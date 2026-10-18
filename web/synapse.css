@@ -623,8 +623,9 @@ body.dark .sidebar-bottom,
 
 /* In a session the dock fills the stage row once there is history: the
    transcript starts directly under the role cards and the composer sits at the
-   bottom of the window. Empty, it is just the composer controls at the bottom —
-   no panel chrome, no void-filling box.
+   bottom of the window. Empty, the dock shrinks to just the composer row and
+   stays bottom-pinned, but it keeps the same panel surface and border — the
+   composer lives in a panel, it is never a bare bar floating on the stage.
    `has-history` is toggled by renderTranscript; keep it in sync there. */
 body[data-view="session"] .chat-dock { align-self: end; }
 body[data-view="session"] .chat-dock.has-history {
@@ -632,14 +633,8 @@ body[data-view="session"] .chat-dock.has-history {
   height: 100%;
   max-height: 100%;
 }
-body[data-view="session"] .chat-dock:not(.has-history) {
-  background: transparent;
-  border-color: transparent;
-}
-body[data-view="session"] .chat-dock:not(.has-history) .composer {
-  background: transparent;
-  border-top-color: transparent;
-}
+/* the composer's divider would double the panel's own top border while empty */
+body[data-view="session"] .chat-dock:not(.has-history) .composer { border-top-color: transparent; }
 .chat-scroll.is-empty { display: none; }
 
 /* jump between your own requests; only shown for longer conversations.

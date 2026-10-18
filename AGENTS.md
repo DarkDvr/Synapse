@@ -486,9 +486,12 @@ This is once per directory per process and needs no config.
   window; the transcript scrolls inside it. The transcript is `display: none`
   while empty (`is-empty`), and there is no empty-state copy inside a session:
   a fresh session shows the composer alone — `has-history` (toggled by
-  renderTranscript on every render) is absent, so the dock is bottom-pinned,
-  transparent and borderless, just the controls. The moment history exists the
-  dock gains the class and the full panel chrome, stretching up to the cards.
+  renderTranscript on every render) is absent, so the dock is bottom-pinned and
+  exactly one composer row tall. It keeps the same panel surface, border and
+  radius as the full dock: the composer lives in a panel, never as a bare bar
+  floating on the stage (only its own top divider is suppressed, so it does not
+  double the panel's top border). The moment history exists the dock gains the
+  class and stretches from the cards to the composer.
 - **The transcript shows user and assistant turns only.** System prompts,
   scaffolding and context dumps from the engine are not chat — rendering them
   once leaked AGENTS.md prose and diff hunks into the transcript above the
