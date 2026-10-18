@@ -323,6 +323,18 @@ ordinary file tools; there is no tool and no store for it.
   directly is fine in Chromium (measured: 34px visible of 84px) even though
   `getComputedStyle` reports its display as `flow-root` — do not wrap it in
   another span on that reading, it clips either way.
+- **There are two panel colours, and they are the operator's.** `ui.answerBg`
+  (the Architect's answer) and `ui.harnessBg` (the harness speaking — a worker's
+  report in its own panel, rendered as markdown because a report has headings and
+  code in it). Both are root variables, both preview live in Settings → Chat, and
+  both derive their border with `color-mix`. The harness block also carries a 2px
+  amber rule on `.msg-body` with **10px of padding-left** — without that padding
+  the rule sat flush against the words.
+- **There is no Project panel, and no path label anywhere.** The rail is Project
+  plan + Tools in use; each project in the sidebar carries its own **Browse**
+  and **Cmd** shortcuts on a `.tree-project-actions` row under its header.
+  `POST /api/projects/{id}/open` spawns a detached GUI process (array args, never
+  a shell string), and both branches are validated before anything is spawned.
 - **A polled reader must not log on every poll.** `logPlanState` keys on a
   signature of the state (issues + every task's id and status) and speaks only
   when it changes; the pane reads the plan every few seconds, so anything dumber
@@ -380,10 +392,13 @@ Non-obvious, all verified on 2.0.30:
   Hidden in Single via `body[data-mode="single"] .keep-toggle`. Verified live:
   switched on, the remaining three tasks ran themselves in 12.8 minutes.
 - **A stalled worker cannot hang the loop:** the wait is on the engine's `idle`
-  message, with a 240s ceiling that interrupts the session and reports a timeout.
-  A timeout is not a failed task: the calendar auditor hit the ceiling and still
-  left a useful result — the Architect judged from what it *had* produced, and
-  marked it done on the evidence rather than on the worker's word.
+  message, with a ceiling that interrupts the session and reports a timeout. The
+  ceiling is `worker.timeoutSec` (Settings → Workers, default 300s) and a role
+  overrides it on its own entry (`roles.<id>.timeoutSec`) — one number for every
+  role was wrong within a day: the auditor hit 240s and needed more. A timeout is
+  not a failed task: the calendar auditor was interrupted and still left a useful
+  result, and the Architect judged from what it *had* produced rather than from
+  the worker's word.
 
 ---
 

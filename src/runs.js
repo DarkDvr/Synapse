@@ -24,7 +24,6 @@
 //     transcript, or a second event for the same turn cannot run it twice.
 import { readPlan, briefSession, appendRun, readRuns, planFingerprint, BRIEF_KEY, PLAN_DIR } from './plans.js';
 
-const WORKER_TIMEOUT_MS = 240000;
 const POLL_MS = 1500;
 const RESULT_MAX = 4000;
 const NOTE_MAX = 1000;
@@ -32,6 +31,9 @@ const NOTE_MAX = 1000;
 // Architect is told, and it is the Architect that marks the task blocked — the
 // harness never writes the plan, and never decides a task is hopeless.
 const MAX_ATTEMPTS = 3;
+// Fallback only: the real ceiling comes from config (worker.timeoutSec, with a
+// per-role override on roles.<id>.timeoutSec).
+const DEFAULT_TIMEOUT_SEC = 300;
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -188,6 +190,13 @@ export function createRunner({ engine, logger, getConfig }) {
     const roleConfig = getConfig()?.roles?.[role] || {};
     const modelRef = roleConfig.ref || null;
     const variant = roleConfig.variant || null;
+    // The ceiling for this task: the role's own, else the global default.
+    const config = getConfig() || {};
+    const timeoutSec = Math.max(
+      30,
+      Number(roleConfig.timeoutSec) || Number(config.worker?.timeoutSec) || DEFAULT_TIMEOUT_SEC,
+    );
+    const timeoutMs = timeoutSec * 1000;
     const fingerprintBefore = planFingerprint(dir);
     const startedAt = Date.now();
     let worker = null;
@@ -210,7 +219,7 @@ export function createRunner({ engine, logger, getConfig }) {
     });
     log.info(
       `delegation: ${request.task} "${task.title}" -> ${role} ` +
-        `(${modelRef || 'engine default'}${variant ? `#${variant}` : ''}) in ${project}`,
+        `(${modelRef || 'engine default'}${variant ? `#${variant}` : ''}) in ${project}, ceiling ${timeoutSec}s`,
     );
 
     try {
@@ -233,7 +242,7 @@ export function createRunner({ engine, logger, getConfig }) {
 
       const before = (await engine.getMessages(worker.id)).length;
       await engine.prompt(worker.id, workerPrompt({ task, note: request.note, goal: plan.plan?.goal }));
-      const finished = await waitForIdle(worker.id, before);
+      const finished = await waitForIdle(worker.id, before, timeoutMs);
       if (finished.timedOut) {
         outcome = 'timeout';
         try { await engine.interrupt(worker.id); } catch { /* already gone */ }
@@ -293,14 +302,17 @@ export function createRunner({ engine, logger, getConfig }) {
         workerId: worker?.id,
         planTouched,
         auto,
+        timeoutMs,
       }),
     });
   }
 
   /** Poll until the worker's turn closes with `idle`, which is the engine's own
-   *  end-of-turn signal — never a timer. */
-  async function waitForIdle(workerId, before) {
-    const deadline = Date.now() + WORKER_TIMEOUT_MS;
+   *  end-of-turn signal — never a timer. The ceiling is the task's own
+   *  (per-role) one, and hitting it interrupts the session and reports a timeout;
+   *  whatever the worker produced up to then is still gathered as evidence. */
+  async function waitForIdle(workerId, before, timeoutMs) {
+    const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {
       await sleep(POLL_MS);
       let messages;
@@ -359,12 +371,12 @@ export function createRunner({ engine, logger, getConfig }) {
     return [...seen];
   }
 
-  function report({ task, role, outcome, ms, text, files, workerId, planTouched, auto }) {
+  function report({ task, role, outcome, ms, text, files, workerId, planTouched, auto, timeoutMs }) {
     const head =
       outcome === 'completed'
         ? `[harness] ${task.id} (${role}) finished in ${Math.round(ms / 1000)}s.`
         : outcome === 'timeout'
-          ? `[harness] ${task.id} (${role}) did not finish within ${Math.round(WORKER_TIMEOUT_MS / 1000)}s and was interrupted.`
+          ? `[harness] ${task.id} (${role}) did not finish within ${Math.round(timeoutMs / 1000)}s and was interrupted.`
           : `[harness] ${task.id} (${role}) could not run.`;
     const lines = [head];
     // The evidence, never omitted: a worker that claims a file it did not write

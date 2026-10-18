@@ -116,9 +116,13 @@ content. What is not wired yet carries `data-soon`, which raises a toast naming
 the stage that will wire it; the role cards' per-role activity is the remaining
 stub — they show the real model/effort controls and nothing else.
 
-**Left rail is two-tier.** A project is a panel with its own surface, a
+**Left sidebar is two-tier.** A project is a panel with its own surface, a
 chevron, and its sessions indented on a guide line inside it. Sessions never
-carry a background, so the two tiers never read alike.
+carry a background, so the two tiers never read alike. Under each project's
+header sit its two shortcuts — **Browse** (Explorer) and **Cmd** (a command
+prompt at that folder) — because those belong with the project they act on, not
+in a rail panel. There is no Project panel and no path label anywhere: the tree
+already names the project, and the path was never what you looked at.
 
 **Connectors.** The idle structure is small round dots at 75% opacity with no
 arrowheads, and that is all the cards show today. The live path — a solid orange
@@ -137,7 +141,7 @@ space at the window's right edge, with the same geometry in Single and Multi.
 Role cards have a **360px floor**, so the full three-column layout needs
 **1460px** of window. Below that the rail flows under the chat (the stage keeps
 its full width so the cards never squeeze); down there the rail is two equal
-halves — Project above Project plan on the left, Tools in use on the right.
+halves — the Project plan on the left, Tools in use on the right.
 Below 1100px the window scrolls horizontally.
 
 **Row highlighting is one token.** The baseline paints table rows `#fcfcff`
@@ -363,6 +367,13 @@ Three rules hold the whole thing together:
 - **A task is attempted at most three times**, then the harness refuses and tells
   the Architect to break it down, change the role or model, or mark it blocked
   for you. It never decides a task is hopeless by itself.
+- **Each task has a time ceiling** (`worker.timeoutSec`, Settings → Workers,
+  default 300s). Hitting it interrupts the session and reports a timeout — but a
+  timeout is a *report*, not a failed task: whatever the worker produced up to
+  that point is still gathered and handed over as evidence, which is how an
+  interrupted audit was still judged and accepted. A role that genuinely needs
+  longer overrides it on its own entry (`roles.<id>.timeoutSec`) — the auditor,
+  which reads and runs things, is the one that hit the ceiling in practice.
 
 **Single mode refuses delegation.** The engine offers the tool either way, so the
 harness enforces the promise: in Single the request is refused out loud and the
@@ -488,6 +499,14 @@ fill colour is the operator's (`ui.answerBg`, Settings → Chat, default
 obviously not chrome — and reads separately from the reasoning and tool noise
 around it. This is a deliberate exception to "yellow is an affordance colour":
 it is a *fill*, not text and not an icon.
+
+**The harness gets its own panel and its own colour too** (`ui.harnessBg`,
+default `#2F2D17`). A worker's report is prose with headings, lists and code in
+it, so it is rendered as markdown like an answer, in a panel of the same shape —
+and the amber rule beside it is the "this is not your voice" marker, with a 10px
+gap so the line never sits flush against the words. Operator, Architect and
+harness each have a distinct surface, so they are never told apart by reading a
+label.
 
 `web/md.js` is hand-rolled (no dependencies) and **escape-first**: the source is
 HTML-escaped before any markdown rule runs, so a model cannot inject markup

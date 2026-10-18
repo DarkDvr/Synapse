@@ -57,7 +57,7 @@
     "resetOnBoot": false
   },
   "ui": {
-    "answerBg": "#2c2e29"
+    "answerBg": "#191f19"
   },
   "logging": {
     "level": "info",

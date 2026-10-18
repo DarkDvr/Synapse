@@ -1,5 +1,7 @@
 // Synapse API — a stable, engine-agnostic surface for the UI.
 // Handlers call the engine adapter; nothing here knows about OpenCode.
+import fs from 'node:fs';
+import { spawn } from 'node:child_process';
 import { TBD_TITLE } from './titles.js';
 import { ensurePlan, readPlan, briefSession, logPlanState, BRIEF_KEY } from './plans.js';
 
@@ -180,6 +182,33 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
       // it has something concrete to fill in rather than a blank page.
       ensurePlan(project.directory);
       return { project: (await projectsWithSessions()).find((p) => p.id === project.id) || project };
+    },
+
+    /**
+     * Open a project in Explorer, or a command prompt at it. Both are detached
+     * GUI processes: Synapse does not track them and never kills them.
+     */
+    openProject: async (id, what) => {
+      const project = projects.find(id);
+      if (!project) {
+        const err = new Error('project not found');
+        err.status = 404;
+        throw err;
+      }
+      if (!fs.existsSync(project.directory)) {
+        const err = new Error(`the folder does not exist: ${project.directory}`);
+        err.status = 400;
+        throw err;
+      }
+      // Array args, never a shell string: the directory is the operator's, and
+      // it must not be able to turn into a command.
+      const cmd = what === 'cmd';
+      const child = cmd
+        ? spawn('cmd.exe', ['/K', 'cd', '/d', project.directory], { detached: true, stdio: 'ignore' })
+        : spawn('explorer.exe', [project.directory], { detached: true, stdio: 'ignore' });
+      child.unref();
+      app.info(`opened ${cmd ? 'a command prompt' : 'Explorer'} at ${project.directory}`);
+      return { ok: true };
     },
 
     updateProject: async (id, body) => {

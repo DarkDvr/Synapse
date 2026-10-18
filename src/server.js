@@ -131,6 +131,10 @@ export function createServer({ api, engine, logger, config }) {
       const projectId = decodeURIComponent(seg[1] || '');
       if (seg.length === 2 && method === 'PATCH') return sendJson(res, 200, await api.updateProject(projectId, await readBody(req)));
       if (seg.length === 2 && method === 'DELETE') return sendJson(res, 200, await api.deleteProject(projectId));
+      if (seg[2] === 'open' && method === 'POST') {
+        const body = await readBody(req);
+        return sendJson(res, 200, await api.openProject(projectId, body?.what === 'cmd' ? 'cmd' : 'browse'));
+      }
     }
 
     // /api/sessions...

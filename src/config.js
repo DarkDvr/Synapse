@@ -60,6 +60,19 @@ export const DEFAULTS = {
     // A solid colour rather than an alpha wash, because it has to stay readable
     // under the text inside it — the operator tunes it from Settings.
     answerBg: '#382F19',
+    // The harness speaking (a worker's report handed back). Its own colour, so
+    // the operator's voice, the Architect's answer and the harness never have to
+    // be told apart by reading the label.
+    harnessBg: '#2F2D17',
+  },
+  worker: {
+    // How long one delegated task may run before the harness interrupts it and
+    // reports a timeout. A timeout is a report, not a failed task: whatever the
+    // worker produced up to that point is still evidence and is handed over.
+    // A role that genuinely needs longer overrides it on its own entry
+    // (`roles.<id>.timeoutSec`) — the auditor, which reads and runs things, is
+    // the one that hit this ceiling in practice.
+    timeoutSec: 300,
   },
   logging: {
     level: 'info',
@@ -100,8 +113,15 @@ export function normalize(raw) {
   cfg.tools.resetOnBoot = cfg.tools.resetOnBoot !== false;
   cfg.ui = cfg.ui || {};
   // Only real hex colours reach CSS; anything else falls back to the default.
-  const bg = String(cfg.ui.answerBg || '').trim();
-  cfg.ui.answerBg = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(bg) ? bg.toLowerCase() : DEFAULTS.ui.answerBg;
+  const hex = (value, fallback) => {
+    const s = String(value || '').trim();
+    return /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(s) ? s.toLowerCase() : fallback;
+  };
+  cfg.ui.answerBg = hex(cfg.ui.answerBg, DEFAULTS.ui.answerBg);
+  cfg.ui.harnessBg = hex(cfg.ui.harnessBg, DEFAULTS.ui.harnessBg);
+
+  cfg.worker = cfg.worker || {};
+  cfg.worker.timeoutSec = clampInt(cfg.worker.timeoutSec, 30, 3600, DEFAULTS.worker.timeoutSec);
 
   cfg.engine.type = String(cfg.engine.type || 'opencode');
   const oc = cfg.engine.opencode;
@@ -147,6 +167,10 @@ export function normalize(raw) {
       const variant = isPlainObject(spec) && typeof spec.variant === 'string' ? spec.variant.trim() : '';
       const entry = { ref: ref.trim() };
       if (variant) entry.variant = variant;
+      // A role may need longer than the default worker timeout (the auditor
+      // reads and runs things). Only a real number is kept.
+      const timeoutSec = isPlainObject(spec) ? Number(spec.timeoutSec) : NaN;
+      if (Number.isFinite(timeoutSec)) entry.timeoutSec = clampInt(timeoutSec, 30, 3600, DEFAULTS.worker.timeoutSec);
       roles[String(id)] = entry;
     }
   }

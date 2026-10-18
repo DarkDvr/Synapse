@@ -370,6 +370,19 @@ body.dark .sidebar .nav-link.active > span:first-child { color: #fff; }
 /* a project whose directory is gone: the engine cannot run sessions there */
 .tree-missing { color: var(--red); font-size: 10px; padding: 0 4px; flex: none; }
 
+/* The project's own two shortcuts, right under its header. The rail's Project
+   panel is gone: the path was never needed, and opening the folder or a prompt
+   belongs with the project it acts on. */
+.tree-project-actions { display: flex; gap: 6px; padding: 0 4px 6px 26px; }
+.btn-thin {
+  flex: 1 1 0; min-width: 0;
+  height: 22px; padding: 0 6px; border-radius: 6px; cursor: pointer;
+  background: rgba(255, 255, 255, 0.035); border: 1px solid #33363c;
+  color: #a8acb3; font-family: inherit; font-size: 10.5px; font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.btn-thin:hover { background: var(--violet-faint); border-color: var(--violet-line); color: #fff; }
+
 /* the live marker: reserved space, revealed only while work is running */
 .tree-live {
   width: 7px; height: 7px; border-radius: 50%; flex: none;
@@ -978,8 +991,15 @@ body[data-mode="single"] .keep-toggle { display: none; }
   display: inline-block; width: 7px; height: 7px; margin-top: 4px;
   border-radius: 50%; background: #5b6068; flex: none;
 }
-.plan-task[data-status="doing"] { background: rgba(232, 163, 61, 0.07); border-color: rgba(232, 163, 61, 0.22); }
-.plan-task[data-status="doing"] .plan-dot { background: var(--amber); }
+.plan-task[data-status="doing"] { background: rgba(237, 194, 90, 0.06); border-color: rgba(237, 194, 90, 0.22); }
+/* "you are here": a yellow ring rather than a filled dot, so the current step
+   cannot be mistaken for a settled one at a glance. Yellow, not amber — amber is
+   the palette's warn colour and this is not a warning. */
+.plan-task[data-status="doing"] .plan-dot {
+  width: 9px; height: 9px; margin-top: 3px; box-sizing: border-box;
+  background: transparent; border: 2px solid var(--yellow);
+  box-shadow: 0 0 0 3px rgba(237, 194, 90, 0.16);
+}
 .plan-task[data-status="done"] .plan-dot { background: var(--green); }
 .plan-task[data-status="blocked"],
 .plan-task[data-status="failed"] { background: rgba(240, 86, 63, 0.07); border-color: rgba(240, 86, 63, 0.24); }
@@ -1080,7 +1100,11 @@ body[data-mode="single"] .keep-toggle { display: none; }
   accent-color: var(--primary); cursor: pointer;
 }
 
-/* a colour swatch and its hex, side by side, in one settings cell */
+/* a note under a settings field (wraps to its own row) */
+.set-note {
+  grid-column: 1 / -1; margin: 0; font-size: 11.5px; line-height: 1.5; color: #82868e;
+}
+.set-note code { font-family: var(--mono); font-size: 11px; color: #a8acb3; }
 .color-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .color-row input[type="color"] {
   flex: none; width: 34px; height: 28px; min-height: 28px; padding: 2px;
@@ -1091,13 +1115,27 @@ body[data-mode="single"] .keep-toggle { display: none; }
   font-family: var(--mono); font-size: 12px; text-transform: lowercase;
 }
 
-/* the harness speaking: a worker's report, or a problem handed back */
-.msg.harness .msg-body { border-left: 2px solid var(--amber); }
+/* the harness speaking: a worker's report, or a problem handed back. The amber
+   rule is the "not your voice" marker; the panel below carries the colour. The
+   padding is the gap between that rule and the text — without it the line sat
+   flush against the words. */
+.msg.harness .msg-body { border-left: 2px solid var(--amber); padding-left: 10px; }
 .msg.harness .msg-role {
   font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.04em;
   color: var(--amber); text-transform: uppercase;
 }
-.msg.harness .msg-text { white-space: pre-wrap; }
+/* The report itself: same panel shape as the Architect's answer, its own colour
+   (`ui.harnessBg`). Markdown matters here — a report has headings, lists and
+   code in it, and it is read, not glanced at. */
+.msg-harness {
+  margin: 5px 0 0; padding: 8px 10px;
+  background: var(--harness-bg, #2f2d17);
+  border: 1px solid color-mix(in srgb, var(--harness-bg, #2f2d17), #fff 18%);
+  border-radius: 9px;
+  font-size: 12.5px; line-height: 1.55; color: #d3d6db;
+}
+.msg-harness > :first-child { margin-top: 0; }
+.msg-harness > :last-child { margin-bottom: 0; }
 /* ── 15. modal + toast ─────────────────────────────────────────────────── */
 
 .modal-backdrop {
