@@ -425,6 +425,19 @@ it as a panel **painted over the chat, anchored just above the composer**.
   and the run would die at the timeout with nothing to look at. Only the *open*
   session's own question disables the composer — a worker waiting is no reason to
   stop talking to the Architect.
+- **The whole panel is orange** — border, title, dot, option accents, the Submit
+  fill. It is the only thing on screen that is waiting for the operator, and it
+  should be impossible to miss. White text on the orange fill; orange text sits
+  on the panel's own warm dark surface, never on violet.
+- **"(Recommended)" becomes a chip.** The question tool's own convention is to
+  put the recommendation first and end its label with " (Recommended)". The panel
+  strips the suffix and shows a chip beside the label, and the role brief tells
+  both roles to write it that way — verified live: the worker's next question came
+  back as `Number of notes (Recommended)`.
+- **The engine's `header` is a heading only when it separates questions.** It is a
+  short label for telling several questions apart; with a single question it just
+  sat above the real question, and models often write a slug there ("--reverse
+  meaning"). A one-field form drops it and leads with the question text.
 - **Verified end to end** on the `field-notes` project: the Architect asked
   "Index colour scheme" through the tool, the panel appeared over the chat while
   its card read `asking the operator`, the answer "Fixed palette" was submitted,
@@ -784,6 +797,29 @@ This is once per directory per process and needs no config.
   `GET /api/runs` from the Code Mode runtime (`fetch` works, and
   `browser_wait_for` with a text that cannot exist is a usable sleep) and assert
   on the API's own answer.
+- **`display: revert` does not mean "back to my stylesheet".** The Multi reveal
+  used it to un-hide the worker cards, and `revert` rolls back to the USER-AGENT
+  value — `block` for `<article>` — so every worker card silently stopped being a
+  grid item. The visible symptom was the missing gap between the name row and the
+  task line (`gap: 8px` had never applied to them; measured 0). Worse, the
+  show-rule written to replace it lost to the hide-rule's `:not()` specificity,
+  so Multi showed no worker cards at all. Hide conditionally instead
+  (`body[data-view="session"]:not(.workers-on) …`) and let each element keep its
+  own display. Check the *computed* display, not the class list.
+- **The chat fits the window below the 1460px breakpoint.** `fitChatHeight()`
+  caps the dock to the room left under it in the viewport (`min(room, 70vh,
+  720px)`), so on a short window the cards cannot push the composer off the
+  bottom edge — the chat's top stays exactly where the cards left it and only its
+  height shrinks. Measured at 1200x700: the dock was 490px and the composer sat
+  at 904–962, invisible; now the dock is 253px and the composer ends at 686. The
+  wide layout clears the inline cap and lets CSS own it.
+- **The subtitle reserve shrinks on a short window**
+  (`@media (max-height: 820px) { --task-lines: 2 }`): three lines of empty card is
+  a luxury paid out of the chat. It is fixed *within* a window size, so the
+  no-shift rule still holds; only a resize across the breakpoint moves anything.
+  The ask panel's own `max-height` floors at 100px rather than 150 — a panel that
+  pokes out of the dock is clipped by it, and half a panel is worse than a small
+  one that scrolls (Submit is sticky, so it is always reachable).
 - **Cards have a hard minimum width** (`--card-min: 360px`): below that the
   select, the chevron and the edit button start colliding and the name is
   ellipsised away. Two columns + the 66px spine need ~790px of stage, so the

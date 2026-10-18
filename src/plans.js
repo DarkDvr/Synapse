@@ -301,6 +301,14 @@ export function briefSession({ dir, role = 'architect', auto = false } = {}) {
     if (state.problems.length) lines.push(`Plan problems to fix: ${state.problems.slice(0, 4).join('; ')}`);
   }
 
+  // Both roles can ask the operator something, and the panel is only as good as
+  // the question. The label convention is the question tool's own: recommend by
+  // position and by the "(Recommended)" suffix, which the panel turns into a chip.
+  lines.push(
+    `If you need a decision from the operator, ask with the question tool: give the question a short human ` +
+      `title (not a slug or a flag name), put your recommended option first and end its label with " (Recommended)".`,
+  );
+
   if (isArchitect) {
     lines.push(
       `Format: {"version":1,"goal":"...","tasks":[{"id":"t1","title":"...","role":"coder-1","status":"todo",` +

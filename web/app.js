@@ -1108,6 +1108,7 @@ function setView() {
   $('modeToggle').hidden = state.view !== 'session';
   renderKeep();
   applyRoleCardsLayout();
+  fitChatHeight();
   renderComposer();
   renderAskPanel();
   renderRoleActivity();
@@ -1457,6 +1458,9 @@ function renderTranscript() {
   // The dock is a bare composer while empty and fills the stage once there is
   // anything to show; the CSS keys off this class, so set it on every render.
   $('chatDock')?.classList.toggle('has-history', hasHistory);
+  // An empty dock sits at the bottom of the page, a full one starts under the
+  // cards — so the room left for it has to be re-measured on every change.
+  fitChatHeight();
 
   // Nothing in the conversation changed since the last render: leave the DOM —
   // and whatever the operator has open — exactly as it is.
@@ -1758,15 +1762,47 @@ function placeAskPanel() {
   if (!host || !dock || !composer || host.hidden) return;
   const composerH = composer.offsetHeight;
   host.style.bottom = `${composerH + 10}px`;
-  // Never zero: a panel with no room at all is worse than one that is clipped.
-  host.style.maxHeight = `${Math.max(150, dock.clientHeight - composerH - 20)}px`;
+  // Never zero, but never more than the chat actually has either: a panel that
+  // pokes out of the dock is clipped by it, and half a panel is worse than a
+  // small one that scrolls (its Submit is sticky, so it is always reachable).
+  host.style.maxHeight = `${Math.max(100, dock.clientHeight - composerH - 20)}px`;
+}
+
+/**
+ * Below the wide breakpoint the stage is content-sized, so on a short window the
+ * card block plus a 70vh chat pushes the composer off the bottom edge — and the
+ * one thing the operator needs is the thing that gets cut off. Cap the dock to
+ * the room left under it: the chat's top stays exactly where the cards left it,
+ * and only its height shrinks. In the wide layout the stage already has a
+ * definite height, so the inline cap is cleared and CSS owns it.
+ */
+function fitChatHeight() {
+  const dock = $('chatDock');
+  if (!dock) return;
+  const wide = window.matchMedia('(min-width: 1461px)').matches;
+  let next = '';
+  if (!wide && state.view === 'session') {
+    // Page coordinates, so scrolling the page does not change the answer.
+    const top = dock.getBoundingClientRect().top + window.scrollY;
+    const room = window.innerHeight - top - 12;
+    // The stacked layout's own cap still applies: this only ever takes room away.
+    const cap = Math.min(room, Math.round(window.innerHeight * 0.7), 720);
+    next = `${Math.max(180, Math.floor(cap))}px`;
+  }
+  if (dock.style.maxHeight !== next) dock.style.maxHeight = next;
 }
 
 function askOption(kind, name, value, label, description) {
+  // The models mark their recommendation in the label — "(Recommended)", the
+  // convention the question tool documents. Take it out of the sentence and give
+  // it a chip: readable as a label, still obvious at a glance.
+  const raw = String(label ?? '');
+  const recommended = /\(\s*recommended\s*\)\s*$/i.test(raw);
+  const text = recommended ? raw.replace(/\s*\(\s*recommended\s*\)\s*$/i, '') : raw;
   return `<label class="ask-opt">
     <input type="${kind}" name="${esc(name)}" value="${esc(value)}" />
     <span class="ask-opt-text">
-      <span class="ask-opt-label">${esc(label)}</span>
+      <span class="ask-opt-label">${esc(text)}${recommended ? '<span class="ask-rec">Recommended</span>' : ''}</span>
       ${description ? `<span class="ask-opt-desc">${esc(description)}</span>` : ''}
     </span>
   </label>`;
@@ -1785,12 +1821,18 @@ function askCustom(kind, name) {
 }
 
 /** One field of a form, rendered as the control its type deserves. */
-function askField(field, index) {
+function askField(field, index, all) {
   const key = String(field.key ?? `q${index}`);
   const name = `ask-${key}`;
   const type = String(field.type || 'string');
   const options = Array.isArray(field.options) ? field.options : [];
-  const title = field.title ? `<p class="ask-q-title">${esc(field.title)}</p>` : '';
+  // The engine calls this the question's `header` — a short label for telling
+  // several questions apart. With only one, it just sits above the real question
+  // and models often write a slug there ("--reverse meaning"), which reads like a
+  // broken title. Show it only when it separates questions, or when there is no
+  // question text to show instead.
+  const showTitle = field.title && ((all?.length || 1) > 1 || !field.description);
+  const title = showTitle ? `<p class="ask-q-title">${esc(field.title)}</p>` : '';
   const text = field.description ? `<p class="ask-q-text">${esc(field.description)}</p>` : '';
   const req = field.required ? '<span class="ask-req" title="Required">required</span>' : '';
 
@@ -1853,7 +1895,7 @@ function renderAskPanel() {
   host.hidden = false;
   host.innerHTML = `<div class="ask-panel" role="dialog" aria-label="Question waiting for an answer" data-ask="${esc(form.id)}">
     <div class="ask-head">
-      <span class="status-dot warn" role="img" aria-label="waiting"></span>
+      <span class="ask-dot" aria-hidden="true"></span>
       <span class="ask-head-title">${esc(form.title || 'Input Needed')}</span>
       <span class="ask-head-note">${
         form.sessionId === state.sessionId
@@ -1864,7 +1906,7 @@ function renderAskPanel() {
     <div class="ask-fields">${(form.fields || []).map(askField).join('')}</div>
     <div class="ask-actions">
       <span class="ask-state" data-ask-state></span>
-      <button class="btn btn-primary btn-sm" data-form-reply="${esc(form.id)}">Submit Answer</button>
+      <button class="btn btn-ask btn-sm" data-form-reply="${esc(form.id)}">Submit Answer</button>
     </div>
   </div>`;
   placeAskPanel();
@@ -2780,6 +2822,7 @@ function wire() {
   window.addEventListener('resize', () => requestAnimationFrame(() => {
     fitStageHeight();
     if (state.view === 'session') applyRoleCardsLayout({ animate: false });
+    fitChatHeight();
     placeAskPanel();
     drawActivePath();
     renderChatNav();

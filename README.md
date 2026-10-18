@@ -137,12 +137,15 @@ deliberately absent: the arrow already says who and where.
 grew when work started pushed the chat down every time an agent began — the
 mechanic was right but it read as the whole UI jumping. Reserving the space once
 means nothing moves, ever; the text is clamped to the slot (all worker cards
-measure 98.28px, the Architect 102.28 because its name is larger) and the full
-text is the tooltip. `--task-lines` is the one number to change.
+measure 106px) and the full text is the tooltip. `--task-lines` is the one number
+to change, and it drops to 2 on a window shorter than 820px so the reserve is not
+paid for out of a chat that is already tight.
 
 The stage's second row is still `minmax(0, 1fr)` under a definite height, so
 anything that *does* grow — a raised `--task-lines`, a font swap — comes out of
-the transcript's top edge and never moves the composer.
+the transcript's top edge and never moves the composer. Below the 1460px
+breakpoint the chat is capped to the room left under the cards, so a short window
+scrolls the page for the rail but never hides the message box.
 
 **The two roles in a delegation are the only cards that change appearance.** The
 requester takes green (the Architect's own colour) and the worker red; colour
@@ -567,6 +570,12 @@ painted over the chat, anchored just above the composer:
   disabled until you pick that row — your own words become the answer.
 - **Submit is pinned** to the panel's bottom edge, so a six-field form never
   hides the one button you need. Required fields keep it disabled and say why.
+- **"Recommended" is a chip.** These models mark their recommendation by putting
+  that option first and ending its label with "(Recommended)" — the panel takes
+  the suffix out of the sentence and shows a chip, and the role brief tells both
+  roles to write it that way.
+- **The whole panel is orange** — border, title, dot, option accents and the
+  Submit fill — because it is the one thing on screen that is waiting for you.
 - **The composer is disabled while a question waits** (`Answer the question
   above`): the turn cannot read a message, so it does not pretend otherwise. That
   applies to the open session's own question — a **worker** can ask one too, and

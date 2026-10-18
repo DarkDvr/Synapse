@@ -257,9 +257,15 @@ body[data-view="session"] .stage { grid-template-rows: auto minmax(0, 1fr); gap:
    clipped only mid-animation. */
 .topology-wrap.is-open { max-height: var(--reveal-h, 600px); opacity: 1; overflow: clip; }
 
-/* workers appear only in Multi; the path layer always stays */
-body[data-view="session"] .topology > *:not(.topo-architect):not(.path-layer) { display: none; }
-body.workers-on .topology > *:not(.topo-architect):not(.path-layer) { display: revert; }
+/* Workers appear only in Multi; the path layer always stays. Hide them only when
+   the workers are OFF, and let each element keep its own display otherwise — a
+   `revert` here rolls back to the USER-AGENT value (block for <article>), which
+   silently threw away the role card's grid and with it the gap between the name
+   row and the task line. `display: revert` also loses to the :not() chain's
+   specificity, so the show rule has to be phrased as the absence of the hide. */
+body[data-view="session"]:not(.workers-on) .topology > *:not(.topo-architect):not(.path-layer) {
+  display: none;
+}
 
 /* ── 5. sidebar: navigation ────────────────────────────────────────────── */
 
@@ -533,7 +539,8 @@ body.dark .sidebar-bottom,
   border-radius: 12px; padding: 11px 13px;
   min-width: 0; height: auto; overflow: hidden;
   display: grid; grid-template-rows: auto;
-  gap: 4px;
+  /* the head row and the task line: this is the gap above the label */
+  gap: 8px;
   transition: border-color 0.18s ease, background-color 0.18s ease, opacity 0.2s ease;
 }
 .role-card:hover { border-color: #454950; }
@@ -551,6 +558,14 @@ body.dark .sidebar-bottom,
   display: -webkit-box; -webkit-box-orient: vertical;
   -webkit-line-clamp: var(--task-lines, 3);
   overflow: hidden; overflow-wrap: anywhere;
+}
+
+/* On a short window the reserve is a luxury paid out of the chat, which is
+   already tight. Two lines still holds nearly every task line, and the space
+   goes back to the transcript. It stays fixed *within* a window size, so the
+   no-shift rule holds; only a resize across the breakpoint moves anything. */
+@media (max-height: 820px) {
+  :root { --task-lines: 2; }
 }
 
 /* The two roles taking part in a delegation: the requester green (the
@@ -923,7 +938,12 @@ body[data-mode="single"] .keep-toggle { display: none; }
    and it is deliberately OUT of the dock's layout: nothing here can change the
    chat's height by a single pixel, however many questions arrive. Bottom and
    max-height are set from measurement (placeAskPanel) because the composer's
-   own height moves with the textarea. */
+   own height moves with the textarea.
+
+   The whole panel is orange on purpose: it is the one thing on screen that is
+   waiting on the operator, and it should be impossible to miss. White text on
+   an orange fill is the palette's rule for fills; orange text sits on the warm
+   dark surface, never on a violet one. */
 .ask-host {
   position: absolute; left: 10px; right: 10px; z-index: 40;
   display: flex; flex-direction: column; justify-content: flex-end;
@@ -932,47 +952,61 @@ body[data-mode="single"] .keep-toggle { display: none; }
 .ask-host[hidden] { display: none; }
 .ask-panel {
   pointer-events: auto; overflow: auto;
-  background: #1b1a26; border: 1px solid var(--violet-line);
+  background: #241a12; border: 1px solid var(--orange);
   border-radius: 12px; padding: 10px 12px 0;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.55);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 125, 26, 0.14);
   max-height: 100%;
 }
 .ask-head { display: flex; align-items: center; gap: 8px; }
+.ask-dot {
+  flex: none; width: 7px; height: 7px; border-radius: 50%;
+  background: var(--orange); box-shadow: 0 0 0 3px rgba(255, 125, 26, 0.18);
+}
 .ask-head-title {
   font-size: 11.5px; font-weight: 700; letter-spacing: 0.06em;
-  text-transform: uppercase; color: var(--yellow);
+  text-transform: uppercase; color: var(--orange);
 }
-.ask-head-note { margin-left: auto; font-size: 11px; color: #82868e; }
+.ask-head-note { margin-left: auto; font-size: 11px; color: #c9a184; }
 
 .ask-fields { margin-top: 8px; display: grid; gap: 12px; }
 .ask-field[hidden] { display: none; }
-.ask-q-title { margin: 0; font-size: 12.5px; font-weight: 700; color: #fff; }
+.ask-q-title { margin: 0; font-size: 12.5px; font-weight: 700; color: var(--orange); }
 .ask-q-text {
-  margin: 3px 0 0; font-size: 12px; line-height: 1.5; color: #b9bdc4;
+  margin: 3px 0 0; font-size: 12px; line-height: 1.5; color: #e8dcd3;
   overflow-wrap: anywhere;
 }
 .ask-req {
   display: inline-block; margin-left: 6px; vertical-align: 1px;
   font-size: 9px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
-  color: var(--amber);
+  color: var(--orange);
 }
 
 .ask-opts { margin-top: 7px; display: grid; gap: 5px; }
 .ask-opt {
   display: flex; align-items: flex-start; gap: 8px;
   padding: 6px 8px; border-radius: 9px; cursor: pointer;
-  border: 1px solid #33363c; background: rgba(255, 255, 255, 0.015);
+  border: 1px solid #4a3628; background: rgba(255, 125, 26, 0.035);
 }
-.ask-opt:hover { border-color: #4a4e56; background: var(--violet-faint); }
-.ask-opt:has(input:checked) { border-color: var(--violet-line); background: var(--violet-soft); }
+.ask-opt:hover { border-color: #6d4a30; background: rgba(255, 125, 26, 0.09); }
+.ask-opt:has(input:checked) { border-color: var(--orange); background: rgba(255, 125, 26, 0.15); }
 .ask-opt input[type="radio"],
 .ask-opt input[type="checkbox"] {
-  flex: none; margin: 3px 0 0; width: 13px; height: 13px; accent-color: var(--violet);
+  flex: none; margin: 3px 0 0; width: 13px; height: 13px; accent-color: var(--orange);
 }
 .ask-opt-text { min-width: 0; display: grid; gap: 2px; }
 .ask-opt-label { font-size: 12.5px; color: var(--text); }
 .ask-opt:has(input:checked) .ask-opt-label { color: #fff; font-weight: 600; }
-.ask-opt-desc { font-size: 11px; line-height: 1.45; color: #8f939b; overflow-wrap: anywhere; }
+.ask-opt-desc { font-size: 11px; line-height: 1.45; color: #c4a894; overflow-wrap: anywhere; }
+
+/* The model's own recommendation, in the label as "(Recommended)" — the same
+   convention the question tool documents — shown as a chip instead of a shout
+   in the middle of the option. */
+.ask-rec {
+  display: inline-block; margin-left: 7px; vertical-align: 1px;
+  padding: 1px 6px; border-radius: 999px;
+  font-size: 9px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;
+  color: #241a12; background: var(--orange);
+}
 
 .ask-opt-other { flex-wrap: wrap; }
 .ask-other-pick { display: flex; align-items: flex-start; gap: 8px; flex: none; cursor: pointer; }
@@ -981,10 +1015,10 @@ body[data-mode="single"] .keep-toggle { display: none; }
 
 .ask-input {
   margin-top: 6px; width: 100%;
-  background: #14161a; border: 1px solid #3a3d43; border-radius: 8px;
-  color: var(--text); font-family: inherit; font-size: 12.5px; padding: 5px 9px; min-height: 28px;
+  background: #1a120c; border: 1px solid #4a3628; border-radius: 8px;
+  color: #efe3da; font-family: inherit; font-size: 12.5px; padding: 5px 9px; min-height: 28px;
 }
-.ask-input:focus-visible { outline: none; border-color: var(--violet); box-shadow: 0 0 0 3px rgba(98, 91, 246, 0.24); }
+.ask-input:focus-visible { outline: none; border-color: var(--orange); box-shadow: 0 0 0 3px rgba(255, 125, 26, 0.24); }
 .ask-link { color: var(--orange); font-size: 12px; }
 
 /* Pinned to the panel's bottom: a form with six fields is taller than the chat,
@@ -994,16 +1028,24 @@ body[data-mode="single"] .keep-toggle { display: none; }
   position: sticky; bottom: 0; z-index: 1;
   display: flex; align-items: center; gap: 10px;
   margin: 11px -12px 0; padding: 9px 12px 11px;
-  background: #1b1a26; border-top: 1px solid #2b2a3a;
+  background: #241a12; border-top: 1px solid #4a3628;
   border-radius: 0 0 12px 12px;
 }
-.ask-state { font-size: 11px; color: var(--amber); }
+.ask-state { font-size: 11px; color: var(--orange); }
 .ask-actions .btn { margin-left: auto; }
 .ask-actions .btn:disabled { opacity: 0.45; cursor: not-allowed; }
 
+/* the one orange fill in the panel: white on orange, never orange on orange */
+.btn-ask {
+  background: var(--orange); border: 1px solid var(--orange);
+  color: #fff; font-weight: 700;
+}
+.btn-ask:hover { background: #ff8f3f; border-color: #ff8f3f; }
+.btn-ask:disabled { background: var(--orange); border-color: var(--orange); color: #fff; }
+
 /* the composer while a question is waiting: the session cannot read a message */
 .composer textarea:disabled { opacity: 0.55; cursor: not-allowed; }
-.composer textarea:disabled::placeholder { color: var(--amber); opacity: 0.75; }
+.composer textarea:disabled::placeholder { color: var(--orange); opacity: 0.85; }
 
 /* ── 12. composer ──────────────────────────────────────────────────────── */
 
