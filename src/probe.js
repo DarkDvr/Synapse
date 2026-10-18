@@ -174,6 +174,8 @@ export function createProbe({ engine, logger, notify, scratchDir, file }) {
     current: null,
     results: [],
     toolset: [],
+    // which model the last run was against; the toolset is per model
+    model: null,
   };
 
   // The last run outlives the process, so the panel is not blank after a
@@ -185,6 +187,7 @@ export function createProbe({ engine, logger, notify, scratchDir, file }) {
         state.finishedAt = saved.finishedAt || null;
         state.results = saved.results;
         state.toolset = Array.isArray(saved.toolset) ? saved.toolset : [];
+        state.model = saved.model || null;
         log.info(`probe results restored: ${state.results.length} cases from an earlier run`);
       }
     }
@@ -199,7 +202,7 @@ export function createProbe({ engine, logger, notify, scratchDir, file }) {
       const tmp = `${file}.${process.pid}.tmp`;
       fs.writeFileSync(
         tmp,
-        `${JSON.stringify({ finishedAt: state.finishedAt, toolset: state.toolset, results: state.results }, null, 2)}\n`,
+        `${JSON.stringify({ finishedAt: state.finishedAt, model: state.model, toolset: state.toolset, results: state.results }, null, 2)}\n`,
         'utf8',
       );
       fs.renameSync(tmp, file);
@@ -358,7 +361,7 @@ export function createProbe({ engine, logger, notify, scratchDir, file }) {
 
   async function run() {
     if (state.running) return { started: false, reason: 'A probe is already running.' };
-    state = { running: true, startedAt: Date.now(), finishedAt: null, current: null, results: [], toolset: [] };
+    state = { running: true, startedAt: Date.now(), finishedAt: null, current: null, results: [], toolset: [], model: null };
     notify({ kind: 'probe', type: 'probe.started', total: PROBE_CASES.length });
 
     fs.mkdirSync(scratchDir, { recursive: true });
@@ -372,7 +375,22 @@ export function createProbe({ engine, logger, notify, scratchDir, file }) {
       state.current = 'toolset';
       notify({ kind: 'probe', type: 'probe.case.started', case: 'toolset', tool: 'discovery' });
       state.toolset = await discoverToolset(session.id);
-      notify({ kind: 'probe', type: 'probe.toolset', toolset: state.toolset });
+      // Name the model only after that first turn: a session created without an
+      // explicit model reports none until it has run. If it still reports none,
+      // fall back to the engine's default model — that is what is actually
+      // serving this run.
+      try {
+        const info = await engine.getSession(session.id);
+        let ref = info?.model || null;
+        let variant = info?.variant || null;
+        if (!ref) {
+          const def = await engine.getDefaultModel?.();
+          ref = def?.ref || null;
+          variant = null;
+        }
+        state.model = ref ? `${ref}${variant && variant !== 'default' ? `#${variant}` : ''}` : null;
+      } catch { state.model = null; }
+      notify({ kind: 'probe', type: 'probe.toolset', toolset: state.toolset, model: state.model });
       for (const c of PROBE_CASES) {
         try {
           state.results.push(await runOne(session.id, c));

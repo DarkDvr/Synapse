@@ -29,14 +29,17 @@
   },
   "roles": {
     "designer": {
-      "ref": "opencode/space-bunny-free"
+      "ref": "opencode/nemotron-3-ultra-free"
     },
     "critic": {
       "ref": "opencode/cat-jam-free",
-      "variant": "max"
+      "variant": "high"
     },
     "architect": {
       "ref": "opencode/deepseek-v4.1-flash-free"
+    },
+    "coder-1": {
+      "ref": "opencode/mimo-v2.6-flash-free"
     }
   },
   "logging": {

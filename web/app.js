@@ -541,9 +541,16 @@ function applyRoleCardsLayout({ animate = true } = {}) {
     return;
   }
 
+  // Single target: everything above the first worker, including the 12px top
+  // margin the Architect row gets from `.topology > * + *` (the absolute path
+  // layer is a preceding child, so the selector matches it). Using the card's
+  // own height here clipped exactly that margin, cut the card's bottom border
+  // and grew a scrollbar.
+  const topoRect = topo.getBoundingClientRect();
   const arch = topo.querySelector('.topo-architect');
-  const archH = Math.ceil(arch?.getBoundingClientRect().height || 0);
-  wrap.style.setProperty('--reveal-h', `${Math.min(archH, Math.round(stageBudget($('stage'))))}px`);
+  const archBottom = arch?.getBoundingClientRect().bottom ?? topoRect.top;
+  const singleH = Math.ceil(archBottom - topoRect.top);
+  wrap.style.setProperty('--reveal-h', `${Math.min(singleH, Math.round(stageBudget($('stage'))))}px`);
   if (!animate) {
     document.body.classList.remove('workers-on');
     return;
@@ -586,6 +593,13 @@ async function switchMode() {
 // change is stored in the config file; the Architect's copy is also applied to
 // the open session immediately, while worker selections wait for the
 // orchestration layer to spawn their sessions.
+// One chevron, as an inline SVG stroke. The previous rotated-border box aliased
+// into odd shapes at this size; a round-capped stroke stays crisp.
+const EFFORT_CHEV =
+  '<svg class="effort-chev" viewBox="0 0 10 6" aria-hidden="true">' +
+  '<path d="M1 5 L5 1.3 L9 5" fill="none" stroke="currentColor" stroke-width="1.6" ' +
+  'stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
 function renderEffort(roleId) {
   const sel = document.querySelector(`.role-model[data-role="${roleId}"]`);
   const btn = document.querySelector(`.role-effort[data-role="${roleId}"]`);
@@ -603,7 +617,7 @@ function renderEffort(roleId) {
   btn.disabled = top.length === 0;
   btn.dataset.level = String(level);
   btn.innerHTML = level
-    ? `<span class="effort-glyph">${'<span class="effort-chev"></span>'.repeat(level)}</span>`
+    ? `<span class="effort-glyph">${EFFORT_CHEV.repeat(level)}</span>`
     : '<span class="effort-glyph"><span class="effort-auto"></span></span>';
   const tools = Array.isArray(model?.tools) && model.tools.length ? ` · ${model.tools.length} tools` : '';
   btn.title = top.length
@@ -961,12 +975,27 @@ async function commitRename() {
 }
 
 // ── view state ──────────────────────────────────────────────────
+
+/**
+ * The two-column topology needs ~786px of stage (two 360px cards + the spine).
+ * Below that the cards stack into one column, because squeezing them hides the
+ * select and the buttons. Measured from the stage, not the window: the rail
+ * stacking below 1180px changes the stage width on its own.
+ */
+function syncTopologyDensity() {
+  const stage = $('stage');
+  if (!stage) return;
+  const width = stage.getBoundingClientRect().width;
+  document.body.classList.toggle('topology-tight', width > 0 && width < 790);
+}
+
 function setView() {
   document.body.dataset.view = state.view;
   document.body.dataset.mode = state.mode;
   // the mode toggle is a session control: there is nothing to switch without
   // an open session
   $('modeToggle').hidden = state.view !== 'session';
+  syncTopologyDensity();
   applyRoleCardsLayout();
   renderComposer();
   updateSessionHeader();
@@ -1477,6 +1506,13 @@ async function renderProbe() {
   }
 
   const results = st.results || [];
+  const modelEl = $('probeModel');
+  if (modelEl) {
+    // These results belong to one model; the toolset and the timings are only
+    // meaningful with it named.
+    modelEl.textContent = st.model ? `Model: ${st.model}` : '';
+    modelEl.hidden = !modelEl.textContent;
+  }
   const tsEl = $('probeToolset');
   if (tsEl) {
     // The toolset is per-model, so it is worth stating outright rather than
@@ -1962,11 +1998,33 @@ function wire() {
   });
 
   window.addEventListener('resize', () => requestAnimationFrame(() => {
+    syncTopologyDensity();
     if (state.view === 'session') applyRoleCardsLayout({ animate: false });
     drawActivePath();
     renderChatNav();
   }));
-  if (window.ResizeObserver) new ResizeObserver(() => drawActivePath()).observe($('topology'));
+
+  // The card heights change after the fonts load (and with any content change),
+  // which used to leave the wrapper's max-height stale by a pixel or two — the
+  // Architect card was cut and the wrapper grew a scrollbar. Re-measure whenever
+  // the topology's box changes.
+  if (window.ResizeObserver) {
+    let topoRaf = 0;
+    new ResizeObserver(() => {
+      if (topoRaf) return;
+      topoRaf = requestAnimationFrame(() => {
+        topoRaf = 0;
+        if (state.view === 'session') applyRoleCardsLayout({ animate: false });
+        drawActivePath();
+      });
+    }).observe($('topology'));
+  }
+  // Fonts settle a tick after first paint; measure once more when they do.
+  if (document.fonts?.ready) {
+    document.fonts.ready.then(() => {
+      if (state.view === 'session') applyRoleCardsLayout({ animate: false });
+    }).catch(() => {});
+  }
 
   setInterval(refreshStatus, 10000);
 

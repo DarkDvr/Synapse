@@ -325,6 +325,12 @@ export class OpenCodeEngine extends Engine {
     return data.map(normalizeModel);
   }
 
+  /** The model a session gets when it has no explicit selection. */
+  async getDefaultModel() {
+    const r = await this.request('GET', '/api/model/default');
+    return r?.data ? normalizeModel(r.data) : null;
+  }
+
   async listAgents() {
     const r = await this.request('GET', '/api/agent');
     const data = Array.isArray(r?.data) ? r.data : [];

@@ -318,6 +318,8 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
         startedAt: s.startedAt,
         finishedAt: s.finishedAt,
         results: s.results,
+        // Which model these results are for — the toolset is per model.
+        model: s.model || null,
         // Which tools this model was given, as it reported them. Shown in the
         // panel so a "not called" verdict is not read as a model failure.
         toolset: s.toolset || [],

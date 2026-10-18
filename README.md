@@ -242,6 +242,10 @@ the project whose directory they run in.
   the model for a short title through the engine's one-shot `generate` route —
   which does **not** add anything to the transcript — and renames the session.
   One attempt per session, never for a session you have named yourself.
+- **Git on the first successful turn.** The same moment also checks the
+  session's folder for a repository and runs `git init` if there is none. A
+  folder inside an existing repo (Synapse's own `workspace\`, for example) is
+  left alone, so no nested repos are ever created.
 - **The role cards are live controls, not status.** They carry the per-role
   model and thinking-effort pickers; per-role activity (what each worker is
   doing) arrives with the orchestration layer in stages 3–6.

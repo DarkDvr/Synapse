@@ -1,7 +1,7 @@
 // Synapse entry point: load config, start the engine, serve the UI.
 import fs from 'node:fs';
 import path from 'node:path';
-import { spawn } from 'node:child_process';
+import { spawn, execFile } from 'node:child_process';
 import { DATA_DIR, LOGS_DIR, WORKSPACE_DIR, ENGINE_HOME, PID_FILE, PROJECTS_FILE, TOOL_STATS_FILE, PROBE_DIR, PROBE_FILE, MODEL_CACHE_FILE } from './paths.js';
 import { loadConfig, saveConfig } from './config.js';
 import { logger } from './logger.js';
@@ -137,22 +137,56 @@ async function main() {
     if (sel?.ref) inspectModel(sel.ref);
   }
 
-  // Scan a finished turn once: its tool calls go into the census, and a
-  // still-unnamed session gets its name.
-  async function afterTurn(sessionId) {
+  // ── first-response git check ─────────────────────────────────
+  // A session's project folder should be a git repository before the agent
+  // starts editing files. When the first turn succeeds, check for one and
+  // `git init` if there is none. `rev-parse` succeeds inside any parent repo,
+  // so a folder under an existing repository is left alone — never a nested
+  // repo. Once per directory per run; resets on restart, where the check is
+  // cheap and idempotent.
+  const gitChecked = new Set();
+  function git(args, dir) {
+    return new Promise((resolve, reject) => {
+      execFile('git', args, { cwd: dir, windowsHide: true, timeout: 20000 }, (err, stdout) =>
+        (err ? reject(err) : resolve(String(stdout || '').trim())),
+      );
+    });
+  }
+  async function ensureGitRepo(dir) {
+    if (!dir || gitChecked.has(dir)) return;
+    gitChecked.add(dir);
+    try {
+      await git(['rev-parse', '--git-dir'], dir);
+      return; // already a repository, or inside one
+    } catch { /* not under git — initialize it below */ }
+    try {
+      await git(['init'], dir);
+      app.info(`git: initialized ${dir}`);
+    } catch (err) {
+      app.warn(`git init skipped for ${dir}: ${err.message}`);
+    }
+  }
+
+  // Scan a finished turn once: its tool calls go into the census, a
+  // still-unnamed session gets its name, and a project folder without git gets
+  // a repository.
+  async function afterTurn(sessionId, type) {
     try {
       const messages = await engine.getMessages(sessionId);
       let session = null;
       try { session = await engine.getSession(sessionId); } catch { /* gone */ }
+      if (type === 'session.execution.succeeded' && session?.directory) {
+        ensureGitRepo(session.directory).catch(() => {});
+      }
       const added = toolStats.recordMessages(messages, {
         // A session created without an explicit model reports none until later;
-        // fall back to the configured default so the census stays per-model.
-        // A non-default thinking variant is part of the identity here: `#max`
-        // and `#low` are different configurations of the same model.
+        // fall back to the Architect's stored choice so the census stays
+        // per-model. A non-default thinking variant is part of the identity
+        // here: `#max` and `#low` are different configurations of one model.
         model: session?.model
           ? session.model + (session.variant && session.variant !== 'default' ? `#${session.variant}` : '')
-          : getConfig().defaults?.model || '(engine default)',
-        agent: session?.agent || getConfig().defaults?.agent || '(default)',
+          : getConfig().roles?.architect?.ref || '(engine default)',
+        agent: session?.agent || '(default)',
         sessionId,
       });
       if (added) {
@@ -170,7 +204,7 @@ async function main() {
     const type = ev?.type;
     if (!ev?.sessionId) return;
     if (type === 'session.execution.succeeded') titler.maybeTitle(ev.sessionId);
-    if (/^session\.execution\.(succeeded|failed|interrupted)$/.test(type)) afterTurn(ev.sessionId);
+    if (/^session\.execution\.(succeeded|failed|interrupted)$/.test(type)) afterTurn(ev.sessionId, type);
   });
   // Anything left unnamed from a previous run gets named shortly after boot.
   {

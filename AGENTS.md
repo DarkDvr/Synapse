@@ -327,6 +327,27 @@ failure "not offered by this model" when the tool was never in its list.
 - It **interrupts a timed-out case** before starting the next. Without that, the
   wedge is inherited and every later case fails too.
 - Results persist to `data\probe.json` so a restart does not blank the panel.
+  The run records **which model** it was against (captured after the toolset
+  discovery turn — a fresh session reports no model before its first turn), and
+  the panel names it above the results: tool timings and toolset are
+  model-specific, so a result without a model is unreadable.
+
+---
+
+## Git on a session's first successful turn
+
+Beside the auto-namer in `afterTurn`, Synapse checks the session's directory for
+a repository (`git rev-parse --git-dir`) and runs `git init` if there is none.
+This is once per directory per process and needs no config.
+
+- `rev-parse` succeeds inside any **parent** repo, so a project folder under an
+  existing repository is left alone — Synapse never creates a nested repo. That
+  also covers `workspace\`, which lives inside Synapse's own repository.
+- `git` missing or the command failing is logged and skipped; a turn never
+  fails because of it. Verified the commands in an isolated temp folder:
+  exit 128 before `git init`, `.git` and exit 0 after.
+- The name and the repo are independent side effects of the same succeeded turn;
+  the title is still the model's call through the one-shot `generate` route.
 
 ---
 
@@ -370,9 +391,11 @@ failure "not offered by this model" when the tool was never in its list.
   by `normalize()` and the key is deleted. Changing the Architect card switches
   the open session immediately (`POST /api/session/{id}/model`); worker picks are
   stored for the orchestration layer, which is not built yet.
-- **The thinking-effort button** shows 1–3 stacked **orange** chevrons — dot =
-  engine default, chevrons = the three highest variants a model allows. Orange
-  because green is semantic-only in this palette. Click cycles
+- **The thinking-effort button** shows 1–3 stacked **green** chevrons — dot =
+  engine default, chevrons = the three highest variants a model allows. The
+  chevrons are inline **SVG strokes with round caps**, not a font and not
+  rotated bordered boxes: at 22px those alias into odd shapes, which is what
+  made them look like a strange typeface. Click cycles
   default → lowest → … → highest → default; the tooltip is
   `Current thinking effort: <label>` where `<label>` is the provider's own
   `reasoningEffort` value, never our id. Models with 2/1 variants get 2/1
@@ -393,7 +416,21 @@ failure "not offered by this model" when the tool was never in its list.
   Architect, leaving the workers clipped behind the chat while Multi appeared to
   do nothing. Measure with `scrollHeight` (integer-rounded, so no half-pixel
   scrollbar), cap by the stage only in the wide layout, and cap by the viewport
-  otherwise.
+  otherwise. **And measure from the topology's top, not the card's height**: the
+  absolute `.path-layer` is the first child, so `.topology > * + *` gives the
+  Architect's row a 12px top margin — using the card height alone clipped
+  exactly that margin, cut the card's bottom border and grew a scrollbar.
+  Re-measure on the topology's `ResizeObserver` and on `document.fonts.ready`:
+  the card height changes after the font swap, and a stale `--reveal-h` looked
+  like a one-pixel clip.
+- **Cards have a hard minimum width** (`--card-min: 360px`): below that the
+  select, the chevron and the edit button start colliding and the name is
+  ellipsised away. Two columns + the 66px spine therefore need ~790px of stage;
+  when the measured stage is narrower, `syncTopologyDensity()` adds
+  `body.topology-tight` and the cards stack into one column, connectors and the
+  path layer hidden. `body.topology-tight .topology > .link.link` is not a typo:
+  it must outrank the four-class `body.workers-on .topology > *:not(…)` rule, or
+  the dotted connectors reappear between stacked cards in Multi.
   The glyph measurements that matter: both button glyphs are centred on the 22px
   button to within 0.01px, with ~1.5px of margin left top and bottom at three
   chevrons — if the glyph or border size changes, re-measure with
