@@ -55,13 +55,26 @@ function parseInput(input) {
   }
 }
 
-export function createRunner({ engine, logger, getConfig }) {
+export function createRunner({ engine, logger, getConfig, notify }) {
   const log = logger.channel('tools');
   // One worker per project at a time: two Architects on the same plan is the
   // one thing that can actually corrupt it.
   const busy = new Set();
   // Requests picked up in this process, so a transcript re-read cannot re-run one.
   const claimed = new Set();
+  // What is running right now, keyed by directory. The UI draws the cards' state
+  // and the live path from this; it is also served over HTTP so a page reload
+  // mid-run does not lose the picture.
+  const running = new Map();
+  const dirKey = (d) => String(d ?? '').replace(/[\\/]+$/, '').toLowerCase();
+
+  /** Tell the open UIs what a worker is doing. A broken listener must never
+   *  break a run, so this can never throw. */
+  const emit = (type, data) => {
+    try {
+      notify?.({ kind: 'run', type, ...data });
+    } catch { /* ignore */ }
+  };
 
   /** Delegation requests in a transcript that have not been answered yet. */
   function requestsIn(messages, dir) {
@@ -222,6 +235,24 @@ export function createRunner({ engine, logger, getConfig }) {
         `(${modelRef || 'engine default'}${variant ? `#${variant}` : ''}) in ${project}, ceiling ${timeoutSec}s`,
     );
 
+    // The card that will run this, and the path the UI draws to it. Kept in a
+    // map as well as broadcast, so a page reloaded mid-run can ask what is
+    // happening rather than showing an idle screen while work is in flight.
+    const live = {
+      dir,
+      role,
+      task: task.id,
+      title: task.title,
+      architect: architectId,
+      model: modelRef,
+      variant,
+      startedAt,
+      timeoutSec,
+      tool: null,
+    };
+    running.set(dirKey(dir), live);
+    emit('run.started', live);
+
     try {
       worker = await engine.createSession({
         title: `${request.task} - ${role}`,
@@ -242,7 +273,10 @@ export function createRunner({ engine, logger, getConfig }) {
 
       const before = (await engine.getMessages(worker.id)).length;
       await engine.prompt(worker.id, workerPrompt({ task, note: request.note, goal: plan.plan?.goal }));
-      const finished = await waitForIdle(worker.id, before, timeoutMs);
+      const finished = await waitForIdle(worker.id, before, timeoutMs, (tool) => {
+        live.tool = tool;
+        emit('run.progress', { ...live });
+      });
       if (finished.timedOut) {
         outcome = 'timeout';
         try { await engine.interrupt(worker.id); } catch { /* already gone */ }
@@ -259,6 +293,18 @@ export function createRunner({ engine, logger, getConfig }) {
       log.warn(`worker for ${request.task} failed: ${err.message}`);
     } finally {
       busy.delete(dir);
+      // The card goes back to idle and the path is erased as soon as the worker
+      // stops — before the Architect is woken, so the two never disagree.
+      running.delete(dirKey(dir));
+      emit('run.finished', {
+        dir,
+        role,
+        task: task.id,
+        title: task.title,
+        outcome,
+        ms: Date.now() - startedAt,
+        files: files.length,
+      });
     }
 
     // The plan must not have moved under the worker's feet.
@@ -310,9 +356,14 @@ export function createRunner({ engine, logger, getConfig }) {
   /** Poll until the worker's turn closes with `idle`, which is the engine's own
    *  end-of-turn signal — never a timer. The ceiling is the task's own
    *  (per-role) one, and hitting it interrupts the session and reports a timeout;
-   *  whatever the worker produced up to then is still gathered as evidence. */
-  async function waitForIdle(workerId, before, timeoutMs) {
+   *  whatever the worker produced up to then is still gathered as evidence.
+   *
+   *  The same poll is where the card's live activity comes from: the worker's
+   *  transcript is already being fetched, so the newest tool call costs nothing
+   *  extra and the operator can watch the work instead of guessing at it. */
+  async function waitForIdle(workerId, before, timeoutMs, onTool) {
     const deadline = Date.now() + timeoutMs;
+    let lastKey = '';
     while (Date.now() < deadline) {
       await sleep(POLL_MS);
       let messages;
@@ -321,11 +372,44 @@ export function createRunner({ engine, logger, getConfig }) {
       } catch {
         continue;
       }
+      if (onTool) {
+        const tool = latestTool(messages, before);
+        const key = tool ? `${tool.name}\u0000${tool.target}` : '';
+        if (key && key !== lastKey) {
+          lastKey = key;
+          onTool(tool);
+        }
+      }
       if (messages.length > before && messages[messages.length - 1]?.type === 'idle') {
         return { timedOut: false };
       }
     }
     return { timedOut: true };
+  }
+
+  /**
+   * The worker's newest tool call, and what it is pointed at.
+   *
+   * Only messages from `from` onward are scanned, so a long turn costs one pass
+   * over its new messages rather than a re-read of the whole transcript. The
+   * input field name differs per tool, which is why file, shell, search, fetch,
+   * skill and subagent targets are all read here: the card says "writing
+   * calendar.py", not "write".
+   */
+  function latestTool(messages, from = 0) {
+    let found = null;
+    for (let i = Math.max(0, from | 0); i < (messages || []).length; i += 1) {
+      for (const part of messages[i]?.parts || []) {
+        if (part?.type !== 'tool' || !part.name) continue;
+        const input = parseInput(part.input) || {};
+        const raw =
+          input.filePath ?? input.file_path ?? input.path ??
+          input.command ?? input.pattern ?? input.url ??
+          input.skill ?? input.agent ?? '';
+        found = { name: String(part.name), target: String(raw || '').trim() };
+      }
+    }
+    return found;
   }
 
   function workerPrompt({ task, note, goal }) {
@@ -420,6 +504,10 @@ export function createRunner({ engine, logger, getConfig }) {
     }
   }
 
-  return { handleTurn, requestsIn };
+  /** What is running now, for `GET /api/runs` — so a reloaded UI reopens onto
+   *  the same picture the cards had before it. */
+  const active = () => [...running.values()];
+
+  return { handleTurn, requestsIn, active };
 }
 

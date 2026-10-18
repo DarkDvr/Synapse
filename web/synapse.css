@@ -485,14 +485,16 @@ body.dark .sidebar-bottom,
   position: absolute; inset: 0; z-index: 3;
   pointer-events: none; overflow: visible;
 }
+/* The arrow is yellow and the ants that travel it are orange: the mockup's
+   pair, and orange is this palette's colour for dot-ants. */
 .path-layer .flow {
-  fill: none; stroke: var(--orange); stroke-width: 2.5; stroke-linejoin: round;
+  fill: none; stroke: var(--yellow); stroke-width: 2.5; stroke-linejoin: round;
 }
-.path-layer marker path { fill: var(--orange); }
-/* ants ride a solid orange line, so they read as lighter beads with a glow */
+.path-layer marker path { fill: var(--yellow); }
+/* ants ride a solid line, so they read as beads with a glow */
 .path-layer circle {
-  fill: #ffd8b0; opacity: 0.8;
-  filter: drop-shadow(0 0 3px rgba(255, 125, 26, 0.9));
+  fill: var(--orange); opacity: 0.9;
+  filter: drop-shadow(0 0 3px rgba(255, 125, 26, 0.85));
 }
 
 .topo-architect { grid-column: 1 / -1; display: flex; justify-content: center; }
@@ -535,6 +537,23 @@ body.dark .sidebar-bottom,
   transition: border-color 0.18s ease, background-color 0.18s ease, opacity 0.2s ease;
 }
 .role-card:hover { border-color: #454950; }
+
+/* The card's subtitle: the task this role is on, and what it is doing to it.
+   It is absent while the role has nothing to show, so an idle topology stays as
+   short as it was — and when it appears, the room comes from the top of the
+   chat, never from the composer. */
+.role-task {
+  margin: 0; min-width: 0;
+  font-size: 11.5px; line-height: 1.45; color: #b9bdc4;
+  overflow-wrap: anywhere;
+}
+.role-task[hidden] { display: none; }
+
+/* The two roles taking part in a delegation: the requester green (the
+   Architect's own colour), the worker red. Colour only — changing the width
+   would shift every card below it. */
+.role-card.is-initiator { border-color: var(--green); }
+.role-card.is-worker { border-color: var(--red); }
 
 .role-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .role-head h3 {

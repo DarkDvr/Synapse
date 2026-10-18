@@ -45,6 +45,13 @@ const state = {
   busySessions: new Set(),
   busySince: new Map(),
   toolsInFlight: new Set(),
+  // Delegated work in flight, keyed by directory: one worker per project, so a
+  // project has at most one entry. The cards and the live path are drawn from
+  // this, and `GET /api/runs` is what a page opened mid-run starts from.
+  runs: new Map(),
+  // Signature of what the role cards are showing, so a poll that learned nothing
+  // does not re-measure the wrapper and jiggle the chat.
+  roleSig: '',
   forms: [],
   // 'single' (one Architect, all tools, no delegation) or 'multi' (delegation
   // allowed, role cards revealed). New sessions start single; the toggle
@@ -578,7 +585,7 @@ function measureReveal(topo, stage) {
  * not even a transient one can scroll). The measured height is used only for
  * the 320ms Multi→Single collapse animation.
  */
-function applyRoleCardsLayout({ animate = true } = {}) {
+function applyRoleCardsLayout({ animate = true, from = null } = {}) {
   const els = topologyTarget();
   if (!els || state.view !== 'session') return;
   const { wrap, topo } = els;
@@ -590,7 +597,12 @@ function applyRoleCardsLayout({ animate = true } = {}) {
     // `max-height: none` does not interpolate, so growing straight out of the
     // Single resting state would snap instead of sliding. Pin the current
     // height first, force a reflow, then grow to the measured target.
-    const fromH = Math.ceil(wrap.getBoundingClientRect().height);
+    //
+    // `from` is the height to animate from when the caller already changed the
+    // content: a card that just gained a subtitle is taller by the time this
+    // runs, and pinning *that* would snap instead of sliding. The chat's top
+    // edge is what moves; its bottom is pinned by the stage's definite height.
+    const fromH = from ?? Math.ceil(wrap.getBoundingClientRect().height);
     document.body.classList.add('workers-on');
     wrap.style.setProperty('--reveal-h', `${fromH}px`);
     // the reflow is what makes the reveal animate instead of snapping
@@ -1094,6 +1106,7 @@ function setView() {
   renderKeep();
   applyRoleCardsLayout();
   renderComposer();
+  renderRoleActivity();
   requestAnimationFrame(drawActivePath);
 }
 
@@ -1133,8 +1146,159 @@ function showNothing() {
   renderPlan();
 }
 
-// The live connection is drawn as one solid orange path from the requester
-// down the spine and across into the worker, with faint ants travelling it.
+// ── live delegated work ─────────────────────────────────────────
+// The runner broadcasts a run's whole life (`run.started` → `run.progress` →
+// `run.finished`) and serves the same shape at `GET /api/runs`, so a page opened
+// mid-run starts from the truth rather than from an idle screen. One worker per
+// project at a time, so a project has at most one live run.
+const dirKey = (d) => String(d ?? '').replace(/[\\/]+$/, '').toLowerCase();
+const runIn = (project) => (project ? state.runs.get(dirKey(project.directory)) || null : null);
+const currentRun = () => runIn(currentProject());
+const roleLabel = (id) => ROLES.find((r) => r.id === id)?.name || String(id || '');
+
+/** A tool call as the card's phrase: "writing calendar.py". */
+function runPhrase(tool) {
+  const name = String(tool?.name || '');
+  const target = String(tool?.target || '');
+  const file = target.split(/[\\/]/).filter(Boolean).pop() || '';
+  const cut = (s, n) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
+  switch (name) {
+    case 'write': return file ? `writing ${file}` : 'writing a file';
+    case 'edit': return file ? `editing ${file}` : 'editing a file';
+    case 'read': return file ? `reading ${file}` : 'reading';
+    case 'shell': return target ? `running ${cut(target, 40)}` : 'running a command';
+    case 'grep':
+    case 'glob': return file ? `searching ${file}` : 'searching';
+    case 'webfetch': return 'fetching a page';
+    case 'skill': return file ? `using ${file}` : 'loading a skill';
+    case 'subagent': return 'delegating';
+    case 'question': return 'asking the operator';
+    default: return name || 'working';
+  }
+}
+
+/** The newest tool call in the open transcript — the Architect's own activity
+ *  while its turn is running (a worker's comes from the runner instead). */
+function latestToolIn(messages) {
+  let found = null;
+  for (const m of messages || []) {
+    for (const p of m?.parts || []) {
+      if (p?.type === 'tool' && p.name) found = { name: String(p.name), target: toolTarget(p) };
+    }
+  }
+  return found;
+}
+
+/** The card a role owns. The role id lives on its model select, which the picker
+ *  code already treats as the source of truth for which card is whose. */
+const cardFor = (role) => {
+  const sel = document.querySelector(`#topology .role-model[data-role="${CSS.escape(String(role || ''))}"]`);
+  return sel ? sel.closest('.role-card') : null;
+};
+
+/**
+ * Give every card a role id and a subtitle slot.
+ *
+ * The ids are read off the cards' own model selects rather than written into the
+ * markup a second time: one source of truth per role, and a card added to
+ * index.html gets its slot without anyone remembering to add one.
+ */
+function initRoleCards() {
+  for (const card of document.querySelectorAll('#topology .role-card')) {
+    const sel = card.querySelector('.role-model[data-role]');
+    if (sel) card.dataset.role = sel.dataset.role;
+    if (!card.querySelector('.role-task')) {
+      const slot = document.createElement('p');
+      slot.className = 'role-task';
+      slot.hidden = true;
+      card.append(slot);
+    }
+  }
+}
+
+/** What every card is doing right now.
+ *
+ *  The Architect takes part twice over: while a worker runs it says who it is
+ *  waiting on, and while its own turn is in flight it shows what it is doing.
+ *  The worker shows the task it was handed with its newest tool call in
+ *  brackets — no task id, no destination: the arrow already says who and where.
+ *  Those two cards are also the only ones that change appearance: the requester
+ *  takes green, the worker red, so which two roles are talking is readable at a
+ *  glance instead of from a word.
+ */
+function renderRoleActivity() {
+  const run = currentRun();
+  const archBusy = isBusy(state.sessionId);
+  const archTool = archBusy ? latestToolIn(state.messages) : null;
+  const rows = [];
+  let sig = '';
+
+  for (const card of document.querySelectorAll('#topology .role-card')) {
+    const role = card.dataset.role;
+    let text = '';
+    let part = '';
+    if (role === 'architect') {
+      if (run) { text = `Waiting on ${roleLabel(run.role)}`; part = 'initiator'; }
+      else if (archBusy) { text = archTool ? runPhrase(archTool) : 'Thinking'; part = 'initiator'; }
+    } else if (run && run.role === role) {
+      text = `${run.title}${run.tool ? ` (${runPhrase(run.tool)})` : ''}`;
+      part = 'worker';
+    }
+    rows.push({ card, text, part });
+    sig += `${role}\u0001${part}\u0001${text}\u0002`;
+  }
+
+  if (sig === state.roleSig) return;
+  state.roleSig = sig;
+
+  // Measured before the text changes, so the wrapper animates from the height
+  // the chat's top edge is actually at. The dock's bottom does not move: it is
+  // pinned by the stage's definite height, so a taller card has to take its room
+  // from the transcript's top edge.
+  const fromH = Math.ceil($('topologyWrap')?.getBoundingClientRect().height || 0);
+  for (const { card, text, part } of rows) {
+    const slot = card.querySelector('.role-task');
+    if (!slot) continue;
+    slot.textContent = text;
+    slot.hidden = !text;
+    card.classList.toggle('is-initiator', part === 'initiator');
+    card.classList.toggle('is-worker', part === 'worker');
+  }
+  if (state.view === 'session') {
+    applyRoleCardsLayout({ animate: true, from: fromH });
+  }
+  requestAnimationFrame(drawActivePath);
+}
+
+/** Ask what is running. The SSE stream is the fast path; this is what a page
+ *  reloaded in the middle of a run starts from. */
+async function loadRuns() {
+  try {
+    const { runs } = await api('GET', '/api/runs');
+    state.runs = new Map((runs || []).map((r) => [dirKey(r.dir), r]));
+  } catch { /* the stream will catch up */ }
+  state.roleSig = '';
+  renderRoleActivity();
+}
+
+/** One delegated run, live: started, its newest tool call, then finished. */
+function handleRunEvent(ev) {
+  const key = dirKey(ev.dir);
+  if (ev.type === 'run.started' || ev.type === 'run.progress') {
+    state.runs.set(key, { ...(state.runs.get(key) || {}), ...ev });
+  } else if (ev.type === 'run.finished') {
+    state.runs.delete(key);
+  } else {
+    return;
+  }
+  renderRoleActivity();
+}
+
+// The live path: one solid arrow from the requester down the spine and across
+// into the worker, with orange ants travelling it — the design in
+// `docs/stage-1-mockup-rev6.pdf`. It is measured from the real boxes at full
+// precision (the spine's exact centreline, the dotted band's exact centre) so
+// the arrow covers the dots it replaces instead of stepping past them.
 function drawActivePath() {
   const layer = $('pathLayer');
   const topo = $('topology');
@@ -1142,42 +1306,47 @@ function drawActivePath() {
   layer.innerHTML = '';
   if (!topo.offsetParent || topo.clientWidth === 0) return; // hidden view
 
-  const active = topo.querySelector('.link.active');
+  const run = currentRun();
   const arch = topo.querySelector('.topo-architect .role-card');
-  if (!active || !arch) return;
+  const dest = run ? cardFor(run.role) : null;
+  if (!run || !arch || !dest) return;
 
-  const kids = [...topo.children];
-  const idx = kids.indexOf(active);
-  const rtl = active.classList.contains('rtl');
-  const dest = rtl ? kids[idx - 1] : kids[idx + 1];
-  if (!dest || !dest.classList.contains('role-card')) return;
+  // The row's connector cell owns the band the path runs along, and the spine is
+  // that cell's exact centre. The cell is a sibling of the row's two cards —
+  // before the right-hand one, after the left-hand one.
+  const sibling = (el) => (el && el.classList.contains('link') ? el : null);
+  const cell = sibling(dest.previousElementSibling) || sibling(dest.nextElementSibling);
+  const spineCell = topo.querySelector('.link') || cell;
+  const band = cell?.querySelector('.link-line')?.getBoundingClientRect();
+  if (!band || !spineCell) return;
 
-  // Measure the spine and the dotted band from the connector cell itself, and
-  // keep full precision (no rounding) — anything else leaves a sub-pixel step
-  // between the orange path and the dots it is supposed to cover.
   const box = topo.getBoundingClientRect();
   const a = arch.getBoundingClientRect();
   const d = dest.getBoundingClientRect();
-  const cell = active.getBoundingClientRect();
-  const band = active.querySelector('.link-line').getBoundingClientRect();
-  const n = (v) => Math.round(v * 100) / 100;
+  const s = spineCell.getBoundingClientRect();
+  const n = (v) => Math.round(v * 1000) / 1000;
 
-  const x0 = n(cell.left + cell.width / 2 - box.left);   // exactly the spine
-  const y0 = n(a.bottom - box.top);                      // where the spine starts
-  const y1 = n(band.top + band.height / 2 - box.top);    // exactly the dot centre
-  const x1 = n((rtl ? d.right : d.left) - box.left);     // touches the worker
-  const path = `M ${x0} ${y0} L ${x0} ${y1} L ${x1} ${y1}`;
+  const spineX = n(s.left + s.width / 2 - box.left);
+  const y0 = n(a.bottom - box.top);                 // the requester's bottom edge
+  const y1 = n(band.top + band.height / 2 - box.top); // exactly the dot centre
+  const right = d.left + d.width / 2 > box.left + box.width / 2;
+  const x1 = n((right ? d.left : d.right) - box.left); // touches the worker
+  const path = `M ${spineX} ${y0} L ${spineX} ${y1} L ${x1} ${y1}`;
 
   layer.setAttribute('viewBox', `0 0 ${box.width} ${box.height}`);
   layer.setAttribute('preserveAspectRatio', 'none');
 
   const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const COUNT = 12;
-  const DUR = 3.4;
+  // Even pitch rather than a fixed count: a long path gets more ants, so the
+  // beads read as one dotted line the whole way, and the speed stays constant
+  // instead of the ants sprinting down a short path and crawling down a long one.
+  const len = Math.abs(y1 - y0) + Math.abs(x1 - spineX);
+  const COUNT = Math.max(5, Math.round(len / 16));
+  const DUR = Math.max(2.2, len / 90);
   const ants = reduce
     ? ''
     : Array.from({ length: COUNT }, (_, i) =>
-        `<circle r="3"><animateMotion dur="${DUR}s" begin="${(i * DUR / COUNT).toFixed(2)}s" repeatCount="indefinite" path="${path}"></animateMotion></circle>`,
+        `<circle r="2.8"><animateMotion dur="${DUR.toFixed(2)}s" begin="${(i * DUR / COUNT).toFixed(2)}s" repeatCount="indefinite" path="${path}"></animateMotion></circle>`,
       ).join('');
 
   layer.innerHTML =
@@ -1255,6 +1424,9 @@ function renderTranscript() {
   const el = $('transcript');
   if (!el) return;
   toolSeq = 0;
+  // The Architect's card shows what its own turn is doing, read from this same
+  // transcript, so it is refreshed wherever the transcript is.
+  renderRoleActivity();
   // Only the conversation itself is shown: user turns, assistant turns, and the
   // harness speaking (a worker's report being handed back). Anything else the
   // engine reports (system prompts, scaffolding, context dumps) is not chat and
@@ -1992,6 +2164,13 @@ function connectStream() {
       return;
     }
 
+    // Delegated work: the runner's own events, one per project, adding up to the
+    // live path and the cards' state. Nothing here is a session event.
+    if (ev.kind === 'run') {
+      handleRunEvent(ev);
+      return;
+    }
+
     setEventChip(ev.type);
     const mine = !ev.sessionId || ev.sessionId === state.sessionId;
     // any traffic from a session counts as progress against the stall timer
@@ -2383,6 +2562,9 @@ function wire() {
 
 async function boot() {
   wire();
+  // Before anything is measured: the cards need their role id and their
+  // subtitle slot, and a card's height is what the wrapper is measured against.
+  initRoleCards();
   fitStageHeight();
   state.config = await api('GET', '/api/config').catch(() => null);
   // every new session starts Single; an opened session sets its own mode
@@ -2392,6 +2574,7 @@ async function boot() {
   await refreshStatus();
   await loadModels();
   await loadProjects();
+  await loadRuns();
   renderTranscript();
   connectStream();
   refreshPending();

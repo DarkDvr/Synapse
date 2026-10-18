@@ -109,8 +109,14 @@ async function main() {
 
   // The delegation runner: the Architect asks for work with a tool, and this is
   // what actually runs it — a real session on the task's role and model, run to
-  // completion, recorded, and reported back. See src/runs.js.
-  const runner = createRunner({ engine, logger, getConfig });
+  // completion, recorded, and reported back. See src/runs.js. It also reports the
+  // live state of each run so the role cards and the live path can show it.
+  const runner = createRunner({
+    engine,
+    logger,
+    getConfig,
+    notify: (ev) => http?.broadcast({ ...ev, ts: Date.now() }),
+  });
 
   // The probe drives one turn per tool so we can see what these models actually
   // reach for, and how slow or broken each tool is on this machine.
@@ -277,6 +283,7 @@ async function main() {
     modelCache,
     inspectModel,
     probeDir: PROBE_DIR,
+    runs: runner,
   });
   http = createServer({ api, engine, logger, config: getConfig() });
   await http.listen();

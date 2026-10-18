@@ -5,7 +5,7 @@ import { spawn } from 'node:child_process';
 import { TBD_TITLE } from './titles.js';
 import { ensurePlan, readPlan, briefSession, logPlanState, BRIEF_KEY } from './plans.js';
 
-export function createApi({ getConfig, applyConfig, engine, logger, getBootError, projects, toolStats, probe, modelCache, inspectModel: inspectRef, probeDir }) {
+export function createApi({ getConfig, applyConfig, engine, logger, getBootError, projects, toolStats, probe, modelCache, inspectModel: inspectRef, probeDir, runs }) {
   const app = logger.channel('app');
 
   // The last brief we handed each session, so an unchanged plan does not PUT
@@ -172,6 +172,11 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
       const sessions = await engine.listSessions();
       return { sessions: sessions.filter((s) => !isScratchSession(s)) };
     },
+
+    /** Delegated work in flight, one entry per project. The live path and the
+     *  role cards are drawn from this; the SSE events are the fast path and
+     *  this is what a page opened mid-run starts from. */
+    runs: async () => ({ runs: runs?.active() || [] }),
 
     // ── projects ─────────────────────────────────────────────
     projects: async () => ({ projects: await projectsWithSessions() }),

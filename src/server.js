@@ -114,6 +114,9 @@ export function createServer({ api, engine, logger, config }) {
     // GET /api/pending — permissions, forms and active sessions in one call
     if (seg[0] === 'pending' && method === 'GET') return sendJson(res, 200, await api.pending());
 
+    // GET /api/runs — delegated work in flight (the live path + role cards)
+    if (seg[0] === 'runs' && method === 'GET') return sendJson(res, 200, await api.runs());
+
     // GET /api/tools/stats — the tool-call census · POST /api/tools/reset — clear it
     if (seg[0] === 'tools' && seg[1] === 'stats' && method === 'GET') return sendJson(res, 200, await api.toolStats());
     if (seg[0] === 'tools' && seg[1] === 'reset' && method === 'POST') return sendJson(res, 200, await api.clearToolStats());
