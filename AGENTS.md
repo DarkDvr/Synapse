@@ -323,6 +323,10 @@ ordinary file tools; there is no tool and no store for it.
   directly is fine in Chromium (measured: 34px visible of 84px) even though
   `getComputedStyle` reports its display as `flow-root` — do not wrap it in
   another span on that reading, it clips either way.
+- **A task's `result` is not printed under its title.** One line per task keeps
+  the pane scannable; the result rides the title's tooltip. A `note` is the
+  exception and stays visible — a blocked task is the one case where the operator
+  is being asked for something, so the reason must not be behind a hover.
 - **There are two panel colours, and they are the operator's.** `ui.answerBg`
   (the Architect's answer) and `ui.harnessBg` (the harness speaking — a worker's
   report in its own panel, rendered as markdown because a report has headings and
@@ -331,11 +335,12 @@ ordinary file tools; there is no tool and no store for it.
   amber rule on `.msg-body` with **10px of padding-left** — without that padding
   the rule sat flush against the words.
 - **There is no Project panel, and no path label anywhere.** The rail is Project
-  plan + Tools in use; each project in the sidebar carries its own **Browse**
-  and **Cmd** shortcuts on a `.tree-project-actions` row under its header, with
-  a **Sessions:** label above the indented list so that block is never a mystery.
-  `POST /api/projects/{id}/open` spawns a detached GUI process (array args, never
-  a shell string), and both branches are validated before anything is spawned.
+  plan + Tools in use; each project in the sidebar owns a `.tree-project-body`
+  with one vertical yellow rule on its left, and the two shortcuts, the
+  **Sessions:** label and the sessions all line up to the right of it (verified
+  aligned at the same left edge). `POST /api/projects/{id}/open` spawns a
+  detached GUI process (array args, never a shell string), and both branches are
+  validated before anything is spawned.
 - **A command prompt needs `start`.** `spawn('cmd.exe', ['/K', 'cd', '/d', dir])`
   exits with code 0 within a second and no window ever appears: a console
   spawned directly by a process that has none has no console to inherit. The
@@ -345,10 +350,16 @@ ordinary file tools; there is no tool and no store for it.
   us: `POST /open` answers in ~57ms. Because the delay is real but not ours, the
   button carries an `:active` state so the click is acknowledged immediately.
 - **Speaker headers are yellow, and every turn has a hairline above it.** The
-  label is the speaker (`You` / `Architect` / `Harness · …`), so a harness report
+  label is the speaker (`You` / `Architect` / `Synapse · …`), so a Synapse report
   no longer repeats `[harness]` in its own text — and old messages are stripped
-  at render time. The operator's label stays white: warm text on the violet
-  bubble breaks the palette (it was orange, and read badly).
+  at render time. The three colours are `--violet-bright` (you), `--green`
+  (Architect) and `--yellow` (Synapse), and all three use the same block: no
+  panel fills exist any more. **`ui.answerBg` / `ui.harnessBg` and the Settings
+  → Chat group are gone** — `normalize()` deletes a `ui` block so an old config
+  does not carry a dead key.
+- **The product's name is Synapse; "harness" is what it is, not what it is
+  called.** Anything user-facing says Synapse. The code still says harness in
+  places (the `.msg.harness` class, `src/runs.js`), which is fine internally.
 - **A polled reader must not log on every poll.** `logPlanState` keys on a
   signature of the state (issues + every task's id and status) and speaks only
   when it changes; the pane reads the plan every few seconds, so anything dumber

@@ -56,10 +56,6 @@
   "tools": {
     "resetOnBoot": false
   },
-  "ui": {
-    "answerBg": "#232f23",
-    "harnessBg": "#292715"
-  },
   "worker": {
     "timeoutSec": 300
   },

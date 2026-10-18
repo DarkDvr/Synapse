@@ -879,16 +879,20 @@ function renderTree() {
           ${p.general ? '' : `<button class="tree-x" data-del-project="${esc(p.id)}" title="Delete Project" aria-label="Delete Project">✕</button>`}
         </span>
       </div>
-      <div class="tree-project-actions">
-        <button class="btn-thin" data-browse-project="${esc(p.id)}" title="Open this project's folder in Explorer">Browse</button>
-        <button class="btn-thin" data-cmd-project="${esc(p.id)}" title="Open a command prompt in this project's folder">Cmd</button>
+      <div class="tree-project-body">
+        <div class="tree-project-actions">
+          <button class="btn-thin" data-browse-project="${esc(p.id)}" title="Open this project's folder in Explorer">Browse</button>
+          <button class="btn-thin" data-cmd-project="${esc(p.id)}" title="Open a command prompt in this project's folder">Cmd</button>
+        </div>
+        ${
+          open
+            ? `<div class="tree-sessions-label">Sessions:</div>` +
+              // New Session sits at the bottom: sessions read oldest-first, so
+              // the new one belongs where it will actually land.
+              `<div class="tree-sessions">${p.sessions.map(sessionRow).join('')}${newSessionRow(p.id)}</div>`
+            : ''
+        }
       </div>`);
-    if (open) {
-      // New Session sits at the bottom: sessions read oldest-first, so the new
-      // one belongs where it will actually land.
-      html.push(`<div class="tree-sessions-label">Sessions:</div>`);
-      html.push(`<div class="tree-sessions">${p.sessions.map(sessionRow).join('')}${newSessionRow(p.id)}</div>`);
-    }
     html.push('</div>');
   }
 
@@ -1309,19 +1313,18 @@ function renderMessage(m) {
     </div></div>`;
   }
   if (m.type === 'synthetic') {
-    // The harness speaking: a worker's report, or the harness telling the
-    // Architect something went wrong. Same speaker header as the Architect —
-    // it is a speaker, not a special case — with the report itself in a panel of
-    // its own colour, because a report is prose with headings and code in it.
+    // Synapse speaking: a worker's report, or something the harness needs the
+    // Architect to know. Identical block to the Architect's and the operator's —
+    // same header, same rule down the left — in Synapse's own colour.
     //
     // The leading "[harness]" is stripped because the header already names the
     // speaker. Reports written before that was true are still in the transcript,
     // so this is done here rather than only at the source.
-    const label = m.description ? esc(m.description) : 'Harness';
+    const label = m.description ? esc(m.description) : 'report';
     const body = String(m.text || '').replace(/^\s*\[harness\]\s*/i, '');
-    return `<div class="msg harness" data-msg="harness"><div class="msg-body">
-      ${stamp}<span class="msg-role">Harness · ${label}</span>
-      <div class="msg-harness">${renderMarkdown(body)}</div>
+    return `<div class="msg harness" data-msg="synapse"><div class="msg-body">
+      ${stamp}<span class="msg-role">Synapse · ${label}</span>
+      <div class="msg-answer">${renderMarkdown(body)}</div>
     </div></div>`;
   }
   if (m.type === 'assistant') {
@@ -1693,11 +1696,16 @@ function renderPlan() {
     `<ol class="plan-list">${tasks
       .map((t) => {
         const status = PLAN_STATUS[t.status] ? t.status : 'todo';
+        // The result is not printed under the title: the row stays one line per
+        // task, and the detail is a hover away. A blocked note is the exception
+        // — that one is the reason the operator is being asked, so it shows.
+        const tooltip = [t.title, t.result ? `Result: ${t.result}` : '', t.note ? `Note: ${t.note}` : '']
+          .filter(Boolean)
+          .join('\n\n');
         return `<li class="plan-task" data-status="${status}">
           <span class="plan-dot" role="img" aria-label="${esc(PLAN_STATUS[status])}"></span>
           <span class="plan-main">
-            <span class="plan-title" title="${esc(t.title)}"><span class="plan-id">${esc(t.id || '?')}</span>${esc(t.title)}</span>
-            ${t.result ? `<span class="plan-result">${esc(t.result)}</span>` : ''}
+            <span class="plan-title" title="${esc(tooltip)}"><span class="plan-id">${esc(t.id || '?')}</span>${esc(t.title)}</span>
             ${t.note ? `<span class="plan-note">${esc(t.note)}</span>` : ''}
           </span>
           <span class="plan-role">${esc(t.role)}</span>
@@ -2079,16 +2087,6 @@ function renderSettings() {
     </label>`;
   const group = (title, body, cols) => `<section class="set-group"><h4>${title}</h4><div class="set-grid${cols === 3 ? ' cols-3' : ''}">${body}</div></section>`;
 
-  // A colour swatch and its hex, mirroring each other. Both carry the path so
-  // the save writes the colour input's value; the hex is only a way to type it.
-  const colorRow = (label, path, value) => `
-    <label class="set-field"><span>${esc(label)}</span>
-      <span class="color-row">
-        <input type="color" data-path="${path}" value="${esc(value)}" aria-label="${esc(label)}" />
-        <input type="text" class="color-hex" data-color-hex="${path}" value="${esc(value)}" spellcheck="false" aria-label="${esc(label)} hex" />
-      </span>
-    </label>`;
-
   // Show what the engine actually resolved when the config is blank: these two
   // fields mean "auto" when empty, and an empty box hides the path in use.
   const detected = state.status?.engine || {};
@@ -2121,9 +2119,6 @@ function renderSettings() {
       `<div class="set-field"><span>Tool census</span>
         <button type="button" class="btn btn-warn btn-sm" data-clear-tools>Clear Tool Census</button>
       </div>`),
-    group('Chat',
-      colorRow('Answer panel colour', 'ui.answerBg', readPath(c, 'ui.answerBg') || '#382f19') +
-      colorRow('Harness panel colour', 'ui.harnessBg', readPath(c, 'ui.harnessBg') || '#2f2d17')),
     group('Workers',
       f('Timeout per task (seconds)', 'worker.timeoutSec', { type: 'number' }) +
       `<p class="set-note">A delegated task is interrupted after this long and its partial work is reported. ` +
@@ -2159,7 +2154,6 @@ async function saveSettings() {
   }
   try {
     state.config = await api('PUT', '/api/config', draft);
-    applyUiTheme();
     toast('Settings saved', 'Restart Synapse to apply engine or server changes.');
     await loadModels();
   } catch (err) {
@@ -2186,40 +2180,8 @@ async function clearToolCensus() {
   }
 }
 
-function openSettings() { renderSettings(); bindColorInputs($('settingsBody')); $('settingsModal').hidden = false; }
+function openSettings() { renderSettings(); $('settingsModal').hidden = false; }
 function closeSettings() { $('settingsModal').hidden = true; }
-
-/**
- * Both panel fills are the operator's choice (Settings → Chat). They are CSS
- * variables on the root so the transcript repaints instantly while they try
- * colours in the picker, and they are read from config on boot and after a save.
- */
-function applyUiTheme() {
-  const ui = state.config?.ui || {};
-  document.documentElement.style.setProperty('--answer-bg', ui.answerBg || '#382f19');
-  document.documentElement.style.setProperty('--harness-bg', ui.harnessBg || '#2f2d17');
-}
-
-/** `ui.answerBg` -> `--answer-bg`. The variable name follows from the path. */
-function cssVarFor(path) {
-  const key = String(path).split('.').pop() || '';
-  return `--${key.replace(/[A-Z]/g, (m) => `-${m.toLowerCase()}`)}`;
-}
-
-/** Live preview: every colour input and its hex field mirror each other. */
-function bindColorInputs(scope) {
-  scope.querySelectorAll('input[data-color-hex]').forEach((hex) => {
-    const path = hex.dataset.colorHex;
-    const color = scope.querySelector(`input[type="color"][data-path="${path}"]`);
-    if (!color) return;
-    const paint = (value) => document.documentElement.style.setProperty(cssVarFor(path), value);
-    color.addEventListener('input', () => { hex.value = color.value; paint(color.value); });
-    hex.addEventListener('input', () => {
-      const v = hex.value.trim();
-      if (/^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(v)) { color.value = v; paint(v); }
-    });
-  });
-}
 
 // ── wiring ──────────────────────────────────────────────────────
 function wire() {
@@ -2423,7 +2385,6 @@ async function boot() {
   wire();
   fitStageHeight();
   state.config = await api('GET', '/api/config').catch(() => null);
-  applyUiTheme();
   // every new session starts Single; an opened session sets its own mode
   state.mode = 'single';
   renderMode();

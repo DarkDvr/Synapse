@@ -55,16 +55,6 @@ export const DEFAULTS = {
     // boot unless the operator turns that off. Settings also clears it by hand.
     resetOnBoot: true,
   },
-  ui: {
-    // The model's answer panel is the one block that must not look like chrome.
-    // A solid colour rather than an alpha wash, because it has to stay readable
-    // under the text inside it — the operator tunes it from Settings.
-    answerBg: '#382F19',
-    // The harness speaking (a worker's report handed back). Its own colour, so
-    // the operator's voice, the Architect's answer and the harness never have to
-    // be told apart by reading the label.
-    harnessBg: '#2F2D17',
-  },
   worker: {
     // How long one delegated task may run before the harness interrupts it and
     // reports a timeout. A timeout is a report, not a failed task: whatever the
@@ -111,14 +101,10 @@ export function normalize(raw) {
   cfg.server.openBrowser = cfg.server.openBrowser !== false;
   cfg.tools = cfg.tools || {};
   cfg.tools.resetOnBoot = cfg.tools.resetOnBoot !== false;
-  cfg.ui = cfg.ui || {};
-  // Only real hex colours reach CSS; anything else falls back to the default.
-  const hex = (value, fallback) => {
-    const s = String(value || '').trim();
-    return /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(s) ? s.toLowerCase() : fallback;
-  };
-  cfg.ui.answerBg = hex(cfg.ui.answerBg, DEFAULTS.ui.answerBg);
-  cfg.ui.harnessBg = hex(cfg.ui.harnessBg, DEFAULTS.ui.harnessBg);
+  // Panel colours were an experiment and are gone: every speaker now gets the
+  // same block with only a colour difference, so there is nothing to configure.
+  // Any `ui` left in a config file is dropped rather than carried around.
+  delete cfg.ui;
 
   cfg.worker = cfg.worker || {};
   cfg.worker.timeoutSec = clampInt(cfg.worker.timeoutSec, 30, 3600, DEFAULTS.worker.timeoutSec);

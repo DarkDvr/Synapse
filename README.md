@@ -117,12 +117,14 @@ the stage that will wire it; the role cards' per-role activity is the remaining
 stub — they show the real model/effort controls and nothing else.
 
 **Left sidebar is two-tier.** A project is a panel with its own surface, a
-chevron, and its sessions indented on a guide line inside it. Sessions never
-carry a background, so the two tiers never read alike. Under each project's
-header sit its two shortcuts — **Browse** (Explorer) and **Cmd** (a command
-prompt at that folder) — because those belong with the project they act on, not
-in a rail panel. There is no Project panel and no path label anywhere: the tree
-already names the project, and the path was never what you looked at.
+chevron, and everything inside it — its two shortcuts, the **Sessions:** label
+and the sessions themselves — lined up to the right of one vertical yellow rule,
+so the block reads as belonging to that project. Sessions never carry a
+background, so the two tiers never read alike. Under each project's header sit
+its two shortcuts: **Browse** (Explorer) and **Cmd** (a command prompt at that
+folder), because those belong with the project they act on, not in a rail panel.
+There is no Project panel and no path label anywhere: the tree already names the
+project, and the path was never what you looked at.
 
 **Connectors.** The idle structure is small round dots at 75% opacity with no
 arrowheads, and that is all the cards show today. The live path — a solid orange
@@ -491,32 +493,35 @@ themselves still show no per-role activity — that arrives with the
 orchestration layer; what exists today is the model/effort choice per role, the
 delegation permission, and the reveal.
 
-## Markdown
+## Speakers, and markdown
 
-The model's actual answer is rendered as markdown inside its own panel, whose
-fill colour is the operator's (`ui.answerBg`, Settings → Chat, default
-`#382f19`; the border is derived from it) so the answer is the one block that is
-obviously not chrome — and reads separately from the reasoning and tool noise
-around it. This is a deliberate exception to "yellow is an affordance colour":
-it is a *fill*, not text and not an icon.
+Three things speak in the transcript, and they **share one format**: a coloured
+name, a 2px rule down the left of what they said, and a hairline between turns
+with room above and below it. Only the colour differs.
 
-**The harness gets its own panel and its own colour too** (`ui.harnessBg`,
-default `#2F2D17`). A worker's report is prose with headings, lists and code in
-it, so it is rendered as markdown like an answer, in a panel of the same shape —
-and the amber rule beside it is the "this is not your voice" marker, with a 10px
-gap so the line never sits flush against the words. Operator, Architect and
-harness each have a distinct surface, so they are never told apart by reading a
-label.
+| Speaker | Colour | Says |
+|---|---|---|
+| **You** | bright purple (`--violet-bright`) | what you typed |
+| **Architect** | green (`--green`) | its reasoning, its tool calls, its answer |
+| **Synapse** | yellow (`--yellow`) | a worker's report, or something the harness needs the Architect to know |
 
-`web/md.js` is hand-rolled (no dependencies) and **escape-first**: the source is
-HTML-escaped before any markdown rule runs, so a model cannot inject markup
-through its answer. It covers fenced code, headings, GFM tables (alignment
-included, pipes inside `code` don't split cells), blockquotes, ordered and
-unordered lists (including `- [ ]` task lists), images, rules and paragraphs,
-plus inline code, bold, italic, strikethrough and links — the range these
-models actually produce. Link targets
-are restricted to `http(s)`, `mailto`, `/` and `#` (images additionally allow
-`data:image/`).
+Nothing carries a fill. The Architect's answer used to sit in a tinted panel and
+Synapse's reports in another, with both colours configurable in Settings; that
+was dropped once the shared format made it unnecessary — a panel colour said
+"this is different" while the speaker's name already said *who*, and two
+exceptions to the palette rule in one screen is two too many. Synapse is the
+product's name; *harness* is what it is, and never appears on screen.
+
+A worker's report is prose with headings, lists and code in it, so it is rendered
+as markdown in the same body class as the Architect's answer. `web/md.js` is
+hand-rolled (no dependencies) and **escape-first**: the source is HTML-escaped
+before any markdown rule runs, so a model cannot inject markup through its
+answer. It covers fenced code, headings, GFM tables (alignment included, pipes
+inside `code` don't split cells), blockquotes, ordered and unordered lists
+(including `- [ ]` task lists), images, rules and paragraphs, plus inline code,
+bold, italic, strikethrough and links — the range these models actually produce.
+Link targets are restricted to `http(s)`, `mailto`, `/` and `#` (images
+additionally allow `data:image/`).
 
 ## Logs
 
