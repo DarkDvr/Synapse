@@ -536,10 +536,15 @@ function applyRoleCardsLayout({ animate = true } = {}) {
   wrap.classList.add('is-open');
 
   if (state.mode === 'multi') {
+    // `max-height: none` does not interpolate, so growing straight out of the
+    // Single resting state would snap instead of sliding. Pin the current
+    // height first, force a reflow, then grow to the measured target.
+    const fromH = Math.ceil(wrap.getBoundingClientRect().height);
     document.body.classList.add('workers-on');
-    wrap.style.setProperty('--reveal-h', `${measureReveal(topo, $('stage'))}px`);
-    // the reflow is what makes the first reveal animate instead of snapping
+    wrap.style.setProperty('--reveal-h', `${fromH}px`);
+    // the reflow is what makes the reveal animate instead of snapping
     void wrap.offsetHeight;
+    wrap.style.setProperty('--reveal-h', `${measureReveal(topo, $('stage'))}px`);
     requestAnimationFrame(drawActivePath);
     return;
   }
@@ -1165,6 +1170,9 @@ function renderTranscript() {
     (m) => m.error || m.type === 'user' || m.type === 'assistant',
   );
   const pending = renderPermissions() + renderForms();
+  // The dock is a bare composer while empty and fills the stage once there is
+  // anything to show; the CSS keys off this class, so set it on every render.
+  $('chatDock')?.classList.toggle('has-history', showable.length > 0 || Boolean(pending));
   if (showable.length === 0 && !pending) {
     // nothing to show: collapse the transcript entirely, so the dock is just
     // the composer and the empty space above it belongs to the cards/napkin

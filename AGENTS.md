@@ -442,6 +442,11 @@ This is once per directory per process and needs no config.
   absolute `.path-layer` is the first child, so `.topology > * + *` gives the
   Architect's row a 12px top margin — using the card height alone clipped
   exactly that margin, cut the card's bottom border and grew a scrollbar.
+  Both mode switches slide through numbers: the collapse shrinks the measured
+  height, the reveal pins the current height first (a straight set out of
+  `max-height: none` would snap — `none` does not interpolate), forces a
+  reflow, then grows to the target. Measured mid-flight: 61→241px in ~300ms
+  and 241→61px back, both smooth.
   Re-measure on the topology's `ResizeObserver` and on `document.fonts.ready`:
   the card height changes after the font swap, and a stale `--reveal-h` looked
   like a one-pixel clip.
@@ -454,6 +459,11 @@ This is once per directory per process and needs no config.
   alone still fits two columns); narrower than 1100 the window scrolls
   horizontally rather than squeezing the cards. The baseline's ≤950px sidebar
   drawer behaviour is overridden for the same reason.
+  Below the chat the rail itself is two columns: the Project header spans the
+  full width (`grid-area: project`), plan and tools sit side by side at exactly
+  50/50 (`plan | tools`, `align-items: start` so a short "No plan yet" does not
+  stretch). Panels are addressed by `.rail-project` / `.rail-plan` /
+  `.rail-tools` classes, not child order.
   The glyph measurements that matter: both button glyphs are centred on the 22px
   button to within 0.01px, with ~1.5px of margin left top and bottom at three
   chevrons — if the glyph or border size changes, re-measure with
@@ -472,7 +482,10 @@ This is once per directory per process and needs no config.
   under the role cards (one 14px grid gap) to the composer at the bottom of the
   window; the transcript scrolls inside it. The transcript is `display: none`
   while empty (`is-empty`), and there is no empty-state copy inside a session:
-  a fresh session shows the composer alone.
+  a fresh session shows the composer alone — `has-history` (toggled by
+  renderTranscript on every render) is absent, so the dock is bottom-pinned,
+  transparent and borderless, just the controls. The moment history exists the
+  dock gains the class and the full panel chrome, stretching up to the cards.
 - **The transcript shows user and assistant turns only.** System prompts,
   scaffolding and context dumps from the engine are not chat — rendering them
   once leaked AGENTS.md prose and diff hunks into the transcript above the

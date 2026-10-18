@@ -135,8 +135,9 @@ and capped (`--work-w`, 1240px): sidebar → role cards + chat → rail → empt
 space at the window's right edge, with the same geometry in Single and Multi.
 Role cards have a **360px floor**, so the full three-column layout needs
 **1460px** of window. Below that the rail flows under the chat (the stage keeps
-its full width so the cards never squeeze); below 1100px the window scrolls
-horizontally.
+its full width so the cards never squeeze); down there the rail itself is two
+columns — Project header full width, plan and tools side by side at 50/50.
+Below 1100px the window scrolls horizontally.
 
 **Row highlighting is one token.** The baseline paints table rows `#fcfcff`
 on hover in every theme; Synapse overrides that globally to `--hover-bg`

@@ -616,13 +616,24 @@ body.dark .sidebar-bottom,
   border-radius: 14px; overflow: hidden; min-height: 0;
 }
 
-/* In a session the dock fills the stage row: the transcript starts directly under
-   the role cards and the composer sits at the bottom of the window. The
-   transcript scrolls inside itself rather than growing the page. */
-body[data-view="session"] .chat-dock {
+/* In a session the dock fills the stage row once there is history: the
+   transcript starts directly under the role cards and the composer sits at the
+   bottom of the window. Empty, it is just the composer controls at the bottom —
+   no panel chrome, no void-filling box.
+   `has-history` is toggled by renderTranscript; keep it in sync there. */
+body[data-view="session"] .chat-dock { align-self: end; }
+body[data-view="session"] .chat-dock.has-history {
   align-self: stretch;
   height: 100%;
   max-height: 100%;
+}
+body[data-view="session"] .chat-dock:not(.has-history) {
+  background: transparent;
+  border-color: transparent;
+}
+body[data-view="session"] .chat-dock:not(.has-history) .composer {
+  background: transparent;
+  border-top-color: transparent;
 }
 .chat-scroll.is-empty { display: none; }
 
@@ -1004,7 +1015,18 @@ body[data-view="session"] .chat-dock {
   /* stacked, the stage is content-sized and the page scrolls again */
   .stage { height: auto; min-height: 0; }
   .chat-scroll { min-height: clamp(150px, 32vh, 360px); }
-  .inspector { max-height: none; }
+  /* the rail flows below the chat in two equal columns: the project header
+     spans the full width, plan and tools sit side by side at 50/50 */
+  .inspector {
+    max-height: none;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: auto auto;
+    grid-template-areas: "project project" "plan tools";
+    align-items: start;
+  }
+  .inspector > .rail-project { grid-area: project; }
+  .inspector > .rail-plan { grid-area: plan; }
+  .inspector > .rail-tools { grid-area: tools; }
   .rail-actions { grid-template-columns: 1fr 1fr; }
 }
 
