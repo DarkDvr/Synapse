@@ -789,17 +789,13 @@ not gigabytes. Worth knowing; not worth panicking about.
     remaining three tasks ran themselves — 12.8 minutes, five worker runs, two
     files in `bin/`, `python bin/calendar.py` printing the month. The Auditor hit
     the 240s ceiling yet its partial work was still judged and accepted.
-  - **3.3 next — role cards show live activity.** The worker transcript is
-    invisible while it runs by design (hidden session); the operator wants to
-    watch it. Cards need state (idle / working / blocked), the task in hand, and
-    elapsed time, plus the ✎ editor for per-role instructions. The ✎ settles
-    skills gating with it: custom agents are dead here (the free tier rejected
-    every custom-agent request), so instructions are prompt text on a
-    default-agent session — which is what the brief already is.
-  - **3.3 — role cards show live activity**, and the ✎ button opens per-role
-    instructions. Settles skills gating with it. Remember custom agents are dead
-    here (the free tier rejected every custom-agent request), so instructions
-    have to be prompt text on a default-agent session.
+  - **3.3 next — role cards show live activity**, and the ✎ button opens
+    per-role instructions. Cards need state (idle / working / blocked), the task
+    in hand, and elapsed time; the worker transcript is invisible while it runs
+    today by design, and the operator wants to watch it. The ✎ settles skills
+    gating with it: custom agents are dead here (the free tier rejected every
+    custom-agent request), so instructions are prompt text on a default-agent
+    session — which is what the brief already is.
   - **3.4 — the live per-session Tools-in-Use feed**, then the main-pane napkin
     with its live path: arrows and ants on the topology while a worker runs, and
     the plan pane driving it.
