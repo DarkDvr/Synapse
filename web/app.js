@@ -65,6 +65,9 @@ const state = {
   // the DOM or it dies with the next render.
   open: new Set(),
   renderSig: '',
+  // Signature of what the question panel is showing, so a poll does not rebuild
+  // it and discard answers the operator has already given.
+  askSig: '',
   renaming: null,
   view: 'none', // none | session
 };
@@ -1106,6 +1109,7 @@ function setView() {
   renderKeep();
   applyRoleCardsLayout();
   renderComposer();
+  renderAskPanel();
   renderRoleActivity();
   requestAnimationFrame(drawActivePath);
 }
@@ -1442,7 +1446,10 @@ function renderTranscript() {
     .filter((m) => m.error || m.type === 'user' || m.type === 'assistant' || m.type === 'synthetic')
     .map((m) => (m.parts ? { ...m, parts: m.parts.map((p, i) => ({ ...p, _k: `${m.id}:${i}` })) } : m));
   const showable = groupTurns(tagged);
-  const pending = renderPermissions() + renderForms();
+  // Only permissions stay in the transcript: a form is answered in the panel
+  // over the chat, and a card here would both duplicate it and change the
+  // transcript's height the moment it appeared.
+  const pending = renderPermissions();
   const hasHistory = showable.length > 0 || Boolean(pending);
   // The dock is a bare composer while empty and fills the stage once there is
   // anything to show; the CSS keys off this class, so set it on every render.
@@ -1526,6 +1533,19 @@ function renderMessage(m) {
 
 let toolSeq = 0;
 
+/** A `question` tool call is answered in the panel above the composer, so its
+ *  card is the record rather than the interface: it says what was asked, and the
+ *  raw payload is one click away like any other tool. */
+function questionSummary(part) {
+  const questions = Array.isArray(part?.input?.questions) ? part.input.questions : [];
+  if (!questions.length) return 'you were asked something';
+  const first = questions[0] || {};
+  const head = String(first.header || first.question || '').replace(/\s+/g, ' ').trim();
+  if (!head) return 'you were asked something';
+  const more = questions.length > 1 ? ` (+${questions.length - 1} more)` : '';
+  return `${head.length > 88 ? `${head.slice(0, 87)}…` : head}${more}`;
+}
+
 // A tool call is one line until you ask for the detail — you rarely need the
 // full payload, and a busy turn produces dozens of them.
 function renderTool(part) {
@@ -1538,7 +1558,7 @@ function renderTool(part) {
   // fallback for a part with no message identity.
   const id = part._k || `tool-${toolSeq++}`;
   const open = state.open.has(id);
-  const target = toolTarget(part);
+  const target = String(part.name) === 'question' ? questionSummary(part) : toolTarget(part);
   const input = part.input !== null && part.input !== undefined ? JSON.stringify(part.input, null, 1) : '';
   const output = part.output !== null && part.output !== undefined
     ? (typeof part.output === 'string' ? part.output : JSON.stringify(part.output, null, 1))
@@ -1702,74 +1722,248 @@ function renderPermissions() {
     .join('');
 }
 
-// An agent can also ask for structured input; the session blocks until it is
-// answered, exactly like a permission.
-function renderForms() {
-  return (state.forms || [])
-    .filter((f) => f.sessionId === state.sessionId)
-    .map(
-      (f) => `<div class="form-card" data-form-card="${esc(f.id)}">
-        <div class="form-head"><span class="status-dot warn" role="img" aria-label="waiting"></span>Input Needed</div>
-        <p class="form-title">${esc(f.title)}</p>
-        ${(f.fields || []).map(formField).join('')}
-        <div class="perm-actions">
-          <button class="btn btn-primary btn-sm" data-form-reply="${esc(f.id)}">Send Answer</button>
-        </div>
-      </div>`,
-    )
-    .join('');
+// ── the question panel ──────────────────────────────────────────
+// A model that asks the operator something blocks the session until it is
+// answered, so the question is not a transcript decoration: it is a panel
+// painted over the chat, anchored just above the composer. The engine raises a
+// form for it, and the form is the interface — the `question` tool card in the
+// transcript is only the record.
+//
+// It lives in an absolutely positioned host (see `.ask-host`), so however tall
+// it grows it can never change the chat's size: it only ever covers what is
+// already there.
+
+/** The form waiting on the operator for the open session, if there is one. */
+const currentForm = () =>
+  (state.forms || []).find((f) => f.sessionId === state.sessionId) || null;
+
+/** Anchor the panel to the top of the composer and cap it to the room above.
+ *  The composer's own height moves (the textarea grows), so this is measured
+ *  rather than expressed in CSS. */
+function placeAskPanel() {
+  const host = $('askHost');
+  const dock = $('chatDock');
+  const composer = $('composer');
+  if (!host || !dock || !composer || host.hidden) return;
+  const composerH = composer.offsetHeight;
+  host.style.bottom = `${composerH + 10}px`;
+  // Never zero: a panel with no room at all is worse than one that is clipped.
+  host.style.maxHeight = `${Math.max(150, dock.clientHeight - composerH - 20)}px`;
 }
 
-function formField(field) {
-  const key = esc(field.key);
-  const label = esc(field.title || field.key);
-  const hint = field.description ? ` title="${esc(field.description)}"` : '';
-  const req = field.required ? ' *' : '';
+function askOption(kind, name, value, label, description) {
+  return `<label class="ask-opt">
+    <input type="${kind}" name="${esc(name)}" value="${esc(value)}" />
+    <span class="ask-opt-text">
+      <span class="ask-opt-label">${esc(label)}</span>
+      ${description ? `<span class="ask-opt-desc">${esc(description)}</span>` : ''}
+    </span>
+  </label>`;
+}
+
+/** A choice question may also be answered in the operator's own words — the
+ *  engine marks that with `custom`, and so does the tool these models call. */
+function askCustom(kind, name) {
+  return `<div class="ask-opt ask-opt-other">
+    <label class="ask-other-pick">
+      <input type="${kind}" name="${esc(name)}" value="__custom" data-ask-custom="1" />
+      <span class="ask-opt-label">Something Else…</span>
+    </label>
+    <input class="ask-input ask-other-text" type="text" placeholder="Type it here" disabled />
+  </div>`;
+}
+
+/** One field of a form, rendered as the control its type deserves. */
+function askField(field, index) {
+  const key = String(field.key ?? `q${index}`);
+  const name = `ask-${key}`;
+  const type = String(field.type || 'string');
   const options = Array.isArray(field.options) ? field.options : [];
+  const title = field.title ? `<p class="ask-q-title">${esc(field.title)}</p>` : '';
+  const text = field.description ? `<p class="ask-q-text">${esc(field.description)}</p>` : '';
+  const req = field.required ? '<span class="ask-req" title="Required">required</span>' : '';
 
-  if (field.type === 'boolean') {
-    return `<label class="form-check"><input type="checkbox" data-form-key="${key}" ${field.default ? 'checked' : ''} />${label}${req}</label>`;
+  let body;
+  if (type === 'boolean') {
+    body = `<div class="ask-opts">${askOption('checkbox', name, 'true', field.title || 'Yes', '')}</div>`;
+  } else if (type === 'multiselect') {
+    body =
+      `<div class="ask-opts">${options.map((o) => askOption('checkbox', name, o.value, o.label, o.description)).join('')}` +
+      `${field.custom ? askCustom('checkbox', name) : ''}</div>`;
+  } else if (options.length) {
+    body =
+      `<div class="ask-opts">${options.map((o) => askOption('radio', name, o.value, o.label, o.description)).join('')}` +
+      `${field.custom ? askCustom('radio', name) : ''}</div>`;
+  } else if (type === 'external') {
+    // Nothing to answer: the field is a door to somewhere else.
+    body = `<a class="ask-link" href="${esc(field.url || '#')}" target="_blank" rel="noreferrer noopener">${esc(field.title || field.url || 'Open')}</a>`;
+  } else if (type === 'number' || type === 'integer') {
+    const min = field.minimum != null ? ` min="${esc(field.minimum)}"` : '';
+    const max = field.maximum != null ? ` max="${esc(field.maximum)}"` : '';
+    body = `<input class="ask-input" type="number" data-ask-key="${esc(key)}"${min}${max} value="${esc(field.default ?? '')}" />`;
+  } else {
+    body = `<input class="ask-input" type="text" data-ask-key="${esc(key)}" placeholder="${esc(field.placeholder || '')}" value="${esc(field.default ?? '')}" />`;
   }
-  if (field.type === 'multiselect') {
-    return `<label class="form-field"><span>${label}${req}</span>
-      <select data-form-key="${key}" multiple size="${Math.min(5, options.length || 3)}">
-        ${options.map((o) => `<option value="${esc(o.value)}">${esc(o.label)}</option>`).join('')}
-      </select></label>`;
-  }
-  if (options.length) {
-    return `<label class="form-field"><span>${label}${req}</span>
-      <select data-form-key="${key}">
-        ${options.map((o) => `<option value="${esc(o.value)}"${o.value === field.default ? ' selected' : ''}>${esc(o.label)}</option>`).join('')}
-      </select></label>`;
-  }
-  const type = field.type === 'number' || field.type === 'integer' ? 'number' : 'text';
-  return `<label class="form-field"><span>${label}${req}</span>
-    <input type="${type}" data-form-key="${key}" value="${esc(field.default ?? '')}" placeholder="${esc(field.placeholder || '')}" /></label>`;
+
+  // `when` is the engine's own conditional: the field only exists if another
+  // answer says so. Hidden fields are not rendered, and never answer anything.
+  const when = Array.isArray(field.when) && field.when.length
+    ? ` data-ask-when="${esc(JSON.stringify(field.when))}"`
+    : '';
+  return `<div class="ask-field" data-ask-field="${esc(key)}" data-ask-type="${esc(type)}"${when}${
+    field.required ? ' data-ask-required="1"' : ''
+  }>${title}${text}${req}${body}</div>`;
 }
 
-function collectFormAnswer(formId) {
-  const card = document.querySelector(`[data-form-card="${CSS.escape(formId)}"]`);
+function renderAskPanel() {
+  const host = $('askHost');
+  if (!host) return;
+  const form = state.view === 'session' ? currentForm() : null;
+  if (!form) {
+    state.askSig = '';
+    host.hidden = true;
+    host.innerHTML = '';
+    syncAskState();
+    return;
+  }
+  // The panel is polled like everything else, and rebuilding it would throw away
+  // whatever the operator had already answered — so it is only rebuilt when the
+  // form itself changed. Answers live in the DOM, and the signature deliberately
+  // says nothing about them.
+  const sig = `${form.id}|${(form.fields || [])
+    .map((f) => `${f.key}:${f.type}:${(f.options || []).map((o) => o.value).join(',')}`)
+    .join(';')}`;
+  if (sig === state.askSig) {
+    host.hidden = false;
+    placeAskPanel();
+    return;
+  }
+  state.askSig = sig;
+  host.hidden = false;
+  host.innerHTML = `<div class="ask-panel" role="dialog" aria-label="Question waiting for an answer" data-ask="${esc(form.id)}">
+    <div class="ask-head">
+      <span class="status-dot warn" role="img" aria-label="waiting"></span>
+      <span class="ask-head-title">${esc(form.title || 'Input Needed')}</span>
+      <span class="ask-head-note">the session is waiting on you</span>
+    </div>
+    <div class="ask-fields">${(form.fields || []).map(askField).join('')}</div>
+    <div class="ask-actions">
+      <span class="ask-state" data-ask-state></span>
+      <button class="btn btn-primary btn-sm" data-form-reply="${esc(form.id)}">Submit Answer</button>
+    </div>
+  </div>`;
+  placeAskPanel();
+  applyAskConditions();
+  syncAskState();
+}
+
+/** The panel's answers, in the shape the engine's form reply wants. */
+function collectAskAnswer(form) {
+  const panel = document.querySelector('.ask-panel');
   const answer = {};
-  for (const el of card?.querySelectorAll('[data-form-key]') || []) {
-    const key = el.dataset.formKey;
-    if (el.tagName === 'SELECT' && el.multiple) answer[key] = [...el.selectedOptions].map((o) => o.value);
-    else if (el.type === 'checkbox') answer[key] = el.checked;
-    else if (el.type === 'number') answer[key] = el.value === '' ? null : Number(el.value);
-    else answer[key] = el.value;
+  if (!panel) return answer;
+  for (const field of form.fields || []) {
+    const key = String(field.key ?? '');
+    const holder = panel.querySelector(`[data-ask-field="${CSS.escape(key)}"]`);
+    if (!holder || holder.hidden) continue;
+    const type = String(field.type || 'string');
+    const one = (sel) => holder.querySelector(sel);
+    if (field.hidden || type === 'external') continue;
+    if (type === 'boolean') {
+      answer[key] = Boolean(one('input[type="checkbox"]')?.checked);
+    } else if (type === 'multiselect') {
+      const picked = [...holder.querySelectorAll('input[type="checkbox"]:checked')]
+        .filter((el) => !el.hasAttribute('data-ask-custom'))
+        .map((el) => el.value);
+      const other = one('.ask-other-text');
+      if (other && other.value.trim()) picked.push(other.value.trim());
+      answer[key] = picked;
+    } else if (Array.isArray(field.options) && field.options.length) {
+      const checked = one('input[type="radio"]:checked');
+      if (!checked) continue;
+      const other = one('.ask-other-text');
+      answer[key] = checked.hasAttribute('data-ask-custom')
+        ? String(other?.value || '').trim()
+        : checked.value;
+    } else if (type === 'number' || type === 'integer') {
+      const el = one(`[data-ask-key="${CSS.escape(key)}"]`);
+      answer[key] = el?.value === '' || el?.value === undefined ? null : Number(el.value);
+    } else {
+      answer[key] = String(one(`[data-ask-key="${CSS.escape(key)}"]`)?.value ?? '');
+    }
   }
   return answer;
 }
 
+/** Required fields, and the free-text box on a choice question, only make sense
+ *  live: the Submit button says no until the form can be answered. */
+function syncAskState() {
+  const panel = document.querySelector('.ask-panel');
+  const btn = panel?.querySelector('[data-form-reply]');
+  const note = panel?.querySelector('[data-ask-state]');
+  if (!panel || !btn) return;
+  const form = currentForm();
+  if (!form) return;
+  const answer = collectAskAnswer(form);
+  const missing = (form.fields || []).filter((f) => {
+    if (!f.required || f.hidden || f.type === 'external') return false;
+    const holder = panel.querySelector(`[data-ask-field="${CSS.escape(String(f.key ?? ''))}"]`);
+    if (!holder || holder.hidden) return false;
+    const v = answer[String(f.key ?? '')];
+    return v === undefined || v === null || (typeof v === 'string' && !v.trim()) || (Array.isArray(v) && !v.length);
+  });
+  btn.disabled = missing.length > 0;
+  if (note) {
+    note.textContent = missing.length ? 'Answer every required question to send.' : '';
+    note.hidden = !missing.length;
+  }
+}
+
+/** Show or hide the fields whose `when` conditions are not met yet. */
+function applyAskConditions() {
+  const panel = document.querySelector('.ask-panel');
+  const form = currentForm();
+  if (!panel || !form) return;
+  const answer = collectAskAnswer(form);
+  for (const holder of panel.querySelectorAll('[data-ask-when]')) {
+    let ok = true;
+    try {
+      for (const rule of JSON.parse(holder.dataset.askWhen)) {
+        const actual = answer[String(rule.key)];
+        const same = String(actual) === String(rule.value);
+        if (rule.op === 'eq' ? !same : same) { ok = false; break; }
+      }
+    } catch { /* a malformed rule hides nothing */ }
+    holder.hidden = !ok;
+  }
+}
+
+/** The free-text box on a choice question is only usable once its row is picked. */
+function syncAskCustoms(target) {
+  const row = target.closest('.ask-opt-other');
+  if (!row) return;
+  const pick = row.querySelector('[data-ask-custom]');
+  const text = row.querySelector('.ask-other-text');
+  if (text) text.disabled = !pick?.checked;
+  if (pick?.checked) text?.focus();
+}
+
 async function replyForm(formId) {
   const sessionId = state.sessionId;
-  const answer = collectFormAnswer(formId);
-  state.forms = state.forms.filter((f) => f.id !== formId);
-  renderTranscript();
+  const form = currentForm();
+  if (!form || form.id !== formId) return;
+  const answer = collectAskAnswer(form);
+  const btn = document.querySelector(`[data-form-reply="${CSS.escape(formId)}"]`);
+  if (btn) btn.disabled = true;
   try {
     await api('POST', `/api/sessions/${encodeURIComponent(sessionId)}/forms/${encodeURIComponent(formId)}/reply`, { answer });
-    toast('Answer Sent');
+    state.forms = state.forms.filter((f) => f.id !== formId);
+    renderAskPanel();
+    renderComposer();
+    renderTranscript();
+    toast('Answer Sent', 'The session will carry on from it.');
   } catch (err) {
-    toast('Could not send the answer', err.message);
+    toast('Could Not Send The Answer', err.message);
     refreshPending();
   }
 }
@@ -1783,7 +1977,7 @@ async function replyForm(formId) {
 async function refreshPending() {
   let p;
   try {
-    p = await api('GET', '/api/pending');
+    p = await api('GET', `/api/pending${state.sessionId ? `?session=${encodeURIComponent(state.sessionId)}` : ''}`);
   } catch {
     return;
   }
@@ -1804,7 +1998,11 @@ async function refreshPending() {
   state.forms = p.forms || [];
 
   renderTree();
-  if (state.view === 'session') renderTranscript();
+  if (state.view === 'session') {
+    renderAskPanel();
+    renderComposer();
+    renderTranscript();
+  }
 }
 
 // ── the project plan ────────────────────────────────────────────
@@ -2046,10 +2244,25 @@ async function replyPermission(requestId, decision) {
 }
 
 // ── composer ────────────────────────────────────────────────────
+/**
+ * The composer. While a question is waiting the session genuinely cannot read a
+ * message — the engine's turn is blocked on the answer — so the box says so
+ * rather than letting a message be typed into nothing.
+ */
 function renderComposer() {
   const hasSession = Boolean(state.sessionId);
-  $('sendBtn').disabled = state.busy && !hasSession;
+  const asking = Boolean(currentForm());
+  $('sendBtn').disabled = (state.busy && !hasSession) || asking;
   $('stopBtn').disabled = !state.busy || !hasSession;
+  const input = $('promptInput');
+  if (input) {
+    input.disabled = asking;
+    input.placeholder = asking
+      ? 'Answer the question above'
+      : state.mode === 'single'
+        ? 'Message'
+        : 'Message the Architect…';
+  }
 }
 
 async function send() {
@@ -2383,6 +2596,33 @@ function wire() {
     if (navRaf) return;
     navRaf = requestAnimationFrame(() => { navRaf = 0; renderChatNav(); });
   });
+  // The question panel. Its answer changes what is required and what other
+  // fields even exist, so every keystroke and every pick re-checks the panel.
+  const askHost = $('askHost');
+  if (askHost) {
+    askHost.addEventListener('input', (e) => {
+      syncAskCustoms(e.target);
+      applyAskConditions();
+      syncAskState();
+    });
+    askHost.addEventListener('change', (e) => {
+      syncAskCustoms(e.target);
+      applyAskConditions();
+      syncAskState();
+    });
+    askHost.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-form-reply]');
+      if (btn) replyForm(btn.dataset.formReply);
+    });
+    // Enter in a text field submits, the way any small form should.
+    askHost.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter' || e.target.tagName !== 'INPUT') return;
+      e.preventDefault();
+      const btn = askHost.querySelector('[data-form-reply]');
+      if (btn && !btn.disabled) replyForm(btn.dataset.formReply);
+    });
+  }
+
   $('transcript').addEventListener('click', (e) => {
     const formBtn = e.target.closest('[data-form-reply]');
     if (formBtn) { replyForm(formBtn.dataset.formReply); return; }
@@ -2519,6 +2759,7 @@ function wire() {
   window.addEventListener('resize', () => requestAnimationFrame(() => {
     fitStageHeight();
     if (state.view === 'session') applyRoleCardsLayout({ animate: false });
+    placeAskPanel();
     drawActivePath();
     renderChatNav();
   }));

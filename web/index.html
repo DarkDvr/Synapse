@@ -183,6 +183,12 @@
               <button class="fab" id="navPrev" title="Jump to my previous message" aria-label="Previous message">↑</button>
               <button class="fab" id="navNext" title="Jump to my next message" aria-label="Next message">↓</button>
             </div>
+            <!-- The question panel. Absolutely positioned inside the dock and
+                 anchored just above the composer, so a model that asks something
+                 can be answered without the chat moving a pixel — the dock's
+                 height is never affected by how tall the panel gets. -->
+            <div class="ask-host" id="askHost" hidden></div>
+
             <form class="composer" id="composer">
               <button type="button" class="mode-toggle" id="modeToggle" aria-pressed="false" title="Switch between Multi and Single">
                 <span class="mode-dot" aria-hidden="true"></span><span id="modeLabel">Single</span>

@@ -380,6 +380,53 @@ ordinary file tools; there is no tool and no store for it.
 
 ---
 
+## Questions: a panel over the chat, never in it
+
+A model asking the operator something is not a chat message — it is a blocked
+session. The engine raises a form (see "Tools and models"), and Synapse renders
+it as a panel **painted over the chat, anchored just above the composer**.
+
+- **It cannot change the chat's size, and that is structural, not careful.** The
+  host is `position: absolute` inside `.chat-dock` (`position: relative`), and
+  `placeAskPanel()` sets its `bottom` and `max-height` from the composer's and
+  the dock's measured heights — the composer grows with the textarea, so CSS
+  alone cannot express it. Measured with the panel shown and hidden on the same
+  transcript: dock 269/619/888, composer top 829, transcript 559 — identical in
+  both states, and page overflow 0.
+- **The panel is polled, so it must never rebuild for nothing.** `refreshPending`
+  runs every 8s; rebuilding the panel's HTML threw away answers the operator had
+  already given (reproduced: pick a radio, wait for a poll, the radio cleared and
+  Submit disabled itself again). `state.askSig` is the form's id plus its fields
+  and option values — nothing about the answers — and an unchanged signature only
+  re-places the panel. Same lesson as `renderSig` for the transcript.
+- **The action row is sticky.** A six-field form is taller than the chat, so
+  Submit is pinned to the panel's bottom edge rather than something to scroll to.
+- **Choice questions get radios, `multiselect` gets checkboxes**, `boolean` a
+  single checkbox, numbers a number input, `external` a link. Every option shows
+  its label and its description — the descriptions are the model's own reasoning
+  about each choice and are most of the value.
+- **`custom: true` becomes "Something Else…"**: a radio/checkbox row with a text
+  input that stays disabled until that row is picked, and whose text becomes the
+  answer. That is how these models phrase an escape hatch, and the engine's
+  question tool always sets it.
+- **Required fields gate Submit**, with "Answer every required question to send."
+  next to the button rather than an error after the click.
+- **The composer is disabled while a question waits** (the operator's call): the
+  turn is blocked, so a message typed into it would go nowhere. The placeholder
+  becomes `Answer the question above`.
+- **The `question` tool card stays, as one line.** It is the record, not the
+  interface: `renderTool` gives it `questionSummary(part)` (the first question's
+  `header`), and the raw payload is one click away like any other tool. On
+  answer the engine's own output ("User has answered your questions: …") shows in
+  the expanded card.
+- **Verified end to end** on the `field-notes` project: the Architect asked
+  "Index colour scheme" through the tool, the panel appeared over the chat while
+  its card read `asking the operator`, the answer "Fixed palette" was submitted,
+  the tool call completed with that answer, and the Architect carried on in the
+  same turn — closed t4 and unblocked t3.
+
+---
+
 ## Delegation: the Architect asks, the harness runs
 
 `delegate { task }` is a stateless MCP tool (src/mcp/delegate-server.js). The
@@ -452,8 +499,27 @@ Non-obvious, all verified on 2.0.30:
   webfetch, websearch, write, execute`. There is **no `list`** and **no
   `todowrite`**; asked for `list` the model used `read`, asked for `task` it
   used `subagent`.
-- **`question` is the form mechanism.** It raises a schema-driven form and
-  blocks the session until answered. Missing one stalls a session forever.
+- **`question` is the form mechanism, and the form is the interface.** The tool
+  call blocks the session, and the engine raises a **form** for it:
+  `GET /api/session/{id}/form` lists it, `POST .../form/{formId}/reply` with
+  `{answer:{<key>: value}}` settles it, and the tool call then completes with the
+  answers in its output. A form is a schema, not a question: fields are
+  `string` (with `options` → a choice, `custom: true` → an escape hatch),
+  `multiselect` (checkboxes), `boolean`, `number`/`integer`, `external`, with
+  `required`, `hidden` and `when` (eq/neq on another key). Missing one stalls a
+  session forever.
+  **The global form list is location-scoped and will not show a project's form.**
+  `GET /api/form` only lists forms in the engine's own location (`workspace`), so
+  a question asked in `workspace/field-notes` is invisible there — which is
+  exactly why the first real question showed up as a raw JSON tool card while the
+  session sat blocked. Ask the session, not the world: a session waiting on a
+  form is a session `GET /api/session/active` reports as active, and the open
+  session is asked for by name too (`GET /api/pending?session=<id>`).
+  **Forms live in the engine's memory.** A Synapse restart restarts the engine,
+  and every pending form dies with it: the transcript is left with a tool part
+  stuck at `running` and the turn never resumes. Interrupt the session (Stop)
+  before a restart if a question is open; a stranded part is the one visible
+  symptom.
 - **Tools are fast; models are slow.** Measured tool execution: file tools
   10–130ms, shell ~300ms, webfetch ~180–330ms, `execute` ~50ms. Turn times are
   3–80s because of model latency. Judge tools by their own `time.completed -

@@ -409,16 +409,38 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
      * permission or a form makes no progress and emits nothing, so this is the
      * only way to notice it after a reload.
      */
-    pending: async () => {
+    pending: async (focusSessionId = null) => {
       if (!engine.status().ready) return { permissions: [], forms: [], active: [] };
       const safe = async (fn, fallback) => {
         try { return await fn(); } catch (err) { app.warn(`pending: ${err.message}`); return fallback; }
       };
-      const [permissions, forms, active] = await Promise.all([
+      const [permissions, active] = await Promise.all([
         safe(() => engine.listPendingPermissions(), []),
-        safe(() => engine.listForms(), []),
         safe(() => engine.listActiveSessions(), []),
       ]);
+
+      // Forms have to be asked for per session. The engine's global list is
+      // scoped to its *own* location (the workspace), so a form raised by a
+      // session running in a project subfolder is not in it — which is why a
+      // question from a project session used to be invisible while the session
+      // sat there blocked. A session waiting on a form is exactly a session the
+      // engine reports as active, and the session the operator has open is asked
+      // for by name as well, so the panel is never wrong about what is on screen.
+      const ask = [...new Set([...active, focusSessionId].filter(Boolean))];
+      const lists = await Promise.all([
+        safe(() => engine.listForms(), []),
+        ...ask.map((id) => safe(() => engine.listForms(id), [])),
+      ]);
+      const forms = [];
+      const seen = new Set();
+      for (const list of lists) {
+        for (const f of list || []) {
+          if (!f?.id || seen.has(f.id)) continue;
+          seen.add(f.id);
+          forms.push(f);
+        }
+      }
+
       return {
         permissions: permissions.map((p) => ({
           requestId: p.id || p.requestID || null,

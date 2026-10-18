@@ -544,7 +544,35 @@ bold, italic, strikethrough and links — the range these models actually produc
 Link targets are restricted to `http(s)`, `mailto`, `/` and `#` (images
 additionally allow `data:image/`).
 
-## Logs
+## Questions
+
+When a model needs a decision, it calls the `question` tool and the session
+**blocks** — none of this is chat. Synapse renders the engine's form as a panel
+painted over the chat, anchored just above the composer:
+
+- **It cannot change the chat's size.** The panel is absolutely positioned inside
+  the dock, so it only ever covers what is already there; measured with it shown
+  and hidden on the same transcript, every box is identical. That was the whole
+  requirement: no reflow, no jumping transcript.
+- **Radios for a single choice, checkboxes for a multiple one**, a checkbox for a
+  boolean, a number box for a number, and a text box for free text. Each option
+  shows its label *and* its description, because the description is the model's
+  reasoning about that choice.
+- **"Something Else…"** is always offered on a choice question, with its text box
+  disabled until you pick that row — your own words become the answer.
+- **Submit is pinned** to the panel's bottom edge, so a six-field form never
+  hides the one button you need. Required fields keep it disabled and say why.
+- **The composer is disabled while a question waits** (`Answer the question
+  above`): the turn cannot read a message, so it does not pretend otherwise.
+- **The transcript keeps one line about it** — `question · Index colour scheme ·
+  running` — with the raw payload one click away and the answer in it once you
+  have replied. The panel is the interface; the card is the record.
+
+The answer goes back through the engine's form reply, and the model continues in
+the same turn. Verified live on the `field-notes` project: the Architect asked
+which colour scheme the index should use, the answer "Fixed palette" was
+submitted, and it closed the blocked task and unblocked the next one.
+
 
 Separate channels for easy bug-tracking:
 

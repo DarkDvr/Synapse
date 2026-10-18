@@ -73,7 +73,7 @@ export function createServer({ api, engine, logger, config }) {
     });
   }
 
-  async function handleApi(req, res, pathname) {
+  async function handleApi(req, res, pathname, query) {
     const { method } = req;
     const seg = pathname.replace(/^\/api\/?/, '').split('/').filter(Boolean);
 
@@ -111,8 +111,12 @@ export function createServer({ api, engine, logger, config }) {
     }
     if (seg[0] === 'agents' && method === 'GET') return sendJson(res, 200, await api.agents());
 
-    // GET /api/pending — permissions, forms and active sessions in one call
-    if (seg[0] === 'pending' && method === 'GET') return sendJson(res, 200, await api.pending());
+    // GET /api/pending — permissions, forms and active sessions in one call.
+    // `?session=` asks for that session's own forms as well, so the question
+    // panel knows what the open session is waiting on.
+    if (seg[0] === 'pending' && method === 'GET') {
+      return sendJson(res, 200, await api.pending(query?.get('session') || null));
+    }
 
     // GET /api/runs — delegated work in flight (the live path + role cards)
     if (seg[0] === 'runs' && method === 'GET') return sendJson(res, 200, await api.runs());
@@ -163,9 +167,10 @@ export function createServer({ api, engine, logger, config }) {
   }
 
   const server = http.createServer(async (req, res) => {
-    const pathname = new URL(req.url, `http://${req.headers.host || 'localhost'}`).pathname;
+    const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+    const pathname = url.pathname;
     try {
-      if (pathname.startsWith('/api/')) return await handleApi(req, res, pathname);
+      if (pathname.startsWith('/api/')) return await handleApi(req, res, pathname, url.searchParams);
       return serveStatic(res, pathname);
     } catch (err) {
       const status = err.status || 500;
