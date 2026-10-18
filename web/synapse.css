@@ -164,7 +164,10 @@ body[data-view="none"] .inspector { display: none; }
 .stage {
   display: grid;
   grid-template-rows: minmax(0, 1fr) auto;
-  gap: 14px;
+  /* the topology wrapper owns the vertical gap: 0 when the cards are closed,
+     14px when they are open (see the view-state rules below) */
+  gap: 0;
+  transition: gap 0.26s ease;
   min-width: 0;
   /* A definite height, so the composer sits at the bottom of the window and the
      conversation scrolls inside itself instead of growing the page. That is
@@ -205,15 +208,37 @@ body[data-view="none"] .stage-empty {
   border-radius: 5px; padding: 1px 6px;
 }
 
-body[data-view="none"] .topology,
+body[data-view="none"] .topology-wrap,
 body[data-view="none"] .chat-dock { display: none; }
 
-/* a real session has no orchestration yet — chat gets the whole stage */
-body[data-view="session"] .topology { display: none; }
-body[data-view="session"] .stage { grid-template-rows: minmax(0, 1fr); }
+/* A session's stage is two rows: the role-card wrapper and the chat dock. The
+   wrapper animates max-height rather than using display, so opening AND closing
+   are smooth and the grid never re-flows mid-animation. Single mode leaves it
+   at zero, so the chat owns the whole stage; Multi mode grows it to the height
+   JS measured and the chat slides down. */
+body[data-view="session"] .stage { grid-template-rows: auto minmax(0, 1fr); }
+
+.topology-wrap {
+  display: block; overflow: hidden;
+  max-height: 0; opacity: 0;
+  transition: max-height 0.26s ease, opacity 0.2s ease;
+}
+body[data-view="preview"] .topology-wrap { max-height: none; opacity: 1; }
+.topology-wrap.is-open { max-height: var(--reveal-h, 600px); opacity: 1; }
+
+body[data-view="session"].topology-open .stage,
+body[data-view="preview"] .stage { gap: 14px; }
 
 .stage.chat-expanded { grid-template-rows: minmax(0, 1fr); }
-.stage.chat-expanded .topology { display: none; }
+.stage.chat-expanded .topology-wrap { max-height: 0; opacity: 0; }
+
+/* the role cards' activity copy is still sample data: say so when they are
+   shown around a real session, exactly as the rail panels do. `.topology >`
+   outranks the generic .sample-note rule further down the file. */
+.topology > .topology-sample {
+  display: none; position: absolute; top: 0; right: 0; z-index: 4;
+}
+body[data-view="session"] .topology-sample { display: inline-flex; }
 body[data-view="session"] .chat-expand { display: none; }
 
 .session-only { display: none; }
@@ -413,18 +438,8 @@ body.dark .sidebar-bottom,
 }
 
 /* ── 7. shared control styles ──────────────────────────────────────────── */
-/* the topbar is gone: the only selects left are the composer's role picker
-   and the settings modal's model / mode fields */
-
-.role-select {
-  appearance: none;
-  background: #202226 url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6'><path d='M0 0h10L5 6z' fill='%2394979e'/></svg>") right 10px center no-repeat;
-  border: 1px solid var(--line); border-radius: 9px;
-  color: var(--text); font: inherit; font-size: 12.5px;
-  padding: 7px 30px 7px 11px; max-width: 210px;
-}
-.role-select:hover { border-color: #454950; }
-.role-select:focus-visible { outline: 2px solid var(--orange); outline-offset: 1px; }
+/* the topbar is gone: the only selects left are the settings modal's model
+   and mode fields (the composer talks to the Architect, always) */
 
 /* only present at <=950px, where the rail slides away */
 .control-room .mobile-menu { position: fixed; top: 12px; right: 14px; z-index: 40; }
@@ -538,23 +553,30 @@ body.dark .sidebar-bottom,
    from the Adamant assistant's oracle glyph. Green is semantic here — the
    button reports how hard the model is asked to think. `default` shows as a dot
    so the engine's own choice stays reachable; a model without variants gets a
-   disabled control. */
+   disabled control. Both glyphs are sized to the button's 20px content box and
+   centred by the grid, not by margins. */
 .role-effort { color: var(--green); }
 .role-effort:hover { border-color: #454950; background: var(--green-soft); }
 .role-effort:disabled { color: #5c6169; opacity: 0.55; cursor: default; }
 .role-effort:disabled:hover { border-color: var(--line); background: transparent; }
 .effort-glyph { display: flex; flex-direction: column; align-items: center; line-height: 0; }
 .effort-chev {
-  width: 5px; height: 5px;
+  width: 7px; height: 7px;
   border: 1.5px solid transparent;
   border-right-color: currentColor;
   border-bottom-color: currentColor;
   transform: rotate(-135deg);
 }
-.effort-chev + .effort-chev { margin-top: -2.5px; }
+.effort-chev + .effort-chev { margin-top: -3.5px; }
 .effort-auto {
-  width: 4px; height: 4px; border-radius: 50%;
+  width: 5px; height: 5px; border-radius: 50%;
   background: currentColor; opacity: 0.5;
+}
+/* the pencil is a text glyph: give it its own box so it can be made larger
+   without touching the button's 22px frame */
+.role-glyph {
+  display: grid; place-items: center;
+  font-size: 15px; line-height: 1;
 }
 
 /* the action gets two lines, then ellipsis — the card never grows */
@@ -798,14 +820,12 @@ body.dark .sidebar-bottom,
 .form-field select:focus-visible { outline: none; border-color: var(--orange); box-shadow: 0 0 0 3px rgba(255, 125, 26, 0.18); }
 .form-check { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--text); margin-bottom: 8px; }
 
-/* ── 12. composer + target picker ──────────────────────────────────────── */
+/* ── 12. composer ──────────────────────────────────────────────────────── */
 
 .composer {
   display: flex; gap: 8px; align-items: center;
   border-top: 1px solid var(--line); padding: 9px 11px; background: #1a1c20;
 }
-.to-pick { display: flex; align-items: center; gap: 6px; flex: none; }
-.role-select { padding: 8px 26px 8px 10px; font-size: 12px; max-width: 150px; }
 
 .composer textarea {
   flex: 1; min-width: 0; resize: none; min-height: 38px; max-height: 150px;

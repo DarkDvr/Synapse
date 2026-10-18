@@ -388,6 +388,20 @@ export class OpenCodeEngine extends Engine {
     );
   }
 
+  /**
+   * Replace the session's permission ruleset. An empty array clears all rules
+   * (delegation allowed — Multi); the Single ruleset denies the `subagent`
+   * tool. The engine applies this to later turns of the same session, so the
+   * mode can be flipped while it is open. Returns 204 with no body.
+   */
+  async updateSessionPermissions(sessionId, permissions) {
+    const rules = Array.isArray(permissions) ? permissions : [];
+    await this.request('PATCH', `/api/session/${encodeURIComponent(sessionId)}`, { permissions: rules });
+    this.sessionLog.info(
+      `permissions set id=${sessionId} mode=${rules.length ? 'single' : 'multi'} rules=${rules.length}`,
+    );
+  }
+
   async getMessages(sessionId) {
     const r = await this.request(
       'GET',

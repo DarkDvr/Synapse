@@ -157,16 +157,38 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
       return { session, projectId: project.id };
     },
 
-    renameSession: async (sessionId, body) => {
+    /**
+     * PATCH a session. `title` renames it; `permissions` replaces its ruleset —
+     * which is how Single↔Multi flips an open session without recreating it.
+     */
+    updateSession: async (sessionId, body) => {
       requireReady();
-      const title = String(body?.title ?? '').trim();
-      if (!title) {
-        const err = new Error('a session needs a title');
+      const hasPermissions = body !== null && typeof body === 'object' && 'permissions' in body;
+      const hasTitle = body !== null && typeof body === 'object' && body.title !== undefined;
+      if (!hasPermissions && !hasTitle) {
+        const err = new Error('nothing to update');
         err.status = 400;
         throw err;
       }
-      await engine.updateSessionTitle(sessionId, title);
-      return { ok: true, title };
+      if (hasPermissions) {
+        const p = body.permissions;
+        if (p !== null && !Array.isArray(p)) {
+          const err = new Error('permissions must be an array or null');
+          err.status = 400;
+          throw err;
+        }
+        await engine.updateSessionPermissions(sessionId, Array.isArray(p) ? p : []);
+      }
+      if (hasTitle) {
+        const title = String(body.title ?? '').trim();
+        if (!title) {
+          const err = new Error('a session needs a title');
+          err.status = 400;
+          throw err;
+        }
+        await engine.updateSessionTitle(sessionId, title);
+      }
+      return { ok: true };
     },
 
     /** Switch the model and/or thinking effort used by an existing session. */

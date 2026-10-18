@@ -264,13 +264,17 @@ Verified end to end: the model called `synapse-search_websearch` twice, got live
 
 ## Multi vs Single mode
 
-A small toggle sits in the composer, between the role picker and the message box.
-**Both modes have the full toolset** — that is the point of them.
+The composer's toggle sits left of the message box. **Both modes have the full
+toolset** — that is the point of them.
 
-- **Multi** — the Architect can hand work to workers and the role cards are shown.
-  (The multi-agent workflow itself lands with the orchestration layer.)
-- **Single** — the same tools, but delegation is denied, so the Architect answers
-  everything itself in one chat and the role cards do not appear.
+- **Every new session starts in Single.** One Architect, all tools, delegation
+  denied; the role cards are not rendered, so a Single session pays nothing for
+  them.
+- **Switching to Multi** slides the chat panel down, reveals the role cards and
+  clears the delegation deny, so the Architect can hand work to subagents.
+- **Switching back to Single** slides the chat up and restores the deny. The
+  same session keeps its transcript — the mode is a live property of the open
+  session, not something chosen at creation.
 
 Single is a **permission ruleset on an ordinary session** that denies only the
 delegation tool:
@@ -288,15 +292,15 @@ Two designs that look right and are not:
 - Denying *all* tools. That gives a plain chat with no tools at all, which
   defeats the purpose: Single is meant to be a capable single agent.
 
-The engine fixes a session's permissions at creation — `PATCH /api/session/{id}`
-accepts only `title`, `metadata` and `permissions` — so:
+`PATCH /api/session/{id}` accepts `permissions`, and that is how the toggle
+flips an open session: `[]` clears the deny, the ruleset reinstates it. There is
+no target picker in the composer — every message goes to the Architect; each
+role's model and thinking effort are set on its own card.
 
-- toggling with an **empty** session open swaps it for one in the right mode;
-- toggling with a session that has **messages** keeps that session as it is and
-  tells you so; the next new session uses the new mode, and sending continues in
-  a fresh session.
-
-The choice is remembered in `config\synapse.config.json` as `defaults.mode`.
+**Role activity is still sample data.** The cards' actions and footers come from
+the mockup and are labelled SAMPLE when shown around a real session. What is
+real today: the per-role model/effort choice, the delegation permission, and the
+reveal itself.
 
 ## Markdown
 

@@ -29,6 +29,9 @@ export class Engine extends EventEmitter {
   // Switch the model (and optionally its thinking-effort variant) of an
   // existing session; subsequent turns use it.
   async switchModel() { throw new Error(`${this.kind}: switchModel() not implemented`); }
+  // Replace a session's permission ruleset. This is how Single↔Multi is
+  // applied to an open session: deny `subagent`, or clear the deny.
+  async updateSessionPermissions() { throw new Error(`${this.kind}: updateSessionPermissions() not implemented`); }
   async getMessages() { return []; }
   async prompt() { throw new Error(`${this.kind}: prompt() not implemented`); }
   async interrupt() {}

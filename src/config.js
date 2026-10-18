@@ -41,11 +41,6 @@ export const DEFAULTS = {
     // whatever the provider does when no reasoningEffort is requested.
     variant: '',
     agent: '',
-    // 'multi' = the Architect can hand work to workers; 'single' = every tool
-    // but delegation, so it answers everything itself in one chat. Applied when
-    // a session is created; the engine will not change a session's permissions
-    // in a way that survives, so the mode is chosen before a session starts.
-    mode: 'multi',
   },
   // Per-role selections made on the role cards: { ref, variant }. The Architect
   // uses `defaults` above (it is the main session); every other role gets its
@@ -120,7 +115,9 @@ export function normalize(raw) {
   cfg.defaults.model = String(cfg.defaults.model || '');
   cfg.defaults.variant = String(cfg.defaults.variant || '');
   cfg.defaults.agent = String(cfg.defaults.agent || '');
-  cfg.defaults.mode = cfg.defaults.mode === 'single' ? 'single' : 'multi';
+  // The mode is per session now (Single at creation, switched live), so the old
+  // defaults.mode key is dropped rather than left to mislead.
+  delete cfg.defaults.mode;
 
   // Role selections are objects now ({ ref, variant }); accept the older bare
   // "provider/id" strings so existing config files keep working. The Architect

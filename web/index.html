@@ -81,9 +81,12 @@
             <button class="btn btn-primary" id="emptyNewSession">New Session</button>
           </div>
 
-          <!-- ── topology (sample preview) ───────────────────────────── -->
+          <!-- ── role cards: revealed in Multi mode (activity is sample until
+               the orchestration layer lands) ───────────────────────────── -->
+          <div class="topology-wrap" id="topologyWrap">
           <div class="topology" id="topology">
             <svg class="path-layer" id="pathLayer" aria-hidden="true" focusable="false"></svg>
+            <span class="sample-note topology-sample">SAMPLE</span>
 
             <div class="topo-architect">
               <article class="role-card role-architect is-active">
@@ -93,7 +96,7 @@
                   <div class="role-tools">
                     <select class="role-model" data-role="architect" aria-label="Model for the Architect role" title="Model for the Architect role"></select>
                     <button class="role-btn role-effort" type="button" data-role="architect" title="Thinking effort" aria-label="Thinking effort for the Architect role"></button>
-                    <button class="role-btn ic-edit" data-soon="Per-role instructions arrive in stage 2." title="Role instructions" aria-label="Role instructions">✎</button>
+                    <button class="role-btn ic-edit" data-soon="Per-role instructions arrive with the orchestration layer." title="Role instructions" aria-label="Role instructions"><span class="role-glyph">✎</span></button>
                   </div>
                 </header>
                 <p class="role-action">Reviewing the Designer's settings-screen spec before handing the month grid to Coder 1.</p>
@@ -114,7 +117,7 @@
                 <div class="role-tools">
                   <select class="role-model" data-role="critic" aria-label="Model for the Critic role" title="Model for the Critic role"></select>
                   <button class="role-btn role-effort" type="button" data-role="critic" title="Thinking effort" aria-label="Thinking effort for the Critic role"></button>
-                  <button class="role-btn ic-edit" data-soon="Per-role instructions arrive in stage 2." title="Role instructions" aria-label="Role instructions">✎</button>
+                  <button class="role-btn ic-edit" data-soon="Per-role instructions arrive with the orchestration layer." title="Role instructions" aria-label="Role instructions"><span class="role-glyph">✎</span></button>
                 </div>
               </header>
               <p class="role-action">Idle. Last pass flagged the unguarded date parse in event import.</p>
@@ -133,7 +136,7 @@
                 <div class="role-tools">
                   <select class="role-model" data-role="coder-1" aria-label="Model for Coder 1" title="Model for Coder 1"></select>
                   <button class="role-btn role-effort" type="button" data-role="coder-1" title="Thinking effort" aria-label="Thinking effort for Coder 1"></button>
-                  <button class="role-btn ic-edit" data-soon="Per-role instructions arrive in stage 2." title="Role instructions" aria-label="Role instructions">✎</button>
+                  <button class="role-btn ic-edit" data-soon="Per-role instructions arrive with the orchestration layer." title="Role instructions" aria-label="Role instructions"><span class="role-glyph">✎</span></button>
                 </div>
               </header>
               <p class="role-action">Building the month grid — laying out weeks and wiring day-cell selection.</p>
@@ -151,7 +154,7 @@
                 <div class="role-tools">
                   <select class="role-model" data-role="designer" aria-label="Model for the Designer role" title="Model for the Designer role"></select>
                   <button class="role-btn role-effort" type="button" data-role="designer" title="Thinking effort" aria-label="Thinking effort for the Designer role"></button>
-                  <button class="role-btn ic-edit" data-soon="Per-role instructions arrive in stage 2." title="Role instructions" aria-label="Role instructions">✎</button>
+                  <button class="role-btn ic-edit" data-soon="Per-role instructions arrive with the orchestration layer." title="Role instructions" aria-label="Role instructions"><span class="role-glyph">✎</span></button>
                 </div>
               </header>
               <p class="role-action">Drafting the settings screen against the locked design baseline.</p>
@@ -170,7 +173,7 @@
                 <div class="role-tools">
                   <select class="role-model" data-role="coder-2" aria-label="Model for Coder 2" title="Model for Coder 2"></select>
                   <button class="role-btn role-effort" type="button" data-role="coder-2" title="Thinking effort" aria-label="Thinking effort for Coder 2"></button>
-                  <button class="role-btn ic-edit" data-soon="Per-role instructions arrive in stage 2." title="Role instructions" aria-label="Role instructions">✎</button>
+                  <button class="role-btn ic-edit" data-soon="Per-role instructions arrive with the orchestration layer." title="Role instructions" aria-label="Role instructions"><span class="role-glyph">✎</span></button>
                 </div>
               </header>
               <p class="role-action">Queued. Starts on the event dialog once the grid lands.</p>
@@ -188,7 +191,7 @@
                 <div class="role-tools">
                   <select class="role-model" data-role="auditor" aria-label="Model for the Auditor role" title="Model for the Auditor role"></select>
                   <button class="role-btn role-effort" type="button" data-role="auditor" title="Thinking effort" aria-label="Thinking effort for the Auditor role"></button>
-                  <button class="role-btn ic-edit" data-soon="Per-role instructions arrive in stage 2." title="Role instructions" aria-label="Role instructions">✎</button>
+                  <button class="role-btn ic-edit" data-soon="Per-role instructions arrive with the orchestration layer." title="Role instructions" aria-label="Role instructions"><span class="role-glyph">✎</span></button>
                 </div>
               </header>
               <p class="role-action">Idle. Ran the acceptance checklist against the persistence layer.</p>
@@ -207,7 +210,7 @@
                 <div class="role-tools">
                   <select class="role-model" data-role="coder-3" aria-label="Model for Coder 3" title="Model for Coder 3"></select>
                   <button class="role-btn role-effort" type="button" data-role="coder-3" title="Thinking effort" aria-label="Thinking effort for Coder 3"></button>
-                  <button class="role-btn ic-edit" data-soon="Per-role instructions arrive in stage 2." title="Role instructions" aria-label="Role instructions">✎</button>
+                  <button class="role-btn ic-edit" data-soon="Per-role instructions arrive with the orchestration layer." title="Role instructions" aria-label="Role instructions"><span class="role-glyph">✎</span></button>
                 </div>
               </header>
               <p class="role-action">Queued. Owns recurrence rules — currently hard-blocked.</p>
@@ -216,6 +219,7 @@
                 <span>blocked by <span class="to">plan step 5</span></span><span>queued</span>
               </footer>
             </article>
+          </div>
           </div>
 
           <!-- ── conversation (live · no header) ─────────────────────── -->
@@ -228,14 +232,10 @@
               <button class="fab" id="navNext" title="Jump to my next message" aria-label="Next message">↓</button>
             </div>
             <form class="composer" id="composer">
-              <label class="to-pick">
-                <span class="pick-tag">to</span>
-                <select class="role-select" id="targetRole" title="Which role answers you" aria-label="Which role answers you"></select>
-              </label>
               <button type="button" class="mode-toggle" id="modeToggle" aria-pressed="false" title="Switch between Multi and Single">
-                <span class="mode-dot" aria-hidden="true"></span><span id="modeLabel">Multi</span>
+                <span class="mode-dot" aria-hidden="true"></span><span id="modeLabel">Single</span>
               </button>
-              <textarea id="promptInput" rows="1" placeholder="Message…" title="Enter to send · Shift+Enter for a newline"></textarea>
+              <textarea id="promptInput" rows="1" placeholder="Message the Architect…" title="Enter to send · Shift+Enter for a newline"></textarea>
               <button type="button" class="icon-button" id="stopBtn" title="Stop the current run" aria-label="Stop the current run" disabled>■</button>
               <button type="button" class="icon-button chat-expand" id="expandBtn" title="Expand the conversation over the role cards" aria-label="Expand the conversation">⤢</button>
               <button type="submit" class="btn btn-primary" id="sendBtn">Send</button>

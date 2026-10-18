@@ -132,7 +132,7 @@ export function createServer({ api, engine, logger, config }) {
       if (seg.length === 1 && method === 'GET') return sendJson(res, 200, await api.sessions());
       if (seg.length === 1 && method === 'POST') return sendJson(res, 200, await api.createSession(await readBody(req)));
       const sessionId = decodeURIComponent(seg[1] || '');
-      if (seg.length === 2 && method === 'PATCH') return sendJson(res, 200, await api.renameSession(sessionId, await readBody(req)));
+      if (seg.length === 2 && method === 'PATCH') return sendJson(res, 200, await api.updateSession(sessionId, await readBody(req)));
       if (seg.length === 2 && method === 'DELETE') return sendJson(res, 200, await api.deleteSession(sessionId));
       if (seg[2] === 'model' && method === 'POST') return sendJson(res, 200, await api.switchModel(sessionId, await readBody(req)));
       if (seg[2] === 'messages' && method === 'GET') return sendJson(res, 200, await api.messages(sessionId));

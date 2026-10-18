@@ -12,11 +12,11 @@ import { renderMarkdown } from './md.js';
 
 const $ = (id) => document.getElementById(id);
 
-// Orchestration roles. The composer's picker targets one of these; the very
-// same ids key the per-role model choices in the config file. Only `architect`
-// can be addressed until the orchestration layer lands.
+// Orchestration roles. These ids key the per-role model choices in the config
+// file and label the cards. Every chat message goes to the Architect — the
+// composer has no target picker; the philosophy is one interface, one lead.
 const ROLES = [
-  { id: 'architect', name: 'Architect', addressable: true },
+  { id: 'architect', name: 'Architect' },
   { id: 'critic', name: 'Critic' },
   { id: 'designer', name: 'Designer' },
   { id: 'coder-1', name: 'Coder 1' },
@@ -44,14 +44,15 @@ const state = {
   forms: [],
   toolStats: null,
   probe: null,
-  // 'multi' (workers + role cards) or 'single' (one Architect, all tools)
-  mode: 'multi',
+  // 'single' (one Architect, all tools, no delegation) or 'multi' (delegation
+  // allowed, role cards revealed). New sessions start single; the toggle
+  // switches the open session live.
+  mode: 'single',
   streaming: false,
   streamLive: false,
   collapsed: new Set(),
   renaming: null,
   expanded: false,
-  target: 'architect',
   view: 'none', // none | session | preview
 };
 
@@ -221,10 +222,7 @@ async function loadModelsAndAgents() {
   try { state.models = (await api('GET', '/api/models')).models; } catch { state.models = []; }
   try { state.agents = (await api('GET', '/api/agents')).agents; } catch { state.agents = []; }
   fillRoleModels();
-  renderTargetSelect();
 }
-
-const defaultAgent = () => state.config?.defaults?.agent || undefined;
 
 // A role's model selection is { ref, variant }; an empty variant means the
 // engine's own default (the engine records it as "default"). The Architect is
@@ -288,13 +286,15 @@ const modelTitle = (m) => {
 const SINGLE_PERMISSIONS = [{ action: 'subagent', resource: '*', effect: 'deny' }];
 const sessionMode = (s) => (s?.single ? 'single' : 'multi');
 
-/** What to POST when creating a session in the mode currently selected. */
+/**
+ * A new session is always born in Single mode: one Architect, every tool,
+ * delegation denied. Multi is a live switch on the open session — a permission
+ * PATCH — so nothing about the mode has to be decided at creation time.
+ */
 function sessionBody(projectId) {
-  const body = { projectId };
+  const body = { projectId, permissions: SINGLE_PERMISSIONS };
   const model = architectSelection();
   if (model) body.model = model;
-  if (state.mode === 'single') body.permissions = SINGLE_PERMISSIONS;
-  else body.agent = defaultAgent();
   return body;
 }
 
@@ -307,48 +307,94 @@ function renderMode() {
   btn.classList.toggle('is-single', single);
   btn.setAttribute('aria-pressed', String(single));
   btn.title = single
-    ? 'Single: one Architect, all the tools, no workers — it answers everything itself. Click for Multi.'
-    : 'Multi: the Architect can hand work to workers and shows the role cards. Click for Single.';
+    ? 'Single: one Architect, all the tools, no delegation — it answers everything itself. Click for Multi.'
+    : 'Multi: the Architect can delegate to subagents and the role cards are shown. Click for Single.';
+  document.body.dataset.mode = state.mode;
 }
 
-async function saveMode() {
-  try {
-    const cfg = { ...(state.config || {}) };
-    cfg.defaults = { ...(cfg.defaults || {}), mode: state.mode };
-    state.config = await api('PUT', '/api/config', cfg);
-  } catch { /* the toggle still works for this session */ }
+// ── role cards: the Multi reveal ────────────────────────────────
+// The cards sit in a wrapper whose max-height animates. Opening pushes the chat
+// down and reveals them; closing pulls the chat back up. Height is measured,
+// not guessed, and capped so a short window cannot squeeze the conversation.
+let revealTimer = 0;
+
+function topologyTarget() {
+  const wrap = $('topologyWrap');
+  const topo = $('topology');
+  return wrap && topo ? { wrap, topo } : null;
 }
 
-async function switchMode() {
-  state.mode = state.mode === 'single' ? 'multi' : 'single';
-  renderMode();
-  setView();
-  saveMode();
+function measureReveal(topo, stage) {
+  const stageH = stage?.getBoundingClientRect().height || window.innerHeight;
+  return Math.max(0, Math.min(Math.round(topo.getBoundingClientRect().height), Math.round(stageH * 0.62)));
+}
 
-  if (!state.sessionId) return;
-  const current = sessionMode(findSession(state.sessionId));
-  if (current === state.mode) return;
+function setRoleCardsOpen(open, { animate = true } = {}) {
+  const els = topologyTarget();
+  if (!els) return;
+  const { wrap, topo } = els;
+  clearTimeout(revealTimer);
+  if (open) {
+    wrap.style.setProperty('--reveal-h', `${measureReveal(topo, $('stage'))}px`);
+    document.body.classList.add('topology-open');
+    // the reflow between setting the height and adding the class is what makes
+    // the first reveal animate instead of snapping open
+    void wrap.offsetHeight;
+    wrap.classList.add('is-open');
+    requestAnimationFrame(drawActivePath);
+    return;
+  }
+  wrap.classList.remove('is-open');
+  document.body.classList.remove('topology-open');
+  if (!animate) {
+    wrap.style.removeProperty('--reveal-h');
+    return;
+  }
+  revealTimer = setTimeout(() => {
+    if (!wrap.classList.contains('is-open')) wrap.style.removeProperty('--reveal-h');
+  }, 300);
+}
 
-  // Nothing said yet, so swap the empty session for one in the right mode
-  // rather than leaving the toggle looking broken.
-  if (state.messages.length === 0) {
-    const projectId = projectOf(state.sessionId)?.id;
-    try {
-      await api('DELETE', `/api/sessions/${encodeURIComponent(state.sessionId)}`);
-      state.sessionId = null;
-      const { session } = await api('POST', '/api/sessions', sessionBody(projectId));
-      await loadProjects();
-      await openSession(session.id);
-    } catch (err) {
-      toast('Could Not Switch Mode', err.message);
+/** Where the cards should be, given the current view and mode. */
+function applyModeLayout(options) {
+  if (state.view === 'preview') {
+    const els = topologyTarget();
+    if (els) {
+      clearTimeout(revealTimer);
+      els.wrap.classList.remove('is-open');
+      document.body.classList.remove('topology-open');
+      requestAnimationFrame(drawActivePath);
     }
     return;
   }
+  if (state.view === 'session' && state.mode === 'multi') setRoleCardsOpen(true, options);
+  else setRoleCardsOpen(false, options);
+}
 
-  toast(
-    `This Session Stays In ${current === 'single' ? 'Single' : 'Multi'} Mode`,
-    `Mode is fixed when a session starts. Your next new session will be ${state.mode === 'single' ? 'Single' : 'Multi'}.`,
-  );
+async function switchMode() {
+  if (state.view !== 'session' || !state.sessionId) {
+    toast('No Session Open', 'Open or start a session to switch modes.');
+    return;
+  }
+  const previous = state.mode;
+  const next = previous === 'single' ? 'multi' : 'single';
+  state.mode = next;
+  renderMode();
+  setView();
+  try {
+    // Single denies only the delegation tool; Multi clears the ruleset. The
+    // engine applies this to later turns of the same session.
+    await api('PATCH', `/api/sessions/${encodeURIComponent(state.sessionId)}`, {
+      permissions: next === 'single' ? SINGLE_PERMISSIONS : [],
+    });
+    const s = findSession(state.sessionId);
+    if (s) s.single = next === 'single';
+  } catch (err) {
+    state.mode = previous;
+    renderMode();
+    setView();
+    toast('Could Not Switch Mode', err.message);
+  }
 }
 
 // One model picker and one thinking-effort button per role card. The model
@@ -454,13 +500,6 @@ async function cycleEffort(roleId) {
   } catch (err) {
     toast('Could not save the thinking effort', err.message);
   }
-}
-
-function renderTargetSelect() {
-  const sel = $('targetRole');
-  if (!sel) return;
-  sel.innerHTML = ROLES.map((r) => `<option value="${esc(r.id)}">${esc(r.name)}</option>`).join('');
-  sel.value = state.target;
 }
 
 // ── projects + sessions ─────────────────────────────────────────
@@ -744,11 +783,14 @@ async function commitRename() {
 // ── view state ──────────────────────────────────────────────────
 function setView() {
   document.body.dataset.view = state.view;
-  // Single mode has no workers, so there are no role cards to show: the
-  // conversation takes the whole stage and the expand button has nothing to do.
+  document.body.dataset.mode = state.mode;
   const single = state.mode === 'single';
-  $('stage').classList.toggle('chat-expanded', single || state.expanded);
+  $('stage').classList.toggle('chat-expanded', state.expanded);
   $('expandBtn').hidden = single;
+  // the mode toggle is a session control: there is nothing to switch without
+  // an open session (preview is sample data and always shows the cards)
+  $('modeToggle').hidden = state.view !== 'session';
+  applyModeLayout();
   renderComposer();
   updateSessionHeader();
   requestAnimationFrame(drawActivePath);
@@ -775,6 +817,9 @@ async function openSession(id) {
   state.sessionId = id;
   state.permissions = [];
   state.expanded = false;
+  // the mode is a property of the session, not of the app
+  state.mode = sessionMode(findSession(id));
+  renderMode();
   $('sidebar').classList.remove('open');
   setView();
   renderTree();
@@ -788,6 +833,8 @@ function openPreview() {
   state.sessionId = null;
   state.messages = [];
   state.expanded = false;
+  state.mode = 'multi';
+  renderMode();
   setView();
   renderTree();
   renderTranscript();
@@ -798,6 +845,8 @@ function showNothing() {
   state.sessionId = null;
   state.messages = [];
   state.expanded = false;
+  state.mode = 'single';
+  renderMode();
   setView();
   renderTree();
   renderTranscript();
@@ -904,9 +953,13 @@ function renderTranscript() {
   );
   const pending = renderPermissions() + renderForms();
   if (showable.length === 0 && !pending) {
-    el.innerHTML = state.view === 'preview'
-      ? `<div class="chat-empty">Nothing open. Send a message and Synapse starts a session for you in General.</div>`
-      : `<div class="chat-empty">Pick a session on the left, or start a new one.</div>`;
+    const empty =
+      state.view === 'preview'
+        ? 'Nothing open. Send a message and Synapse starts a session for you in General.'
+        : state.view === 'session'
+          ? 'A fresh session. Ask the Architect what it is doing, or send the first instruction.'
+          : 'Pick a session on the left, or start a new one.';
+    el.innerHTML = `<div class="chat-empty">${empty}</div>`;
     renderChatNav();
     return;
   }
@@ -1366,11 +1419,6 @@ async function send() {
   const text = input.value.trim();
   if (!text) return;
 
-  const role = ROLES.find((r) => r.id === state.target) || ROLES[0];
-  if (!role.addressable) {
-    toast(`Talking to the ${role.name} directly`, 'Direct worker routing arrives with the orchestration layer in stage 3. Message the Architect for now.');
-    return;
-  }
   if (!state.sessionId && state.view !== 'preview') {
     toast('No session open', 'Pick a session on the left, or start a new one.');
     return;
@@ -1396,32 +1444,17 @@ async function send() {
 }
 
 // Messaging from the design preview starts a real session in General.
+// A session always starts in Single mode; Multi is switched live.
 async function ensureSession() {
-  if (state.sessionId) {
-    // The agent is fixed when a session is created, so a mode change continues
-    // in a new session rather than silently doing nothing.
-    const current = sessionMode(findSession(state.sessionId));
-    if (current === state.mode) return state.sessionId;
-    const projectId = projectOf(state.sessionId)?.id;
-    const { session } = await api('POST', '/api/sessions', sessionBody(projectId));
-    state.sessionId = session.id;
-    state.messages = [];
-    state.view = 'session';
-    state.expanded = false;
-    setView();
-    await loadProjects();
-    toast(
-      `Continued In ${state.mode === 'single' ? 'Single' : 'Multi'} Mode`,
-      'A session keeps the mode it started with, so this is a new one.',
-    );
-    return state.sessionId;
-  }
+  if (state.sessionId) return state.sessionId;
   const general = state.projects.find((p) => p.general);
   if (!general) throw new Error('no General project');
   const { session } = await api('POST', '/api/sessions', sessionBody(general.id));
   state.sessionId = session.id;
   state.view = 'session';
   state.expanded = false;
+  state.mode = sessionMode(session);
+  renderMode();
   setView();
   await loadProjects();
   return state.sessionId;
@@ -1699,12 +1732,6 @@ function wire() {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
   });
 
-  $('targetRole').addEventListener('change', (e) => {
-    state.target = e.target.value;
-    const role = ROLES.find((r) => r.id === state.target);
-    input.placeholder = role?.id === 'architect' ? 'Message the Architect…' : `Message ${role?.name || ''}…`;
-  });
-
   $('projectTree').addEventListener('click', (e) => {
     if (e.target.closest('[data-soon]')) return;
     const stop = e.target.closest('[data-interrupt]');
@@ -1779,7 +1806,14 @@ function wire() {
     else if (!$('settingsModal').hidden) closeSettings();
   });
 
-  window.addEventListener('resize', () => requestAnimationFrame(() => { drawActivePath(); renderChatNav(); }));
+  window.addEventListener('resize', () => requestAnimationFrame(() => {
+    const els = topologyTarget();
+    if (els && document.body.classList.contains('topology-open')) {
+      els.wrap.style.setProperty('--reveal-h', `${measureReveal(els.topo, $('stage'))}px`);
+    }
+    drawActivePath();
+    renderChatNav();
+  }));
   if (window.ResizeObserver) new ResizeObserver(() => drawActivePath()).observe($('topology'));
 
   setInterval(refreshStatus, 10000);
@@ -1799,7 +1833,8 @@ function wire() {
 async function boot() {
   wire();
   state.config = await api('GET', '/api/config').catch(() => null);
-  state.mode = state.config?.defaults?.mode === 'single' ? 'single' : 'multi';
+  // every new session starts Single; an opened session sets its own mode
+  state.mode = 'single';
   renderMode();
   setView();
   await refreshStatus();

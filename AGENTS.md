@@ -196,7 +196,7 @@ guessing.
 | Thing | Reality |
 |---|---|
 | `POST /api/session` | accepts `location:{directory}`. **A session cannot run in a directory that does not exist** — the engine throws `LocationNotFoundError` on prompt. Synapse creates the folder when a project is added. |
-| `PATCH /api/session/{id}` | accepts only `title`, `metadata`, `permissions`. **Not `agent`.** Returns **204 with an empty body** — do not try to parse it. |
+| `PATCH /api/session/{id}` | accepts only `title`, `metadata`, `permissions`. **Not `agent`.** Returns **204 with an empty body** — do not try to parse it. `permissions: []` clears the ruleset; that is how Single→Multi is applied to an open session. |
 | `POST /api/session/{id}/model` | switches model and thinking effort for later turns. Body `{model:{providerID,id,variant?}}`; **204, empty body**. Omitting `variant` makes the engine store `"default"` — see "Context windows and thinking effort". |
 | `POST /api/session/{id}/generate` | one-shot completion in the session's context. Returns `{data:{text}}`. **Adds nothing to the transcript** — this is how sessions get named. |
 | `POST /api/session/{id}/prompt` | accepts `text`, `files`, `agents`, `skills`, `metadata`, `delivery`, `resume`. An `agents:[{name}]` attachment does **not** change the acting agent. |
@@ -335,6 +335,18 @@ failure "not offered by this model" when the tool was never in its list.
   (`F:\dev\Obsidian.Adamant\...\adamant-assistant`) — shape only, no code copied,
   and that folder is read-only. The model select's tooltip carries the context
   window, which is how the 1M override becomes visible without a settings field.
+- **The Multi reveal animates `max-height`, not `display`.** The cards live in
+  `#topologyWrap`; JS measures the topology, sets `--reveal-h` (capped at 62% of
+  the stage), adds `.is-open` and the `topology-open` body class, and the chat
+  slides down because the stage's gap is folded into the same transition. A
+  reflow between setting the height and adding the class is what makes the first
+  reveal animate instead of snapping. In Single the wrapper is 0px tall, so the
+  cards cost nothing. The glyph measurements that matter: both button glyphs are
+  centred on the 22px button to within 0.01px, with ~1.5px of margin left top
+  and bottom at three chevrons — if the glyph or border size changes, re-measure
+  with `browser_get_element` rather than eyeballing it.
+- **The composer has no target picker, deliberately.** One interface, one lead:
+  every message goes to the Architect. Per-role model/effort are card controls.
 
 ---
 
@@ -390,21 +402,27 @@ not gigabytes. Worth knowing; not worth panicking about.
 - **Stage 3 onward**: the Architect's real dev plan in the right pane
   (green/amber/red, red = hard-blocked), the status model, then the main-pane
   napkin, then the Tools-in-Use feed.
-- **Multi vs Single mode.** The composer toggle picks one of two, and **both
-  have the full toolset** — that is the whole point.
-  - **Multi** — the Architect can hand work to workers (the multi-agent workflow
-    still to be wired) and the role cards are shown.
-  - **Single** — the same tools, but delegation denied, so the Architect answers
-    everything itself in one chat, and the role cards do not appear.
+- **Multi vs Single mode.** The composer toggle flips the **open session** live;
+  new sessions always start Single. Both modes have the full toolset — that is
+  the whole point.
+  - **Single** — a permission ruleset on an ordinary session that denies only
+    `subagent`, not a custom agent and not a blanket deny. The role cards stay
+    collapsed (`max-height: 0`), so a Single session pays nothing for them.
+  - **Multi** — the ruleset is cleared (`PATCH /api/session/{id}` with
+    `permissions: []`), the wrapper animates open and the chat slides down.
 
-  Single is a **permission ruleset on an ordinary session** that denies only
-  `subagent`, not a custom agent and not a blanket deny. A dedicated `chat` agent
-  (tools denied, `steps: 1`) is the obvious design and it does **not** work: the
-  free tier rejected every request from a custom agent with a provider auth error
+  The mode is a per-session property read from `isSingleSession()`
+  (`engines/base.js`); nothing is stored in config — `defaults.mode` was removed
+  once the toggle became live. A dedicated `chat` agent (tools denied,
+  `steps: 1`) is the obvious design and it does **not** work: the free tier
+  rejected every request from a custom agent with a provider auth error
   (measured side by side — a custom-agent session failed at 20:45:37 while a
   default-agent session succeeded at 20:45:40). Denying everything also defeats
-  the purpose, because Single is meant to have tools. `POST /api/session` accepts
-  `permissions`, and `isSingleSession()` in `engines/base.js` reads it back.
-  `PATCH /api/session/{id}` accepts only `title`, `metadata` and `permissions`.
+  the purpose, because Single is meant to have tools. `POST /api/session`
+  accepts `permissions`; `PATCH /api/session/{id}` replaces them.
+- The composer has **no target picker**: every message goes to the Architect.
+  Per-role model and thinking effort live on the role cards. If direct worker
+  addressing is ever wanted, make the card itself the affordance rather than
+  reintroducing a dropdown.
 - Adding skills later is just files in `%USERPROFILE%\.agents\skills` — they
   are already wired in.
