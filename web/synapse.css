@@ -1072,6 +1072,13 @@ body[data-view="session"] .chat-dock:not(.has-history) .composer { border-top-co
   font-family: var(--mono); font-size: 12px; text-transform: lowercase;
 }
 
+/* the harness speaking: a worker's report, or a problem handed back */
+.msg.harness .msg-body { border-left: 2px solid var(--amber); }
+.msg.harness .msg-role {
+  font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.04em;
+  color: var(--amber); text-transform: uppercase;
+}
+.msg.harness .msg-text { white-space: pre-wrap; }
 /* ── 15. modal + toast ─────────────────────────────────────────────────── */
 
 .modal-backdrop {

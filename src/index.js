@@ -10,6 +10,7 @@ import { createProjectStore } from './projects.js';
 import { createTitler } from './titler.js';
 import { createToolStats } from './toolstats.js';
 import { ensurePlan, readPlan, logPlanState } from './plans.js';
+import { createRunner } from './runs.js';
 import { createProbe, discoverToolsetForModel } from './probe.js';
 import { createModelCache, MAX_TOOL_ASKS } from './modelcache.js';
 import { createApi } from './api.js';
@@ -105,6 +106,11 @@ async function main() {
     toolStats.clear();
     toolStatsLog.info('census cleared on boot (tools.resetOnBoot)');
   }
+
+  // The delegation runner: the Architect asks for work with a tool, and this is
+  // what actually runs it — a real session on the task's role and model, run to
+  // completion, recorded, and reported back. See src/runs.js.
+  const runner = createRunner({ engine, logger, getConfig });
 
   // The probe drives one turn per tool so we can see what these models actually
   // reach for, and how slow or broken each tool is on this machine.
@@ -225,6 +231,9 @@ async function main() {
       // The plan is written during the turn, so a finished turn is when it
       // changed — and this is the only place that notices with no UI open.
       if (session?.directory) logPlanState(readPlan(session.directory), app);
+      // And a finished turn is where the Architect's requests for work are
+      // picked up. Nothing is awaited: the worker reports back on its own.
+      runner.handleTurn(sessionId, messages);
     } catch (err) {
       toolStatsLog.warn(`census skipped for ${sessionId}: ${err.message}`);
     }

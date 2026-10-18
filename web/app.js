@@ -1201,16 +1201,17 @@ function renderTranscript() {
   const el = $('transcript');
   if (!el) return;
   toolSeq = 0;
-  // Only the conversation itself is shown: user turns and assistant turns.
-  // Anything else the engine reports (system prompts, scaffolding, context
-  // dumps) is not chat and once leaked into the transcript above the user's
-  // own message. Errors still show, whatever type carries them.
+  // Only the conversation itself is shown: user turns, assistant turns, and the
+  // harness speaking (a worker's report being handed back). Anything else the
+  // engine reports (system prompts, scaffolding, context dumps) is not chat and
+  // once leaked into the transcript above the user's own message. Errors still
+  // show, whatever type carries them.
   //
   // Every part carries a stable key (its message id + index) so an expanded
   // Reasoning block or tool card can be restored after a rebuild — a poll
   // landing mid-read used to snap them shut.
   const tagged = state.messages
-    .filter((m) => m.error || m.type === 'user' || m.type === 'assistant')
+    .filter((m) => m.error || m.type === 'user' || m.type === 'assistant' || m.type === 'synthetic')
     .map((m) => (m.parts ? { ...m, parts: m.parts.map((p, i) => ({ ...p, _k: `${m.id}:${i}` })) } : m));
   const showable = groupTurns(tagged);
   const pending = renderPermissions() + renderForms();
@@ -1255,6 +1256,16 @@ function renderMessage(m) {
   if (m.type === 'user') {
     return `<div class="msg user" data-msg="user"><div class="msg-body">
       ${stamp}<span class="msg-role">You</span><span class="msg-text">${esc(m.text)}</span>
+    </div></div>`;
+  }
+  if (m.type === 'synthetic') {
+    // The harness speaking: a worker's report, or the harness telling the
+    // Architect something went wrong. Deliberately not dressed as the operator —
+    // nobody typed it — and not as the Architect either, since it is what the
+    // Architect is answering.
+    const label = m.description ? esc(m.description) : 'Harness';
+    return `<div class="msg harness" data-msg="harness"><div class="msg-body">
+      ${stamp}<span class="msg-role">Harness · ${label}</span><span class="msg-text">${esc(m.text)}</span>
     </div></div>`;
   }
   if (m.type === 'assistant') {

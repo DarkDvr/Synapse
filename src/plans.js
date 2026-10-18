@@ -215,6 +215,45 @@ export function planFingerprint(dir) {
   }
 }
 
+/**
+ * The harness's own record of what ran: one JSON object per line, append-only.
+ *
+ * Deliberately NOT part of the plan. The plan is intent and the Architect owns
+ * it; this is evidence and the harness owns it, so neither has to be written by
+ * the other's owner. It is also how a delegation survives a restart: a request
+ * already answered is in here by its tool-call id, so it is never run twice.
+ */
+export function appendRun(dir, entry) {
+  const target = runsPath(dir);
+  try {
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    fs.appendFileSync(target, `${JSON.stringify({ at: Date.now(), ...entry })}\n`, 'utf8');
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Every run line recorded for a project. Malformed lines are skipped. */
+export function readRuns(dir) {
+  try {
+    return fs
+      .readFileSync(runsPath(dir), 'utf8')
+      .split('\n')
+      .filter(Boolean)
+      .map((line) => {
+        try {
+          return JSON.parse(line);
+        } catch {
+          return null;
+        }
+      })
+      .filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
 const counts = (tasks) => {
   const out = {};
   for (const t of tasks) out[t.status] = (out[t.status] || 0) + 1;
@@ -237,9 +276,10 @@ export function briefSession({ dir, role = 'architect' } = {}) {
   lines.push(
     isArchitect
       ? `Project plan: ${planRelPathPlain()} - you own this file and you are the only role that may write it. ` +
-          `Read it when a session starts, and keep it current as work lands.`
+          `Read it when a session starts, and keep it current as work lands. To get a task done, hand it to ` +
+          `its role with the delegate tool and wait for the report; do not do the work yourself.`
       : `Project plan: ${planRelPathPlain()} - read-only for you. Never write to it, and never create files in ${PLAN_DIR}/. ` +
-          `Your task below was taken from it.`,
+          `Your task is in the message you were given; do only that task.`,
   );
 
   if (!state.exists) {

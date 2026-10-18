@@ -14,7 +14,7 @@ import {
   normalizeSession,
   parseModelRef,
 } from './base.js';
-import { SEARCH_SERVER, ENGINE_PID_FILE } from '../paths.js';
+import { SEARCH_SERVER, DELEGATE_SERVER, ENGINE_PID_FILE } from '../paths.js';
 
 const ENGINE_USERNAME = 'opencode';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -103,6 +103,10 @@ export class OpenCodeEngine extends Engine {
     const servers = { ...((cfg.mcp || {}).servers || {}) };
     delete servers.synapse;
     delete servers['synapse-search'];
+    delete servers['synapse-delegate'];
+    // A server that no longer exists: the plan became a file the Architect owns
+    // (src/plans.js), so the entry must not linger pointing at a deleted file.
+    delete servers['synapse-plan'];
 
     // Our search, unless the operator switched it off. This used to return early
     // from the whole function, which also cost them the model limit overrides
@@ -118,8 +122,18 @@ export class OpenCodeEngine extends Engine {
       };
     }
 
+    // How the Architect hands a plan task to the role that owns it. The request
+    // is read back out of the transcript by the harness (see src/runs.js).
+    servers['synapse-delegate'] = {
+      type: 'local',
+      command: [process.execPath, DELEGATE_SERVER],
+      codemode: false,
+    };
+
     const legacyMcp = { ...(cfg.mcp || {}) };
     delete legacyMcp['synapse-search'];
+    delete legacyMcp['synapse-delegate'];
+    delete legacyMcp['synapse-plan'];
     delete legacyMcp.synapse;
 
     const next = {
@@ -406,11 +420,15 @@ export class OpenCodeEngine extends Engine {
     return true;
   }
 
-  async createSession({ title, model, agent, directory, permissions } = {}) {
+  async createSession({ title, model, agent, directory, permissions, metadata } = {}) {
     const target = directory || this.workspaceDir;
     const body = { location: { directory: target } };
     if (title) body.title = title;
     if (agent) body.agent = agent;
+    // Free-form session metadata. Synapse uses it to mark its own scaffolding —
+    // a worker session must be hidden from the rail even though it runs in the
+    // project's directory, which is how real sessions are recognised.
+    if (metadata && typeof metadata === 'object') body.metadata = metadata;
     // A session may be created with its own tool ruleset — that is how chat
     // mode (every tool denied) is expressed.
     if (Array.isArray(permissions) && permissions.length) body.permissions = permissions;
@@ -469,6 +487,20 @@ export class OpenCodeEngine extends Engine {
   async prompt(sessionId, text) {
     this.sessionLog.info(`prompt -> ${sessionId}: ${String(text).replace(/\s+/g, ' ').slice(0, 300)}`);
     return this.request('POST', `/api/session/${encodeURIComponent(sessionId)}/prompt`, { text });
+  }
+
+  /**
+   * Inject a synthetic message into a session. The engine describes it as
+   * "durably admit synthetic session input and schedule execution", so unlike a
+   * prompt it is not the operator speaking — it is the harness, and the
+   * transcript keeps it as its own message type. This is how the Architect is
+   * woken after a worker reports back, with nobody typing anything.
+   */
+  async synthetic(sessionId, text, { description } = {}) {
+    const body = { text };
+    if (description) body.description = description;
+    this.sessionLog.info(`synthetic -> ${sessionId}: ${String(description || text).slice(0, 200)}`);
+    return this.request('POST', `/api/session/${encodeURIComponent(sessionId)}/synthetic`, body);
   }
 
   async interrupt(sessionId) {

@@ -335,6 +335,48 @@ ordinary file tools; there is no tool and no store for it.
 
 ---
 
+## Delegation: the Architect asks, the harness runs
+
+`delegate { task }` is a stateless MCP tool (src/mcp/delegate-server.js). The
+request is read out of the transcript on the turn boundary, exactly like the
+census, and answered once — the call id is written to `.synapse\runs.jsonl`
+**before** the worker starts, so a restart or a re-scan cannot run it twice.
+`src/runs.js` then creates a real session for the task's role, on that role's
+model and effort, briefs it with its own task, runs it, records the evidence, and
+wakes the Architect.
+
+Non-obvious, all verified on 2.0.30:
+
+- **`POST /api/session/{id}/synthetic`** — "durably admit synthetic session input
+  and schedule execution". This is how the Architect is woken with nobody
+  typing: the message is its own transcript type (`synthetic`), which the UI
+  renders as **Harness · \<description\>** with an amber edge, never as the
+  operator. `sessionLog` records each one.
+- **`metadata` is accepted on `POST /api/session`** and is free-form, so
+  `metadata.synapse.internal` marks a worker session. `normalizeSession` exposes
+  it as `internal`, and the API filters those out of the rail *and* the project
+  session counts. The engine still lists them, so a worker transcript stays
+  inspectable at `/api/session` — that is how you audit a run.
+- **A worker's claim is not evidence.** The first delegated run reported writing
+  `bin/calendar_design.md`; no such file existed and `runs.jsonl` recorded
+  `files: []` from its own tool calls. The Architect checked the disk, kept the
+  task `todo`, wrote the reason into `note`, and re-delegated — attempt two wrote
+  the real file. This is why the report always prints `Files written: none.`
+  rather than omitting the line, and why the harness never moves a task.
+- **Retry cap: 3 attempts per task**, then the harness refuses with a report
+  telling the Architect to break the task down, change the role/model, or mark it
+  blocked. Refusals are logged with an `outcome` and no `attempt` number, so they
+  do not count against the cap. A refusal is a real answer, not a silent retry.
+- **Single mode refuses.** Tool rulesets cannot hide an MCP tool, so the promise
+  is kept in the runner: a delegation request in a Single session is refused out
+  loud and the Architect is told to ask for Multi.
+- **One worker per project at a time** (`busy` set keyed by directory) — two
+  Architects editing one plan file is the one thing that can actually corrupt it.
+- **A stalled worker cannot hang the loop:** the wait is on the engine's `idle`
+  message, with a 240s ceiling that interrupts the session and reports a timeout.
+
+---
+
 ## Tools and models
 
 - **The toolset is per-model, per-agent, and even per-call.** One run reported
@@ -728,15 +770,18 @@ not gigabytes. Worth knowing; not worth panicking about.
     plan with roles, the file's first version came back unparseable (a stray
     backslash copied out of the brief), the pane named the exact position, and
     one bare "Continue." made the Architect repair its own file.
-  - **3.2 next — delegation.** The harness runs one task at a time on the role's
-    model and effort, hands the worker only its own task, records what ran, and
-    reports the result back to the Architect so it can move the task. Open
-    questions: how a task is *requested* (the Architect marking it `doing` vs an
-    explicit request), and who writes a worker's `result` back (the Architect, to
-    keep one writer on the file). Needs **internal sessions**: a worker session
-    must stay out of the rail the way `workspace\_probe` does, marked through the
-    `metadata` that `PATCH /api/session/{id}` already accepts. Test with a
-    **one-step** plan — every step is a real turn on the operator's free tier.
+  - **3.2 done for a single step — delegation.** `delegate` tool, `src/runs.js`,
+    hidden worker sessions, `.synapse\runs.jsonl`, the synthetic wake, and the
+    retry cap. Verified live on `calendar`: t1 → Designer (big-pickle, own
+    session, 42s) → reported a file it had not written → the Architect checked
+    the disk, kept it `todo`, wrote the reason into `note` and re-delegated →
+    attempt two wrote `bin\calendar_design.md` → the Architect verified it and
+    marked t1 `done`. The chain did not run on its own: the Architect stopped at
+    "Say the word and I'll hand it over."
+  - **3.2 next** — the chain and its controls: whether the Architect should
+    continue to the next ready task automatically or wait for the operator each
+    time, and how a run is shown while it happens (the worker transcript is
+    invisible today by design). Then 3.3.
   - **3.3 — role cards show live activity**, and the ✎ button opens per-role
     instructions. Settles skills gating with it. Remember custom agents are dead
     here (the free tier rejected every custom-agent request), so instructions

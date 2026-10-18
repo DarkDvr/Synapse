@@ -35,8 +35,10 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
   /** Directory comparison key: case-insensitive, no trailing separator. */
   const dirKey = (d) => String(d ?? '').replace(/[\\/]+$/, '').toLowerCase();
 
-  /** Probe scratch sessions are Synapse's own scaffolding, never user work. */
+  /** Probe scratch sessions and Synapse's own worker sessions are scaffolding,
+   *  never the operator's work: they never appear in the rail. */
   const isScratchSession = (s) => {
+    if (s?.internal) return true;
     const key = dirKey(probeDir);
     return Boolean(key) && dirKey(s?.directory) === key;
   };

@@ -312,6 +312,63 @@ project, where the plan file is, who may write it, what the current plan says,
 the format, and that deliverables go in `bin/`. It is re-sent only when its text
 changes.
 
+## Delegation
+
+The Architect does not do the work itself. It **asks**, with a tool:
+
+```text
+delegate { task: "t1", note?: "constraints, files, what done looks like" }
+```
+
+The tool is stateless — it cannot run anything and cannot see which session
+called it — so its reply is just a receipt ("Queued: t1"), and the request is
+read back out of the transcript on the turn boundary, the same way the census
+reads tool calls. The harness then does what a harness is for
+(`src/runs.js`):
+
+1. Creates a **real session** for that task's role, in the project directory, on
+   that role's own model and thinking effort — the per-role pickers finally mean
+   something. The session is marked `metadata.synapse.internal`, so it never
+   appears in the rail: it runs in the project's directory, and only that mark
+   tells Synapse it is scaffolding.
+2. Briefs it with the project and the plan, and gives it **only its own task**.
+   It is told the plan is read-only and is never shown the whole file.
+3. Runs it and waits for the engine's own end-of-turn `idle` — never a timer.
+4. Records what actually happened in `.synapse\runs.jsonl` (append-only,
+   harness-owned: the request, the role, the model, the duration, the outcome,
+   and the files it actually wrote).
+5. Wakes the Architect with a **synthetic message** — the harness speaking, not
+   you, and not the Architect. Nobody has to type "go on" for the loop to
+   continue.
+
+```
+[harness] t1 (designer) finished in 42s.
+Files written: none.
+Reported:
+...
+You are the only writer of the plan: judge this yourself.
+```
+
+Three rules hold the whole thing together:
+
+- **The Architect is the only writer of the plan.** The harness never writes it,
+  so it never marks a task done; a worker's "done" is a claim, not a verdict.
+  If the plan file changes during a worker's turn, that is logged and reported as
+  suspicious.
+- **The evidence is always stated.** `Files written: none.` is not decoration: on
+  the very first delegated run the Designer reported a file path it had never
+  written, and that line is what made the claim obvious — the Architect checked
+  the disk, kept the task `todo`, wrote the reason into the task's `note`, and
+  sent it back. Attempt two produced the real file.
+- **A task is attempted at most three times**, then the harness refuses and tells
+  the Architect to break it down, change the role or model, or mark it blocked
+  for you. It never decides a task is hopeless by itself.
+
+**Single mode refuses delegation.** The engine offers the tool either way, so the
+harness enforces the promise: in Single the request is refused out loud and the
+Architect is told to ask for Multi. New sessions start Single; the calendar
+session here is Multi.
+
 **Interaction rules.**
 - **Button labels are Title Case**, always ("Browse Folder", "Allow Once", "Add Project"). Nothing else is forced to a case.
 - **A tool call is one line** — name, what it is running, outcome — with a `›` chevron; the full input and output are one click away. A call that failed gets a red dot, an `exit N` pill and an **Error** button, because the engine reports a non-zero shell exit as `completed`; `normalizeMessage` derives the real outcome.

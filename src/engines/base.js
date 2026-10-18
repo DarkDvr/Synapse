@@ -43,6 +43,8 @@ export class Engine extends EventEmitter {
   // One-shot completion in a session's context that does NOT join the
   // transcript — used for naming sessions.
   async generateText() { return ''; }
+  // Inject a message that is the harness speaking, not the operator.
+  async synthetic() { throw new Error(`${this.kind}: synthetic() not implemented`); }
 
   // ── standing context ─────────────────────────────────────────
   // Durable, per-session instructions. Synapse briefs a role with these rather
@@ -171,6 +173,10 @@ export function normalizeSession(raw) {
     variant: raw?.model?.variant || null,
     agent: raw?.agent || null,
     single: isSingleSession(raw),
+    // Synapse marks its own scaffolding sessions here (worker sessions, which
+    // run in the project directory but must not appear as the operator's work).
+    internal: raw?.metadata?.synapse?.internal === true,
+    metadata: raw?.metadata || null,
     created: raw?.time?.created || null,
     updated: raw?.time?.updated || null,
     raw,
@@ -190,6 +196,15 @@ export function normalizeMessage(raw) {
 
   if (type === 'user') {
     msg.text = raw?.text || '';
+    return msg;
+  }
+
+  // A synthetic message is the harness speaking, not the operator. The engine
+  // keeps it as its own message type, so it never appears as something the
+  // operator typed — which is exactly why the Architect is woken with one.
+  if (type === 'synthetic') {
+    msg.text = raw?.text || '';
+    msg.description = raw?.description || null;
     return msg;
   }
 

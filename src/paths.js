@@ -42,10 +42,12 @@ export const PROBE_FILE = path.join(DATA_DIR, 'probe.json');
 // discovered toolset. Survives models leaving the catalog.
 export const MODEL_CACHE_FILE = path.join(DATA_DIR, 'model-cache.json');
 
-// Synapse's own MCP server, registered into the engine's isolated config so the
-// models can actually call it: a working web search (the engine's own needs a
-// provider key and answers 403 here).
+// Synapse's own MCP servers, registered into the engine's isolated config so the
+// models can actually call them: a working web search (the engine's own needs a
+// provider key and answers 403 here), and the delegation request the Architect
+// hands tasks to a role with.
 export const SEARCH_SERVER = path.join(ROOT, 'src', 'mcp', 'search-server.js');
+export const DELEGATE_SERVER = path.join(ROOT, 'src', 'mcp', 'delegate-server.js');
 
 export const PID_FILE = path.join(DATA_DIR, 'synapse.pid');
 
