@@ -375,9 +375,12 @@ This is once per directory per process and needs no config.
   the chat and the page scrolls by design. Every scroll helper goes through
   `chatScroller()`, which returns the transcript when it scrolls and `null`
   otherwise.
-- **Jump buttons are `position: fixed`**, anchored to the chat column by JS.
-  Absolute positioning inside a content-sized dock put them in the middle of the
-  log where they scrolled away and did nothing.
+- **Jump buttons live inside the chat pane.** `.chat-nav` is `position:
+  absolute` in the dock (which is `position: relative; overflow: hidden`), so it
+  can never drift out over the rail, and it does not reserve a gutter — it
+  floats over the transcript's right edge, keeping the conversation's padding
+  symmetric (13px each side). An earlier `position: fixed` version anchored by
+  JS escaped the pane when the dock was short.
 - **The jump buttons step message-by-message from an anchor, not from the raw
   scroll offset.** `navAnchors()` picks the message that owns the fold (last top
   at or above `scrollTop + 12`), and the buttons move `cur ± 1`. A raw
@@ -514,6 +517,15 @@ This is once per directory per process and needs no config.
   scaffolding and context dumps from the engine are not chat — rendering them
   once leaked AGENTS.md prose and diff hunks into the transcript above the
   user's own message. Errors still show, whatever type carries them.
+- **One assistant block per turn, not per step.** The engine emits an assistant
+  message per step (reasoning, tool call, reasoning…), so rendering them raw gave
+  a three-question chat fourteen "Architect" headers. `groupTurns()` merges
+  consecutive assistant messages: one header, the steps in order, the answer
+  panels amongst them. Three questions now render as three blocks.
+- **Tool rows are deliberately small.** `.tool-head` is 22px high: 7px flat
+  status dot (no ring), 10.5px mono, `2px 7px` padding, 5px-radius pill at 9px.
+  A busy turn emits dozens of them, so a `2px` margin keeps the transcript
+  readable where a `5px` margin plus the standard 9px ringed dot read as noise.
 - **Mode colours:** Multi is orange, Single is violet, both with white text and
   a white dot; both are filled pills, so the mode is readable at a glance. The
   composer placeholder is `Message` in Single, `Message the Architect…` in Multi.

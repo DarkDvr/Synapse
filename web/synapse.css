@@ -634,10 +634,12 @@ body[data-view="session"] .chat-dock:not(.has-history) .composer { border-top-co
 .chat-scroll.is-empty { display: none; }
 
 /* jump between your own requests; only shown for longer conversations.
-   Fixed, so it floats over the conversation and stays reachable however far the
-   log scrolls. JS sets `right` so it hugs the chat column rather than the page. */
+   Absolute *inside the dock*: the pane is the button's world, so it can never
+   drift out over the rail, and the dock's own overflow clips it. It floats over
+   the transcript's right edge rather than reserving a gutter, so the
+   conversation keeps the same padding on both sides. */
 .chat-nav {
-  position: fixed; right: 10px; top: 50vh; transform: translateY(-50%);
+  position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
   display: grid; gap: 6px; z-index: 30;
 }
 .fab {
@@ -650,7 +652,6 @@ body[data-view="session"] .chat-dock:not(.has-history) .composer { border-top-co
 .fab:hover { background: var(--violet-soft); border-color: var(--violet-line); color: #fff; }
 .fab:disabled { opacity: 0.35; cursor: default; }
 .fab:disabled:hover { background: #23262c; border-color: var(--line); color: #c3c6cc; }
-.chat-dock.has-nav .chat-scroll { padding-right: 48px; }
 
 /* ── mode toggle: Multi is orange, Single is violet, white text on both ──── */
 .mode-toggle {
@@ -782,23 +783,28 @@ body[data-view="session"] .chat-dock:not(.has-history) .composer { border-top-co
   color: #a9adb5; white-space: pre-wrap; overflow-wrap: anywhere;
 }
 
-/* tool calls: one line until you ask for the detail */
-.tool-card { margin: 5px 0; border: 1px solid var(--line); border-radius: 9px; background: #1a1c20; overflow: hidden; }
+/* tool calls: one compact line until you ask for the detail. Kept deliberately
+   short vertically — a busy turn emits dozens of them, so the dot, the type and
+   the padding are all smaller than the rest of the transcript. */
+.tool-card { margin: 2px 0; border: 1px solid var(--line); border-radius: 7px; background: #1a1c20; overflow: hidden; }
 .tool-head {
-  display: flex; align-items: center; gap: 8px;
-  padding: 6px 9px; font-family: var(--mono); font-size: 11.5px;
+  display: flex; align-items: center; gap: 6px;
+  padding: 2px 7px; font-family: var(--mono); font-size: 10.5px;
   cursor: pointer; user-select: none;
 }
 .tool-head:hover { background: #212429; }
 .tool-head:focus-visible { outline: 2px solid var(--orange); outline-offset: -2px; }
 .tool-head .tool-name { color: var(--text); font-weight: 600; flex: none; }
+/* a small, flat dot: the status is carried by the colour and the pill, so the
+   9px dot ring used elsewhere in the app is too heavy here */
+.tool-head .status-dot { width: 7px; height: 7px; box-shadow: none; }
 .tool-target {
   flex: 1 1 auto; min-width: 0;
   color: #8a8e96; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .tool-head .tool-state { flex: none; margin-left: auto; }
 .tool-chev {
-  flex: none; width: 12px; color: #9aa0a8; font-size: 13px; line-height: 1;
+  flex: none; width: 10px; color: #9aa0a8; font-size: 11px; line-height: 1;
   text-align: center; transition: transform 0.15s ease;
 }
 .tool-card.open .tool-chev { transform: rotate(90deg); }
@@ -813,8 +819,8 @@ body[data-view="session"] .chat-dock:not(.has-history) .composer { border-top-co
 .tool-body pre.is-error { color: #ffb4a6; }
 
 .state-pill {
-  display: inline-flex; align-items: center; gap: 5px;
-  font-size: 9.5px; font-weight: 650; border-radius: 6px; padding: 2px 6px;
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 9px; font-weight: 650; border-radius: 5px; padding: 0 5px;
   border: 1px solid var(--line); color: var(--muted);
 }
 .state-pill.ok    { color: var(--green); border-color: #26543f; background: var(--green-soft); }

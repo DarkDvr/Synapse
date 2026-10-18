@@ -3,8 +3,8 @@
 // The engine scopes every session to a working directory, so a project is
 // simply a directory that owns sessions — there is no parallel concept to keep
 // in sync. This store only remembers the ones the operator has added, in
-// data/projects.json. "General" is synthesised (it is the workspace root) and
-// is always present, first, and undeletable.
+// data/projects.json. "General" is its own folder (GENERAL_DIR), synthesised at
+// boot, and is always present, first, and undeletable.
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';

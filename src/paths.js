@@ -16,6 +16,12 @@ export const LOGS_DIR = path.join(ROOT, 'logs');
 // Default working directory for sessions until per-project folders exist.
 export const WORKSPACE_DIR = path.join(ROOT, 'workspace');
 
+// The General project owns its own folder. It must not be the workspace root,
+// where every project folder is created — a project that shares its directory
+// with the workspace swallows sessions that belong to no project and cannot be
+// told apart from them. Created on boot when missing.
+export const GENERAL_DIR = path.join(WORKSPACE_DIR, 'general');
+
 // Isolated engine home (config/data/state/tmp) so the engine never touches
 // the machine-wide ~/.config/opencode or ~/.local/share/opencode.
 export const ENGINE_HOME = path.join(DATA_DIR, 'engine', 'opencode');

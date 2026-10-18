@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn, execFile } from 'node:child_process';
-import { DATA_DIR, LOGS_DIR, WORKSPACE_DIR, ENGINE_HOME, PID_FILE, PROJECTS_FILE, TOOL_STATS_FILE, PROBE_DIR, PROBE_FILE, MODEL_CACHE_FILE } from './paths.js';
+import { DATA_DIR, LOGS_DIR, WORKSPACE_DIR, GENERAL_DIR, ENGINE_HOME, PID_FILE, PROJECTS_FILE, TOOL_STATS_FILE, PROBE_DIR, PROBE_FILE, MODEL_CACHE_FILE } from './paths.js';
 import { loadConfig, saveConfig } from './config.js';
 import { logger } from './logger.js';
 import { createEngine } from './engines/index.js';
@@ -21,7 +21,7 @@ let http = null;
 
 async function main() {
   // ── directories ──────────────────────────────────────────────
-  for (const dir of [DATA_DIR, LOGS_DIR, WORKSPACE_DIR, ENGINE_HOME]) {
+  for (const dir of [DATA_DIR, LOGS_DIR, WORKSPACE_DIR, GENERAL_DIR, ENGINE_HOME]) {
     fs.mkdirSync(dir, { recursive: true });
   }
 
@@ -48,10 +48,16 @@ async function main() {
   try { fs.writeFileSync(PID_FILE, String(process.pid), 'utf8'); } catch { /* ignore */ }
 
   // ── projects ─────────────────────────────────────────────────
+  // General is its own folder, created fresh if it is missing (a new folder has
+  // no sessions). It is never the workspace root: that is where project folders
+  // live, and sharing it makes "sessions belonging to General" indistinguishable
+  // from "sessions in a folder nobody registered".
+  const generalExisted = fs.existsSync(GENERAL_DIR);
+  fs.mkdirSync(GENERAL_DIR, { recursive: true });
+  if (!generalExisted) app.info(`created the General project folder: ${GENERAL_DIR}`);
   const projects = createProjectStore({
     file: PROJECTS_FILE,
-    // General is the workspace root: sessions that belong to no project.
-    generalDir: config.defaults.directory || WORKSPACE_DIR,
+    generalDir: GENERAL_DIR,
     logger,
   });
   app.info(`projects: ${projects.list().length} (General + ${projects.list().length - 1})`);

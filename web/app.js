@@ -1159,6 +1159,29 @@ function updateBusyFromMessages() {
   renderComposer();
 }
 
+/**
+ * The engine emits one assistant message per *step* — a reasoning turn, a tool
+ * call, another reasoning turn — not one per conversational turn. Rendering
+ * them raw gave a three-question chat fourteen "Architect" headers. Consecutive
+ * assistant messages belong to the same turn, so merge them into one block: one
+ * header, the steps in order, and the answer panels amongst them.
+ */
+function groupTurns(messages) {
+  const out = [];
+  for (const m of messages) {
+    const prev = out[out.length - 1];
+    if (m.type === 'assistant' && prev?.type === 'assistant') {
+      prev.parts = [...(prev.parts || []), ...(m.parts || [])];
+      prev.text = `${prev.text || ''}${m.text || ''}`;
+      prev.error = prev.error || m.error;
+      prev.completed = m.completed || prev.completed;
+      continue;
+    }
+    out.push({ ...m, parts: m.parts ? [...m.parts] : m.parts });
+  }
+  return out;
+}
+
 // ── transcript ──────────────────────────────────────────────────
 function renderTranscript() {
   const el = $('transcript');
@@ -1168,8 +1191,8 @@ function renderTranscript() {
   // Anything else the engine reports (system prompts, scaffolding, context
   // dumps) is not chat and once leaked into the transcript above the user's
   // own message. Errors still show, whatever type carries them.
-  const showable = state.messages.filter(
-    (m) => m.error || m.type === 'user' || m.type === 'assistant',
+  const showable = groupTurns(
+    state.messages.filter((m) => m.error || m.type === 'user' || m.type === 'assistant'),
   );
   const pending = renderPermissions() + renderForms();
   // The dock is a bare composer while empty and fills the stage once there is
@@ -1331,13 +1354,10 @@ function renderChatNav() {
   const count = myMessages().length;
   const show = count >= 3;
   nav.hidden = !show;
-  dock.classList.toggle('has-nav', show);
   if (!show) return;
 
-  // Fixed so it floats over the log, but anchored to the chat column rather
-  // than the window — otherwise it drifts into the inspector on wide layouts.
-  const d = dock.getBoundingClientRect();
-  nav.style.right = `${Math.max(8, Math.round(window.innerWidth - d.right + 10))}px`;
+  // No JS anchoring: the nav is absolutely positioned inside the dock, so it is
+  // clipped to the chat pane and stays put when the window resizes.
 
   const { tops, cur } = navAnchors();
   // Never offer a jump that cannot happen: with nothing to scroll, both rest.

@@ -237,8 +237,11 @@ directory, so Synapse does not invent a parallel concept: `data\projects.json`
 just remembers which directories the operator added. Sessions are assigned to
 the project whose directory they run in.
 
-- **General** is always present, first, undeletable and is the workspace root —
-  it holds sessions that belong to no project you are working on.
+- **General** is always present, first and undeletable, and owns its own folder
+  (`workspace\general`, created on boot when missing, so it starts with no
+  sessions). It is deliberately *not* the workspace root — sharing that folder
+  with the projects directory would make General's sessions indistinguishable
+  from sessions in a folder nobody registered.
 - **Adding a project** creates the folder when it is missing (the engine
   refuses to run a session in a directory that does not exist).
 - **Removing a project** only forgets the registry entry. Nothing on disk is
