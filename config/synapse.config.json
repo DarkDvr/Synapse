@@ -33,14 +33,18 @@
     },
     "critic": {
       "ref": "opencode/cat-jam-free",
-      "variant": "high"
+      "variant": "max"
     },
     "architect": {
-      "ref": "opencode/deepseek-v4.1-flash-free"
+      "ref": "opencode/deepseek-v4.1-flash-free",
+      "variant": "max"
     },
     "coder-1": {
       "ref": "opencode/mimo-v2.6-flash-free"
     }
+  },
+  "modelChecks": {
+    "maxAsks": 3
   },
   "logging": {
     "level": "info",

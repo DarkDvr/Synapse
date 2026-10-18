@@ -296,17 +296,19 @@ provider's own `reasoningEffort`), capabilities, `firstSeen`/`lastSeen` and the
 discovered toolset. `engine.listModels()` is recorded on every boot and every
 `GET /api/models`, so the file stays current for free.
 
-- **Each model is asked at most 3 times, ever.** The first selection fires
-  `POST /api/models/inspect`; the server answers from cache when a *valid*
+- **Each model is asked at most N times, ever** (default 3). The first selection
+  fires `POST /api/models/inspect`; the server answers from cache when a *valid*
   (non-empty) tool list exists, refuses to stack a duplicate run, and serialises
   runs one at a time (`inspectChain`). A completed run increments `timesAsked`
   even when the answer is empty — an empty answer is only eligible for a retry
-  while `timesAsked < MAX_TOOL_ASKS` (3). At 3 the model is `exhausted` and is
-  never asked again. The count is per model, so the attempts spread across
-  selections and restarts instead of hammering one session. Synapse re-asks on
-  boot for any **role's** current model that is still missing a valid list.
-  Verified: seeded one model at 3 asks → `{started:false, exhausted:true}`;
-  another at 1 ask → asked again on restart (ask 2/3) and locked in.
+  while `timesAsked < modelChecks.maxAsks` (Settings, 1–20). At the cap the
+  model is `exhausted` and is never asked again. The count is per model, so the
+  attempts spread across selections and restarts. Synapse re-asks on boot for
+  any **role's** current model that is still missing a valid list. Settings has
+  **Reset Ask Counters**, which zeroes every model's count (valid results are
+  kept). Verified: seeded one model at 3 asks → `{started:false, exhausted:true}`;
+  another at 1 ask → asked again on restart and locked in; reset returned 11 and
+  left `timesAsked` at 0 everywhere.
 - The discovery prompt asks the model to list its tools; `parseToolNames` takes
   the last dotted segment (`tools["opencode"].list_mcp_resources` →
   `list_mcp_resources`) then keeps `[a-z0-9_-]` (MCP names contain hyphens — an
@@ -326,11 +328,18 @@ failure "not offered by this model" when the tool was never in its list.
 
 - It **interrupts a timed-out case** before starting the next. Without that, the
   wedge is inherited and every later case fails too.
+- **The scratch session is invisible.** Probe and model-check sessions live in
+  `workspace\_probe`; the API filters that directory out of project/session
+  lists, so they never appear in the rail, and `probe.sweep()` deletes any
+  leftover at boot (a killed process cannot leave a ghost). They are real
+  engine sessions behind the scenes, not fake turns.
 - Results persist to `data\probe.json` so a restart does not blank the panel.
   The run records **which model** it was against (captured after the toolset
   discovery turn — a fresh session reports no model before its first turn), and
   the panel names it above the results: tool timings and toolset are
-  model-specific, so a result without a model is unreadable.
+  model-specific, so a result without a model is unreadable. The toolset list
+  itself is **not** printed any more — the per-case table underneath is the
+  useful view.
 
 ---
 
@@ -393,9 +402,10 @@ This is once per directory per process and needs no config.
   stored for the orchestration layer, which is not built yet.
 - **The thinking-effort button** shows 1–3 stacked **green** chevrons — dot =
   engine default, chevrons = the three highest variants a model allows. The
-  chevrons are inline **SVG strokes with round caps**, not a font and not
-  rotated bordered boxes: at 22px those alias into odd shapes, which is what
-  made them look like a strange typeface. Click cycles
+  chevrons are **one inline SVG per level** with integer-spaced paths: three
+  separate SVGs and fractional negative margins rounded unevenly, so the gaps
+  looked different. They are strokes with round caps, not a font and not rotated
+  bordered boxes (those alias into odd shapes at 22px). Click cycles
   default → lowest → … → highest → default; the tooltip is
   `Current thinking effort: <label>` where `<label>` is the provider's own
   `reasoningEffort` value, never our id. Models with 2/1 variants get 2/1
@@ -425,12 +435,14 @@ This is once per directory per process and needs no config.
   like a one-pixel clip.
 - **Cards have a hard minimum width** (`--card-min: 360px`): below that the
   select, the chevron and the edit button start colliding and the name is
-  ellipsised away. Two columns + the 66px spine therefore need ~790px of stage;
-  when the measured stage is narrower, `syncTopologyDensity()` adds
-  `body.topology-tight` and the cards stack into one column, connectors and the
-  path layer hidden. `body.topology-tight .topology > .link.link` is not a typo:
-  it must outrank the four-class `body.workers-on .topology > *:not(…)` rule, or
-  the dotted connectors reappear between stacked cards in Multi.
+  ellipsised away. Two columns + the 66px spine need ~790px of stage, so the
+  **whole app has a minimum width of 1100px** (`body { min-width }`) and narrower
+  windows get a horizontal scrollbar rather than a collapsed layout. The rail
+  stacks under the chat below **1460px** (256 sidebar + 48 padding + 790 stage +
+  20 gap + 330 rail = 1444, rounded up); above it the stage is guaranteed wide
+  enough for two columns. There is no single-column-card mode any more — it was
+  removed because squeezed cards are worse than a scrollbar. The baseline's
+  ≤950px sidebar drawer behaviour is overridden for the same reason.
   The glyph measurements that matter: both button glyphs are centred on the 22px
   button to within 0.01px, with ~1.5px of margin left top and bottom at three
   chevrons — if the glyph or border size changes, re-measure with
@@ -460,6 +472,9 @@ This is once per directory per process and needs no config.
   sample plan list, the sample tools table and the role cards' mock activity
   were all removed before live testing. Do not put invented content back; label
   unimplemented affordances with `data-soon` instead.
+- **There is no Home nav.** The button did nothing; sessions live in the project
+  tree and the stage shows the welcome screen when nothing is open. Do not add
+  nav items that do not change the view.
 
 ---
 

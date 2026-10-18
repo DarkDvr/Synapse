@@ -43,6 +43,11 @@ export const DEFAULTS = {
   // { ref, variant }. There is no "default model" concept: if a role has no
   // entry, nothing was chosen yet. Persisted so choices survive a restart.
   roles: {},
+  // How many times a model may be asked about its toolset before we give up,
+  // per model (1–20). The cache counts attempts across sessions and restarts.
+  modelChecks: {
+    maxAsks: 3,
+  },
   logging: {
     level: 'info',
     retentionDays: 7,
@@ -138,6 +143,9 @@ export function normalize(raw) {
   delete cfg.defaults.variant;
   delete cfg.defaults.agent;
   cfg.roles = roles;
+
+  cfg.modelChecks = cfg.modelChecks || {};
+  cfg.modelChecks.maxAsks = clampInt(cfg.modelChecks.maxAsks, 1, 20, 3);
 
   const lg = cfg.logging;
   lg.level = ['error', 'warn', 'info', 'debug'].includes(lg.level) ? lg.level : 'info';

@@ -347,12 +347,18 @@ export function createProbe({ engine, logger, notify, scratchDir, file }) {
     return result;
   }
 
-  /** Remove probe scaffolding from earlier runs so only one can ever exist. */
+  /**
+   * Remove probe scaffolding from earlier runs so only one can ever exist.
+   * Matches by directory, not title: the scratch dir is Synapse's, so any
+   * session there is disposable — including a model-check session left behind
+   * by a killed process.
+   */
   async function sweep() {
+    const key = (d) => String(d || '').replace(/[\\/]+$/, '').toLowerCase();
     try {
       const sessions = await engine.listSessions();
       for (const s of sessions) {
-        if (s.title === 'Tool Probe') {
+        if (key(s.directory) === key(scratchDir)) {
           try { await engine.deleteSession(s.id); } catch { /* already gone */ }
         }
       }
@@ -421,5 +427,5 @@ export function createProbe({ engine, logger, notify, scratchDir, file }) {
     return { started: true };
   }
 
-  return { run, state: () => state, cases: PROBE_CASES };
+  return { run, sweep, state: () => state, cases: PROBE_CASES };
 }

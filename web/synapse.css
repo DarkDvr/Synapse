@@ -148,6 +148,9 @@ body.dark .input-with-action input {
 
 .sidebar { width: var(--sidebar-w); padding: 22px 16px 14px; overflow-y: auto; overflow-x: hidden; }
 .control-room .main-content { margin-left: var(--sidebar-w); display: flex; flex-direction: column; min-height: 100vh; }
+/* The supported minimum: 1100 = sidebar + padding + the 790px two-column stage.
+   Narrower windows scroll horizontally rather than squeezing the cards. */
+body { min-width: 1100px; }
 @media (max-width: 1250px) {
   .sidebar { width: var(--sidebar-w); }
   .main-content { margin-left: var(--sidebar-w); }
@@ -439,8 +442,9 @@ body.dark .sidebar-bottom,
   position: relative;
   display: grid;
   /* cards never go below --card-min: beneath that the select, the buttons and
-     the name start colliding (~360px is the measured floor). The "tight" class
-     (JS, from the measured stage width) stacks them into one column instead. */
+     the name start colliding (~360px is the measured floor). Two columns plus
+     the spine therefore need ~790px of stage; the page's minimum width
+     guarantees it instead of squeezing the cards. */
   grid-template-columns: minmax(var(--card-min), 1fr) var(--spine-w) minmax(var(--card-min), 1fr);
   /* rows keep their natural height: stretching them would push each
      connector cell's midline below its cards' midline and the orange path
@@ -449,14 +453,6 @@ body.dark .sidebar-bottom,
   min-width: 0;
 }
 .topology > * + * { margin-top: var(--row-gap); }
-
-/* too narrow for two columns with room to spare: one column, no connectors.
-   `.link.link` is deliberate: it has to outrank `body.workers-on .topology > *`
-   (a four-class selector) which reverts the workers into view in Multi. */
-body.topology-tight .topology { grid-template-columns: minmax(var(--card-min), 1fr); }
-body.topology-tight .topology > .link.link { display: none; }
-body.topology-tight .topology > * + * { margin-top: 12px; }
-body.topology-tight .path-layer { display: none; }
 
 /* the live path is drawn over the structure, computed from real card boxes */
 .path-layer {
@@ -596,8 +592,7 @@ body.topology-tight .path-layer { display: none; }
 .effort-glyph { display: flex; flex-direction: column; align-items: center; line-height: 0; }
 /* chevrons are inline SVG strokes, not a font and not rotated bordered boxes:
    a 1.6px round cap stays crisp at 22px where those alias into odd shapes */
-.effort-chev { width: 10px; height: 6px; display: block; }
-.effort-chev + .effort-chev { margin-top: -1.5px; }
+.effort-chev { display: block; }
 .effort-auto {
   width: 5px; height: 5px; border-radius: 50%;
   background: currentColor; opacity: 0.5;
@@ -990,11 +985,10 @@ body[data-view="session"] .chat-dock {
   .rail-actions { grid-template-columns: 1fr; }
 }
 
-/* Below this the central pane can no longer hold a usable chat *and* the role
-   cards beside the rail, so the rail moves underneath. Back to 1180px: at
-   narrower widths the role cards were being squeezed to the point of being
-   unreadable, which is worse than stacking. */
-@media (max-width: 1180px) {
+/* The rail moves under the chat unless the stage can hold two full card columns
+   *beside* it: 256 sidebar + 48 padding + 790 stage + 20 gap + 330 rail = 1444,
+   rounded up. Below that the stage takes the full width and the rail stacks. */
+@media (max-width: 1460px) {
   .room { grid-template-columns: minmax(0, 1fr); gap: 18px; }
   /* stacked: rule the chat off from the rail below it */
   .inspector {
@@ -1011,8 +1005,15 @@ body[data-view="session"] .chat-dock {
   .rail-actions { grid-template-columns: 1fr 1fr; }
 }
 
-@media (max-width: 950px) {
-  .control-room .content-wrap { padding-top: 54px; }
+/* Narrow windows are not supported: the page keeps its full layout and grows a
+   horizontal scrollbar instead of collapsing the cards into unusable widths.
+   1100 = sidebar + padding + the 790px two-column stage. The baseline's mobile
+   drawer behaviour is disabled here for the same reason. */
+@media (max-width: 1099px) {
+  .sidebar { transform: none; }
+  .sidebar.open { transform: none; }
+  .main-content { margin-left: var(--sidebar-w); }
+  .control-room .mobile-menu { display: none; }
 }
 
 /* ── 16. tool probe ────────────────────────────────────────────────────── */
@@ -1027,7 +1028,6 @@ body[data-view="session"] .chat-dock {
 .probe-block .tool-table td { padding-top: 3px; padding-bottom: 3px; }
 /* the case name is an identifier, not prose — mono keeps the column aligned */
 .probe-block .tool-name { font-family: var(--mono); font-size: 10.5px; color: #c3c6cc; }
-.probe-toolset { font-family: var(--mono); font-size: 10px; line-height: 1.45; color: #7d818a; margin: 2px 0 4px; }
 
 /* ── 17. reduced motion ────────────────────────────────────────────────── */
 

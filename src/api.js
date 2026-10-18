@@ -2,11 +2,17 @@
 // Handlers call the engine adapter; nothing here knows about OpenCode.
 import { TBD_TITLE } from './titles.js';
 
-export function createApi({ getConfig, applyConfig, engine, logger, getBootError, projects, toolStats, probe, modelCache, inspectModel: inspectRef }) {
+export function createApi({ getConfig, applyConfig, engine, logger, getBootError, projects, toolStats, probe, modelCache, inspectModel: inspectRef, probeDir }) {
   const app = logger.channel('app');
 
   /** Directory comparison key: case-insensitive, no trailing separator. */
   const dirKey = (d) => String(d ?? '').replace(/[\\/]+$/, '').toLowerCase();
+
+  /** Probe scratch sessions are Synapse's own scaffolding, never user work. */
+  const isScratchSession = (s) => {
+    const key = dirKey(probeDir);
+    return Boolean(key) && dirKey(s?.directory) === key;
+  };
 
   /**
    * Projects with their sessions attached. A session belongs to the project
@@ -26,6 +32,7 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
       app.warn(`could not list sessions: ${err.message}`);
     }
     for (const s of sessions) {
+      if (isScratchSession(s)) continue; // probe/model-check scaffolding
       const owner = byDir.get(dirKey(s.directory)) || general;
       owner.sessions.push(s);
     }
@@ -101,6 +108,12 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
     /** The raw per-model knowledge base, for inspection and debugging. */
     modelCache: async () => (modelCache ? modelCache.snapshot() : { version: 1, models: {} }),
 
+    /** Zero every model's ask counter (keeps valid results). */
+    resetModelAsks: async () => ({
+      ok: true,
+      models: modelCache ? modelCache.resetAsks() : 0,
+    }),
+
     /**
      * Kick off a background toolset discovery for one model. Idempotent: a model
      * already checked returns its cached tools, and one already running reports
@@ -125,7 +138,8 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
 
     sessions: async () => {
       if (!engine.status().ready) return { sessions: [] };
-      return { sessions: await engine.listSessions() };
+      const sessions = await engine.listSessions();
+      return { sessions: sessions.filter((s) => !isScratchSession(s)) };
     },
 
     // ── projects ─────────────────────────────────────────────

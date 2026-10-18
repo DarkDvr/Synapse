@@ -94,6 +94,9 @@ async function main() {
     file: PROBE_FILE,
     notify: (ev) => http?.broadcast({ ...ev, ts: Date.now() }),
   });
+  // Clear any probe/model-check session a killed process left behind; they are
+  // scaffolding, never user work.
+  probe.sweep().catch(() => {});
 
   // ── per-model knowledge ──────────────────────────────────────
   // The engine catalog refreshes every boot, but models come and go. Record
@@ -112,7 +115,8 @@ async function main() {
     if (modelCache.isChecked(key)) return { started: false, cached: true, tools: known.tools || [] };
     if (inspecting.has(key)) return { started: false, running: true };
     const asked = modelCache.attempts(key);
-    if (asked >= MAX_TOOL_ASKS) return { started: false, exhausted: true, timesAsked: asked };
+    const maxAsks = getConfig().modelChecks?.maxAsks ?? MAX_TOOL_ASKS;
+    if (asked >= maxAsks) return { started: false, exhausted: true, timesAsked: asked, maxAsks };
 
     inspecting.add(key);
     inspectChain = inspectChain
@@ -122,7 +126,7 @@ async function main() {
         modelCache.setTools(key, tools);
         inspectLog.info(
           `model check ${key}: ${tools.length ? `${tools.length} tools` : 'no list'} ` +
-            `(ask ${modelCache.attempts(key)}/${MAX_TOOL_ASKS})`,
+            `(ask ${modelCache.attempts(key)}/${maxAsks})`,
         );
         http?.broadcast({ kind: 'model', type: 'model.probed', ref: key, tools, ts: Date.now() });
       })
@@ -237,6 +241,7 @@ async function main() {
     probe,
     modelCache,
     inspectModel,
+    probeDir: PROBE_DIR,
   });
   http = createServer({ api, engine, logger, config: getConfig() });
   await http.listen();

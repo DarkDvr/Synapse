@@ -133,6 +133,9 @@ live on the role cards, where they belong, not in Settings. The last engine
 event is a row in the sidebar's STATUS block. The working area is left-anchored
 and capped (`--work-w`, 1240px): sidebar → role cards + chat → rail → empty
 space at the window's right edge, with the same geometry in Single and Multi.
+Role cards have a **360px floor**, so the app's minimum width is **1100px**:
+narrower windows scroll horizontally instead of collapsing the cards. The rail
+stacks under the chat below **1460px**.
 
 **Row highlighting is one token.** The baseline paints table rows `#fcfcff`
 on hover in every theme; Synapse overrides that globally to `--hover-bg`
@@ -204,15 +207,16 @@ button.
   their pick for the orchestration layer (stage 3+). Both live side by side in
   `config\synapse.config.json` as `roles.<id> = { "ref", "variant" }` — there is
   no default model anywhere.
-- **Each model is asked at most three times, ever.** Selecting a model fires a
-  background check that asks it what tools it has; the answer, together with its
-  context, output and effort variants, is stored in `data\model-cache.json`
-  keyed by the full `provider/id` ref. The same model under a different provider
-  (`opencode` vs `opencode-go`, or a future local runtime) is a separate record.
-  A silent or failed answer earns a retry — on the next selection or the next
-  Synapse start — but only up to **three asks in total**; after that the model
-  is left alone. The catalog itself is re-recorded for free on every boot, and
-  models that leave keep their record.
+- **Each model is asked at most three times, ever** (configurable in Settings:
+  `modelChecks.maxAsks`, 1–20; **Reset Ask Counters** zeroes every model's count
+  without discarding valid results). Selecting a model fires a background check
+  that asks it what tools it has; the answer, together with its context, output
+  and effort variants, is stored in `data\model-cache.json` keyed by the full
+  `provider/id` ref. The same model under a different provider (`opencode` vs
+  `opencode-go`, or a future local runtime) is a separate record. A silent or
+  failed answer earns a retry — on the next selection or the next Synapse start —
+  but only up to the cap; after that the model is left alone. The catalog itself
+  is re-recorded for free on every boot, and models that leave keep their record.
 - **DeepSeek V4.1 Flash Free serves 1M context, not 200k.** The engine's catalog
   is conservative; the backend serves 1,048,576 tokens (boundary-tested, ~1.037M
   OK / ~1.107M HTTP 400). Synapse writes the override from
@@ -267,7 +271,7 @@ the project whose directory they run in.
 
 **Tool census.** Every finished turn is scanned once and its tool calls recorded (keyed by part id, so re-reading a transcript never double-counts) into `data\tool-stats.json`: per tool and per model — calls, failures, exit codes, average execution time, and the last 20 error signatures. Read it at `GET /api/tools/stats`; the inspector's **Tools in use** panel shows the live summary. This is how we find out what these models actually reach for, instead of guessing.
 
-**Tool probe.** The census says what has happened; the probe finds out on purpose. **Run Tool Probe** in the *Tools in use* panel drives one turn per tool in the engine's real toolset — `shell` (pass and fail), `read`, `write`, `edit`, `glob`, `grep`, `question`, `webfetch` (good host and bad host), `websearch`, `subagent`, `execute`, `skill` — each in a disposable scratch session (`workspace\_probe`). Per case it records whether the turn closed, which tool actually ran, whether it failed, and **the tool's own execution time** (not the turn time, which is mostly the model thinking). Results stream into the panel live; `GET /api/tools/probe`, `POST /api/tools/probe/run`.
+**Tool probe.** The census says what has happened; the probe finds out on purpose. **Run Tool Probe** in the *Tools in use* panel drives one turn per tool in the engine's real toolset - `shell` (pass and fail), `read`, `write`, `edit`, `glob`, `grep`, `question`, `webfetch` (good host and bad host), `websearch`, `subagent`, `execute`, `skill` - each in a disposable scratch session (`workspace\_probe`). Per case it records whether the turn closed, which tool actually ran, whether it failed, and **the tool's own execution time** (not the turn time, which is mostly the model thinking). The scratch session is hidden from the rail and swept at boot; the panel names the model the run used. Results stream into the panel live; `GET /api/tools/probe`, `POST /api/tools/probe/run`.
 
 Two things the first run of it proved, which is the point of having it:
 

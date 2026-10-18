@@ -115,5 +115,17 @@ export function createModelCache({ logger, file }) {
     return get(ref)?.timesAsked || 0;
   }
 
-  return { record, get, setTools, isChecked, attempts, snapshot: () => data };
+  /**
+   * Give every model three fresh chances: zero the attempt counters. Valid
+   * results are kept — a model that already answered will not be asked again
+   * just because its counter was reset.
+   */
+  function resetAsks() {
+    const refs = Object.keys(data.models);
+    for (const ref of refs) data.models[ref].timesAsked = 0;
+    persist();
+    return refs.length;
+  }
+
+  return { record, get, setTools, isChecked, attempts, resetAsks, snapshot: () => data };
 }

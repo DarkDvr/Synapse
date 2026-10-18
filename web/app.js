@@ -593,12 +593,22 @@ async function switchMode() {
 // change is stored in the config file; the Architect's copy is also applied to
 // the open session immediately, while worker selections wait for the
 // orchestration layer to spawn their sessions.
-// One chevron, as an inline SVG stroke. The previous rotated-border box aliased
-// into odd shapes at this size; a round-capped stroke stays crisp.
-const EFFORT_CHEV =
-  '<svg class="effort-chev" viewBox="0 0 10 6" aria-hidden="true">' +
-  '<path d="M1 5 L5 1.3 L9 5" fill="none" stroke="currentColor" stroke-width="1.6" ' +
-  'stroke-linecap="round" stroke-linejoin="round"/></svg>';
+// One SVG per effort level, drawn as evenly spaced stroked chevrons. Three
+// separate SVGs with fractional negative margins rounded unevenly (the gaps
+// looked different), so the whole glyph is one SVG with integer geometry.
+function effortChevrons(level) {
+  const step = 4.4;
+  const paths = Array.from({ length: level }, (_, i) => {
+    const y = 5 + i * step;
+    return `<path d="M1 ${y} L5 ${(y - 3.7).toFixed(1)} L9 ${y}"/>`;
+  }).join('');
+  const height = 5 + (level - 1) * step + 1.2;
+  return (
+    `<svg class="effort-chev" viewBox="0 0 10 ${height.toFixed(1)}" width="10" height="${height.toFixed(1)}" ` +
+    'fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" ' +
+    `aria-hidden="true">${paths}</svg>`
+  );
+}
 
 function renderEffort(roleId) {
   const sel = document.querySelector(`.role-model[data-role="${roleId}"]`);
@@ -617,7 +627,7 @@ function renderEffort(roleId) {
   btn.disabled = top.length === 0;
   btn.dataset.level = String(level);
   btn.innerHTML = level
-    ? `<span class="effort-glyph">${EFFORT_CHEV.repeat(level)}</span>`
+    ? `<span class="effort-glyph">${effortChevrons(level)}</span>`
     : '<span class="effort-glyph"><span class="effort-auto"></span></span>';
   const tools = Array.isArray(model?.tools) && model.tools.length ? ` · ${model.tools.length} tools` : '';
   btn.title = top.length
@@ -975,27 +985,12 @@ async function commitRename() {
 }
 
 // ── view state ──────────────────────────────────────────────────
-
-/**
- * The two-column topology needs ~786px of stage (two 360px cards + the spine).
- * Below that the cards stack into one column, because squeezing them hides the
- * select and the buttons. Measured from the stage, not the window: the rail
- * stacking below 1180px changes the stage width on its own.
- */
-function syncTopologyDensity() {
-  const stage = $('stage');
-  if (!stage) return;
-  const width = stage.getBoundingClientRect().width;
-  document.body.classList.toggle('topology-tight', width > 0 && width < 790);
-}
-
 function setView() {
   document.body.dataset.view = state.view;
   document.body.dataset.mode = state.mode;
   // the mode toggle is a session control: there is nothing to switch without
   // an open session
   $('modeToggle').hidden = state.view !== 'session';
-  syncTopologyDensity();
   applyRoleCardsLayout();
   renderComposer();
   updateSessionHeader();
@@ -1513,17 +1508,6 @@ async function renderProbe() {
     modelEl.textContent = st.model ? `Model: ${st.model}` : '';
     modelEl.hidden = !modelEl.textContent;
   }
-  const tsEl = $('probeToolset');
-  if (tsEl) {
-    // The toolset is per-model, so it is worth stating outright rather than
-    // letting a "not called" verdict look like a model failure. Filter empties:
-    // a persisted run can carry a null entry.
-    const offered = (st.toolset || []).filter((t) => typeof t === 'string' && t);
-    tsEl.textContent = offered.length
-      ? `This model offers ${offered.length}: ${offered.join(', ')}`
-      : '';
-    tsEl.hidden = !tsEl.textContent;
-  }
   if (!results.length) {
     note.hidden = false;
     note.textContent = st.running
@@ -1829,6 +1813,11 @@ function renderSettings() {
       f('Engine home (blank = data\\engine\\opencode)', 'engine.opencode.home', { wide: true })),
     group('Working directory',
       f('Where new sessions run (blank = workspace)', 'defaults.directory', { wide: true })),
+    group('Model checks',
+      f('Max asks per model (1–20)', 'modelChecks.maxAsks', { type: 'number' }) +
+      `<div class="set-field"><span>Ask counters</span>
+        <button type="button" class="btn btn-secondary btn-sm" data-reset-asks>Reset Ask Counters</button>
+      </div>`),
     group('Logging',
       f('Level (error | warn | info | debug)', 'logging.level') +
       f('Retention (days)', 'logging.retentionDays', { type: 'number' }) +
@@ -1859,6 +1848,15 @@ async function saveSettings() {
     await loadModels();
   } catch (err) {
     toast('Could not save settings', err.message);
+  }
+}
+
+async function resetModelAsks() {
+  try {
+    const r = await api('POST', '/api/models/reset-asks');
+    toast('Ask Counters Reset', `${r.models} model(s) may be asked again.`);
+  } catch (err) {
+    toast('Could Not Reset Ask Counters', err.message);
   }
 }
 
@@ -1962,6 +1960,9 @@ function wire() {
     // a click anywhere outside the open model menu closes it
     if (menuRole && !e.target.closest('.model-search') && !e.target.closest('#modelMenu')) closeModelMenu();
 
+    const resetAsks = e.target.closest('[data-reset-asks]');
+    if (resetAsks) { e.preventDefault(); resetModelAsks(); return; }
+
     const perm = e.target.closest('[data-perm]');
     if (perm) { e.preventDefault(); replyPermission(perm.dataset.permId, perm.dataset.perm); return; }
 
@@ -1998,7 +1999,6 @@ function wire() {
   });
 
   window.addEventListener('resize', () => requestAnimationFrame(() => {
-    syncTopologyDensity();
     if (state.view === 'session') applyRoleCardsLayout({ animate: false });
     drawActivePath();
     renderChatNav();
