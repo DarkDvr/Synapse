@@ -55,6 +55,12 @@ export const DEFAULTS = {
     // boot unless the operator turns that off. Settings also clears it by hand.
     resetOnBoot: true,
   },
+  ui: {
+    // The model's answer panel is the one block that must not look like chrome.
+    // A solid colour rather than an alpha wash, because it has to stay readable
+    // under the text inside it — the operator tunes it from Settings.
+    answerBg: '#382F19',
+  },
   logging: {
     level: 'info',
     retentionDays: 7,
@@ -92,6 +98,10 @@ export function normalize(raw) {
   cfg.server.openBrowser = cfg.server.openBrowser !== false;
   cfg.tools = cfg.tools || {};
   cfg.tools.resetOnBoot = cfg.tools.resetOnBoot !== false;
+  cfg.ui = cfg.ui || {};
+  // Only real hex colours reach CSS; anything else falls back to the default.
+  const bg = String(cfg.ui.answerBg || '').trim();
+  cfg.ui.answerBg = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(bg) ? bg.toLowerCase() : DEFAULTS.ui.answerBg;
 
   cfg.engine.type = String(cfg.engine.type || 'opencode');
   const oc = cfg.engine.opencode;

@@ -1956,6 +1956,13 @@ function renderSettings() {
       `<div class="set-field"><span>Tool census</span>
         <button type="button" class="btn btn-warn btn-sm" data-clear-tools>Clear Tool Census</button>
       </div>`),
+    group('Chat',
+      `<label class="set-field"><span>Answer panel colour</span>
+        <span class="color-row">
+          <input type="color" data-path="ui.answerBg" value="${esc(readPath(c, 'ui.answerBg') || '#382f19')}" aria-label="Answer panel background colour" />
+          <input type="text" class="color-hex" data-color-hex="ui.answerBg" value="${esc(readPath(c, 'ui.answerBg') || '#382f19')}" spellcheck="false" aria-label="Answer panel background hex" />
+        </span>
+      </label>`),
     group('Logging',
       sel('Level', 'logging.level', [
         { v: 'debug', l: 'Debug' },
@@ -1987,6 +1994,7 @@ async function saveSettings() {
   }
   try {
     state.config = await api('PUT', '/api/config', draft);
+    applyUiTheme();
     toast('Settings saved', 'Restart Synapse to apply engine or server changes.');
     await loadModels();
   } catch (err) {
@@ -2013,8 +2021,33 @@ async function clearToolCensus() {
   }
 }
 
-function openSettings() { renderSettings(); $('settingsModal').hidden = false; }
+function openSettings() { renderSettings(); bindColorInputs($('settingsBody')); $('settingsModal').hidden = false; }
 function closeSettings() { $('settingsModal').hidden = true; }
+
+/**
+ * The answer panel's fill is the operator's choice (Settings → Chat). It is a
+ * CSS variable on the root so the transcript repaints instantly while they try
+ * colours in the picker, and it is read from config on boot and after a save.
+ */
+function applyUiTheme() {
+  const bg = state.config?.ui?.answerBg || '#382f19';
+  document.documentElement.style.setProperty('--answer-bg', bg);
+}
+
+/** Live preview: colour input and hex field mirror each other as you type. */
+function bindColorInputs(scope) {
+  const color = scope.querySelector('input[type="color"][data-path]');
+  const hex = scope.querySelector('input[data-color-hex]');
+  if (!color || !hex) return;
+  const paint = (value) => {
+    document.documentElement.style.setProperty('--answer-bg', value);
+  };
+  color.addEventListener('input', () => { hex.value = color.value; paint(color.value); });
+  hex.addEventListener('input', () => {
+    const v = hex.value.trim();
+    if (/^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(v)) { color.value = v; paint(v); }
+  });
+}
 
 // ── wiring ──────────────────────────────────────────────────────
 function wire() {
@@ -2210,6 +2243,7 @@ async function boot() {
   wire();
   fitStageHeight();
   state.config = await api('GET', '/api/config').catch(() => null);
+  applyUiTheme();
   // every new session starts Single; an opened session sets its own mode
   state.mode = 'single';
   renderMode();

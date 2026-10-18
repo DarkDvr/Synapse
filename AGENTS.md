@@ -541,9 +541,13 @@ This is once per directory per process and needs no config.
   early when it has not changed, so a poll that learned nothing new does not
   touch the DOM at all. Verified live: a Reasoning block and a tool card opened
   during turn 1 were still open after turn 2 rebuilt the transcript.
-- **The answer panel is a warm yellow-brown wash** (`#382F19`). This is a
-  deliberate exception to "yellow is an affordance colour" — it is a fill, not
-  text, and no other surface uses it.
+- **The answer panel's fill is the operator's choice.** `ui.answerBg` in the
+  config (Settings → Chat, a colour swatch + hex field) defaults to a warm
+  yellow-brown `#382f19`; the app sets `--answer-bg` on the root, so the picker
+  previews live and a save persists it. The border is derived from the same
+  colour with `color-mix(in srgb, var(--answer-bg), #fff 18%)`, so any choice
+  stays coherent. This is a deliberate exception to "yellow is an affordance
+  colour" — it is a fill, never text.
 - **Mode colours:** Multi is orange, Single is violet, both with white text and
   a white dot; both are filled pills, so the mode is readable at a glance. The
   composer placeholder is `Message` in Single, `Message the Architect…` in Multi.

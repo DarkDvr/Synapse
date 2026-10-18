@@ -7,11 +7,11 @@
   "engine": {
     "type": "opencode",
     "opencode": {
-      "binary": "",
+      "binary": "C:\\Users\\Andrew\\AppData\\Roaming\\npm\\node_modules\\@opencode\\cli\\bin\\opencode.exe",
       "port": 8720,
       "host": "127.0.0.1",
       "password": "",
-      "home": "",
+      "home": "F:\\dev\\Synapse\\data\\engine\\opencode",
       "startTimeoutMs": 60000,
       "args": [],
       "modelLimits": {
@@ -45,6 +45,12 @@
   },
   "modelChecks": {
     "maxAsks": 3
+  },
+  "tools": {
+    "resetOnBoot": true
+  },
+  "ui": {
+    "answerBg": "#382f19"
   },
   "logging": {
     "level": "info",

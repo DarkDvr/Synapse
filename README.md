@@ -351,11 +351,12 @@ delegation permission, and the reveal.
 
 ## Markdown
 
-The model's actual answer is rendered as markdown inside its own panel — a
-warm yellow-brown wash (`#382F19`, border `rgba(237,194,90,0.28)`) so the
-answer is the one block that is obviously not chrome — and reads separately
-from the reasoning and tool noise around it. This is a deliberate exception to
-"yellow is an affordance colour": it is a *fill*, not text and not an icon.
+The model's actual answer is rendered as markdown inside its own panel, whose
+fill colour is the operator's (`ui.answerBg`, Settings → Chat, default
+`#382f19`; the border is derived from it) so the answer is the one block that is
+obviously not chrome — and reads separately from the reasoning and tool noise
+around it. This is a deliberate exception to "yellow is an affordance colour":
+it is a *fill*, not text and not an icon.
 
 `web/md.js` is hand-rolled (no dependencies) and **escape-first**: the source is
 HTML-escaped before any markdown rule runs, so a model cannot inject markup
