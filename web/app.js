@@ -1324,6 +1324,8 @@ function drawActivePath() {
   const a = arch.getBoundingClientRect();
   const d = dest.getBoundingClientRect();
   const s = spineCell.getBoundingClientRect();
+  // A card hidden by Single mode has no box: there is nothing to draw a path to.
+  if (!d.width || !a.width || !s.width) return;
   const n = (v) => Math.round(v * 1000) / 1000;
 
   const spineX = n(s.left + s.width / 2 - box.left);

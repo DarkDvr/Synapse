@@ -44,6 +44,11 @@ recycled engine binary it locates.
   dot-ants). **Never orange text on a violet fill** — use white.
 - Green / amber / red are semantic only, never decorative.
 - Affordances: `+` green, `✕` red, edit/settings icons yellow.
+- **The live path is the one deliberate pair: a yellow arrow with orange ants.**
+  Orange is this palette's colour for dot-ants, and the arrow has to be a
+  different colour from the ants riding it or they read as one thick line. The
+  two delegation cards are the other exception: requester green, worker red
+  (borders only — the operator's call).
 - **All button labels are Title Case** (see `references\UI UX\DESIGN.md` §8).
   This applies to buttons only — not headings, body text, labels or tooltips.
 
@@ -180,7 +185,17 @@ web/
   vendor/fonts.css    vendored DM Sans + Manrope (offline)
 data/                 runtime state (projects, census, probe results, engine home)
 logs/                 one file per channel: app, engine, session, tools
+docs/                 design mockups (stage-1-mockup-rev*.pdf, stage-2-*.pdf)
 ```
+
+**The mockups are PDFs and there is no PDF renderer on this machine** (no
+`pdftoppm`, `magick`, `gswin64c`, `mutool`). Chrome renders them: open
+`file:///F:/dev/Synapse/docs/<name>.pdf` in a `browser-control` session. A
+`#zoom=200` fragment works only on a *fresh* URL (add a query string to force
+one) and the viewer cannot be scrolled from the page, so the page is only
+readable top-left at a time. The right answer is that the mockup is a *shape*
+record, not a pixel source: the numbers that matter (spine centre, band centre,
+card boxes) are measured live and asserted against.
 
 **`web/vendor/summit.css` is a locked baseline.** The only edit ever made to it
 is line 1: the Google Fonts `@import` was replaced with a comment, because
@@ -417,6 +432,14 @@ Non-obvious, all verified on 2.0.30:
   not a failed task: the calendar auditor was interrupted and still left a useful
   result, and the Architect judged from what it *had* produced rather than from
   the worker's word.
+- **The worker's poll is also the UI's source of live activity.** `waitForIdle`
+  already fetches the worker's transcript on a timer, so the newest tool call
+  costs nothing extra: the runner reads its name and target (the input field
+  differs per tool, so file, shell, search, fetch, skill and subagent targets are
+  all read in one place) and emits `run.progress` only when it changes. The same
+  run is in a map keyed by directory, served at `GET /api/runs` — the SSE events
+  are the fast path, and this is what a page reloaded mid-run reopens from.
+  Nothing invented, no extra turn, no polling of the engine from the UI.
 
 ---
 
@@ -651,6 +674,35 @@ This is once per directory per process and needs no config.
   Re-measure on the topology's `ResizeObserver` and on `document.fonts.ready`:
   the card height changes after the font swap, and a stale `--reveal-h` looked
   like a one-pixel clip.
+- **A growing card takes its room from the top of the chat, never the bottom.**
+  The stage's second row is `minmax(0, 1fr)` under a definite height, so a taller
+  role-card wrapper just squeezes the transcript: the dock's bottom is pinned and
+  its top edge moves down (measured live: 269 → 306px top, 888 → 888px bottom).
+  Two things make it work. `renderRoleActivity()` measures the wrapper **before**
+  it changes the subtitle text and passes that height to `applyRoleCardsLayout` as
+  `from` — a card that has already grown is taller by the time the reflow happens,
+  so pinning the current height would snap instead of sliding. And a poll that
+  learned nothing must not re-measure at all, or the chat jiggles for no reason:
+  `state.roleSig` is a signature of every card's role, state and text, and an
+  unchanged signature returns early. Below the 1460px breakpoint the stacked
+  layout caps the chat instead, and the growth is instant — there is no `1fr` row
+  to squeeze.
+- **The live path is measured from the connector cell, not from the cards.** The
+  spine is that cell's exact centreline and the band is its `.link-line`'s exact
+  centre, both at three decimal places — the arrow has to *cover* the dots it
+  replaces, and rounding to whole pixels left a visible step. The destination's
+  own edge is the end point, so the arrowhead lands on the card. Which side the
+  worker is on is decided by comparing its centre with the topology's, not by a
+  hardcoded side. Ant count and duration come from the path length, so the beads
+  read as one dotted line whether the run is one row away or three. A card hidden
+  by Single mode has a zero-width box, which is the guard that stops a path being
+  drawn to nothing.
+- **`browser_wait_for` can match stale text.** Waiting for "Waiting on" to
+  confirm a delegation had started matched the *transcript's* own prose from an
+  earlier run and returned immediately. For anything live, poll
+  `GET /api/runs` from the Code Mode runtime (`fetch` works, and
+  `browser_wait_for` with a text that cannot exist is a usable sleep) and assert
+  on the API's own answer.
 - **Cards have a hard minimum width** (`--card-min: 360px`): below that the
   select, the chevron and the edit button start colliding and the name is
   ellipsised away. Two columns + the 66px spine need ~790px of stage, so the
@@ -817,16 +869,30 @@ not gigabytes. Worth knowing; not worth panicking about.
     remaining three tasks ran themselves — 12.8 minutes, five worker runs, two
     files in `bin/`, `python bin/calendar.py` printing the month. The Auditor hit
     the 240s ceiling yet its partial work was still judged and accepted.
-  - **3.3 next — role cards show live activity**, and the ✎ button opens
-    per-role instructions. Cards need state (idle / working / blocked), the task
-    in hand, and elapsed time; the worker transcript is invisible while it runs
-    today by design, and the operator wants to watch it. The ✎ settles skills
-    gating with it: custom agents are dead here (the free tier rejected every
+  - **3.3 done (activity half) — the cards show the live work.** `src/runs.js`
+    emits `run.started` / `run.progress` / `run.finished` over the SSE stream and
+    keeps the same shape at `GET /api/runs`, so a page reloaded mid-run reopens
+    onto the truth. Each card carries a subtitle while its role has something to
+    show — a worker: the task title plus its newest tool call in brackets, no
+    task id and no destination; the Architect: who it is waiting on, or what its
+    own turn is doing — and the two participants are the only cards that change
+    appearance (requester green, worker red). Verified live on `calendar` with a
+    deliberate repeat delegation of t4: the Architect's card went green and read
+    `Waiting on Coder 1`, Coder 1 went red and read
+    `Deliver final script (reading calendar_design.md)`, the yellow arrow was
+    drawn exactly on the dots, and everything returned to idle when the worker
+    stopped.
+    **Still open here: the ✎ button's per-role instructions.** It settles skills
+    gating: custom agents are dead here (the free tier rejected every
     custom-agent request), so instructions are prompt text on a default-agent
-    session — which is what the brief already is.
-  - **3.4 — the live per-session Tools-in-Use feed**, then the main-pane napkin
-    with its live path: arrows and ants on the topology while a worker runs, and
-    the plan pane driving it.
+    session — which is what the brief already is. Card state is idle/working
+    only; there is no "blocked" state because the runner has none — a blocked
+    task is the Architect's judgement, and it shows in the plan pane.
+    **Elapsed time is not shown either**: a ticking number needs a repaint loop,
+    and nothing in the card needs one.
+  - **3.4 next — the live per-session Tools-in-Use feed.** The main-pane napkin
+    with its live path is done (arrows and ants on the topology while a worker
+    runs); what is left is the per-session tool feed the rail shows.
   - **3.5 — housekeeping**: `engine.type` as a dropdown (only `opencode` is
     registered), **Browse Folder** / **Cmd Here** still `data-soon` for stage 4,
     and zeroing the stored probe results if the panel should start blank.

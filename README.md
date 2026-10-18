@@ -110,11 +110,11 @@ Both families are now vendored as variable fonts in `web\vendor\fonts\`
 
 Affordance colours: `+` add is green, `✕` delete is red, `⚙`/`✎` are yellow.
 
-**Sample vs. live.** The UI is live-only now: the design-preview entry and the
+**Sample vs. live.** The UI is live-only: the design-preview entry and the
 `SAMPLE` badges were removed before live testing, so nothing shows invented
 content. What is not wired yet carries `data-soon`, which raises a toast naming
-the stage that will wire it; the role cards' per-role activity is the remaining
-stub — they show the real model/effort controls and nothing else.
+the stage that will wire it. The role cards' per-role instructions (the ✎
+button) are the remaining stub; their model, effort and live activity are real.
 
 **Left sidebar is two-tier.** A project is a panel with its own surface, a
 chevron, and everything inside it — its two shortcuts, the **Sessions:** label
@@ -126,13 +126,34 @@ folder), because those belong with the project they act on, not in a rail panel.
 There is no Project panel and no path label anywhere: the tree already names the
 project, and the path was never what you looked at.
 
+**Role cards are live.** Each card carries a subtitle while its role has
+something to show: a worker shows the task it was handed with its newest tool
+call in brackets — "Implement calendar script (writing calendar.py)" — and the
+Architect shows who it is waiting on, or what its own turn is doing
+("editing plan.json"). The task id and the destination are deliberately absent:
+the arrow already says who and where. Idle cards keep no subtitle at all, so an
+idle topology is exactly as short as it was.
+
+A card growing takes its room from **the top of the chat**, never from the
+composer: the stage's second row is `minmax(0, 1fr)` under a definite height, so
+the dock's bottom stays put and the transcript's top edge moves down. Measured
+during a live delegation: dock top 269 → 306px, dock bottom 888 → 888px.
+
+**The two roles in a delegation are the only cards that change appearance.** The
+requester takes green (the Architect's own colour) and the worker red; colour
+only, because a width change would shift every card below it.
+
 **Connectors.** The idle structure is small round dots at 75% opacity with no
-arrowheads, and that is all the cards show today. The live path — a solid orange
-line from requester to worker with pale glowing ants — is already implemented in
-`drawActivePath`: it computes the route from the real card and connector-cell
-boxes at full precision (the spine's exact centreline, the dotted band's exact
-centre) so the orange covers the dots with no sub-pixel step. It activates when
-the orchestration layer marks a real connection (stage 5).
+arrowheads. When a delegation runs, one solid **yellow arrow** is drawn from the
+requester's bottom edge down the spine and across into the worker, with **orange
+ants** travelling it — the direction of the work, not a decoration. It is
+measured from the real boxes at full precision (the connector cell's exact
+centreline, the dotted band's exact centre) so the arrow covers the dots it
+replaces; verified live as `M 445 80.938 L 445 125.406 L 478 125.406`, where 445
+is the spine, 80.94 the Architect's bottom, 125.41 the band's centre and 478 the
+worker's own edge. The ant count and speed are derived from the path length, so
+the beads read as one dotted line whatever the distance. The shape is
+`docs\stage-1-mockup-rev6.pdf`.
 
 **No topbar.** The main pane starts at the top edge. Breadcrumbs were dropped
 (the tree highlights the current project and session); model and effort choices
