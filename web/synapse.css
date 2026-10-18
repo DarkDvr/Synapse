@@ -174,15 +174,20 @@ body[data-view="none"] .inspector { display: none; }
   height: calc(100vh - 26px);
 }
 
-/* the rail owns the full column height; the tools panel takes the slack */
+/* the rail owns the full column height; the tools panel takes the slack. The
+   inspector is capped to the viewport so a long tool census scrolls inside the
+   panel instead of making the whole page scroll — which used to move the stage
+   (and the Architect card) off-screen. Below 1180px the page scrolls by design
+   and this cap is lifted. */
 .inspector {
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr);
   gap: 14px;
   align-content: stretch;
   min-width: 0; min-height: 0;
+  max-height: calc(100vh - 26px);
 }
-.inspector > .panel:last-child { display: flex; flex-direction: column; min-height: 0; }
+.inspector > .panel:last-child { display: flex; flex-direction: column; min-height: 0; overflow-y: auto; }
 .inspector > .panel:last-child .tool-table { overflow: auto; }
 
 /* Long tool names (synapse-search_websearch) must never stretch the pane: fix
@@ -524,20 +529,26 @@ body.dark .sidebar-bottom,
   position: fixed; z-index: 80;
   background: #1b1d21; border: 1px solid var(--line); border-radius: 9px;
   box-shadow: 0 14px 34px rgba(0, 0, 0, 0.55);
-  max-height: 264px; overflow-y: auto; padding: 4px;
+  max-height: 300px; overflow-y: auto; padding: 3px;
 }
 .model-opt {
-  display: flex; align-items: center; gap: 10px;
-  padding: 6px 8px; border-radius: 6px; cursor: pointer;
-  font-family: var(--mono); font-size: 11px; color: #c3c6cc; white-space: nowrap;
+  display: flex; align-items: center; gap: 8px;
+  padding: 3px 7px; border-radius: 5px; cursor: pointer;
+  font-family: var(--mono); font-size: 10.5px; color: #c3c6cc; white-space: nowrap;
 }
 .model-opt:hover { background: var(--surface-soft); }
 .model-opt.is-active { background: var(--violet-soft); color: #fff; }
-.model-opt.is-current .mo-name { color: var(--green); }
+.model-opt.is-current .mo-name { color: var(--orange); }
 .model-opt .mo-name { overflow: hidden; text-overflow: ellipsis; }
-.model-opt .mo-meta { margin-left: auto; color: #6d717a; font-size: 10px; }
+.model-opt .mo-src {
+  flex: none; font-size: 8.5px; font-weight: 700; letter-spacing: 0.06em;
+  text-transform: uppercase; color: #82868e;
+  border: 1px solid #3a3d43; border-radius: 4px; padding: 0 4px; line-height: 1.5;
+}
+.model-opt.is-active .mo-src { color: #d5d7dc; border-color: #565a63; }
+.model-opt .mo-meta { margin-left: auto; color: #6d717a; font-size: 9.5px; }
 .model-opt.is-active .mo-meta { color: #b9bdc4; }
-.model-empty { padding: 7px 8px; font-size: 11px; color: #6d717a; font-family: var(--mono); }
+.model-empty { padding: 6px 8px; font-size: 10.5px; color: #6d717a; font-family: var(--mono); }
 
 .role-btn {
   width: 22px; height: 22px; flex: none; display: grid; place-items: center;
@@ -546,13 +557,12 @@ body.dark .sidebar-bottom,
 }
 
 /* Thinking effort: up to three stacked chevrons, redrawn at this button's scale
-   from the Adamant assistant's oracle glyph. Green is semantic here — the
-   button reports how hard the model is asked to think. `default` shows as a dot
-   so the engine's own choice stays reachable; a model without variants gets a
-   disabled control. Both glyphs are sized to the button's 20px content box and
-   centred by the grid, not by margins. */
-.role-effort { color: var(--green); }
-.role-effort:hover { border-color: #454950; background: var(--green-soft); }
+   from the Adamant assistant's oracle glyph. Orange is the accent colour here —
+   not green, which is semantic-only in this design. `default` shows as a dot so
+   the engine's own choice stays reachable; a model without variants gets a
+   disabled control. */
+.role-effort { color: var(--orange); }
+.role-effort:hover { border-color: #454950; background: rgba(255, 125, 26, 0.12); }
 .role-effort:disabled { color: #5c6169; opacity: 0.55; cursor: default; }
 .role-effort:disabled:hover { border-color: var(--line); background: transparent; }
 .effort-glyph { display: flex; flex-direction: column; align-items: center; line-height: 0; }
@@ -969,6 +979,7 @@ body[data-view="session"] .chat-dock {
      the conversation needs its floor back */
   .stage { height: auto; min-height: 0; }
   .chat-scroll { min-height: clamp(150px, 32vh, 360px); }
+  .inspector { max-height: none; }
   .rail-actions { grid-template-columns: 1fr 1fr; }
 }
 

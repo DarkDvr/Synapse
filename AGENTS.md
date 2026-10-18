@@ -287,22 +287,28 @@ and stores the operator's choice per role.
 ### The model cache (`data\model-cache.json`)
 
 Models come and go; what we learned about one should outlive it leaving the
-catalog. `src/modelcache.js` is a small JSON store keyed by `provider/id` with
-name, context/output, variants (`{id, label}` — label is the provider's own
-`reasoningEffort`), capabilities, `firstSeen`/`lastSeen`, and the discovered
-toolset. `engine.listModels()` is recorded on every boot and every
+catalog. `src/modelcache.js` is a small JSON store **keyed by the full
+`provider/id` ref**, because the same model can exist in more than one category
+— `opencode/deepseek-v4.1-flash-free` and a future `opencode-go/…` are different
+entries with different backends, and local runtimes will be more. Each record
+holds name, provider, context/output, variants (`{id, label}` — label is the
+provider's own `reasoningEffort`), capabilities, `firstSeen`/`lastSeen` and the
+discovered toolset. `engine.listModels()` is recorded on every boot and every
 `GET /api/models`, so the file stays current for free.
 
-- **Toolset discovery costs one turn and runs once per model.** On selection the
-  UI fires `POST /api/models/inspect`; the server answers from cache when the
-  tools are known, refuses to stack a duplicate run, and serialises runs one at
-  a time (`inspectChain`) so burst-selecting models cannot hammer the provider.
-  A failed or empty answer leaves `tools` unset so a later selection retries.
+- **Each model is asked once, ever.** The first selection fires
+  `POST /api/models/inspect`; the server answers from cache when `toolsAt` is
+  set, refuses to stack a duplicate run, and serialises runs one at a time
+  (`inspectChain`). An empty or failed answer is still recorded (`tools: []`,
+  `toolsAt` set) — the point is that we asked. Verified: `started` → `running`
+  → `cached`.
 - The discovery prompt asks the model to list its tools; `parseToolNames` keeps
   `[a-z0-9_-]` (MCP names contain hyphens — an earlier parser dropped them and
   turned `synapse-search_websearch` into `synapsesearch_websearch`).
 - When the check finishes, `model.probed` goes out over SSE and the picker/effort
-  tooltips gain a `· N tools` suffix.
+  tooltips gain a `· N tools` suffix. The picker menu itself shows a source chip
+  (`OPENCODE`, `OPENCODE GO`, later a local provider) so two entries with the
+  same display name can never be confused.
 - `GET /api/models/cache` exposes the raw store for debugging.
 
 ### The probe (`Run Tool Probe`)
@@ -342,28 +348,37 @@ failure "not offered by this model" when the tool was never in its list.
   `synapse-search_websearch` otherwise blows the rail out to the right.
 - The sidebar breakpoint is **1180px**. Below it the rail stacks under the chat,
   because the role cards need the width more than the rail needs to be beside.
-- **Role selections are `{ref, variant}`** in `config.roles`; the Architect is
-  the exception — it is the main session, so its choice lives in
-  `defaults.model` / `defaults.variant`. Bare `"provider/id"` strings are the old
-  shape and are migrated on save. Changing the Architect card switches the open
-  session immediately (`POST /api/session/{id}/model`); worker picks are stored
-  for the orchestration layer, which is not built yet.
-- **The thinking-effort button** shows 1–3 stacked green chevrons — dot =
-  engine default, chevrons = the three highest variants a model allows. Click
-  cycles default → lowest → … → highest → default; tooltip is
-  `Current thinking effort: <variant>`. A model with no variants gets a disabled
-  button. The glyph is the Adamant assistant oracle chevron *redrawn at 22px*
+- **Every role owns its model and effort — there is no "default model".** The
+  Architect's choice lives in `roles.architect` like every other role, and is
+  persisted in `config\synapse.config.json`; `defaults` holds only the working
+  directory now. An older `defaults.model` is folded into `roles.architect` once
+  by `normalize()` and the key is deleted. Changing the Architect card switches
+  the open session immediately (`POST /api/session/{id}/model`); worker picks are
+  stored for the orchestration layer, which is not built yet.
+- **The thinking-effort button** shows 1–3 stacked **orange** chevrons — dot =
+  engine default, chevrons = the three highest variants a model allows. Orange
+  because green is semantic-only in this palette. Click cycles
+  default → lowest → … → highest → default; the tooltip is
+  `Current thinking effort: <label>` where `<label>` is the provider's own
+  `reasoningEffort` value, never our id. Models with 2/1 variants get 2/1
+  chevrons; a model with none gets a disabled button. The glyph is the Adamant
+  assistant oracle chevron *redrawn at 22px*
   (`F:\dev\Obsidian.Adamant\...\adamant-assistant`) — shape only, no code copied,
-  and that folder is read-only. The model select's tooltip carries the context
-  window, which is how the 1M override becomes visible without a settings field.
+  and that folder is read-only.
 - **The Architect card is always visible; Multi reveals the workers.** The cards
   live in `#topologyWrap`, whose `max-height` animates between the Architect's
   height (Single) and the full topology (Multi). Worker children are hidden by
   `body[data-view="session"] .topology > *:not(.topo-architect):not(.path-layer)`
   and shown by the `workers-on` body class; on Multi→Single the class is removed
-  only after the height animation, so the workers do not vanish mid-slide. The
-  height is measured (I once capped it at 62% of the stage — that cut the last
-  row mid-card and was the bug), capped only by the room left above the composer.
+  only after the height animation, so the workers do not vanish mid-slide.
+  **The height cap is the part that bit twice.** Below 1180px the stage is
+  content-sized, so `stageBudget()` tests the *breakpoint* (`matchMedia`), not
+  the stage's used height — `getComputedStyle().height` reports the used height,
+  never `auto`, and capping against it collapsed the reveal to the 48px
+  Architect, leaving the workers clipped behind the chat while Multi appeared to
+  do nothing. Measure with `scrollHeight` (integer-rounded, so no half-pixel
+  scrollbar), cap by the stage only in the wide layout, and cap by the viewport
+  otherwise.
   The glyph measurements that matter: both button glyphs are centred on the 22px
   button to within 0.01px, with ~1.5px of margin left top and bottom at three
   chevrons — if the glyph or border size changes, re-measure with
@@ -374,7 +389,10 @@ failure "not offered by this model" when the tool was never in its list.
   `#modelMenu` (fixed-position, so it escapes the wrapper's overflow clip).
   Typing only filters (name or ref substring); a model can be set **only** by
   choosing an option, `Enter` on the active one, or Escape to revert. Do not
-  make the typed text the value.
+  make the typed text the value. Rows are compact (22px) and carry a source chip
+  — the provider id is part of a model's identity, so `OpenCode` and
+  `OpenCode Go` entries read differently, and local providers will slot into the
+  same chip.
 - **The chat dock is content-sized and bottom-pinned in a session.** Empty, it
   is just the composer row (60px); it grows upward as messages arrive, up to
   `max-height: min(100%, 80vh)` — `100%` lets Multi squeeze it when the cards
@@ -416,6 +434,17 @@ look at the result rather than only asserting against the DOM.
   instead of looping over widths.
 - **Never use the `browser.*` namespace** — that is the desktop browser, and it
   opens the review pane.
+- **Look at the deliverable, and assert geometry.** Reading code is not testing:
+  I shipped a layout twice where the role cards were clipped behind the chat
+  because I only measured widths I had chosen to measure. The habit that catches
+  it: (1) screenshot the actual state and *look at it*; (2) assert the
+  composition with numbers — `archCard.bottom <= wrap.bottom`, `dock.top >=
+  wrap.bottom`, `wrap.height ≈ topology.scrollHeight`, page `scrollHeight <=
+  innerHeight` in the wide layout; (3) test **at two viewport widths** — the
+  1180px breakpoint changes the whole stage layout, and a bug there is invisible
+  at 1200px; (4) click the thing the operator will click (the mode toggle, a
+  dropdown) and re-measure after it. If a claim is structural, prove it with a
+  bounding box, not an opinion.
 
 ### Two wrong conclusions, corrected
 

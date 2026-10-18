@@ -34,19 +34,14 @@ export const DEFAULTS = {
     },
   },
   defaults: {
+    // The only global default left: where a new session runs when no project
+    // is picked. Model and thinking effort belong to roles — the Architect
+    // included — not to the app.
     directory: '',
-    model: '',
-    // Thinking-effort variant for the default model. Empty means the engine's
-    // own default: the engine records that as variant "default", which maps to
-    // whatever the provider does when no reasoningEffort is requested.
-    variant: '',
-    agent: '',
   },
-  // Per-role selections made on the role cards: { ref, variant }. The Architect
-  // uses `defaults` above (it is the main session); every other role gets its
-  // own entry here. Routing an entry to a real worker session lands with the
-  // orchestration layer; storing them now means the operator's picks survive a
-  // restart.
+  // Per-role selections made on the role cards, the Architect included:
+  // { ref, variant }. There is no "default model" concept: if a role has no
+  // entry, nothing was chosen yet. Persisted so choices survive a restart.
   roles: {},
   logging: {
     level: 'info',
@@ -112,17 +107,14 @@ export function normalize(raw) {
     : [];
 
   cfg.defaults.directory = String(cfg.defaults.directory || '');
-  cfg.defaults.model = String(cfg.defaults.model || '');
-  cfg.defaults.variant = String(cfg.defaults.variant || '');
-  cfg.defaults.agent = String(cfg.defaults.agent || '');
   // The mode is per session now (Single at creation, switched live), so the old
   // defaults.mode key is dropped rather than left to mislead.
   delete cfg.defaults.mode;
 
-  // Role selections are objects now ({ ref, variant }); accept the older bare
+  // Role selections are objects ({ ref, variant }); accept the older bare
   // "provider/id" strings so existing config files keep working. The Architect
-  // belongs in `defaults` — it is the main session, not a worker — so fold any
-  // legacy roles.architect entry into defaults and drop it.
+  // is no longer special: it owns a role entry like everyone else, so there is
+  // no "default model" to disagree with the card.
   const roles = {};
   if (isPlainObject(cfg.roles)) {
     for (const [id, spec] of Object.entries(cfg.roles)) {
@@ -131,14 +123,20 @@ export function normalize(raw) {
       const variant = isPlainObject(spec) && typeof spec.variant === 'string' ? spec.variant.trim() : '';
       const entry = { ref: ref.trim() };
       if (variant) entry.variant = variant;
-      if (id === 'architect') {
-        if (!cfg.defaults.model) cfg.defaults.model = entry.ref;
-        if (!cfg.defaults.variant && entry.variant) cfg.defaults.variant = entry.variant;
-        continue;
-      }
       roles[String(id)] = entry;
     }
   }
+  // Fold a pre-roles defaults.model into the Architect role once, then drop the
+  // old keys entirely (the Settings field that wrote them is gone).
+  if (typeof cfg.defaults.model === 'string' && cfg.defaults.model.trim() && !roles.architect) {
+    const entry = { ref: cfg.defaults.model.trim() };
+    const variant = String(cfg.defaults.variant || '').trim();
+    if (variant) entry.variant = variant;
+    roles.architect = entry;
+  }
+  delete cfg.defaults.model;
+  delete cfg.defaults.variant;
+  delete cfg.defaults.agent;
   cfg.roles = roles;
 
   const lg = cfg.logging;

@@ -128,9 +128,9 @@ centre) so the orange covers the dots with no sub-pixel step. It activates when
 the orchestration layer marks a real connection (stage 5).
 
 **No topbar.** The main pane starts at the top edge. Breadcrumbs were dropped
-(the tree highlights the current project and session) and the default model /
-mode moved into Settings, where they are now populated selects rather than
-free-text. The last engine event is a row in the sidebar's STATUS block.
+(the tree highlights the current project and session); model and effort choices
+live on the role cards, where they belong, not in Settings. The last engine
+event is a row in the sidebar's STATUS block.
 
 **Row highlighting is one token.** The baseline paints table rows `#fcfcff`
 on hover in every theme; Synapse overrides that globally to `--hover-bg`
@@ -168,37 +168,47 @@ new fields need a deliberate design pass instead of silently stretching rows.
 | `engine.opencode.port` | engine port (default 8720) |
 | `engine.opencode.password` | server password (`""` = generated once into `data\`) |
 | `engine.opencode.home` | engine home (`""` = `data\engine\opencode`) |
-| `defaults.model` | default model ref, e.g. `opencode/…-free` |
-| `defaults.variant` | thinking effort for the default model (`""` = engine's own default) |
-| `defaults.agent` | default agent |
-| `defaults.directory` | default working directory for sessions |
+| `defaults.directory` | working directory for sessions that belong to no project |
+| `roles.<id>` | per-role model choice: `{ "ref", "variant" }` — the Architect included |
 | `logging.retentionDays` | logs older than this are deleted (default 7) |
+
+There is deliberately **no "default model"**: every role, the Architect
+included, owns its own `{ ref, variant }` under `roles`, and those choices are
+what persist across reloads. An old `defaults.model` from an earlier version is
+migrated into `roles.architect` once and removed.
 
 ## Models, thinking effort and context
 
 Model pickers are **searchable comboboxes**: type `deep` and the menu narrows to
 DeepSeek. The typed text only filters — a model can be set only by choosing it
-(click or Enter), so a typo can never become the selection. The Architect card is
-always on screen, in both modes, because its model and effort are yours to
-change at any time.
+(click or Enter), so a typo can never become the selection. Rows are compact and
+carry a **source chip** (`OpenCode`, `OpenCode Go`, later a local runtime): the
+provider is part of a model's identity, so two entries with the same display
+name can never be confused, and local LLMs will slot into the same list. The
+Architect card is always on screen, in both modes, because its model and effort
+are yours to change at any time.
 
 Next to every model picker is a chevron button: a dot means the engine's own
 default, one to three chevrons show the three highest efforts that model allows
 (e.g. Cat Jam Free is `high → xhigh → max`; DeepSeek is `low → high → max`), and
 a left click cycles through them. The tooltip states the current effort **using
-the provider's own label** and appends `· N tools` once the model's toolset is
-known. Models that offer no variants get a disabled button.
+the name the provider reports** — `xhigh`, `max`, `turbo`, whatever that model
+actually calls it — and appends `· N tools` once the model's toolset is known.
+A model with two variants gets two chevrons, one gets one, none gets a disabled
+button.
 
-- The **Architect** card is the main session: changing it switches the open
-  session immediately and becomes the default for new sessions.
-- **Worker** cards store their pick in `config\synapse.config.json` as
-  `roles.<id> = { "ref", "variant" }`; the orchestration layer (stage 3+) reads
-  them when it spawns a worker.
-- **Every model is recorded once.** Selecting a model fires a background check
+- **Every role persists its own choice.** The Architect card is the main
+  session: changing it switches the open session immediately; worker cards store
+  their pick for the orchestration layer (stage 3+). Both live side by side in
+  `config\synapse.config.json` as `roles.<id> = { "ref", "variant" }` — there is
+  no default model anywhere.
+- **Each model is asked once, ever.** Selecting a model fires a background check
   that asks it what tools it has; the answer, together with its context, output
-  and effort variants, is stored in `data\model-cache.json`. It runs **once per
-  model** and never again — the catalog itself is re-recorded for free on every
-  boot. Models that leave the catalog keep their record.
+  and effort variants, is stored in `data\model-cache.json` keyed by the full
+  `provider/id` ref. The same model under a different provider (`opencode` vs
+  `opencode-go`, or a future local runtime) is a separate record. An empty or
+  failed answer is still recorded, so we never ask twice. The catalog itself is
+  re-recorded for free on every boot, and models that leave keep their record.
 - **DeepSeek V4.1 Flash Free serves 1M context, not 200k.** The engine's catalog
   is conservative; the backend serves 1,048,576 tokens (boundary-tested, ~1.037M
   OK / ~1.107M HTTP 400). Synapse writes the override from

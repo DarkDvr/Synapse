@@ -25,10 +25,7 @@
     }
   },
   "defaults": {
-    "directory": "",
-    "model": "",
-    "variant": "",
-    "agent": ""
+    "directory": ""
   },
   "roles": {
     "designer": {
@@ -37,6 +34,9 @@
     "critic": {
       "ref": "opencode/cat-jam-free",
       "variant": "max"
+    },
+    "architect": {
+      "ref": "opencode/deepseek-v4.1-flash-free"
     }
   },
   "logging": {

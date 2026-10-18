@@ -31,7 +31,6 @@ const state = {
   status: null,
   config: null,
   models: [],
-  agents: [],
   workspace: '',
   projects: [],
   sessionId: null,
@@ -217,18 +216,15 @@ function setEventChip(type) {
 }
 
 // ── models / modes ──────────────────────────────────────────────
-async function loadModelsAndAgents() {
+async function loadModels() {
   try { state.models = (await api('GET', '/api/models')).models; } catch { state.models = []; }
-  try { state.agents = (await api('GET', '/api/agents')).agents; } catch { state.agents = []; }
   fillRoleModels();
 }
 
-// A role's model selection is { ref, variant }; an empty variant means the
-// engine's own default (the engine records it as "default"). The Architect is
-// the main session, so its choice is stored under `defaults`; workers get their
-// own `roles[id]` entry, which the orchestration layer will read when it spawns
-// them. Selecting a model does not imply an effort: the operator picks that
-// with the chevron button.
+// Every role — the Architect included — stores its own selection as
+// { ref, variant } under `roles[id]` in the config file. An empty variant means
+// the engine's own default (recorded as "default"). Selecting a model does not
+// imply an effort: the operator picks that with the chevron button.
 const asSelection = (spec) => {
   if (!spec) return null;
   if (typeof spec === 'string') return { ref: spec, variant: '' };
@@ -250,25 +246,19 @@ const variantsOf = (model) =>
 const topEfforts = (model) => variantsOf(model).slice(-3);
 
 function selectionFor(roleId) {
-  if (roleId === 'architect') {
-    return {
-      ref: state.config?.defaults?.model || '',
-      variant: String(state.config?.defaults?.variant || ''),
-    };
-  }
   return asSelection(state.config?.roles?.[roleId]) || { ref: '', variant: '' };
 }
 
+/** The Architect is a role like any other — no "default model" exists. */
 function architectSelection() {
-  const ref = state.config?.defaults?.model || state.models[0]?.ref || '';
-  if (!ref) return null;
+  const sel = selectionFor('architect');
+  if (!sel.ref) return null;
   // The chevron control only expresses the three highest efforts, so a stored
   // value it cannot show is dropped here too — the session must not run an
   // effort the button claims is not set.
-  const saved = String(state.config?.defaults?.variant || '');
-  const model = modelByRef(ref);
-  const variant = topEfforts(model).some((v) => v.id === saved) ? saved : '';
-  return { ref, variant };
+  const model = modelByRef(sel.ref);
+  const variant = topEfforts(model).some((v) => v.id === sel.variant) ? sel.variant : '';
+  return { ref: sel.ref, variant };
 }
 
 const fmtTokens = (n) =>
@@ -287,6 +277,21 @@ const modelMeta = (m) => {
   if (m.context) bits.push(fmtTokens(m.context));
   if (Array.isArray(m.tools) && m.tools.length) bits.push(`${m.tools.length} tools`);
   return bits.join(' · ');
+};
+
+// Where a model comes from is part of its identity: `opencode/…-free` and
+// `opencode-go/…` can be the same model with different backends, and local
+// runtimes will be a third source later. The provider id is the source, so show
+// it; unknown providers fall back to a readable form of the id.
+const PROVIDER_LABELS = { opencode: 'OpenCode', 'opencode-go': 'OpenCode Go' };
+const providerLabel = (p) => {
+  const id = String(p || 'unknown');
+  if (PROVIDER_LABELS[id]) return PROVIDER_LABELS[id];
+  return id
+    .split(/[-_]/)
+    .filter(Boolean)
+    .map((w) => w[0].toUpperCase() + w.slice(1))
+    .join(' ');
 };
 
 // ── searchable model picker ─────────────────────────────────────
@@ -364,14 +369,15 @@ function openModelMenu(role, fromTyping) {
   menuRole = role;
   if (!fromTyping) p.input.select();
   const q = fromTyping ? p.input.value.trim().toLowerCase() : '';
-  const list = state.models.filter(
-    (m) => !q || m.name.toLowerCase().includes(q) || m.ref.toLowerCase().includes(q),
-  );
+  const list = state.models
+    .filter((m) => !q || m.name.toLowerCase().includes(q) || m.ref.toLowerCase().includes(q))
+    .sort((a, b) => String(a.provider).localeCompare(String(b.provider)) || a.name.localeCompare(b.name));
   menuRefs = list.map((m) => m.ref);
   menu.innerHTML = list.length
     ? list
         .map(
           (m) => `<div class="model-opt${m.ref === p.sel.value ? ' is-current' : ''}" role="option" data-ref="${esc(m.ref)}">
+            <span class="mo-src">${esc(providerLabel(m.provider))}</span>
             <span class="mo-name">${esc(shortModel(m.name))}</span>
             <span class="mo-meta">${esc(modelMeta(m))}</span>
           </div>`,
@@ -490,12 +496,27 @@ function topologyTarget() {
   return wrap && topo ? { wrap, topo } : null;
 }
 
-function measureReveal(topo, stage) {
-  const stageH = stage?.getBoundingClientRect().height || window.innerHeight;
-  // leave the dock's minimum (the composer row) plus the stage gap
+/**
+ * How much vertical room the role-card wrapper may take. In the wide layout the
+ * stage has a definite height (viewport minus the frame); below the 1180px
+ * breakpoint it is content-sized and the page scrolls. There, using the stage's
+ * own height double-counts the chat row and clipped the cards to the Architect
+ * alone — `getComputedStyle().height` reports the *used* height, never `auto`,
+ * so the breakpoint itself is the honest test. The chat then visibly slides
+ * down as the workers reveal.
+ */
+function stageBudget(stage) {
   const composerH = $('composer')?.getBoundingClientRect().height || 58;
-  const available = Math.max(0, stageH - composerH - 2 - 14);
-  return Math.min(Math.round(topo.getBoundingClientRect().height), Math.round(available));
+  const wide = window.matchMedia('(min-width: 1181px)').matches;
+  const basis = wide && stage ? stage.getBoundingClientRect().height : window.innerHeight - 40;
+  // composer row + its borders + the stage gap
+  return Math.max(0, basis - composerH - 2 - 14);
+}
+
+function measureReveal(topo, stage) {
+  // scrollHeight is integer-rounded, so the wrapper never scrolls to reveal a
+  // half-pixel of a card
+  return Math.min(topo.scrollHeight, Math.round(stageBudget(stage)));
 }
 
 /**
@@ -521,7 +542,8 @@ function applyRoleCardsLayout({ animate = true } = {}) {
   }
 
   const arch = topo.querySelector('.topo-architect');
-  wrap.style.setProperty('--reveal-h', `${Math.round(arch?.getBoundingClientRect().height || 0)}px`);
+  const archH = Math.ceil(arch?.getBoundingClientRect().height || 0);
+  wrap.style.setProperty('--reveal-h', `${Math.min(archH, Math.round(stageBudget($('stage'))))}px`);
   if (!animate) {
     document.body.classList.remove('workers-on');
     return;
@@ -599,7 +621,7 @@ function fillRoleModels() {
     sel.innerHTML = state.models
       .map((m) => `<option value="${esc(m.ref)}">${esc(shortModel(m.name))}</option>`)
       .join('');
-    let chosen = role === 'architect' ? state.config?.defaults?.model || '' : selectionFor(role).ref;
+    let chosen = selectionFor(role).ref;
     if (!modelByRef(chosen)) chosen = (pool[i % pool.length] || state.models[0]).ref;
     sel.value = chosen;
     sel.title = modelTitle(modelByRef(chosen)) || `Model for the ${role} role`;
@@ -609,15 +631,12 @@ function fillRoleModels() {
   });
 }
 
+/** Every role, the Architect included, keeps its own persisted selection. */
 async function saveRoleSelection(roleId, ref, variant) {
   const draft = JSON.parse(JSON.stringify(state.config || {}));
-  if (roleId === 'architect') {
-    draft.defaults = { ...(draft.defaults || {}), model: ref, variant: variant || '' };
-  } else {
-    const entry = { ref };
-    if (variant) entry.variant = variant;
-    draft.roles = { ...(draft.roles || {}), [roleId]: entry };
-  }
+  const entry = { ref };
+  if (variant) entry.variant = variant;
+  draft.roles = { ...(draft.roles || {}), [roleId]: entry };
   state.config = await api('PUT', '/api/config', draft);
 }
 
@@ -1751,13 +1770,6 @@ function renderSettings() {
       <span>${esc(label)}</span>
       <input data-path="${path}" type="${opts.type || 'text'}" value="${esc(readPath(c, path))}" ${opts.attr || ''} />
     </label>`;
-  const sel = (label, path, options, opts = {}) => `
-    <label class="set-field${opts.wide ? ' wide' : ''}">
-      <span>${esc(label)}</span>
-      <select data-path="${path}">
-        ${options.map((o) => `<option value="${esc(o.v)}"${o.v === readPath(c, path) ? ' selected' : ''}>${esc(o.l)}</option>`).join('')}
-      </select>
-    </label>`;
   const check = (label, path) => `
     <label class="set-check">
       <input data-path="${path}" type="checkbox" ${readPath(c, path) ? 'checked' : ''} />
@@ -1765,14 +1777,8 @@ function renderSettings() {
     </label>`;
   const group = (title, body, cols) => `<section class="set-group"><h4>${title}</h4><div class="set-grid${cols === 3 ? ' cols-3' : ''}">${body}</div></section>`;
 
-  const modelField = state.models.length
-    ? sel('Default model for new sessions', 'defaults.model',
-        state.models.map((m) => ({ v: m.ref, l: `${m.name}${m.free ? ' · free' : ''}` })), { wide: true })
-    : f('Default model (provider/model)', 'defaults.model', { wide: true });
-  const modeField = state.agents.length
-    ? sel('Default mode (engine agent)', 'defaults.agent', state.agents.map((a) => ({ v: a.id, l: a.name })))
-    : f('Default mode', 'defaults.agent');
-
+  // No model or agent fields here: there is no "default" — every role owns its
+  // model and effort, chosen on its card and persisted in the config file.
   $('settingsBody').innerHTML = [
     group('Server',
       f('Host', 'server.host') +
@@ -1785,9 +1791,8 @@ function renderSettings() {
       f('Password (blank = keep existing)', 'engine.opencode.password', { type: 'password', attr: 'placeholder="unchanged"' }) +
       f('Start timeout (ms)', 'engine.opencode.startTimeoutMs', { type: 'number' }) +
       f('Engine home (blank = data\\engine\\opencode)', 'engine.opencode.home', { wide: true })),
-    group('Defaults',
-      modelField + modeField +
-      f('Working directory (blank = workspace)', 'defaults.directory', { wide: true })),
+    group('Working directory',
+      f('Where new sessions run (blank = workspace)', 'defaults.directory', { wide: true })),
     group('Logging',
       f('Level (error | warn | info | debug)', 'logging.level') +
       f('Retention (days)', 'logging.retentionDays', { type: 'number' }) +
@@ -1808,9 +1813,6 @@ async function saveSettings() {
   // (or that the chevron control cannot express). Clear it rather than let the
   // config and the button disagree.
   const effortIds = (ref) => topEfforts(modelByRef(ref)).map((v) => v.id);
-  if (draft.defaults && !effortIds(draft.defaults.model).includes(draft.defaults.variant)) {
-    draft.defaults.variant = '';
-  }
   for (const entry of Object.values(draft.roles || {})) {
     if (!entry || typeof entry !== 'object') continue;
     if (!effortIds(entry.ref).includes(entry.variant)) delete entry.variant;
@@ -1818,7 +1820,7 @@ async function saveSettings() {
   try {
     state.config = await api('PUT', '/api/config', draft);
     toast('Settings saved', 'Restart Synapse to apply engine or server changes.');
-    await loadModelsAndAgents();
+    await loadModels();
   } catch (err) {
     toast('Could not save settings', err.message);
   }
@@ -1988,7 +1990,7 @@ async function boot() {
   renderMode();
   setView();
   await refreshStatus();
-  await loadModelsAndAgents();
+  await loadModels();
   await loadProjects();
   renderTranscript();
   connectStream();
@@ -1998,3 +2000,4 @@ async function boot() {
 }
 
 boot();
+

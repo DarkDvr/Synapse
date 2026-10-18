@@ -86,18 +86,20 @@ export function createModelCache({ logger, file }) {
 
   function setTools(ref, tools) {
     const rec = data.models[ref];
-    if (!rec || !Array.isArray(tools) || tools.length === 0) return false;
+    if (!rec || !Array.isArray(tools)) return false;
+    // Store the result even when it is empty: the point is that the model was
+    // asked once. A failed or silent answer must not cause a second turn later.
     rec.tools = tools;
     rec.toolsAt = Date.now();
     persist();
     return true;
   }
 
-  /** True when we have never discovered this model's toolset. */
-  function needsTools(ref) {
+  /** True once the model has been asked about its toolset — whatever it said. */
+  function isChecked(ref) {
     const rec = get(ref);
-    return Boolean(rec) && !(Array.isArray(rec.tools) && rec.tools.length);
+    return Boolean(rec && rec.toolsAt);
   }
 
-  return { record, get, setTools, needsTools, snapshot: () => data };
+  return { record, get, setTools, isChecked, snapshot: () => data };
 }

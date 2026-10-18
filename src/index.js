@@ -109,7 +109,8 @@ async function main() {
     const key = String(ref || '').trim();
     if (!key.includes('/')) return { started: false, reason: 'a provider/model ref is required' };
     const known = modelCache.get(key);
-    if (known?.tools?.length) return { started: false, cached: true, tools: known.tools };
+    // Asked once, never again — an empty answer is an answer.
+    if (known?.toolsAt) return { started: false, cached: true, tools: known.tools || [] };
     if (inspecting.has(key)) return { started: false, running: true };
 
     inspecting.add(key);
@@ -117,13 +118,8 @@ async function main() {
       .catch(() => {})
       .then(() => discoverToolsetForModel(engine, inspectLog, key, PROBE_DIR))
       .then((tools) => {
-        if (tools.length) {
-          modelCache.setTools(key, tools);
-          http?.broadcast({ kind: 'model', type: 'model.probed', ref: key, tools, ts: Date.now() });
-        } else {
-          // nothing usable: leave the record unmarked so a later try can retry
-          http?.broadcast({ kind: 'model', type: 'model.probe.failed', ref: key, ts: Date.now() });
-        }
+        modelCache.setTools(key, tools);
+        http?.broadcast({ kind: 'model', type: 'model.probed', ref: key, tools, ts: Date.now() });
       })
       .catch((err) => inspectLog.warn(`model check ${key} failed: ${err.message}`))
       .finally(() => inspecting.delete(key));
