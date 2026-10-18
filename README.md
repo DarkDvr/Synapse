@@ -133,9 +133,9 @@ live on the role cards, where they belong, not in Settings. The last engine
 event is a row in the sidebar's STATUS block. The working area is left-anchored
 and capped (`--work-w`, 1240px): sidebar → role cards + chat → rail → empty
 space at the window's right edge, with the same geometry in Single and Multi.
-Role cards have a **360px floor**, so the app's minimum width is **1100px**:
-narrower windows scroll horizontally instead of collapsing the cards. The rail
-stacks under the chat below **1460px**.
+Role cards have a **360px floor**, so the app's minimum width is **1460px**:
+narrower windows keep the full three-column layout and scroll horizontally
+(the rail never stacks under the chat).
 
 **Row highlighting is one token.** The baseline paints table rows `#fcfcff`
 on hover in every theme; Synapse overrides that globally to `--hover-bg`

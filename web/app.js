@@ -495,18 +495,14 @@ function topologyTarget() {
 }
 
 /**
- * How much vertical room the role-card wrapper may take. In the wide layout the
- * stage has a definite height (viewport minus the frame); below the 1460px
- * breakpoint it is content-sized and the page scrolls. There, using the stage's
- * own height double-counts the chat row and clipped the cards to the Architect
- * alone — `getComputedStyle().height` reports the *used* height, never `auto`,
- * so the breakpoint itself is the honest test. The chat then visibly slides
- * down as the workers reveal.
+ * How much vertical room the role-card wrapper may take. The stage always has a
+ * definite height now — narrow windows scroll horizontally instead of stacking
+ * the rail — so its own height is the basis. The old bug was capping against a
+ * content-sized stage below the breakpoint; that layout no longer exists.
  */
 function stageBudget(stage) {
   const composerH = $('composer')?.getBoundingClientRect().height || 58;
-  const wide = window.matchMedia('(min-width: 1461px)').matches;
-  const basis = wide && stage ? stage.getBoundingClientRect().height : window.innerHeight - 40;
+  const basis = stage?.getBoundingClientRect().height || window.innerHeight;
   // composer row + its borders + the stage gap
   return Math.max(0, basis - composerH - 2 - 14);
 }
@@ -983,6 +979,19 @@ async function commitRename() {
 }
 
 // ── view state ──────────────────────────────────────────────────
+
+/**
+ * The stage is exactly the window minus the frame, but a classic horizontal
+ * scrollbar (narrow, unsupported windows) eats layout height that `100vh` does
+ * not account for. Measure the difference and reserve it, so the vertical
+ * scrollbar cannot come back.
+ */
+function fitStageHeight() {
+  const doc = document.documentElement;
+  const bar = Math.max(0, window.innerHeight - doc.clientHeight);
+  doc.style.setProperty('--stage-h', `${Math.max(0, window.innerHeight - 26 - bar)}px`);
+}
+
 function setView() {
   document.body.dataset.view = state.view;
   document.body.dataset.mode = state.mode;
@@ -1233,9 +1242,9 @@ function toggleTool(id) {
 }
 
 // ── scrolling: the transcript when it scrolls, the page when it does not ──
-// In the wide layout the stage has a definite height and the transcript scrolls
-// inside itself; in the stacked layout the page scrolls instead. Every scroll
-// helper goes through here so both behave the same.
+// The stage always has a definite height, so the transcript scrolls inside
+// itself; the page itself never scrolls vertically. Every scroll helper goes
+// through here.
 function chatScroller() {
   const el = $('transcript');
   return el && el.scrollHeight > el.clientHeight + 2 ? el : null;
@@ -1826,14 +1835,14 @@ function renderSettings() {
     group('Model checks',
       f('Max asks per model (1–20)', 'modelChecks.maxAsks', { type: 'number' }) +
       `<div class="set-field"><span>Ask counters</span>
-        <button type="button" class="btn btn-danger btn-sm" data-reset-asks>Reset Ask Counters</button>
+        <button type="button" class="btn btn-warn btn-sm" data-reset-asks>Reset Ask Counters</button>
       </div>`),
     group('Logging',
       sel('Level', 'logging.level', [
-        { v: 'error', l: 'Error' },
-        { v: 'warn', l: 'Warn' },
-        { v: 'info', l: 'Info' },
         { v: 'debug', l: 'Debug' },
+        { v: 'info', l: 'Info' },
+        { v: 'warn', l: 'Warn' },
+        { v: 'error', l: 'Error' },
       ]) +
       f('Retention (days)', 'logging.retentionDays', { type: 'number' }) +
       f('Max file size (MB)', 'logging.maxFileMb', { type: 'number' }), 3),
@@ -2014,6 +2023,7 @@ function wire() {
   });
 
   window.addEventListener('resize', () => requestAnimationFrame(() => {
+    fitStageHeight();
     if (state.view === 'session') applyRoleCardsLayout({ animate: false });
     drawActivePath();
     renderChatNav();
@@ -2057,6 +2067,7 @@ function wire() {
 
 async function boot() {
   wire();
+  fitStageHeight();
   state.config = await api('GET', '/api/config').catch(() => null);
   // every new session starts Single; an opened session sets its own mode
   state.mode = 'single';

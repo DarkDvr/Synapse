@@ -146,9 +146,10 @@ body.dark .input-with-action input {
 
 .sidebar { width: var(--sidebar-w); padding: 22px 16px 14px; overflow-y: auto; overflow-x: hidden; }
 .control-room .main-content { margin-left: var(--sidebar-w); display: flex; flex-direction: column; min-height: 100vh; }
-/* The supported minimum: 1100 = sidebar + padding + the 790px two-column stage.
-   Narrower windows scroll horizontally rather than squeezing the cards. */
-body { min-width: 1100px; }
+/* The supported minimum: below 1460 the window scrolls horizontally. The room
+   (stage 890 + gap + rail 330) and the sidebar need that much before the cards
+   start colliding. */
+body { min-width: 1460px; }
 @media (max-width: 1250px) {
   .sidebar { width: var(--sidebar-w); }
   .main-content { margin-left: var(--sidebar-w); }
@@ -187,9 +188,11 @@ body[data-view="none"] .inspector { display: none; }
   transition: gap 0.26s ease;
   min-width: 0;
   /* A definite height, so the composer sits at the bottom of the window and the
-     conversation scrolls inside itself instead of growing the page. That is
-     also what lets the jump buttons float and actually work. */
-  height: calc(100vh - 26px);
+     conversation scrolls inside itself instead of growing the page. JS sets
+     --stage-h from the measured viewport, subtracting a classic horizontal
+     scrollbar; 100vh alone would overflow by that bar's height on narrow
+     windows and bring the vertical scrollbar back. */
+  height: var(--stage-h, calc(100vh - 26px));
 }
 
 /* the rail owns the full column height; the tools panel takes the slack. The
@@ -203,7 +206,7 @@ body[data-view="none"] .inspector { display: none; }
   gap: 14px;
   align-content: stretch;
   min-width: 0; min-height: 0;
-  max-height: calc(100vh - 26px);
+  max-height: var(--stage-h, calc(100vh - 26px));
 }
 .inspector > .panel:last-child { display: flex; flex-direction: column; min-height: 0; overflow-y: auto; }
 .inspector > .panel:last-child .tool-table { overflow: auto; }
@@ -975,31 +978,12 @@ body[data-view="session"] .chat-dock {
   .rail-actions { grid-template-columns: 1fr; }
 }
 
-/* The rail moves under the chat unless the stage can hold two full card columns
-   *beside* it: 256 sidebar + 48 padding + 790 stage + 20 gap + 330 rail = 1444,
-   rounded up. Below that the stage takes the full width and the rail stacks. */
-@media (max-width: 1460px) {
-  .room { grid-template-columns: minmax(0, 1fr); gap: 18px; }
-  /* stacked: rule the chat off from the rail below it */
-  .inspector {
-    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-    grid-template-rows: auto;
-    border-top: 1px solid var(--line);
-    padding-top: 18px;
-  }
-  /* stacked, the page scrolls again — so the stage must be content-sized and
-     the conversation needs its floor back */
-  .stage { height: auto; min-height: 0; }
-  .chat-scroll { min-height: clamp(150px, 32vh, 360px); }
-  .inspector { max-height: none; }
-  .rail-actions { grid-template-columns: 1fr 1fr; }
-}
-
-/* Narrow windows are not supported: the page keeps its full layout and grows a
-   horizontal scrollbar instead of collapsing the cards into unusable widths.
-   1100 = sidebar + padding + the 790px two-column stage. The baseline's mobile
-   drawer behaviour is disabled here for the same reason. */
-@media (max-width: 1099px) {
+/* Narrow windows are not supported: the app keeps its full three-column layout
+   and the window grows a horizontal scrollbar. The rail never stacks under the
+   chat any more — stacking made the page taller than the viewport, and scrolling
+   it carried the Architect card away. The baseline's mobile drawer behaviour is
+   disabled for the same reason. */
+@media (max-width: 1459px) {
   .sidebar { transform: none; }
   .sidebar.open { transform: none; }
   .main-content { margin-left: var(--sidebar-w); }
@@ -1008,6 +992,8 @@ body[data-view="session"] .chat-dock {
 
 .btn-danger { color: var(--red); border-color: #5d2f27; background: rgba(240, 86, 63, 0.09); }
 .btn-danger:hover:not(:disabled) { background: var(--red-soft); border-color: var(--red); }
+.btn-warn { color: var(--amber); border-color: #5a4725; background: rgba(232, 163, 61, 0.07); }
+.btn-warn:hover:not(:disabled) { background: var(--amber-soft); border-color: var(--amber); }
 
 /* ── 16. tool probe ────────────────────────────────────────────────────── */
 .probe-block { margin-top: 12px; padding-top: 11px; border-top: 1px solid var(--line); }

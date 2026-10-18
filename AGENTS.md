@@ -368,11 +368,11 @@ This is once per directory per process and needs no config.
   appeared, and the whole app shifted ~15px. Also: any grid column holding prose
   is `minmax(0, 1fr)`, never `auto`, so content cannot stretch it.
 - **`.chat-scroll` scrolls internally; the page does not.** `.stage` has a
-  definite `height: calc(100vh - 26px)` in the side-by-side layout, so the
-  composer sits at the bottom of the window. In the stacked layout (below
-  1460px) the stage is content-sized and the page scrolls again. Every scroll
-  helper goes through `chatScroller()`, which returns the transcript when it
-  scrolls and `null` otherwise.
+  definite height (set from the measured viewport via `--stage-h`, minus any
+  horizontal scrollbar), so the composer sits at the bottom of the window and
+  the page never scrolls vertically at any supported or unsupported width. Every
+  scroll helper goes through `chatScroller()`, which returns the transcript when
+  it scrolls and `null` otherwise.
 - **Jump buttons are `position: fixed`**, anchored to the chat column by JS.
   Absolute positioning inside a content-sized dock put them in the middle of the
   log where they scrolled away and did nothing.
@@ -390,10 +390,11 @@ This is once per directory per process and needs no config.
   card) collapsed to ~380px and drifted right. Fixed with `width: 100%;
   margin: 0` and `--work-w: 1240px` as the room's max-width: sidebar → cards+chat
   (1fr, left-anchored) → rail → empty space at the window's right edge. Both
-  modes now measure the same room width (verified at 1680 and 1100).
-- The rail stacks under the chat below **1460px** (it needs 256 sidebar + 48
-  padding + 790 stage + 20 gap + 330 rail); below **1100px** the window scrolls
-  horizontally instead of collapsing the cards.
+  modes now measure the same room width (verified at 1680 and 1200).
+- The full three-column layout is kept at every width: with the rail and the
+  sidebar it needs **1460px**, and narrower windows scroll horizontally rather
+  than stacking the rail. Stacking made the page taller than the viewport, and
+  scrolling it carried the Architect card away.
 - **Every role owns its model and effort — there is no "default model".** The
   Architect's choice lives in `roles.architect` like every other role, and is
   persisted in `config\synapse.config.json`; `defaults` holds only the working
@@ -420,14 +421,15 @@ This is once per directory per process and needs no config.
   `body[data-view="session"] .topology > *:not(.topo-architect):not(.path-layer)`
   and shown by the `workers-on` body class; on Multi→Single the class is removed
   only after the height animation, so the workers do not vanish mid-slide.
-  **The height cap is the part that bit twice.** Below 1460px the stage is
-  content-sized, so `stageBudget()` tests the *breakpoint* (`matchMedia`), not
-  the stage's used height — `getComputedStyle().height` reports the used height,
-  never `auto`, and capping against it collapsed the reveal to the 48px
-  Architect, leaving the workers clipped behind the chat while Multi appeared to
-  do nothing. Measure with `scrollHeight` (integer-rounded, so no half-pixel
-  scrollbar), cap by the stage only in the wide layout, and cap by the viewport
-  otherwise. **And measure from the topology's top, not the card's height**: the
+  **The height cap is the part that bit twice.** The stage now always has a
+  definite height (narrow windows scroll horizontally instead of stacking the
+  rail), so `stageBudget()` uses the stage's own measured height. It must not use
+  `getComputedStyle().height` to decide whether the stage is content-sized —
+  that reports the used height, never `auto`, and the old stacked layout made a
+  cap against it collapse the reveal to the 48px Architect, leaving the workers
+  clipped behind the chat while Multi appeared to do nothing. Measure with
+  `scrollHeight` (integer-rounded, so no half-pixel scrollbar).
+  **And measure from the topology's top, not the card's height**: the
   absolute `.path-layer` is the first child, so `.topology > * + *` gives the
   Architect's row a 12px top margin — using the card height alone clipped
   exactly that margin, cut the card's bottom border and grew a scrollbar.
@@ -436,14 +438,15 @@ This is once per directory per process and needs no config.
   like a one-pixel clip.
 - **Cards have a hard minimum width** (`--card-min: 360px`): below that the
   select, the chevron and the edit button start colliding and the name is
-  ellipsised away. Two columns + the 66px spine need ~790px of stage, so the
-  **whole app has a minimum width of 1100px** (`body { min-width }`) and narrower
-  windows get a horizontal scrollbar rather than a collapsed layout. The rail
-  stacks under the chat below **1460px** (256 sidebar + 48 padding + 790 stage +
-  20 gap + 330 rail = 1444, rounded up); above it the stage is guaranteed wide
-  enough for two columns. There is no single-column-card mode any more — it was
-  removed because squeezed cards are worse than a scrollbar. The baseline's
-  ≤950px sidebar drawer behaviour is overridden for the same reason.
+  ellipsised away. Two columns + the 66px spine need ~790px of stage; with the
+  sidebar and the rail, the **whole app has a minimum width of 1460px**
+  (`body { min-width }`). Narrower windows keep the full three-column layout and
+  get a horizontal scrollbar — the rail never stacks under the chat any more.
+  Stacking made the page taller than the viewport, and scrolling it carried the
+  Architect away. The stage height is set from the measured viewport
+  (`fitStageHeight()` reserves the horizontal scrollbar's height) so a narrow
+  window never grows a vertical scrollbar. The baseline's ≤950px sidebar drawer
+  is overridden for the same reason.
   The glyph measurements that matter: both button glyphs are centred on the 22px
   button to within 0.01px, with ~1.5px of margin left top and bottom at three
   chevrons — if the glyph or border size changes, re-measure with
