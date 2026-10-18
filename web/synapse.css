@@ -146,10 +146,11 @@ body.dark .input-with-action input {
 
 .sidebar { width: var(--sidebar-w); padding: 22px 16px 14px; overflow-y: auto; overflow-x: hidden; }
 .control-room .main-content { margin-left: var(--sidebar-w); display: flex; flex-direction: column; min-height: 100vh; }
-/* The supported minimum: below 1460 the window scrolls horizontally. The room
-   (stage 890 + gap + rail 330) and the sidebar need that much before the cards
-   start colliding. */
-body { min-width: 1460px; }
+/* The supported minimum: 1100 = sidebar + padding + the 790px two-column stage.
+   Below the 1460px breakpoint the rail flows to the bottom (single column), so
+   the stage alone sets the floor. Anything narrower scrolls horizontally rather
+   than squeezing the cards. */
+body { min-width: 1100px; }
 @media (max-width: 1250px) {
   .sidebar { width: var(--sidebar-w); }
   .main-content { margin-left: var(--sidebar-w); }
@@ -245,6 +246,12 @@ body[data-view="session"] .stage { grid-template-rows: auto minmax(0, 1fr); gap:
 /* when open the wrapper may scroll on a very short window, but the measured
    height normally equals the content, so no bar appears */
 .topology-wrap.is-open { max-height: var(--reveal-h, 600px); opacity: 1; overflow-y: auto; }
+
+/* Single: the wrapper is exactly the Architect card. `clip` — not auto, not
+   hidden — means it can never grow a scrollbar and can never be scrolled, by
+   mouse, keyboard or script: overflow is cut, and at the measured height there
+   is nothing to cut. The collapse animation still clips correctly mid-flight. */
+body[data-mode="single"] .topology-wrap.is-open { overflow: clip; }
 
 /* workers appear only in Multi; the path layer always stays */
 body[data-view="session"] .topology > *:not(.topo-architect):not(.path-layer) { display: none; }
@@ -609,13 +616,13 @@ body.dark .sidebar-bottom,
   border-radius: 14px; overflow: hidden; min-height: 0;
 }
 
-/* In a session the dock is content-sized and pinned to the bottom: with nothing
-   to say it is just the composer; it grows upward as the conversation fills.
-   `min(100%, 80vh)` lets Multi squeeze it when the cards need the room, while
-   Single allows the "about twice" expansion. */
+/* In a session the dock fills the stage row: the transcript starts directly under
+   the role cards and the composer sits at the bottom of the window. The
+   transcript scrolls inside itself rather than growing the page. */
 body[data-view="session"] .chat-dock {
-  align-self: end;
-  max-height: min(100%, 80vh);
+  align-self: stretch;
+  height: 100%;
+  max-height: 100%;
 }
 .chat-scroll.is-empty { display: none; }
 
@@ -731,6 +738,25 @@ body[data-view="session"] .chat-dock {
   border-left: 2px solid var(--violet); color: #b9bdc4;
 }
 .msg-answer hr { border: 0; border-top: 1px solid var(--line); margin: 9px 0; }
+.msg-answer table.md-table {
+  width: 100%; border-collapse: collapse;
+  margin: 0 0 7px; font-size: 12px;
+}
+.msg-answer table.md-table th,
+.msg-answer table.md-table td {
+  border: 1px solid var(--line);
+  padding: 4px 8px; text-align: left; vertical-align: top;
+  overflow-wrap: anywhere;
+}
+.msg-answer table.md-table thead th {
+  background: var(--surface-soft); color: #fff; font-weight: 700;
+}
+.msg-answer table.md-table tbody tr:nth-child(even) td { background: rgba(255, 255, 255, 0.015); }
+.msg-answer li.md-task { list-style: none; margin-left: -19px; }
+.msg-answer li.md-task input[type="checkbox"] {
+  margin-right: 6px; accent-color: var(--primary); vertical-align: -1px;
+}
+.msg-answer img { max-width: 100%; border-radius: 7px; }
 .msg-error {
   margin-top: 5px; padding: 7px 9px; border-radius: 8px;
   background: var(--red-soft); border: 1px solid #5d2f27; color: #ffb4a6;
@@ -969,20 +995,22 @@ body[data-view="session"] .chat-dock {
 
 /* ── 15. responsive ────────────────────────────────────────────────────── */
 
-@media (max-width: 1400px) { :root { --rail-w: 300px; } }
-
-/* Narrower rail on narrower screens: the right pane holds no prose, so it can
-   give the conversation its width back. */
-@media (max-width: 1250px) {
-  :root { --rail-w: 268px; }
-  .rail-actions { grid-template-columns: 1fr; }
+/* Wide: the rail sits to the right of the stage with a fixed width. Narrow
+   (the room needs 256 sidebar + 48 padding + 790 stage + 20 gap + 330 rail =
+   1444, rounded up): the rail flows to the bottom and the page scrolls — the
+   stage keeps its full width so the cards never squeeze. */
+@media (max-width: 1460px) {
+  .room { grid-template-columns: minmax(0, 1fr); }
+  /* stacked, the stage is content-sized and the page scrolls again */
+  .stage { height: auto; min-height: 0; }
+  .chat-scroll { min-height: clamp(150px, 32vh, 360px); }
+  .inspector { max-height: none; }
+  .rail-actions { grid-template-columns: 1fr 1fr; }
 }
 
-/* Narrow windows are not supported: the app keeps its full three-column layout
-   and the window grows a horizontal scrollbar. The rail never stacks under the
-   chat any more — stacking made the page taller than the viewport, and scrolling
-   it carried the Architect card away. The baseline's mobile drawer behaviour is
-   disabled for the same reason. */
+/* Narrow windows are not supported: the page keeps its layout and grows a
+   horizontal scrollbar instead of collapsing the cards. The baseline's mobile
+   drawer behaviour is disabled for the same reason. */
 @media (max-width: 1459px) {
   .sidebar { transform: none; }
   .sidebar.open { transform: none; }

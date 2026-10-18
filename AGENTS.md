@@ -173,7 +173,8 @@ src/
 web/
   index.html          the shell
   app.js              all UI logic (ES module)
-  md.js               the markdown renderer (escape-first, no dependencies)
+  md.js               the markdown renderer (escape-first, no dependencies;
+                        fenced code, headings, GFM tables, task lists, images)
   synapse.css         theme + shell (Summit baseline stays locked)
   vendor/summit.css   LOCKED baseline — one deliberate edit, see below
   vendor/fonts.css    vendored DM Sans + Manrope (offline)
@@ -367,12 +368,13 @@ This is once per directory per process and needs no config.
   Without it, expanding a tool made the page taller, the page scrollbar
   appeared, and the whole app shifted ~15px. Also: any grid column holding prose
   is `minmax(0, 1fr)`, never `auto`, so content cannot stretch it.
-- **`.chat-scroll` scrolls internally; the page does not.** `.stage` has a
-  definite height (set from the measured viewport via `--stage-h`, minus any
-  horizontal scrollbar), so the composer sits at the bottom of the window and
-  the page never scrolls vertically at any supported or unsupported width. Every
-  scroll helper goes through `chatScroller()`, which returns the transcript when
-  it scrolls and `null` otherwise.
+- **`.chat-scroll` scrolls internally in the wide layout; the page scrolls in the
+  stacked one.** Above 1460px `.stage` has a definite height (set from the
+  measured viewport via `--stage-h`, minus any horizontal scrollbar), so the
+  composer sits at the bottom of the window. Below 1460px the rail flows under
+  the chat and the page scrolls by design. Every scroll helper goes through
+  `chatScroller()`, which returns the transcript when it scrolls and `null`
+  otherwise.
 - **Jump buttons are `position: fixed`**, anchored to the chat column by JS.
   Absolute positioning inside a content-sized dock put them in the middle of the
   log where they scrolled away and did nothing.
@@ -421,15 +423,22 @@ This is once per directory per process and needs no config.
   `body[data-view="session"] .topology > *:not(.topo-architect):not(.path-layer)`
   and shown by the `workers-on` body class; on Multi→Single the class is removed
   only after the height animation, so the workers do not vanish mid-slide.
-  **The height cap is the part that bit twice.** The stage now always has a
-  definite height (narrow windows scroll horizontally instead of stacking the
-  rail), so `stageBudget()` uses the stage's own measured height. It must not use
-  `getComputedStyle().height` to decide whether the stage is content-sized —
-  that reports the used height, never `auto`, and the old stacked layout made a
-  cap against it collapse the reveal to the 48px Architect, leaving the workers
-  clipped behind the chat while Multi appeared to do nothing. Measure with
-  `scrollHeight` (integer-rounded, so no half-pixel scrollbar).
-  **And measure from the topology's top, not the card's height**: the
+  **Single never trusts a measurement for its resting state.** The measured
+  height drives only the 320ms collapse animation; afterwards `--reveal-h` is
+  `none`, so the wrapper is exactly the Architect card by construction — a stale
+  measure can never clip the card or grow a scrollbar. And `overflow: clip` (not
+  auto, not hidden) on the Single wrapper means it is never a scroller at all:
+  no scrollbar, no wheel/keyboard/script scrolling, while mid-flight content
+  still clips correctly. Verified: wrap 60.27 = topology 60.27, `max-height:
+  none`, round-trip Multi→Single settles exact.
+  **The height cap is the part that bit twice.** Below 1460px the stage is
+  content-sized, so `stageBudget()` tests the *breakpoint* (`matchMedia`), not
+  the stage's used height — `getComputedStyle().height` reports the used height,
+  never `auto`, and capping against it collapsed the reveal to the 48px
+  Architect, leaving the workers clipped behind the chat while Multi appeared to
+  do nothing. Measure with `scrollHeight` (integer-rounded, so no half-pixel
+  scrollbar), cap by the stage only in the wide layout, and cap by the viewport
+  otherwise. **And measure from the topology's top, not the card's height**: the
   absolute `.path-layer` is the first child, so `.topology > * + *` gives the
   Architect's row a 12px top margin — using the card height alone clipped
   exactly that margin, cut the card's bottom border and grew a scrollbar.
@@ -438,15 +447,13 @@ This is once per directory per process and needs no config.
   like a one-pixel clip.
 - **Cards have a hard minimum width** (`--card-min: 360px`): below that the
   select, the chevron and the edit button start colliding and the name is
-  ellipsised away. Two columns + the 66px spine need ~790px of stage; with the
-  sidebar and the rail, the **whole app has a minimum width of 1460px**
-  (`body { min-width }`). Narrower windows keep the full three-column layout and
-  get a horizontal scrollbar — the rail never stacks under the chat any more.
-  Stacking made the page taller than the viewport, and scrolling it carried the
-  Architect away. The stage height is set from the measured viewport
-  (`fitStageHeight()` reserves the horizontal scrollbar's height) so a narrow
-  window never grows a vertical scrollbar. The baseline's ≤950px sidebar drawer
-  is overridden for the same reason.
+  ellipsised away. Two columns + the 66px spine need ~790px of stage, so the
+  full three-column layout needs **1460px** (256 sidebar + 48 padding + 790
+  stage + 20 gap + 330 rail = 1444, rounded up). Below that the rail flows under
+  the chat (single-column `.room`, `body { min-width: 1100px }` so the stage
+  alone still fits two columns); narrower than 1100 the window scrolls
+  horizontally rather than squeezing the cards. The baseline's ≤950px sidebar
+  drawer behaviour is overridden for the same reason.
   The glyph measurements that matter: both button glyphs are centred on the 22px
   button to within 0.01px, with ~1.5px of margin left top and bottom at three
   chevrons — if the glyph or border size changes, re-measure with
@@ -461,12 +468,15 @@ This is once per directory per process and needs no config.
   — the provider id is part of a model's identity, so `OpenCode` and
   `OpenCode Go` entries read differently, and local providers will slot into the
   same chip.
-- **The chat dock is content-sized and bottom-pinned in a session.** Empty, it
-  is just the composer row (60px); it grows upward as messages arrive, up to
-  `max-height: min(100%, 80vh)` — `100%` lets Multi squeeze it when the cards
-  need the room, `80vh` is the "about twice" ceiling. The transcript is
-  `display: none` while empty (`is-empty`), and there is no empty-state copy
-  inside a session: a fresh session shows the composer alone.
+- **The chat dock fills the stage row in a session.** It stretches from directly
+  under the role cards (one 14px grid gap) to the composer at the bottom of the
+  window; the transcript scrolls inside it. The transcript is `display: none`
+  while empty (`is-empty`), and there is no empty-state copy inside a session:
+  a fresh session shows the composer alone.
+- **The transcript shows user and assistant turns only.** System prompts,
+  scaffolding and context dumps from the engine are not chat — rendering them
+  once leaked AGENTS.md prose and diff hunks into the transcript above the
+  user's own message. Errors still show, whatever type carries them.
 - **Mode colours:** Multi is orange, Single is violet, both with white text and
   a white dot; both are filled pills, so the mode is readable at a glance. The
   composer placeholder is `Message` in Single, `Message the Architect…` in Multi.

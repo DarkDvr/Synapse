@@ -495,14 +495,17 @@ function topologyTarget() {
 }
 
 /**
- * How much vertical room the role-card wrapper may take. The stage always has a
- * definite height now — narrow windows scroll horizontally instead of stacking
- * the rail — so its own height is the basis. The old bug was capping against a
- * content-sized stage below the breakpoint; that layout no longer exists.
+ * How much vertical room the role-card wrapper may take. In the wide layout the
+ * stage has a definite height (viewport minus the frame); below the 1460px
+ * breakpoint it is content-sized and the page scrolls. There, using the stage's
+ * own height would collapse the reveal to the Architect alone, so the
+ * breakpoint itself is the test — `getComputedStyle().height` reports the used
+ * height, never `auto`. The chat visibly slides down as the workers reveal.
  */
 function stageBudget(stage) {
   const composerH = $('composer')?.getBoundingClientRect().height || 58;
-  const basis = stage?.getBoundingClientRect().height || window.innerHeight;
+  const wide = window.matchMedia('(min-width: 1461px)').matches;
+  const basis = wide && stage ? stage.getBoundingClientRect().height : window.innerHeight - 40;
   // composer row + its borders + the stage gap
   return Math.max(0, basis - composerH - 2 - 14);
 }
@@ -517,6 +520,12 @@ function measureReveal(topo, stage) {
  * Single: Architect only, wrapper at the Architect's height. Multi: the whole
  * topology, measured. The wrapper is always open in a session, so switching
  * modes is a height animation, not a show/hide.
+ *
+ * Single never trusts a measurement for its resting state: the wrapper ends at
+ * `max-height: none`, i.e. exactly the Architect card, so a stale measure can
+ * never clip the card or grow a scrollbar (and `overflow: clip` in CSS means
+ * not even a transient one can scroll). The measured height is used only for
+ * the 320ms Multi→Single collapse animation.
  */
 function applyRoleCardsLayout({ animate = true } = {}) {
   const els = topologyTarget();
@@ -535,24 +544,31 @@ function applyRoleCardsLayout({ animate = true } = {}) {
     return;
   }
 
-  // Single target: everything above the first worker, including the 12px top
-  // margin the Architect row gets from `.topology > * + *` (the absolute path
-  // layer is a preceding child, so the selector matches it). Using the card's
-  // own height here clipped exactly that margin, cut the card's bottom border
-  // and grew a scrollbar.
+  // Everything above the first worker, including the 12px top margin the
+  // Architect row gets from `.topology > * + *` (the absolute path layer is a
+  // preceding child, so the selector matches it). Only used to animate the
+  // collapse; the resting state below does not depend on it.
   const topoRect = topo.getBoundingClientRect();
   const arch = topo.querySelector('.topo-architect');
   const archBottom = arch?.getBoundingClientRect().bottom ?? topoRect.top;
   const singleH = Math.ceil(archBottom - topoRect.top);
-  wrap.style.setProperty('--reveal-h', `${Math.min(singleH, Math.round(stageBudget($('stage'))))}px`);
-  if (!animate) {
+  const collapseH = Math.min(singleH, Math.round(stageBudget($('stage'))));
+
+  if (!animate || !document.body.classList.contains('workers-on')) {
+    // Fresh open or re-measure: settle exact immediately, no animation.
     document.body.classList.remove('workers-on');
+    wrap.style.setProperty('--reveal-h', 'none');
     return;
   }
-  // keep the workers laid out while the height falls, then hide them
+  // Collapsing from Multi: shrink through the measured height, then settle
+  // exact and hide the workers only once the height has fallen.
+  wrap.style.setProperty('--reveal-h', `${collapseH}px`);
   workersPendingOff = true;
   revealTimer = setTimeout(() => {
-    if (workersPendingOff && state.mode === 'single') document.body.classList.remove('workers-on');
+    if (workersPendingOff && state.mode === 'single') {
+      document.body.classList.remove('workers-on');
+      wrap.style.setProperty('--reveal-h', 'none');
+    }
     workersPendingOff = false;
   }, 320);
 }
@@ -1141,8 +1157,12 @@ function renderTranscript() {
   const el = $('transcript');
   if (!el) return;
   toolSeq = 0;
+  // Only the conversation itself is shown: user turns and assistant turns.
+  // Anything else the engine reports (system prompts, scaffolding, context
+  // dumps) is not chat and once leaked into the transcript above the user's
+  // own message. Errors still show, whatever type carries them.
   const showable = state.messages.filter(
-    (m) => m.error || ['user', 'assistant', 'system', 'synthetic', 'shell'].includes(m.type),
+    (m) => m.error || m.type === 'user' || m.type === 'assistant',
   );
   const pending = renderPermissions() + renderForms();
   if (showable.length === 0 && !pending) {
@@ -1242,9 +1262,9 @@ function toggleTool(id) {
 }
 
 // ── scrolling: the transcript when it scrolls, the page when it does not ──
-// The stage always has a definite height, so the transcript scrolls inside
-// itself; the page itself never scrolls vertically. Every scroll helper goes
-// through here.
+// In the wide layout the stage has a definite height and the transcript scrolls
+// inside itself; in the stacked layout the page scrolls instead. Every scroll
+// helper goes through here so both behave the same.
 function chatScroller() {
   const el = $('transcript');
   return el && el.scrollHeight > el.clientHeight + 2 ? el : null;

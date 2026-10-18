@@ -133,9 +133,10 @@ live on the role cards, where they belong, not in Settings. The last engine
 event is a row in the sidebar's STATUS block. The working area is left-anchored
 and capped (`--work-w`, 1240px): sidebar → role cards + chat → rail → empty
 space at the window's right edge, with the same geometry in Single and Multi.
-Role cards have a **360px floor**, so the app's minimum width is **1460px**:
-narrower windows keep the full three-column layout and scroll horizontally
-(the rail never stacks under the chat).
+Role cards have a **360px floor**, so the full three-column layout needs
+**1460px** of window. Below that the rail flows under the chat (the stage keeps
+its full width so the cards never squeeze); below 1100px the window scrolls
+horizontally.
 
 **Row highlighting is one token.** The baseline paints table rows `#fcfcff`
 on hover in every theme; Synapse overrides that globally to `--hover-bg`
@@ -350,10 +351,13 @@ noise around it.
 
 `web/md.js` is hand-rolled (no dependencies) and **escape-first**: the source is
 HTML-escaped before any markdown rule runs, so a model cannot inject markup
-through its answer. It covers fenced code, headings, blockquotes, ordered and
-unordered lists, rules and paragraphs, plus inline code, bold, italic,
-strikethrough and links — the range these models actually produce. Link targets
-are restricted to `http(s)`, `mailto`, `/` and `#`.
+through its answer. It covers fenced code, headings, GFM tables (alignment
+included, pipes inside `code` don't split cells), blockquotes, ordered and
+unordered lists (including `- [ ]` task lists), images, rules and paragraphs,
+plus inline code, bold, italic, strikethrough and links — the range these
+models actually produce. Link targets
+are restricted to `http(s)`, `mailto`, `/` and `#` (images additionally allow
+`data:image/`).
 
 ## Logs
 
