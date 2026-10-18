@@ -1367,6 +1367,28 @@ function renderChatNav() {
   $('navNext').disabled = !canScroll || cur >= tops.length - 1;
 }
 
+/**
+ * The jump buttons animate the transcript themselves. `behavior: 'smooth'`
+ * hands the duration to the browser, where it cannot be tuned; 280ms here is
+ * roughly 30% quicker than the browser's own smooth scroll over these
+ * distances, with an ease-out so the arrival still reads as a landing.
+ */
+function animateScroll(el, to, ms = 280) {
+  const from = el ? el.scrollTop : window.scrollY;
+  const delta = to - from;
+  if (Math.abs(delta) < 1) return;
+  const t0 = performance.now();
+  const ease = (t) => 1 - (1 - t) ** 3;
+  const step = (now) => {
+    const p = Math.min(1, (now - t0) / ms);
+    const y = from + delta * ease(p);
+    if (el) el.scrollTop = y;
+    else window.scrollTo(0, y);
+    if (p < 1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+
 function jumpMessage(dir) {
   const { tops, cur } = navAnchors();
   // Move exactly one message from the one currently at the fold, in the asked
@@ -1375,9 +1397,7 @@ function jumpMessage(dir) {
   const next = dir < 0 ? cur - 1 : cur + 1;
   if (next < 0 || next >= tops.length) return;
   const top = Math.max(0, tops[next] - 10);
-  const el = chatScroller();
-  if (el) el.scrollTo({ top, behavior: 'smooth' });
-  else window.scrollTo({ top, behavior: 'smooth' });
+  animateScroll(chatScroller(), top);
 }
 
 // The engine blocks the session until every permission request is answered.

@@ -379,8 +379,14 @@ This is once per directory per process and needs no config.
   absolute` in the dock (which is `position: relative; overflow: hidden`), so it
   can never drift out over the rail, and it does not reserve a gutter — it
   floats over the transcript's right edge, keeping the conversation's padding
-  symmetric (13px each side). An earlier `position: fixed` version anchored by
-  JS escaped the pane when the dock was short.
+  symmetric (13px each side). It sits at `right: 22px` so it clears the
+  transcript's ~15px scrollbar (verified: 7px clear). An earlier
+  `position: fixed` version anchored by JS escaped the pane when the dock was
+  short.
+- **The jump animation is hand-rolled.** `animateScroll()` runs a 280ms
+  ease-out rAF scroll instead of `behavior: 'smooth'`, whose duration the
+  browser owns and cannot be tuned — roughly 30% quicker than the browser's own
+  smooth scroll over these distances (measured ~289ms end to end).
 - **The jump buttons step message-by-message from an anchor, not from the raw
   scroll offset.** `navAnchors()` picks the message that owns the fold (last top
   at or above `scrollTop + 12`), and the buttons move `cur ± 1`. A raw

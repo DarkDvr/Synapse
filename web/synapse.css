@@ -636,10 +636,10 @@ body[data-view="session"] .chat-dock:not(.has-history) .composer { border-top-co
 /* jump between your own requests; only shown for longer conversations.
    Absolute *inside the dock*: the pane is the button's world, so it can never
    drift out over the rail, and the dock's own overflow clips it. It floats over
-   the transcript's right edge rather than reserving a gutter, so the
-   conversation keeps the same padding on both sides. */
+   the transcript's right edge rather than reserving a gutter, and sits clear of
+   the transcript's scrollbar. */
 .chat-nav {
-  position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+  position: absolute; right: 22px; top: 50%; transform: translateY(-50%);
   display: grid; gap: 6px; z-index: 30;
 }
 .fab {
@@ -707,12 +707,14 @@ body[data-view="session"] .chat-dock:not(.has-history) .composer { border-top-co
 .msg.user .msg-text { color: #fff; }
 
 /* ── the model's answer ───────────────────────────────────────────────────
-   Split out from the reasoning and tool noise around it: a thin border and a
-   faint tint, and rendered as markdown rather than a wall of plain text. */
+   Split out from the reasoning and tool noise around it: a faint violet fill so
+   the answer reads as the one thing that is *not* chrome. Violet is the fill
+   colour in this palette (orange stays an accent), so the tint is deliberate —
+   subtle enough that tables and code inside it still read. */
 .msg-answer {
   margin: 5px 0 0; padding: 8px 10px;
-  border: 1px solid var(--line); border-radius: 9px;
-  background: #1b1d21;
+  border: 1px solid #3b3566; border-radius: 9px;
+  background: #1f1c31;
   font-size: 12.5px; line-height: 1.55; color: #d3d6db;
 }
 .msg-answer > :first-child { margin-top: 0; }

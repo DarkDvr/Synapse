@@ -349,9 +349,10 @@ delegation permission, and the reveal.
 
 ## Markdown
 
-The model's actual answer is rendered as markdown inside its own panel — a thin
-border and a faint tint — so it reads separately from the reasoning and tool
-noise around it.
+The model's actual answer is rendered as markdown inside its own panel — a
+faint **violet** fill (#1f1c31, border #3b3566) so the answer is the one thing
+in the transcript that is not chrome — and reads separately from the reasoning
+and tool noise around it.
 
 `web/md.js` is hand-rolled (no dependencies) and **escape-first**: the source is
 HTML-escaped before any markdown rule runs, so a model cannot inject markup
