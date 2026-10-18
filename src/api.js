@@ -1,7 +1,7 @@
 // Synapse API — a stable, engine-agnostic surface for the UI.
 // Handlers call the engine adapter; nothing here knows about OpenCode.
 import { TBD_TITLE } from './titles.js';
-import { ensurePlan, readPlan, briefSession, BRIEF_KEY } from './plans.js';
+import { ensurePlan, readPlan, briefSession, logPlanState, BRIEF_KEY } from './plans.js';
 
 export function createApi({ getConfig, applyConfig, engine, logger, getBootError, projects, toolStats, probe, modelCache, inspectModel: inspectRef, probeDir }) {
   const app = logger.channel('app');
@@ -303,8 +303,11 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
         const session = await engine.getSession(sessionId);
         directory = session?.directory || null;
       } catch { /* session gone; report no plan rather than an error */ }
-      if (!directory) return readPlan('');
-      return readPlan(directory);
+      const state = directory ? readPlan(directory) : readPlan('');
+      // The pane polls this, so the logger is told once per distinct problem
+      // rather than once per poll (see logPlanState).
+      logPlanState(state, app);
+      return state;
     },
 
     sendMessage: async (sessionId, body) => {

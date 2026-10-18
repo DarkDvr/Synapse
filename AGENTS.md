@@ -317,6 +317,19 @@ ordinary file tools; there is no tool and no store for it.
   when a project is added and at boot for any project missing one.
 - **`id` is required.** Delegation refers to tasks by id, and the Architect may
   rewrite the file at any time; a task without one is flagged and skipped.
+- **Titles over 80 characters are a `problem`, not a silent trim.** The pane
+  clamps a title to two lines with the full text on hover, and the brief carries
+  the complaint so the Architect shortens its own title. Clamping the grid item
+  directly is fine in Chromium (measured: 34px visible of 84px) even though
+  `getComputedStyle` reports its display as `flow-root` — do not wrap it in
+  another span on that reading, it clips either way.
+- **A polled reader must not log on every poll.** `logPlanState` keys on a
+  signature of the state (issues + every task's id and status) and speaks only
+  when it changes; the pane reads the plan every few seconds, so anything dumber
+  writes the same sentence into app.log forever. Called from two places: the
+  plan route (a hand edit is noticed while a pane is open) and `afterTurn` (the
+  Architect writes during a turn, and that is the only place that notices with no
+  UI open). A session with no directory is not logged at all.
 - **Deliverables go in `bin/`** inside the project; everything else there is
   scratch. It is in the brief so every role knows where work lands.
 

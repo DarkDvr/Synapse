@@ -65,6 +65,41 @@ export function ensurePlan(dir) {
 const asText = (v) => (typeof v === 'string' ? v.trim() : v == null ? '' : String(v));
 const asId = (v) => asText(v).replace(/[^A-Za-z0-9._-]/g, '');
 
+// A title long enough to be a paragraph is a plan that cannot be read at a
+// glance. We do not trim it — the Architect is told, and trims it itself.
+const TITLE_MAX = 80;
+
+/**
+ * Log a plan's state, once per change and never twice.
+ *
+ * Synapse reads the plan on every poll and on every turn, so a naive log would
+ * repeat the same sentence every few seconds. The signature is the state, and
+ * the logger only hears about a state it has not already reported.
+ */
+const logged = new Map(); // project dir -> last signature
+export function logPlanState(state, log) {
+  if (!log || !state) return;
+  const dir = state.dir || '';
+  // Nothing to say about a session that is not in a directory.
+  if (!dir) return;
+  const issues = state.error || state.problems.join(' | ');
+  const statuses = (state.plan?.tasks || []).map((t) => `${t.id || '?'}:${t.status}`).join(' ');
+  const signature = `${issues}::${statuses}`;
+  const previous = logged.get(dir);
+  if (previous === signature) return;
+  logged.set(dir, signature);
+
+  if (state.error) log.warn(`plan ${state.relative} unreadable (${dir}): ${state.error}`);
+  else if (state.problems.length) {
+    log.warn(`plan ${state.relative} has problems (${dir}): ${state.problems.join('; ')}`);
+  }
+  if (previous === undefined) {
+    if (!issues) log.info(`plan (${dir}): ${statuses || 'empty'}`);
+    return;
+  }
+  if (!issues) log.info(`plan changed (${dir}): ${statuses || 'empty'}`);
+}
+
 /**
  * Read a project's plan. Never throws: a missing file, bad JSON or a wrong
  * shape all come back as data the UI can explain.
@@ -131,6 +166,9 @@ export function readPlan(dir) {
 
     const title = asText(source.title);
     if (!title) problems.push(`${where} has no title`);
+    else if (title.length > TITLE_MAX) {
+      problems.push(`${where}'s title is ${title.length} characters - keep titles under ${TITLE_MAX}`);
+    }
 
     const role = asText(source.role) || 'architect';
     if (source.role && !ROLES.includes(role)) {
@@ -227,7 +265,8 @@ export function briefSession({ dir, role = 'architect' } = {}) {
     lines.push(
       `Format: {"version":1,"goal":"...","tasks":[{"id":"t1","title":"...","role":"coder-1","status":"todo",` +
         `"detail":"...","dependsOn":[],"result":null,"note":null}]} - ` +
-        `statuses: ${STATUSES.join(', ')}. Mark a task "blocked" only when it needs the operator.`,
+        `statuses: ${STATUSES.join(', ')}. Keep ids short and unique, titles under ${TITLE_MAX} characters, ` +
+        `and mark a task "blocked" only when it needs the operator.`,
     );
     lines.push(
       `Write paths inside the file with forward slashes (bin/, src/) so the JSON stays valid, ` +

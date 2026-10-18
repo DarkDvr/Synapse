@@ -29,32 +29,25 @@
   },
   "roles": {
     "designer": {
-      "ref": "opencode/cat-jam-free",
-      "variant": "xhigh"
+      "ref": "opencode/big-pickle"
     },
     "critic": {
-      "ref": "opencode/cat-jam-free",
-      "variant": "xhigh"
+      "ref": "opencode/big-pickle"
     },
     "architect": {
-      "ref": "opencode/space-bunny-free",
-      "variant": "xhigh"
+      "ref": "opencode/deepseek-v4.1-flash-free"
     },
     "coder-1": {
-      "ref": "opencode/cat-jam-free",
-      "variant": "xhigh"
+      "ref": "opencode/big-pickle"
     },
     "coder-2": {
-      "ref": "opencode/cat-jam-free",
-      "variant": "xhigh"
+      "ref": "opencode/big-pickle"
     },
     "coder-3": {
-      "ref": "opencode/cat-jam-free",
-      "variant": "xhigh"
+      "ref": "opencode/big-pickle"
     },
     "auditor": {
-      "ref": "opencode/cat-jam-free",
-      "variant": "xhigh"
+      "ref": "opencode/big-pickle"
     }
   },
   "modelChecks": {

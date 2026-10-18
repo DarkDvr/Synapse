@@ -968,7 +968,22 @@ body[data-view="session"] .chat-dock:not(.has-history) .composer { border-top-co
 .plan-task[data-status="failed"] .plan-dot { background: var(--red); }
 
 .plan-main { display: grid; gap: 2px; min-width: 0; }
-.plan-title { font-size: 12px; line-height: 1.4; color: var(--text); overflow-wrap: anywhere; }
+/* Two lines is the budget: a plan is read at a glance, and the full title is one
+   hover away. Long titles are also reported as a plan problem (see plans.js).
+   Clamping the grid item directly is fine here — measured in Chromium, a long
+   title is clipped to two lines (client 34px vs scroll 84px). `getComputedStyle`
+   reports this element's display as `flow-root` even though the rule says
+   `-webkit-box`, so do NOT "fix" that by wrapping it in another span: it clips
+   either way, and the wrapper was added once on that false reading. */
+.plan-title {
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  overflow: hidden; overflow-wrap: anywhere;
+  font-size: 12px; line-height: 1.4; color: var(--text);
+}
+.plan-id {
+  font-family: var(--mono); font-size: 10px; color: #7b8089;
+  margin-right: 5px; letter-spacing: 0.02em;
+}
 .plan-task[data-status="done"] .plan-title { color: #9aa0a8; }
 .plan-result { font-size: 11px; line-height: 1.4; color: #82868e; overflow-wrap: anywhere; }
 .plan-note { font-size: 11px; line-height: 1.4; color: var(--red); overflow-wrap: anywhere; }

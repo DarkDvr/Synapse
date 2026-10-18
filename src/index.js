@@ -9,7 +9,7 @@ import { createEngine } from './engines/index.js';
 import { createProjectStore } from './projects.js';
 import { createTitler } from './titler.js';
 import { createToolStats } from './toolstats.js';
-import { ensurePlan } from './plans.js';
+import { ensurePlan, readPlan, logPlanState } from './plans.js';
 import { createProbe, discoverToolsetForModel } from './probe.js';
 import { createModelCache, MAX_TOOL_ASKS } from './modelcache.js';
 import { createApi } from './api.js';
@@ -222,6 +222,9 @@ async function main() {
           `census +${added} call(s) in ${sessionId}; running total ${snap.total} (${snap.failed} failed)`,
         );
       }
+      // The plan is written during the turn, so a finished turn is when it
+      // changed — and this is the only place that notices with no UI open.
+      if (session?.directory) logPlanState(readPlan(session.directory), app);
     } catch (err) {
       toolStatsLog.warn(`census skipped for ${sessionId}: ${err.message}`);
     }
