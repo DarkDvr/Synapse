@@ -29,18 +29,32 @@
   },
   "roles": {
     "designer": {
-      "ref": "opencode/nemotron-3-ultra-free"
+      "ref": "opencode/cat-jam-free",
+      "variant": "xhigh"
     },
     "critic": {
       "ref": "opencode/cat-jam-free",
-      "variant": "max"
+      "variant": "xhigh"
     },
     "architect": {
-      "ref": "opencode/deepseek-v4.1-flash-free",
-      "variant": "low"
+      "ref": "opencode/space-bunny-free",
+      "variant": "xhigh"
     },
     "coder-1": {
-      "ref": "opencode/mimo-v2.6-flash-free"
+      "ref": "opencode/cat-jam-free",
+      "variant": "xhigh"
+    },
+    "coder-2": {
+      "ref": "opencode/cat-jam-free",
+      "variant": "xhigh"
+    },
+    "coder-3": {
+      "ref": "opencode/cat-jam-free",
+      "variant": "xhigh"
+    },
+    "auditor": {
+      "ref": "opencode/cat-jam-free",
+      "variant": "xhigh"
     }
   },
   "modelChecks": {

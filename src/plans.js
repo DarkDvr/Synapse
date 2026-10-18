@@ -1,207 +1,241 @@
-// The development plan for a session.
+// The project's plan: a plain JSON file the Architect owns, inside the project.
 //
-// The Architect publishes it by calling the `synapse-plan` MCP tool, and reports
-// progress on its tasks with a second tool. Neither call needs its own
-// transport: the engine already records **every tool call, with its full input**,
-// in the session transcript, and Synapse reads that transcript on every finished
-// turn anyway (that is how the tool census works). The MCP server's only job is
-// to tell the model what it accepted; the durable record is the turn itself.
+//   <project>\.synapse\plan.json
 //
-// Two consequences worth knowing before touching this:
+// The plan is *intent*, written by the Architect with the ordinary file tools it
+// already has - there is no tool for it and no store in Synapse, because the
+// file is the single source of truth. Synapse only ever **reads** it (for the
+// rail pane and for briefing a session); it never rewrites it, so the Architect
+// stays the one and only writer. If the file is malformed we do not repair it -
+// we hand the Architect the precise problem and let it fix its own document.
 //
-//   - Applying a transcript is **idempotent and ordered**. The whole transcript
-//     is replayed on each turn, so replaying it after a restart lands on exactly
-//     the same state. Every timestamp comes from the tool part, never from the
-//     clock, or a replay would invent new ones.
-//   - A re-publish keeps the status of any task whose title it repeats, so the
-//     Architect can restate its plan without losing progress.
+// Everything here is therefore tolerant by design: reading never throws, and a
+// bad file produces `problems` and `error` for a human to see rather than an
+// exception nobody can act on.
+//
+// A companion file, `.synapse\runs.jsonl`, holds the harness's own record of
+// what actually ran. That is evidence, not intent, and the harness owns it - so
+// the two never have to be written by the same party.
 import fs from 'node:fs';
 import path from 'node:path';
 
-// The roles the topology has cards for. The tool schema offers exactly these.
+// The roles the topology has cards for.
 export const ROLES = ['architect', 'critic', 'coder-1', 'designer', 'coder-2', 'auditor', 'coder-3'];
 
-// `blocked` is the one that matters: it means the work cannot proceed without
-// the operator, and it is painted red for that reason. `failed` is red too —
-// the work ran and did not hold.
+// `blocked` is the one that matters: the work cannot proceed without the
+// operator, which is why it is the one painted red.
 export const STATUSES = ['todo', 'doing', 'done', 'blocked', 'failed'];
 
-const PUBLISH = 'plan_publish';
-const STATUS = 'task_status';
+export const PLAN_DIR = '.synapse';
+export const PLAN_NAME = 'plan.json';
+export const RUNS_NAME = 'runs.jsonl';
 
-// MCP tools arrive namespaced (`synapse-plan_plan_publish`). Match by suffix,
-// never by equality — the namespace belongs to the engine.
-const matches = (name, base) => name === base || name.endsWith(`_${base}`);
+/** The instruction-entry key the brief is attached to, per session. */
+export const BRIEF_KEY = 'synapse.plan';
 
-const norm = (s) => String(s || '').trim().toLowerCase().replace(/\s+/g, ' ');
+export const planPath = (dir) => path.join(String(dir || ''), PLAN_DIR, PLAN_NAME);
+export const runsPath = (dir) => path.join(String(dir || ''), PLAN_DIR, RUNS_NAME);
+export const planRelPath = () => `${PLAN_DIR}\\${PLAN_NAME}`;
+/** The same path for text the models read: forward slashes, because a lone
+ *  backslash inside a JSON string is an invalid escape and models copy what
+ *  they are shown. (A plan file once came back unreadable for exactly that.) */
+export const planRelPathPlain = () => `${PLAN_DIR}/${PLAN_NAME}`;
 
-/** The tool input may arrive as an object or as a JSON string. */
-function parseInput(input) {
-  if (input && typeof input === 'object') return input;
-  if (typeof input !== 'string') return null;
+/** The empty file a project starts with. Valid as it stands, so the first read
+ *  is never an error and the Architect has the shape in front of it. */
+export const emptyPlan = () => ({ version: 1, goal: '', tasks: [] });
+
+/**
+ * Create `.synapse\plan.json` when it is missing. This is the one write Synapse
+ * does, it happens before anyone owns the file, and it never touches an
+ * existing plan.
+ */
+export function ensurePlan(dir) {
+  const target = planPath(dir);
   try {
-    const parsed = JSON.parse(input);
-    return parsed && typeof parsed === 'object' ? parsed : null;
+    if (fs.existsSync(target)) return { path: target, created: false };
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    fs.writeFileSync(target, `${JSON.stringify(emptyPlan(), null, 2)}\n`, 'utf8');
+    return { path: target, created: true };
+  } catch (err) {
+    return { path: target, created: false, error: err.message };
+  }
+}
+
+const asText = (v) => (typeof v === 'string' ? v.trim() : v == null ? '' : String(v));
+const asId = (v) => asText(v).replace(/[^A-Za-z0-9._-]/g, '');
+
+/**
+ * Read a project's plan. Never throws: a missing file, bad JSON or a wrong
+ * shape all come back as data the UI can explain.
+ */
+export function readPlan(dir) {
+  const target = planPath(dir);
+  const base = {
+    dir: String(dir || ''),
+    path: target,
+    relative: planRelPath(),
+    exists: false,
+    plan: null,
+    problems: [],
+    error: null,
+    mtime: null,
+    stat: null,
+  };
+  let raw;
+  let stat;
+  try {
+    stat = fs.statSync(target);
+    raw = fs.readFileSync(target, 'utf8');
+  } catch (err) {
+    // Missing is the normal case for a folder nobody has planned in yet.
+    if (err.code === 'ENOENT') return base;
+    return { ...base, error: `could not read the plan file: ${err.message}` };
+  }
+
+  const problems = [];
+  let parsed;
+  try {
+    parsed = JSON.parse(raw || '{}');
+  } catch (err) {
+    return {
+      ...base,
+      exists: true,
+      mtime: stat.mtimeMs,
+      stat: { size: stat.size, mtime: stat.mtimeMs },
+      error: `plan.json is not valid JSON: ${err.message}`,
+    };
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    return {
+      ...base,
+      exists: true,
+      mtime: stat.mtimeMs,
+      stat: { size: stat.size, mtime: stat.mtimeMs },
+      error: 'plan.json must contain a single JSON object',
+    };
+  }
+
+  const goal = asText(parsed.goal);
+  const rawTasks = Array.isArray(parsed.tasks) ? parsed.tasks : null;
+  if (rawTasks === null) problems.push('"tasks" is missing or is not an array');
+
+  const seen = new Set();
+  const tasks = (rawTasks || []).map((t, i) => {
+    const where = `task ${i + 1}`;
+    const source = t && typeof t === 'object' ? t : {};
+    const id = asId(source.id);
+    if (!id) problems.push(`${where} has no id - give every task a short unique id like "t1"`);
+    else if (seen.has(id)) problems.push(`${where} repeats the id "${id}"`);
+    else seen.add(id);
+
+    const title = asText(source.title);
+    if (!title) problems.push(`${where} has no title`);
+
+    const role = asText(source.role) || 'architect';
+    if (source.role && !ROLES.includes(role)) {
+      problems.push(`${where} names an unknown role "${role}" (cards: ${ROLES.join(', ')})`);
+    }
+
+    const rawStatus = asText(source.status) || 'todo';
+    const status = STATUSES.includes(rawStatus) ? rawStatus : 'todo';
+    if (!STATUSES.includes(rawStatus)) {
+      problems.push(`${where} has an unknown status "${rawStatus}" - showing it as todo`);
+    }
+
+    return {
+      id: id || null,
+      title: title || '(untitled)',
+      role,
+      status,
+      rawStatus,
+      detail: asText(source.detail) || null,
+      dependsOn: Array.isArray(source.dependsOn) ? source.dependsOn.map(asText).filter(Boolean) : [],
+      result: asText(source.result) || null,
+      note: asText(source.note) || null,
+    };
+  });
+
+  return {
+    ...base,
+    exists: true,
+    mtime: stat.mtimeMs,
+    stat: { size: stat.size, mtime: stat.mtimeMs },
+    problems,
+    plan: { version: Number(parsed.version) || 1, goal, tasks },
+  };
+}
+
+/** A cheap change fingerprint, so the harness can tell that something wrote to
+ *  the plan when it should not have. */
+export function planFingerprint(dir) {
+  try {
+    const s = fs.statSync(planPath(dir));
+    return `${s.size}:${s.mtimeMs}`;
   } catch {
     return null;
   }
 }
 
-export function createPlans({ file, logger }) {
-  const log = logger.channel('app');
-  let state = { version: 1, plans: {} };
+const counts = (tasks) => {
+  const out = {};
+  for (const t of tasks) out[t.status] = (out[t.status] || 0) + 1;
+  return out;
+};
 
-  try {
-    if (fs.existsSync(file)) {
-      const saved = JSON.parse(fs.readFileSync(file, 'utf8') || '{}');
-      if (saved && typeof saved === 'object' && saved.plans && typeof saved.plans === 'object') {
-        state = { version: 1, plans: saved.plans };
-      }
+/**
+ * The brief handed to a session through the engine's instruction entries.
+ *
+ * Kept short on purpose: it is re-read on every step, and a wall of text gets
+ * skimmed. Facts first (what the plan currently says), then the one rule that
+ * cannot be guessed (the Architect owns the file; nobody else writes it).
+ */
+export function briefSession({ dir, role = 'architect' } = {}) {
+  const state = readPlan(dir);
+  const lines = [];
+  const isArchitect = role === 'architect';
+
+  lines.push(`Synapse project: ${path.basename(String(dir || '')) || 'unknown'}`);
+  lines.push(
+    isArchitect
+      ? `Project plan: ${planRelPathPlain()} - you own this file and you are the only role that may write it. ` +
+          `Read it when a session starts, and keep it current as work lands.`
+      : `Project plan: ${planRelPathPlain()} - read-only for you. Never write to it, and never create files in ${PLAN_DIR}/. ` +
+          `Your task below was taken from it.`,
+  );
+
+  if (!state.exists) {
+    lines.push(`The plan file does not exist yet.`);
+  } else if (state.error) {
+    lines.push(`The plan file cannot be read - ${state.error}. Fix the file before continuing.`);
+  } else if (!state.plan.tasks.length) {
+    lines.push(`The plan is empty. Write it early: a "goal" line, then ordered tasks.`);
+  } else {
+    const c = counts(state.plan.tasks);
+    const parts = [`${state.plan.tasks.length} task(s)`];
+    for (const s of ['done', 'doing', 'blocked', 'failed', 'todo']) if (c[s]) parts.push(`${c[s]} ${s}`);
+    lines.push(`Current plan: ${parts.join(', ')}.`);
+    if (state.plan.goal) lines.push(`Goal: ${state.plan.goal}`);
+    const blocked = state.plan.tasks.filter((t) => t.status === 'blocked' || t.status === 'failed');
+    for (const t of blocked.slice(0, 4)) {
+      lines.push(`  ${t.id || '?'} ${t.status}: ${t.title}${t.note ? ` - ${t.note}` : ''}`);
     }
-  } catch (err) {
-    log.warn(`could not read the plan store: ${err.message}`);
+    if (state.problems.length) lines.push(`Plan problems to fix: ${state.problems.slice(0, 4).join('; ')}`);
   }
 
-  function save() {
-    try {
-      fs.mkdirSync(path.dirname(file), { recursive: true });
-      const tmp = `${file}.tmp`;
-      fs.writeFileSync(tmp, `${JSON.stringify(state, null, 2)}\n`, 'utf8');
-      fs.renameSync(tmp, file);
-    } catch (err) {
-      log.warn(`could not write the plan store: ${err.message}`);
-    }
+  if (isArchitect) {
+    lines.push(
+      `Format: {"version":1,"goal":"...","tasks":[{"id":"t1","title":"...","role":"coder-1","status":"todo",` +
+        `"detail":"...","dependsOn":[],"result":null,"note":null}]} - ` +
+        `statuses: ${STATUSES.join(', ')}. Mark a task "blocked" only when it needs the operator.`,
+    );
+    lines.push(
+      `Write paths inside the file with forward slashes (bin/, src/) so the JSON stays valid, ` +
+        `and keep the file valid JSON - Synapse reads it on every turn.`,
+    );
+    lines.push(`Deliverables go in bin/ inside the project folder; everything else there is scratch.`);
   }
 
-  /**
-   * Replace the plan. Task ids are positional (`t1`…`tn`) because that is what
-   * the tool reply hands the model; status and results carry over to any task
-   * whose title repeats.
-   */
-  function publish(plan, input, at) {
-    const raw = Array.isArray(input?.tasks) ? input.tasks : null;
-    if (!raw || !raw.length) return false;
-    const goal = String(input?.goal || plan.goal || '').trim();
-    const previous = new Map((plan.tasks || []).map((t) => [norm(t.title), t]));
-
-    const tasks = raw.slice(0, 24).map((t, i) => {
-      const title = String(t?.title || '').trim() || `Task ${i + 1}`;
-      const prev = previous.get(norm(title)) || {};
-      return {
-        id: `t${i + 1}`,
-        title,
-        role: String(t?.role || prev.role || 'architect').trim(),
-        detail: String(t?.detail || prev.detail || '').trim() || null,
-        dependsOn: Array.isArray(t?.dependsOn) ? t.dependsOn.map(String) : prev.dependsOn || [],
-        status: prev.status || 'todo',
-        result: prev.result ?? null,
-        note: prev.note ?? null,
-        started: prev.started ?? null,
-        ended: prev.ended ?? null,
-        at: prev.at ?? at ?? null,
-      };
-    });
-
-    const same =
-      plan.goal === goal &&
-      (plan.tasks || []).length === tasks.length &&
-      tasks.every((t, i) => {
-        const p = plan.tasks[i];
-        return p.id === t.id && p.title === t.title && p.role === t.role && p.detail === t.detail;
-      });
-    if (same) return false;
-
-    plan.goal = goal;
-    plan.tasks = tasks;
-    plan.published = plan.published ?? at ?? null;
-    plan.updated = at ?? plan.updated ?? null;
-    return true;
-  }
-
-  function setStatus(plan, input, at, endedAt) {
-    const id = String(input?.id || '').trim();
-    const status = String(input?.status || '').toLowerCase();
-    if (!id || !STATUSES.includes(status)) return false;
-    const task = (plan.tasks || []).find((t) => t.id === id);
-    if (!task) return false;
-
-    const result = input?.result != null ? String(input.result).trim() || null : task.result;
-    const note = input?.note != null ? String(input.note).trim() || null : task.note;
-    if (task.status === status && task.result === result && task.note === note) return false;
-
-    task.status = status;
-    task.result = result;
-    task.note = note;
-    if (status === 'doing') {
-      task.started = task.started ?? at ?? null;
-      task.ended = null;
-    } else if (status === 'done' || status === 'failed' || status === 'blocked') {
-      task.started = task.started ?? at ?? null;
-      task.ended = endedAt ?? at ?? null;
-    } else {
-      task.started = null;
-      task.ended = null;
-    }
-    task.at = at ?? task.at ?? null;
-    plan.updated = at ?? plan.updated ?? null;
-    return true;
-  }
-
-  /**
-   * Read a session's transcript and fold its plan calls into the store.
-   * Safe to call with the whole transcript every turn.
-   */
-  function applyMessages(sessionId, messages) {
-    const plan = state.plans[sessionId] || (state.plans[sessionId] = blank(sessionId));
-    let changed = false;
-    for (const message of messages || []) {
-      for (const part of message?.parts || []) {
-        if (part?.type !== 'tool') continue;
-        const name = String(part.name || '');
-        if (!matches(name, PUBLISH) && !matches(name, STATUS)) continue;
-        const input = parseInput(part.input);
-        if (!input) continue;
-        const at = part.startedAt ?? part.endedAt ?? null;
-        changed = (matches(name, PUBLISH)
-          ? publish(plan, input, at)
-          : setStatus(plan, input, at, part.endedAt ?? null)) || changed;
-      }
-    }
-    if (changed) {
-      save();
-      log.info(`plan: ${sessionId} -> ${(plan.tasks || []).length} task(s), ${summary(plan)}`);
-    }
-    return changed;
-  }
-
-  function blank(sessionId) {
-    return {
-      sessionId,
-      goal: '',
-      tasks: [],
-      published: null,
-      updated: null,
-    };
-  }
-
-  function summary(plan) {
-    const counts = {};
-    for (const t of plan.tasks || []) counts[t.status] = (counts[t.status] || 0) + 1;
-    return Object.entries(counts).map(([k, v]) => `${k} ${v}`).join(', ') || 'empty';
-  }
-
-  /** Drop a plan whose session is gone; nothing else refers to it. */
-  function clear(sessionId) {
-    if (!state.plans[sessionId]) return false;
-    delete state.plans[sessionId];
-    save();
-    return true;
-  }
-
-  return {
-    get: (sessionId) => state.plans[sessionId] || null,
-    applyMessages,
-    clear,
-    snapshot: () => ({ version: state.version, plans: state.plans }),
-  };
+  return lines.join('\n');
 }
+

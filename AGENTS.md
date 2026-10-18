@@ -210,9 +210,9 @@ guessing.
 
 ## MCP: how the engine exposes tools to models
 
-Synapse registers its own MCP servers in the engine's isolated config at
+Synapse registers its own MCP server in the engine's isolated config at
 `data\engine\opencode\config\opencode\opencode.json`, which it rewrites on every
-boot — currently two of them: the search, and the plan tool.
+boot.
 
 ```json
 {
@@ -220,11 +220,6 @@ boot — currently two of them: the search, and the plan tool.
     "synapse-search": {
       "type": "local",
       "command": ["<node>", "F:\\dev\\Synapse\\src\\mcp\\search-server.js"],
-      "codemode": false
-    },
-    "synapse-plan": {
-      "type": "local",
-      "command": ["<node>", "F:\\dev\\Synapse\\src\\mcp\\plan-server.js"],
       "codemode": false
     }
   } },
@@ -245,14 +240,13 @@ Two non-obvious things, both found by testing:
 MCP tools arrive **namespaced** (`synapse-search_websearch`). Match
 names by suffix, not equality.
 
-**A stateless MCP server cannot see a session, so keep state out of it.** The
-plan tool is the worked example: an MCP server has no idea which session called
-it, so it cannot read or write per-session state on its own. It does not have
-to. The engine records **every tool call, with its full input**, in the session
-transcript — so the durable record of `plan_publish` is the turn itself, and
-`src/plans.js` reads it back exactly the way the census does. The server only
-validates the call and returns the receipt. Anything else that needs to know
-what a model asked for should follow this shape rather than inventing a port.
+**A tool with per-session state belongs in the transcript, not in a server.** An
+MCP server has no idea which session called it, so it cannot keep per-session
+state on its own. It does not have to: the engine records **every tool call, with
+its full input**, in the transcript, which Synapse reads back on each turn the
+way the census does. That is how the plan tool worked before the plan became a
+file — and `src/plans.js` still reads the tool calls the same way for anything
+else that needs them.
 
 Also: `engine.opencode.localSearch: false` used to `return` from the whole of
 `ensureEngineConfig`, which silently cost the model-limit overrides too. The
@@ -263,6 +257,68 @@ for one question the operator asked while testing search, and he asked for it to
 be removed — it was not a real capability the product needed, and it was bloat.
 Ask before adding a special-case tool; add it only if it is genuinely useful for
 real agentic development work.
+
+---
+
+## Briefing a session: the engine's instruction entries
+
+The engine has a standing-context channel that is **not** the transcript:
+
+```text
+PUT    /api/experimental/session/{sessionID}/instructions/entries/{key}   { value }
+GET    /api/experimental/session/{sessionID}/instructions/entries
+DELETE /api/experimental/session/{sessionID}/instructions/entries/{key}
+```
+
+`key` matches `^[a-z0-9][a-z0-9._-]*$`; the reply is **204 with an empty body**;
+the value is any JSON value (a string is fine) and there is a size cap that
+answers **413** (`InstructionEntryValueTooLargeError`). The route's own summary
+says changes "announce as updates at the next step boundary". Verified live on
+2.0.30: PUT returned 204 and GET read the value back.
+
+This is how Synapse briefs a role — which project, where the plan file is, who
+may write it, what the plan currently says, and how work is expected to be
+delivered. It is the right channel for three reasons:
+
+- **It is per session**, so the Architect and each worker can be told different
+  things without any of them knowing the others exist.
+- **It is durable**, so it is sent once and re-sent only when its text changes,
+  instead of riding on every message.
+- **It does not appear in the transcript.** `POST /api/session/{id}/prompt`
+  accepts only `text, files, agents, skills, metadata, delivery, resume` — there
+  is **no system field**, and `agents:[{name}]` does not switch the acting agent.
+  So the alternative would be prefixing the operator's message, which joins the
+  conversation and reads as if the operator had typed it.
+
+**Never put a lone backslash in text a model reads.** The first plan Synapse
+generated came back as invalid JSON because the brief said `bin\` and the model
+copied it verbatim into a JSON string, where `\ ` is an invalid escape. Model-
+facing paths use forward slashes (`bin/`, `.synapse/plan.json`).
+
+---
+
+## The project plan: a file the Architect owns
+
+`<project>\.synapse\plan.json` — goal + tasks (`id`, `title`, `role`, `status`,
+`detail`, `dependsOn`, `result`, `note`). The Architect writes it with the
+ordinary file tools; there is no tool and no store for it.
+
+- **One writer.** The Architect owns it. Workers are told it is read-only and
+  are handed their own task instead, so they never need to open it. The harness
+  fingerprints the file around a worker turn so a stray edit is visible.
+- **Synapse only reads it — it never repairs it.** Reading is tolerant and never
+  throws: a bad file becomes `error` (unparseable) or `problems` (it parsed but
+  breaks the shape), and the pane shows exactly what is wrong. The same sentence
+  goes into the Architect's brief, so **the model fixes its own document**;
+  verified live — one bare "Continue." closed the loop, because the brief was the
+  only thing that could have told it the file was broken.
+- **It belongs to the project, not the conversation**, so a new session
+  continues the same plan. It is created empty (`{"version":1,"goal":"","tasks":[]}`)
+  when a project is added and at boot for any project missing one.
+- **`id` is required.** Delegation refers to tasks by id, and the Architect may
+  rewrite the file at any time; a task without one is flagged and skipped.
+- **Deliverables go in `bin/`** inside the project; everything else there is
+  scratch. It is in the brief so every role knows where work lands.
 
 ---
 
@@ -652,19 +708,22 @@ not gigabytes. Worth knowing; not worth panicking about.
   subagent's model, so leaning on `subagent` would leave every per-role pick
   decorative and hide the orchestration inside a black box. Each step will run
   as a real engine session with that role's model and effort instead.
-  - **3.1 done — the plan contract and the pane.** `synapse-plan`
-    (`plan_publish`, `task_status`), `src/plans.js`, the rail pane with
-    green/amber/red, red = hard-blocked. Verified in two live turns: the
-    Architect published four tasks with roles, a later turn moved two of them,
-    and the pane followed without a reload. Replay idempotency is unit-checked.
-  - **3.2 next — worker execution.** One plan step at a time, in the project's
-    own directory, with the role's model and effort; state onto the card; the
-    result written back to the plan and handed to the Architect. Needs
-    **internal sessions**: a worker session must be hidden from the rail the way
-    `workspace\_probe` already is, and `PATCH /api/session/{id}` accepts
-    `metadata`, so mark it there rather than inventing a parallel registry.
-    Test with a **one-step** plan — every step is a real turn on the operator's
-    free tier.
+  - **3.1 done — the plan is a project file.** `.synapse\plan.json`, owned and
+    written by the Architect (no tool, no store), read and rendered by Synapse,
+    briefed into every session through the engine's instruction entries. Verified
+    live on the `calendar` project: the Architect created a correct four-task
+    plan with roles, the file's first version came back unparseable (a stray
+    backslash copied out of the brief), the pane named the exact position, and
+    one bare "Continue." made the Architect repair its own file.
+  - **3.2 next — delegation.** The harness runs one task at a time on the role's
+    model and effort, hands the worker only its own task, records what ran, and
+    reports the result back to the Architect so it can move the task. Open
+    questions: how a task is *requested* (the Architect marking it `doing` vs an
+    explicit request), and who writes a worker's `result` back (the Architect, to
+    keep one writer on the file). Needs **internal sessions**: a worker session
+    must stay out of the rail the way `workspace\_probe` does, marked through the
+    `metadata` that `PATCH /api/session/{id}` already accepts. Test with a
+    **one-step** plan — every step is a real turn on the operator's free tier.
   - **3.3 — role cards show live activity**, and the ✎ button opens per-role
     instructions. Settles skills gating with it. Remember custom agents are dead
     here (the free tier rejected every custom-agent request), so instructions

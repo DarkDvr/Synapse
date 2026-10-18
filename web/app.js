@@ -35,8 +35,9 @@ const state = {
   projects: [],
   sessionId: null,
   messages: [],
-  // The plan the Architect published for the open session (null until it does).
-  plan: null,
+  // The open session's project plan file: its parsed contents, any problems in
+  // it, and when it last changed.
+  planState: null,
   permissions: [],
   busy: false,
   busySessions: new Set(),
@@ -1069,7 +1070,7 @@ function showNothing() {
   state.view = 'none';
   state.sessionId = null;
   state.messages = [];
-  state.plan = null;
+  state.planState = null;
   state.mode = 'single';
   renderMode();
   setView();
@@ -1149,6 +1150,9 @@ async function loadMessages() {
     setEventChip('message load failed');
   }
   renderTranscript();
+  // The plan is a file the Architect writes during the turn, so a message
+  // refresh is exactly when it is most likely to have changed.
+  loadPlan();
 }
 
 function updateBusyFromMessages() {
@@ -1559,22 +1563,31 @@ async function refreshPending() {
   if (state.view === 'session') renderTranscript();
 }
 
-// ── the development plan ────────────────────────────────────────
-// The Architect publishes it through the synapse-plan tool; Synapse reads the
-// call out of the transcript and this pane renders it. Statuses are the whole
-// point: red means the work is waiting on the operator.
+// ── the project plan ────────────────────────────────────────────
+// `.synapse\plan.json` in the session's project folder, written by the Architect
+// and read here. The file is the source of truth: this pane only renders it, and
+// says so plainly when the file is malformed rather than hiding the problem.
 const PLAN_STATUS = { todo: 'Todo', doing: 'Doing', done: 'Done', blocked: 'Blocked', failed: 'Failed' };
+
+function ago(ms) {
+  if (!ms) return '';
+  const s = Math.max(0, Math.round((Date.now() - ms) / 1000));
+  if (s < 45) return 'just now';
+  if (s < 3600) return `${Math.round(s / 60)}m ago`;
+  if (s < 86400) return `${Math.round(s / 3600)}h ago`;
+  return `${Math.round(s / 86400)}d ago`;
+}
 
 async function loadPlan() {
   if (!state.sessionId) {
-    state.plan = null;
+    state.planState = null;
     renderPlan();
     return;
   }
   try {
-    state.plan = (await api('GET', `/api/sessions/${encodeURIComponent(state.sessionId)}/plan`)).plan;
+    state.planState = await api('GET', `/api/sessions/${encodeURIComponent(state.sessionId)}/plan`);
   } catch {
-    state.plan = null;
+    state.planState = null;
   }
   renderPlan();
 }
@@ -1582,10 +1595,21 @@ async function loadPlan() {
 function renderPlan() {
   const body = $('planBody');
   if (!body) return;
-  const plan = state.plan;
-  const tasks = plan?.tasks || [];
+  const st = state.planState;
+  const rel = st?.relative || '.synapse\\plan.json';
+
+  // A file we cannot read is the Architect's to fix, so say exactly what is
+  // wrong and where, rather than showing an empty pane.
+  if (st?.error) {
+    body.innerHTML =
+      `<p class="plan-error">${esc(st.error)}</p>` +
+      `<p class="rail-note plan-meta">${esc(rel)}</p>`;
+    return;
+  }
+
+  const tasks = st?.plan?.tasks || [];
   if (!tasks.length) {
-    body.innerHTML = `<p class="rail-note">No plan yet. Ask the Architect to plan this job.</p>`;
+    body.innerHTML = `<p class="rail-note">No plan yet. Ask the Architect to plan this job — it owns ${esc(rel)}.</p>`;
     return;
   }
 
@@ -1595,9 +1619,10 @@ function renderPlan() {
   if (counts.doing) meta.push(`${counts.doing} in flight`);
   if (counts.blocked) meta.push(`${counts.blocked} blocked`);
   if (counts.failed) meta.push(`${counts.failed} failed`);
+  if (st.mtime) meta.push(ago(st.mtime));
 
   body.innerHTML =
-    (plan.goal ? `<p class="plan-goal">${esc(plan.goal)}</p>` : '') +
+    (st.plan.goal ? `<p class="plan-goal">${esc(st.plan.goal)}</p>` : '') +
     `<ol class="plan-list">${tasks
       .map((t) => {
         const status = PLAN_STATUS[t.status] ? t.status : 'todo';
@@ -1612,6 +1637,9 @@ function renderPlan() {
         </li>`;
       })
       .join('')}</ol>` +
+    (st.problems?.length
+      ? `<p class="plan-problems">${st.problems.map((p) => esc(p)).join('<br>')}</p>`
+      : '') +
     `<p class="rail-note plan-meta">${esc(meta.join(' · '))}</p>`;
 }
 
@@ -1871,12 +1899,6 @@ function connectStream() {
         const passed = results.filter((r) => r.ok).length;
         toast('Tool Probe Finished', `${passed}/${results.length} cases clean — see Tools In Use.`);
       }
-      return;
-    }
-
-    // The Architect published or moved its plan.
-    if (ev.kind === 'plan') {
-      if (ev.sessionId === state.sessionId) loadPlan();
       return;
     }
 

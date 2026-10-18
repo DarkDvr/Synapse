@@ -978,6 +978,19 @@ body[data-view="session"] .chat-dock:not(.has-history) .composer { border-top-co
   border: 1px solid var(--violet-line); white-space: nowrap; margin-top: 1px;
 }
 .plan-meta { margin-top: 10px; font-family: var(--mono); font-size: 11px; }
+/* the file could not be read at all — the Architect's to fix, so say so plainly */
+.plan-error {
+  margin: 0; padding: 7px 9px; border-radius: 7px;
+  background: rgba(240, 86, 63, 0.09); border: 1px solid rgba(240, 86, 63, 0.24);
+  color: var(--red); font-family: var(--mono); font-size: 11px; line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+/* the file parsed but breaks the shape: amber, not red — the plan is still readable */
+.plan-problems {
+  margin: 9px 0 0; padding: 7px 9px; border-radius: 7px;
+  background: rgba(232, 163, 61, 0.07); border: 1px solid rgba(232, 163, 61, 0.22);
+  color: var(--amber); font-size: 11px; line-height: 1.5;
+}
 
 /* ── settings: a compact two-column form ───────────────────────────────── */
 #settingsModal .modal { width: min(640px, 100%); }

@@ -1,9 +1,36 @@
 // Synapse API — a stable, engine-agnostic surface for the UI.
 // Handlers call the engine adapter; nothing here knows about OpenCode.
 import { TBD_TITLE } from './titles.js';
+import { ensurePlan, readPlan, briefSession, BRIEF_KEY } from './plans.js';
 
-export function createApi({ getConfig, applyConfig, engine, logger, getBootError, projects, toolStats, plans, probe, modelCache, inspectModel: inspectRef, probeDir }) {
+export function createApi({ getConfig, applyConfig, engine, logger, getBootError, projects, toolStats, probe, modelCache, inspectModel: inspectRef, probeDir }) {
   const app = logger.channel('app');
+
+  // The last brief we handed each session, so an unchanged plan does not PUT
+  // the same text again on every message.
+  const briefed = new Map();
+
+  /**
+   * Tell a session where it is and what the project plan says.
+   *
+   * This goes through the engine's instruction entries rather than the message
+   * text: a prefix would join the conversation and read as if the operator had
+   * typed it. Failure is logged once and never blocks the turn — an engine
+   * without the concept still works, it just gets no brief.
+   */
+  async function brief(sessionId, directory, role) {
+    try {
+      const text = briefSession({ dir: directory, role });
+      if (briefed.get(sessionId) === text) return;
+      await engine.setInstruction(sessionId, BRIEF_KEY, text);
+      briefed.set(sessionId, text);
+    } catch (err) {
+      if (briefed.get(sessionId) !== 'failed') {
+        app.warn(`could not brief ${sessionId}: ${err.message}`);
+        briefed.set(sessionId, 'failed');
+      }
+    }
+  }
 
   /** Directory comparison key: case-insensitive, no trailing separator. */
   const dirKey = (d) => String(d ?? '').replace(/[\\/]+$/, '').toLowerCase();
@@ -147,6 +174,9 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
 
     createProject: async (body) => {
       const project = projects.create({ name: body?.name, directory: body?.directory });
+      // A project starts with an empty, valid plan file, so the first session in
+      // it has something concrete to fill in rather than a blank page.
+      ensurePlan(project.directory);
       return { project: (await projectsWithSessions()).find((p) => p.id === project.id) || project };
     },
 
@@ -196,6 +226,9 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
         permissions: body?.permissions,
         directory: project.directory,
       });
+      // From the first turn, the Architect knows where it is and that the plan
+      // file is its own to keep.
+      await brief(session.id, project.directory, 'architect');
       return { session, projectId: project.id };
     },
 
@@ -249,8 +282,7 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
     deleteSession: async (sessionId) => {
       requireReady();
       await engine.deleteSession(sessionId);
-      // A deleted session's plan has nothing left to describe.
-      plans?.clear(sessionId);
+      briefed.delete(sessionId);
       return { ok: true };
     },
 
@@ -259,8 +291,21 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
       return { messages: await engine.getMessages(sessionId) };
     },
 
-    /** The development plan the Architect published for this session. */
-    plan: async (sessionId) => ({ plan: plans ? plans.get(sessionId) : null }),
+    /**
+     * The open session's project plan, read straight from `.synapse\plan.json`
+     * in its directory. The file is the source of truth — there is no store to
+     * keep in sync, and a plan written by hand reads the same as one the
+     * Architect wrote.
+     */
+    plan: async (sessionId) => {
+      let directory = null;
+      try {
+        const session = await engine.getSession(sessionId);
+        directory = session?.directory || null;
+      } catch { /* session gone; report no plan rather than an error */ }
+      if (!directory) return readPlan('');
+      return readPlan(directory);
+    },
 
     sendMessage: async (sessionId, body) => {
       requireReady();
@@ -269,6 +314,14 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
         const err = new Error('message text is required');
         err.status = 400;
         throw err;
+      }
+      // Re-brief before the turn: the plan may have changed since the last one,
+      // and an unchanged plan is not sent twice.
+      try {
+        const session = await engine.getSession(sessionId);
+        await brief(sessionId, session?.directory, 'architect');
+      } catch (err) {
+        app.warn(`brief skipped for ${sessionId}: ${err.message}`);
       }
       await engine.prompt(sessionId, text);
       return { ok: true };

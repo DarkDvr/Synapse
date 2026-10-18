@@ -14,7 +14,7 @@ import {
   normalizeSession,
   parseModelRef,
 } from './base.js';
-import { SEARCH_SERVER, PLAN_SERVER, ENGINE_PID_FILE } from '../paths.js';
+import { SEARCH_SERVER, ENGINE_PID_FILE } from '../paths.js';
 
 const ENGINE_USERNAME = 'opencode';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -103,7 +103,6 @@ export class OpenCodeEngine extends Engine {
     const servers = { ...((cfg.mcp || {}).servers || {}) };
     delete servers.synapse;
     delete servers['synapse-search'];
-    delete servers['synapse-plan'];
 
     // Our search, unless the operator switched it off. This used to return early
     // from the whole function, which also cost them the model limit overrides
@@ -119,17 +118,8 @@ export class OpenCodeEngine extends Engine {
       };
     }
 
-    // The plan: the Architect publishes it as structured tasks here, and
-    // Synapse reads the calls back out of the transcript (src/plans.js).
-    servers['synapse-plan'] = {
-      type: 'local',
-      command: [process.execPath, PLAN_SERVER],
-      codemode: false,
-    };
-
     const legacyMcp = { ...(cfg.mcp || {}) };
     delete legacyMcp['synapse-search'];
-    delete legacyMcp['synapse-plan'];
     delete legacyMcp.synapse;
 
     const next = {
@@ -180,7 +170,7 @@ export class OpenCodeEngine extends Engine {
         fs.writeFileSync(cfgFile, body, 'utf8');
         this.log.info(
           `engine config: ${this.cfg.localSearch === false ? 'search disabled' : 'local search registered'}` +
-            `, plan tool registered, built-in websearch disabled` +
+            `, built-in websearch disabled` +
             (skillPaths.length ? `, ${skillPaths.length} skill path(s)` : '') +
             (limitIds.length ? `, ${limitIds.length} model limit override(s)` : ''),
         );
@@ -376,6 +366,44 @@ export class OpenCodeEngine extends Engine {
   async getSession(sessionId) {
     const r = await this.request('GET', `/api/session/${encodeURIComponent(sessionId)}`);
     return normalizeSession(r?.data || {});
+  }
+
+  /**
+   * Attach or replace one durable instruction entry on a session.
+   *
+   * This is the engine's own channel for standing context: per session, kept
+   * across turns, and announced as an update at the next step boundary. Synapse
+   * uses it to brief a role (which project, where the plan lives, what to do
+   * with it) without prefixing text onto the operator's message — a prefix would
+   * be part of the conversation and would show up in the transcript as if the
+   * operator had typed it.
+   *
+   * The route is namespaced `experimental` upstream; it is the one place in
+   * Synapse that knows that, which is exactly what the adapter is for.
+   */
+  async setInstruction(sessionId, key, value) {
+    await this.request(
+      'PUT',
+      `/api/experimental/session/${encodeURIComponent(sessionId)}/instructions/entries/${encodeURIComponent(key)}`,
+      { value },
+    );
+    return true;
+  }
+
+  async listInstructions(sessionId) {
+    const r = await this.request(
+      'GET',
+      `/api/experimental/session/${encodeURIComponent(sessionId)}/instructions/entries`,
+    );
+    return Array.isArray(r?.data) ? r.data : [];
+  }
+
+  async clearInstruction(sessionId, key) {
+    await this.request(
+      'DELETE',
+      `/api/experimental/session/${encodeURIComponent(sessionId)}/instructions/entries/${encodeURIComponent(key)}`,
+    );
+    return true;
   }
 
   async createSession({ title, model, agent, directory, permissions } = {}) {

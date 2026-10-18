@@ -2,14 +2,14 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn, execFile } from 'node:child_process';
-import { DATA_DIR, LOGS_DIR, WORKSPACE_DIR, GENERAL_DIR, ENGINE_HOME, PID_FILE, PROJECTS_FILE, TOOL_STATS_FILE, PROBE_DIR, PROBE_FILE, MODEL_CACHE_FILE, PLANS_FILE } from './paths.js';
+import { DATA_DIR, LOGS_DIR, WORKSPACE_DIR, GENERAL_DIR, ENGINE_HOME, PID_FILE, PROJECTS_FILE, TOOL_STATS_FILE, PROBE_DIR, PROBE_FILE, MODEL_CACHE_FILE } from './paths.js';
 import { loadConfig, saveConfig } from './config.js';
 import { logger } from './logger.js';
 import { createEngine } from './engines/index.js';
 import { createProjectStore } from './projects.js';
 import { createTitler } from './titler.js';
 import { createToolStats } from './toolstats.js';
-import { createPlans } from './plans.js';
+import { ensurePlan } from './plans.js';
 import { createProbe, discoverToolsetForModel } from './probe.js';
 import { createModelCache, MAX_TOOL_ASKS } from './modelcache.js';
 import { createApi } from './api.js';
@@ -62,6 +62,14 @@ async function main() {
     logger,
   });
   app.info(`projects: ${projects.list().length} (General + ${projects.list().length - 1})`);
+  // Every project owns a plan file. Create the ones that are missing rather than
+  // waiting for the first session: an empty, valid file is a better starting
+  // point than a missing one, and it makes the file discoverable.
+  for (const project of projects.list()) {
+    if (!project.exists) continue;
+    const made = ensurePlan(project.directory);
+    if (made.created) app.info(`plan file created: ${made.path}`);
+  }
 
   // ── engine ───────────────────────────────────────────────────
   engine = createEngine(config, {
@@ -97,10 +105,6 @@ async function main() {
     toolStats.clear();
     toolStatsLog.info('census cleared on boot (tools.resetOnBoot)');
   }
-
-  // What each session is working towards. Derived from the plan tool calls in
-  // its transcript — see src/plans.js for why there is no IPC here.
-  const plans = createPlans({ file: PLANS_FILE, logger });
 
   // The probe drives one turn per tool so we can see what these models actually
   // reach for, and how slow or broken each tool is on this machine.
@@ -218,12 +222,6 @@ async function main() {
           `census +${added} call(s) in ${sessionId}; running total ${snap.total} (${snap.failed} failed)`,
         );
       }
-      // The plan travels the same way. The Architect publishes it by calling the
-      // synapse-plan tool, and that call — with its full input — is already in
-      // the messages we just fetched, so there is nothing to transport.
-      if (plans.applyMessages(sessionId, messages)) {
-        http?.broadcast({ kind: 'plan', type: 'plan.updated', sessionId, ts: Date.now() });
-      }
     } catch (err) {
       toolStatsLog.warn(`census skipped for ${sessionId}: ${err.message}`);
     }
@@ -263,7 +261,6 @@ async function main() {
     getBootError: () => bootError,
     projects,
     toolStats,
-    plans,
     probe,
     modelCache,
     inspectModel,

@@ -44,6 +44,14 @@ export class Engine extends EventEmitter {
   // transcript — used for naming sessions.
   async generateText() { return ''; }
 
+  // ── standing context ─────────────────────────────────────────
+  // Durable, per-session instructions. Synapse briefs a role with these rather
+  // than prefixing its message: a prefix would be part of the conversation.
+  // An engine without the concept may implement these as no-ops.
+  async setInstruction() { return false; }
+  async listInstructions() { return []; }
+  async clearInstruction() { return false; }
+
   // ── things that can block a session ──────────────────────────
   /** Sessions the engine still considers running. */
   async listActiveSessions() { return []; }

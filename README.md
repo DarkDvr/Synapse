@@ -49,12 +49,11 @@ F:\dev\Synapse
 │  ├─ projects.js              the project registry (data\projects.json)
 │  ├─ titler.js                names a session after its first answer
 │  ├─ toolstats.js             the tool-call census (data\tool-stats.json)
-│  ├─ plans.js                 the Architect's plan, per session (data\plans.json)
+│  ├─ plans.js                 the project plan file (read/validate/brief)
 │  ├─ modelcache.js            per-model knowledge (data\model-cache.json)
 │  ├─ probe.js                 the tool probe + one-off model toolset checks
 │  ├─ search.js                dependency-free DuckDuckGo search
 │  ├─ mcp/search-server.js     stdio MCP server exposing websearch to the engine
-│  ├─ mcp/plan-server.js       stdio MCP server the Architect publishes its plan through
 │  ├─ titles.js                the shared "TBD" placeholder
 │  ├─ api.js                   stable engine-agnostic API
 │  ├─ server.js                HTTP + static UI + SSE relay
@@ -263,36 +262,55 @@ the project whose directory they run in.
 
 ## The project plan
 
-The Architect does not describe its plan in prose — it **publishes** it, as
-structured tasks, through Synapse's own MCP tool. The right pane then shows what
-the job is, who does what, and where it is stuck.
+The plan is a **file the Architect owns**, inside the project it plans:
 
 ```text
-plan_publish  { goal, tasks: [{ title, role, detail?, dependsOn? }] }
-task_status   { id, status, result?, note? }
+<project>\.synapse\plan.json
+{
+  "version": 1,
+  "goal": "Print this month's calendar in the console with Python and rich.",
+  "tasks": [
+    { "id": "t1", "title": "Visual design for the output", "role": "designer",
+      "status": "todo", "detail": "layout, colours, highlight style",
+      "dependsOn": [], "result": null, "note": null }
+  ]
+}
 ```
 
-`status` is `todo · doing · done · blocked · failed`. Task ids (`t1`, `t2`, …)
-come back in the tool's own reply, which is why the model always knows what to
-address. `blocked` is the one that matters: it means the work cannot proceed
-without the operator, and it is the only red the pane paints for a live task.
-Roles are the cards the topology already has (`architect, critic, coder-1,
-designer, coder-2, auditor, coder-3`), so a task already says which model and
-effort will run it — that is the point of publishing rather than describing.
+`status` is `todo · doing · done · blocked · failed`. `blocked` is the one that
+matters: the work cannot proceed without the operator, and it is the only red
+the pane paints. Roles are the cards the topology already has (`architect,
+critic, coder-1, designer, coder-2, auditor, coder-3`), so a task already says
+which model and effort will run it. Task ids are required because delegation
+refers to them (`run t2`) and a rewritten file must not lose that thread.
 
-**There is no IPC.** The plan travels the way the tool census does: the engine
-records every tool call, with its full input, in the session transcript, and
-Synapse reads the transcript on each finished turn (`src/plans.js`). The MCP
-server is deliberately stateless — it validates the call and hands back the ids;
-the record that matters is the turn itself. Two properties fall out of that, and
-both are tested: applying a transcript is **idempotent and ordered**, so
-replaying it (after a restart, say) lands on exactly the same state with the
-same timestamps; and a **re-publish keeps the status of any task whose title it
-repeats**, so the Architect can restate its plan without losing progress.
+- **The file is the source of truth.** There is no store in Synapse and no tool
+  for this: the Architect writes it with the ordinary `read`/`write`/`edit`
+  tools it already has, and Synapse only **reads** it. A plan edited by hand
+  reads exactly like one the model wrote.
+- **One writer.** The Architect owns the file; every other role is told it is
+  read-only, and the harness fingerprints it around a worker turn so a stray
+  edit is visible rather than silent.
+- **It survives sessions.** It belongs to the project, not to the conversation,
+  so a new chat in the same project continues the same plan, and the pane shows
+  the same plan whichever session is open.
+- **Synapse never repairs it.** If the file is malformed, the pane names the
+  exact problem and the brief carries that same sentence into the Architect's
+  next turn — so the model fixes its own document. This is not theoretical: the
+  very first plan Synapse generated came back unreadable, because the brief
+  itself contained `bin\` and the model copied that lone backslash into a JSON
+  string. The loop closed on its own within one turn, prompted by nothing but
+  the harness's error message.
+- **Nothing forces a plan** out of a simple question. The pane is explicit about
+  that, and about which file it is reading.
 
-The pane is empty until a plan exists, and says so. Ask the Architect to plan
-the job — the tool description is written to encourage it, but nothing forces a
-plan out of a simple question.
+Every session is **briefed** through the engine's own instruction entries
+(`PUT /api/experimental/session/{id}/instructions/entries/{key}`, key
+`synapse.plan`) rather than by prefixing text onto your message — a prefix would
+join the conversation and read as if you had typed it. The brief is short: which
+project, where the plan file is, who may write it, what the current plan says,
+the format, and that deliverables go in `bin/`. It is re-sent only when its text
+changes.
 
 **Interaction rules.**
 - **Button labels are Title Case**, always ("Browse Folder", "Allow Once", "Add Project"). Nothing else is forced to a case.
