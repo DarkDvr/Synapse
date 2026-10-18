@@ -378,6 +378,18 @@ This is once per directory per process and needs no config.
 - **Jump buttons are `position: fixed`**, anchored to the chat column by JS.
   Absolute positioning inside a content-sized dock put them in the middle of the
   log where they scrolled away and did nothing.
+- **The jump buttons step message-by-message from an anchor, not from the raw
+  scroll offset.** `navAnchors()` picks the message that owns the fold (last top
+  at or above `scrollTop + 12`), and the buttons move `cur ± 1`. A raw
+  "first message below the fold" test got stuck: the first message sits ~11px
+  below the content top, so UP kept re-selecting it and DOWN never advanced.
+  Verified both directions at 1200 and 1680: 0 → 1 → 2 with NEXT disabling at
+  the last message, and back with PREV disabling at the first.
+- **The stacked layout caps the chat panel** at `min(70vh, 720px)`
+  (`body[data-view="session"] .chat-dock.has-history`). Below 1460px the stage
+  is content-sized, so without a cap a long conversation would stretch the page
+  forever. The cap is where the panel stops growing and its transcript starts
+  scrolling internally — verified 630px at 900px viewport height.
 - **Status dots need `display: inline-block`** — as inline spans they ignore
   width/height and paint as a 4px square.
 - **No duplicate status labels.** A failed tool card shows the `Failed` pill

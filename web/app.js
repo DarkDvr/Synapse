@@ -1309,6 +1309,21 @@ function myMessageTops() {
   return myMessages().map((n) => n.getBoundingClientRect().top + window.scrollY);
 }
 
+/**
+ * Which of my messages currently owns the top of the viewport. `cur` is the
+ * last message whose top is at or above the fold; -1 means the view sits above
+ * every message. Comparing raw scroll offsets is not enough: the first message
+ * often sits ~10px below the content top, so a "first one below the fold" test
+ * kept re-selecting it and the DOWN button never advanced past message one.
+ */
+function navAnchors() {
+  const tops = myMessageTops();
+  const at = chatScrollTop();
+  let cur = -1;
+  for (let i = 0; i < tops.length; i++) if (tops[i] <= at + 12) cur = i;
+  return { tops, at, cur };
+}
+
 function renderChatNav() {
   const nav = $('chatNav');
   const dock = $('chatDock');
@@ -1324,23 +1339,22 @@ function renderChatNav() {
   const d = dock.getBoundingClientRect();
   nav.style.right = `${Math.max(8, Math.round(window.innerWidth - d.right + 10))}px`;
 
-  const tops = myMessageTops();
-  const at = chatScrollTop();
+  const { tops, cur } = navAnchors();
   // Never offer a jump that cannot happen: with nothing to scroll, both rest.
   const canScroll =
     chatScroller() !== null || document.documentElement.scrollHeight > window.innerHeight + 2;
-  $('navPrev').disabled = !canScroll || !tops.some((t) => t < at - 8);
-  $('navNext').disabled = !canScroll || !tops.some((t) => t > at + 8);
+  $('navPrev').disabled = !canScroll || cur <= 0;
+  $('navNext').disabled = !canScroll || cur >= tops.length - 1;
 }
 
 function jumpMessage(dir) {
-  const tops = myMessageTops();
-  const at = chatScrollTop();
-  const target = dir < 0
-    ? [...tops].reverse().find((t) => t < at - 8)
-    : tops.find((t) => t > at + 8);
-  if (target === undefined) return;
-  const top = Math.max(0, target - 10);
+  const { tops, cur } = navAnchors();
+  // Move exactly one message from the one currently at the fold, in the asked
+  // direction. Deriving the target from the scroll offset alone got stuck on
+  // the first message (its top is not at 0), which is why DOWN did nothing.
+  const next = dir < 0 ? cur - 1 : cur + 1;
+  if (next < 0 || next >= tops.length) return;
+  const top = Math.max(0, tops[next] - 10);
   const el = chatScroller();
   if (el) el.scrollTo({ top, behavior: 'smooth' });
   else window.scrollTo({ top, behavior: 'smooth' });
