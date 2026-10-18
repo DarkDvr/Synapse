@@ -123,10 +123,8 @@ body.dark .input-with-action input {
 
 /* affordance colours: add = green · delete = red · edit/settings = yellow */
 .ic-add { color: var(--green); }
-.ic-del { color: var(--red); }
 .ic-edit, .ic-settings { color: var(--yellow); }
 .ic-add:hover { background: var(--green-soft); }
-.ic-del:hover { background: var(--red-soft); }
 .ic-edit:hover, .ic-settings:hover { background: var(--amber-soft); }
 
 /* ── 2. status dots ────────────────────────────────────────────────────── */
@@ -167,7 +165,6 @@ body { min-width: 1100px; }
   margin: 0;
   width: 100%;
 }
-.control-room .topbar { position: sticky; top: 0; z-index: 20; }
 
 .room {
   display: grid;
@@ -198,7 +195,7 @@ body[data-view="none"] .inspector { display: none; }
 /* the rail owns the full column height; the tools panel takes the slack. The
    inspector is capped to the viewport so a long tool census scrolls inside the
    panel instead of making the whole page scroll — which used to move the stage
-   (and the Architect card) off-screen. Below 1180px the page scrolls by design
+   (and the Architect card) off-screen. Below 1460px the page scrolls by design
    and this cap is lifted. */
 .inspector {
   display: grid;
@@ -343,10 +340,6 @@ body.dark .sidebar .nav-link.active > span:first-child { color: #fff; }
 .tree-row.session:hover .tree-open { color: var(--text); }
 .tree-row.session.is-current { background: var(--violet-faint); border-radius: 8px; }
 .tree-row.session.is-current .tree-open { color: #fff; font-weight: 600; }
-.tree-meta {
-  font-family: var(--mono); font-size: 10px; color: #6d717a;
-  padding: 0 4px; flex: none;
-}
 .tree-x {
   border: 0; background: transparent; color: var(--red); opacity: 0.65;
   font-size: 12px; line-height: 1; padding: 3px 5px; border-radius: 5px;
@@ -387,9 +380,6 @@ body.dark .sidebar .nav-link.active > span:first-child { color: #fff; }
   padding: 4px 7px; margin: 1px 0;
 }
 .tree-rename:focus-visible { outline: 2px solid var(--orange); outline-offset: 1px; }
-
-/* shown in place of the session list when a project has none open */
-.tree-empty { padding: 3px 8px; font-size: 12px; color: #6d717a; }
 
 /* the always-available "New Session" slot at the top of every project */
 .tree-row.new {
@@ -1016,14 +1006,24 @@ body[data-view="session"] .chat-dock {
   .control-room .mobile-menu { display: none; }
 }
 
+.btn-danger { color: var(--red); border-color: #5d2f27; background: rgba(240, 86, 63, 0.09); }
+.btn-danger:hover:not(:disabled) { background: var(--red-soft); border-color: var(--red); }
+
 /* ── 16. tool probe ────────────────────────────────────────────────────── */
 .probe-block { margin-top: 12px; padding-top: 11px; border-top: 1px solid var(--line); }
 .probe-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 7px; }
 .probe-title {
-  font-size: 10px; font-weight: 700; letter-spacing: 0.08em;
-  text-transform: uppercase; color: var(--muted);
+  font-size: 12.5px; font-weight: 600; color: var(--text);
 }
-.probe-model { font-family: var(--mono); font-size: 10px; color: #9aa0a8; margin: 2px 0 0; }
+/* a short control, not a full-height button */
+#runProbe { height: 26px; min-height: 26px; padding: 0 10px; font-size: 11px; }
+/* the full provider/id can be long: one line, ellipsised, with the ref in the
+   tooltip. The mockup's "..." is this rule, not truncation in JS. */
+.probe-model {
+  font-family: var(--mono); font-size: 10.5px; color: #9aa0a8;
+  margin: 4px 0 0;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
 .probe-block .tool-table { margin-top: 4px; }
 .probe-block .tool-table td { padding-top: 3px; padding-bottom: 3px; }
 /* the case name is an identifier, not prose — mono keeps the column aligned */

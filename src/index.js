@@ -149,6 +149,7 @@ async function main() {
   // repo. Once per directory per run; resets on restart, where the check is
   // cheap and idempotent.
   const gitChecked = new Set();
+  const pathKey = (d) => String(d || '').replace(/[\\/]+$/, '').toLowerCase();
   function git(args, dir) {
     return new Promise((resolve, reject) => {
       execFile('git', args, { cwd: dir, windowsHide: true, timeout: 20000 }, (err, stdout) =>
@@ -157,7 +158,8 @@ async function main() {
     });
   }
   async function ensureGitRepo(dir) {
-    if (!dir || gitChecked.has(dir)) return;
+    // The probe scratch directory is not a project; never repository it.
+    if (!dir || pathKey(dir) === pathKey(PROBE_DIR) || gitChecked.has(dir)) return;
     gitChecked.add(dir);
     try {
       await git(['rev-parse', '--git-dir'], dir);

@@ -2,7 +2,7 @@
   "server": {
     "host": "127.0.0.1",
     "port": 8700,
-    "openBrowser": false
+    "openBrowser": true
   },
   "engine": {
     "type": "opencode",

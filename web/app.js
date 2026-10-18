@@ -41,8 +41,6 @@ const state = {
   busySince: new Map(),
   toolsInFlight: new Set(),
   forms: [],
-  toolStats: null,
-  probe: null,
   // 'single' (one Architect, all tools, no delegation) or 'multi' (delegation
   // allowed, role cards revealed). New sessions start single; the toggle
   // switches the open session live.
@@ -498,7 +496,7 @@ function topologyTarget() {
 
 /**
  * How much vertical room the role-card wrapper may take. In the wide layout the
- * stage has a definite height (viewport minus the frame); below the 1180px
+ * stage has a definite height (viewport minus the frame); below the 1460px
  * breakpoint it is content-sized and the page scrolls. There, using the stage's
  * own height double-counts the chat row and clipped the cards to the Architect
  * alone — `getComputedStyle().height` reports the *used* height, never `auto`,
@@ -507,7 +505,7 @@ function topologyTarget() {
  */
 function stageBudget(stage) {
   const composerH = $('composer')?.getBoundingClientRect().height || 58;
-  const wide = window.matchMedia('(min-width: 1181px)').matches;
+  const wide = window.matchMedia('(min-width: 1461px)').matches;
   const basis = wide && stage ? stage.getBoundingClientRect().height : window.innerHeight - 40;
   // composer row + its borders + the stage gap
   return Math.max(0, basis - composerH - 2 - 14);
@@ -1442,7 +1440,6 @@ async function renderToolUsage() {
   try {
     stats = await api('GET', '/api/tools/stats');
   } catch { /* engine down */ }
-  state.toolStats = stats;
 
   if (!stats || !stats.total) {
     note.hidden = false;
@@ -1493,7 +1490,6 @@ async function renderProbe() {
   } catch {
     return;
   }
-  state.probe = st;
 
   if (btn) {
     btn.disabled = Boolean(st.running);
@@ -1503,9 +1499,10 @@ async function renderProbe() {
   const results = st.results || [];
   const modelEl = $('probeModel');
   if (modelEl) {
-    // These results belong to one model; the toolset and the timings are only
-    // meaningful with it named.
-    modelEl.textContent = st.model ? `Model: ${st.model}` : '';
+    // The full provider/id, ellipsised by CSS when it does not fit; the ref is
+    // in the tooltip so the truncated part is still available.
+    modelEl.textContent = st.model || '';
+    modelEl.title = st.model || '';
     modelEl.hidden = !modelEl.textContent;
   }
   if (!results.length) {
@@ -1788,7 +1785,14 @@ function renderSettings() {
   const f = (label, path, opts = {}) => `
     <label class="set-field${opts.wide ? ' wide' : ''}">
       <span>${esc(label)}</span>
-      <input data-path="${path}" type="${opts.type || 'text'}" value="${esc(readPath(c, path))}" ${opts.attr || ''} />
+      <input data-path="${path}" type="${opts.type || 'text'}" value="${esc(opts.value !== undefined ? opts.value : readPath(c, path))}" ${opts.attr || ''} />
+    </label>`;
+  const sel = (label, path, options, opts = {}) => `
+    <label class="set-field${opts.wide ? ' wide' : ''}">
+      <span>${esc(label)}</span>
+      <select data-path="${path}">
+        ${options.map((o) => `<option value="${esc(o.v)}"${o.v === readPath(c, path) ? ' selected' : ''}>${esc(o.l)}</option>`).join('')}
+      </select>
     </label>`;
   const check = (label, path) => `
     <label class="set-check">
@@ -1796,6 +1800,12 @@ function renderSettings() {
       <span>${esc(label)}</span>
     </label>`;
   const group = (title, body, cols) => `<section class="set-group"><h4>${title}</h4><div class="set-grid${cols === 3 ? ' cols-3' : ''}">${body}</div></section>`;
+
+  // Show what the engine actually resolved when the config is blank: these two
+  // fields mean "auto" when empty, and an empty box hides the path in use.
+  const detected = state.status?.engine || {};
+  const binaryValue = readPath(c, 'engine.opencode.binary') || detected.binary || '';
+  const homeValue = readPath(c, 'engine.opencode.home') || detected.home || '';
 
   // No model or agent fields here: there is no "default" — every role owns its
   // model and effort, chosen on its card and persisted in the config file.
@@ -1807,19 +1817,24 @@ function renderSettings() {
     group('Engine',
       f('Engine type', 'engine.type') +
       f('Engine port', 'engine.opencode.port', { type: 'number' }) +
-      f('opencode.exe path (blank = auto-detect)', 'engine.opencode.binary', { wide: true }) +
+      f('opencode.exe path (blank = auto-detect)', 'engine.opencode.binary', { wide: true, value: binaryValue }) +
       f('Password (blank = keep existing)', 'engine.opencode.password', { type: 'password', attr: 'placeholder="unchanged"' }) +
       f('Start timeout (ms)', 'engine.opencode.startTimeoutMs', { type: 'number' }) +
-      f('Engine home (blank = data\\engine\\opencode)', 'engine.opencode.home', { wide: true })),
+      f('Engine home (blank = data\\engine\\opencode)', 'engine.opencode.home', { wide: true, value: homeValue })),
     group('Working directory',
       f('Where new sessions run (blank = workspace)', 'defaults.directory', { wide: true })),
     group('Model checks',
       f('Max asks per model (1–20)', 'modelChecks.maxAsks', { type: 'number' }) +
       `<div class="set-field"><span>Ask counters</span>
-        <button type="button" class="btn btn-secondary btn-sm" data-reset-asks>Reset Ask Counters</button>
+        <button type="button" class="btn btn-danger btn-sm" data-reset-asks>Reset Ask Counters</button>
       </div>`),
     group('Logging',
-      f('Level (error | warn | info | debug)', 'logging.level') +
+      sel('Level', 'logging.level', [
+        { v: 'error', l: 'Error' },
+        { v: 'warn', l: 'Warn' },
+        { v: 'info', l: 'Info' },
+        { v: 'debug', l: 'Debug' },
+      ]) +
       f('Retention (days)', 'logging.retentionDays', { type: 'number' }) +
       f('Max file size (MB)', 'logging.maxFileMb', { type: 'number' }), 3),
   ].join('');

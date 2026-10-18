@@ -286,6 +286,7 @@ export class OpenCodeEngine extends Engine {
       version: this.version,
       endpoint: this.base || null,
       pid: this.proc?.pid ?? null,
+      binary: this.resolveBinary(),
       home: this.resolveHome().base,
       workspace: this.workspaceDir,
     };

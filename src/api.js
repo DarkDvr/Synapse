@@ -334,8 +334,8 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
         results: s.results,
         // Which model these results are for — the toolset is per model.
         model: s.model || null,
-        // Which tools this model was given, as it reported them. Shown in the
-        // panel so a "not called" verdict is not read as a model failure.
+        // Which tools this model was given, as it reported them. Used to label
+        // a "not called" verdict honestly; the panel lists only the cases.
         toolset: s.toolset || [],
         cases: probe ? probe.cases.map((c) => ({ id: c.id, tool: c.tool })) : [],
       };

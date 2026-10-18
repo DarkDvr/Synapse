@@ -370,7 +370,7 @@ This is once per directory per process and needs no config.
 - **`.chat-scroll` scrolls internally; the page does not.** `.stage` has a
   definite `height: calc(100vh - 26px)` in the side-by-side layout, so the
   composer sits at the bottom of the window. In the stacked layout (below
-  1180px) the stage is content-sized and the page scrolls again. Every scroll
+  1460px) the stage is content-sized and the page scrolls again. Every scroll
   helper goes through `chatScroller()`, which returns the transcript when it
   scrolls and `null` otherwise.
 - **Jump buttons are `position: fixed`**, anchored to the chat column by JS.
@@ -391,8 +391,9 @@ This is once per directory per process and needs no config.
   margin: 0` and `--work-w: 1240px` as the room's max-width: sidebar → cards+chat
   (1fr, left-anchored) → rail → empty space at the window's right edge. Both
   modes now measure the same room width (verified at 1680 and 1100).
-- The sidebar breakpoint is **1180px**. Below it the rail stacks under the chat,
-  because the role cards need the width more than the rail needs to be beside.
+- The rail stacks under the chat below **1460px** (it needs 256 sidebar + 48
+  padding + 790 stage + 20 gap + 330 rail); below **1100px** the window scrolls
+  horizontally instead of collapsing the cards.
 - **Every role owns its model and effort — there is no "default model".** The
   Architect's choice lives in `roles.architect` like every other role, and is
   persisted in `config\synapse.config.json`; `defaults` holds only the working
@@ -419,7 +420,7 @@ This is once per directory per process and needs no config.
   `body[data-view="session"] .topology > *:not(.topo-architect):not(.path-layer)`
   and shown by the `workers-on` body class; on Multi→Single the class is removed
   only after the height animation, so the workers do not vanish mid-slide.
-  **The height cap is the part that bit twice.** Below 1180px the stage is
+  **The height cap is the part that bit twice.** Below 1460px the stage is
   content-sized, so `stageBudget()` tests the *breakpoint* (`matchMedia`), not
   the stage's used height — `getComputedStyle().height` reports the used height,
   never `auto`, and capping against it collapsed the reveal to the 48px
@@ -508,8 +509,8 @@ look at the result rather than only asserting against the DOM.
   composition with numbers — `archCard.bottom <= wrap.bottom`, `dock.top >=
   wrap.bottom`, `wrap.height ≈ topology.scrollHeight`, page `scrollHeight <=
   innerHeight` in the wide layout; (3) test **at two viewport widths** — the
-  1180px breakpoint changes the whole stage layout, and a bug there is invisible
-  at 1200px; (4) click the thing the operator will click (the mode toggle, a
+  1460px breakpoint changes the whole stage layout, and a bug there is invisible
+  at 1600px; (4) click the thing the operator will click (the mode toggle, a
   dropdown) and re-measure after it. If a claim is structural, prove it with a
   bounding box, not an opinion.
 
