@@ -102,13 +102,19 @@ export function normalizeModel(raw) {
   const id = raw?.id || raw?.modelID || '';
   const cost = Array.isArray(raw?.cost) ? raw.cost : [];
   const free = cost.length > 0 ? cost.every((c) => Number(c?.input) === 0) : Boolean(raw?.free);
-  // Thinking-effort variants as the model advertises them, in ascending order.
-  // `none` means the model can be asked not to think; an empty list means the
-  // model exposes no effort control at all.
+  // Thinking-effort variants in ascending order. `id` is what the engine's
+  // Model.Ref takes; `label` is the provider's own knob value (reasoningEffort),
+  // which is what the UI should show when it differs from the id. An empty list
+  // means the model exposes no effort control at all.
   const variants = (Array.isArray(raw?.variants) ? raw.variants : [])
-    .map((v) => (typeof v === 'string' ? v : v?.id))
-    .filter(Boolean)
-    .map(String);
+    .map((v) => {
+      if (typeof v === 'string') return { id: v, label: v };
+      const vid = v?.id ? String(v.id) : '';
+      if (!vid) return null;
+      const label = v?.settings?.reasoningEffort ? String(v.settings.reasoningEffort) : vid;
+      return { id: vid, label };
+    })
+    .filter(Boolean);
   return {
     ref: `${provider}/${id}`,
     provider,

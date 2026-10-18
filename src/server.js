@@ -103,7 +103,11 @@ export function createServer({ api, engine, logger, config }) {
     }
 
     // GET /api/models  /api/agents
-    if (seg[0] === 'models' && method === 'GET') return sendJson(res, 200, await api.models());
+    if (seg[0] === 'models' && seg.length === 1 && method === 'GET') return sendJson(res, 200, await api.models());
+    if (seg[0] === 'models' && seg[1] === 'cache' && method === 'GET') return sendJson(res, 200, await api.modelCache());
+    if (seg[0] === 'models' && seg[1] === 'inspect' && method === 'POST') {
+      return sendJson(res, 200, await api.inspectModel(await readBody(req)));
+    }
     if (seg[0] === 'agents' && method === 'GET') return sendJson(res, 200, await api.agents());
 
     // GET /api/pending — permissions, forms and active sessions in one call

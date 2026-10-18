@@ -115,6 +115,52 @@ function defaultAnswer(fields) {
   return answer;
 }
 
+/** Pull tool names out of a model's comma/newline-separated answer. */
+export function parseToolNames(text) {
+  return [
+    ...new Set(
+      String(text || '')
+        .split(/[,\n]/)
+        // hyphens are part of real tool names (MCP namespaces use them)
+        .map((t) => t.replace(/[^a-z0-9_-]/gi, '').toLowerCase())
+        .filter((t) => t.length > 1 && t.length < 32),
+    ),
+  ];
+}
+
+/**
+ * Ask one model what tools it has, in its own throwaway session, and return the
+ * names it reports. Used by the model cache when a model is first selected —
+ * once per model, not once per run. Returns [] on failure or an empty answer,
+ * and the caller then leaves the record unmarked so a later attempt can retry.
+ */
+export async function discoverToolsetForModel(engine, log, model, directory) {
+  const session = await engine.createSession({ title: 'Model check', model, directory });
+  try {
+    await engine.prompt(
+      session.id,
+      'List the exact names of every tool available to you, separated by commas. ' +
+        'Output only the tool names, nothing else. Do not call any tool.',
+    );
+    const deadline = Date.now() + 90000;
+    let messages = [];
+    while (Date.now() < deadline) {
+      await sleep(POLL_MS);
+      messages = await engine.getMessages(session.id);
+      if (messages.length && messages[messages.length - 1]?.type === 'idle') break;
+    }
+    const text = messages
+      .filter((m) => m.type === 'assistant')
+      .map((m) => m.text || '')
+      .join(' ');
+    const names = parseToolNames(text);
+    log.info(`model check ${model}: reported [${names.join(', ') || 'nothing'}]`);
+    return names;
+  } finally {
+    try { await engine.deleteSession(session.id); } catch { /* already gone */ }
+  }
+}
+
 export function createProbe({ engine, logger, notify, scratchDir, file }) {
   const log = logger.channel('tools');
   let state = {
@@ -190,14 +236,7 @@ export function createProbe({ engine, logger, notify, scratchDir, file }) {
         .filter((m) => m.type === 'assistant')
         .map((m) => m.text || '')
         .join(' ');
-      const names = [
-        ...new Set(
-          text
-            .split(/[,\n]/)
-            .map((t) => t.replace(/[^a-z_]/gi, '').toLowerCase())
-            .filter((t) => t.length > 1 && t.length < 24),
-        ),
-      ];
+      const names = parseToolNames(text);
       log.info(`probe: this model offers [${names.join(', ') || 'nothing reported'}]`);
       return names;
     } catch (err) {

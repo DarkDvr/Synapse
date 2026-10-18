@@ -239,7 +239,12 @@ const asSelection = (spec) => {
 };
 
 const modelByRef = (ref) => state.models.find((m) => m.ref === ref) || null;
-const variantsOf = (model) => (Array.isArray(model?.variants) ? model.variants.map(String) : []);
+const variantsOf = (model) =>
+  Array.isArray(model?.variants)
+    ? model.variants
+        .map((v) => (typeof v === 'string' ? { id: v, label: v } : { id: String(v?.id ?? ''), label: String(v?.label ?? v?.id ?? '') }))
+        .filter((v) => v.id)
+    : [];
 // The chevron button exposes the three highest efforts a model allows, in
 // ascending order: Cat Jam Free → high, xhigh, max; DeepSeek → low, high, max.
 const topEfforts = (model) => variantsOf(model).slice(-3);
@@ -262,7 +267,7 @@ function architectSelection() {
   // effort the button claims is not set.
   const saved = String(state.config?.defaults?.variant || '');
   const model = modelByRef(ref);
-  const variant = topEfforts(model).includes(saved) ? saved : '';
+  const variant = topEfforts(model).some((v) => v.id === saved) ? saved : '';
   return { ref, variant };
 }
 
@@ -276,6 +281,164 @@ const modelTitle = (m) => {
   if (m.output) bits.push(`${fmtTokens(m.output)} max output`);
   return bits.join(' · ');
 };
+
+const modelMeta = (m) => {
+  const bits = [];
+  if (m.context) bits.push(fmtTokens(m.context));
+  if (Array.isArray(m.tools) && m.tools.length) bits.push(`${m.tools.length} tools`);
+  return bits.join(' · ');
+};
+
+// ── searchable model picker ─────────────────────────────────────
+// The native <select> stays in the DOM as the source of truth — every existing
+// handler (fillRoleModels, renderEffort, setRoleModel) keeps working — but it is
+// hidden and driven by an input plus one shared menu. The menu is fixed-position
+// so it can escape the role-card wrapper's overflow clipping. Typing only
+// filters; a model can be set only by choosing an option.
+const pickers = new Map();
+let menuRole = null;
+let menuIndex = -1;
+let menuRefs = [];
+
+function setupModelPickers() {
+  document.querySelectorAll('.role-model').forEach((sel) => {
+    const role = sel.dataset.role;
+    if (!role) return;
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'model-search';
+    input.dataset.role = role;
+    input.autocomplete = 'off';
+    input.spellcheck = false;
+    input.placeholder = 'Search models…';
+    input.setAttribute('role', 'combobox');
+    input.setAttribute('aria-expanded', 'false');
+    input.setAttribute('aria-label', `Search models for ${role}`);
+    sel.after(input);
+    pickers.set(role, { sel, input });
+
+    input.addEventListener('focus', () => openModelMenu(role, false));
+    input.addEventListener('click', () => openModelMenu(role, false));
+    input.addEventListener('input', () => openModelMenu(role, true));
+    input.addEventListener('keydown', (e) => onModelKey(e, role));
+    // the delay lets a click on an option land before the menu closes
+    input.addEventListener('blur', () => setTimeout(() => { if (menuRole === role) closeModelMenu(); }, 130));
+  });
+
+  const menu = $('modelMenu');
+  if (menu) {
+    menu.addEventListener('mousedown', (e) => {
+      const opt = e.target.closest('[data-ref]');
+      if (!opt) return;
+      e.preventDefault();
+      chooseModel(menuRole, opt.dataset.ref);
+    });
+  }
+}
+
+function syncPickerInput(input) {
+  const p = pickers.get(input.dataset.role);
+  if (!p) return;
+  const m = modelByRef(p.sel.value);
+  input.value = m ? shortModel(m.name) : '';
+  input.title = m ? `${modelTitle(m)} · type to search` : 'Type to search models';
+}
+
+function positionModelMenu(input, menu) {
+  const r = input.getBoundingClientRect();
+  menu.style.left = `${Math.round(r.left)}px`;
+  menu.style.top = `${Math.round(r.bottom + 4)}px`;
+  menu.style.minWidth = `${Math.max(220, Math.round(r.width))}px`;
+}
+
+function paintModelMenu() {
+  const menu = $('modelMenu');
+  if (!menu) return;
+  [...menu.querySelectorAll('.model-opt')].forEach((el, i) => el.classList.toggle('is-active', i === menuIndex));
+}
+
+function openModelMenu(role, fromTyping) {
+  const p = pickers.get(role);
+  const menu = $('modelMenu');
+  if (!p || !menu) return;
+  menuRole = role;
+  if (!fromTyping) p.input.select();
+  const q = fromTyping ? p.input.value.trim().toLowerCase() : '';
+  const list = state.models.filter(
+    (m) => !q || m.name.toLowerCase().includes(q) || m.ref.toLowerCase().includes(q),
+  );
+  menuRefs = list.map((m) => m.ref);
+  menu.innerHTML = list.length
+    ? list
+        .map(
+          (m) => `<div class="model-opt${m.ref === p.sel.value ? ' is-current' : ''}" role="option" data-ref="${esc(m.ref)}">
+            <span class="mo-name">${esc(shortModel(m.name))}</span>
+            <span class="mo-meta">${esc(modelMeta(m))}</span>
+          </div>`,
+        )
+        .join('')
+    : '<div class="model-empty">No models match</div>';
+  menu.hidden = false;
+  p.input.setAttribute('aria-expanded', 'true');
+  positionModelMenu(p.input, menu);
+  menuIndex = menuRefs.length ? Math.max(0, menuRefs.indexOf(p.sel.value)) : -1;
+  paintModelMenu();
+}
+
+function closeModelMenu() {
+  const menu = $('modelMenu');
+  if (menu) menu.hidden = true;
+  if (menuRole) {
+    const p = pickers.get(menuRole);
+    if (p) {
+      p.input.setAttribute('aria-expanded', 'false');
+      syncPickerInput(p.input);
+    }
+  }
+  menuRole = null;
+  menuIndex = -1;
+  menuRefs = [];
+}
+
+/** Only a real model can be set; the typed text never becomes the value. */
+function chooseModel(role, ref) {
+  const p = pickers.get(role);
+  if (!p || !ref || !modelByRef(ref)) return;
+  if (p.sel.value !== ref) {
+    p.sel.value = ref;
+    p.sel.dispatchEvent(new Event('change'));
+  }
+  closeModelMenu();
+}
+
+function onModelKey(e, role) {
+  const p = pickers.get(role);
+  const menu = $('modelMenu');
+  if (!p || !menu) return;
+  const open = menuRole === role && !menu.hidden;
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    e.preventDefault();
+    if (!open) { openModelMenu(role, true); return; }
+    if (!menuRefs.length) return;
+    menuIndex = (menuIndex + (e.key === 'ArrowDown' ? 1 : -1) + menuRefs.length) % menuRefs.length;
+    paintModelMenu();
+    menu.querySelector('.model-opt.is-active')?.scrollIntoView({ block: 'nearest' });
+    return;
+  }
+  if (e.key === 'Enter') {
+    if (open && menuIndex >= 0) {
+      e.preventDefault();
+      chooseModel(role, menuRefs[menuIndex]);
+    }
+    return;
+  }
+  if (e.key === 'Escape') {
+    e.preventDefault();
+    closeModelMenu();
+    return;
+  }
+  if (e.key === 'Tab') closeModelMenu();
+}
 
 // Single mode keeps every tool but denies delegation, so the Architect answers
 // everything itself in one chat. A dedicated agent for this is the obvious
@@ -313,12 +476,13 @@ function renderMode() {
   document.body.dataset.mode = state.mode;
 }
 
-// ── role cards: the Multi reveal ────────────────────────────────
-// The cards sit in a wrapper whose max-height animates. Opening pushes the chat
-// down and reveals them fully; closing pulls the chat back up. Height is
-// measured, not guessed: the cards get their natural height, capped only by the
-// room left above the composer, so they are never cut off mid-card.
+// ── role cards: the Architect is always there ───────────────────
+// The cards sit in a wrapper whose max-height animates. The Architect card is
+// visible in both modes — you need its model and thinking-effort controls even
+// in Single — and Multi reveals the workers around it. Height is measured, not
+// guessed, so the cards are never cut off mid-card.
 let revealTimer = 0;
+let workersPendingOff = false;
 
 function topologyTarget() {
   const wrap = $('topologyWrap');
@@ -334,36 +498,40 @@ function measureReveal(topo, stage) {
   return Math.min(Math.round(topo.getBoundingClientRect().height), Math.round(available));
 }
 
-function setRoleCardsOpen(open, { animate = true } = {}) {
+/**
+ * Single: Architect only, wrapper at the Architect's height. Multi: the whole
+ * topology, measured. The wrapper is always open in a session, so switching
+ * modes is a height animation, not a show/hide.
+ */
+function applyRoleCardsLayout({ animate = true } = {}) {
   const els = topologyTarget();
-  if (!els) return;
+  if (!els || state.view !== 'session') return;
   const { wrap, topo } = els;
   clearTimeout(revealTimer);
-  if (open) {
+  workersPendingOff = false;
+  wrap.classList.add('is-open');
+
+  if (state.mode === 'multi') {
+    document.body.classList.add('workers-on');
     wrap.style.setProperty('--reveal-h', `${measureReveal(topo, $('stage'))}px`);
-    document.body.classList.add('topology-open');
-    // the reflow between setting the height and adding the class is what makes
-    // the first reveal animate instead of snapping open
+    // the reflow is what makes the first reveal animate instead of snapping
     void wrap.offsetHeight;
-    wrap.classList.add('is-open');
     requestAnimationFrame(drawActivePath);
     return;
   }
-  wrap.classList.remove('is-open');
-  document.body.classList.remove('topology-open');
+
+  const arch = topo.querySelector('.topo-architect');
+  wrap.style.setProperty('--reveal-h', `${Math.round(arch?.getBoundingClientRect().height || 0)}px`);
   if (!animate) {
-    wrap.style.removeProperty('--reveal-h');
+    document.body.classList.remove('workers-on');
     return;
   }
+  // keep the workers laid out while the height falls, then hide them
+  workersPendingOff = true;
   revealTimer = setTimeout(() => {
-    if (!wrap.classList.contains('is-open')) wrap.style.removeProperty('--reveal-h');
-  }, 300);
-}
-
-/** Where the cards should be, given the current view and mode. */
-function applyModeLayout(options) {
-  if (state.view === 'session' && state.mode === 'multi') setRoleCardsOpen(true, options);
-  else setRoleCardsOpen(false, options);
+    if (workersPendingOff && state.mode === 'single') document.body.classList.remove('workers-on');
+    workersPendingOff = false;
+  }, 320);
 }
 
 async function switchMode() {
@@ -405,17 +573,20 @@ function renderEffort(roleId) {
   // A stored effort that is not one of the three the button offers shows as
   // default; the next click (or save) writes a value the control can express.
   const saved = selectionFor(roleId).variant;
-  const variant = top.includes(saved) ? saved : '';
-  const level = variant ? top.indexOf(variant) + 1 : 0;
+  const idx = top.findIndex((v) => v.id === saved);
+  const level = idx >= 0 ? idx + 1 : 0;
+  // the provider's own label (reasoningEffort), not just our id
+  const label = idx >= 0 ? top[idx].label : 'default';
 
   btn.disabled = top.length === 0;
   btn.dataset.level = String(level);
   btn.innerHTML = level
     ? `<span class="effort-glyph">${'<span class="effort-chev"></span>'.repeat(level)}</span>`
     : '<span class="effort-glyph"><span class="effort-auto"></span></span>';
+  const tools = Array.isArray(model?.tools) && model.tools.length ? ` · ${model.tools.length} tools` : '';
   btn.title = top.length
-    ? `Current thinking effort: ${variant || 'default'}`
-    : `No thinking-effort control for ${model?.name || 'this model'}`;
+    ? `Current thinking effort: ${label}${tools}`
+    : `No thinking-effort control for ${model?.name || 'this model'}${tools}`;
   btn.setAttribute('aria-label', btn.title);
 }
 
@@ -432,6 +603,8 @@ function fillRoleModels() {
     if (!modelByRef(chosen)) chosen = (pool[i % pool.length] || state.models[0]).ref;
     sel.value = chosen;
     sel.title = modelTitle(modelByRef(chosen)) || `Model for the ${role} role`;
+    const p = pickers.get(role);
+    if (p) syncPickerInput(p.input);
     renderEffort(role);
   });
 }
@@ -461,12 +634,14 @@ async function applyArchitectModel() {
 
 async function setRoleModel(roleId, ref) {
   const role = ROLES.find((r) => r.id === roleId);
-  const top = topEfforts(modelByRef(ref));
   const current = selectionFor(roleId).variant;
-  const variant = top.includes(current) ? current : '';
+  const variant = topEfforts(modelByRef(ref)).some((v) => v.id === current) ? current : '';
   try {
     await saveRoleSelection(roleId, ref, variant);
     renderEffort(roleId);
+    // first time this model is chosen, learn its toolset in the background;
+    // the server answers from cache and never probes the same model twice
+    api('POST', '/api/models/inspect', { ref }).catch(() => {});
     if (roleId === 'architect') {
       await applyArchitectModel();
       toast('Model for Architect', state.sessionId ? 'Saved and applied to the open session.' : 'Saved for new sessions.');
@@ -484,10 +659,10 @@ async function cycleEffort(roleId) {
   const sel = document.querySelector(`.role-model[data-role="${roleId}"]`);
   const btn = document.querySelector(`.role-effort[data-role="${roleId}"]`);
   if (!btn || btn.disabled) return;
-  const top = topEfforts(modelByRef(sel?.value));
-  if (top.length === 0) return;
-  const idx = top.indexOf(selectionFor(roleId).variant);
-  const next = idx === -1 ? top[0] : idx < top.length - 1 ? top[idx + 1] : '';
+  const ids = topEfforts(modelByRef(sel?.value)).map((v) => v.id);
+  if (ids.length === 0) return;
+  const idx = ids.indexOf(selectionFor(roleId).variant);
+  const next = idx === -1 ? ids[0] : idx < ids.length - 1 ? ids[idx + 1] : '';
   try {
     await saveRoleSelection(roleId, sel.value, next);
     renderEffort(roleId);
@@ -773,7 +948,7 @@ function setView() {
   // the mode toggle is a session control: there is nothing to switch without
   // an open session
   $('modeToggle').hidden = state.view !== 'session';
-  applyModeLayout();
+  applyRoleCardsLayout();
   renderComposer();
   updateSessionHeader();
   requestAnimationFrame(drawActivePath);
@@ -1479,6 +1654,22 @@ function connectStream() {
       return;
     }
 
+    // A background model check finished: fold the toolset into the model list
+    // and refresh the pickers' meta (the menu shows a tool count when known).
+    if (ev.kind === 'model') {
+      const m = state.models.find((x) => x.ref === ev.ref);
+      if (m && Array.isArray(ev.tools) && ev.tools.length) {
+        m.tools = ev.tools;
+        pickers.forEach((p) => {
+          if (p.sel.value === ev.ref) {
+            syncPickerInput(p.input);
+            renderEffort(p.sel.dataset.role);
+          }
+        });
+      }
+      return;
+    }
+
     setEventChip(ev.type);
     const mine = !ev.sessionId || ev.sessionId === state.sessionId;
     // any traffic from a session counts as progress against the stall timer
@@ -1616,12 +1807,13 @@ async function saveSettings() {
   // A model change can strand a thinking effort the new model does not offer
   // (or that the chevron control cannot express). Clear it rather than let the
   // config and the button disagree.
-  if (draft.defaults && !topEfforts(modelByRef(draft.defaults.model)).includes(draft.defaults.variant)) {
+  const effortIds = (ref) => topEfforts(modelByRef(ref)).map((v) => v.id);
+  if (draft.defaults && !effortIds(draft.defaults.model).includes(draft.defaults.variant)) {
     draft.defaults.variant = '';
   }
   for (const entry of Object.values(draft.roles || {})) {
     if (!entry || typeof entry !== 'object') continue;
-    if (!topEfforts(modelByRef(entry.ref)).includes(entry.variant)) delete entry.variant;
+    if (!effortIds(entry.ref).includes(entry.variant)) delete entry.variant;
   }
   try {
     state.config = await api('PUT', '/api/config', draft);
@@ -1637,6 +1829,7 @@ function closeSettings() { $('settingsModal').hidden = true; }
 
 // ── wiring ──────────────────────────────────────────────────────
 function wire() {
+  setupModelPickers();
   $('composer').addEventListener('submit', (e) => { e.preventDefault(); send(); });
   $('stopBtn').addEventListener('click', interrupt);
   $('modeToggle').addEventListener('click', switchMode);
@@ -1728,6 +1921,9 @@ function wire() {
 
   // mockup affordances: clearly announce what is not wired yet
   document.addEventListener('click', (e) => {
+    // a click anywhere outside the open model menu closes it
+    if (menuRole && !e.target.closest('.model-search') && !e.target.closest('#modelMenu')) closeModelMenu();
+
     const perm = e.target.closest('[data-perm]');
     if (perm) { e.preventDefault(); replyPermission(perm.dataset.permId, perm.dataset.perm); return; }
 
@@ -1764,10 +1960,7 @@ function wire() {
   });
 
   window.addEventListener('resize', () => requestAnimationFrame(() => {
-    const els = topologyTarget();
-    if (els && document.body.classList.contains('topology-open')) {
-      els.wrap.style.setProperty('--reveal-h', `${measureReveal(els.topo, $('stage'))}px`);
-    }
+    if (state.view === 'session') applyRoleCardsLayout({ animate: false });
     drawActivePath();
     renderChatNav();
   }));

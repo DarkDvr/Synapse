@@ -206,11 +206,10 @@ body[data-view="none"] .topology-wrap,
 body[data-view="none"] .chat-dock { display: none; }
 
 /* A session's stage is two rows: the role-card wrapper and the chat dock. The
-   wrapper animates max-height rather than using display, so opening AND closing
-   are smooth and the grid never re-flows mid-animation. Single mode leaves it
-   at zero, so the chat owns the whole stage; Multi mode grows it to the height
-   JS measured and the chat slides down. */
-body[data-view="session"] .stage { grid-template-rows: auto minmax(0, 1fr); }
+   wrapper animates max-height rather than using display, so switching modes is
+   a smooth height change. The Architect card is always present; Single hides
+   the workers, Multi reveals them. */
+body[data-view="session"] .stage { grid-template-rows: auto minmax(0, 1fr); gap: 14px; }
 
 .topology-wrap {
   display: block; overflow: hidden;
@@ -221,7 +220,9 @@ body[data-view="session"] .stage { grid-template-rows: auto minmax(0, 1fr); }
    height normally equals the content, so no bar appears */
 .topology-wrap.is-open { max-height: var(--reveal-h, 600px); opacity: 1; overflow-y: auto; }
 
-body[data-view="session"].topology-open .stage { gap: 14px; }
+/* workers appear only in Multi; the path layer always stays */
+body[data-view="session"] .topology > *:not(.topo-architect):not(.path-layer) { display: none; }
+body.workers-on .topology > *:not(.topo-architect):not(.path-layer) { display: revert; }
 
 /* ── 5. sidebar: navigation ────────────────────────────────────────────── */
 
@@ -502,6 +503,41 @@ body.dark .sidebar-bottom,
 }
 .role-model:hover { border-color: #454950; color: var(--text); }
 .role-model:focus-visible { outline: 2px solid var(--orange); outline-offset: 1px; }
+
+/* ── searchable model picker ───────────────────────────────────────────── */
+/* The native <select> stays in the DOM as the source of truth (every handler
+   keeps working) but is hidden; an input drives it. The menu is one shared,
+   fixed-position node so it can escape the role-card wrapper's overflow. */
+.role-model { display: none; }
+.model-search {
+  appearance: none; background: #202226;
+  border: 1px solid var(--line); border-radius: 7px;
+  color: #b6bac1; font-family: var(--mono); font-size: 10.5px;
+  padding: 3px 8px; width: 180px; flex: none;
+  text-overflow: ellipsis; cursor: text;
+}
+.model-search:hover { border-color: #454950; color: var(--text); }
+.model-search:focus-visible { outline: 2px solid var(--orange); outline-offset: 1px; }
+.model-search::placeholder { color: #6d717a; }
+
+.model-menu {
+  position: fixed; z-index: 80;
+  background: #1b1d21; border: 1px solid var(--line); border-radius: 9px;
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.55);
+  max-height: 264px; overflow-y: auto; padding: 4px;
+}
+.model-opt {
+  display: flex; align-items: center; gap: 10px;
+  padding: 6px 8px; border-radius: 6px; cursor: pointer;
+  font-family: var(--mono); font-size: 11px; color: #c3c6cc; white-space: nowrap;
+}
+.model-opt:hover { background: var(--surface-soft); }
+.model-opt.is-active { background: var(--violet-soft); color: #fff; }
+.model-opt.is-current .mo-name { color: var(--green); }
+.model-opt .mo-name { overflow: hidden; text-overflow: ellipsis; }
+.model-opt .mo-meta { margin-left: auto; color: #6d717a; font-size: 10px; }
+.model-opt.is-active .mo-meta { color: #b9bdc4; }
+.model-empty { padding: 7px 8px; font-size: 11px; color: #6d717a; font-family: var(--mono); }
 
 .role-btn {
   width: 22px; height: 22px; flex: none; display: grid; place-items: center;

@@ -2,14 +2,15 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
-import { DATA_DIR, LOGS_DIR, WORKSPACE_DIR, ENGINE_HOME, PID_FILE, PROJECTS_FILE, TOOL_STATS_FILE, PROBE_DIR, PROBE_FILE } from './paths.js';
+import { DATA_DIR, LOGS_DIR, WORKSPACE_DIR, ENGINE_HOME, PID_FILE, PROJECTS_FILE, TOOL_STATS_FILE, PROBE_DIR, PROBE_FILE, MODEL_CACHE_FILE } from './paths.js';
 import { loadConfig, saveConfig } from './config.js';
 import { logger } from './logger.js';
 import { createEngine } from './engines/index.js';
 import { createProjectStore } from './projects.js';
 import { createTitler } from './titler.js';
 import { createToolStats } from './toolstats.js';
-import { createProbe } from './probe.js';
+import { createProbe, discoverToolsetForModel } from './probe.js';
+import { createModelCache } from './modelcache.js';
 import { createApi } from './api.js';
 import { createServer } from './server.js';
 
@@ -94,6 +95,41 @@ async function main() {
     notify: (ev) => http?.broadcast({ ...ev, ts: Date.now() }),
   });
 
+  // ── per-model knowledge ──────────────────────────────────────
+  // The engine catalog refreshes every boot, but models come and go. Record
+  // what we see, and discover a model's toolset once, on first selection.
+  // Runs are serialised: burst-selecting several models should not fire several
+  // turns at the provider at once.
+  const modelCache = createModelCache({ logger, file: MODEL_CACHE_FILE });
+  const inspectLog = logger.channel('tools');
+  const inspecting = new Set();
+  let inspectChain = Promise.resolve();
+
+  function inspectModel(ref) {
+    const key = String(ref || '').trim();
+    if (!key.includes('/')) return { started: false, reason: 'a provider/model ref is required' };
+    const known = modelCache.get(key);
+    if (known?.tools?.length) return { started: false, cached: true, tools: known.tools };
+    if (inspecting.has(key)) return { started: false, running: true };
+
+    inspecting.add(key);
+    inspectChain = inspectChain
+      .catch(() => {})
+      .then(() => discoverToolsetForModel(engine, inspectLog, key, PROBE_DIR))
+      .then((tools) => {
+        if (tools.length) {
+          modelCache.setTools(key, tools);
+          http?.broadcast({ kind: 'model', type: 'model.probed', ref: key, tools, ts: Date.now() });
+        } else {
+          // nothing usable: leave the record unmarked so a later try can retry
+          http?.broadcast({ kind: 'model', type: 'model.probe.failed', ref: key, ts: Date.now() });
+        }
+      })
+      .catch((err) => inspectLog.warn(`model check ${key} failed: ${err.message}`))
+      .finally(() => inspecting.delete(key));
+    return { started: true };
+  }
+
   // Scan a finished turn once: its tool calls go into the census, and a
   // still-unnamed session gets its name.
   async function afterTurn(sessionId) {
@@ -135,8 +171,32 @@ async function main() {
     t.unref?.();
   }
 
+  // Record the live catalog once the engine is up. Metadata is free; the
+  // toolset discovery is the part that costs a turn, and that only happens when
+  // the operator selects a model.
+  if (engine.status().ready) {
+    engine
+      .listModels()
+      .then((list) => {
+        const changed = modelCache.record(list);
+        if (changed) app.info(`model cache: ${changed} model(s) recorded or updated`);
+      })
+      .catch((err) => app.warn(`model cache refresh failed: ${err.message}`));
+  }
+
   // ── http ─────────────────────────────────────────────────────
-  const api = createApi({ getConfig, applyConfig, engine, logger, getBootError: () => bootError, projects, toolStats, probe });
+  const api = createApi({
+    getConfig,
+    applyConfig,
+    engine,
+    logger,
+    getBootError: () => bootError,
+    projects,
+    toolStats,
+    probe,
+    modelCache,
+    inspectModel,
+  });
   http = createServer({ api, engine, logger, config: getConfig() });
   await http.listen();
 

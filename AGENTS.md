@@ -284,6 +284,27 @@ and stores the operator's choice per role.
   boot. That changes only the engine's local budgeting ceiling; the provider's
   own limit still applies. Output limits were *not* tested — only context.
 
+### The model cache (`data\model-cache.json`)
+
+Models come and go; what we learned about one should outlive it leaving the
+catalog. `src/modelcache.js` is a small JSON store keyed by `provider/id` with
+name, context/output, variants (`{id, label}` — label is the provider's own
+`reasoningEffort`), capabilities, `firstSeen`/`lastSeen`, and the discovered
+toolset. `engine.listModels()` is recorded on every boot and every
+`GET /api/models`, so the file stays current for free.
+
+- **Toolset discovery costs one turn and runs once per model.** On selection the
+  UI fires `POST /api/models/inspect`; the server answers from cache when the
+  tools are known, refuses to stack a duplicate run, and serialises runs one at
+  a time (`inspectChain`) so burst-selecting models cannot hammer the provider.
+  A failed or empty answer leaves `tools` unset so a later selection retries.
+- The discovery prompt asks the model to list its tools; `parseToolNames` keeps
+  `[a-z0-9_-]` (MCP names contain hyphens — an earlier parser dropped them and
+  turned `synapse-search_websearch` into `synapsesearch_websearch`).
+- When the check finishes, `model.probed` goes out over SSE and the picker/effort
+  tooltips gain a `· N tools` suffix.
+- `GET /api/models/cache` exposes the raw store for debugging.
+
 ### The probe (`Run Tool Probe`)
 
 Drives one turn per tool in a disposable scratch session
@@ -335,18 +356,25 @@ failure "not offered by this model" when the tool was never in its list.
   (`F:\dev\Obsidian.Adamant\...\adamant-assistant`) — shape only, no code copied,
   and that folder is read-only. The model select's tooltip carries the context
   window, which is how the 1M override becomes visible without a settings field.
-- **The Multi reveal animates `max-height`, not `display`.** The cards live in
-  `#topologyWrap`; JS measures the topology, sets `--reveal-h` to the **full**
-  card height (I once capped it at 62% of the stage — that cut the last row
-  mid-card and was the bug), capped only by the room left above the composer,
-  adds `.is-open` and the `topology-open` body class, and the chat slides down
-  because the stage's gap is folded into the same transition. A reflow between
-  setting the height and adding the class is what makes the first reveal animate
-  instead of snapping. In Single the wrapper is 0px tall, so the cards cost
-  nothing. The glyph measurements that matter: both button glyphs are centred on
-  the 22px button to within 0.01px, with ~1.5px of margin left top and bottom at
-  three chevrons — if the glyph or border size changes, re-measure with
+- **The Architect card is always visible; Multi reveals the workers.** The cards
+  live in `#topologyWrap`, whose `max-height` animates between the Architect's
+  height (Single) and the full topology (Multi). Worker children are hidden by
+  `body[data-view="session"] .topology > *:not(.topo-architect):not(.path-layer)`
+  and shown by the `workers-on` body class; on Multi→Single the class is removed
+  only after the height animation, so the workers do not vanish mid-slide. The
+  height is measured (I once capped it at 62% of the stage — that cut the last
+  row mid-card and was the bug), capped only by the room left above the composer.
+  The glyph measurements that matter: both button glyphs are centred on the 22px
+  button to within 0.01px, with ~1.5px of margin left top and bottom at three
+  chevrons — if the glyph or border size changes, re-measure with
   `browser_get_element` rather than eyeballing it.
+- **Model pickers are searchable.** Each `.role-model` `<select>` stays in the
+  DOM as the source of truth — every handler still works — but is hidden
+  (`display: none`) and driven by a `.model-search` input plus one shared
+  `#modelMenu` (fixed-position, so it escapes the wrapper's overflow clip).
+  Typing only filters (name or ref substring); a model can be set **only** by
+  choosing an option, `Enter` on the active one, or Escape to revert. Do not
+  make the typed text the value.
 - **The chat dock is content-sized and bottom-pinned in a session.** Empty, it
   is just the composer row (60px); it grows upward as messages arrive, up to
   `max-height: min(100%, 80vh)` — `100%` lets Multi squeeze it when the cards

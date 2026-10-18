@@ -32,6 +32,10 @@ export const PROBE_DIR = path.join(WORKSPACE_DIR, '_probe');
 // The last probe run, so the results survive a restart.
 export const PROBE_FILE = path.join(DATA_DIR, 'probe.json');
 
+// What we know about each model: limits, thinking-effort variants and the
+// discovered toolset. Survives models leaving the catalog.
+export const MODEL_CACHE_FILE = path.join(DATA_DIR, 'model-cache.json');
+
 // Synapse's own MCP server (a working web search), registered into the engine's
 // isolated config so the models can actually call it.
 export const SEARCH_SERVER = path.join(ROOT, 'src', 'mcp', 'search-server.js');

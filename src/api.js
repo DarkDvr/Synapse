@@ -2,7 +2,7 @@
 // Handlers call the engine adapter; nothing here knows about OpenCode.
 import { TBD_TITLE } from './titles.js';
 
-export function createApi({ getConfig, applyConfig, engine, logger, getBootError, projects, toolStats, probe }) {
+export function createApi({ getConfig, applyConfig, engine, logger, getBootError, projects, toolStats, probe, modelCache, inspectModel: inspectRef }) {
   const app = logger.channel('app');
 
   /** Directory comparison key: case-insensitive, no trailing separator. */
@@ -87,7 +87,35 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
 
     models: async () => {
       requireReady();
-      return { models: await engine.listModels() };
+      const list = await engine.listModels();
+      // The catalog is the live truth; record it so a model that later leaves
+      // the list still has its context, variants and tools on file.
+      if (modelCache) {
+        try { modelCache.record(list); } catch (err) { app.warn(`model cache update failed: ${err.message}`); }
+      }
+      return {
+        models: list.map((m) => ({ ...m, tools: modelCache?.get(m.ref)?.tools || null })),
+      };
+    },
+
+    /** The raw per-model knowledge base, for inspection and debugging. */
+    modelCache: async () => (modelCache ? modelCache.snapshot() : { version: 1, models: {} }),
+
+    /**
+     * Kick off a background toolset discovery for one model. Idempotent: a model
+     * already checked returns its cached tools, and one already running reports
+     * `running` instead of stacking a second turn.
+     */
+    inspectModel: async (body) => {
+      requireReady();
+      if (!inspectRef) return { started: false, reason: 'model checks are unavailable' };
+      const ref = String(body?.ref || '').trim();
+      if (!ref.includes('/')) {
+        const err = new Error('a provider/model ref is required');
+        err.status = 400;
+        throw err;
+      }
+      return inspectRef(ref);
     },
 
     agents: async () => {

@@ -49,7 +49,8 @@ F:\dev\Synapse
 │  ├─ projects.js              the project registry (data\projects.json)
 │  ├─ titler.js                names a session after its first answer
 │  ├─ toolstats.js             the tool-call census (data\tool-stats.json)
-│  ├─ probe.js                 the tool probe: one turn per tool
+│  ├─ modelcache.js            per-model knowledge (data\model-cache.json)
+│  ├─ probe.js                 the tool probe + one-off model toolset checks
 │  ├─ search.js                dependency-free DuckDuckGo search
 │  ├─ mcp/search-server.js     stdio MCP server exposing websearch to the engine
 │  ├─ titles.js                the shared "TBD" placeholder
@@ -175,19 +176,29 @@ new fields need a deliberate design pass instead of silently stretching rows.
 
 ## Models, thinking effort and context
 
-Each model selection is a ref plus an optional thinking-effort variant. Next to
-every role-card model picker is a chevron button: a dot means the engine's own
+Model pickers are **searchable comboboxes**: type `deep` and the menu narrows to
+DeepSeek. The typed text only filters — a model can be set only by choosing it
+(click or Enter), so a typo can never become the selection. The Architect card is
+always on screen, in both modes, because its model and effort are yours to
+change at any time.
+
+Next to every model picker is a chevron button: a dot means the engine's own
 default, one to three chevrons show the three highest efforts that model allows
 (e.g. Cat Jam Free is `high → xhigh → max`; DeepSeek is `low → high → max`), and
-a left click cycles through them. The tooltip states the current effort. Models
-that offer no variants get a disabled button, and the picker's tooltip carries
-the model's context and output limits.
+a left click cycles through them. The tooltip states the current effort **using
+the provider's own label** and appends `· N tools` once the model's toolset is
+known. Models that offer no variants get a disabled button.
 
 - The **Architect** card is the main session: changing it switches the open
   session immediately and becomes the default for new sessions.
 - **Worker** cards store their pick in `config\synapse.config.json` as
   `roles.<id> = { "ref", "variant" }`; the orchestration layer (stage 3+) reads
   them when it spawns a worker.
+- **Every model is recorded once.** Selecting a model fires a background check
+  that asks it what tools it has; the answer, together with its context, output
+  and effort variants, is stored in `data\model-cache.json`. It runs **once per
+  model** and never again — the catalog itself is re-recorded for free on every
+  boot. Models that leave the catalog keep their record.
 - **DeepSeek V4.1 Flash Free serves 1M context, not 200k.** The engine's catalog
   is conservative; the backend serves 1,048,576 tokens (boundary-tested, ~1.037M
   OK / ~1.107M HTTP 400). Synapse writes the override from
@@ -268,14 +279,15 @@ The composer's toggle sits left of the message box. **Both modes have the full
 toolset** — that is the point of them.
 
 - **Every new session starts in Single.** One Architect, all tools, delegation
-  denied. The chat panel is content-sized and pinned to the bottom: empty, it is
-  just the composer; it grows upward as the conversation fills, to a maximum of
-  `80vh`. The role cards cost nothing — the wrapper is 0px tall.
+  denied. The Architect card stays on screen (its model and effort controls are
+  always useful); the workers are hidden. The chat panel is content-sized and
+  pinned to the bottom: empty, it is just the composer; it grows upward as the
+  conversation fills, to a maximum of `80vh`.
 - **Switching to Multi** (the toggle turns **orange**; Single is **violet**,
-  white text on both) slides the chat down and reveals the cards **at their full
-  measured height** — they are never cut off mid-card — and clears the
+  white text on both) slides the chat down and reveals the **workers** at their
+  full measured height — they are never cut off mid-card — and clears the
   delegation deny, so the Architect can hand work to subagents.
-- **Switching back to Single** slides the chat up and restores the deny. The
+- **Switching back to Single** slides the workers away and restores the deny. The
   same session keeps its transcript — the mode is a live property of the open
   session, not something chosen at creation.
 - The composer placeholder reads `Message` in Single and
