@@ -12,6 +12,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
+// A silent model gets at most this many asks, across selections and restarts.
+// Three is enough to ride out a transient failure without burning quota on a
+// model that simply will not answer.
+export const MAX_TOOL_ASKS = 3;
+
 export function createModelCache({ logger, file }) {
   const log = logger.channel('app');
   const data = { version: 1, models: {} };
@@ -87,19 +92,28 @@ export function createModelCache({ logger, file }) {
   function setTools(ref, tools) {
     const rec = data.models[ref];
     if (!rec || !Array.isArray(tools)) return false;
-    // Store the result even when it is empty: the point is that the model was
-    // asked once. A failed or silent answer must not cause a second turn later.
-    rec.tools = tools;
+    // Every completed ask counts, even an empty answer. `toolsValid` is only
+    // set by a real list, so a silent model stays eligible for a retry — but
+    // only up to MAX_TOOL_ASKS in total, spread across sessions.
+    rec.timesAsked = (rec.timesAsked || 0) + 1;
     rec.toolsAt = Date.now();
+    if (tools.length) {
+      rec.tools = tools;
+      rec.toolsValid = true;
+    }
     persist();
     return true;
   }
 
-  /** True once the model has been asked about its toolset — whatever it said. */
+  /** True once we hold a real, non-empty tool list for this model. */
   function isChecked(ref) {
     const rec = get(ref);
-    return Boolean(rec && rec.toolsAt);
+    return Boolean(rec && rec.toolsValid);
   }
 
-  return { record, get, setTools, isChecked, snapshot: () => data };
+  function attempts(ref) {
+    return get(ref)?.timesAsked || 0;
+  }
+
+  return { record, get, setTools, isChecked, attempts, snapshot: () => data };
 }

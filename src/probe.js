@@ -121,7 +121,11 @@ export function parseToolNames(text) {
     ...new Set(
       String(text || '')
         .split(/[,\n]/)
-        // hyphens are part of real tool names (MCP namespaces use them)
+        // Answers are free text: `tools["opencode"].list_mcp_resources`,
+        // `opencode.models`, plain `edit`. Keep the last dotted segment (the
+        // tool name), then only name-safe characters. Hyphens are part of real
+        // names — MCP namespaces use them.
+        .map((t) => t.split(/[."'[\]]/).filter(Boolean).pop() || '')
         .map((t) => t.replace(/[^a-z0-9_-]/gi, '').toLowerCase())
         .filter((t) => t.length > 1 && t.length < 32),
     ),

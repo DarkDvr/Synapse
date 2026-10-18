@@ -32,6 +32,9 @@ html { scrollbar-gutter: stable; }
   --spine-w: 66px;
   --row-gap: 12px;
   --sidebar-w: 256px;
+  /* the capped working area: cards+chat + rail. Left-anchored, so on a wide
+     window the leftover space sits at the right edge. */
+  --work-w: 1240px;
 }
 
 body.dark {
@@ -147,7 +150,17 @@ body.dark .input-with-action input {
   .main-content { margin-left: var(--sidebar-w); }
 }
 
-.control-room .content-wrap { padding-top: 14px; padding-bottom: 12px; margin: 0 auto; }
+/* The working area is left-anchored and capped: sidebar | cards+chat | rail |
+   empty space. `margin: 0 auto` here was a bug: this is a column flex item, and
+   auto cross-axis margins make it shrink-to-fit instead of filling, so the
+   whole room sized itself to its content and Single (small content) collapsed
+   while Multi looked fine. An explicit width fills, `margin: 0` keeps the
+   leftover space at the window's right edge. */
+.control-room .content-wrap {
+  padding: 14px 24px 12px;
+  margin: 0;
+  width: 100%;
+}
 .control-room .topbar { position: sticky; top: 0; z-index: 20; }
 
 .room {
@@ -156,6 +169,8 @@ body.dark .input-with-action input {
   gap: var(--gap-rail);
   align-items: stretch;
   width: 100%;
+  /* the working area cap; anything beyond it stays empty at the right edge */
+  max-width: var(--work-w);
 }
 body[data-view="none"] .room { grid-template-columns: minmax(0, 1fr); }
 body[data-view="none"] .inspector { display: none; }

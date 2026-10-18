@@ -130,7 +130,9 @@ the orchestration layer marks a real connection (stage 5).
 **No topbar.** The main pane starts at the top edge. Breadcrumbs were dropped
 (the tree highlights the current project and session); model and effort choices
 live on the role cards, where they belong, not in Settings. The last engine
-event is a row in the sidebar's STATUS block.
+event is a row in the sidebar's STATUS block. The working area is left-anchored
+and capped (`--work-w`, 1240px): sidebar → role cards + chat → rail → empty
+space at the window's right edge, with the same geometry in Single and Multi.
 
 **Row highlighting is one token.** The baseline paints table rows `#fcfcff`
 on hover in every theme; Synapse overrides that globally to `--hover-bg`
@@ -202,13 +204,15 @@ button.
   their pick for the orchestration layer (stage 3+). Both live side by side in
   `config\synapse.config.json` as `roles.<id> = { "ref", "variant" }` — there is
   no default model anywhere.
-- **Each model is asked once, ever.** Selecting a model fires a background check
-  that asks it what tools it has; the answer, together with its context, output
-  and effort variants, is stored in `data\model-cache.json` keyed by the full
-  `provider/id` ref. The same model under a different provider (`opencode` vs
-  `opencode-go`, or a future local runtime) is a separate record. An empty or
-  failed answer is still recorded, so we never ask twice. The catalog itself is
-  re-recorded for free on every boot, and models that leave keep their record.
+- **Each model is asked at most three times, ever.** Selecting a model fires a
+  background check that asks it what tools it has; the answer, together with its
+  context, output and effort variants, is stored in `data\model-cache.json`
+  keyed by the full `provider/id` ref. The same model under a different provider
+  (`opencode` vs `opencode-go`, or a future local runtime) is a separate record.
+  A silent or failed answer earns a retry — on the next selection or the next
+  Synapse start — but only up to **three asks in total**; after that the model
+  is left alone. The catalog itself is re-recorded for free on every boot, and
+  models that leave keep their record.
 - **DeepSeek V4.1 Flash Free serves 1M context, not 200k.** The engine's catalog
   is conservative; the backend serves 1,048,576 tokens (boundary-tested, ~1.037M
   OK / ~1.107M HTTP 400). Synapse writes the override from

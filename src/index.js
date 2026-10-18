@@ -10,7 +10,7 @@ import { createProjectStore } from './projects.js';
 import { createTitler } from './titler.js';
 import { createToolStats } from './toolstats.js';
 import { createProbe, discoverToolsetForModel } from './probe.js';
-import { createModelCache } from './modelcache.js';
+import { createModelCache, MAX_TOOL_ASKS } from './modelcache.js';
 import { createApi } from './api.js';
 import { createServer } from './server.js';
 
@@ -109,9 +109,10 @@ async function main() {
     const key = String(ref || '').trim();
     if (!key.includes('/')) return { started: false, reason: 'a provider/model ref is required' };
     const known = modelCache.get(key);
-    // Asked once, never again — an empty answer is an answer.
-    if (known?.toolsAt) return { started: false, cached: true, tools: known.tools || [] };
+    if (modelCache.isChecked(key)) return { started: false, cached: true, tools: known.tools || [] };
     if (inspecting.has(key)) return { started: false, running: true };
+    const asked = modelCache.attempts(key);
+    if (asked >= MAX_TOOL_ASKS) return { started: false, exhausted: true, timesAsked: asked };
 
     inspecting.add(key);
     inspectChain = inspectChain
@@ -119,11 +120,21 @@ async function main() {
       .then(() => discoverToolsetForModel(engine, inspectLog, key, PROBE_DIR))
       .then((tools) => {
         modelCache.setTools(key, tools);
+        inspectLog.info(
+          `model check ${key}: ${tools.length ? `${tools.length} tools` : 'no list'} ` +
+            `(ask ${modelCache.attempts(key)}/${MAX_TOOL_ASKS})`,
+        );
         http?.broadcast({ kind: 'model', type: 'model.probed', ref: key, tools, ts: Date.now() });
       })
       .catch((err) => inspectLog.warn(`model check ${key} failed: ${err.message}`))
       .finally(() => inspecting.delete(key));
     return { started: true };
+  }
+
+  // A restart is one of the three chances: ask again for any role's model whose
+  // toolset is still missing, up to the shared cap. Runs are serialised.
+  for (const sel of Object.values(getConfig().roles || {})) {
+    if (sel?.ref) inspectModel(sel.ref);
   }
 
   // Scan a finished turn once: its tool calls go into the census, and a

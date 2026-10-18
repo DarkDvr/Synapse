@@ -296,15 +296,22 @@ provider's own `reasoningEffort`), capabilities, `firstSeen`/`lastSeen` and the
 discovered toolset. `engine.listModels()` is recorded on every boot and every
 `GET /api/models`, so the file stays current for free.
 
-- **Each model is asked once, ever.** The first selection fires
-  `POST /api/models/inspect`; the server answers from cache when `toolsAt` is
-  set, refuses to stack a duplicate run, and serialises runs one at a time
-  (`inspectChain`). An empty or failed answer is still recorded (`tools: []`,
-  `toolsAt` set) — the point is that we asked. Verified: `started` → `running`
-  → `cached`.
-- The discovery prompt asks the model to list its tools; `parseToolNames` keeps
-  `[a-z0-9_-]` (MCP names contain hyphens — an earlier parser dropped them and
-  turned `synapse-search_websearch` into `synapsesearch_websearch`).
+- **Each model is asked at most 3 times, ever.** The first selection fires
+  `POST /api/models/inspect`; the server answers from cache when a *valid*
+  (non-empty) tool list exists, refuses to stack a duplicate run, and serialises
+  runs one at a time (`inspectChain`). A completed run increments `timesAsked`
+  even when the answer is empty — an empty answer is only eligible for a retry
+  while `timesAsked < MAX_TOOL_ASKS` (3). At 3 the model is `exhausted` and is
+  never asked again. The count is per model, so the attempts spread across
+  selections and restarts instead of hammering one session. Synapse re-asks on
+  boot for any **role's** current model that is still missing a valid list.
+  Verified: seeded one model at 3 asks → `{started:false, exhausted:true}`;
+  another at 1 ask → asked again on restart (ask 2/3) and locked in.
+- The discovery prompt asks the model to list its tools; `parseToolNames` takes
+  the last dotted segment (`tools["opencode"].list_mcp_resources` →
+  `list_mcp_resources`) then keeps `[a-z0-9_-]` (MCP names contain hyphens — an
+  earlier parser dropped them and turned `synapse-search_websearch` into
+  `synapsesearch_websearch`).
 - When the check finishes, `model.probed` goes out over SSE and the picker/effort
   tooltips gain a `· N tools` suffix. The picker menu itself shows a source chip
   (`OPENCODE`, `OPENCODE GO`, later a local provider) so two entries with the
@@ -346,6 +353,14 @@ failure "not offered by this model" when the tool was never in its list.
 - **Table cells must not be able to stretch the pane.** `.inspector .tool-table`
   is `table-layout: fixed` with ellipsised cells — a long MCP tool name like
   `synapse-search_websearch` otherwise blows the rail out to the right.
+- **The working area is left-anchored and capped.** `.content-wrap` is a column
+  flex item; `margin: 0 auto` on it was a real bug — auto cross-axis margins make
+  a flex item **shrink-to-fit** instead of filling, so the whole `.room` sized
+  itself to its content. Multi (wide topology) looked fine while Single (one
+  card) collapsed to ~380px and drifted right. Fixed with `width: 100%;
+  margin: 0` and `--work-w: 1240px` as the room's max-width: sidebar → cards+chat
+  (1fr, left-anchored) → rail → empty space at the window's right edge. Both
+  modes now measure the same room width (verified at 1680 and 1100).
 - The sidebar breakpoint is **1180px**. Below it the rail stacks under the chat,
   because the role cards need the width more than the rail needs to be beside.
 - **Every role owns its model and effort — there is no "default model".** The
