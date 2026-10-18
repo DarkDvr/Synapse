@@ -48,6 +48,13 @@ export const DEFAULTS = {
   modelChecks: {
     maxAsks: 3,
   },
+  tools: {
+    // The tool census answers "what are the models doing *here, now*" — it is
+    // not a historical archive. Left alone it accumulates across every test run
+    // and stops describing the current environment, so it starts fresh on each
+    // boot unless the operator turns that off. Settings also clears it by hand.
+    resetOnBoot: true,
+  },
   logging: {
     level: 'info',
     retentionDays: 7,
@@ -83,6 +90,8 @@ export function normalize(raw) {
   cfg.server.host = String(cfg.server.host || '127.0.0.1');
   cfg.server.port = clampInt(cfg.server.port, 1, 65535, 8700);
   cfg.server.openBrowser = cfg.server.openBrowser !== false;
+  cfg.tools = cfg.tools || {};
+  cfg.tools.resetOnBoot = cfg.tools.resetOnBoot !== false;
 
   cfg.engine.type = String(cfg.engine.type || 'opencode');
   const oc = cfg.engine.opencode;

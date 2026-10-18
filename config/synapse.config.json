@@ -37,7 +37,7 @@
     },
     "architect": {
       "ref": "opencode/deepseek-v4.1-flash-free",
-      "variant": "max"
+      "variant": "low"
     },
     "coder-1": {
       "ref": "opencode/mimo-v2.6-flash-free"

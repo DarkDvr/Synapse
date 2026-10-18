@@ -276,6 +276,8 @@ the project whose directory they run in.
 
 **Tool census.** Every finished turn is scanned once and its tool calls recorded (keyed by part id, so re-reading a transcript never double-counts) into `data\tool-stats.json`: per tool and per model — calls, failures, exit codes, average execution time, and the last 20 error signatures. Read it at `GET /api/tools/stats`; the inspector's **Tools in use** panel shows the live summary. This is how we find out what these models actually reach for, instead of guessing.
 
+**The census describes *now*, not history, so it clears itself.** It starts empty on every boot (`tools.resetOnBoot`, on by default — untick *Clear the tool census on every start* in Settings to keep it across restarts), and Settings has a **Clear Tool Census** button for a mid-session reset. `POST /api/tools/reset`. Left to accumulate it stops describing the current environment, which is exactly what happened after a few days of testing: 184 calls from sessions that no longer existed.
+
 **Tool probe.** The census says what has happened; the probe finds out on purpose. **Run Tool Probe** in the *Tools in use* panel drives one turn per tool in the engine's real toolset - `shell` (pass and fail), `read`, `write`, `edit`, `glob`, `grep`, `question`, `webfetch` (good host and bad host), `websearch`, `subagent`, `execute`, `skill` - each in a disposable scratch session (`workspace\_probe`). Per case it records whether the turn closed, which tool actually ran, whether it failed, and **the tool's own execution time** (not the turn time, which is mostly the model thinking). The scratch session is hidden from the rail and swept at boot; the panel names the model the run used. Results stream into the panel live; `GET /api/tools/probe`, `POST /api/tools/probe/run`.
 
 Two things the first run of it proved, which is the point of having it:
@@ -350,9 +352,11 @@ delegation permission, and the reveal.
 ## Markdown
 
 The model's actual answer is rendered as markdown inside its own panel — a
-faint **violet** fill (#1f1c31, border #3b3566) so the answer is the one thing
-in the transcript that is not chrome — and reads separately from the reasoning
-and tool noise around it.
+faint **yellow** wash (`rgba(237,194,90,0.15)`, border `rgba(237,194,90,0.34)`)
+so the answer is the one block that is obviously not chrome — and reads
+separately from the reasoning and tool noise around it. This is a deliberate
+exception to "yellow is an affordance colour": it is a low-opacity *fill*, not
+text and not an icon.
 
 `web/md.js` is hand-rolled (no dependencies) and **escape-first**: the source is
 HTML-escaped before any markdown rule runs, so a model cannot inject markup

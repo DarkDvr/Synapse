@@ -48,6 +48,11 @@ const state = {
   streaming: false,
   streamLive: false,
   collapsed: new Set(),
+  // Keys of reasoning blocks and tool cards the operator has opened. The
+  // transcript is rebuilt on every poll, so expansion state has to live outside
+  // the DOM or it dies with the next render.
+  open: new Set(),
+  renderSig: '',
   renaming: null,
   view: 'none', // none | session
 };
@@ -1191,14 +1196,32 @@ function renderTranscript() {
   // Anything else the engine reports (system prompts, scaffolding, context
   // dumps) is not chat and once leaked into the transcript above the user's
   // own message. Errors still show, whatever type carries them.
-  const showable = groupTurns(
-    state.messages.filter((m) => m.error || m.type === 'user' || m.type === 'assistant'),
-  );
+  //
+  // Every part carries a stable key (its message id + index) so an expanded
+  // Reasoning block or tool card can be restored after a rebuild — a poll
+  // landing mid-read used to snap them shut.
+  const tagged = state.messages
+    .filter((m) => m.error || m.type === 'user' || m.type === 'assistant')
+    .map((m) => (m.parts ? { ...m, parts: m.parts.map((p, i) => ({ ...p, _k: `${m.id}:${i}` })) } : m));
+  const showable = groupTurns(tagged);
   const pending = renderPermissions() + renderForms();
+  const hasHistory = showable.length > 0 || Boolean(pending);
   // The dock is a bare composer while empty and fills the stage once there is
   // anything to show; the CSS keys off this class, so set it on every render.
-  $('chatDock')?.classList.toggle('has-history', showable.length > 0 || Boolean(pending));
-  if (showable.length === 0 && !pending) {
+  $('chatDock')?.classList.toggle('has-history', hasHistory);
+
+  // Nothing in the conversation changed since the last render: leave the DOM —
+  // and whatever the operator has open — exactly as it is.
+  const sig = hasHistory
+    ? `${showable.map((m) => `${m.id}:${m.completed || 0}:${(m.parts || []).length}`).join(',')}|${pending.length}|${state.streaming}`
+    : '';
+  if (sig && sig === state.renderSig) {
+    renderChatNav();
+    return;
+  }
+  state.renderSig = sig;
+
+  if (!hasHistory) {
     // nothing to show: collapse the transcript entirely, so the dock is just
     // the composer and the empty space above it belongs to the cards/napkin
     el.innerHTML = '';
@@ -1232,7 +1255,10 @@ function renderMessage(m) {
       // so it is visually separate from reasoning and tool noise.
       if (part.type === 'text') body.push(`<div class="msg-answer">${renderMarkdown(part.text)}</div>`);
       else if (part.type === 'reasoning')
-        body.push(`<details class="reasoning"><summary>Reasoning</summary><pre>${esc(part.text)}</pre></details>`);
+        body.push(
+          `<details class="reasoning" data-k="${esc(part._k)}"${state.open.has(part._k) ? ' open' : ''}>` +
+            `<summary>Reasoning</summary><pre>${esc(part.text)}</pre></details>`,
+        );
       else if (part.type === 'tool') body.push(renderTool(part));
     }
     if ((m.parts || []).length === 0 && !m.error) body.push('<span class="msg-text">…</span>');
@@ -1255,7 +1281,10 @@ function renderTool(part) {
   const running = /run|stream|pend|progress/.test(status);
   const cls = running ? 'warn' : failed ? 'err' : 'ok';
 
-  const id = `tool-${toolSeq++}`;
+  // A stable key so an open card survives a re-render; toolSeq is only the
+  // fallback for a part with no message identity.
+  const id = part._k || `tool-${toolSeq++}`;
+  const open = state.open.has(id);
   const target = toolTarget(part);
   const input = part.input !== null && part.input !== undefined ? JSON.stringify(part.input, null, 1) : '';
   const output = part.output !== null && part.output !== undefined
@@ -1267,15 +1296,15 @@ function renderTool(part) {
   const label = failed ? (hasExit ? `Exit ${part.exitCode}` : 'Failed') : status;
   const detail = part.error || output || '(no output)';
 
-  return `<div class="tool-card" data-tool-card="${id}">
-    <div class="tool-head" role="button" tabindex="0" data-tool-toggle="${id}" aria-expanded="false" aria-controls="${id}-detail">
+  return `<div class="tool-card${open ? ' open' : ''}" data-tool-card="${esc(id)}">
+    <div class="tool-head" role="button" tabindex="0" data-tool-toggle="${esc(id)}" aria-expanded="${open}" aria-controls="${esc(id)}-detail">
       <span class="status-dot ${cls}" role="img" aria-label="${esc(label)}"></span>
       <span class="tool-name">${esc(part.name)}</span>
       <span class="tool-target" title="${esc(target)}">${esc(target)}</span>
       <span class="tool-state state-pill ${cls}">${esc(label)}</span>
       <span class="tool-chev" aria-hidden="true">›</span>
     </div>
-    <div class="tool-detail" id="${id}-detail" hidden>
+    <div class="tool-detail" id="${esc(id)}-detail"${open ? '' : ' hidden'}>
       ${input ? `<div class="tool-body"><pre>${esc(input)}</pre></div>` : ''}
       ${output ? `<div class="tool-body"><pre${failed ? ' class="is-error"' : ''}>${esc(output)}</pre></div>` : ''}
       ${part.error ? `<div class="tool-body"><pre class="is-error">${esc(part.error)}</pre></div>` : ''}
@@ -1292,6 +1321,7 @@ function toggleTool(id) {
   detail.hidden = !open;
   card.classList.toggle('open', open);
   head.setAttribute('aria-expanded', String(open));
+  if (open) state.open.add(id); else state.open.delete(id);
 }
 
 // ── scrolling: the transcript when it scrolls, the page when it does not ──
@@ -1921,6 +1951,11 @@ function renderSettings() {
       `<div class="set-field"><span>Ask counters</span>
         <button type="button" class="btn btn-warn btn-sm" data-reset-asks>Reset Ask Counters</button>
       </div>`),
+    group('Tools',
+      check('Clear the tool census on every start', 'tools.resetOnBoot') +
+      `<div class="set-field"><span>Tool census</span>
+        <button type="button" class="btn btn-warn btn-sm" data-clear-tools>Clear Tool Census</button>
+      </div>`),
     group('Logging',
       sel('Level', 'logging.level', [
         { v: 'debug', l: 'Debug' },
@@ -1968,6 +2003,16 @@ async function resetModelAsks() {
   }
 }
 
+async function clearToolCensus() {
+  try {
+    await api('POST', '/api/tools/reset');
+    await renderToolUsage();
+    toast('Tool Census Cleared', 'The Tools in use panel starts from zero.');
+  } catch (err) {
+    toast('Could Not Clear the Tool Census', err.message);
+  }
+}
+
 function openSettings() { renderSettings(); $('settingsModal').hidden = false; }
 function closeSettings() { $('settingsModal').hidden = true; }
 
@@ -2001,6 +2046,15 @@ function wire() {
     const head = e.target.closest('[data-tool-toggle]');
     if (head) { e.preventDefault(); toggleTool(head.dataset.toolToggle); }
   });
+  // <details> fires `toggle` (no bubbling), so capture it to remember which
+  // Reasoning blocks the operator opened.
+  $('transcript').addEventListener('toggle', (e) => {
+    const d = e.target;
+    if (!d || d.tagName !== 'DETAILS' || !d.classList.contains('reasoning')) return;
+    const k = d.dataset.k;
+    if (!k) return;
+    if (d.open) state.open.add(k); else state.open.delete(k);
+  }, true);
   $('settingsBtn').addEventListener('click', openSettings);
   $('closeSettings').addEventListener('click', closeSettings);
   $('cancelSettings').addEventListener('click', closeSettings);
@@ -2070,6 +2124,9 @@ function wire() {
 
     const resetAsks = e.target.closest('[data-reset-asks]');
     if (resetAsks) { e.preventDefault(); resetModelAsks(); return; }
+
+    const clearTools = e.target.closest('[data-clear-tools]');
+    if (clearTools) { e.preventDefault(); clearToolCensus(); return; }
 
     const perm = e.target.closest('[data-perm]');
     if (perm) { e.preventDefault(); replyPermission(perm.dataset.permId, perm.dataset.perm); return; }

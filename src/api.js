@@ -323,6 +323,13 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
 
     toolStats: async () => (toolStats ? toolStats.snapshot() : { total: 0, failed: 0, tools: [], models: [] }),
 
+    /** Clear the tool census. */
+    clearToolStats: async () => {
+      if (toolStats) toolStats.clear();
+      app.info('tool census cleared');
+      return { ok: true };
+    },
+
     /** The probe's case list plus the state of the last run. */
     probe: async () => {
       const s = probe ? probe.state() : { running: false, results: [] };

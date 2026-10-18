@@ -532,6 +532,18 @@ This is once per directory per process and needs no config.
   status dot (no ring), 10.5px mono, `2px 7px` padding, 5px-radius pill at 9px.
   A busy turn emits dozens of them, so a `2px` margin keeps the transcript
   readable where a `5px` margin plus the standard 9px ringed dot read as noise.
+- **Expanded state lives outside the DOM.** The transcript is rebuilt on every
+  poll, so an open Reasoning block or tool card used to snap shut whenever the
+  next render landed. Two things fix it: every part is tagged with a stable key
+  (`<message id>:<index>`) and `state.open` holds the open keys, restored on
+  render (`data-k` on `<details>`, `data-tool-card` uses the key directly); and
+  `renderTranscript()` computes a signature of the conversation and returns
+  early when it has not changed, so a poll that learned nothing new does not
+  touch the DOM at all. Verified live: a Reasoning block and a tool card opened
+  during turn 1 were still open after turn 2 rebuilt the transcript.
+- **The answer panel is a yellow wash** (`rgba(237,194,90,0.15)`). This is a
+  deliberate exception to "yellow is an affordance colour" — it is a fill, not
+  text, and no other surface uses it.
 - **Mode colours:** Multi is orange, Single is violet, both with white text and
   a white dot; both are filled pills, so the mode is readable at a glance. The
   composer placeholder is `Message` in Single, `Message the Architect…` in Multi.

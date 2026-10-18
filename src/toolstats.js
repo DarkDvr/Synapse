@@ -101,8 +101,7 @@ export function createToolStats({ file, logger }) {
   }
 
   /** Scan a session's transcript; safe to call repeatedly. */
-  function recordMessages(messages, { model, agent, sessionId } = {}) {
-    let added = 0;
+  function recordMessages(messages, { model, agent, sessionId } = {}) {    let added = 0;
     for (const m of messages || []) {
       for (const part of m.parts || []) {
         if (part?.type !== 'tool') continue;
@@ -123,8 +122,24 @@ export function createToolStats({ file, logger }) {
     return added;
   }
 
-  function snapshot() {
-    const rank = (bucket) =>
+  /**
+   * Wipe the census. `seen` goes with it: those ids are only there to stop the
+   * same tool part being counted twice inside one census, so keeping them would
+   * make the next scan silently count nothing.
+   */
+  function clear() {
+    state.since = Date.now();
+    state.total = 0;
+    state.failed = 0;
+    state.tools = {};
+    state.models = {};
+    state.exits = {};
+    state.recentErrors = [];
+    seen.clear();
+    flush();
+  }
+
+  function snapshot() {    const rank = (bucket) =>
       Object.entries(bucket)
         .map(([key, v]) => ({
           key,
@@ -145,5 +160,5 @@ export function createToolStats({ file, logger }) {
     };
   }
 
-  return { record, recordMessages, snapshot, flush };
+  return { record, recordMessages, snapshot, clear, flush };
 }

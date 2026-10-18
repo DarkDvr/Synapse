@@ -90,6 +90,12 @@ async function main() {
 
   const toolStats = createToolStats({ file: TOOL_STATS_FILE, logger });
   const toolStatsLog = logger.channel('tools');
+  // Automated clearing: the census describes the current environment, so it
+  // starts empty on boot unless the operator opts out (Settings → Tools).
+  if (config.tools?.resetOnBoot !== false) {
+    toolStats.clear();
+    toolStatsLog.info('census cleared on boot (tools.resetOnBoot)');
+  }
 
   // The probe drives one turn per tool so we can see what these models actually
   // reach for, and how slow or broken each tool is on this machine.
