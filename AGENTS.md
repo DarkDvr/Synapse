@@ -327,13 +327,6 @@ ordinary file tools; there is no tool and no store for it.
   the pane scannable; the result rides the title's tooltip. A `note` is the
   exception and stays visible — a blocked task is the one case where the operator
   is being asked for something, so the reason must not be behind a hover.
-- **There are two panel colours, and they are the operator's.** `ui.answerBg`
-  (the Architect's answer) and `ui.harnessBg` (the harness speaking — a worker's
-  report in its own panel, rendered as markdown because a report has headings and
-  code in it). Both are root variables, both preview live in Settings → Chat, and
-  both derive their border with `color-mix`. The harness block also carries a 2px
-  amber rule on `.msg-body` with **10px of padding-left** — without that padding
-  the rule sat flush against the words.
 - **There is no Project panel, and no path label anywhere.** The rail is Project
   plan + Tools in use; each project in the sidebar owns a `.tree-project-body`
   with one vertical yellow rule on its left, and the two shortcuts, the
@@ -722,17 +715,12 @@ This is once per directory per process and needs no config.
   early when it has not changed, so a poll that learned nothing new does not
   touch the DOM at all. Verified live: a Reasoning block and a tool card opened
   during turn 1 were still open after turn 2 rebuilt the transcript.
-- **The answer panel's fill is the operator's choice.** `ui.answerBg` in the
-  config (Settings → Chat, a colour swatch + hex field) defaults to a warm
-  yellow-brown `#382f19`; the app sets `--answer-bg` on the root, so the picker
-  previews live and a save persists it. **The fallback must live in `var()`, not
-  as a local declaration** — `--answer-bg: #382f19` *inside* `.msg-answer`
-  shadows the root variable, and then no setting ever reaches an existing
-  transcript (the page still looks right, because the local value is the
-  default; only changing it exposes the bug). The border is derived from the
-  same colour with `color-mix(in srgb, var(--answer-bg), #fff 18%)`, so any
-  choice stays coherent. This is a deliberate exception to "yellow is an
-  affordance colour" — it is a fill, never text.
+- **Nothing in the transcript has a fill any more.** The three speakers share one
+  block (coloured name + 2px rule, see "Speaker headers" above); the Architect's
+  answer and Synapse's report are the same markdown body. An earlier design gave
+  each a tinted panel with an operator-chosen colour, and it was removed: the
+  speaker's name already says who is talking, so the fill was decoration that
+  needed a palette exception to justify itself.
 - **Mode colours:** Multi is orange, Single is violet, both with white text and
   a white dot; both are filled pills, so the mode is readable at a glance. The
   composer placeholder is `Message` in Single, `Message the Architect…` in Multi.
