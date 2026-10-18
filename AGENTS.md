@@ -459,11 +459,14 @@ This is once per directory per process and needs no config.
   alone still fits two columns); narrower than 1100 the window scrolls
   horizontally rather than squeezing the cards. The baseline's ≤950px sidebar
   drawer behaviour is overridden for the same reason.
-  Below the chat the rail itself is two columns: the Project header spans the
-  full width (`grid-area: project`), plan and tools sit side by side at exactly
-  50/50 (`plan | tools`, `align-items: start` so a short "No plan yet" does not
-  stretch). Panels are addressed by `.rail-project` / `.rail-plan` /
-  `.rail-tools` classes, not child order.
+  Below the chat the rail itself is two equal halves: **Project above Project
+  plan on the left**, **Tools in use on the right** spanning the full height.
+  The left pair lives in a `.rail-col` wrapper that is `display: contents` in
+  the wide layout — so the two panels are ordinary grid rows there — and becomes
+  its own grid column when stacked. Without that wrapper the tall tools panel
+  spans both rows and stretches the row heights, opening a 300px hole between
+  Project and Project plan. Both halves are start-aligned so a short "No plan
+  yet" never stretches.
   The glyph measurements that matter: both button glyphs are centred on the 22px
   button to within 0.01px, with ~1.5px of margin left top and bottom at three
   chevrons — if the glyph or border size changes, re-measure with

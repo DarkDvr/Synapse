@@ -209,8 +209,13 @@ body[data-view="none"] .inspector { display: none; }
   min-width: 0; min-height: 0;
   max-height: var(--stage-h, calc(100vh - 26px));
 }
-.inspector > .panel:last-child { display: flex; flex-direction: column; min-height: 0; overflow-y: auto; }
-.inspector > .panel:last-child .tool-table { overflow: auto; }
+.inspector > .rail-tools { display: flex; flex-direction: column; min-height: 0; overflow-y: auto; }
+.inspector > .rail-tools .tool-table { overflow: auto; }
+
+/* The left pair (Project + Project plan) lives in a wrapper so it can stack as
+   one column when the rail moves under the chat. Wide, the wrapper dissolves
+   and its two panels are ordinary grid rows. */
+.rail-col { display: contents; }
 
 /* Long tool names (synapse-search_websearch) must never stretch the pane: fix
    the layout and ellipsise the cells instead of letting the table grow. */
@@ -1015,18 +1020,22 @@ body[data-view="session"] .chat-dock:not(.has-history) .composer {
   /* stacked, the stage is content-sized and the page scrolls again */
   .stage { height: auto; min-height: 0; }
   .chat-scroll { min-height: clamp(150px, 32vh, 360px); }
-  /* the rail flows below the chat in two equal columns: the project header
-     spans the full width, plan and tools sit side by side at 50/50 */
+  /* the rail flows below the chat in two equal halves: Project above Project
+     plan on the left, Tools in use owning the right. The tools panel is not
+     allowed to size the left column, so it cannot stretch a gap between the two
+     left panels; each side is start-aligned. */
   .inspector {
     max-height: none;
     grid-template-columns: 1fr 1fr;
-    grid-template-rows: auto auto;
-    grid-template-areas: "project project" "plan tools";
+    grid-template-rows: auto;
     align-items: start;
+    align-content: start;
   }
-  .inspector > .rail-project { grid-area: project; }
-  .inspector > .rail-plan { grid-area: plan; }
-  .inspector > .rail-tools { grid-area: tools; }
+  .inspector > .rail-col {
+    display: grid; gap: 14px; align-content: start; min-width: 0;
+    grid-column: 1; grid-row: 1;
+  }
+  .inspector > .rail-tools { grid-column: 2; grid-row: 1; }
   .rail-actions { grid-template-columns: 1fr 1fr; }
 }
 
