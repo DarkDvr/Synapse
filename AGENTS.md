@@ -419,6 +419,12 @@ it as a panel **painted over the chat, anchored just above the composer**.
   `header`), and the raw payload is one click away like any other tool. On
   answer the engine's own output ("User has answered your questions: …") shows in
   the expanded card.
+- **A worker can ask too.** The panel is not limited to the open session: any
+  pending form is shown, with the head saying `another session is waiting on you`.
+  A worker has the same toolset, and without this its question would be invisible
+  and the run would die at the timeout with nothing to look at. Only the *open*
+  session's own question disables the composer — a worker waiting is no reason to
+  stop talking to the Architect.
 - **Verified end to end** on the `field-notes` project: the Architect asked
   "Index colour scheme" through the tool, the panel appeared over the chat while
   its card read `asking the operator`, the answer "Fixed palette" was submitted,

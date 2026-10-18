@@ -563,7 +563,10 @@ painted over the chat, anchored just above the composer:
 - **Submit is pinned** to the panel's bottom edge, so a six-field form never
   hides the one button you need. Required fields keep it disabled and say why.
 - **The composer is disabled while a question waits** (`Answer the question
-  above`): the turn cannot read a message, so it does not pretend otherwise.
+  above`): the turn cannot read a message, so it does not pretend otherwise. That
+  applies to the open session's own question — a **worker** can ask one too, and
+  its question is shown with `another session is waiting on you` without locking
+  the message box you are using.
 - **The transcript keeps one line about it** — `question · Index colour scheme ·
   running` — with the raw payload one click away and the answer in it once you
   have replied. The panel is the interface; the card is the record.

@@ -1733,9 +1733,17 @@ function renderPermissions() {
 // it grows it can never change the chat's size: it only ever covers what is
 // already there.
 
-/** The form waiting on the operator for the open session, if there is one. */
-const currentForm = () =>
-  (state.forms || []).find((f) => f.sessionId === state.sessionId) || null;
+/** The form waiting on the operator.
+ *
+ *  The open session's own form wins, but any pending form is shown: a hidden
+ *  worker session has the same toolset, and if one of those asks something the
+ *  operator has to be able to answer it — otherwise the worker sits there until
+ *  its timeout reports a failure nobody could see coming. The head says which.
+ */
+const currentForm = () => {
+  const forms = state.forms || [];
+  return forms.find((f) => f.sessionId === state.sessionId) || forms[0] || null;
+};
 
 /** Anchor the panel to the top of the composer and cap it to the room above.
  *  The composer's own height moves (the textarea grows), so this is measured
@@ -1844,7 +1852,11 @@ function renderAskPanel() {
     <div class="ask-head">
       <span class="status-dot warn" role="img" aria-label="waiting"></span>
       <span class="ask-head-title">${esc(form.title || 'Input Needed')}</span>
-      <span class="ask-head-note">the session is waiting on you</span>
+      <span class="ask-head-note">${
+        form.sessionId === state.sessionId
+          ? 'the session is waiting on you'
+          : 'another session is waiting on you'
+      }</span>
     </div>
     <div class="ask-fields">${(form.fields || []).map(askField).join('')}</div>
     <div class="ask-actions">
@@ -1949,9 +1961,11 @@ function syncAskCustoms(target) {
 }
 
 async function replyForm(formId) {
-  const sessionId = state.sessionId;
   const form = currentForm();
   if (!form || form.id !== formId) return;
+  // The form's own session, not the open one: a worker's question is answered
+  // in the session that asked it.
+  const sessionId = form.sessionId || state.sessionId;
   const answer = collectAskAnswer(form);
   const btn = document.querySelector(`[data-form-reply="${CSS.escape(formId)}"]`);
   if (btn) btn.disabled = true;
@@ -2251,7 +2265,11 @@ async function replyPermission(requestId, decision) {
  */
 function renderComposer() {
   const hasSession = Boolean(state.sessionId);
-  const asking = Boolean(currentForm());
+  const form = currentForm();
+  // Only this session's own question blocks this composer. A worker asking
+  // something (its session is hidden) must not stop you talking to the
+  // Architect — the panel still shows, with a note saying whose question it is.
+  const asking = Boolean(form && form.sessionId === state.sessionId);
   $('sendBtn').disabled = (state.busy && !hasSession) || asking;
   $('stopBtn').disabled = !state.busy || !hasSession;
   const input = $('promptInput');
