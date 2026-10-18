@@ -169,6 +169,19 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
       return { ok: true, title };
     },
 
+    /** Switch the model and/or thinking effort used by an existing session. */
+    switchModel: async (sessionId, body) => {
+      requireReady();
+      const model = body?.model;
+      if (!model || (typeof model === 'string' && !model.includes('/'))) {
+        const err = new Error('a model reference is required');
+        err.status = 400;
+        throw err;
+      }
+      await engine.switchModel(sessionId, model);
+      return { ok: true };
+    },
+
     deleteSession: async (sessionId) => {
       requireReady();
       await engine.deleteSession(sessionId);

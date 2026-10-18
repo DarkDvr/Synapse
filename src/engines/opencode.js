@@ -125,6 +125,26 @@ export class OpenCodeEngine extends Engine {
       mcp: { ...legacyMcp, servers },
     };
 
+    // Per-model limit overrides. The engine's catalog is conservative for some
+    // free models: DeepSeek V4.1 Flash Free advertises 200k context, but the
+    // backend serves the full 1,048,576 (boundary-tested — see AGENTS.md). The
+    // override only changes the engine's local budgeting/compaction ceiling;
+    // whatever the provider enforces still applies.
+    const limits = this.cfg.modelLimits || {};
+    const limitIds = Object.keys(limits);
+    if (limitIds.length) {
+      const providers = { ...(cfg.providers || {}) };
+      const opencode = { ...(providers.opencode || {}) };
+      const models = { ...(opencode.models || {}) };
+      for (const id of limitIds) {
+        const existing = models[id] || {};
+        models[id] = { ...existing, limit: { ...(existing.limit || {}), ...limits[id] } };
+      }
+      opencode.models = models;
+      providers.opencode = opencode;
+      next.providers = providers;
+    }
+
     // Skills the operator has pointed us at. Without this the `skill` tool has
     // nothing to offer and the models cannot call it at all.
     const skillPaths = Array.isArray(this.cfg.skillPaths) ? this.cfg.skillPaths.filter(Boolean) : [];
@@ -143,7 +163,8 @@ export class OpenCodeEngine extends Engine {
         fs.writeFileSync(cfgFile, body, 'utf8');
         this.log.info(
           `engine config: local search registered, built-in websearch disabled` +
-            (skillPaths.length ? `, ${skillPaths.length} skill path(s)` : ''),
+            (skillPaths.length ? `, ${skillPaths.length} skill path(s)` : '') +
+            (limitIds.length ? `, ${limitIds.length} model limit override(s)` : ''),
         );
       }
     } catch (err) {
@@ -346,10 +367,25 @@ export class OpenCodeEngine extends Engine {
     const r = await this.request('POST', '/api/session', body, { directory: target });
     const s = normalizeSession(r?.data || {});
     this.sessionLog.info(
-      `session created id=${s.id} model=${model || '(default)'} agent=${agent || '(default)'} ` +
+      `session created id=${s.id} model=${ref ? `${ref.providerID}/${ref.id}` : '(default)'} ` +
+        `variant=${ref?.variant || 'default'} agent=${agent || '(default)'} ` +
         `mode=${s.chat ? 'chat' : 'agents'} dir=${target}`,
     );
     return s;
+  }
+
+  /**
+   * Switch the model and/or thinking effort of an existing session. The engine
+   * accepts a Model.Ref — provider, model id and an optional variant — and
+   * applies it to subsequent provider turns. Returns 204 with no body.
+   */
+  async switchModel(sessionId, model) {
+    const ref = parseModelRef(model);
+    if (!ref) throw new Error('a model reference is required');
+    await this.request('POST', `/api/session/${encodeURIComponent(sessionId)}/model`, { model: ref });
+    this.sessionLog.info(
+      `model switched id=${sessionId} model=${ref.providerID}/${ref.id} variant=${ref.variant || 'default'}`,
+    );
   }
 
   async getMessages(sessionId) {

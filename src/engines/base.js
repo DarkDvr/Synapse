@@ -26,6 +26,9 @@ export class Engine extends EventEmitter {
   async listSessions() { return []; }
   async getSession() { return null; }
   async createSession() { throw new Error(`${this.kind}: createSession() not implemented`); }
+  // Switch the model (and optionally its thinking-effort variant) of an
+  // existing session; subsequent turns use it.
+  async switchModel() { throw new Error(`${this.kind}: switchModel() not implemented`); }
   async getMessages() { return []; }
   async prompt() { throw new Error(`${this.kind}: prompt() not implemented`); }
   async interrupt() {}
@@ -58,12 +61,37 @@ export function modelRef(raw) {
   return `${provider}/${id}`;
 }
 
-export function parseModelRef(ref) {
-  if (!ref || typeof ref !== 'string' || !ref.includes('/')) return null;
-  const i = ref.indexOf('/');
-  const providerID = ref.slice(0, i).trim();
-  const id = ref.slice(i + 1).trim();
-  return providerID && id ? { providerID, id } : null;
+/**
+ * A model selection is either a bare "provider/id" string or an object:
+ *   { ref: "provider/id", variant? }  or  { providerID, id, variant? }
+ * `variant` is the engine's thinking-effort selector (it maps to the provider's
+ * `reasoningEffort`). Omitting it lets the engine use the model's own default;
+ * the engine records that as `variant: "default"`.
+ */
+export function parseModelRef(model) {
+  if (typeof model === 'string') {
+    const i = model.indexOf('/');
+    if (i <= 0) return null;
+    const providerID = model.slice(0, i).trim();
+    const id = model.slice(i + 1).trim();
+    return providerID && id ? { providerID, id } : null;
+  }
+  if (!model || typeof model !== 'object') return null;
+
+  let providerID = model.providerID;
+  let id = model.id || model.modelID;
+  if ((!providerID || !id) && typeof model.ref === 'string') {
+    const parsed = parseModelRef(model.ref);
+    if (!parsed) return null;
+    providerID = providerID || parsed.providerID;
+    id = id || parsed.id;
+  }
+  providerID = String(providerID || '').trim();
+  id = String(id || '').trim();
+  if (!providerID || !id) return null;
+
+  const variant = String(model.variant || '').trim();
+  return variant ? { providerID, id, variant } : { providerID, id };
 }
 
 export function normalizeModel(raw) {
@@ -71,6 +99,13 @@ export function normalizeModel(raw) {
   const id = raw?.id || raw?.modelID || '';
   const cost = Array.isArray(raw?.cost) ? raw.cost : [];
   const free = cost.length > 0 ? cost.every((c) => Number(c?.input) === 0) : Boolean(raw?.free);
+  // Thinking-effort variants as the model advertises them, in ascending order.
+  // `none` means the model can be asked not to think; an empty list means the
+  // model exposes no effort control at all.
+  const variants = (Array.isArray(raw?.variants) ? raw.variants : [])
+    .map((v) => (typeof v === 'string' ? v : v?.id))
+    .filter(Boolean)
+    .map(String);
   return {
     ref: `${provider}/${id}`,
     provider,
@@ -78,6 +113,12 @@ export function normalizeModel(raw) {
     name: raw?.name || raw?.label || id,
     free,
     cost,
+    // What the engine budgets locally. Not every provider-enforced ceiling
+    // matches it: the engine's catalog can be conservative (see modelLimits in
+    // the engine config), so treat these as the engine's numbers.
+    context: Number(raw?.limit?.context) || null,
+    output: Number(raw?.limit?.output) || null,
+    variants,
     raw,
   };
 }
@@ -105,6 +146,10 @@ export function normalizeSession(raw) {
     title: raw?.title || null,
     directory: raw?.location?.directory || null,
     model: raw?.model ? `${raw.model.providerID}/${raw.model.id}` : null,
+    // The engine stores `variant: "default"` when a session was created
+    // without an explicit thinking effort — that is not one of the model's
+    // advertised variants, so keep it as-is rather than inventing a level.
+    variant: raw?.model?.variant || null,
     agent: raw?.agent || null,
     single: isSingleSession(raw),
     created: raw?.time?.created || null,

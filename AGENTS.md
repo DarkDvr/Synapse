@@ -197,6 +197,7 @@ guessing.
 |---|---|
 | `POST /api/session` | accepts `location:{directory}`. **A session cannot run in a directory that does not exist** — the engine throws `LocationNotFoundError` on prompt. Synapse creates the folder when a project is added. |
 | `PATCH /api/session/{id}` | accepts only `title`, `metadata`, `permissions`. **Not `agent`.** Returns **204 with an empty body** — do not try to parse it. |
+| `POST /api/session/{id}/model` | switches model and thinking effort for later turns. Body `{model:{providerID,id,variant?}}`; **204, empty body**. Omitting `variant` makes the engine store `"default"` — see "Context windows and thinking effort". |
 | `POST /api/session/{id}/generate` | one-shot completion in the session's context. Returns `{data:{text}}`. **Adds nothing to the transcript** — this is how sessions get named. |
 | `POST /api/session/{id}/prompt` | accepts `text`, `files`, `agents`, `skills`, `metadata`, `delivery`, `resume`. An `agents:[{name}]` attachment does **not** change the acting agent. |
 | Turn boundaries | every turn ends with an **`idle` message** appended. That is the reliable end-of-turn signal — do not invent a timer. |
@@ -264,6 +265,25 @@ real agentic development work.
   intermittent, not a ban. **Every test turn spends the operator's quota** —
   batch checks, and prefer a single turn that proves several things.
 
+### Context windows and thinking effort
+
+`GET /api/model` reports `limit.context`, `limit.output` and `variants`; each
+variant sets a `reasoningEffort`. Synapse surfaces all of it (`normalizeModel`)
+and stores the operator's choice per role.
+
+- **Omitting a variant is not "no effort".** The engine stores
+  `variant:"default"`, which is not one of the advertised variants. Measured
+  reasoning tokens on the same task: `low` 70, default 228, `max` 719 (r/opencode
+  boundary test, Oct 2026).
+- **The catalog is conservative.** DeepSeek V4.1 Flash Free advertises 200k
+  context, but the backend serves **1,048,576** — boundary-tested: ~1.037M OK,
+  ~1.107M HTTP 400. MiMo-V2.6-Flash and Big Pickle are still genuinely 200k, so
+  **never raise a limit without testing that model**.
+- Synapse writes overrides from `engine.opencode.modelLimits` (config file) into
+  `providers.opencode.models.<id>.limit` in the isolated engine config on every
+  boot. That changes only the engine's local budgeting ceiling; the provider's
+  own limit still applies. Output limits were *not* tested — only context.
+
 ### The probe (`Run Tool Probe`)
 
 Drives one turn per tool in a disposable scratch session
@@ -301,6 +321,20 @@ failure "not offered by this model" when the tool was never in its list.
   `synapse-search_websearch` otherwise blows the rail out to the right.
 - The sidebar breakpoint is **1180px**. Below it the rail stacks under the chat,
   because the role cards need the width more than the rail needs to be beside.
+- **Role selections are `{ref, variant}`** in `config.roles`; the Architect is
+  the exception — it is the main session, so its choice lives in
+  `defaults.model` / `defaults.variant`. Bare `"provider/id"` strings are the old
+  shape and are migrated on save. Changing the Architect card switches the open
+  session immediately (`POST /api/session/{id}/model`); worker picks are stored
+  for the orchestration layer, which is not built yet.
+- **The thinking-effort button** shows 1–3 stacked green chevrons — dot =
+  engine default, chevrons = the three highest variants a model allows. Click
+  cycles default → lowest → … → highest → default; tooltip is
+  `Current thinking effort: <variant>`. A model with no variants gets a disabled
+  button. The glyph is the Adamant assistant oracle chevron *redrawn at 22px*
+  (`F:\dev\Obsidian.Adamant\...\adamant-assistant`) — shape only, no code copied,
+  and that folder is read-only. The model select's tooltip carries the context
+  window, which is how the 1M override becomes visible without a settings field.
 
 ---
 

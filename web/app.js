@@ -224,9 +224,61 @@ async function loadModelsAndAgents() {
   renderTargetSelect();
 }
 
-const defaultModel = () => state.config?.defaults?.model || state.models[0]?.ref || undefined;
-
 const defaultAgent = () => state.config?.defaults?.agent || undefined;
+
+// A role's model selection is { ref, variant }; an empty variant means the
+// engine's own default (the engine records it as "default"). The Architect is
+// the main session, so its choice is stored under `defaults`; workers get their
+// own `roles[id]` entry, which the orchestration layer will read when it spawns
+// them. Selecting a model does not imply an effort: the operator picks that
+// with the chevron button.
+const asSelection = (spec) => {
+  if (!spec) return null;
+  if (typeof spec === 'string') return { ref: spec, variant: '' };
+  if (typeof spec === 'object' && typeof spec.ref === 'string') {
+    return { ref: spec.ref, variant: String(spec.variant || '') };
+  }
+  return null;
+};
+
+const modelByRef = (ref) => state.models.find((m) => m.ref === ref) || null;
+const variantsOf = (model) => (Array.isArray(model?.variants) ? model.variants.map(String) : []);
+// The chevron button exposes the three highest efforts a model allows, in
+// ascending order: Cat Jam Free → high, xhigh, max; DeepSeek → low, high, max.
+const topEfforts = (model) => variantsOf(model).slice(-3);
+
+function selectionFor(roleId) {
+  if (roleId === 'architect') {
+    return {
+      ref: state.config?.defaults?.model || '',
+      variant: String(state.config?.defaults?.variant || ''),
+    };
+  }
+  return asSelection(state.config?.roles?.[roleId]) || { ref: '', variant: '' };
+}
+
+function architectSelection() {
+  const ref = state.config?.defaults?.model || state.models[0]?.ref || '';
+  if (!ref) return null;
+  // The chevron control only expresses the three highest efforts, so a stored
+  // value it cannot show is dropped here too — the session must not run an
+  // effort the button claims is not set.
+  const saved = String(state.config?.defaults?.variant || '');
+  const model = modelByRef(ref);
+  const variant = topEfforts(model).includes(saved) ? saved : '';
+  return { ref, variant };
+}
+
+const fmtTokens = (n) =>
+  !n ? '' : n >= 1000000 ? `${(n / 1000000).toFixed(n % 1000000 ? 1 : 0)}M` : n >= 1000 ? `${Math.round(n / 1000)}K` : String(n);
+
+const modelTitle = (m) => {
+  if (!m) return '';
+  const bits = [m.name];
+  if (m.context) bits.push(`${fmtTokens(m.context)} context`);
+  if (m.output) bits.push(`${fmtTokens(m.output)} max output`);
+  return bits.join(' · ');
+};
 
 // Single mode keeps every tool but denies delegation, so the Architect answers
 // everything itself in one chat. A dedicated agent for this is the obvious
@@ -238,7 +290,9 @@ const sessionMode = (s) => (s?.single ? 'single' : 'multi');
 
 /** What to POST when creating a session in the mode currently selected. */
 function sessionBody(projectId) {
-  const body = { projectId, model: defaultModel() };
+  const body = { projectId };
+  const model = architectSelection();
+  if (model) body.model = model;
   if (state.mode === 'single') body.permissions = SINGLE_PERMISSIONS;
   else body.agent = defaultAgent();
   return body;
@@ -297,11 +351,35 @@ async function switchMode() {
   );
 }
 
-// One model picker per role card. The choice is stored in the config file;
-// routing it to a real worker session lands with the orchestration layer.
+// One model picker and one thinking-effort button per role card. The model
+// change is stored in the config file; the Architect's copy is also applied to
+// the open session immediately, while worker selections wait for the
+// orchestration layer to spawn their sessions.
+function renderEffort(roleId) {
+  const sel = document.querySelector(`.role-model[data-role="${roleId}"]`);
+  const btn = document.querySelector(`.role-effort[data-role="${roleId}"]`);
+  if (!btn) return;
+  const model = modelByRef(sel?.value);
+  const top = topEfforts(model);
+  // A stored effort that is not one of the three the button offers shows as
+  // default; the next click (or save) writes a value the control can express.
+  const saved = selectionFor(roleId).variant;
+  const variant = top.includes(saved) ? saved : '';
+  const level = variant ? top.indexOf(variant) + 1 : 0;
+
+  btn.disabled = top.length === 0;
+  btn.dataset.level = String(level);
+  btn.innerHTML = level
+    ? `<span class="effort-glyph">${'<span class="effort-chev"></span>'.repeat(level)}</span>`
+    : '<span class="effort-glyph"><span class="effort-auto"></span></span>';
+  btn.title = top.length
+    ? `Current thinking effort: ${variant || 'default'}`
+    : `No thinking-effort control for ${model?.name || 'this model'}`;
+  btn.setAttribute('aria-label', btn.title);
+}
+
 function fillRoleModels() {
   if (state.models.length === 0) return;
-  const saved = state.config?.roles || {};
   const free = state.models.filter((m) => m.free);
   const pool = free.length ? free : state.models;
   document.querySelectorAll('.role-model').forEach((sel, i) => {
@@ -309,20 +387,72 @@ function fillRoleModels() {
     sel.innerHTML = state.models
       .map((m) => `<option value="${esc(m.ref)}">${esc(shortModel(m.name))}</option>`)
       .join('');
-    const chosen = saved[role] || (pool[i % pool.length] || state.models[0]).ref;
+    let chosen = role === 'architect' ? state.config?.defaults?.model || '' : selectionFor(role).ref;
+    if (!modelByRef(chosen)) chosen = (pool[i % pool.length] || state.models[0]).ref;
     sel.value = chosen;
+    sel.title = modelTitle(modelByRef(chosen)) || `Model for the ${role} role`;
+    renderEffort(role);
   });
+}
+
+async function saveRoleSelection(roleId, ref, variant) {
+  const draft = JSON.parse(JSON.stringify(state.config || {}));
+  if (roleId === 'architect') {
+    draft.defaults = { ...(draft.defaults || {}), model: ref, variant: variant || '' };
+  } else {
+    const entry = { ref };
+    if (variant) entry.variant = variant;
+    draft.roles = { ...(draft.roles || {}), [roleId]: entry };
+  }
+  state.config = await api('PUT', '/api/config', draft);
+}
+
+/** Push the Architect's current model + effort onto the open session. */
+async function applyArchitectModel() {
+  const model = architectSelection();
+  if (!model || !state.sessionId) return;
+  try {
+    await api('POST', `/api/sessions/${encodeURIComponent(state.sessionId)}/model`, { model });
+  } catch (err) {
+    toast('Could Not Switch the Session Model', err.message);
+  }
 }
 
 async function setRoleModel(roleId, ref) {
   const role = ROLES.find((r) => r.id === roleId);
+  const top = topEfforts(modelByRef(ref));
+  const current = selectionFor(roleId).variant;
+  const variant = top.includes(current) ? current : '';
   try {
-    const draft = JSON.parse(JSON.stringify(state.config || {}));
-    draft.roles = { ...(draft.roles || {}), [roleId]: ref };
-    state.config = await api('PUT', '/api/config', draft);
-    toast(`Model for ${role?.name || roleId}`, 'Saved. Routing it to a real worker arrives in stage 3.');
+    await saveRoleSelection(roleId, ref, variant);
+    renderEffort(roleId);
+    if (roleId === 'architect') {
+      await applyArchitectModel();
+      toast('Model for Architect', state.sessionId ? 'Saved and applied to the open session.' : 'Saved for new sessions.');
+    } else {
+      toast(`Model for ${role?.name || roleId}`, 'Saved. The orchestration layer will use it when this role runs.');
+    }
   } catch (err) {
     toast('Could not save the role model', err.message);
+  }
+}
+
+// default → 1 chevron → 2 → 3 → back to default. Keeping the default reachable
+// matters: it is the engine's own choice, not an absence of one.
+async function cycleEffort(roleId) {
+  const sel = document.querySelector(`.role-model[data-role="${roleId}"]`);
+  const btn = document.querySelector(`.role-effort[data-role="${roleId}"]`);
+  if (!btn || btn.disabled) return;
+  const top = topEfforts(modelByRef(sel?.value));
+  if (top.length === 0) return;
+  const idx = top.indexOf(selectionFor(roleId).variant);
+  const next = idx === -1 ? top[0] : idx < top.length - 1 ? top[idx + 1] : '';
+  try {
+    await saveRoleSelection(roleId, sel.value, next);
+    renderEffort(roleId);
+    if (roleId === 'architect') await applyArchitectModel();
+  } catch (err) {
+    toast('Could not save the thinking effort', err.message);
   }
 }
 
@@ -1486,6 +1616,16 @@ async function saveSettings() {
     if (el.type === 'number' && !Number.isFinite(value)) continue;
     writePath(draft, path, value);
   }
+  // A model change can strand a thinking effort the new model does not offer
+  // (or that the chevron control cannot express). Clear it rather than let the
+  // config and the button disagree.
+  if (draft.defaults && !topEfforts(modelByRef(draft.defaults.model)).includes(draft.defaults.variant)) {
+    draft.defaults.variant = '';
+  }
+  for (const entry of Object.values(draft.roles || {})) {
+    if (!entry || typeof entry !== 'object') continue;
+    if (!topEfforts(modelByRef(entry.ref)).includes(entry.variant)) delete entry.variant;
+  }
   try {
     state.config = await api('PUT', '/api/config', draft);
     toast('Settings saved', 'Restart Synapse to apply engine or server changes.');
@@ -1597,6 +1737,9 @@ function wire() {
 
   document.querySelectorAll('.role-model').forEach((sel) =>
     sel.addEventListener('change', () => setRoleModel(sel.dataset.role, sel.value)),
+  );
+  document.querySelectorAll('.role-effort').forEach((btn) =>
+    btn.addEventListener('click', () => cycleEffort(btn.dataset.role)),
   );
 
   // mockup affordances: clearly announce what is not wired yet

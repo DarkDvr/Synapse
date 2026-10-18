@@ -168,9 +168,36 @@ new fields need a deliberate design pass instead of silently stretching rows.
 | `engine.opencode.password` | server password (`""` = generated once into `data\`) |
 | `engine.opencode.home` | engine home (`""` = `data\engine\opencode`) |
 | `defaults.model` | default model ref, e.g. `opencode/…-free` |
+| `defaults.variant` | thinking effort for the default model (`""` = engine's own default) |
 | `defaults.agent` | default agent |
 | `defaults.directory` | default working directory for sessions |
 | `logging.retentionDays` | logs older than this are deleted (default 7) |
+
+## Models, thinking effort and context
+
+Each model selection is a ref plus an optional thinking-effort variant. Next to
+every role-card model picker is a chevron button: a dot means the engine's own
+default, one to three chevrons show the three highest efforts that model allows
+(e.g. Cat Jam Free is `high → xhigh → max`; DeepSeek is `low → high → max`), and
+a left click cycles through them. The tooltip states the current effort. Models
+that offer no variants get a disabled button, and the picker's tooltip carries
+the model's context and output limits.
+
+- The **Architect** card is the main session: changing it switches the open
+  session immediately and becomes the default for new sessions.
+- **Worker** cards store their pick in `config\synapse.config.json` as
+  `roles.<id> = { "ref", "variant" }`; the orchestration layer (stage 3+) reads
+  them when it spawns a worker.
+- **DeepSeek V4.1 Flash Free serves 1M context, not 200k.** The engine's catalog
+  is conservative; the backend serves 1,048,576 tokens (boundary-tested, ~1.037M
+  OK / ~1.107M HTTP 400). Synapse writes the override from
+  `engine.opencode.modelLimits` into the engine's isolated config on boot. Only
+  the engine's local budgeting ceiling changes — the provider still enforces its
+  own. MiMo-V2.6-Flash and Big Pickle are left at 200k because that is what they
+  actually serve.
+- Omitting an effort is not "no effort": the engine records `variant:"default"`,
+  which maps to the provider's own behaviour. The chevron's dot state keeps that
+  reachable.
 
 ## Projects and sessions
 

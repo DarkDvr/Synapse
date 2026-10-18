@@ -20,6 +20,14 @@ export const DEFAULTS = {
       home: '',
       startTimeoutMs: 60000,
       args: [],
+      // Per-model limit overrides written into the engine's own config. The
+      // engine's catalog is conservative for some free models: DeepSeek V4.1
+      // Flash Free advertises 200k context but the backend serves 1,048,576
+      // (boundary-tested — see AGENTS.md). This raises only the engine's local
+      // budgeting ceiling. Add another entry only after testing that model.
+      modelLimits: {
+        'deepseek-v4.1-flash-free': { context: 1048576 },
+      },
       // Folders of agent skills to hand to the engine. Empty by default: this
       // is the operator's choice, not something Synapse should assume.
       skillPaths: [],
@@ -28,6 +36,10 @@ export const DEFAULTS = {
   defaults: {
     directory: '',
     model: '',
+    // Thinking-effort variant for the default model. Empty means the engine's
+    // own default: the engine records that as variant "default", which maps to
+    // whatever the provider does when no reasoningEffort is requested.
+    variant: '',
     agent: '',
     // 'multi' = the Architect can hand work to workers; 'single' = every tool
     // but delegation, so it answers everything itself in one chat. Applied when
@@ -35,9 +47,11 @@ export const DEFAULTS = {
     // in a way that survives, so the mode is chosen before a session starts.
     mode: 'multi',
   },
-  // Per-role model choices made in the UI. Routing them to real worker
-  // sessions lands with the orchestration layer; storing them now means the
-  // operator's picks survive a restart.
+  // Per-role selections made on the role cards: { ref, variant }. The Architect
+  // uses `defaults` above (it is the main session); every other role gets its
+  // own entry here. Routing an entry to a real worker session lands with the
+  // orchestration layer; storing them now means the operator's picks survive a
+  // restart.
   roles: {},
   logging: {
     level: 'info',
@@ -84,19 +98,48 @@ export function normalize(raw) {
   oc.home = String(oc.home || '');
   oc.startTimeoutMs = clampInt(oc.startTimeoutMs, 5000, 600000, 60000);
   if (!Array.isArray(oc.args)) oc.args = [];
+  // Model limit overrides: { modelID: { context?, input?, output? } }.
+  const limits = {};
+  if (isPlainObject(oc.modelLimits)) {
+    for (const [id, spec] of Object.entries(oc.modelLimits)) {
+      if (!isPlainObject(spec)) continue;
+      const entry = {};
+      for (const key of ['context', 'input', 'output']) {
+        const n = Number.parseInt(spec[key], 10);
+        if (Number.isFinite(n) && n > 0) entry[key] = n;
+      }
+      if (Object.keys(entry).length) limits[String(id)] = entry;
+    }
+  }
+  oc.modelLimits = limits;
   oc.skillPaths = Array.isArray(oc.skillPaths)
     ? oc.skillPaths.map((p) => String(p || '').trim()).filter(Boolean)
     : [];
 
   cfg.defaults.directory = String(cfg.defaults.directory || '');
   cfg.defaults.model = String(cfg.defaults.model || '');
+  cfg.defaults.variant = String(cfg.defaults.variant || '');
   cfg.defaults.agent = String(cfg.defaults.agent || '');
   cfg.defaults.mode = cfg.defaults.mode === 'single' ? 'single' : 'multi';
 
+  // Role selections are objects now ({ ref, variant }); accept the older bare
+  // "provider/id" strings so existing config files keep working. The Architect
+  // belongs in `defaults` — it is the main session, not a worker — so fold any
+  // legacy roles.architect entry into defaults and drop it.
   const roles = {};
   if (isPlainObject(cfg.roles)) {
-    for (const [id, ref] of Object.entries(cfg.roles)) {
-      if (typeof ref === 'string' && ref.trim()) roles[String(id)] = ref.trim();
+    for (const [id, spec] of Object.entries(cfg.roles)) {
+      const ref = typeof spec === 'string' ? spec : isPlainObject(spec) ? spec.ref : '';
+      if (typeof ref !== 'string' || !ref.trim()) continue;
+      const variant = isPlainObject(spec) && typeof spec.variant === 'string' ? spec.variant.trim() : '';
+      const entry = { ref: ref.trim() };
+      if (variant) entry.variant = variant;
+      if (id === 'architect') {
+        if (!cfg.defaults.model) cfg.defaults.model = entry.ref;
+        if (!cfg.defaults.variant && entry.variant) cfg.defaults.variant = entry.variant;
+        continue;
+      }
+      roles[String(id)] = entry;
     }
   }
   cfg.roles = roles;

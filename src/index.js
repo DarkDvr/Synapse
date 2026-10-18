@@ -104,7 +104,11 @@ async function main() {
       const added = toolStats.recordMessages(messages, {
         // A session created without an explicit model reports none until later;
         // fall back to the configured default so the census stays per-model.
-        model: session?.model || getConfig().defaults?.model || '(engine default)',
+        // A non-default thinking variant is part of the identity here: `#max`
+        // and `#low` are different configurations of the same model.
+        model: session?.model
+          ? session.model + (session.variant && session.variant !== 'default' ? `#${session.variant}` : '')
+          : getConfig().defaults?.model || '(engine default)',
         agent: session?.agent || getConfig().defaults?.agent || '(default)',
         sessionId,
       });

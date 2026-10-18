@@ -14,6 +14,11 @@
       "home": "",
       "startTimeoutMs": 60000,
       "args": [],
+      "modelLimits": {
+        "deepseek-v4.1-flash-free": {
+          "context": 1048576
+        }
+      },
       "skillPaths": [
         "C:\\Users\\Andrew\\.agents\\skills"
       ]
@@ -22,11 +27,14 @@
   "defaults": {
     "directory": "",
     "model": "",
+    "variant": "",
     "agent": "",
     "mode": "multi"
   },
   "roles": {
-    "designer": "opencode/space-bunny-free"
+    "designer": {
+      "ref": "opencode/space-bunny-free"
+    }
   },
   "logging": {
     "level": "info",

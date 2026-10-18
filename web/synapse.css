@@ -534,6 +534,29 @@ body.dark .sidebar-bottom,
   font-size: 11px; line-height: 1; cursor: pointer; padding: 0;
 }
 
+/* Thinking effort: up to three stacked chevrons, redrawn at this button's scale
+   from the Adamant assistant's oracle glyph. Green is semantic here — the
+   button reports how hard the model is asked to think. `default` shows as a dot
+   so the engine's own choice stays reachable; a model without variants gets a
+   disabled control. */
+.role-effort { color: var(--green); }
+.role-effort:hover { border-color: #454950; background: var(--green-soft); }
+.role-effort:disabled { color: #5c6169; opacity: 0.55; cursor: default; }
+.role-effort:disabled:hover { border-color: var(--line); background: transparent; }
+.effort-glyph { display: flex; flex-direction: column; align-items: center; line-height: 0; }
+.effort-chev {
+  width: 5px; height: 5px;
+  border: 1.5px solid transparent;
+  border-right-color: currentColor;
+  border-bottom-color: currentColor;
+  transform: rotate(-135deg);
+}
+.effort-chev + .effort-chev { margin-top: -2.5px; }
+.effort-auto {
+  width: 4px; height: 4px; border-radius: 50%;
+  background: currentColor; opacity: 0.5;
+}
+
 /* the action gets two lines, then ellipsis — the card never grows */
 .role-action {
   margin: 0; font-size: 12.5px; line-height: 1.38; color: #c3c6cc;
