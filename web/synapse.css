@@ -539,15 +539,19 @@ body.dark .sidebar-bottom,
 .role-card:hover { border-color: #454950; }
 
 /* The card's subtitle: the task this role is on, and what it is doing to it.
-   It is absent while the role has nothing to show, so an idle topology stays as
-   short as it was — and when it appears, the room comes from the top of the
-   chat, never from the composer. */
+   The slot is always three lines tall, empty or not. A card that grows when a
+   task appears pushes the chat down every time an agent starts, which read as
+   the whole UI jumping; reserving the space once means nothing moves, ever.
+   Clamped, so a long task cannot grow it either — the full text is the title.
+   `--task-lines` is the one number to change if three is too much. */
 .role-task {
   margin: 0; min-width: 0;
   font-size: 11.5px; line-height: 1.45; color: #b9bdc4;
-  overflow-wrap: anywhere;
+  height: calc(var(--task-lines, 3) * 1.45em);
+  display: -webkit-box; -webkit-box-orient: vertical;
+  -webkit-line-clamp: var(--task-lines, 3);
+  overflow: hidden; overflow-wrap: anywhere;
 }
-.role-task[hidden] { display: none; }
 
 /* The two roles taking part in a delegation: the requester green (the
    Architect's own colour), the worker red. Colour only — changing the width
@@ -563,9 +567,12 @@ body.dark .sidebar-bottom,
 }
 /* short role names on the left, so the picker is a fixed, generous width and
    always butts up against the edit button on the right */
+/* The role's name never runs into the model picker: the picker is right-aligned,
+   so the gap between them collapses to nothing on a long name. The padding is
+   inside the tools row, so the picker's right edge stays put. */
 .role-tools {
   display: flex; align-items: center; gap: 5px;
-  flex: none; margin-left: auto;
+  flex: none; margin-left: auto; padding-left: 8px;
 }
 .role-model {
   appearance: none;

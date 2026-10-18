@@ -485,6 +485,12 @@ Non-obvious, all verified on 2.0.30:
   not a failed task: the calendar auditor was interrupted and still left a useful
   result, and the Architect judged from what it *had* produced rather than from
   the worker's word.
+  **One exception: a worker waiting on an answer is not stalled.** While the
+  transcript shows a `question` tool part still running, `waitForIdle` pushes the
+  deadline out on every poll, so the operator can take as long as they like.
+  Without that, every worker that asked anything was guaranteed to be interrupted
+  for asking — and the panel would have shown a question for a run that had
+  already been killed.
 - **The worker's poll is also the UI's source of live activity.** `waitForIdle`
   already fetches the worker's transcript on a timer, so the newest tool call
   costs nothing extra: the runner reads its name and target (the input field
@@ -746,19 +752,22 @@ This is once per directory per process and needs no config.
   Re-measure on the topology's `ResizeObserver` and on `document.fonts.ready`:
   the card height changes after the font swap, and a stale `--reveal-h` looked
   like a one-pixel clip.
-- **A growing card takes its room from the top of the chat, never the bottom.**
-  The stage's second row is `minmax(0, 1fr)` under a definite height, so a taller
-  role-card wrapper just squeezes the transcript: the dock's bottom is pinned and
-  its top edge moves down (measured live: 269 → 306px top, 888 → 888px bottom).
-  Two things make it work. `renderRoleActivity()` measures the wrapper **before**
-  it changes the subtitle text and passes that height to `applyRoleCardsLayout` as
-  `from` — a card that has already grown is taller by the time the reflow happens,
-  so pinning the current height would snap instead of sliding. And a poll that
-  learned nothing must not re-measure at all, or the chat jiggles for no reason:
-  `state.roleSig` is a signature of every card's role, state and text, and an
-  unchanged signature returns early. Below the 1460px breakpoint the stacked
-  layout caps the chat instead, and the growth is instant — there is no `1fr` row
-  to squeeze.
+- **The subtitle slot is a fixed three lines, so the chat never moves.** The
+  first version let a card grow when its task appeared, which took its room from
+  the transcript's top edge (correct mechanically, 269 → 306px top with the
+  bottom pinned at 888) — and read as the whole UI jumping every time an agent
+  started. Now every card reserves `--task-lines` (3) of subtitle space whether it
+  has anything to say or not, clamped with `-webkit-line-clamp`, so filling it
+  changes no height at all (measured: all worker cards 98.28px, Architect 102.28
+  because its name is 15px). The full text rides the `title`. The trade is real:
+  the topology is ~200px taller for ever, which comes out of the chat. `--task-lines`
+  is the one number to change.
+  The stage's second row is still `minmax(0, 1fr)` under a definite height, so
+  *anything* that does grow (a raised `--task-lines`, a font swap) squeezes the
+  transcript and never moves the composer — `applyRoleCardsLayout({ from })` still
+  takes the pre-change height so it slides. And a poll that learned nothing must
+  not re-measure at all: `state.roleSig` is a signature of every card's role,
+  state and text, and an unchanged signature returns early.
 - **The live path is measured from the connector cell, not from the cards.** The
   spine is that cell's exact centreline and the band is its `.link-line`'s exact
   centre, both at three decimal places — the arrow has to *cover* the dots it

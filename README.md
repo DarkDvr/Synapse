@@ -130,14 +130,19 @@ project, and the path was never what you looked at.
 something to show: a worker shows the task it was handed with its newest tool
 call in brackets — "Implement calendar script (writing calendar.py)" — and the
 Architect shows who it is waiting on, or what its own turn is doing
-("editing plan.json"). The task id and the destination are deliberately absent:
-the arrow already says who and where. Idle cards keep no subtitle at all, so an
-idle topology is exactly as short as it was.
+("editing plan.json", "asking the operator"). The task id and the destination are
+deliberately absent: the arrow already says who and where.
 
-A card growing takes its room from **the top of the chat**, never from the
-composer: the stage's second row is `minmax(0, 1fr)` under a definite height, so
-the dock's bottom stays put and the transcript's top edge moves down. Measured
-during a live delegation: dock top 269 → 306px, dock bottom 888 → 888px.
+**The subtitle slot is three lines tall whether it is used or not.** A card that
+grew when work started pushed the chat down every time an agent began — the
+mechanic was right but it read as the whole UI jumping. Reserving the space once
+means nothing moves, ever; the text is clamped to the slot (all worker cards
+measure 98.28px, the Architect 102.28 because its name is larger) and the full
+text is the tooltip. `--task-lines` is the one number to change.
+
+The stage's second row is still `minmax(0, 1fr)` under a definite height, so
+anything that *does* grow — a raised `--task-lines`, a font swap — comes out of
+the transcript's top edge and never moves the composer.
 
 **The two roles in a delegation are the only cards that change appearance.** The
 requester takes green (the Architect's own colour) and the worker red; colour

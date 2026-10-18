@@ -362,8 +362,9 @@ export function createRunner({ engine, logger, getConfig, notify }) {
    *  transcript is already being fetched, so the newest tool call costs nothing
    *  extra and the operator can watch the work instead of guessing at it. */
   async function waitForIdle(workerId, before, timeoutMs, onTool) {
-    const deadline = Date.now() + timeoutMs;
+    let deadline = Date.now() + timeoutMs;
     let lastKey = '';
+    let asking = false;
     while (Date.now() < deadline) {
       await sleep(POLL_MS);
       let messages;
@@ -380,6 +381,24 @@ export function createRunner({ engine, logger, getConfig, notify }) {
           onTool(tool);
         }
       }
+
+      // A question for the operator is not a stalled worker. The engine blocks
+      // the turn until it is answered, which may be hours — so while one is
+      // pending the ceiling stops counting, or every worker that asks anything
+      // is guaranteed to be interrupted for asking. It is read from the
+      // transcript already being polled, so this costs nothing.
+      const last = messages[messages.length - 1];
+      const waiting = (last?.parts || []).some(
+        (p) => p?.type === 'tool' && /^question$/.test(String(p.name || '')) && /run|pend|progress/i.test(String(p.status || '')),
+      );
+      if (waiting) {
+        deadline = Date.now() + timeoutMs;
+        if (!asking) log.info(`worker ${workerId} is waiting on an answer; its ceiling is paused`);
+      } else if (asking) {
+        log.info(`worker ${workerId} has an answer; its ceiling is running again`);
+      }
+      asking = waiting;
+
       if (messages.length > before && messages[messages.length - 1]?.type === 'idle') {
         return { timedOut: false };
       }

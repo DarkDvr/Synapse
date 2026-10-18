@@ -1214,7 +1214,6 @@ function initRoleCards() {
     if (!card.querySelector('.role-task')) {
       const slot = document.createElement('p');
       slot.className = 'role-task';
-      slot.hidden = true;
       card.append(slot);
     }
   }
@@ -1255,16 +1254,20 @@ function renderRoleActivity() {
   if (sig === state.roleSig) return;
   state.roleSig = sig;
 
-  // Measured before the text changes, so the wrapper animates from the height
-  // the chat's top edge is actually at. The dock's bottom does not move: it is
-  // pinned by the stage's definite height, so a taller card has to take its room
-  // from the transcript's top edge.
+  // The cards no longer change height here — the subtitle slot is a fixed
+  // three-line hole — so this is only a re-measure for safety (a raised
+  // `--task-lines`, a font swap). The dock's bottom never moves: the stage has a
+  // definite height, so anything that did grow would take room from the
+  // transcript's top edge.
   const fromH = Math.ceil($('topologyWrap')?.getBoundingClientRect().height || 0);
   for (const { card, text, part } of rows) {
     const slot = card.querySelector('.role-task');
     if (!slot) continue;
+    // The slot never appears or disappears: it is a fixed three-line hole in the
+    // card, so filling it cannot change the card's height and cannot move the
+    // chat. The full text rides the tooltip because the slot clamps.
     slot.textContent = text;
-    slot.hidden = !text;
+    slot.title = text;
     card.classList.toggle('is-initiator', part === 'initiator');
     card.classList.toggle('is-worker', part === 'worker');
   }
