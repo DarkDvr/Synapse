@@ -57,6 +57,19 @@ recycled engine binary it locates.
   session, reused; few screenshots. See "Browsers" below.
 - **Stage the delivery.** Each stage is reviewed before the next starts.
 
+### Version control
+
+- **Commit before every important change** — before starting a stage, a refactor,
+  or a risky fix, and again when it works. Small scoped commits, message says
+  what changed and why.
+- **`data/`, `logs/` and `workspace/` stay out of git** (already in
+  `.gitignore`): they hold PIDs, probe output, session logs and scratch projects,
+  all local and regenerable.
+- **Check `git status` before and after.** Do not commit build junk or secrets;
+  `config/synapse.config.json` is source of truth and safe (its password field is
+  empty by default), but never commit a filled-in one.
+- **No remote.** This is a local repository; never force-push or rewrite history.
+
 ### Destructive commands — verify before you act
 
 This machine is shared and busy: the desktop app, a browser running hundreds of
