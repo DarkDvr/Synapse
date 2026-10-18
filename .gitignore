@@ -1,0 +1,8 @@
+# Runtime state — regenerated on start
+data/
+logs/
+workspace/
+
+# Node
+node_modules/
+npm-debug.log*

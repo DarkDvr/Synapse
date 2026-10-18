@@ -1,0 +1,441 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#151619" />
+  <title>Synapse</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23625bf6'/%3E%3Cpath d='M16 6l8 10-8 10-8-10z' fill='%23ff7d1a'/%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="/vendor/fonts.css" />
+  <link rel="stylesheet" href="/vendor/summit.css" />
+  <link rel="stylesheet" href="/synapse.css" />
+</head>
+<body class="dark" data-view="none">
+<div class="app-shell control-room">
+
+  <!-- ── left rail ────────────────────────────────────────────────────── -->
+  <aside class="sidebar" id="sidebar">
+    <a class="brand" href="#" aria-label="Synapse home">
+      <span class="brand-mark">◈</span>
+      <span>Synapse</span>
+      <span class="version">v0.1</span>
+    </a>
+
+    <nav class="side-nav" aria-label="Main">
+      <button class="nav-link active" aria-current="page"><span>⌂</span> Home</button>
+    </nav>
+
+    <div class="tree-block">
+      <div class="sidebar-label">
+        PROJECTS
+        <button class="tree-add ic-add" id="addProjectBtn" title="Add a project" aria-label="Add a project">＋</button>
+      </div>
+      <!-- General (live) + sample preview projects, rendered by app.js -->
+      <div class="project-tree" id="projectTree"></div>
+    </div>
+
+    <div class="side-nav settings-slot">
+      <button class="nav-link" id="settingsBtn">
+        <span class="ic-settings">⚙</span> Settings
+      </button>
+    </div>
+
+    <div class="sidebar-bottom status-block">
+      <div class="sidebar-label">STATUS</div>
+      <div class="status-row" title="Engine process state">
+        <span class="status-dot idle" id="engineDot"></span>Engine
+        <span class="status-state" id="engineState">starting…</span>
+      </div>
+      <div class="status-row" title="Live event stream">
+        <span class="status-dot idle" id="streamDot"></span>Event stream
+        <span class="status-state" id="streamState">—</span>
+      </div>
+      <div class="status-row" title="Last engine event received">
+        <span class="status-dot idle" id="eventDot"></span>Last event
+        <span class="status-state" id="lastEvent">idle</span>
+      </div>
+      <div class="status-row" title="A local model runtime is not wired yet">
+        <span class="status-dot idle"></span>Local LLM
+        <span class="status-state">not set</span>
+      </div>
+    </div>
+  </aside>
+
+  <main class="main-content">
+    <button class="mobile-menu icon-button" id="menuBtn" aria-label="Open menu" title="Menu">☰</button>
+
+    <div class="content-wrap">
+      <div class="room">
+
+        <!-- ── main stage ─────────────────────────────────────────────── -->
+        <section class="stage" id="stage">
+
+          <!-- nothing open -->
+          <div class="stage-empty" id="stageEmpty">
+            <div class="stage-empty-mark">◈</div>
+            <h2>Nothing open</h2>
+            <p>
+              Pick a session in the left rail, or start a new one.<br />
+              <kbd>Design preview</kbd> opens the control-room layout with sample data.
+            </p>
+            <button class="btn btn-primary" id="emptyNewSession">New Session</button>
+          </div>
+
+          <!-- ── topology (sample preview) ───────────────────────────── -->
+          <div class="topology" id="topology">
+            <svg class="path-layer" id="pathLayer" aria-hidden="true" focusable="false"></svg>
+
+            <div class="topo-architect">
+              <article class="role-card role-architect is-active">
+                <header class="role-head">
+                  <span class="status-dot warn" role="img" aria-label="working"></span>
+                  <h3>Architect</h3>
+                  <div class="role-tools">
+                    <select class="role-model" data-role="architect" aria-label="Model for the Architect role" title="Model for the Architect role"></select>
+                    <button class="role-btn ic-edit" data-soon="Per-role instructions arrive in stage 2." title="Role instructions" aria-label="Role instructions">✎</button>
+                  </div>
+                </header>
+                <p class="role-action">Reviewing the Designer's settings-screen spec before handing the month grid to Coder 1.</p>
+                <footer class="role-foot">
+                  <span>supervisor</span>
+                  <span class="grow"></span>
+                  <span>waiting on <span class="to">Designer</span></span>
+                  <span>step 4 / 7</span>
+                </footer>
+              </article>
+            </div>
+
+            <!-- row 1 · Critic ↔ Coder 1 -->
+            <article class="role-card">
+              <header class="role-head">
+                <span class="status-dot ok" role="img" aria-label="idle"></span>
+                <h3>Critic</h3>
+                <div class="role-tools">
+                  <select class="role-model" data-role="critic" aria-label="Model for the Critic role" title="Model for the Critic role"></select>
+                  <button class="role-btn ic-edit" data-soon="Per-role instructions arrive in stage 2." title="Role instructions" aria-label="Role instructions">✎</button>
+                </div>
+              </header>
+              <p class="role-action">Idle. Last pass flagged the unguarded date parse in event import.</p>
+              <footer class="role-foot">
+                <span>review</span><span class="grow"></span>
+                <span>last task 2m ago</span><span>3 findings</span>
+              </footer>
+            </article>
+
+            <div class="link" aria-hidden="true"><span class="link-line"></span></div>
+
+            <article class="role-card is-active">
+              <header class="role-head">
+                <span class="status-dot warn" role="img" aria-label="working"></span>
+                <h3>Coder 1</h3>
+                <div class="role-tools">
+                  <select class="role-model" data-role="coder-1" aria-label="Model for Coder 1" title="Model for Coder 1"></select>
+                  <button class="role-btn ic-edit" data-soon="Per-role instructions arrive in stage 2." title="Role instructions" aria-label="Role instructions">✎</button>
+                </div>
+              </header>
+              <p class="role-action">Building the month grid — laying out weeks and wiring day-cell selection.</p>
+              <footer class="role-foot">
+                <span>build</span><span class="grow"></span>
+                <span>assigned by <span class="to">Architect</span></span><span>edits 12</span>
+              </footer>
+            </article>
+
+            <!-- row 2 · Designer ↔ Coder 2 — the one lit connection -->
+            <article class="role-card is-active">
+              <header class="role-head">
+                <span class="status-dot warn" role="img" aria-label="working"></span>
+                <h3>Designer</h3>
+                <div class="role-tools">
+                  <select class="role-model" data-role="designer" aria-label="Model for the Designer role" title="Model for the Designer role"></select>
+                  <button class="role-btn ic-edit" data-soon="Per-role instructions arrive in stage 2." title="Role instructions" aria-label="Role instructions">✎</button>
+                </div>
+              </header>
+              <p class="role-action">Drafting the settings screen against the locked design baseline.</p>
+              <footer class="role-foot">
+                <span>UI / UX</span><span class="grow"></span>
+                <span>requested by <span class="to">Architect</span></span><span>40s</span>
+              </footer>
+            </article>
+
+            <div class="link active rtl" data-conn="architect:designer" aria-hidden="true"><span class="link-line"></span></div>
+
+            <article class="role-card is-unused">
+              <header class="role-head">
+                <span class="status-dot idle" role="img" aria-label="waiting"></span>
+                <h3>Coder 2</h3>
+                <div class="role-tools">
+                  <select class="role-model" data-role="coder-2" aria-label="Model for Coder 2" title="Model for Coder 2"></select>
+                  <button class="role-btn ic-edit" data-soon="Per-role instructions arrive in stage 2." title="Role instructions" aria-label="Role instructions">✎</button>
+                </div>
+              </header>
+              <p class="role-action">Queued. Starts on the event dialog once the grid lands.</p>
+              <footer class="role-foot">
+                <span>build</span><span class="grow"></span>
+                <span>blocked by <span class="to">Coder 1</span></span><span>queued</span>
+              </footer>
+            </article>
+
+            <!-- row 3 · Auditor ↔ Coder 3 -->
+            <article class="role-card">
+              <header class="role-head">
+                <span class="status-dot ok" role="img" aria-label="idle"></span>
+                <h3>Auditor</h3>
+                <div class="role-tools">
+                  <select class="role-model" data-role="auditor" aria-label="Model for the Auditor role" title="Model for the Auditor role"></select>
+                  <button class="role-btn ic-edit" data-soon="Per-role instructions arrive in stage 2." title="Role instructions" aria-label="Role instructions">✎</button>
+                </div>
+              </header>
+              <p class="role-action">Idle. Ran the acceptance checklist against the persistence layer.</p>
+              <footer class="role-foot">
+                <span>verify</span><span class="grow"></span>
+                <span>last task 6m ago</span><span>18 / 18 pass</span>
+              </footer>
+            </article>
+
+            <div class="link is-last" aria-hidden="true"><span class="link-line"></span></div>
+
+            <article class="role-card is-unused">
+              <header class="role-head">
+                <span class="status-dot idle" role="img" aria-label="waiting"></span>
+                <h3>Coder 3</h3>
+                <div class="role-tools">
+                  <select class="role-model" data-role="coder-3" aria-label="Model for Coder 3" title="Model for Coder 3"></select>
+                  <button class="role-btn ic-edit" data-soon="Per-role instructions arrive in stage 2." title="Role instructions" aria-label="Role instructions">✎</button>
+                </div>
+              </header>
+              <p class="role-action">Queued. Owns recurrence rules — currently hard-blocked.</p>
+              <footer class="role-foot">
+                <span>build</span><span class="grow"></span>
+                <span>blocked by <span class="to">plan step 5</span></span><span>queued</span>
+              </footer>
+            </article>
+          </div>
+
+          <!-- ── conversation (live · no header) ─────────────────────── -->
+          <section class="chat-dock" id="chatDock" aria-label="Conversation">
+            <div class="chat-scroll" id="transcript">
+              <div class="chat-empty">Ask the Architect what it is doing, or send the next instruction for this session.</div>
+            </div>
+            <div class="chat-nav" id="chatNav" hidden>
+              <button class="fab" id="navPrev" title="Jump to my previous message" aria-label="Previous message">↑</button>
+              <button class="fab" id="navNext" title="Jump to my next message" aria-label="Next message">↓</button>
+            </div>
+            <form class="composer" id="composer">
+              <label class="to-pick">
+                <span class="pick-tag">to</span>
+                <select class="role-select" id="targetRole" title="Which role answers you" aria-label="Which role answers you"></select>
+              </label>
+              <button type="button" class="mode-toggle" id="modeToggle" aria-pressed="false" title="Switch between Multi and Single">
+                <span class="mode-dot" aria-hidden="true"></span><span id="modeLabel">Multi</span>
+              </button>
+              <textarea id="promptInput" rows="1" placeholder="Message…" title="Enter to send · Shift+Enter for a newline"></textarea>
+              <button type="button" class="icon-button" id="stopBtn" title="Stop the current run" aria-label="Stop the current run" disabled>■</button>
+              <button type="button" class="icon-button chat-expand" id="expandBtn" title="Expand the conversation over the role cards" aria-label="Expand the conversation">⤢</button>
+              <button type="submit" class="btn btn-primary" id="sendBtn">Send</button>
+            </form>
+          </section>
+        </section>
+
+        <!-- ── inspector rail ─────────────────────────────────────────── -->
+        <aside class="inspector">
+
+          <!-- project -->
+          <section class="panel rail-panel">
+            <div class="panel-head">
+              <h3>Project</h3>
+              <span class="sample-note sample-only">SAMPLE</span>
+            </div>
+            <h2 class="project-name sample-only">calendar</h2>
+            <p class="project-path sample-only" title="F:\dev\Synapse\workspace">F:\dev\Synapse\workspace\calendar</p>
+            <h2 class="project-name session-only" id="sessionProjectName">—</h2>
+            <p class="project-path session-only" id="sessionProjectPath" title=""></p>
+            <div class="rail-actions">
+              <button class="btn btn-secondary btn-sm" data-soon="Opening the project folder arrives in stage 4.">Browse Folder</button>
+              <button class="btn btn-secondary btn-sm" data-soon="Opening a command prompt here arrives in stage 4.">Cmd Here</button>
+            </div>
+          </section>
+
+          <!-- plan -->
+          <section class="panel rail-panel">
+            <div class="panel-head">
+              <h3>Project plan</h3>
+              <span class="sample-note sample-only">SAMPLE</span>
+            </div>
+            <ol class="plan-list sample-only">
+              <li class="plan-item done">
+                <span class="plan-idx">1</span><span class="plan-text">Scaffold project structure</span>
+                <span class="plan-mark"><span class="status-dot ok" role="img" aria-label="done"></span></span>
+              </li>
+              <li class="plan-item done">
+                <span class="plan-idx">2</span><span class="plan-text">Data model and local persistence</span>
+                <span class="plan-mark"><span class="status-dot ok" role="img" aria-label="done"></span></span>
+              </li>
+              <li class="plan-item active">
+                <span class="plan-idx">3</span><span class="plan-text">Month grid rendering</span>
+                <span class="plan-mark"><span class="status-dot warn" role="img" aria-label="in progress"></span></span>
+              </li>
+              <li class="plan-item">
+                <span class="plan-idx">4</span><span class="plan-text">Event create and edit dialog</span>
+                <span class="plan-mark"><span class="status-dot idle" role="img" aria-label="not started"></span></span>
+              </li>
+              <li class="plan-item blocked">
+                <span class="plan-idx">5</span><span class="plan-text">Recurrence rules</span>
+                <span class="plan-mark">
+                  <span class="status-dot err" role="img" aria-label="hard-blocked"></span>
+                  <button class="err-btn" data-error-title="Plan step 5 — recurrence rules"
+                    data-error="Hard-blocked: expansion exceeded the 200 ms budget.&#10;&#10;RRULE FREQ=WEEKLY;INTERVAL=1;BYDAY=MO,TU,WE,TH,FR over a 5-year window produced 1,304 occurrences in one synchronous pass and was aborted at 214 ms.&#10;&#10;Suggested: expand lazily per visible month, and cap the window at 2 years.">Error</button>
+                </span>
+              </li>
+              <li class="plan-item">
+                <span class="plan-idx">6</span><span class="plan-text">Local reminders</span>
+                <span class="plan-mark"><span class="status-dot idle" role="img" aria-label="not started"></span></span>
+              </li>
+              <li class="plan-item">
+                <span class="plan-idx">7</span><span class="plan-text">Package as a single .exe</span>
+                <span class="plan-mark"><span class="status-dot idle" role="img" aria-label="not started"></span></span>
+              </li>
+            </ol>
+            <p class="rail-note session-only">No plan yet. The Architect's dev plan and its red / amber / green steps arrive in stage 3.</p>
+          </section>
+
+          <!-- tools -->
+          <section class="panel rail-panel">
+            <div class="panel-head">
+              <h3>Tools in use</h3>
+              <span class="sample-note sample-only">SAMPLE</span>
+            </div>
+            <table class="tool-table sample-only">
+              <thead>
+                <tr><th>Tool</th><th>Target</th><th style="text-align:right">Time</th><th></th></tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="tool-name">shell</td>
+                  <td class="tool-target" title="npx tsc --noEmit">npx tsc --noEmit</td>
+                  <td class="tool-time slow">12.8s</td>
+                  <td class="tool-result"><span class="state-pill warn">running</span></td>
+                </tr>
+                <tr>
+                  <td class="tool-name">shell</td>
+                  <td class="tool-target" title="npm run build">npm run build</td>
+                  <td class="tool-time slow">4.2s</td>
+                  <td class="tool-result"><span class="status-dot ok" role="img" aria-label="success"></span></td>
+                </tr>
+                <tr>
+                  <td class="tool-name">edit</td>
+                  <td class="tool-target" title="src/lib/recur.ts">src/lib/recur.ts</td>
+                  <td class="tool-time">1.4s</td>
+                  <td class="tool-result"><span class="status-dot ok" role="img" aria-label="success"></span></td>
+                </tr>
+                <tr>
+                  <td class="tool-name">write</td>
+                  <td class="tool-target" title="src/ui/EventDialog.tsx">src/ui/EventDialog.tsx</td>
+                  <td class="tool-time"></td>
+                  <td class="tool-result">
+                    <span class="status-dot err" role="img" aria-label="error"></span>
+                    <button class="err-btn" data-error-title="write — src/ui/EventDialog.tsx"
+                      data-error="EPERM: operation not permitted, open 'F:\dev\Synapse\workspace\calendar\src\ui\EventDialog.tsx'.&#10;&#10;The file is open in another process (editor lock). Retried twice, then gave up.&#10;&#10;Suggested: close the editor, or write to a temporary file and swap it in.">Error</button>
+                  </td>
+                </tr>
+                <tr>
+                  <td class="tool-name">grep</td>
+                  <td class="tool-target" title="&quot;RRULE&quot; in src/">"RRULE" in src/</td>
+                  <td class="tool-time"></td>
+                  <td class="tool-result"><span class="status-dot ok" role="img" aria-label="success"></span></td>
+                </tr>
+                <tr>
+                  <td class="tool-name">read</td>
+                  <td class="tool-target" title="src/lib/recur.ts">src/lib/recur.ts</td>
+                  <td class="tool-time"></td>
+                  <td class="tool-result"><span class="status-dot ok" role="img" aria-label="success"></span></td>
+                </tr>
+              </tbody>
+            </table>
+            <p class="rail-note session-only" id="toolUsageNote">No tool calls recorded yet.</p>
+            <table class="tool-table session-only" id="toolUsage" hidden>
+              <thead>
+                <tr><th>Tool</th><th style="text-align:right">Calls</th><th style="text-align:right">Fail</th><th style="text-align:right">Avg</th></tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+            <p class="rail-note session-only" id="toolUsageMeta"></p>
+
+            <!-- the probe: exercise every tool once and record what happens -->
+            <div class="probe-block">
+              <div class="probe-head">
+                <span class="probe-title">Tool Probe</span>
+                <button class="btn btn-secondary btn-sm" id="runProbe">Run Tool Probe</button>
+              </div>
+              <p class="rail-note" id="probeNote">Runs every tool once and records what happened, and how long it took.</p>
+              <p class="rail-note probe-toolset" id="probeToolset"></p>
+              <table class="tool-table" id="probeTable" hidden>
+                <thead>
+                  <tr>
+                    <th>Case</th>
+                    <th style="text-align:right" title="the tool's own execution time, not the model's">Time</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+              <p class="rail-note" id="probeMeta"></p>
+            </div>
+          </section>
+        </aside>
+      </div>
+    </div>
+  </main>
+</div>
+
+<div class="toast-region" id="toastRegion" aria-live="polite" aria-atomic="false"></div>
+
+<!-- error detail popup -->
+<div class="modal-backdrop" id="errorModal" hidden>
+  <div class="modal panel" role="dialog" aria-modal="true" aria-labelledby="errorHeading">
+    <div class="panel-head" style="margin-bottom:0;justify-content:flex-end">
+      <button class="close-x" id="closeErrorTop" aria-label="Close">✕</button>
+    </div>
+    <h2 id="errorHeading">Error</h2>
+    <pre class="modal-err" id="errorText"></pre>
+    <div class="modal-actions" style="display:flex;gap:9px;margin-top:16px;justify-content:flex-end">
+      <button class="btn btn-secondary btn-sm" id="copyError">Copy</button>
+      <button class="btn btn-primary btn-sm" id="closeError">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- settings — a GUI over config/synapse.config.json (live) -->
+<div class="modal-backdrop" id="settingsModal" hidden>
+  <div class="modal panel" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+    <div class="panel-head" style="margin-bottom:0">
+      <h3 id="settingsTitle">Settings</h3>
+      <button class="close-x" id="closeSettings" aria-label="Close">✕</button>
+    </div>
+    <p class="modal-sub">Writes <code>config/synapse.config.json</code>. Engine and server changes apply on restart.</p>
+    <div class="settings-body" id="settingsBody"></div>
+    <div class="modal-actions" style="display:flex;gap:9px;margin-top:16px;justify-content:flex-end">
+      <button class="btn btn-ghost btn-sm" id="cancelSettings">Cancel</button>
+      <button class="btn btn-primary btn-sm" id="saveSettings">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- generic dialog: confirmations and small forms -->
+<div class="modal-backdrop" id="dialogModal" hidden>
+  <div class="modal panel" role="dialog" aria-modal="true" aria-labelledby="dialogTitle">
+    <div class="panel-head" style="margin-bottom:0">
+      <h3 id="dialogTitle">Dialog</h3>
+      <button class="close-x" id="dialogClose" aria-label="Close">✕</button>
+    </div>
+    <p class="modal-sub" id="dialogMessage"></p>
+    <div class="settings-body" id="dialogBody"></div>
+    <div class="modal-actions" style="display:flex;gap:9px;margin-top:16px;justify-content:flex-end">
+      <button class="btn btn-ghost btn-sm" id="dialogCancel">Cancel</button>
+      <button class="btn btn-primary btn-sm" id="dialogOk">OK</button>
+    </div>
+  </div>
+</div>
+
+<script type="module" src="/app.js"></script>
+</body>
+</html>

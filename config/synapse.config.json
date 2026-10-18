@@ -1,0 +1,42 @@
+{
+  "server": {
+    "host": "127.0.0.1",
+    "port": 8700,
+    "openBrowser": false
+  },
+  "engine": {
+    "type": "opencode",
+    "opencode": {
+      "binary": "",
+      "port": 8720,
+      "host": "127.0.0.1",
+      "password": "",
+      "home": "",
+      "startTimeoutMs": 60000,
+      "args": [],
+      "skillPaths": [
+        "C:\\Users\\Andrew\\.agents\\skills"
+      ]
+    }
+  },
+  "defaults": {
+    "directory": "",
+    "model": "",
+    "agent": "",
+    "mode": "multi"
+  },
+  "roles": {
+    "designer": "opencode/space-bunny-free"
+  },
+  "logging": {
+    "level": "info",
+    "retentionDays": 7,
+    "maxFileMb": 5,
+    "channels": {
+      "app": true,
+      "engine": true,
+      "session": true,
+      "tools": true
+    }
+  }
+}

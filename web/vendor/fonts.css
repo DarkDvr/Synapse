@@ -1,0 +1,21 @@
+/* Synapse — locally vendored UI fonts.
+   Both files are variable fonts (weight axis 100–900), subset to latin.
+   Sourced from the same families the design reference uses (DM Sans / Manrope)
+   so Synapse renders identically with no network access.
+   Do not add remote @import here: the app must work offline. */
+
+@font-face {
+  font-family: 'DM Sans';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('./fonts/dm-sans-var.woff2') format('woff2-variations');
+}
+
+@font-face {
+  font-family: 'Manrope';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('./fonts/manrope-var.woff2') format('woff2-variations');
+}

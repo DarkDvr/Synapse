@@ -1,0 +1,14 @@
+{
+  "name": "synapse",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Synapse — self-contained Windows agent harness. Chat with OpenCode free models in a local web UI.",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js"
+  }
+}

@@ -1,0 +1,1672 @@
+// Synapse UI. Talks only to the Synapse API; knows nothing about the engine.
+//
+// LIVE: engine/stream status, projects and their sessions (create, rename,
+// delete), the conversation with streamed tool calls, tool permissions,
+// per-role model choices, and the settings form over config/synapse.config.json.
+//
+// SAMPLE: the control-room topology, the project plan and the tools table.
+// They are reachable through the "Design preview" entry and are labelled
+// everywhere they appear.
+
+import { renderMarkdown } from './md.js';
+
+const $ = (id) => document.getElementById(id);
+
+// Orchestration roles. The composer's picker targets one of these; the very
+// same ids key the per-role model choices in the config file. Only `architect`
+// can be addressed until the orchestration layer lands.
+const ROLES = [
+  { id: 'architect', name: 'Architect', addressable: true },
+  { id: 'critic', name: 'Critic' },
+  { id: 'designer', name: 'Designer' },
+  { id: 'coder-1', name: 'Coder 1' },
+  { id: 'coder-2', name: 'Coder 2' },
+  { id: 'coder-3', name: 'Coder 3' },
+  { id: 'auditor', name: 'Auditor' },
+];
+
+const TBD_TITLE = 'TBD';
+
+const state = {
+  status: null,
+  config: null,
+  models: [],
+  agents: [],
+  workspace: '',
+  projects: [],
+  sessionId: null,
+  messages: [],
+  permissions: [],
+  busy: false,
+  busySessions: new Set(),
+  busySince: new Map(),
+  toolsInFlight: new Set(),
+  forms: [],
+  toolStats: null,
+  probe: null,
+  // 'multi' (workers + role cards) or 'single' (one Architect, all tools)
+  mode: 'multi',
+  streaming: false,
+  streamLive: false,
+  collapsed: new Set(),
+  renaming: null,
+  expanded: false,
+  target: 'architect',
+  view: 'none', // none | session | preview
+};
+
+// ── helpers ─────────────────────────────────────────────────────
+const esc = (s) =>
+  String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+async function api(method, path, body) {
+  const res = await fetch(path, {
+    method,
+    headers: body !== undefined ? { 'content-type': 'application/json' } : undefined,
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  });
+  const text = await res.text();
+  let json = null;
+  try { json = text ? JSON.parse(text) : null; } catch { /* non-JSON */ }
+  if (!res.ok) throw new Error(json?.error || `${method} ${path} → ${res.status}`);
+  return json;
+}
+
+function debounce(fn, ms) {
+  let t;
+  return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); };
+}
+
+const relTime = (ts) => {
+  if (!ts) return '';
+  const d = Date.now() - ts;
+  if (d < 60000) return 'now';
+  if (d < 3600000) return `${Math.floor(d / 60000)}m ago`;
+  if (d < 86400000) return `${Math.floor(d / 3600000)}h ago`;
+  return new Date(ts).toLocaleDateString();
+};
+
+/** 24-hour HH:MM for message timestamps. */
+const hhmm = (ts) => {
+  if (!ts) return '';
+  const d = new Date(ts);
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+};
+
+/** A tool call's one-line description: what it is actually running. */
+function toolTarget(part) {
+  const i = part?.input;
+  const clean = (v) => (typeof v === 'string' ? v.replace(/\s+/g, ' ').trim() : '');
+  if (i && typeof i === 'object') {
+    const named = clean(i.command) || clean(i.path) || clean(i.filePath) || clean(i.pattern)
+      || clean(i.query) || clean(i.url) || clean(i.name);
+    if (named) return named;
+    for (const v of Object.values(i)) {
+      const s = clean(v);
+      if (s) return s;
+    }
+  }
+  return clean(part?.title);
+}
+
+// selects cannot render `text-overflow: ellipsis`, so truncate the label itself
+const shortModel = (name) => {
+  const s = String(name || '').replace(/\s*free\s*/i, ' ').trim();
+  return s.length > 28 ? s.slice(0, 28).trimEnd() + '…' : s;
+};
+
+const slug = (s) => String(s || '').trim().toLowerCase().replace(/[^a-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '') || 'project';
+
+// ── toast ───────────────────────────────────────────────────────
+function toast(title, body) {
+  const el = document.createElement('div');
+  el.className = 'toast';
+  el.innerHTML = `<span class="toast-icon">◈</span><div><strong>${esc(title)}</strong>${body ? `<p>${esc(body)}</p>` : ''}</div>`;
+  $('toastRegion').appendChild(el);
+  setTimeout(() => el.remove(), 4200);
+}
+
+// ── error popup ─────────────────────────────────────────────────
+function openError(title, text) {
+  $('errorHeading').textContent = title;
+  $('errorText').textContent = text;
+  $('errorModal').hidden = false;
+  $('closeError').focus();
+}
+function closeError() { $('errorModal').hidden = true; }
+
+// ── generic dialog (confirmations and small forms) ──────────────
+let dialogResolve = null;
+let dialogFields = [];
+
+function openDialog({ title, message = '', fields = [], confirmLabel = 'OK', danger = false, afterRender }) {
+  return new Promise((resolve) => {
+    dialogResolve = resolve;
+    dialogFields = fields;
+    $('dialogTitle').textContent = title;
+    $('dialogMessage').textContent = message;
+    $('dialogMessage').hidden = !message;
+    $('dialogOk').textContent = confirmLabel;
+    $('dialogOk').className = `btn btn-sm ${danger ? 'btn-danger' : 'btn-primary'}`;
+    $('dialogBody').innerHTML = fields
+      .map((f) => {
+        const control = f.type === 'select'
+          ? `<select id="dlg-${esc(f.name)}">${f.options.map((o) => `<option value="${esc(o.v)}">${esc(o.l)}</option>`).join('')}</select>`
+          : `<input id="dlg-${esc(f.name)}" type="text" value="${esc(f.value ?? '')}" placeholder="${esc(f.placeholder ?? '')}" />`;
+        return `<label class="set-field wide"><span>${esc(f.label)}</span>${control}</label>`;
+      })
+      .join('');
+    $('dialogModal').hidden = false;
+    const first = $('dialogBody').querySelector('input, select');
+    first?.focus();
+    first?.select?.();
+    afterRender?.();
+  });
+}
+
+function readDialog() {
+  if (!dialogFields.length) return true;
+  const values = {};
+  for (const f of dialogFields) {
+    const el = $(`dlg-${f.name}`);
+    if (el) values[f.name] = el.value.trim();
+  }
+  return values;
+}
+
+function closeDialog(result) {
+  $('dialogModal').hidden = true;
+  const resolve = dialogResolve;
+  dialogResolve = null;
+  resolve?.(result);
+}
+
+// ── status ──────────────────────────────────────────────────────
+async function refreshStatus() {
+  try {
+    state.status = await api('GET', '/api/status');
+    state.workspace = state.status?.engine?.workspace || '';
+  } catch (err) {
+    state.status = { engine: { ready: false, kind: 'engine' }, bootError: err.message };
+  }
+  renderStatus();
+}
+
+function renderStatus() {
+  const engine = state.status?.engine || {};
+  const ready = Boolean(engine.ready);
+  const failed = Boolean(state.status?.bootError);
+
+  $('engineDot').className = 'status-dot ' + (ready ? 'ok' : failed ? 'err' : 'warn');
+  $('engineState').textContent = ready
+    ? `${engine.kind} ${engine.version || ''}`.trim()
+    : failed ? 'failed' : 'starting';
+
+  $('streamDot').className = 'status-dot ' + (state.streamLive ? 'ok' : 'idle');
+  $('streamState').textContent = state.streamLive ? 'connected' : 'offline';
+}
+
+function setEventChip(type) {
+  const el = $('lastEvent');
+  if (el) el.textContent = String(type || 'idle').replace(/^session\./, '');
+  const dot = $('eventDot');
+  if (!dot) return;
+  dot.className = 'status-dot ok';
+  clearTimeout(setEventChip.timer);
+  setEventChip.timer = setTimeout(() => { dot.className = 'status-dot idle'; }, 1200);
+}
+
+// ── models / modes ──────────────────────────────────────────────
+async function loadModelsAndAgents() {
+  try { state.models = (await api('GET', '/api/models')).models; } catch { state.models = []; }
+  try { state.agents = (await api('GET', '/api/agents')).agents; } catch { state.agents = []; }
+  fillRoleModels();
+  renderTargetSelect();
+}
+
+const defaultModel = () => state.config?.defaults?.model || state.models[0]?.ref || undefined;
+
+const defaultAgent = () => state.config?.defaults?.agent || undefined;
+
+// Single mode keeps every tool but denies delegation, so the Architect answers
+// everything itself in one chat. A dedicated agent for this is the obvious
+// design and it fails: the free tier rejects every request from a custom agent
+// with a provider auth error (measured). A permission ruleset on an ordinary
+// session works, and — unlike denying everything — leaves the tools usable.
+const SINGLE_PERMISSIONS = [{ action: 'subagent', resource: '*', effect: 'deny' }];
+const sessionMode = (s) => (s?.single ? 'single' : 'multi');
+
+/** What to POST when creating a session in the mode currently selected. */
+function sessionBody(projectId) {
+  const body = { projectId, model: defaultModel() };
+  if (state.mode === 'single') body.permissions = SINGLE_PERMISSIONS;
+  else body.agent = defaultAgent();
+  return body;
+}
+
+function renderMode() {
+  const btn = $('modeToggle');
+  const label = $('modeLabel');
+  if (!btn || !label) return;
+  const single = state.mode === 'single';
+  label.textContent = single ? 'Single' : 'Multi';
+  btn.classList.toggle('is-single', single);
+  btn.setAttribute('aria-pressed', String(single));
+  btn.title = single
+    ? 'Single: one Architect, all the tools, no workers — it answers everything itself. Click for Multi.'
+    : 'Multi: the Architect can hand work to workers and shows the role cards. Click for Single.';
+}
+
+async function saveMode() {
+  try {
+    const cfg = { ...(state.config || {}) };
+    cfg.defaults = { ...(cfg.defaults || {}), mode: state.mode };
+    state.config = await api('PUT', '/api/config', cfg);
+  } catch { /* the toggle still works for this session */ }
+}
+
+async function switchMode() {
+  state.mode = state.mode === 'single' ? 'multi' : 'single';
+  renderMode();
+  setView();
+  saveMode();
+
+  if (!state.sessionId) return;
+  const current = sessionMode(findSession(state.sessionId));
+  if (current === state.mode) return;
+
+  // Nothing said yet, so swap the empty session for one in the right mode
+  // rather than leaving the toggle looking broken.
+  if (state.messages.length === 0) {
+    const projectId = projectOf(state.sessionId)?.id;
+    try {
+      await api('DELETE', `/api/sessions/${encodeURIComponent(state.sessionId)}`);
+      state.sessionId = null;
+      const { session } = await api('POST', '/api/sessions', sessionBody(projectId));
+      await loadProjects();
+      await openSession(session.id);
+    } catch (err) {
+      toast('Could Not Switch Mode', err.message);
+    }
+    return;
+  }
+
+  toast(
+    `This Session Stays In ${current === 'single' ? 'Single' : 'Multi'} Mode`,
+    `Mode is fixed when a session starts. Your next new session will be ${state.mode === 'single' ? 'Single' : 'Multi'}.`,
+  );
+}
+
+// One model picker per role card. The choice is stored in the config file;
+// routing it to a real worker session lands with the orchestration layer.
+function fillRoleModels() {
+  if (state.models.length === 0) return;
+  const saved = state.config?.roles || {};
+  const free = state.models.filter((m) => m.free);
+  const pool = free.length ? free : state.models;
+  document.querySelectorAll('.role-model').forEach((sel, i) => {
+    const role = sel.dataset.role || String(i);
+    sel.innerHTML = state.models
+      .map((m) => `<option value="${esc(m.ref)}">${esc(shortModel(m.name))}</option>`)
+      .join('');
+    const chosen = saved[role] || (pool[i % pool.length] || state.models[0]).ref;
+    sel.value = chosen;
+  });
+}
+
+async function setRoleModel(roleId, ref) {
+  const role = ROLES.find((r) => r.id === roleId);
+  try {
+    const draft = JSON.parse(JSON.stringify(state.config || {}));
+    draft.roles = { ...(draft.roles || {}), [roleId]: ref };
+    state.config = await api('PUT', '/api/config', draft);
+    toast(`Model for ${role?.name || roleId}`, 'Saved. Routing it to a real worker arrives in stage 3.');
+  } catch (err) {
+    toast('Could not save the role model', err.message);
+  }
+}
+
+function renderTargetSelect() {
+  const sel = $('targetRole');
+  if (!sel) return;
+  sel.innerHTML = ROLES.map((r) => `<option value="${esc(r.id)}">${esc(r.name)}</option>`).join('');
+  sel.value = state.target;
+}
+
+// ── projects + sessions ─────────────────────────────────────────
+async function loadProjects() {
+  try {
+    state.projects = (await api('GET', '/api/projects')).projects;
+  } catch (err) {
+    state.projects = [];
+    setEventChip('projects unavailable');
+  }
+  renderTree();
+  updateSessionHeader();
+}
+
+const findSession = (id) => {
+  for (const p of state.projects) {
+    const s = p.sessions.find((x) => x.id === id);
+    if (s) return s;
+  }
+  return null;
+};
+
+const projectOf = (sessionId) => state.projects.find((p) => p.sessions.some((s) => s.id === sessionId)) || null;
+
+// Every project starts with the same slot; projects are all real now.
+function newSessionRow(projectId) {
+  return `<div class="tree-row new" data-new="${esc(projectId)}">
+    <button class="tree-open"><span class="tree-name">New Session</span></button>
+    <button class="tree-add-row" title="New Session" aria-label="New Session">＋</button>
+  </div>`;
+}
+
+const isBusy = (sessionId) => state.busySessions.has(sessionId);
+const lastProgress = (sessionId) => state.busySince.get(sessionId) || 0;
+// A running session that has produced nothing for this long is not "working",
+// it is waiting on an upstream request that is never coming back. A tool that
+// is genuinely still executing emits nothing either (measured: a 100s shell
+// command logs one progress event and then silence), so an in-flight tool
+// always counts as progress. Measured first-token latency on the free models
+// reached 69s on a cold start, so the window has to clear that comfortably.
+const STALL_MS = 180000;
+const isStalled = (sessionId) =>
+  isBusy(sessionId) &&
+  !state.toolsInFlight.has(sessionId) &&
+  Date.now() - lastProgress(sessionId) > STALL_MS;
+
+function liveDot(sessionId, { clickable = true } = {}) {
+  const busy = isBusy(sessionId);
+  const stalled = isStalled(sessionId);
+  if (stalled && clickable) {
+    return `<button class="tree-live on stalled" data-interrupt="${esc(sessionId)}" title="No response for over ${Math.round(STALL_MS / 1000)}s — click to interrupt"></button>`;
+  }
+  if (stalled) return '<span class="tree-live on stalled" title="Stalled"></span>';
+  return `<span class="tree-live${busy ? ' on' : ''}" title="${busy ? 'Working' : ''}"></span>`;
+}
+
+function sessionRow(s) {
+  if (state.renaming === s.id) {
+    return `<div class="tree-row session" data-session="${esc(s.id)}">
+      <input class="tree-rename" id="renameInput" value="${esc(s.title || TBD_TITLE)}" aria-label="Session Name" />
+    </div>`;
+  }
+  const current = state.view === 'session' && s.id === state.sessionId;
+  const title = s.title || TBD_TITLE;
+  // Recency lives in the tooltip: the name needs the width more than "8m ago" does,
+  // and the list is already newest-first.
+  const when = relTime(s.updated || s.created);
+  const busy = isBusy(s.id);
+  return `<div class="tree-row session${current ? ' is-current' : ''}" data-session="${esc(s.id)}">
+    <button class="tree-open" title="${esc(title)}${when ? ` · ${esc(when)}` : ''}${busy ? ' · working' : ''}">
+      <span class="tree-name">${esc(title)}</span>
+    </button>
+    <span class="tree-actions">
+      <button class="tree-edit ic-edit" data-rename="${esc(s.id)}" title="Rename Session" aria-label="Rename Session">✎</button>
+      ${liveDot(s.id)}
+      <button class="tree-x" data-del-session="${esc(s.id)}" title="Delete Session" aria-label="Delete Session">✕</button>
+    </span>
+  </div>`;
+}
+
+function renderTree() {
+  const el = $('projectTree');
+  if (!el) return;
+  const html = [];
+
+  for (const p of state.projects) {
+    const open = !state.collapsed.has(p.id);
+    const current = state.view === 'session' && p.sessions.some((s) => s.id === state.sessionId);
+    html.push(`<div class="tree-project">
+      <div class="tree-row project${current ? ' is-current' : ''}">
+        <button class="tree-open" data-project="${esc(p.id)}" aria-expanded="${open}">
+          <span class="tree-caret" aria-hidden="true"></span>
+          <span class="tree-name">${esc(p.name)}</span>
+        </button>
+        ${p.exists === false ? '<span class="tree-missing" title="This folder no longer exists — sessions cannot run here">!</span>' : ''}
+        <span class="tree-actions">
+          ${p.general ? '' : `<button class="tree-edit ic-edit" data-rename-project="${esc(p.id)}" title="Rename Project" aria-label="Rename Project">✎</button>`}
+          ${liveDot((p.sessions.find((s) => isBusy(s.id)) || {}).id || '__none__', { clickable: false })}
+          ${p.general ? '' : `<button class="tree-x" data-del-project="${esc(p.id)}" title="Delete Project" aria-label="Delete Project">✕</button>`}
+        </span>
+      </div>`);
+    if (open) {
+      // New Session sits at the bottom: sessions read oldest-first, so the new
+      // one belongs where it will actually land.
+      html.push(`<div class="tree-sessions">${p.sessions.map(sessionRow).join('')}${newSessionRow(p.id)}</div>`);
+    }
+    html.push('</div>');
+  }
+
+  html.push(`<div class="tree-project">
+    <div class="tree-row is-preview-row${state.view === 'preview' ? ' is-current' : ''}">
+      <button class="tree-open" data-preview="1" title="Sample data for reviewing the control-room layout">
+        <span class="tree-name">Design preview</span>
+      </button>
+      <span class="tree-badge">SAMPLE</span>
+    </div>
+  </div>`);
+
+  el.innerHTML = html.join('');
+
+  if (state.renaming) {
+    const input = $('renameInput');
+    if (input) { input.focus(); input.select(); }
+  }
+}
+
+function toggleProject(id) {
+  if (state.collapsed.has(id)) state.collapsed.delete(id);
+  else state.collapsed.add(id);
+  renderTree();
+}
+
+async function createSession(projectId) {
+  const project = state.projects.find((p) => p.id === projectId) || state.projects.find((p) => p.general);
+  if (!project) return;
+  if (project.exists === false) {
+    toast('Folder missing', `${project.directory} does not exist, so no session can run there.`);
+    return;
+  }
+  try {
+    const { session } = await api('POST', '/api/sessions', sessionBody(project.id));
+    await loadProjects();
+    await openSession(session.id);
+  } catch (err) {
+    toast('Could not create a session', err.message);
+  }
+}
+
+// One shape for every destructive confirmation.
+function confirmDelete({ kind, name, consequence, extra }) {
+  return openDialog({
+    title: `Delete ${kind}`,
+    message: `"${name}" ${consequence}${extra ? ` ${extra}` : ''}`,
+    confirmLabel: 'Delete',
+    danger: true,
+  });
+}
+
+async function removeSession(id) {
+  const s = findSession(id);
+  const ok = await confirmDelete({
+    kind: 'session',
+    name: s?.title || TBD_TITLE,
+    consequence: 'and its whole transcript are removed from the engine.',
+    extra: 'This cannot be undone.',
+  });
+  if (!ok) return;
+  try {
+    await api('DELETE', `/api/sessions/${encodeURIComponent(id)}`);
+    state.busySessions.delete(id);
+    if (state.sessionId === id) showNothing();
+    await loadProjects();
+  } catch (err) {
+    toast('Could not delete the session', err.message);
+  }
+}
+
+async function removeProject(id) {
+  const p = state.projects.find((x) => x.id === id);
+  if (!p) return;
+  if (p.sessions.length) {
+    await openDialog({
+      title: 'Sessions Still Inside',
+      message: `"${p.name}" holds ${p.sessions.length} session${p.sessions.length === 1 ? '' : 's'}. Delete or move ${p.sessions.length === 1 ? 'it' : 'them'} first — Synapse will not leave a session without a project.`,
+      confirmLabel: 'OK',
+    });
+    return;
+  }
+  const ok = await confirmDelete({
+    kind: 'project',
+    name: p.name,
+    consequence: 'is removed from Synapse.',
+    extra: 'The folder and every file in it are left untouched.',
+  });
+  if (!ok) return;
+  try {
+    await api('DELETE', `/api/projects/${encodeURIComponent(id)}`);
+    await loadProjects();
+    toast('Project Removed', 'Nothing on disk was touched.');
+  } catch (err) {
+    toast('Could not remove the project', err.message);
+  }
+}
+
+async function renameProject(id) {
+  const p = state.projects.find((x) => x.id === id);
+  if (!p) return;
+  const res = await openDialog({
+    title: 'Rename project',
+    message: `The label only — the folder stays ${p.directory}.`,
+    fields: [{ name: 'name', label: 'Project name', value: p.name }],
+    confirmLabel: 'Rename',
+    afterRender: () => $('dlg-name')?.select(),
+  });
+  if (!res) return;
+  const name = res.name?.trim();
+  if (!name || name === p.name) return;
+  try {
+    await api('PATCH', `/api/projects/${encodeURIComponent(id)}`, { name });
+    await loadProjects();
+  } catch (err) {
+    toast('Could not rename the project', err.message);
+  }
+}
+
+async function addProject() {
+  const base = state.workspace || '';
+  const res = await openDialog({
+    title: 'Add a project',
+    message: 'A project is a folder. Sessions you start inside it run in that folder. Synapse creates the folder when it does not exist yet.',
+    fields: [
+      { name: 'name', label: 'Project name', placeholder: 'calendar' },
+      { name: 'directory', label: 'Folder', placeholder: base ? `${base}\\calendar` : 'C:\\path\\to\\project' },
+    ],
+    confirmLabel: 'Add Project',
+    afterRender: () => {
+      const nameEl = $('dlg-name');
+      const dirEl = $('dlg-directory');
+      if (!nameEl || !dirEl) return;
+      let touched = false;
+      const suggest = () => (base ? `${base}\\${slug(nameEl.value)}` : '');
+      dirEl.addEventListener('input', () => { touched = true; });
+      nameEl.addEventListener('input', () => { if (!touched) dirEl.value = suggest(); });
+    },
+  });
+  if (!res) return;
+
+  const name = res.name?.trim();
+  let directory = res.directory?.trim();
+  if (!directory) directory = base ? `${base}\\${slug(name)}` : '';
+  if (!directory) {
+    toast('A folder is required', 'Give the project a folder to run in.');
+    return;
+  }
+  try {
+    await api('POST', '/api/projects', { name: name || undefined, directory });
+    await loadProjects();
+    toast('Project added', directory);
+  } catch (err) {
+    toast('Could not add the project', err.message);
+  }
+}
+
+async function commitRename() {
+  const id = state.renaming;
+  if (!id) return;
+  const input = $('renameInput');
+  const title = input ? input.value.trim() : '';
+  state.renaming = null;
+  const current = findSession(id);
+  if (!title || (current && current.title === title)) { renderTree(); return; }
+  try {
+    await api('PATCH', `/api/sessions/${encodeURIComponent(id)}`, { title });
+    await loadProjects();
+  } catch (err) {
+    toast('Could not rename the session', err.message);
+    renderTree();
+  }
+}
+
+// ── view state ──────────────────────────────────────────────────
+function setView() {
+  document.body.dataset.view = state.view;
+  // Single mode has no workers, so there are no role cards to show: the
+  // conversation takes the whole stage and the expand button has nothing to do.
+  const single = state.mode === 'single';
+  $('stage').classList.toggle('chat-expanded', single || state.expanded);
+  $('expandBtn').hidden = single;
+  renderComposer();
+  updateSessionHeader();
+  requestAnimationFrame(drawActivePath);
+}
+
+function currentProject() {
+  if (state.view === 'preview') return { name: 'calendar', directory: `${state.workspace || ''}\\calendar` };
+  return projectOf(state.sessionId);
+}
+
+function updateSessionHeader() {
+  const p = currentProject();
+  const nameEl = $('sessionProjectName');
+  const pathEl = $('sessionProjectPath');
+  if (nameEl) nameEl.textContent = p?.name || '—';
+  if (pathEl) {
+    pathEl.textContent = p?.directory || '';
+    pathEl.title = p?.directory || '';
+  }
+}
+
+async function openSession(id) {
+  state.view = 'session';
+  state.sessionId = id;
+  state.permissions = [];
+  state.expanded = false;
+  $('sidebar').classList.remove('open');
+  setView();
+  renderTree();
+  await loadMessages();
+  refreshPending();
+  renderToolUsage();
+}
+
+function openPreview() {
+  state.view = 'preview';
+  state.sessionId = null;
+  state.messages = [];
+  state.expanded = false;
+  setView();
+  renderTree();
+  renderTranscript();
+}
+
+function showNothing() {
+  state.view = 'none';
+  state.sessionId = null;
+  state.messages = [];
+  state.expanded = false;
+  setView();
+  renderTree();
+  renderTranscript();
+}
+
+// The live connection is drawn as one solid orange path from the requester
+// down the spine and across into the worker, with faint ants travelling it.
+function drawActivePath() {
+  const layer = $('pathLayer');
+  const topo = $('topology');
+  if (!layer || !topo) return;
+  layer.innerHTML = '';
+  if (!topo.offsetParent || topo.clientWidth === 0) return; // hidden view
+
+  const active = topo.querySelector('.link.active');
+  const arch = topo.querySelector('.topo-architect .role-card');
+  if (!active || !arch) return;
+
+  const kids = [...topo.children];
+  const idx = kids.indexOf(active);
+  const rtl = active.classList.contains('rtl');
+  const dest = rtl ? kids[idx - 1] : kids[idx + 1];
+  if (!dest || !dest.classList.contains('role-card')) return;
+
+  // Measure the spine and the dotted band from the connector cell itself, and
+  // keep full precision (no rounding) — anything else leaves a sub-pixel step
+  // between the orange path and the dots it is supposed to cover.
+  const box = topo.getBoundingClientRect();
+  const a = arch.getBoundingClientRect();
+  const d = dest.getBoundingClientRect();
+  const cell = active.getBoundingClientRect();
+  const band = active.querySelector('.link-line').getBoundingClientRect();
+  const n = (v) => Math.round(v * 100) / 100;
+
+  const x0 = n(cell.left + cell.width / 2 - box.left);   // exactly the spine
+  const y0 = n(a.bottom - box.top);                      // where the spine starts
+  const y1 = n(band.top + band.height / 2 - box.top);    // exactly the dot centre
+  const x1 = n((rtl ? d.right : d.left) - box.left);     // touches the worker
+  const path = `M ${x0} ${y0} L ${x0} ${y1} L ${x1} ${y1}`;
+
+  layer.setAttribute('viewBox', `0 0 ${box.width} ${box.height}`);
+  layer.setAttribute('preserveAspectRatio', 'none');
+
+  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const COUNT = 12;
+  const DUR = 3.4;
+  const ants = reduce
+    ? ''
+    : Array.from({ length: COUNT }, (_, i) =>
+        `<circle r="3"><animateMotion dur="${DUR}s" begin="${(i * DUR / COUNT).toFixed(2)}s" repeatCount="indefinite" path="${path}"></animateMotion></circle>`,
+      ).join('');
+
+  layer.innerHTML =
+    `<defs><marker id="synArrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto">` +
+    `<path d="M0 0 L10 5 L0 10 Z"></path></marker></defs>` +
+    `<path class="flow" d="${path}" marker-end="url(#synArrow)"></path>` +
+    ants;
+}
+
+// ── messages ────────────────────────────────────────────────────
+async function loadMessages() {
+  if (!state.sessionId) return;
+  try {
+    state.messages = (await api('GET', `/api/sessions/${encodeURIComponent(state.sessionId)}/messages`)).messages;
+    updateBusyFromMessages();
+  } catch (err) {
+    if (/not found|404/i.test(err.message)) {
+      // The session is gone — deleted here, or by another client. Stop polling.
+      state.busySessions.delete(state.sessionId);
+      showNothing();
+      await loadProjects();
+      return;
+    }
+    setEventChip('message load failed');
+  }
+  renderTranscript();
+}
+
+function updateBusyFromMessages() {
+  if (state.streaming) return;
+  const convo = state.messages.filter((m) => m.type === 'user' || m.type === 'assistant');
+  const last = convo[convo.length - 1];
+  state.busy = Boolean(last && last.type === 'assistant' && !last.completed && !last.error);
+
+  // Seed "a tool is running" from the transcript too, so a reload in the middle
+  // of a long tool does not look like a stall.
+  if (state.sessionId) {
+    const running = (last?.parts || []).some(
+      (p) => p.type === 'tool' && /run|stream|pend|progress/i.test(String(p.status || '')),
+    );
+    if (running) state.toolsInFlight.add(state.sessionId);
+    else state.toolsInFlight.delete(state.sessionId);
+  }
+  renderComposer();
+}
+
+// ── transcript ──────────────────────────────────────────────────
+function renderTranscript() {
+  const el = $('transcript');
+  if (!el) return;
+  toolSeq = 0;
+  const showable = state.messages.filter(
+    (m) => m.error || ['user', 'assistant', 'system', 'synthetic', 'shell'].includes(m.type),
+  );
+  const pending = renderPermissions() + renderForms();
+  if (showable.length === 0 && !pending) {
+    el.innerHTML = state.view === 'preview'
+      ? `<div class="chat-empty">Nothing open. Send a message and Synapse starts a session for you in General.</div>`
+      : `<div class="chat-empty">Pick a session on the left, or start a new one.</div>`;
+    renderChatNav();
+    return;
+  }
+  // Stick to the bottom while new output arrives, but never yank the view away
+  // from someone who has scrolled up to read.
+  const stick = chatAtBottom();
+  el.innerHTML = showable.map(renderMessage).join('') + pending;
+  if (stick) scrollChatToBottom();
+  renderChatNav();
+}
+
+// The role label shares the first line with the text; the time rides the right.
+function renderMessage(m) {
+  const t = hhmm(m.created);
+  const stamp = t ? `<span class="msg-time">${t}</span>` : '';
+
+  if (m.type === 'user') {
+    return `<div class="msg user" data-msg="user"><div class="msg-body">
+      ${stamp}<span class="msg-role">You</span><span class="msg-text">${esc(m.text)}</span>
+    </div></div>`;
+  }
+  if (m.type === 'assistant') {
+    const body = [`${stamp}<span class="msg-role">Architect</span>`];
+    for (const part of m.parts || []) {
+      // The model's actual answer goes in its own panel, rendered as markdown,
+      // so it is visually separate from reasoning and tool noise.
+      if (part.type === 'text') body.push(`<div class="msg-answer">${renderMarkdown(part.text)}</div>`);
+      else if (part.type === 'reasoning')
+        body.push(`<details class="reasoning"><summary>Reasoning</summary><pre>${esc(part.text)}</pre></details>`);
+      else if (part.type === 'tool') body.push(renderTool(part));
+    }
+    if ((m.parts || []).length === 0 && !m.error) body.push('<span class="msg-text">…</span>');
+    if (m.error) body.push(`<div class="msg-error">${esc(m.error)}</div>`);
+    return `<div class="msg assistant" data-msg="assistant"><div class="msg-body">${body.join('')}</div></div>`;
+  }
+  const body = m.error
+    ? `<div class="msg-error">${esc(m.error)}</div>`
+    : `<span class="msg-text">${esc(m.text)}</span>`;
+  return `<div class="msg"><div class="msg-body">${stamp}<span class="msg-role">${esc(m.type)}</span>${body}</div></div>`;
+}
+
+let toolSeq = 0;
+
+// A tool call is one line until you ask for the detail — you rarely need the
+// full payload, and a busy turn produces dozens of them.
+function renderTool(part) {
+  const status = String(part.status || 'unknown').toLowerCase();
+  const failed = Boolean(part.failed) || /error|fail/.test(status);
+  const running = /run|stream|pend|progress/.test(status);
+  const cls = running ? 'warn' : failed ? 'err' : 'ok';
+
+  const id = `tool-${toolSeq++}`;
+  const target = toolTarget(part);
+  const input = part.input !== null && part.input !== undefined ? JSON.stringify(part.input, null, 1) : '';
+  const output = part.output !== null && part.output !== undefined
+    ? (typeof part.output === 'string' ? part.output : JSON.stringify(part.output, null, 1))
+    : '';
+  const hasExit = typeof part.exitCode === 'number';
+  // One status label, not two. The Error button that used to sit here said the
+  // same thing as this pill, and the detail is one click away in the card body.
+  const label = failed ? (hasExit ? `Exit ${part.exitCode}` : 'Failed') : status;
+  const detail = part.error || output || '(no output)';
+
+  return `<div class="tool-card" data-tool-card="${id}">
+    <div class="tool-head" role="button" tabindex="0" data-tool-toggle="${id}" aria-expanded="false" aria-controls="${id}-detail">
+      <span class="status-dot ${cls}" role="img" aria-label="${esc(label)}"></span>
+      <span class="tool-name">${esc(part.name)}</span>
+      <span class="tool-target" title="${esc(target)}">${esc(target)}</span>
+      <span class="tool-state state-pill ${cls}">${esc(label)}</span>
+      <span class="tool-chev" aria-hidden="true">›</span>
+    </div>
+    <div class="tool-detail" id="${id}-detail" hidden>
+      ${input ? `<div class="tool-body"><pre>${esc(input)}</pre></div>` : ''}
+      ${output ? `<div class="tool-body"><pre${failed ? ' class="is-error"' : ''}>${esc(output)}</pre></div>` : ''}
+      ${part.error ? `<div class="tool-body"><pre class="is-error">${esc(part.error)}</pre></div>` : ''}
+    </div>
+  </div>`;
+}
+
+function toggleTool(id) {
+  const card = document.querySelector(`[data-tool-card="${CSS.escape(id)}"]`);
+  if (!card) return;
+  const head = card.querySelector('.tool-head');
+  const detail = card.querySelector('.tool-detail');
+  const open = detail.hidden;
+  detail.hidden = !open;
+  card.classList.toggle('open', open);
+  head.setAttribute('aria-expanded', String(open));
+}
+
+// ── scrolling: the transcript when it scrolls, the page when it does not ──
+// In the wide layout the stage has a definite height and the transcript scrolls
+// inside itself; in the stacked layout the page scrolls instead. Every scroll
+// helper goes through here so both behave the same.
+function chatScroller() {
+  const el = $('transcript');
+  return el && el.scrollHeight > el.clientHeight + 2 ? el : null;
+}
+
+function chatScrollTop() {
+  const el = chatScroller();
+  return el ? el.scrollTop : window.scrollY;
+}
+
+function chatAtBottom(slack = 60) {
+  const el = chatScroller();
+  if (el) return el.scrollHeight - el.scrollTop - el.clientHeight <= slack;
+  return window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - slack;
+}
+
+function scrollChatToBottom(behavior = 'auto') {
+  const el = chatScroller();
+  if (el) { el.scrollTo({ top: el.scrollHeight, behavior }); return; }
+  window.scrollTo({ top: document.documentElement.scrollHeight, behavior });
+}
+
+const myMessages = () =>
+  [...document.querySelectorAll('#transcript .msg[data-msg="user"]')];
+
+function myMessageTops() {
+  const el = chatScroller();
+  if (el) {
+    const sRect = el.getBoundingClientRect();
+    return myMessages().map((n) => n.getBoundingClientRect().top - sRect.top + el.scrollTop);
+  }
+  return myMessages().map((n) => n.getBoundingClientRect().top + window.scrollY);
+}
+
+function renderChatNav() {
+  const nav = $('chatNav');
+  const dock = $('chatDock');
+  if (!nav || !dock) return;
+  const count = myMessages().length;
+  const show = count >= 3;
+  nav.hidden = !show;
+  dock.classList.toggle('has-nav', show);
+  if (!show) return;
+
+  // Fixed so it floats over the log, but anchored to the chat column rather
+  // than the window — otherwise it drifts into the inspector on wide layouts.
+  const d = dock.getBoundingClientRect();
+  nav.style.right = `${Math.max(8, Math.round(window.innerWidth - d.right + 10))}px`;
+
+  const tops = myMessageTops();
+  const at = chatScrollTop();
+  // Never offer a jump that cannot happen: with nothing to scroll, both rest.
+  const canScroll =
+    chatScroller() !== null || document.documentElement.scrollHeight > window.innerHeight + 2;
+  $('navPrev').disabled = !canScroll || !tops.some((t) => t < at - 8);
+  $('navNext').disabled = !canScroll || !tops.some((t) => t > at + 8);
+}
+
+function jumpMessage(dir) {
+  const tops = myMessageTops();
+  const at = chatScrollTop();
+  const target = dir < 0
+    ? [...tops].reverse().find((t) => t < at - 8)
+    : tops.find((t) => t > at + 8);
+  if (target === undefined) return;
+  const top = Math.max(0, target - 10);
+  const el = chatScroller();
+  if (el) el.scrollTo({ top, behavior: 'smooth' });
+  else window.scrollTo({ top, behavior: 'smooth' });
+}
+
+// The engine blocks the session until every permission request is answered.
+function renderPermissions() {
+  return state.permissions
+    .filter((p) => p.sessionId === state.sessionId)
+    .map(
+      (p) => `<div class="perm-card">
+        <div class="perm-head"><span class="status-dot warn" role="img" aria-label="waiting"></span>Permission needed</div>
+        <p class="perm-action">${esc(p.action)}</p>
+        ${p.resources?.length ? `<pre class="perm-res">${esc(p.resources.join('\n'))}</pre>` : ''}
+        <div class="perm-actions">
+          <button class="btn btn-primary btn-sm" data-perm="once" data-perm-id="${esc(p.requestId)}">Allow Once</button>
+          <button class="btn btn-secondary btn-sm" data-perm="always" data-perm-id="${esc(p.requestId)}">Always Allow</button>
+          <button class="btn btn-ghost btn-sm" data-perm="reject" data-perm-id="${esc(p.requestId)}">Reject</button>
+        </div>
+      </div>`,
+    )
+    .join('');
+}
+
+// An agent can also ask for structured input; the session blocks until it is
+// answered, exactly like a permission.
+function renderForms() {
+  return (state.forms || [])
+    .filter((f) => f.sessionId === state.sessionId)
+    .map(
+      (f) => `<div class="form-card" data-form-card="${esc(f.id)}">
+        <div class="form-head"><span class="status-dot warn" role="img" aria-label="waiting"></span>Input Needed</div>
+        <p class="form-title">${esc(f.title)}</p>
+        ${(f.fields || []).map(formField).join('')}
+        <div class="perm-actions">
+          <button class="btn btn-primary btn-sm" data-form-reply="${esc(f.id)}">Send Answer</button>
+        </div>
+      </div>`,
+    )
+    .join('');
+}
+
+function formField(field) {
+  const key = esc(field.key);
+  const label = esc(field.title || field.key);
+  const hint = field.description ? ` title="${esc(field.description)}"` : '';
+  const req = field.required ? ' *' : '';
+  const options = Array.isArray(field.options) ? field.options : [];
+
+  if (field.type === 'boolean') {
+    return `<label class="form-check"><input type="checkbox" data-form-key="${key}" ${field.default ? 'checked' : ''} />${label}${req}</label>`;
+  }
+  if (field.type === 'multiselect') {
+    return `<label class="form-field"><span>${label}${req}</span>
+      <select data-form-key="${key}" multiple size="${Math.min(5, options.length || 3)}">
+        ${options.map((o) => `<option value="${esc(o.value)}">${esc(o.label)}</option>`).join('')}
+      </select></label>`;
+  }
+  if (options.length) {
+    return `<label class="form-field"><span>${label}${req}</span>
+      <select data-form-key="${key}">
+        ${options.map((o) => `<option value="${esc(o.value)}"${o.value === field.default ? ' selected' : ''}>${esc(o.label)}</option>`).join('')}
+      </select></label>`;
+  }
+  const type = field.type === 'number' || field.type === 'integer' ? 'number' : 'text';
+  return `<label class="form-field"><span>${label}${req}</span>
+    <input type="${type}" data-form-key="${key}" value="${esc(field.default ?? '')}" placeholder="${esc(field.placeholder || '')}" /></label>`;
+}
+
+function collectFormAnswer(formId) {
+  const card = document.querySelector(`[data-form-card="${CSS.escape(formId)}"]`);
+  const answer = {};
+  for (const el of card?.querySelectorAll('[data-form-key]') || []) {
+    const key = el.dataset.formKey;
+    if (el.tagName === 'SELECT' && el.multiple) answer[key] = [...el.selectedOptions].map((o) => o.value);
+    else if (el.type === 'checkbox') answer[key] = el.checked;
+    else if (el.type === 'number') answer[key] = el.value === '' ? null : Number(el.value);
+    else answer[key] = el.value;
+  }
+  return answer;
+}
+
+async function replyForm(formId) {
+  const sessionId = state.sessionId;
+  const answer = collectFormAnswer(formId);
+  state.forms = state.forms.filter((f) => f.id !== formId);
+  renderTranscript();
+  try {
+    await api('POST', `/api/sessions/${encodeURIComponent(sessionId)}/forms/${encodeURIComponent(formId)}/reply`, { answer });
+    toast('Answer Sent');
+  } catch (err) {
+    toast('Could not send the answer', err.message);
+    refreshPending();
+  }
+}
+
+// ── things that can block a session ─────────────────────────────
+/**
+ * Permissions, forms and the engine's own list of running sessions. A blocked
+ * session emits nothing at all, so polling this is the only way to notice it —
+ * and it is what restores the prompt after a reload.
+ */
+async function refreshPending() {
+  let p;
+  try {
+    p = await api('GET', '/api/pending');
+  } catch {
+    return;
+  }
+
+  // The engine is the authority on what is running; SSE keeps us snappy
+  // between polls and this corrects any drift.
+  const active = new Set(p.active || []);
+  for (const id of active) if (!state.busySince.has(id)) state.busySince.set(id, Date.now());
+  for (const id of [...state.busySince.keys()]) if (!active.has(id)) state.busySince.delete(id);
+  state.busySessions = active;
+
+  state.permissions = (p.permissions || []).map((x) => ({
+    sessionId: x.sessionId,
+    requestId: x.requestId,
+    action: x.action,
+    resources: x.resources,
+  }));
+  state.forms = p.forms || [];
+
+  renderTree();
+  if (state.view === 'session' || state.view === 'preview') renderTranscript();
+}
+
+async function renderToolUsage() {
+  const note = $('toolUsageNote');
+  const table = $('toolUsage');
+  const meta = $('toolUsageMeta');
+  if (!note || !table) return;
+  let stats = null;
+  try {
+    stats = await api('GET', '/api/tools/stats');
+  } catch { /* engine down */ }
+  state.toolStats = stats;
+
+  if (!stats || !stats.total) {
+    note.hidden = false;
+    note.textContent = 'No tool calls recorded yet. The census fills in as sessions run.';
+    table.hidden = true;
+    if (meta) meta.textContent = '';
+    return;
+  }
+  note.hidden = true;
+  table.hidden = false;
+  table.querySelector('tbody').innerHTML = stats.tools
+    .slice(0, 8)
+    .map(
+      (t) => `<tr>
+        <td class="tool-name">${esc(t.key)}</td>
+        <td class="tool-time">${t.calls}</td>
+        <td class="tool-time${t.failed ? ' slow' : ''}">${t.failed || ''}</td>
+        <td class="tool-time${t.avgMs > 1000 ? ' slow' : ''}">${t.avgMs ? fmtMs(t.avgMs) : ''}</td>
+      </tr>`,
+    )
+    .join('');
+  if (meta) {
+    meta.textContent = `${stats.total} calls · ${stats.failed} failed (${Math.round(stats.failRate * 100)}%)`;
+  }
+}
+
+function fmtMs(ms) {
+  if (ms == null) return '';
+  return ms < 1000 ? `${Math.round(ms)}ms` : `${(ms / 1000).toFixed(1)}s`;
+}
+
+/**
+ * The probe's per-case results. A case is "clean" when the turn closed, the
+ * tool we asked for actually ran, and none of its calls failed — anything else
+ * is worth looking at, so it gets a coloured dot and, when there is a message,
+ * the standard red Error button.
+ */
+async function renderProbe() {
+  const note = $('probeNote');
+  const table = $('probeTable');
+  const meta = $('probeMeta');
+  const btn = $('runProbe');
+  if (!note || !table) return;
+
+  let st = null;
+  try {
+    st = await api('GET', '/api/tools/probe');
+  } catch {
+    return;
+  }
+  state.probe = st;
+
+  if (btn) {
+    btn.disabled = Boolean(st.running);
+    btn.textContent = st.running ? 'Probe Running…' : 'Run Tool Probe';
+  }
+
+  const results = st.results || [];
+  const tsEl = $('probeToolset');
+  if (tsEl) {
+    // The toolset is per-model, so it is worth stating outright rather than
+    // letting a "not called" verdict look like a model failure. Filter empties:
+    // a persisted run can carry a null entry.
+    const offered = (st.toolset || []).filter((t) => typeof t === 'string' && t);
+    tsEl.textContent = offered.length
+      ? `This model offers ${offered.length}: ${offered.join(', ')}`
+      : '';
+    tsEl.hidden = !tsEl.textContent;
+  }
+  if (!results.length) {
+    note.hidden = false;
+    note.textContent = st.running
+      ? st.current === 'toolset'
+        ? 'Asking the model which tools it has…'
+        : `Running case "${st.current || '…'}"…`
+      : 'Runs every tool once and records what happened, and how long it took.';
+    table.hidden = true;
+    if (meta) meta.textContent = '';
+    return;
+  }
+
+  note.hidden = true;
+  table.hidden = false;
+  table.querySelector('tbody').innerHTML = results
+    .map((r) => {
+      const label = r.ok
+        ? 'clean'
+        : r.offered === false
+          ? 'not offered by this model'
+          : r.timedOut
+            ? 'timeout'
+            : r.missing
+              ? 'not called'
+              : 'failed';
+      const cls = r.ok ? 'ok' : r.offered === false || r.timedOut ? 'warn' : 'err';
+      const detail = r.errors?.length
+        ? r.errors.map((e) => `${e.tool}${e.exitCode != null ? ` (exit ${e.exitCode})` : ''}: ${e.detail}`).join('\n\n')
+        : r.error || '';
+      const errBtn = detail
+        ? `<button class="err-btn" data-error-title="${esc(r.id)}" data-error="${esc(detail)}">Error</button>`
+        : '';
+      // The time shown is the tool's own execution. The turn took far longer,
+      // but almost all of that is the model thinking — showing the turn time
+      // here would make every tool look slow.
+      const turn = r.ms ? `turn ${fmtMs(r.ms)}` : '';
+      const tool = (r.used || []).join(', ') || r.expect || '—';
+      // A failed case shows the Error button alone; a red dot next to it said
+      // exactly the same thing and cost a column of width.
+      const status = errBtn
+        ? errBtn
+        : `<span class="status-dot ${r.ok ? 'ok' : 'warn'}" role="img" aria-label="${esc(label)}"></span>`;
+      return `<tr>
+        <td class="tool-name" title="${esc(r.id)} · ran ${esc(tool)} · ${esc(label)}${turn ? ` · ${esc(turn)}` : ''}">${esc(r.id)}</td>
+        <td class="tool-time${r.toolMs > 1000 ? ' slow' : ''}" title="tool ${fmtMs(r.toolMs)}${turn ? ` · ${turn}` : ''}">${r.toolMs ? fmtMs(r.toolMs) : ''}</td>
+        <td class="tool-result">${status}</td>
+      </tr>`;
+    })
+    .join('');
+
+  if (meta) {
+    const passed = results.filter((r) => r.ok).length;
+    meta.textContent = st.running
+      ? `${results.length}/${st.cases?.length || results.length} done · running "${st.current || '…'}"`
+      : `${passed}/${results.length} clean · tool times, not model times · ${relTime(st.finishedAt)}`;
+  }
+}
+
+function permissionFromEvent(ev) {
+  const d = ev.raw?.data || ev.raw?.properties || ev.raw || {};
+  const req = d.request || d;
+  return {
+    requestId: d.requestID || d.id || req.id,
+    action: req.action || req.title || req.metadata?.title || 'tool call',
+    resources: Array.isArray(req.resources) ? req.resources : [],
+  };
+}
+
+async function replyPermission(requestId, decision) {
+  const sessionId = state.sessionId;
+  state.permissions = state.permissions.filter((p) => p.requestId !== requestId);
+  renderTranscript();
+  try {
+    await api('POST', `/api/sessions/${encodeURIComponent(sessionId)}/permission`, { requestId, decision });
+  } catch (err) {
+    toast('Could not answer the request', err.message);
+  }
+}
+
+// ── composer ────────────────────────────────────────────────────
+function renderComposer() {
+  const hasSession = Boolean(state.sessionId);
+  $('sendBtn').disabled = state.busy && !hasSession;
+  $('stopBtn').disabled = !state.busy || !hasSession;
+}
+
+async function send() {
+  const input = $('promptInput');
+  const text = input.value.trim();
+  if (!text) return;
+
+  const role = ROLES.find((r) => r.id === state.target) || ROLES[0];
+  if (!role.addressable) {
+    toast(`Talking to the ${role.name} directly`, 'Direct worker routing arrives with the orchestration layer in stage 3. Message the Architect for now.');
+    return;
+  }
+  if (!state.sessionId && state.view !== 'preview') {
+    toast('No session open', 'Pick a session on the left, or start a new one.');
+    return;
+  }
+
+  input.value = '';
+  autoGrow(input);
+  try {
+    await ensureSession();
+    state.streaming = true;
+    state.busy = true;
+    renderComposer();
+    state.messages.push({ id: 'local-' + Date.now(), type: 'user', text, created: Date.now() });
+    renderTranscript();
+    await api('POST', `/api/sessions/${encodeURIComponent(state.sessionId)}/messages`, { text });
+    await loadMessages();
+  } catch (err) {
+    toast('Send failed', err.message);
+  } finally {
+    state.streaming = false;
+    renderComposer();
+  }
+}
+
+// Messaging from the design preview starts a real session in General.
+async function ensureSession() {
+  if (state.sessionId) {
+    // The agent is fixed when a session is created, so a mode change continues
+    // in a new session rather than silently doing nothing.
+    const current = sessionMode(findSession(state.sessionId));
+    if (current === state.mode) return state.sessionId;
+    const projectId = projectOf(state.sessionId)?.id;
+    const { session } = await api('POST', '/api/sessions', sessionBody(projectId));
+    state.sessionId = session.id;
+    state.messages = [];
+    state.view = 'session';
+    state.expanded = false;
+    setView();
+    await loadProjects();
+    toast(
+      `Continued In ${state.mode === 'single' ? 'Single' : 'Multi'} Mode`,
+      'A session keeps the mode it started with, so this is a new one.',
+    );
+    return state.sessionId;
+  }
+  const general = state.projects.find((p) => p.general);
+  if (!general) throw new Error('no General project');
+  const { session } = await api('POST', '/api/sessions', sessionBody(general.id));
+  state.sessionId = session.id;
+  state.view = 'session';
+  state.expanded = false;
+  setView();
+  await loadProjects();
+  return state.sessionId;
+}
+
+async function interrupt() {
+  if (!state.sessionId) return;
+  try { await api('POST', `/api/sessions/${encodeURIComponent(state.sessionId)}/interrupt`); }
+  catch (err) { toast('Stop failed', err.message); }
+}
+
+/** Interrupt any session, from the rail — the way out of a stalled run. */
+async function interruptSession(sessionId) {
+  try {
+    await api('POST', `/api/sessions/${encodeURIComponent(sessionId)}/interrupt`);
+    state.busySessions.delete(sessionId);
+    state.busySince.delete(sessionId);
+    renderTree();
+    toast('Interrupted', 'The stuck request was cancelled.');
+    refreshPending();
+  } catch (err) {
+    toast('Could not interrupt', err.message);
+  }
+}
+
+function autoGrow(el) {
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 150) + 'px';
+}
+
+// ── live event stream ───────────────────────────────────────────
+const reloadMessages = debounce(() => loadMessages(), 250);
+const reloadProjects = debounce(() => loadProjects(), 600);
+
+function connectStream() {
+  const es = new EventSource('/api/stream');
+  es.onopen = () => { state.streamLive = true; renderStatus(); };
+  es.onmessage = (e) => {
+    let ev;
+    try { ev = JSON.parse(e.data); } catch { return; }
+    if (ev.kind === 'hello') { state.streamLive = true; renderStatus(); return; }
+
+    // Synapse's own notification: the session was just auto-named.
+    if (ev.kind === 'sessions') {
+      reloadProjects();
+      if (ev.sessionId === state.sessionId) updateSessionHeader();
+      return;
+    }
+
+    // The tool probe reports its own progress; it is not a session event.
+    if (ev.kind === 'probe') {
+      renderProbe();
+      if (ev.type === 'probe.finished') {
+        const results = ev.results || [];
+        const passed = results.filter((r) => r.ok).length;
+        toast('Tool Probe Finished', `${passed}/${results.length} cases clean — see Tools In Use.`);
+      }
+      return;
+    }
+
+    setEventChip(ev.type);
+    const mine = !ev.sessionId || ev.sessionId === state.sessionId;
+    // any traffic from a session counts as progress against the stall timer
+    if (ev.sessionId) state.busySince.set(ev.sessionId, Date.now());
+
+    // A tool that is still executing is progress, even though it emits nothing.
+    if (ev.sessionId) {
+      if (ev.type === 'session.tool.called' || ev.type === 'session.tool.input.ended') {
+        state.toolsInFlight.add(ev.sessionId);
+      } else if (
+        ev.type === 'session.tool.success' ||
+        ev.type === 'session.tool.failed' ||
+        ev.type === 'shell.exited' ||
+        /^session\.execution\.(succeeded|failed|interrupted)$/.test(ev.type)
+      ) {
+        state.toolsInFlight.delete(ev.sessionId);
+      }
+    }
+
+    if (ev.kind === 'status') {
+      // Track every session, not just the open one, so the rail can show which
+      // project or session is actually working right now.
+      let changed = false;
+      if (ev.sessionId) {
+        const busy = state.busySessions.has(ev.sessionId);
+        if (ev.type === 'session.execution.started' && !busy) { state.busySessions.add(ev.sessionId); changed = true; }
+        else if (/^session\.execution\.(succeeded|failed|interrupted)$/.test(ev.type) && busy) {
+          state.busySessions.delete(ev.sessionId);
+          changed = true;
+        }
+      }
+      if (mine) {
+        if (ev.type === 'session.execution.started') state.busy = true;
+        else if (/^session\.execution\.(succeeded|failed|interrupted)$/.test(ev.type) || ev.type === 'session.idle') state.busy = false;
+        renderComposer();
+      }
+      if (changed) renderTree();
+      reloadProjects();
+      if (mine) reloadMessages();
+      return;
+    }
+
+    if (ev.kind === 'permission') {
+      if (ev.type === 'permission.asked' && mine) {
+        const p = permissionFromEvent(ev);
+        if (p.requestId && !state.permissions.some((x) => x.requestId === p.requestId)) {
+          state.permissions.push({ sessionId: ev.sessionId, ...p });
+          renderTranscript();
+        }
+      }
+      return;
+    }
+
+    if (ev.kind === 'tool' || ev.kind === 'message') {
+      reloadProjects();
+      if (mine) reloadMessages();
+    }
+  };
+  es.onerror = () => { state.streamLive = false; renderStatus(); };
+}
+
+// ── settings (live) ─────────────────────────────────────────────
+function readPath(obj, path) {
+  return path.split('.').reduce((o, k) => (o == null ? undefined : o[k]), obj) ?? '';
+}
+function writePath(obj, path, value) {
+  const keys = path.split('.');
+  let o = obj;
+  for (let i = 0; i < keys.length - 1; i++) { o[keys[i]] = o[keys[i]] || {}; o = o[keys[i]]; }
+  o[keys[keys.length - 1]] = value;
+}
+
+function renderSettings() {
+  const c = state.config;
+  if (!c) { $('settingsBody').innerHTML = '<p class="rail-note">Config unavailable.</p>'; return; }
+
+  const f = (label, path, opts = {}) => `
+    <label class="set-field${opts.wide ? ' wide' : ''}">
+      <span>${esc(label)}</span>
+      <input data-path="${path}" type="${opts.type || 'text'}" value="${esc(readPath(c, path))}" ${opts.attr || ''} />
+    </label>`;
+  const sel = (label, path, options, opts = {}) => `
+    <label class="set-field${opts.wide ? ' wide' : ''}">
+      <span>${esc(label)}</span>
+      <select data-path="${path}">
+        ${options.map((o) => `<option value="${esc(o.v)}"${o.v === readPath(c, path) ? ' selected' : ''}>${esc(o.l)}</option>`).join('')}
+      </select>
+    </label>`;
+  const check = (label, path) => `
+    <label class="set-check">
+      <input data-path="${path}" type="checkbox" ${readPath(c, path) ? 'checked' : ''} />
+      <span>${esc(label)}</span>
+    </label>`;
+  const group = (title, body, cols) => `<section class="set-group"><h4>${title}</h4><div class="set-grid${cols === 3 ? ' cols-3' : ''}">${body}</div></section>`;
+
+  const modelField = state.models.length
+    ? sel('Default model for new sessions', 'defaults.model',
+        state.models.map((m) => ({ v: m.ref, l: `${m.name}${m.free ? ' · free' : ''}` })), { wide: true })
+    : f('Default model (provider/model)', 'defaults.model', { wide: true });
+  const modeField = state.agents.length
+    ? sel('Default mode (engine agent)', 'defaults.agent', state.agents.map((a) => ({ v: a.id, l: a.name })))
+    : f('Default mode', 'defaults.agent');
+
+  $('settingsBody').innerHTML = [
+    group('Server',
+      f('Host', 'server.host') +
+      f('Port', 'server.port', { type: 'number' }) +
+      check('Open browser on start', 'server.openBrowser')),
+    group('Engine',
+      f('Engine type', 'engine.type') +
+      f('Engine port', 'engine.opencode.port', { type: 'number' }) +
+      f('opencode.exe path (blank = auto-detect)', 'engine.opencode.binary', { wide: true }) +
+      f('Password (blank = keep existing)', 'engine.opencode.password', { type: 'password', attr: 'placeholder="unchanged"' }) +
+      f('Start timeout (ms)', 'engine.opencode.startTimeoutMs', { type: 'number' }) +
+      f('Engine home (blank = data\\engine\\opencode)', 'engine.opencode.home', { wide: true })),
+    group('Defaults',
+      modelField + modeField +
+      f('Working directory (blank = workspace)', 'defaults.directory', { wide: true })),
+    group('Logging',
+      f('Level (error | warn | info | debug)', 'logging.level') +
+      f('Retention (days)', 'logging.retentionDays', { type: 'number' }) +
+      f('Max file size (MB)', 'logging.maxFileMb', { type: 'number' }), 3),
+  ].join('');
+}
+
+async function saveSettings() {
+  const draft = JSON.parse(JSON.stringify(state.config));
+  for (const el of $('settingsBody').querySelectorAll('[data-path]')) {
+    const path = el.dataset.path;
+    let value = el.type === 'checkbox' ? el.checked : el.value;
+    if (el.type === 'number') value = Number(value);
+    if (el.type === 'number' && !Number.isFinite(value)) continue;
+    writePath(draft, path, value);
+  }
+  try {
+    state.config = await api('PUT', '/api/config', draft);
+    toast('Settings saved', 'Restart Synapse to apply engine or server changes.');
+    await loadModelsAndAgents();
+  } catch (err) {
+    toast('Could not save settings', err.message);
+  }
+}
+
+function openSettings() { renderSettings(); $('settingsModal').hidden = false; }
+function closeSettings() { $('settingsModal').hidden = true; }
+
+// ── wiring ──────────────────────────────────────────────────────
+function wire() {
+  $('composer').addEventListener('submit', (e) => { e.preventDefault(); send(); });
+  $('stopBtn').addEventListener('click', interrupt);
+  $('modeToggle').addEventListener('click', switchMode);
+  $('expandBtn').addEventListener('click', () => {
+    if (state.mode === 'single') return; // nothing to expand to in Single
+    state.expanded = !state.expanded;
+    $('stage').classList.toggle('chat-expanded', state.expanded);
+    $('expandBtn').title = state.expanded ? 'Collapse back to the role cards' : 'Expand the conversation over the role cards';
+  });
+  $('menuBtn').addEventListener('click', () => $('sidebar').classList.toggle('open'));
+  $('emptyNewSession').addEventListener('click', () => createSession(state.projects.find((p) => p.general)?.id));
+  $('addProjectBtn').addEventListener('click', addProject);
+
+  // conversation navigation + collapsible tool calls
+  $('navPrev').addEventListener('click', () => jumpMessage(-1));
+  $('navNext').addEventListener('click', () => jumpMessage(1));
+  let navRaf = 0;
+  $('transcript').addEventListener('scroll', () => {
+    if (navRaf) return;
+    navRaf = requestAnimationFrame(() => { navRaf = 0; renderChatNav(); });
+  });
+  $('transcript').addEventListener('click', (e) => {
+    const formBtn = e.target.closest('[data-form-reply]');
+    if (formBtn) { replyForm(formBtn.dataset.formReply); return; }
+    if (e.target.closest('[data-error]')) return; // the error button is not a toggle
+    const head = e.target.closest('[data-tool-toggle]');
+    if (head) toggleTool(head.dataset.toolToggle);
+  });
+  $('transcript').addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    const head = e.target.closest('[data-tool-toggle]');
+    if (head) { e.preventDefault(); toggleTool(head.dataset.toolToggle); }
+  });
+  $('settingsBtn').addEventListener('click', openSettings);
+  $('closeSettings').addEventListener('click', closeSettings);
+  $('cancelSettings').addEventListener('click', closeSettings);
+  $('saveSettings').addEventListener('click', saveSettings);
+
+  // The probe takes minutes, so it is started and then reported over the stream.
+  $('runProbe').addEventListener('click', async () => {
+    try {
+      const r = await api('POST', '/api/tools/probe/run');
+      if (!r.started) {
+        toast('Probe Not Started', r.reason || 'Something is already running.');
+        return;
+      }
+      toast('Tool Probe Started', 'Every tool runs once — results appear as they land.');
+      renderProbe();
+    } catch (err) {
+      toast('Could Not Start The Probe', err.message);
+    }
+  });
+
+  const input = $('promptInput');
+  input.addEventListener('input', () => autoGrow(input));
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
+  });
+
+  $('targetRole').addEventListener('change', (e) => {
+    state.target = e.target.value;
+    const role = ROLES.find((r) => r.id === state.target);
+    input.placeholder = role?.id === 'architect' ? 'Message the Architect…' : `Message ${role?.name || ''}…`;
+  });
+
+  $('projectTree').addEventListener('click', (e) => {
+    if (e.target.closest('[data-soon]')) return;
+    const stop = e.target.closest('[data-interrupt]');
+    if (stop) { interruptSession(stop.dataset.interrupt); return; }
+    const renameProjectBtn = e.target.closest('[data-rename-project]');
+    if (renameProjectBtn) { renameProject(renameProjectBtn.dataset.renameProject); return; }
+    const delProject = e.target.closest('[data-del-project]');
+    if (delProject) { removeProject(delProject.dataset.delProject); return; }
+    const delSession = e.target.closest('[data-del-session]');
+    if (delSession) { removeSession(delSession.dataset.delSession); return; }
+    const rename = e.target.closest('[data-rename]');
+    if (rename) { state.renaming = rename.dataset.rename; renderTree(); return; }
+    const fresh = e.target.closest('[data-new]');
+    if (fresh) { createSession(fresh.dataset.new); return; }
+    if (e.target.closest('[data-preview]')) { openPreview(); return; }
+    const project = e.target.closest('[data-project]');
+    if (project) { toggleProject(project.dataset.project); return; }
+    const row = e.target.closest('[data-session]');
+    if (row && !e.target.closest('.tree-edit, .tree-x')) openSession(row.dataset.session);
+  });
+
+  $('projectTree').addEventListener('keydown', (e) => {
+    if (!e.target.classList.contains('tree-rename')) return;
+    if (e.key === 'Enter') { e.preventDefault(); commitRename(); }
+    if (e.key === 'Escape') { e.preventDefault(); state.renaming = null; renderTree(); }
+  });
+  $('projectTree').addEventListener('focusout', (e) => {
+    if (e.target.classList.contains('tree-rename') && state.renaming) commitRename();
+  });
+
+  document.querySelectorAll('.role-model').forEach((sel) =>
+    sel.addEventListener('change', () => setRoleModel(sel.dataset.role, sel.value)),
+  );
+
+  // mockup affordances: clearly announce what is not wired yet
+  document.addEventListener('click', (e) => {
+    const perm = e.target.closest('[data-perm]');
+    if (perm) { e.preventDefault(); replyPermission(perm.dataset.permId, perm.dataset.perm); return; }
+
+    const soon = e.target.closest('[data-soon]');
+    if (soon) { e.preventDefault(); e.stopPropagation(); toast('Not wired yet', soon.dataset.soon); return; }
+
+    const err = e.target.closest('[data-error]');
+    if (err) { e.preventDefault(); openError(err.dataset.errorTitle || 'Error', err.dataset.error || ''); }
+  });
+
+  $('dialogOk').addEventListener('click', () => closeDialog(readDialog()));
+  $('dialogCancel').addEventListener('click', () => closeDialog(null));
+  $('dialogClose').addEventListener('click', () => closeDialog(null));
+  $('dialogModal').addEventListener('click', (e) => { if (e.target === $('dialogModal')) closeDialog(null); });
+  $('dialogModal').addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target.tagName === 'INPUT') { e.preventDefault(); $('dialogOk').click(); } });
+
+  $('closeError').addEventListener('click', closeError);
+  $('closeErrorTop').addEventListener('click', closeError);
+  $('errorModal').addEventListener('click', (e) => { if (e.target === $('errorModal')) closeError(); });
+  $('copyError').addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText($('errorText').textContent);
+      toast('Copied', 'Error text is on the clipboard.');
+    } catch {
+      toast('Copy failed', 'Clipboard access was blocked.');
+    }
+  });
+  $('settingsModal').addEventListener('click', (e) => { if (e.target === $('settingsModal')) closeSettings(); });
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    if (!$('dialogModal').hidden) closeDialog(null);
+    else if (!$('errorModal').hidden) closeError();
+    else if (!$('settingsModal').hidden) closeSettings();
+  });
+
+  window.addEventListener('resize', () => requestAnimationFrame(() => { drawActivePath(); renderChatNav(); }));
+  if (window.ResizeObserver) new ResizeObserver(() => drawActivePath()).observe($('topology'));
+
+  setInterval(refreshStatus, 10000);
+
+  // Blocked or stalled sessions emit nothing, so they have to be polled for.
+  setInterval(refreshPending, 8000);
+  // Re-render the rail as sessions cross into "stalled".
+  let lastStalled = 0;
+  setInterval(() => {
+    if (state.busySessions.size === 0) return;
+    const stalled = [...state.busySessions].filter(isStalled).length;
+    if (stalled !== lastStalled) { lastStalled = stalled; renderTree(); }
+  }, 5000);
+  setInterval(() => { if (state.view !== 'none') renderToolUsage(); }, 30000);
+}
+
+async function boot() {
+  wire();
+  state.config = await api('GET', '/api/config').catch(() => null);
+  state.mode = state.config?.defaults?.mode === 'single' ? 'single' : 'multi';
+  renderMode();
+  setView();
+  await refreshStatus();
+  await loadModelsAndAgents();
+  await loadProjects();
+  renderTranscript();
+  connectStream();
+  refreshPending();
+  renderProbe();
+  // nothing is auto-opened: the operator picks what to work on
+}
+
+boot();
