@@ -670,6 +670,25 @@ body[data-view="session"] .chat-dock:not(.has-history) .composer { border-top-co
 .mode-toggle.is-single:hover { border-color: #fff; }
 .mode-toggle.is-single .mode-dot { background: #fff; box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.22); }
 .mode-toggle:focus-visible { outline: none; border-color: #fff; box-shadow: 0 0 0 3px rgba(255, 125, 26, 0.35); }
+
+/* ── keep-building switch: a finish-line flag between Stop and Send ────────
+   Green when the Architect is asked to run the plan to the end; muted like the
+   stop button when it must do one task and then stop. Hidden in Single, where
+   delegation is refused — the switch would be a lie there. */
+.keep-toggle {
+  flex: none; display: inline-flex; align-items: center; justify-content: center;
+  width: 36px; height: 36px; padding: 0; border-radius: 9px; cursor: pointer;
+  background: transparent; border: 1px solid #3a3d43; color: #82868e;
+}
+.keep-toggle:hover { border-color: #4a4e56; color: #c3c6cc; }
+.keep-toggle.is-on { background: var(--green-soft); border-color: #2c6a4f; color: var(--green); }
+.keep-toggle.is-on:hover { border-color: var(--green); }
+.keep-toggle:focus-visible {
+  outline: none; border-color: var(--green); box-shadow: 0 0 0 3px rgba(53, 192, 138, 0.28);
+}
+/* the [hidden] attribute must win over the display above */
+#keepBtn[hidden] { display: none; }
+body[data-mode="single"] .keep-toggle { display: none; }
 /* min-height 0: the dock fills a definite stage height, so the transcript
    scrolls internally rather than stretching the page. */
 .chat-scroll {

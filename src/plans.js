@@ -267,7 +267,7 @@ const counts = (tasks) => {
  * skimmed. Facts first (what the plan currently says), then the one rule that
  * cannot be guessed (the Architect owns the file; nobody else writes it).
  */
-export function briefSession({ dir, role = 'architect' } = {}) {
+export function briefSession({ dir, role = 'architect', auto = false } = {}) {
   const state = readPlan(dir);
   const lines = [];
   const isArchitect = role === 'architect';
@@ -307,6 +307,14 @@ export function briefSession({ dir, role = 'architect' } = {}) {
         `"detail":"...","dependsOn":[],"result":null,"note":null}]} - ` +
         `statuses: ${STATUSES.join(', ')}. Keep ids short and unique, titles under ${TITLE_MAX} characters, ` +
         `and mark a task "blocked" only when it needs the operator.`,
+    );
+    lines.push(
+      auto
+        ? `Keep building is ON: after each worker report, judge it and delegate the next task whose ` +
+            `dependencies are done. Continue until every task is done or one is blocked - do not stop to ` +
+            `ask between tasks.`
+        : `Keep building is OFF: run one task at a time. After a report, judge it and stop, waiting for ` +
+            `the operator to say go on.`,
     );
     lines.push(
       `Write paths inside the file with forward slashes (bin/, src/) so the JSON stays valid, ` +

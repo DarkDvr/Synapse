@@ -18,9 +18,9 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
    * typed it. Failure is logged once and never blocks the turn — an engine
    * without the concept still works, it just gets no brief.
    */
-  async function brief(sessionId, directory, role) {
+  async function brief(sessionId, directory, role, auto = false) {
     try {
-      const text = briefSession({ dir: directory, role });
+      const text = briefSession({ dir: directory, role, auto });
       if (briefed.get(sessionId) === text) return;
       await engine.setInstruction(sessionId, BRIEF_KEY, text);
       briefed.set(sessionId, text);
@@ -230,7 +230,7 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
       });
       // From the first turn, the Architect knows where it is and that the plan
       // file is its own to keep.
-      await brief(session.id, project.directory, 'architect');
+      await brief(session.id, project.directory, 'architect', false);
       return { session, projectId: project.id };
     },
 
@@ -324,12 +324,32 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
       // and an unchanged plan is not sent twice.
       try {
         const session = await engine.getSession(sessionId);
-        await brief(sessionId, session?.directory, 'architect');
+        await brief(sessionId, session?.directory, 'architect', session?.auto === true);
       } catch (err) {
         app.warn(`brief skipped for ${sessionId}: ${err.message}`);
       }
       await engine.prompt(sessionId, text);
       return { ok: true };
+    },
+
+    /**
+     * The "keep building" switch: when on, the Architect is expected to keep
+     * delegating the next ready task until the plan is done or a task is
+     * blocked. It lives in the session metadata, so it is per session and it
+     * survives a restart.
+     */
+    setAuto: async (sessionId, body) => {
+      requireReady();
+      const session = await engine.getSession(sessionId);
+      const meta = session?.metadata && typeof session.metadata === 'object' ? session.metadata : {};
+      const synapse = meta.synapse && typeof meta.synapse === 'object' ? meta.synapse : {};
+      const auto = body?.auto === true;
+      await engine.updateSessionMetadata(sessionId, { ...meta, synapse: { ...synapse, auto } });
+      // The brief carries the mode, so the Architect hears about it on the very
+      // next message rather than discovering it mid-run.
+      await brief(sessionId, session?.directory, 'architect', auto);
+      app.info(`keep-building ${auto ? 'on' : 'off'} for ${sessionId}`);
+      return { ok: true, auto };
     },
 
     interrupt: async (sessionId) => {

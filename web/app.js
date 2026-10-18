@@ -38,6 +38,8 @@ const state = {
   // The open session's project plan file: its parsed contents, any problems in
   // it, and when it last changed.
   planState: null,
+  // "Keep building": the open session's switch for running the plan to the end.
+  auto: false,
   permissions: [],
   busy: false,
   busySessions: new Set(),
@@ -461,6 +463,44 @@ const SINGLE_PERMISSIONS = [{ action: 'subagent', resource: '*', effect: 'deny' 
 const sessionMode = (s) => (s?.single ? 'single' : 'multi');
 
 /**
+ * The "keep building" switch, shown between Stop and Send.
+ *
+ * It is only meaningful where delegation is possible, so it is hidden with no
+ * session open and hidden entirely in Single mode — the runner refuses
+ * delegation there, and a switch that does nothing is worse than no switch.
+ */
+function renderKeep() {
+  const btn = $('keepBtn');
+  if (!btn) return;
+  const usable = state.view === 'session' && state.mode === 'multi' && Boolean(state.sessionId);
+  btn.hidden = !usable;
+  btn.classList.toggle('is-on', state.auto);
+  btn.setAttribute('aria-pressed', String(state.auto));
+  btn.title = state.auto
+    ? 'Keep building: on. The Architect works through the plan, one task at a time, until it is ' +
+      'done or a hard blocker stops it. Click to make it stop after each task.'
+    : "Ask the Architect to keep building until it's done, unless a hard blocker stops it";
+}
+
+async function toggleKeep() {
+  if (!state.sessionId) return;
+  const next = !state.auto;
+  try {
+    const r = await api('POST', `/api/sessions/${encodeURIComponent(state.sessionId)}/auto`, { auto: next });
+    state.auto = r.auto === true;
+    renderKeep();
+    toast(
+      state.auto ? 'Keep Building On' : 'Keep Building Off',
+      state.auto
+        ? 'The Architect will run the plan through to the end, unless a task is blocked.'
+        : 'The Architect does one task, then stops for you.',
+    );
+  } catch (err) {
+    toast('Could Not Change Keep Building', err.message);
+  }
+}
+
+/**
  * A new session is always born in Single mode: one Architect, every tool,
  * delegation denied. Multi is a live switch on the open session — a permission
  * PATCH — so nothing about the mode has to be decided at creation time.
@@ -486,6 +526,7 @@ function renderMode() {
   const input = $('promptInput');
   if (input) input.placeholder = single ? 'Message' : 'Message the Architect…';
   document.body.dataset.mode = state.mode;
+  renderKeep();
 }
 
 // ── role cards: the Architect is always there ───────────────────
@@ -1029,6 +1070,7 @@ function setView() {
   // the mode toggle is a session control: there is nothing to switch without
   // an open session
   $('modeToggle').hidden = state.view !== 'session';
+  renderKeep();
   applyRoleCardsLayout();
   renderComposer();
   updateSessionHeader();
@@ -1056,7 +1098,9 @@ async function openSession(id) {
   state.permissions = [];
   // the mode is a property of the session, not of the app
   state.mode = sessionMode(findSession(id));
+  state.auto = findSession(id)?.auto === true;
   renderMode();
+  renderKeep();
   $('sidebar').classList.remove('open');
   setView();
   renderTree();
@@ -1071,6 +1115,7 @@ function showNothing() {
   state.sessionId = null;
   state.messages = [];
   state.planState = null;
+  state.auto = false;
   state.mode = 'single';
   renderMode();
   setView();
@@ -2155,6 +2200,7 @@ function wire() {
   $('composer').addEventListener('submit', (e) => { e.preventDefault(); send(); });
   $('stopBtn').addEventListener('click', interrupt);
   $('modeToggle').addEventListener('click', switchMode);
+  $('keepBtn').addEventListener('click', toggleKeep);
   $('menuBtn').addEventListener('click', () => $('sidebar').classList.toggle('open'));
   $('emptyNewSession').addEventListener('click', () => createSession(state.projects.find((p) => p.general)?.id));
   $('addProjectBtn').addEventListener('click', addProject);

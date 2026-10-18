@@ -369,6 +369,27 @@ harness enforces the promise: in Single the request is refused out loud and the
 Architect is told to ask for Multi. New sessions start Single; the calendar
 session here is Multi.
 
+### Keep building
+
+Between **Stop** and **Send** there is a finish-line flag. It is the switch that
+decides how far the Architect goes on its own:
+
+- **On (green)** — after each worker report it judges the task and delegates the
+  next one whose dependencies are done, and keeps going until the plan is
+  finished or a task is **blocked**. Nobody has to say "go on".
+- **Off (grey, like Stop)** — one task per report. It judges, stops, and waits.
+
+It is a property of the session, not of the app: it is stored in the session's
+own metadata (`synapse.auto`), so it survives a restart, and the Architect is
+told about it twice — in its brief for each message, and again in every worker
+report, so flipping it mid-run takes effect on the next judgement. It is hidden
+in **Single** mode, where delegation is refused and the switch would be a lie.
+
+Verified end to end on the calendar project: switched on, told the Architect to
+continue, and the remaining three tasks (implement → test → deliver) ran
+themselves to completion in 12.8 minutes with no further input — five worker runs
+recorded, two files in `bin/`, and `python bin/calendar.py` printing the month.
+
 **Interaction rules.**
 - **Button labels are Title Case**, always ("Browse Folder", "Allow Once", "Add Project"). Nothing else is forced to a case.
 - **A tool call is one line** — name, what it is running, outcome — with a `›` chevron; the full input and output are one click away. A call that failed gets a red dot, an `exit N` pill and an **Error** button, because the engine reports a non-zero shell exit as `completed`; `normalizeMessage` derives the real outcome.

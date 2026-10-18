@@ -274,6 +274,13 @@ export function createRunner({ engine, logger, getConfig }) {
         (planTouched ? ' - THE PLAN FILE CHANGED DURING THE WORKER TURN' : ''),
     );
 
+    // The "keep building" switch is read at report time, so flipping it while a
+    // worker runs takes effect on the very next judgement.
+    let auto = false;
+    try {
+      auto = (await engine.getSession(architectId))?.auto === true;
+    } catch { /* session gone; treat as off */ }
+
     await wake(architectId, dir, {
       description: `worker ${request.task} (${role}) ${outcome}`,
       text: report({
@@ -285,6 +292,7 @@ export function createRunner({ engine, logger, getConfig }) {
         files,
         workerId: worker?.id,
         planTouched,
+        auto,
       }),
     });
   }
@@ -351,7 +359,7 @@ export function createRunner({ engine, logger, getConfig }) {
     return [...seen];
   }
 
-  function report({ task, role, outcome, ms, text, files, workerId, planTouched }) {
+  function report({ task, role, outcome, ms, text, files, workerId, planTouched, auto }) {
     const head =
       outcome === 'completed'
         ? `[harness] ${task.id} (${role}) finished in ${Math.round(ms / 1000)}s.`
@@ -376,9 +384,14 @@ export function createRunner({ engine, logger, getConfig }) {
       `You are the only writer of the plan: judge this yourself. Mark ${task.id} done if it holds, ` +
         `send it back with what is wrong if it does not, or mark it blocked if it needs the operator.`,
     );
+    lines.push(
+      auto
+        ? `Keep building is ON: having judged this, delegate the next task whose dependencies are done ` +
+            `and keep going until the plan is finished or a task is blocked.`
+        : `Keep building is OFF: stop after judging this one and wait for the operator.`,
+    );
     return lines.join('\n');
   }
-
   /** Wake the Architect with the harness speaking. A synthetic message keeps it
    *  out of the operator's voice; the prompt route is the fallback if an engine
    *  has no such thing. */

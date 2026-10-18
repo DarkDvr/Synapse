@@ -473,6 +473,18 @@ export class OpenCodeEngine extends Engine {
     );
   }
 
+  /**
+   * Replace the session's metadata. The engine keeps it as free-form JSON, which
+   * is where Synapse stores its own per-session switches (`synapse.auto`,
+   * `synapse.internal`) — durable, and they travel with the session. Returns 204
+   * with no body.
+   */
+  async updateSessionMetadata(sessionId, metadata) {
+    await this.request('PATCH', `/api/session/${encodeURIComponent(sessionId)}`, {
+      metadata: metadata && typeof metadata === 'object' ? metadata : {},
+    });
+  }
+
   async getMessages(sessionId) {
     const r = await this.request(
       'GET',

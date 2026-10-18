@@ -372,8 +372,18 @@ Non-obvious, all verified on 2.0.30:
   loud and the Architect is told to ask for Multi.
 - **One worker per project at a time** (`busy` set keyed by directory) — two
   Architects editing one plan file is the one thing that can actually corrupt it.
+- **"Keep building" is a session switch, not a setting.** `metadata.synapse.auto`
+  (normalizeSession exposes it as `auto`) is toggled by the finish-line flag
+  between Stop and Send, and read in three places: the brief tells the Architect
+  its mode for the next message, every worker report repeats it so a mid-run flip
+  lands on the next judgement, and the runner itself reads it at report time.
+  Hidden in Single via `body[data-mode="single"] .keep-toggle`. Verified live:
+  switched on, the remaining three tasks ran themselves in 12.8 minutes.
 - **A stalled worker cannot hang the loop:** the wait is on the engine's `idle`
   message, with a 240s ceiling that interrupts the session and reports a timeout.
+  A timeout is not a failed task: the calendar auditor hit the ceiling and still
+  left a useful result — the Architect judged from what it *had* produced, and
+  marked it done on the evidence rather than on the worker's word.
 
 ---
 
@@ -770,24 +780,29 @@ not gigabytes. Worth knowing; not worth panicking about.
     plan with roles, the file's first version came back unparseable (a stray
     backslash copied out of the brief), the pane named the exact position, and
     one bare "Continue." made the Architect repair its own file.
-  - **3.2 done for a single step — delegation.** `delegate` tool, `src/runs.js`,
-    hidden worker sessions, `.synapse\runs.jsonl`, the synthetic wake, and the
-    retry cap. Verified live on `calendar`: t1 → Designer (big-pickle, own
-    session, 42s) → reported a file it had not written → the Architect checked
-    the disk, kept it `todo`, wrote the reason into `note` and re-delegated →
-    attempt two wrote `bin\calendar_design.md` → the Architect verified it and
-    marked t1 `done`. The chain did not run on its own: the Architect stopped at
-    "Say the word and I'll hand it over."
-  - **3.2 next** — the chain and its controls: whether the Architect should
-    continue to the next ready task automatically or wait for the operator each
-    time, and how a run is shown while it happens (the worker transcript is
-    invisible today by design). Then 3.3.
+  - **3.2 done — delegation, the chain, and its switch.** `delegate` tool,
+    `src/runs.js`, hidden worker sessions, `.synapse\runs.jsonl`, the synthetic
+    wake, the retry cap, and the **Keep building** flag between Stop and Send
+    (`metadata.synapse.auto`). Verified live on `calendar`: with the flag off,
+    t1 → Designer → the Architect caught a hallucinated file, sent it back, and
+    stopped for the operator. With the flag **on** and one "continue", the
+    remaining three tasks ran themselves — 12.8 minutes, five worker runs, two
+    files in `bin/`, `python bin/calendar.py` printing the month. The Auditor hit
+    the 240s ceiling yet its partial work was still judged and accepted.
+  - **3.3 next — role cards show live activity.** The worker transcript is
+    invisible while it runs by design (hidden session); the operator wants to
+    watch it. Cards need state (idle / working / blocked), the task in hand, and
+    elapsed time, plus the ✎ editor for per-role instructions. The ✎ settles
+    skills gating with it: custom agents are dead here (the free tier rejected
+    every custom-agent request), so instructions are prompt text on a
+    default-agent session — which is what the brief already is.
   - **3.3 — role cards show live activity**, and the ✎ button opens per-role
     instructions. Settles skills gating with it. Remember custom agents are dead
     here (the free tier rejected every custom-agent request), so instructions
     have to be prompt text on a default-agent session.
   - **3.4 — the live per-session Tools-in-Use feed**, then the main-pane napkin
-    with its live path.
+    with its live path: arrows and ants on the topology while a worker runs, and
+    the plan pane driving it.
   - **3.5 — housekeeping**: `engine.type` as a dropdown (only `opencode` is
     registered), **Browse Folder** / **Cmd Here** still `data-soon` for stage 4,
     and zeroing the stored probe results if the panel should start blank.

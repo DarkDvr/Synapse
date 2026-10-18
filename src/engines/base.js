@@ -45,6 +45,8 @@ export class Engine extends EventEmitter {
   async generateText() { return ''; }
   // Inject a message that is the harness speaking, not the operator.
   async synthetic() { throw new Error(`${this.kind}: synthetic() not implemented`); }
+  // Replace a session's free-form metadata (Synapse stores its own switches here).
+  async updateSessionMetadata() { throw new Error(`${this.kind}: updateSessionMetadata() not implemented`); }
 
   // ── standing context ─────────────────────────────────────────
   // Durable, per-session instructions. Synapse briefs a role with these rather
@@ -173,6 +175,9 @@ export function normalizeSession(raw) {
     variant: raw?.model?.variant || null,
     agent: raw?.agent || null,
     single: isSingleSession(raw),
+    // Synapse's own per-session switch: "keep building until done". It lives in
+    // the session metadata so it survives a restart and travels with the session.
+    auto: raw?.metadata?.synapse?.auto === true,
     // Synapse marks its own scaffolding sessions here (worker sessions, which
     // run in the project directory but must not appear as the operator's work).
     internal: raw?.metadata?.synapse?.internal === true,
