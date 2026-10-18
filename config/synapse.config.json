@@ -50,7 +50,7 @@
     "resetOnBoot": true
   },
   "ui": {
-    "answerBg": "#382f19"
+    "answerBg": "#62680d"
   },
   "logging": {
     "level": "info",

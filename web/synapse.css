@@ -715,9 +715,11 @@ body[data-view="session"] .chat-dock:not(.has-history) .composer { border-top-co
    exception: a fill, never text. */
 .msg-answer {
   margin: 5px 0 0; padding: 8px 10px;
-  --answer-bg: #382f19;
-  background: var(--answer-bg);
-  border: 1px solid color-mix(in srgb, var(--answer-bg), #fff 18%);
+  /* the fallback lives in var(), not as a local declaration: a local
+     `--answer-bg` would shadow the root one and the Settings colour would
+     never reach an existing transcript */
+  background: var(--answer-bg, #382f19);
+  border: 1px solid color-mix(in srgb, var(--answer-bg, #382f19), #fff 18%);
   border-radius: 9px;
   font-size: 12.5px; line-height: 1.55; color: #d3d6db;
 }
