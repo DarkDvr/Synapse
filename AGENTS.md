@@ -336,17 +336,32 @@ failure "not offered by this model" when the tool was never in its list.
   and that folder is read-only. The model select's tooltip carries the context
   window, which is how the 1M override becomes visible without a settings field.
 - **The Multi reveal animates `max-height`, not `display`.** The cards live in
-  `#topologyWrap`; JS measures the topology, sets `--reveal-h` (capped at 62% of
-  the stage), adds `.is-open` and the `topology-open` body class, and the chat
-  slides down because the stage's gap is folded into the same transition. A
-  reflow between setting the height and adding the class is what makes the first
-  reveal animate instead of snapping. In Single the wrapper is 0px tall, so the
-  cards cost nothing. The glyph measurements that matter: both button glyphs are
-  centred on the 22px button to within 0.01px, with ~1.5px of margin left top
-  and bottom at three chevrons — if the glyph or border size changes, re-measure
-  with `browser_get_element` rather than eyeballing it.
+  `#topologyWrap`; JS measures the topology, sets `--reveal-h` to the **full**
+  card height (I once capped it at 62% of the stage — that cut the last row
+  mid-card and was the bug), capped only by the room left above the composer,
+  adds `.is-open` and the `topology-open` body class, and the chat slides down
+  because the stage's gap is folded into the same transition. A reflow between
+  setting the height and adding the class is what makes the first reveal animate
+  instead of snapping. In Single the wrapper is 0px tall, so the cards cost
+  nothing. The glyph measurements that matter: both button glyphs are centred on
+  the 22px button to within 0.01px, with ~1.5px of margin left top and bottom at
+  three chevrons — if the glyph or border size changes, re-measure with
+  `browser_get_element` rather than eyeballing it.
+- **The chat dock is content-sized and bottom-pinned in a session.** Empty, it
+  is just the composer row (60px); it grows upward as messages arrive, up to
+  `max-height: min(100%, 80vh)` — `100%` lets Multi squeeze it when the cards
+  need the room, `80vh` is the "about twice" ceiling. The transcript is
+  `display: none` while empty (`is-empty`), and there is no empty-state copy
+  inside a session: a fresh session shows the composer alone.
+- **Mode colours:** Multi is orange, Single is violet, both with white text and
+  a white dot; both are filled pills, so the mode is readable at a glance. The
+  composer placeholder is `Message` in Single, `Message the Architect…` in Multi.
 - **The composer has no target picker, deliberately.** One interface, one lead:
   every message goes to the Architect. Per-role model/effort are card controls.
+- **The UI is live-only.** The `Design preview` entry, every `SAMPLE` badge, the
+  sample plan list, the sample tools table and the role cards' mock activity
+  were all removed before live testing. Do not put invented content back; label
+  unimplemented affordances with `data-soon` instead.
 
 ---
 
@@ -410,6 +425,9 @@ not gigabytes. Worth knowing; not worth panicking about.
     collapsed (`max-height: 0`), so a Single session pays nothing for them.
   - **Multi** — the ruleset is cleared (`PATCH /api/session/{id}` with
     `permissions: []`), the wrapper animates open and the chat slides down.
+    Verified live: the Architect called `subagent` (general, `completed`) and
+    answered with the worker's reply; a subagent run does not leave a child
+    session in the rail.
 
   The mode is a per-session property read from `isSingleSession()`
   (`engines/base.js`); nothing is stored in config — `defaults.mode` was removed

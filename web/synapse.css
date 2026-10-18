@@ -31,7 +31,6 @@ html { scrollbar-gutter: stable; }
   --rail-w: 330px;
   --spine-w: 66px;
   --row-gap: 12px;
-  --card-h: 112px;
   --sidebar-w: 256px;
 }
 
@@ -202,11 +201,6 @@ body[data-view="none"] .stage-empty {
 .stage-empty-mark { font-size: 30px; color: var(--violet); opacity: 0.9; }
 .stage-empty h2 { margin: 6px 0 0; font: 800 20px var(--display); color: var(--text); letter-spacing: -0.4px; }
 .stage-empty p { margin: 0 0 14px; font-size: 13px; max-width: 420px; line-height: 1.55; }
-.stage-empty kbd {
-  font-family: var(--mono); font-size: 11.5px; color: var(--orange);
-  background: transparent; border: 1px dashed #4a4e55;
-  border-radius: 5px; padding: 1px 6px;
-}
 
 body[data-view="none"] .topology-wrap,
 body[data-view="none"] .chat-dock { display: none; }
@@ -223,27 +217,11 @@ body[data-view="session"] .stage { grid-template-rows: auto minmax(0, 1fr); }
   max-height: 0; opacity: 0;
   transition: max-height 0.26s ease, opacity 0.2s ease;
 }
-body[data-view="preview"] .topology-wrap { max-height: none; opacity: 1; }
-.topology-wrap.is-open { max-height: var(--reveal-h, 600px); opacity: 1; }
+/* when open the wrapper may scroll on a very short window, but the measured
+   height normally equals the content, so no bar appears */
+.topology-wrap.is-open { max-height: var(--reveal-h, 600px); opacity: 1; overflow-y: auto; }
 
-body[data-view="session"].topology-open .stage,
-body[data-view="preview"] .stage { gap: 14px; }
-
-.stage.chat-expanded { grid-template-rows: minmax(0, 1fr); }
-.stage.chat-expanded .topology-wrap { max-height: 0; opacity: 0; }
-
-/* the role cards' activity copy is still sample data: say so when they are
-   shown around a real session, exactly as the rail panels do. `.topology >`
-   outranks the generic .sample-note rule further down the file. */
-.topology > .topology-sample {
-  display: none; position: absolute; top: 0; right: 0; z-index: 4;
-}
-body[data-view="session"] .topology-sample { display: inline-flex; }
-body[data-view="session"] .chat-expand { display: none; }
-
-.session-only { display: none; }
-body[data-view="session"] .sample-only { display: none; }
-body[data-view="session"] .session-only { display: revert; }
+body[data-view="session"].topology-open .stage { gap: 14px; }
 
 /* ── 5. sidebar: navigation ────────────────────────────────────────────── */
 
@@ -383,15 +361,7 @@ body.dark .sidebar .nav-link.active > span:first-child { color: #fff; }
 }
 .tree-rename:focus-visible { outline: 2px solid var(--orange); outline-offset: 1px; }
 
-/* the design-preview entry: deliberately not a real project */
-.tree-row.is-preview-row {
-  border: 1px dashed #3a3e46; border-radius: 9px; background: transparent;
-}
-.tree-row.is-preview-row .tree-open { font-size: 12.5px; color: #8a8e96; }
-.tree-row.is-preview-row:hover { border-color: #4a4f58; }
-.tree-row.is-preview-row:hover .tree-open { color: #cfd2d8; }
-.tree-row.is-preview-row.is-current { background: var(--violet-faint); border-color: var(--violet-line); }
-.tree-row.is-preview-row.is-current .tree-open { color: #fff; }
+/* shown in place of the session list when a project has none open */
 .tree-empty { padding: 3px 8px; font-size: 12px; color: #6d717a; }
 
 /* the always-available "New Session" slot at the top of every project */
@@ -408,11 +378,6 @@ body.dark .sidebar .nav-link.active > span:first-child { color: #fff; }
   padding: 3px 6px; border-radius: 5px; cursor: pointer; flex: none;
 }
 .tree-add-row:hover { background: var(--green-soft); }
-.tree-badge {
-  font-size: 8.5px; font-weight: 700; letter-spacing: 0.08em;
-  color: #8a8e96; border: 1px dashed #43474e; border-radius: 5px;
-  padding: 1px 5px; margin-left: auto; flex: none;
-}
 
 .tree-add {
   margin-left: auto; border: 0; background: transparent; color: var(--green);
@@ -473,8 +438,6 @@ body.dark .sidebar-bottom,
   filter: drop-shadow(0 0 3px rgba(255, 125, 26, 0.9));
 }
 
-.preview-note { display: none; }
-
 .topo-architect { grid-column: 1 / -1; display: flex; justify-content: center; }
 .topo-architect .role-card { width: min(640px, 100%); }
 
@@ -509,15 +472,12 @@ body.dark .sidebar-bottom,
 .role-card {
   background: var(--surface); border: 1px solid var(--line);
   border-radius: 12px; padding: 11px 13px;
-  min-width: 0; height: var(--card-h); overflow: hidden;
-  display: grid; grid-template-rows: auto minmax(0, 1fr) auto;
+  min-width: 0; height: auto; overflow: hidden;
+  display: grid; grid-template-rows: auto;
   gap: 4px;
   transition: border-color 0.18s ease, background-color 0.18s ease, opacity 0.2s ease;
 }
 .role-card:hover { border-color: #454950; }
-
-/* never called in this project — dimmed until first use */
-.role-card.is-unused { opacity: 0.5; }
 
 .role-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .role-head h3 {
@@ -579,33 +539,7 @@ body.dark .sidebar-bottom,
   font-size: 15px; line-height: 1;
 }
 
-/* the action gets two lines, then ellipsis — the card never grows */
-.role-action {
-  margin: 0; font-size: 12.5px; line-height: 1.38; color: #c3c6cc;
-  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
-  overflow: hidden; overflow-wrap: anywhere;
-}
-.role-foot {
-  display: flex; align-items: center; gap: 8px;
-  font-size: 10.5px; color: #7e828a; font-family: var(--mono);
-  border-top: 1px solid #2a2d33; padding-top: 6px;
-  min-width: 0;
-}
-.role-foot > span {
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0;
-}
-.role-foot .grow { flex: 1 1 auto; }
-.role-foot .to { color: var(--orange); }
-.role-wait { font-size: 11px; color: var(--muted); font-family: var(--mono); }
-.role-wait .to { color: var(--orange); }
-
-.role-card.is-active { border-color: var(--violet-line); background: var(--violet-faint); }
-.role-card.is-active .role-action { color: var(--text); }
 .role-architect { border-color: #43464d; background: linear-gradient(180deg, #23262b, #1e2024); }
-.role-architect.is-active {
-  border-color: var(--violet-line);
-  background: linear-gradient(180deg, #2a2848, #1f1d33);
-}
 .role-architect .role-head h3 { font-size: 15px; }
 
 /* ── 11. chat dock (no header — it costs a whole row) ──────────────────── */
@@ -616,6 +550,16 @@ body.dark .sidebar-bottom,
   background: var(--surface); border: 1px solid var(--line);
   border-radius: 14px; overflow: hidden; min-height: 0;
 }
+
+/* In a session the dock is content-sized and pinned to the bottom: with nothing
+   to say it is just the composer; it grows upward as the conversation fills.
+   `min(100%, 80vh)` lets Multi squeeze it when the cards need the room, while
+   Single allows the "about twice" expansion. */
+body[data-view="session"] .chat-dock {
+  align-self: end;
+  max-height: min(100%, 80vh);
+}
+.chat-scroll.is-empty { display: none; }
 
 /* jump between your own requests; only shown for longer conversations.
    Fixed, so it floats over the conversation and stays reachable however far the
@@ -636,24 +580,23 @@ body.dark .sidebar-bottom,
 .fab:disabled:hover { background: #23262c; border-color: var(--line); color: #c3c6cc; }
 .chat-dock.has-nav .chat-scroll { padding-right: 48px; }
 
-/* ── mode toggle: plain chat vs agentic ─────────────────────────────────── */
+/* ── mode toggle: Multi is orange, Single is violet, white text on both ──── */
 .mode-toggle {
   flex: none; display: inline-flex; align-items: center; gap: 6px;
   height: 32px; padding: 0 10px; border-radius: 9px; cursor: pointer;
-  background: transparent; border: 1px solid var(--line);
-  color: var(--muted); font-family: inherit; font-size: 11.5px; font-weight: 600;
+  background: var(--orange); border: 1px solid var(--orange);
+  color: #fff; font-family: inherit; font-size: 11.5px; font-weight: 600;
   letter-spacing: 0.02em; white-space: nowrap;
 }
-.mode-toggle:hover { border-color: var(--violet-line); color: var(--text); }
+.mode-toggle:hover { border-color: #fff; }
 .mode-dot {
   width: 7px; height: 7px; border-radius: 50%; flex: none;
-  background: var(--violet); box-shadow: 0 0 0 3px rgba(98, 91, 246, 0.16);
+  background: #fff; box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.22);
 }
-/* single mode is deliberately the quieter of the two */
 .mode-toggle.is-single { background: var(--violet); border-color: var(--violet); color: #fff; }
-.mode-toggle.is-single:hover { color: #fff; }
-.mode-toggle.is-single .mode-dot { background: #fff; box-shadow: none; }
-.mode-toggle:focus-visible { outline: none; border-color: var(--orange); box-shadow: 0 0 0 3px rgba(255, 125, 26, 0.18); }
+.mode-toggle.is-single:hover { border-color: #fff; }
+.mode-toggle.is-single .mode-dot { background: #fff; box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.22); }
+.mode-toggle:focus-visible { outline: none; border-color: #fff; box-shadow: 0 0 0 3px rgba(255, 125, 26, 0.35); }
 /* min-height 0: the dock fills a definite stage height, so the transcript
    scrolls internally rather than stretching the page. */
 .chat-scroll {
@@ -730,8 +673,6 @@ body.dark .sidebar-bottom,
   border-left: 2px solid var(--violet); color: #b9bdc4;
 }
 .msg-answer hr { border: 0; border-top: 1px solid var(--line); margin: 9px 0; }
-
-.chat-empty { padding: 14px 4px; color: var(--muted); font-size: 12.5px; }
 .msg-error {
   margin-top: 5px; padding: 7px 9px; border-radius: 8px;
   background: var(--red-soft); border: 1px solid #5d2f27; color: #ffb4a6;
@@ -854,20 +795,6 @@ body.dark .sidebar-bottom,
 }
 .rail-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 
-.plan-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
-.plan-item {
-  display: grid; grid-template-columns: 14px 1fr auto; gap: 10px;
-  align-items: start; padding: 6px 7px; border-radius: 8px;
-}
-.plan-item:hover { background: var(--surface-soft); }
-.plan-idx { font-family: var(--mono); font-size: 11px; color: #6d717a; text-align: right; padding-top: 1px; }
-.plan-text { font-size: 12.5px; line-height: 1.4; color: #c3c6cc; }
-.plan-item.done .plan-text { color: #82868e; text-decoration: line-through; text-decoration-color: #4a4e55; }
-.plan-item.blocked .plan-text { color: #ffb4a6; }
-.plan-item.active .plan-text { color: var(--text); font-weight: 600; }
-.plan-item.active { background: var(--violet-faint); }
-.plan-mark { display: flex; align-items: center; gap: 6px; padding-top: 1px; }
-
 /* the small red "Error" affordance, matching the reference app's:
    borderless, faint red fill, red label */
 .err-btn {
@@ -896,22 +823,11 @@ body.dark .sidebar-bottom,
 .tool-table td { padding: 7px 2px; border-bottom: 1px solid #26292e; vertical-align: middle; }
 .tool-table tr:last-child td { border-bottom: 0; }
 .tool-name { font-family: var(--mono); font-size: 12px; color: var(--text); }
-.tool-target {
-  font-family: var(--mono); font-size: 11.5px; color: #82868e;
-  max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
 .tool-time { font-family: var(--mono); font-size: 11.5px; color: #82868e; text-align: right; white-space: nowrap; }
 .tool-time.slow { color: var(--amber); }
-.tool-result { text-align: right; white-space: nowrap; }
-.tool-result .state-pill { padding: 1px 6px; }
 /* no glow ring in a dense table — bare circles read cleaner here */
 .tool-table .status-dot { box-shadow: none; }
 
-.sample-note {
-  display: inline-flex; align-items: center; gap: 6px;
-  font-size: 9.5px; font-weight: 700; letter-spacing: 0.1em;
-  color: #7e828a; border: 1px dashed #3f434a; border-radius: 5px; padding: 2px 6px;
-}
 .rail-note { margin: 0; font-size: 12.5px; line-height: 1.5; color: #82868e; }
 
 /* ── settings: a compact two-column form ───────────────────────────────── */

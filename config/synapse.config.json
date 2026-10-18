@@ -32,7 +32,10 @@
   },
   "roles": {
     "designer": {
-      "ref": "opencode/space-bunny-free",
+      "ref": "opencode/space-bunny-free"
+    },
+    "critic": {
+      "ref": "opencode/cat-jam-free",
       "variant": "max"
     }
   },

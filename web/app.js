@@ -2,11 +2,11 @@
 //
 // LIVE: engine/stream status, projects and their sessions (create, rename,
 // delete), the conversation with streamed tool calls, tool permissions,
-// per-role model choices, and the settings form over config/synapse.config.json.
+// per-role model + thinking-effort choices, the Single↔Multi switch, and the
+// settings form over config/synapse.config.json.
 //
-// SAMPLE: the control-room topology, the project plan and the tools table.
-// They are reachable through the "Design preview" entry and are labelled
-// everywhere they appear.
+// The role cards are shown in Multi mode but their per-role activity is not
+// wired yet — the orchestration layer will drive them (stage 3+).
 
 import { renderMarkdown } from './md.js';
 
@@ -52,8 +52,7 @@ const state = {
   streamLive: false,
   collapsed: new Set(),
   renaming: null,
-  expanded: false,
-  view: 'none', // none | session | preview
+  view: 'none', // none | session
 };
 
 // ── helpers ─────────────────────────────────────────────────────
@@ -309,13 +308,16 @@ function renderMode() {
   btn.title = single
     ? 'Single: one Architect, all the tools, no delegation — it answers everything itself. Click for Multi.'
     : 'Multi: the Architect can delegate to subagents and the role cards are shown. Click for Single.';
+  const input = $('promptInput');
+  if (input) input.placeholder = single ? 'Message' : 'Message the Architect…';
   document.body.dataset.mode = state.mode;
 }
 
 // ── role cards: the Multi reveal ────────────────────────────────
 // The cards sit in a wrapper whose max-height animates. Opening pushes the chat
-// down and reveals them; closing pulls the chat back up. Height is measured,
-// not guessed, and capped so a short window cannot squeeze the conversation.
+// down and reveals them fully; closing pulls the chat back up. Height is
+// measured, not guessed: the cards get their natural height, capped only by the
+// room left above the composer, so they are never cut off mid-card.
 let revealTimer = 0;
 
 function topologyTarget() {
@@ -326,7 +328,10 @@ function topologyTarget() {
 
 function measureReveal(topo, stage) {
   const stageH = stage?.getBoundingClientRect().height || window.innerHeight;
-  return Math.max(0, Math.min(Math.round(topo.getBoundingClientRect().height), Math.round(stageH * 0.62)));
+  // leave the dock's minimum (the composer row) plus the stage gap
+  const composerH = $('composer')?.getBoundingClientRect().height || 58;
+  const available = Math.max(0, stageH - composerH - 2 - 14);
+  return Math.min(Math.round(topo.getBoundingClientRect().height), Math.round(available));
 }
 
 function setRoleCardsOpen(open, { animate = true } = {}) {
@@ -357,16 +362,6 @@ function setRoleCardsOpen(open, { animate = true } = {}) {
 
 /** Where the cards should be, given the current view and mode. */
 function applyModeLayout(options) {
-  if (state.view === 'preview') {
-    const els = topologyTarget();
-    if (els) {
-      clearTimeout(revealTimer);
-      els.wrap.classList.remove('is-open');
-      document.body.classList.remove('topology-open');
-      requestAnimationFrame(drawActivePath);
-    }
-    return;
-  }
   if (state.view === 'session' && state.mode === 'multi') setRoleCardsOpen(true, options);
   else setRoleCardsOpen(false, options);
 }
@@ -609,15 +604,6 @@ function renderTree() {
     html.push('</div>');
   }
 
-  html.push(`<div class="tree-project">
-    <div class="tree-row is-preview-row${state.view === 'preview' ? ' is-current' : ''}">
-      <button class="tree-open" data-preview="1" title="Sample data for reviewing the control-room layout">
-        <span class="tree-name">Design preview</span>
-      </button>
-      <span class="tree-badge">SAMPLE</span>
-    </div>
-  </div>`);
-
   el.innerHTML = html.join('');
 
   if (state.renaming) {
@@ -784,11 +770,8 @@ async function commitRename() {
 function setView() {
   document.body.dataset.view = state.view;
   document.body.dataset.mode = state.mode;
-  const single = state.mode === 'single';
-  $('stage').classList.toggle('chat-expanded', state.expanded);
-  $('expandBtn').hidden = single;
   // the mode toggle is a session control: there is nothing to switch without
-  // an open session (preview is sample data and always shows the cards)
+  // an open session
   $('modeToggle').hidden = state.view !== 'session';
   applyModeLayout();
   renderComposer();
@@ -797,7 +780,6 @@ function setView() {
 }
 
 function currentProject() {
-  if (state.view === 'preview') return { name: 'calendar', directory: `${state.workspace || ''}\\calendar` };
   return projectOf(state.sessionId);
 }
 
@@ -816,7 +798,6 @@ async function openSession(id) {
   state.view = 'session';
   state.sessionId = id;
   state.permissions = [];
-  state.expanded = false;
   // the mode is a property of the session, not of the app
   state.mode = sessionMode(findSession(id));
   renderMode();
@@ -828,23 +809,10 @@ async function openSession(id) {
   renderToolUsage();
 }
 
-function openPreview() {
-  state.view = 'preview';
-  state.sessionId = null;
-  state.messages = [];
-  state.expanded = false;
-  state.mode = 'multi';
-  renderMode();
-  setView();
-  renderTree();
-  renderTranscript();
-}
-
 function showNothing() {
   state.view = 'none';
   state.sessionId = null;
   state.messages = [];
-  state.expanded = false;
   state.mode = 'single';
   renderMode();
   setView();
@@ -953,16 +921,14 @@ function renderTranscript() {
   );
   const pending = renderPermissions() + renderForms();
   if (showable.length === 0 && !pending) {
-    const empty =
-      state.view === 'preview'
-        ? 'Nothing open. Send a message and Synapse starts a session for you in General.'
-        : state.view === 'session'
-          ? 'A fresh session. Ask the Architect what it is doing, or send the first instruction.'
-          : 'Pick a session on the left, or start a new one.';
-    el.innerHTML = `<div class="chat-empty">${empty}</div>`;
+    // nothing to show: collapse the transcript entirely, so the dock is just
+    // the composer and the empty space above it belongs to the cards/napkin
+    el.innerHTML = '';
+    el.classList.add('is-empty');
     renderChatNav();
     return;
   }
+  el.classList.remove('is-empty');
   // Stick to the bottom while new output arrives, but never yank the view away
   // from someone who has scrolled up to read.
   const stick = chatAtBottom();
@@ -1246,7 +1212,7 @@ async function refreshPending() {
   state.forms = p.forms || [];
 
   renderTree();
-  if (state.view === 'session' || state.view === 'preview') renderTranscript();
+  if (state.view === 'session') renderTranscript();
 }
 
 async function renderToolUsage() {
@@ -1419,7 +1385,7 @@ async function send() {
   const text = input.value.trim();
   if (!text) return;
 
-  if (!state.sessionId && state.view !== 'preview') {
+  if (!state.sessionId) {
     toast('No session open', 'Pick a session on the left, or start a new one.');
     return;
   }
@@ -1443,7 +1409,6 @@ async function send() {
   }
 }
 
-// Messaging from the design preview starts a real session in General.
 // A session always starts in Single mode; Multi is switched live.
 async function ensureSession() {
   if (state.sessionId) return state.sessionId;
@@ -1452,7 +1417,6 @@ async function ensureSession() {
   const { session } = await api('POST', '/api/sessions', sessionBody(general.id));
   state.sessionId = session.id;
   state.view = 'session';
-  state.expanded = false;
   state.mode = sessionMode(session);
   renderMode();
   setView();
@@ -1676,12 +1640,6 @@ function wire() {
   $('composer').addEventListener('submit', (e) => { e.preventDefault(); send(); });
   $('stopBtn').addEventListener('click', interrupt);
   $('modeToggle').addEventListener('click', switchMode);
-  $('expandBtn').addEventListener('click', () => {
-    if (state.mode === 'single') return; // nothing to expand to in Single
-    state.expanded = !state.expanded;
-    $('stage').classList.toggle('chat-expanded', state.expanded);
-    $('expandBtn').title = state.expanded ? 'Collapse back to the role cards' : 'Expand the conversation over the role cards';
-  });
   $('menuBtn').addEventListener('click', () => $('sidebar').classList.toggle('open'));
   $('emptyNewSession').addEventListener('click', () => createSession(state.projects.find((p) => p.general)?.id));
   $('addProjectBtn').addEventListener('click', addProject);
@@ -1746,7 +1704,6 @@ function wire() {
     if (rename) { state.renaming = rename.dataset.rename; renderTree(); return; }
     const fresh = e.target.closest('[data-new]');
     if (fresh) { createSession(fresh.dataset.new); return; }
-    if (e.target.closest('[data-preview]')) { openPreview(); return; }
     const project = e.target.closest('[data-project]');
     if (project) { toggleProject(project.dataset.project); return; }
     const row = e.target.closest('[data-session]');

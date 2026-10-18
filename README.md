@@ -101,30 +101,30 @@ Both families are now vendored as variable fonts in `web\vendor\fonts\`
 
 - violet (`#625bf6`, soft `#302d59`) comes from the design spec and drives
   every fill: primary buttons, the active nav item, the current tree row,
-  the active role cards, the user message, the active plan step.
+  the user message, and the Single mode toggle.
 - orange (`#ff7d1a`) is reserved for accents only: accent text, borders
   (connector rails, the lit arrowhead) and dot-ants.
 - green / amber / red are semantic only — never decorative.
 
 Affordance colours: `+` add is green, `✕` delete is red, `⚙`/`✎` are yellow.
 
-**Sample vs. live.** Anything the app cannot really do yet is labelled
-`SAMPLE` on the panel and its controls carry `data-soon`, which raises a
-toast naming the stage that will wire it. The `calendar` and `resume-tailor`
-projects are design previews; the `General` project and its sessions are real.
+**Sample vs. live.** The UI is live-only now: the design-preview entry and the
+`SAMPLE` badges were removed before live testing, so nothing shows invented
+content. What is not wired yet carries `data-soon`, which raises a toast naming
+the stage that will wire it; the role cards' per-role activity is the remaining
+stub — they show the real model/effort controls and nothing else.
 
 **Left rail is two-tier.** A project is a panel with its own surface, a
 chevron, and its sessions indented on a guide line inside it. Sessions never
 carry a background, so the two tiers never read alike.
 
 **Connectors.** The idle structure is small round dots at 75% opacity with no
-arrowheads. The one live connection is drawn as a solid orange path from the
-requester, down the spine and into the worker, ending in an arrowhead that
-touches the card edge, with pale glowing ants travelling it. `web\app.js`
-computes that path from the real card and connector-cell boxes
-(`drawActivePath`) at full precision — the spine's exact centreline and the
-dotted band's exact centre — so the orange covers the dots with no sub-pixel
-step, and it survives any layout change.
+arrowheads, and that is all the cards show today. The live path — a solid orange
+line from requester to worker with pale glowing ants — is already implemented in
+`drawActivePath`: it computes the route from the real card and connector-cell
+boxes at full precision (the spine's exact centreline, the dotted band's exact
+centre) so the orange covers the dots with no sub-pixel step. It activates when
+the orchestration layer marks a real connection (stage 5).
 
 **No topbar.** The main pane starts at the top edge. Breadcrumbs were dropped
 (the tree highlights the current project and session) and the default model /
@@ -217,9 +217,9 @@ the project whose directory they run in.
   the model for a short title through the engine's one-shot `generate` route —
   which does **not** add anything to the transcript — and renames the session.
   One attempt per session, never for a session you have named yourself.
-- **The design topology, plan and tools table are sample data.** They live
-  behind the `Design preview` entry in the tree and are labelled wherever they
-  appear; real orchestration is stages 3–6.
+- **The role cards are live controls, not status.** They carry the per-role
+  model and thinking-effort pickers; per-role activity (what each worker is
+  doing) arrives with the orchestration layer in stages 3–6.
 
 **Interaction rules.**
 - **Button labels are Title Case**, always ("Browse Folder", "Allow Once", "Add Project"). Nothing else is forced to a case.
@@ -268,13 +268,18 @@ The composer's toggle sits left of the message box. **Both modes have the full
 toolset** — that is the point of them.
 
 - **Every new session starts in Single.** One Architect, all tools, delegation
-  denied; the role cards are not rendered, so a Single session pays nothing for
-  them.
-- **Switching to Multi** slides the chat panel down, reveals the role cards and
-  clears the delegation deny, so the Architect can hand work to subagents.
+  denied. The chat panel is content-sized and pinned to the bottom: empty, it is
+  just the composer; it grows upward as the conversation fills, to a maximum of
+  `80vh`. The role cards cost nothing — the wrapper is 0px tall.
+- **Switching to Multi** (the toggle turns **orange**; Single is **violet**,
+  white text on both) slides the chat down and reveals the cards **at their full
+  measured height** — they are never cut off mid-card — and clears the
+  delegation deny, so the Architect can hand work to subagents.
 - **Switching back to Single** slides the chat up and restores the deny. The
   same session keeps its transcript — the mode is a live property of the open
   session, not something chosen at creation.
+- The composer placeholder reads `Message` in Single and
+  `Message the Architect…` in Multi.
 
 Single is a **permission ruleset on an ordinary session** that denies only the
 delegation tool:
@@ -297,10 +302,11 @@ flips an open session: `[]` clears the deny, the ruleset reinstates it. There is
 no target picker in the composer — every message goes to the Architect; each
 role's model and thinking effort are set on its own card.
 
-**Role activity is still sample data.** The cards' actions and footers come from
-the mockup and are labelled SAMPLE when shown around a real session. What is
-real today: the per-role model/effort choice, the delegation permission, and the
-reveal itself.
+**Delegation is real, verified live.** In Multi the Architect called `subagent`
+(general, `completed`) and answered with the worker's reply. The cards
+themselves still show no per-role activity — that arrives with the
+orchestration layer; what exists today is the model/effort choice per role, the
+delegation permission, and the reveal.
 
 ## Markdown
 
