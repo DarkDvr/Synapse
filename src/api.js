@@ -202,10 +202,16 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
       }
       // Array args, never a shell string: the directory is the operator's, and
       // it must not be able to turn into a command.
+      //
+      // A command prompt goes through `start`, because a `cmd.exe` spawned
+      // directly by this process has no console of its own and exits instantly
+      // (verified: exit 0 within a second, no window). `start` asks the shell to
+      // create the window, and it survives.
       const cmd = what === 'cmd';
-      const child = cmd
-        ? spawn('cmd.exe', ['/K', 'cd', '/d', project.directory], { detached: true, stdio: 'ignore' })
-        : spawn('explorer.exe', [project.directory], { detached: true, stdio: 'ignore' });
+      const args = cmd
+        ? ['/c', 'start', '', 'cmd.exe', '/K', `cd /d ${project.directory}`]
+        : [project.directory];
+      const child = spawn(cmd ? 'cmd.exe' : 'explorer.exe', args, { detached: true, stdio: 'ignore' });
       child.unref();
       app.info(`opened ${cmd ? 'a command prompt' : 'Explorer'} at ${project.directory}`);
       return { ok: true };

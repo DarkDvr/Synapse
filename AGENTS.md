@@ -332,9 +332,23 @@ ordinary file tools; there is no tool and no store for it.
   the rule sat flush against the words.
 - **There is no Project panel, and no path label anywhere.** The rail is Project
   plan + Tools in use; each project in the sidebar carries its own **Browse**
-  and **Cmd** shortcuts on a `.tree-project-actions` row under its header.
+  and **Cmd** shortcuts on a `.tree-project-actions` row under its header, with
+  a **Sessions:** label above the indented list so that block is never a mystery.
   `POST /api/projects/{id}/open` spawns a detached GUI process (array args, never
   a shell string), and both branches are validated before anything is spawned.
+- **A command prompt needs `start`.** `spawn('cmd.exe', ['/K', 'cd', '/d', dir])`
+  exits with code 0 within a second and no window ever appears: a console
+  spawned directly by a process that has none has no console to inherit. The
+  working form is `cmd.exe /c start "" cmd.exe /K cd /d <dir>` — verified by
+  finding the new window's title, then closing it by PID.
+- **Explorer takes about a second to show a window**, and that is Explorer, not
+  us: `POST /open` answers in ~57ms. Because the delay is real but not ours, the
+  button carries an `:active` state so the click is acknowledged immediately.
+- **Speaker headers are yellow, and every turn has a hairline above it.** The
+  label is the speaker (`You` / `Architect` / `Harness · …`), so a harness report
+  no longer repeats `[harness]` in its own text — and old messages are stripped
+  at render time. The operator's label stays white: warm text on the violet
+  bubble breaks the palette (it was orange, and read badly).
 - **A polled reader must not log on every poll.** `logPlanState` keys on a
   signature of the state (issues + every task's id and status) and speaks only
   when it changes; the pane reads the plan every few seconds, so anything dumber

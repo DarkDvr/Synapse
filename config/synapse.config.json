@@ -57,7 +57,11 @@
     "resetOnBoot": false
   },
   "ui": {
-    "answerBg": "#191f19"
+    "answerBg": "#232f23",
+    "harnessBg": "#292715"
+  },
+  "worker": {
+    "timeoutSec": 300
   },
   "logging": {
     "level": "info",

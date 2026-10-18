@@ -886,6 +886,7 @@ function renderTree() {
     if (open) {
       // New Session sits at the bottom: sessions read oldest-first, so the new
       // one belongs where it will actually land.
+      html.push(`<div class="tree-sessions-label">Sessions:</div>`);
       html.push(`<div class="tree-sessions">${p.sessions.map(sessionRow).join('')}${newSessionRow(p.id)}</div>`);
     }
     html.push('</div>');
@@ -1309,14 +1310,18 @@ function renderMessage(m) {
   }
   if (m.type === 'synthetic') {
     // The harness speaking: a worker's report, or the harness telling the
-    // Architect something went wrong. Deliberately not dressed as the operator —
-    // nobody typed it — and not as the Architect either, since it is what the
-    // Architect is answering. Rendered as markdown in a panel of its own colour,
-    // because a worker's report is prose with headings and code in it.
+    // Architect something went wrong. Same speaker header as the Architect —
+    // it is a speaker, not a special case — with the report itself in a panel of
+    // its own colour, because a report is prose with headings and code in it.
+    //
+    // The leading "[harness]" is stripped because the header already names the
+    // speaker. Reports written before that was true are still in the transcript,
+    // so this is done here rather than only at the source.
     const label = m.description ? esc(m.description) : 'Harness';
+    const body = String(m.text || '').replace(/^\s*\[harness\]\s*/i, '');
     return `<div class="msg harness" data-msg="harness"><div class="msg-body">
       ${stamp}<span class="msg-role">Harness · ${label}</span>
-      <div class="msg-harness">${renderMarkdown(m.text)}</div>
+      <div class="msg-harness">${renderMarkdown(body)}</div>
     </div></div>`;
   }
   if (m.type === 'assistant') {

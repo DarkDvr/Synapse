@@ -110,7 +110,7 @@ export function createRunner({ engine, logger, getConfig }) {
           await wake(sessionId, session.directory, {
             description: `delegate ${request.task} refused`,
             text:
-              `[harness] Nothing was run: delegation is off in Single mode. ` +
+              `Nothing was run: delegation is off in Single mode. ` +
               `Ask the operator to switch to Multi, then delegate ${request.task} again.`,
           });
         }
@@ -142,7 +142,7 @@ export function createRunner({ engine, logger, getConfig }) {
       await wake(architectId, dir, {
         description: `delegate ${request.task} rejected`,
         text:
-          `[harness] Nothing was run: the plan has no task "${request.task}". ` +
+          `Nothing was run: the plan has no task "${request.task}". ` +
           `Check the id against the plan file and ask again.`,
       });
       return;
@@ -153,7 +153,7 @@ export function createRunner({ engine, logger, getConfig }) {
       await wake(architectId, dir, {
         description: `delegate ${request.task} deferred`,
         text:
-          `[harness] Nothing was run yet: another task is already running in this project. ` +
+          `Nothing was run yet: another task is already running in this project. ` +
           `Ask again when it reports back.`,
       });
       return;
@@ -177,7 +177,7 @@ export function createRunner({ engine, logger, getConfig }) {
       await wake(architectId, dir, {
         description: `delegate ${task.id} refused`,
         text:
-          `[harness] Nothing was run: ${task.id} has already been attempted ${attempts} times in this ` +
+          `Nothing was run: ${task.id} has already been attempted ${attempts} times in this ` +
           `project, and the harness will not keep spending turns on it. Either the task needs to be ` +
           `broken down differently, or a different role or model for it, or the operator needs to ` +
           `decide. Mark ${task.id} blocked with what you have learned and say so to the operator.`,
@@ -374,10 +374,10 @@ export function createRunner({ engine, logger, getConfig }) {
   function report({ task, role, outcome, ms, text, files, workerId, planTouched, auto, timeoutMs }) {
     const head =
       outcome === 'completed'
-        ? `[harness] ${task.id} (${role}) finished in ${Math.round(ms / 1000)}s.`
+        ? `${task.id} (${role}) finished in ${Math.round(ms / 1000)}s.`
         : outcome === 'timeout'
-          ? `[harness] ${task.id} (${role}) did not finish within ${Math.round(timeoutMs / 1000)}s and was interrupted.`
-          : `[harness] ${task.id} (${role}) could not run.`;
+          ? `${task.id} (${role}) did not finish within ${Math.round(timeoutMs / 1000)}s and was interrupted.`
+          : `${task.id} (${role}) could not run.`;
     const lines = [head];
     // The evidence, never omitted: a worker that claims a file it did not write
     // is a real failure mode (it happened on the first run: the report named
@@ -422,3 +422,4 @@ export function createRunner({ engine, logger, getConfig }) {
 
   return { handleTurn, requestsIn };
 }
+

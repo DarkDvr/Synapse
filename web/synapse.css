@@ -372,16 +372,24 @@ body.dark .sidebar .nav-link.active > span:first-child { color: #fff; }
 
 /* The project's own two shortcuts, right under its header. The rail's Project
    panel is gone: the path was never needed, and opening the folder or a prompt
-   belongs with the project it acts on. */
-.tree-project-actions { display: flex; gap: 6px; padding: 0 4px 6px 26px; }
+   belongs with the project it acts on. Centred on the panel's own padding, so
+   the pair reads as one control rather than as two stray buttons. */
+.tree-project-actions { display: flex; gap: 6px; padding: 2px 8px 5px; }
 .btn-thin {
-  flex: 1 1 0; min-width: 0;
-  height: 22px; padding: 0 6px; border-radius: 6px; cursor: pointer;
+  flex: 1 1 0; min-width: 0; height: 22px; padding: 0 6px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 6px; cursor: pointer;
   background: rgba(255, 255, 255, 0.035); border: 1px solid #33363c;
   color: #a8acb3; font-family: inherit; font-size: 10.5px; font-weight: 600;
   letter-spacing: 0.02em;
 }
 .btn-thin:hover { background: var(--violet-faint); border-color: var(--violet-line); color: #fff; }
+/* Explorer takes about a second to put its window up, so the button has to
+   answer the click itself or it feels dead. */
+.btn-thin:active { background: var(--violet-soft); border-color: var(--violet-line); color: #fff; }
+
+/* the sessions list gets a name, so the indented block is never a mystery */
+.tree-sessions-label { padding: 3px 10px 1px; font-size: 11px; color: #6d717a; }
 
 /* the live marker: reserved space, revealed only while work is running */
 .tree-live {
@@ -724,7 +732,13 @@ body[data-mode="single"] .keep-toggle { display: none; }
   letter-spacing: 0.08em; text-transform: uppercase;
   color: var(--muted); margin-right: 7px; vertical-align: 1.5px;
 }
-.msg.user .msg-role { color: var(--orange); }
+.msg.user .msg-role { color: #fff; }
+/* Speakers. Every turn is separated by a hairline, and the speaker's name is the
+   one yellow label in the transcript so the eye finds it when scanning back.
+   The operator's own label stays white: warm text on the violet bubble breaks
+   the palette (it was orange before, and read badly). */
+.msg + .msg { border-top: 1px solid #2b2e35; padding-top: 9px; }
+.msg-role { color: var(--yellow); }
 .msg-time {
   float: right; margin-left: 10px;
   font-family: var(--mono); font-size: 10px; line-height: 1.7;
@@ -1017,7 +1031,7 @@ body[data-mode="single"] .keep-toggle { display: none; }
 .plan-title {
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
   overflow: hidden; overflow-wrap: anywhere;
-  font-size: 12px; line-height: 1.4; color: var(--text);
+  font-size: 12.5px; line-height: 1.4; font-weight: 600; color: #e6e8ec;
 }
 .plan-id {
   font-family: var(--mono); font-size: 10px; color: #7b8089;
@@ -1115,15 +1129,11 @@ body[data-mode="single"] .keep-toggle { display: none; }
   font-family: var(--mono); font-size: 12px; text-transform: lowercase;
 }
 
-/* the harness speaking: a worker's report, or a problem handed back. The amber
-   rule is the "not your voice" marker; the panel below carries the colour. The
-   padding is the gap between that rule and the text — without it the line sat
-   flush against the words. */
+/* the harness speaking: a worker's report, or a problem handed back. Its header
+   is the same speaker header as the Architect's — the harness is a speaker, not
+   a special case — and the amber rule plus the panel are what mark it as not
+   being the operator's or the Architect's words. */
 .msg.harness .msg-body { border-left: 2px solid var(--amber); padding-left: 10px; }
-.msg.harness .msg-role {
-  font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.04em;
-  color: var(--amber); text-transform: uppercase;
-}
 /* The report itself: same panel shape as the Architect's answer, its own colour
    (`ui.harnessBg`). Markdown matters here — a report has headings, lists and
    code in it, and it is read, not glanced at. */
