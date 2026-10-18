@@ -49,10 +49,12 @@ F:\dev\Synapse
 │  ├─ projects.js              the project registry (data\projects.json)
 │  ├─ titler.js                names a session after its first answer
 │  ├─ toolstats.js             the tool-call census (data\tool-stats.json)
+│  ├─ plans.js                 the Architect's plan, per session (data\plans.json)
 │  ├─ modelcache.js            per-model knowledge (data\model-cache.json)
 │  ├─ probe.js                 the tool probe + one-off model toolset checks
 │  ├─ search.js                dependency-free DuckDuckGo search
 │  ├─ mcp/search-server.js     stdio MCP server exposing websearch to the engine
+│  ├─ mcp/plan-server.js       stdio MCP server the Architect publishes its plan through
 │  ├─ titles.js                the shared "TBD" placeholder
 │  ├─ api.js                   stable engine-agnostic API
 │  ├─ server.js                HTTP + static UI + SSE relay
@@ -258,6 +260,39 @@ the project whose directory they run in.
 - **The role cards are live controls, not status.** They carry the per-role
   model and thinking-effort pickers; per-role activity (what each worker is
   doing) arrives with the orchestration layer in stages 3–6.
+
+## The project plan
+
+The Architect does not describe its plan in prose — it **publishes** it, as
+structured tasks, through Synapse's own MCP tool. The right pane then shows what
+the job is, who does what, and where it is stuck.
+
+```text
+plan_publish  { goal, tasks: [{ title, role, detail?, dependsOn? }] }
+task_status   { id, status, result?, note? }
+```
+
+`status` is `todo · doing · done · blocked · failed`. Task ids (`t1`, `t2`, …)
+come back in the tool's own reply, which is why the model always knows what to
+address. `blocked` is the one that matters: it means the work cannot proceed
+without the operator, and it is the only red the pane paints for a live task.
+Roles are the cards the topology already has (`architect, critic, coder-1,
+designer, coder-2, auditor, coder-3`), so a task already says which model and
+effort will run it — that is the point of publishing rather than describing.
+
+**There is no IPC.** The plan travels the way the tool census does: the engine
+records every tool call, with its full input, in the session transcript, and
+Synapse reads the transcript on each finished turn (`src/plans.js`). The MCP
+server is deliberately stateless — it validates the call and hands back the ids;
+the record that matters is the turn itself. Two properties fall out of that, and
+both are tested: applying a transcript is **idempotent and ordered**, so
+replaying it (after a restart, say) lands on exactly the same state with the
+same timestamps; and a **re-publish keeps the status of any task whose title it
+repeats**, so the Architect can restate its plan without losing progress.
+
+The pane is empty until a plan exists, and says so. Ask the Architect to plan
+the job — the tool description is written to encourage it, but nothing forces a
+plan out of a simple question.
 
 **Interaction rules.**
 - **Button labels are Title Case**, always ("Browse Folder", "Allow Once", "Add Project"). Nothing else is forced to a case.

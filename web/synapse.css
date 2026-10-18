@@ -939,6 +939,46 @@ body[data-view="session"] .chat-dock:not(.has-history) .composer { border-top-co
 
 .rail-note { margin: 0; font-size: 12.5px; line-height: 1.5; color: #82868e; }
 
+/* ── the development plan ────────────────────────────────────────────────
+   The Architect's plan, one row per task. Status is carried by a flat dot and
+   the row's own tint, never by colouring the text: green done, amber in
+   flight, red blocked (needs the operator) or failed, grey not started. */
+.plan-body { min-width: 0; }
+.plan-goal {
+  margin: 0 0 10px; font-size: 12px; line-height: 1.45; color: #b9bdc4;
+}
+.plan-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; }
+.plan-task {
+  display: grid; grid-template-columns: 10px minmax(0, 1fr) auto;
+  align-items: start; gap: 8px; padding: 6px 7px; border-radius: 7px;
+  border: 1px solid transparent; background: rgba(255, 255, 255, 0.02);
+}
+/* display: inline-block — as an inline span the dot ignores width and height
+   and paints as a 4px square (cost an hour once; it is in AGENTS.md) */
+.plan-dot {
+  display: inline-block; width: 7px; height: 7px; margin-top: 4px;
+  border-radius: 50%; background: #5b6068; flex: none;
+}
+.plan-task[data-status="doing"] { background: rgba(232, 163, 61, 0.07); border-color: rgba(232, 163, 61, 0.22); }
+.plan-task[data-status="doing"] .plan-dot { background: var(--amber); }
+.plan-task[data-status="done"] .plan-dot { background: var(--green); }
+.plan-task[data-status="blocked"],
+.plan-task[data-status="failed"] { background: rgba(240, 86, 63, 0.07); border-color: rgba(240, 86, 63, 0.24); }
+.plan-task[data-status="blocked"] .plan-dot,
+.plan-task[data-status="failed"] .plan-dot { background: var(--red); }
+
+.plan-main { display: grid; gap: 2px; min-width: 0; }
+.plan-title { font-size: 12px; line-height: 1.4; color: var(--text); overflow-wrap: anywhere; }
+.plan-task[data-status="done"] .plan-title { color: #9aa0a8; }
+.plan-result { font-size: 11px; line-height: 1.4; color: #82868e; overflow-wrap: anywhere; }
+.plan-note { font-size: 11px; line-height: 1.4; color: var(--red); overflow-wrap: anywhere; }
+.plan-role {
+  font-family: var(--mono); font-size: 10px; line-height: 1; padding: 3px 6px;
+  border-radius: 5px; background: var(--violet-faint); color: #b9b5ff;
+  border: 1px solid var(--violet-line); white-space: nowrap; margin-top: 1px;
+}
+.plan-meta { margin-top: 10px; font-family: var(--mono); font-size: 11px; }
+
 /* ── settings: a compact two-column form ───────────────────────────────── */
 #settingsModal .modal { width: min(640px, 100%); }
 /* focus rings must never be clipped by the scroll container, so leave room */

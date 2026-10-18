@@ -14,7 +14,7 @@ import {
   normalizeSession,
   parseModelRef,
 } from './base.js';
-import { SEARCH_SERVER, ENGINE_PID_FILE } from '../paths.js';
+import { SEARCH_SERVER, PLAN_SERVER, ENGINE_PID_FILE } from '../paths.js';
 
 const ENGINE_USERNAME = 'opencode';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -93,7 +93,6 @@ export class OpenCodeEngine extends Engine {
    * working one instead. Any other config already in that file is preserved.
    */
   ensureEngineConfig(home) {
-    if (this.cfg.localSearch === false) return;
     const cfgFile = path.join(home.config, 'opencode', 'opencode.json');
     let cfg = {};
     try { cfg = JSON.parse(fs.readFileSync(cfgFile, 'utf8') || '{}'); } catch { cfg = {}; }
@@ -103,16 +102,34 @@ export class OpenCodeEngine extends Engine {
     // cannot linger alongside the new one.
     const servers = { ...((cfg.mcp || {}).servers || {}) };
     delete servers.synapse;
-    servers['synapse-search'] = {
+    delete servers['synapse-search'];
+    delete servers['synapse-plan'];
+
+    // Our search, unless the operator switched it off. This used to return early
+    // from the whole function, which also cost them the model limit overrides
+    // below — so the guard wraps the server, not the config write.
+    if (this.cfg.localSearch !== false) {
+      servers['synapse-search'] = {
+        type: 'local',
+        command: [process.execPath, SEARCH_SERVER],
+        // Without this the engine exposes MCP tools through its code-mode tool as
+        // `tools["synapse-search"].websearch`, and the model tries to call that
+        // literal string as a tool name. Off, it is a normal tool.
+        codemode: false,
+      };
+    }
+
+    // The plan: the Architect publishes it as structured tasks here, and
+    // Synapse reads the calls back out of the transcript (src/plans.js).
+    servers['synapse-plan'] = {
       type: 'local',
-      command: [process.execPath, SEARCH_SERVER],
-      // Without this the engine exposes MCP tools through its code-mode tool as
-      // `tools["synapse-search"].websearch`, and the model tries to call that
-      // literal string as a tool name. Off, it is a normal tool.
+      command: [process.execPath, PLAN_SERVER],
       codemode: false,
     };
+
     const legacyMcp = { ...(cfg.mcp || {}) };
     delete legacyMcp['synapse-search'];
+    delete legacyMcp['synapse-plan'];
     delete legacyMcp.synapse;
 
     const next = {
@@ -162,7 +179,8 @@ export class OpenCodeEngine extends Engine {
       if (current !== body) {
         fs.writeFileSync(cfgFile, body, 'utf8');
         this.log.info(
-          `engine config: local search registered, built-in websearch disabled` +
+          `engine config: ${this.cfg.localSearch === false ? 'search disabled' : 'local search registered'}` +
+            `, plan tool registered, built-in websearch disabled` +
             (skillPaths.length ? `, ${skillPaths.length} skill path(s)` : '') +
             (limitIds.length ? `, ${limitIds.length} model limit override(s)` : ''),
         );

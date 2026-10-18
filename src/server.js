@@ -142,6 +142,7 @@ export function createServer({ api, engine, logger, config }) {
       if (seg.length === 2 && method === 'DELETE') return sendJson(res, 200, await api.deleteSession(sessionId));
       if (seg[2] === 'model' && method === 'POST') return sendJson(res, 200, await api.switchModel(sessionId, await readBody(req)));
       if (seg[2] === 'messages' && method === 'GET') return sendJson(res, 200, await api.messages(sessionId));
+      if (seg[2] === 'plan' && method === 'GET') return sendJson(res, 200, await api.plan(sessionId));
       if (seg[2] === 'messages' && method === 'POST') return sendJson(res, 200, await api.sendMessage(sessionId, await readBody(req)));
       if (seg[2] === 'interrupt' && method === 'POST') return sendJson(res, 200, await api.interrupt(sessionId));
       if (seg[2] === 'permission' && method === 'POST') return sendJson(res, 200, await api.permission(sessionId, await readBody(req)));

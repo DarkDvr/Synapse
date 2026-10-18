@@ -42,9 +42,16 @@ export const PROBE_FILE = path.join(DATA_DIR, 'probe.json');
 // discovered toolset. Survives models leaving the catalog.
 export const MODEL_CACHE_FILE = path.join(DATA_DIR, 'model-cache.json');
 
-// Synapse's own MCP server (a working web search), registered into the engine's
-// isolated config so the models can actually call it.
+// Synapse's own MCP servers, registered into the engine's isolated config so
+// the models can actually call them: a working web search (the engine's own
+// needs a provider key and answers 403 here), and the plan tool the Architect
+// publishes its development plan through.
 export const SEARCH_SERVER = path.join(ROOT, 'src', 'mcp', 'search-server.js');
+export const PLAN_SERVER = path.join(ROOT, 'src', 'mcp', 'plan-server.js');
+
+// The development plan the Architect published for each session, keyed by
+// session id. Derived from the transcript — see src/plans.js.
+export const PLANS_FILE = path.join(DATA_DIR, 'plans.json');
 
 export const PID_FILE = path.join(DATA_DIR, 'synapse.pid');
 

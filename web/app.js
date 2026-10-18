@@ -35,6 +35,8 @@ const state = {
   projects: [],
   sessionId: null,
   messages: [],
+  // The plan the Architect published for the open session (null until it does).
+  plan: null,
   permissions: [],
   busy: false,
   busySessions: new Set(),
@@ -1060,17 +1062,20 @@ async function openSession(id) {
   await loadMessages();
   refreshPending();
   renderToolUsage();
+  loadPlan();
 }
 
 function showNothing() {
   state.view = 'none';
   state.sessionId = null;
   state.messages = [];
+  state.plan = null;
   state.mode = 'single';
   renderMode();
   setView();
   renderTree();
   renderTranscript();
+  renderPlan();
 }
 
 // The live connection is drawn as one solid orange path from the requester
@@ -1554,6 +1559,62 @@ async function refreshPending() {
   if (state.view === 'session') renderTranscript();
 }
 
+// ── the development plan ────────────────────────────────────────
+// The Architect publishes it through the synapse-plan tool; Synapse reads the
+// call out of the transcript and this pane renders it. Statuses are the whole
+// point: red means the work is waiting on the operator.
+const PLAN_STATUS = { todo: 'Todo', doing: 'Doing', done: 'Done', blocked: 'Blocked', failed: 'Failed' };
+
+async function loadPlan() {
+  if (!state.sessionId) {
+    state.plan = null;
+    renderPlan();
+    return;
+  }
+  try {
+    state.plan = (await api('GET', `/api/sessions/${encodeURIComponent(state.sessionId)}/plan`)).plan;
+  } catch {
+    state.plan = null;
+  }
+  renderPlan();
+}
+
+function renderPlan() {
+  const body = $('planBody');
+  if (!body) return;
+  const plan = state.plan;
+  const tasks = plan?.tasks || [];
+  if (!tasks.length) {
+    body.innerHTML = `<p class="rail-note">No plan yet. Ask the Architect to plan this job.</p>`;
+    return;
+  }
+
+  const counts = {};
+  for (const t of tasks) counts[t.status] = (counts[t.status] || 0) + 1;
+  const meta = [`${counts.done || 0}/${tasks.length} done`];
+  if (counts.doing) meta.push(`${counts.doing} in flight`);
+  if (counts.blocked) meta.push(`${counts.blocked} blocked`);
+  if (counts.failed) meta.push(`${counts.failed} failed`);
+
+  body.innerHTML =
+    (plan.goal ? `<p class="plan-goal">${esc(plan.goal)}</p>` : '') +
+    `<ol class="plan-list">${tasks
+      .map((t) => {
+        const status = PLAN_STATUS[t.status] ? t.status : 'todo';
+        return `<li class="plan-task" data-status="${status}">
+          <span class="plan-dot" role="img" aria-label="${esc(PLAN_STATUS[status])}"></span>
+          <span class="plan-main">
+            <span class="plan-title">${esc(t.title)}</span>
+            ${t.result ? `<span class="plan-result">${esc(t.result)}</span>` : ''}
+            ${t.note ? `<span class="plan-note">${esc(t.note)}</span>` : ''}
+          </span>
+          <span class="plan-role">${esc(t.role)}</span>
+        </li>`;
+      })
+      .join('')}</ol>` +
+    `<p class="rail-note plan-meta">${esc(meta.join(' · '))}</p>`;
+}
+
 async function renderToolUsage() {
   const note = $('toolUsageNote');
   const table = $('toolUsage');
@@ -1577,7 +1638,7 @@ async function renderToolUsage() {
     .slice(0, 8)
     .map(
       (t) => `<tr>
-        <td class="tool-name">${esc(t.key)}</td>
+        <td class="tool-name" title="${esc(t.key)}">${esc(t.key)}</td>
         <td class="tool-time">${t.calls}</td>
         <td class="tool-time${t.failed ? ' slow' : ''}">${t.failed || ''}</td>
         <td class="tool-time${t.avgMs > 1000 ? ' slow' : ''}">${t.avgMs ? fmtMs(t.avgMs) : ''}</td>
@@ -1810,6 +1871,12 @@ function connectStream() {
         const passed = results.filter((r) => r.ok).length;
         toast('Tool Probe Finished', `${passed}/${results.length} cases clean — see Tools In Use.`);
       }
+      return;
+    }
+
+    // The Architect published or moved its plan.
+    if (ev.kind === 'plan') {
+      if (ev.sessionId === state.sessionId) loadPlan();
       return;
     }
 
@@ -2237,6 +2304,9 @@ function wire() {
     if (stalled !== lastStalled) { lastStalled = stalled; renderTree(); }
   }, 5000);
   setInterval(() => { if (state.view !== 'none') renderToolUsage(); }, 30000);
+  // Belt and braces for the plan pane: the SSE event is the fast path, this
+  // catches a tab that missed it.
+  setInterval(() => { if (state.view !== 'none') loadPlan(); }, 30000);
 }
 
 async function boot() {

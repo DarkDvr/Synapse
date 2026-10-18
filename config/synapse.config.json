@@ -47,10 +47,10 @@
     "maxAsks": 3
   },
   "tools": {
-    "resetOnBoot": true
+    "resetOnBoot": false
   },
   "ui": {
-    "answerBg": "#62680d"
+    "answerBg": "#22221c"
   },
   "logging": {
     "level": "info",

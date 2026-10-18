@@ -2,7 +2,7 @@
 // Handlers call the engine adapter; nothing here knows about OpenCode.
 import { TBD_TITLE } from './titles.js';
 
-export function createApi({ getConfig, applyConfig, engine, logger, getBootError, projects, toolStats, probe, modelCache, inspectModel: inspectRef, probeDir }) {
+export function createApi({ getConfig, applyConfig, engine, logger, getBootError, projects, toolStats, plans, probe, modelCache, inspectModel: inspectRef, probeDir }) {
   const app = logger.channel('app');
 
   /** Directory comparison key: case-insensitive, no trailing separator. */
@@ -249,6 +249,8 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
     deleteSession: async (sessionId) => {
       requireReady();
       await engine.deleteSession(sessionId);
+      // A deleted session's plan has nothing left to describe.
+      plans?.clear(sessionId);
       return { ok: true };
     },
 
@@ -256,6 +258,9 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
       requireReady();
       return { messages: await engine.getMessages(sessionId) };
     },
+
+    /** The development plan the Architect published for this session. */
+    plan: async (sessionId) => ({ plan: plans ? plans.get(sessionId) : null }),
 
     sendMessage: async (sessionId, body) => {
       requireReady();

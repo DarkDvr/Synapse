@@ -210,17 +210,24 @@ guessing.
 
 ## MCP: how the engine exposes tools to models
 
-Synapse registers its own MCP server in the engine's isolated config at
+Synapse registers its own MCP servers in the engine's isolated config at
 `data\engine\opencode\config\opencode\opencode.json`, which it rewrites on every
-boot.
+boot — currently two of them: the search, and the plan tool.
 
 ```json
 {
-  "mcp": { "servers": { "synapse-search": {
-    "type": "local",
-    "command": ["<node>", "F:\\dev\\Synapse\\src\\mcp\\search-server.js"],
-    "codemode": false
-  } } },
+  "mcp": { "servers": {
+    "synapse-search": {
+      "type": "local",
+      "command": ["<node>", "F:\\dev\\Synapse\\src\\mcp\\search-server.js"],
+      "codemode": false
+    },
+    "synapse-plan": {
+      "type": "local",
+      "command": ["<node>", "F:\\dev\\Synapse\\src\\mcp\\plan-server.js"],
+      "codemode": false
+    }
+  } },
   "websearch": false,
     "skills": { "paths": ["C:\\Users\\Andrew\\.agents\\skills"] }
 }
@@ -237,6 +244,19 @@ Two non-obvious things, both found by testing:
 
 MCP tools arrive **namespaced** (`synapse-search_websearch`). Match
 names by suffix, not equality.
+
+**A stateless MCP server cannot see a session, so keep state out of it.** The
+plan tool is the worked example: an MCP server has no idea which session called
+it, so it cannot read or write per-session state on its own. It does not have
+to. The engine records **every tool call, with its full input**, in the session
+transcript — so the durable record of `plan_publish` is the turn itself, and
+`src/plans.js` reads it back exactly the way the census does. The server only
+validates the call and returns the receipt. Anything else that needs to know
+what a model asked for should follow this shape rather than inventing a port.
+
+Also: `engine.opencode.localSearch: false` used to `return` from the whole of
+`ensureEngineConfig`, which silently cost the model-limit overrides too. The
+guard now wraps only the search server.
 
 **Keep it to what is needed.** A `time` tool was added here as a special case
 for one question the operator asked while testing search, and he asked for it to
@@ -627,9 +647,42 @@ not gigabytes. Worth knowing; not worth panicking about.
   instructions. The engine takes skills globally (`skills.paths`); per-role
   gating would go through each agent's own permission rules. Decide this
   together with role instructions.
-- **Stage 3 onward**: the Architect's real dev plan in the right pane
-  (green/amber/red, red = hard-blocked), the status model, then the main-pane
-  napkin, then the Tools-in-Use feed.
+- **Stage 3 — orchestration.** The dispatch decision is settled: **Synapse owns
+  dispatch, not the engine's `subagent` tool.** The Architect cannot choose a
+  subagent's model, so leaning on `subagent` would leave every per-role pick
+  decorative and hide the orchestration inside a black box. Each step will run
+  as a real engine session with that role's model and effort instead.
+  - **3.1 done — the plan contract and the pane.** `synapse-plan`
+    (`plan_publish`, `task_status`), `src/plans.js`, the rail pane with
+    green/amber/red, red = hard-blocked. Verified in two live turns: the
+    Architect published four tasks with roles, a later turn moved two of them,
+    and the pane followed without a reload. Replay idempotency is unit-checked.
+  - **3.2 next — worker execution.** One plan step at a time, in the project's
+    own directory, with the role's model and effort; state onto the card; the
+    result written back to the plan and handed to the Architect. Needs
+    **internal sessions**: a worker session must be hidden from the rail the way
+    `workspace\_probe` already is, and `PATCH /api/session/{id}` accepts
+    `metadata`, so mark it there rather than inventing a parallel registry.
+    Test with a **one-step** plan — every step is a real turn on the operator's
+    free tier.
+  - **3.3 — role cards show live activity**, and the ✎ button opens per-role
+    instructions. Settles skills gating with it. Remember custom agents are dead
+    here (the free tier rejected every custom-agent request), so instructions
+    have to be prompt text on a default-agent session.
+  - **3.4 — the live per-session Tools-in-Use feed**, then the main-pane napkin
+    with its live path.
+  - **3.5 — housekeeping**: `engine.type` as a dropdown (only `opencode` is
+    registered), **Browse Folder** / **Cmd Here** still `data-soon` for stage 4,
+    and zeroing the stored probe results if the panel should start blank.
+- **Known issue: the census can double-count after a restart.** `recordMessages`
+  is called with the **whole transcript** on every turn and de-duplicates with an
+  in-memory `seen` set of tool-part ids — which is not persisted, while the
+  aggregates are. So the first turn in a session that predates the restart
+  re-adds that session's entire tool history. Reproduced: 2 calls → restart →
+  re-scan the same transcript → 4. Note a naive test **looks clean**, because
+  `flush()` is debounced by 2s; call `flush()` before "restarting", or the first
+  run never reaches disk. Fix is small (persist the ids, or a per-session
+  high-water mark); do it before trusting the census for anything.
 - **Multi vs Single mode.** The composer toggle flips the **open session** live;
   new sessions always start Single. Both modes have the full toolset — that is
   the whole point.
