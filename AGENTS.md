@@ -541,7 +541,7 @@ This is once per directory per process and needs no config.
   early when it has not changed, so a poll that learned nothing new does not
   touch the DOM at all. Verified live: a Reasoning block and a tool card opened
   during turn 1 were still open after turn 2 rebuilt the transcript.
-- **The answer panel is a yellow wash** (`rgba(237,194,90,0.15)`). This is a
+- **The answer panel is a warm yellow-brown wash** (`#382F19`). This is a
   deliberate exception to "yellow is an affordance colour" — it is a fill, not
   text, and no other surface uses it.
 - **Mode colours:** Multi is orange, Single is violet, both with white text and

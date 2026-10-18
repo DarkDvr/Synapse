@@ -707,14 +707,14 @@ body[data-view="session"] .chat-dock:not(.has-history) .composer { border-top-co
 .msg.user .msg-text { color: #fff; }
 
 /* ── the model's answer ───────────────────────────────────────────────────
-   Split out from the reasoning and tool noise around it: a faint yellow wash
-   (15% of --yellow over the panel surface) so the answer is the one block that
-   is obviously not chrome. Yellow is normally an affordance colour in this
-   palette; here it is a deliberate, low-opacity fill the operator asked for. */
+   Split out from the reasoning and tool noise around it: a warm yellow-brown
+   wash (#382F19) so the answer is the one block that is obviously not chrome.
+   Yellow is normally an affordance colour in this palette; here it is a
+   deliberate, low-key fill the operator chose. */
 .msg-answer {
   margin: 5px 0 0; padding: 8px 10px;
-  border: 1px solid rgba(237, 194, 90, 0.34); border-radius: 9px;
-  background: rgba(237, 194, 90, 0.15);
+  border: 1px solid rgba(237, 194, 90, 0.28); border-radius: 9px;
+  background: #382f19;
   font-size: 12.5px; line-height: 1.55; color: #d3d6db;
 }
 .msg-answer > :first-child { margin-top: 0; }
