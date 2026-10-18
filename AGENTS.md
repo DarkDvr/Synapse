@@ -426,11 +426,17 @@ This is once per directory per process and needs no config.
   **Single never trusts a measurement for its resting state.** The measured
   height drives only the 320ms collapse animation; afterwards `--reveal-h` is
   `none`, so the wrapper is exactly the Architect card by construction — a stale
-  measure can never clip the card or grow a scrollbar. And `overflow: clip` (not
-  auto, not hidden) on the Single wrapper means it is never a scroller at all:
-  no scrollbar, no wheel/keyboard/script scrolling, while mid-flight content
-  still clips correctly. Verified: wrap 60.27 = topology 60.27, `max-height:
-  none`, round-trip Multi→Single settles exact.
+  measure can never clip the card or grow a scrollbar.
+  **The role-card wrapper is `overflow: clip` in every mode — never `auto`.** It
+  must never scroll: not by wheel, keyboard, drag or script, and no scrollbar
+  may ever appear beside the cards. `auto` was wrong twice over: it made the
+  section scrollable, and a 241.06px topology under a 241px cap grew a hairline
+  scrollbar during the Multi→Single switch (scrollHeight rounds down, so the
+  overflow was invisible but real). `measureReveal()` now measures the real box
+  and rounds UP (`Math.ceil`) so the cap clears the content, and `clip` makes
+  any attempt to scroll a no-op (`scrollTop` stays 0). Verified across 41
+  frames of a Multi→Single switch at 1680px and at 1200px: every frame
+  `overflow: clip`, `scrollTop` forced to 50/60 stayed 0, gutter 0.
   **The height cap is the part that bit twice.** Below 1460px the stage is
   content-sized, so `stageBudget()` tests the *breakpoint* (`matchMedia`), not
   the stage's used height — `getComputedStyle().height` reports the used height,

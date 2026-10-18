@@ -511,9 +511,11 @@ function stageBudget(stage) {
 }
 
 function measureReveal(topo, stage) {
-  // scrollHeight is integer-rounded, so the wrapper never scrolls to reveal a
-  // half-pixel of a card
-  return Math.min(topo.scrollHeight, Math.round(stageBudget(stage)));
+  // Use the real box height, rounded UP: scrollHeight rounds down, and a
+  // 241.06px topology under a 241px cap clipped the last card's bottom border
+  // and made `overflow: auto` grow a hairline scrollbar.
+  const content = Math.ceil(topo.getBoundingClientRect().height);
+  return Math.min(content, Math.round(stageBudget(stage)));
 }
 
 /**

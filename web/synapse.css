@@ -248,15 +248,11 @@ body[data-view="session"] .stage { grid-template-rows: auto minmax(0, 1fr); gap:
   max-height: 0; opacity: 0;
   transition: max-height 0.26s ease, opacity 0.2s ease;
 }
-/* when open the wrapper may scroll on a very short window, but the measured
-   height normally equals the content, so no bar appears */
-.topology-wrap.is-open { max-height: var(--reveal-h, 600px); opacity: 1; overflow-y: auto; }
-
-/* Single: the wrapper is exactly the Architect card. `clip` — not auto, not
-   hidden — means it can never grow a scrollbar and can never be scrolled, by
-   mouse, keyboard or script: overflow is cut, and at the measured height there
-   is nothing to cut. The collapse animation still clips correctly mid-flight. */
-body[data-mode="single"] .topology-wrap.is-open { overflow: clip; }
+/* The wrapper is never a scroller. `clip` — not auto, not hidden — means it
+   cannot grow a scrollbar and cannot be scrolled by mouse, keyboard, wheel or
+   script, in either mode. The measured height is what makes it fit; content is
+   clipped only mid-animation. */
+.topology-wrap.is-open { max-height: var(--reveal-h, 600px); opacity: 1; overflow: clip; }
 
 /* workers appear only in Multi; the path layer always stays */
 body[data-view="session"] .topology > *:not(.topo-architect):not(.path-layer) { display: none; }
