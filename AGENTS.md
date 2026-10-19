@@ -190,6 +190,9 @@ web/
 skills/               shipped WITH Synapse, always on the engine's skill path
   visual-review/      render a page to PNG, then read it (the agents' eyes)
   ui-design/          the Designer's craft brief: direction, tokens, states, spec
+  frontend-design/    taste and direction (Apache 2.0)
+  aesthetic-foundations/  composition, colour, hierarchy, a critique protocol
+  code-craft/         the coders' brief: small surface, fail loudly, prove it
 data/                 runtime state (projects, census, probe results, engine home)
 logs/                 one file per channel: app, engine, session, tools
 docs/                 design mockups (stage-1-mockup-rev*.pdf, stage-2-*.pdf)
@@ -775,6 +778,26 @@ with it:
 |---|---|
 | `visual-review` | renders a mock and reads the PNG — the only way these agents see |
 | `ui-design` | the Designer's craft: direction, tokens, every state, a spec table |
+| `frontend-design` | taste and direction: distinctiveness, typography, avoiding template defaults (Apache 2.0, licence kept) |
+| `aesthetic-foundations` | composition, colour and hierarchy theory plus a critique protocol, for judging a design |
+| `code-craft` | the coders' brief: match the surrounding style, keep the surface small, fail loudly, prove it, report what ran |
+
+**What each role gets by default.** Architect `visual-review`; Designer all four
+design skills; every coder `code-craft` plus `visual-review` (a coder that can
+screenshot its own shell before reporting is cheaper than a round trip); the
+Inventor and the Hacker get none — the Hacker's work is the focus dial, and an
+ideas role handed design skills starts designing.
+
+**One skill was deliberately not shipped, and why matters.**
+`using-superpowers` reads like coding guidance and is not: it is a rule about
+*when to invoke skills* ("if there is even a 1% chance a skill might apply, you
+MUST invoke it"), its examples name `superpowers:brainstorming` and
+`systematic-debugging`, neither of which is installed here, and it carries seven
+per-harness tool references (Claude Code, Codex, Pi, Antigravity, Hermes, Muse)
+that mean nothing in a deepseek session. Given to a coder it spends the turn
+announcing skills that do not exist. The operator wanted "best practices to write
+good code", so `code-craft` was written instead. Read a skill before shipping it;
+a description is a claim, not a measurement.
 
 The operator's own folders are extra paths on top (`engine.opencode.skillPaths`,
 one `;`-separated line in Settings → Skills). Nothing is downloaded at runtime — the
