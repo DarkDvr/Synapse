@@ -155,16 +155,43 @@ function closeError() { $('errorModal').hidden = true; }
 // ── generic dialog (confirmations and small forms) ──────────────
 let dialogResolve = null;
 let dialogFields = [];
+let dialogDismissable = true;
+let dialogOkResult;
 
-function openDialog({ title, message = '', fields = [], confirmLabel = 'OK', danger = false, afterRender }) {
+function openDialog({
+  title,
+  message = '',
+  fields = [],
+  confirmLabel = 'OK',
+  danger = false,
+  extra = null,
+  okResult = undefined,
+  dismissable = true,
+  tone = null,
+  afterRender,
+}) {
   return new Promise((resolve) => {
     dialogResolve = resolve;
     dialogFields = fields;
+    dialogDismissable = dismissable;
+    dialogOkResult = okResult;
     $('dialogTitle').textContent = title;
     $('dialogMessage').textContent = message;
     $('dialogMessage').hidden = !message;
     $('dialogOk').textContent = confirmLabel;
     $('dialogOk').className = `btn btn-sm ${danger ? 'btn-danger' : 'btn-primary'}`;
+    // A third choice, for the one dialog that needs three (a folder that already
+    // exists: cancel, wipe it, or carry on with it).
+    const extraBtn = $('dialogExtra');
+    extraBtn.hidden = !extra;
+    if (extra) {
+      extraBtn.textContent = extra.label;
+      extraBtn.dataset.result = extra.result || 'extra';
+    }
+    // "Non-bypassable" means exactly this: no close button, no backdrop dismiss, no
+    // Escape. The operator must pick one of the answers.
+    $('dialogClose').hidden = !dismissable;
+    document.querySelector('#dialogModal .modal')?.classList.toggle('is-clash', tone === 'clash');
     $('dialogBody').innerHTML = fields
       .map((f) => {
         const control = f.type === 'select'
@@ -1147,21 +1174,38 @@ async function addProject() {
     return;
   }
   try {
-    const created = await api('POST', '/api/projects', { name: name || undefined, directory });
-    await loadProjects();
-    // A folder that already had a plan keeps it — that is how a re-added project
-    // continues its work, and how a reused name inherits a finished one. Say so
-    // once, instead of letting the pane look broken.
-    const prior = created?.existingPlan;
-    if (prior) {
-      toast(
-        'Folder Already Has A Plan',
-        `${prior.tasks} task(s), ${prior.done} done - the Architect will continue that plan, not start ` +
-          `a new one. For a clean start: stop Synapse, delete the folder, then add it again.`,
-      );
-    } else {
-      toast('Project added', directory);
+    // Look before creating. A folder that was a project once still holds everything
+    // — and a reused name ("Test Project 1") resolves to the very same path — so
+    // the operator is asked, not told, and nothing is created or deleted until
+    // they answer.
+    const info = await api('POST', '/api/projects/inspect', { directory });
+    if (info.plan) {
+      const mins = info.plan.mtime ? Math.max(1, Math.round((Date.now() - info.plan.mtime) / 60000)) : null;
+      const ago = mins === null ? '' : mins < 90 ? `, last touched ${mins} min ago` : `, last touched ${Math.round(mins / 60)}h ago`;
+      const choice = await openDialog({
+        title: 'This folder was a project before',
+        message:
+          `"${directory}" already holds ${info.plan.tasks} task(s), ${info.plan.done} done` +
+          `${info.files ? ` and ${info.files} file(s)` : ''}${ago}.\n\n` +
+          (info.plan.goal ? `Its goal was: ${info.plan.goal}\n\n` : '') +
+          `Cancel and create a project with a different name, delete that folder off the drive and start ` +
+          `fresh, or re-use it and continue where it left off.`,
+        confirmLabel: 'Delete Folder And Start Fresh',
+        danger: true,
+        extra: { label: 'Re-Use It', result: 'reuse' },
+        okResult: 'wipe',
+        dismissable: false,
+        tone: 'clash',
+      });
+      if (!choice) return; // cancelled: nothing created, nothing deleted
+      if (choice === 'wipe') {
+        await api('POST', '/api/projects/wipe', { directory });
+        toast('Folder Wiped', `"${directory}" is empty — starting fresh.`);
+      }
     }
+    await api('POST', '/api/projects', { name: name || undefined, directory });
+    await loadProjects();
+    toast('Project added', directory);
   } catch (err) {
     toast('Could not add the project', err.message);
   }
@@ -3060,10 +3104,15 @@ function wire() {
     if (err) { e.preventDefault(); openError(err.dataset.errorTitle || 'Error', err.dataset.error || ''); }
   });
 
-  $('dialogOk').addEventListener('click', () => closeDialog(readDialog()));
+  $('dialogOk').addEventListener('click', () =>
+    closeDialog(dialogOkResult !== undefined ? dialogOkResult : readDialog()),
+  );
+  $('dialogExtra').addEventListener('click', () => closeDialog($('dialogExtra').dataset.result || 'extra'));
   $('dialogCancel').addEventListener('click', () => closeDialog(null));
   $('dialogClose').addEventListener('click', () => closeDialog(null));
-  $('dialogModal').addEventListener('click', (e) => { if (e.target === $('dialogModal')) closeDialog(null); });
+  $('dialogModal').addEventListener('click', (e) => {
+    if (e.target === $('dialogModal') && dialogDismissable) closeDialog(null);
+  });
   $('dialogModal').addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target.tagName === 'INPUT') { e.preventDefault(); $('dialogOk').click(); } });
 
   $('closeError').addEventListener('click', closeError);
@@ -3080,7 +3129,12 @@ function wire() {
   $('settingsModal').addEventListener('click', (e) => { if (e.target === $('settingsModal')) closeSettings(); });
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
-    if (!$('dialogModal').hidden) closeDialog(null);
+    // A non-dismissable dialog (the folder-already-exists question) ignores Escape:
+    // the operator must answer it.
+    if (!$('dialogModal').hidden) {
+      if (dialogDismissable) closeDialog(null);
+      else e.preventDefault();
+    }
     else if (!$('errorModal').hidden) closeError();
     else if (!$('settingsModal').hidden) closeSettings();
   });

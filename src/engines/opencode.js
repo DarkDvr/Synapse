@@ -575,6 +575,46 @@ export class OpenCodeEngine extends Engine {
     return true;
   }
 
+  /**
+   * Dispose the engine's cached services for a directory.
+   *
+   * The engine keeps a location loaded once it has served a turn there, and that
+   * handle keeps the folder undeletable until the engine restarts. This is the
+   * release: `DELETE /api/debug/location`, whose `location` parameter is a
+   * deepObject (`location[directory]=…`). Verified: after this call the folder
+   * deletes normally with the engine still running.
+   */
+  async evictLocation(directory) {
+    const dir = String(directory || '');
+    if (!dir) return false;
+    const query = `location%5Bdirectory%5D=${encodeURIComponent(dir)}`;
+    await this.request('DELETE', `/api/debug/location?${query}`);
+    // The engine disposes the location's services asynchronously: the directory
+    // handle drops a moment later, not by the time the call returns. Measured — an
+    // immediate delete right after the evict still failed, and the same delete a
+    // second later worked. So confirm the release against the engine's own list
+    // rather than sleeping and hoping.
+    const key = (p) =>
+      String(p || '')
+        .replace(/[\\/]+/g, '/')
+        .toLowerCase()
+        .replace(/\/+$/, '');
+    const want = key(dir);
+    for (let i = 0; i < 30; i += 1) {
+      try {
+        const list = await this.request('GET', '/api/debug/location');
+        const dirs = (Array.isArray(list) ? list : list?.data || []).map((l) => key(l?.directory));
+        if (!dirs.includes(want)) {
+          this.log.info(`engine released location: ${dir}`);
+          return true;
+        }
+      } catch { /* keep waiting */ }
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    this.log.warn(`engine still lists ${dir} after eviction; the folder may stay locked`);
+    return false;
+  }
+
   /** One-shot completion inside a session's context; adds nothing to the transcript. */
   async generateText(sessionId, prompt) {
     const r = await this.request('POST', `/api/session/${encodeURIComponent(sessionId)}/generate`, { prompt: String(prompt) });

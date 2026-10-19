@@ -1,9 +1,11 @@
 // Synapse API — a stable, engine-agnostic surface for the UI.
 // Handlers call the engine adapter; nothing here knows about OpenCode.
 import fs from 'node:fs';
+import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { TBD_TITLE } from './titles.js';
 import { ensurePlan, readPlan, readRuns, briefSession, logPlanState, BRIEF_KEY } from './plans.js';
+import { PROJECTS_ROOT } from './paths.js';
 
 export function createApi({ getConfig, applyConfig, engine, logger, getBootError, projects, toolStats, probe, modelCache, inspectModel: inspectRef, probeDir, runs, notify, guard }) {
   const app = logger.channel('app');
@@ -299,6 +301,88 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
       return { project };
     },
 
+    /**
+     * Look at a folder *before* a project is registered there.
+     *
+     * Deleting a project only unregisters it, so a reused name lands on the old
+     * folder with everything still in it — plan included. The UI asks this first and
+     * shows a three-way choice; nothing is created or deleted by this call.
+     */
+    inspectProjectDir: async (body) => {
+      const dir = String(body?.directory || '').trim();
+      if (!dir) {
+        const err = new Error('a directory is required');
+        err.status = 400;
+        throw err;
+      }
+      const state = readPlan(dir);
+      let files = 0;
+      try {
+        files = fs.readdirSync(dir, { recursive: true }).length;
+      } catch { /* not there, or not readable: both mean "nothing to lose" */ }
+      return {
+        directory: dir,
+        exists: fs.existsSync(dir),
+        files,
+        plan: state.exists && state.plan?.tasks?.length
+          ? {
+              tasks: state.plan.tasks.length,
+              done: state.plan.tasks.filter((t) => t.status === 'done').length,
+              goal: (state.plan.goal || '').slice(0, 160),
+              mtime: state.mtime,
+            }
+          : null,
+      };
+    },
+
+    /**
+     * Wipe a project folder so a fresh project can start in it.
+     *
+     * Deliberately narrow: only a directory *inside* the projects root, never the
+     * root itself, never General's folder. The engine is told to release the
+     * location first — that handle is the only reason a folder could not be
+     * deleted while Synapse runs.
+     */
+    wipeProjectDir: async (body) => {
+      const dir = String(body?.directory || '').trim();
+      if (!dir) {
+        const err = new Error('a directory is required');
+        err.status = 400;
+        throw err;
+      }
+      const rel = path.relative(PROJECTS_ROOT, path.resolve(dir));
+      if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) {
+        const err = new Error(`refusing to wipe ${dir}: it is not inside ${PROJECTS_ROOT}`);
+        err.status = 400;
+        throw err;
+      }
+      try {
+        await engine.evictLocation?.(dir);
+      } catch (err) {
+        app.warn(`could not release ${dir} before wiping it: ${err.message}`);
+      }
+      // Even a confirmed release can leave the filesystem a tick behind, so the
+      // delete is retried briefly rather than failing on the first EBUSY.
+      let lastError = null;
+      for (let i = 0; i < 10; i += 1) {
+        try {
+          fs.rmSync(dir, { recursive: true, force: true });
+          lastError = null;
+          break;
+        } catch (err) {
+          lastError = err;
+          await new Promise((r) => setTimeout(r, 150));
+        }
+      }
+      if (lastError) {
+        const e = new Error(`could not delete ${dir}: ${lastError.message}`);
+        e.status = 423; // locked
+        throw e;
+      }
+      app.info(`wiped project folder: ${dir}`);
+      return { ok: true, removed: !fs.existsSync(dir) };
+    },
+
     deleteProject: async (id) => {
       const current = projects.find(id);
       if (!current) {
@@ -322,6 +406,16 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
         throw err;
       }
       projects.remove(id);
+      // And let the engine go of the directory. It keeps a location "loaded" once
+      // it has served a turn there, and that handle is what made a finished
+      // project's folder undeletable until Synapse was stopped. `DELETE
+      // /api/debug/location` disposes a location's cached services; the folder is
+      // then the operator's to delete, which is the whole point.
+      try {
+        await engine.evictLocation?.(current.directory);
+      } catch (err) {
+        app.warn(`could not release ${current.directory} from the engine: ${err.message}`);
+      }
       return { ok: true };
     },
 

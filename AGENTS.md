@@ -392,16 +392,21 @@ ordinary file tools; there is no tool and no store for it.
   only while it is that reason**: on a `done` or `todo` task the text stays in the
   file and in the tooltip, because the Architect moving on without clearing its own
   note made a finished plan look like it was still asking.
-- **A project's folder cannot be deleted while the engine is running.** Deleting a
-  project unregisters the entry and leaves the folder, which is the registry's
-  documented behaviour — but the *folder* then refuses to go: `Remove-Item
-  -Recurse -Force` reports "being used by another process" on the directory
-  itself, and the folder is left behind, empty. The holder is the engine, which
-  keeps a handle on a location it has served; it is released when the engine
-  stops. So the order is **stop Synapse → remove the folder → start Synapse**, and
-  `restart.ps1` is the wrong tool for the middle step on its own. This is what
-  left `workspace\field-notes` behind after the projects moved out, and it cost a
-  second round before the cause was obvious.
+- **A finished project's folder can be deleted while Synapse runs — the engine has
+  to be told to let go.** The engine keeps a *location* loaded once it has served a
+  turn there, and that handle makes the directory undeletable: `Remove-Item` reports
+  "being used by another process" on the folder even after its sessions are gone and
+  the project is unregistered. The release is
+  `DELETE /api/debug/location?location[directory]=<dir>` (the parameter is a
+  **deepObject**, so the query is `location%5Bdirectory%5D=…`, not a bare
+  `location=`; a bare one answers 400 `Expected object`). Two facts measured: it
+  **works**, and it is **asynchronous** — an immediate delete after the call still
+  failed while the same delete a second later succeeded, so `evictLocation()` polls
+  `GET /api/debug/location` until the directory is gone (30 × 100ms) instead of
+  sleeping. `deleteProject` evicts and waits (281ms measured), and
+  `wipeProjectDir` evicts then retries `fs.rmSync` before failing with 423. The
+  operator's flow is now: delete the project in Synapse → take what you want out of
+  `bin/` → delete the folder. Nothing to stop first.
 - **There is no Project panel, and no path label anywhere.** The rail is Project
   plan + Tools in use; each project in the sidebar owns a `.tree-project-body`
   with one vertical yellow rule on its left, and the two shortcuts, the
@@ -896,11 +901,20 @@ This is once per directory per process and needs no config.
   project only unregisters it (documented, and right: the folder is the operator's),
   so a reused name like `Test Project 1` resolves to the same slug on disk and the
   new project inherits the old plan — the pane opened onto a finished 4/4 plan and
-  the Architect card said DONE before anything was typed. `createProject` now
-  reports `existingPlan: { tasks, done, goal }` and the UI says so once, with the
-  recipe for a clean start: **stop Synapse, delete the folder, add it again** (the
-  engine holds the directory while it runs). It never wipes the plan: re-adding a
-  real project must continue its work.
+  the Architect card said DONE before anything was typed. That is now a three-way
+  question (see the next bullet) rather than a toast, and `createProject` also
+  reports `existingPlan` for API callers. It never wipes the plan by itself:
+  re-adding a real project must continue its work.
+- **A reused folder is a decision, not a toast.** Adding a project to a directory
+  that already holds a plan now asks, in a **non-dismissable dialog with a red
+  frame**: *cancel and pick another name*, *delete that folder and start fresh*, or
+  *re-use it and carry on*. It shows what is at stake — task count, done count, file
+  count, last touched, and the old goal — because all three answers are about a
+  folder on disk. `POST /api/projects/inspect` answers without side effects;
+  `POST /api/projects/wipe` refuses anything outside the projects root (and the root
+  itself), evicts the location first, then deletes with retries. The dialog is the
+  one place `openDialog` takes `dismissable: false`, an `extra` button and a
+  `tone: 'clash'`; the generic dialog's Cancel/OK pair is unchanged elsewhere.
 - **`.chat-scroll` scrolls internally in the wide layout; the page scrolls in the
   stacked one.** Above 1460px `.stage` has a definite height (set from the
   measured viewport via `--stage-h`, minus any horizontal scrollbar), so the

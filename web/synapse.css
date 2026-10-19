@@ -1535,3 +1535,14 @@ body[data-mode="single"] .keep-toggle { display: none; }
 }
 ::-webkit-scrollbar-thumb:hover { background: #4a4f57; background-clip: content-box; }
 ::-webkit-scrollbar-corner { background: transparent; }
+
+/* ── 19. the folder-already-exists question ────────────────────────────── */
+/* A red frame, a red title, no close button, an answer required: the one dialog
+   that must not be dismissed by accident, because the three answers do very
+   different things to a folder on disk. */
+.modal.is-clash {
+  border: 2px solid var(--red);
+  box-shadow: 0 25px 80px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(240, 86, 63, 0.22);
+}
+.modal.is-clash #dialogTitle { color: var(--red); }
+.modal.is-clash .modal-sub { white-space: pre-line; line-height: 1.65; }

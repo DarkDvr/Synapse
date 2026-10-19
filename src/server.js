@@ -144,6 +144,12 @@ export function createServer({ api, engine, logger, config }) {
     if (seg[0] === 'projects') {
       if (seg.length === 1 && method === 'GET') return sendJson(res, 200, await api.projects());
       if (seg.length === 1 && method === 'POST') return sendJson(res, 200, await api.createProject(await readBody(req)));
+      if (seg.length === 2 && seg[1] === 'inspect' && method === 'POST') {
+        return sendJson(res, 200, await api.inspectProjectDir(await readBody(req)));
+      }
+      if (seg.length === 2 && seg[1] === 'wipe' && method === 'POST') {
+        return sendJson(res, 200, await api.wipeProjectDir(await readBody(req)));
+      }
       const projectId = decodeURIComponent(seg[1] || '');
       if (seg.length === 2 && method === 'PATCH') return sendJson(res, 200, await api.updateProject(projectId, await readBody(req)));
       if (seg.length === 2 && method === 'DELETE') return sendJson(res, 200, await api.deleteProject(projectId));

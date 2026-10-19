@@ -40,6 +40,11 @@ export class Engine extends EventEmitter {
   async replyPermission() {}
   async updateSessionTitle() { throw new Error(`${this.kind}: updateSessionTitle() not implemented`); }
   async deleteSession() { throw new Error(`${this.kind}: deleteSession() not implemented`); }
+
+  /** Release whatever the engine holds for a directory (cached services, file
+   *  watchers, a working-directory handle). Engines that hold nothing need not
+   *  implement it — the folder is then deletable by definition. */
+  async evictLocation() { return false; }
   // One-shot completion in a session's context that does NOT join the
   // transcript — used for naming sessions.
   async generateText() { return ''; }

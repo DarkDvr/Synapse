@@ -300,8 +300,15 @@ the project whose directory they run in.
 - **Adding a project** creates the folder when it is missing (the engine
   refuses to run a session in a directory that does not exist).
 - **Removing a project** only forgets the registry entry. Nothing on disk is
-  touched. Synapse refuses while sessions still live in it, so a session is
-  never left without a project.
+  touched, and Synapse refuses while sessions still live in it, so a session is
+  never left without a project. It does **release the folder**: the engine keeps a
+  location loaded once it has served a turn there, and deleting the project tells it
+  to let go, so the folder can be deleted straight after (take what you want out of
+  `bin/` first). Nothing has to be stopped.
+- **A reused name asks first.** Adding a project to a folder that already holds a
+  plan raises a non-dismissable red dialog with the numbers — tasks, done, files,
+  last touched, the old goal — and three answers: cancel and pick another name,
+  delete that folder and start fresh, or re-use it and carry on where it left off.
 - **Session names** start as `TBD`. When the first turn succeeds, Synapse asks
   the model for a short title through the engine's one-shot `generate` route —
   which does **not** add anything to the transcript — and renames the session.
