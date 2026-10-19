@@ -1,7 +1,7 @@
-# Runtime state — regenerated on start
+# Runtime state - regenerated on start
 data/
 logs/
-workspace/
+# (the projects root is a sibling of this folder, so it needs no entry here)
 
 # Node
 node_modules/

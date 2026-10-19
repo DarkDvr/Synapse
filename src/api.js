@@ -5,7 +5,7 @@ import { spawn } from 'node:child_process';
 import { TBD_TITLE } from './titles.js';
 import { ensurePlan, readPlan, briefSession, logPlanState, BRIEF_KEY } from './plans.js';
 
-export function createApi({ getConfig, applyConfig, engine, logger, getBootError, projects, toolStats, probe, modelCache, inspectModel: inspectRef, probeDir, runs, notify }) {
+export function createApi({ getConfig, applyConfig, engine, logger, getBootError, projects, toolStats, probe, modelCache, inspectModel: inspectRef, probeDir, runs, notify, guard }) {
   const app = logger.channel('app');
 
   // The last brief we handed each session, so an unchanged plan does not PUT
@@ -265,7 +265,10 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
         title: TBD_TITLE,
         model: body?.model,
         agent: body?.agent,
-        permissions: body?.permissions,
+        // The harness guard rides along with whatever rules the caller asked for:
+        // a session may be Single (deny `subagent`) or Multi (no rules), and the
+        // harness is denied in both.
+        permissions: [...(Array.isArray(body?.permissions) ? body.permissions : []), ...(guard?.rules?.() || [])],
         directory: project.directory,
       });
       // From the first turn, the Architect knows where it is and that the plan
@@ -294,7 +297,10 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
           err.status = 400;
           throw err;
         }
-        await engine.updateSessionPermissions(sessionId, Array.isArray(p) ? p : []);
+        await engine.updateSessionPermissions(sessionId, [
+          ...(Array.isArray(p) ? p : []),
+          ...(guard?.rules?.() || []),
+        ]);
       }
       if (hasTitle) {
         const title = String(body.title ?? '').trim();

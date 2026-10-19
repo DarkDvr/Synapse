@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn, execFile } from 'node:child_process';
-import { DATA_DIR, LOGS_DIR, WORKSPACE_DIR, GENERAL_DIR, ENGINE_HOME, PID_FILE, PROJECTS_FILE, TOOL_STATS_FILE, PROBE_DIR, PROBE_FILE, MODEL_CACHE_FILE } from './paths.js';
+import { DATA_DIR, LOGS_DIR, WORKSPACE_DIR, GENERAL_DIR, ENGINE_HOME, PID_FILE, PROJECTS_FILE, TOOL_STATS_FILE, PROBE_DIR, PROBE_FILE, MODEL_CACHE_FILE, ROOT } from './paths.js';
 import { loadConfig, saveConfig } from './config.js';
 import { logger } from './logger.js';
 import { createEngine } from './engines/index.js';
@@ -11,6 +11,7 @@ import { createTitler } from './titler.js';
 import { createToolStats } from './toolstats.js';
 import { ensurePlan, readPlan, logPlanState } from './plans.js';
 import { createRunner } from './runs.js';
+import { createHarnessGuard } from './harness.js';
 import { createProbe, discoverToolsetForModel } from './probe.js';
 import { createModelCache, MAX_TOOL_ASKS } from './modelcache.js';
 import { createApi } from './api.js';
@@ -111,10 +112,17 @@ async function main() {
   // what actually runs it — a real session on the task's role and model, run to
   // completion, recorded, and reported back. See src/runs.js. It also reports the
   // live state of each run so the role cards and the live path can show it.
+  const guard = createHarnessGuard({
+    root: ROOT,
+    logger,
+    notify: (ev) => http?.broadcast({ ...ev, ts: Date.now() }),
+  });
+
   const runner = createRunner({
     engine,
     logger,
     getConfig,
+    guard,
     notify: (ev) => http?.broadcast({ ...ev, ts: Date.now() }),
   });
 
@@ -237,7 +245,11 @@ async function main() {
       // The plan is written during the turn, so a finished turn is when it
       // changed — and this is the only place that notices with no UI open.
       if (session?.directory) logPlanState(readPlan(session.directory), app);
-      // And a finished turn is where the Architect's requests for work are
+      // And every turn's tool calls are checked against the harness: a write or an
+      // edit that names a file inside it is reported here, with the session that
+      // made it. The messages are already in hand, so this costs nothing.
+      guard.checkTurn({ sessionId, messages, label: `turn finished (${type})` });
+      // A finished turn is where the Architect's requests for work are
       // picked up. Nothing is awaited: the worker reports back on its own.
       runner.handleTurn(sessionId, messages);
     } catch (err) {
@@ -285,6 +297,7 @@ async function main() {
     probeDir: PROBE_DIR,
     runs: runner,
     notify: (ev) => http?.broadcast({ ...ev, ts: Date.now() }),
+    guard,
   });
   http = createServer({ api, engine, logger, config: getConfig() });
   await http.listen();

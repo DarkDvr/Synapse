@@ -278,10 +278,16 @@ just remembers which directories the operator added. Sessions are assigned to
 the project whose directory they run in.
 
 - **General** is always present, first and undeletable, and owns its own folder
-  (`workspace\general`, created on boot when missing, so it starts with no
-  sessions). It is deliberately *not* the workspace root — sharing that folder
-  with the projects directory would make General's sessions indistinguishable
-  from sessions in a folder nobody registered.
+  (`..\Synapse.Projects\general`, created on boot when missing, so it starts with
+  no sessions). It is deliberately *not* the projects root — sharing that folder
+  with the projects would make General's sessions indistinguishable from sessions
+  in a folder nobody registered.
+- **The projects root is a sibling of the harness** (`..\Synapse.Projects`,
+  resolved from the harness folder so the drive letter is nobody's business), not a
+  folder inside it. A project is a place models write files, and the engine's file
+  and shell tools are not confined to a session's directory — so a project inside
+  the harness would put the harness one stray absolute path away from being edited
+  by a model. Side by side, the two never overlap.
 - **Adding a project** creates the folder when it is missing (the engine
   refuses to run a session in a directory that does not exist).
 - **Removing a project** only forgets the registry entry. Nothing on disk is
@@ -293,8 +299,15 @@ the project whose directory they run in.
   One attempt per session, never for a session you have named yourself.
 - **Git on the first successful turn.** The same moment also checks the
   session's folder for a repository and runs `git init` if there is none. A
-  folder inside an existing repo (Synapse's own `workspace\`, for example) is
-  left alone, so no nested repos are ever created.
+  folder inside an existing repo is left alone, so no nested repos are ever
+  created — and since the projects root is outside the harness, a project is never
+  inside Synapse's own repository to begin with.
+- **The harness is guarded from the models it runs.** Every session carries a
+  permission ruleset that denies anything inside the harness folder, and a watchdog
+  reports any write, edit or shell command that names a harness path — with a
+  `git` snapshot committed before each delegation as the restore point. See
+  "Protecting the harness's own files" in AGENTS.md for how the rules combine and
+  what the watchdog cannot see.
 - **The role cards are live controls, not status.** They carry the per-role
   model and thinking-effort pickers; per-role activity (what each worker is
   doing) arrives with the orchestration layer in stages 3–6.
@@ -455,7 +468,7 @@ recorded, two files in `bin/`, and `python bin/calendar.py` printing the month.
 
 **The census describes *now*, not history, so it clears itself.** It starts empty on every boot (`tools.resetOnBoot`, on by default — untick *Clear the tool census on every start* in Settings to keep it across restarts), and Settings has a **Clear Tool Census** button for a mid-session reset. `POST /api/tools/reset`. Left to accumulate it stops describing the current environment, which is exactly what happened after a few days of testing: 184 calls from sessions that no longer existed.
 
-**Tool probe.** The census says what has happened; the probe finds out on purpose. **Run Tool Probe** in the *Tools in use* panel drives one turn per tool in the engine's real toolset - `shell` (pass and fail), `read`, `write`, `edit`, `glob`, `grep`, `question`, `webfetch` (good host and bad host), `websearch`, `subagent`, `execute`, `skill` - each in a disposable scratch session (`workspace\_probe`). Per case it records whether the turn closed, which tool actually ran, whether it failed, and **the tool's own execution time** (not the turn time, which is mostly the model thinking). The scratch session is hidden from the rail and swept at boot; the panel names the model the run used. Results stream into the panel live; `GET /api/tools/probe`, `POST /api/tools/probe/run`.
+**Tool probe.** The census says what has happened; the probe finds out on purpose. **Run Tool Probe** in the *Tools in use* panel drives one turn per tool in the engine's real toolset - `shell` (pass and fail), `read`, `write`, `edit`, `glob`, `grep`, `question`, `webfetch` (good host and bad host), `websearch`, `subagent`, `execute`, `skill` - each in a disposable scratch session (`..\Synapse.Projects\_probe`). Per case it records whether the turn closed, which tool actually ran, whether it failed, and **the tool's own execution time** (not the turn time, which is mostly the model thinking). The scratch session is hidden from the rail and swept at boot; the panel names the model the run used. Results stream into the panel live; `GET /api/tools/probe`, `POST /api/tools/probe/run`.
 
 Two things the first run of it proved, which is the point of having it:
 

@@ -55,7 +55,7 @@ function parseInput(input) {
   }
 }
 
-export function createRunner({ engine, logger, getConfig, notify }) {
+export function createRunner({ engine, logger, getConfig, guard, notify }) {
   const log = logger.channel('tools');
   // One worker per project at a time: two Architects on the same plan is the
   // one thing that can actually corrupt it.
@@ -253,11 +253,23 @@ export function createRunner({ engine, logger, getConfig, notify }) {
     running.set(dirKey(dir), live);
     emit('run.started', live);
 
+    // A restore point first, then a clean baseline: the harness is committed as it
+    // stands, so anything it shows once the worker has stopped is the worker's
+    // doing and can be put back. Both calls are cheap and neither is on the
+    // worker's critical path — the snapshot is one `git add -u` + commit in the
+    // harness repository, which a project never lives inside.
+    await guard?.snapshot?.(`before ${task.id} (${role})`).catch(() => {});
+    const harnessBefore = await guard?.state?.().catch(() => null);
+
     try {
       worker = await engine.createSession({
         title: `${request.task} - ${role}`,
         model: modelRef ? { ref: modelRef, variant } : undefined,
         directory: dir,
+        // Workers carry the harness guard too: they have the same toolset as the
+        // Architect, and a worker is the most likely place for a stray absolute
+        // path — it is the one being told to write files.
+        permissions: guard?.rules?.() || [],
         // Hidden from the rail: it runs in the project directory, so only this
         // mark tells Synapse it is scaffolding and not the operator's session.
         metadata: { synapse: { internal: true, role, task: request.task, architect: architectId } },
@@ -270,7 +282,6 @@ export function createRunner({ engine, logger, getConfig, notify }) {
       } catch (err) {
         log.warn(`worker brief failed for ${request.task}: ${err.message}`);
       }
-
       const before = (await engine.getMessages(worker.id)).length;
       await engine.prompt(worker.id, workerPrompt({ task, note: request.note, goal: plan.plan?.goal }));
       const finished = await waitForIdle(worker.id, before, timeoutMs, (tool) => {
@@ -310,6 +321,22 @@ export function createRunner({ engine, logger, getConfig, notify }) {
     // The plan must not have moved under the worker's feet.
     const after = planFingerprint(dir);
     const planTouched = fingerprintBefore !== after;
+
+    // And nor must the harness. The snapshot above left a known state; whatever
+    // the repository shows now that it did not show then happened while the
+    // worker was running — however it happened, and whether or not a tool call
+    // named a path. Reported before the Architect is woken, so the two never
+    // disagree about what the worker did.
+    const harnessAfter = await guard?.state?.().catch(() => null);
+    const harnessChanged = guard?.changed?.(harnessBefore, harnessAfter) || [];
+    if (harnessChanged.length) {
+      guard.alarm({
+        sessionId: architectId,
+        what: 'CHANGED DURING A WORKER RUN',
+        paths: harnessChanged.slice(0, 12),
+        note: `${request.task} (${role})`,
+      });
+    }
 
     appendRun(dir, {
       kind: 'result',

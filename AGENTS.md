@@ -68,7 +68,7 @@ recycled engine binary it locates.
 - **Commit before every important change** — before starting a stage, a refactor,
   or a risky fix, and again when it works. Small scoped commits, message says
   what changed and why.
-- **`data/`, `logs/` and `workspace/` stay out of git** (already in
+- **`data/`, `logs/` and the projects root stay out of git** (already in
   `.gitignore`): they hold PIDs, probe output, session logs and scratch projects,
   all local and regenerable.
 - **Check `git status` before and after.** Do not commit build junk or secrets;
@@ -342,7 +342,10 @@ ordinary file tools; there is no tool and no store for it.
 - **A task's `result` is not printed under its title.** One line per task keeps
   the pane scannable; the result rides the title's tooltip. A `note` is the
   exception and stays visible — a blocked task is the one case where the operator
-  is being asked for something, so the reason must not be behind a hover.
+  is being asked for something, so the reason must not be behind a hover — **and
+  only while it is that reason**: on a `done` or `todo` task the text stays in the
+  file and in the tooltip, because the Architect moving on without clearing its own
+  note made a finished plan look like it was still asking.
 - **There is no Project panel, and no path label anywhere.** The rail is Project
   plan + Tools in use; each project in the sidebar owns a `.tree-project-body`
   with one vertical yellow rule on its left, and the two shortcuts, the
@@ -566,8 +569,8 @@ Non-obvious, all verified on 2.0.30:
   `required`, `hidden` and `when` (eq/neq on another key). Missing one stalls a
   session forever.
   **The global form list is location-scoped and will not show a project's form.**
-  `GET /api/form` only lists forms in the engine's own location (`workspace`), so
-  a question asked in `workspace/field-notes` is invisible there — which is
+  `GET /api/form` only lists forms in the engine's own location (the projects
+  root), so a question asked in a project subfolder is invisible there — which is
   exactly why the first real question showed up as a raw JSON tool card while the
   session sat blocked. Ask the session, not the world: a session waiting on a
   form is a session `GET /api/session/active` reports as active, and the open
@@ -644,13 +647,13 @@ discovered toolset. `engine.listModels()` is recorded on every boot and every
 ### The probe (`Run Tool Probe`)
 
 Drives one turn per tool in a disposable scratch session
-(`workspace\_probe`), records the tool's own execution time, and labels a
+(`<projects root>\_probe`), records the tool's own execution time, and labels a
 failure "not offered by this model" when the tool was never in its list.
 
 - It **interrupts a timed-out case** before starting the next. Without that, the
   wedge is inherited and every later case fails too.
 - **The scratch session is invisible.** Probe and model-check sessions live in
-  `workspace\_probe`; the API filters that directory out of project/session
+  `<projects root>\_probe`; the API filters that directory out of project/session
   lists, so they never appear in the rail, and `probe.sweep()` deletes any
   leftover at boot (a killed process cannot leave a ghost). They are real
   engine sessions behind the scenes, not fake turns.
@@ -664,6 +667,53 @@ failure "not offered by this model" when the tool was never in its list.
 
 ---
 
+## Protecting the harness's own files
+
+The engine's `edit`, `write` and `shell` tools are **not confined to a session's
+directory**. A role told to work in its project folder can write anywhere the
+operator can, and sooner or later a model will decide the harness itself needs
+"fixing". Three mechanisms, because they fail differently (verified live on 2.0.30):
+
+- **The projects root is a sibling of the harness** (`..\Synapse.Projects`, resolved
+  from the harness root, so the drive letter is nobody's business). This is the
+  foundation: with projects *inside* the harness, "outside the project" and "inside
+  the harness" overlap and no path rule can tell them apart.
+- **A permission ruleset on every session** — `src/harness.js` `rules()`:
+  `[{action:'*', resource:'*', effect:'allow'}, {action:'*', resource:'<harness>/**', effect:'deny'}]`.
+  The engine evaluates it *before* a tool runs, so this is prevention. Two engine
+  facts make it work: an effect may be `allow`/`deny`/**`ask`**, and **the last
+  matching rule wins** — which is why the broad allow comes first and the harness
+  deny after it. Measured on a fresh session: `edit` and `bash` on `src/`, `web/`
+  and `AGENTS.md` all come back `deny`; the project folder and a temp path `allow`
+  (a temp write must not ask, or every scratch file becomes a question). It is
+  **appended** to whatever the mode rules are, so Single's `subagent` deny and this
+  guard never fight, and worker sessions carry it too.
+- **A watchdog**, because a ruleset cannot see a shell *command* — `pwsh -c
+  "Set-Content …"` is a string, not a path. Two layers, both cheap: `checkTurn()`
+  reads the transcript Synapse has already fetched and reports any write or edit
+  that names a harness path (attributed, and no extra engine calls, so it cannot
+  slow a turn down); and around each worker run the runner compares
+  `git status --porcelain` before and after, so anything the repository shows
+  afterwards that it did not show before is reported as *changed during a worker
+  run* however it happened. Both go out as a log `ERROR` and an SSE `alarm`, which
+  the UI shows as a toast and the error dialog with the paths.
+- **A restore point before each delegation** — `snapshot()` runs `git add -u`
+  (tracked files only: never `-A`, so an untracked file of the operator's is never
+  swept into a commit) and commits `snapshot: before <task> (<role>)`. Nothing to
+  commit is the normal case. This is the recovery half: the watchdog reports, the
+  commits make it undoable, and because a project is outside the repository a
+  snapshot can never stage a project's deliverables.
+
+**Nothing here repairs a file automatically.** An auto-revert would clobber the
+operator's own work in progress, which is a worse failure than the one it prevents;
+the evidence plus the commits are the answer.
+
+**Not doing: a separate Windows user for the engine.** It is the only boundary a
+shell cannot talk its way around, but with the projects moved out, the ruleset live
+and the snapshots in place it is overkill on this machine — the operator's call.
+
+---
+
 ## Git on a session's first successful turn
 
 Beside the auto-namer in `afterTurn`, Synapse checks the session's directory for
@@ -671,8 +721,10 @@ a repository (`git rev-parse --git-dir`) and runs `git init` if there is none.
 This is once per directory per process and needs no config.
 
 - `rev-parse` succeeds inside any **parent** repo, so a project folder under an
-  existing repository is left alone — Synapse never creates a nested repo. That
-  also covers `workspace\`, which lives inside Synapse's own repository.
+  existing repository is left alone — Synapse never creates a nested repo. Since
+  the projects root is now a *sibling* of the harness, a project is no longer
+  inside Synapse's own repository at all, which is also what keeps a project's
+  files out of the harness's `git add -u` snapshots.
 - `git` missing or the command failing is logged and skipped; a turn never
   fails because of it. Verified the commands in an isolated temp folder:
   exit 128 before `git init`, `.git` and exit 0 after.

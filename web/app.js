@@ -2470,6 +2470,16 @@ function connectStream() {
       return;
     }
 
+    // The harness watchdog: something the models run touched Synapse's own files.
+    // This is the one event that must not be missed, so it is loud in both places
+    // the operator looks — a toast now, and the error dialog with the paths.
+    if (ev.kind === 'alarm') {
+      const paths = (ev.paths || []).slice(0, 6).join('\n');
+      toast('Harness Tampering Detected', ev.what || 'something touched Synapse itself');
+      openError(ev.what || 'Harness Tampering', `${ev.what || ''}\n\n${paths}${ev.note ? `\n\n(${ev.note})` : ''}`);
+      return;
+    }
+
     // The tool probe reports its own progress; it is not a session event.
     if (ev.kind === 'probe') {
       renderProbe();
