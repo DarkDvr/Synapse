@@ -578,15 +578,22 @@ painted over the chat, anchored just above the composer:
   that option first and ending its label with "(Recommended)" — the panel takes
   the suffix out of the sentence and shows a chip, and the role brief tells both
   roles to write it that way.
+- **Question text and option labels are bold**; the option descriptions stay
+  regular and muted, which is what keeps the bold from reading as a wall.
+- **"Something Else…" puts its box on its own line**, indented to line up with the
+  option labels — sharing one line it raced the label to the right edge.
+- **The panel is capped at 780px** and inset clear of the transcript's scrollbar
+  gutter, so its own bar never paints over the chat's.
 - **Orange marks the panel rather than filling it**: the border, the heading, the
   waiting dot, the Recommended chip, the control accents and the Submit fill. The
   surface, the options and the question text are the ordinary ones — a fully
   orange panel was more than a page of questions wants.
+- **Any pending question blocks the composer**, including one from a worker; the
+  panel's head says whose it is (`another session is waiting on you`).
 - **The composer is disabled while a question waits** (`Answer the question
-  above`): the turn cannot read a message, so it does not pretend otherwise. That
-  applies to the open session's own question — a **worker** can ask one too, and
-  its question is shown with `another session is waiting on you` without locking
-  the message box you are using.
+  above`): the turn cannot read a message, so it does not pretend otherwise. Any
+  pending question does this, including a worker's — the panel's head tells you
+  whose it is.
 - **The transcript keeps one line about it** — `question · Index colour scheme ·
   running` — with the raw payload one click away and the answer in it once you
   have replied. The panel is the interface; the card is the record.

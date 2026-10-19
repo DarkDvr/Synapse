@@ -689,6 +689,13 @@ async function switchMode() {
     state.mode = previous;
     renderMode();
     setView();
+    // The session may simply not exist any more (deleted in another tab, or by
+    // a scaffolding sweep). Re-reading the projects closes the dead view instead
+    // of complaining about a session that is gone.
+    if (/not found|404/i.test(String(err.message || ''))) {
+      await loadProjects();
+      return;
+    }
     toast('Could Not Switch Mode', err.message);
   }
 }
@@ -826,8 +833,20 @@ async function loadProjects() {
   } catch (err) {
     state.projects = [];
     setEventChip('projects unavailable');
+    renderTree();
+    return;
   }
   renderTree();
+  // The open session can be deleted from another tab, or by Synapse's own
+  // scaffolding sweep. Left alone, the UI keeps a dead session open and every
+  // control on it answers 404 — which is how a mode switch once reported
+  // "Session not found". The list is only trusted while the engine is up: with
+  // the engine down it is empty for a reason that has nothing to do with this
+  // session, and closing the view would be wrong.
+  if (state.sessionId && state.status?.engine?.ready === true && !findSession(state.sessionId)) {
+    toast('Session Closed', 'It was deleted, so it is no longer open.');
+    showNothing();
+  }
 }
 
 const findSession = (id) => {
@@ -2349,11 +2368,10 @@ async function replyPermission(requestId, decision) {
  */
 function renderComposer() {
   const hasSession = Boolean(state.sessionId);
-  const form = currentForm();
-  // Only this session's own question blocks this composer. A worker asking
-  // something (its session is hidden) must not stop you talking to the
-  // Architect — the panel still shows, with a note saying whose question it is.
-  const asking = Boolean(form && form.sessionId === state.sessionId);
+  const asking = Boolean(currentForm());
+  // Any pending question blocks this composer, whoever asked it: the operator's
+  // attention is the thing the run is waiting on, and a worker's question is no
+  // different from the Architect's in that respect.
   $('sendBtn').disabled = (state.busy && !hasSession) || asking;
   $('stopBtn').disabled = !state.busy || !hasSession;
   const input = $('promptInput');

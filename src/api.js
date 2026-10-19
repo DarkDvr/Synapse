@@ -5,7 +5,7 @@ import { spawn } from 'node:child_process';
 import { TBD_TITLE } from './titles.js';
 import { ensurePlan, readPlan, briefSession, logPlanState, BRIEF_KEY } from './plans.js';
 
-export function createApi({ getConfig, applyConfig, engine, logger, getBootError, projects, toolStats, probe, modelCache, inspectModel: inspectRef, probeDir, runs }) {
+export function createApi({ getConfig, applyConfig, engine, logger, getBootError, projects, toolStats, probe, modelCache, inspectModel: inspectRef, probeDir, runs, notify }) {
   const app = logger.channel('app');
 
   // The last brief we handed each session, so an unchanged plan does not PUT
@@ -325,6 +325,10 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
       requireReady();
       await engine.deleteSession(sessionId);
       briefed.delete(sessionId);
+      // Tell every open UI. Another tab can have it on screen, and a UI left
+      // holding a deleted session answers 404 on every control it offers —
+      // which is how a mode switch ended up reporting "Session not found".
+      notify?.({ kind: 'sessions', type: 'session.deleted', sessionId });
       return { ok: true };
     },
 

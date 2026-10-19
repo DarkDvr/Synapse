@@ -284,6 +284,7 @@ async function main() {
     inspectModel,
     probeDir: PROBE_DIR,
     runs: runner,
+    notify: (ev) => http?.broadcast({ ...ev, ts: Date.now() }),
   });
   http = createServer({ api, engine, logger, config: getConfig() });
   await http.listen();

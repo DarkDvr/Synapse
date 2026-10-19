@@ -43,7 +43,8 @@ recycled engine binary it locates.
 - **Violet** = fills and surfaces. **Orange** = accents only (text, borders,
   dot-ants). **Never orange text on a violet fill** — use white.
 - Green / amber / red are semantic only, never decorative.
-- Affordances: `+` green, `✕` red, edit/settings icons yellow.
+- Affordances: `+` green, `✕` red, edit/settings icons yellow. The composer's
+  **Stop turns red on hover** — it is the one destructive control in that row.
 - **The live path is the one deliberate pair: a yellow arrow with orange ants.**
   Orange is this palette's colour for dot-ants, and the arrow has to be a
   different colour from the ants riding it or they read as one thick line. The
@@ -422,9 +423,10 @@ it as a panel **painted over the chat, anchored just above the composer**.
 - **A worker can ask too.** The panel is not limited to the open session: any
   pending form is shown, with the head saying `another session is waiting on you`.
   A worker has the same toolset, and without this its question would be invisible
-  and the run would die at the timeout with nothing to look at. Only the *open*
-  session's own question disables the composer — a worker waiting is no reason to
-  stop talking to the Architect.
+  and the run would die at the timeout with nothing to look at. **Any** pending
+  question blocks the composer, whoever asked it: the operator's attention is what
+  the run is waiting for, and a worker's question is no different from the
+  Architect's in that.
 - **Orange marks the panel; it does not fill it.** The border, the QUESTIONS
   heading, the waiting dot, the Recommended chip, the control accents and the
   Submit fill are orange — the surface, the option rows and the question text are
@@ -432,6 +434,16 @@ it as a panel **painted over the chat, anchored just above the composer**.
   operator pulled it back the same day ("was too much orange" for something read
   line by line). A selected row is marked by the orange rule plus a white label,
   never an orange wash.
+- **The panel is 780px wide, inset 12/30px.** The right inset clears the
+  transcript's 15px scrollbar gutter — at 10px the panel's own bar landed on top of
+  it, which read as one broken scrollbar. The width cap is about the reading: a
+  form as wide as the chat turns every option description into a 1000px rule.
+- **Question text and option labels are bold** (700); the option descriptions stay
+  regular and muted, which is what keeps the bold from being a wall.
+- **"Something Else…" gets its own line for the box.** Sharing one line, the box
+  raced the label to the right edge (and wrapped badly when it did not fit), so the
+  row is a column and the box is indented 21px to line up with the option labels
+  above it.
 - **"(Recommended)" becomes a chip.** The question tool's own convention is to
   put the recommendation first and end its label with " (Recommended)". The panel
   strips the suffix and shows a chip beside the label, and the role brief tells
@@ -800,6 +812,15 @@ This is once per directory per process and needs no config.
   `GET /api/runs` from the Code Mode runtime (`fetch` works, and
   `browser_wait_for` with a text that cannot exist is a usable sleep) and assert
   on the API's own answer.
+- **A session can be deleted under the UI's feet.** Synapse deletes its own
+  scaffolding, and another tab can delete one too. The UI used to keep the dead
+  session open, and every control on it answered 404 — which is exactly how a mode
+  switch reported `Could Not Switch Mode … 404 Session not found`. Now
+  `deleteSession` broadcasts `session.deleted`, `loadProjects()` closes the view
+  when the open session is no longer in the project list (guarded on the engine
+  being ready — with the engine down that list is empty for reasons that have
+  nothing to do with this session), and a 404 from an action re-reads the projects
+  instead of reporting a failure the operator can do nothing about.
 - **`display: revert` does not mean "back to my stylesheet".** The Multi reveal
   used it to un-hide the worker cards, and `revert` rolls back to the USER-AGENT
   value — `block` for `<article>` — so every worker card silently stopped being a
