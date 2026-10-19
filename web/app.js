@@ -70,6 +70,9 @@ const state = {
   // Signature of what the question panel is showing, so a poll does not rebuild
   // it and discard answers the operator has already given.
   askSig: '',
+  // Which question of the form is on screen. A five-question form is five pages,
+  // because the ones below the fold were being missed entirely.
+  askPage: 0,
   renaming: null,
   view: 'none', // none | session
 };
@@ -1761,7 +1764,9 @@ function drawActivePath() {
   // instead of the ants sprinting down a short path and crawling down a long one.
   const len = Math.abs(y1 - y0) + Math.abs(x1 - spineX);
   const COUNT = Math.max(5, Math.round(len / 16));
-  const DUR = Math.max(2.2, len / 90);
+  // Half the speed of the first version (2.2s/90 was a sprint at 1200px). The
+  // `begin` offsets are fractions of DUR, so the pitch scales with it.
+  const DUR = Math.max(4.4, len / 45);
   const ants = reduce
     ? ''
     : Array.from({ length: COUNT }, (_, i) =>
@@ -1873,7 +1878,11 @@ function renderTranscript() {
   // over the chat, and a card here would both duplicate it and change the
   // transcript's height the moment it appeared.
   const pending = renderPermissions();
-  const hasHistory = showable.length > 0 || Boolean(pending);
+  // A question needs room even when the conversation is empty: the panel is the
+  // dock's own child and takes its height from the dock, so a freshly opened
+  // session (a strip of composer) would show a 64px form with its buttons
+  // hanging outside it. A form is something to read, so the dock opens for it.
+  const hasHistory = showable.length > 0 || Boolean(pending) || Boolean(currentForm());
   // The dock is a bare composer while empty and fills the stage once there is
   // anything to show; the CSS keys off this class, so set it on every render.
   $('chatDock')?.classList.toggle('has-history', hasHistory);
@@ -2037,13 +2046,28 @@ function chatScrollTop() {
 function chatAtBottom(slack = 60) {
   const el = chatScroller();
   if (el) return el.scrollHeight - el.scrollTop - el.clientHeight <= slack;
-  return window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - slack;
+  // No internal scroller: the whole conversation fits its box. "At the bottom"
+  // then means the chat's own bottom edge is in view — not that the *page* has
+  // reached its end. Below 1460px the page continues past the chat into the
+  // rail, so the document's bottom is hundreds of pixels below the conversation
+  // and asking about it always answered "scrolled up".
+  const box = $('transcript');
+  if (!box) return true;
+  return box.getBoundingClientRect().bottom <= window.innerHeight + slack;
 }
 
 function scrollChatToBottom(behavior = 'auto') {
   const el = chatScroller();
   if (el) { el.scrollTo({ top: el.scrollHeight, behavior }); return; }
-  window.scrollTo({ top: document.documentElement.scrollHeight, behavior });
+  // The transcript already fits its box: the newest message is laid out and
+  // there is nothing to scroll to. This used to fall through to the WINDOW and
+  // jump to `documentElement.scrollHeight` — past the chat, to the very bottom
+  // of the page, which in the stacked layout is the rail. That is the "the
+  // central panel scrolled itself" report, and it only happened while the
+  // conversation was still short enough not to scroll inside its own box; once
+  // it grew, the branch above took over and the jump stopped. The page is moved
+  // deliberately in exactly two places (Send and opening a session), never by a
+  // render.
 }
 
 const myMessages = () =>
@@ -2288,7 +2312,7 @@ function askField(field, index, all) {
   const when = Array.isArray(field.when) && field.when.length
     ? ` data-ask-when="${esc(JSON.stringify(field.when))}"`
     : '';
-  return `<div class="ask-field" data-ask-field="${esc(key)}" data-ask-type="${esc(type)}"${when}${
+  return `<div class="ask-field" data-ask-field="${esc(key)}" data-ask-index="${index}" data-ask-type="${esc(type)}"${when}${
     field.required ? ' data-ask-required="1"' : ''
   }>${title}${text}${req}${body}</div>`;
 }
@@ -2299,6 +2323,7 @@ function renderAskPanel() {
   const form = state.view === 'session' ? currentForm() : null;
   if (!form) {
     state.askSig = '';
+    state.askPage = 0;
     host.hidden = true;
     host.innerHTML = '';
     $('chatDock')?.classList.remove('has-ask');
@@ -2331,13 +2356,18 @@ function renderAskPanel() {
     </div>
     <div class="ask-fields">${(form.fields || []).map(askField).join('')}</div>
     <div class="ask-actions">
+      <span class="ask-progress" data-ask-progress hidden></span>
       <span class="ask-state" data-ask-state></span>
-      <button class="btn btn-ask btn-sm" data-form-reply="${esc(form.id)}">Submit Answer</button>
+      <button class="btn btn-ghost btn-sm" data-ask-back hidden>Back</button>
+      <button class="btn btn-ask btn-sm" data-ask-next hidden>Next</button>
+      <button class="btn btn-ask btn-sm" data-form-reply="${esc(form.id)}" hidden>Submit Answer</button>
     </div>
   </div>`;
+  // A new form starts at its first question. The page is *not* reset on a poll:
+  // an unchanged signature returns above, so a rebuild never moves the operator.
+  state.askPage = 0;
   $('chatDock')?.classList.add('has-ask');
-  applyAskConditions();
-  syncAskState();
+  refreshAskPanel();
 }
 
 /** The panel's answers, in the shape the engine's form reply wants. */
@@ -2378,27 +2408,109 @@ function collectAskAnswer(form) {
   return answer;
 }
 
+/** The questions of a form in the order they are asked. A field the engine marks
+ *  `hidden` is not a question at all and never becomes a page. */
+function askPageList(panel, form) {
+  return (form?.fields || [])
+    .map((field, index) => ({ field, holder: panel.querySelector(`.ask-field[data-ask-index="${index}"]`) }))
+    // `when` hides a question whose premise the operator has not chosen; it must
+    // not become a page they cannot reach an answer for either.
+    .filter(({ field, holder }) => !field.hidden && holder && !holder.hidden);
+}
+
+/** Show the question at `state.askPage` and nothing else. A five-question form
+ *  used to be one long scroll and the questions below the fold were missed.
+ *  Every field stays in the DOM — off-page is a class, never `hidden` — so
+ *  answers survive paging and the `when` rules keep working. */
+function applyAskPage(panel = document.querySelector('.ask-panel')) {
+  const form = currentForm();
+  if (!panel || !form) return;
+  const pages = askPageList(panel, form);
+  const last = Math.max(0, pages.length - 1);
+  if (state.askPage > last) state.askPage = last;
+  if (state.askPage < 0) state.askPage = 0;
+  const active = pages[state.askPage]?.holder || null;
+  for (const holder of panel.querySelectorAll('.ask-field')) {
+    holder.classList.toggle('ask-page-off', Boolean(active) && holder !== active);
+  }
+  const many = pages.length > 1;
+  const progress = panel.querySelector('[data-ask-progress]');
+  if (progress) {
+    progress.hidden = !many;
+    progress.textContent = many ? `Question ${state.askPage + 1} of ${pages.length}` : '';
+  }
+  const back = panel.querySelector('[data-ask-back]');
+  const next = panel.querySelector('[data-ask-next]');
+  const submit = panel.querySelector('[data-form-reply]');
+  // One question keeps the old shape: no counter, no paging, just Submit.
+  if (back) back.hidden = !many || state.askPage === 0;
+  if (next) next.hidden = !many || state.askPage >= last;
+  if (submit) submit.hidden = many && state.askPage < last;
+}
+
+function moveAskPage(delta) {
+  const panel = document.querySelector('.ask-panel');
+  if (!panel) return;
+  const before = state.askPage;
+  state.askPage += delta;
+  applyAskPage(panel);
+  if (state.askPage === before) return;
+  syncAskState();
+  // A new question starts at its own top: a long list of options must not open
+  // where the previous page happened to be scrolled to.
+  const fields = panel.querySelector('.ask-fields');
+  if (fields) fields.scrollTop = 0;
+}
+
+/** Conditions first, then which page that leaves, then the buttons: a `when`
+ *  rule can hide the question the operator was looking at. */
+function refreshAskPanel() {
+  applyAskConditions();
+  applyAskPage();
+  syncAskState();
+}
+
 /** Required fields, and the free-text box on a choice question, only make sense
- *  live: the Submit button says no until the form can be answered. */
+ *  live: Next says no until this page can be answered, Submit until the whole
+ *  form can. */
 function syncAskState() {
   const panel = document.querySelector('.ask-panel');
-  const btn = panel?.querySelector('[data-form-reply]');
-  const note = panel?.querySelector('[data-ask-state]');
-  if (!panel || !btn) return;
   const form = currentForm();
-  if (!form) return;
+  if (!panel || !form) return;
+  const btn = panel.querySelector('[data-form-reply]');
+  const next = panel.querySelector('[data-ask-next]');
+  const note = panel.querySelector('[data-ask-state]');
+  if (!btn) return;
   const answer = collectAskAnswer(form);
+  const blank = (field) => {
+    const v = answer[String(field.key ?? '')];
+    return (
+      v === undefined || v === null || (typeof v === 'string' && !v.trim()) || (Array.isArray(v) && !v.length)
+    );
+  };
   const missing = (form.fields || []).filter((f) => {
     if (!f.required || f.hidden || f.type === 'external') return false;
     const holder = panel.querySelector(`[data-ask-field="${CSS.escape(String(f.key ?? ''))}"]`);
     if (!holder || holder.hidden) return false;
-    const v = answer[String(f.key ?? '')];
-    return v === undefined || v === null || (typeof v === 'string' && !v.trim()) || (Array.isArray(v) && !v.length);
+    return blank(f);
   });
+  const active = askPageList(panel, form)[state.askPage]?.field;
+  const activeMissing = Boolean(active && active.required && active.type !== 'external' && blank(active));
   btn.disabled = missing.length > 0;
+  if (next) next.disabled = activeMissing;
   if (note) {
-    note.textContent = missing.length ? 'Answer every required question to send.' : '';
-    note.hidden = !missing.length;
+    // On a page with a Next, only *this* question can block you — naming a
+    // question further down the form would be a warning about something the
+    // operator cannot even see yet. Submit is the one that speaks for the form.
+    const text = !next || next.hidden
+      ? missing.length
+        ? 'Answer every required question to send.'
+        : ''
+      : activeMissing
+        ? 'Answer this question to continue.'
+        : '';
+    note.textContent = text;
+    note.hidden = !text;
   }
 }
 
@@ -2664,14 +2776,6 @@ async function renderProbe() {
   }
 
   const results = st.results || [];
-  const modelEl = $('probeModel');
-  if (modelEl) {
-    // The full provider/id, ellipsised by CSS when it does not fit; the ref is
-    // in the tooltip so the truncated part is still available.
-    modelEl.textContent = st.model || '';
-    modelEl.title = st.model || '';
-    modelEl.hidden = !modelEl.textContent;
-  }
   if (!results.length) {
     note.hidden = false;
     note.textContent = st.running
@@ -2691,7 +2795,7 @@ async function renderProbe() {
       const label = r.ok
         ? 'clean'
         : r.offered === false
-          ? 'not offered by this model'
+          ? 'not offered'
           : r.timedOut
             ? 'timeout'
             : r.missing
@@ -3229,22 +3333,28 @@ function wire() {
   if (askHost) {
     askHost.addEventListener('input', (e) => {
       syncAskCustoms(e.target);
-      applyAskConditions();
-      syncAskState();
+      refreshAskPanel();
     });
     askHost.addEventListener('change', (e) => {
       syncAskCustoms(e.target);
-      applyAskConditions();
-      syncAskState();
+      refreshAskPanel();
     });
     askHost.addEventListener('click', (e) => {
       const btn = e.target.closest('[data-form-reply]');
-      if (btn) replyForm(btn.dataset.formReply);
+      if (btn) { replyForm(btn.dataset.formReply); return; }
+      if (e.target.closest('[data-ask-next]')) { moveAskPage(1); return; }
+      if (e.target.closest('[data-ask-back]')) { moveAskPage(-1); return; }
     });
-    // Enter in a text field submits, the way any small form should.
+    // Enter in a text field moves on, the way any small form should — Submit is
+    // only the last page's word for it.
     askHost.addEventListener('keydown', (e) => {
       if (e.key !== 'Enter' || e.target.tagName !== 'INPUT') return;
       e.preventDefault();
+      const next = askHost.querySelector('[data-ask-next]');
+      if (next && !next.hidden) {
+        if (!next.disabled) moveAskPage(1);
+        return;
+      }
       const btn = askHost.querySelector('[data-form-reply]');
       if (btn && !btn.disabled) replyForm(btn.dataset.formReply);
     });

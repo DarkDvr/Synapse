@@ -740,8 +740,11 @@ export function briefSession({ dir, role = 'architect', auto = false, skills = '
     lines.push(
       `The work is a menu, not a checklist - pick the phases this project needs and put them in "phases". ` +
         `invent: when the operator wants something built but the features are open, delegate to inventor, which ` +
-        `writes ${PLAN_DIR}/ideas/ideas-1.md ranked with effort. Then YOU ask the operator which to include ` +
-        `(one question, the ones you recommend first, " (Recommended)" on the label), and write ` +
+        `writes ${PLAN_DIR}/ideas/ideas-1.md ranked with effort. Then YOU ask the operator which to include: ` +
+        `ONE multiselect, one option per proposed feature - never bundles and never a "how much of it do you ` +
+        `want" choice, because they are picking features, not a mood. Put the ones you recommend first with ` +
+        `" (Recommended)" on the label, give each option's description that idea's one-line why and its effort, ` +
+        `and set custom:true so they can add their own. Then write ` +
         `${PLAN_DIR}/${FEATURES_NAME}: {"version":1,"items":[{"id":"F1","title":"...","why":"...",` +
         `"priority":"critical|useful|optional","status":"confirmed|rejected","task":"t2"}]}. Every confirmed ` +
         `feature names the task that delivers it; rejected ones stay in the file and are never passed on.`,

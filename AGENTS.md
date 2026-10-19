@@ -494,6 +494,25 @@ it as a panel **painted over the chat, anchored just above the composer**.
   single checkbox, numbers a number input, `external` a link. Every option shows
   its label and its description — the descriptions are the model's own reasoning
   about each choice and are most of the value.
+- **One question per page.** A five-question form was one long scroll and the
+  questions below the fold were missed outright. The panel shows one at a time,
+  `Question 2 of 5` in the action row, `Back` from the second page on, and the
+  orange fill only on the last page's **Submit Answer**. `Next` is gated on
+  *that* page's required fields and carries "Answer this question to continue.";
+  Submit still speaks for the whole form ("Answer every required question to
+  send." — a warning about a question further down the form, while Next is
+  available, is a warning about something the operator cannot see yet). A
+  one-question form keeps the old shape: no counter, no paging, just Submit.
+  **Paging hides a question by class, never by `hidden`.** `hidden` belongs to
+  the engine's `when` rules, and `collectAskAnswer()` skips a hidden field — so
+  paging with it would silently drop every answer already given. Verified on a
+  fabricated three-question form: paged 1 → 2 → 3, back to 2, across a poll
+  boundary, and the reply still carried
+  `{stack:"page", features:["sky","quote","world"], skin:"warm"}`.
+  **A form opens the dock.** The panel is the dock's child and takes its height
+  from it, so a freshly opened session (a strip of composer) squeezed the panel
+  to 64px with its action row hanging outside it. `has-history` now holds while a
+  form is pending, and a form measures 634px with `stripBelowSubmit: 1`.
 - **`custom: true` becomes "Something Else…"**: a radio/checkbox row with a text
   input that stays disabled until that row is picked, and whose text becomes the
   answer. That is how these models phrase an escape hatch, and the engine's
@@ -714,6 +733,17 @@ item naming the task that delivers it), `ideas/`, `design/`, `reports/` and
 `runs.jsonl`. Each brief is assembled from those files, so a worker receives the
 operator's words and the confirmed features verbatim, and the rejected ones are
 never passed on.
+
+**The features gate is a multiselect, one option per proposed feature.** The
+Inventor proposes; the Architect asks which to include. It used to ask "how much
+of it should the clock do" with three bundles, which hid ten individual ideas
+behind a mood — the operator's word: they wanted to tick the ones they wanted.
+The brief now says: one `multiselect`, never bundles, the recommended ones first
+with `(Recommended)`, each option's description carrying that idea's one-line why
+and its effort, and `custom: true` for their own. The panel already rendered a
+`multiselect` as checkboxes with descriptions, so this was a brief change, not a
+UI one. It is instruction, not enforcement — the question schema is the model's
+to author.
 
 ### What the engine actually does with a permission rule (measured, 2.0.30)
 
@@ -972,12 +1002,13 @@ failure "not offered by this model" when the tool was never in its list.
   leftover at boot (a killed process cannot leave a ghost). They are real
   engine sessions behind the scenes, not fake turns.
 - Results persist to `data\probe.json` so a restart does not blank the panel.
-  The run records **which model** it was against (captured after the toolset
-  discovery turn — a fresh session reports no model before its first turn), and
-  the panel names it above the results: tool timings and toolset are
-  model-specific, so a result without a model is unreadable. The toolset list
-  itself is **not** printed any more — the per-case table underneath is the
-  useful view.
+  The run still records **which model** it was against (captured after the toolset
+  discovery turn — a fresh session reports no model before its first turn), but
+  the panel no longer prints it: a probe is a question about the *tools*, and the
+  model name above the table read as if the results were model-specific. The ref
+  stays in `probe.json` for the case where a result looks impossible. The toolset
+  list is **not** printed either — the per-case table underneath is the useful
+  view.
 
 ---
 
@@ -1088,6 +1119,21 @@ This is once per directory per process and needs no config.
   each actually scrolls — in the wide layout the page does not, so nothing moves
   there. The first version made it either/or, which did nothing at all on a window
   where the transcript scrolls *and* the page does.
+- **A render never moves the page; only Send and opening a session do.**
+  `chatScroller()` returns `null` while the conversation fits its box, and
+  `scrollChatToBottom()` used to fall through to
+  `window.scrollTo(documentElement.scrollHeight)` — the bottom of the *page*,
+  which below 1460px is the rail under the chat, not the chat. Posting a message
+  in a young conversation therefore yanked the whole panel down to the very
+  bottom, and it "fixed itself" as soon as the conversation grew long enough to
+  scroll inside its own box — the branch above took over and only the transcript
+  moved. The fallback is gone: a render scrolls the transcript when it scrolls and
+  does nothing otherwise. `chatAtBottom()` had the mirror-image bug — it compared
+  the page's end with the document's height, so the same case always read
+  "scrolled up" — and now compares the transcript's bottom edge with the viewport.
+  Measured on a stubbed session at 294×980: one message, `maxScroll 540`, page
+  stays at `6` (the cards' top); thirty messages, the transcript ends at its own
+  end and the page still does not move.
 - **The transcript follows a turn while it streams — and the measurement has to
   happen first.** `renderTranscript()` decides "was the reader at the bottom?"
   *before* `fitChatHeight()` runs: that call resizes the dock, and a shrunken dock

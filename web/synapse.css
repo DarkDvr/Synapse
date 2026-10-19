@@ -1121,6 +1121,10 @@ body[data-mode="single"] .keep-toggle { display: none; }
 
 .ask-fields { margin-top: 8px; display: grid; gap: 12px; flex: 1 1 auto; min-height: 0; overflow: auto; }
 .ask-field[hidden] { display: none; }
+/* Paging hides a question by class, never by `hidden`: `hidden` belongs to the
+   engine's `when` rules, and collectAskAnswer skips a `hidden` field — an answer
+   given on page 1 would vanish when page 2 was shown. */
+.ask-field.ask-page-off { display: none; }
 .ask-q-title { margin: 0; font-size: 12.5px; font-weight: 700; color: #fff; }
 .ask-q-text {
   margin: 3px 0 0; font-size: 16px; line-height: 1.5; font-weight: 700; color: var(--text);
@@ -1190,12 +1194,21 @@ body[data-mode="single"] .keep-toggle { display: none; }
    questions arrive. */
 .ask-actions {
   flex: none;
-  display: flex; align-items: center; gap: 10px;
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap; row-gap: 6px;
   margin: 11px -14px 0; padding: 9px 14px 11px;
   background: #1a1c20; border-top: 1px solid #2b2e35;
 }
 .ask-state { font-size: 11px; color: var(--orange); }
+/* Which question of how many — the one thing that says a form has more below
+   the fold. It sits first in the row so it is read before the button. */
+.ask-progress {
+  font-size: 10.5px; font-weight: 700; letter-spacing: 0.08em;
+  text-transform: uppercase; color: #b9bec6; white-space: nowrap;
+}
 .ask-actions .btn { margin-left: auto; }
+/* Back and Next are one cluster: only the first button takes the free space. */
+.ask-actions .btn ~ .btn { margin-left: 8px; }
+.ask-actions .btn[hidden] { display: none; }
 .ask-actions .btn:disabled { opacity: 0.45; cursor: not-allowed; }
 
 /* the one orange fill in the panel: white on orange, never orange on orange */
@@ -1574,13 +1587,6 @@ body[data-mode="single"] .keep-toggle { display: none; }
 }
 /* a short control, not a full-height button */
 #runProbe { height: 26px; min-height: 26px; padding: 0 10px; font-size: 11px; }
-/* the full provider/id can be long: one line, ellipsised, with the ref in the
-   tooltip. The mockup's "..." is this rule, not truncation in JS. */
-.probe-model {
-  font-family: var(--mono); font-size: 10.5px; color: #9aa0a8;
-  margin: 4px 0 0;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
 .probe-block .tool-table { margin-top: 4px; }
 /* The case name is an identifier, not prose - mono keeps the column aligned. Row
    geometry is the inspector-wide one (2px cells, 21px rows); this table used to
