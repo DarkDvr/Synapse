@@ -143,9 +143,13 @@ paid for out of a chat that is already tight.
 
 The stage's second row is still `minmax(0, 1fr)` under a definite height, so
 anything that *does* grow — a raised `--task-lines`, a font swap — comes out of
-the transcript's top edge and never moves the composer. Below the 1460px
-breakpoint the chat is capped to the room left under the cards, so a short window
-scrolls the page for the rail but never hides the message box.
+the transcript's top edge and never moves the composer.
+
+Below the 1460px breakpoint the chat is **bottom-anchored**: its height is the room
+between where the cards will settle and the window's bottom, so the composer sits
+on the window's bottom edge in both modes and only the chat's top edge moves when
+you switch. It moves with them too — the dock transitions its cap with the same
+260ms ease as the card reveal, so the bottom does not move by a pixel.
 
 **The two roles in a delegation are the only cards that change appearance.** The
 requester takes green (the Architect's own colour) and the worker red; colour

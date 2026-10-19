@@ -806,13 +806,25 @@ This is once per directory per process and needs no config.
   so Multi showed no worker cards at all. Hide conditionally instead
   (`body[data-view="session"]:not(.workers-on) …`) and let each element keep its
   own display. Check the *computed* display, not the class list.
-- **The chat fits the window below the 1460px breakpoint.** `fitChatHeight()`
-  caps the dock to the room left under it in the viewport (`min(room, 70vh,
-  720px)`), so on a short window the cards cannot push the composer off the
-  bottom edge — the chat's top stays exactly where the cards left it and only its
-  height shrinks. Measured at 1200x700: the dock was 490px and the composer sat
-  at 904–962, invisible; now the dock is 253px and the composer ends at 686. The
-  wide layout clears the inline cap and lets CSS own it.
+- **Below the breakpoint the chat is bottom-anchored.** `fitChatHeight()` caps the
+  dock to the room between where the cards *will settle* (`--reveal-h`, the
+  reveal's target — never the live position) and the window's bottom, so the
+  composer sits on the window's bottom edge in both modes and only the chat's top
+  moves as the cards collapse or reveal. There is no `70vh`/`720px` ceiling: a
+  ceiling is what left the chat floating short of the bottom with the rail showing
+  underneath it. Measured at 900x880, traced frame by frame: the dock's bottom
+  held at 868px for the whole slide in both directions while the top moved
+  501 ↔ 146.
+  Two things make it hold. `.chat-dock` transitions `max-height` with the same
+  260ms ease as the card reveal (narrow layout only), so the shrinking height and
+  the moving top cancel out; and a **re-measure must not land mid-slide**
+  (`revealUntil`): the ResizeObserver fires exactly then — adding `workers-on`
+  resizes the topology — and re-driving the layout restarts the wrapper's
+  transition while the chat's own curve keeps going, which showed up as a 29px
+  bounce of the composer. The observer and the render-time re-measure wait for the
+  slide; a mode switch never does. A frame-by-frame correction loop was tried
+  first and was worse: the height lags the moving top by a frame, which overshot
+  the window by 40px.
 - **The subtitle reserve shrinks on a short window**
   (`@media (max-height: 820px) { --task-lines: 2 }`): three lines of empty card is
   a luxury paid out of the chat. It is fixed *within* a window size, so the

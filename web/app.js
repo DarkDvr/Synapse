@@ -546,8 +546,10 @@ function renderMode() {
 // guessed, so the cards are never cut off mid-card.
 let revealTimer = 0;
 let workersPendingOff = false;
-// The chat's height has to be re-fitted once the cards have settled: measured
-// mid-slide it describes a layout that no longer exists.
+// While a card transition is in flight, re-measures wait (see applyRoleCardsLayout).
+let revealUntil = 0;
+// The chat's height is settled after the cards have moved: one correction at the
+// end, not a per-frame chase (that overshoots the window by a frame).
 let chatFitTimer = 0;
 
 function topologyTarget() {
@@ -591,17 +593,25 @@ function measureReveal(topo, stage) {
  * not even a transient one can scroll). The measured height is used only for
  * the 320ms Multi→Single collapse animation.
  */
-function applyRoleCardsLayout({ animate = true, from = null } = {}) {
+function applyRoleCardsLayout({ animate = true, from = null, remeasure = false } = {}) {
   const els = topologyTarget();
   if (!els || state.view !== 'session') return;
+  // A re-measure landing mid-slide restarts the wrapper's transition while the
+  // chat's own curve keeps going, and the two fall out of step — that is the
+  // ~29px bounce the composer did while the cards were revealing. The observer
+  // fires exactly then (adding `workers-on` resizes the topology), so it waits
+  // for the slide to finish; a mode switch is never a re-measure and always runs.
+  if (remeasure && performance.now() < revealUntil) {
+    requestAnimationFrame(drawActivePath);
+    return;
+  }
   const { wrap, topo } = els;
   clearTimeout(revealTimer);
   clearTimeout(chatFitTimer);
   workersPendingOff = false;
   wrap.classList.add('is-open');
-  // Whatever the cards end up at, the chat is re-fitted when the slide is over.
-  // Measuring mid-transition would pin the dock to a height the layout is still
-  // on its way out of, and the chat would stop tracking the cards at all.
+  // The chat's cap is set from the reveal's *target* (so the two transitions can
+  // run together), and re-fitted once more when everything has settled.
   chatFitTimer = setTimeout(() => {
     fitChatHeight();
     placeAskPanel();
@@ -622,6 +632,7 @@ function applyRoleCardsLayout({ animate = true, from = null } = {}) {
     // the reflow is what makes the reveal animate instead of snapping
     void wrap.offsetHeight;
     wrap.style.setProperty('--reveal-h', `${measureReveal(topo, $('stage'))}px`);
+    revealUntil = performance.now() + 300;
     requestAnimationFrame(drawActivePath);
     return;
   }
@@ -645,6 +656,7 @@ function applyRoleCardsLayout({ animate = true, from = null } = {}) {
   // Collapsing from Multi: shrink through the measured height, then settle
   // exact and hide the workers only once the height has fallen.
   wrap.style.setProperty('--reveal-h', `${collapseH}px`);
+  revealUntil = performance.now() + 300;
   workersPendingOff = true;
   revealTimer = setTimeout(() => {
     if (workersPendingOff && state.mode === 'single') {
@@ -1284,7 +1296,7 @@ function renderRoleActivity() {
     card.classList.toggle('is-worker', part === 'worker');
   }
   if (state.view === 'session') {
-    applyRoleCardsLayout({ animate: true, from: fromH });
+    applyRoleCardsLayout({ animate: true, from: fromH, remeasure: true });
   }
   requestAnimationFrame(drawActivePath);
 }
@@ -1782,10 +1794,19 @@ function placeAskPanel() {
 /**
  * Below the wide breakpoint the stage is content-sized, so on a short window the
  * card block plus a 70vh chat pushes the composer off the bottom edge — and the
- * one thing the operator needs is the thing that gets cut off. Cap the dock to
- * the room left under it: the chat's top stays exactly where the cards left it,
- * and only its height shrinks. In the wide layout the stage already has a
- * definite height, so the inline cap is cleared and CSS owns it.
+ * one thing the operator needs is the thing that gets cut off.
+ *
+ * The chat is bottom-anchored: its height is exactly the room between where the
+ * cards will settle and the bottom of the window, so the composer sits on the
+ * window's bottom edge in every mode and only the chat's *top* moves when the
+ * cards collapse or reveal. No ceiling — a ceiling is what left the chat floating
+ * short of the bottom with the rail showing underneath it.
+ *
+ * The room is computed from the *settled* card height (`--reveal-h`, the reveal's
+ * target), not from where the dock is this instant: mid-slide that is a layout
+ * that no longer exists, and a height that chases the moving top overshoots the
+ * window by a frame. `.chat-dock` transitions max-height with the same 260ms ease
+ * as the cards, so the two move together and the bottom stays put.
  */
 function fitChatHeight() {
   const dock = $('chatDock');
@@ -1793,15 +1814,22 @@ function fitChatHeight() {
   const wide = window.matchMedia('(min-width: 1461px)').matches;
   let next = '';
   if (!wide && state.view === 'session') {
-    // Page coordinates, so scrolling the page does not change the answer.
-    const top = dock.getBoundingClientRect().top + window.scrollY;
-    const room = window.innerHeight - top - 12;
-    // The stacked layout's own cap still applies: this only ever takes room away.
-    const cap = Math.min(room, Math.round(window.innerHeight * 0.7), 720);
-    next = `${Math.max(180, Math.floor(cap))}px`;
+    const wrap = $('topologyWrap');
+    // `none` in Single: the wrapper is exactly the Architect card.
+    const settled = parseFloat(wrap?.style.getPropertyValue('--reveal-h'))
+      || wrap?.getBoundingClientRect().height
+      || 0;
+    const room = window.innerHeight - (stageTop() + settled + stageGap()) - 12;
+    next = `${Math.max(180, Math.floor(room))}px`;
   }
   if (dock.style.maxHeight !== next) dock.style.maxHeight = next;
 }
+
+/** The stage's top edge in page coordinates — the one reference point every
+ *  height below the cards is measured from. */
+const stageTop = () => $('stage').getBoundingClientRect().top + window.scrollY;
+/** The stage's own row gap, read rather than assumed. */
+const stageGap = () => parseFloat(getComputedStyle($('stage')).rowGap) || 0;
 
 function askOption(kind, name, value, label, description) {
   // The models mark their recommendation in the label — "(Recommended)", the
@@ -2849,7 +2877,7 @@ function wire() {
       if (topoRaf) return;
       topoRaf = requestAnimationFrame(() => {
         topoRaf = 0;
-        if (state.view === 'session') applyRoleCardsLayout({ animate: false });
+        if (state.view === 'session') applyRoleCardsLayout({ animate: false, remeasure: true });
         drawActivePath();
       });
     }).observe($('topology'));
@@ -2857,7 +2885,7 @@ function wire() {
   // Fonts settle a tick after first paint; measure once more when they do.
   if (document.fonts?.ready) {
     document.fonts.ready.then(() => {
-      if (state.view === 'session') applyRoleCardsLayout({ animate: false });
+      if (state.view === 'session') applyRoleCardsLayout({ animate: false, remeasure: true });
     }).catch(() => {});
   }
 

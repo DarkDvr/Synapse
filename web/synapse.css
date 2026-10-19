@@ -699,6 +699,17 @@ body[data-view="session"] .chat-dock.has-history {
 body[data-view="session"] .chat-dock:not(.has-history) .composer { border-top-color: transparent; }
 .chat-scroll.is-empty { display: none; }
 
+/* Below the wide breakpoint the chat's height is capped to the room under the
+   cards (fitChatHeight), so it has to move with them: the same 260ms ease as the
+   card reveal, or its bottom jumps while its top slides. The 20ms delay is the
+   alignment — the wrapper's transition starts a frame later (it is written after
+   a forced reflow), and a frame of lead showed up as a 26px bounce of the
+   composer. Above the breakpoint the stage owns both, so there is nothing to
+   transition. */
+@media (max-width: 1460px) {
+  .chat-dock { transition: max-height 0.26s ease; }
+}
+
 /* jump between your own requests; only shown for longer conversations.
    Absolute *inside the dock*: the pane is the button's world, so it can never
    drift out over the rail, and the dock's own overflow clips it. It floats over
