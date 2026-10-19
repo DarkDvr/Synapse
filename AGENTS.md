@@ -369,6 +369,13 @@ ordinary file tools; there is no tool and no store for it.
   a task whose id is running renders as `doing` — yellow dot, yellow border, white
   bold title — while the file stays the plan. Counts in the footer stay the file's
   (they are the plan's truth); only the row is live.
+- **A result with a status that has not caught up is a `problem`.** test-project-3's
+  t1 got a full `result` and was left `todo`, so the pane showed a finished task as
+  untouched while the Architect's own message said it was marked done. `readPlan`
+  now flags "has a result but its status is \"todo\"" — a `blocked` or `failed` task
+  may legitimately carry a result (a timed-out worker still produced something), so
+  only `todo` and `doing` are flagged. It goes through the same `problems` channel,
+  so the Architect repairs its own file on its next turn.
 - **Plan problems are a labelled list, not a filled block.** They were an amber
   panel with the complaints as amber paragraphs, and on a finished plan that read
   as a rendering fault rather than a note — the operator's word for it was
@@ -868,6 +875,14 @@ This is once per directory per process and needs no config.
   each actually scrolls — in the wide layout the page does not, so nothing moves
   there. The first version made it either/or, which did nothing at all on a window
   where the transcript scrolls *and* the page does.
+- **The transcript follows a turn while it streams — and the measurement has to
+  happen first.** `renderTranscript()` decides "was the reader at the bottom?"
+  *before* `fitChatHeight()` runs: that call resizes the dock, and a shrunken dock
+  makes the transcript read as scrolled-up, so reasoning and tool lines arrived
+  without the chat following them. While `state.streaming || state.busy` it follows
+  unconditionally — the operator's words were "to make sure I always see any new
+  info in chat being added" — so reading history mid-turn is pulled back to the end
+  by the next part. That is the trade they asked for.
 - **The two rail tables share one geometry.** They are lists before they are
   tables: 2px cells, `line-height: 15px`, `tbody tr { height: 21px }`, and anything
   that lives in a cell is capped to that height — the probe's Error is a real
@@ -1015,10 +1030,16 @@ This is once per directory per process and needs no config.
   `--yellow` — the live path's colour, not amber, which stays the engine's
   "waiting" colour elsewhere), **red** a task of its role is `blocked` or
   `failed`, **green** idle but has taken part. Precedence is running → blocked →
-  done → idle. A card whose role has never taken part is **80% opacity** (the
-  Architect never is), which is how "who has actually worked here" is readable at
-  a glance; a role goes solid the instant it is running, not when its task's
-  status changes. The Architect has two **chips** for its two resting states, in
+  done → idle. A card whose role has never taken part is dimmed (see below: 55%,
+  not the 80% it was first shipped at), which is how "who has actually worked here"
+  is readable at a glance; a role goes solid the instant it is running, not when its
+  task's status changes. **The dim is 0.55, not 0.8** — at 80% the operator could not
+  see it at all — and hovering restores the card to full, so a dimmed picker is never
+  unreadable. **A skipped role looks blocked**: red border, red label, and its
+  **picker goes red** (border and model name, background unchanged) because the
+  model is what failed and swapping it is the fix. Like the rest of this, it is
+  derived: the run carries `skipped: [{ role, message }]`, so the mark lasts exactly
+  as long as the run does. The Architect has two **chips** for its two resting states, in
   the same slot the task line uses — a green **`Done`** when there is a plan and
   every task is `done`, and a yellow **`Waiting on you`** when nothing is in
   flight and work is outstanding. Both also put the card in `is-settled`, which is

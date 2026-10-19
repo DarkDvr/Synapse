@@ -1348,6 +1348,7 @@ function renderRoleActivity() {
     let part = '';
     let dot = 'idle';
     let chip = null;
+    let skipped = false;
     // "Settled" is the Architect's resting state — finished, or waiting for the
     // operator to move. Its border goes green, the same colour every other card
     // uses for "idle, has taken part": there is nothing of ours in flight.
@@ -1373,20 +1374,22 @@ function renderRoleActivity() {
       dot = 'live';
     } else if (run?.skipped?.some((s) => s.role === role)) {
       // This role was tried for the task and the model refused it, so the harness
-      // moved the work down the ladder. Say why, on the card of the role that was
-      // skipped: the report says it too, but the card is where the question
-      // "why is Coder 1 idle?" is actually asked.
+      // moved the work down the ladder. Say why on the card of the role that was
+      // skipped — and mark it the way a blocker is marked: red border, red label,
+      // and a red picker, because the model is what failed.
       const why = run.skipped.find((s) => s.role === role);
+      skipped = true;
       text = `Skipped — ${why?.message || 'the model could not run it'}`;
     } else if (blocked) dot = 'err';
     else if (participated) dot = 'ok';
 
     // Dimmed cards are the ones that have never been in this project at all. A
     // card that is taking part is solid by definition, and the Architect is never
-    // dimmed: it is the role that exists before any of this.
-    const dim = role !== 'architect' && !participated && !part;
-    rows.push({ card, text, part, dot, dim, chip, settled });
-    sig += `${role}\u0001${part}\u0001${dot}\u0001${dim ? 1 : 0}\u0001${settled ? 1 : 0}\u0001${chip ? chip.text : ''}\u0001${text}\u0002`;
+    // dimmed: it is the role that exists before any of this. A skipped card is
+    // solid too — it is news, not absence.
+    const dim = role !== 'architect' && !participated && !part && !skipped;
+    rows.push({ card, text, part, dot, dim, chip, settled, skipped });
+    sig += `${role}\u0001${part}\u0001${dot}\u0001${dim ? 1 : 0}\u0001${settled ? 1 : 0}\u0001${skipped ? 1 : 0}\u0001${chip ? chip.text : ''}\u0001${text}\u0002`;
   }
 
   if (sig === state.roleSig) return;
@@ -1398,7 +1401,7 @@ function renderRoleActivity() {
   // definite height, so anything that did grow would take room from the
   // transcript's top edge.
   const fromH = Math.ceil($('topologyWrap')?.getBoundingClientRect().height || 0);
-  for (const { card, text, part, dot, dim, chip, settled } of rows) {
+  for (const { card, text, part, dot, dim, chip, settled, skipped } of rows) {
     const slot = card.querySelector('.role-task');
     // The status dot is the markup's own — it ships as `idle` and is only ever
     // changed here. Yellow breathes because it means "taking part right now",
@@ -1415,6 +1418,10 @@ function renderRoleActivity() {
     card.classList.toggle('is-initiator', part === 'initiator');
     card.classList.toggle('is-worker', part === 'worker');
     card.classList.toggle('is-settled', settled);
+    // A skipped role looks like a blocked one, and its picker says where the
+    // problem is: the model, not the role.
+    card.classList.toggle('is-skipped', skipped);
+    card.querySelector('.model-search')?.classList.toggle('is-skipped', skipped);
     if (!slot) continue;
     // The slot never appears or disappears: it is a fixed three-line hole in the
     // card, so filling it cannot change the card's height and cannot move the
@@ -1590,6 +1597,16 @@ function renderTranscript() {
   const el = $('transcript');
   if (!el) return;
   toolSeq = 0;
+  // Read the reader's intent BEFORE anything resizes the dock. `fitChatHeight()`
+  // below can shrink it, and a shrunken dock makes the transcript look "scrolled
+  // up" even though nobody moved — which is why new reasoning and tool lines
+  // arrived without the chat following them.
+  //
+  // And while a turn is streaming, follow unconditionally: the operator's words
+  // were "they should, to make sure I always see any new info in chat being
+  // added". Reading back through history mid-turn will be pulled to the end by
+  // the next part; that is the trade they asked for.
+  const stick = chatAtBottom() || state.streaming || state.busy;
   // The Architect's card shows what its own turn is doing, read from this same
   // transcript, so it is refreshed wherever the transcript is.
   renderRoleActivity();
@@ -1638,9 +1655,6 @@ function renderTranscript() {
     return;
   }
   el.classList.remove('is-empty');
-  // Stick to the bottom while new output arrives, but never yank the view away
-  // from someone who has scrolled up to read.
-  const stick = chatAtBottom();
   el.innerHTML = showable.map(renderMessage).join('') + pending;
   if (stick) scrollChatToBottom();
   renderChatNav();

@@ -621,10 +621,19 @@ body.dark .sidebar-bottom,
 
 /* A role that has never been in this plan. The Architect is never dimmed (the
    UI does not add this class to its card): it exists before any of this, and it
-   is the card the operator needs to read. The dim is deliberately subtle — it
-   has to be readable at a glance which roles have taken part, not hidden. */
-.role-card.is-dim { opacity: 0.8; }
+   is the card the operator needs to read. 0.55, not 0.8 — at 80% the operator
+   could not see the difference at all. Hovering restores it, so nothing is ever
+   unreadable. */
+.role-card.is-dim { opacity: 0.55; }
 .role-card.is-dim:hover { opacity: 1; }
+
+/* A role the harness skipped because its MODEL refused the turn. Marked the way a
+   blocker is marked — red border, red label — and the picker goes red too, since
+   the model is what failed and swapping it is the fix. This is live state: it
+   lasts as long as the run does, and the report and the model's badge carry the
+   evidence afterwards. */
+.role-card.is-skipped { border-color: var(--red); }
+.role-card.is-skipped .role-task { color: var(--red); }
 
 .role-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .role-head h3 {
@@ -671,6 +680,12 @@ body.dark .sidebar-bottom,
    sits on a dead model and the card looks fine. */
 .model-search.has-issues { border-color: rgba(232, 163, 61, 0.55); color: var(--amber); }
 .model-search.has-issues:hover { border-color: var(--amber); }
+/* Skipped just now: red, text included. The background stays as it is — this is a
+   mark on the control, not a new control. */
+.model-search.is-skipped {
+  border-color: rgba(240, 86, 63, 0.75); color: var(--red);
+}
+.model-search.is-skipped:hover { border-color: var(--red); }
 .model-search:focus-visible { outline: 2px solid var(--orange); outline-offset: 1px; }
 .model-search::placeholder { color: #6d717a; }
 

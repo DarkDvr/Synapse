@@ -200,6 +200,17 @@ export function readPlan(dir) {
     if (!STATUSES.includes(rawStatus)) {
       problems.push(`${where} has an unknown status "${rawStatus}" - showing it as todo`);
     }
+    // A half-written status: a result filled in while the task still says it has
+    // not started. That happened live — test-project-3's t1 was given a full
+    // `result` and left `todo`, so the pane showed a finished task as untouched
+    // and the Architect's own message claimed it was done. The Architect owns the
+    // file, so it is told, not repaired.
+    const result = asText(source.result) || null;
+    if (result && (status === 'todo' || status === 'doing')) {
+      problems.push(
+        `${where} has a result but its status is "${status}" - mark it done, or clear the result`,
+      );
+    }
 
     return {
       id: id || null,
@@ -209,7 +220,7 @@ export function readPlan(dir) {
       rawStatus,
       detail: asText(source.detail) || null,
       dependsOn: Array.isArray(source.dependsOn) ? source.dependsOn.map(asText).filter(Boolean) : [],
-      result: asText(source.result) || null,
+      result,
       note: asText(source.note) || null,
     };
   });
