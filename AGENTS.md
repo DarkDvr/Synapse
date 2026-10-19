@@ -360,6 +360,16 @@ ordinary file tools; there is no tool and no store for it.
   only while it is that reason**: on a `done` or `todo` task the text stays in the
   file and in the tooltip, because the Architect moving on without clearing its own
   note made a finished plan look like it was still asking.
+- **A project's folder cannot be deleted while the engine is running.** Deleting a
+  project unregisters the entry and leaves the folder, which is the registry's
+  documented behaviour — but the *folder* then refuses to go: `Remove-Item
+  -Recurse -Force` reports "being used by another process" on the directory
+  itself, and the folder is left behind, empty. The holder is the engine, which
+  keeps a handle on a location it has served; it is released when the engine
+  stops. So the order is **stop Synapse → remove the folder → start Synapse**, and
+  `restart.ps1` is the wrong tool for the middle step on its own. This is what
+  left `workspace\field-notes` behind after the projects moved out, and it cost a
+  second round before the cause was obvious.
 - **There is no Project panel, and no path label anywhere.** The rail is Project
   plan + Tools in use; each project in the sidebar owns a `.tree-project-body`
   with one vertical yellow rule on its left, and the two shortcuts, the

@@ -184,8 +184,8 @@ export function readPlan(dir) {
       const hinted = file || title.match(PATHISH_TITLE);
       if (hinted) {
         problems.push(
-          `${where}'s title names a file or a path ("${hinted[0]}") - say what the work is, ` +
-            `e.g. "Build the word-frequency report", and put the path in detail`,
+          `${where}'s title names ${file ? 'a file' : 'a path'} ("${hinted[0]}") - say what the work is, ` +
+            `and put the path in detail`,
         );
       }
     }
