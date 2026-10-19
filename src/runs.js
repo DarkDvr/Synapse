@@ -35,6 +35,14 @@ const MAX_ATTEMPTS = 3;
 // per-role override on roles.<id>.timeoutSec).
 const DEFAULT_TIMEOUT_SEC = 300;
 
+// The peer ladder: roles that can stand in for one another, in escalation order.
+// A task is written for one role, and the harness moves the same task down the
+// line when that role cannot do the job — the Architect cannot make that call,
+// because the first thing it ever learns about a refused model is a report saying
+// nothing happened. Configurable as `worker.ladder`; a role not in it is tried on
+// its own.
+const DEFAULT_LADDER = ['coder-1', 'coder-2', 'coder-3'];
+
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // MCP tools arrive namespaced (`synapse-delegate_delegate`): match by suffix.
@@ -67,6 +75,38 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
   // mid-run does not lose the picture.
   const running = new Map();
   const dirKey = (d) => String(d ?? '').replace(/[\\/]+$/, '').toLowerCase();
+
+  /** Has the provider already refused this role's model? */
+  function providerMarked(roleId, config) {
+    const ref = config?.roles?.[roleId]?.ref;
+    if (!ref || !modelCache?.get) return false;
+    return Boolean(modelCache.get(ref)?.issues?.some((i) => i.kind === 'provider'));
+  }
+
+  /**
+   * The rungs to try, in order, for this attempt of this task.
+   *
+   * Two rules, both about the same thing — a coder that cannot do the job:
+   *
+   *  - an attempt after the first starts a rung further down, because the
+   *    Architect re-delegating the same task *is* its verdict that the previous
+   *    coder did not deliver. It is the only verdict the harness can see, and it
+   *    is exactly "blocked by a coder not able to do its job";
+   *  - a rung whose model carries a provider mark is skipped, because the provider
+   *    has already said it will not run it.
+   *
+   * A role outside the ladder has no peers and is tried alone.
+   */
+  function candidatesFor(role, attempt, config) {
+    const ladder =
+      Array.isArray(config?.worker?.ladder) && config.worker.ladder.length ? config.worker.ladder : DEFAULT_LADDER;
+    const at = ladder.indexOf(role);
+    if (at === -1) return [role];
+    const skip = Math.min(Math.max(0, (attempt || 1) - 1), ladder.length - 1);
+    const rest = ladder.slice(skip);
+    const clean = rest.filter((id) => !providerMarked(id, config));
+    return clean.length ? clean : rest;
+  }
 
   /** Tell the open UIs what a worker is doing. A broken listener must never
    *  break a run, so this can never throw. */
@@ -199,17 +239,21 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     }
     busy.add(dir);
 
-    const role = task.role;
-    const roleConfig = getConfig()?.roles?.[role] || {};
-    const modelRef = roleConfig.ref || null;
-    const variant = roleConfig.variant || null;
-    // The ceiling for this task: the role's own, else the global default.
+    // Which role gets this attempt, before anything is created: the plan's role is
+    // the first rung of its ladder. See candidatesFor().
     const config = getConfig() || {};
-    const timeoutSec = Math.max(
+    const candidates = candidatesFor(task.role, attempts + 1, config);
+    let role = candidates[0];
+    let roleConfig = config.roles?.[role] || {};
+    let modelRef = roleConfig.ref || null;
+    let variant = roleConfig.variant || null;
+    // The ceiling for this task: the role's own, else the global default. Re-read
+    // per rung, because a role can override it.
+    let timeoutSec = Math.max(
       30,
       Number(roleConfig.timeoutSec) || Number(config.worker?.timeoutSec) || DEFAULT_TIMEOUT_SEC,
     );
-    const timeoutMs = timeoutSec * 1000;
+    let timeoutMs = timeoutSec * 1000;
     const fingerprintBefore = planFingerprint(dir);
     const startedAt = Date.now();
     let worker = null;
@@ -225,15 +269,18 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
       callId: request.callId,
       task: request.task,
       role,
+      plannedRole: task.role,
       title: task.title,
       model: modelRef,
       variant,
       architect: architectId,
       attempt: attempts + 1,
+      ladder: candidates,
     });
     log.info(
-      `delegation: ${request.task} "${task.title}" -> ${role} ` +
-        `(${modelRef || 'engine default'}${variant ? `#${variant}` : ''}) in ${project}, ceiling ${timeoutSec}s`,
+      `delegation: ${request.task} "${task.title}" -> ${role}` +
+        (role === task.role ? '' : ` (planned for ${task.role})`) +
+        ` (${modelRef || 'engine default'}${variant ? `#${variant}` : ''}) in ${project}, ceiling ${timeoutSec}s`,
     );
 
     // The card that will run this, and the path the UI draws to it. Kept in a
@@ -263,65 +310,103 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     const harnessBefore = await (guard?.state?.() || Promise.resolve(null)).catch(() => null);
 
     try {
-      worker = await engine.createSession({
-        title: `${request.task} - ${role}`,
-        model: modelRef ? { ref: modelRef, variant } : undefined,
-        directory: dir,
-        // Workers carry the harness guard too: they have the same toolset as the
-        // Architect, and a worker is the most likely place for a stray absolute
-        // path — it is the one being told to write files.
-        permissions: guard?.rules?.() || [],
-        // Hidden from the rail: it runs in the project directory, so only this
-        // mark tells Synapse it is scaffolding and not the operator's session.
-        metadata: { synapse: { internal: true, role, task: request.task, architect: architectId } },
-      });
-
-      // Its context: where it is, what the plan says, and that the plan is not
-      // its to touch. The task itself goes in the message below.
-      try {
-        await engine.setInstruction(worker.id, BRIEF_KEY, briefSession({ dir, role }));
-      } catch (err) {
-        log.warn(`worker brief failed for ${request.task}: ${err.message}`);
-      }
-      const before = (await engine.getMessages(worker.id)).length;
-      await engine.prompt(worker.id, workerPrompt({ task, note: request.note, goal: plan.plan?.goal }));
-      const finished = await waitForIdle(worker.id, before, timeoutMs, (tool) => {
-        live.tool = tool;
-        emit('run.progress', { ...live });
-      });
-      if (finished.timedOut) {
-        outcome = 'timeout';
-        try { await engine.interrupt(worker.id); } catch { /* already gone */ }
-      }
-
-      const messages = await engine.getMessages(worker.id);
-      text = workerText(messages);
-      files = workerFiles(messages);
-
-      if (!finished.timedOut) {
-        // A turn can end with `idle` and still have failed: the engine appends
-        // idle whatever the step did, and a provider refusing the model (a
-        // retired model answers HTTP 410) is over in about two seconds. Reading
-        // that idle as success told the Architect the work was done and produced
-        // nothing — which is a lie twice over, and it hid a dead model behind
-        // "the worker reported nothing".
-        turnError = turnErrorOf(messages, before);
-        if (turnError) {
-          outcome = 'error';
-          log.error(`worker ${request.task} (${role}) turn ended in an error: ${turnError}`);
-          // The badge of shame is for the operator's picker, never for the model:
-          // nothing is said to the Architect about a model's reputation, and the
-          // operator clears it the moment the model works again.
-          try {
-            if (modelCache?.noteIssue?.(modelRef, { kind: 'provider', message: turnError })) {
-              // Tell the UI to re-read the catalog, so the badge is on the picker
-              // that chose the model rather than waiting for a reload.
-              notify?.({ kind: 'model', type: 'issues', ref: modelRef });
-            }
-          } catch { /* the cache is not worth failing a run over */ }
-        } else {
-          outcome = 'completed';
+      // One worker run per rung. The loop exists for one case: the provider
+      // refusing the model (a retired one answers 410 in about two seconds).
+      // Retrying the same dead model would spend the Architect's turn for nothing,
+      // so the next peer takes over inside this same delegation — same task, same
+      // attempt — and the report says who actually ran it. A timeout does not
+      // loop: a timed-out worker may still have produced something, and the
+      // attempt counter is what moves that case down the ladder next time.
+      for (let rung = 0; rung < candidates.length; rung += 1) {
+        const candidate = candidates[rung];
+        if (rung > 0) {
+          log.warn(
+            `worker ${request.task}: ${candidates[rung - 1]} could not run it (${outcome}), moving to ${candidate}`,
+          );
         }
+        role = candidate;
+        roleConfig = config.roles?.[role] || {};
+        modelRef = roleConfig.ref || null;
+        variant = roleConfig.variant || null;
+        timeoutSec = Math.max(
+          30,
+          Number(roleConfig.timeoutSec) || Number(config.worker?.timeoutSec) || DEFAULT_TIMEOUT_SEC,
+        );
+        timeoutMs = timeoutSec * 1000;
+        turnError = null;
+        // The card and the live path follow the role that is actually working.
+        live.role = role;
+        live.model = modelRef;
+        live.variant = variant;
+        live.timeoutSec = timeoutSec;
+        live.tool = null;
+        emit('run.progress', { ...live });
+
+        worker = await engine.createSession({
+          title: `${request.task} - ${role}`,
+          model: modelRef ? { ref: modelRef, variant } : undefined,
+          directory: dir,
+          // Workers carry the harness guard too: they have the same toolset as the
+          // Architect, and a worker is the most likely place for a stray absolute
+          // path — it is the one being told to write files.
+          permissions: guard?.rules?.() || [],
+          // Hidden from the rail: it runs in the project directory, so only this
+          // mark tells Synapse it is scaffolding and not the operator's session.
+          metadata: { synapse: { internal: true, role, task: request.task, architect: architectId } },
+        });
+
+        // Its context: where it is, what the plan says, and that the plan is not
+        // its to touch. The task itself goes in the message below.
+        try {
+          await engine.setInstruction(worker.id, BRIEF_KEY, briefSession({ dir, role }));
+        } catch (err) {
+          log.warn(`worker brief failed for ${request.task}: ${err.message}`);
+        }
+        const before = (await engine.getMessages(worker.id)).length;
+        await engine.prompt(worker.id, workerPrompt({ task, note: request.note, goal: plan.plan?.goal }));
+        const finished = await waitForIdle(worker.id, before, timeoutMs, (tool) => {
+          live.tool = tool;
+          emit('run.progress', { ...live });
+        });
+        if (finished.timedOut) {
+          outcome = 'timeout';
+          try { await engine.interrupt(worker.id); } catch { /* already gone */ }
+        }
+
+        const messages = await engine.getMessages(worker.id);
+        text = workerText(messages);
+        files = workerFiles(messages);
+
+        if (!finished.timedOut) {
+          // A turn can end with `idle` and still have failed: the engine appends
+          // idle whatever the step did, and a provider refusing the model (a
+          // retired model answers HTTP 410) is over in about two seconds. Reading
+          // that idle as success told the Architect the work was done and produced
+          // nothing — which is a lie twice over, and it hid a dead model behind
+          // "the worker reported nothing".
+          turnError = turnErrorOf(messages, before);
+          if (turnError) {
+            outcome = 'error';
+            log.error(`worker ${request.task} (${role}) turn ended in an error: ${turnError}`);
+            // The badge of shame is for the operator's picker, never for the model:
+            // nothing is said to the Architect about a model's reputation, and the
+            // operator clears it the moment the model works again.
+            try {
+              if (modelCache?.noteIssue?.(modelRef, { kind: 'provider', message: turnError })) {
+                // Tell the UI to re-read the catalog, so the badge is on the picker
+                // that chose the model rather than waiting for a reload.
+                notify?.({ kind: 'model', type: 'issues', ref: modelRef });
+              }
+            } catch { /* the cache is not worth failing a run over */ }
+          } else {
+            outcome = 'completed';
+          }
+        }
+
+        // The provider refused this model: the next rung can still do the work,
+        // and the operator is not asked to decide anything about it.
+        if (outcome === 'error' && rung + 1 < candidates.length) continue;
+        break;
       }
     } catch (err) {
       outcome = 'failed';
@@ -368,6 +453,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
       callId: request.callId,
       task: request.task,
       role,
+      plannedRole: task.role,
       worker: worker?.id || null,
       outcome,
       ms: Date.now() - startedAt,
@@ -393,6 +479,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
       text: report({
         task,
         role,
+        insteadOf: task.role !== role ? task.role : null,
         outcome,
         ms: Date.now() - startedAt,
         text,
@@ -540,7 +627,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     return [...seen];
   }
 
-  function report({ task, role, outcome, ms, text, files, workerId, planTouched, auto, timeoutMs, error }) {
+  function report({ task, role, insteadOf, outcome, ms, text, files, workerId, planTouched, auto, timeoutMs, error }) {
     const head =
       outcome === 'completed'
         ? `${task.id} (${role}) finished in ${Math.round(ms / 1000)}s.`
@@ -550,6 +637,13 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
             ? `${task.id} (${role}) could not run - the model refused the turn, so the task was never attempted.`
             : `${task.id} (${role}) could not run.`;
     const lines = [head];
+    if (insteadOf) {
+      lines.push(
+        `This attempt ran on ${role}, not ${insteadOf}: ${insteadOf} could not do it, so the harness moved the ` +
+          `task down its line of coders. The plan still says ${insteadOf} - leave the role as it is and judge ` +
+          `the work on its merits.`,
+      );
+    }
     // The evidence, never omitted: a worker that claims a file it did not write
     // is a real failure mode (it happened on the first run: the report named
     // bin/calendar_design.md and no such file existed). "Files written: none"

@@ -360,6 +360,12 @@ ordinary file tools; there is no tool and no store for it.
   green = done, yellow = the step in hand, red = blocked/failed (on top of the
   washes `doing` and `blocked` already had). A plan is read by colour before it is
   read by word.
+- **The step in hand is the run, not the file.** The Architect only writes the plan
+  when it *judges*, so during a worker run the file still says `todo` and the pane
+  showed the live step as a grey row. `renderPlan` overlays the runner's live run:
+  a task whose id is running renders as `doing` — yellow dot, yellow border, white
+  bold title — while the file stays the plan. Counts in the footer stay the file's
+  (they are the plan's truth); only the row is live.
 - **Plan problems are a labelled list, not a filled block.** They were an amber
   panel with the complaints as amber paragraphs, and on a finished plan that read
   as a rendering fault rather than a note — the operator's word for it was
@@ -555,6 +561,24 @@ Non-obvious, all verified on 2.0.30:
   telling the Architect to break the task down, change the role/model, or mark it
   blocked. Refusals are logged with an `outcome` and no `attempt` number, so they
   do not count against the cap. A refusal is a real answer, not a silent retry.
+- **A coder that cannot do the job hands it down the line.** The three coder roles
+  are peers (`worker.ladder`, default `coder-1 → coder-2 → coder-3`), and the
+  harness moves the *same task* between them — the Architect cannot, because the
+  first thing it learns about a refused model is a report saying nothing happened.
+  `candidatesFor()` decides the rungs for an attempt, on two rules: **a provider
+  refusal moves to the next peer inside the same delegation** (same task, same
+  attempt, and retrying a retired model would only spend the Architect's turn), and
+  **an attempt after the first starts one rung further down**, because the Architect
+  re-delegating the same task *is* its verdict that the previous coder did not
+  deliver — the only verdict the harness can see. A role whose model carries a
+  provider mark is skipped from the start. A timeout does not loop: the worker may
+  still have produced something, and the attempt counter moves that case next time.
+  The plan's `role` is never rewritten (the Architect owns the file); the report says
+  *"this attempt ran on coder-2, not coder-1 — the plan still says coder-1, judge the
+  work on its merits"*, and `runs.jsonl` records `role`, `plannedRole` and `ladder`.
+  Verified through the real runner with a stubbed engine (19/19): a refusal moves,
+  attempt 2 starts a rung down, a marked model is skipped, a clean turn stays on
+  coder-1, and a role outside the ladder still reports a plain `error`.
 - **Single mode refuses.** Tool rulesets cannot hide an MCP tool, so the promise
   is kept in the runner: a delegation request in a Single session is refused out
   loud and the Architect is told to ask for Multi.
@@ -710,6 +734,15 @@ discovered toolset. `engine.listModels()` is recorded on every boot and every
   **The record never becomes policy:** the badge does not block a selection and is
   never mentioned in a brief. Deliberately, because a model can come back and
   because the operator is the one who checks.
+- **The probe marks a model that cannot drive tools, and clears its own mark.** A
+  probe run counts its *real* failures — a case whose tool the model was never
+  offered does not count (`offered === false`), since the case list asks about
+  tools a model may simply not have — and **3 or more** writes a `kind: 'tools'`
+  issue naming the tools. The threshold is 3 because a probe is one turn per case
+  against a flaky free provider, and two could be an afternoon. A later probe with
+  fewer than 3 clears that *kind* by itself (`clearIssueKind`), because a clean run
+  is the same evidence pointing the other way; a `provider` mark is never cleared
+  automatically — that one is the operator's.
 - `GET /api/models/cache` exposes the raw store for debugging.
 
 ### The probe (`Run Tool Probe`)
@@ -808,6 +841,19 @@ This is once per directory per process and needs no config.
   Without it, expanding a tool made the page taller, the page scrollbar
   appeared, and the whole app shifted ~15px. Also: any grid column holding prose
   is `minmax(0, 1fr)`, never `auto`, so content cannot stretch it.
+- **Scrollbars are ours now.** `::-webkit-scrollbar` (+ `scrollbar-width`/
+  `scrollbar-color` for the standard path) is styled thin and dark: Chromium stops
+  drawing its native bar as soon as that pseudo-element is styled, which is what
+  removes the Windows stepper arrows — a tool card's 200px output box was showing
+  two of them and read like a spreadsheet. Tool output also never scrolls
+  sideways: `white-space: pre-wrap` + `overflow-wrap: anywhere` + `overflow-x:
+  hidden` on `.tool-body pre`, so a wide monospace table wraps instead of growing a
+  horizontal bar (measured: 0 of 82 output blocks scrolling sideways on a real
+  four-round transcript).
+- **Sending puts the newest message in view.** `scrollChatToEnd()` asks
+  `chatScroller()` which element scrolls — the transcript in the wide layout, the
+  page below the breakpoint — and animates to the end; `send()` calls it when the
+  local message is painted and again when the turn's messages land.
 - **`.chat-scroll` scrolls internally in the wide layout; the page scrolls in the
   stacked one.** Above 1460px `.stage` has a definite height (set from the
   measured viewport via `--stage-h`, minus any horizontal scrollbar), so the
@@ -979,14 +1025,15 @@ This is once per directory per process and needs no config.
 - **A chip inside a text slot inherits its line-height, and that is what
   de-centres it.** The `Done` chip sits in the card's subtitle slot, whose
   `line-height` is 1.45 — so the chip's box was the *line box* (13.775px) plus its
-  padding, while its text is 9.5px, and the ink sat 0.38px high with 1.77px more
-  space below than above. `line-height: 1` gives the chip a box the size of its own
-  text, and then the only bias left is the font's — uppercase has no descenders, so
-  the ink reads high and wants a hair more padding above than below. Measured with
-  canvas ink metrics calibrated against the DOM's own em box (the model reproduced
-  the DOM to 0.25px): `.role-done` `2.75px 7px 2.25px` and `.ask-rec`
-  `1.5px 6px 1.5px` both land at **0.00**. Guessing padding without that
-  calibration is how the first attempt went from 0.38px high to 0.25px low.
+  padding, while its text is 9.5px. `line-height: 1` gives the chip a box the size
+  of its own text. The rest is optical, not geometric: **uppercase has no
+  descenders, so centring the em box still reads half a pixel high.** The answer is
+  one pixel more padding above than below (`.role-done`/`.role-waiting`
+  `3.75px 7px 1.25px`, `.ask-rec` `2.5px 6px 0.5px`) — and the way to settle it is a
+  **4x render with a 1px line drawn at 50% of the pill**, which is exactly what the
+  eye compares. Two earlier attempts were "measured" as centred by two different
+  metrics and both still looked high; the operator's red line was right and the
+  arithmetic was not.
 - **A repro page needs the palette's own context.** `--green`, `--amber` and the
   rest are declared under `body.dark`, and the font comes from
   `web/vendor/summit.css` — a repro that links only `synapse.css` renders in Times

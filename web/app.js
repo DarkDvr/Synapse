@@ -2269,6 +2269,11 @@ function renderPlan() {
   }
 
   const tasks = st?.plan?.tasks || [];
+  // A task with a worker on it is the step in hand whatever the file says. The
+  // Architect only writes the plan when it judges, so during the run the file
+  // still says todo and the pane showed the live step as a grey row. The run is
+  // the live truth; the file stays the plan.
+  const liveRun = currentRun();
   if (!tasks.length) {
     body.innerHTML = `<p class="rail-note">No plan yet. Ask the Architect to plan this job — it owns ${esc(rel)}.</p>`;
     return;
@@ -2286,7 +2291,7 @@ function renderPlan() {
     (st.plan.goal ? `<p class="plan-goal">${esc(st.plan.goal)}</p>` : '') +
     `<ol class="plan-list">${tasks
       .map((t) => {
-        const status = PLAN_STATUS[t.status] ? t.status : 'todo';
+        const status = liveRun && liveRun.task === t.id ? 'doing' : PLAN_STATUS[t.status] ? t.status : 'todo';
         // The result is not printed under the title: the row stays one line per
         // task, and the detail is a hover away. A blocked note is the exception —
         // that one is the reason the operator is being asked, so it shows.
@@ -2515,14 +2520,32 @@ async function send() {
     renderComposer();
     state.messages.push({ id: 'local-' + Date.now(), type: 'user', text, created: Date.now() });
     renderTranscript();
+    // Sending is a statement of intent to read the answer: put the newest message
+    // in view, and again after the turn's messages land.
+    scrollChatToEnd();
     await api('POST', `/api/sessions/${encodeURIComponent(state.sessionId)}/messages`, { text });
     await loadMessages();
+    scrollChatToEnd();
   } catch (err) {
     toast('Send failed', err.message);
   } finally {
     state.streaming = false;
     renderComposer();
   }
+}
+
+/** Put the newest message in view. In the wide layout the transcript scrolls
+ *  itself; below the breakpoint the page does — ask `chatScroller()` which. */
+function scrollChatToEnd(smooth = true) {
+  const el = chatScroller();
+  if (el) {
+    if (smooth) animateScroll(el, el.scrollHeight, 220);
+    else el.scrollTop = el.scrollHeight;
+    return;
+  }
+  const to = Math.max(document.documentElement.scrollHeight, document.body.scrollHeight);
+  if (smooth) animateScroll(null, to, 220);
+  else window.scrollTo(0, to);
 }
 
 // A session always starts in Single mode; Multi is switched live.

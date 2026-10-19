@@ -139,6 +139,7 @@ async function main() {
     logger,
     scratchDir: PROBE_DIR,
     file: PROBE_FILE,
+    modelCache,
     notify: (ev) => http?.broadcast({ ...ev, ts: Date.now() }),
   });
   // Clear any probe/model-check session a killed process left behind; they are

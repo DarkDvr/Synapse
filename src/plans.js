@@ -344,6 +344,15 @@ export function briefSession({ dir, role = 'architect', auto = false } = {}) {
         `"Wire the buttons", "Audit the output", "Quality Control". No file paths and no code identifiers ` +
         `in a title: put them in detail.`,
     );
+    // The operator's setup deliberately gives the coders different models, from
+    // cheap and experimental to reliable and expensive. The Architect only needs
+    // to know they are peers: the ladder is the harness's business (it is the one
+    // that can see a model refuse a turn).
+    lines.push(
+      `coder-1, coder-2 and coder-3 are peers - three coders, which may each be on a different model. Write ` +
+        `coding work for one of them; if that coder cannot do it, Synapse moves the task down the line ` +
+        `itself and the report tells you which role actually ran it.`,
+    );
     lines.push(
       auto
         ? `Keep building is ON: after each worker report, judge it and delegate the next task whose ` +

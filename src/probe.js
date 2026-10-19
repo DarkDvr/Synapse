@@ -23,6 +23,11 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const CASE_TIMEOUT_MS = 150000;
 const POLL_MS = 1200;
 
+// How many *real* case failures earn a model the tool badge. Three, not two: a
+// probe is one turn per case against a flaky free provider, so two could be an
+// afternoon. A tool the model was never offered never counts (see `offered`).
+const PROBE_FAILURES_TO_MARK = 3;
+
 // Each prompt is deliberately blunt: it names the tool and the exact argument.
 // A model that ignores it tells us something too — the case reports "missing".
 export const PROBE_CASES = [
@@ -165,8 +170,7 @@ export async function discoverToolsetForModel(engine, log, model, directory) {
   }
 }
 
-export function createProbe({ engine, logger, notify, scratchDir, file }) {
-  const log = logger.channel('tools');
+export function createProbe({ engine, logger, notify, scratchDir, file, modelCache }) {  const log = logger.channel('tools');
   let state = {
     running: false,
     startedAt: null,
@@ -395,7 +399,9 @@ export function createProbe({ engine, logger, notify, scratchDir, file }) {
           variant = null;
         }
         state.model = ref ? `${ref}${variant && variant !== 'default' ? `#${variant}` : ''}` : null;
-      } catch { state.model = null; }
+        // The cache is keyed by the bare ref, never by ref#variant.
+        state.modelRef = ref || null;
+      } catch { state.model = null; state.modelRef = null; }
       notify({ kind: 'probe', type: 'probe.toolset', toolset: state.toolset, model: state.model });
       for (const c of PROBE_CASES) {
         try {
@@ -422,6 +428,30 @@ export function createProbe({ engine, logger, notify, scratchDir, file }) {
       persist();
       const passed = state.results.filter((r) => r.ok).length;
       log.info(`probe finished: ${passed}/${state.results.length} cases clean`);
+      // A model that cannot drive a few tools will waste worker turns, so the
+      // probe is the honest source for the *tool* half of the badge of shame.
+      // Only real failures count: a tool the model was never offered is not a
+      // fault (`offered === false`), because the case list asks about tools this
+      // model may simply not have.
+      const bad = state.results.filter((r) => !r.ok && r.offered !== false);
+      if (modelCache && state.modelRef) {
+        try {
+          if (bad.length >= PROBE_FAILURES_TO_MARK) {
+            const names = bad.slice(0, 6).map((r) => r.expect || r.id);
+            const marked = modelCache.noteIssue(state.modelRef, {
+              kind: 'tools',
+              message:
+                `Probe: ${bad.length} of ${state.results.length} cases failed ` +
+                `(${names.join(', ')}${bad.length > names.length ? ', …' : ''})`,
+            });
+            if (marked) notify({ kind: 'model', type: 'issues', ref: state.modelRef });
+          } else if (modelCache.clearIssueKind(state.modelRef, 'tools')) {
+            // A clean probe is the same evidence pointing the other way: the
+            // operator does not have to clear this one.
+            notify({ kind: 'model', type: 'issues', ref: state.modelRef });
+          }
+        } catch { /* the badge is not worth failing a probe over */ }
+      }
       notify({ kind: 'probe', type: 'probe.finished', results: state.results });
     }
     return { started: true };

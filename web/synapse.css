@@ -574,11 +574,14 @@ body.dark .sidebar-bottom,
 
    `line-height: 1` is not cosmetic: this chip sits in a slot whose line-height is
    1.45, and inheriting that made the box taller than its own text and pushed the
-   ink ~0.9px above centre (measured). With the em box as the line box, the only
-   bias left is the font's — uppercase has no descenders, so the ink reads high —
-   and the padding below corrects it. Measured at 0.00 for both. */
+   ink above centre. With the em box as the line box the only bias left is the
+   font's: **uppercase has no descenders, so the ink sits high in the em box**, and
+   the way to put it on the pill's centre is one pixel of padding more above than
+   below — checked at 4x against a line drawn at 50% of the pill, which is what
+   the eye actually compares. Centring the *em box* (equal padding) still reads a
+   half-pixel high. */
 .role-done, .role-waiting {
-  display: inline-block; line-height: 1; padding: 2.75px 7px 2.25px; border-radius: 999px;
+  display: inline-block; line-height: 1; padding: 3.75px 7px 1.25px; border-radius: 999px;
   font-size: 9.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
 }
 .role-done { color: #0f2a1f; background: var(--green); }
@@ -969,7 +972,7 @@ body[data-mode="single"] .keep-toggle { display: none; }
 .tool-body pre {
   margin: 0; font-family: var(--mono); font-size: 11px; line-height: 1.45;
   color: #b6babf; white-space: pre-wrap; overflow-wrap: anywhere;
-  max-height: 200px; overflow: auto;
+  max-height: 200px; overflow-x: hidden; overflow-y: auto;
 }
 .tool-body pre.is-error { color: #ffb4a6; }
 
@@ -1084,7 +1087,7 @@ body[data-mode="single"] .keep-toggle { display: none; }
    so the pill is sized by its text and the uppercase ink sits on the centre. */
 .ask-rec {
   display: inline-block; margin-left: 7px; vertical-align: 1px;
-  line-height: 1; padding: 1.5px 6px 1.5px; border-radius: 999px;
+  line-height: 1; padding: 2.5px 6px 0.5px; border-radius: 999px;
   font-size: 9px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;
   color: #241a12; background: var(--orange);
 }
@@ -1460,7 +1463,22 @@ body[data-mode="single"] .keep-toggle { display: none; }
 .probe-block .tool-name { font-family: var(--mono); font-size: 10.5px; color: #c3c6cc; }
 
 /* ── 17. reduced motion ────────────────────────────────────────────────── */
-
 @media (prefers-reduced-motion: reduce) {
   .status-dot.warn, .status-dot.live { animation: none; }
 }
+
+/* ── 18. scrollbars ────────────────────────────────────────────────────── */
+/* Slim, dark, no stepper arrows. Chromium stops drawing its native scrollbars as
+   soon as ::-webkit-scrollbar is styled, which is what removes the Windows arrow
+   buttons — a tool card's 200px output box was showing two of them and read like
+   a spreadsheet. `scrollbar-width`/`scrollbar-color` are the standard properties
+   (what Firefox uses); both together keep the thin bar everywhere. */
+* { scrollbar-width: thin; scrollbar-color: #3a3e45 transparent; }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: #363a41; border-radius: 999px;
+  border: 2px solid transparent; background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover { background: #4a4f57; background-clip: content-box; }
+::-webkit-scrollbar-corner { background: transparent; }

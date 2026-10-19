@@ -436,6 +436,17 @@ Three rules hold the whole thing together:
   interrupted audit was still judged and accepted. A role that genuinely needs
   longer overrides it on its own entry (`roles.<id>.timeoutSec`) — the auditor,
   which reads and runs things, is the one that hit the ceiling in practice.
+- **A coder that cannot do the job hands it down the line.** The three coder roles
+  are peers, and the harness moves the same task between them: a provider refusal
+  moves to the next coder inside the same delegation, and a *second* attempt starts
+  one rung further down (the Architect re-delegating is its verdict that the last
+  coder did not deliver). The plan's role is never rewritten — the report says
+  "this attempt ran on coder-2, not coder-1… judge the work on its merits".
+- **A model can be marked for the operator, never for the model.** A refused turn,
+  or a probe run with 3+ real tool failures, puts an orange **ISSUES** chip on that
+  model in the picker (tooltip: the provider's own words, with the date). Clicking
+  the chip clears it; a clean probe clears the tool half by itself. The marks never
+  block a selection and never reach a brief — they are a note to you.
 - **A turn the provider refuses is reported as exactly that.** The engine ends
   every turn with an `idle` message whatever happened, so a worker whose model the
   provider has *retired* used to arrive as "completed in 1.8s, reported nothing".

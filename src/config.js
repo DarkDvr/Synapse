@@ -63,6 +63,11 @@ export const DEFAULTS = {
     // (`roles.<id>.timeoutSec`) — the auditor, which reads and runs things, is
     // the one that hit this ceiling in practice.
     timeoutSec: 300,
+    // Roles that can stand in for one another, in escalation order. A task is
+    // written for one role; when that coder cannot do the job the harness moves
+    // the same task down this list (see src/runs.js candidatesFor). A role not in
+    // it is tried on its own.
+    ladder: ['coder-1', 'coder-2', 'coder-3'],
   },
   logging: {
     level: 'info',
@@ -108,6 +113,11 @@ export function normalize(raw) {
 
   cfg.worker = cfg.worker || {};
   cfg.worker.timeoutSec = clampInt(cfg.worker.timeoutSec, 30, 3600, DEFAULTS.worker.timeoutSec);
+  // The peer ladder is a list of role ids; anything unknown is dropped rather than
+  // left to confuse a delegation with a role that has no card and no model.
+  cfg.worker.ladder = Array.isArray(cfg.worker.ladder)
+    ? cfg.worker.ladder.map((r) => String(r || '').trim()).filter(Boolean)
+    : [...DEFAULTS.worker.ladder];
 
   cfg.engine.type = String(cfg.engine.type || 'opencode');
   const oc = cfg.engine.opencode;
