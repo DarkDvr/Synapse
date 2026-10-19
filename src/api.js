@@ -132,12 +132,31 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
         try { modelCache.record(list); } catch (err) { app.warn(`model cache update failed: ${err.message}`); }
       }
       return {
-        models: list.map((m) => ({ ...m, tools: modelCache?.get(m.ref)?.tools || null })),
+        models: list.map((m) => {
+          const known = modelCache?.get(m.ref);
+          return { ...m, tools: known?.tools || null, issues: known?.issues || null };
+        }),
       };
     },
 
     /** The raw per-model knowledge base, for inspection and debugging. */
     modelCache: async () => (modelCache ? modelCache.snapshot() : { version: 1, models: {} }),
+
+    /**
+     * Clear a model's issues. The operator's own call, from the picker: they
+     * checked it and it works, so the badge goes and nothing is asked of anyone.
+     */
+    clearModelIssues: async (body) => {
+      const ref = String(body?.ref || '').trim();
+      if (!ref) {
+        const err = new Error('a provider/model ref is required');
+        err.status = 400;
+        throw err;
+      }
+      const cleared = modelCache ? modelCache.clearIssues(ref) : false;
+      app.info(`model issues cleared: ${ref}${cleared ? '' : ' (there were none)'}`);
+      return { ok: true, ref, cleared };
+    },
 
     /** Zero every model's ask counter (keeps valid results). */
     resetModelAsks: async () => ({

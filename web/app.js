@@ -297,6 +297,12 @@ const modelMeta = (m) => {
   return bits.join(' · ');
 };
 
+/** The badge of shame: what a provider said about this model, when it said it,
+ *  and how to take the mark off. It is the operator's own note — nothing is said
+ *  to any model about another model's reputation. */
+const issuesTitle = (m) =>
+  [...(m.issues || []).map((i) => `${new Date(i.at).toLocaleString()} - ${i.message}`), 'Click to clear.'].join('\n');
+
 // Where a model comes from is part of its identity: `opencode/…-free` and
 // `opencode-go/…` can be the same model with different backends, and local
 // runtimes will be a third source later. The provider id is the source, so show
@@ -351,6 +357,15 @@ function setupModelPickers() {
   const menu = $('modelMenu');
   if (menu) {
     menu.addEventListener('mousedown', (e) => {
+      // The badge is the operator's own control, so it is handled before the row
+      // is: clicking it clears the mark, it does not choose the model.
+      const badge = e.target.closest('[data-clear-issues]');
+      if (badge) {
+        e.preventDefault();
+        e.stopPropagation();
+        clearModelIssues(badge.dataset.clearIssues);
+        return;
+      }
       const opt = e.target.closest('[data-ref]');
       if (!opt) return;
       e.preventDefault();
@@ -359,12 +374,42 @@ function setupModelPickers() {
   }
 }
 
+/**
+ * Take the mark off a model. UI-only and instant: no turn, no question, nothing
+ * said to anybody — the operator checked it and it works again.
+ */
+async function clearModelIssues(ref) {
+  const role = menuRole;
+  try {
+    await api('POST', '/api/models/issues/clear', { ref });
+  } catch (err) {
+    toast('Could Not Clear Issues', err.message);
+    return;
+  }
+  const m = modelByRef(ref);
+  if (m) m.issues = null;
+  toast('Issues Cleared', `${m ? shortModel(m.name) : ref} is unmarked.`);
+  // Re-open unfiltered: the input holds the model's *name*, so passing it through
+  // as a search would leave the operator looking at a one-row menu.
+  if (role) openModelMenu(role, false);
+}
+
+/** Re-read the catalog, so a badge earned server-side appears without a reload. */
+async function refreshModels() {
+  try {
+    state.models = (await api('GET', '/api/models')).models;
+    fillRoleModels();
+  } catch { /* the catalog is not worth a toast */ }
+}
+
 function syncPickerInput(input) {
   const p = pickers.get(input.dataset.role);
   if (!p) return;
   const m = modelByRef(p.sel.value);
   input.value = m ? shortModel(m.name) : '';
-  input.title = m ? `${modelTitle(m)} · type to search` : 'Type to search models';
+  const issues = m?.issues?.length ? ` · ISSUES: ${m.issues[0].message}` : '';
+  input.title = m ? `${modelTitle(m)}${issues} · type to search` : 'Type to search models';
+  input.classList.toggle('has-issues', Boolean(m?.issues?.length));
 }
 
 function positionModelMenu(input, menu) {
@@ -397,6 +442,7 @@ function openModelMenu(role, fromTyping) {
           (m) => `<div class="model-opt${m.ref === p.sel.value ? ' is-current' : ''}" role="option" data-ref="${esc(m.ref)}">
             <span class="mo-src">${esc(providerLabel(m.provider))}</span>
             <span class="mo-name">${esc(shortModel(m.name))}</span>
+            ${m.issues?.length ? `<span class="mo-issues" data-clear-issues="${esc(m.ref)}" title="${esc(issuesTitle(m))}">Issues</span>` : ''}
             <span class="mo-meta">${esc(modelMeta(m))}</span>
           </div>`,
         )
@@ -1301,7 +1347,11 @@ function renderRoleActivity() {
     let text = '';
     let part = '';
     let dot = 'idle';
-    let done = false;
+    let chip = null;
+    // "Settled" is the Architect's resting state — finished, or waiting for the
+    // operator to move. Its border goes green, the same colour every other card
+    // uses for "idle, has taken part": there is nothing of ours in flight.
+    let settled = false;
 
     if (role === 'architect') {
       // The Architect's own question first: the operator is the one being waited
@@ -1309,11 +1359,11 @@ function renderRoleActivity() {
       if (form && form.sessionId === state.sessionId) { text = 'Waiting on your answer'; dot = 'live'; }
       else if (run) { text = `Waiting on ${roleLabel(run.role)}`; part = 'initiator'; dot = 'live'; }
       else if (archBusy) { text = archTool ? runPhrase(archTool) : 'Thinking'; part = 'initiator'; dot = 'live'; }
-      // Its work is done: say so rather than leaving an empty line. The chip is
-      // inside the fixed subtitle slot, so it cannot move anything.
-      else if (planFinished) { text = 'Plan complete'; done = true; dot = 'ok'; }
-      // Nothing in flight and work outstanding: the move is the operator's.
-      else if (unfinished) { text = 'Waiting on you'; dot = 'live'; }
+      // Every task is done: the chip says so rather than leaving an empty line.
+      else if (planFinished) { text = 'Plan complete'; chip = { cls: 'role-done', text: 'Done' }; dot = 'ok'; settled = true; }
+      // Nothing in flight and work outstanding: the move is the operator's, so
+      // the card says it in the same place a worker's task line would be.
+      else if (unfinished) { text = 'Waiting on you'; chip = { cls: 'role-waiting', text: 'Waiting on you' }; dot = 'ok'; settled = true; }
     } else if (run && run.role === role) {
       // A worker stopped on a question is not working on its task, whatever the
       // newest tool call was — it is waiting, exactly like the Architect does.
@@ -1328,8 +1378,8 @@ function renderRoleActivity() {
     // card that is taking part is solid by definition, and the Architect is never
     // dimmed: it is the role that exists before any of this.
     const dim = role !== 'architect' && !participated && !part;
-    rows.push({ card, text, part, dot, dim, done });
-    sig += `${role}\u0001${part}\u0001${dot}\u0001${dim ? 1 : 0}\u0001${done ? 1 : 0}\u0001${text}\u0002`;
+    rows.push({ card, text, part, dot, dim, chip, settled });
+    sig += `${role}\u0001${part}\u0001${dot}\u0001${dim ? 1 : 0}\u0001${settled ? 1 : 0}\u0001${chip ? chip.text : ''}\u0001${text}\u0002`;
   }
 
   if (sig === state.roleSig) return;
@@ -1341,7 +1391,7 @@ function renderRoleActivity() {
   // definite height, so anything that did grow would take room from the
   // transcript's top edge.
   const fromH = Math.ceil($('topologyWrap')?.getBoundingClientRect().height || 0);
-  for (const { card, text, part, dot, dim, done } of rows) {
+  for (const { card, text, part, dot, dim, chip, settled } of rows) {
     const slot = card.querySelector('.role-task');
     // The status dot is the markup's own — it ships as `idle` and is only ever
     // changed here. Yellow breathes because it means "taking part right now",
@@ -1357,12 +1407,13 @@ function renderRoleActivity() {
     card.classList.toggle('is-dim', dim);
     card.classList.toggle('is-initiator', part === 'initiator');
     card.classList.toggle('is-worker', part === 'worker');
+    card.classList.toggle('is-settled', settled);
     if (!slot) continue;
     // The slot never appears or disappears: it is a fixed three-line hole in the
     // card, so filling it cannot change the card's height and cannot move the
-    // chat. The full text rides the tooltip because the slot clamps. The DONE
-    // chip is the same size as a line of text for the same reason.
-    if (done) slot.innerHTML = '<span class="role-done">Done</span>';
+    // chat. The full text rides the tooltip because the slot clamps. A chip is
+    // the same size as a line of text for the same reason.
+    if (chip) slot.innerHTML = `<span class="${chip.cls}">${esc(chip.text)}</span>`;
     else slot.textContent = text;
     slot.title = text;
   }
@@ -2529,6 +2580,13 @@ function connectStream() {
     // Synapse's own notification: the session was just auto-named.
     if (ev.kind === 'sessions') {
       reloadProjects();
+      return;
+    }
+
+    // A model earned itself a mark while a run was failing: re-read the catalog
+    // so the picker shows it now rather than after the next reload.
+    if (ev.kind === 'model') {
+      refreshModels();
       return;
     }
 

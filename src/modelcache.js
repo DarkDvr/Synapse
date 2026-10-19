@@ -127,5 +127,38 @@ export function createModelCache({ logger, file }) {
     return refs.length;
   }
 
-  return { record, get, setTools, isChecked, attempts, resetAsks, snapshot: () => data };
+  /**
+   * A complaint about a model, in the provider's own words.
+   *
+   * Not a verdict — evidence, and the operator's to overrule. A retired model is
+   * the case that cost a run: the catalog keeps advertising a model the inference
+   * endpoint has already retired, so the picker showed nothing wrong and every
+   * delegation died in two seconds. Kept newest-first and de-duplicated by
+   * message, because the same outage reported five times is one problem.
+   */
+  function noteIssue(ref, issue) {
+    const rec = ref ? data.models[ref] : null;
+    if (!rec || !issue?.message) return false;
+    const entry = {
+      at: Date.now(),
+      kind: String(issue.kind || 'provider'),
+      message: String(issue.message).slice(0, 300),
+    };
+    const prev = Array.isArray(rec.issues) ? rec.issues : [];
+    if (prev.some((i) => i.message === entry.message)) return false;
+    rec.issues = [entry, ...prev].slice(0, 3);
+    persist();
+    return true;
+  }
+
+  /** The operator checked it and it works: forget the complaints, no questions. */
+  function clearIssues(ref) {
+    const rec = ref ? data.models[ref] : null;
+    if (!rec?.issues?.length) return false;
+    delete rec.issues;
+    persist();
+    return true;
+  }
+
+  return { record, get, setTools, isChecked, attempts, resetAsks, noteIssue, clearIssues, snapshot: () => data };
 }

@@ -111,6 +111,9 @@ export function createServer({ api, engine, logger, config }) {
     // GET /api/models  /api/agents
     if (seg[0] === 'models' && seg.length === 1 && method === 'GET') return sendJson(res, 200, await api.models());
     if (seg[0] === 'models' && seg[1] === 'cache' && method === 'GET') return sendJson(res, 200, await api.modelCache());
+    if (seg[0] === 'models' && seg[1] === 'issues' && seg[2] === 'clear' && method === 'POST') {
+      return sendJson(res, 200, await api.clearModelIssues(await readBody(req)));
+    }
     if (seg[0] === 'models' && seg[1] === 'reset-asks' && method === 'POST') return sendJson(res, 200, await api.resetModelAsks());
     if (seg[0] === 'models' && seg[1] === 'inspect' && method === 'POST') {
       return sendJson(res, 200, await api.inspectModel(await readBody(req)));

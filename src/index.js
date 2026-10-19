@@ -118,11 +118,17 @@ async function main() {
     notify: (ev) => http?.broadcast({ ...ev, ts: Date.now() }),
   });
 
+  // Per-model knowledge. Created before the runner because a run that fails
+  // leaves a mark on the model it ran on — that is the picker's badge of shame,
+  // and it is also why the cache outlives a model leaving the catalog.
+  const modelCache = createModelCache({ logger, file: MODEL_CACHE_FILE });
+
   const runner = createRunner({
     engine,
     logger,
     getConfig,
     guard,
+    modelCache,
     notify: (ev) => http?.broadcast({ ...ev, ts: Date.now() }),
   });
 
@@ -144,7 +150,6 @@ async function main() {
   // what we see, and discover a model's toolset once, on first selection.
   // Runs are serialised: burst-selecting several models should not fire several
   // turns at the provider at once.
-  const modelCache = createModelCache({ logger, file: MODEL_CACHE_FILE });
   const inspectLog = logger.channel('tools');
   const inspecting = new Set();
   let inspectChain = Promise.resolve();

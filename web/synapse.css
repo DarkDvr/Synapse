@@ -567,20 +567,22 @@ body.dark .sidebar-bottom,
   overflow: hidden; overflow-wrap: anywhere;
 }
 
-/* The finished plan, as a chip rather than a line of prose — it replaces the
-   subtitle text in the same slot, so it cannot change the card's height. Green
-   because green is this palette's "this is done and nothing is wanted" colour.
+/* The plan's state, as a chip rather than a line of prose — it replaces the
+   subtitle text in the same slot, so it cannot change the card's height. Two
+   chips, one geometry: green is "done and nothing is wanted", yellow is "the move
+   is yours", which is the loudest thing a card can say without a panel.
 
    `line-height: 1` is not cosmetic: this chip sits in a slot whose line-height is
    1.45, and inheriting that made the box taller than its own text and pushed the
    ink ~0.9px above centre (measured). With the em box as the line box, the only
    bias left is the font's — uppercase has no descenders, so the ink reads high —
-   and one extra pixel of top padding corrects it. */
-.role-done {
+   and the padding below corrects it. Measured at 0.00 for both. */
+.role-done, .role-waiting {
   display: inline-block; line-height: 1; padding: 2.75px 7px 2.25px; border-radius: 999px;
   font-size: 9.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
-  color: #0f2a1f; background: var(--green);
 }
+.role-done { color: #0f2a1f; background: var(--green); }
+.role-waiting { color: #241a12; background: var(--yellow); }
 
 /* On a short window the reserve is a luxury paid out of the chat, which is
    already tight. Two lines still holds nearly every task line, and the space
@@ -596,6 +598,11 @@ body.dark .sidebar-bottom,
    one thing only — blocked. Colour only: changing the width would shift every
    card below it. */
 .role-card.is-initiator, .role-card.is-worker { border-color: var(--yellow); }
+
+/* The Architect at rest. Green is the colour every other card uses for "idle,
+   has taken part", and both resting states are exactly that: nothing of ours is
+   in flight. Which of the two it is, is the chip's job. */
+.role-card.is-settled { border-color: var(--green); }
 
 /* A role that has never been in this plan. The Architect is never dimmed (the
    UI does not add this class to its card): it exists before any of this, and it
@@ -644,6 +651,11 @@ body.dark .sidebar-bottom,
   text-overflow: ellipsis; cursor: text;
 }
 .model-search:hover { border-color: #454950; color: var(--text); }
+/* The model this picker holds has been marked. The badge itself lives in the
+   menu, but the mark has to be readable without opening it — otherwise a role
+   sits on a dead model and the card looks fine. */
+.model-search.has-issues { border-color: rgba(232, 163, 61, 0.55); color: var(--amber); }
+.model-search.has-issues:hover { border-color: var(--amber); }
 .model-search:focus-visible { outline: 2px solid var(--orange); outline-offset: 1px; }
 .model-search::placeholder { color: #6d717a; }
 
@@ -669,6 +681,16 @@ body.dark .sidebar-bottom,
 }
 .model-opt.is-active .mo-src { color: #d5d7dc; border-color: #565a63; }
 .model-opt .mo-meta { margin-left: auto; color: #6d717a; font-size: 9.5px; }
+/* The badge of shame: an orange chip in the menu row, clickable, gone the moment
+   the operator says the model is fine. Same geometry as the source chip so the
+   row stays even. */
+.model-opt .mo-issues {
+  flex: none; cursor: pointer;
+  font-size: 8.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+  color: #241a12; background: var(--orange);
+  border-radius: 4px; padding: 0 4px; line-height: 1.5;
+}
+.model-opt .mo-issues:hover { background: #ffa14d; }
 .model-opt.is-active .mo-meta { color: #b9bdc4; }
 .model-empty { padding: 6px 8px; font-size: 10.5px; color: #6d717a; font-family: var(--mono); }
 
@@ -1214,6 +1236,11 @@ body[data-mode="single"] .keep-toggle { display: none; }
   border-radius: 50%; background: #5b6068; flex: none;
 }
 .plan-task[data-status="doing"] { background: rgba(237, 194, 90, 0.06); border-color: rgba(237, 194, 90, 0.22); }
+/* The row's border carries the same state as its dot, because a plan is read by
+   colour before it is read by word: grey = not started, green = done, yellow =
+   the step in hand, red = blocked or failed. */
+.plan-task[data-status="todo"] { border-color: rgba(92, 96, 104, 0.42); }
+.plan-task[data-status="done"] { border-color: rgba(53, 192, 138, 0.34); }
 /* "you are here": a yellow ring rather than a filled dot, so the current step
    cannot be mistaken for a settled one at a glance. Yellow, not amber — amber is
    the palette's warn colour and this is not a warning. */
@@ -1236,16 +1263,20 @@ body[data-mode="single"] .keep-toggle { display: none; }
    reports this element's display as `flow-root` even though the rule says
    `-webkit-box`, so do NOT "fix" that by wrapping it in another span: it clips
    either way, and the wrapper was added once on that false reading. */
+/* Every step but the one in hand is secondary. The current step is the only one
+   that earns white and bold; a finished or blocked step is announced by its dot
+   and its border, not by shouting, and the pane stays scannable because exactly
+   one line is loud. */
 .plan-title {
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
   overflow: hidden; overflow-wrap: anywhere;
-  font-size: 12.5px; line-height: 1.4; font-weight: 600; color: #e6e8ec;
+  font-size: 12.5px; line-height: 1.4; font-weight: 600; color: #9aa0a8;
 }
+.plan-task[data-status="doing"] .plan-title { color: #fff; font-weight: 700; }
 .plan-id {
   font-family: var(--mono); font-size: 10px; color: #7b8089;
   margin-right: 5px; letter-spacing: 0.02em;
 }
-.plan-task[data-status="done"] .plan-title { color: #9aa0a8; }
 .plan-note { font-size: 11px; line-height: 1.4; color: var(--red); overflow-wrap: anywhere; }
 .plan-role {
   font-family: var(--mono); font-size: 10px; line-height: 1; padding: 3px 6px;

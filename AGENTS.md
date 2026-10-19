@@ -353,6 +353,13 @@ ordinary file tools; there is no tool and no store for it.
   **`Audit the UI/UX` must not be flagged**, and is the test that proves it. Note
   the flip side: an existing plan written before this rule shows the complaint in
   the pane until the Architect rewrites its own titles.
+- **One line is loud: the step in hand.** Every title is muted (`#9aa0a8`, 600);
+  only a `doing` task is white and 700. A finished or blocked step is announced by
+  its dot and its border, not by brightness, so a four-line plan has exactly one
+  place to look. **The row's border is the dot's colour**: grey = not started,
+  green = done, yellow = the step in hand, red = blocked/failed (on top of the
+  washes `doing` and `blocked` already had). A plan is read by colour before it is
+  read by word.
 - **Plan problems are a labelled list, not a filled block.** They were an amber
   panel with the complaints as amber paragraphs, and on a finished plan that read
   as a rendering fault rather than a note — the operator's word for it was
@@ -689,6 +696,20 @@ discovered toolset. `engine.listModels()` is recorded on every boot and every
   tooltips gain a `· N tools` suffix. The picker menu itself shows a source chip
   (`OPENCODE`, `OPENCODE GO`, later a local provider) so two entries with the
   same display name can never be confused.
+- **A model can be marked, and only the operator unmarks it.** A provider refusal
+  during a worker run (`outcome: "error"`) writes the provider's own sentence into
+  the model's record (`issues: [{ at, kind, message }]`, newest first, de-duplicated
+  by message) and broadcasts `kind: 'model'` so the picker re-reads the catalog
+  without a reload. The picker row grows an orange **ISSUES** chip whose tooltip is
+  the sentence and its date, the closed picker's border goes amber, and **clicking
+  the chip clears it**: no turn, no question, nothing written to the plan and
+  nothing said to any model — "UI-only, only me", in the operator's words. The mark
+  survives a restart until it is cleared, which is the point: a retired model is
+  still advertised by the catalog, so without this the picker shows a dead model as
+  perfectly healthy (that is exactly what happened to `space-bunny-free`).
+  **The record never becomes policy:** the badge does not block a selection and is
+  never mentioned in a brief. Deliberately, because a model can come back and
+  because the operator is the one who checks.
 - `GET /api/models/cache` exposes the raw store for debugging.
 
 ### The probe (`Run Tool Probe`)
@@ -932,9 +953,13 @@ This is once per directory per process and needs no config.
   done → idle. A card whose role has never taken part is **80% opacity** (the
   Architect never is), which is how "who has actually worked here" is readable at
   a glance; a role goes solid the instant it is running, not when its task's
-  status changes. The Architect additionally says **`Waiting on you`** when
-  nothing is in flight and the plan has work outstanding — the operator's turn —
-  and wears a green **`Done`** chip when there is a plan and every task is `done`.
+  status changes. The Architect has two **chips** for its two resting states, in
+  the same slot the task line uses — a green **`Done`** when there is a plan and
+  every task is `done`, and a yellow **`Waiting on you`** when nothing is in
+  flight and work is outstanding. Both also put the card in `is-settled`, which is
+  the **green border**: yellow border means a delegation is in flight, green means
+  nothing of ours is and the move is the operator's. Because a chip is the size of
+  a line of text it still cannot change a card's height.
   **Because it is all derived, "a new plan resets participation" needs no code:**
   a rewritten plan is all `todo` again, so every card goes back to 80% on its own,
   and a reload or a restart shows the same picture.

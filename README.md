@@ -157,10 +157,10 @@ taking part, **red** when a task of its role is blocked or failed, and **green**
 when it is idle having already taken part; a role that has never been in the plan
 sits at **80% opacity** until it has (the Architect never dims). The two cards in
 a live delegation wear the live path's **yellow** as a border, so red means
-blocked and nothing else. The Architect says **`Waiting on you`** when nothing is
-in flight and there is work outstanding, and wears a green **`Done`** chip once
-every task is done — because it is all read from the plan file, a new plan resets
-every card by itself.
+blocked and nothing else. The Architect has two chips and a **green border** for
+its two resting states: green **`Done`** once every task is done, and yellow
+**`Waiting on you`** when it is finished for now and the next move is yours.
+Because it is all read from the plan file, a new plan resets every card by itself.
 
 **Connectors.** The idle structure is small round dots at 75% opacity with no
 arrowheads. When a delegation runs, one solid **yellow arrow** is drawn from the

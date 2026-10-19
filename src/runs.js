@@ -55,7 +55,7 @@ function parseInput(input) {
   }
 }
 
-export function createRunner({ engine, logger, getConfig, guard, notify }) {
+export function createRunner({ engine, logger, getConfig, guard, notify, modelCache }) {
   const log = logger.channel('tools');
   // One worker per project at a time: two Architects on the same plan is the
   // one thing that can actually corrupt it.
@@ -309,6 +309,16 @@ export function createRunner({ engine, logger, getConfig, guard, notify }) {
         if (turnError) {
           outcome = 'error';
           log.error(`worker ${request.task} (${role}) turn ended in an error: ${turnError}`);
+          // The badge of shame is for the operator's picker, never for the model:
+          // nothing is said to the Architect about a model's reputation, and the
+          // operator clears it the moment the model works again.
+          try {
+            if (modelCache?.noteIssue?.(modelRef, { kind: 'provider', message: turnError })) {
+              // Tell the UI to re-read the catalog, so the badge is on the picker
+              // that chose the model rather than waiting for a reload.
+              notify?.({ kind: 'model', type: 'issues', ref: modelRef });
+            }
+          } catch { /* the cache is not worth failing a run over */ }
         } else {
           outcome = 'completed';
         }
