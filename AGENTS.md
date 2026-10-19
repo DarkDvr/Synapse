@@ -45,13 +45,14 @@ recycled engine binary it locates.
 - Green / amber / red are semantic only, never decorative.
 - Affordances: `+` green, `✕` red, edit/settings icons yellow. The composer's
   **Stop turns red on hover** — it is the one destructive control in that row.
-- **The live path is the one deliberate pair: a yellow arrow with orange ants.**
-  Orange is this palette's colour for dot-ants, and the arrow has to be a
-  different colour from the ants riding it or they read as one thick line. The
-  two delegation cards wear that same **yellow** as a border while a delegation is
-  in flight, so "yellow = taking part" holds in both channels, and **red means
-  blocked and nothing else** (it carried two meanings for one day: requester
-  green / worker red borders, which collided with the blocked dot).
+- **The live path is one colour: a yellow arrow with yellow ants.** Orange is this
+  palette's accent (text, borders), and it used to be the dot-ant colour too — the
+  operator changed that: a different hue on a 2.5px line read as one object with a
+  colour bug rather than a line with beads on it, so the beads are separated by
+  their glow instead. The two delegation cards wear the same **yellow** as a border
+  while a delegation is in flight, and **red means blocked and nothing else** (it
+  carried two meanings for one day: requester green / worker red borders, which
+  collided with the blocked dot).
 - **All button labels are Title Case** (see `references\UI UX\DESIGN.md` §8).
   This applies to buttons only — not headings, body text, labels or tooltips.
 
@@ -1037,9 +1038,17 @@ This is once per directory per process and needs no config.
   see it at all — and hovering restores the card to full, so a dimmed picker is never
   unreadable. **A skipped role looks blocked**: red border, red label, and its
   **picker goes red** (border and model name, background unchanged) because the
-  model is what failed and swapping it is the fix. Like the rest of this, it is
-  derived: the run carries `skipped: [{ role, message }]`, so the mark lasts exactly
-  as long as the run does. The Architect has two **chips** for its two resting states, in
+  model is what failed and swapping it is the fix. The mark is driven by *two*
+  sources and survives the run: the live run's `skipped[]` while it lasts, and
+  afterwards the role's current model carrying a `provider` issue — so the card
+  stays red until the role points at another model or the operator clears the badge,
+  which is exactly when the problem is gone. **Participation is not just the plan**:
+  the ladder can hand a role's task to a peer, and that peer delivered it (in
+  test-project-3 coder-2 ran t1 and its card dimmed anyway). The plan route returns
+  `delivered` — roles with a `result` line matching a task of the *current* plan by
+  id+title — and that counts as having taken part. Matching the title is what makes
+  a rewritten plan reset it, because ids repeat between plans and titles do not.
+  The Architect has two **chips** for its two resting states, in
   the same slot the task line uses — a green **`Done`** when there is a plan and
   every task is `done`, and a yellow **`Waiting on you`** when nothing is in
   flight and work is outstanding. Both also put the card in `is-settled`, which is

@@ -7,7 +7,7 @@
 
    PALETTE RULE (do not break this):
      violet = fills and surfaces   (spec --primary #625bf6 / --primary-soft #302d59)
-     orange = accents only         (text, borders, dot-ants) — --orange
+     orange = accents only         (text, borders) - --orange
      NEVER orange text on a violet fill: white / near-white on violet.
    Status colours (green / amber / red) are semantic and never decorative.
    ══════════════════════════════════════════════════════════════════════════ */
@@ -510,16 +510,19 @@ body.dark .sidebar-bottom,
   position: absolute; inset: 0; z-index: 3;
   pointer-events: none; overflow: visible;
 }
-/* The arrow is yellow and the ants that travel it are orange: the mockup's
-   pair, and orange is this palette's colour for dot-ants. */
+/* The arrow and the ants that travel it are the same yellow. They used to be
+   yellow/orange for the mockup's pair, but on a thin line the two colours read as
+   one object with a colour bug rather than as a line with beads on it; the beads
+   are separated by their glow instead. (This is the operator's call, and it
+   overrides the palette note that orange is the dot-ant colour.) */
 .path-layer .flow {
   fill: none; stroke: var(--yellow); stroke-width: 2.5; stroke-linejoin: round;
 }
 .path-layer marker path { fill: var(--yellow); }
 /* ants ride a solid line, so they read as beads with a glow */
 .path-layer circle {
-  fill: var(--orange); opacity: 0.9;
-  filter: drop-shadow(0 0 3px rgba(255, 125, 26, 0.85));
+  fill: var(--yellow); opacity: 0.95;
+  filter: drop-shadow(0 0 3px rgba(237, 194, 90, 0.9));
 }
 
 .topo-architect { grid-column: 1 / -1; display: flex; justify-content: center; }

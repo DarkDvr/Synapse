@@ -461,6 +461,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
       kind: 'result',
       callId: request.callId,
       task: request.task,
+      title: task.title,
       role,
       plannedRole: task.role,
       worker: worker?.id || null,

@@ -3,7 +3,7 @@
 import fs from 'node:fs';
 import { spawn } from 'node:child_process';
 import { TBD_TITLE } from './titles.js';
-import { ensurePlan, readPlan, briefSession, logPlanState, BRIEF_KEY } from './plans.js';
+import { ensurePlan, readPlan, readRuns, briefSession, logPlanState, BRIEF_KEY } from './plans.js';
 
 export function createApi({ getConfig, applyConfig, engine, logger, getBootError, projects, toolStats, probe, modelCache, inspectModel: inspectRef, probeDir, runs, notify, guard }) {
   const app = logger.channel('app');
@@ -11,6 +11,28 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
   // The last brief we handed each session, so an unchanged plan does not PUT
   // the same text again on every message.
   const briefed = new Map();
+
+  /**
+   * Which roles actually delivered a task of the *current* plan.
+   *
+   * The plan's `role` is who the task was written for; the ladder can hand the
+   * work to a peer, and that peer has taken part even though no task names it —
+   * in test-project-3, coder-2 delivered t1 and its card dimmed anyway. A result
+   * line carries the role that ran it; matching id+title against the current plan
+   * is what makes a rewritten plan reset this, because titles change between plans
+   * and ids repeat.
+   */
+  function deliveredRoles(directory, state) {
+    if (!directory || !state?.plan) return [];
+    const titles = new Map((state.plan.tasks || []).map((t) => [t.id, t.title]));
+    const out = new Set();
+    for (const r of readRuns(directory)) {
+      if (r.kind !== 'result' || !r.role || !titles.has(r.task)) continue;
+      if (r.title && r.title !== titles.get(r.task)) continue;
+      out.add(r.role);
+    }
+    return [...out];
+  }
 
   /**
    * Tell a session where it is and what the project plan says.
@@ -378,7 +400,7 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
       // The pane polls this, so the logger is told once per distinct problem
       // rather than once per poll (see logPlanState).
       logPlanState(state, app);
-      return state;
+      return { ...state, delivered: deliveredRoles(directory, state) };
     },
 
     sendMessage: async (sessionId, body) => {

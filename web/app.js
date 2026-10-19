@@ -1337,12 +1337,20 @@ function renderRoleActivity() {
   for (const card of document.querySelectorAll('#topology .role-card')) {
     const role = card.dataset.role;
     const mine = tasks.filter((t) => t.role === role);
-    // "Has taken part" is read from the plan: a task of this role's that is no
-    // longer waiting to start. A worker that ran but whose task the Architect
-    // left `todo` therefore reads as not having taken part — that is the honest
-    // reading of the file we have, and the alternative needs a second source.
-    const participated = mine.some((t) => t.status !== 'todo');
+    // "Has taken part" is the plan's status *or* the run history: the ladder can
+    // hand a role's task to a peer, and that peer delivered it. The server matches
+    // result lines to the current plan by id+title, so a rewritten plan resets it.
+    const participated =
+      mine.some((t) => t.status !== 'todo') || (state.planState?.delivered || []).includes(role);
     const blocked = mine.some((t) => t.status === 'blocked' || t.status === 'failed');
+    // A role whose *current* model the provider has already refused keeps its mark
+    // after the run: the run is over, the dead model is still selected. It clears
+    // the moment the role points at another model, or the operator clears the badge.
+    const pickerValue = card.querySelector('.role-model')?.value || selectionFor(role).ref;
+    const refused = pickerValue
+      ? (modelByRef(pickerValue)?.issues || []).find((i) => i.kind === 'provider')
+      : null;
+    const skipReason = run?.skipped?.find((s) => s.role === role)?.message || refused?.message || null;
 
     let text = '';
     let part = '';
@@ -1372,14 +1380,14 @@ function renderRoleActivity() {
       text = asking ? `Waiting on your answer (${run.title})` : `${run.title}${run.tool ? ` (${runPhrase(run.tool)})` : ''}`;
       part = 'worker';
       dot = 'live';
-    } else if (run?.skipped?.some((s) => s.role === role)) {
-      // This role was tried for the task and the model refused it, so the harness
-      // moved the work down the ladder. Say why on the card of the role that was
-      // skipped — and mark it the way a blocker is marked: red border, red label,
-      // and a red picker, because the model is what failed.
-      const why = run.skipped.find((s) => s.role === role);
+    } else if (skipReason) {
+      // This role was tried for the task and the model refused it, or its current
+      // model is still marked as refused. Mark it the way a blocker is marked: red
+      // border, red label, and a red picker, because the model is what failed and
+      // swapping it is the fix. It outlives the run on purpose — the dead model is
+      // still selected after the report.
       skipped = true;
-      text = `Skipped — ${why?.message || 'the model could not run it'}`;
+      text = `Skipped — ${skipReason}`;
     } else if (blocked) dot = 'err';
     else if (participated) dot = 'ok';
 

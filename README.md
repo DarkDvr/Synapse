@@ -442,9 +442,11 @@ Three rules hold the whole thing together:
   one rung further down (the Architect re-delegating is its verdict that the last
   coder did not deliver). The plan's role is never rewritten — the report says
   "this attempt ran on coder-2, not coder-1… judge the work on its merits".
-- **You can see why a coder was skipped.** The report names the provider's own
-  sentence, the skipped role's card says `Skipped — <reason>` while the run is live,
-  and the model wears its orange **ISSUES** chip in the picker afterwards.
+- **You can see why a coder was skipped — and it stays visible.** The report names
+  the provider's own sentence, the skipped role's card goes **red** with
+  `Skipped — <reason>` and a red model picker, and the model wears its orange
+  **ISSUES** chip. The red card outlives the run: it clears when you point the role
+  at another model, or clear the badge — which is exactly when the problem is gone.
 - **A model can be marked for the operator, never for the model.** A refused turn,
   or a probe run with 3+ real tool failures, puts an orange **ISSUES** chip on that
   model in the picker (tooltip: the provider's own words, with the date). Clicking
