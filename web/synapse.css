@@ -115,9 +115,16 @@ body.dark .input-with-action input {
 }
 
 .brand-mark {
-  background: linear-gradient(145deg, #6f68ff, #4e47df);
-  box-shadow: 0 4px 10px rgba(98, 91, 246, 0.28);
+  display: block;
+  width: 28px; height: 28px;
+  border-radius: 8px;
+  background: none;
+  box-shadow: 0 3px 10px rgba(11, 26, 43, 0.45);
+  object-fit: cover;
 }
+/* The app icon replaced the glyph; the wrapper keeps the flex row's gap honest
+   and lets the mark keep its own shadow without summit.css's text box. */
+.brand-mark-wrap { display: inline-flex; flex: none; }
 
 .sr-only {
   position: absolute; width: 1px; height: 1px;
@@ -252,7 +259,11 @@ body[data-view="none"] .stage-empty {
   display: grid; place-content: center; justify-items: center; gap: 4px;
   text-align: center; color: var(--muted);
 }
-.stage-empty-mark { font-size: 30px; color: var(--violet); opacity: 0.9; }
+.stage-empty-mark {
+  width: 44px; height: 44px; border-radius: 12px;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.35);
+  margin-bottom: 4px;
+}
 .stage-empty h2 { margin: 6px 0 0; font: 800 20px var(--display); color: var(--text); letter-spacing: -0.4px; }
 .stage-empty p { margin: 0 0 14px; font-size: 13px; max-width: 420px; line-height: 1.55; }
 

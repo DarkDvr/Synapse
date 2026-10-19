@@ -187,6 +187,8 @@ web/
   synapse.css         theme + shell (Summit baseline stays locked)
   vendor/summit.css   LOCKED baseline — one deliberate edit, see below
   vendor/fonts.css    vendored DM Sans + Manrope (offline)
+  icon-16…256.png     the app icon, rendered from references\synapse_icon_full.png
+  favicon.ico         the same, packed as a multi-size icon
 skills/               shipped WITH Synapse, always on the engine's skill path
   visual-review/      render a page to PNG, then read it (the agents' eyes)
   ui-design/          the Designer's craft brief: direction, tokens, states, spec
@@ -1047,6 +1049,17 @@ This is once per directory per process and needs no config.
 
 ## UI lessons
 
+- **The app icon is generated, not drawn.** `references\synapse_icon_full.png`
+  (471×472) is the source; `web\icon-{16,32,48,64,180,256}.png` and `favicon.ico`
+  are rendered from it, and the sidebar mark and the welcome screen use the same
+  files rather than a glyph. There is no image tool on this machine, so the
+  rasterizer is the browser: one headless Edge launch draws every size onto a
+  canvas and `--dump-dom` hands the data URLs back, which Node decodes and packs
+  into an ICO (PNG entries, Vista+). Two traps: Chromium enforces a **minimum
+  window size**, so `--window-size=16,16` silently yields a cropped shot — the
+  canvas does the scaling, not the window — and a `file://` image **taints the
+  canvas** unless `--allow-file-access-from-files` is passed, which makes
+  `toDataURL` throw.
 - **Scrollbar stability.** A scroll container must never change the width of its
   contents. `scrollbar-gutter: stable` is set on `html` and on `.chat-scroll`.
   Without it, expanding a tool made the page taller, the page scrollbar
