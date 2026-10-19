@@ -151,9 +151,16 @@ on the window's bottom edge in both modes and only the chat's top edge moves whe
 you switch. It moves with them too — the dock transitions its cap with the same
 260ms ease as the card reveal, so the bottom does not move by a pixel.
 
-**The two roles in a delegation are the only cards that change appearance.** The
-requester takes green (the Architect's own colour) and the worker red; colour
-only, because a width change would shift every card below it.
+**Every card carries a state, not just the two in a delegation.**
+The dot is grey until a role has taken part, **yellow and breathing** while it is
+taking part, **red** when a task of its role is blocked or failed, and **green**
+when it is idle having already taken part; a role that has never been in the plan
+sits at **80% opacity** until it has (the Architect never dims). The two cards in
+a live delegation wear the live path's **yellow** as a border, so red means
+blocked and nothing else. The Architect says **`Waiting on you`** when nothing is
+in flight and there is work outstanding, and wears a green **`Done`** chip once
+every task is done — because it is all read from the plan file, a new plan resets
+every card by itself.
 
 **Connectors.** The idle structure is small round dots at 75% opacity with no
 arrowheads. When a delegation runs, one solid **yellow arrow** is drawn from the
@@ -335,6 +342,13 @@ the pane paints. Roles are the cards the topology already has (`architect,
 critic, coder-1, designer, coder-2, auditor, coder-3`), so a task already says
 which model and effort will run it. Task ids are required because delegation
 refers to them (`run t2`) and a rewritten file must not lose that thread.
+
+- **A title says what the work is, not which file it lands in.** The pane is an
+  index read at a glance — `Build the word-frequency report`, `Wire the buttons`,
+  `Audit the UI/UX` — while the paths, commands and formats live in `detail`,
+  which the row shows on hover. A title that names a file (`bin/wordfreq.py`) is
+  a `problem` the pane shows and the brief carries, so the Architect shortens and
+  generalises its own title; a bare slash is fine, a filename is not.
 
 - **The file is the source of truth.** There is no store in Synapse and no tool
   for this: the Architect writes it with the ordinary `read`/`write`/`edit`

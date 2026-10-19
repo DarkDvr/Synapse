@@ -69,6 +69,16 @@ const asId = (v) => asText(v).replace(/[^A-Za-z0-9._-]/g, '');
 // glance. We do not trim it — the Architect is told, and trims it itself.
 const TITLE_MAX = 80;
 
+// A title is the plan's human index: what the work is, not which file it lands
+// in. A model that writes its own filenames into titles turns the pane into a
+// list of paths, so a title that names a file is a problem the Architect fixes —
+// the same loop that already repairs a malformed file. Both patterns are
+// deliberately narrow: a bare slash is a perfectly good title ("Audit the
+// UI/UX"), and only a name with a real extension, or a leading project-relative
+// directory, counts as a path.
+const FILEISH_TITLE = /[A-Za-z0-9_-]+\.[A-Za-z]{1,5}\b/;
+const PATHISH_TITLE = /^(bin|src|web|docs|config)[\\/]/i;
+
 /**
  * Log a plan's state, once per change and never twice.
  *
@@ -168,6 +178,16 @@ export function readPlan(dir) {
     if (!title) problems.push(`${where} has no title`);
     else if (title.length > TITLE_MAX) {
       problems.push(`${where}'s title is ${title.length} characters - keep titles under ${TITLE_MAX}`);
+    } else {
+      // Say what the work *is*. Naming the file is what the detail field is for.
+      const file = title.match(FILEISH_TITLE);
+      const hinted = file || title.match(PATHISH_TITLE);
+      if (hinted) {
+        problems.push(
+          `${where}'s title names a file or a path ("${hinted[0]}") - say what the work is, ` +
+            `e.g. "Build the word-frequency report", and put the path in detail`,
+        );
+      }
     }
 
     const role = asText(source.role) || 'architect';
@@ -315,6 +335,14 @@ export function briefSession({ dir, role = 'architect', auto = false } = {}) {
         `"detail":"...","dependsOn":[],"result":null,"note":null}]} - ` +
         `statuses: ${STATUSES.join(', ')}. Keep ids short and unique, titles under ${TITLE_MAX} characters, ` +
         `and mark a task "blocked" only when it needs the operator.`,
+    );
+    // The pane is an index of the work, not a list of files. The specific file
+    // names, commands and formats belong in `detail`, which the row shows on
+    // hover — so a title stays readable to someone who has not read the project.
+    lines.push(
+      `A title says what the work *is*, in plain human words - "Build the word-frequency report", ` +
+        `"Wire the buttons", "Audit the output", "Quality Control". No file paths and no code identifiers ` +
+        `in a title: put them in detail.`,
     );
     lines.push(
       auto

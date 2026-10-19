@@ -1260,36 +1260,76 @@ function initRoleCards() {
   }
 }
 
-/** What every card is doing right now.
+/**
+ * What every card is doing right now, and what state its role is in.
  *
- *  The Architect takes part twice over: while a worker runs it says who it is
- *  waiting on, and while its own turn is in flight it shows what it is doing.
- *  The worker shows the task it was handed with its newest tool call in
- *  brackets — no task id, no destination: the arrow already says who and where.
- *  Those two cards are also the only ones that change appearance: the requester
- *  takes green, the worker red, so which two roles are talking is readable at a
- *  glance instead of from a word.
+ * One derivation, three things read off it: the **dot** (taking part / blocked /
+ * idle but has taken part / never taken part), the card's **opacity** (a role
+ * that has never been in this plan is dimmed to 80%), and the **subtitle** (who
+ * the Architect is waiting on, what a worker is doing to its task, or that the
+ * operator is the one being waited on).
+ *
+ * All of it is derived from state we already hold — the plan file, the runs the
+ * runner serves, the open session's turn, the pending form — so nothing is
+ * stored, a reload and a restart show the same picture, and a new plan (whose
+ * tasks are all `todo` again) puts every card back to 80% by itself.
+ *
+ * Precedence per role: running → blocked → done → idle.
  */
 function renderRoleActivity() {
   const run = currentRun();
   const archBusy = isBusy(state.sessionId);
   const archTool = archBusy ? latestToolIn(state.messages) : null;
+  const form = (state.forms || [])[0] || null;
+  const tasks = state.planState?.plan?.tasks || [];
+  // The plan is finished when there is one and nothing in it is outstanding.
+  const planFinished = tasks.length > 0 && tasks.every((t) => t.status === 'done');
+  const unfinished = tasks.some((t) => t.status !== 'done');
   const rows = [];
   let sig = '';
 
   for (const card of document.querySelectorAll('#topology .role-card')) {
     const role = card.dataset.role;
+    const mine = tasks.filter((t) => t.role === role);
+    // "Has taken part" is read from the plan: a task of this role's that is no
+    // longer waiting to start. A worker that ran but whose task the Architect
+    // left `todo` therefore reads as not having taken part — that is the honest
+    // reading of the file we have, and the alternative needs a second source.
+    const participated = mine.some((t) => t.status !== 'todo');
+    const blocked = mine.some((t) => t.status === 'blocked' || t.status === 'failed');
+
     let text = '';
     let part = '';
+    let dot = 'idle';
+    let done = false;
+
     if (role === 'architect') {
-      if (run) { text = `Waiting on ${roleLabel(run.role)}`; part = 'initiator'; }
-      else if (archBusy) { text = archTool ? runPhrase(archTool) : 'Thinking'; part = 'initiator'; }
+      // The Architect's own question first: the operator is the one being waited
+      // on, and that outranks anything else the card could say.
+      if (form && form.sessionId === state.sessionId) { text = 'Waiting on your answer'; dot = 'live'; }
+      else if (run) { text = `Waiting on ${roleLabel(run.role)}`; part = 'initiator'; dot = 'live'; }
+      else if (archBusy) { text = archTool ? runPhrase(archTool) : 'Thinking'; part = 'initiator'; dot = 'live'; }
+      // Its work is done: say so rather than leaving an empty line. The chip is
+      // inside the fixed subtitle slot, so it cannot move anything.
+      else if (planFinished) { text = 'Plan complete'; done = true; dot = 'ok'; }
+      // Nothing in flight and work outstanding: the move is the operator's.
+      else if (unfinished) { text = 'Waiting on you'; dot = 'live'; }
     } else if (run && run.role === role) {
-      text = `${run.title}${run.tool ? ` (${runPhrase(run.tool)})` : ''}`;
+      // A worker stopped on a question is not working on its task, whatever the
+      // newest tool call was — it is waiting, exactly like the Architect does.
+      const asking = form && form.sessionId !== state.sessionId;
+      text = asking ? `Waiting on your answer (${run.title})` : `${run.title}${run.tool ? ` (${runPhrase(run.tool)})` : ''}`;
       part = 'worker';
-    }
-    rows.push({ card, text, part });
-    sig += `${role}\u0001${part}\u0001${text}\u0002`;
+      dot = 'live';
+    } else if (blocked) dot = 'err';
+    else if (participated) dot = 'ok';
+
+    // Dimmed cards are the ones that have never been in this project at all. A
+    // card that is taking part is solid by definition, and the Architect is never
+    // dimmed: it is the role that exists before any of this.
+    const dim = role !== 'architect' && !participated && !part;
+    rows.push({ card, text, part, dot, dim, done });
+    sig += `${role}\u0001${part}\u0001${dot}\u0001${dim ? 1 : 0}\u0001${done ? 1 : 0}\u0001${text}\u0002`;
   }
 
   if (sig === state.roleSig) return;
@@ -1301,16 +1341,30 @@ function renderRoleActivity() {
   // definite height, so anything that did grow would take room from the
   // transcript's top edge.
   const fromH = Math.ceil($('topologyWrap')?.getBoundingClientRect().height || 0);
-  for (const { card, text, part } of rows) {
+  for (const { card, text, part, dot, dim, done } of rows) {
     const slot = card.querySelector('.role-task');
+    // The status dot is the markup's own — it ships as `idle` and is only ever
+    // changed here. Yellow breathes because it means "taking part right now",
+    // and the animation is the same `dot-breathe` the sidebar's live dot uses.
+    const dotEl = card.querySelector('.role-head .status-dot');
+    if (dotEl) {
+      dotEl.className = `status-dot ${dot}`;
+      dotEl.setAttribute(
+        'aria-label',
+        dot === 'live' ? 'taking part' : dot === 'err' ? 'blocked' : dot === 'ok' ? 'idle, has taken part' : 'idle',
+      );
+    }
+    card.classList.toggle('is-dim', dim);
+    card.classList.toggle('is-initiator', part === 'initiator');
+    card.classList.toggle('is-worker', part === 'worker');
     if (!slot) continue;
     // The slot never appears or disappears: it is a fixed three-line hole in the
     // card, so filling it cannot change the card's height and cannot move the
-    // chat. The full text rides the tooltip because the slot clamps.
-    slot.textContent = text;
+    // chat. The full text rides the tooltip because the slot clamps. The DONE
+    // chip is the same size as a line of text for the same reason.
+    if (done) slot.innerHTML = '<span class="role-done">Done</span>';
+    else slot.textContent = text;
     slot.title = text;
-    card.classList.toggle('is-initiator', part === 'initiator');
-    card.classList.toggle('is-worker', part === 'worker');
   }
   if (state.view === 'session') {
     applyRoleCardsLayout({ animate: true, from: fromH, remeasure: true });
@@ -2133,6 +2187,7 @@ async function loadPlan() {
   if (!state.sessionId) {
     state.planState = null;
     renderPlan();
+    renderRoleActivity();
     return;
   }
   try {
@@ -2141,6 +2196,10 @@ async function loadPlan() {
     state.planState = null;
   }
   renderPlan();
+  // The cards read the plan too: which roles have taken part, which are blocked,
+  // and whether the whole thing is finished. Without this a status change would
+  // only reach the dots on the next run or session event.
+  renderRoleActivity();
 }
 
 function renderPlan() {

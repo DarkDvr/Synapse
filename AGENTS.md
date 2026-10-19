@@ -48,8 +48,10 @@ recycled engine binary it locates.
 - **The live path is the one deliberate pair: a yellow arrow with orange ants.**
   Orange is this palette's colour for dot-ants, and the arrow has to be a
   different colour from the ants riding it or they read as one thick line. The
-  two delegation cards are the other exception: requester green, worker red
-  (borders only — the operator's call).
+  two delegation cards wear that same **yellow** as a border while a delegation is
+  in flight, so "yellow = taking part" holds in both channels, and **red means
+  blocked and nothing else** (it carried two meanings for one day: requester
+  green / worker red borders, which collided with the blocked dot).
 - **All button labels are Title Case** (see `references\UI UX\DESIGN.md` §8).
   This applies to buttons only — not headings, body text, labels or tooltips.
 
@@ -339,6 +341,18 @@ ordinary file tools; there is no tool and no store for it.
   directly is fine in Chromium (measured: 34px visible of 84px) even though
   `getComputedStyle` reports its display as `flow-root` — do not wrap it in
   another span on that reading, it clips either way.
+- **A title is the plan's human index: what the work *is*, not which file it lands
+  in.** The pane is read at a glance and by someone who has not read the project,
+  so `Write bin/wordfreq.py and bin/NOTES.md` is a `problem` and `Build the
+  word-frequency report` is not — the brief says so ("no file paths and no code
+  identifiers in a title: put them in detail") and `readPlan` enforces it in the
+  same `problems` channel the Architect already repairs a malformed file from.
+  The patterns are deliberately narrow: `FILEISH_TITLE`
+  (`/[A-Za-z0-9_-]+\.[A-Za-z]{1,5}\b/`) and `PATHISH_TITLE` (a leading
+  `bin|src|web|docs|config` + separator). A bare slash is a perfectly good title —
+  **`Audit the UI/UX` must not be flagged**, and is the test that proves it. Note
+  the flip side: an existing plan written before this rule shows the complaint in
+  the pane until the Architect rewrites its own titles.
 - **A task's `result` is not printed under its title.** One line per task keeps
   the pane scannable; the result rides the title's tooltip. A `note` is the
   exception and stays visible — a blocked task is the one case where the operator
@@ -459,7 +473,10 @@ it as a panel **painted over the chat, anchored just above the composer**.
   traced through a switch, the offset stayed at exactly 2px on all four sides on
   every frame.
 - **Question text and option labels are bold** (700); the option descriptions stay
-  regular and muted, which is what keeps the bold from being a wall.
+  regular and muted, which is what keeps the bold from being a wall. The question
+  itself is the one thing read standing up, so it is **16px** while the option
+  labels stay 12.5px and the descriptions 11px — the operator asked for "larger by
+  three points" and 3pt is 4px in CSS, which is what took 12px to 16px.
 - **"Something Else…" gets its own line for the box.** Sharing one line, the box
   raced the label to the right edge (and wrapped badly when it did not fit), so the
   row is a column and the box is indented 21px to line up with the option labels
@@ -875,6 +892,35 @@ This is once per directory per process and needs no config.
   read as one dotted line whether the run is one row away or three. A card hidden
   by Single mode has a zero-width box, which is the guard that stops a path being
   drawn to nothing.
+- **The card's dot is a state, and the whole language is derived — nothing is
+  stored.** Four states, all read from the plan file plus the runs the runner
+  already serves plus the open session's turn: **grey** never taken part,
+  **yellow breathing** taking part right now (`.status-dot.live`, `dot-breathe`,
+  `--yellow` — the live path's colour, not amber, which stays the engine's
+  "waiting" colour elsewhere), **red** a task of its role is `blocked` or
+  `failed`, **green** idle but has taken part. Precedence is running → blocked →
+  done → idle. A card whose role has never taken part is **80% opacity** (the
+  Architect never is), which is how "who has actually worked here" is readable at
+  a glance; a role goes solid the instant it is running, not when its task's
+  status changes. The Architect additionally says **`Waiting on you`** when
+  nothing is in flight and the plan has work outstanding — the operator's turn —
+  and wears a green **`Done`** chip when there is a plan and every task is `done`.
+  **Because it is all derived, "a new plan resets participation" needs no code:**
+  a rewritten plan is all `todo` again, so every card goes back to 80% on its own,
+  and a reload or a restart shows the same picture.
+  Two consequences worth keeping. The chip replaces the subtitle *text in the same
+  slot*, so it cannot change a card's height (measured: all seven cards 106.28px
+  with and without it, at 1680 and at 1200). And `state.roleSig` must include the
+  dot class, the dim and the done flag, or a poll that changed only a status
+  returns early and the dot never repaints — which is also why `loadPlan()` calls
+  `renderRoleActivity()`: the plan poll (30s, plus every message event) is the
+  only thing that learns a task changed.
+  **The known gap:** participation is "a task of that role is not `todo`". A
+  worker that ran and was interrupted, whose task the Architect left `todo`, dims
+  again — its card is solid while it runs and loses that afterwards. Closing it
+  needs `runs.jsonl` as a second source *and* a marker for which plan those runs
+  belong to (task ids repeat between plans), which is real machinery for a small
+  visual; the honest reading of the file we have was preferred.
 - **`browser_wait_for` can match stale text.** Waiting for "Waiting on" to
   confirm a delegation had started matched the *transcript's* own prose from an
   earlier run and returned immediately. For anything live, poll
@@ -1119,7 +1165,8 @@ not gigabytes. Worth knowing; not worth panicking about.
     show — a worker: the task title plus its newest tool call in brackets, no
     task id and no destination; the Architect: who it is waiting on, or what its
     own turn is doing — and the two participants are the only cards that change
-    appearance (requester green, worker red). Verified live on `calendar` with a
+    appearance (requester green, worker red *at the time*; both are yellow now,
+    see the card-state bullet in UI lessons). Verified live on `calendar` with a
     deliberate repeat delegation of t4: the Architect's card went green and read
     `Waiting on Coder 1`, Coder 1 went red and read
     `Deliver final script (reading calendar_design.md)`, the yellow arrow was
@@ -1128,9 +1175,11 @@ not gigabytes. Worth knowing; not worth panicking about.
     **Still open here: the ✎ button's per-role instructions.** It settles skills
     gating: custom agents are dead here (the free tier rejected every
     custom-agent request), so instructions are prompt text on a default-agent
-    session — which is what the brief already is. Card state is idle/working
-    only; there is no "blocked" state because the runner has none — a blocked
-    task is the Architect's judgement, and it shows in the plan pane.
+    session — which is what the brief already is. Card state was idle/working only
+    as shipped here; it has since grown the full derived language (see "The card's
+    dot is a state" in UI lessons): blocked and done are read from the *plan*,
+    which is where the Architect's judgement already lives, so no "blocked" state
+    had to be invented in the runner.
     **Elapsed time is not shown either**: a ticking number needs a repaint loop,
     and nothing in the card needs one.
   - **3.4 next — the live per-session Tools-in-Use feed.** The main-pane napkin

@@ -143,6 +143,13 @@ body.dark .input-with-action input {
 .status-dot.err  { background: var(--red);   box-shadow: 0 0 0 4px rgba(240, 86, 63, 0.14); }
 .status-dot.idle { background: #5c6068;      box-shadow: 0 0 0 4px rgba(92, 96, 104, 0.12); }
 .status-dot.warn { animation: dot-breathe 1.4s ease-in-out infinite; }
+/* Taking part right now. Yellow rather than amber on purpose: amber is the
+   engine's "waiting" colour elsewhere, and this is the live path's colour — the
+   same yellow as the arrow that says these two roles are talking. It breathes
+   like `.warn` does, and it is exempted from the animation when the operator has
+   asked for reduced motion. */
+.status-dot.live { background: var(--yellow); box-shadow: 0 0 0 4px rgba(237, 194, 90, 0.14);
+                   animation: dot-breathe 1.4s ease-in-out infinite; }
 @keyframes dot-breathe { 50% { opacity: 0.4; } }
 
 /* ── 3. control-room shell ─────────────────────────────────────────────── */
@@ -560,6 +567,15 @@ body.dark .sidebar-bottom,
   overflow: hidden; overflow-wrap: anywhere;
 }
 
+/* The finished plan, as a chip rather than a line of prose — it replaces the
+   subtitle text in the same slot, so it cannot change the card's height. Green
+   because green is this palette's "this is done and nothing is wanted" colour. */
+.role-done {
+  display: inline-block; padding: 1px 7px; border-radius: 999px;
+  font-size: 9.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+  color: #0f2a1f; background: var(--green);
+}
+
 /* On a short window the reserve is a luxury paid out of the chat, which is
    already tight. Two lines still holds nearly every task line, and the space
    goes back to the transcript. It stays fixed *within* a window size, so the
@@ -568,11 +584,19 @@ body.dark .sidebar-bottom,
   :root { --task-lines: 2; }
 }
 
-/* The two roles taking part in a delegation: the requester green (the
-   Architect's own colour), the worker red. Colour only — changing the width
-   would shift every card below it. */
-.role-card.is-initiator { border-color: var(--green); }
-.role-card.is-worker { border-color: var(--red); }
+/* The two roles taking part in a delegation, in the live path's own yellow: the
+   dot is yellow while a role is taking part, so the border says the same thing
+   about the pair the arrow already connects. Red is deliberately left meaning
+   one thing only — blocked. Colour only: changing the width would shift every
+   card below it. */
+.role-card.is-initiator, .role-card.is-worker { border-color: var(--yellow); }
+
+/* A role that has never been in this plan. The Architect is never dimmed (the
+   UI does not add this class to its card): it exists before any of this, and it
+   is the card the operator needs to read. The dim is deliberately subtle — it
+   has to be readable at a glance which roles have taken part, not hidden. */
+.role-card.is-dim { opacity: 0.8; }
+.role-card.is-dim:hover { opacity: 1; }
 
 .role-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .role-head h3 {
@@ -997,7 +1021,7 @@ body[data-mode="single"] .keep-toggle { display: none; }
 .ask-field[hidden] { display: none; }
 .ask-q-title { margin: 0; font-size: 12.5px; font-weight: 700; color: #fff; }
 .ask-q-text {
-  margin: 3px 0 0; font-size: 12px; line-height: 1.5; font-weight: 700; color: var(--text);
+  margin: 3px 0 0; font-size: 16px; line-height: 1.5; font-weight: 700; color: var(--text);
   overflow-wrap: anywhere;
 }
 .ask-req {
@@ -1389,5 +1413,5 @@ body[data-mode="single"] .keep-toggle { display: none; }
 /* ── 17. reduced motion ────────────────────────────────────────────────── */
 
 @media (prefers-reduced-motion: reduce) {
-  .status-dot.warn { animation: none; }
+  .status-dot.warn, .status-dot.live { animation: none; }
 }
