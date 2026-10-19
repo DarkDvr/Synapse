@@ -37,7 +37,7 @@
     },
     "hacker": {
       "ref": "opencode/deepseek-v4.1-flash-free",
-      "variant": "low",
+      "variant": "high",
       "focus": "app"
     },
     "architect": {
@@ -49,7 +49,7 @@
     },
     "coder-1": {
       "ref": "opencode/deepseek-v4.1-flash-free",
-      "variant": "low",
+      "variant": "high",
       "skills": [
         "code-craft",
         "visual-review"
@@ -73,7 +73,7 @@
     },
     "inventor": {
       "ref": "opencode/deepseek-v4.1-flash-free",
-      "variant": "low"
+      "variant": "high"
     }
   },
   "modelChecks": {
