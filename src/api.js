@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { TBD_TITLE } from './titles.js';
-import { ensurePlan, readPlan, readRuns, briefSession, logPlanState, BRIEF_KEY } from './plans.js';
+import { ensurePlan, readPlan, readRuns, briefSession, logPlanState, BRIEF_KEY, appendRequirement } from './plans.js';
 import { skillRules, describeSkills } from './skills.js';
 import { PROJECTS_ROOT } from './paths.js';
 
@@ -552,12 +552,17 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
       }
       // Re-brief before the turn: the plan may have changed since the last one,
       // and an unchanged plan is not sent twice.
+      let directory = '';
       try {
         const session = await engine.getSession(sessionId);
-        await brief(sessionId, session?.directory, 'architect', session?.auto === true);
+        directory = session?.directory || '';
+        await brief(sessionId, directory, 'architect', session?.auto === true);
       } catch (err) {
         app.warn(`brief skipped for ${sessionId}: ${err.message}`);
       }
+      // The operator's own words, written down before any model can restate
+      // them. This file is the requirement every role is judged against.
+      if (directory) appendRequirement(directory, text);
       await engine.prompt(sessionId, text);
       return { ok: true };
     },

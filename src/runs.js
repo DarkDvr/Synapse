@@ -22,7 +22,19 @@
 //   - **A request is answered once.** The request is written to the run log by its
 //     tool-call id before the worker starts, so a restart, a re-scan of the same
 //     transcript, or a second event for the same turn cannot run it twice.
-import { readPlan, briefSession, appendRun, readRuns, planFingerprint, BRIEF_KEY, PLAN_DIR } from './plans.js';
+import {
+  readPlan,
+  briefSession,
+  appendRun,
+  readRuns,
+  planFingerprint,
+  BRIEF_KEY,
+  PLAN_DIR,
+  roleWriteRules,
+  synapseFingerprint,
+  fingerprintDiff,
+  ownedFolder,
+} from './plans.js';
 import { skillRules, describeSkills } from './skills.js';
 
 const POLL_MS = 1500;
@@ -307,6 +319,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     );
     let timeoutMs = timeoutSec * 1000;
     const fingerprintBefore = planFingerprint(dir);
+    const synapseBefore = synapseFingerprint(dir);
     const startedAt = Date.now();
     let worker = null;
     let outcome = 'failed';
@@ -406,7 +419,11 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
           // Architect, and a worker is the most likely place for a stray absolute
           // path — it is the one being told to write files. The role's skill list
           // rides last so its allows beat the broad allow above.
-          permissions: [...(guard?.rules?.() || []), ...skillRules(config, role)],
+          permissions: [
+            ...(guard?.rules?.() || []),
+            ...roleWriteRules(dir, role),
+            ...skillRules(config, role),
+          ],
           // Hidden from the rail: it runs in the project directory, so only this
           // mark tells Synapse it is scaffolding and not the operator's session.
           metadata: { synapse: { internal: true, role, task: request.task, architect: architectId } },
@@ -494,6 +511,25 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     const after = planFingerprint(dir);
     const planTouched = fingerprintBefore !== after;
 
+    // Neither must anything else in .synapse that is not this role's to write.
+    // The path rules stop the file tools; a shell redirect, the `execute` tool or
+    // an absolute path can still land, so the folder is compared around the turn
+    // the way the harness repository is.
+    const synapseAfter = synapseFingerprint(dir);
+    const strayWrites = fingerprintDiff(synapseBefore, synapseAfter, ownedFolder(role));
+    if (strayWrites.length) {
+      if (guard?.alarm) {
+        guard.alarm({
+          sessionId: architectId,
+          what: 'WROTE INSIDE .synapse OUTSIDE ITS FOLDER',
+          paths: strayWrites.slice(0, 12),
+          note: `${request.task} (${role})`,
+        });
+      } else {
+        log.error(`.synapse changed during ${request.task} (${role}): ${strayWrites.join(', ')}`);
+      }
+    }
+
     // And nor must the harness. The snapshot above left a known state; whatever
     // the repository shows now that it did not show then happened while the
     // worker was running — however it happened, and whether or not a tool call
@@ -523,11 +559,13 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
       files,
       text: text.slice(0, RESULT_MAX),
       planTouched,
+      synapseTouched: strayWrites,
     });
     log.info(
       `delegation finished: ${request.task} (${role}) ${outcome} in ${Math.round((Date.now() - startedAt) / 1000)}s` +
         (files.length ? `, ${files.length} file(s) written` : '') +
-        (planTouched ? ' - THE PLAN FILE CHANGED DURING THE WORKER TURN' : ''),
+        (planTouched ? ' - THE PLAN FILE CHANGED DURING THE WORKER TURN' : '') +
+        (strayWrites.length ? ` - .synapse WRITTEN OUTSIDE ITS FOLDER: ${strayWrites.join(', ')}` : ''),
     );
 
     // The "keep building" switch is read at report time, so flipping it while a
@@ -550,6 +588,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
         files,
         workerId: worker?.id,
         planTouched,
+        synapseTouched: strayWrites,
         error: turnError,
         auto,
         timeoutMs,
@@ -638,6 +677,9 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
   function workerPrompt({ task, note, goal }) {
     const lines = [`Task ${task.id}: ${task.title}`];
     if (task.detail) lines.push(`What is wanted: ${task.detail}`);
+    if (Array.isArray(task.reads) && task.reads.length) {
+      lines.push(`Read these before you start: ${task.reads.join(', ')}.`);
+    }
     if (goal) lines.push(`The project goal, for context: ${goal}`);
     if (note) lines.push(`The Architect adds: ${note}`);
     lines.push(
@@ -691,7 +733,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     return [...seen];
   }
 
-  function report({ task, role, insteadOf, skipped, outcome, ms, text, files, workerId, planTouched, auto, timeoutMs, error }) {
+  function report({ task, role, insteadOf, skipped, outcome, ms, text, files, workerId, planTouched, synapseTouched, auto, timeoutMs, error }) {
     const head =
       outcome === 'completed'
         ? `${task.id} (${role}) finished in ${Math.round(ms / 1000)}s.`
@@ -729,6 +771,13 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
       lines.push(
         `Warning: the plan file changed while the worker ran. A worker is never meant to write it — ` +
           `check what changed before trusting the file.`,
+      );
+    }
+    if (Array.isArray(synapseTouched) && synapseTouched.length) {
+      lines.push(
+        `Warning: these files changed inside .synapse while the worker ran, and they are not this role's to ` +
+          `write: ${synapseTouched.slice(0, 8).join(', ')}. The file tools are refused there, so this went ` +
+          `around them; check the contents before you trust the plan or the contract.`,
       );
     }
     lines.push(

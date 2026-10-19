@@ -32,6 +32,8 @@ export const STATUSES = ['todo', 'doing', 'done', 'blocked', 'failed'];
 export const PLAN_DIR = '.synapse';
 export const PLAN_NAME = 'plan.json';
 export const RUNS_NAME = 'runs.jsonl';
+export const REQUIREMENT_NAME = 'requirement.md';
+export const FEATURES_NAME = 'features.json';
 
 /** The instruction-entry key the brief is attached to, per session. */
 export const BRIEF_KEY = 'synapse.plan';
@@ -67,6 +69,113 @@ export function ensurePlan(dir) {
 
 const asText = (v) => (typeof v === 'string' ? v.trim() : v == null ? '' : String(v));
 const asId = (v) => asText(v).replace(/[^A-Za-z0-9._-]/g, '');
+
+/** The operator's words, verbatim, append-only.
+ *
+ * Synapse writes this, never a model: a requirement that a model restates is a
+ * requirement that can drift, and every role downstream is judged against the
+ * operator's own sentences rather than the Architect's summary of them. */
+export function appendRequirement(dir, text) {
+  const body = String(text || '').trim();
+  if (!body || !dir) return false;
+  const target = path.join(String(dir), PLAN_DIR, REQUIREMENT_NAME);
+  try {
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    const exists = fs.existsSync(target);
+    const header = exists ? '' : `# The operator's request\n\n`;
+    const separator = exists ? '\n---\n\n' : '';
+    fs.appendFileSync(target, `${header}${separator}${body}\n`, 'utf8');
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function readRequirement(dir) {
+  try {
+    // The header is for a human opening the file; a brief does not need it.
+    return fs
+      .readFileSync(path.join(String(dir || ''), PLAN_DIR, REQUIREMENT_NAME), 'utf8')
+      .replace(/^# The operator's request\s*\n+/, '')
+      .trim();
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * The feature contract: what was asked for, what was rejected, and which task
+ * delivers each confirmed item.
+ *
+ * The Architect writes it after the operator answers the feature question. Read
+ * tolerantly, like the plan, and never repaired here: a confirmed feature that
+ * no task claims is a problem the Architect is told about, because the whole
+ * point of the file is that the promise and the plan cannot quietly disagree.
+ */
+export function readFeatures(dir, tasks = []) {
+  const base = {
+    exists: false,
+    relative: `${PLAN_DIR}/${FEATURES_NAME}`,
+    items: [],
+    confirmed: [],
+    rejected: [],
+    problems: [],
+    error: null,
+  };
+  const target = path.join(String(dir || ''), PLAN_DIR, FEATURES_NAME);
+  let raw;
+  try {
+    raw = fs.readFileSync(target, 'utf8');
+  } catch (err) {
+    if (err.code === 'ENOENT') return base;
+    return { ...base, error: `could not read it: ${err.message}` };
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(raw || '{}');
+  } catch (err) {
+    return { ...base, exists: true, error: `not valid JSON: ${err.message}` };
+  }
+  const rawItems = Array.isArray(parsed?.items) ? parsed.items : null;
+  if (!rawItems) return { ...base, exists: true, problems: ['"items" is missing or is not an array'] };
+
+  const problems = [];
+  const seen = new Set();
+  const taskIds = new Set(tasks.map((t) => t.id).filter(Boolean));
+  const items = rawItems.map((source, i) => {
+    const where = `item ${i + 1}`;
+    const item = source && typeof source === 'object' ? source : {};
+    const id = asText(item.id);
+    if (!id) problems.push(`${where} has no id - give every feature one like "F1"`);
+    else if (seen.has(id)) problems.push(`item ${i + 1} repeats the id "${id}"`);
+    else seen.add(id);
+
+    const title = asText(item.title);
+    if (!title) problems.push(`${where} has no title`);
+
+    const status = asText(item.status).toLowerCase() || 'confirmed';
+    if (!['confirmed', 'rejected'].includes(status)) {
+      problems.push(`${where} has an unknown status "${status}" - use confirmed or rejected`);
+    }
+    const task = asText(item.task) || null;
+    if (status === 'confirmed') {
+      if (!task) problems.push(`${where} ("${title || id}") is confirmed but names no task`);
+      else if (!taskIds.has(task)) {
+        problems.push(`${where} ("${title || id}") is confirmed for task "${task}", which is not in the plan`);
+      }
+    }
+    return { id: id || null, title: title || '(untitled)', why: asText(item.why) || null, status, task, priority: asText(item.priority) || null };
+  });
+
+  return {
+    ...base,
+    exists: true,
+    items,
+    confirmed: items.filter((i) => i.status === 'confirmed'),
+    rejected: items.filter((i) => i.status === 'rejected'),
+    problems,
+  };
+}
 
 // A title long enough to be a paragraph is a plan that cannot be read at a
 // glance. We do not trim it — the Architect is told, and trims it itself.
@@ -215,6 +324,22 @@ export function readPlan(dir) {
       );
     }
 
+    // What the task points at. A path that is not there is worth saying now, not
+    // after a worker has spent a turn discovering it.
+    const reads = Array.isArray(source.reads) ? source.reads.map(asText).filter(Boolean) : [];
+    for (const rel of reads) {
+      const parts = rel.split(/[\\/]/);
+      if (path.isAbsolute(rel) || parts.includes('..')) {
+        problems.push(`${where} reads "${rel}", which must be a path inside the project`);
+        continue;
+      }
+      try {
+        if (!fs.statSync(path.join(dir, ...parts)).isFile()) problems.push(`${where} reads "${rel}", which is not a file`);
+      } catch {
+        problems.push(`${where} reads "${rel}", which does not exist`);
+      }
+    }
+
     return {
       id: id || null,
       title: title || '(untitled)',
@@ -223,6 +348,7 @@ export function readPlan(dir) {
       rawStatus,
       detail: asText(source.detail) || null,
       dependsOn: Array.isArray(source.dependsOn) ? source.dependsOn.map(asText).filter(Boolean) : [],
+      reads,
       result,
       note: asText(source.note) || null,
     };
@@ -238,12 +364,20 @@ export function readPlan(dir) {
     );
   }
 
+  // The feature contract lives beside the plan and is read the same way. Its
+  // complaints join the plan's, so the Architect repairs both from one message.
+  const features = readFeatures(dir, tasks);
+  for (const p of features.problems) problems.push(`features.json: ${p}`);
+  if (features.error) problems.push(`features.json: ${features.error}`);
+
   return {
     ...base,
     exists: true,
     mtime: stat.mtimeMs,
     stat: { size: stat.size, mtime: stat.mtimeMs },
     problems,
+    features,
+    requirement: readRequirement(dir),
     plan: { version: Number(parsed.version) || 1, goal, summary: asText(parsed.summary), tasks },
   };}
 
@@ -348,6 +482,83 @@ const OWNED_DIR = {
   hacker: `${PLAN_DIR}/reports`,
 };
 
+/** The folder inside .synapse that a role owns, or '' for none. */
+export function ownedFolder(role) {
+  const dir = OWNED_DIR[role];
+  return dir ? dir.split('/').pop() : '';
+}
+
+/**
+ * Where a worker may write inside .synapse, enforced by the engine.
+ *
+ * Three measured facts (2.0.30) decide this shape:
+ *
+ *   - the rule is matched against the path *as the model wrote it*, so a
+ *     relative rule `.synapse/**` refuses a relative path while an absolute
+ *     rule does not; both forms are emitted because a model may write either;
+ *   - `edit` is the action that covers both the `write` and the `edit` tools —
+ *     `write` is not an action name at all (a rule on it denies nothing);
+ *   - the last matching rule wins, so the role's own folder is allowed after the
+ *     deny, exactly as the harness guard does it.
+ *
+ * This stops the file tools. It cannot stop `shell` or `execute`, which take a
+ * command rather than a path — that is what synapseFingerprint/around-turn
+ * detection is for.
+ */
+export function roleWriteRules(dir, role) {
+  const root = String(dir || '').replace(/\\/g, '/').replace(/\/+$/, '');
+  if (!root) return [];
+  const owned = ownedFolder(role);
+  const rules = [];
+  for (const base of [PLAN_DIR, `${root}/${PLAN_DIR}`]) {
+    rules.push({ action: 'edit', resource: `${base}/**`, effect: 'deny' });
+    if (owned) rules.push({ action: 'edit', resource: `${base}/${owned}/**`, effect: 'allow' });
+  }
+  return rules;
+}
+
+/**
+ * Every file under .synapse, with a cheap identity. Compared around a worker
+ * turn so a write that went around the path rules — a shell redirect, the `execute`
+ * tool, an absolute path — is still seen and reported, the way the harness
+ * watchdog compares the repository.
+ */
+export function synapseFingerprint(dir) {
+  const base = path.join(String(dir || ''), PLAN_DIR);
+  const out = {};
+  const walk = (folder, prefix) => {
+    let entries;
+    try {
+      entries = fs.readdirSync(folder, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
+      if (entry.isDirectory()) walk(path.join(folder, entry.name), rel);
+      else {
+        try {
+          const stat = fs.statSync(path.join(folder, entry.name));
+          out[rel] = `${stat.size}:${Math.round(stat.mtimeMs)}`;
+        } catch { /* vanished mid-walk */ }
+      }
+    }
+  };
+  walk(base, '');
+  return out;
+}
+
+/** Paths that differ between two fingerprints, ignoring one allowed folder. */
+export function fingerprintDiff(before = {}, after = {}, allowFolder = '') {
+  const changed = [];
+  for (const rel of new Set([...Object.keys(before), ...Object.keys(after)])) {
+    if (before[rel] === after[rel]) continue;
+    if (allowFolder && (rel === allowFolder || rel.startsWith(`${allowFolder}/`))) continue;
+    changed.push(rel);
+  }
+  return changed.sort();
+}
+
 /**
  * The brief handed to a session through the engine's instruction entries.
  *
@@ -361,6 +572,17 @@ export function briefSession({ dir, role = 'architect', auto = false, skills = '
   const isArchitect = role === 'architect';
 
   lines.push(`Synapse project: ${path.basename(String(dir || '')) || 'unknown'}`);
+
+  // The operator's own words, verbatim. Capped: the brief is re-read on every
+  // step, and a long conversation is not the brief's job — the file keeps all
+  // of it, and this is the ask itself.
+  if (state.requirement) {
+    const text =
+      state.requirement.length > 1600
+        ? `${state.requirement.slice(0, 1600).trimEnd()} [...]`
+        : state.requirement;
+    lines.push(`The operator's request (verbatim, also in ${PLAN_DIR}/${REQUIREMENT_NAME}):\n${text}`);
+  }
   lines.push(
     isArchitect
       ? `Project plan: ${planRelPathPlain()} - you own this file and you are the only role that may write it. ` +
@@ -382,6 +604,16 @@ export function briefSession({ dir, role = 'architect', auto = false, skills = '
   // turn on a refusal it could have seen coming.
   if (skills) lines.push(skills);
 
+  // What the operator actually approved. A worker that sees this cannot quietly
+  // build a rejected idea back in; the rejected ones are never listed here.
+  if (state.features?.confirmed?.length) {
+    const list = state.features.confirmed
+      .slice(0, 12)
+      .map((f) => `${f.id || '?'} ${f.title}`)
+      .join('; ');
+    lines.push(`Confirmed features: ${list}.`);
+  }
+
   if (!state.exists) {
     lines.push(`The plan file does not exist yet.`);
   } else if (state.error) {
@@ -398,7 +630,11 @@ export function briefSession({ dir, role = 'architect', auto = false, skills = '
     for (const t of blocked.slice(0, 4)) {
       lines.push(`  ${t.id || '?'} ${t.status}: ${t.title}${t.note ? ` - ${t.note}` : ''}`);
     }
-    if (state.problems.length) lines.push(`Plan problems to fix: ${state.problems.slice(0, 4).join('; ')}`);
+    // Only the Architect can repair the plan. Telling a worker about a broken
+    // task two rows down is noise it can do nothing about.
+    if (isArchitect && state.problems.length) {
+      lines.push(`Plan problems to fix: ${state.problems.slice(0, 4).join('; ')}`);
+    }
   }
 
   // Both roles can ask the operator something, and the panel is only as good as
