@@ -546,6 +546,9 @@ function renderMode() {
 // guessed, so the cards are never cut off mid-card.
 let revealTimer = 0;
 let workersPendingOff = false;
+// The chat's height has to be re-fitted once the cards have settled: measured
+// mid-slide it describes a layout that no longer exists.
+let chatFitTimer = 0;
 
 function topologyTarget() {
   const wrap = $('topologyWrap');
@@ -593,8 +596,16 @@ function applyRoleCardsLayout({ animate = true, from = null } = {}) {
   if (!els || state.view !== 'session') return;
   const { wrap, topo } = els;
   clearTimeout(revealTimer);
+  clearTimeout(chatFitTimer);
   workersPendingOff = false;
   wrap.classList.add('is-open');
+  // Whatever the cards end up at, the chat is re-fitted when the slide is over.
+  // Measuring mid-transition would pin the dock to a height the layout is still
+  // on its way out of, and the chat would stop tracking the cards at all.
+  chatFitTimer = setTimeout(() => {
+    fitChatHeight();
+    placeAskPanel();
+  }, 340);
 
   if (state.mode === 'multi') {
     // `max-height: none` does not interpolate, so growing straight out of the

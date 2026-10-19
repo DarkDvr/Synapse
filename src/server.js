@@ -68,7 +68,13 @@ export function createServer({ api, engine, logger, config }) {
         res.end('Not found');
         return;
       }
-      res.writeHead(200, { 'content-type': MIME[path.extname(filePath)] || 'application/octet-stream' });
+      res.writeHead(200, {
+        'content-type': MIME[path.extname(filePath)] || 'application/octet-stream',
+        // The UI is served from disk while it is being worked on: a stylesheet
+        // the browser kept from an earlier version produces a bug report about
+        // code that no longer exists. Cheap here — the files are local.
+        'cache-control': 'no-cache',
+      });
       res.end(data);
     });
   }
