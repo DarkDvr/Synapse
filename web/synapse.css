@@ -951,10 +951,10 @@ body[data-mode="single"] .keep-toggle { display: none; }
    max-height are set from measurement (placeAskPanel) because the composer's
    own height moves with the textarea.
 
-   The whole panel is orange on purpose: it is the one thing on screen that is
-   waiting on the operator, and it should be impossible to miss. White text on
-   an orange fill is the palette's rule for fills; orange text sits on the warm
-   dark surface, never on a violet one. */
+   The orange is an accent, not a wash: the border, the heading, the dot, the
+   Submit fill and the selected row's rule. The surface, the option rows and the
+   question text are the ordinary ones — an orange panel with orange text under
+   it was too much for something that is read line by line. */
 .ask-host {
   position: absolute; left: 10px; right: 10px; z-index: 40;
   display: flex; flex-direction: column; justify-content: flex-end;
@@ -963,9 +963,9 @@ body[data-mode="single"] .keep-toggle { display: none; }
 .ask-host[hidden] { display: none; }
 .ask-panel {
   pointer-events: auto; overflow: auto;
-  background: #241a12; border: 1px solid var(--orange);
+  background: #1a1c20; border: 1px solid var(--orange);
   border-radius: 12px; padding: 10px 12px 0;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 125, 26, 0.14);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 125, 26, 0.1);
   max-height: 100%;
 }
 .ask-head { display: flex; align-items: center; gap: 8px; }
@@ -977,13 +977,13 @@ body[data-mode="single"] .keep-toggle { display: none; }
   font-size: 11.5px; font-weight: 700; letter-spacing: 0.06em;
   text-transform: uppercase; color: var(--orange);
 }
-.ask-head-note { margin-left: auto; font-size: 11px; color: #c9a184; }
+.ask-head-note { margin-left: auto; font-size: 11px; color: #82868e; }
 
 .ask-fields { margin-top: 8px; display: grid; gap: 12px; }
 .ask-field[hidden] { display: none; }
-.ask-q-title { margin: 0; font-size: 12.5px; font-weight: 700; color: var(--orange); }
+.ask-q-title { margin: 0; font-size: 12.5px; font-weight: 700; color: #fff; }
 .ask-q-text {
-  margin: 3px 0 0; font-size: 12px; line-height: 1.5; color: #e8dcd3;
+  margin: 3px 0 0; font-size: 12px; line-height: 1.5; color: var(--text);
   overflow-wrap: anywhere;
 }
 .ask-req {
@@ -996,10 +996,10 @@ body[data-mode="single"] .keep-toggle { display: none; }
 .ask-opt {
   display: flex; align-items: flex-start; gap: 8px;
   padding: 6px 8px; border-radius: 9px; cursor: pointer;
-  border: 1px solid #4a3628; background: rgba(255, 125, 26, 0.035);
+  border: 1px solid #33363c; background: rgba(255, 255, 255, 0.015);
 }
-.ask-opt:hover { border-color: #6d4a30; background: rgba(255, 125, 26, 0.09); }
-.ask-opt:has(input:checked) { border-color: var(--orange); background: rgba(255, 125, 26, 0.15); }
+.ask-opt:hover { border-color: #4a4e56; background: rgba(255, 255, 255, 0.035); }
+.ask-opt:has(input:checked) { border-color: var(--orange); background: rgba(255, 255, 255, 0.05); }
 .ask-opt input[type="radio"],
 .ask-opt input[type="checkbox"] {
   flex: none; margin: 3px 0 0; width: 13px; height: 13px; accent-color: var(--orange);
@@ -1007,7 +1007,7 @@ body[data-mode="single"] .keep-toggle { display: none; }
 .ask-opt-text { min-width: 0; display: grid; gap: 2px; }
 .ask-opt-label { font-size: 12.5px; color: var(--text); }
 .ask-opt:has(input:checked) .ask-opt-label { color: #fff; font-weight: 600; }
-.ask-opt-desc { font-size: 11px; line-height: 1.45; color: #c4a894; overflow-wrap: anywhere; }
+.ask-opt-desc { font-size: 11px; line-height: 1.45; color: #8f939b; overflow-wrap: anywhere; }
 
 /* The model's own recommendation, in the label as "(Recommended)" — the same
    convention the question tool documents — shown as a chip instead of a shout
@@ -1026,8 +1026,8 @@ body[data-mode="single"] .keep-toggle { display: none; }
 
 .ask-input {
   margin-top: 6px; width: 100%;
-  background: #1a120c; border: 1px solid #4a3628; border-radius: 8px;
-  color: #efe3da; font-family: inherit; font-size: 12.5px; padding: 5px 9px; min-height: 28px;
+  background: #14161a; border: 1px solid #3a3d43; border-radius: 8px;
+  color: var(--text); font-family: inherit; font-size: 12.5px; padding: 5px 9px; min-height: 28px;
 }
 .ask-input:focus-visible { outline: none; border-color: var(--orange); box-shadow: 0 0 0 3px rgba(255, 125, 26, 0.24); }
 .ask-link { color: var(--orange); font-size: 12px; }
@@ -1039,7 +1039,7 @@ body[data-mode="single"] .keep-toggle { display: none; }
   position: sticky; bottom: 0; z-index: 1;
   display: flex; align-items: center; gap: 10px;
   margin: 11px -12px 0; padding: 9px 12px 11px;
-  background: #241a12; border-top: 1px solid #4a3628;
+  background: #1a1c20; border-top: 1px solid #2b2e35;
   border-radius: 0 0 12px 12px;
 }
 .ask-state { font-size: 11px; color: var(--orange); }
