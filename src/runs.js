@@ -48,6 +48,14 @@ const MAX_ATTEMPTS = 3;
 // model will keep finding "one more issue" until the quota runs out; three
 // rounds is the deal, then the remainder is the operator's to judge.
 const HACK_ROUNDS = 3;
+/** Completed hack rounds on a project: the loop is bounded by them, not by the
+ *  model's appetite for one more issue. */
+const hackRoundsUsed = (dir) =>
+  readRuns(dir).filter((r) => r.kind === 'result' && r.role === 'hacker' && r.outcome === 'completed').length;
+// Written by Synapse itself on every run, so a change to one of these is never a
+// worker's doing. plan.json is reported separately (planTouched), which is why it
+// is ignored here rather than alarming twice.
+const HARNESS_FILES = new Set(['plan.json', 'runs.jsonl', 'requirement.md']);
 // Fallback only: the real ceiling comes from config (worker.timeoutSec, with a
 // per-role override on roles.<id>.timeoutSec).
 const DEFAULT_TIMEOUT_SEC = 300;
@@ -538,7 +546,9 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     // an absolute path can still land, so the folder is compared around the turn
     // the way the harness repository is.
     const synapseAfter = synapseFingerprint(dir);
-    const strayWrites = fingerprintDiff(synapseBefore, synapseAfter, ownedFolder(role));
+    const strayWrites = fingerprintDiff(synapseBefore, synapseAfter, ownedFolder(role)).filter(
+      (p) => !HARNESS_FILES.has(p),
+    );
     if (strayWrites.length) {
       if (guard?.alarm) {
         guard.alarm({
