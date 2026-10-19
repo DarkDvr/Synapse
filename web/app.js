@@ -1802,12 +1802,10 @@ function placeAskPanel() {
   const dock = $('chatDock');
   const composer = $('composer');
   if (!host || !dock || !composer || host.hidden) return;
-  const composerH = composer.offsetHeight;
-  host.style.bottom = `${composerH + 10}px`;
-  // Never zero, but never more than the chat actually has either: a panel that
-  // pokes out of the dock is clipped by it, and half a panel is worse than a
-  // small one that scrolls (its Submit is sticky, so it is always reachable).
-  host.style.maxHeight = `${Math.max(100, dock.clientHeight - composerH - 20)}px`;
+  // The panel fills everything above the composer: flush to the dock's sides and
+  // top, ending where the composer begins. Only the bottom moves, and it is
+  // measured because the textarea grows.
+  host.style.bottom = `${composer.offsetHeight}px`;
 }
 
 /**

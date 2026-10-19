@@ -582,12 +582,13 @@ painted over the chat, anchored just above the composer:
   regular and muted, which is what keeps the bold from reading as a wall.
 - **"Something Else…" puts its box on its own line**, indented to line up with the
   option labels — sharing one line it raced the label to the right edge.
-- **The panel is capped at 780px** and inset clear of the transcript's scrollbar
-  gutter, so its own bar never paints over the chat's.
-- **Orange marks the panel rather than filling it**: the border, the heading, the
-  waiting dot, the Recommended chip, the control accents and the Submit fill. The
-  surface, the options and the question text are the ordinary ones — a fully
-  orange panel was more than a page of questions wants.
+- **The panel covers the chat's transcript area completely** — side to side, from
+  the top of the dock to the composer. The chat's scrollbar, its jump buttons and
+  its prose sit behind an opaque surface, because none of them should be used or
+  read while a question is waiting; it is also the room the form gets to use.
+- **Orange marks the panel rather than filling it**: the top rule, the heading, the
+  waiting dot, the Recommended chip, each answer's outline and the Submit fill. The
+  surface, the row backgrounds and the question text are the ordinary ones.
 - **Any pending question blocks the composer**, including one from a worker; the
   panel's head says whose it is (`another session is waiting on you`).
 - **The composer is disabled while a question waits** (`Answer the question

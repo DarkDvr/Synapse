@@ -427,17 +427,24 @@ it as a panel **painted over the chat, anchored just above the composer**.
   question blocks the composer, whoever asked it: the operator's attention is what
   the run is waiting for, and a worker's question is no different from the
   Architect's in that.
-- **Orange marks the panel; it does not fill it.** The border, the QUESTIONS
-  heading, the waiting dot, the Recommended chip, the control accents and the
-  Submit fill are orange — the surface, the option rows and the question text are
-  the ordinary ones. The first version was orange all the way down and the
-  operator pulled it back the same day ("was too much orange" for something read
-  line by line). A selected row is marked by the orange rule plus a white label,
-  never an orange wash.
-- **The panel is 780px wide, inset 12/30px.** The right inset clears the
-  transcript's 15px scrollbar gutter — at 10px the panel's own bar landed on top of
-  it, which read as one broken scrollbar. The width cap is about the reading: a
-  form as wide as the chat turns every option description into a 1000px rule.
+- **Orange marks the panel; it does not fill it.** The top rule, the QUESTIONS
+  heading, the waiting dot, the Recommended chip, the control accents, each option
+  row's outline and the Submit fill are orange — nothing else is: the panel
+  surface, the row backgrounds and the question text are the ordinary colours. The
+  first version was orange all the way down and the operator pulled it back the
+  same day ("was too much orange" for something read line by line). Every option is
+  an answer and carries the rule; the row you picked is marked by a lifted
+  background and a white label, never an orange wash.
+- **The panel covers the transcript area completely.** Side to side, from the top
+  of the dock down to the composer — the full width and height of what the chat
+  scrolls in. It is not a card floating over the chat: the chat's scrollbar, its
+  jump buttons and its prose are all behind an opaque surface, which is the point,
+  because none of them should be used or read while a question waits. It is flush
+  and square; the dock's own border and 14px radius clip it, and the orange top
+  rule is what says "question view" rather than more chat. `bottom` is measured
+  (placeAskPanel) because the composer's height moves with the textarea. It also
+  gave the form its room back: a 900x880 window now gets 306px where a 100px floor
+  was holding it.
 - **Question text and option labels are bold** (700); the option descriptions stay
   regular and muted, which is what keeps the bold from being a wall.
 - **"Something Else…" gets its own line for the box.** Sharing one line, the box
