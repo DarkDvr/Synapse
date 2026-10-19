@@ -29,25 +29,28 @@
   },
   "roles": {
     "designer": {
-      "ref": "opencode/space-bunny-free"
-    },
-    "critic": {
-      "ref": "opencode/space-bunny-free"
-    },
-    "architect": {
       "ref": "opencode/deepseek-v4.1-flash-free"
     },
+    "critic": {
+      "ref": "opencode/deepseek-v4.1-flash-free",
+      "variant": "low"
+    },
+    "architect": {
+      "ref": "opencode/deepseek-v4.1-flash-free",
+      "variant": "high"
+    },
     "coder-1": {
-      "ref": "opencode/space-bunny-free"
+      "ref": "opencode/deepseek-v4.1-flash-free"
     },
     "coder-2": {
-      "ref": "opencode/space-bunny-free"
+      "ref": "opencode/big-pickle"
     },
     "coder-3": {
-      "ref": "opencode/space-bunny-free"
+      "ref": "opencode/muse-spark-1.3-contributor-free"
     },
     "auditor": {
-      "ref": "opencode/space-bunny-free"
+      "ref": "opencode/deepseek-v4.1-flash-free",
+      "variant": "low"
     }
   },
   "modelChecks": {
