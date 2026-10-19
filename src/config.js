@@ -158,10 +158,15 @@ export function normalize(raw) {
   const roles = {};
   if (isPlainObject(cfg.roles)) {
     for (const [id, spec] of Object.entries(cfg.roles)) {
-      const ref = typeof spec === 'string' ? spec : isPlainObject(spec) ? spec.ref : '';
-      if (typeof ref !== 'string' || !ref.trim()) continue;
+      const rawRef = typeof spec === 'string' ? spec : isPlainObject(spec) ? spec.ref : '';
+      const ref = typeof rawRef === 'string' ? rawRef.trim() : '';
+      // A role may carry a skill list before it has a model chosen; without a
+      // model *or* a list there is nothing here to keep.
+      const hasSkills = isPlainObject(spec) && Array.isArray(spec.skills);
+      if (!ref && !hasSkills) continue;
+      const entry = {};
+      if (ref) entry.ref = ref;
       const variant = isPlainObject(spec) && typeof spec.variant === 'string' ? spec.variant.trim() : '';
-      const entry = { ref: ref.trim() };
       if (variant) entry.variant = variant;
       // A role may need longer than the default worker timeout (the hacker
       // fuzzes a build, which takes time). Only a real number is kept.

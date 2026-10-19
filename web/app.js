@@ -194,6 +194,20 @@ function openDialog({
     document.querySelector('#dialogModal .modal')?.classList.toggle('is-clash', tone === 'clash');
     $('dialogBody').innerHTML = fields
       .map((f) => {
+        // A checklist is not one control inside one label: every row is its own
+        // label, or clicking a row's text would toggle the first box instead.
+        if (f.type === 'checklist') {
+          const rows = f.options
+            .map(
+              (o) =>
+                `<label class="dlg-check"><input type="checkbox" data-check="${esc(o.v)}"${o.checked ? ' checked' : ''} />` +
+                `<span>${esc(o.l)}</span>` +
+                (o.hint ? `<small>${esc(o.hint)}</small>` : '') +
+                `</label>`,
+            )
+            .join('');
+          return `<div class="set-field wide"><span>${esc(f.label)}</span><div class="dlg-checklist">${rows}</div></div>`;
+        }
         const control = f.type === 'select'
           ? `<select id="dlg-${esc(f.name)}">${f.options.map((o) => `<option value="${esc(o.v)}">${esc(o.l)}</option>`).join('')}</select>`
           : `<input id="dlg-${esc(f.name)}" type="text" value="${esc(f.value ?? '')}" placeholder="${esc(f.placeholder ?? '')}" />`;
@@ -212,6 +226,12 @@ function readDialog() {
   if (!dialogFields.length) return true;
   const values = {};
   for (const f of dialogFields) {
+    if (f.type === 'checklist') {
+      values[f.name] = [...$('dialogBody').querySelectorAll('input[data-check]')]
+        .filter((el) => el.checked)
+        .map((el) => el.dataset.check);
+      continue;
+    }
     const el = $(`dlg-${f.name}`);
     if (el) values[f.name] = el.value.trim();
   }
@@ -840,10 +860,79 @@ function fillRoleModels() {
 /** Every role, the Architect included, keeps its own persisted selection. */
 async function saveRoleSelection(roleId, ref, variant) {
   const draft = JSON.parse(JSON.stringify(state.config || {}));
-  const entry = { ref };
+  // Keep whatever else the entry holds (its skill list, its timeout): changing
+  // the model must never quietly wipe the rest of the role's settings.
+  const entry = { ...(draft.roles?.[roleId] || {}), ref };
   if (variant) entry.variant = variant;
+  else delete entry.variant;
   draft.roles = { ...(draft.roles || {}), [roleId]: entry };
   state.config = await api('PUT', '/api/config', draft);
+}
+
+/**
+ * The ✎ button: which skills this role may load.
+ *
+ * The list is enforced at the engine, not merely written down — a role with a
+ * list gets every skill denied and its own ones allowed, so an unticked skill is
+ * genuinely refused (measured on 2.0.30). Ticking nothing is saved as an empty
+ * list, which means "no skills at all", and the dialog says so.
+ */
+async function editRoleSkills(roleId) {
+  const role = ROLES.find((r) => r.id === roleId);
+  let installed = [];
+  try {
+    installed = (await api('GET', '/api/skills')).skills || [];
+  } catch (err) {
+    toast('Could Not Read the Skills', err.message);
+    return;
+  }
+  if (!installed.length) {
+    toast('No Skills Installed', 'Synapse found no skills in the configured folders.');
+    return;
+  }
+  const configured = state.config?.roles?.[roleId]?.skills;
+  const allowed = Array.isArray(configured) ? configured : installed.map((s) => s.name);
+  const result = await openDialog({
+    title: `Skills for ${role?.name || roleId}`,
+    message:
+      configured === undefined
+        ? 'Nothing has been chosen yet, so every skill is available. Tick what this role may use.'
+        : 'Anything unticked is refused by the engine, not just unmentioned.',
+    fields: [
+      {
+        name: 'skills',
+        type: 'checklist',
+        label: 'Installed skills',
+        options: installed.map((s) => ({
+          v: s.name,
+          l: s.name,
+          hint: s.description,
+          checked: allowed.includes(s.name),
+        })),
+      },
+    ],
+    confirmLabel: 'Save Skills',
+  });
+  if (!result || !Array.isArray(result.skills)) return;
+  const draft = JSON.parse(JSON.stringify(state.config || {}));
+  draft.roles = { ...(draft.roles || {}) };
+  draft.roles[roleId] = { ...(draft.roles[roleId] || {}), skills: result.skills };
+  try {
+    state.config = await api('PUT', '/api/config', draft);
+    toast(
+      'Skills Saved',
+      `${role?.name || roleId}: ${result.skills.length ? result.skills.join(', ') : 'none'}.`,
+    );
+    // The Architect's own session runs under a ruleset, so the change reaches it
+    // now rather than at the next restart — the same PATCH the mode switch uses.
+    if (roleId === 'architect' && state.sessionId) {
+      await api('PATCH', `/api/sessions/${encodeURIComponent(state.sessionId)}`, {
+        permissions: state.mode === 'single' ? SINGLE_PERMISSIONS : [],
+      });
+    }
+  } catch (err) {
+    toast('Could Not Save the Skills', err.message);
+  }
 }
 
 /** Push the Architect's current model + effort onto the open session. */
@@ -3129,6 +3218,13 @@ function wire() {
   );
   document.querySelectorAll('.role-effort').forEach((btn) =>
     btn.addEventListener('click', () => cycleEffort(btn.dataset.role)),
+  );
+  document.querySelectorAll('#topology .ic-edit').forEach((btn) =>
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      const role = btn.closest('.role-card')?.querySelector('.role-model')?.dataset.role;
+      if (role) editRoleSkills(role);
+    }),
   );
 
   // mockup affordances: clearly announce what is not wired yet

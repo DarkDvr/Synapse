@@ -5,6 +5,7 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { TBD_TITLE } from './titles.js';
 import { ensurePlan, readPlan, readRuns, briefSession, logPlanState, BRIEF_KEY } from './plans.js';
+import { skillRules, describeSkills } from './skills.js';
 import { PROJECTS_ROOT } from './paths.js';
 
 export function createApi({ getConfig, applyConfig, engine, logger, getBootError, projects, toolStats, probe, modelCache, inspectModel: inspectRef, probeDir, runs, notify, guard }) {
@@ -52,7 +53,7 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
    */
   async function brief(sessionId, directory, role, auto = false) {
     try {
-      const text = briefSession({ dir: directory, role, auto });
+      const text = briefSession({ dir: directory, role, auto, skills: describeSkills(getConfig(), role) });
       if (briefed.get(sessionId) === text) return;
       await engine.setInstruction(sessionId, BRIEF_KEY, text);
       briefed.set(sessionId, text);
@@ -214,6 +215,13 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
     agents: async () => {
       requireReady();
       return { agents: await engine.listAgents() };
+    },
+
+    /** The skills the engine can see, for the per-role picker. Name and
+     *  description only: the path a skill lives in is nobody's business. */
+    skills: async () => {
+      if (!engine.status().ready) return { skills: [] };
+      return { skills: await engine.listSkills() };
     },
 
     sessions: async () => {
@@ -433,8 +441,13 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
         agent: body?.agent,
         // The harness guard rides along with whatever rules the caller asked for:
         // a session may be Single (deny `subagent`) or Multi (no rules), and the
-        // harness is denied in both.
-        permissions: [...(Array.isArray(body?.permissions) ? body.permissions : []), ...(guard?.rules?.() || [])],
+        // harness is denied in both. The role's skill list comes last, because
+        // the engine takes the last matching rule and its allow must win.
+        permissions: [
+          ...(Array.isArray(body?.permissions) ? body.permissions : []),
+          ...(guard?.rules?.() || []),
+          ...skillRules(getConfig(), 'architect'),
+        ],
         directory: project.directory,
       });
       // From the first turn, the Architect knows where it is and that the plan
@@ -466,6 +479,7 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
         await engine.updateSessionPermissions(sessionId, [
           ...(Array.isArray(p) ? p : []),
           ...(guard?.rules?.() || []),
+          ...skillRules(getConfig(), 'architect'),
         ]);
       }
       if (hasTitle) {

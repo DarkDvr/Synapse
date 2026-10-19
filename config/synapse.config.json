@@ -37,7 +37,10 @@
     },
     "architect": {
       "ref": "opencode/deepseek-v4.1-flash-free",
-      "variant": "high"
+      "variant": "high",
+      "skills": [
+        "visual-review"
+      ]
     },
     "coder-1": {
       "ref": "opencode/deepseek-v4.1-flash-free",

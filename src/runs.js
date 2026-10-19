@@ -23,6 +23,7 @@
 //     tool-call id before the worker starts, so a restart, a re-scan of the same
 //     transcript, or a second event for the same turn cannot run it twice.
 import { readPlan, briefSession, appendRun, readRuns, planFingerprint, BRIEF_KEY, PLAN_DIR } from './plans.js';
+import { skillRules, describeSkills } from './skills.js';
 
 const POLL_MS = 1500;
 const RESULT_MAX = 4000;
@@ -403,8 +404,9 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
           directory: dir,
           // Workers carry the harness guard too: they have the same toolset as the
           // Architect, and a worker is the most likely place for a stray absolute
-          // path — it is the one being told to write files.
-          permissions: guard?.rules?.() || [],
+          // path — it is the one being told to write files. The role's skill list
+          // rides last so its allows beat the broad allow above.
+          permissions: [...(guard?.rules?.() || []), ...skillRules(config, role)],
           // Hidden from the rail: it runs in the project directory, so only this
           // mark tells Synapse it is scaffolding and not the operator's session.
           metadata: { synapse: { internal: true, role, task: request.task, architect: architectId } },
@@ -413,7 +415,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
         // Its context: where it is, what the plan says, and that the plan is not
         // its to touch. The task itself goes in the message below.
         try {
-          await engine.setInstruction(worker.id, BRIEF_KEY, briefSession({ dir, role }));
+          await engine.setInstruction(worker.id, BRIEF_KEY, briefSession({ dir, role, skills: describeSkills(config, role) }));
         } catch (err) {
           log.warn(`worker brief failed for ${request.task}: ${err.message}`);
         }

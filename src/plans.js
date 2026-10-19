@@ -355,7 +355,7 @@ const OWNED_DIR = {
  * skimmed. Facts first (what the plan currently says), then the one rule that
  * cannot be guessed (the Architect owns the file; nobody else writes it).
  */
-export function briefSession({ dir, role = 'architect', auto = false } = {}) {
+export function briefSession({ dir, role = 'architect', auto = false, skills = '' } = {}) {
   const state = readPlan(dir);
   const lines = [];
   const isArchitect = role === 'architect';
@@ -377,6 +377,10 @@ export function briefSession({ dir, role = 'architect', auto = false } = {}) {
   // specific task. Coders share one mandate, including coder-2 and coder-3.
   const mandate = isArchitect ? null : ROLE_MANDATES[role] || ROLE_MANDATES['coder-1'];
   if (mandate) lines.push(mandate);
+  // Which skills this role may load. Synapse enforces the same list through the
+  // session's permission ruleset; saying it here is what stops a model wasting a
+  // turn on a refusal it could have seen coming.
+  if (skills) lines.push(skills);
 
   if (!state.exists) {
     lines.push(`The plan file does not exist yet.`);

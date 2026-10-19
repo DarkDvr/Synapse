@@ -23,6 +23,7 @@ export class Engine extends EventEmitter {
   // The model the engine uses when a session has no explicit selection.
   async getDefaultModel() { return null; }
   async listAgents() { return []; }
+  async listSkills() { return []; }
 
   // ── sessions ─────────────────────────────────────────────────
   async listSessions() { return []; }

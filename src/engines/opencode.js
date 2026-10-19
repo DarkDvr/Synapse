@@ -354,6 +354,20 @@ export class OpenCodeEngine extends Engine {
     return r?.data ? normalizeModel(r.data) : null;
   }
 
+  /** The skills the engine can see. Name and description only — the per-role
+   *  picker needs nothing else, and a skill's folder is not the UI's business. */
+  async listSkills() {
+    const r = await this.request('GET', '/api/skill');
+    const data = Array.isArray(r?.data) ? r.data : Array.isArray(r) ? r : [];
+    return data
+      .map((s) => ({
+        name: String(s?.name || s?.id || '').trim(),
+        description: String(s?.description || '').trim(),
+      }))
+      .filter((s) => s.name)
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }
+
   async listAgents() {
     const r = await this.request('GET', '/api/agent');
     const data = Array.isArray(r?.data) ? r.data : [];

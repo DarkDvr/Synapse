@@ -1409,9 +1409,33 @@ body[data-mode="single"] .keep-toggle { display: none; }
 }
 .set-field input:focus-visible,
 .set-field select:focus-visible { outline: 2px solid var(--orange); outline-offset: 1px; }
+/* A skill list is a column of rows, not one form control. Each row is its own
+   label, so clicking a description toggles only that box. */
+.dlg-checklist {
+  display: flex; flex-direction: column; gap: 1px;
+  max-height: 320px; overflow-y: auto;
+  padding: 4px; border: 1px solid #3a3d43; border-radius: 8px;
+  background: #17181b;
+}
+.dlg-check {
+  display: grid; grid-template-columns: 16px minmax(0, 1fr); gap: 0 8px;
+  align-items: start; padding: 5px 6px; border-radius: 6px; cursor: pointer;
+}
+.dlg-check:hover { background: var(--violet-faint); }
+.dlg-check input {
+  width: 14px; height: 14px; min-height: 0; margin: 2px 0 0; padding: 0;
+  border: 1px solid #3a3d43; border-radius: 3px;
+  accent-color: var(--violet-bright); cursor: pointer;
+}
+.dlg-check > span { font-size: 12.5px; color: var(--text); }
+.dlg-check > small {
+  grid-column: 2; font-size: 11px; color: var(--muted); line-height: 1.4;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
 /* the checkbox leads its label, on one row */
-.set-check {
-  grid-column: 1 / -1;
+.set-check {  grid-column: 1 / -1;
   display: flex; align-items: center; gap: 9px;
   font-size: 12.5px; color: var(--text); cursor: pointer; padding: 1px 0;
 }
