@@ -166,11 +166,13 @@ export class OpenCodeEngine extends Engine {
       next.providers = providers;
     }
 
-    // Skills the operator has pointed us at, plus the ones Synapse ships. The
-    // shipped folder comes first and is not configurable: without it the `skill`
-    // tool has nothing to offer, and a config carried from another machine would
-    // otherwise point at a folder that no longer exists and lose every skill
-    // silently — including the eyes the Architect designs with.
+    // Skills Synapse ships, plus any folder the operator adds.
+    //
+    // The engine also reads `~/.agents/skills` by default — that is where the
+    // operator's own library lives, and it keeps working for every other app.
+    // When a name exists in both, the *configured* copy is the one loaded
+    // (measured on 2.0.30 with a distinct description in each copy, after a
+    // restart), so Synapse uses what it ships while the global library stays put.
     const configured = Array.isArray(this.cfg.skillPaths) ? this.cfg.skillPaths.filter(Boolean) : [];
     const skillPaths = [SKILLS_DIR, ...configured.filter((p) => path.resolve(String(p)) !== SKILLS_DIR)];
     if (skillPaths.length) next.skills = { paths: skillPaths };

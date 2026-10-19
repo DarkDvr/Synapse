@@ -235,10 +235,28 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
      */
     skills: async () => {
       const config = getConfig() || {};
-      const paths = (config.engine?.opencode?.skillPaths || []).map((p) => ({
-        path: String(p),
-        exists: fs.existsSync(String(p)),
-      }));
+      // A shipped skill also present in a *configured* folder is worth naming:
+      // the configured copy wins (measured), so an edit to the shipped one would
+      // not be the one loaded. The engine's default `~/.agents/skills` scan is not
+      // a problem — it loses to the configured copy, which is the point.
+      let shipped = new Set();
+      try {
+        shipped = new Set(
+          fs.readdirSync(SKILLS_DIR, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name),
+        );
+      } catch { /* no shipped folder: nothing can collide */ }
+      const paths = (config.engine?.opencode?.skillPaths || []).map((p) => {
+        const entry = { path: String(p), exists: fs.existsSync(String(p)), duplicates: [] };
+        if (!entry.exists || !shipped.size) return entry;
+        try {
+          entry.duplicates = fs
+            .readdirSync(String(p), { withFileTypes: true })
+            .filter((e) => e.isDirectory() && shipped.has(e.name))
+            .map((e) => e.name)
+            .sort();
+        } catch { /* an unreadable folder is reported by `exists` */ }
+        return entry;
+      });
       if (!engine.status().ready) return { skills: [], missing: [], paths, bundled: SKILLS_DIR };
       const skills = await engine.listSkills();
       const names = new Set(skills.map((s) => s.name));

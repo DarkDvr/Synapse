@@ -782,6 +782,17 @@ with it:
 | `aesthetic-foundations` | composition, colour and hierarchy theory plus a critique protocol, for judging a design |
 | `code-craft` | the coders' brief: match the surrounding style, keep the surface small, fail loudly, prove it, report what ran |
 
+**Where the engine looks, and which copy wins.** The engine reads the configured
+`skills.paths` *and* `~/.agents/skills` by default — so the operator's own library
+stays useful to every other app and still shows up here. When a name exists in
+both, the **configured** copy is the one loaded: measured on 2.0.30 by putting a
+distinct description in each copy and restarting, the shipped text was the one
+read, while a probe skill that existed only in `~/.agents/skills` was still
+listed. (An earlier test of the opposite was wrong because PowerShell's
+`-replace '^description:'` does not match per line without `(?m)`, so the marker
+was never written — verify the file, not the edit.) The consequence is simple:
+ship the copy Synapse should use, and leave the global one alone.
+
 **What each role gets by default.** Architect `visual-review`; Designer all four
 design skills; every coder `code-craft` plus `visual-review` (a coder that can
 screenshot its own shell before reporting is cheaper than a round trip); the

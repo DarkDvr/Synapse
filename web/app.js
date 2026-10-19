@@ -3040,13 +3040,15 @@ async function checkSkills({ quiet = false } = {}) {
   if (quiet) return;
   const missing = state.skillsInfo?.missing || [];
   const gone = (state.skillsInfo?.paths || []).filter((p) => !p.exists);
-  if (!missing.length && !gone.length) return;
+  const dupes = (state.skillsInfo?.paths || []).flatMap((p) => (p.duplicates || []).map((n) => `${n} (also in ${p.path})`));
+  if (!missing.length && !gone.length && !dupes.length) return;
   const parts = [];
   if (missing.length) {
     const roles = [...new Set(missing.flatMap((m) => m.roles))];
     parts.push(`${missing.map((m) => m.name).join(', ')} — used by ${roles.join(', ')}`);
   }
   if (gone.length) parts.push(`folder not found: ${gone.map((p) => p.path).join(', ')}`);
+  if (dupes.length) parts.push(`two copies of ${dupes.join(', ')} — the engine picks one`);
   toast('Some Skills Are Missing', `${parts.join('. ')}. Settings → Skills says where they go.`, 9000);
 }
 
@@ -3057,9 +3059,11 @@ function skillsSummary() {
   const total = (info.skills || []).length;
   const missing = (info.missing || []).map((m) => `${m.name} (${m.roles.join(', ')})`);
   const gone = (info.paths || []).filter((p) => !p.exists).map((p) => p.path);
+  const dupeNames = [...new Set((info.paths || []).flatMap((p) => p.duplicates || []))];
   const bits = [`${total} skill(s) load, ${info.bundled ? `including Synapse's own in ${info.bundled}` : 'from the skills folder'}`];
   if (missing.length) bits.push(`not installed: ${missing.join(', ')}`);
   if (gone.length) bits.push(`extra folder missing: ${gone.join(', ')}`);
+  if (dupeNames.length) bits.push(`also in your folder, so either copy may load: ${dupeNames.join(', ')}`);
   return bits.join(' · ');
 }
 
@@ -3115,8 +3119,10 @@ function renderSettings() {
       }) +
       `<p class="set-note">${esc(skillsSummary())}</p>` +
       `<p class="set-note">Synapse's own skills ship in <code>skills\\</code> beside the app and always load, ` +
-      `so the pipeline works on a fresh machine with nothing installed. To move them, move that folder with ` +
-      `Synapse. A skill your role settings name but this machine does not have is listed above instead of ` +
+      `so the pipeline works on a fresh machine with nothing installed. The engine also reads your own ` +
+      `<code>~/.agents/skills</code>, which is why your library appears here too — and where a name exists in ` +
+      `both places, the copy Synapse ships is the one that loads. Add a folder below only for skills that are ` +
+      `not in either. A skill a role names but this machine does not have is listed above instead of ` +
       `disappearing quietly.</p>`),
     group('Model checks',
       f('Max asks per model (1–20)', 'modelChecks.maxAsks', { type: 'number' }) +

@@ -19,9 +19,7 @@
           "context": 1048576
         }
       },
-      "skillPaths": [
-        "C:\\Users\\Andrew\\.agents\\skills"
-      ]
+      "skillPaths": []
     }
   },
   "defaults": {
