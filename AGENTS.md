@@ -400,8 +400,14 @@ it as a panel **painted over the chat, anchored just above the composer**.
   Submit disabled itself again). `state.askSig` is the form's id plus its fields
   and option values — nothing about the answers — and an unchanged signature only
   re-places the panel. Same lesson as `renderSig` for the transcript.
-- **The action row is sticky.** A six-field form is taller than the chat, so
-  Submit is pinned to the panel's bottom edge rather than something to scroll to.
+- **The action row is the panel's last column row, not a sticky one.** A six-field
+  form is taller than the chat, so Submit is pinned to the panel's bottom edge
+  rather than something to scroll to. It was `position: sticky; bottom: 0` first,
+  which only holds while the content is taller than the panel: on a short form the
+  row sat where the content ended and the panel went on being empty underneath it —
+  a strip that reads as the chat showing through. The panel is now a flex column,
+  the fields take the room and scroll inside it, and the row ends at the panel's
+  bottom edge either way (measured: `stripBelowSubmit: 0` in both cases).
 - **Choice questions get radios, `multiselect` gets checkboxes**, `boolean` a
   single checkbox, numbers a number input, `external` a link. Every option shows
   its label and its description — the descriptions are the model's own reasoning
@@ -860,9 +866,9 @@ This is once per directory per process and needs no config.
   (`@media (max-height: 820px) { --task-lines: 2 }`): three lines of empty card is
   a luxury paid out of the chat. It is fixed *within* a window size, so the
   no-shift rule still holds; only a resize across the breakpoint moves anything.
-  The ask panel's own `max-height` floors at 100px rather than 150 — a panel that
-  pokes out of the dock is clipped by it, and half a panel is worse than a small
-  one that scrolls (Submit is sticky, so it is always reachable).
+  The ask panel is no longer a floating card at all — it covers the chat's
+  transcript area edge to edge, so there is no `max-height` to floor; its fields
+  scroll inside it and the action row is pinned to its bottom row.
 - **Cards have a hard minimum width** (`--card-min: 360px`): below that the
   select, the chevron and the edit button start colliding and the name is
   ellipsised away. Two columns + the 66px spine need ~790px of stage, so the

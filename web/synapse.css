@@ -968,16 +968,18 @@ body[data-mode="single"] .keep-toggle { display: none; }
 }
 .ask-host[hidden] { display: none; }
 .ask-panel {
-  pointer-events: auto; overflow: auto;
-  /* Flush with the dock's edges: its own 14px radius (and the border) do the
-     corner clipping, so the panel is square and edge to edge. The orange top rule
-     is what marks it as the question view rather than more chat. */
+  pointer-events: auto;
+  /* A column: the fields take the room and scroll inside it, the action row is
+     pinned at the panel's bottom. A sticky row instead would sit wherever the
+     content happens to end, leaving a strip of empty panel under it that reads
+     as the chat showing through. */
+  display: flex; flex-direction: column;
   background: #1a1c20;
   border: 0; border-top: 1px solid var(--orange);
   padding: 12px 14px 0;
   width: 100%; height: 100%;
 }
-.ask-head { display: flex; align-items: center; gap: 8px; }
+.ask-head { display: flex; align-items: center; gap: 8px; flex: none; }
 .ask-dot {
   flex: none; width: 7px; height: 7px; border-radius: 50%;
   background: var(--orange); box-shadow: 0 0 0 3px rgba(255, 125, 26, 0.18);
@@ -988,7 +990,7 @@ body[data-mode="single"] .keep-toggle { display: none; }
 }
 .ask-head-note { margin-left: auto; font-size: 11px; color: #82868e; }
 
-.ask-fields { margin-top: 8px; display: grid; gap: 12px; }
+.ask-fields { margin-top: 8px; display: grid; gap: 12px; flex: 1 1 auto; min-height: 0; overflow: auto; }
 .ask-field[hidden] { display: none; }
 .ask-q-title { margin: 0; font-size: 12.5px; font-weight: 700; color: #fff; }
 .ask-q-text {
@@ -1048,11 +1050,11 @@ body[data-mode="single"] .keep-toggle { display: none; }
 .ask-input:focus-visible { outline: none; border-color: var(--orange); box-shadow: 0 0 0 3px rgba(255, 125, 26, 0.24); }
 .ask-link { color: var(--orange); font-size: 12px; }
 
-/* Pinned to the panel's bottom: a form with six fields is taller than the chat,
-   and the one button the operator needs must never be something they have to go
-   looking for. Sticky, inside the panel's own scroller. */
+/* Pinned to the panel's bottom as the last row of its column: the one button the
+   operator needs is never something they have to go looking for, however many
+   questions arrive. */
 .ask-actions {
-  position: sticky; bottom: 0; z-index: 1;
+  flex: none;
   display: flex; align-items: center; gap: 10px;
   margin: 11px -14px 0; padding: 9px 14px 11px;
   background: #1a1c20; border-top: 1px solid #2b2e35;
