@@ -838,6 +838,27 @@ This is once per directory per process and needs no config.
   being ready — with the engine down that list is empty for reasons that have
   nothing to do with this session), and a 404 from an action re-reads the projects
   instead of reporting a failure the operator can do nothing about.
+- **`body { min-width: 1100px }` is the source of the horizontal bar on a narrow
+  window.** Below 1100 the page is deliberately wider than the window (the cards
+  need ~790px of stage, so the alternative was squeezing them), and the browser
+  shows a horizontal scrollbar. At 900px it is 200px of scrolling; at the operator's
+  842px window it was 258px, and that is what made the panel look cut off on the
+  right and left a bar across the bottom of it. **Not yet decided**: whether the
+  floor should come down (stack the card columns below some width instead of
+  scrolling) — it is the last layout question open.
+- **A ceiling is not a height.** `fitChatHeight` used to set `max-height`, which
+  only ever takes room away: a conversation shorter than the ceiling left the chat
+  ending above the window's bottom with the rail showing underneath — exactly the
+  "not anchored any more" report. It sets a definite `height` now (and clears it in
+  the wide layout and on an empty dock), and the dock transitions `height`, not
+  `max-height`.
+- **The panel needs `overflow: hidden`.** Its action row has a square background
+  and sits flush against the panel's bottom edge, so without clipping it painted
+  over the 16px radius and hid the orange border's curve at both bottom corners.
+- **`.ask-input`'s `width: 100%` beat the custom-answer override.** The "Something
+  Else…" box is indented 21px, so 100% of the *row* made it 12px wider than the
+  space it had, which gave the fields a horizontal scrollbar. `.ask-opt
+  .ask-other-text { width: calc(100% - 21px) }` — two classes beat one.
 - **`display: revert` does not mean "back to my stylesheet".** The Multi reveal
   used it to un-hide the worker cards, and `revert` rolls back to the USER-AGENT
   value — `block` for `<article>` — so every worker card silently stopped being a

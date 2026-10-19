@@ -1813,17 +1813,26 @@ function fitChatHeight() {
   const dock = $('chatDock');
   if (!dock) return;
   const wide = window.matchMedia('(min-width: 1461px)').matches;
-  let next = '';
-  if (!wide && state.view === 'session') {
-    const wrap = $('topologyWrap');
-    // `none` in Single: the wrapper is exactly the Architect card.
-    const settled = parseFloat(wrap?.style.getPropertyValue('--reveal-h'))
-      || wrap?.getBoundingClientRect().height
-      || 0;
-    const room = window.innerHeight - (stageTop() + settled + stageGap()) - 12;
-    next = `${Math.max(180, Math.floor(room))}px`;
+  const inSession = state.view === 'session' && dock.classList.contains('has-history');
+  if (wide || !inSession) {
+    // The wide layout's stage owns the height, and an empty dock is just its
+    // composer row: neither takes an inline height.
+    if (dock.style.height) dock.style.height = '';
+    if (dock.style.maxHeight) dock.style.maxHeight = '';
+    return;
   }
-  if (dock.style.maxHeight !== next) dock.style.maxHeight = next;
+  const wrap = $('topologyWrap');
+  // `none` in Single: the wrapper is exactly the Architect card.
+  const settled = parseFloat(wrap?.style.getPropertyValue('--reveal-h'))
+    || wrap?.getBoundingClientRect().height
+    || 0;
+  const room = window.innerHeight - (stageTop() + settled + stageGap()) - 12;
+  const next = `${Math.max(180, Math.floor(room))}px`;
+  // A definite height, not a ceiling. A ceiling only ever took room away, so a
+  // conversation shorter than the ceiling left the chat stopping above the
+  // window's bottom with the rail showing underneath it.
+  if (dock.style.height !== next) dock.style.height = next;
+  if (dock.style.maxHeight) dock.style.maxHeight = '';
 }
 
 /** The stage's top edge in page coordinates — the one reference point every
