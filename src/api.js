@@ -13,25 +13,31 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
   const briefed = new Map();
 
   /**
-   * Which roles actually delivered a task of the *current* plan.
+   * Which roles this *session* has used, ever.
    *
-   * The plan's `role` is who the task was written for; the ladder can hand the
-   * work to a peer, and that peer has taken part even though no task names it —
-   * in test-project-3, coder-2 delivered t1 and its card dimmed anyway. A result
-   * line carries the role that ran it; matching id+title against the current plan
-   * is what makes a rewritten plan reset this, because titles change between plans
-   * and ids repeat.
+   * The operator's rule: a non-Architect card starts dim and goes solid the first
+   * time that role is used for anything in this session, and it stays solid for
+   * the rest of the session. A delegation attempt counts even when the model
+   * refused it — that is what the ladder does with a dead model — and rewriting
+   * the plan does not reset it, because it is the session's history, not the
+   * plan's state. A new session starts everyone dim again, which is the point.
+   *
+   * The run log has it: every delegate line records the architect session and the
+   * role the task was written for; the result line records the role that actually
+   * ran it. Both count, joined by callId.
    */
-  function deliveredRoles(directory, state) {
-    if (!directory || !state?.plan) return [];
-    const titles = new Map((state.plan.tasks || []).map((t) => [t.id, t.title]));
-    const out = new Set();
-    for (const r of readRuns(directory)) {
-      if (r.kind !== 'result' || !r.role || !titles.has(r.task)) continue;
-      if (r.title && r.title !== titles.get(r.task)) continue;
-      out.add(r.role);
+  function usedRoles(directory, sessionId) {
+    if (!directory || !sessionId) return [];
+    const runs = readRuns(directory);
+    const mine = new Set(
+      runs.filter((r) => r.kind === 'delegate' && r.architect === sessionId).map((r) => r.callId),
+    );
+    const used = new Set();
+    for (const r of runs) {
+      if (r.kind === 'delegate' && r.architect === sessionId && r.role) used.add(r.role);
+      else if (r.kind === 'result' && r.role && mine.has(r.callId)) used.add(r.role);
     }
-    return [...out];
+    return [...used];
   }
 
   /**
@@ -223,11 +229,36 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
     projects: async () => ({ projects: await projectsWithSessions() }),
 
     createProject: async (body) => {
+      // Does this folder already carry a plan? Adding a project only registers a
+      // directory, so a folder the operator deleted the *project* for is still on
+      // disk with everything in it — including the plan the Architect left there.
+      // That is the right behaviour for re-adding a real project, and a trap when
+      // the name is reused for a fresh start: the pane opened onto a finished
+      // 4/4 plan and the Architect card said DONE before anyone had typed
+      // anything. So it is reported, never wiped.
+      let existingPlan = null;
+      const dir = String(body?.directory || '').trim();
+      if (dir) {
+        try {
+          const before = readPlan(dir);
+          if (before.exists && before.plan?.tasks?.length) {
+            existingPlan = {
+              tasks: before.plan.tasks.length,
+              done: before.plan.tasks.filter((t) => t.status === 'done').length,
+              goal: (before.plan.goal || '').slice(0, 120),
+            };
+          }
+        } catch { /* a directory we cannot read is the project's problem, not this call's */ }
+      }
       const project = projects.create({ name: body?.name, directory: body?.directory });
       // A project starts with an empty, valid plan file, so the first session in
-      // it has something concrete to fill in rather than a blank page.
+      // it has something concrete to fill in rather than a blank page. This never
+      // touches an existing plan.
       ensurePlan(project.directory);
-      return { project: (await projectsWithSessions()).find((p) => p.id === project.id) || project };
+      return {
+        project: (await projectsWithSessions()).find((p) => p.id === project.id) || project,
+        existingPlan,
+      };
     },
 
     /**
@@ -400,7 +431,7 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
       // The pane polls this, so the logger is told once per distinct problem
       // rather than once per poll (see logPlanState).
       logPlanState(state, app);
-      return { ...state, delivered: deliveredRoles(directory, state) };
+      return { ...state, used: usedRoles(directory, sessionId) };
     },
 
     sendMessage: async (sessionId, body) => {

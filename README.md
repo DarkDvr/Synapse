@@ -154,10 +154,12 @@ you switch. It moves with them too — the dock transitions its cap with the sam
 **Every card carries a state, not just the two in a delegation.**
 The dot is grey until a role has taken part, **yellow and breathing** while it is
 taking part, **red** when a task of its role is blocked or failed, and **green**
-when it is idle having already taken part; a role that has never been in the plan
-sits at **80% opacity** until it has (the Architect never dims). The two cards in
-a live delegation wear the live path's **yellow** as a border, so red means
-blocked and nothing else. The Architect has two chips and a **green border** for
+when it is idle having already taken part. A role card is about whether this role
+has been **used at all in this session**: it starts dimmed to 55% (the Architect
+never dims) and goes solid the first time it is used, and stays solid for the rest
+of the session — a plan rewrite does not reset it, a new session does. The two cards
+in a live delegation wear the live path's **yellow** as a border, so red means
+blocked and nothing else, and a skipped role wears red with a red model picker. The Architect has two chips and a **green border** for
 its two resting states: green **`Done`** once every task is done, and yellow
 **`Waiting on you`** when it is finished for now and the next move is yours.
 Because it is all read from the plan file, a new plan resets every card by itself.

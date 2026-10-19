@@ -1147,9 +1147,21 @@ async function addProject() {
     return;
   }
   try {
-    await api('POST', '/api/projects', { name: name || undefined, directory });
+    const created = await api('POST', '/api/projects', { name: name || undefined, directory });
     await loadProjects();
-    toast('Project added', directory);
+    // A folder that already had a plan keeps it — that is how a re-added project
+    // continues its work, and how a reused name inherits a finished one. Say so
+    // once, instead of letting the pane look broken.
+    const prior = created?.existingPlan;
+    if (prior) {
+      toast(
+        'Folder Already Has A Plan',
+        `${prior.tasks} task(s), ${prior.done} done - the Architect will continue that plan, not start ` +
+          `a new one. For a clean start: stop Synapse, delete the folder, then add it again.`,
+      );
+    } else {
+      toast('Project added', directory);
+    }
   } catch (err) {
     toast('Could not add the project', err.message);
   }
@@ -1218,6 +1230,11 @@ async function openSession(id) {
   setView();
   renderTree();
   await loadMessages();
+  // A session is opened to read where it got to, not where it started: put the
+  // transcript at its end once, without touching the page (the role cards above it
+  // are where the operator's eye goes next anyway).
+  const el = chatScroller();
+  if (el) el.scrollTop = el.scrollHeight;
   refreshPending();
   renderToolUsage();
   loadPlan();
@@ -1337,11 +1354,11 @@ function renderRoleActivity() {
   for (const card of document.querySelectorAll('#topology .role-card')) {
     const role = card.dataset.role;
     const mine = tasks.filter((t) => t.role === role);
-    // "Has taken part" is the plan's status *or* the run history: the ladder can
-    // hand a role's task to a peer, and that peer delivered it. The server matches
-    // result lines to the current plan by id+title, so a rewritten plan resets it.
-    const participated =
-      mine.some((t) => t.status !== 'todo') || (state.planState?.delivered || []).includes(role);
+    // "Has been used this session" — the server answers it from the run log, scoped
+    // to the open session, so it survives a plan rewrite and a page reload and
+    // starts over in a new session. Per the operator: a role card is about whether
+    // this role was used for anything in this session, ever.
+    const participated = (state.planState?.used || []).includes(role);
     const blocked = mine.some((t) => t.status === 'blocked' || t.status === 'failed');
     // A role whose *current* model the provider has already refused keeps its mark
     // after the run: the run is over, the dead model is still selected. It clears

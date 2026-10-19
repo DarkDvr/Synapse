@@ -884,11 +884,23 @@ This is once per directory per process and needs no config.
   unconditionally — the operator's words were "to make sure I always see any new
   info in chat being added" — so reading history mid-turn is pulled back to the end
   by the next part. That is the trade they asked for.
+- **Opening a session starts at its end.** `openSession()` puts the transcript at
+  its bottom once after `loadMessages()` — a session is opened to read where it got
+  to. It does not move the page (unlike Send), because the cards are right there.
 - **The two rail tables share one geometry.** They are lists before they are
   tables: 2px cells, `line-height: 15px`, `tbody tr { height: 21px }`, and anything
   that lives in a cell is capped to that height — the probe's Error is a real
   `.btn` (22px min-height) and its own `td` rule set 3px, so one table had 29px rows
   beside 22px ones. Measured after the fix: 8 rows and 14 rows, every one 21px.
+- **Adding a project can adopt a folder that already has a plan.** Deleting a
+  project only unregisters it (documented, and right: the folder is the operator's),
+  so a reused name like `Test Project 1` resolves to the same slug on disk and the
+  new project inherits the old plan — the pane opened onto a finished 4/4 plan and
+  the Architect card said DONE before anything was typed. `createProject` now
+  reports `existingPlan: { tasks, done, goal }` and the UI says so once, with the
+  recipe for a clean start: **stop Synapse, delete the folder, add it again** (the
+  engine holds the directory while it runs). It never wipes the plan: re-adding a
+  real project must continue its work.
 - **`.chat-scroll` scrolls internally in the wide layout; the page scrolls in the
   stacked one.** Above 1460px `.stage` has a definite height (set from the
   measured viewport via `--stage-h`, minus any horizontal scrollbar), so the
@@ -1042,12 +1054,15 @@ This is once per directory per process and needs no config.
   sources and survives the run: the live run's `skipped[]` while it lasts, and
   afterwards the role's current model carrying a `provider` issue — so the card
   stays red until the role points at another model or the operator clears the badge,
-  which is exactly when the problem is gone. **Participation is not just the plan**:
-  the ladder can hand a role's task to a peer, and that peer delivered it (in
-  test-project-3 coder-2 ran t1 and its card dimmed anyway). The plan route returns
-  `delivered` — roles with a `result` line matching a task of the *current* plan by
-  id+title — and that counts as having taken part. Matching the title is what makes
-  a rewritten plan reset it, because ids repeat between plans and titles do not.
+  which is exactly when the problem is gone. **Participation is per session, not
+  per plan** — the operator's rule: a non-Architect card starts dim and goes solid
+  the first time that role is used for anything in *this session*, and stays solid
+  for the rest of it. A plan rewrite does not reset it; a new session does. The plan
+  route returns `used`, computed from `runs.jsonl` by `architect` = the open session
+  (every delegate line carries it), and it counts both the role the task was written
+  for and the role that actually ran it — which is how coder-2 is solid after the
+  ladder handed it coder-1's task. Deriving it from the run log rather than from
+  memory is what makes it survive a reload and a restart.
   The Architect has two **chips** for its two resting states, in
   the same slot the task line uses — a green **`Done`** when there is a plan and
   every task is `done`, and a yellow **`Waiting on you`** when nothing is in
