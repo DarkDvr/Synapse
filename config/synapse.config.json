@@ -83,7 +83,7 @@
     "resetOnBoot": false
   },
   "worker": {
-    "timeoutSec": 600,
+    "timeoutSec": 1200,
     "ladder": [
       "coder-1",
       "coder-2",
