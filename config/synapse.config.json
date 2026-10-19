@@ -57,7 +57,7 @@
     "resetOnBoot": false
   },
   "worker": {
-    "timeoutSec": 300
+    "timeoutSec": 600
   },
   "logging": {
     "level": "info",

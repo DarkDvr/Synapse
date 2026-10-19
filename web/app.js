@@ -2178,8 +2178,14 @@ function renderPlan() {
       .map((t) => {
         const status = PLAN_STATUS[t.status] ? t.status : 'todo';
         // The result is not printed under the title: the row stays one line per
-        // task, and the detail is a hover away. A blocked note is the exception
-        // — that one is the reason the operator is being asked, so it shows.
+        // task, and the detail is a hover away. A blocked note is the exception —
+        // that one is the reason the operator is being asked, so it shows.
+        //
+        // Only while it *is* the reason: a note on a task that is done, or back to
+        // todo, is the Architect having moved on without clearing its own note, and
+        // showing it made a finished plan look like it was still asking. The file
+        // keeps the text (the Architect owns it) — this is just what the pane shows.
+        const asking = status === 'blocked' || status === 'failed';
         const tooltip = [t.title, t.result ? `Result: ${t.result}` : '', t.note ? `Note: ${t.note}` : '']
           .filter(Boolean)
           .join('\n\n');
@@ -2187,7 +2193,7 @@ function renderPlan() {
           <span class="plan-dot" role="img" aria-label="${esc(PLAN_STATUS[status])}"></span>
           <span class="plan-main">
             <span class="plan-title" title="${esc(tooltip)}"><span class="plan-id">${esc(t.id || '?')}</span>${esc(t.title)}</span>
-            ${t.note ? `<span class="plan-note">${esc(t.note)}</span>` : ''}
+            ${t.note && asking ? `<span class="plan-note">${esc(t.note)}</span>` : ''}
           </span>
           <span class="plan-role">${esc(t.role)}</span>
         </li>`;
