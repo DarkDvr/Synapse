@@ -677,6 +677,79 @@ Non-obvious, all verified on 2.0.30:
 
 ---
 
+## The pipeline: ideas, design, a build, and an adversary
+
+The seven cards are `architect, inventor, coder-1, designer, coder-2, hacker,
+coder-3`. `auditor` and `critic` are retired: the Architect verifies its own
+delegations against the disk, so a second confirmation was redundant, and the two
+slots are better spent on an idea generator and an adversary. A config written
+before the rename is migrated once (`normalize()` folds `auditor`→`inventor`,
+`critic`→`hacker`), so a saved model choice is never lost.
+
+The pipeline is a **menu**, not a checklist: the Architect picks the phases per
+project and records them in the plan's `phases`. A clock pays for invent → design
+→ build the shell → wire it → hack → fix → re-hack; a word-count CLI pays for two
+tasks. Roles are identities plus one mandate each (`ROLE_MANDATES` in
+`plans.js`), and each owns one folder:
+
+| role | may write | produces |
+|---|---|---|
+| inventor | `.synapse/ideas/` | `ideas-1.md`, ranked, with a one-line why and effort |
+| designer | `.synapse/design/` | `design.md` (the spec) + `mock-N.html` |
+| hacker | `.synapse/reports/` | `hack-N.md`: ids `H1…`, severity, exact repro |
+| coders | the project | `bin/` |
+
+**The file contract is the point.** `.synapse/` holds `requirement.md` (written by
+the harness from the operator's own message, append-only — never a model's
+paraphrase), `plan.json`, `features.json` (confirmed + rejected, every confirmed
+item naming the task that delivers it), `ideas/`, `design/`, `reports/` and
+`runs.jsonl`. Each brief is assembled from those files, so a worker receives the
+operator's words and the confirmed features verbatim, and the rejected ones are
+never passed on.
+
+### What the engine actually does with a permission rule (measured, 2.0.30)
+
+This cost an afternoon and is not guessable:
+
+- **The rule matches the path as the model wrote it.** A relative rule
+  (`.synapse/**`) refuses a relative write; an **absolute** rule does *not*
+  refuse a relative path. Emit both forms.
+- **`edit` is the action for both the `write` and the `edit` tools.** `write` is
+  not an action name at all — a rule on it denies nothing, which looks exactly
+  like a working rule until you test it.
+- **`read` is an action**, so reads can be denied separately.
+- **`action:'*'` with a path denies reads too**, which is why the harness guard
+  uses it and why `.synapse` cannot (the plan and the contract are meant to be
+  read).
+- **`shell` and `execute` are not path-matched.** They take a command, so a
+  worker can go around any path rule with a redirect. Hence
+  `synapseFingerprint`/`fingerprintDiff`: the runner compares every file under
+  `.synapse` before and after a worker turn and reports anything changed outside
+  that role's folder as an alarm — prevention for the file tools, detection for
+  the rest, the same split as the harness watchdog. **Verified live:** a coder
+  rule refused `.synapse/probe/x.txt` twice (`write:error`, no file), while the
+  same write with an absolute path in the prompt got through — which is exactly
+  why the detection layer exists.
+
+**Skills are per role, and enforced.** `roles.<id>.skills` is an allowlist; the
+session gets `{action:'skill', resource:'*', deny}` plus one allow per name (the
+last matching rule wins), and the brief names them. Measured: a denied skill
+answers "Permission denied: skill (type: permission.rejected)" while an allowed
+one loads. No list means no restriction; an empty list means none. The picker is
+the ✎ button on the role card.
+
+**Eyes are a skill, not a tool.** `visual-review` (`%USERPROFILE%\.agents\skills`
+`\visual-review`, `bin\shot.mjs`) renders a file or URL with the machine's own
+Edge (`--headless=new`, a throwaway `--user-data-dir`, ~1.2s) and writes the PNG
+into the project; the model then **reads the PNG**, which works on deepseek and
+not just on a vision model (measured: it named a made-up word and its background
+colour correctly). Two widths at most — each image is roughly a thousand tokens.
+The SKILL.md carries the honesty rules: say what is measurable, say what a still
+cannot show, never invent a label. Without it, "the Architect checked the design"
+is a sentence about HTML rather than pixels.
+
+---
+
 ## Tools and models
 
 - **The toolset is per-model, per-agent, and even per-call.** One run reported
@@ -1360,11 +1433,11 @@ not gigabytes. Worth knowing; not worth panicking about.
 
 ## Open items
 
-- **Per-role instructions and per-role skills.** The role-card edit button
-  should open a picker for which skills that role may use, alongside its
-  instructions. The engine takes skills globally (`skills.paths`); per-role
-  gating would go through each agent's own permission rules. Decide this
-  together with role instructions.
+- **Per-role instructions.** The ✎ button's other half: per-role skills are done
+  (`roles.<id>.skills`, enforced by the session ruleset, with the picker on the
+  card), but a role cannot yet carry its own free-text instructions. That text
+  belongs in the brief, and the brief is regenerated per session, so it is a
+  small addition once we decide where it is stored.
 - **Stage 3 — orchestration.** The dispatch decision is settled: **Synapse owns
   dispatch, not the engine's `subagent` tool.** The Architect cannot choose a
   subagent's model, so leaning on `subagent` would leave every per-role pick

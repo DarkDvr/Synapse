@@ -324,19 +324,22 @@ export function readPlan(dir) {
       );
     }
 
-    // What the task points at. A path that is not there is worth saying now, not
-    // after a worker has spent a turn discovering it.
+    // What the task points at. Only checked for the step in hand: a later task's
+    // `reads` may name a file an earlier task has not written yet, and flagging
+    // that would have the Architect rewriting a perfectly good plan.
     const reads = Array.isArray(source.reads) ? source.reads.map(asText).filter(Boolean) : [];
-    for (const rel of reads) {
-      const parts = rel.split(/[\\/]/);
-      if (path.isAbsolute(rel) || parts.includes('..')) {
-        problems.push(`${where} reads "${rel}", which must be a path inside the project`);
-        continue;
-      }
-      try {
-        if (!fs.statSync(path.join(dir, ...parts)).isFile()) problems.push(`${where} reads "${rel}", which is not a file`);
-      } catch {
-        problems.push(`${where} reads "${rel}", which does not exist`);
+    if (status === 'doing') {
+      for (const rel of reads) {
+        const parts = rel.split(/[\\/]/);
+        if (path.isAbsolute(rel) || parts.includes('..')) {
+          problems.push(`${where} reads "${rel}", which must be a path inside the project`);
+          continue;
+        }
+        try {
+          if (!fs.statSync(path.join(dir, ...parts)).isFile()) problems.push(`${where} reads "${rel}", which is not a file`);
+        } catch {
+          problems.push(`${where} reads "${rel}", which does not exist`);
+        }
       }
     }
 
@@ -647,8 +650,8 @@ export function briefSession({ dir, role = 'architect', auto = false, skills = '
 
   if (isArchitect) {
     lines.push(
-      `Format: {"version":1,"goal":"...","summary":"","tasks":[{"id":"t1","title":"...","role":"coder-1","status":"todo",` +
-        `"detail":"...","dependsOn":[],"result":null,"note":null}]} - ` +
+      `Format: {"version":1,"goal":"...","summary":"","phases":["invent","design","build","hack"],"tasks":[{"id":"t1","title":"...","role":"coder-1","status":"todo",` +
+        `"detail":"...","reads":[],"dependsOn":[],"result":null,"note":null}]} - ` +
         `statuses: ${STATUSES.join(', ')}. Keep ids short and unique, titles under ${TITLE_MAX} characters, ` +
         `and mark a task "blocked" only when it needs the operator.`,
     );
@@ -674,6 +677,39 @@ export function briefSession({ dir, role = 'architect', auto = false, skills = '
       `coder-1, coder-2 and coder-3 are peers - three coders, which may each be on a different model. Write ` +
         `coding work for one of them; if that coder cannot do it, Synapse moves the task down the line ` +
         `itself and the report tells you which role actually ran it.`,
+    );
+    // The pipeline is a menu: a clock pays for all of it, a one-file script does
+    // not. These are the rules that change behaviour, not a description of a
+    // process - every one of them exists because a project drifted without it.
+    lines.push(
+      `The work is a menu, not a checklist - pick the phases this project needs and put them in "phases". ` +
+        `invent: when the operator wants something built but the features are open, delegate to inventor, which ` +
+        `writes ${PLAN_DIR}/ideas/ideas-1.md ranked with effort. Then YOU ask the operator which to include ` +
+        `(one question, the ones you recommend first, " (Recommended)" on the label), and write ` +
+        `${PLAN_DIR}/${FEATURES_NAME}: {"version":1,"items":[{"id":"F1","title":"...","why":"...",` +
+        `"priority":"critical|useful|optional","status":"confirmed|rejected","task":"t2"}]}. Every confirmed ` +
+        `feature names the task that delivers it; rejected ones stay in the file and are never passed on.`,
+    );
+    lines.push(
+      `design: delegate to designer, which writes ${PLAN_DIR}/design/design.md (screens, controls, colour tokens, ` +
+        `theme values) and one mock per screen. Look at the mocks yourself before showing them (the visual-review ` +
+        `skill renders them), then ask the operator to pick one - design is the one thing only they can judge. ` +
+        `Pin the stack first: if "runs like an app" could mean a local page, a Tkinter window or something else, ask.`,
+    );
+    lines.push(
+      `build: one task that builds the shell from the design with no wiring, then one that wires it. The titles ` +
+        `say which is which. A shell task must not wire; a wiring task must not redesign.`,
+    );
+    lines.push(
+      `hack: delegate to hacker with the request, the confirmed features and the design spec. It writes ` +
+        `${PLAN_DIR}/reports/hack-N.md with ids (H1, H2...) and a repro for each. Then one fix task naming the ids ` +
+        `to fix, then a re-hack that re-runs the same repros. Three rounds is the limit; after the third, stop and ` +
+        `tell the operator what is still open.`,
+    );
+    lines.push(
+      `A task's "reads" lists the files the worker must read first (a design spec, the feature list, a hack ` +
+        `report). Use it instead of restating their contents in "detail": the files are the contract, and a ` +
+        `paraphrase is how a project drifts.`,
     );
     lines.push(
       auto

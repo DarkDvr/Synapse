@@ -44,6 +44,10 @@ const NOTE_MAX = 1000;
 // Architect is told, and it is the Architect that marks the task blocked — the
 // harness never writes the plan, and never decides a task is hopeless.
 const MAX_ATTEMPTS = 3;
+// How many hack rounds a project gets before the harness closes the loop. A
+// model will keep finding "one more issue" until the quota runs out; three
+// rounds is the deal, then the remainder is the operator's to judge.
+const HACK_ROUNDS = 3;
 // Fallback only: the real ceiling comes from config (worker.timeoutSec, with a
 // per-role override on roles.<id>.timeoutSec).
 const DEFAULT_TIMEOUT_SEC = 300;
@@ -235,12 +239,30 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
           });
           continue;
         }
+        // The hack loop closes after three completed rounds. A model will keep
+        // finding one more issue until the quota is gone; the third report says so
+        // too, and this is what makes it true if the model ignores it.
+        const asked = (readPlan(session.directory).plan?.tasks || []).find((t) => t.id === request.task);
+        if (asked?.role === 'hacker' && hackRoundsUsed(session.directory) >= HACK_ROUNDS) {
+          appendRun(session.directory, {
+            kind: 'delegate',
+            callId: request.callId,
+            task: request.task,
+            outcome: 'hack-cap',
+          });
+          log.info(`delegation refused: ${request.task} - ${HACK_ROUNDS} hack rounds are already spent`);
+          notify?.({
+            kind: 'note',
+            title: 'Hack Loop Capped',
+            body: `${HACK_ROUNDS} hack rounds are spent on this project, so ${request.task} was not run.`,
+          });
+          continue;
+        }
         // Deliberately not awaited: the Architect's turn is over, and the worker
         // reports back through its own message when it is done.
         run(sessionId, session.directory, request).catch((err) =>
           log.warn(`delegation ${request.task} failed: ${err.message}`),
-        );
-      }
+        );      }
     } catch (err) {
       log.warn(`could not look for delegation requests in ${sessionId}: ${err.message}`);
     }
@@ -589,6 +611,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
         workerId: worker?.id,
         planTouched,
         synapseTouched: strayWrites,
+        hackRound: hackRoundsUsed(dir),
         error: turnError,
         auto,
         timeoutMs,
@@ -733,7 +756,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     return [...seen];
   }
 
-  function report({ task, role, insteadOf, skipped, outcome, ms, text, files, workerId, planTouched, synapseTouched, auto, timeoutMs, error }) {
+  function report({ task, role, insteadOf, skipped, outcome, ms, text, files, workerId, planTouched, synapseTouched, hackRound, auto, timeoutMs, error }) {
     const head =
       outcome === 'completed'
         ? `${task.id} (${role}) finished in ${Math.round(ms / 1000)}s.`
@@ -778,6 +801,12 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
         `Warning: these files changed inside .synapse while the worker ran, and they are not this role's to ` +
           `write: ${synapseTouched.slice(0, 8).join(', ')}. The file tools are refused there, so this went ` +
           `around them; check the contents before you trust the plan or the contract.`,
+      );
+    }
+    if (role === 'hacker' && hackRound >= HACK_ROUNDS) {
+      lines.push(
+        `That was hack round ${hackRound} of ${HACK_ROUNDS} - the loop is closed. Do not delegate another hack: ` +
+          `tell the operator what is still open, with the issue ids, and let them decide.`,
       );
     }
     lines.push(

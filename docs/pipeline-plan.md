@@ -211,9 +211,30 @@ rounds. If it gets through that, the pipeline is real.
 
 ---
 
-## 9. Not doing (yet)
+## 9. What the build changed (19 Oct, measured)
 
-- Per-project skill folders, or skills gated at install time.
-- A browser *tool* (the engine's toolset is fixed; shell + Edge is the route).
-- Pixel-diffing screenshots between rounds — the Hacker reads them, a diff engine
-  is a whole other product.
+Landed: stages 1–3 in full, stage 4's Architect brief and `phases`, and stage 5's
+hack cap. Notes that differ from the plan above, all from live measurement:
+
+- **The rules match the path as the model wrote it**, so they are emitted
+  relative (`.synapse/**`) *and* absolute. `edit` is the action covering both
+  `write` and `edit`; `write` is not an action name; `read` is.
+- **Path rules cannot stop `shell` or `execute`**, so the runner fingerprints
+  `.synapse` around every worker turn and alarms on anything written outside the
+  role's folder. Prevention plus detection, like the harness watchdog.
+- **Hack rounds: three.** The third report says the loop is closed, and a fourth
+  hacker delegation is refused with `outcome: 'hack-cap'` plus a toast.
+- **Skills are enforced fail-closed**: deny every skill, allow the listed ones.
+  The ✎ picker is the UI; no list means no restriction.
+- **`visual-review` lives in the operator's skills folder**, not in the repo
+  (`%USERPROFILE%\.agents\skills\visual-review`), consistent with the other
+  nine skills. It needs no restart: the engine rescans the folder per request.
+
+Not done yet, and deliberately:
+
+- **`phases` is written by the Architect but not shown in the pane.** The file is
+  the record; a footer chip is a small follow-up.
+- **Ideas are not hidden from coders.** `read` *can* be denied by path, so
+  `{action:'read', resource:'.synapse/ideas/**', deny}` for coders is a one-line
+  experiment for the next round.
+- **Per-role instructions** (the other half of the ✎ button) are still open.
