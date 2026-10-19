@@ -1150,20 +1150,18 @@ function renderTree() {
           ${p.general ? '' : `<button class="tree-x" data-del-project="${esc(p.id)}" title="Delete Project" aria-label="Delete Project">✕</button>`}
         </span>
       </div>
-      <div class="tree-project-body">
+      ${
+        open
+          ? `<div class="tree-project-body">
         <div class="tree-project-actions">
           <button class="btn-thin" data-browse-project="${esc(p.id)}" title="Open this project's folder in Explorer">Browse</button>
           <button class="btn-thin" data-cmd-project="${esc(p.id)}" title="Open a command prompt in this project's folder">Cmd</button>
         </div>
-        ${
-          open
-            ? `<div class="tree-sessions-label">Sessions:</div>` +
-              // New Session sits at the bottom: sessions read oldest-first, so
-              // the new one belongs where it will actually land.
-              `<div class="tree-sessions">${p.sessions.map(sessionRow).join('')}${newSessionRow(p.id)}</div>`
-            : ''
-        }
-      </div>`);
+        <div class="tree-sessions-label">Sessions:</div>
+        <div class="tree-sessions">${p.sessions.map(sessionRow).join('')}${newSessionRow(p.id)}</div>
+      </div>`
+          : ''
+      }`);
     html.push('</div>');
   }
 

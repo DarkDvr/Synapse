@@ -1119,6 +1119,11 @@ This is once per directory per process and needs no config.
   itself), evicts the location first, then deletes with retries. The dialog is the
   one place `openDialog` takes `dismissable: false`, an `extra` button and a
   `tone: 'clash'`; the generic dialog's Cancel/OK pair is unchanged elsewhere.
+- **A name-only create makes its own folder.** `projects.create` derives
+  `<projects root>/<slug>` when no directory is given. Before this,
+  `normalizeDir('')` resolved to the process's working directory — which is the
+  harness — so an API create carrying only a name registered `F:\dev\Synapse` as
+  a project. The UI always sends a directory, so only the API could hit it.
 - **`.chat-scroll` scrolls internally in the wide layout; the page scrolls in the
   stacked one.** Above 1460px `.stage` has a definite height (set from the
   measured viewport via `--stage-h`, minus any horizontal scrollbar), so the

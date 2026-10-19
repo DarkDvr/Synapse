@@ -76,7 +76,18 @@ export function createProjectStore({ file, generalDir, logger }) {
    * run a session in a directory that does not exist.
    */
   function create({ name, directory } = {}) {
-    const dir = normalizeDir(directory);
+    // No directory means "make me one" — and it belongs beside the other
+    // projects, never in the process's working directory. `path.resolve('')` is
+    // the cwd, which is the harness itself: a name-only create used to register
+    // F:\dev\Synapse as a project.
+    const asked = String(directory || '').trim();
+    const slug =
+      String(name || '')
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9._-]+/g, '-')
+        .replace(/^-+|-+$/g, '') || `project-${Date.now()}`;
+    const dir = asked ? normalizeDir(asked) : path.join(path.dirname(generalDir), slug);
     if (!dir) {
       const err = new Error('a project needs a directory');
       err.status = 400;
