@@ -2751,6 +2751,13 @@ function connectStream() {
       return;
     }
 
+    // Synapse's own short note (not an alarm, not a message to any model): the
+    // harness declined to do something the operator should know about.
+    if (ev.kind === 'note') {
+      toast(ev.title || 'Note', ev.body || '');
+      return;
+    }
+
     // The harness watchdog: something the models run touched Synapse's own files.
     // This is the one event that must not be missed, so it is loud in both places
     // the operator looks — a toast now, and the error dialog with the paths.

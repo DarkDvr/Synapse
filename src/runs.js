@@ -83,6 +83,30 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     return Boolean(modelCache.get(ref)?.issues?.some((i) => i.kind === 'provider'));
   }
 
+  /** Did the operator speak after the last report?
+   *
+   *  The harness's wakes are `synthetic`, so the newest timestamp of each type
+   *  answers it with no stored state: a `user` message newer than the newest
+   *  `synthetic` means the operator has said something since the work was reported
+   *  back. Timestamps rather than array order, because the engine returns messages
+   *  newest-first.
+   */
+  function operatorSpokeSince(messages) {
+    let lastUser = 0;
+    let lastReport = 0;
+    for (const m of messages || []) {
+      if (m?.type === 'user') lastUser = Math.max(lastUser, m.created || 0);
+      if (m?.type === 'synthetic') lastReport = Math.max(lastReport, m.created || 0);
+    }
+    return lastUser > lastReport;
+  }
+
+  /** The task the runner last reported back for this project, or null. */
+  function lastReportedTask(directory) {
+    const results = readRuns(directory).filter((r) => r.kind === 'result');
+    return results.length ? results[results.length - 1].task : null;
+  }
+
   /**
    * The rungs to try, in order, for this attempt of this task.
    *
@@ -102,8 +126,13 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
       Array.isArray(config?.worker?.ladder) && config.worker.ladder.length ? config.worker.ladder : DEFAULT_LADDER;
     const at = ladder.indexOf(role);
     if (at === -1) return [role];
-    const skip = Math.min(Math.max(0, (attempt || 1) - 1), ladder.length - 1);
-    const rest = ladder.slice(skip);
+    // Start at the role's own rung, not at the ladder's first: this used to be
+    // `ladder.slice(skip)`, so a task written for coder-2 began on coder-1 — which
+    // is how test-project-1's t2 "ran on coder-1, not coder-2" without anything
+    // having failed. Step one rung per attempt, floored at the last rung.
+    const room = Math.max(0, ladder.length - at - 1);
+    const skip = Math.min(Math.max(0, (attempt || 1) - 1), room);
+    const rest = ladder.slice(at + skip);
     const clean = rest.filter((id) => !providerMarked(id, config));
     return clean.length ? clean : rest;
   }
@@ -171,6 +200,28 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
       }
       for (const request of requests) {
         claimed.add(request.callId);
+        // Keep building is off, and the operator has not spoken since the last
+        // report: a delegation now is the model deciding to carry on by itself.
+        // A *re-delegation of the task that was just reported* is still allowed —
+        // that is a retry, which is the Architect's judgement, not a decision to
+        // start the next piece of work. Refused silently: waking it to say "stop"
+        // would start another turn it could delegate in again.
+        if (!session.auto && !operatorSpokeSince(messages) && lastReportedTask(session.directory) !== request.task) {
+          appendRun(session.directory, {
+            kind: 'delegate',
+            callId: request.callId,
+            task: request.task,
+            outcome: 'keep-building-off',
+          });
+          log.info(`delegation refused: ${request.task} while keep building is off`);
+          emit('keep-building-refused', { task: request.task, dir: session.directory });
+          notify?.({
+            kind: 'note',
+            title: 'Keep building is off',
+            body: `${request.task} was not delegated - the Architect tried to start the next task by itself.`,
+          });
+          continue;
+        }
         // Deliberately not awaited: the Architect's turn is over, and the worker
         // reports back through its own message when it is done.
         run(sessionId, session.directory, request).catch((err) =>

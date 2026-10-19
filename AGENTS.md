@@ -596,7 +596,11 @@ Non-obvious, all verified on 2.0.30:
   attempt, and retrying a retired model would only spend the Architect's turn), and
   **an attempt after the first starts one rung further down**, because the Architect
   re-delegating the same task *is* its verdict that the previous coder did not
-  deliver — the only verdict the harness can see. A role whose model carries a
+  deliver — the only verdict the harness can see. It starts at the **role's own
+  rung**: `ladder.slice(skip)` sliced from the ladder's start, so a task written for
+  coder-2 began on coder-1 and the report said "ran on coder-1, not coder-2" with
+  nothing having failed (caught in test-project-1's f-string run, fixed to
+  `slice(at + skip)`). A role whose model carries a
   provider mark is skipped from the start. A timeout does not loop: the worker may
   still have produced something, and the attempt counter moves that case next time.
   The plan's `role` is never rewritten (the Architect owns the file); the report says
@@ -625,6 +629,17 @@ Non-obvious, all verified on 2.0.30:
   lands on the next judgement, and the runner itself reads it at report time.
   Hidden in Single via `body[data-mode="single"] .keep-toggle`. Verified live:
   switched on, the remaining three tasks ran themselves in 12.8 minutes.
+  **The flag is enforced, not just asked.** A free model read "Keep building is
+  OFF: stop after judging this one" three times and delegated the next task anyway
+  (test-project-1's f-string run: all three tasks, no operator input, `auto: false`).
+  The runner now refuses a delegation when keep-building is off **and the operator
+  has not spoken since the last report** — `operatorSpokeSince()` compares the
+  newest `user` timestamp with the newest `synthetic` one, so nothing is stored —
+  unless the delegation is for **the task that was just reported**, which is a retry
+  and therefore the Architect's judgement. The refusal is logged, recorded in
+  `runs.jsonl` as `outcome: 'keep-building-off'`, and shown as a toast; it does
+  **not** wake the Architect, because waking it to say "stop" starts another turn
+  it can delegate in again.
 - **A stalled worker cannot hang the loop:** the wait is on the engine's `idle`
   message, with a ceiling that interrupts the session and reports a timeout. The
   ceiling is `worker.timeoutSec` (Settings → Workers, default 300s) and a role

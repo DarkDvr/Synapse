@@ -488,6 +488,12 @@ decides how far the Architect goes on its own:
   next one whose dependencies are done, and keeps going until the plan is
   finished or a task is **blocked**. Nobody has to say "go on".
 - **Off (grey, like Stop)** — one task per report. It judges, stops, and waits.
+  **Off is enforced by the harness, not just asked.** A free model read "stop after
+  judging this one" three times and delegated the next task anyway, so the runner
+  now refuses that delegation: with the flag off and no message from you since the
+  last report, only a **retry of the task that just reported** gets through. You see
+  a toast; the Architect is not woken to be told off, because that would start
+  another turn it could delegate in again.
 
 It is a property of the session, not of the app: it is stored in the session's
 own metadata (`synapse.auto`), so it survives a restart, and the Architect is
