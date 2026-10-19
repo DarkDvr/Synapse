@@ -425,10 +425,13 @@ it as a panel **painted over the chat, anchored just above the composer**.
   and the run would die at the timeout with nothing to look at. Only the *open*
   session's own question disables the composer — a worker waiting is no reason to
   stop talking to the Architect.
-- **The whole panel is orange** — border, title, dot, option accents, the Submit
-  fill. It is the only thing on screen that is waiting for the operator, and it
-  should be impossible to miss. White text on the orange fill; orange text sits
-  on the panel's own warm dark surface, never on violet.
+- **Orange marks the panel; it does not fill it.** The border, the QUESTIONS
+  heading, the waiting dot, the Recommended chip, the control accents and the
+  Submit fill are orange — the surface, the option rows and the question text are
+  the ordinary ones. The first version was orange all the way down and the
+  operator pulled it back the same day ("was too much orange" for something read
+  line by line). A selected row is marked by the orange rule plus a white label,
+  never an orange wash.
 - **"(Recommended)" becomes a chip.** The question tool's own convention is to
   put the recommendation first and end its label with " (Recommended)". The panel
   strips the suffix and shows a chip beside the label, and the role brief tells

@@ -578,8 +578,10 @@ painted over the chat, anchored just above the composer:
   that option first and ending its label with "(Recommended)" — the panel takes
   the suffix out of the sentence and shows a chip, and the role brief tells both
   roles to write it that way.
-- **The whole panel is orange** — border, title, dot, option accents and the
-  Submit fill — because it is the one thing on screen that is waiting for you.
+- **Orange marks the panel rather than filling it**: the border, the heading, the
+  waiting dot, the Recommended chip, the control accents and the Submit fill. The
+  surface, the options and the question text are the ordinary ones — a fully
+  orange panel was more than a page of questions wants.
 - **The composer is disabled while a question waits** (`Answer the question
   above`): the turn cannot read a message, so it does not pretend otherwise. That
   applies to the open session's own question — a **worker** can ask one too, and
