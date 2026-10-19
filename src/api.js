@@ -328,7 +328,7 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
           ? {
               tasks: state.plan.tasks.length,
               done: state.plan.tasks.filter((t) => t.status === 'done').length,
-              goal: (state.plan.goal || '').slice(0, 160),
+              goal: state.plan.goal || '',
               mtime: state.mtime,
             }
           : null,

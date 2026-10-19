@@ -1144,6 +1144,38 @@ async function renameProject(id) {
   }
 }
 
+/**
+ * The folder-history dialog's body: the path, the numbers as chips, and the old
+ * goal as a quotation.
+ *
+ * The goal is shown in full and clamped by CSS to three lines *with an ellipsis*,
+ * its text in the tooltip. It used to be sliced to 160 characters by the server,
+ * which cut it mid-sentence with no ellipsis — the operator's word for it was "text
+ * cuts off", and it read as a rendering fault rather than a summary.
+ */
+function clashBody(info) {
+  const mins = info.plan.mtime ? Math.max(1, Math.round((Date.now() - info.plan.mtime) / 60000)) : null;
+  const ago = mins === null
+    ? null
+    : mins < 90 ? `${mins} min ago` : mins < 60 * 36 ? `${Math.round(mins / 60)}h ago` : `${Math.round(mins / 1440)}d ago`;
+  const chips = [
+    `${info.plan.tasks} task${info.plan.tasks === 1 ? '' : 's'}`,
+    `${info.plan.done} done`,
+    info.files ? `${info.files} file${info.files === 1 ? '' : 's'}` : null,
+    ago ? `last touched ${ago}` : null,
+  ].filter(Boolean);
+  return (
+    `<p class="clash-path" title="${esc(info.directory)}">${esc(info.directory)}</p>` +
+    `<div class="clash-chips">${chips.map((c) => `<span class="clash-chip">${esc(c)}</span>`).join('')}</div>` +
+    (info.plan.goal
+      ? `<p class="clash-label">Its goal was</p>` +
+        `<blockquote class="clash-goal" title="${esc(info.plan.goal)}">${esc(info.plan.goal)}</blockquote>`
+      : '') +
+    `<p class="clash-note">Re-using continues that plan where it left off. ` +
+    `Deleting removes the folder and everything inside it — that cannot be undone.</p>`
+  );
+}
+
 async function addProject() {
   const base = state.workspace || '';
   const res = await openDialog({
@@ -1180,22 +1212,16 @@ async function addProject() {
     // they answer.
     const info = await api('POST', '/api/projects/inspect', { directory });
     if (info.plan) {
-      const mins = info.plan.mtime ? Math.max(1, Math.round((Date.now() - info.plan.mtime) / 60000)) : null;
-      const ago = mins === null ? '' : mins < 90 ? `, last touched ${mins} min ago` : `, last touched ${Math.round(mins / 60)}h ago`;
       const choice = await openDialog({
         title: 'This folder was a project before',
-        message:
-          `"${directory}" already holds ${info.plan.tasks} task(s), ${info.plan.done} done` +
-          `${info.files ? ` and ${info.files} file(s)` : ''}${ago}.\n\n` +
-          (info.plan.goal ? `Its goal was: ${info.plan.goal}\n\n` : '') +
-          `Cancel and create a project with a different name, delete that folder off the drive and start ` +
-          `fresh, or re-use it and continue where it left off.`,
+        message: '',
         confirmLabel: 'Delete Folder And Start Fresh',
         danger: true,
         extra: { label: 'Re-Use It', result: 'reuse' },
         okResult: 'wipe',
         dismissable: false,
         tone: 'clash',
+        afterRender: () => { $('dialogBody').innerHTML = clashBody(info); },
       });
       if (!choice) return; // cancelled: nothing created, nothing deleted
       if (choice === 'wipe') {
@@ -1318,7 +1344,7 @@ function runPhrase(tool) {
     case 'write': return file ? `writing ${file}` : 'writing a file';
     case 'edit': return file ? `editing ${file}` : 'editing a file';
     case 'read': return file ? `reading ${file}` : 'reading';
-    case 'shell': return target ? `running ${cut(target, 40)}` : 'running a command';
+    case 'shell': return target ? `running ${target}` : 'running a command';
     case 'grep':
     case 'glob': return file ? `searching ${file}` : 'searching';
     case 'webfetch': return 'fetching a page';
@@ -1429,8 +1455,15 @@ function renderRoleActivity() {
       if (form && form.sessionId === state.sessionId) { text = 'Waiting on your answer'; dot = 'live'; }
       else if (run) { text = `Waiting on ${roleLabel(run.role)}`; part = 'initiator'; dot = 'live'; }
       else if (archBusy) { text = archTool ? runPhrase(archTool) : 'Thinking'; part = 'initiator'; dot = 'live'; }
-      // Every task is done: the chip says so rather than leaving an empty line.
-      else if (planFinished) { text = 'Plan complete'; chip = { cls: 'role-done', text: 'Done' }; dot = 'ok'; settled = true; }
+      // Every task is done: the chip says so, and under it the Architect's own
+      // one-sentence, customer-facing summary of what was built.
+      else if (planFinished) {
+        const summary = state.planState?.plan?.summary || '';
+        text = summary || 'Plan complete';
+        chip = { cls: 'role-done', text: 'Done', note: summary };
+        dot = 'ok';
+        settled = true;
+      }
       // Nothing in flight and work outstanding: the move is the operator's, so
       // the card says it in the same place a worker's task line would be.
       else if (unfinished) { text = 'Waiting on you'; chip = { cls: 'role-waiting', text: 'Waiting on you' }; dot = 'ok'; settled = true; }
@@ -1496,8 +1529,11 @@ function renderRoleActivity() {
     // card, so filling it cannot change the card's height and cannot move the
     // chat. The full text rides the tooltip because the slot clamps. A chip is
     // the same size as a line of text for the same reason.
-    if (chip) slot.innerHTML = `<span class="${chip.cls}">${esc(chip.text)}</span>`;
-    else slot.textContent = text;
+    if (chip) {
+      slot.innerHTML =
+        `<span class="${chip.cls}">${esc(chip.text)}</span>` +
+        (chip.note ? `<span class="role-summary">${esc(chip.note)}</span>` : '');
+    } else slot.textContent = text;
     slot.title = text;
   }
   if (state.view === 'session') {
@@ -3040,7 +3076,12 @@ function wire() {
   const input = $('promptInput');
   input.addEventListener('input', () => autoGrow(input));
   input.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
+    // Ctrl+Enter sends; Enter and Shift+Enter are newlines, the way a chat box
+    // with long prompts should behave. The Send button is always there too.
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      send();
+    }
   });
 
   $('projectTree').addEventListener('click', (e) => {

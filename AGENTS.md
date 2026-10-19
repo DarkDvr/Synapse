@@ -385,6 +385,16 @@ ordinary file tools; there is no tool and no store for it.
   deliberate, quiet enough to sit under a finished plan. The *brief* still carries
   them in the same `problems` channel either way — this is only what the pane looks
   like.
+- **A finished plan owes a customer-facing summary.** `summary` is a plan field the
+  Architect writes when it marks the last task done: one sentence a customer would
+  understand, with no file paths, tool names or code. The Architect's card shows it
+  under the **Done** chip (two lines, clamped, full text in the tooltip — it shares
+  the fixed three-line slot with the chip, so the card's height is unchanged:
+  measured 106.3px before and after). `readPlan` flags a finished plan with no
+  summary in the same `problems` channel, so the Architect writes its own.
+  **Why the Architect and not the harness:** it has the plan's context and it owns
+  the file; a `generate` call from Synapse would also work but would leave the text
+  nowhere to live that survives a restart.
 - **A task's `result` is not printed under its title.** One line per task keeps
   the pane scannable; the result rides the title's tooltip. A `note` is the
   exception and stays visible — a blocked task is the one case where the operator
@@ -908,9 +918,13 @@ This is once per directory per process and needs no config.
 - **A reused folder is a decision, not a toast.** Adding a project to a directory
   that already holds a plan now asks, in a **non-dismissable dialog with a red
   frame**: *cancel and pick another name*, *delete that folder and start fresh*, or
-  *re-use it and carry on*. It shows what is at stake — task count, done count, file
-  count, last touched, and the old goal — because all three answers are about a
-  folder on disk. `POST /api/projects/inspect` answers without side effects;
+  *re-use it and carry on*. It shows what is at stake, because all three answers are
+  about a folder on disk: the path in mono, the **numbers as chips** (`3 tasks`,
+  `3 done`, `35 files`, `last touched 4 min ago`), and the old goal as a
+  **quotation with a left rule**, clamped to three lines *with an ellipsis* and
+  carried in its tooltip. The goal used to be sliced to 160 characters by the
+  server, which cut it mid-sentence with no ellipsis and read as a rendering fault.
+  `POST /api/projects/inspect` answers without side effects;
   `POST /api/projects/wipe` refuses anything outside the projects root (and the root
   itself), evicts the location first, then deletes with retries. The dialog is the
   one place `openDialog` takes `dismissable: false`, an `extra` button and a
@@ -1263,6 +1277,9 @@ This is once per directory per process and needs no config.
   composer placeholder is `Message` in Single, `Message the Architect…` in Multi.
 - **The composer has no target picker, deliberately.** One interface, one lead:
   every message goes to the Architect. Per-role model/effort are card controls.
+- **`Ctrl+Enter` sends; `Enter` is a newline.** The operator asked for it once the
+  prompts became multi-paragraph: Enter and Shift+Enter insert a line, Ctrl+Enter
+  (or the Send button) sends. The textarea's title says so.
 - **The UI is live-only.** The `Design preview` entry, every `SAMPLE` badge, the
   sample plan list, the sample tools table and the role cards' mock activity
   were all removed before live testing. Do not put invented content back; label

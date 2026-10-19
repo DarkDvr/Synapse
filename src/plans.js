@@ -225,15 +225,24 @@ export function readPlan(dir) {
     };
   });
 
+  // A finished plan owes the operator a customer-facing summary: the Architect's
+  // card shows it once the work is done, instead of only a DONE chip. The Architect
+  // writes it itself, so this is a note to it rather than something we invent.
+  if (tasks.length && tasks.every((t) => t.status === 'done') && !asText(parsed.summary)) {
+    problems.push(
+      'the plan is finished but has no "summary" - add one sentence a customer would understand: ' +
+        'what this project delivers, with no file paths and no tool names',
+    );
+  }
+
   return {
     ...base,
     exists: true,
     mtime: stat.mtimeMs,
     stat: { size: stat.size, mtime: stat.mtimeMs },
     problems,
-    plan: { version: Number(parsed.version) || 1, goal, tasks },
-  };
-}
+    plan: { version: Number(parsed.version) || 1, goal, summary: asText(parsed.summary), tasks },
+  };}
 
 /** A cheap change fingerprint, so the harness can tell that something wrote to
  *  the plan when it should not have. */
@@ -342,7 +351,7 @@ export function briefSession({ dir, role = 'architect', auto = false } = {}) {
 
   if (isArchitect) {
     lines.push(
-      `Format: {"version":1,"goal":"...","tasks":[{"id":"t1","title":"...","role":"coder-1","status":"todo",` +
+      `Format: {"version":1,"goal":"...","summary":"","tasks":[{"id":"t1","title":"...","role":"coder-1","status":"todo",` +
         `"detail":"...","dependsOn":[],"result":null,"note":null}]} - ` +
         `statuses: ${STATUSES.join(', ')}. Keep ids short and unique, titles under ${TITLE_MAX} characters, ` +
         `and mark a task "blocked" only when it needs the operator.`,
@@ -354,6 +363,12 @@ export function briefSession({ dir, role = 'architect', auto = false } = {}) {
       `A title says what the work *is*, in plain human words - "Build the word-frequency report", ` +
         `"Wire the buttons", "Audit the output", "Quality Control". No file paths and no code identifiers ` +
         `in a title: put them in detail.`,
+    );
+    // The card has to tell the operator, in one line, what they actually got.
+    lines.push(
+      `When every task is done, also write "summary" in the plan: ONE sentence a customer would ` +
+        `understand, saying what this project delivers. No file paths, no tool names, no code. ` +
+        `The Architect's card shows it instead of just a tick.`,
     );
     // The operator's setup deliberately gives the coders different models, from
     // cheap and experimental to reliable and expensive. The Architect only needs

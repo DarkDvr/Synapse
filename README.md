@@ -306,9 +306,14 @@ the project whose directory they run in.
   to let go, so the folder can be deleted straight after (take what you want out of
   `bin/` first). Nothing has to be stopped.
 - **A reused name asks first.** Adding a project to a folder that already holds a
-  plan raises a non-dismissable red dialog with the numbers — tasks, done, files,
-  last touched, the old goal — and three answers: cancel and pick another name,
-  delete that folder and start fresh, or re-use it and carry on where it left off.
+  plan raises a non-dismissable red dialog with the path, the numbers as chips —
+  tasks, done, files, last touched — and the old goal as a quotation, and three
+  answers: cancel and pick another name, delete that folder and start fresh, or
+  re-use it and carry on where it left off.
+- **A finished plan ends with a sentence, not just a tick.** When the Architect
+  marks the last task done it also writes `summary` in the plan: one sentence a
+  customer would understand, saying what the project delivers — no file paths, no
+  tool names. The Architect's card shows it under the **Done** chip.
 - **Session names** start as `TBD`. When the first turn succeeds, Synapse asks
   the model for a short title through the engine's one-shot `generate` route —
   which does **not** add anything to the transcript — and renames the session.

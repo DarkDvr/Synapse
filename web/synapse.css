@@ -602,6 +602,17 @@ body.dark .sidebar-bottom,
 .role-done { color: #0f2a1f; background: var(--green); }
 .role-waiting { color: #241a12; background: var(--yellow); }
 
+/* The customer-facing line under the DONE chip: what the project actually delivers,
+   in the Architect's own words (it writes `summary` into the plan). It shares the
+   card's fixed three-line subtitle slot with the chip — 15px chip + 4px gap + two
+   lines of 11px — so it still cannot change a card's height. Clamped, with the full
+   sentence in the tooltip. */
+.role-summary {
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
+  overflow: hidden; overflow-wrap: anywhere;
+  margin-top: 4px; font-size: 11px; line-height: 1.3; color: #b9bdc4;
+}
+
 /* On a short window the reserve is a luxury paid out of the chat, which is
    already tight. Two lines still holds nearly every task line, and the space
    goes back to the transcript. It stays fixed *within* a window size, so the
@@ -1546,3 +1557,29 @@ body[data-mode="single"] .keep-toggle { display: none; }
 }
 .modal.is-clash #dialogTitle { color: var(--red); }
 .modal.is-clash .modal-sub { white-space: pre-line; line-height: 1.65; }
+
+/* The dialog's content: path, numbers as chips, the old goal as a quotation. */
+.clash-path {
+  margin: 0 0 9px; font-family: var(--mono); font-size: 10.5px; color: #8f939b;
+  overflow-wrap: anywhere;
+}
+.clash-chips { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 13px; }
+.clash-chip {
+  font-family: var(--mono); font-size: 9.5px; line-height: 1.7;
+  color: #b6bac1; background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--line); border-radius: 999px; padding: 0 8px;
+}
+.clash-label {
+  margin: 0 0 4px; font-size: 9.5px; font-weight: 700; letter-spacing: 0.07em;
+  text-transform: uppercase; color: #8f939b;
+}
+/* Full text, clamped with an ellipsis and carried in the tooltip — never a blunt
+   string slice, which cut it mid-sentence and looked like a rendering fault. */
+.clash-goal {
+  margin: 0 0 13px; padding: 1px 0 1px 9px;
+  border-left: 2px solid var(--violet-line);
+  color: #b9bdc4; font-size: 12px; line-height: 1.55;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3;
+  overflow: hidden; overflow-wrap: anywhere;
+}
+.clash-note { margin: 0; font-size: 11px; line-height: 1.55; color: #8f939b; }
