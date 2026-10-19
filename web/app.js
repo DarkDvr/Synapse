@@ -1445,6 +1445,10 @@ function handleRunEvent(ev) {
     return;
   }
   renderRoleActivity();
+  // The plan pane overlays the live run too (a running task renders as `doing`
+  // whatever the file says), so it needs to know when a run starts and stops — but
+  // not on every tool call: that would rebuild the rail for nothing.
+  if (ev.type !== 'run.progress') renderPlan();
 }
 
 // The live path: one solid arrow from the requester down the spine and across
