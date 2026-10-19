@@ -611,11 +611,9 @@ function applyRoleCardsLayout({ animate = true, from = null, remeasure = false }
   workersPendingOff = false;
   wrap.classList.add('is-open');
   // The chat's cap is set from the reveal's *target* (so the two transitions can
-  // run together), and re-fitted once more when everything has settled.
-  chatFitTimer = setTimeout(() => {
-    fitChatHeight();
-    placeAskPanel();
-  }, 340);
+  // run together), and re-fitted once more when everything has settled. The
+  // question panel needs none of this: as the dock's child it moves with it.
+  chatFitTimer = setTimeout(fitChatHeight, 340);
 
   if (state.mode === 'multi') {
     // `max-height: none` does not interpolate, so growing straight out of the
@@ -1794,20 +1792,6 @@ const currentForm = () => {
   return forms.find((f) => f.sessionId === state.sessionId) || forms[0] || null;
 };
 
-/** Anchor the panel to the top of the composer and cap it to the room above.
- *  The composer's own height moves (the textarea grows), so this is measured
- *  rather than expressed in CSS. */
-function placeAskPanel() {
-  const host = $('askHost');
-  const dock = $('chatDock');
-  const composer = $('composer');
-  if (!host || !dock || !composer || host.hidden) return;
-  // The panel fills everything above the composer: flush to the dock's sides and
-  // top, ending where the composer begins. Only the bottom moves, and it is
-  // measured because the textarea grows.
-  host.style.bottom = `${composer.offsetHeight}px`;
-}
-
 /**
  * Below the wide breakpoint the stage is content-sized, so on a short window the
  * card block plus a 70vh chat pushes the composer off the bottom edge — and the
@@ -1932,6 +1916,7 @@ function renderAskPanel() {
     state.askSig = '';
     host.hidden = true;
     host.innerHTML = '';
+    $('chatDock')?.classList.remove('has-ask');
     syncAskState();
     return;
   }
@@ -1944,7 +1929,7 @@ function renderAskPanel() {
     .join(';')}`;
   if (sig === state.askSig) {
     host.hidden = false;
-    placeAskPanel();
+    $('chatDock')?.classList.add('has-ask');
     return;
   }
   state.askSig = sig;
@@ -1965,7 +1950,7 @@ function renderAskPanel() {
       <button class="btn btn-ask btn-sm" data-form-reply="${esc(form.id)}">Submit Answer</button>
     </div>
   </div>`;
-  placeAskPanel();
+  $('chatDock')?.classList.add('has-ask');
   applyAskConditions();
   syncAskState();
 }
@@ -2878,7 +2863,6 @@ function wire() {
     fitStageHeight();
     if (state.view === 'session') applyRoleCardsLayout({ animate: false });
     fitChatHeight();
-    placeAskPanel();
     drawActivePath();
     renderChatNav();
   }));

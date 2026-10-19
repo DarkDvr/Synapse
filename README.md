@@ -582,10 +582,10 @@ painted over the chat, anchored just above the composer:
   regular and muted, which is what keeps the bold from reading as a wall.
 - **"Something Else…" puts its box on its own line**, indented to line up with the
   option labels — sharing one line it raced the label to the right edge.
-- **The panel covers the chat's transcript area completely** — side to side, from
-  the top of the dock to the composer. The chat's scrollbar, its jump buttons and
-  its prose sit behind an opaque surface, because none of them should be used or
-  read while a question is waiting; it is also the room the form gets to use.
+- **The panel covers the chat completely** — its border, its jump buttons and the
+  composer included. It is the chat dock's own child at `inset: -3px` (2px past the
+  chat's border box), so it is laid out *with* the chat: any window size, either
+  mode, either layout, with nothing to measure and nothing to drift.
 - **Orange marks the panel rather than filling it**: the top rule, the heading, the
   waiting dot, the Recommended chip, each answer's outline and the Submit fill. The
   surface, the row backgrounds and the question text are the ordinary ones.

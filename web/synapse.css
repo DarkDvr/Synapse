@@ -699,6 +699,11 @@ body[data-view="session"] .chat-dock.has-history {
 body[data-view="session"] .chat-dock:not(.has-history) .composer { border-top-color: transparent; }
 .chat-scroll.is-empty { display: none; }
 
+/* While a question is up the panel is a 2px-larger box, so the dock must stop
+   clipping it. Nothing escapes: the transcript clips its own content, and the
+   composer, the jump buttons and the border are all behind the panel anyway. */
+body[data-view="session"] .chat-dock.has-ask { overflow: visible; }
+
 /* Below the wide breakpoint the chat's height is capped to the room under the
    cards (fitChatHeight), so it has to move with them: the same 260ms ease as the
    card reveal, or its bottom jumps while its top slides. The 20ms delay is the
@@ -944,25 +949,23 @@ body[data-mode="single"] .keep-toggle { display: none; }
 
 /* ── the question panel ───────────────────────────────────────────────────
    A model that asks the operator something blocks the session until it is
-   answered, so this is an interface, not a transcript decoration. It is
-   absolutely positioned inside the dock and anchored just above the composer,
-   and it is deliberately OUT of the dock's layout: nothing here can change the
-   chat's height by a single pixel, however many questions arrive. Bottom and
-   max-height are set from measurement (placeAskPanel) because the composer's
-   own height moves with the textarea.
+   answered, so this is an interface, not a transcript decoration. It sits at
+   -2px inside the chat dock, which means the whole chat — its border, its jump
+   buttons and the composer — is underneath it, and being the dock's own child it
+   moves with the dock in the same layout pass: no measurement, nothing to drift.
 
    The orange is an accent, not a wash: the border, the heading, the dot, the
    Submit fill and the selected row's rule. The surface, the option rows and the
    question text are the ordinary ones — an orange panel with orange text under
    it was too much for something that is read line by line. */
 .ask-host {
-  /* Full-bleed over the chat's transcript area: side to side and from the top of
-     the dock down to the composer. It has to be the full width so the transcript's
-     scrollbar and its jump buttons are covered — neither should be used while a
-     question waits — and so the chat underneath stops being visual noise behind
-     the question. `bottom` is set by measurement (placeAskPanel), because the
-     composer's own height moves with the textarea. */
-  position: absolute; left: 0; right: 0; top: 0; z-index: 50;
+  /* -3px inside the dock's padding box = 2px beyond its border box: the chat's
+     border, radius, jump buttons and composer are all underneath it. It is a
+     child of the dock on purpose — the browser keeps the two in the same layout
+     pass, through mode switches, resizes and page scrolling, with nothing to
+     measure and nothing that can drift. The dock drops its clipping while a
+     question is up (`.has-ask` below) so the panel can be the larger box. */
+  position: absolute; inset: -3px; z-index: 60;
   display: flex; flex-direction: column;
   pointer-events: none;
 }
@@ -974,10 +977,10 @@ body[data-mode="single"] .keep-toggle { display: none; }
      content happens to end, leaving a strip of empty panel under it that reads
      as the chat showing through. */
   display: flex; flex-direction: column;
-  background: #1a1c20;
-  border: 0; border-top: 1px solid var(--orange);
-  padding: 12px 14px 0;
+  background: #1a1c20; border: 1px solid var(--orange);
+  border-radius: 16px; padding: 12px 14px 0;
   width: 100%; height: 100%;
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.6);
 }
 .ask-head { display: flex; align-items: center; gap: 8px; flex: none; }
 .ask-dot {

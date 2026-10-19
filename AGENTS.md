@@ -441,16 +441,20 @@ it as a panel **painted over the chat, anchored just above the composer**.
   same day ("was too much orange" for something read line by line). Every option is
   an answer and carries the rule; the row you picked is marked by a lifted
   background and a white label, never an orange wash.
-- **The panel covers the transcript area completely.** Side to side, from the top
-  of the dock down to the composer — the full width and height of what the chat
-  scrolls in. It is not a card floating over the chat: the chat's scrollbar, its
-  jump buttons and its prose are all behind an opaque surface, which is the point,
-  because none of them should be used or read while a question waits. It is flush
-  and square; the dock's own border and 14px radius clip it, and the orange top
-  rule is what says "question view" rather than more chat. `bottom` is measured
-  (placeAskPanel) because the composer's height moves with the textarea. It also
-  gave the form its room back: a 900x880 window now gets 306px where a 100px floor
-  was holding it.
+- **The panel covers the whole chat, including the composer.** It is the dock's own
+  child at `inset: -3px` — 2px past the dock's *border box*, so the chat's border,
+  its radius, its jump buttons and the composer (textbox, Stop, Send, the mode
+  toggle) are all underneath it. The dock drops its clipping while a question is up
+  (`.chat-dock.has-ask { overflow: visible }`), which is what lets the panel be the
+  larger box; nothing else escapes, because the transcript clips its own content
+  and the composer is behind the panel anyway.
+  **Being the dock's child is the point, not a detail.** Measuring the chat from
+  outside and copying its rect onto a body-level panel was tried first: it looked
+  right at rest but drifted up to **34px** off the chat during a mode switch, every
+  frame, because a style written from a measurement is painted a frame after the
+  layout it measured. As a child it moves with the dock in the same layout pass —
+  traced through a switch, the offset stayed at exactly 2px on all four sides on
+  every frame.
 - **Question text and option labels are bold** (700); the option descriptions stay
   regular and muted, which is what keeps the bold from being a wall.
 - **"Something Else…" gets its own line for the box.** Sharing one line, the box
