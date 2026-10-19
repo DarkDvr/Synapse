@@ -356,10 +356,13 @@ ordinary file tools; there is no tool and no store for it.
 - **One line is loud: the step in hand.** Every title is muted (`#9aa0a8`, 600);
   only a `doing` task is white and 700. A finished or blocked step is announced by
   its dot and its border, not by brightness, so a four-line plan has exactly one
-  place to look. **The row's border is the dot's colour**: grey = not started,
-  green = done, yellow = the step in hand, red = blocked/failed (on top of the
-  washes `doing` and `blocked` already had). A plan is read by colour before it is
-  read by word.
+  place to look. **The row's border is the dot's colour, at 2px** — at 1px and 0.34
+  alpha the operator's word for it was "too faint" — and the `tN` id carries the
+  same colour in text, which is what makes a plan readable without counting dots.
+  **Every dot is filled**: the step in hand used to be a yellow *ring* on a
+  transparent centre, which on a dark row reads as a black dot inside a ring —
+  two styles at once. Grey = not started, green = done, yellow = in hand, red =
+  blocked/failed.
 - **The step in hand is the run, not the file.** The Architect only writes the plan
   when it *judges*, so during a worker run the file still says `todo` and the pane
   showed the live step as a grey row. `renderPlan` overlays the runner's live run:
@@ -579,6 +582,14 @@ Non-obvious, all verified on 2.0.30:
   Verified through the real runner with a stubbed engine (19/19): a refusal moves,
   attempt 2 starts a rung down, a marked model is skipped, a clean turn stays on
   coder-1, and a role outside the ladder still reports a plain `error`.
+  **The reason is visible in three places**, because "why is Coder 1 idle?" is the
+  question a card invites: the report carries the provider's own sentence
+  (`coder-1's model was refused: Model space-bunny-free has been deprecated…`), the
+  run state carries `skipped: [{ role, message }]` so the skipped role's card reads
+  `Skipped — <reason>` for as long as the run is live, and the model keeps its
+  badge in the picker. The first production run of this (`test-project-2`, t1) went
+  exactly that way: 1.8s refusal → `coder-2` in 87s, with the move written into
+  `runs.jsonl` as `role=coder-2 plannedRole=coder-1`.
 - **Single mode refuses.** Tool rulesets cannot hide an MCP tool, so the promise
   is kept in the runner: a delegation request in a Single session is refused out
   loud and the Architect is told to ask for Multi.
@@ -850,10 +861,18 @@ This is once per directory per process and needs no config.
   hidden` on `.tool-body pre`, so a wide monospace table wraps instead of growing a
   horizontal bar (measured: 0 of 82 output blocks scrolling sideways on a real
   four-round transcript).
-- **Sending puts the newest message in view.** `scrollChatToEnd()` asks
-  `chatScroller()` which element scrolls — the transcript in the wide layout, the
-  page below the breakpoint — and animates to the end; `send()` calls it when the
-  local message is painted and again when the turn's messages land.
+- **Sending puts the newest message in view — and the cards above it.** Two
+  scrollers can be live at once: the transcript scrolls itself, and below 1460px the
+  page scrolls too. `send()` runs `scrollChatToEnd()`, which sends the transcript to
+  its end **and** the page to the top of `#topologyWrap` (8px margin), but only when
+  each actually scrolls — in the wide layout the page does not, so nothing moves
+  there. The first version made it either/or, which did nothing at all on a window
+  where the transcript scrolls *and* the page does.
+- **The two rail tables share one geometry.** They are lists before they are
+  tables: 2px cells, `line-height: 15px`, `tbody tr { height: 21px }`, and anything
+  that lives in a cell is capped to that height — the probe's Error is a real
+  `.btn` (22px min-height) and its own `td` rule set 3px, so one table had 29px rows
+  beside 22px ones. Measured after the fix: 8 rows and 14 rows, every one 21px.
 - **`.chat-scroll` scrolls internally in the wide layout; the page scrolls in the
   stacked one.** Above 1460px `.stage` has a definite height (set from the
   measured viewport via `--stage-h`, minus any horizontal scrollbar), so the

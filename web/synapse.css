@@ -230,6 +230,18 @@ body[data-view="none"] .inspector { display: none; }
 /* Long tool names (synapse-search_websearch) must never stretch the pane: fix
    the layout and ellipsise the cells instead of letting the table grow. */
 .inspector .tool-table { table-layout: fixed; width: 100%; }
+/* One geometry for both rail tables, and a compact one. They are lists before
+   they are tables: the operator had two different row heights in two adjacent
+   panels and asked for equal and smaller. The state pill is capped too — it is
+   taller than a status dot, which is why single rows measured 29px against 24.8px
+   in the same table. */
+.inspector .tool-table th,
+.inspector .tool-table td {
+  padding: 2px 6px; line-height: 15px;
+}
+.inspector .tool-table tbody tr { height: 21px; }
+.inspector .tool-table tbody td { vertical-align: middle; }
+.inspector .tool-table .state-pill { line-height: 13px; padding: 0 5px; }
 .inspector .tool-table th,
 .inspector .tool-table td { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
@@ -1229,8 +1241,11 @@ body[data-mode="single"] .keep-toggle { display: none; }
 .plan-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; }
 .plan-task {
   display: grid; grid-template-columns: 10px minmax(0, 1fr) auto;
-  align-items: start; gap: 8px; padding: 6px 7px; border-radius: 7px;
-  border: 1px solid transparent; background: rgba(255, 255, 255, 0.02);
+  align-items: start; gap: 8px; padding: 5px 6px; border-radius: 7px;
+  /* 2px, not 1px: on a dark pane a 1px status border was barely a tint and the
+     operator's word for it was "too faint". The padding gives back the pixel the
+     border took, so the row keeps its size. */
+  border: 2px solid transparent; background: rgba(255, 255, 255, 0.02);
 }
 /* display: inline-block — as an inline span the dot ignores width and height
    and paints as a 4px square (cost an hour once; it is in AGENTS.md) */
@@ -1238,25 +1253,35 @@ body[data-mode="single"] .keep-toggle { display: none; }
   display: inline-block; width: 7px; height: 7px; margin-top: 4px;
   border-radius: 50%; background: #5b6068; flex: none;
 }
-.plan-task[data-status="doing"] { background: rgba(237, 194, 90, 0.06); border-color: rgba(237, 194, 90, 0.22); }
+.plan-task[data-status="doing"] { background: rgba(237, 194, 90, 0.06); border-color: rgba(237, 194, 90, 0.5); }
 /* The row's border carries the same state as its dot, because a plan is read by
    colour before it is read by word: grey = not started, green = done, yellow =
    the step in hand, red = blocked or failed. */
-.plan-task[data-status="todo"] { border-color: rgba(92, 96, 104, 0.42); }
-.plan-task[data-status="done"] { border-color: rgba(53, 192, 138, 0.34); }
-/* "you are here": a yellow ring rather than a filled dot, so the current step
-   cannot be mistaken for a settled one at a glance. Yellow, not amber — amber is
-   the palette's warn colour and this is not a warning. */
+.plan-task[data-status="todo"] { border-color: rgba(92, 96, 104, 0.55); }
+.plan-task[data-status="done"] { border-color: rgba(53, 192, 138, 0.55); }
+/* The step in hand: a FILLED yellow dot, the same shape as every other state.
+   It used to be a yellow ring on a transparent centre, which on a dark row read
+   as a black dot inside a ring — two styles at once, and the operator said so.
+   Yellow, not amber: amber is the palette's warn colour and this is not a warning,
+   and the row's own yellow border already says "in hand". */
 .plan-task[data-status="doing"] .plan-dot {
-  width: 9px; height: 9px; margin-top: 3px; box-sizing: border-box;
-  background: transparent; border: 2px solid var(--yellow);
+  width: 9px; height: 9px; margin-top: 3px;
+  background: var(--yellow);
   box-shadow: 0 0 0 3px rgba(237, 194, 90, 0.16);
 }
 .plan-task[data-status="done"] .plan-dot { background: var(--green); }
 .plan-task[data-status="blocked"],
-.plan-task[data-status="failed"] { background: rgba(240, 86, 63, 0.07); border-color: rgba(240, 86, 63, 0.24); }
+.plan-task[data-status="failed"] { background: rgba(240, 86, 63, 0.07); border-color: rgba(240, 86, 63, 0.5); }
 .plan-task[data-status="blocked"] .plan-dot,
 .plan-task[data-status="failed"] .plan-dot { background: var(--red); }
+/* The id carries the state in text as well as the border, which is what makes a
+   four-row plan readable without counting dots. Titles stay muted on purpose: the
+   step in hand is still the only line that is white and bold. */
+.plan-task[data-status="todo"] .plan-id { color: #6f747c; }
+.plan-task[data-status="done"] .plan-id { color: var(--green); }
+.plan-task[data-status="doing"] .plan-id { color: var(--yellow); }
+.plan-task[data-status="blocked"] .plan-id,
+.plan-task[data-status="failed"] .plan-id { color: var(--red); }
 
 .plan-main { display: grid; gap: 2px; min-width: 0; }
 /* Two lines is the budget: a plan is read at a glance, and the full title is one
@@ -1458,9 +1483,19 @@ body[data-mode="single"] .keep-toggle { display: none; }
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .probe-block .tool-table { margin-top: 4px; }
-.probe-block .tool-table td { padding-top: 3px; padding-bottom: 3px; }
-/* the case name is an identifier, not prose — mono keeps the column aligned */
+/* The case name is an identifier, not prose - mono keeps the column aligned. Row
+   geometry is the inspector-wide one (2px cells, 21px rows); this table used to
+   set its own 3px, and its rows were 22px next to the tools table's 21px. */
 .probe-block .tool-name { font-family: var(--mono); font-size: 10.5px; color: #c3c6cc; }
+/* An Error button is a button, and a button's 22px min-height made one row in this
+   table 29px against 22px neighbours. Inside a rail table it is a label: 15px tall,
+   centred rather than baseline-aligned, which is what the last pixel of difference
+   was (an inline control sits on the baseline and drags descender space with it). */
+.inspector .tool-table .err-btn {
+  display: inline-flex; vertical-align: middle;
+  height: 15px; min-height: 0; box-sizing: border-box;
+  line-height: 13px; padding: 0 5px; font-size: 9px;
+}
 
 /* ── 17. reduced motion ────────────────────────────────────────────────── */
 @media (prefers-reduced-motion: reduce) {

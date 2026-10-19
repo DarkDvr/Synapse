@@ -1371,6 +1371,13 @@ function renderRoleActivity() {
       text = asking ? `Waiting on your answer (${run.title})` : `${run.title}${run.tool ? ` (${runPhrase(run.tool)})` : ''}`;
       part = 'worker';
       dot = 'live';
+    } else if (run?.skipped?.some((s) => s.role === role)) {
+      // This role was tried for the task and the model refused it, so the harness
+      // moved the work down the ladder. Say why, on the card of the role that was
+      // skipped: the report says it too, but the card is where the question
+      // "why is Coder 1 idle?" is actually asked.
+      const why = run.skipped.find((s) => s.role === role);
+      text = `Skipped — ${why?.message || 'the model could not run it'}`;
     } else if (blocked) dot = 'err';
     else if (participated) dot = 'ok';
 
@@ -2538,16 +2545,24 @@ async function send() {
   }
 }
 
-/** Put the newest message in view. In the wide layout the transcript scrolls
- *  itself; below the breakpoint the page does — ask `chatScroller()` which. */
+/** Put the newest message in view, and the cards above it.
+ *
+ *  Two scrollers can both be live: the transcript scrolls itself, and below the
+ *  1460px breakpoint the *page* scrolls as well (rail under chat, one column). The
+ *  transcript goes to its end, and the page goes to the top of the role cards — so
+ *  sending shows the newest message *and* the cards the work will appear in. In the
+ *  wide layout the page does not scroll, so only the transcript moves.
+ */
 function scrollChatToEnd(smooth = true) {
   const el = chatScroller();
   if (el) {
     if (smooth) animateScroll(el, el.scrollHeight, 220);
     else el.scrollTop = el.scrollHeight;
-    return;
   }
-  const to = Math.max(document.documentElement.scrollHeight, document.body.scrollHeight);
+  const cards = $('topologyWrap');
+  if (!cards) return;
+  if (document.documentElement.scrollHeight <= window.innerHeight + 2) return;
+  const to = Math.max(0, window.scrollY + cards.getBoundingClientRect().top - 8);
   if (smooth) animateScroll(null, to, 220);
   else window.scrollTo(0, to);
 }

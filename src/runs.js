@@ -261,6 +261,9 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     let text = '';
     let files = [];
     let turnError = null;
+    // Roles that were tried for this task and refused by their model. The report
+    // carries the reason and the cards show it while the run is live.
+    const skipped = [];
 
     // Written before the worker starts: this is what makes the request answered
     // exactly once, whatever happens next.
@@ -297,6 +300,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
       startedAt,
       timeoutSec,
       tool: null,
+      skipped,
     };
     running.set(dirKey(dir), live);
     emit('run.started', live);
@@ -405,7 +409,12 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
 
         // The provider refused this model: the next rung can still do the work,
         // and the operator is not asked to decide anything about it.
-        if (outcome === 'error' && rung + 1 < candidates.length) continue;
+        if (outcome === 'error' && rung + 1 < candidates.length) {
+          skipped.push({ role, message: turnError });
+          live.skipped = skipped;
+          emit('run.progress', { ...live });
+          continue;
+        }
         break;
       }
     } catch (err) {
@@ -480,6 +489,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
         task,
         role,
         insteadOf: task.role !== role ? task.role : null,
+        skipped,
         outcome,
         ms: Date.now() - startedAt,
         text,
@@ -627,7 +637,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     return [...seen];
   }
 
-  function report({ task, role, insteadOf, outcome, ms, text, files, workerId, planTouched, auto, timeoutMs, error }) {
+  function report({ task, role, insteadOf, skipped, outcome, ms, text, files, workerId, planTouched, auto, timeoutMs, error }) {
     const head =
       outcome === 'completed'
         ? `${task.id} (${role}) finished in ${Math.round(ms / 1000)}s.`
@@ -638,10 +648,12 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
             : `${task.id} (${role}) could not run.`;
     const lines = [head];
     if (insteadOf) {
+      const why = (skipped || []).find((s) => s.role === insteadOf);
       lines.push(
         `This attempt ran on ${role}, not ${insteadOf}: ${insteadOf} could not do it, so the harness moved the ` +
           `task down its line of coders. The plan still says ${insteadOf} - leave the role as it is and judge ` +
-          `the work on its merits.`,
+          `the work on its merits.` +
+          (why?.message ? `\n${insteadOf}'s model was refused: ${why.message}` : ''),
       );
     }
     // The evidence, never omitted: a worker that claims a file it did not write
