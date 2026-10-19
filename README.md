@@ -436,6 +436,13 @@ Three rules hold the whole thing together:
   interrupted audit was still judged and accepted. A role that genuinely needs
   longer overrides it on its own entry (`roles.<id>.timeoutSec`) — the auditor,
   which reads and runs things, is the one that hit the ceiling in practice.
+- **A turn the provider refuses is reported as exactly that.** The engine ends
+  every turn with an `idle` message whatever happened, so a worker whose model the
+  provider has *retired* used to arrive as "completed in 1.8s, reported nothing".
+  The run now carries `outcome: error` and the report quotes the provider's own
+  sentence ("Model space-bunny-free has been deprecated…"), says the worker never
+  got to work, and points at the role's model — because the catalog will happily
+  keep advertising a model the endpoint has already retired.
 
 **Single mode refuses delegation.** The engine offers the tool either way, so the
 harness enforces the promise: in Single the request is refused out loud and the

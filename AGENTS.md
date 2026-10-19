@@ -353,6 +353,14 @@ ordinary file tools; there is no tool and no store for it.
   **`Audit the UI/UX` must not be flagged**, and is the test that proves it. Note
   the flip side: an existing plan written before this rule shows the complaint in
   the pane until the Architect rewrites its own titles.
+- **Plan problems are a labelled list, not a filled block.** They were an amber
+  panel with the complaints as amber paragraphs, and on a finished plan that read
+  as a rendering fault rather than a note — the operator's word for it was
+  "unexpected yellow artifacts". They are a left amber rule, a heading
+  ("`2 plan notes for the Architect`") and one bullet per problem now: unmistakably
+  deliberate, quiet enough to sit under a finished plan. The *brief* still carries
+  them in the same `problems` channel either way — this is only what the pane looks
+  like.
 - **A task's `result` is not printed under its title.** One line per task keeps
   the pane scannable; the result rides the title's tooltip. A `note` is the
   exception and stays visible — a blocked task is the one case where the operator
@@ -560,6 +568,18 @@ Non-obvious, all verified on 2.0.30:
   not a failed task: the calendar auditor was interrupted and still left a useful
   result, and the Architect judged from what it *had* produced rather than from
   the worker's word.
+  **A turn the provider refuses is not a success either.** The engine appends
+  `idle` whatever the step did, so reading idle alone as "completed" reported a
+  dead model as a finished task with no output — twice, and the Architect had to
+  guess why. A retired model answers **HTTP 410** in about two seconds and both the
+  assistant message and the idle one carry the reason, so `turnErrorOf()` reads the
+  new messages for an error and the run is `outcome: "error"`: the report quotes the
+  provider's own sentence, says plainly that the worker never got to work, and
+  points at the role's model. Measured on the live case: `space-bunny-free` was
+  retired mid-run, every worker turn died in 1.8s, and the plan went `blocked`
+  because nothing said why. **The catalog can advertise a model the inference
+  endpoint has already retired** — `space-bunny-free` was still listed, still
+  pickable, and still the one the provider told us to stop using.
   **One exception: a worker waiting on an answer is not stalled.** While the
   transcript shows a `question` tool part still running, `waitForIdle` pushes the
   deadline out on every poll, so the operator can take as long as they like.
@@ -931,6 +951,22 @@ This is once per directory per process and needs no config.
   needs `runs.jsonl` as a second source *and* a marker for which plan those runs
   belong to (task ids repeat between plans), which is real machinery for a small
   visual; the honest reading of the file we have was preferred.
+- **A chip inside a text slot inherits its line-height, and that is what
+  de-centres it.** The `Done` chip sits in the card's subtitle slot, whose
+  `line-height` is 1.45 — so the chip's box was the *line box* (13.775px) plus its
+  padding, while its text is 9.5px, and the ink sat 0.38px high with 1.77px more
+  space below than above. `line-height: 1` gives the chip a box the size of its own
+  text, and then the only bias left is the font's — uppercase has no descenders, so
+  the ink reads high and wants a hair more padding above than below. Measured with
+  canvas ink metrics calibrated against the DOM's own em box (the model reproduced
+  the DOM to 0.25px): `.role-done` `2.75px 7px 2.25px` and `.ask-rec`
+  `1.5px 6px 1.5px` both land at **0.00**. Guessing padding without that
+  calibration is how the first attempt went from 0.38px high to 0.25px low.
+- **A repro page needs the palette's own context.** `--green`, `--amber` and the
+  rest are declared under `body.dark`, and the font comes from
+  `web/vendor/summit.css` — a repro that links only `synapse.css` renders in Times
+  with transparent pills, and every measurement taken from it is wrong. Link both
+  and set `class="dark"`, or measure in the app.
 - **`browser_wait_for` can match stale text.** Waiting for "Waiting on" to
   confirm a delegation had started matched the *transcript's* own prose from an
   earlier run and returned immediately. For anything live, poll

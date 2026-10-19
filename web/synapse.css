@@ -569,9 +569,15 @@ body.dark .sidebar-bottom,
 
 /* The finished plan, as a chip rather than a line of prose — it replaces the
    subtitle text in the same slot, so it cannot change the card's height. Green
-   because green is this palette's "this is done and nothing is wanted" colour. */
+   because green is this palette's "this is done and nothing is wanted" colour.
+
+   `line-height: 1` is not cosmetic: this chip sits in a slot whose line-height is
+   1.45, and inheriting that made the box taller than its own text and pushed the
+   ink ~0.9px above centre (measured). With the em box as the line box, the only
+   bias left is the font's — uppercase has no descenders, so the ink reads high —
+   and one extra pixel of top padding corrects it. */
 .role-done {
-  display: inline-block; padding: 1px 7px; border-radius: 999px;
+  display: inline-block; line-height: 1; padding: 2.75px 7px 2.25px; border-radius: 999px;
   font-size: 9.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
   color: #0f2a1f; background: var(--green);
 }
@@ -1052,10 +1058,11 @@ body[data-mode="single"] .keep-toggle { display: none; }
 
 /* The model's own recommendation, in the label as "(Recommended)" — the same
    convention the question tool documents — shown as a chip instead of a shout
-   in the middle of the option. */
+   in the middle of the option. Same correction as `.role-done`: its own line box,
+   so the pill is sized by its text and the uppercase ink sits on the centre. */
 .ask-rec {
   display: inline-block; margin-left: 7px; vertical-align: 1px;
-  padding: 1px 6px; border-radius: 999px;
+  line-height: 1; padding: 1.5px 6px 1.5px; border-radius: 999px;
   font-size: 9px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;
   color: #241a12; background: var(--orange);
 }
@@ -1254,11 +1261,22 @@ body[data-mode="single"] .keep-toggle { display: none; }
   overflow-wrap: anywhere;
 }
 /* the file parsed but breaks the shape: amber, not red — the plan is still readable */
+/* What the Architect must fix in its own plan. It used to be a filled amber
+   block, which on a dark pane read as a rendering fault rather than a note —
+   the operator's word for it was "artifacts". It is a left rule and a labelled
+   list now: unmistakably deliberate, and quiet enough to sit under a finished
+   plan without shouting. */
 .plan-problems {
-  margin: 9px 0 0; padding: 7px 9px; border-radius: 7px;
-  background: rgba(232, 163, 61, 0.07); border: 1px solid rgba(232, 163, 61, 0.22);
-  color: var(--amber); font-size: 11px; line-height: 1.5;
+  margin: 10px 0 0; padding: 1px 0 1px 9px;
+  border-left: 2px solid rgba(232, 163, 61, 0.45);
+  color: #c8a469; font-size: 10.5px; line-height: 1.5;
 }
+.plan-problems-head {
+  display: block; margin-bottom: 3px;
+  color: var(--amber); font-size: 10.5px; font-weight: 700;
+}
+.plan-problems ul { margin: 0; padding-left: 13px; display: grid; gap: 2px; }
+.plan-problems li { margin: 0; overflow-wrap: anywhere; }
 
 /* ── settings: a compact two-column form ───────────────────────────────── */
 #settingsModal .modal { width: min(640px, 100%); }

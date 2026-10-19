@@ -2259,7 +2259,10 @@ function renderPlan() {
       })
       .join('')}</ol>` +
     (st.problems?.length
-      ? `<p class="plan-problems">${st.problems.map((p) => esc(p)).join('<br>')}</p>`
+      ? `<div class="plan-problems">` +
+        `<span class="plan-problems-head">${st.problems.length} plan note${st.problems.length === 1 ? '' : 's'} for the Architect</span>` +
+        `<ul>${st.problems.map((p) => `<li>${esc(p)}</li>`).join('')}</ul>` +
+        `</div>`
       : '') +
     `<p class="rail-note plan-meta">${esc(meta.join(' · '))}</p>`;
 }

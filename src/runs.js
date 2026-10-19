@@ -216,6 +216,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify }) {
     let outcome = 'failed';
     let text = '';
     let files = [];
+    let turnError = null;
 
     // Written before the worker starts: this is what makes the request answered
     // exactly once, whatever happens next.
@@ -258,8 +259,8 @@ export function createRunner({ engine, logger, getConfig, guard, notify }) {
     // doing and can be put back. Both calls are cheap and neither is on the
     // worker's critical path — the snapshot is one `git add -u` + commit in the
     // harness repository, which a project never lives inside.
-    await guard?.snapshot?.(`before ${task.id} (${role})`).catch(() => {});
-    const harnessBefore = await guard?.state?.().catch(() => null);
+    await (guard?.snapshot?.(`before ${task.id} (${role})`) || Promise.resolve()).catch(() => {});
+    const harnessBefore = await (guard?.state?.() || Promise.resolve(null)).catch(() => null);
 
     try {
       worker = await engine.createSession({
@@ -291,13 +292,27 @@ export function createRunner({ engine, logger, getConfig, guard, notify }) {
       if (finished.timedOut) {
         outcome = 'timeout';
         try { await engine.interrupt(worker.id); } catch { /* already gone */ }
-      } else {
-        outcome = 'completed';
       }
 
       const messages = await engine.getMessages(worker.id);
       text = workerText(messages);
       files = workerFiles(messages);
+
+      if (!finished.timedOut) {
+        // A turn can end with `idle` and still have failed: the engine appends
+        // idle whatever the step did, and a provider refusing the model (a
+        // retired model answers HTTP 410) is over in about two seconds. Reading
+        // that idle as success told the Architect the work was done and produced
+        // nothing — which is a lie twice over, and it hid a dead model behind
+        // "the worker reported nothing".
+        turnError = turnErrorOf(messages, before);
+        if (turnError) {
+          outcome = 'error';
+          log.error(`worker ${request.task} (${role}) turn ended in an error: ${turnError}`);
+        } else {
+          outcome = 'completed';
+        }
+      }
     } catch (err) {
       outcome = 'failed';
       text = `the worker could not run: ${err.message}`;
@@ -327,7 +342,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify }) {
     // worker was running — however it happened, and whether or not a tool call
     // named a path. Reported before the Architect is woken, so the two never
     // disagree about what the worker did.
-    const harnessAfter = await guard?.state?.().catch(() => null);
+    const harnessAfter = await (guard?.state?.() || Promise.resolve(null)).catch(() => null);
     const harnessChanged = guard?.changed?.(harnessBefore, harnessAfter) || [];
     if (harnessChanged.length) {
       guard.alarm({
@@ -374,6 +389,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify }) {
         files,
         workerId: worker?.id,
         planTouched,
+        error: turnError,
         auto,
         timeoutMs,
       }),
@@ -474,6 +490,19 @@ export function createRunner({ engine, logger, getConfig, guard, notify }) {
     return lines.join('\n');
   }
 
+  /** The provider's own words for a turn that ended in an error, or null.
+   *
+   *  The engine appends `idle` even when the step failed — a retired model answers
+   *  HTTP 410 in about two seconds — so the idle message alone cannot be read as
+   *  success. Both it and the assistant message carry the error, which is also the
+   *  only place the reason is written down. */
+  function turnErrorOf(messages, from = 0) {
+    for (const message of (messages || []).slice(Math.max(0, from | 0))) {
+      if (message?.error) return String(message.error);
+    }
+    return null;
+  }
+
   const textOf = (m) => (m.parts || []).filter((p) => p.type === 'text' && p.text).map((p) => p.text).join('\n\n').trim();
 
   function workerText(messages) {
@@ -501,21 +530,31 @@ export function createRunner({ engine, logger, getConfig, guard, notify }) {
     return [...seen];
   }
 
-  function report({ task, role, outcome, ms, text, files, workerId, planTouched, auto, timeoutMs }) {
+  function report({ task, role, outcome, ms, text, files, workerId, planTouched, auto, timeoutMs, error }) {
     const head =
       outcome === 'completed'
         ? `${task.id} (${role}) finished in ${Math.round(ms / 1000)}s.`
         : outcome === 'timeout'
           ? `${task.id} (${role}) did not finish within ${Math.round(timeoutMs / 1000)}s and was interrupted.`
-          : `${task.id} (${role}) could not run.`;
+          : outcome === 'error'
+            ? `${task.id} (${role}) could not run - the model refused the turn, so the task was never attempted.`
+            : `${task.id} (${role}) could not run.`;
     const lines = [head];
     // The evidence, never omitted: a worker that claims a file it did not write
     // is a real failure mode (it happened on the first run: the report named
     // bin/calendar_design.md and no such file existed). "Files written: none"
     // is what made the claim obvious to the Architect.
     lines.push(files.length ? `Files written: ${files.join(', ')}` : `Files written: none.`);
+    if (error) {
+      lines.push(`The provider said: ${error}`);
+      lines.push(
+        `That is not a judgement on the task - the worker never got to work, and nothing was attempted. ` +
+          `It is usually the role's model having been retired by the provider: pick another model for that ` +
+          `role (or run the task on another role), then delegate this task again.`,
+      );
+    }
     if (text) lines.push(`Reported:\n${text}`);
-    else lines.push(`It reported nothing.`);
+    else if (!error) lines.push(`It reported nothing.`);
     if (planTouched) {
       lines.push(
         `Warning: the plan file changed while the worker ran. A worker is never meant to write it — ` +
