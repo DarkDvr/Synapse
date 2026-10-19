@@ -60,8 +60,8 @@ export const DEFAULTS = {
     // reports a timeout. A timeout is a report, not a failed task: whatever the
     // worker produced up to that point is still evidence and is handed over.
     // A role that genuinely needs longer overrides it on its own entry
-    // (`roles.<id>.timeoutSec`) — the auditor, which reads and runs things, is
-    // the one that hit this ceiling in practice.
+    // (`roles.<id>.timeoutSec`) — the hacker, which fuzzes a build, is the one
+    // that hits this ceiling in practice.
     timeoutSec: 300,
     // Roles that can stand in for one another, in escalation order. A task is
     // written for one role; when that coder cannot do the job the harness moves
@@ -163,12 +163,25 @@ export function normalize(raw) {
       const variant = isPlainObject(spec) && typeof spec.variant === 'string' ? spec.variant.trim() : '';
       const entry = { ref: ref.trim() };
       if (variant) entry.variant = variant;
-      // A role may need longer than the default worker timeout (the auditor
-      // reads and runs things). Only a real number is kept.
+      // A role may need longer than the default worker timeout (the hacker
+      // fuzzes a build, which takes time). Only a real number is kept.
       const timeoutSec = isPlainObject(spec) ? Number(spec.timeoutSec) : NaN;
       if (Number.isFinite(timeoutSec)) entry.timeoutSec = clampInt(timeoutSec, 30, 3600, DEFAULTS.worker.timeoutSec);
+      // Which skills this role may load. Absent means "no restriction"; an empty
+      // list means "none", which is a deliberate choice and is kept as one.
+      if (isPlainObject(spec) && Array.isArray(spec.skills)) {
+        entry.skills = spec.skills.map((s) => String(s || '').trim()).filter(Boolean);
+      }
       roles[String(id)] = entry;
     }
+  }
+  // The Auditor and the Critic were retired in favour of the Inventor and the
+  // Hacker. Fold their saved choices into the new roles once and drop the old
+  // ids: a config written before the rename must not lose the operator's pick.
+  for (const [oldId, newId] of Object.entries({ auditor: 'inventor', critic: 'hacker' })) {
+    if (!roles[oldId]) continue;
+    if (!roles[newId]) roles[newId] = roles[oldId];
+    delete roles[oldId];
   }
   // Fold a pre-roles defaults.model into the Architect role once, then drop the
   // old keys entirely (the Settings field that wrote them is gone).

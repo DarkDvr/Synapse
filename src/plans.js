@@ -19,8 +19,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-// The roles the topology has cards for.
-export const ROLES = ['architect', 'critic', 'coder-1', 'designer', 'coder-2', 'auditor', 'coder-3'];
+// The roles the topology has cards for, in card order. The `auditor` and the
+// `critic` were retired: the Architect verifies its own delegations against the
+// disk, so a second confirmation was redundant, and the two slots are better
+// spent on an idea generator and an adversary.
+export const ROLES = ['architect', 'inventor', 'coder-1', 'designer', 'coder-2', 'hacker', 'coder-3'];
 
 // `blocked` is the one that matters: the work cannot proceed without the
 // operator, which is why it is the one painted red.
@@ -301,6 +304,51 @@ const counts = (tasks) => {
 };
 
 /**
+ * What each working role is for, in its own words.
+ *
+ * A worker's brief is its mandate plus where its output goes; it does not need
+ * the plan's judgement rules, and three paragraphs about JSON shape would only
+ * bury the one sentence that matters. Paths are written with forward slashes
+ * because a lone backslash inside text a model copies into JSON is an invalid
+ * escape (a plan file once came back unreadable for exactly that).
+ */
+const ROLE_MANDATES = {
+  inventor: [
+    'You are the Inventor. You generate and rank ideas; you do not design screens and you do not write application code.',
+    'Write the list to .synapse/ideas/ideas-1.md (create the folder): most valuable first, each item with a one-line',
+    'reason it matters and an effort estimate (small, medium or large). After the list, say what you would leave out',
+    'and why. Be opinionated - ten ideas of equal weight is not a ranking. Work from the operator\'s request and the',
+    'project goal, and keep it to what this project can actually deliver.',
+  ].join(' '),
+  designer: [
+    'You are the Designer. You decide how it looks - layout, palette, type, spacing, states - and you do not write',
+    'application code. Write the spec to .synapse/design/design.md: a table of screens and their controls, the colour',
+    'tokens as real values, and the values for each theme that was asked for. Then one self-contained mock per screen',
+    'at .synapse/design/mock-1.html, mock-2.html and so on - plain HTML with inline CSS, static, opening at any width.',
+    'The spec is what the builder is held to, so make it exact enough to check line by line.',
+  ].join(' '),
+  hacker: [
+    'You are the Hacker. Assume the build is broken and find where. Run it with empty, huge, malformed and unusual',
+    'input; check boundaries, exit codes and failure paths; try to make it lie. Do not fix anything and do not edit',
+    'the build. Write the findings to .synapse/reports/hack-1.md (create the folder): each with an id (H1, H2...), a',
+    'severity (critical, major, minor, nice-to-have), the exact command and input that reproduces it, what happened and',
+    'what should have happened. Also list what you tested and could not break, so coverage is visible.',
+  ].join(' '),
+  'coder-1': [
+    'You are a Coder. Build exactly what the task names and nothing else: the plan, the confirmed features and the',
+    'design are read-only to you. Work only inside the project folder.',
+  ].join(' '),
+};
+
+// Where a role may write inside .synapse, and nowhere else there. A coder has
+// no such folder: its output is the project itself.
+const OWNED_DIR = {
+  inventor: `${PLAN_DIR}/ideas`,
+  designer: `${PLAN_DIR}/design`,
+  hacker: `${PLAN_DIR}/reports`,
+};
+
+/**
  * The brief handed to a session through the engine's instruction entries.
  *
  * Kept short on purpose: it is re-read on every step, and a wall of text gets
@@ -318,9 +366,17 @@ export function briefSession({ dir, role = 'architect', auto = false } = {}) {
       ? `Project plan: ${planRelPathPlain()} - you own this file and you are the only role that may write it. ` +
           `Read it when a session starts, and keep it current as work lands. To get a task done, hand it to ` +
           `its role with the delegate tool and wait for the report; do not do the work yourself.`
-      : `Project plan: ${planRelPathPlain()} - read-only for you. Never write to it, and never create files in ${PLAN_DIR}/. ` +
+      : `Project plan: ${planRelPathPlain()} - read-only for you; the Architect is its only writer. ` +
+          (OWNED_DIR[role]
+            ? `Inside ${PLAN_DIR}/ you may write only under ${OWNED_DIR[role]}/ and nowhere else there. `
+            : `Do not write anything inside ${PLAN_DIR}/. `) +
           `Your task is in the message you were given; do only that task.`,
   );
+
+  // A worker knows what its job is *in general*; the message tells it which
+  // specific task. Coders share one mandate, including coder-2 and coder-3.
+  const mandate = isArchitect ? null : ROLE_MANDATES[role] || ROLE_MANDATES['coder-1'];
+  if (mandate) lines.push(mandate);
 
   if (!state.exists) {
     lines.push(`The plan file does not exist yet.`);

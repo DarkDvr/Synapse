@@ -31,7 +31,7 @@
     "designer": {
       "ref": "opencode/deepseek-v4.1-flash-free"
     },
-    "critic": {
+    "hacker": {
       "ref": "opencode/deepseek-v4.1-flash-free",
       "variant": "low"
     },
@@ -51,7 +51,7 @@
       "ref": "opencode/muse-spark-1.3-contributor-free",
       "variant": "high"
     },
-    "auditor": {
+    "inventor": {
       "ref": "opencode/deepseek-v4.1-flash-free",
       "variant": "low"
     }

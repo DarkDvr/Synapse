@@ -17,12 +17,12 @@ const $ = (id) => document.getElementById(id);
 // composer has no target picker; the philosophy is one interface, one lead.
 const ROLES = [
   { id: 'architect', name: 'Architect' },
-  { id: 'critic', name: 'Critic' },
+  { id: 'inventor', name: 'Inventor' },
   { id: 'designer', name: 'Designer' },
   { id: 'coder-1', name: 'Coder 1' },
   { id: 'coder-2', name: 'Coder 2' },
   { id: 'coder-3', name: 'Coder 3' },
-  { id: 'auditor', name: 'Auditor' },
+  { id: 'hacker', name: 'Hacker' },
 ];
 
 const TBD_TITLE = 'TBD';
@@ -2932,7 +2932,7 @@ function renderSettings() {
     group('Workers',
       f('Timeout per task (seconds)', 'worker.timeoutSec', { type: 'number' }) +
       `<p class="set-note">A delegated task is interrupted after this long and its partial work is reported. ` +
-      `A role can override it in the config (<code>roles.&lt;id&gt;.timeoutSec</code>) — the auditor is the one that needs more.</p>`),
+      `A role can override it in the config (<code>roles.&lt;id&gt;.timeoutSec</code>) — the hacker is the one that needs more.</p>`),
     group('Logging',
       sel('Level', 'logging.level', [
         { v: 'debug', l: 'Debug' },
