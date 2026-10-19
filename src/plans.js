@@ -274,6 +274,9 @@ export function readPlan(dir) {
   }
 
   const goal = asText(parsed.goal);
+  // The phases the Architect chose for this project: a menu, not a checklist,
+  // and this is the record of what it picked. Tolerant, like everything else.
+  const phases = Array.isArray(parsed.phases) ? parsed.phases.map(asText).filter(Boolean).slice(0, 8) : [];
   const rawTasks = Array.isArray(parsed.tasks) ? parsed.tasks : null;
   if (rawTasks === null) problems.push('"tasks" is missing or is not an array');
 
@@ -381,7 +384,7 @@ export function readPlan(dir) {
     problems,
     features,
     requirement: readRequirement(dir),
-    plan: { version: Number(parsed.version) || 1, goal, summary: asText(parsed.summary), tasks },
+    plan: { version: Number(parsed.version) || 1, goal, summary: asText(parsed.summary), phases, tasks },
   };}
 
 /** A cheap change fingerprint, so the harness can tell that something wrote to
@@ -465,11 +468,11 @@ const ROLE_MANDATES = {
     'The spec is what the builder is held to, so make it exact enough to check line by line.',
   ].join(' '),
   hacker: [
-    'You are the Hacker. Assume the build is broken and find where. Run it with empty, huge, malformed and unusual',
-    'input; check boundaries, exit codes and failure paths; try to make it lie. Do not fix anything and do not edit',
-    'the build. Write the findings to .synapse/reports/hack-1.md (create the folder): each with an id (H1, H2...), a',
-    'severity (critical, major, minor, nice-to-have), the exact command and input that reproduces it, what happened and',
-    'what should have happened. Also list what you tested and could not break, so coverage is visible.',
+    'You are the Hacker. Assume the build is broken and find where. Run it the way it is meant to be used, then',
+    'the way a careless person would: the faults live at the edges. Do not fix anything and do not edit the build.',
+    'Write the findings to .synapse/reports/hack-1.md (create the folder): each with an id (H1, H2...), a severity',
+    '(critical, major, minor, nice-to-have), the exact command and input that reproduces it, what happened and what',
+    'should have happened. Also list what you tested and could not break, so coverage is visible.',
   ].join(' '),
   'coder-1': [
     'You are a Coder. Build exactly what the task names and nothing else: the plan, the confirmed features and the',
@@ -477,8 +480,37 @@ const ROLE_MANDATES = {
   ].join(' '),
 };
 
-// Where a role may write inside .synapse, and nowhere else there. A coder has
-// no such folder: its output is the project itself.
+// How hard the Hacker pushes. `app` is the default and the honest one for most
+// projects: a person typing something wrong is what actually breaks a small
+// tool, and an hour of hostile-environment construction answers a question
+// nobody asked. `security` is the same role with the gloves off, one setting
+// away in the role card's ✎ dialog.
+const HACKER_FOCUS = {
+  app: [
+    'Focus: real use, not security. The user is a person typing into this app or running this command. Test what',
+    'they actually do - empty and whitespace-only input, text where a number belongs, a negative or enormous',
+    'number, a very long line, accented letters and emoji, a missing file, the wrong file, a path with spaces, an',
+    'option that does not exist, starting it from the wrong folder, pressing Enter twice, closing the window',
+    'half-way. Judge what they would see: a crash, a wrong answer, silence where something should happen, a',
+    'message nobody can understand, work lost. Do not audit the security of the build: no hostile-environment',
+    'construction, no locale or interpreter matrices, no fuzzing loops. If something looks genuinely dangerous,',
+    'note it as an observation and move on.',
+  ].join(' '),
+  security: [
+    'Focus: adversarial. Treat the build as hostile territory - try to make it lie, escape its folder, run',
+    'something it should not, or lose data under duress. Hostile input, unusual encodings, broken output streams,',
+    'missing permissions, and anything that would matter if this were exposed to someone trying to break it. Say',
+    'plainly what you did not cover.',
+  ].join(' '),
+};
+
+// A handful of the cases a real user hits beats an exhaustive matrix, in either
+// focus: the report is read by a person who wants to know what to fix.
+const HACKER_PROPORTION =
+  'Keep it proportionate: the cases with the best chance of happening are worth more than a complete matrix, and ' +
+  'the report is judged on what it found, not on how long it ran.';
+
+/** Where a role may write inside .synapse, and nowhere else there. */
 const OWNED_DIR = {
   inventor: `${PLAN_DIR}/ideas`,
   designer: `${PLAN_DIR}/design`,
@@ -517,6 +549,22 @@ export function roleWriteRules(dir, role) {
     rules.push({ action: 'edit', resource: `${base}/**`, effect: 'deny' });
     if (owned) rules.push({ action: 'edit', resource: `${base}/${owned}/**`, effect: 'allow' });
   }
+  return rules;
+}
+
+/**
+ * What a coder may not read inside .synapse.
+ *
+ * Ideas are the one file that still holds the options the operator turned down,
+ * and a coder that reads them is a coder that can quietly build one. `read` is a
+ * real action and a relative path matches (both measured), so this is
+ * enforcement rather than a request.
+ */
+export function roleReadRules(dir, role) {
+  if (!/^coder-/.test(String(role || ''))) return [];
+  const root = String(dir || '').replace(/\\/g, '/').replace(/\/+$/, '');
+  const rules = [{ action: 'read', resource: `${PLAN_DIR}/ideas/**`, effect: 'deny' }];
+  if (root) rules.push({ action: 'read', resource: `${root}/${PLAN_DIR}/ideas/**`, effect: 'deny' });
   return rules;
 }
 
@@ -569,7 +617,7 @@ export function fingerprintDiff(before = {}, after = {}, allowFolder = '') {
  * skimmed. Facts first (what the plan currently says), then the one rule that
  * cannot be guessed (the Architect owns the file; nobody else writes it).
  */
-export function briefSession({ dir, role = 'architect', auto = false, skills = '' } = {}) {
+export function briefSession({ dir, role = 'architect', auto = false, skills = '', focus = '', instructions = '' } = {}) {
   const state = readPlan(dir);
   const lines = [];
   const isArchitect = role === 'architect';
@@ -602,6 +650,14 @@ export function briefSession({ dir, role = 'architect', auto = false, skills = '
   // specific task. Coders share one mandate, including coder-2 and coder-3.
   const mandate = isArchitect ? null : ROLE_MANDATES[role] || ROLE_MANDATES['coder-1'];
   if (mandate) lines.push(mandate);
+  if (role === 'hacker') {
+    lines.push(HACKER_FOCUS[focus === 'security' ? 'security' : 'app']);
+    lines.push(HACKER_PROPORTION);
+  }
+  // The operator's own words for this role. Anything typed here is what the
+  // role is told on every turn, which is the cheapest way to correct a habit
+  // without editing what the role is for.
+  if (instructions) lines.push(`The operator adds, for this role: ${instructions}`);
   // Which skills this role may load. Synapse enforces the same list through the
   // session's permission ruleset; saying it here is what stops a model wasting a
   // turn on a refusal it could have seen coming.

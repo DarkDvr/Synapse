@@ -33,7 +33,8 @@
     },
     "hacker": {
       "ref": "opencode/deepseek-v4.1-flash-free",
-      "variant": "low"
+      "variant": "low",
+      "focus": "app"
     },
     "architect": {
       "ref": "opencode/deepseek-v4.1-flash-free",

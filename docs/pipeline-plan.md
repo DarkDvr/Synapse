@@ -232,9 +232,6 @@ hack cap. Notes that differ from the plan above, all from live measurement:
 
 Not done yet, and deliberately:
 
-- **`phases` is written by the Architect but not shown in the pane.** The file is
-  the record; a footer chip is a small follow-up.
-- **Ideas are not hidden from coders.** `read` *can* be denied by path, so
-  `{action:'read', resource:'.synapse/ideas/**', deny}` for coders is a one-line
-  experiment for the next round.
-- **Per-role instructions** (the other half of the ✎ button) are still open.
+- **`phases` is shown in the pane** as one muted line above the tasks
+  (`Phases: build · hack`), so the menu choice is visible without opening the
+  file.

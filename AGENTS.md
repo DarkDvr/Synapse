@@ -736,7 +736,30 @@ session gets `{action:'skill', resource:'*', deny}` plus one allow per name (the
 last matching rule wins), and the brief names them. Measured: a denied skill
 answers "Permission denied: skill (type: permission.rejected)" while an allowed
 one loads. No list means no restriction; an empty list means none. The picker is
-the ✎ button on the role card.
+the ✎ button on the role card, which now holds three things:
+
+- **Skills** — ticked = allowed. Ticking every skill stores *no* list, because
+  that is the same thing and it lets a skill added later reach the role.
+- **Focus** (the Hacker only) — `app` by default, `security` when needed.
+- **Instructions** — free text appended to the role's brief on every turn
+  (`roles.<id>.instructions`, capped at 2000 characters).
+
+**The Hacker has a volume dial, and it starts low.** `roles.hacker.focus` is
+`app` unless it is set to `security`. In `app` the mandate is what a *person*
+does: empty and whitespace input, text in a number field, a negative or enormous
+number, accented letters, a missing or wrong file, a path with spaces, a flag
+that does not exist, starting from the wrong folder, Enter twice, a window closed
+half-way — and it is told, in those words, not to build hostile environments, run
+locale or interpreter matrices, or fuzz in loops. `security` is the same role
+with the gloves off. Both carry a proportion rule ("the cases with the best
+chance of happening beat a complete matrix"), because the 197-second
+locale-matrix run was technically correct and useless for a small tool.
+
+**Ideas are hidden from coders.** `roleReadRules` denies `read` on
+`.synapse/ideas/**` for `coder-*` only: the ideas file is the one place rejected
+options live, and a coder that reads it can quietly build one. Everything else in
+`.synapse` stays readable, because the brief and the contract are there to be
+read.
 
 **Eyes are a skill, not a tool.** `visual-review` (`%USERPROFILE%\.agents\skills`
 `\visual-review`, `bin\shot.mjs`) renders a file or URL with the machine's own

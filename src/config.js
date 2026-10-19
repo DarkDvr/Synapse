@@ -163,7 +163,11 @@ export function normalize(raw) {
       // A role may carry a skill list before it has a model chosen; without a
       // model *or* a list there is nothing here to keep.
       const hasSkills = isPlainObject(spec) && Array.isArray(spec.skills);
-      if (!ref && !hasSkills) continue;
+      const hasText =
+        isPlainObject(spec) &&
+        ((typeof spec.instructions === 'string' && spec.instructions.trim()) ||
+          typeof spec.focus === 'string');
+      if (!ref && !hasSkills && !hasText) continue;
       const entry = {};
       if (ref) entry.ref = ref;
       const variant = isPlainObject(spec) && typeof spec.variant === 'string' ? spec.variant.trim() : '';
@@ -176,6 +180,16 @@ export function normalize(raw) {
       // list means "none", which is a deliberate choice and is kept as one.
       if (isPlainObject(spec) && Array.isArray(spec.skills)) {
         entry.skills = spec.skills.map((s) => String(s || '').trim()).filter(Boolean);
+      }
+      // The Hacker's dial: `app` tests what a real user types, `security` hunts
+      // for a way in. Anything else is the safe default.
+      if (isPlainObject(spec) && typeof spec.focus === 'string') {
+        entry.focus = spec.focus === 'security' ? 'security' : 'app';
+      }
+      // Free-text instructions for the role, appended to its mandate in the
+      // brief. Capped: it is read on every step of every turn.
+      if (isPlainObject(spec) && typeof spec.instructions === 'string' && spec.instructions.trim()) {
+        entry.instructions = spec.instructions.trim().slice(0, 2000);
       }
       roles[String(id)] = entry;
     }

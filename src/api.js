@@ -53,7 +53,14 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
    */
   async function brief(sessionId, directory, role, auto = false) {
     try {
-      const text = briefSession({ dir: directory, role, auto, skills: describeSkills(getConfig(), role) });
+      const text = briefSession({
+        dir: directory,
+        role,
+        auto,
+        skills: describeSkills(getConfig(), role),
+        focus: getConfig()?.roles?.[role]?.focus,
+        instructions: getConfig()?.roles?.[role]?.instructions,
+      });
       if (briefed.get(sessionId) === text) return;
       await engine.setInstruction(sessionId, BRIEF_KEY, text);
       briefed.set(sessionId, text);

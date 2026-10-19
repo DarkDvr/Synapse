@@ -209,8 +209,12 @@ function openDialog({
           return `<div class="set-field wide"><span>${esc(f.label)}</span><div class="dlg-checklist">${rows}</div></div>`;
         }
         const control = f.type === 'select'
-          ? `<select id="dlg-${esc(f.name)}">${f.options.map((o) => `<option value="${esc(o.v)}">${esc(o.l)}</option>`).join('')}</select>`
-          : `<input id="dlg-${esc(f.name)}" type="text" value="${esc(f.value ?? '')}" placeholder="${esc(f.placeholder ?? '')}" />`;
+          ? `<select id="dlg-${esc(f.name)}">${f.options
+              .map((o) => `<option value="${esc(o.v)}"${o.v === f.value ? ' selected' : ''}>${esc(o.l)}</option>`)
+              .join('')}</select>`
+          : f.type === 'textarea'
+            ? `<textarea id="dlg-${esc(f.name)}" rows="4" placeholder="${esc(f.placeholder ?? '')}">${esc(f.value ?? '')}</textarea>`
+            : `<input id="dlg-${esc(f.name)}" type="text" value="${esc(f.value ?? '')}" placeholder="${esc(f.placeholder ?? '')}" />`;
         return `<label class="set-field wide"><span>${esc(f.label)}</span>${control}</label>`;
       })
       .join('');
@@ -877,8 +881,9 @@ async function saveRoleSelection(roleId, ref, variant) {
  * genuinely refused (measured on 2.0.30). Ticking nothing is saved as an empty
  * list, which means "no skills at all", and the dialog says so.
  */
-async function editRoleSkills(roleId) {
+async function editRoleSettings(roleId) {
   const role = ROLES.find((r) => r.id === roleId);
+  const entry = state.config?.roles?.[roleId] || {};
   let installed = [];
   try {
     installed = (await api('GET', '/api/skills')).skills || [];
@@ -886,52 +891,82 @@ async function editRoleSkills(roleId) {
     toast('Could Not Read the Skills', err.message);
     return;
   }
-  if (!installed.length) {
-    toast('No Skills Installed', 'Synapse found no skills in the configured folders.');
-    return;
+  const allowed = Array.isArray(entry.skills) ? entry.skills : installed.map((s) => s.name);
+  const fields = [];
+  // The Hacker's dial is the one role-specific setting: the same role, at two
+  // very different volumes. `app` is the default because a person typing
+  // something wrong is what actually breaks a small tool.
+  if (roleId === 'hacker') {
+    fields.push({
+      name: 'focus',
+      type: 'select',
+      label: 'How hard should it push?',
+      value: entry.focus === 'security' ? 'security' : 'app',
+      options: [
+        { v: 'app', l: 'Real use — user mistakes, wrong input, the edges a person hits' },
+        { v: 'security', l: 'Security — hunt for a way in, hostile input, break out' },
+      ],
+    });
   }
-  const configured = state.config?.roles?.[roleId]?.skills;
-  const allowed = Array.isArray(configured) ? configured : installed.map((s) => s.name);
+  fields.push({
+    name: 'skills',
+    type: 'checklist',
+    label: 'Installed skills',
+    options: installed.map((s) => ({
+      v: s.name,
+      l: s.name,
+      hint: s.description,
+      checked: allowed.includes(s.name),
+    })),
+  });
+  fields.push({
+    name: 'instructions',
+    type: 'textarea',
+    label: 'Instructions for this role',
+    value: entry.instructions || '',
+    placeholder: 'Anything it should remember every turn. Optional.',
+  });
+
   const result = await openDialog({
-    title: `Skills for ${role?.name || roleId}`,
+    title: `Settings for ${role?.name || roleId}`,
     message:
-      configured === undefined
-        ? 'Nothing has been chosen yet, so every skill is available. Tick what this role may use.'
-        : 'Anything unticked is refused by the engine, not just unmentioned.',
-    fields: [
-      {
-        name: 'skills',
-        type: 'checklist',
-        label: 'Installed skills',
-        options: installed.map((s) => ({
-          v: s.name,
-          l: s.name,
-          hint: s.description,
-          checked: allowed.includes(s.name),
-        })),
-      },
-    ],
-    confirmLabel: 'Save Skills',
+      roleId === 'hacker'
+        ? 'Real use is the default: what a person typing something wrong would hit. Security is there when this one has to withstand someone trying.'
+        : 'Anything unticked is refused by the engine, not just unmentioned. Instructions are added to what the role is told on every turn.',
+    fields,
+    confirmLabel: 'Save',
   });
   if (!result || !Array.isArray(result.skills)) return;
+
   const draft = JSON.parse(JSON.stringify(state.config || {}));
   draft.roles = { ...(draft.roles || {}) };
-  draft.roles[roleId] = { ...(draft.roles[roleId] || {}), skills: result.skills };
+  const next = { ...(draft.roles[roleId] || {}) };
+  // Ticking everything means "no restriction", which is exactly what an absent
+  // list says — and it lets a skill added next month reach this role without the
+  // operator coming back to tick it.
+  if (result.skills.length === installed.length) delete next.skills;
+  else next.skills = result.skills;
+  if (roleId === 'hacker') next.focus = result.focus === 'security' ? 'security' : 'app';
+  const text = String(result.instructions || '').trim();
+  if (text) next.instructions = text;
+  else delete next.instructions;
+  draft.roles[roleId] = next;
+
   try {
     state.config = await api('PUT', '/api/config', draft);
     toast(
-      'Skills Saved',
-      `${role?.name || roleId}: ${result.skills.length ? result.skills.join(', ') : 'none'}.`,
+      'Role Saved',
+      `${role?.name || roleId}${roleId === 'hacker' ? ` · ${next.focus === 'security' ? 'security' : 'real use'}` : ''}.`,
     );
     // The Architect's own session runs under a ruleset, so the change reaches it
-    // now rather than at the next restart — the same PATCH the mode switch uses.
+    // now rather than at the next restart - the same PATCH the mode switch uses.
     if (roleId === 'architect' && state.sessionId) {
       await api('PATCH', `/api/sessions/${encodeURIComponent(state.sessionId)}`, {
         permissions: state.mode === 'single' ? SINGLE_PERMISSIONS : [],
       });
     }
   } catch (err) {
-    toast('Could Not Save the Skills', err.message);
+    toast('Could Not Save the Role', err.message);
   }
 }
 
@@ -2488,6 +2523,9 @@ function renderPlan() {
   }
 
   const tasks = st?.plan?.tasks || [];
+  // The Architect's menu choice, recorded in the file. Quiet: it is a record of
+  // a decision, not a status.
+  const phases = Array.isArray(st?.plan?.phases) ? st.plan.phases : [];
   // A task with a worker on it is the step in hand whatever the file says. The
   // Architect only writes the plan when it judges, so during the run the file
   // still says todo and the pane showed the live step as a grey row. The run is
@@ -2508,6 +2546,7 @@ function renderPlan() {
 
   body.innerHTML =
     (st.plan.goal ? `<p class="plan-goal">${esc(st.plan.goal)}</p>` : '') +
+    (phases.length ? `<p class="plan-phases">Phases: ${phases.map((p) => esc(p)).join(' · ')}</p>` : '') +
     `<ol class="plan-list">${tasks
       .map((t) => {
         const status = liveRun && liveRun.task === t.id ? 'doing' : PLAN_STATUS[t.status] ? t.status : 'todo';
@@ -3223,7 +3262,7 @@ function wire() {
     btn.addEventListener('click', (e) => {
       e.preventDefault();
       const role = btn.closest('.role-card')?.querySelector('.role-model')?.dataset.role;
-      if (role) editRoleSkills(role);
+      if (role) editRoleSettings(role);
     }),
   );
 

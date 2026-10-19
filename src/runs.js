@@ -31,6 +31,7 @@ import {
   BRIEF_KEY,
   PLAN_DIR,
   roleWriteRules,
+  roleReadRules,
   synapseFingerprint,
   fingerprintDiff,
   ownedFolder,
@@ -452,6 +453,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
           permissions: [
             ...(guard?.rules?.() || []),
             ...roleWriteRules(dir, role),
+            ...roleReadRules(dir, role),
             ...skillRules(config, role),
           ],
           // Hidden from the rail: it runs in the project directory, so only this
@@ -462,7 +464,17 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
         // Its context: where it is, what the plan says, and that the plan is not
         // its to touch. The task itself goes in the message below.
         try {
-          await engine.setInstruction(worker.id, BRIEF_KEY, briefSession({ dir, role, skills: describeSkills(config, role) }));
+          await engine.setInstruction(
+            worker.id,
+            BRIEF_KEY,
+            briefSession({
+              dir,
+              role,
+              skills: describeSkills(config, role),
+              focus: roleConfig.focus,
+              instructions: roleConfig.instructions,
+            }),
+          );
         } catch (err) {
           log.warn(`worker brief failed for ${request.task}: ${err.message}`);
         }

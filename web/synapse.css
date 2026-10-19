@@ -1267,6 +1267,12 @@ body[data-mode="single"] .keep-toggle { display: none; }
 .plan-goal {
   margin: 0 0 10px; font-size: 12px; line-height: 1.45; color: #b9bdc4;
 }
+/* The phases the Architect picked. A record, so it whispers: one line, above
+   the tasks, in the same muted tone as the footer. */
+.plan-phases {
+  margin: -6px 0 10px; font-size: 10px; letter-spacing: 0.05em;
+  text-transform: uppercase; color: var(--muted);
+}
 .plan-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; }
 .plan-task {
   display: grid; grid-template-columns: 10px minmax(0, 1fr) auto;
@@ -1387,15 +1393,20 @@ body[data-mode="single"] .keep-toggle { display: none; }
 .set-field.wide { grid-column: 1 / -1; }
 .set-field > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .set-field input,
-.set-field select {
+.set-field select,
+.set-field textarea {
   width: 100%; min-width: 0; min-height: 28px;
   background: #17181b; border: 1px solid #3a3d43; border-radius: 8px;
   color: var(--text); font-family: inherit; font-size: 12.5px;
   padding: 4px 9px;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
+.set-field textarea {
+  min-height: 64px; resize: vertical; line-height: 1.45; padding: 6px 9px;
+}
 .set-field input:focus-visible,
-.set-field select:focus-visible {
+.set-field select:focus-visible,
+.set-field textarea:focus-visible {
   /* border + ring rather than a bare outline: the border can never be clipped */
   outline: none; border-color: var(--orange);
   box-shadow: 0 0 0 3px rgba(255, 125, 26, 0.18);
@@ -1408,7 +1419,8 @@ body[data-mode="single"] .keep-toggle { display: none; }
   padding-right: 26px;
 }
 .set-field input:focus-visible,
-.set-field select:focus-visible { outline: 2px solid var(--orange); outline-offset: 1px; }
+.set-field select:focus-visible,
+.set-field textarea:focus-visible { outline: 2px solid var(--orange); outline-offset: 1px; }
 /* A skill list is a column of rows, not one form control. Each row is its own
    label, so clicking a description toggles only that box. */
 .dlg-checklist {
