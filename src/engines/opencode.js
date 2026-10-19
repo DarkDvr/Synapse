@@ -14,7 +14,7 @@ import {
   normalizeSession,
   parseModelRef,
 } from './base.js';
-import { SEARCH_SERVER, DELEGATE_SERVER, ENGINE_PID_FILE } from '../paths.js';
+import { SEARCH_SERVER, DELEGATE_SERVER, ENGINE_PID_FILE, SKILLS_DIR } from '../paths.js';
 
 const ENGINE_USERNAME = 'opencode';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -166,9 +166,13 @@ export class OpenCodeEngine extends Engine {
       next.providers = providers;
     }
 
-    // Skills the operator has pointed us at. Without this the `skill` tool has
-    // nothing to offer and the models cannot call it at all.
-    const skillPaths = Array.isArray(this.cfg.skillPaths) ? this.cfg.skillPaths.filter(Boolean) : [];
+    // Skills the operator has pointed us at, plus the ones Synapse ships. The
+    // shipped folder comes first and is not configurable: without it the `skill`
+    // tool has nothing to offer, and a config carried from another machine would
+    // otherwise point at a folder that no longer exists and lose every skill
+    // silently — including the eyes the Architect designs with.
+    const configured = Array.isArray(this.cfg.skillPaths) ? this.cfg.skillPaths.filter(Boolean) : [];
+    const skillPaths = [SKILLS_DIR, ...configured.filter((p) => path.resolve(String(p)) !== SKILLS_DIR)];
     if (skillPaths.length) next.skills = { paths: skillPaths };
     else delete next.skills;
 

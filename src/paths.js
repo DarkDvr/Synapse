@@ -10,6 +10,10 @@ export const ROOT = path.resolve(here, '..');
 export const CONFIG_DIR = path.join(ROOT, 'config');
 export const CONFIG_FILE = path.join(CONFIG_DIR, 'synapse.config.json');
 export const WEB_DIR = path.join(ROOT, 'web');
+// Skills that ship WITH Synapse, so the pipeline does not depend on what happens
+// to be installed on this machine. The operator's own folders are extra paths on
+// top of this one; this one is the product.
+export const SKILLS_DIR = path.join(ROOT, 'skills');
 export const DATA_DIR = path.join(ROOT, 'data');
 export const LOGS_DIR = path.join(ROOT, 'logs');
 
@@ -50,7 +54,7 @@ export const PROBE_DIR = path.join(PROJECTS_ROOT, '_probe');
 
 // The harness's own source, for the tamper watchdog: a write to any of these is a
 // write to the tool that is doing the writing.
-export const HARNESS_DIRS = ['src', 'web', 'config', 'docs'].map((d) => path.join(ROOT, d));
+export const HARNESS_DIRS = ['src', 'web', 'config', 'docs', 'skills'].map((d) => path.join(ROOT, d));
 export const HARNESS_FILES = ['AGENTS.md', 'README.md', 'package.json', 'start.bat', 'stop.bat', 'restart.ps1']
   .map((f) => path.join(ROOT, f));
 

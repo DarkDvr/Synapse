@@ -38,6 +38,8 @@ const state = {
   // The open session's project plan file: its parsed contents, any problems in
   // it, and when it last changed.
   planState: null,
+  // What the engine can load and what the role settings expect (GET /api/skills).
+  skillsInfo: null,
   // "Keep building": the open session's switch for running the plan to the end.
   auto: false,
   permissions: [],
@@ -135,12 +137,12 @@ const shortModel = (name) => {
 const slug = (s) => String(s || '').trim().toLowerCase().replace(/[^a-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '') || 'project';
 
 // ── toast ───────────────────────────────────────────────────────
-function toast(title, body) {
+function toast(title, body, ms = 4200) {
   const el = document.createElement('div');
   el.className = 'toast';
   el.innerHTML = `<span class="toast-icon">◈</span><div><strong>${esc(title)}</strong>${body ? `<p>${esc(body)}</p>` : ''}</div>`;
   $('toastRegion').appendChild(el);
-  setTimeout(() => el.remove(), 4200);
+  setTimeout(() => el.remove(), ms);
 }
 
 // ── error popup ─────────────────────────────────────────────────
@@ -892,6 +894,14 @@ async function editRoleSettings(roleId) {
     return;
   }
   const allowed = Array.isArray(entry.skills) ? entry.skills : installed.map((s) => s.name);
+  if (!installed.length) {
+    toast('No Skills Available', 'Synapse found no skills in its own folder or yours — see Settings → Skills.');
+    return;
+  }
+  // A name the role expects but this machine cannot load is shown rather than
+  // dropped in silence: keeping it is a valid choice (it works again once the
+  // skill is installed), and unticking it is the clean way to drop the reference.
+  const missingHere = (state.skillsInfo?.missing || []).filter((m) => m.roles.includes(roleId));
   const fields = [];
   // The Hacker's dial is the one role-specific setting: the same role, at two
   // very different volumes. `app` is the default because a person typing
@@ -912,12 +922,21 @@ async function editRoleSettings(roleId) {
     name: 'skills',
     type: 'checklist',
     label: 'Installed skills',
-    options: installed.map((s) => ({
-      v: s.name,
-      l: s.name,
-      hint: s.description,
-      checked: allowed.includes(s.name),
-    })),
+    options: installed
+      .map((s) => ({
+        v: s.name,
+        l: s.name,
+        hint: s.description,
+        checked: allowed.includes(s.name),
+      }))
+      .concat(
+        missingHere.map((m) => ({
+          v: m.name,
+          l: m.name,
+          hint: 'Not installed on this machine — the reference is kept, but nothing loads.',
+          checked: allowed.includes(m.name),
+        })),
+      ),
   });
   fields.push({
     name: 'instructions',
@@ -3002,6 +3021,48 @@ function writePath(obj, path, value) {
   o[keys[keys.length - 1]] = value;
 }
 
+/**
+ * What the engine can load, and whether a role expects something that is not
+ * here.
+ *
+ * The failure this exists for is silent: a role's skill list survives a move to
+ * another machine, the folder does not, and the ruleset still "allows" a name
+ * that can never load. Nothing errors — the Architect simply stops being able to
+ * look at a mock. So the gap is named once at boot, and again in Settings.
+ */
+async function checkSkills({ quiet = false } = {}) {
+  try {
+    state.skillsInfo = await api('GET', '/api/skills');
+  } catch {
+    state.skillsInfo = null;
+    return;
+  }
+  if (quiet) return;
+  const missing = state.skillsInfo?.missing || [];
+  const gone = (state.skillsInfo?.paths || []).filter((p) => !p.exists);
+  if (!missing.length && !gone.length) return;
+  const parts = [];
+  if (missing.length) {
+    const roles = [...new Set(missing.flatMap((m) => m.roles))];
+    parts.push(`${missing.map((m) => m.name).join(', ')} — used by ${roles.join(', ')}`);
+  }
+  if (gone.length) parts.push(`folder not found: ${gone.map((p) => p.path).join(', ')}`);
+  toast('Some Skills Are Missing', `${parts.join('. ')}. Settings → Skills says where they go.`, 9000);
+}
+
+/** One line for the Settings panel, kept short enough to read at a glance. */
+function skillsSummary() {
+  const info = state.skillsInfo;
+  if (!info) return 'Skills have not been read yet.';
+  const total = (info.skills || []).length;
+  const missing = (info.missing || []).map((m) => `${m.name} (${m.roles.join(', ')})`);
+  const gone = (info.paths || []).filter((p) => !p.exists).map((p) => p.path);
+  const bits = [`${total} skill(s) load, ${info.bundled ? `including Synapse's own in ${info.bundled}` : 'from the skills folder'}`];
+  if (missing.length) bits.push(`not installed: ${missing.join(', ')}`);
+  if (gone.length) bits.push(`extra folder missing: ${gone.join(', ')}`);
+  return bits.join(' · ');
+}
+
 function renderSettings() {
   const c = state.config;
   if (!c) { $('settingsBody').innerHTML = '<p class="rail-note">Config unavailable.</p>'; return; }
@@ -3047,6 +3108,16 @@ function renderSettings() {
       f('Engine home (blank = data\\engine\\opencode)', 'engine.opencode.home', { wide: true, value: homeValue })),
     group('Working directory',
       f('Where new sessions run (blank = workspace)', 'defaults.directory', { wide: true })),
+    group('Skills',
+      f('Extra skill folders (separate with ;)', 'engine.opencode.skillPaths', {
+        wide: true,
+        value: (c.engine?.opencode?.skillPaths || []).join(';'),
+      }) +
+      `<p class="set-note">${esc(skillsSummary())}</p>` +
+      `<p class="set-note">Synapse's own skills ship in <code>skills\\</code> beside the app and always load, ` +
+      `so the pipeline works on a fresh machine with nothing installed. To move them, move that folder with ` +
+      `Synapse. A skill your role settings name but this machine does not have is listed above instead of ` +
+      `disappearing quietly.</p>`),
     group('Model checks',
       f('Max asks per model (1–20)', 'modelChecks.maxAsks', { type: 'number' }) +
       `<div class="set-field"><span>Ask counters</span>
@@ -3080,6 +3151,11 @@ async function saveSettings() {
     let value = el.type === 'checkbox' ? el.checked : el.value;
     if (el.type === 'number') value = Number(value);
     if (el.type === 'number' && !Number.isFinite(value)) continue;
+    // A folder list is one line in the form and an array in the config.
+    if (path === 'engine.opencode.skillPaths') {
+      writePath(draft, path, String(value).split(';').map((p) => p.trim()).filter(Boolean));
+      continue;
+    }
     writePath(draft, path, value);
   }
   // A model change can strand a thinking effort the new model does not offer
@@ -3094,6 +3170,9 @@ async function saveSettings() {
     state.config = await api('PUT', '/api/config', draft);
     toast('Settings saved', 'Restart Synapse to apply engine or server changes.');
     await loadModels();
+    // A new skills folder is worth reading before the operator closes the panel.
+    await checkSkills({ quiet: true });
+    renderSettings();
   } catch (err) {
     toast('Could not save settings', err.message);
   }
@@ -3383,6 +3462,7 @@ async function boot() {
   await refreshStatus();
   await loadModels();
   await loadProjects();
+  await checkSkills();
   await loadRuns();
   renderTranscript();
   connectStream();

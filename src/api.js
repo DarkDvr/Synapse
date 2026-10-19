@@ -6,7 +6,7 @@ import { spawn } from 'node:child_process';
 import { TBD_TITLE } from './titles.js';
 import { ensurePlan, readPlan, readRuns, briefSession, logPlanState, BRIEF_KEY, appendRequirement } from './plans.js';
 import { skillRules, describeSkills } from './skills.js';
-import { PROJECTS_ROOT } from './paths.js';
+import { PROJECTS_ROOT, SKILLS_DIR } from './paths.js';
 
 export function createApi({ getConfig, applyConfig, engine, logger, getBootError, projects, toolStats, probe, modelCache, inspectModel: inspectRef, probeDir, runs, notify, guard }) {
   const app = logger.channel('app');
@@ -224,11 +224,37 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
       return { agents: await engine.listAgents() };
     },
 
-    /** The skills the engine can see, for the per-role picker. Name and
-     *  description only: the path a skill lives in is nobody's business. */
+    /**
+     * What the engine can actually load, and what the role settings expect.
+     *
+     * A config that travelled from another machine can name skills that are not
+     * here, and a missing name does not fail — the rule allows it and nothing
+     * loads, which is the quietest way for a capability to disappear. So the gap
+     * is reported as data: the UI says it once at boot, and the role picker shows
+     * the name it cannot offer rather than dropping it in silence.
+     */
     skills: async () => {
-      if (!engine.status().ready) return { skills: [] };
-      return { skills: await engine.listSkills() };
+      const config = getConfig() || {};
+      const paths = (config.engine?.opencode?.skillPaths || []).map((p) => ({
+        path: String(p),
+        exists: fs.existsSync(String(p)),
+      }));
+      if (!engine.status().ready) return { skills: [], missing: [], paths, bundled: SKILLS_DIR };
+      const skills = await engine.listSkills();
+      const names = new Set(skills.map((s) => s.name));
+      const missing = [];
+      for (const [role, entry] of Object.entries(config.roles || {})) {
+        for (const name of entry?.skills || []) {
+          if (names.has(name)) continue;
+          let record = missing.find((m) => m.name === name);
+          if (!record) {
+            record = { name, roles: [] };
+            missing.push(record);
+          }
+          record.roles.push(role);
+        }
+      }
+      return { skills, missing, paths, bundled: SKILLS_DIR };
     },
 
     sessions: async () => {

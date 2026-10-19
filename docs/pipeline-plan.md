@@ -103,7 +103,7 @@ pointers, never paraphrases.
 - **UI**: the ✎ button on each role card opens the picker (skills + instructions),
   closing the open "per-role instructions" item.
 
-### `visual-review` (in `%USERPROFILE%\.agents\skills\visual-review`)
+### `visual-review` (shipped: `skills\visual-review`)
 
 ```
 SKILL.md        when to use it, and the honesty rules
@@ -226,9 +226,12 @@ hack cap. Notes that differ from the plan above, all from live measurement:
   hacker delegation is refused with `outcome: 'hack-cap'` plus a toast.
 - **Skills are enforced fail-closed**: deny every skill, allow the listed ones.
   The ✎ picker is the UI; no list means no restriction.
-- **`visual-review` lives in the operator's skills folder**, not in the repo
-  (`%USERPROFILE%\.agents\skills\visual-review`), consistent with the other
-  nine skills. It needs no restart: the engine rescans the folder per request.
+- **`visual-review` and `ui-design` ship with Synapse** in `skills\`, which is put
+  on the engine's skill path on every boot, ahead of the operator's folders. That
+  is what makes the pipeline portable: moving the app moves its skills, and
+  nothing is fetched at runtime. A config carried from another machine that names
+  a skill this one lacks is reported (toast + Settings → Skills + the role picker),
+  never silently dropped.
 
 Not done yet, and deliberately:
 

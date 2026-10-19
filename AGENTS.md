@@ -187,6 +187,9 @@ web/
   synapse.css         theme + shell (Summit baseline stays locked)
   vendor/summit.css   LOCKED baseline — one deliberate edit, see below
   vendor/fonts.css    vendored DM Sans + Manrope (offline)
+skills/               shipped WITH Synapse, always on the engine's skill path
+  visual-review/      render a page to PNG, then read it (the agents' eyes)
+  ui-design/          the Designer's craft brief: direction, tokens, states, spec
 data/                 runtime state (projects, census, probe results, engine home)
 logs/                 one file per channel: app, engine, session, tools
 docs/                 design mockups (stage-1-mockup-rev*.pdf, stage-2-*.pdf)
@@ -761,8 +764,37 @@ options live, and a coder that reads it can quietly build one. Everything else i
 `.synapse` stays readable, because the brief and the contract are there to be
 read.
 
-**Eyes are a skill, not a tool.** `visual-review` (`%USERPROFILE%\.agents\skills`
-`\visual-review`, `bin\shot.mjs`) renders a file or URL with the machine's own
+**Synapse ships the skills it needs, and says what it cannot find.** `skills\`
+next to `src\`, `web\` and `config\` is put on the engine's `skills.paths` on every
+boot, ahead of any configured folder and independent of the config — that is the
+difference between "the pipeline works on a new PC" and "the Architect silently
+has no eyes". Move the folder with the app and everything Synapse needs travels
+with it:
+
+| shipped | why |
+|---|---|
+| `visual-review` | renders a mock and reads the PNG — the only way these agents see |
+| `ui-design` | the Designer's craft: direction, tokens, every state, a spec table |
+
+The operator's own folders are extra paths on top (`engine.opencode.skillPaths`,
+one `;`-separated line in Settings → Skills). Nothing is downloaded at runtime — the
+offline rule makes "install" mean "carry the folder", and a third-party skill stays
+where its licence lives.
+
+The failure this guards is silent: a role's skill list survives a move to another
+machine, the folder does not, and the ruleset still *allows* a name that can never
+load. Nothing errors; the capability just vanishes. `GET /api/skills` therefore
+returns `missing` (names a role expects, and which roles) and `paths` (each
+configured folder, and whether it exists). The UI says it once at boot as a toast
+and lists it in Settings → Skills; the role picker shows such a name as *"not
+installed on this machine — the reference is kept, but nothing loads"*, so
+unticking it is deliberate rather than a silent loss. Verified live: a role set to
+`nope-skill` produced the toast, named the role, and Settings read
+`not installed: nope-skill (coder-3)`.
+
+**Eyes are a skill, not a tool, and it ships with Synapse.** `visual-review`
+(`skills\visual-review`, `bin\shot.mjs`) renders a file or URL with the machine's
+own
 Edge (`--headless=new`, a throwaway `--user-data-dir`, ~1.2s) and writes the PNG
 into the project; the model then **reads the PNG**, which works on deepseek and
 not just on a vision model (measured: it named a made-up word and its background

@@ -29,7 +29,11 @@
   },
   "roles": {
     "designer": {
-      "ref": "opencode/deepseek-v4.1-flash-free"
+      "ref": "opencode/deepseek-v4.1-flash-free",
+      "skills": [
+        "ui-design",
+        "visual-review"
+      ]
     },
     "hacker": {
       "ref": "opencode/deepseek-v4.1-flash-free",
@@ -76,7 +80,7 @@
   },
   "logging": {
     "level": "info",
-    "retentionDays": 7,
+    "retentionDays": 1,
     "maxFileMb": 5,
     "channels": {
       "app": true,
