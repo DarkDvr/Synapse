@@ -357,8 +357,12 @@ body.dark .sidebar .nav-link.active > span:first-child { color: #fff; }
 .tree-row.project:hover { background: #262931; border-color: #363a42; }
 .tree-row.project.is-current { background: var(--violet-faint); border-color: var(--violet-line); }
 
-.project-tree { display: grid; gap: 3px; }
-.tree-project { display: grid; gap: 1px; }
+/* `align-content: start` matters: the list is a grid inside a flex column that
+   gives it a definite height, and a grid with free space stretches its rows —
+   one project became a 674px empty box. Rows keep their own height and the
+   free space sits at the bottom, where the scrollbar grows into it. */
+.project-tree { display: grid; gap: 3px; align-content: start; }
+.tree-project { display: grid; gap: 1px; align-content: start; }
 
 .tree-row {
   display: flex; align-items: center; gap: 4px;
@@ -1411,8 +1415,8 @@ body[data-mode="single"] .keep-toggle { display: none; }
 .set-group h4 {
   margin: 0 0 3px; padding-bottom: 7px;
   font-size: 11.5px; font-weight: 700; letter-spacing: 0.09em;
-  text-transform: uppercase; color: var(--text);
-  border-bottom: 1px solid var(--line);
+  text-transform: uppercase; color: var(--yellow);
+  border-bottom: 1px solid rgba(237, 194, 90, 0.55);
 }
 .set-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 10px; }
 .set-grid.cols-3 { grid-template-columns: repeat(3, 1fr); }

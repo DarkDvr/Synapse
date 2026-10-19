@@ -1060,6 +1060,13 @@ This is once per directory per process and needs no config.
   canvas does the scaling, not the window — and a `file://` image **taints the
   canvas** unless `--allow-file-access-from-files` is passed, which makes
   `toDataURL` throw.
+- **A grid with a definite height stretches its rows.** `.project-tree` is a grid
+  inside the sidebar's flex column; giving it `flex: 1` handed it a height, and a
+  grid with free space distributes it across the rows — one project became a
+  674px empty box with its name floating in the middle. `align-content: start` is
+  the fix, on the list and on each project. It only showed with *few* projects:
+  with nine the content exceeded the box and there was no free space to stretch,
+  which is exactly how a test with the wrong fixture passes.
 - **Scrollbar stability.** A scroll container must never change the width of its
   contents. `scrollbar-gutter: stable` is set on `html` and on `.chat-scroll`.
   Without it, expanding a tool made the page taller, the page scrollbar
