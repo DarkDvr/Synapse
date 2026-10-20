@@ -118,24 +118,39 @@ try {
     notify: (n) => seen.push('alarm: ' + n.what),
   });
   const turn = (cmd) => [{ parts: [{ type: 'tool', name: 'shell', input: { command: cmd } }] }];
-  const render = 'node "F:/dev/Synapse/skills/visual-review/bin/shot.mjs" "F:/dev/Synapse.Projects/x/bin/index.html"';
+  const alarmCount = (msgs, sessionId = 'arch') => {
+    seen.length = 0;
+    guard.checkTurn({ sessionId, messages: msgs, label: 'turn' });
+    return seen.filter((s) => s.startsWith('alarm:')).length;
+  };
 
-  seen.length = 0;
-  guard.checkTurn({ sessionId: 'arch', messages: turn(render), label: 'turn', trustShell: true });
-  expect('architect render is an info line, not an alarm', !seen.some((s) => s.startsWith('alarm:')) && seen.some((s) => s.startsWith('info:')));
-
-  seen.length = 0;
-  guard.checkTurn({ sessionId: 'worker', messages: turn(render), label: 'turn', trustShell: false });
-  expect('a worker naming the harness is still an alarm', seen.some((s) => s.includes('alarm: shell command naming the harness')));
-
-  seen.length = 0;
-  guard.checkTurn({
-    sessionId: 'arch',
-    messages: [{ parts: [{ type: 'tool', name: 'write', input: { filePath: 'F:\\dev\\Synapse\\src\\index.js' } }] }],
-    label: 'turn',
-    trustShell: true,
-  });
-  expect('a write inside the harness is an alarm even for the Architect', seen.some((s) => s.includes('WRITE INSIDE THE HARNESS')));
+  const render = 'node "F:/dev/Synapse/skills/visual-review/bin/shot.mjs" "F:/Synapse.Projects/x/bin/index.html" --out "F:/Synapse.Projects/x/shot.png"';
+  expect('running a skill is not an alarm', alarmCount(turn(render)) === 0);
+  expect('running a skill is not an alarm for a worker either', alarmCount(turn(render), 'worker') === 0);
+  expect(
+    'a piped render with a 2>&1 is still tool use',
+    alarmCount(turn('Get-ChildItem F:\\dev\\Synapse\\skills\\visual-review -Recurse | node "F:/dev/Synapse/skills/visual-review/bin/shot.mjs" "F:/x.html" 2>&1 | Out-String')) === 0,
+  );
+  expect(
+    'writing into skills is an alarm',
+    alarmCount(turn('Set-Content F:/dev/Synapse/skills/visual-review/bin/shot.mjs -Value "x"')) === 1,
+  );
+  expect(
+    'redirecting a skill run into a file is an alarm',
+    alarmCount(turn('node F:/dev/Synapse/skills/visual-review/bin/shot.mjs F:/x.html > out.txt')) === 1,
+  );
+  expect(
+    'a command naming the rest of the harness is an alarm',
+    alarmCount(turn('node F:/dev/Synapse/src/index.js')) === 1,
+  );
+  expect(
+    'a write tool on a harness file is an alarm',
+    alarmCount([{ parts: [{ type: 'tool', name: 'write', input: { filePath: 'F:\\dev\\Synapse\\src\\index.js' } }] }]) === 1,
+  );
+  expect(
+    'naming the projects root is not naming the harness',
+    alarmCount(turn('node F:/dev/Synapse.Projects/x/bin/app.js')) === 0,
+  );
 }
 
 console.log(checks.join('\n'));

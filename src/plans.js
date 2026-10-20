@@ -515,9 +515,9 @@ const ROLE_MANDATES = {
     'tokens as real values, and the values for each theme that was asked for. Then one self-contained mock per screen',
     'at .synapse/design/mock-1.html, mock-2.html and so on - plain HTML with inline CSS, static, opening at any width.',
     'Two mocks is the ceiling: the operator picks a direction, not a catalogue, and every extra one is another',
-    '300 KB of inlined fonts and another round of renders to read back. States of one screen belong in one mock',
-    'behind a query flag (?state=night), not in four files. The spec is what the builder is held to, so make it',
-    'exact enough to check line by line.',
+    'file to keep in step and another round of renders to look at. States of one screen belong in one mock behind',
+    'a query flag (?state=night), not in a file each. The spec is what the builder is held to, so make it exact',
+    'enough to check line by line.',
   ].join(' '),
   hacker: [
     'You are the Hacker. Use the build the way the operator will, then the way a person in a hurry will, and report',
@@ -549,8 +549,8 @@ const HACKER_FOCUS = {
     'letters and emoji, a missing file, the wrong file, a path with spaces, an option that does not exist, starting',
     'it from the wrong folder, pressing Enter twice, closing the window half-way. Judge what they would see on',
     'their own screen and machine: a crash, a wrong answer, silence where something should happen, a message',
-    'nobody can understand, work lost. An edge that needs another hemisphere, another screen size other than the',
-    'one they asked for, or a hand-edited constant is an observation, not a finding. Do not audit the security of',
+    'nobody can understand, work lost. An edge that needs another hemisphere or a hand-edited constant is an',
+    'observation, not a finding. Do not audit the security of',
     'the build: no hostile-environment construction, no locale or interpreter matrices, no fuzzing loops. If',
     'something looks genuinely dangerous, note it as an observation and move on.',
   ].join(' '),
@@ -812,9 +812,9 @@ export function briefSession({ dir, role = 'architect', auto = false, skills = '
     lines.push(
       `Write the whole plan before the first task runs: every phase you listed needs its tasks in the file now, ` +
         `with role, order and dependsOn, so the operator can read the job end to end on one screen. A plan that ` +
-        `grows a task at a time is not a plan anyone can approve - on the clock project it opened with two steps ` +
-        `and the Architect added seven while it worked. If a task must be added, removed or reordered later, make ` +
-        `the change and say why in one line to the operator: a justified change is fine, an unannounced one is drift.`,
+        `grows a task at a time is not a plan anyone can approve: what they agreed to on the first screen has to ` +
+        `be what runs. If a task must be added, removed or reordered later, make the change and say why in one ` +
+        `line to the operator - a justified change is fine, an unannounced one is drift.`,
     );
     lines.push(
       `design: delegate to designer, which writes ${PLAN_DIR}/design/design.md (screens, controls, colour tokens, ` +

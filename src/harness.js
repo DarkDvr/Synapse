@@ -21,6 +21,19 @@ import { execFile } from 'node:child_process';
 const WRITE_TOOLS = /^(write|edit)$/;
 const SHELL_TOOLS = /^(shell|bash|execute)$/;
 
+// A shell command is judged on what it does to the harness, not on the fact that
+// it names it. `skills/` is the harness's toolbox — the visual-review renderer,
+// the design briefs — and running one is ordinary tool use, already in the
+// transcript, the census and the session log. On the clock run the Architect ran
+// `shot.mjs` before every delegation and each one was a red alarm about the
+// feature working as designed.
+//
+// So a command that names nothing but `skills/` is quiet, *unless* it is shaped
+// like a write: a redirect with a real target, or one of the verbs that changes
+// a file. `2>&1` is not a redirect to a file, and `--delete` is not `del`.
+const WRITE_HINT =
+  /(?:^|[\s;&|(])(?:set-content|add-content|out-file|new-item|remove-item|rename-item|move-item|copy-item|del|erase|rm|mv|cp|move|copy|robocopy|tee-object)\b|>\s*[^\s&|]/i;
+
 export function createHarnessGuard({ root, logger, notify }) {
   const log = logger.channel('app');
   const asKey = (p) => String(p || '').replace(/\\/g, '/').toLowerCase();
@@ -30,6 +43,24 @@ export function createHarnessGuard({ root, logger, notify }) {
   const inHarness = (value) => {
     const key = asKey(value);
     return Boolean(key) && (key === rootKey || key.includes(`${rootKey}/`));
+  };
+
+  const skillsKey = `${rootKey}/skills/`;
+
+  /** The harness paths a command names, as keys. Split on shell punctuation, so a
+   *  quoted path with spaces survives and a path inside a pipe still counts. */
+  const harnessPathsIn = (command) =>
+    String(command || '')
+      .split(/[\s"'`;|&()<>,]+/)
+      .filter(Boolean)
+      .map(asKey)
+      .filter((token) => token === rootKey || token.includes(`${rootKey}/`));
+
+  /** Is this shell command just the harness's own toolbox being used? */
+  const runsTheToolbox = (command) => {
+    const named = harnessPathsIn(command);
+    if (!named.length || !named.every((p) => p.startsWith(skillsKey))) return false;
+    return !WRITE_HINT.test(String(command));
   };
 
   /**
@@ -62,7 +93,7 @@ export function createHarnessGuard({ root, logger, notify }) {
         const input = part.input && typeof part.input === 'object' ? part.input : {};
         const target = input.filePath || input.file_path || input.path || '';
         if (WRITE_TOOLS.test(name) && inHarness(target)) writes.add(String(target));
-        if (SHELL_TOOLS.test(name) && inHarness(input.command)) {
+        if (SHELL_TOOLS.test(name) && inHarness(input.command) && !runsTheToolbox(input.command)) {
           shells.add(String(input.command).replace(/\s+/g, ' ').slice(0, 160));
         }
       }
@@ -79,24 +110,12 @@ export function createHarnessGuard({ root, logger, notify }) {
     } catch { /* a broken listener must not break a run */ }
   }
 
-  /**
-   * Report a turn's own tool calls. Cheap: the caller already has the messages.
-   *
-   * `trustShell` is for the Architect and the operator's own session, and only
-   * for the shell line. The Architect is the one role that is *meant* to reach
-   * into the harness: the visual-review skill lives there and the brief tells it
-   * to render the build before judging a report. On the clock project eleven of
-   * its shells were `shot.mjs` runs, every one of them a red alarm about the
-   * feature working as designed. A *write* is still an alarm for everyone — the
-   * ruleset denies it as well — and a worker naming the harness is still an
-   * alarm, because no worker has business there.
-   */
-  function checkTurn({ sessionId, messages, label, trustShell = false }) {
+  /** Report a turn's own tool calls. Cheap: the caller already has the messages. */
+  function checkTurn({ sessionId, messages, label }) {
     const { writes, shells } = inspect(messages);
     if (writes.length) alarm({ sessionId, what: 'WRITE INSIDE THE HARNESS', paths: writes, note: label });
     if (shells.length) {
-      if (trustShell) log.info(`used the harness (${label}): ${shells.join(' | ')}`);
-      else alarm({ sessionId, what: 'shell command naming the harness', paths: shells, note: label });
+      alarm({ sessionId, what: 'shell command naming the harness', paths: shells, note: label });
     }
     return { writes, shells };
   }

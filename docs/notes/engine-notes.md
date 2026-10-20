@@ -482,15 +482,18 @@ thinking**; 13% of the time in tools, the rest in generation.
   own screen and machine, calls another hemisphere / another screen size / a
   hand-edited constant an observation rather than a finding, and says a minor or
   nice-to-have is a note, not a reason for another fix round.
-- **Harness alarms: only a worker's shell counts.** Eleven of the run's alarms were
-  the Architect running `skills\visual-review\shot.mjs` before judging a report —
-  the feature working as designed. `checkTurn({ trustShell })` is set for any
-  session Synapse did not mark `internal` (the Architect and the operator's own),
-  so those are an info line; a worker naming the harness is still an alarm, and a
-  *write* inside the harness is an alarm for everyone. The one
-  "CHANGED DURING A WORKER RUN" alarm was the operator's own Settings save, and
-  `configSavedAt()` now excuses exactly that: a config change no save of ours
-  explains is still reported.
+- **Harness alarms judge what a shell does, not what it names.** Eleven of the
+  run's alarms were the Architect running `skills\visual-review\shot.mjs` before
+  judging a report — the toolbox doing its job, already visible in the transcript,
+  the census and the session log. A command whose only harness paths are under
+  `skills/` is now quiet; one that names the rest of the harness, or that is shaped
+  like a write (a redirect with a real target, or `Set-Content`/`rm`/`mv`/…), is
+  still an alarm, and a *write tool* on a harness file is an alarm for everyone.
+  Replayed over the run's 399 shell commands: 21 would have alarmed before, 1 does
+  now (a compound command that edits project scratch *and* runs the renderer —
+  ambiguous, and kept on the loud side). The one "CHANGED DURING A WORKER RUN"
+  alarm was the operator's own Settings save, and `configSavedAt()` now excuses
+  exactly that: a config change no save of ours explains is still reported.
 
 ### What the engine actually does with a permission rule (measured, 2.0.30)
 
