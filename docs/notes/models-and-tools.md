@@ -121,6 +121,22 @@ window watchdog (`src/runs.js`). Left out, the engine reports **its own default
 window, so set it when you know it. Measured: `qwen3.8-27b-ud` on `localhost:1235`
 answered a turn through the engine in **18 s**, no other change needed.
 
+**Ask the server what its window really is, don't guess from the card.** LM Studio
+answers `GET /api/v0/models` with `max_context_length` (what the model supports) and
+`loaded_context_length` (what it actually reserved). Measured here: 262,144 and
+**39,168** — a 27B at IQ3_S on a 16 GB card. Synapse was configured with 40,960,
+1,792 tokens *larger than the window*, and the server's **Context Overflow:
+Truncate Middle** would have silently dropped the middle of an oversized prompt
+rather than failing — for an agent that means keeping the task at the top and the
+last turn at the bottom while the file contents in between vanish. Set the limit to
+the loaded length or below.
+
+**What a 40k window costs.** The engine compacts at roughly the same point the
+watchdog does (~60% of the window): a 32-turn task at 39k took **3 compactions**
+and read 541k prompt tokens, peaking at 24.6k. That is workable for a small task and
+would be constant churn for a big one — which is the argument for splitting tasks
+rather than for a bigger window.
+
 ### The model cache (`data\model-cache.json`)
 
 Models come and go; what we learned about one should outlive it leaving the
