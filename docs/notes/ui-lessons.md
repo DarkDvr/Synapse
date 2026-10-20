@@ -698,6 +698,37 @@ bold, italic, strikethrough and links: the range these models actually produce.
   is gone from the UI and stays in `logs\app.log` (`logPlanState`). A plan that
   cannot be read is still shown: that one the operator does need, because the pane
   would otherwise look empty for no reason.
+- **A plan step carries its own stopwatch, and that is what makes a row two lines.**
+  The badge and the clock stack in one right-hand column (`plan-side`), so the row
+  is as tall as the stack whatever the title does — no `min-height` guessing. The
+  time is the sum of that task's completed runs from `runs.jsonl` (served as
+  `spent` on the plan payload, because a client clock only knows about the time
+  this browser has been open) plus the live run's start while it is in hand.
+  A step nobody has run keeps the line and hides its zeros: the height must not
+  jump from row to row, but ten `00:00:00` under ten badges is noise.
+- **The tools panel never met the chat's bottom because the grid had one row too
+  many.** `.inspector` declared `auto auto minmax(0,1fr)` and had two children —
+  the plan and the tools — so the tools sat in an `auto` row and the slack row
+  stayed empty: measured 40px short of the dock. It is now
+  `fit-content(55%) minmax(180px, 1fr)`: a short plan sizes to itself, a long one
+  scrolls inside its panel, and the census always gets 180px instead of being
+  squeezed to nothing. The bottoms now land on the same pixel (988/988 at a
+  1000px window).
+- **The jump buttons live in the transcript's top-right corner, at 22px.** At the
+  middle of the pane they covered two lines of whatever was being read; in the
+  corner they cover a sliver of one, and the pair sits side by side rather than
+  stacked.
+- **The PHASES line is gone.** It was the Architect's menu choice, not something
+  the operator acts on, and it was not always true — a phase can be declared and
+  then dropped.
+- **Panel grounds are two photographs at 96% surface over them.** Below ~90% the
+  image starts to read as an image and fights the text; at 96% it is tone. Two
+  things worth keeping: `body.dark .sidebar`, because the locked baseline sets that
+  background with a two-class shorthand and would reset a bare `.sidebar` rule; and
+  **JPEG had no MIME type** in the static server, so `bg-left.jpg` was served as
+  `application/octet-stream` — it "usually" paints, which is not a reason to leave
+  a type out of a table that exists to hold types. `.jpg`, `.jpeg` and `.webp` are
+  there now.
 - **The ask row is right-aligned, state first.** The counter and the buttons sit
   together at the right and the warning text takes the left — which needed the
   DOM order changed as well as `justify-content: flex-end`, since `margin-left:
