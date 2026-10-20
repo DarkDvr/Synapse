@@ -163,6 +163,34 @@ export function contextStats(messages) {
 /** Token counts read as words, not as digits: 212k, 1.4M. */
 const tokens = (n) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : `${Math.round(n / 1e3)}k`);
 
+/**
+ * How much of a model's window a prompt may use before it is full.
+ *
+ * The next turn needs room for its own output and for the tool results it will
+ * pull in, so the ceiling is the window minus the model's output limit minus a
+ * slice (5%, floor 8k). Deliberately derived from the model's own numbers: 1M
+ * hosted models and 62k local ones both land on something sane, and a model whose
+ * window nobody recorded gets no ceiling at all rather than a guessed one.
+ */
+export function windowRoom({ context, output } = {}) {
+  if (!Number(context)) return 0;
+  const slack = Math.max(8000, Math.round(context * 0.05));
+  return Math.max(0, context - (Number(output) || 0) - slack);
+}
+
+/**
+ * What the window watchdog should do on this poll.
+ *
+ * `armed` is the whole state machine: ask once when the prompt reaches the room,
+ * then stay quiet until the transcript has actually shrunk (a compaction that did
+ * not take must not become a request every 1.5 seconds).
+ */
+export function windowAction(state, ctx, room) {
+  if (!room || !ctx || state?.off) return 'none';
+  if (state.armed) return ctx >= room ? 'compact' : 'none';
+  return ctx < room * 0.7 ? 'arm' : 'none';
+}
+
 export function createRunner({ engine, logger, getConfig, guard, notify, modelCache }) {
   const log = logger.channel('tools');
   // The same milestones into the app channel, which is mirrored to the console:
@@ -624,6 +652,8 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
               emit('run.progress', { ...live });
             },
             signal,
+            // The room this model actually has, or nothing at all.
+            contextWindow(modelRef),
           );
 
           if (finished.stopped) {
@@ -960,6 +990,78 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
   }
 
   /**
+   * The room a model has, if the catalog actually knows it.
+   *
+   * Never guessed. A worker's window is 1M on most hosted models, 200k on a few
+   * free ones and ~62k on a local LLM, so any single number baked in here is wrong
+   * for most runs — 200k was the old assumption and it was only ever right by
+   * accident. `modelCache.get()` is the engine's own catalog, recorded at boot;
+   * the operator's `modelLimits` override wins when they have set one.
+   */
+  function contextWindow(ref) {
+    if (!ref) return null;
+    const cached = (() => {
+      try { return modelCache?.get?.(ref); } catch { return null; }
+    })();
+    const override = getConfig()?.modelLimits?.[ref] || {};
+    const context = Number(override.context) || Number(cached?.context) || 0;
+    const output = Number(override.output) || Number(cached?.output) || 0;
+    if (!context) return null;
+    return { context, output, room: windowRoom({ context, output }) };
+  }
+
+  // One entry per session: the last turn's prompt size, whether the watchdog is
+  // armed, and how many times it has asked. A run-wide Map because a session is
+  // polled once per 1.5s and this has to survive between polls.
+  const windows = new Map();
+
+  /**
+   * Compact *before* the window closes, never on a schedule.
+   *
+   * This is a safeguard, not a policy: the engine compacts by itself when it
+   * decides to, and on the clock run it did so at 290k on a model advertising 1M.
+   * What Synapse adds is the case where the engine's own read of the window is
+   * wrong or absent — a local model, a provider lying about its limit — because
+   * the failure there is an oversized request, and an oversized request is the
+   * one error a retry can never fix.
+   *
+   * Silent when nothing is known, and silent until the boundary is actually near.
+   */
+  async function watchWindow(sessionId, messages, window) {
+    if (!window?.room) return;
+    const last = [...messages].reverse().find((m) => m.type === 'assistant' && m.raw?.tokens);
+    if (!last) return;
+    const t = last.raw.tokens;
+    const ctx = (t.input || 0) + (t.cache?.read || 0);
+    if (!ctx) return;
+
+    const state = windows.get(sessionId) || { armed: true, times: 0, off: false };
+    windows.set(sessionId, state);
+
+    const action = windowAction(state, ctx, window.room);
+    if (action === 'arm') { state.armed = true; return; }
+    if (action !== 'compact') return;
+
+    state.armed = false;
+    state.times += 1;
+    out.warn(
+      `context ${tokens(ctx)} of ${tokens(window.context)} in ${sessionId} - compacting before the window closes`,
+    );
+    try {
+      const ok = await engine.compact(sessionId);
+      if (!ok) {
+        state.off = true;
+        out.warn(`the engine has no compaction to offer; ${sessionId} is left to its own limit`);
+      }
+    } catch (err) {
+      // A refused request is not a failed run: re-arm and let the engine's own
+      // handling have its turn.
+      state.armed = true;
+      out.warn(`compaction request refused for ${sessionId}: ${err.message}`);
+    }
+  }
+
+  /**
    * Poll until the turn closes with `idle`, or nothing has changed for `stallMs`.
    *
    * There is deliberately no wall-clock ceiling. A turn that is working is left
@@ -974,7 +1076,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
    * A pending question also pauses the clock: the operator may take hours, and
    * the transcript itself says so.
    */
-  async function waitForIdle(sessionId, before, stallMs, onTool, signal) {
+  async function waitForIdle(sessionId, before, stallMs, onTool, signal, window = null) {
     let lastActivity = Date.now();
     let lastKey = '';
     let sig = '';
@@ -1007,6 +1109,11 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
           onTool(tool);
         }
       }
+
+      // The prompt is in hand on every poll, which is the only place in a run
+      // where the window can be watched without another engine call. It does
+      // nothing at all unless the model's real limit is known and near.
+      if (window) await watchWindow(sessionId, messages, window);
 
       const last = messages[messages.length - 1];
       const waiting = (last?.parts || []).some(
@@ -1263,8 +1370,21 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
       }
 
       // Watch the turn it started. Without this the runner cannot tell a report
-      // that was judged from one that was read by nobody.
-      const finished = await waitForIdle(architectId, before, settings.stallSec * 1000, null, signal);
+      // that was judged from one that was read by nobody. The Architect's session
+      // outlives every delegation, so it gets the same window watch — and its own
+      // model, not the card's, since the operator may have switched it.
+      let archRef = getConfig()?.roles?.architect?.ref || null;
+      try {
+        archRef = (await engine.getSession(architectId))?.model || archRef;
+      } catch { /* the card's choice is the best we have */ }
+      const finished = await waitForIdle(
+        architectId,
+        before,
+        settings.stallSec * 1000,
+        null,
+        signal,
+        contextWindow(archRef),
+      );
       if (finished.stopped) return { ok: false, stopped: true };
 
       let messages = [];

@@ -471,7 +471,13 @@ thinking**; 13% of the time in tools, the rest in generation.
   auto-compacted (a 228k-token summarise call). The causes are visible: 84% of
   turns issued exactly one tool call, and the engine stores `reasoning` parts in
   the transcript (985 of them here), so thinking is re-sent every turn —
-  per-turn growth measured ≈ text + thinking + tool output.
+  per-turn growth measured ≈ text + thinking + tool output. What that prompt is
+  made of, measured on t4 (212k, no compaction): **thinking 43%, tool results
+  30%, tool call arguments 19%, screenshots 4%, instructions 3%, the actual
+  conversation ~1%**. Whole file bodies ride along as `write` arguments, and a
+  file read at turn 12 is still in the prompt after turn 40 edited it.
+  Compaction is not the fix and 200k is not a number to build on — see the window
+  watchdog in `docs/notes/models-and-tools.md`.
 - **So the harness reports the cost of each run.** The report the Architect gets,
   and the chat, carry one line: `Effort: 130 turns, 118k tokens written (74%
   thinking), context peaked at 212k`. It is also on the `runs.jsonl` result line as

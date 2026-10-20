@@ -15,7 +15,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { readPlan } from '../src/plans.js';
-import { contextStats } from '../src/runs.js';
+import { contextStats, windowRoom, windowAction } from '../src/runs.js';
 import { createHarnessGuard } from '../src/harness.js';
 
 const checks = [];
@@ -107,6 +107,33 @@ try {
   expect('thinking share is reported', stats.thinkShare === 77, String(stats.thinkShare));
   expect('a compaction is counted', stats.compactions === 1);
   expect('no messages is not a crash', contextStats([]).turns === 0 && contextStats(null).peak === 0);
+}
+
+// ── the window watchdog ─────────────────────────────────────────
+{
+  // The three windows this machine actually has: a 1M hosted model, a 200k free
+  // one, and the 62k local LLM the operator will plug in later.
+  const big = windowRoom({ context: 1048576, output: 32000 });
+  const free = windowRoom({ context: 200000, output: 32000 });
+  const local = windowRoom({ context: 62000, output: 8000 });
+  // 1,048,576 - 32,000 output - 52,429 (5%) slack.
+  expect('a 1M model keeps room for output and slack', big === 964147, String(big));
+  expect('a 200k model lands near 158k', free === 158000, String(free));
+  expect('a 62k local model lands near 46k', local === 46000, String(local));
+  expect('an unknown window has no ceiling', windowRoom({}) === 0 && windowRoom({ context: 0 }) === 0);
+
+  // The state machine: ask once at the boundary, then stay quiet until the
+  // transcript actually shrinks.
+  const s = { armed: true, times: 0, off: false };
+  expect('nothing happens well below the room', windowAction(s, 100000, big) === 'none');
+  expect('it fires at the room', windowAction(s, big, big) === 'compact');
+  s.armed = false;
+  expect('a second poll does not fire again', windowAction(s, big + 1000, big) === 'none');
+  expect('still quiet while above 70%', windowAction(s, Math.round(big * 0.8), big) === 'none');
+  expect('it re-arms once the transcript shrinks', windowAction(s, Math.round(big * 0.6), big) === 'arm');
+  expect('an engine without compaction stays off', windowAction({ armed: true, off: true }, big, big) === 'none');
+  expect('no window, no action', windowAction(s, 999999, 0) === 'none');
+  expect('no context yet, no action', windowAction(s, 0, big) === 'none');
 }
 
 // ── the harness guard ───────────────────────────────────────────

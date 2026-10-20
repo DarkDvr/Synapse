@@ -65,6 +65,34 @@ and stores the operator's choice per role.
   `providers.opencode.models.<id>.limit` in the isolated engine config on every
   boot. That changes only the engine's local budgeting ceiling; the provider's
   own limit still applies. Output limits were *not* tested — only context.
+- **There is no such thing as "the" context window, so nothing may assume one.**
+  Most hosted models here are 1,048,576; MiMo, Big Pickle and GLM are 200,000; a
+  local LLM the operator plugs in later will be ~62,000. Even the *engine* does
+  not compact at the model's limit: on the clock run it auto-compacted at 290k on
+  a model advertising 1M. So compaction is not a schedule and not a token number.
+
+**The window watchdog (`src/runs.js`).** The one thing Synapse can do about it is
+a boundary check, and only from facts:
+
+- `windowRoom({context, output})` = `context - output - max(8k, 5% of context)` —
+  the room left for the next turn's own output and for what it will pull in.
+- It fires when *that model's* recorded window is about to be reached, once, and
+  re-arms only after the transcript has fallen below 70% of the room (a compaction
+  that did not take must not become a request every poll).
+- **A window nobody recorded gets no watchdog at all.** `modelCache.get(ref)` or
+  the operator's `modelLimits` is the only source; guessing is how a 62k local
+  model would be treated like a 1M hosted one.
+- It runs inside `waitForIdle`, which already has the messages on every 1.5s poll,
+  so it costs no extra engine call and can never slow a turn down. It watches the
+  Architect too (its session outlives every delegation), using the session's own
+  model rather than the card's.
+- `POST /api/session/{id}/compact` is "durably admit a session compaction request
+  … it runs at the next step boundary", so it is safe to send mid-run; a 409 means
+  one is already queued. The transcript is kept; only what the model is sent is
+  replaced by the summary.
+- This is a *safeguard*, not a strategy. The failure it prevents is an oversized
+  request, which is the one error a retry can never fix. Prevention — shorter
+  tasks, batched tools — is the strategy.
 
 ### The model cache (`data\model-cache.json`)
 

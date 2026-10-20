@@ -505,6 +505,21 @@ export class OpenCodeEngine extends Engine {
     });
   }
 
+  /**
+   * Ask the engine to compact a session.
+   *
+   * "Durably admit a session compaction request. Steers by default: it runs at the
+   * next step boundary instead of waiting behind queued prompts." — so this is a
+   * queue entry, not a blocking call, which is what makes it safe to send from
+   * inside a run. The summary replaces the transcript the model is sent; the
+   * transcript itself is kept.
+   */
+  async compact(sessionId) {
+    await this.request('POST', `/api/session/${encodeURIComponent(sessionId)}/compact`, {});
+    this.sessionLog.info(`compact -> ${sessionId}`);
+    return true;
+  }
+
   async getMessages(sessionId) {
     const r = await this.request(
       'GET',

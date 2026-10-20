@@ -18,6 +18,14 @@ over its HTTP + SSE API and rebuilds the interface from scratch.
 Everything lives in `F:\dev\Synapse`. Nothing is written outside it except the
 recycled engine binary it locates.
 
+**It is a harness for any project, and any model.** No project, product or model
+may be named in its code, its briefs or its config: the briefs are sent to every
+project this harness will ever run, so a rule shaped around one project's incident
+is wrong for the next one. Write the general rule here and the incident that
+earned it in `docs/notes/` — the incident explains the rule, it is not the rule.
+The same goes for numbers: never bake in one model's context window, token budget
+or speed.
+
 ---
 
 ## Hard rules
@@ -210,7 +218,8 @@ skills/               shipped WITH Synapse, always on the engine's skill path
   code-craft/         the coders' brief: small surface, fail loudly, prove it
 data/                 runtime state (projects, census, probe results, engine home)
 logs/                 one file per channel: app, engine, session, tools
-docs/                 design mockups (*.pdf) and the detail behind this file
+docs/                 design mockups (*.pdf), clock-test-2.md (the run the
+                      briefs were rewritten around), and the detail behind this file
   notes/              engine-notes, models-and-tools, ui-lessons, runbook
 ```
 

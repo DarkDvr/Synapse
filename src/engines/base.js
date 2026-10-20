@@ -39,6 +39,10 @@ export class Engine extends EventEmitter {
   async prompt() { throw new Error(`${this.kind}: prompt() not implemented`); }
   async interrupt() {}
   async replyPermission() {}
+  // Ask the session to summarise itself and carry on. The engine queues it for
+  // its next step boundary, so it is safe to ask mid-turn. Returns false when the
+  // engine has no such operation; the caller then leaves the session alone.
+  async compact() { return false; }
   async updateSessionTitle() { throw new Error(`${this.kind}: updateSessionTitle() not implemented`); }
   async deleteSession() { throw new Error(`${this.kind}: deleteSession() not implemented`); }
 
