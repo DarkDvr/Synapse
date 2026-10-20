@@ -166,6 +166,34 @@ export class OpenCodeEngine extends Engine {
       next.providers = providers;
     }
 
+    // Other model servers — a local LLM, a second vendor — declared in Synapse's
+    // config and handed to the engine as OpenAI-compatible providers. The engine
+    // reads `provider` (singular) for definitions and `providers` (plural) for
+    // per-provider overrides; getting those two names the wrong way round is
+    // silent, so both are written deliberately and only these keys are ours.
+    const providers = Array.isArray(this.cfg.providers) ? this.cfg.providers : [];
+    if (providers.length) {
+      const defs = { ...(cfg.provider || {}) };
+      for (const p of providers) {
+        const models = {};
+        for (const m of p.models) {
+          models[m.id] = {
+            name: m.name,
+            ...(m.context || m.output
+              ? { limit: { ...(m.context ? { context: m.context } : {}), ...(m.output ? { output: m.output } : {}) } }
+              : {}),
+          };
+        }
+        defs[p.id] = {
+          npm: p.npm || '@ai-sdk/openai-compatible',
+          name: p.name || p.id,
+          options: { baseURL: p.baseURL, ...(p.apiKey ? { apiKey: p.apiKey } : {}) },
+          models,
+        };
+      }
+      next.provider = defs;
+    }
+
     // Skills Synapse ships, plus any folder the operator adds.
     //
     // The engine also reads `~/.agents/skills` by default — that is where the

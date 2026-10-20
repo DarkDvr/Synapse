@@ -19,7 +19,21 @@
           "context": 1048576
         }
       },
-      "skillPaths": []
+      "skillPaths": [],
+      "providers": [
+        {
+          "id": "bionic",
+          "name": "Bionic",
+          "baseURL": "http://localhost:1235/v1",
+          "apiKey": "",
+          "models": [
+            {
+              "id": "qwen3.8-27b-ud",
+              "name": "Qwen 3.8 27B UD"
+            }
+          ]
+        }
+      ]
     }
   },
   "defaults": {
@@ -41,6 +55,7 @@
     },
     "architect": {
       "ref": "opencode/deepseek-v4.1-flash-free",
+      "variant": "low",
       "skills": [
         "visual-review"
       ]

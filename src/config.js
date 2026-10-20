@@ -31,6 +31,19 @@ export const DEFAULTS = {
       // Folders of agent skills to hand to the engine. Empty by default: this
       // is the operator's choice, not something Synapse should assume.
       skillPaths: [],
+      // Other model servers — usually a local LLM on this machine — registered
+      // with the engine as an OpenAI-compatible provider, so they appear in the
+      // model menu like any other model. Nothing is contacted until a model is
+      // picked and a turn is run; an unreachable server simply fails that turn.
+      //
+      //   { "id": "bionic", "name": "Bionic",
+      //     "baseURL": "http://localhost:1235/v1", "apiKey": "",
+      //     "models": [{ "id": "qwen3.8-27b-ud", "name": "...", "context": 65536, "output": 8192 }] }
+      //
+      // `context`/`output` are optional and only used for the window watchdog and
+      // the engine's own budgeting. Left out, nothing is assumed — see
+      // docs/notes/models-and-tools.md.
+      providers: [],
     },
   },
   defaults: {
@@ -167,6 +180,36 @@ export function normalize(raw) {
   oc.skillPaths = Array.isArray(oc.skillPaths)
     ? oc.skillPaths.map((p) => String(p || '').trim()).filter(Boolean)
     : [];
+
+  // Other model servers: [ { id, name, baseURL, apiKey?, models: [{id, name?, context?, output?}] } ].
+  // A provider without an id, a base URL or at least one model is dropped rather
+  // than half-registered - the engine would answer an empty catalog and the menu
+  // would show a provider with nothing in it.
+  oc.providers = (Array.isArray(oc.providers) ? oc.providers : [])
+    .filter(isPlainObject)
+    .map((p) => {
+      const models = (Array.isArray(p.models) ? p.models : [])
+        .filter(isPlainObject)
+        .map((m) => {
+          const id = String(m.id || '').trim();
+          if (!id) return null;
+          const entry = { id, name: String(m.name || '').trim() || id };
+          for (const key of ['context', 'output']) {
+            const n = Number.parseInt(m[key], 10);
+            if (Number.isFinite(n) && n > 0) entry[key] = n;
+          }
+          return entry;
+        })
+        .filter(Boolean);
+      return {
+        id: String(p.id || '').trim(),
+        name: String(p.name || '').trim(),
+        baseURL: String(p.baseURL || '').trim(),
+        apiKey: String(p.apiKey || ''),
+        models,
+      };
+    })
+    .filter((p) => p.id && p.baseURL && p.models.length);
 
   cfg.defaults.directory = String(cfg.defaults.directory || '');
   // The mode is per session now (Single at creation, switched live), so the old

@@ -218,8 +218,9 @@ skills/               shipped WITH Synapse, always on the engine's skill path
   code-craft/         the coders' brief: small surface, fail loudly, prove it
 data/                 runtime state (projects, census, probe results, engine home)
 logs/                 one file per channel: app, engine, session, tools
-docs/                 design mockups (*.pdf), clock-test-2.md (the run the
-                      briefs were rewritten around), and the detail behind this file
+docs/                 design mockups (*.pdf), clock-test-2.md and shift-test-1.md
+                      (the runs the briefs were rewritten around), and the detail
+                      behind this file
   notes/              engine-notes, models-and-tools, ui-lessons, runbook
 ```
 

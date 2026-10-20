@@ -94,6 +94,33 @@ a boundary check, and only from facts:
   request, which is the one error a retry can never fix. Prevention — shorter
   tasks, batched tools — is the strategy.
 
+### Other model servers: a local LLM in the same dropdown
+
+`engine.opencode.providers` in `config\synapse.config.json` registers any
+OpenAI-compatible server — a local LLM, a second vendor — and it then appears in the
+model menu like any other model:
+
+```json
+"providers": [
+  { "id": "bionic", "name": "Bionic",
+    "baseURL": "http://localhost:1235/v1", "apiKey": "",
+    "models": [{ "id": "qwen3.8-27b-ud", "name": "Qwen 3.8 27B UD" }] }
+]
+```
+
+`src/engines/opencode.js` writes each one into the engine's own config as
+`provider.<id>` with `npm: "@ai-sdk/openai-compatible"`, `options.baseURL` and a
+`models` map — **`provider` singular for definitions, `providers` plural for
+per-provider overrides**, and getting those two names the wrong way round is
+silent. Nothing is contacted until a model is picked and a turn is run; an
+unreachable server fails that turn and nothing else.
+
+`context`/`output` are optional per model, and are the only honest source for the
+window watchdog (`src/runs.js`). Left out, the engine reports **its own default
+(200,000 for a provider it has no limit for)** — which is not the local model's real
+window, so set it when you know it. Measured: `qwen3.8-27b-ud` on `localhost:1235`
+answered a turn through the engine in **18 s**, no other change needed.
+
 ### The model cache (`data\model-cache.json`)
 
 Models come and go; what we learned about one should outlive it leaving the
