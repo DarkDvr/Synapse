@@ -698,6 +698,12 @@ bold, italic, strikethrough and links: the range these models actually produce.
   is gone from the UI and stays in `logs\app.log` (`logPlanState`). A plan that
   cannot be read is still shown: that one the operator does need, because the pane
   would otherwise look empty for no reason.
+- **The step node is the state's dot with the id under it, both on one axis.** The
+  id used to ride inline in front of the title, so a two-line title wrapped around
+  a mark that had nothing to do with it. Now `plan-node` stacks the dot and the id
+  (centred on each other, measured 1224 = 1224), the row is centred rather than
+  top-aligned, and a one-, two- or three-line title all sit level with the dot
+  (row centre 127.3, title centre 127.3). Three lines is the budget now.
 - **A plan step carries its own stopwatch, and that is what makes a row two lines.**
   The badge and the clock stack in one right-hand column (`plan-side`), so the row
   is as tall as the stack whatever the title does — no `min-height` guessing. The
@@ -721,11 +727,23 @@ bold, italic, strikethrough and links: the range these models actually produce.
 - **The PHASES line is gone.** It was the Architect's menu choice, not something
   the operator acts on, and it was not always true — a phase can be declared and
   then dropped.
-- **Panel grounds are two photographs at 96% surface over them.** Below ~90% the
-  image starts to read as an image and fights the text; at 96% it is tone. Two
-  things worth keeping: `body.dark .sidebar`, because the locked baseline sets that
-  background with a two-class shorthand and would reset a bare `.sidebar` rule; and
-  **JPEG had no MIME type** in the static server, so `bg-left.jpg` was served as
+- **The stacked rail's panels end on the same line.** Below 1460px the rail flows
+  under the chat in two halves, and `align-items: start` made each panel size to its
+  own content: the plan ended 100px below the census (1666 vs 1563) and the operator
+  drew a line under the gap. `align-items: stretch` puts both bottoms on 1692, with
+  the plan scrolling inside its panel. (Wide, the fault was different and older —
+  see the `fit-content(55%)` note above.)
+- **Panel grounds: two photographs, and 96% was the wrong instinct.** Both images
+  are already near-black with a glow, so the overlay only has to take the glare
+  off — **50%** over the central frame, **30%** over the sidebar's ribbon. At 96%
+  the operator's word for the sidebar was "pretty much just 1 color"; a photograph
+  dark enough to sit under text needs no help being quiet. The central frame goes on
+  `.stage` (the whole working column), not on the chat panel: the frame's edges are
+  the point, and an opaque dock over it cuts the picture in half — the dock is now
+  `rgba(29,31,35,0.86)` so the ground carries on underneath.
+  Two things worth keeping: `body.dark .sidebar`, because the locked baseline sets
+  that background with a two-class shorthand and would reset a bare `.sidebar` rule;
+  and **JPEG had no MIME type** in the static server, so `bg-left.jpg` was served as
   `application/octet-stream` — it "usually" paints, which is not a reason to leave
   a type out of a table that exists to hold types. `.jpg`, `.jpeg` and `.webp` are
   there now.

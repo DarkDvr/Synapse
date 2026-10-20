@@ -908,7 +908,10 @@ body.dark .sidebar-bottom,
 .chat-dock {
   position: relative;
   display: grid; grid-template-rows: minmax(0, 1fr) auto;
-  background: var(--surface); border: 1px solid var(--line);
+  /* Slightly translucent so the stage's ground carries on underneath it: an
+     opaque panel over a framed background cut the frame in half at the dock's
+     edge. 86% keeps the transcript's surface dark and its contrast intact. */
+  background: rgba(29, 31, 35, 0.86); border: 1px solid var(--line);
   border-radius: 14px; overflow: hidden; min-height: 0;
 }
 
@@ -1432,8 +1435,10 @@ body[data-mode="single"] .keep-toggle { display: none; }
    (a phase can be declared and then dropped). */
 .plan-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; }
 .plan-task {
-  display: grid; grid-template-columns: 10px minmax(0, 1fr) auto;
-  align-items: start; gap: 8px; padding: 5px 6px; border-radius: 7px;
+  display: grid; grid-template-columns: 18px minmax(0, 1fr) auto;
+  /* Centre every cell on the node: one line of title, two or three all sit level
+     with the dot, which is what makes a row of them scan as a list of marks. */
+  align-items: center; gap: 9px; padding: 6px 7px; border-radius: 7px;
   /* 2px, not 1px: on a dark pane a 1px status border was barely a tint and the
      operator's word for it was "too faint". The padding gives back the pixel the
      border took, so the row keeps its size. */
@@ -1441,8 +1446,15 @@ body[data-mode="single"] .keep-toggle { display: none; }
 }
 /* display: inline-block — as an inline span the dot ignores width and height
    and paints as a 4px square (cost an hour once; it is in AGENTS.md) */
+/* The node: the state's dot with the step id under it, both centred on the same
+   axis. The id used to ride inline in front of the title, which made the title
+   wrap around a mark that had nothing to do with it. */
+.plan-node {
+  display: grid; justify-items: center; gap: 3px;
+  align-self: center; min-width: 0;
+}
 .plan-dot {
-  display: inline-block; width: 7px; height: 7px; margin-top: 4px;
+  display: inline-block; width: 9px; height: 9px;
   border-radius: 50%; background: #5b6068; flex: none;
 }
 .plan-task[data-status="doing"] { background: rgba(237, 194, 90, 0.06); border-color: rgba(237, 194, 90, 0.5); }
@@ -1457,7 +1469,7 @@ body[data-mode="single"] .keep-toggle { display: none; }
    Yellow, not amber: amber is the palette's warn colour and this is not a warning,
    and the row's own yellow border already says "in hand". */
 .plan-task[data-status="doing"] .plan-dot {
-  width: 9px; height: 9px; margin-top: 3px;
+  width: 11px; height: 11px;
   background: var(--yellow);
   box-shadow: 0 0 0 3px rgba(237, 194, 90, 0.16);
 }
@@ -1488,15 +1500,13 @@ body[data-mode="single"] .keep-toggle { display: none; }
    and its border, not by shouting, and the pane stays scannable because exactly
    one line is loud. */
 .plan-title {
-  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;
   overflow: hidden; overflow-wrap: anywhere;
   font-size: 12.5px; line-height: 1.4; font-weight: 600; color: #9aa0a8;
 }
 .plan-task[data-status="doing"] .plan-title { color: #fff; font-weight: 700; }
-.plan-id {
-  font-family: var(--mono); font-size: 10px; color: #7b8089;
-  margin-right: 5px; letter-spacing: 0.02em;
-}
+/* Under the dot, centred, and quiet: it is an address, not a title. */
+.plan-id { font-family: var(--mono); font-size: 9.5px; color: #7b8089; letter-spacing: 0.02em; line-height: 1; }
 .plan-note { font-size: 11px; line-height: 1.4; color: var(--red); overflow-wrap: anywhere; }
 /* The right-hand column of a step: the role badge, and under it the step's own
    stopwatch. That stack is what makes two lines the minimum height of a row, which
@@ -1727,7 +1737,11 @@ body:has(.modal-backdrop:not([hidden])) { overflow: hidden; }
     max-height: none;
     grid-template-columns: 1fr 1fr;
     grid-template-rows: auto;
-    align-items: start;
+    /* Stretch, not start: the plan and the tools sit side by side here, and with
+       `start` each sized to its own content, so their bottoms missed by 100px and
+       the operator drew a line under the gap. Stretched, both end on the same
+       edge; a long plan scrolls inside its panel and the census keeps its height. */
+    align-items: stretch;
     align-content: start;
   }
   .inspector > .rail-col {
@@ -1836,23 +1850,25 @@ body:has(.modal-backdrop:not([hidden])) { overflow: hidden; }
 
 /* ── 16. faint grounds ──────────────────────────────────────────────────── */
 
-/* Two reference photographs used as texture, not as pictures: the panel's own
-   surface colour sits over them at ~94%, so what survives is a slow change of
-   tone across the panel. Measured by eye: below 90% the image starts to read as
-   an image and fights the text; at 96% it is invisible on a laptop screen.
+/* Two reference photographs used as grounds, not as pictures. Both are already
+   near-black with a glow, so the overlay only has to take the glare off: 50% over
+   the central frame, 45% over the sidebar's ribbon. At 96% (the first attempt) the
+   operator's word was "pretty much just 1 color" — a photograph dark enough to sit
+   under text needs no help being quiet.
    `background-size: cover` keeps the composition whatever the panel size. */
-.chat-dock {
+.stage {
   background-image:
-    linear-gradient(rgba(29, 31, 35, 0.958), rgba(29, 31, 35, 0.958)),
+    linear-gradient(rgba(20, 21, 34, 0.78), rgba(20, 21, 34, 0.78)),
     url("/assets/bg-center.jpg");
   background-size: cover;
   background-position: center;
+  border-radius: 16px;
 }
 /* `body.dark .sidebar`, not `.sidebar`: the locked baseline sets that background
    with a two-class selector and a shorthand, which would reset the image. */
 body.dark .sidebar {
   background-image:
-    linear-gradient(rgba(25, 27, 42, 0.965), rgba(25, 27, 42, 0.965)),
+    linear-gradient(rgba(21, 22, 34, 0.3), rgba(21, 22, 34, 0.3)),
     url("/assets/bg-left.jpg");
   background-size: cover;
   background-position: center;

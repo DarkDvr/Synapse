@@ -3159,9 +3159,12 @@ function renderPlan() {
         const since = liveRun && liveRun.task === t.id ? Number(liveRun.startedAt) || 0 : 0;
         const total = base + (since ? Date.now() - since : 0);
         return `<li class="plan-task" data-status="${status}">
-          <span class="plan-dot" role="img" aria-label="${esc(PLAN_STATUS[status])}"></span>
+          <span class="plan-node">
+            <span class="plan-dot" role="img" aria-label="${esc(PLAN_STATUS[status])}"></span>
+            <span class="plan-id">${esc(t.id || '?')}</span>
+          </span>
           <span class="plan-main">
-            <span class="plan-title" title="${esc(tooltip)}"><span class="plan-id">${esc(t.id || '?')}</span>${esc(t.title)}</span>
+            <span class="plan-title" title="${esc(tooltip)}">${esc(t.title)}</span>
             ${t.note && asking ? `<span class="plan-note">${esc(t.note)}</span>` : ''}
           </span>
           <span class="plan-side">
