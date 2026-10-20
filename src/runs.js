@@ -138,6 +138,7 @@ function parseInput(input) {
 export function contextStats(messages) {
   let turns = 0;
   let peak = 0;
+  let prompt = 0;
   let generated = 0;
   let thinking = 0;
   let compactions = 0;
@@ -147,13 +148,21 @@ export function contextStats(messages) {
     const t = m.raw?.tokens;
     if (!t) continue;
     turns += 1;
-    peak = Math.max(peak, (t.input || 0) + (t.cache?.read || 0));
+    const sent = (t.input || 0) + (t.cache?.read || 0);
+    peak = Math.max(peak, sent);
+    // Everything the provider was asked to read, summed over the run. This is the
+    // number a free tier meters: a worker re-sends its whole transcript on every
+    // turn, so 84 turns at 200k is 13.7M prompt tokens in half an hour — an order
+    // of magnitude more per minute than an interactive chat, and the reason a
+    // quota that looks untouched in a desktop app runs out under a build.
+    prompt += sent;
     generated += (t.output || 0) + (t.reasoning || 0);
     thinking += t.reasoning || 0;
   }
   return {
     turns,
     peak,
+    prompt,
     generated,
     thinking,
     compactions,
@@ -936,8 +945,8 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
         (resumes ? `, ${resumes} restart${resumes === 1 ? '' : 's'}` : '') +
         (files.length ? `, ${files.length} file(s)` : '') +
         (context?.turns
-          ? `, ${context.turns} turns, ctx peak ${tokens(context.peak)}, ${tokens(context.generated)} written` +
-            ` (${context.thinkShare}% thinking)` +
+          ? `, ${context.turns} turns, ctx peak ${tokens(context.peak)}, ${tokens(context.prompt)} prompt tok, ` +
+            `${tokens(context.generated)} written (${context.thinkShare}% thinking)` +
             (context.compactions ? `, ${context.compactions} compaction(s)` : '')
           : ''),
     );
@@ -1328,8 +1337,9 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     // to doubt the model.
     if (context && context.turns) {
       lines.push(
-        `Effort: ${context.turns} turn${context.turns === 1 ? '' : 's'}, ${tokens(context.generated)} tokens written ` +
-          `(${context.thinkShare}% thinking), context peaked at ${tokens(context.peak)}` +
+        `Effort: ${context.turns} turn${context.turns === 1 ? '' : 's'}, ${tokens(context.prompt)} prompt tokens ` +
+          `read (the provider's meter), ${tokens(context.generated)} written (${context.thinkShare}% thinking), ` +
+          `context peaked at ${tokens(context.peak)}` +
           (context.compactions
             ? context.compactions === 1
               ? ' and was summarised once.'

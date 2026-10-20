@@ -104,6 +104,8 @@ try {
   ]);
   expect('peak is input + cache.read of the biggest turn', stats.peak === 142000, String(stats.peak));
   expect('turns count assistant messages only', stats.turns === 3, String(stats.turns));
+  // 64k + 142k + 3.5k: everything the provider was asked to read.
+  expect('prompt tokens are the sum of every prompt', stats.prompt === 209500, String(stats.prompt));
   // 1300 + 2500 + 100 written, of which 3000 was thinking.
   expect('generated is output + reasoning', stats.generated === 3900, String(stats.generated));
   expect('thinking share is reported', stats.thinkShare === 77, String(stats.thinkShare));
