@@ -357,6 +357,15 @@ Non-obvious, all verified on 2.0.30:
   and keeps every file already written: the harness sends `synthetic` "continue"
   rather than starting a new worker from scratch. *Terminal* — deprecated/retired
   model, invalid API key, explicit 400/422 — ends the delegation and moves the rung.
+  *Context* — the prompt did not fit the window — is a third kind, because neither
+  of the other two is right: retrying the same request fails identically, and the
+  run is not over. The harness asks the engine to compact and then sends "continue
+  from the summary, keep each turn small", for the worker and for the Architect
+  alike. This is the error a local server set to **Stop at Limit** returns; the
+  alternatives are worse — *Truncate Middle* silently drops the middle of the
+  conversation (the task at the top and the last turn survive, the file contents
+  between them vanish), and *Rolling Window* drops the beginning. The rule is
+  tested before `bad-request`, because OpenAI wraps an over-long prompt in a 400.
   **The engine does not retry; the harness must.** Measured on the clock run: a rate
   limit landed at 00:41:03 and the session was `idle` one second later. The desktop
   app survives that because the client retries; the engine's API does not.

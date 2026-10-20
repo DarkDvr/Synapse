@@ -89,6 +89,13 @@ const RETRY_NUDGE =
 const WAKE_NUDGE =
   'Your previous turn was cut short by the provider, not by the operator. The report above still needs your ' +
   'judgement: continue from where you left off.';
+// After a context-limit error the transcript has been summarised, so the request
+// that failed is gone; what must not happen is the model reading that as "start
+// again" and redoing work the summary already accounts for.
+const CONTEXT_NUDGE =
+  'Your last request was larger than the model\'s context window, so the conversation has just been summarised ' +
+  'and you are continuing from that summary. Carry on with the task from where it stands - do not start over - ' +
+  'and keep each turn small: read only what you need and write in short pieces.';
 
 /** Sleep, but let Stop cut it short: a five-minute backoff must not be five
  *  minutes of the operator pressing a button that does nothing. */
@@ -793,6 +800,32 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
             break;
           }
 
+          // The prompt is bigger than the window. Waiting changes nothing and
+          // repeating the request fails identically, so the answer is the one the
+          // engine already has: summarise, then carry on. A local server set to
+          // "Stop at Limit" reports it this way instead of truncating silently.
+          if (cls.kind === 'context') {
+            rungRetries += 1;
+            retries += 1;
+            out.warn(
+              `context limit hit in ${request.task} (${role}); asking the engine to compact and carrying on`,
+            );
+            live.retry = { attempt: rungRetries, at: Date.now(), message: turnError, reason: 'context' };
+            emit('run.progress', { ...live });
+            try {
+              await engine.compact(worker.id);
+            } catch (err) {
+              log.warn(`compaction after a context error failed: ${err.message}`);
+            }
+            await sleep(3000, signal);
+            if (signal?.aborted) { outcome = 'stopped'; break; }
+            live.retry = null;
+            emit('run.progress', { ...live });
+            await nudge(worker.id, CONTEXT_NUDGE, signal);
+            before = (await engine.getMessages(worker.id)).length;
+            continue;
+          }
+
           // Recoverable: wait, then ask the same session to carry on. No attempt is
           // consumed, the ladder does not move, and this does not end.
           rungRetries += 1;
@@ -1495,6 +1528,20 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
         log.error(`the Architect could not process the report: ${err}`);
         notify?.({ kind: 'role-error', dir, role: 'architect', message: err, final: true });
         return { ok: false, error: err };
+      }
+
+      // The Architect's own transcript outgrew the window. Compact it, then let
+      // the loop send the report again - the transcript keeps a summary of what
+      // came before, so nothing is lost that a retry would have kept.
+      if (cls.kind === 'context') {
+        out.warn(`the Architect's context is full; compacting it and sending the report again`);
+        try {
+          await engine.compact(architectId);
+        } catch (e) {
+          log.warn(`compaction after a context error failed: ${e.message}`);
+        }
+        await sleep(3000, signal);
+        continue;
       }
 
       tries += 1;

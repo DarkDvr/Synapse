@@ -49,6 +49,15 @@ const RULES = [
     re: /unauthori[sz]ed|invalid api key|invalid key|authentication failed|forbidden|\b40[13]\b/i,
   },
   {
+    // Before `bad-request`, because an over-long prompt is usually reported as a
+    // 400 and "retry the same request" can never fix it. It is not terminal
+    // either: a compaction makes it fit, and the work carries on. A local server
+    // set to "Stop at Limit" answers exactly this way instead of truncating.
+    reason: 'context',
+    kind: 'context',
+    re: /context (length|window|limit)|maximum context|context_length_exceeded|prompt is too (long|large)|too many tokens|exceeds? (the )?(model'?s )?(maximum|context)|input is too long/i,
+  },
+  {
     reason: 'bad-request',
     kind: 'terminal',
     re: /invalid request|bad request|\b400\b|unprocessable|\b422\b|validation (error|failed)/i,

@@ -157,6 +157,19 @@ expect('deprecated is terminal', classifyFailure(DEPRECATED).kind === 'terminal'
 expect('invalid key is terminal', classifyFailure('Invalid API key').kind === 'terminal');
 expect('bad request is terminal', classifyFailure('Invalid request: text is required').kind === 'terminal');
 expect('unknown defaults to transient', classifyFailure('a brand new sentence').kind === 'transient');
+// A prompt that does not fit is neither: retrying it cannot help, and it is not
+// the end of the run - a compaction makes it fit. Local servers set to "Stop at
+// Limit" answer this way, and OpenAI wraps it in a 400, so this rule is tested
+// before bad-request.
+expect(
+  'context overflow is its own kind',
+  classifyFailure('This model\'s maximum context length is 39168 tokens. However, you requested 42000 tokens.').kind === 'context',
+);
+expect(
+  'context overflow beats the 400 in the same sentence',
+  classifyFailure('400 Bad Request: context_length_exceeded').kind === 'context',
+);
+expect('the reason is named', classifyFailure('prompt is too long: 42000 tokens').reason === 'context');
 
 // 2. a rate limit is retried, not an attempt
 const retried = await runCase({ name: 'retried', script: [{ error: RATE }, {}] });
