@@ -514,7 +514,10 @@ const ROLE_MANDATES = {
     'application code. Write the spec to .synapse/design/design.md: a table of screens and their controls, the colour',
     'tokens as real values, and the values for each theme that was asked for. Then one self-contained mock per screen',
     'at .synapse/design/mock-1.html, mock-2.html and so on - plain HTML with inline CSS, static, opening at any width.',
-    'The spec is what the builder is held to, so make it exact enough to check line by line.',
+    'Two mocks is the ceiling: the operator picks a direction, not a catalogue, and every extra one is another',
+    '300 KB of inlined fonts and another round of renders to read back. States of one screen belong in one mock',
+    'behind a query flag (?state=night), not in four files. The spec is what the builder is held to, so make it',
+    'exact enough to check line by line.',
   ].join(' '),
   hacker: [
     'You are the Hacker. Use the build the way the operator will, then the way a person in a hurry will, and report',
@@ -815,7 +818,8 @@ export function briefSession({ dir, role = 'architect', auto = false, skills = '
     );
     lines.push(
       `design: delegate to designer, which writes ${PLAN_DIR}/design/design.md (screens, controls, colour tokens, ` +
-        `theme values) and one mock per screen. Look at the mocks yourself before showing them (the visual-review ` +
+        `theme values) and one mock per screen, two at most for the project - a screen with four states is one ` +
+        `mock behind a switch, not four files. Look at the mocks yourself before showing them (the visual-review ` +
         `skill renders them), then ask the operator to pick one - design is the one thing only they can judge. ` +
         `Pin the stack first: if "runs like an app" could mean a local page, a Tkinter window or something else, ask.`,
     );
