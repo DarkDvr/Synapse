@@ -2513,12 +2513,7 @@ function scrollChatToBottom(behavior = 'auto') {
   // render.
 }
 
-const navMessages = () =>
-  [
-    ...document.querySelectorAll(
-      '#transcript .msg[data-msg="user"], #transcript .msg[data-msg="assistant"]',
-    ),
-  ];
+const navMessages = () => [...document.querySelectorAll('#transcript .msg[data-msg]')];
 
 function myMessageTops() {
   const el = chatScroller();
@@ -2536,9 +2531,9 @@ function myMessageTops() {
  * sits ~10px below the content top, so a "first one below the fold" test kept
  * re-selecting it and the DOWN button never advanced past message one.
  *
- * Anchors are every turn, not the operator's turns: a long run is one question
- * and a dozen answers, and anchoring on questions alone left nothing to jump
- * between.
+ * Anchors are every turn, including Synapse's own reports: the rule between
+ * speakers is the only structure the transcript has, so the bars are the anchors
+ * and a chat with two of them has somewhere to jump.
  */
 function navAnchors() {
   const tops = myMessageTops();
@@ -2552,6 +2547,9 @@ function renderChatNav() {
   const nav = $('chatNav');
   const dock = $('chatDock');
   if (!nav || !dock) return;
+  // The transcript's only structure is the rule between speakers, so the bars
+  // are what the buttons step through: two of them means there is something to
+  // jump between. (Messages = bars + 1.)
   const count = navMessages().length;
   const show = count >= 3;
   nav.hidden = !show;

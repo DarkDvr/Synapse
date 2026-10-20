@@ -241,13 +241,15 @@ it as a panel **painted over the chat, anchored just above the composer**.
   ease-out rAF scroll instead of `behavior: 'smooth'`, whose duration the
   browser owns and cannot be tuned — roughly 30% quicker than the browser's own
   smooth scroll over these distances (measured ~289ms end to end).
-- **The jump buttons anchor on every turn, not on the operator's turns.** They
+- **The jump buttons anchor on every turn, including Synapse's reports.** They
   used to collect `[data-msg="user"]` and need three of them, so a real run — one
   prompt and a dozen answers — had no jump buttons at all, and the operator read
-  that as the feature having been removed. `navMessages()` takes user **and**
-  assistant messages, harness notes stay out (they are reports, not turns), and
-  three turns of any kind show the pair. The tooltips say "the previous message",
-  because that is now true.
+  that as the feature having been removed. `navMessages()` takes **every**
+  `.msg[data-msg]`: the rule between speakers is the only structure the
+  transcript has, so the bars are the anchors. Two bars (three messages) show the
+  pair; the tooltips say "the previous message", because that is now true.
+  Verified on Clock Test 2 — 1 prompt, 10 answers, 9 worker reports — where five
+  PREV presses stepped synapse → assistant → synapse → assistant → synapse.
 - **The jump buttons step message-by-message from an anchor, not from the raw
   scroll offset.** `navAnchors()` picks the message that owns the fold (last top
   at or above `scrollTop + 12`), and the buttons move `cur ± 1`. A raw

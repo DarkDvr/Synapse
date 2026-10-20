@@ -424,7 +424,13 @@ body.dark .sidebar .nav-link.active > span:first-child { color: #fff; }
    right of one vertical yellow rule — the shortcuts, the label, the sessions. */
 .tree-project-body {
   margin: 3px 0 4px 6px; padding: 4px 0 4px 6px;
-  border-left: 2px solid var(--yellow);
+  border-left: 2px solid #2f323a;
+}
+/* Only the project you are in gets the yellow rule: it is a "you are here" mark,
+   not decoration, and every project wearing one made them all look active. An
+   inactive project's rule is the ordinary grey the rail uses for its lines. */
+.tree-project:has(> .tree-row.project.is-current) > .tree-project-body {
+  border-left-color: var(--yellow);
 }
 /* the sessions list draws no guide line or indent of its own: the rule does it */
 .tree-sessions { position: relative; padding-left: 0; margin: 2px 0 0; display: grid; gap: 1px; }
