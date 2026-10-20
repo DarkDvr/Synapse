@@ -1,0 +1,124 @@
+// A delegation is refused while the plan declares a phase it has not planned.
+//
+// This is the enforcement behind the brief line "write the whole plan before the
+// first task runs". Clock Test 3 showed the instruction alone was not enough: the
+// Architect wrote t1, delegated it in the same turn, and added t2-t10 afterwards,
+// so the first task ran against a two-task plan that grew to ten behind the
+// operator's back. Driven through the real runner with a stubbed engine.
+import fs from 'node:fs';
+import path from 'node:path';
+import os from 'node:os';
+import { createRunner } from '../src/runs.js';
+import { uncoveredPhases } from '../src/plans.js';
+
+const ROOT = path.join(os.tmpdir(), `synapse-delegate-rules-${process.pid}`);
+const DIR = path.join(ROOT, 'project');
+const quiet = { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} };
+
+const checks = [];
+const expect = (label, ok, detail) =>
+  checks.push(`${ok ? 'PASS' : 'FAIL'}  ${label}${detail ? `  <- ${detail}` : ''}`);
+
+const plan = (phases, tasks) => ({ version: 1, goal: 'x', phases, tasks });
+const task = (id, role) => ({ id, title: `Do ${id}`, role, status: 'todo', detail: 'd', reads: [], dependsOn: [] });
+
+const writePlan = (p) => {
+  fs.mkdirSync(path.join(DIR, '.synapse'), { recursive: true });
+  fs.writeFileSync(path.join(DIR, '.synapse', 'plan.json'), JSON.stringify(p, null, 2), 'utf8');
+};
+
+// ── the pure answer ─────────────────────────────────────────────
+expect(
+  'an unplanned phase is reported',
+  uncoveredPhases(plan(['invent', 'build'], [task('t1', 'inventor')])).join() === 'build',
+);
+expect(
+  'a covered phase is not',
+  uncoveredPhases(plan(['build'], [task('t1', 'coder-2')])).length === 0,
+);
+expect(
+  'an unknown phase is the Architect\'s menu, not ours',
+  uncoveredPhases(plan(['polish'], [task('t1', 'coder-1')])).length === 0,
+);
+expect('an empty plan has nothing to complain about', uncoveredPhases({ phases: [], tasks: [] }).length === 0);
+
+// ── the refusal, through handleTurn ─────────────────────────────
+const makeRunner = () => {
+  const woke = [];
+  const ran = [];
+  const arch = [{ id: 'm0', type: 'user', parts: [] }];
+  const engine = {
+    async getSession(id) {
+      if (id === 'ses_arch') return { id, directory: DIR, internal: false, single: false, auto: true };
+      return { id, directory: DIR, internal: true };
+    },
+    async getMessages(id) {
+      return id === 'ses_arch' ? [...arch] : [];
+    },
+    // A wake is "landed" when the session grows an idle message, which is exactly
+    // how the real engine ends a turn.
+    async synthetic(id, text) {
+      woke.push(text);
+      arch.push({ id: `s${woke.length}`, type: 'synthetic', parts: [{ type: 'text', text }] });
+      arch.push({ id: `i${woke.length}`, type: 'idle', parts: [] });
+    },
+    async createSession() { ran.push('createSession'); return { id: 'ses_w1' }; },
+    async prompt() { ran.push('prompt'); },
+    async setInstruction() {},
+    async nudge() {},
+  };
+  const warns = [];
+  const runner = createRunner({
+    engine,
+    logger: { channel: () => ({ ...quiet, warn: (m) => warns.push(String(m)) }) },
+    getConfig: () => ({
+      roles: { 'coder-1': { ref: 'opencode/x' } },
+      worker: { ladder: ['coder-1'], stallSec: 5, resumeMax: 0 },
+    }),
+    guard: null,
+    notify: () => {},
+    modelCache: null,
+  });
+  return { runner, woke, ran, warns };
+};
+
+/** A run is started without being awaited, so give it a tick to reach the prompt. */
+const settle = () => new Promise((r) => setTimeout(r, 300));
+
+// A distinct call id per case: a request is answered once, so reusing one would be
+// skipped as already handled rather than run.
+const delegate = (taskId, callId = `call_${taskId}`) => [
+  { id: 'msg1', type: 'assistant', parts: [{ type: 'tool', id: callId, name: 'synapse-delegate_delegate', input: { task: taskId } }] },
+];
+
+try {
+  // 1. an unplanned phase: refused, the Architect is told, nothing runs
+  writePlan(plan(['invent', 'build', 'hack'], [task('t1', 'inventor')]));
+  {
+    const { runner, woke, ran } = makeRunner();
+    await runner.handleTurn('ses_arch', delegate('t1'));
+    const run = fs.existsSync(path.join(DIR, '.synapse', 'runs.jsonl'))
+      ? fs.readFileSync(path.join(DIR, '.synapse', 'runs.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l))
+      : [];
+    expect('the delegation is refused', ran.length === 0, ran.join(','));
+    expect('the Architect is woken with what to do', woke.length === 1 && /declares the phases "build", "hack"/.test(woke[0]), woke[0]?.slice(0, 90));
+    expect('the refusal is recorded', run.some((r) => r.outcome === 'plan-incomplete'));
+  }
+
+  // 2. the same delegation, once the plan is whole: it runs
+  writePlan(plan(['invent', 'build'], [task('t1', 'inventor'), task('t2', 'coder-1')]));
+  {
+    const { runner, woke, ran, warns } = makeRunner();
+    await runner.handleTurn('ses_arch', delegate('t1', 'call_second_try'));
+    await settle();
+    expect('a whole plan lets the work start', ran.includes('prompt'), ran.join(',') + ' warns=' + warns.join(' | '));
+    expect('and nothing is refused', woke.length === 0);
+  }
+} finally {
+  fs.rmSync(ROOT, { recursive: true, force: true });
+}
+
+console.log(checks.join('\n'));
+const failed = checks.filter((c) => c.startsWith('FAIL')).length;
+console.log(`\n${checks.length - failed}/${checks.length} passed`);
+process.exit(failed ? 1 : 0);

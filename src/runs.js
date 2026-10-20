@@ -35,6 +35,7 @@ import {
   synapseFingerprint,
   fingerprintDiff,
   ownedFolder,
+  uncoveredPhases,
 } from './plans.js';
 import { skillRules, describeSkills } from './skills.js';
 import { configSavedAt } from './config.js';
@@ -401,10 +402,45 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
           });
           continue;
         }
+        // Nothing runs while the plan declares a phase it has not planned. The
+        // operator approves a plan, not a plan-shaped thing that grows a task at a
+        // time: on Clock Test 3 the Architect wrote t1, delegated it in the same
+        // turn, and only then added t2-t10 — so the first task ran against a
+        // two-task plan that became a ten-task one behind the operator's back.
+        // The brief asks for the whole plan and the validator says so; this is the
+        // part that does not depend on the model reading either.
+        const currentPlan = readPlan(session.directory).plan;
+        const unplanned = uncoveredPhases(currentPlan);
+        if (unplanned.length) {
+          const list = unplanned.map((p) => `"${p}"`).join(', ');
+          appendRun(session.directory, {
+            kind: 'delegate',
+            callId: request.callId,
+            task: request.task,
+            outcome: 'plan-incomplete',
+          });
+          log.info(`delegation refused: ${request.task} - the plan declares ${unplanned.join(', ')} with no task`);
+          notify?.({
+            kind: 'note',
+            title: 'Plan Not Finished',
+            body: `The plan declares ${list} but has no task for ${unplanned.length === 1 ? 'it' : 'them'}, so ${request.task} was not run.`,
+          });
+          await wake(sessionId, session.directory, {
+            description: `delegate ${request.task} refused: plan incomplete`,
+            text:
+              `Nothing was run: the plan declares the phase${unplanned.length === 1 ? '' : 's'} ${list} but has no ` +
+              `task for ${unplanned.length === 1 ? 'it' : 'them'}. Write the whole plan - every declared phase ` +
+              `with its tasks, role and order - or drop the phase${unplanned.length === 1 ? '' : 's'} you are not ` +
+              `using, and then delegate ${request.task} again. The operator reviews the plan, so what they agreed ` +
+              `to on the first screen has to be what runs.`,
+          });
+          continue;
+        }
+
         // The hack loop closes after three completed rounds. A model will keep
         // finding one more issue until the quota is gone; the third report says so
         // too, and this is what makes it true if the model ignores it.
-        const asked = (readPlan(session.directory).plan?.tasks || []).find((t) => t.id === request.task);
+        const asked = (currentPlan?.tasks || []).find((t) => t.id === request.task);
         if (asked?.role === 'hacker' && hackRoundsUsed(session.directory) >= HACK_ROUNDS) {
           appendRun(session.directory, {
             kind: 'delegate',

@@ -47,6 +47,23 @@ const PHASE_ROLES = {
   hack: ['hacker'],
 };
 
+/**
+ * Phases the plan declares but has not planned: a phase whose roles no task
+ * carries. Unknown phase names are left alone — they are the Architect's menu,
+ * not ours to police.
+ *
+ * Exported because two callers need the same answer: the validator, which says it,
+ * and the runner, which refuses to start work while it is true.
+ */
+export function uncoveredPhases(plan) {
+  const phases = Array.isArray(plan?.phases) ? plan.phases : [];
+  const tasks = Array.isArray(plan?.tasks) ? plan.tasks : [];
+  return phases.filter((phase) => {
+    const roles = PHASE_ROLES[String(phase).toLowerCase()];
+    return roles ? !tasks.some((t) => roles.includes(t.role)) : false;
+  });
+}
+
 export const PLAN_DIR = '.synapse';
 export const PLAN_NAME = 'plan.json';
 export const RUNS_NAME = 'runs.jsonl';
@@ -390,10 +407,7 @@ export function readPlan(dir) {
   // worked, so what was approved on the first screen was not what ran. A declared
   // phase with no task under it is the visible symptom, so that is what is named —
   // and the fix is the Architect's own: add the tasks, or drop the phase.
-  const uncovered = phases.filter((phase) => {
-    const roles = PHASE_ROLES[String(phase).toLowerCase()];
-    return roles ? !tasks.some((t) => roles.includes(t.role)) : false;
-  });
+  const uncovered = uncoveredPhases({ phases, tasks });
   for (const phase of uncovered) {
     problems.push(
       `phases lists "${phase}" but the plan has no task for it - write the whole plan before the first task ` +
