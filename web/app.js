@@ -475,7 +475,7 @@ function positionModelMenu(input, menu) {
   const r = input.getBoundingClientRect();
   menu.style.left = `${Math.round(r.left)}px`;
   menu.style.top = `${Math.round(r.bottom + 4)}px`;
-  menu.style.minWidth = `${Math.max(220, Math.round(r.width))}px`;
+  menu.style.minWidth = `${Math.max(320, Math.round(r.width))}px`;
 }
 
 function paintModelMenu() {
@@ -3319,7 +3319,11 @@ function renderSettings() {
         wide: true,
         value: homeValue,
         hint: 'Where the engine keeps its own settings, logs and data. Blank uses the copy inside Synapse; the machine-wide OpenCode install is never touched.',
-      })),
+      }) +
+      `<p class="set-note">Running <strong>${esc(detected.version || 'not started')}</strong> from ` +
+      `<code>${esc(detected.binary || 'auto-detected')}</code>. The model list is read from this engine at ` +
+      `every launch, but the catalog ships inside the engine binary — so when OpenCode Desktop shows models ` +
+      `that are missing here, its engine is newer and <code>@opencode/cli</code> is the thing to update.</p>`),
     group('Working directory',
       f('Where new sessions run (blank = workspace)', 'defaults.directory', {
         wide: true,

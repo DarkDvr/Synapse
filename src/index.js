@@ -289,6 +289,9 @@ async function main() {
       .listModels()
       .then((list) => {
         const changed = modelCache.record(list);
+        // One line on the console every launch: which catalog this engine is
+        // serving, so a stale model list is visible without opening a log.
+        app.info(`catalog: ${list.length} model(s) from engine ${engine.status().version || '?'}`);
         if (changed) app.info(`model cache: ${changed} model(s) recorded or updated`);
       })
       .catch((err) => app.warn(`model cache refresh failed: ${err.message}`));

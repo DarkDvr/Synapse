@@ -742,6 +742,10 @@ body.dark .sidebar-bottom,
   background: #1b1d21; border: 1px solid var(--line); border-radius: 9px;
   box-shadow: 0 14px 34px rgba(0, 0, 0, 0.55);
   max-height: 300px; overflow-y: auto; padding: 3px;
+  /* Wide enough for the source chip, the name, an ISSUES badge and the limits on
+     one line: a row that has to squeeze the badge reads as a clipped control. */
+  min-width: 320px; max-width: min(560px, calc(100vw - 24px));
+  overscroll-behavior: contain;
 }
 .model-opt {
   display: flex; align-items: center; gap: 8px;
@@ -751,14 +755,14 @@ body.dark .sidebar-bottom,
 .model-opt:hover { background: var(--surface-soft); }
 .model-opt.is-active { background: var(--violet-soft); color: #fff; }
 .model-opt.is-current .mo-name { color: var(--orange); }
-.model-opt .mo-name { overflow: hidden; text-overflow: ellipsis; }
+.model-opt .mo-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .model-opt .mo-src {
   flex: none; font-size: 8.5px; font-weight: 700; letter-spacing: 0.06em;
   text-transform: uppercase; color: #82868e;
   border: 1px solid #3a3d43; border-radius: 4px; padding: 0 4px; line-height: 1.5;
 }
 .model-opt.is-active .mo-src { color: #d5d7dc; border-color: #565a63; }
-.model-opt .mo-meta { margin-left: auto; color: #6d717a; font-size: 9.5px; }
+.model-opt .mo-meta { margin-left: auto; padding-left: 14px; color: #6d717a; font-size: 9.5px; }
 /* The badge of shame: an orange chip in the menu row, clickable, gone the moment
    the operator says the model is fine. Same geometry as the source chip so the
    row stays even. */
@@ -1425,6 +1429,7 @@ body[data-mode="single"] .keep-toggle { display: none; }
 .settings-body {
   flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 4px 6px;
   display: grid; gap: 19px; align-content: start;
+  overscroll-behavior: contain;
 }
 .set-group { display: grid; gap: 7px; }
 /* Section headings are the only structure in a long form, so they carry the
@@ -1519,7 +1524,14 @@ body[data-mode="single"] .keep-toggle { display: none; }
   position: fixed; inset: 0; z-index: 60;
   background: rgba(10, 11, 13, 0.62);
   display: grid; place-items: center; padding: 24px;
+  /* A wheel over the dialog must not carry on into the page behind it. */
+  overscroll-behavior: contain;
 }
+/* And while a modal is open the page does not scroll at all: the settings list
+   used to reach its end and then the window underneath carried on, which reads as
+   the dialog itself jumping. One rule, no class to keep in sync — and the page's
+   `scrollbar-gutter: stable` means hiding the bar moves nothing. */
+body:has(.modal-backdrop:not([hidden])) { overflow: hidden; }
 .modal { width: min(560px, 100%); max-height: calc(100vh - 48px); display: flex; flex-direction: column; }
 .modal h2 { font-size: 18px; margin: 12px 0 8px; }
 .modal-sub {

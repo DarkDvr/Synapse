@@ -47,7 +47,12 @@ class Logger {
     if (this.enabled[channel] === false) return;
     if (LEVELS[level] > LEVELS[this.level]) return;
     const line = `${ts()} [${level.toUpperCase().padEnd(5)}] ${msg}\n`;
-    if (channel === 'app' || level === 'error') process.stdout.write(`[${channel}] ${line}`);
+    // The console is the operator's quick check: the app channel is Synapse's own
+    // narrative, and every warning or error from any channel. An info line from a
+    // busy channel (the tool census) would drown it, which is why it is not all.
+    if (channel === 'app' || level === 'error' || level === 'warn') {
+      process.stdout.write(`[${channel}] ${line}`);
+    }
     try {
       const file = this._file(channel);
       this._rotate(file);

@@ -122,6 +122,10 @@ function parseInput(input) {
 
 export function createRunner({ engine, logger, getConfig, guard, notify, modelCache }) {
   const log = logger.channel('tools');
+  // The same milestones into the app channel, which is mirrored to the console:
+  // a bat file leaves a window open all day, and "what is it doing" should be
+  // answerable by looking at it rather than by opening a log file.
+  const out = logger.channel('app');
   // One worker per project at a time: two Architects on the same plan is the
   // one thing that can actually corrupt it.
   const busy = new Set();
@@ -455,6 +459,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
         (role === task.role ? '' : ` (planned for ${task.role})`) +
         ` (${modelRef || 'engine default'}${variant ? `#${variant}` : ''}) in ${project}, stall ${stallSec}s`,
     );
+    out.info(`run ${request.task} (${role}) started — ${modelRef || 'engine default'} · ${task.title}`);
 
     // The card that will run this, and the path the UI draws to it. Kept in a
     // map as well as broadcast, so a page reloaded mid-run can ask what is
@@ -790,10 +795,18 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
         (strayWrites.length ? ` - .synapse WRITTEN OUTSIDE ITS FOLDER: ${strayWrites.join(', ')}` : ''),
     );
 
+    out.info(
+      `run ${request.task} (${role}) ${outcome} in ${Math.round((Date.now() - startedAt) / 1000)}s` +
+        (retries ? `, ${retries} retr${retries === 1 ? 'y' : 'ies'}` : '') +
+        (resumes ? `, ${resumes} restart${resumes === 1 ? '' : 's'}` : '') +
+        (files.length ? `, ${files.length} file(s)` : ''),
+    );
+
     // A stopped run is the operator's decision: no report and no wake. Waking the
     // Architect here would start a turn that could re-delegate the very task that
     // was just stopped, and the operator is about to say what they want instead.
     if (outcome === 'stopped') {
+      out.warn(`run ${request.task} (${role}) stopped by the operator`);
       notify?.({
         kind: 'note',
         title: 'Run Stopped',

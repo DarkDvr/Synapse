@@ -154,6 +154,12 @@ Gotchas:
   **Use `restart.ps1`, which reads `data\synapse.pid` and `data\engine.pid`.**
   Never match on a process name.
 - `stop.bat` must not use `$pid` as a variable — it is read-only in PowerShell.
+- The console is a first-class output. `start.bat` leaves a window open all day, so
+  `logger` mirrors the `app` channel **and every warning or error from any channel**
+  to stdout, and the runner writes its milestones (run started, outcome, stopped) to
+  the app channel too. A retry or a stall therefore shows up in that window without
+  opening a file. The `tools` channel's *info* lines are not mirrored on purpose —
+  it carries the tool census, which would drown the window.
 - Ports: **UI 8700, engine 8720**. Ports 1174–1273 are reserved by
   Hyper-V/WSL on this machine — do not pick one (1235 and 1240 both fail with
   `EACCES`; 8701 and 4343 are fine).
@@ -220,6 +226,20 @@ fonts must be local. Do not restyle it — put changes in `synapse.css`.
 Route and schema ground truth is the OpenAPI dump at
 `%LOCALAPPDATA%\Temp\opencode\openapi.json`. Check it before
 guessing.
+
+**The engine is 2.1.0 as of 20 Oct 2026.** Everything below was measured on
+2.0.30 unless it says otherwise, and the upgrade was verified on the routes
+Synapse actually depends on: session create, messages, the model switch, the
+instruction entries (PUT 204 / GET / DELETE 204), `/api/session/active` (an object
+keyed by session, which the adapter reads with `Object.keys`) and the session form
+route. **The model catalog ships inside the engine binary, not in Synapse.** 2.0.30
+listed 11 models including ones the provider had already retired (`space-bunny`,
+`muse-spark`); 2.1.0 lists the current 10, with MiniMax M3.1 and GLM-5.3 in and the
+retired ones gone — measured side by side, same account, same API. A stale model
+list therefore means a stale *binary*, never a stale cache: the console prints
+`catalog: N model(s) from engine X` at every boot so it is visible at a glance.
+`@opencode/cli` is the thing to update; the engine data dir was backed up to
+`data\engine\opencode-2.0.30-backup` before the switch.
 
 | Thing | Reality |
 |---|---|
@@ -977,7 +997,10 @@ and stores the operator's choice per role.
 ### The model cache (`data\model-cache.json`)
 
 Models come and go; what we learned about one should outlive it leaving the
-catalog. `src/modelcache.js` is a small JSON store **keyed by the full
+catalog. The picker is built from the engine's **live** catalog on every launch:
+the cache only supplies what we learned about a model that is still there (its
+toolset, its variants, its issues), and never adds an entry of its own — a model
+that leaves the catalog disappears with it. `src/modelcache.js` is a small JSON store **keyed by the full
 `provider/id` ref**, because the same model can exist in more than one category
 — `opencode/deepseek-v4.1-flash-free` and a future `opencode-go/…` are different
 entries with different backends, and local runtimes will be more. Each record
@@ -1516,6 +1539,17 @@ This is once per directory per process and needs no config.
   button to within 0.01px, with ~1.5px of margin left top and bottom at three
   chevrons — if the glyph or border size changes, re-measure with
   `browser_get_element` rather than eyeballing it.
+- **A modal owns the wheel.** `body:has(.modal-backdrop:not([hidden])) { overflow:
+  hidden }`, plus `overscroll-behavior: contain` on the backdrop and on
+  `.settings-body`. Without it the settings list reached its end and the page
+  underneath carried on scrolling, which reads as the dialog itself jumping.
+  Measured before: page 877px of content in a 620px viewport with the list already
+  at its end; after: `scrollY` stays 0 whatever is attempted, and the page's
+  `scrollbar-gutter: stable` means hiding the bar moves nothing.
+- **The model menu is at least 320px wide**, not the input's 180. A row is source
+  chip + name + ISSUES badge + limits on one line; at the old width the badge
+  squeezed the limits and read as a clipped control (the operator: "unless it
+  doesn't fit in our drop down, which means it should be made wider").
 - **A provider error is red *text* on the card, never a border.** While a role is
   retrying, or its wake failed, its subtitle line reads `Retrying at 00:45 — Rate
   limit exceeded` in `--red` at 600 weight, and the card's border keeps its own
