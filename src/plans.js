@@ -29,6 +29,22 @@ export const ROLES = ['architect', 'inventor', 'coder-1', 'designer', 'coder-2',
 // operator, which is why it is the one painted red.
 export const STATUSES = ['todo', 'doing', 'done', 'blocked', 'failed'];
 
+// A result with a "todo" status is the Architect's two writes landing one after
+// the other: it records the result, then flips the status seconds later. Inside
+// that gap the plan is half-written, not wrong, so the complaint waits until the
+// file has stood still — a plan left in that state is the fault worth naming.
+const RESULT_STATUS_GRACE_MS = 90 * 1000;
+
+// Which roles belong to a phase the Architect declared. `phases` is a menu, so an
+// empty or unknown phase name is not ours to police; a declared phase with no task
+// under it is the symptom of a plan written one step at a time.
+const PHASE_ROLES = {
+  invent: ['inventor'],
+  design: ['designer'],
+  build: ['coder-1', 'coder-2', 'coder-3'],
+  hack: ['hacker'],
+};
+
 export const PLAN_DIR = '.synapse';
 export const PLAN_NAME = 'plan.json';
 export const RUNS_NAME = 'runs.jsonl';
@@ -320,8 +336,14 @@ export function readPlan(dir) {
     // `result` and left `todo`, so the pane showed a finished task as untouched
     // and the Architect's own message claimed it was done. The Architect owns the
     // file, so it is told, not repaired.
+    //
+    // Waiting for the file to settle is what separates the fault from the normal
+    // two-step write: on the clock project this fired after every single run
+    // (six for six) inside the 3-17s it took the Architect to flip the status,
+    // and every one of those six was work that was already being finished.
     const result = asText(source.result) || null;
-    if (result && (status === 'todo' || status === 'doing')) {
+    const settled = Date.now() - stat.mtimeMs > RESULT_STATUS_GRACE_MS;
+    if (result && settled && (status === 'todo' || status === 'doing')) {
       problems.push(
         `${where} has a result but its status is "${status}" - mark it done, or clear the result`,
       );
@@ -360,10 +382,37 @@ export function readPlan(dir) {
     };
   });
 
+  // The plan is written once, in full, before the first delegation: the operator
+  // reviews a plan, not something that grows a task at a time. On the clock
+  // project it opened with two steps and the Architect added seven more while it
+  // worked, so what was approved on the first screen was not what ran. A declared
+  // phase with no task under it is the visible symptom, so that is what is named —
+  // and the fix is the Architect's own: add the tasks, or drop the phase.
+  const uncovered = phases.filter((phase) => {
+    const roles = PHASE_ROLES[String(phase).toLowerCase()];
+    return roles ? !tasks.some((t) => roles.includes(t.role)) : false;
+  });
+  for (const phase of uncovered) {
+    problems.push(
+      `phases lists "${phase}" but the plan has no task for it - write the whole plan before the first task ` +
+        `runs, or drop the phase`,
+    );
+  }
+
   // A finished plan owes the operator a customer-facing summary: the Architect's
   // card shows it once the work is done, instead of only a DONE chip. The Architect
   // writes it itself, so this is a note to it rather than something we invent.
-  if (tasks.length && tasks.every((t) => t.status === 'done') && !asText(parsed.summary)) {
+  //
+  // "Finished" means every task is done *and* the plan still matches the phases it
+  // declared: a two-task plan with four phases is a plan being written, not a
+  // finished one, and asking for its summary there is how the clock project got
+  // the complaint at 10:59 while the Architect was still planning.
+  if (
+    tasks.length &&
+    tasks.every((t) => t.status === 'done') &&
+    !uncovered.length &&
+    !asText(parsed.summary)
+  ) {
     problems.push(
       'the plan is finished but has no "summary" - add one sentence a customer would understand: ' +
         'what this project delivers, with no file paths and no tool names',
@@ -468,15 +517,20 @@ const ROLE_MANDATES = {
     'The spec is what the builder is held to, so make it exact enough to check line by line.',
   ].join(' '),
   hacker: [
-    'You are the Hacker. Assume the build is broken and find where. Run it the way it is meant to be used, then',
-    'the way a careless person would: the faults live at the edges. Do not fix anything and do not edit the build.',
+    'You are the Hacker. Use the build the way the operator will, then the way a person in a hurry will, and report',
+    'what would actually stop them or mislead them. Do not fix anything and do not edit the build.',
     'Write the findings to .synapse/reports/hack-1.md (create the folder): each with an id (H1, H2...), a severity',
     '(critical, major, minor, nice-to-have), the exact command and input that reproduces it, what happened and what',
-    'should have happened. Also list what you tested and could not break, so coverage is visible.',
+    'should have happened. Then one line per area you checked, not a matrix. Batch: when you need several files or',
+    'several probes, ask for them in one turn, and run a suite once per batch of changes rather than after every',
+    'edit - every extra turn is a full round-trip, and everything you did stays in your context and is paid for',
+    'again on every later turn.',
   ].join(' '),
   'coder-1': [
     'You are a Coder. Build exactly what the task names and nothing else: the plan, the confirmed features and the',
-    'design are read-only to you. Work only inside the project folder.',
+    'design are read-only to you. Work only inside the project folder. Batch your tools: when you need several',
+    'files or several searches, ask for them in one turn, and run the test suite once per batch of changes rather',
+    'than after every edit - every extra turn is a full round-trip and everything you read stays in your context.',
   ].join(' '),
 };
 
@@ -488,13 +542,14 @@ const ROLE_MANDATES = {
 const HACKER_FOCUS = {
   app: [
     'Focus: real use, not security. The user is a person typing into this app or running this command. Test what',
-    'they actually do - empty and whitespace-only input, text where a number belongs, a negative or enormous',
-    'number, a very long line, accented letters and emoji, a missing file, the wrong file, a path with spaces, an',
-    'option that does not exist, starting it from the wrong folder, pressing Enter twice, closing the window',
-    'half-way. Judge what they would see: a crash, a wrong answer, silence where something should happen, a',
-    'message nobody can understand, work lost. Do not audit the security of the build: no hostile-environment',
-    'construction, no locale or interpreter matrices, no fuzzing loops. If something looks genuinely dangerous,',
-    'note it as an observation and move on.',
+    'they actually do - empty and whitespace-only input, text where a number belongs, a very long line, accented',
+    'letters and emoji, a missing file, the wrong file, a path with spaces, an option that does not exist, starting',
+    'it from the wrong folder, pressing Enter twice, closing the window half-way. Judge what they would see on',
+    'their own screen and machine: a crash, a wrong answer, silence where something should happen, a message',
+    'nobody can understand, work lost. An edge that needs another hemisphere, another screen size other than the',
+    'one they asked for, or a hand-edited constant is an observation, not a finding. Do not audit the security of',
+    'the build: no hostile-environment construction, no locale or interpreter matrices, no fuzzing loops. If',
+    'something looks genuinely dangerous, note it as an observation and move on.',
   ].join(' '),
   security: [
     'Focus: adversarial. Treat the build as hostile territory - try to make it lie, escape its folder, run',
@@ -508,7 +563,9 @@ const HACKER_FOCUS = {
 // focus: the report is read by a person who wants to know what to fix.
 const HACKER_PROPORTION =
   'Keep it proportionate: the cases with the best chance of happening are worth more than a complete matrix, and ' +
-  'the report is judged on what it found, not on how long it ran.';
+  'the report is judged on what it found, not on how long it ran. A minor or nice-to-have finding is a note for ' +
+  'the operator, not a reason for another fix round, and a re-run is a check of the ids already listed, not a ' +
+  'second hunt.';
 
 /** Where a role may write inside .synapse, and nowhere else there. */
 const OWNED_DIR = {
@@ -750,6 +807,13 @@ export function briefSession({ dir, role = 'architect', auto = false, skills = '
         `feature names the task that delivers it; rejected ones stay in the file and are never passed on.`,
     );
     lines.push(
+      `Write the whole plan before the first task runs: every phase you listed needs its tasks in the file now, ` +
+        `with role, order and dependsOn, so the operator can read the job end to end on one screen. A plan that ` +
+        `grows a task at a time is not a plan anyone can approve - on the clock project it opened with two steps ` +
+        `and the Architect added seven while it worked. If a task must be added, removed or reordered later, make ` +
+        `the change and say why in one line to the operator: a justified change is fine, an unannounced one is drift.`,
+    );
+    lines.push(
       `design: delegate to designer, which writes ${PLAN_DIR}/design/design.md (screens, controls, colour tokens, ` +
         `theme values) and one mock per screen. Look at the mocks yourself before showing them (the visual-review ` +
         `skill renders them), then ask the operator to pick one - design is the one thing only they can judge. ` +
@@ -757,13 +821,18 @@ export function briefSession({ dir, role = 'architect', auto = false, skills = '
     );
     lines.push(
       `build: one task that builds the shell from the design with no wiring, then one that wires it. The titles ` +
-        `say which is which. A shell task must not wire; a wiring task must not redesign.`,
+        `say which is which. A shell task must not wire; a wiring task must not redesign. If a task will take ` +
+        `more than about forty turns or touch more than one subsystem, split it into two tasks joined by a ` +
+        `handoff - a worker that runs a hundred turns is slower on its last turn than on its first, because it ` +
+        `reads everything it has already done.`,
     );
     lines.push(
       `hack: delegate to hacker with the request, the confirmed features and the design spec. It writes ` +
         `${PLAN_DIR}/reports/hack-N.md with ids (H1, H2...) and a repro for each. Then one fix task naming the ids ` +
-        `to fix, then a re-hack that re-runs the same repros. Three rounds is the limit; after the third, stop and ` +
-        `tell the operator what is still open.`,
+        `to fix. Then a verification task: re-run exactly those repros and the supplied suites, and nothing else - ` +
+        `a re-hack is a check, not a second hunt, so anything new it notices goes in a short "observed, not fixed" ` +
+        `list for the operator instead of becoming another round. A third round only if the verification found a ` +
+        `real regression. Three is the limit; after that, stop and tell the operator what is still open.`,
     );
     lines.push(
       `A task's "reads" lists the files the worker must read first (a design spec, the feature list, a hack ` +

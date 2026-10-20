@@ -689,6 +689,15 @@ bold, italic, strikethrough and links: the range these models actually produce.
   The clock needs a strip of its own, so `.role-card` gained 8px of bottom
   padding: it sits under the clamped subtitle and can never collide with it, and
   every card is still the same height (114px).
+- **The plan pane prints the plan, not the plan's homework.** Four yellow lines
+  under the plan ("features.json: item 1 … is confirmed for task \"t4\", which is
+  not in the plan") were the validator talking to the Architect, and every one of
+  them was already in its own instruction block as "Plan problems to fix". The
+  operator's rule is the one to apply to any yellow text: either it is theirs to
+  act on, in short common English, or it is not on screen. This one was not, so it
+  is gone from the UI and stays in `logs\app.log` (`logPlanState`). A plan that
+  cannot be read is still shown: that one the operator does need, because the pane
+  would otherwise look empty for no reason.
 - **The ask row is right-aligned, state first.** The counter and the buttons sit
   together at the right and the warning text takes the left — which needed the
   DOM order changed as well as `justify-content: flex-end`, since `margin-left:

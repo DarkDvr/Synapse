@@ -266,6 +266,16 @@ export function loadConfig() {
   }
 }
 
+// When Synapse itself last wrote the config. The harness guard compares the
+// repository around a worker run and reports anything that moved, so a settings
+// change the operator made in the UI looked exactly like a worker tampering with
+// the harness — it fired once on the clock project, at 12:03, for a save the
+// operator made at 11:59. The guard now knows which of the two wrote it.
+let lastSaveAt = 0;
+
+/** When Synapse itself last wrote the config file (epoch ms, 0 if never). */
+export const configSavedAt = () => lastSaveAt;
+
 /** Persist config (normalized) back to the file atomically. */
 export function saveConfig(cfg) {
   const normalized = normalize(cfg);
@@ -273,5 +283,6 @@ export function saveConfig(cfg) {
   const tmp = path.join(CONFIG_DIR, `.synapse.config.${process.pid}.tmp`);
   fs.writeFileSync(tmp, JSON.stringify(normalized, null, 2) + '\n', 'utf8');
   fs.renameSync(tmp, CONFIG_FILE);
+  lastSaveAt = Date.now();
   return normalized;
 }

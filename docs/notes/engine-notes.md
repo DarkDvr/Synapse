@@ -443,6 +443,55 @@ and its effort, and `custom: true` for their own. The panel already rendered a
 UI one. It is instruction, not enforcement — the question schema is the model's
 to author.
 
+### What the first real run cost (Clock Test 2: 2h 51m, nine tasks, no retries)
+
+Measured from the engine's own store (`data\engine\opencode\data\opencode\opencode.db`,
+`session_message.data.tokens`), not from wall-clock guesses. Nine tasks, zero
+retries and zero resumes; 749 model turns; 727k tokens written, **70% of it
+thinking**; 13% of the time in tools, the rest in generation.
+
+- **The plan is written in full before the first task runs.** It opened with two
+  steps and the Architect added seven while it worked, so what the operator
+  approved on the first screen was not what ran. The brief now says so, and the
+  validator names the visible symptom: `phases lists "build" but the plan has no
+  task for it - write the whole plan before the first task runs, or drop the
+  phase`. "The plan is finished" also means every declared phase is covered, which
+  is what stopped the missing-summary note firing at 10:59 while the Architect was
+  still writing the plan.
+- **A re-hack is a check, not a second hunt.** Round 1 (38m) found nine issues;
+  round 2 (32m) re-verified them and opened a new matrix ("every UTC offset from
+  -12 to +14") for two off-path edges; round 3 (6m) re-ran the repros and the
+  suites and stamped SHIP. The cheap round is the model: the brief now says a
+  re-hack re-runs the listed repros *and nothing else*, and anything new goes in
+  an "observed, not fixed" list.
+- **A task that runs long gets slower per turn.** Throughput by prompt size, same
+  model: **157 tok/s under 50k, 145 at 50–100k, 117 at 100–150k, 68 at 150–200k**.
+  Every long task here finished at 212–290k, and its second half ran at half the
+  speed of its first (t2 151→76, t4 167→75, t5 165→82). The Hacker hit 290k and
+  auto-compacted (a 228k-token summarise call). The causes are visible: 84% of
+  turns issued exactly one tool call, and the engine stores `reasoning` parts in
+  the transcript (985 of them here), so thinking is re-sent every turn —
+  per-turn growth measured ≈ text + thinking + tool output.
+- **So the harness reports the cost of each run.** The report the Architect gets,
+  and the chat, carry one line: `Effort: 130 turns, 118k tokens written (74%
+  thinking), context peaked at 212k`. It is also on the `runs.jsonl` result line as
+  `context: {turns, peak, generated, thinking, compactions, thinkShare}` and in the
+  app log, so an audit reads the run log instead of the engine database. Not on the
+  role card: the operator asked for the chat and the log.
+- **The Hacker's default focus was dialled down.** `app` now judges the operator's
+  own screen and machine, calls another hemisphere / another screen size / a
+  hand-edited constant an observation rather than a finding, and says a minor or
+  nice-to-have is a note, not a reason for another fix round.
+- **Harness alarms: only a worker's shell counts.** Eleven of the run's alarms were
+  the Architect running `skills\visual-review\shot.mjs` before judging a report —
+  the feature working as designed. `checkTurn({ trustShell })` is set for any
+  session Synapse did not mark `internal` (the Architect and the operator's own),
+  so those are an info line; a worker naming the harness is still an alarm, and a
+  *write* inside the harness is an alarm for everyone. The one
+  "CHANGED DURING A WORKER RUN" alarm was the operator's own Settings save, and
+  `configSavedAt()` now excuses exactly that: a config change no save of ours
+  explains is still reported.
+
 ### What the engine actually does with a permission rule (measured, 2.0.30)
 
 This cost an afternoon and is not guessable:

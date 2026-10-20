@@ -3152,12 +3152,12 @@ function renderPlan() {
         </li>`;
       })
       .join('')}</ol>` +
-    (st.problems?.length
-      ? `<div class="plan-problems">` +
-        `<span class="plan-problems-head">${st.problems.length} plan note${st.problems.length === 1 ? '' : 's'} for the Architect</span>` +
-        `<ul>${st.problems.map((p) => `<li>${esc(p)}</li>`).join('')}</ul>` +
-        `</div>`
-      : '') +
+    // The plan's complaints are for the Architect, not the operator: they name
+    // feature ids, task ids and file paths, and every one of them is something
+    // the Architect is already being told to fix in its own instruction block.
+    // Printing them here put four lines of housekeeping under the operator's
+    // plan and asked them to care about a job that was not theirs. The log keeps
+    // them (`logPlanState`), which is where a run is read afterwards.
     `<p class="rail-note plan-meta"><span>${esc(meta.join(' · '))}</span>${planClockMarkup()}</p>`;
 }
 

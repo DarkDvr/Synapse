@@ -278,7 +278,17 @@ async function main() {
       // And every turn's tool calls are checked against the harness: a write or an
       // edit that names a file inside it is reported here, with the session that
       // made it. The messages are already in hand, so this costs nothing.
-      guard.checkTurn({ sessionId, messages, label: `turn finished (${type})` });
+      //
+      // Only a worker's shell command naming the harness is an alarm. The
+      // Architect and the operator's own session are trusted for that one line:
+      // the visual-review skill lives in the harness and the Architect is told to
+      // use it, so its renders were nine false alarms on the clock run.
+      guard.checkTurn({
+        sessionId,
+        messages,
+        label: `turn finished (${type})`,
+        trustShell: session ? !session.internal : false,
+      });
       // A finished turn is where the Architect's requests for work are
       // picked up. Nothing is awaited: the worker reports back on its own.
       runner.handleTurn(sessionId, messages);

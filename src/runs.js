@@ -37,6 +37,7 @@ import {
   ownedFolder,
 } from './plans.js';
 import { skillRules, describeSkills } from './skills.js';
+import { configSavedAt } from './config.js';
 import { classifyFailure, recordProviderError, pruneProviderLog } from './provider-errors.js';
 
 const POLL_MS = 1500;
@@ -119,6 +120,48 @@ function parseInput(input) {
     return null;
   }
 }
+
+/**
+ * What a run cost in context, from the engine's own accounting.
+ *
+ * A worker's opening prompt is small — 7-8k tokens on the clock project — and its
+ * transcript is not: the tasks that ran long finished at 200-290k and generated at
+ * less than half the speed of the short ones, because every turn re-reads
+ * everything before it, thinking included. Only the harness can see this, so it
+ * says so: the Architect uses it to split the next task, and the run line keeps it
+ * for the audit afterwards.
+ *
+ * `peak` is input + cache.read — the whole prompt of the biggest turn, cached or
+ * not. `generated` is what the model wrote, thinking included.
+ */
+export function contextStats(messages) {
+  let turns = 0;
+  let peak = 0;
+  let generated = 0;
+  let thinking = 0;
+  let compactions = 0;
+  for (const m of messages || []) {
+    if (m.type === 'compaction') compactions += 1;
+    if (m.type !== 'assistant') continue;
+    const t = m.raw?.tokens;
+    if (!t) continue;
+    turns += 1;
+    peak = Math.max(peak, (t.input || 0) + (t.cache?.read || 0));
+    generated += (t.output || 0) + (t.reasoning || 0);
+    thinking += t.reasoning || 0;
+  }
+  return {
+    turns,
+    peak,
+    generated,
+    thinking,
+    compactions,
+    thinkShare: generated ? Math.round((thinking / generated) * 100) : 0,
+  };
+}
+
+/** Token counts read as words, not as digits: 212k, 1.4M. */
+const tokens = (n) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : `${Math.round(n / 1e3)}k`);
 
 export function createRunner({ engine, logger, getConfig, guard, notify, modelCache }) {
   const log = logger.channel('tools');
@@ -426,6 +469,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     let outcome = 'failed';
     let text = '';
     let files = [];
+    let context = null;
     let turnError = null;
     // How many times this delegation was rescued rather than abandoned. Recorded
     // on the result line so the morning's log explains a long night.
@@ -693,6 +737,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
         const messages = await engine.getMessages(worker.id);
         text = workerText(messages);
         files = workerFiles(messages);
+        context = contextStats(messages);
 
         // The provider refused this model outright: the next rung can still do the
         // work, and the operator is not asked to decide anything about it.
@@ -756,7 +801,16 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     // named a path. Reported before the Architect is woken, so the two never
     // disagree about what the worker did.
     const harnessAfter = await (guard?.state?.() || Promise.resolve(null)).catch(() => null);
-    const harnessChanged = guard?.changed?.(harnessBefore, harnessAfter) || [];
+    const harnessChanged = (guard?.changed?.(harnessBefore, harnessAfter) || []).filter((line) => {
+      // The Settings dialog is Synapse writing its own file, and Synapse knows
+      // when it did: `configSavedAt` moves at the save. A change to the config
+      // that no save of ours explains is still a worker's — the ruleset denies
+      // it, but a shell redirect can land — so only our own save is excused.
+      if (!line.includes('config/synapse.config.json')) return true;
+      const ours = configSavedAt() >= startedAt;
+      if (ours) log.info(`${request.task} (${role}) ran while the operator saved settings - not tampering`);
+      return !ours;
+    });
     if (harnessChanged.length) {
       guard.alarm({
         sessionId: architectId,
@@ -783,6 +837,10 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
       error: turnError,
       files,
       text: text.slice(0, RESULT_MAX),
+      // What the run cost in context, so the audit after a project reads the run
+      // log instead of the engine's database. `peak` is the whole prompt of the
+      // biggest turn; `thinkShare` is how much of the writing was thinking.
+      context,
       planTouched,
       synapseTouched: strayWrites,
     });
@@ -799,7 +857,12 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
       `run ${request.task} (${role}) ${outcome} in ${Math.round((Date.now() - startedAt) / 1000)}s` +
         (retries ? `, ${retries} retr${retries === 1 ? 'y' : 'ies'}` : '') +
         (resumes ? `, ${resumes} restart${resumes === 1 ? '' : 's'}` : '') +
-        (files.length ? `, ${files.length} file(s)` : ''),
+        (files.length ? `, ${files.length} file(s)` : '') +
+        (context?.turns
+          ? `, ${context.turns} turns, ctx peak ${tokens(context.peak)}, ${tokens(context.generated)} written` +
+            ` (${context.thinkShare}% thinking)` +
+            (context.compactions ? `, ${context.compactions} compaction(s)` : '')
+          : ''),
     );
 
     // A stopped run is the operator's decision: no report and no wake. Waking the
@@ -833,6 +896,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
         ms: Date.now() - startedAt,
         text,
         files,
+        context,
         workerId: worker?.id,
         planTouched,
         synapseTouched: strayWrites,
@@ -1047,7 +1111,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     return [...seen];
   }
 
-  function report({ task, role, insteadOf, skipped, outcome, ms, text, files, workerId, planTouched, synapseTouched, hackRound, auto, stallSec, retries, resumes, error }) {
+  function report({ task, role, insteadOf, skipped, outcome, ms, text, files, context, workerId, planTouched, synapseTouched, hackRound, auto, stallSec, retries, resumes, error }) {
     const head =
       outcome === 'completed'
         ? `${task.id} (${role}) finished in ${Math.round(ms / 1000)}s.`
@@ -1072,6 +1136,20 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     // bin/calendar_design.md and no such file existed). "Files written: none"
     // is what made the claim obvious to the Architect.
     lines.push(files.length ? `Files written: ${files.join(', ')}` : `Files written: none.`);
+    // The cost of the run, in the only unit that explains its speed. A task that
+    // reached 200k generated at half the rate of one that stayed under 50k, so a
+    // long run is mostly a big transcript — which is the signal to split it, not
+    // to doubt the model.
+    if (context && context.turns) {
+      lines.push(
+        `Effort: ${context.turns} turn${context.turns === 1 ? '' : 's'}, ${tokens(context.generated)} tokens written ` +
+          `(${context.thinkShare}% thinking), context peaked at ${tokens(context.peak)}` +
+          (context.compactions
+            ? ` and was summarised ${context.compactions} time${context.compactions === 1 ? '' : 's'}.`
+            : '.') +
+          (context.peak > 150000 ? ' Past about 150k a run gets slower with every turn.' : ''),
+      );
+    }
     // How much of the night went into this. A recovered run is not a bad run, and
     // the Architect should not read five retries as five failures.
     if (retries) {

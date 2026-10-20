@@ -79,12 +79,24 @@ export function createHarnessGuard({ root, logger, notify }) {
     } catch { /* a broken listener must not break a run */ }
   }
 
-  /** Report a turn's own tool calls. Cheap: the caller already has the messages. */
-  function checkTurn({ sessionId, messages, label }) {
+  /**
+   * Report a turn's own tool calls. Cheap: the caller already has the messages.
+   *
+   * `trustShell` is for the Architect and the operator's own session, and only
+   * for the shell line. The Architect is the one role that is *meant* to reach
+   * into the harness: the visual-review skill lives there and the brief tells it
+   * to render the build before judging a report. On the clock project eleven of
+   * its shells were `shot.mjs` runs, every one of them a red alarm about the
+   * feature working as designed. A *write* is still an alarm for everyone — the
+   * ruleset denies it as well — and a worker naming the harness is still an
+   * alarm, because no worker has business there.
+   */
+  function checkTurn({ sessionId, messages, label, trustShell = false }) {
     const { writes, shells } = inspect(messages);
     if (writes.length) alarm({ sessionId, what: 'WRITE INSIDE THE HARNESS', paths: writes, note: label });
     if (shells.length) {
-      alarm({ sessionId, what: 'shell command naming the harness', paths: shells, note: label });
+      if (trustShell) log.info(`used the harness (${label}): ${shells.join(' | ')}`);
+      else alarm({ sessionId, what: 'shell command naming the harness', paths: shells, note: label });
     }
     return { writes, shells };
   }
