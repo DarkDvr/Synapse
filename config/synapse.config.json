@@ -43,7 +43,7 @@
   },
   "roles": {
     "designer": {
-      "ref": "opencode/deepseek-v4.1-flash-free",
+      "ref": "bionic/qwen3.8-27b-ud",
       "skills": [
         "ui-design",
         "frontend-design",
@@ -52,12 +52,11 @@
       ]
     },
     "hacker": {
-      "ref": "opencode/deepseek-v4.1-flash-free",
+      "ref": "bionic/qwen3.8-27b-ud",
       "focus": "app"
     },
     "architect": {
-      "ref": "opencode/deepseek-v4.1-flash-free",
-      "variant": "low",
+      "ref": "bionic/qwen3.8-27b-ud",
       "skills": [
         "visual-review"
       ]
@@ -70,21 +69,21 @@
       ]
     },
     "coder-2": {
-      "ref": "opencode/deepseek-v4.1-flash-free",
+      "ref": "bionic/qwen3.8-27b-ud",
       "skills": [
         "code-craft",
         "visual-review"
       ]
     },
     "coder-3": {
-      "ref": "opencode/deepseek-v4.1-flash-free",
+      "ref": "bionic/qwen3.8-27b-ud",
       "skills": [
         "code-craft",
         "visual-review"
       ]
     },
     "inventor": {
-      "ref": "opencode/deepseek-v4.1-flash-free"
+      "ref": "bionic/qwen3.8-27b-ud"
     }
   },
   "modelChecks": {
