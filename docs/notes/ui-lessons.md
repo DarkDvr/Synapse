@@ -638,3 +638,53 @@ It covers fenced code, headings, GFM tables (alignment included — a pipe insid
 `code` does not split a cell), blockquotes, ordered and unordered lists
 (including `- [ ]` task lists), images, rules and paragraphs, plus inline code,
 bold, italic, strikethrough and links: the range these models actually produce.
+
+## Sidebar, clocks and tables (the round after the first real run)
+
+- **The sidebar's status says how long ago, not that it is connected.** There is no
+  "Event stream" row: its dot moved onto **Last event**, whose label carries the
+  age (`Last event (12s)` / `(2m)` / `(3h)`, rounded down). Two readouts that both
+  reset together were one fact printed twice, and "connected" beside a clock is
+  the weaker half. The age repaints on a one-second interval; a tick is a text
+  node.
+- **`opencode v2.1.0`** — the `v` is part of a version, not a word.
+- **The STATUS label is yellow**, like every other section heading in the rail,
+  and its block lost 2px of the air above it (13 → 11): the divider and its label
+  were reading as two groups.
+- **The left panel is yellow now, not violet.** The current project, the current
+  session and the Browse/Cmd hover/active states use the plan's in-hand recipe —
+  a `rgba(237,194,90,0.06)` wash and a `rgba(237,194,90,0.5)` border — so "the one
+  you are in" looks the same in both places. Violet fills belong to the composer.
+- **A session title is generated to fit its row: 22 characters, measured.** The
+  title box is 145px at DM Sans 12.5px and `Ambient Second Monitor` is 145px. It
+  got there from 125px by taking the rename pencil **out of the flow** (it now
+  overlays the name's end on hover) and tightening the project indent — a control
+  that is only visible on hover was costing three characters of every title.
+  The CSS ellipsis stays: a title that still overflows must never push the delete
+  button out of the row.
+- **Three stopwatches, all client-side.** Each card carries `HH:MM:SS / HH:MM:SS`
+  at its bottom right — the current task, then the role's total for this session —
+  and the plan footer carries the session's own total. They are derived from what
+  the cards already show (a live run for a worker, the open turn for the
+  Architect), so waiting on a question, on a permission or on a finished plan
+  stops them without inventing a second notion of "working". Totals live in
+  `localStorage` keyed by session id; the current interval restarts from now on
+  reload, because time with the page closed is not time we measured.
+  The clock needs a strip of its own, so `.role-card` gained 8px of bottom
+  padding: it sits under the clamped subtitle and can never collide with it, and
+  every card is still the same height (114px).
+- **The ask row is right-aligned, state first.** The counter and the buttons sit
+  together at the right and the warning text takes the left — which needed the
+  DOM order changed as well as `justify-content: flex-end`, since `margin-left:
+  auto` on the first button put the counter at the far left of the row.
+- **Markdown tables wrap; they never scroll.** The baseline sets
+  `white-space: nowrap` on every table, which is right for a rail of numbers and
+  wrong for a nine-column report: the table ran off the chat and its right-hand
+  columns were unreadable. `.msg-answer th/td` is `white-space: normal` with
+  `overflow-wrap: anywhere`, so a long identifier breaks rather than widening the
+  table.
+- **The alarm popup is one shape at two weights.** A plain error gets the red
+  badge and rule; an alarm about an agent naming Synapse gets amber, a sentence
+  saying what did **not** happen (nothing was changed automatically, the run was
+  not stopped) and the command in a mono block. It no longer repeats its own
+  title as the first line of the body.

@@ -9,9 +9,17 @@ import { TBD_TITLE } from './titles.js';
 
 const TIMEOUT_MS = 45000;
 
+// Measured in the running UI, not guessed: the title box in the rail is 145px at
+// DM Sans 12.5px, and "Ambient Second Monitor" (22 characters) measures 145px —
+// so 22 is what fits before the ellipsis. The CSS ellipsis stays as the
+// safeguard, because a name that overflows must never push the delete button out
+// of the row.
+const MAX_TITLE = 22;
+
 const titlePrompt = (firstRequest) =>
   'Write a short title for the coding session below. Rules: 3 to 5 words, ' +
-  'title case, no trailing punctuation, no quotes, reply with the title only.\n\n' +
+  'at most 22 characters, title case, no trailing punctuation, no quotes, ' +
+  'reply with the title only.\n\n' +
   `Request: ${firstRequest}`;
 
 /** Models like to wrap answers in quotes or explain themselves; strip that. */
@@ -21,7 +29,14 @@ export function cleanTitle(raw) {
   t = t.replace(/^[#*\-\s"'`]+/, '').replace(/["'`*\s]+$/, '');
   t = t.replace(/^(title|session)\s*[:\-]\s*/i, '');
   t = t.replace(/[.:;,]+$/, '').trim();
-  if (t.length > 60) t = t.slice(0, 60).trimEnd();
+  if (t.length > MAX_TITLE) {
+    // Cut at a word boundary rather than mid-word, unless that would leave a
+    // stump shorter than the cut itself.
+    const head = t.slice(0, MAX_TITLE + 1);
+    const space = head.lastIndexOf(' ');
+    const kept = space > 8 ? head.slice(0, space) : t.slice(0, MAX_TITLE);
+    t = kept.replace(/[\s\-–—,:;]+$/, '').trim();
+  }
   return t;
 }
 

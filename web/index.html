@@ -47,12 +47,11 @@
         <span class="status-dot idle" id="engineDot"></span>Engine
         <span class="status-state" id="engineState">starting…</span>
       </div>
-      <div class="status-row" title="Live event stream">
-        <span class="status-dot idle" id="streamDot"></span>Event stream
-        <span class="status-state" id="streamState">—</span>
-      </div>
-      <div class="status-row" title="Last engine event received">
-        <span class="status-dot idle" id="eventDot"></span>Last event
+      <!-- The stream has no row of its own: this dot *is* the stream's state, and
+           the age beside the label is the evidence. "connected" next to a clock
+           that keeps resetting said the same thing twice. -->
+      <div class="status-row" title="The last event received from the engine, and how long ago">
+        <span class="status-dot idle" id="eventDot"></span><span id="lastEventLabel">Last event</span>
         <span class="status-state" id="lastEvent">idle</span>
       </div>
       <div class="status-row" title="A local model runtime is not wired yet">
@@ -279,15 +278,18 @@
 
 <div class="toast-region" id="toastRegion" aria-live="polite" aria-atomic="false"></div>
 
-<!-- error detail popup -->
+<!-- error detail popup: one shape for a plain error and for an alarm -->
 <div class="modal-backdrop" id="errorModal" hidden>
-  <div class="modal panel" role="dialog" aria-modal="true" aria-labelledby="errorHeading">
-    <div class="panel-head" style="margin-bottom:0;justify-content:flex-end">
+  <div class="modal panel err-modal" role="dialog" aria-modal="true" aria-labelledby="errorHeading">
+    <div class="err-top">
+      <span class="err-badge" id="errorBadge" aria-hidden="true">!</span>
+      <h3 id="errorHeading">Error</h3>
       <button class="close-x" id="closeErrorTop" aria-label="Close">✕</button>
     </div>
-    <h2 id="errorHeading">Error</h2>
-    <pre class="modal-err" id="errorText"></pre>
-    <div class="modal-actions" style="display:flex;gap:9px;margin-top:16px;justify-content:flex-end">
+    <p class="err-lead" id="errorLead" hidden></p>
+    <pre class="err-detail" id="errorText"></pre>
+    <p class="err-note" id="errorNote" hidden></p>
+    <div class="modal-actions">
       <button class="btn btn-secondary btn-sm" id="copyError">Copy</button>
       <button class="btn btn-primary btn-sm" id="closeError">Close</button>
     </div>

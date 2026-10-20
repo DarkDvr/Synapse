@@ -66,6 +66,10 @@ const state = {
   mode: 'single',
   streaming: false,
   streamLive: false,
+  // When the last engine event arrived, so the sidebar can say "10s" instead of
+  // just naming it. And the stopwatches for the open session (see tickClocks).
+  lastEventAt: 0,
+  clocks: null,
   collapsed: new Set(),
   // Keys of reasoning blocks and tool cards the operator has opened. The
   // transcript is rebuilt on every poll, so expansion state has to live outside
@@ -157,11 +161,41 @@ function toast(title, body, ms = 4200) {
 }
 
 // ── error popup ─────────────────────────────────────────────────
-function openError(title, text) {
+function openError(title, text, opts = {}) {
   $('errorHeading').textContent = title;
-  $('errorText').textContent = text;
+  $('errorBadge').textContent = opts.badge || '!';
+  const lead = $('errorLead');
+  lead.textContent = opts.lead || '';
+  lead.hidden = !opts.lead;
+  const detail = $('errorText');
+  detail.textContent = text || '';
+  detail.hidden = !text;
+  const note = $('errorNote');
+  note.textContent = opts.note || '';
+  note.hidden = !opts.note;
+  $('errorModal').classList.toggle('is-alarm', Boolean(opts.alarm));
   $('errorModal').hidden = false;
   $('closeError').focus();
+}
+
+/** An agent touched Synapse itself. Not an error to retry: a report to read, so
+ *  it gets a sentence saying what happened and what did not. */
+function openAlarm(ev) {
+  const what = String(ev.what || '');
+  const title = /shell|command/i.test(what)
+    ? 'A shell command named Synapse'
+    : /write|edit/i.test(what)
+      ? 'Something tried to write inside Synapse'
+      : 'Synapse was named in a tool call';
+  toast('Synapse Activity Warning', what || 'something touched Synapse itself');
+  openError(title, (ev.paths || []).slice(0, 6).join('\n'), {
+    lead:
+      'A model named this folder in a tool call. It is logged, and Synapse takes a restore point before ' +
+      'every delegation, so the repository can be put back. Nothing was changed automatically and the run ' +
+      'was not stopped — this is the report, not the repair.',
+    note: ev.note ? String(ev.note) : '',
+    alarm: true,
+  });
 }
 function closeError() { $('errorModal').hidden = true; }
 
@@ -279,12 +313,170 @@ function renderStatus() {
   const failed = Boolean(state.status?.bootError);
 
   $('engineDot').className = 'status-dot ' + (ready ? 'ok' : failed ? 'err' : 'warn');
+  // `opencode v2.1.0`: the v is the version's own, not a word.
   $('engineState').textContent = ready
-    ? `${engine.kind} ${engine.version || ''}`.trim()
+    ? `${engine.kind} ${versionTag(engine.version)}`.trim()
     : failed ? 'failed' : 'starting';
 
-  $('streamDot').className = 'status-dot ' + (state.streamLive ? 'ok' : 'idle');
-  $('streamState').textContent = state.streamLive ? 'connected' : 'offline';
+  // There is no separate "Event stream" row any more: this dot is the stream's
+  // state, and the age on its label is the evidence. A row that said "connected"
+  // next to a clock that keeps resetting said the same thing twice.
+  $('eventDot').className = 'status-dot ' + (state.streamLive ? 'ok' : 'idle');
+  renderLastEventAge();
+}
+
+const versionTag = (v) => {
+  const s = String(v || '').trim();
+  if (!s) return '';
+  return /^v/i.test(s) ? s : `v${s}`;
+};
+
+/** 10s, 2m, 3h: a unit that never makes you do arithmetic, rounded down. */
+function shortSpan(ms) {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h`;
+  return `${Math.floor(h / 24)}d`;
+}
+
+/** HH:MM:SS, hours not padded — a stopwatch, read at a glance. */
+function hhmmss(ms) {
+  const total = Math.max(0, Math.floor(ms / 1000));
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+}
+
+function renderLastEventAge() {
+  const label = $('lastEventLabel');
+  if (!label) return;
+  label.textContent = state.lastEventAt
+    ? `Last event (${shortSpan(Date.now() - state.lastEventAt)})`
+    : 'Last event';
+}
+
+// ── clocks ──────────────────────────────────────────────────────
+// Three stopwatches: how long a card has been working right now, how long that
+// role has worked in total this session, and how much wall time the session has
+// spent working at all. Two of them are display-only.
+//
+// Deliberately client-side and derived from what is already on screen — a live
+// run for a worker, the open turn for the Architect — because the server has no
+// opinion about "working" that the cards do not already show. Totals are kept in
+// localStorage per session, so a reload restores them; the current interval is
+// restarted from now on load, since time spent with the page closed is not time
+// we can honestly claim to have measured.
+
+const clockKey = (id) => `synapse.clocks.${id}`;
+
+function loadClocks(sessionId) {
+  const c = { sessionId: sessionId || null, session: { ms: 0, since: null }, roles: {}, ticks: 0 };
+  if (!sessionId) return c;
+  try {
+    const raw = JSON.parse(localStorage.getItem(clockKey(sessionId)) || 'null');
+    if (raw && typeof raw === 'object') {
+      c.session.ms = Math.max(0, Number(raw.session?.ms) || 0);
+      for (const [role, v] of Object.entries(raw.roles || {})) {
+        c.roles[role] = {
+          ms: Math.max(0, Number(v?.ms) || 0),
+          since: null,
+          last: Math.max(0, Number(v?.last) || 0),
+        };
+      }
+    }
+  } catch { /* a corrupt stopwatch is not worth an error */ }
+  return c;
+}
+
+function saveClocks() {
+  const c = state.clocks;
+  if (!c?.sessionId) return;
+  try {
+    const roles = {};
+    for (const [role, v] of Object.entries(c.roles)) roles[role] = { ms: v.ms, last: v.last };
+    localStorage.setItem(clockKey(c.sessionId), JSON.stringify({ session: { ms: c.session.ms }, roles }));
+  } catch { /* full or blocked storage must not break a turn */ }
+}
+
+/** Is this card doing work right now? The same reading its dot uses. */
+function roleIsWorking(role) {
+  const run = currentRun();
+  const form = (state.forms || [])[0];
+  const perm = (state.permissions || [])[0];
+  if (role === 'architect') {
+    // Waiting on the operator is not work, and neither is waiting on a worker —
+    // the worker's own card is the one that should be counting.
+    if (form && form.sessionId === state.sessionId) return false;
+    if (perm && perm.sessionId === state.sessionId) return false;
+    if (run) return false;
+    return isBusy(state.sessionId);
+  }
+  if (!run || run.role !== role) return false;
+  // A worker stopped on a question is waiting, exactly as its card says.
+  return !(form && form.sessionId && form.sessionId !== state.sessionId);
+}
+
+function tickClocks() {
+  const now = Date.now();
+  renderLastEventAge();
+  const c = state.clocks;
+  if (!c) return;
+  let changed = false;
+  let anyWorking = false;
+
+  for (const card of document.querySelectorAll('#topology .role-card')) {
+    const role = card.dataset.role;
+    const working = roleIsWorking(role);
+    if (working) anyWorking = true;
+    const rec = (c.roles[role] ||= { ms: 0, since: null, last: 0 });
+    if (working && !rec.since) rec.since = now;
+    else if (!working && rec.since) {
+      rec.last = now - rec.since;
+      rec.ms += rec.last;
+      rec.since = null;
+      changed = true;
+    }
+  }
+
+  // The session clock is the union of the cards: it runs while any of them works,
+  // so it is stopped by a question, by a permission prompt, and by a finished
+  // project — all of which show as "nobody is working" on the cards themselves.
+  if (anyWorking && !c.session.since) c.session.since = now;
+  else if (!anyWorking && c.session.since) {
+    c.session.ms += now - c.session.since;
+    c.session.since = null;
+    changed = true;
+  }
+
+  paintClocks(now);
+  // Persist on a real transition, and every so often while running: the totals
+  // only move at transitions, so this is a handful of writes per run.
+  c.ticks += 1;
+  if (changed || c.ticks % 15 === 0) saveClocks();
+}
+
+function paintClocks(now) {
+  const c = state.clocks;
+  if (!c) return;
+  for (const card of document.querySelectorAll('#topology .role-card')) {
+    const el = card.querySelector('.role-clock');
+    if (!el) continue;
+    const rec = c.roles[card.dataset.role];
+    const running = rec?.since ? now - rec.since : 0;
+    if (!rec || (!rec.ms && !rec.since && !rec.last)) {
+      el.textContent = '';
+      continue;
+    }
+    el.textContent = `${hhmmss(running || rec.last || 0)} / ${hhmmss(rec.ms + running)}`;
+  }
+  const clock = $('planClock');
+  if (clock) {
+    clock.textContent = hhmmss(c.session.ms + (c.session.since ? now - c.session.since : 0));
+  }
 }
 
 // ── engine updates ──────────────────────────────────────────────
@@ -455,11 +647,10 @@ async function applyEngineUpdate() {
 function setEventChip(type) {
   const el = $('lastEvent');
   if (el) el.textContent = String(type || 'idle').replace(/^session\./, '');
-  const dot = $('eventDot');
-  if (!dot) return;
-  dot.className = 'status-dot ok';
-  clearTimeout(setEventChip.timer);
-  setEventChip.timer = setTimeout(() => { dot.className = 'status-dot idle'; }, 1200);
+  // The age beside the label is the liveness readout now, so this only records
+  // when; the dot belongs to the stream and is not flashed here.
+  state.lastEventAt = Date.now();
+  renderLastEventAge();
 }
 
 // ── models / modes ──────────────────────────────────────────────
@@ -1651,6 +1842,9 @@ async function openSession(id) {
   state.view = 'session';
   state.sessionId = id;
   state.permissions = [];
+  // A stopwatch belongs to the session it measured, so opening another one swaps
+  // the totals rather than carrying them across.
+  state.clocks = loadClocks(id);
   // the mode is a property of the session, not of the app
   state.mode = sessionMode(findSession(id));
   state.auto = findSession(id)?.auto === true;
@@ -1675,6 +1869,7 @@ function showNothing() {
   state.sessionId = null;
   state.messages = [];
   state.planState = null;
+  state.clocks = null;
   state.auto = false;
   state.mode = 'single';
   renderMode();
@@ -2604,8 +2799,8 @@ function renderAskPanel() {
     </div>
     <div class="ask-fields">${(form.fields || []).map(askField).join('')}</div>
     <div class="ask-actions">
-      <span class="ask-progress" data-ask-progress hidden></span>
       <span class="ask-state" data-ask-state></span>
+      <span class="ask-progress" data-ask-progress hidden></span>
       <button class="btn btn-ghost btn-sm" data-ask-back hidden>Back</button>
       <button class="btn btn-ask btn-sm" data-ask-next hidden>Next</button>
       <button class="btn btn-ask btn-sm" data-form-reply="${esc(form.id)}" hidden>Submit Answer</button>
@@ -2895,7 +3090,7 @@ function renderPlan() {
   if (st?.error) {
     body.innerHTML =
       `<p class="plan-error">${esc(st.error)}</p>` +
-      `<p class="rail-note plan-meta">${esc(rel)}</p>`;
+      `<p class="rail-note plan-meta"><span>${esc(rel)}</span>${planClockMarkup()}</p>`;
     return;
   }
 
@@ -2909,7 +3104,9 @@ function renderPlan() {
   // the live truth; the file stays the plan.
   const liveRun = currentRun();
   if (!tasks.length) {
-    body.innerHTML = `<p class="rail-note">No plan yet. Ask the Architect to plan this job — it owns ${esc(rel)}.</p>`;
+    body.innerHTML =
+      `<p class="rail-note">No plan yet. Ask the Architect to plan this job - it owns ${esc(rel)}.</p>` +
+      `<p class="rail-note plan-meta"><span></span>${planClockMarkup()}</p>`;
     return;
   }
 
@@ -2955,7 +3152,17 @@ function renderPlan() {
         `<ul>${st.problems.map((p) => `<li>${esc(p)}</li>`).join('')}</ul>` +
         `</div>`
       : '') +
-    `<p class="rail-note plan-meta">${esc(meta.join(' · '))}</p>`;
+    `<p class="rail-note plan-meta"><span>${esc(meta.join(' · '))}</span>${planClockMarkup()}</p>`;
+}
+
+/** The session's own stopwatch, in the plan footer: time spent working, paused
+ *  whenever the cards show nobody working. It is rendered here so a plan poll
+ *  repaints it with the right value instead of zeroing it. */
+function planClockMarkup() {
+  const c = state.clocks;
+  if (!c) return '';
+  const ms = c.session.ms + (c.session.since ? Date.now() - c.session.since : 0);
+  return `<span class="plan-clock" id="planClock" title="Time this session has spent working — it pauses whenever no card is working, and whenever you are being waited on.">${hhmmss(ms)}</span>`;
 }
 
 async function renderToolUsage() {
@@ -3302,9 +3509,7 @@ function connectStream() {
     // This is the one event that must not be missed, so it is loud in both places
     // the operator looks — a toast now, and the error dialog with the paths.
     if (ev.kind === 'alarm') {
-      const paths = (ev.paths || []).slice(0, 6).join('\n');
-      toast('Harness Tampering Detected', ev.what || 'something touched Synapse itself');
-      openError(ev.what || 'Harness Tampering', `${ev.what || ''}\n\n${paths}${ev.note ? `\n\n(${ev.note})` : ''}`);
+      openAlarm(ev);
       return;
     }
 
@@ -3683,6 +3888,18 @@ function closeSettings() { $('settingsModal').hidden = true; }
 // ── wiring ──────────────────────────────────────────────────────
 function wire() {
   setupModelPickers();
+  // One stopwatch per card and one for the session, on a single one-second
+  // interval: HH:MM:SS needs a second's resolution and this is a text node per
+  // tick, so it costs nothing measurable.
+  for (const card of document.querySelectorAll('#topology .role-card')) {
+    if (!card.querySelector('.role-clock')) {
+      const el = document.createElement('span');
+      el.className = 'role-clock';
+      el.setAttribute('aria-hidden', 'true');
+      card.append(el);
+    }
+  }
+  setInterval(tickClocks, 1000);
   $('composer').addEventListener('submit', (e) => { e.preventDefault(); send(); });
   $('stopBtn').addEventListener('click', interrupt);
   $('modeToggle').addEventListener('click', switchMode);

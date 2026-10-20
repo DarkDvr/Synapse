@@ -369,7 +369,12 @@ body.dark .sidebar .nav-link.active > span:first-child { color: #fff; }
   border-radius: 9px;
 }
 .tree-row.project:hover { background: #262931; border-color: #363a42; }
-.tree-row.project.is-current { background: var(--violet-faint); border-color: var(--violet-line); }
+/* The current project and session are yellow, the plan's in-hand colour, not a
+   violet fill: the left panel had the only violet surface left outside the
+   composer, and it read as a different product. Same recipe as the plan row —
+   a faint yellow wash and a yellow border — so "this is the one you are in"
+   looks the same in both places. */
+.tree-row.project.is-current { background: rgba(237, 194, 90, 0.06); border-color: rgba(237, 194, 90, 0.5); }
 
 /* `align-content: start` matters: the list is a grid inside a flex column that
    gives it a definite height, and a grid with free space stretches its rows —
@@ -381,6 +386,7 @@ body.dark .sidebar .nav-link.active > span:first-child { color: #fff; }
 .tree-row {
   display: flex; align-items: center; gap: 4px;
   min-width: 0; padding: 0 5px 0 0; border-radius: 9px;
+  position: relative;
 }
 
 .tree-open {
@@ -410,32 +416,38 @@ body.dark .sidebar .nav-link.active > span:first-child { color: #fff; }
 /* tier 2 — projects' contents: everything under a project header sits to the
    right of one vertical yellow rule — the shortcuts, the label, the sessions. */
 .tree-project-body {
-  margin: 3px 0 4px 10px; padding: 4px 0 4px 10px;
+  margin: 3px 0 4px 6px; padding: 4px 0 4px 6px;
   border-left: 2px solid var(--yellow);
 }
 /* the sessions list draws no guide line or indent of its own: the rule does it */
 .tree-sessions { position: relative; padding-left: 0; margin: 2px 0 0; display: grid; gap: 1px; }
-.tree-row.session { padding: 0 4px 0 0; }
+.tree-row.session { padding: 0 2px 0 0; }
 .tree-row.session .tree-open {
-  font-size: 12.5px; color: #a8acb3; padding: 5px 7px; font-weight: 400;
+  font-size: 12.5px; color: #a8acb3; padding: 5px 3px 5px 7px; font-weight: 400; gap: 4px;
 }
 .tree-row.session:hover .tree-open { color: var(--text); }
-.tree-row.session.is-current { background: var(--violet-faint); border-radius: 8px; }
+.tree-row.session.is-current { background: rgba(237, 194, 90, 0.06); border-radius: 8px; }
 .tree-row.session.is-current .tree-open { color: #fff; font-weight: 600; }
 .tree-x {
   border: 0; background: transparent; color: var(--red); opacity: 0.65;
-  font-size: 12px; line-height: 1; padding: 3px 5px; border-radius: 5px;
+  font-size: 12px; line-height: 1; padding: 3px 4px; border-radius: 5px;
   cursor: pointer; flex: none;
 }
 .tree-x:hover { background: var(--red-soft); opacity: 1; }
 
 /* row actions: edit appears on hover, delete is always present */
 .tree-actions { display: flex; align-items: center; gap: 1px; flex: none; }
+/* The rename pencil overlays the end of the name instead of reserving 21px of
+   it. In a 256px rail that reservation cost three characters of every session
+   title, permanently, for a control only visible on hover. It is the same trade
+   a file tree makes. */
 .tree-edit {
+  position: absolute; right: 21px; top: 2px;
   border: 0; background: transparent; color: var(--yellow); opacity: 0;
+  pointer-events: none;
   font-size: 11px; line-height: 1; padding: 3px 5px; border-radius: 5px; cursor: pointer;
 }
-.tree-row:hover .tree-edit, .tree-edit:focus-visible { opacity: 0.85; }
+.tree-row:hover .tree-edit, .tree-edit:focus-visible { opacity: 0.85; pointer-events: auto; }
 .tree-edit:hover { background: var(--amber-soft); opacity: 1; }
 
 /* a project whose directory is gone: the engine cannot run sessions there */
@@ -459,10 +471,10 @@ body.dark .sidebar .nav-link.active > span:first-child { color: #fff; }
   color: #a8acb3; font-family: inherit; font-size: 10.5px; font-weight: 600;
   letter-spacing: 0.02em;
 }
-.btn-thin:hover { background: var(--violet-faint); border-color: var(--violet-line); color: #fff; }
+.btn-thin:hover { background: rgba(237, 194, 90, 0.12); border-color: rgba(237, 194, 90, 0.5); color: #fff; }
 /* Explorer takes about a second to put its window up, so the button has to
    answer the click itself or it feels dead. */
-.btn-thin:active { background: var(--violet-soft); border-color: var(--violet-line); color: #fff; }
+.btn-thin:active { background: rgba(237, 194, 90, 0.22); border-color: rgba(237, 194, 90, 0.65); color: #fff; }
 
 /* the live marker: reserved space, revealed only while work is running */
 .tree-live {
@@ -512,9 +524,11 @@ body.dark .sidebar .nav-link.active > span:first-child { color: #fff; }
 body.dark .sidebar-bottom,
 .status-block {
   flex-direction: column; align-items: stretch; gap: 7px;
-  padding: 13px 4px 4px;
+  /* 15% less air above STATUS than before: the divider and its label were
+     reading as two groups instead of one heading over its rows. */
+  padding: 11px 4px 4px;
 }
-.status-block .sidebar-label { margin-bottom: 1px; padding-bottom: 0; }
+.status-block .sidebar-label { margin-bottom: 1px; padding-bottom: 0; color: var(--yellow); }
 .status-row {
   display: flex; align-items: center; gap: 8px;
   font-size: 12px; color: var(--muted); white-space: nowrap;
@@ -602,8 +616,9 @@ body.dark .sidebar-bottom,
 
 .role-card {
   background: var(--surface); border: 1px solid var(--line);
-  border-radius: 12px; padding: 11px 13px;
+  border-radius: 12px; padding: 11px 13px 19px;
   min-width: 0; height: auto; overflow: hidden;
+  position: relative;
   display: grid; grid-template-rows: auto;
   /* the head row and the task line: this is the gap above the label */
   gap: 8px;
@@ -1003,6 +1018,15 @@ body[data-mode="single"] .keep-toggle { display: none; }
 }
 .msg-answer > :first-child { margin-top: 0; }
 .msg-answer > :last-child { margin-bottom: 0; }
+/* A GFM table has to wrap. The baseline sets `white-space: nowrap` on every
+   table - right for a rail of numbers, wrong for prose with nine columns, where
+   the table simply ran off the chat and the right-hand findings were unreadable.
+   Wrapping is the fix; a scrollbar would answer the same question worse. */
+.msg-answer table { width: 100%; table-layout: auto; margin: 0 0 8px; }
+.msg-answer th, .msg-answer td {
+  white-space: normal; overflow-wrap: anywhere; word-break: break-word;
+  vertical-align: top; padding: 5px 7px;
+}
 .msg-answer p { margin: 0 0 7px; }
 .msg-answer h1, .msg-answer h2, .msg-answer h3,
 .msg-answer h4, .msg-answer h5, .msg-answer h6 {
@@ -1252,17 +1276,18 @@ body[data-mode="single"] .keep-toggle { display: none; }
 .ask-actions {
   flex: none;
   display: flex; align-items: center; gap: 10px; flex-wrap: wrap; row-gap: 6px;
+  justify-content: flex-end;
   margin: 11px -14px 0; padding: 9px 14px 11px;
   background: #1a1c20; border-top: 1px solid #2b2e35;
 }
-.ask-state { font-size: 11px; color: var(--orange); }
+.ask-state { font-size: 11px; color: var(--orange); margin-right: auto; }
 /* Which question of how many — the one thing that says a form has more below
    the fold. It sits first in the row so it is read before the button. */
 .ask-progress {
   font-size: 10.5px; font-weight: 700; letter-spacing: 0.08em;
   text-transform: uppercase; color: #b9bec6; white-space: nowrap;
 }
-.ask-actions .btn { margin-left: auto; }
+.ask-actions .btn { margin-left: 0; }
 /* Back and Next are one cluster: only the first button takes the free space. */
 .ask-actions .btn ~ .btn { margin-left: 8px; }
 .ask-actions .btn[hidden] { display: none; }
@@ -1446,7 +1471,22 @@ body[data-mode="single"] .keep-toggle { display: none; }
   border-radius: 5px; background: var(--violet-faint); color: #b9b5ff;
   border: 1px solid var(--violet-line); white-space: nowrap; margin-top: 1px;
 }
-.plan-meta { margin-top: 10px; font-family: var(--mono); font-size: 11px; }
+.plan-meta { margin-top: 10px; font-family: var(--mono); font-size: 11px;
+  display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+/* The session's own stopwatch: time spent working, grey and quiet, in the corner
+   where a reader looks last. */
+.plan-clock { color: #6c7079; font-variant-numeric: tabular-nums; flex: none; }
+
+/* One stopwatch per role card: current task, then total for this session. It
+   sits in the extra strip under the clamped subtitle, so it can never collide
+   with the text and never changes a card's height when it appears. */
+.role-clock {
+  position: absolute; right: 13px; bottom: 5px;
+  font-family: var(--mono); font-size: 9.5px; line-height: 1;
+  letter-spacing: 0.02em; color: #6c7079;
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+  pointer-events: none;
+}
 /* the file could not be read at all — the Architect's to fix, so say so plainly */
 .plan-error {
   margin: 0; padding: 7px 9px; border-radius: 7px;
@@ -1594,6 +1634,39 @@ body:has(.modal-backdrop:not([hidden])) { overflow: hidden; }
   color: #ffc3b8; white-space: pre-wrap; overflow-wrap: anywhere;
   max-height: 260px; overflow: auto;
 }
+
+/* The error popup carries two kinds of news: a plain failure, and an alarm about
+   an agent touching Synapse itself. One shape, two weights — the alarm gets the
+   amber badge and rule, because it is a report to read, not an error to retry. */
+.err-modal { width: min(600px, 100%); }
+.err-top { display: flex; align-items: flex-start; gap: 10px; }
+.err-top h3 {
+  flex: 1; margin: 1px 0 0; font: 700 15px var(--display);
+  letter-spacing: -0.2px; color: #fff;
+}
+.err-top .close-x { flex: none; margin: -3px -4px 0 0; }
+.err-badge {
+  flex: none; width: 21px; height: 21px; border-radius: 6px;
+  display: grid; place-items: center;
+  background: rgba(240, 86, 63, 0.12); border: 1px solid rgba(240, 86, 63, 0.45);
+  color: var(--red); font-size: 12px; font-weight: 800; line-height: 1;
+}
+#errorModal.is-alarm .err-modal { border-color: rgba(232, 163, 61, 0.35); }
+#errorModal.is-alarm .err-badge {
+  background: rgba(232, 163, 61, 0.12); border-color: rgba(232, 163, 61, 0.5); color: var(--amber);
+}
+.err-lead { margin: 10px 0 0; font-size: 12px; line-height: 1.6; color: #b6bac1; }
+.err-detail {
+  margin: 12px 0 0; padding: 10px 12px; border-radius: 8px;
+  background: #16181c; border: 1px solid #2a2d33;
+  border-left: 3px solid rgba(240, 86, 63, 0.55);
+  font-family: var(--mono); font-size: 11px; line-height: 1.65; color: #d3d6db;
+  white-space: pre-wrap; overflow-wrap: anywhere;
+  max-height: 220px; overflow-y: auto; overscroll-behavior: contain;
+}
+#errorModal.is-alarm .err-detail { border-left-color: rgba(232, 163, 61, 0.6); }
+.err-note { margin: 9px 0 0; font-family: var(--mono); font-size: 10.5px; color: #74787f; }
+.err-modal .modal-actions { display: flex; gap: 9px; margin-top: 16px; justify-content: flex-end; }
 
 /* ── 15. responsive ────────────────────────────────────────────────────── */
 
