@@ -178,6 +178,16 @@ export function windowRoom({ context, output } = {}) {
   return Math.max(0, context - (Number(output) || 0) - slack);
 }
 
+// Turns at which a worker is asked, once, whether it is done. Not a limit and not
+// a kill: the model decides, and a task that genuinely needs more carries on.
+// Clock Test 3's designer was finished by turn ~50 and ran to 92 — the last twenty
+// minutes moved a value by 0.04% and re-rendered to look at it.
+const TURN_STEERS = [40, 90];
+
+/** Which steer is due, given how many turns a session has taken. */
+export const steerDue = (turns, sent) =>
+  TURN_STEERS[sent] && turns >= TURN_STEERS[sent] ? TURN_STEERS[sent] : null;
+
 /**
  * What the window watchdog should do on this poll.
  *
@@ -652,8 +662,9 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
               emit('run.progress', { ...live });
             },
             signal,
-            // The room this model actually has, or nothing at all.
-            contextWindow(modelRef),
+            // The room this model actually has (or nothing at all), and the one
+            // "are you done" steer a long worker gets.
+            { window: contextWindow(modelRef), steer: true },
           );
 
           if (finished.stopped) {
@@ -1015,6 +1026,35 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
   // polled once per 1.5s and this has to survive between polls.
   const windows = new Map();
 
+  // How many "are you done" steers a session has been sent.
+  const steered = new Map();
+
+  /**
+   * Ask a long-running worker whether it is done.
+   *
+   * The brief says to stop when the deliverable exists, and the window watchdog
+   * catches the transcript filling up — but neither notices a model that is happy
+   * polishing. This is the harness's one word on the subject, at a turn count and
+   * not a wall clock: it is a question the model is free to answer "no" to.
+   */
+  async function steerIfLong(sessionId, messages) {
+    const turns = (messages || []).filter((m) => m.type === 'assistant').length;
+    const sent = steered.get(sessionId) || 0;
+    const due = steerDue(turns, sent);
+    if (!due) return;
+    steered.set(sessionId, sent + 1);
+    const text =
+      `You are ${turns} turns into this task. If what was asked for is essentially there, stop: finish the ` +
+      `deliverable, write your report and end the run - the Architect judges the files, not the effort, and ` +
+      `polishing past the checks the task names is not part of it. If it genuinely needs more work, carry on.`;
+    try {
+      await engine.synthetic(sessionId, text, { description: 'harness: are you done?' });
+      out.info(`asked ${sessionId} whether it is done (turn ${turns})`);
+    } catch (err) {
+      log.warn(`could not ask ${sessionId} whether it is done: ${err.message}`);
+    }
+  }
+
   /**
    * Compact *before* the window closes, never on a schedule.
    *
@@ -1076,7 +1116,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
    * A pending question also pauses the clock: the operator may take hours, and
    * the transcript itself says so.
    */
-  async function waitForIdle(sessionId, before, stallMs, onTool, signal, window = null) {
+  async function waitForIdle(sessionId, before, stallMs, onTool, signal, { window = null, steer = false } = {}) {
     let lastActivity = Date.now();
     let lastKey = '';
     let sig = '';
@@ -1114,6 +1154,9 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
       // where the window can be watched without another engine call. It does
       // nothing at all unless the model's real limit is known and near.
       if (window) await watchWindow(sessionId, messages, window);
+      // And the same poll is where "this has been going a long time" can be said
+      // once, to a worker, without a new engine call.
+      if (steer) await steerIfLong(sessionId, messages);
 
       const last = messages[messages.length - 1];
       const waiting = (last?.parts || []).some(
@@ -1383,7 +1426,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
         settings.stallSec * 1000,
         null,
         signal,
-        contextWindow(archRef),
+        { window: contextWindow(archRef) },
       );
       if (finished.stopped) return { ok: false, stopped: true };
 

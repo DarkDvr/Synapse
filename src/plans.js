@@ -30,10 +30,12 @@ export const ROLES = ['architect', 'inventor', 'coder-1', 'designer', 'coder-2',
 export const STATUSES = ['todo', 'doing', 'done', 'blocked', 'failed'];
 
 // A result with a "todo" status is the Architect's two writes landing one after
-// the other: it records the result, then flips the status seconds later. Inside
-// that gap the plan is half-written, not wrong, so the complaint waits until the
-// file has stood still — a plan left in that state is the fault worth naming.
-const RESULT_STATUS_GRACE_MS = 90 * 1000;
+// the other: it records the result, then flips the status later in the same turn.
+// Inside that gap the plan is half-written, not wrong, so the complaint waits
+// until the file has stood still. Ten minutes, not ninety seconds: judging a
+// report is itself a long turn — reading a 48 KB spec and six renders took one
+// Architect turn past three minutes, and the note fired while it was still working.
+const RESULT_STATUS_GRACE_MS = 10 * 60 * 1000;
 
 // Which roles belong to a phase the Architect declared. `phases` is a menu, so an
 // empty or unknown phase name is not ours to police; a declared phase with no task
@@ -516,8 +518,12 @@ const ROLE_MANDATES = {
     'at .synapse/design/mock-1.html, mock-2.html and so on - plain HTML with inline CSS, static, opening at any width.',
     'Two mocks is the ceiling: the operator picks a direction, not a catalogue, and every extra one is another',
     'file to keep in step and another round of renders to look at. States of one screen belong in one mock behind',
-    'a query flag (?state=night), not in a file each. The spec is what the builder is held to, so make it exact',
-    'enough to check line by line.',
+    'a query flag (?state=night), not in a file each. The spec is what the builder is held to: tables and values,',
+    'at the size a builder will actually use - a book about the design is not the design.',
+    'Stop when the spec is written and both mocks render at the sizes and states you were asked for. One pass of',
+    'adjustment after the first render is worth having; after that you are tuning, not designing, and a value',
+    'settled to two decimal places is not a design decision. If you measure the same thing twice, put the number',
+    'in the spec and move on.',
   ].join(' '),
   hacker: [
     'You are the Hacker. Use the build the way the operator will, then the way a person in a hurry will, and report',
@@ -710,6 +716,17 @@ export function briefSession({ dir, role = 'architect', auto = false, skills = '
   // specific task. Coders share one mandate, including coder-2 and coder-3.
   const mandate = isArchitect ? null : ROLE_MANDATES[role] || ROLE_MANDATES['coder-1'];
   if (mandate) lines.push(mandate);
+  // Every role, at the end of the job: the run ends when the deliverable exists
+  // and the checks pass, not when the model runs out of ideas. The clock project's
+  // designer spent its last twenty minutes moving a value by 0.04% and re-rendering
+  // to look at it, because nothing in its brief said when the work was done.
+  if (!isArchitect) {
+    lines.push(
+      'Stop when the deliverable exists and the checks the task names pass: write your report and finish. A ' +
+        'longer run is not a better one - the Architect judges the files, and polish past what was asked for is ' +
+        'work nobody asked for.',
+    );
+  }
   if (role === 'hacker') {
     lines.push(HACKER_FOCUS[focus === 'security' ? 'security' : 'app']);
     lines.push(HACKER_PROPORTION);

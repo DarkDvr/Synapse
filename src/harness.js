@@ -24,15 +24,13 @@ const SHELL_TOOLS = /^(shell|bash|execute)$/;
 // A shell command is judged on what it does to the harness, not on the fact that
 // it names it. `skills/` is the harness's toolbox — the visual-review renderer,
 // the design briefs — and running one is ordinary tool use, already in the
-// transcript, the census and the session log. On the clock run the Architect ran
-// `shot.mjs` before every delegation and each one was a red alarm about the
-// feature working as designed.
+// transcript, the census and the session log. On the clock runs every render was a
+// red alarm about the feature working as designed.
 //
-// So a command that names nothing but `skills/` is quiet, *unless* it is shaped
-// like a write: a redirect with a real target, or one of the verbs that changes
-// a file. `2>&1` is not a redirect to a file, and `--delete` is not `del`.
-const WRITE_HINT =
-  /(?:^|[\s;&|(])(?:set-content|add-content|out-file|new-item|remove-item|rename-item|move-item|copy-item|del|erase|rm|mv|cp|move|copy|robocopy|tee-object)\b|>\s*[^\s&|]/i;
+// So a command that names nothing but `skills/` is quiet. A *redirect* into the
+// harness is still an alarm whatever it names, because that is the one shape that
+// writes without a path a tool could check. `2>&1` is not a redirect to a file.
+const REDIRECT_INTO = /(?:^|[^0-9&])>>?\s*("[^"]+"|'[^']+'|[^\s;&|]+)/g;
 
 export function createHarnessGuard({ root, logger, notify }) {
   const log = logger.channel('app');
@@ -56,11 +54,20 @@ export function createHarnessGuard({ root, logger, notify }) {
       .map(asKey)
       .filter((token) => token === rootKey || token.includes(`${rootKey}/`));
 
+  /** Does a redirect in this command aim at a file inside the harness? */
+  const redirectsInto = (command) => {
+    for (const match of String(command || '').matchAll(REDIRECT_INTO)) {
+      const target = String(match[1] || '').replace(/^["']|["']$/g, '');
+      if (inHarness(target)) return true;
+    }
+    return false;
+  };
+
   /** Is this shell command just the harness's own toolbox being used? */
   const runsTheToolbox = (command) => {
     const named = harnessPathsIn(command);
     if (!named.length || !named.every((p) => p.startsWith(skillsKey))) return false;
-    return !WRITE_HINT.test(String(command));
+    return !redirectsInto(command);
   };
 
   /**

@@ -15,7 +15,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { readPlan } from '../src/plans.js';
-import { contextStats, windowRoom, windowAction } from '../src/runs.js';
+import { contextStats, windowRoom, windowAction, steerDue } from '../src/runs.js';
 import { createHarnessGuard } from '../src/harness.js';
 
 const checks = [];
@@ -79,6 +79,8 @@ try {
   s = write({ version: 1, goal: 'A clock.', phases: ['build'], tasks: [task('t1', 'inventor', 'done'), half] }, 0);
   expect('result+todo is quiet inside the grace', !has(s, 'has a result but its status'));
   s = write({ version: 1, goal: 'A clock.', phases: ['build'], tasks: [task('t1', 'inventor', 'done'), half] }, 5 * 60 * 1000);
+  expect('result+todo stays quiet through a long judging turn', !has(s, 'has a result but its status'));
+  s = write({ version: 1, goal: 'A clock.', phases: ['build'], tasks: [task('t1', 'inventor', 'done'), half] }, 15 * 60 * 1000);
   expect('result+todo is named once settled', has(s, 'has a result but its status'));
 
   const real = readPlan('F:/dev/Synapse.Projects/clock-test-2');
@@ -136,6 +138,16 @@ try {
   expect('no context yet, no action', windowAction(s, 0, big) === 'none');
 }
 
+// ── the "are you done" steer ────────────────────────────────────
+{
+  expect('no steer before 40 turns', steerDue(39, 0) === null);
+  expect('the first steer lands at 40', steerDue(40, 0) === 40);
+  expect('and never repeats', steerDue(41, 1) === null && steerDue(80, 1) === null);
+  expect('the second lands at 90', steerDue(90, 1) === 90);
+  expect('and then it is quiet for good', steerDue(400, 2) === null);
+  expect('a session that starts past 40 still gets one', steerDue(52, 0) === 40);
+}
+
 // ── the harness guard ───────────────────────────────────────────
 {
   const seen = [];
@@ -158,13 +170,24 @@ try {
     'a piped render with a 2>&1 is still tool use',
     alarmCount(turn('Get-ChildItem F:\\dev\\Synapse\\skills\\visual-review -Recurse | node "F:/dev/Synapse/skills/visual-review/bin/shot.mjs" "F:/x.html" 2>&1 | Out-String')) === 0,
   );
+  // The real Clock Test 3 command: clear the project's own shots, then render.
+  // One line, it names a skill, and it writes only inside the project.
   expect(
-    'writing into skills is an alarm',
-    alarmCount(turn('Set-Content F:/dev/Synapse/skills/visual-review/bin/shot.mjs -Value "x"')) === 1,
+    'a render that also clears project scratch is tool use',
+    alarmCount(
+      turn(
+        '$dir = "F:\\dev\\Synapse.Projects\\x\\.synapse\\design\\shots"; Remove-Item $dir -Recurse -Force; ' +
+          'node "F:/dev/Synapse/skills/visual-review/bin/shot.mjs" "file:///F:/x/mock-a.html?state=day" --out "F:/x/shots/a.png" 2>&1 | Out-String',
+      ),
+    ) === 0,
   );
   expect(
-    'redirecting a skill run into a file is an alarm',
-    alarmCount(turn('node F:/dev/Synapse/skills/visual-review/bin/shot.mjs F:/x.html > out.txt')) === 1,
+    'redirecting a skill run into the project is tool use',
+    alarmCount(turn('node F:/dev/Synapse/skills/visual-review/bin/shot.mjs F:/x.html > out.txt')) === 0,
+  );
+  expect(
+    'redirecting into the harness is an alarm whatever it names',
+    alarmCount(turn('node F:/dev/Synapse/skills/visual-review/bin/shot.mjs F:/x.html > F:/dev/Synapse/skills/leak.txt')) === 1,
   );
   expect(
     'a command naming the rest of the harness is an alarm',
