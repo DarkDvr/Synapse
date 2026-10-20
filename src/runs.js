@@ -1145,7 +1145,9 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
         `Effort: ${context.turns} turn${context.turns === 1 ? '' : 's'}, ${tokens(context.generated)} tokens written ` +
           `(${context.thinkShare}% thinking), context peaked at ${tokens(context.peak)}` +
           (context.compactions
-            ? ` and was summarised ${context.compactions} time${context.compactions === 1 ? '' : 's'}.`
+            ? context.compactions === 1
+              ? ' and was summarised once.'
+              : ` and was summarised ${context.compactions} times.`
             : '.') +
           (context.peak > 150000 ? ' Past about 150k a run gets slower with every turn.' : ''),
       );

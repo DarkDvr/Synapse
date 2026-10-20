@@ -33,6 +33,16 @@ operator can, and sooner or later a model will decide the harness itself needs
   afterwards that it did not show before is reported as *changed during a worker
   run* however it happened. Both go out as a log `ERROR` and an SSE `alarm`, which
   the UI shows as a toast and the error dialog with the paths.
+
+  Two exclusions, both learned the loud way on the clock run. A **shell command**
+  that names the harness is an alarm only for a session Synapse marked internal (a
+  worker) — eleven of that run's alarms were the Architect running
+  `skills\visual-review\shot.mjs` before judging a report, which is the feature
+  working as designed; for the Architect and the operator's own session it is an
+  `INFO` line. And a change to `config\synapse.config.json` is excused when
+  `configSavedAt()` falls inside the run: that is the Settings dialog saving, which
+  also tripped the alarm once at 12:03. A write is still an alarm for everyone, and
+  so is any harness change no save of ours explains.
 - **A restore point before each delegation** — `snapshot()` runs `git add -u`
   (tracked files only: never `-A`, so an untracked file of the operator's is never
   swept into a commit) and commits `snapshot: before <task> (<role>)`. Nothing to
