@@ -2513,24 +2513,32 @@ function scrollChatToBottom(behavior = 'auto') {
   // render.
 }
 
-const myMessages = () =>
-  [...document.querySelectorAll('#transcript .msg[data-msg="user"]')];
+const navMessages = () =>
+  [
+    ...document.querySelectorAll(
+      '#transcript .msg[data-msg="user"], #transcript .msg[data-msg="assistant"]',
+    ),
+  ];
 
 function myMessageTops() {
   const el = chatScroller();
   if (el) {
     const sRect = el.getBoundingClientRect();
-    return myMessages().map((n) => n.getBoundingClientRect().top - sRect.top + el.scrollTop);
+    return navMessages().map((n) => n.getBoundingClientRect().top - sRect.top + el.scrollTop);
   }
-  return myMessages().map((n) => n.getBoundingClientRect().top + window.scrollY);
+  return navMessages().map((n) => n.getBoundingClientRect().top + window.scrollY);
 }
 
 /**
- * Which of my messages currently owns the top of the viewport. `cur` is the
- * last message whose top is at or above the fold; -1 means the view sits above
- * every message. Comparing raw scroll offsets is not enough: the first message
- * often sits ~10px below the content top, so a "first one below the fold" test
- * kept re-selecting it and the DOWN button never advanced past message one.
+ * Which message currently owns the top of the viewport. `cur` is the last
+ * message whose top is at or above the fold; -1 means the view sits above every
+ * message. Comparing raw scroll offsets is not enough: the first message often
+ * sits ~10px below the content top, so a "first one below the fold" test kept
+ * re-selecting it and the DOWN button never advanced past message one.
+ *
+ * Anchors are every turn, not the operator's turns: a long run is one question
+ * and a dozen answers, and anchoring on questions alone left nothing to jump
+ * between.
  */
 function navAnchors() {
   const tops = myMessageTops();
@@ -2544,7 +2552,7 @@ function renderChatNav() {
   const nav = $('chatNav');
   const dock = $('chatDock');
   if (!nav || !dock) return;
-  const count = myMessages().length;
+  const count = navMessages().length;
   const show = count >= 3;
   nav.hidden = !show;
   if (!show) return;

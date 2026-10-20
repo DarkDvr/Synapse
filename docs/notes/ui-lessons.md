@@ -241,6 +241,13 @@ it as a panel **painted over the chat, anchored just above the composer**.
   ease-out rAF scroll instead of `behavior: 'smooth'`, whose duration the
   browser owns and cannot be tuned — roughly 30% quicker than the browser's own
   smooth scroll over these distances (measured ~289ms end to end).
+- **The jump buttons anchor on every turn, not on the operator's turns.** They
+  used to collect `[data-msg="user"]` and need three of them, so a real run — one
+  prompt and a dozen answers — had no jump buttons at all, and the operator read
+  that as the feature having been removed. `navMessages()` takes user **and**
+  assistant messages, harness notes stay out (they are reports, not turns), and
+  three turns of any kind show the pair. The tooltips say "the previous message",
+  because that is now true.
 - **The jump buttons step message-by-message from an anchor, not from the raw
   scroll offset.** `navAnchors()` picks the message that owns the fold (last top
   at or above `scrollTop + 12`), and the buttons move `cur ± 1`. A raw
@@ -248,6 +255,11 @@ it as a panel **painted over the chat, anchored just above the composer**.
   below the content top, so UP kept re-selecting it and DOWN never advanced.
   Verified both directions at 1200 and 1680: 0 → 1 → 2 with NEXT disabling at
   the last message, and back with PREV disabling at the first.
+- **The rename pencil sits in the row's action slot, same size as the delete.**
+  It overlays the name's end (it is hover-only, so it does not reserve 21px of
+  every title), but it is positioned at the row's vertical centre rather than a
+  fixed `top`, and it is 18×18 with a 2px gap — the same box as `.tree-x` beside
+  it. A `top: 2px` version sat visibly high and read as a misplaced icon.
 - **The stacked layout caps the chat panel** at `min(70vh, 720px)`
   (`body[data-view="session"] .chat-dock.has-history`). Below 1460px the stage
   is content-sized, so without a cap a long conversation would stretch the page
@@ -651,10 +663,12 @@ bold, italic, strikethrough and links: the range these models actually produce.
 - **The STATUS label is yellow**, like every other section heading in the rail,
   and its block lost 2px of the air above it (13 → 11): the divider and its label
   were reading as two groups.
-- **The left panel is yellow now, not violet.** The current project, the current
-  session and the Browse/Cmd hover/active states use the plan's in-hand recipe —
-  a `rgba(237,194,90,0.06)` wash and a `rgba(237,194,90,0.5)` border — so "the one
-  you are in" looks the same in both places. Violet fills belong to the composer.
+- **The left panel is yellow now, not violet.** The current project is the
+  loudest row in the rail — a **2px** yellow border (a 1px border plus an inset
+  ring of the same colour, so selecting a project does not move the tree by a
+  pixel) over a `rgba(237,194,90,0.10)` wash; the current session is one step
+  quieter, a 1px inset ring at 0.6 alpha over `0.07`. Browse/Cmd use the same
+  yellow on hover and press. Violet fills belong to the composer.
 - **A session title is generated to fit its row: 22 characters, measured.** The
   title box is 145px at DM Sans 12.5px and `Ambient Second Monitor` is 145px. It
   got there from 125px by taking the rename pencil **out of the flow** (it now
