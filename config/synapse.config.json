@@ -28,7 +28,6 @@
   "roles": {
     "designer": {
       "ref": "opencode/deepseek-v4.1-flash-free",
-      "variant": "high",
       "skills": [
         "ui-design",
         "frontend-design",
@@ -38,19 +37,16 @@
     },
     "hacker": {
       "ref": "opencode/deepseek-v4.1-flash-free",
-      "variant": "high",
       "focus": "app"
     },
     "architect": {
       "ref": "opencode/deepseek-v4.1-flash-free",
-      "variant": "high",
       "skills": [
         "visual-review"
       ]
     },
     "coder-1": {
       "ref": "opencode/deepseek-v4.1-flash-free",
-      "variant": "high",
       "skills": [
         "code-craft",
         "visual-review"
@@ -58,7 +54,6 @@
     },
     "coder-2": {
       "ref": "opencode/deepseek-v4.1-flash-free",
-      "variant": "high",
       "skills": [
         "code-craft",
         "visual-review"
@@ -66,15 +61,13 @@
     },
     "coder-3": {
       "ref": "opencode/deepseek-v4.1-flash-free",
-      "variant": "high",
       "skills": [
         "code-craft",
         "visual-review"
       ]
     },
     "inventor": {
-      "ref": "opencode/deepseek-v4.1-flash-free",
-      "variant": "high"
+      "ref": "opencode/deepseek-v4.1-flash-free"
     }
   },
   "modelChecks": {
