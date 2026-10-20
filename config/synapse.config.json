@@ -56,7 +56,8 @@
       "focus": "app"
     },
     "architect": {
-      "ref": "bionic/qwen3.8-27b-ud",
+      "ref": "opencode/deepseek-v4.1-flash-free",
+      "variant": "high",
       "skills": [
         "visual-review"
       ]
