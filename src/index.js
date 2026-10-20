@@ -11,6 +11,7 @@ import { createTitler } from './titler.js';
 import { createToolStats } from './toolstats.js';
 import { ensurePlan, readPlan, logPlanState } from './plans.js';
 import { createRunner } from './runs.js';
+import { createEngineUpdate } from './engine-update.js';
 import { createHarnessGuard } from './harness.js';
 import { createProbe, discoverToolsetForModel } from './probe.js';
 import { createModelCache, MAX_TOOL_ASKS } from './modelcache.js';
@@ -132,6 +133,23 @@ async function main() {
     modelCache,
     notify: (ev) => http?.broadcast({ ...ev, ts: Date.now() }),
   });
+
+  // The engine is a separate program and it updates often, and the model catalog
+  // ships inside it — so "our model list is old" is usually "our engine is old".
+  // This answers that question from what is already on the machine (the desktop's
+  // own version file) and only asks npm when the operator asks it to.
+  const engineUpdate = createEngineUpdate({
+    engine,
+    logger,
+    runs: runner,
+    notify: (ev) => http?.broadcast({ ...ev, ts: Date.now() }),
+  });
+  engineUpdate
+    .check({ online: false })
+    .then((u) => {
+      if (u?.newer) app.info(`engine update available: ${u.current || '?'} -> ${u.latest} (${u.source})`);
+    })
+    .catch(() => { /* an unavailable version number is not a boot failure */ });
 
   // The probe drives one turn per tool so we can see what these models actually
   // reach for, and how slow or broken each tool is on this machine.
@@ -311,6 +329,7 @@ async function main() {
     inspectModel,
     probeDir: PROBE_DIR,
     runs: runner,
+    engineUpdate,
     notify: (ev) => http?.broadcast({ ...ev, ts: Date.now() }),
     guard,
   });

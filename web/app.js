@@ -29,6 +29,11 @@ const TBD_TITLE = 'TBD';
 
 const state = {
   status: null,
+  // What we know about the engine's own version: current, latest, where the
+  // newer one was seen. `updating` is the one operation in the whole UI that
+  // stops the engine, so it is a state of the app, not of a button.
+  update: null,
+  updating: false,
   config: null,
   models: [],
   workspace: '',
@@ -282,6 +287,171 @@ function renderStatus() {
   $('streamState').textContent = state.streamLive ? 'connected' : 'offline';
 }
 
+// ── engine updates ──────────────────────────────────────────────
+// The engine is a separate program that updates often, and the model catalog
+// ships inside it — so "our model list is old" is nearly always "our engine is
+// old". The offer is a chip beside Settings: noticeable, never in the way, and
+// it says nothing at all when there is nothing to do.
+let updateChecking = false;
+
+async function refreshUpdate() {
+  try { state.update = await api('GET', '/api/engine/update'); } catch { state.update = null; }
+  renderUpdateChip();
+}
+
+function renderUpdateChip() {
+  const chip = $('updateChip');
+  if (!chip) return;
+  const u = state.update;
+  const show = Boolean(u?.newer) && !state.updating;
+  chip.hidden = !show;
+  if (show) {
+    chip.title =
+      `The engine is ${u.current || 'unknown'}; ${u.latest} is available (${u.source}). ` +
+      'The engine carries the model catalog, so updating it is how the list gets current.';
+  }
+}
+
+function openUpdateDialog() {
+  $('updateModal').hidden = false;
+  renderUpdateDialog();
+  // Ask npm once, here: opening the dialog is the operator asking. Boot never
+  // does, because the app is offline by rule.
+  checkEngineUpdate();
+}
+
+function closeUpdateDialog() {
+  // A click-away must not hide the one operation that restarts the engine.
+  if (state.updating) return;
+  $('updateModal').hidden = true;
+}
+
+function renderUpdateDialog() {
+  const u = state.update || {};
+  const sub = $('updateSub');
+  const body = $('updateBody');
+  if (!body) return;
+
+  if (sub) {
+    sub.textContent = state.updating
+      ? 'Updating. The engine is stopped, replaced and started again — this takes about a minute.'
+      : u.newer
+        ? 'A newer engine is available. The model catalog ships inside it, so this is also how the model list gets current.'
+        : 'The engine carries the model catalog, the tools and the API. Nothing to do right now.';
+  }
+
+  const checked = u.checkedAt ? `checked ${ago(Date.parse(u.checkedAt))}` : 'not checked with npm yet';
+  const source =
+    u.source === 'OpenCode Desktop' ? 'OpenCode Desktop' : u.source === 'npm' ? 'npm' : u.source || '';
+  const published = u.publishedAt ? ` · published ${ago(Date.parse(u.publishedAt))}` : '';
+  const rows = [
+    ['Installed', `<b>opencode ${esc(u.current || 'unknown')}</b>`],
+    [
+      'Known newest',
+      `${u.latest ? `<b>${esc(u.latest)}</b>` : 'unknown'}` +
+        (source ? ` <small>${esc(source)}${esc(published)} · ${esc(checked)}</small>` : ''),
+    ],
+    ['Engine file', `<code title="${esc(u.binary || '')}">${esc(u.binary || 'auto-detected')}</code>`],
+  ];
+
+  const notes = [];
+  if (u.onlineError) {
+    notes.push(`<p class="upd-note is-warn">npm could not be asked: ${esc(u.onlineError)}</p>`);
+  }
+  if (!u.managedByNpm) {
+    notes.push(
+      '<p class="upd-note is-warn">This engine was not installed with npm, so Synapse will not replace it. ' +
+        'Update it where it came from, or point Settings → Engine at an npm install.</p>',
+    );
+  }
+  if (u.blocked) notes.push(`<p class="upd-note is-warn">${esc(u.blocked)}</p>`);
+  if (u.newer) {
+    notes.push(
+      '<p class="upd-note">The npm package publishes no release notes — the version number is all it tells us. ' +
+        'The engine brings its own model catalog, tools and API, and updating restarts it; any turn in flight ' +
+        'would be lost, which is why Synapse refuses while one is running.</p>',
+    );
+  }
+
+  body.innerHTML =
+    `<div class="upd-grid">` +
+    rows
+      .map(
+        ([k, v]) =>
+          `<span class="upd-k">${esc(k)}</span><span class="upd-v">${v}</span>`,
+      )
+      .join('') +
+    `</div>` +
+    (state.updating
+      ? '<div class="upd-busy"><span class="upd-bar"></span>' +
+        'Stopping the engine, installing, starting it again…</div>'
+      : '') +
+    notes.join('');
+
+  const check = $('checkUpdate');
+  const apply = $('applyUpdate');
+  if (check) {
+    check.disabled = state.updating || updateChecking;
+    check.textContent = updateChecking ? 'Checking…' : 'Check Again';
+  }
+  if (apply) {
+    apply.disabled = state.updating || updateChecking || !u.newer || !u.canUpdate;
+    apply.textContent = state.updating ? 'Updating…' : 'Update Now';
+  }
+}
+
+async function checkEngineUpdate() {
+  if (updateChecking || state.updating) return;
+  updateChecking = true;
+  renderUpdateDialog();
+  try {
+    state.update = await api('POST', '/api/engine/update/check');
+  } catch (err) {
+    toast('Could Not Check for Updates', err.message);
+  } finally {
+    updateChecking = false;
+    renderUpdateChip();
+    if (!$('updateModal').hidden) renderUpdateDialog();
+  }
+}
+
+async function applyEngineUpdate() {
+  const u = state.update || {};
+  if (state.updating || !u.newer) return;
+  state.updating = true;
+  renderUpdateChip();
+  renderUpdateDialog();
+  let r;
+  try {
+    r = await api('POST', '/api/engine/update');
+  } catch (err) {
+    r = { ok: false, error: err.message };
+  }
+  state.updating = false;
+  if (r.ok) {
+    toast('Engine Updated', `${r.from || 'previous'} → ${r.to || 'new'}. The model list has been re-read.`);
+  } else {
+    toast('Update Failed', r.error || 'The engine was not updated.');
+  }
+  await refreshStatus();
+  await refreshUpdate();
+  await loadModels();
+  // A model that left the catalog leaves a role pointing at nothing. Say it once
+  // here, rather than letting the next turn be the first thing to notice.
+  const roles = state.config?.roles || {};
+  const missing = Object.entries(roles)
+    .filter(([, sel]) => sel?.ref && !modelByRef(sel.ref))
+    .map(([id]) => roleLabel(id));
+  if (missing.length) {
+    toast(
+      'Pick a Model',
+      `${missing.join(', ')} ${missing.length === 1 ? 'is' : 'are'} no longer in the catalog.`,
+      7000,
+    );
+  }
+  if (!$('updateModal').hidden) renderUpdateDialog();
+}
+
 function setEventChip(type) {
   const el = $('lastEvent');
   if (el) el.textContent = String(type || 'idle').replace(/^session\./, '');
@@ -431,6 +601,16 @@ function setupModelPickers() {
       chooseModel(menuRole, opt.dataset.ref);
     });
   }
+
+  // The menu is fixed to the viewport, so anything that moves what it points at
+  // has to move it too — the page under it, an inner scroller, the window itself.
+  const reposition = () => {
+    if (!menuRole) return;
+    const p = pickers.get(menuRole);
+    if (p) positionModelMenu(p.input, $('modelMenu'));
+  };
+  window.addEventListener('scroll', reposition, { capture: true, passive: true });
+  window.addEventListener('resize', () => requestAnimationFrame(reposition));
 }
 
 /**
@@ -471,11 +651,44 @@ function syncPickerInput(input) {
   input.classList.toggle('has-issues', Boolean(m?.issues?.length));
 }
 
+/**
+ * Place the menu inside the window, always.
+ *
+ * It is fixed-positioned so it can escape the role cards' clipped wrapper, which
+ * also means nothing clamps it: in the right-hand card column it ran off the
+ * window, and on a second monitor it ran off the screen. Width first, then a
+ * horizontal clamp, then down when there is room and up when there is not — and
+ * never taller than the space it has, scrolling inside that.
+ */
 function positionModelMenu(input, menu) {
+  if (!input || !menu) return;
+  const pad = 8;
+  const gap = 4;
   const r = input.getBoundingClientRect();
-  menu.style.left = `${Math.round(r.left)}px`;
-  menu.style.top = `${Math.round(r.bottom + 4)}px`;
-  menu.style.minWidth = `${Math.max(320, Math.round(r.width))}px`;
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+
+  // Measure from the left edge: a stale `left` near the right edge would make
+  // shrink-to-fit report a narrower menu than it can be.
+  menu.style.left = `${pad}px`;
+  menu.style.top = '-9999px';
+  const maxW = Math.max(200, Math.min(560, vw - pad * 2));
+  menu.style.minWidth = `${Math.min(Math.max(320, Math.round(r.width)), maxW)}px`;
+  menu.style.maxWidth = `${maxW}px`;
+  const w = menu.getBoundingClientRect().width;
+
+  const left = Math.max(pad, Math.min(r.left, vw - pad - w));
+  menu.style.left = `${Math.round(left)}px`;
+
+  const below = vh - r.bottom - gap - pad;
+  const above = r.top - gap - pad;
+  const openUp = below < 180 && above > below;
+  const maxH = Math.max(80, Math.min(300, openUp ? above : below));
+  menu.style.maxHeight = `${Math.round(maxH)}px`;
+
+  const h = Math.min(menu.getBoundingClientRect().height, maxH);
+  const top = openUp ? Math.max(pad, r.top - gap - h) : r.bottom + gap;
+  menu.style.top = `${Math.round(top)}px`;
 }
 
 function paintModelMenu() {
@@ -3050,6 +3263,15 @@ function connectStream() {
       return;
     }
 
+    // The engine's version moved (an update finished): the chip and the dialog
+    // both read from this, and the catalog may have changed with it.
+    if (ev.kind === 'engine-update') {
+      if (ev.update) state.update = ev.update;
+      renderUpdateChip();
+      if (!$('updateModal').hidden) renderUpdateDialog();
+      return;
+    }
+
     // Synapse's own short note (not an alarm, not a message to any model): the
     // harness declined to do something the operator should know about.
     if (ev.kind === 'note') {
@@ -3322,8 +3544,10 @@ function renderSettings() {
       }) +
       `<p class="set-note">Running <strong>${esc(detected.version || 'not started')}</strong> from ` +
       `<code>${esc(detected.binary || 'auto-detected')}</code>. The model list is read from this engine at ` +
-      `every launch, but the catalog ships inside the engine binary — so when OpenCode Desktop shows models ` +
-      `that are missing here, its engine is newer and <code>@opencode/cli</code> is the thing to update.</p>`),
+      `every launch, but the catalog ships inside the engine binary - so when OpenCode Desktop shows models ` +
+      `that are missing here, its engine is newer and <code>@opencode/cli</code> is the thing to update.</p>` +
+      `<div class="set-field" title="Ask npm whether a newer engine has been published. The engine carries the model catalog, so this is also how the model list gets current."><span>Engine version</span>` +
+      `<button type="button" class="btn btn-secondary btn-sm" data-check-update>Check for Updates</button></div>`),
     group('Working directory',
       f('Where new sessions run (blank = workspace)', 'defaults.directory', {
         wide: true,
@@ -3534,6 +3758,13 @@ function wire() {
   $('cancelSettings').addEventListener('click', closeSettings);
   $('saveSettings').addEventListener('click', saveSettings);
 
+  // The engine's own version: the chip, its dialog, and the two buttons.
+  $('updateChip').addEventListener('click', openUpdateDialog);
+  $('closeUpdate').addEventListener('click', closeUpdateDialog);
+  $('closeUpdateFoot').addEventListener('click', closeUpdateDialog);
+  $('checkUpdate').addEventListener('click', checkEngineUpdate);
+  $('applyUpdate').addEventListener('click', applyEngineUpdate);
+
   // The probe takes minutes, so it is started and then reported over the stream.
   $('runProbe').addEventListener('click', async () => {
     try {
@@ -3615,6 +3846,15 @@ function wire() {
     const resetAsks = e.target.closest('[data-reset-asks]');
     if (resetAsks) { e.preventDefault(); resetModelAsks(); return; }
 
+    // Settings has the engine's version in it, so the check lives there too -
+    // otherwise the offer would only exist when an update is already known.
+    if (e.target.closest('[data-check-update]')) {
+      e.preventDefault();
+      closeSettings();
+      openUpdateDialog();
+      return;
+    }
+
     const clearTools = e.target.closest('[data-clear-tools]');
     if (clearTools) { e.preventDefault(); clearToolCensus(); return; }
 
@@ -3651,6 +3891,7 @@ function wire() {
     }
   });
   $('settingsModal').addEventListener('click', (e) => { if (e.target === $('settingsModal')) closeSettings(); });
+  $('updateModal').addEventListener('click', (e) => { if (e.target === $('updateModal')) closeUpdateDialog(); });
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
     // A non-dismissable dialog (the folder-already-exists question) ignores Escape:
@@ -3660,6 +3901,7 @@ function wire() {
       else e.preventDefault();
     }
     else if (!$('errorModal').hidden) closeError();
+    else if (!$('updateModal').hidden) closeUpdateDialog();
     else if (!$('settingsModal').hidden) closeSettings();
   });
 
@@ -3722,6 +3964,7 @@ async function boot() {
   renderMode();
   setView();
   await refreshStatus();
+  await refreshUpdate();
   await loadModels();
   await loadProjects();
   await checkSkills();

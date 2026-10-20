@@ -312,8 +312,22 @@ body[data-view="session"]:not(.workers-on) .topology > *:not(.topo-architect):no
 .sidebar .nav-link > span:first-child {
   width: 18px; text-align: center; font-size: 15px; flex: none;
 }
-/* Settings is pinned just above the STATUS divider, like the reference app */
-.sidebar .settings-slot { margin-top: auto; }
+/* Settings is pinned just above the STATUS divider, like the reference app.
+   The engine-update offer shares that row: a chip to its right, present only
+   when there is something to install. */
+.sidebar .settings-slot { margin-top: auto; display: flex; align-items: center; gap: 6px; }
+.sidebar .settings-slot .nav-link { flex: 1 1 auto; min-width: 0; }
+.engine-update {
+  flex: none; display: inline-flex; align-items: center;
+  font-family: var(--mono); font-size: 9px; font-weight: 700; letter-spacing: 0.08em;
+  text-transform: uppercase; line-height: 1;
+  color: var(--yellow); background: transparent;
+  border: 1px solid rgba(237, 194, 90, 0.55); border-radius: 5px;
+  padding: 4px 6px 3px; cursor: pointer;
+}
+.engine-update:hover { border-color: var(--yellow); background: rgba(237, 194, 90, 0.12); }
+.engine-update:focus-visible { outline: 2px solid var(--orange); outline-offset: 1px; }
+.engine-update[hidden] { display: none; }
 body.dark .sidebar-bottom { margin-top: 0; }
 body.dark .sidebar .side-nav { gap: 3px; }
 body.dark .sidebar .nav-link:not(.active) { background: transparent; color: var(--muted); }
@@ -736,6 +750,41 @@ body.dark .sidebar-bottom,
 .model-search.is-skipped:hover { border-color: var(--red); }
 .model-search:focus-visible { outline: 2px solid var(--orange); outline-offset: 1px; }
 .model-search::placeholder { color: #6d717a; }
+
+/* Engine update: a few facts, then the honesty note. The bar is indeterminate on
+   purpose — npm reports no progress, and a made-up percentage is worse than a
+   moving line. */
+.upd-body { gap: 11px; }
+.upd-grid {
+  display: grid; grid-template-columns: max-content minmax(0, 1fr);
+  gap: 7px 14px; align-items: baseline;
+}
+.upd-k { font-size: 11px; color: #82868e; }
+.upd-v { font-size: 12px; color: var(--text); min-width: 0; }
+.upd-v small { color: #82868e; font-size: 10.5px; }
+.upd-v code {
+  font-family: var(--mono); font-size: 10.5px; color: #a8acb3;
+  display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.upd-note { font-size: 11.5px; line-height: 1.5; color: #8f939b; margin: 0; }
+.upd-note.is-warn { color: var(--amber); }
+.upd-busy {
+  display: flex; align-items: center; gap: 9px;
+  font-size: 11.5px; color: var(--yellow);
+}
+.upd-bar {
+  position: relative; flex: none; width: 74px; height: 3px; border-radius: 2px;
+  background: rgba(237, 194, 90, 0.18); overflow: hidden;
+}
+.upd-bar::after {
+  content: ''; position: absolute; inset: 0; width: 40%;
+  background: var(--yellow); border-radius: 2px;
+  animation: upd-slide 1.1s ease-in-out infinite;
+}
+@keyframes upd-slide {
+  0% { transform: translateX(-110%); }
+  100% { transform: translateX(260%); }
+}
 
 .model-menu {
   position: fixed; z-index: 80;

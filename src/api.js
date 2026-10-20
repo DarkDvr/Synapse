@@ -8,7 +8,7 @@ import { ensurePlan, readPlan, readRuns, briefSession, logPlanState, BRIEF_KEY, 
 import { skillRules, describeSkills } from './skills.js';
 import { PROJECTS_ROOT, SKILLS_DIR } from './paths.js';
 
-export function createApi({ getConfig, applyConfig, engine, logger, getBootError, projects, toolStats, probe, modelCache, inspectModel: inspectRef, probeDir, runs, notify, guard }) {
+export function createApi({ getConfig, applyConfig, engine, logger, getBootError, projects, toolStats, probe, modelCache, inspectModel: inspectRef, probeDir, runs, engineUpdate, notify, guard }) {
   const app = logger.channel('app');
 
   // The last brief we handed each session, so an unchanged plan does not PUT
@@ -154,6 +154,14 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
     }),
 
     getConfig: async () => toClientConfig(getConfig()),
+
+    // The engine updates often and the model catalog ships inside it, so this is
+    // the one place Synapse will talk to the network for something other than a
+    // model — and only because the operator asked. `check` without `online` is
+    // free: it reads the engine, the desktop's own version file and the cache.
+    engineUpdate: async () => engineUpdate.check({ online: false }),
+    checkEngineUpdate: async () => engineUpdate.check({ online: true }),
+    updateEngine: async () => engineUpdate.update(),
 
     saveConfig: async (body) => {
       const saved = applyConfig(reconcile(body));

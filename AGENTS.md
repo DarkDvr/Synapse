@@ -25,7 +25,10 @@ recycled engine binary it locates.
    looks like it needs a package, solve it in the standard library instead —
    web search, MCP, markdown rendering and the UI are all hand-rolled here.
 2. **Self-contained and offline.** Nothing may be fetched at runtime except the
-   model provider. Fonts are vendored locally. No CDN links, ever.
+   model provider. Fonts are vendored locally. No CDN links, ever. The one
+   exception is the engine update check (`src/engine-update.js`), and only because
+   the operator asks for it: npm is contacted when the update dialog opens, never
+   at boot, and the answer is cached in `data\engine-update.json`.
 3. **The engine home is isolated.** `data\engine\opencode` is set via
    `XDG_CONFIG_HOME` / `XDG_DATA_HOME` / `XDG_STATE_HOME` / `TMPDIR`. The
    machine-wide `~/.config/opencode` must never be touched.
@@ -181,6 +184,7 @@ src/
   titles.js           the shared "TBD" placeholder
   toolstats.js        the tool-call census (data\tool-stats.json)
   probe.js            the tool probe: one turn per tool
+  engine-update.js    is there a newer engine, and stop/install/start
   search.js           dependency-free DuckDuckGo search
   mcp/search-server.js stdio MCP server exposing websearch to the engine
   engines/base.js     engine contract + message normalisation
@@ -1056,6 +1060,44 @@ discovered toolset. `engine.listModels()` is recorded on every boot and every
   automatically — that one is the operator's.
 - `GET /api/models/cache` exposes the raw store for debugging.
 
+### Is there a newer engine? (`src/engine-update.js`)
+
+The catalog ships inside the engine binary, so a stale model list is nearly
+always a stale *engine*. The status block names the version running; a small
+yellow **Update** chip beside Settings appears when a newer one is known, and it
+opens the dialog. When nothing is known it is not there at all.
+
+- **Two sources, because they fail differently.** OpenCode Desktop ships its own
+  engine and updates itself, so its `resources\opencode-cli.version` is read
+  locally at boot — instant, offline, and on this machine it is the signal that
+  actually arrives. npm (`registry.npmjs.org/@opencode/cli`) is asked **only when
+  the dialog opens or Check Again is pressed**: the app is offline by rule, and a
+  check the operator asked for is not the app phoning home at boot. The answer is
+  cached in `data\engine-update.json`, so the chip survives a restart with no
+  network and `GET /api/engine/update` is free.
+- **The npm answer replaces the cached one**, rather than merely raising it —
+  otherwise a wrong cache is sticky for ever (seen while testing with a fake
+  `9.9.9`: the online check could not heal it). The desktop's version is compared,
+  not trusted, so it can still be ahead of npm.
+- **Updating is stop → `npm install -g @opencode/cli@latest` → start**, and that
+  order is not a preference: on Windows a running `.exe` cannot be replaced. The
+  engine restarts **in-process** (`engine.stop()` / `engine.start()`), so the UI
+  stays up and the browser tab survives; measured 9.4 s end to end on 2.1.0 →
+  2.1.0, catalog re-read, sessions and their transcripts intact. A failed install
+  still restarts the engine, because being down is worse than being old.
+- **It refuses while work is in flight** — a live delegation, or any session
+  `/api/session/active` reports (which includes one blocked on a question) —
+  because the restart loses that turn. It also refuses an engine it did not
+  install with npm (`packageRoot()` walks up from the binary to an
+  `@opencode/cli` `package.json`), rather than installing a second engine
+  somewhere else while Synapse keeps using the old one.
+- **`npm` cannot be run with `execFile` on Windows**; the install goes through
+  `cmd.exe /d /s /c npm …` with array arguments.
+- Settings → Engine carries **Check for Updates** too, so the feature is reachable
+  when the chip is hidden. The dialog is honest about what it does not know: npm
+  publishes no release notes for this package, and it says so instead of inventing
+  a changelog.
+
 ### The probe (`Run Tool Probe`)
 
 Drives one turn per tool in a disposable scratch session
@@ -1550,6 +1592,21 @@ This is once per directory per process and needs no config.
   chip + name + ISSUES badge + limits on one line; at the old width the badge
   squeezed the limits and read as a clipped control (the operator: "unless it
   doesn't fit in our drop down, which means it should be made wider").
+- **The menu is clamped to the window, and flips up when there is no room below.**
+  It is `position: fixed` so it can escape the role cards' clipped wrapper — which
+  also means nothing clamped it: in the right-hand card column a 320px menu ran off
+  the window, and off the screen on a second monitor. `positionModelMenu` now
+  measures from a known left edge **first** (a stale `left` near the right edge
+  makes shrink-to-fit report a narrower menu than it can be), sets `min-width: 320`
+  capped at `min(560, vw - 16)`, clamps `left` into `[8, vw - 8 - w]`, opens
+  **upward** when there is under 180px below and more room above, and takes its
+  `max-height` from the space it actually has — the list scrolls inside that, so
+  many more models than today cost nothing. Scroll and resize reposition it,
+  because it is pinned to the viewport while the thing it points at can move.
+  Measured: 1200×900 right edge 1192 of 1200; 900×700 with the input off-screen at
+  1008 → menu `572…892`; 900×460 → opens up (top 108, bottom 339); 900×300 →
+  `max-height` 164, `scrollHeight` 229, scrolls, `maxScroll` 67. Keyboard
+  arrow-navigation already called `scrollIntoView({block:'nearest'})`.
 - **A provider error is red *text* on the card, never a border.** While a role is
   retrying, or its wake failed, its subtitle line reads `Retrying at 00:45 — Rate
   limit exceeded` in `--red` at 600 weight, and the card's border keeps its own

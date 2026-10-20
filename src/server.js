@@ -108,6 +108,16 @@ export function createServer({ api, engine, logger, config }) {
       if (method === 'PUT') return sendJson(res, 200, await api.saveConfig(await readBody(req)));
     }
 
+    // The engine: is there a newer one, and do it.
+    //   GET  /api/engine/update        what we already know (no network)
+    //   POST /api/engine/update/check  ask npm (the operator's click)
+    //   POST /api/engine/update        stop, install, start
+    if (seg[0] === 'engine' && seg[1] === 'update') {
+      if (seg.length === 2 && method === 'GET') return sendJson(res, 200, await api.engineUpdate());
+      if (seg[2] === 'check' && method === 'POST') return sendJson(res, 200, await api.checkEngineUpdate());
+      if (seg.length === 2 && method === 'POST') return sendJson(res, 200, await api.updateEngine());
+    }
+
     // GET /api/models  /api/agents  /api/skills
     if (seg[0] === 'models' && seg.length === 1 && method === 'GET') return sendJson(res, 200, await api.models());
     if (seg[0] === 'skills' && seg.length === 1 && method === 'GET') return sendJson(res, 200, await api.skills());
