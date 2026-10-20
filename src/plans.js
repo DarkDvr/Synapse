@@ -885,7 +885,10 @@ export function briefSession({ dir, role = 'architect', auto = false, skills = '
         `to fix. Then a verification task: re-run exactly those repros and the supplied suites, and nothing else - ` +
         `a re-hack is a check, not a second hunt, so anything new it notices goes in a short "observed, not fixed" ` +
         `list for the operator instead of becoming another round. A third round only if the verification found a ` +
-        `real regression. Three is the limit; after that, stop and tell the operator what is still open.`,
+        `real regression. Three is the limit; after that, stop and tell the operator what is still open. ` +
+        `A worker's report goes in that role's own folder or in the task's "result": never point a coder at ` +
+        `${PLAN_DIR}/reports/, which belongs to the Hacker - the file tools refuse it and the harness reports the ` +
+        `stray write as tampering.`,
     );
     lines.push(
       `A task's "reads" lists the files the worker must read first (a design spec, the feature list, a hack ` +
