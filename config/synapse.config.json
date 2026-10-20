@@ -29,7 +29,9 @@
           "models": [
             {
               "id": "qwen3.8-27b-ud",
-              "name": "Qwen 3.8 27B UD"
+              "name": "Qwen 3.8 27B UD",
+              "context": 40960,
+              "output": 8192
             }
           ]
         }
@@ -61,7 +63,7 @@
       ]
     },
     "coder-1": {
-      "ref": "opencode/deepseek-v4.1-flash-free",
+      "ref": "bionic/qwen3.8-27b-ud",
       "skills": [
         "code-craft",
         "visual-review"
