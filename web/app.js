@@ -423,6 +423,17 @@ function roleIsWorking(role) {
 function tickClocks() {
   const now = Date.now();
   renderLastEventAge();
+  // The plan's per-step stopwatches, before the early return below: they are
+  // driven by the harness's run records (data-ms) plus this run's start, so they
+  // do not depend on the card clocks existing yet.
+  for (const el of document.querySelectorAll('.plan-spent')) {
+    const base = Number(el.dataset.ms) || 0;
+    const since = Number(el.dataset.since) || 0;
+    const ms = base + (since ? now - since : 0);
+    el.classList.toggle('is-zero', ms === 0);
+    const text = hhmmss(ms);
+    if (el.textContent !== text) el.textContent = text;
+  }
   const c = state.clocks;
   if (!c) return;
   let changed = false;
@@ -3101,9 +3112,6 @@ function renderPlan() {
   }
 
   const tasks = st?.plan?.tasks || [];
-  // The Architect's menu choice, recorded in the file. Quiet: it is a record of
-  // a decision, not a status.
-  const phases = Array.isArray(st?.plan?.phases) ? st.plan.phases : [];
   // A task with a worker on it is the step in hand whatever the file says. The
   // Architect only writes the plan when it judges, so during the run the file
   // still says todo and the pane showed the live step as a grey row. The run is
@@ -3124,9 +3132,11 @@ function renderPlan() {
   if (counts.failed) meta.push(`${counts.failed} failed`);
   if (st.mtime) meta.push(ago(st.mtime));
 
+  // Work already spent on each step, from the harness's own run records. A step
+  // with a worker on it keeps counting from the live run's start.
+  const spent = st.spent || {};
   body.innerHTML =
     (st.plan.goal ? `<p class="plan-goal">${esc(st.plan.goal)}</p>` : '') +
-    (phases.length ? `<p class="plan-phases">Phases: ${phases.map((p) => esc(p)).join(' · ')}</p>` : '') +
     `<ol class="plan-list">${tasks
       .map((t) => {
         const status = liveRun && liveRun.task === t.id ? 'doing' : PLAN_STATUS[t.status] ? t.status : 'todo';
@@ -3142,13 +3152,24 @@ function renderPlan() {
         const tooltip = [t.title, t.result ? `Result: ${t.result}` : '', t.note ? `Note: ${t.note}` : '']
           .filter(Boolean)
           .join('\n\n');
+        // The step's own stopwatch: what the harness recorded for it, plus this
+        // run so far while it is in hand. Under the role badge, so the row is two
+        // lines tall whatever the title does.
+        const base = Number(spent[t.id]) || 0;
+        const since = liveRun && liveRun.task === t.id ? Number(liveRun.startedAt) || 0 : 0;
+        const total = base + (since ? Date.now() - since : 0);
         return `<li class="plan-task" data-status="${status}">
           <span class="plan-dot" role="img" aria-label="${esc(PLAN_STATUS[status])}"></span>
           <span class="plan-main">
             <span class="plan-title" title="${esc(tooltip)}"><span class="plan-id">${esc(t.id || '?')}</span>${esc(t.title)}</span>
             ${t.note && asking ? `<span class="plan-note">${esc(t.note)}</span>` : ''}
           </span>
-          <span class="plan-role">${esc(t.role)}</span>
+          <span class="plan-side">
+            <span class="plan-role">${esc(t.role)}</span>
+            <span class="plan-spent${total ? '' : ' is-zero'}" data-ms="${base}"${
+              since ? ` data-since="${since}"` : ''
+            } title="Time spent on this step so far">${hhmmss(total)}</span>
+          </span>
         </li>`;
       })
       .join('')}</ol>` +

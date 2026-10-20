@@ -12,6 +12,12 @@ const MIME = {
   '.json': 'application/json; charset=utf-8',
   '.svg': 'image/svg+xml',
   '.png': 'image/png',
+  // The panel grounds are photographs. Served as octet-stream they still often
+  // paint, but Chrome is within its rights to refuse, and "usually" is not a
+  // reason to leave a type out of a table that exists to hold types.
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.webp': 'image/webp',
   '.ico': 'image/x-icon',
   '.woff2': 'font/woff2',
 };

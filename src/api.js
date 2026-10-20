@@ -612,7 +612,19 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
       // The pane polls this, so the logger is told once per distinct problem
       // rather than once per poll (see logPlanState).
       logPlanState(state, app);
-      return { ...state, used: usedRoles(directory, sessionId) };
+      // How long each step has actually taken: the sum of every completed run for
+      // that task, which is the only honest source (the pane's own clock only sees
+      // the time this browser has been open). A step in flight adds its own
+      // elapsed time on top — the UI already has the live run and its start.
+      const spent = {};
+      if (directory) {
+        for (const record of readRuns(directory)) {
+          if (record.kind !== 'result' || !record.task) continue;
+          const ms = Number(record.ms);
+          if (ms > 0) spent[record.task] = (spent[record.task] || 0) + ms;
+        }
+      }
+      return { ...state, used: usedRoles(directory, sessionId), spent };
     },
 
     sendMessage: async (sessionId, body) => {
