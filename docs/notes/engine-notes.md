@@ -478,6 +478,18 @@ thinking**; 13% of the time in tools, the rest in generation.
   file read at turn 12 is still in the prompt after turn 40 edited it.
   Compaction is not the fix and 200k is not a number to build on — see the window
   watchdog in `docs/notes/models-and-tools.md`.
+- **The meter is turns × transcript, and the briefs now say so.** Clock Test 3 read
+  **56.4M prompt tokens** (workers 50.3M, Architect 6.1M) over 515 turns: t2 12.8M
+  in 71 minutes, t6 13.7M in 34. That is 180–430k tokens a minute, where an
+  interactive chat is 100–200k with long gaps — the density is what a free tier
+  refuses, in bursts of 5–11 minutes. Since every turn re-sends everything, the
+  only instructions that move it are the ones about *how much gets said and how
+  often*: think in a sentence and act (thinking was 51% of the transcript), read a
+  file once and search it after, edit rather than rewrite (a `write` keeps the whole
+  file body), keep the spec under 200 lines, and give tasks a named file and a
+  proving command so the worker does not have to explore. The number is reported on
+  every run (`Effort:` / `context` in `runs.jsonl`) so it can be measured, not
+  guessed.
 - **So the harness reports the cost of each run.** The report the Architect gets,
   and the chat, carry one line: `Effort: 130 turns, 118k tokens written (74%
   thinking), context peaked at 212k`. It is also on the `runs.jsonl` result line as

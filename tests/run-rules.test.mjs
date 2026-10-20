@@ -14,7 +14,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { readPlan } from '../src/plans.js';
+import { readPlan, briefSession } from '../src/plans.js';
 import { contextStats, windowRoom, windowAction, steerDue } from '../src/runs.js';
 import { createHarnessGuard } from '../src/harness.js';
 
@@ -87,6 +87,23 @@ try {
   expect('clock-test-2 has no problems under the new rules', real.problems.length === 0, real.problems.join(' | '));
 } finally {
   fs.rmSync(ROOT, { recursive: true, force: true });
+}
+
+// ── the brief says what a turn costs ────────────────────────────
+{
+  const nowhere = path.join(ROOT, 'no-plan-here');
+  const coder = briefSession({ dir: nowhere, role: 'coder-2' });
+  const designer = briefSession({ dir: nowhere, role: 'designer' });
+  const architect = briefSession({ dir: nowhere, role: 'architect' });
+
+  expect('a worker is told what a turn costs', coder.includes('Mind the bill'));
+  expect('a worker is told to read a file once', coder.includes('Read each file once'));
+  expect('a worker is told to edit rather than rewrite', coder.includes('change it with edits'));
+  expect('a worker is still told when to stop', coder.includes('Stop when the deliverable exists'));
+  expect('the designer has a spec size', designer.includes('200 lines'));
+  expect('the architect caps reads at two files', architect.includes('Two files at most'));
+  expect('the architect is told to write provable tasks', architect.includes('the command that proves'));
+  expect('the architect is not given the worker bill rules', !architect.includes('Mind the bill'));
 }
 
 // ── what a run cost ─────────────────────────────────────────────

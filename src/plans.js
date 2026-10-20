@@ -533,7 +533,8 @@ const ROLE_MANDATES = {
     'Two mocks is the ceiling: the operator picks a direction, not a catalogue, and every extra one is another',
     'file to keep in step and another round of renders to look at. States of one screen belong in one mock behind',
     'a query flag (?state=night), not in a file each. The spec is what the builder is held to: tables and values,',
-    'at the size a builder will actually use - a book about the design is not the design.',
+    'at the size a builder will actually use - a book about the design is not the design. Keep design.md under',
+    'about 200 lines: every worker reads it before it starts, and you re-read it on every turn of this task.',
     'Stop when the spec is written and both mocks render at the sizes and states you were asked for. One pass of',
     'adjustment after the first render is worth having; after that you are tuning, not designing, and a value',
     'settled to two decimal places is not a design decision. If you measure the same thing twice, put the number',
@@ -740,6 +741,23 @@ export function briefSession({ dir, role = 'architect', auto = false, skills = '
         'longer run is not a better one - the Architect judges the files, and polish past what was asked for is ' +
         'work nobody asked for.',
     );
+    // What a turn costs, said plainly, because the model is the only thing that
+    // decides how many of them there are. Every turn re-sends this whole
+    // transcript - its own thinking included - so the bill is turns multiplied by
+    // everything already said. Measured on a real run: 84 turns read 13.7M tokens.
+    lines.push(
+      'Mind the bill: every turn re-sends this whole conversation, your reasoning included, so the cost is ' +
+        'turns multiplied by everything already said. Think in a sentence or two and then act; long deliberation ' +
+        'costs more than it saves.',
+    );
+    lines.push(
+      'Read each file once. When you need something from it later, search for the line instead of reading it ' +
+        'again, and re-read only after you have changed it.',
+    );
+    lines.push(
+      'Once a file exists, change it with edits rather than rewriting it - a write sends the whole file again, ' +
+        'and it stays in the conversation.',
+    );
   }
   if (role === 'hacker') {
     lines.push(HACKER_FOCUS[focus === 'security' ? 'security' : 'app']);
@@ -872,7 +890,14 @@ export function briefSession({ dir, role = 'architect', auto = false, skills = '
     lines.push(
       `A task's "reads" lists the files the worker must read first (a design spec, the feature list, a hack ` +
         `report). Use it instead of restating their contents in "detail": the files are the contract, and a ` +
-        `paraphrase is how a project drifts.`,
+        `paraphrase is how a project drifts. Two files at most, and never a file the previous task wrote - a ` +
+        `worker that opens four documents spends its first turns paying for them.`,
+    );
+    lines.push(
+      `Write the detail for a worker who has read nothing: name the files to touch and the command that proves ` +
+        `it. "Build the sky" costs an hour of searching; "add the solar position to bin/solar.js and prove it ` +
+        `with node bin/tests/solar.test.js" costs minutes. A task that says what to change and how it will be ` +
+        `checked is also a task that can be finished in one sitting.`,
     );
     lines.push(
       auto
