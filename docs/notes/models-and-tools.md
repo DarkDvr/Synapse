@@ -189,3 +189,18 @@ failure "not offered by this model" when the tool was never in its list.
   view.
 
 ---
+
+## The tool census
+
+Every finished turn is scanned once and its tool calls recorded (keyed by part
+id, so re-reading a transcript never double-counts) into
+`data\tool-stats.json`: per tool and per model — calls, failures, exit codes,
+average execution time, and the last 20 error signatures. `GET /api/tools/stats`
+serves it; the rail's **Tools in use** panel shows the live summary.
+
+It describes *now*, not history, so it **clears itself on every boot**
+(`tools.resetOnBoot`, on by default — untick *Clear the Tool Census on every
+start* in Settings to keep it across restarts), and Settings has a **Clear Tool
+Census** button for a mid-session reset (`POST /api/tools/reset`). Left to
+accumulate it stops describing the current environment: after a few days of
+testing it read 184 calls from sessions that no longer existed.

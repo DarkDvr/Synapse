@@ -624,3 +624,17 @@ it as a panel **painted over the chat, anchored just above the composer**.
   nav items that do not change the view.
 
 ---
+
+## The transcript's markdown renderer (`web/md.js`)
+
+A worker's report is prose with headings, lists and code in it, so it is rendered
+as markdown in the same body class as the Architect's answer. The renderer is
+hand-rolled (no dependencies) and **escape-first**: the source is HTML-escaped
+before any markdown rule runs, so a model cannot inject markup through its
+answer. Link targets are restricted to `http(s)`, `mailto`, `/` and `#`; images
+additionally allow `data:image/`.
+
+It covers fenced code, headings, GFM tables (alignment included — a pipe inside
+`code` does not split a cell), blockquotes, ordered and unordered lists
+(including `- [ ]` task lists), images, rules and paragraphs, plus inline code,
+bold, italic, strikethrough and links: the range these models actually produce.

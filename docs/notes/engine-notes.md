@@ -232,6 +232,13 @@ ordinary file tools; there is no tool and no store for it.
 
 ---
 
+## Why Synapse dispatches, and not the engine's `subagent` tool
+
+Settled, and the reason is per-role models: **the Architect cannot choose a
+subagent's model**, so leaning on `subagent` would leave every per-role pick
+decorative and hide the orchestration in a black box. Each step runs as a real
+engine session with that role's model and effort instead.
+
 ## Delegation: the Architect asks, the harness runs
 
 `delegate { task }` is a stateless MCP tool (src/mcp/delegate-server.js). The
@@ -580,3 +587,50 @@ This is once per directory per process and needs no config.
   the title is still the model's call through the one-shot `generate` route.
 
 ---
+
+## Single and Multi mode
+
+The composer toggle flips the **open session** live; new sessions always start
+Single. Both modes have the full toolset — that is the whole point.
+
+- **Single** — a permission ruleset on an ordinary session that denies only
+  `subagent`: not a custom agent, not a blanket deny. The role cards stay
+  collapsed (`max-height: 0`), so a Single session pays nothing for them.
+- **Multi** — the ruleset is cleared (`PATCH /api/session/{id}` with
+  `permissions: []`), the wrapper animates open and the chat slides down. Verified
+  live: the Architect called `subagent` (general, `completed`) and answered with
+  the worker's reply; a subagent run does not leave a child session in the rail.
+
+The mode is a per-session property read from `isSingleSession()`
+(`engines/base.js`); nothing is stored in config — `defaults.mode` was removed
+once the toggle became live. **A dedicated `chat` agent (tools denied, `steps: 1`)
+is the obvious design and it does not work**: the free tier rejected every request
+from a custom agent with a provider auth error (measured side by side — the
+custom-agent session failed at 20:45:37 while a default-agent session succeeded at
+20:45:40). Denying everything also defeats the purpose, because Single is meant to
+have tools. `POST /api/session` accepts `permissions`; `PATCH` replaces them.
+
+## The tool census double-counts after a restart
+
+`recordMessages` is called with the **whole transcript** on every turn and
+de-duplicates with an in-memory `seen` set of tool-part ids — which is not
+persisted, while the aggregates are. So the first turn in a session that predates
+a restart re-adds that session's entire tool history. Reproduced: 2 calls →
+restart → re-scan the same transcript → 4.
+
+A naive test **looks clean**, because `flush()` is debounced by 2s: call `flush()`
+before "restarting", or the first run never reaches disk. The fix is small
+(persist the ids, or a per-session high-water mark); do it before trusting the
+census for anything.
+
+## Session naming, and never being stuck with "TBD"
+
+A session is created as **TBD**. When its first turn succeeds, Synapse asks the
+model for a short title through the engine's one-shot `generate` route — which
+adds nothing to the transcript — and renames the session. One attempt per
+session, never for a session the operator named, and never for a session with no
+user message yet.
+
+Naming is **self-healing**: a name that failed on a transient 503 keeps its
+attempt and retries with backoff, and a sweep at boot names anything still
+unnamed.

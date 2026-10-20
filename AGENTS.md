@@ -1,8 +1,10 @@
 # AGENTS.md — working notes for Synapse
 
 This file is for any agent (or human) picking Synapse up cold. It records what
-the project is, the rules that are not negotiable, and the things that cost real
-time to discover. Read this before changing anything.
+the project is, the rules that are not negotiable, how to run it, and the engine
+traps that cost real time to discover. Read this before changing anything — and
+read the one `docs/notes/` file that matches the thing you are about to touch
+(the index is below).
 
 ---
 
@@ -138,19 +140,6 @@ stop.bat         # reads data\synapse.pid
 restart.ps1      # dev restart — stops the engine by PID, never by name
 ```
 
-**Never restart by matching process names.** The desktop app installs to
-`...\Programs\@opencodedesktop\OpenCode.exe`, whose path contains `@opencode`,
-so a name filter such as `Get-Process -Name opencode | Where Path -like
-'*@opencode*'` kills the operator's editor as well as the engine. That mistake
-caused a string of "the desktop app keeps crashing" reports. `restart.ps1`
-reads `data\synapse.pid` and `data\engine.pid`, and refuses anything under
-`@opencodedesktop`.
-
-`server.openBrowser` is off by default here: a restart should not hijack a
-browser tab. Turn it on in Settings if you want one opened for you.
-
-Restarting during development — **use the script**:
-
 ```powershell
 cd F:\dev\Synapse
 .\restart.ps1
@@ -160,19 +149,16 @@ It stops Synapse and its engine by reading `data\synapse.pid` and
 `data\engine.pid`, and refuses to stop anything under `@opencodedesktop` or
 `ai.opencode.desktop` whatever the pid file says.
 
-**Do not kill these processes by name.** See the first gotcha below — that is
-exactly how the desktop app kept "crashing".
+`server.openBrowser` is off by default here: a restart should not hijack a
+browser tab. Turn it on in Settings if you want one opened for you.
 
 Gotchas:
-- The desktop app also shows as process name `opencode` — and **this is
-  dangerous**. Its install path is `...\Programs\@opencodedesktop\OpenCode.exe`,
-  which **contains `@opencode`**, so
-  `Get-Process -Name opencode | Where-Object { $_.Path -like '*@opencode*' }`
-  force-kills the operator's editor along with the engine. That single mistake
-  caused a string of "the desktop app keeps crashing" reports — it was being
-  killed, which is also why it left no crash dump.
-  **Use `restart.ps1`, which reads `data\synapse.pid` and `data\engine.pid`.**
-  Never match on a process name.
+- **The desktop app also shows as process name `opencode`, and its install path
+  is `...\Programs\@opencodedesktop\OpenCode.exe` — which contains `@opencode`**,
+  so `Get-Process -Name opencode | Where Path -like '*@opencode*'` force-kills
+  the operator's editor along with the engine. That one mistake caused a string
+  of "the desktop app keeps crashing" reports — it was being killed, which is
+  also why it left no crash dump. This is why nothing here matches on a name.
 - `stop.bat` must not use `$pid` as a variable — it is read-only in PowerShell.
 - The console is a first-class output. `start.bat` leaves a window open all day, so
   `logger` mirrors the `app` channel **and every warning or error from any channel**
@@ -224,7 +210,8 @@ skills/               shipped WITH Synapse, always on the engine's skill path
   code-craft/         the coders' brief: small surface, fail loudly, prove it
 data/                 runtime state (projects, census, probe results, engine home)
 logs/                 one file per channel: app, engine, session, tools
-docs/                 design mockups (stage-1-mockup-rev*.pdf, stage-2-*.pdf)
+docs/                 design mockups (*.pdf) and the detail behind this file
+  notes/              engine-notes, models-and-tools, ui-lessons, runbook
 ```
 
 **The mockups are PDFs and there is no PDF renderer on this machine** (no
@@ -248,19 +235,12 @@ Route and schema ground truth is the OpenAPI dump at
 `%LOCALAPPDATA%\Temp\opencode\openapi.json`. Check it before
 guessing.
 
-**The engine is 2.1.0 as of 20 Oct 2026.** Everything below was measured on
-2.0.30 unless it says otherwise, and the upgrade was verified on the routes
-Synapse actually depends on: session create, messages, the model switch, the
-instruction entries (PUT 204 / GET / DELETE 204), `/api/session/active` (an object
-keyed by session, which the adapter reads with `Object.keys`) and the session form
-route. **The model catalog ships inside the engine binary, not in Synapse.** 2.0.30
-listed 11 models including ones the provider had already retired (`space-bunny`,
-`muse-spark`); 2.1.0 lists the current 10, with MiniMax M3.1 and GLM-5.3 in and the
-retired ones gone — measured side by side, same account, same API. A stale model
-list therefore means a stale *binary*, never a stale cache: the console prints
-`catalog: N model(s) from engine X` at every boot so it is visible at a glance.
-`@opencode/cli` is the thing to update; the engine data dir was backed up to
-`data\engine\opencode-2.0.30-backup` before the switch.
+**The engine is 2.1.0 (20 Oct 2026).** The table below was measured on 2.0.30
+unless it says otherwise, and the upgrade was re-verified on the routes Synapse
+depends on. **The model catalog ships inside the engine binary, not in Synapse** —
+so a stale model list means a stale *binary*, never a stale cache. The console
+prints `catalog: N model(s) from engine X` at every boot, which is the check; the
+update dialog (see `docs/notes/models-and-tools.md`) is the fix.
 
 | Thing | Reality |
 |---|---|
@@ -278,95 +258,16 @@ list therefore means a stale *binary*, never a stale cache: the console prints
 
 ## Open items
 
-- **Per-role instructions.** The ✎ button's other half: per-role skills are done
-  (`roles.<id>.skills`, enforced by the session ruleset, with the picker on the
-  card), but a role cannot yet carry its own free-text instructions. That text
-  belongs in the brief, and the brief is regenerated per session, so it is a
-  small addition once we decide where it is stored.
-- **Stage 3 — orchestration.** The dispatch decision is settled: **Synapse owns
-  dispatch, not the engine's `subagent` tool.** The Architect cannot choose a
-  subagent's model, so leaning on `subagent` would leave every per-role pick
-  decorative and hide the orchestration inside a black box. Each step will run
-  as a real engine session with that role's model and effort instead.
-  - **3.1 done — the plan is a project file.** `.synapse\plan.json`, owned and
-    written by the Architect (no tool, no store), read and rendered by Synapse,
-    briefed into every session through the engine's instruction entries. Verified
-    live on the `calendar` project: the Architect created a correct four-task
-    plan with roles, the file's first version came back unparseable (a stray
-    backslash copied out of the brief), the pane named the exact position, and
-    one bare "Continue." made the Architect repair its own file.
-  - **3.2 done — delegation, the chain, and its switch.** `delegate` tool,
-    `src/runs.js`, hidden worker sessions, `.synapse\runs.jsonl`, the synthetic
-    wake, the retry cap, and the **Keep building** flag between Stop and Send
-    (`metadata.synapse.auto`). Verified live on `calendar`: with the flag off,
-    t1 → Designer → the Architect caught a hallucinated file, sent it back, and
-    stopped for the operator. With the flag **on** and one "continue", the
-    remaining three tasks ran themselves — 12.8 minutes, five worker runs, two
-    files in `bin/`, `python bin/calendar.py` printing the month. The Auditor hit
-    the 240s ceiling yet its partial work was still judged and accepted.
-  - **3.3 done (activity half) — the cards show the live work.** `src/runs.js`
-    emits `run.started` / `run.progress` / `run.finished` over the SSE stream and
-    keeps the same shape at `GET /api/runs`, so a page reloaded mid-run reopens
-    onto the truth. Each card carries a subtitle while its role has something to
-    show — a worker: the task title plus its newest tool call in brackets, no
-    task id and no destination; the Architect: who it is waiting on, or what its
-    own turn is doing — and the two participants are the only cards that change
-    appearance (requester green, worker red *at the time*; both are yellow now,
-    see the card-state bullet in UI lessons). Verified live on `calendar` with a
-    deliberate repeat delegation of t4: the Architect's card went green and read
-    `Waiting on Coder 1`, Coder 1 went red and read
-    `Deliver final script (reading calendar_design.md)`, the yellow arrow was
-    drawn exactly on the dots, and everything returned to idle when the worker
-    stopped.
-    **Still open here: the ✎ button's per-role instructions.** It settles skills
-    gating: custom agents are dead here (the free tier rejected every
-    custom-agent request), so instructions are prompt text on a default-agent
-    session — which is what the brief already is. Card state was idle/working only
-    as shipped here; it has since grown the full derived language (see "The card's
-    dot is a state" in UI lessons): blocked and done are read from the *plan*,
-    which is where the Architect's judgement already lives, so no "blocked" state
-    had to be invented in the runner.
-    **Elapsed time is not shown either**: a ticking number needs a repaint loop,
-    and nothing in the card needs one.
-  - **3.4 next — the live per-session Tools-in-Use feed.** The main-pane napkin
-    with its live path is done (arrows and ants on the topology while a worker
-    runs); what is left is the per-session tool feed the rail shows.
-  - **3.5 — housekeeping**: `engine.type` as a dropdown (only `opencode` is
-    registered), **Browse Folder** / **Cmd Here** still `data-soon` for stage 4,
-    and zeroing the stored probe results if the panel should start blank.
-- **Known issue: the census can double-count after a restart.** `recordMessages`
-  is called with the **whole transcript** on every turn and de-duplicates with an
-  in-memory `seen` set of tool-part ids — which is not persisted, while the
-  aggregates are. So the first turn in a session that predates the restart
-  re-adds that session's entire tool history. Reproduced: 2 calls → restart →
-  re-scan the same transcript → 4. Note a naive test **looks clean**, because
-  `flush()` is debounced by 2s; call `flush()` before "restarting", or the first
-  run never reaches disk. Fix is small (persist the ids, or a per-session
-  high-water mark); do it before trusting the census for anything.
-- **Multi vs Single mode.** The composer toggle flips the **open session** live;
-  new sessions always start Single. Both modes have the full toolset — that is
-  the whole point.
-  - **Single** — a permission ruleset on an ordinary session that denies only
-    `subagent`, not a custom agent and not a blanket deny. The role cards stay
-    collapsed (`max-height: 0`), so a Single session pays nothing for them.
-  - **Multi** — the ruleset is cleared (`PATCH /api/session/{id}` with
-    `permissions: []`), the wrapper animates open and the chat slides down.
-    Verified live: the Architect called `subagent` (general, `completed`) and
-    answered with the worker's reply; a subagent run does not leave a child
-    session in the rail.
-
-  The mode is a per-session property read from `isSingleSession()`
-  (`engines/base.js`); nothing is stored in config — `defaults.mode` was removed
-  once the toggle became live. A dedicated `chat` agent (tools denied,
-  `steps: 1`) is the obvious design and it does **not** work: the free tier
-  rejected every request from a custom agent with a provider auth error
-  (measured side by side — a custom-agent session failed at 20:45:37 while a
-  default-agent session succeeded at 20:45:40). Denying everything also defeats
-  the purpose, because Single is meant to have tools. `POST /api/session`
-  accepts `permissions`; `PATCH /api/session/{id}` replaces them.
-- The composer has **no target picker**: every message goes to the Architect.
-  Per-role model and thinking effort live on the role cards. If direct worker
-  addressing is ever wanted, make the card itself the affordance rather than
-  reintroducing a dropdown.
-- Adding skills later is just files in `%USERPROFILE%\.agents\skills` — they
-  are already wired in.
+- **3.4 — the live per-session Tools-in-Use feed.** The main pane's napkin with its
+  live path is done; what is left is the per-session tool feed the rail shows.
+- **3.5 — housekeeping**: `engine.type` as a dropdown (only `opencode` is
+  registered), **Browse Folder** / **Cmd Here** still `data-soon` for stage 4, and
+  zeroing the stored probe results if the panel should start blank.
+- **The census double-counts after a restart** — known, reproduced, not yet fixed;
+  the detail and the near-miss in testing are in `docs/notes/engine-notes.md`.
+- The composer has **no target picker**: every message goes to the Architect, and
+  per-role model and effort live on the cards. If direct worker addressing is ever
+  wanted, make the card itself the affordance rather than reintroducing a
+  dropdown.
+- Adding skills later is just files in `%USERPROFILE%\.agents\skills` — they are
+  already wired in.
