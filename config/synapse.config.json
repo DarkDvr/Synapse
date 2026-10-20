@@ -28,6 +28,7 @@
   "roles": {
     "designer": {
       "ref": "opencode/deepseek-v4.1-flash-free",
+      "variant": "high",
       "skills": [
         "ui-design",
         "frontend-design",
