@@ -678,6 +678,10 @@ body.dark .sidebar-bottom,
    evidence afterwards. */
 .role-card.is-skipped { border-color: var(--red); }
 .role-card.is-skipped .role-task { color: var(--red); }
+/* A provider failure while a run is retrying: red ink on the card's text slot.
+   Only text — the border still means blocked / live / settled, and an error is
+   none of those. Cleared when the role works again. */
+.role-task.is-err { color: var(--red); font-weight: 600; }
 
 .role-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .role-head h3 {

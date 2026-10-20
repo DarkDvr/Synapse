@@ -37,6 +37,7 @@ import {
   ownedFolder,
 } from './plans.js';
 import { skillRules, describeSkills } from './skills.js';
+import { classifyFailure, recordProviderError, pruneProviderLog } from './provider-errors.js';
 
 const POLL_MS = 1500;
 const RESULT_MAX = 4000;
@@ -57,9 +58,14 @@ const hackRoundsUsed = (dir) =>
 // worker's doing. plan.json is reported separately (planTouched), which is why it
 // is ignored here rather than alarming twice.
 const HARNESS_FILES = new Set(['plan.json', 'runs.jsonl', 'requirement.md']);
-// Fallback only: the real ceiling comes from config (worker.timeoutSec, with a
-// per-role override on roles.<id>.timeoutSec).
-const DEFAULT_TIMEOUT_SEC = 300;
+// Fallbacks only: the real numbers come from config (`worker.*`).
+const DEFAULT_STALL_SEC = 600;
+const DEFAULT_RESUME_MAX = 4;
+const DEFAULT_RETRY_BASE_SEC = 10;
+const DEFAULT_RETRY_CAP_SEC = 300;
+const MAX_RESUME_MAX = 20;
+const MAX_STALL_SEC = 7200;
+const MAX_RETRY_CAP_SEC = 3600;
 
 // The peer ladder: roles that can stand in for one another, in escalation order.
 // A task is written for one role, and the harness moves the same task down the
@@ -69,7 +75,32 @@ const DEFAULT_TIMEOUT_SEC = 300;
 // its own.
 const DEFAULT_LADDER = ['coder-1', 'coder-2', 'coder-3'];
 
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+// What the harness says when it restarts a turn. Short deliberately: the whole
+// conversation is already in the session, and repeating the brief would invite
+// the model to start over.
+const STALL_NUDGE =
+  'You were interrupted because nothing had changed in your session for a long time. ' +
+  'Continue from exactly where you left off; do not start over and do not redo work that is already done.';
+const RETRY_NUDGE =
+  'Continue from where you left off. The previous turn was cut short by the provider, not by the operator. ' +
+  'Do not start over.';
+const WAKE_NUDGE =
+  'Your previous turn was cut short by the provider, not by the operator. The report above still needs your ' +
+  'judgement: continue from where you left off.';
+
+/** Sleep, but let Stop cut it short: a five-minute backoff must not be five
+ *  minutes of the operator pressing a button that does nothing. */
+const sleep = (ms, signal) =>
+  new Promise((resolve) => {
+    if (signal?.aborted) return resolve();
+    const done = () => {
+      clearTimeout(timer);
+      signal?.removeEventListener?.('abort', done);
+      resolve();
+    };
+    const timer = setTimeout(done, Math.max(0, ms));
+    signal?.addEventListener?.('abort', done, { once: true });
+  });
 
 // MCP tools arrive namespaced (`synapse-delegate_delegate`): match by suffix.
 const isDelegate = (name) => {
@@ -100,13 +131,42 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
   // and the live path from this; it is also served over HTTP so a page reload
   // mid-run does not lose the picture.
   const running = new Map();
+  // One stop button per live run: Stop must cut a backoff short, not wait it out.
+  const controls = new Map();
   const dirKey = (d) => String(d ?? '').replace(/[\\/]+$/, '').toLowerCase();
 
-  /** Has the provider already refused this role's model? */
+  /** The worker settings, read once per decision so a change lands next time. */
+  function workerSettings(config) {
+    const w = config?.worker || {};
+    const num = (v, lo, hi, fallback) => {
+      const n = Number(v);
+      return Number.isFinite(n) ? Math.min(hi, Math.max(lo, Math.round(n))) : fallback;
+    };
+    return {
+      stallSec: num(w.stallSec, 30, MAX_STALL_SEC, DEFAULT_STALL_SEC),
+      resumeMax: num(w.resumeMax, 0, MAX_RESUME_MAX, DEFAULT_RESUME_MAX),
+      retryBaseSec: num(w.retryBaseSec, 5, 300, DEFAULT_RETRY_BASE_SEC),
+      retryCapSec: num(w.retryCapSec, 10, MAX_RETRY_CAP_SEC, DEFAULT_RETRY_CAP_SEC),
+    };
+  }
+
+  /** Wait before retry number `n`, 1-based: 10s, 20s, 40s … capped, ±20% jitter
+   *  so two roles retrying together do not arrive in lockstep. */
+  function backoffMs(n, settings) {
+    const raw = Math.min(settings.retryCapSec, settings.retryBaseSec * 2 ** Math.max(0, n - 1));
+    const jitter = 0.8 + Math.random() * 0.4;
+    return Math.round(raw * 1000 * jitter);
+  }
+
+  /** Has this role's model already been refused outright — deprecated, or unable
+   *  to drive the critical tools? A provider *rate limit* is not a mark: it is a
+   *  bad minute, and the next attempt may be fine. */
   function providerMarked(roleId, config) {
     const ref = config?.roles?.[roleId]?.ref;
     if (!ref || !modelCache?.get) return false;
-    return Boolean(modelCache.get(ref)?.issues?.some((i) => i.kind === 'provider'));
+    return Boolean(
+      modelCache.get(ref)?.issues?.some((i) => i.kind === 'provider' || i.kind === 'tools'),
+    );
   }
 
   /** Did the operator speak after the last report?
@@ -168,6 +228,14 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
   const emit = (type, data) => {
     try {
       notify?.({ kind: 'run', type, ...data });
+    } catch { /* ignore */ }
+  };
+
+  /** A provider failure for a role's card. Deliberately *not* `emit`: that tags
+   *  everything `kind: 'run'`, and the UI would read this as a run event. */
+  const alert = (data) => {
+    try {
+      notify?.({ kind: 'role-error', ...data });
     } catch { /* ignore */ }
   };
 
@@ -337,18 +405,16 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     // Which role gets this attempt, before anything is created: the plan's role is
     // the first rung of its ladder. See candidatesFor().
     const config = getConfig() || {};
+    const settings = workerSettings(config);
     const candidates = candidatesFor(task.role, attempts + 1, config);
     let role = candidates[0];
     let roleConfig = config.roles?.[role] || {};
     let modelRef = roleConfig.ref || null;
     let variant = roleConfig.variant || null;
-    // The ceiling for this task: the role's own, else the global default. Re-read
-    // per rung, because a role can override it.
-    let timeoutSec = Math.max(
-      30,
-      Number(roleConfig.timeoutSec) || Number(config.worker?.timeoutSec) || DEFAULT_TIMEOUT_SEC,
-    );
-    let timeoutMs = timeoutSec * 1000;
+    // How long a worker may produce *nothing* before it is interrupted and told to
+    // carry on. A role may override it; there is no wall-clock ceiling any more,
+    // because a turn that is working is allowed to take as long as it takes.
+    let stallSec = Math.max(30, Number(roleConfig.stallSec) || settings.stallSec);
     const fingerprintBefore = planFingerprint(dir);
     const synapseBefore = synapseFingerprint(dir);
     const startedAt = Date.now();
@@ -357,6 +423,14 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     let text = '';
     let files = [];
     let turnError = null;
+    // How many times this delegation was rescued rather than abandoned. Recorded
+    // on the result line so the morning's log explains a long night.
+    let retries = 0;
+    let resumes = 0;
+    // Stop: the operator's way out of a retry loop that is going nowhere.
+    const controller = new AbortController();
+    controls.set(dirKey(dir), { abort: () => controller.abort() });
+    const signal = controller.signal;
     // Roles that were tried for this task and refused by their model. The report
     // carries the reason and the cards show it while the run is live.
     const skipped = [];
@@ -379,7 +453,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     log.info(
       `delegation: ${request.task} "${task.title}" -> ${role}` +
         (role === task.role ? '' : ` (planned for ${task.role})`) +
-        ` (${modelRef || 'engine default'}${variant ? `#${variant}` : ''}) in ${project}, ceiling ${timeoutSec}s`,
+        ` (${modelRef || 'engine default'}${variant ? `#${variant}` : ''}) in ${project}, stall ${stallSec}s`,
     );
 
     // The card that will run this, and the path the UI draws to it. Kept in a
@@ -394,7 +468,9 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
       model: modelRef,
       variant,
       startedAt,
-      timeoutSec,
+      stallSec,
+      workerId: null,
+      retry: null,
       tool: null,
       skipped,
     };
@@ -411,12 +487,16 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
 
     try {
       // One worker run per rung. The loop exists for one case: the provider
-      // refusing the model (a retired one answers 410 in about two seconds).
-      // Retrying the same dead model would spend the Architect's turn for nothing,
-      // so the next peer takes over inside this same delegation — same task, same
-      // attempt — and the report says who actually ran it. A timeout does not
-      // loop: a timed-out worker may still have produced something, and the
-      // attempt counter is what moves that case down the ladder next time.
+      // refusing the model outright (a retired model answers 410 in about two
+      // seconds). Retrying that same dead model would spend the Architect's turn
+      // for nothing, so the next peer takes over inside this same delegation —
+      // same task, same attempt — and the report says who actually ran it.
+      //
+      // A *recoverable* failure never moves the ladder. A rate limit or a reset
+      // connection is the provider's minute, not the model's verdict, so the same
+      // session is told to continue, with backoff, for as long as it takes. That
+      // is the difference between a run that survives peak time and one that dies
+      // at 2am with five hours of the night left.
       for (let rung = 0; rung < candidates.length; rung += 1) {
         const candidate = candidates[rung];
         if (rung > 0) {
@@ -428,17 +508,14 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
         roleConfig = config.roles?.[role] || {};
         modelRef = roleConfig.ref || null;
         variant = roleConfig.variant || null;
-        timeoutSec = Math.max(
-          30,
-          Number(roleConfig.timeoutSec) || Number(config.worker?.timeoutSec) || DEFAULT_TIMEOUT_SEC,
-        );
-        timeoutMs = timeoutSec * 1000;
+        stallSec = Math.max(30, Number(roleConfig.stallSec) || settings.stallSec);
         turnError = null;
         // The card and the live path follow the role that is actually working.
         live.role = role;
         live.model = modelRef;
         live.variant = variant;
-        live.timeoutSec = timeoutSec;
+        live.stallSec = stallSec;
+        live.retry = null;
         live.tool = null;
         emit('run.progress', { ...live });
 
@@ -460,6 +537,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
           // mark tells Synapse it is scaffolding and not the operator's session.
           metadata: { synapse: { internal: true, role, task: request.task, architect: architectId } },
         });
+        live.workerId = worker.id;
 
         // Its context: where it is, what the plan says, and that the plan is not
         // its to touch. The task itself goes in the message below.
@@ -478,49 +556,141 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
         } catch (err) {
           log.warn(`worker brief failed for ${request.task}: ${err.message}`);
         }
-        const before = (await engine.getMessages(worker.id)).length;
+
+        let before = (await engine.getMessages(worker.id)).length;
         await engine.prompt(worker.id, workerPrompt({ task, note: request.note, goal: plan.plan?.goal }));
-        const finished = await waitForIdle(worker.id, before, timeoutMs, (tool) => {
-          live.tool = tool;
+
+        // Rescue loop: one turn at a time, with the whole session kept between
+        // them. Nothing is restarted from scratch, so the work already on disk and
+        // in the transcript is the starting point of the next attempt.
+        let rungRetries = 0;
+        let rungResumes = 0;
+        for (;;) {
+          const finished = await waitForIdle(
+            worker.id,
+            before,
+            stallSec * 1000,
+            (tool) => {
+              live.tool = tool;
+              emit('run.progress', { ...live });
+            },
+            signal,
+          );
+
+          if (finished.stopped) {
+            outcome = 'stopped';
+            try { await engine.interrupt(worker.id); } catch { /* already gone */ }
+            break;
+          }
+
+          const now = await engine.getMessages(worker.id);
+
+          if (finished.stalled) {
+            // Nothing written, read, said or streamed for the whole window: the
+            // shape of a silently lost session, not a slow one. Interrupt it and
+            // say "continue" — the operator's own recovery, performed for them.
+            try { await engine.interrupt(worker.id); } catch { /* already gone */ }
+            if (rungResumes >= settings.resumeMax) {
+              outcome = 'timeout';
+              turnError = `nothing happened for ${Math.round(stallSec / 60)} minutes`;
+              log.warn(`worker ${request.task} (${role}) stalled ${rungResumes + 1} times; reporting a timeout`);
+              alert({ dir, role, message: turnError, final: true });
+              break;
+            }
+            rungResumes += 1;
+            resumes += 1;
+            recordProviderError({
+              message: `no activity for ${stallSec}s`,
+              classification: { kind: 'transient', reason: 'stalled' },
+              role,
+              model: modelRef,
+              task: request.task,
+              attempt: rungResumes,
+              note: 'stall restart',
+            });
+            log.warn(
+              `worker ${request.task} (${role}) produced nothing for ${stallSec}s — restarting it ` +
+                `(${rungResumes}/${settings.resumeMax})`,
+            );
+            alert({
+              dir,
+              role,
+              message: `Nothing happened for ${Math.round(stallSec / 60)} min — restarting`,
+              attempt: rungResumes,
+              retrying: true,
+            });
+            await sleep(1500, signal);
+            if (signal?.aborted) { outcome = 'stopped'; break; }
+            await nudge(worker.id, STALL_NUDGE, signal);
+            before = (await engine.getMessages(worker.id)).length;
+            continue;
+          }
+
+          turnError = turnErrorOf(now, before);
+          if (!turnError) {
+            outcome = 'completed';
+            // The role is working again: whatever the card was saying about a
+            // provider failure is no longer news.
+            alert({ dir, role, clear: true });
+            break;
+          }
+
+          const cls = classifyFailure(turnError);
+          recordProviderError({
+            message: turnError,
+            classification: cls,
+            role,
+            model: modelRef,
+            task: request.task,
+            attempt: rungRetries + 1,
+          });
+          log.error(
+            `worker ${request.task} (${role}) turn ended in an error [${cls.kind}/${cls.reason}]: ${turnError}`,
+          );
+
+          if (cls.kind === 'terminal') {
+            outcome = 'error';
+            // Only a model that is *gone* is marked. A wrong key, a malformed
+            // request or a rate limit says nothing about the model itself, and a
+            // badge lives until the operator clears it by hand.
+            if (cls.reason === 'deprecated') refuseModel(modelRef, turnError);
+            alert({ dir, role, message: turnError, final: true });
+            break;
+          }
+
+          // Recoverable: wait, then ask the same session to carry on. No attempt is
+          // consumed, the ladder does not move, and this does not end.
+          rungRetries += 1;
+          retries += 1;
+          const delay = backoffMs(rungRetries, settings);
+          live.retry = { attempt: rungRetries, at: Date.now() + delay, message: turnError, reason: cls.reason };
           emit('run.progress', { ...live });
-        });
-        if (finished.timedOut) {
-          outcome = 'timeout';
-          try { await engine.interrupt(worker.id); } catch { /* already gone */ }
+          alert({
+            dir,
+            role,
+            message: turnError,
+            attempt: rungRetries,
+            retrying: true,
+            at: Date.now() + delay,
+          });
+          log.warn(
+            `worker ${request.task} (${role}) ${cls.reason}: retrying in ${Math.round(delay / 1000)}s ` +
+              `(try ${rungRetries}); a recoverable failure is not an attempt`,
+          );
+          await sleep(delay, signal);
+          if (signal?.aborted) { outcome = 'stopped'; break; }
+          live.retry = null;
+          emit('run.progress', { ...live });
+          await nudge(worker.id, RETRY_NUDGE, signal);
+          before = (await engine.getMessages(worker.id)).length;
         }
 
         const messages = await engine.getMessages(worker.id);
         text = workerText(messages);
         files = workerFiles(messages);
 
-        if (!finished.timedOut) {
-          // A turn can end with `idle` and still have failed: the engine appends
-          // idle whatever the step did, and a provider refusing the model (a
-          // retired model answers HTTP 410) is over in about two seconds. Reading
-          // that idle as success told the Architect the work was done and produced
-          // nothing — which is a lie twice over, and it hid a dead model behind
-          // "the worker reported nothing".
-          turnError = turnErrorOf(messages, before);
-          if (turnError) {
-            outcome = 'error';
-            log.error(`worker ${request.task} (${role}) turn ended in an error: ${turnError}`);
-            // The badge of shame is for the operator's picker, never for the model:
-            // nothing is said to the Architect about a model's reputation, and the
-            // operator clears it the moment the model works again.
-            try {
-              if (modelCache?.noteIssue?.(modelRef, { kind: 'provider', message: turnError })) {
-                // Tell the UI to re-read the catalog, so the badge is on the picker
-                // that chose the model rather than waiting for a reload.
-                notify?.({ kind: 'model', type: 'issues', ref: modelRef });
-              }
-            } catch { /* the cache is not worth failing a run over */ }
-          } else {
-            outcome = 'completed';
-          }
-        }
-
-        // The provider refused this model: the next rung can still do the work,
-        // and the operator is not asked to decide anything about it.
+        // The provider refused this model outright: the next rung can still do the
+        // work, and the operator is not asked to decide anything about it.
         if (outcome === 'error' && rung + 1 < candidates.length) {
           skipped.push({ role, message: turnError });
           live.skipped = skipped;
@@ -535,6 +705,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
       log.warn(`worker for ${request.task} failed: ${err.message}`);
     } finally {
       busy.delete(dir);
+      controls.delete(dirKey(dir));
       // The card goes back to idle and the path is erased as soon as the worker
       // stops — before the Architect is woken, so the two never disagree.
       running.delete(dirKey(dir));
@@ -600,6 +771,11 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
       worker: worker?.id || null,
       outcome,
       ms: Date.now() - startedAt,
+      // How the night went: a run that took three hours because the provider was
+      // rate limiting is explained by these two numbers and the incident log.
+      retries,
+      resumes,
+      error: turnError,
       files,
       text: text.slice(0, RESULT_MAX),
       planTouched,
@@ -607,10 +783,24 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     });
     log.info(
       `delegation finished: ${request.task} (${role}) ${outcome} in ${Math.round((Date.now() - startedAt) / 1000)}s` +
+        (retries ? `, ${retries} retr${retries === 1 ? 'y' : 'ies'}` : '') +
+        (resumes ? `, ${resumes} restart${resumes === 1 ? '' : 's'}` : '') +
         (files.length ? `, ${files.length} file(s) written` : '') +
         (planTouched ? ' - THE PLAN FILE CHANGED DURING THE WORKER TURN' : '') +
         (strayWrites.length ? ` - .synapse WRITTEN OUTSIDE ITS FOLDER: ${strayWrites.join(', ')}` : ''),
     );
+
+    // A stopped run is the operator's decision: no report and no wake. Waking the
+    // Architect here would start a turn that could re-delegate the very task that
+    // was just stopped, and the operator is about to say what they want instead.
+    if (outcome === 'stopped') {
+      notify?.({
+        kind: 'note',
+        title: 'Run Stopped',
+        body: `${request.task} was stopped. Nothing was reported to the Architect.`,
+      });
+      return;
+    }
 
     // The "keep building" switch is read at report time, so flipping it while a
     // worker runs takes effect on the very next judgement.
@@ -636,31 +826,102 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
         hackRound: hackRoundsUsed(dir),
         error: turnError,
         auto,
-        timeoutMs,
+        stallSec,
+        retries,
+        resumes,
       }),
-    });
+    }, signal);
   }
 
-  /** Poll until the worker's turn closes with `idle`, which is the engine's own
-   *  end-of-turn signal — never a timer. The ceiling is the task's own
-   *  (per-role) one, and hitting it interrupts the session and reports a timeout;
-   *  whatever the worker produced up to then is still gathered as evidence.
+  /** Tell a session to carry on after a failure. `synthetic`, so it reads as the
+   *  harness in the transcript rather than as the operator typing "continue". */
+  async function nudge(sessionId, text, signal) {
+    for (let i = 0; i < 5; i += 1) {
+      if (signal?.aborted) return false;
+      try {
+        await engine.synthetic(sessionId, text, { description: 'harness' });
+        return true;
+      } catch (err) {
+        log.warn(`could not nudge ${sessionId} (${i + 1}/5): ${err.message}`);
+        await sleep(5000 * (i + 1), signal);
+      }
+    }
+    return false;
+  }
+
+  /** Mark a model the provider has retired — and nothing else. A rate limit, a
+   *  bad key or a malformed request says nothing about the model, and a provider
+   *  mark makes the ladder skip that role on every later attempt. */
+  function refuseModel(ref, message) {
+    try {
+      if (modelCache?.noteIssue?.(ref, { kind: 'provider', message })) {
+        notify?.({ kind: 'model', type: 'issues', ref });
+      }
+    } catch { /* the cache is not worth failing a run over */ }
+  }
+
+  /** Everything a turn has said so far, as one comparable string.
    *
-   *  The same poll is where the card's live activity comes from: the worker's
-   *  transcript is already being fetched, so the newest tool call costs nothing
-   *  extra and the operator can watch the work instead of guessing at it. */
-  async function waitForIdle(workerId, before, timeoutMs, onTool) {
-    let deadline = Date.now() + timeoutMs;
+   *  This is how "nothing at all happened" is decided: message count, part count,
+   *  text length and timestamps. A tool call, a reasoning block that streams, a
+   *  file written — each one changes it. The engine's own retries (5–10 of them
+   *  before it gives up) change nothing, which is exactly the silence the operator
+   *  wants to catch, while a slow model that is *thinking* keeps producing deltas.
+   */
+  function activityKey(messages) {
+    let key = '';
+    for (const m of messages || []) {
+      let parts = 0;
+      let chars = 0;
+      for (const p of m?.parts || []) {
+        parts += 1;
+        if (p?.text) chars += String(p.text).length;
+      }
+      key += `${m?.id || ''}:${m?.updated || 0}:${m?.completed || 0}:${parts}:${chars}|`;
+    }
+    return key;
+  }
+
+  /**
+   * Poll until the turn closes with `idle`, or nothing has changed for `stallMs`.
+   *
+   * There is deliberately no wall-clock ceiling. A turn that is working is left
+   * alone for as long as it needs — an evening of 20-minute designer turns is
+   * normal, and a 40-minute one is the provider being slow, not a failure. The
+   * only thing worth stopping is a turn that has produced *nothing* for a long
+   * time, because that is what a silently lost session looks like: the operator
+   * has seen the desktop app sit on "Working…" for an hour with nothing happening
+   * behind it, and a "you got stuck, continue" fixed it immediately.
+   *
+   * The answer to a stall is therefore an interrupt and a resume, not a failure.
+   * A pending question also pauses the clock: the operator may take hours, and
+   * the transcript itself says so.
+   */
+  async function waitForIdle(sessionId, before, stallMs, onTool, signal) {
+    let lastActivity = Date.now();
     let lastKey = '';
+    let sig = '';
     let asking = false;
-    while (Date.now() < deadline) {
-      await sleep(POLL_MS);
+    for (;;) {
+      if (signal?.aborted) return { stopped: true };
+      await sleep(POLL_MS, signal);
+      if (signal?.aborted) return { stopped: true };
+
       let messages;
       try {
-        messages = await engine.getMessages(workerId);
+        messages = await engine.getMessages(sessionId);
       } catch {
+        // A poll that failed is not silence: the engine may be restarting. The
+        // stall clock is left where it is and the next poll decides.
         continue;
       }
+
+      const nextSig = activityKey(messages);
+      if (nextSig !== sig) {
+        sig = nextSig;
+        lastActivity = Date.now();
+      }
+
       if (onTool) {
         const tool = latestTool(messages, before);
         const key = tool ? `${tool.name}\u0000${tool.target}` : '';
@@ -670,28 +931,23 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
         }
       }
 
-      // A question for the operator is not a stalled worker. The engine blocks
-      // the turn until it is answered, which may be hours — so while one is
-      // pending the ceiling stops counting, or every worker that asks anything
-      // is guaranteed to be interrupted for asking. It is read from the
-      // transcript already being polled, so this costs nothing.
       const last = messages[messages.length - 1];
       const waiting = (last?.parts || []).some(
         (p) => p?.type === 'tool' && /^question$/.test(String(p.name || '')) && /run|pend|progress/i.test(String(p.status || '')),
       );
       if (waiting) {
-        deadline = Date.now() + timeoutMs;
-        if (!asking) log.info(`worker ${workerId} is waiting on an answer; its ceiling is paused`);
+        lastActivity = Date.now();
+        if (!asking) log.info(`${sessionId} is waiting on an answer; its stall clock is paused`);
       } else if (asking) {
-        log.info(`worker ${workerId} has an answer; its ceiling is running again`);
+        log.info(`${sessionId} has an answer; its stall clock is running again`);
       }
       asking = waiting;
 
       if (messages.length > before && messages[messages.length - 1]?.type === 'idle') {
         return { timedOut: false };
       }
+      if (Date.now() - lastActivity >= stallMs) return { timedOut: true, stalled: true };
     }
-    return { timedOut: true };
   }
 
   /**
@@ -778,14 +1034,15 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     return [...seen];
   }
 
-  function report({ task, role, insteadOf, skipped, outcome, ms, text, files, workerId, planTouched, synapseTouched, hackRound, auto, timeoutMs, error }) {
+  function report({ task, role, insteadOf, skipped, outcome, ms, text, files, workerId, planTouched, synapseTouched, hackRound, auto, stallSec, retries, resumes, error }) {
     const head =
       outcome === 'completed'
         ? `${task.id} (${role}) finished in ${Math.round(ms / 1000)}s.`
         : outcome === 'timeout'
-          ? `${task.id} (${role}) did not finish within ${Math.round(timeoutMs / 1000)}s and was interrupted.`
+          ? `${task.id} (${role}) produced nothing for ${Math.round(stallSec / 60)} minutes in a row and was stopped` +
+            `${resumes ? ` after ${resumes} restart${resumes === 1 ? '' : 's'}` : ''}.`
           : outcome === 'error'
-            ? `${task.id} (${role}) could not run - the model refused the turn, so the task was never attempted.`
+            ? `${task.id} (${role}) could not run - the provider refused the turn, so no further work was attempted.`
             : `${task.id} (${role}) could not run.`;
     const lines = [head];
     if (insteadOf) {
@@ -802,12 +1059,25 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     // bin/calendar_design.md and no such file existed). "Files written: none"
     // is what made the claim obvious to the Architect.
     lines.push(files.length ? `Files written: ${files.join(', ')}` : `Files written: none.`);
+    // How much of the night went into this. A recovered run is not a bad run, and
+    // the Architect should not read five retries as five failures.
+    if (retries) {
+      lines.push(
+        `The provider failed ${retries} time${retries === 1 ? '' : 's'} on the way (rate limits and connection ` +
+          `errors are retried, not counted as attempts); the work above is what survived.`,
+      );
+    }
+    if (resumes) {
+      lines.push(
+        `It was restarted ${resumes} time${resumes === 1 ? '' : 's'} after producing nothing for a long stretch, ` +
+          `and carried on from where it was.`,
+      );
+    }
     if (error) {
       lines.push(`The provider said: ${error}`);
       lines.push(
-        `That is not a judgement on the task - the worker never got to work, and nothing was attempted. ` +
-          `It is usually the role's model having been retired by the provider: pick another model for that ` +
-          `role (or run the task on another role), then delegate this task again.`,
+        `That is not a judgement on the task. If it names a retired or unknown model, pick another model for ` +
+          `that role (or run the task on another role), then delegate this task again.`,
       );
     }
     if (text) lines.push(`Reported:\n${text}`);
@@ -843,19 +1113,102 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     );
     return lines.join('\n');
   }
-  /** Wake the Architect with the harness speaking. A synthetic message keeps it
-   *  out of the operator's voice; the prompt route is the fallback if an engine
-   *  has no such thing. */
-  async function wake(architectId, dir, { description, text }) {
-    try {
-      await engine.synthetic(architectId, text, { description });
-    } catch (err) {
-      log.warn(`synthetic message failed (${err.message}); falling back to a prompt`);
+  /**
+   * Wake the Architect with the harness speaking, and make sure it landed.
+   *
+   * This used to be fire-and-forget: `synthetic` was admitted, the runner moved
+   * on, and nothing watched what happened next. In the clock run the Architect's
+   * own turn then failed on a rate limit two seconds later — the report sat in
+   * the transcript, nobody read it, no delegation followed, and the run stopped
+   * with the UI showing an idle screen. The words were delivered; the work was
+   * not.
+   *
+   * So the wake is watched now, and a recoverable failure is retried with the
+   * same backoff as a worker's turn. The report itself is sent once — it is in
+   * the transcript — and later attempts just say "continue".
+   */
+  async function wake(architectId, dir, { description, text }, signal) {
+    const settings = workerSettings(getConfig() || {});
+    let tries = 0;
+    for (;;) {
+      if (signal?.aborted) return { ok: false, stopped: true };
+      let before = 0;
       try {
-        await engine.prompt(architectId, text);
-      } catch (err2) {
-        log.warn(`could not report back to ${architectId}: ${err2.message}`);
+        before = (await engine.getMessages(architectId)).length;
+      } catch { /* the send below will surface it */ }
+
+      try {
+        await engine.synthetic(architectId, tries === 0 ? text : WAKE_NUDGE, {
+          description: tries === 0 ? description : `${description} (retry)`,
+        });
+      } catch (err) {
+        const cls = classifyFailure(err.message);
+        recordProviderError({
+          message: err.message,
+          classification: cls,
+          role: 'architect',
+          note: 'the synthetic message could not be sent',
+        });
+        if (cls.kind === 'terminal') {
+          log.error(`could not report to the Architect: ${err.message}`);
+          notify?.({ kind: 'role-error', dir, role: 'architect', message: err.message, final: true });
+          return { ok: false, error: err.message };
+        }
+        tries += 1;
+        const delay = backoffMs(tries, settings);
+        notify?.({
+          kind: 'role-error',
+          dir,
+          role: 'architect',
+          message: err.message,
+          retrying: true,
+          at: Date.now() + delay,
+        });
+        log.warn(`wake ${architectId} failed (${cls.reason}); retrying in ${Math.round(delay / 1000)}s`);
+        await sleep(delay, signal);
+        continue;
       }
+
+      // Watch the turn it started. Without this the runner cannot tell a report
+      // that was judged from one that was read by nobody.
+      const finished = await waitForIdle(architectId, before, settings.stallSec * 1000, null, signal);
+      if (finished.stopped) return { ok: false, stopped: true };
+
+      let messages = [];
+      try {
+        messages = await engine.getMessages(architectId);
+      } catch { /* checked below as "no error seen" */ }
+      const err = finished.stalled ? `nothing happened for ${Math.round(settings.stallSec / 60)} minutes` : turnErrorOf(messages, before);
+      if (!err) {
+        notify?.({ kind: 'role-error', dir, role: 'architect', clear: true });
+        return { ok: true };
+      }
+
+      const cls = finished.stalled
+        ? { kind: 'transient', reason: 'stalled' }
+        : classifyFailure(err);
+      recordProviderError({ message: err, classification: cls, role: 'architect', note: 'the wake turn failed' });
+
+      if (cls.kind === 'terminal') {
+        log.error(`the Architect could not process the report: ${err}`);
+        notify?.({ kind: 'role-error', dir, role: 'architect', message: err, final: true });
+        return { ok: false, error: err };
+      }
+
+      tries += 1;
+      const delay = backoffMs(tries, settings);
+      notify?.({
+        kind: 'role-error',
+        dir,
+        role: 'architect',
+        message: err,
+        retrying: true,
+        at: Date.now() + delay,
+      });
+      log.warn(
+        `the Architect's turn failed (${cls.reason}: ${err}); waking it again in ${Math.round(delay / 1000)}s`,
+      );
+      await sleep(delay, signal);
     }
   }
 
@@ -863,6 +1216,21 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
    *  the same picture the cards had before it. */
   const active = () => [...running.values()];
 
-  return { handleTurn, requestsIn, active };
+  /** Stop the run in a project, whichever part of it is running. Returns whether
+   *  there was anything to stop. The wait loops see the abort on their next poll
+   *  (and a backoff sleep is cut short), so this is immediate even mid-retry. */
+  function cancel(dir) {
+    const control = controls.get(dirKey(dir));
+    if (!control) return false;
+    control.abort();
+    const live = running.get(dirKey(dir));
+    if (live?.workerId) {
+      engine.interrupt(live.workerId).catch(() => { /* already gone */ });
+    }
+    log.warn(`run in ${dir} stopped by the operator`);
+    return true;
+  }
+
+  return { handleTurn, requestsIn, active, cancel };
 }
 

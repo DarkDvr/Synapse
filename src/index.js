@@ -16,6 +16,7 @@ import { createProbe, discoverToolsetForModel } from './probe.js';
 import { createModelCache, MAX_TOOL_ASKS } from './modelcache.js';
 import { createApi } from './api.js';
 import { createServer } from './server.js';
+import { pruneProviderLog } from './provider-errors.js';
 
 const bootLog = logger.channel('app');
 let bootError = null;
@@ -145,6 +146,11 @@ async function main() {
   // Clear any probe/model-check session a killed process left behind; they are
   // scaffolding, never user work.
   probe.sweep().catch(() => {});
+
+  // The provider-error diary: keep a month, regardless of the log retention in
+  // Settings. Pruning at boot is what makes that true on a machine that never
+  // restarts for weeks, and every write re-checks (throttled to six hours).
+  pruneProviderLog(true);
 
   // ── per-model knowledge ──────────────────────────────────────
   // The engine catalog refreshes every boot, but models come and go. Record

@@ -614,6 +614,9 @@ Non-obvious, all verified on 2.0.30:
   telling the Architect to break the task down, change the role/model, or mark it
   blocked. Refusals are logged with an `outcome` and no `attempt` number, so they
   do not count against the cap. A refusal is a real answer, not a silent retry.
+  A recoverable provider failure is not an attempt either: a task that was rate
+  limited five times and then finished is on attempt 1, because nothing about the
+  task failed.
 - **A coder that cannot do the job hands it down the line.** The three coder roles
   are peers (`worker.ladder`, default `coder-1 → coder-2 → coder-3`), and the
   harness moves the *same task* between them — the Architect cannot, because the
@@ -667,32 +670,70 @@ Non-obvious, all verified on 2.0.30:
   `runs.jsonl` as `outcome: 'keep-building-off'`, and shown as a toast; it does
   **not** wake the Architect, because waking it to say "stop" starts another turn
   it can delegate in again.
-- **A stalled worker cannot hang the loop:** the wait is on the engine's `idle`
-  message, with a ceiling that interrupts the session and reports a timeout. The
-  ceiling is `worker.timeoutSec` (Settings → Workers, default 300s) and a role
-  overrides it on its own entry (`roles.<id>.timeoutSec`) — one number for every
-  role was wrong within a day: the auditor hit 240s and needed more. A timeout is
-  not a failed task: the calendar auditor was interrupted and still left a useful
-  result, and the Architect judged from what it *had* produced rather than from
-  the worker's word.
-  **A turn the provider refuses is not a success either.** The engine appends
-  `idle` whatever the step did, so reading idle alone as "completed" reported a
-  dead model as a finished task with no output — twice, and the Architect had to
-  guess why. A retired model answers **HTTP 410** in about two seconds and both the
-  assistant message and the idle one carry the reason, so `turnErrorOf()` reads the
-  new messages for an error and the run is `outcome: "error"`: the report quotes the
-  provider's own sentence, says plainly that the worker never got to work, and
-  points at the role's model. Measured on the live case: `space-bunny-free` was
-  retired mid-run, every worker turn died in 1.8s, and the plan went `blocked`
-  because nothing said why. **The catalog can advertise a model the inference
-  endpoint has already retired** — `space-bunny-free` was still listed, still
-  pickable, and still the one the provider told us to stop using.
-  **One exception: a worker waiting on an answer is not stalled.** While the
-  transcript shows a `question` tool part still running, `waitForIdle` pushes the
-  deadline out on every poll, so the operator can take as long as they like.
-  Without that, every worker that asked anything was guaranteed to be interrupted
-  for asking — and the panel would have shown a question for a run that had
-  already been killed.
+- **A worker is never killed for taking a long time.** There is no wall-clock
+  ceiling: a designer turn of forty minutes is normal on a busy evening, and a turn
+  that is writing, reading or reasoning is working. What is stopped is a turn that
+  produces *nothing at all* — `waitForIdle` compares a signature of the transcript
+  (message and part counts, timestamps, text length) on every poll, and when it has
+  not changed for `worker.stallSec` (Settings → Workers, default 600 s), the turn is
+  interrupted and **resumed**, not failed: the session is told to continue from
+  exactly where it stopped, up to `worker.resumeMax` times (default 4), then it is
+  reported as a timeout. `roles.<id>.stallSec` overrides the window for one role.
+  That is the operator's own recovery, performed for them — they had watched the
+  desktop app sit on "Working…" for an hour with nothing behind it, and fixed it by
+  saying "you got stuck, continue".
+  **This is measured, and the old ceiling was the wrong shape.** On the clock run
+  (19 Oct) three consecutive turns hit a 600 s ceiling *while working*: the designer
+  made 48 tool calls and wrote a 447-line contract plus four mocks, the coder had a
+  40 KB shell on disk. The Architect accepted that partial work afterwards; nothing
+  was wrong except the number.
+  **A question for the operator is not silence.** While the transcript shows a
+  `question` tool part still running, the stall clock is paused, so the operator can
+  take as long as they like — otherwise every worker that asks anything would be
+  interrupted for asking.
+- **Recoverable provider failures never end a run.** `src/provider-errors.js`
+  classifies the sentence a turn ended with. *Transient* — rate limit/429,
+  connection reset, socket/network/DNS, 5xx, "overloaded", the free-tier message,
+  and **anything unrecognised** — is retried in the same session with exponential
+  backoff (`worker.retryBaseSec` 10 s doubling to `worker.retryCapSec` 300 s, ±20%
+  jitter), indefinitely. It does not consume an attempt, does not move the ladder,
+  and keeps every file already written: the harness sends `synthetic` "continue"
+  rather than starting a new worker from scratch. *Terminal* — deprecated/retired
+  model, invalid API key, explicit 400/422 — ends the delegation and moves the rung.
+  **The engine does not retry; the harness must.** Measured on the clock run: a rate
+  limit landed at 00:41:03 and the session was `idle` one second later. The desktop
+  app survives that because the client retries; the engine's API does not.
+  **A rate limit must not mark a model.** It used to write a `provider` issue, and
+  `candidatesFor()` skips marked models — so one 429 at 00:41:04 made every role on
+  that model look refused, and the delegation then moved to a model that was
+  retired. Only `deprecated` marks a model now; a 401 stops the turn and reports,
+  but is never written as a permanent mark (a server under load may be lying, and a
+  badge outlives the lie). **Guarded by `node tests\provider-retry.test.mjs`**,
+  which drives the real runner against a stubbed engine — 26 checks over
+  classification, retry, resume, stop and the wake — because this is the code that
+  decides whether an overnight run survives, and every one of those behaviours was
+  invisible in review the first time.
+- **The wake is watched, not fire-and-forget.** `wake()` used to admit the report
+  and move on. On the clock run the Architect's own turn then failed on a rate limit
+  two seconds later: the report sat in a transcript nobody read, no delegation
+  followed, and the run stopped with the UI showing an idle screen. The wake now
+  waits for the Architect's turn and retries its failures on the same schedule; the
+  report is sent once and later attempts just say "continue".
+- **Stop is the way out, and it is a run-level cancel.** `POST /api/runs/cancel`
+  aborts an `AbortController` for that directory: the poll and the backoff sleep see
+  it on the next tick (so a five-minute wait stops immediately), the worker session
+  is interrupted, the result line is `outcome: 'stopped'`, and **no wake is sent** —
+  waking the Architect after a stop would start a turn that could re-delegate the
+  very task that was just stopped. The button is enabled whenever a run is live for
+  the open project, not only when the open session is busy; it used to be disabled
+  exactly when a worker was running, which made it useless for delegations.
+- **Every provider failure is written to `data\provider-errors.log`** — its own
+  file, its own 30-day retention regardless of `logging.retentionDays`, pruned at
+  boot and (throttled to six hours) on write. One line each: timestamp, transient or
+  terminal, reason, role, model, task, retry number, and the provider's sentence
+  truncated to 180 characters. It exists to answer "are evenings slower, and how
+  often is that rate limits?" across months; a month of lines is a few hundred
+  kilobytes.
 - **The worker's poll is also the UI's source of live activity.** `waitForIdle`
   already fetches the worker's transcript on a timer, so the newest tool call
   costs nothing extra: the runner reads its name and target (the input field
@@ -909,6 +950,10 @@ is a sentence about HTML rather than pixels.
   "OpenCode's free tier can only be used from within OpenCode." It is
   intermittent, not a ban. **Every test turn spends the operator's quota** —
   batch checks, and prefer a single turn that proves several things.
+  Evenings are slower than days on this provider — the operator's observation,
+  and the reason `data\provider-errors.log` exists: expect 10+ minute turns and
+  rate limits that last up to half an hour. The harness waits those out now; a
+  test that assumes a fast turn is a test that looks broken at 21:00.
 
 ### Context windows and thinking effort
 
@@ -1471,6 +1516,22 @@ This is once per directory per process and needs no config.
   button to within 0.01px, with ~1.5px of margin left top and bottom at three
   chevrons — if the glyph or border size changes, re-measure with
   `browser_get_element` rather than eyeballing it.
+- **A provider error is red *text* on the card, never a border.** While a role is
+  retrying, or its wake failed, its subtitle line reads `Retrying at 00:45 — Rate
+  limit exceeded` in `--red` at 600 weight, and the card's border keeps its own
+  meaning (blocked / live / settled). It is cleared the moment the role works
+  again. The text is the first sentence of the provider's own words (`shortErr`),
+  clamped by the same three-line slot; the whole sentence is the tooltip. The
+  source is `role-error` events kept in `state.roleErrors` keyed `dirKey|role` —
+  deliberately *not* a run event, or the UI would read it as a card repaint, and
+  `run.progress` cannot clear it because the runner emits one right after the
+  notice.
+- **Every setting carries a one-sentence tooltip, and units live in the label.**
+  Twenty fields, twenty `title`s, in plain English: what it does, what happens
+  when it is wrong, and what counts (seconds, minutes, days, attempts). Long
+  durations are shown in **minutes** — the config stores seconds, and `data-scale`
+  converts on read and on save. "20" beside "Restart after silence (minutes)" is a
+  decision the operator can make; "1200" was a number nobody could read.
 - **Model pickers are searchable.** Each `.role-model` `<select>` stays in the
   DOM as the source of truth — every handler still works — but is hidden
   (`display: none`) and driven by a `.model-search` input plus one shared

@@ -64,7 +64,7 @@
       ]
     },
     "coder-3": {
-      "ref": "opencode/muse-spark-1.3-contributor-free",
+      "ref": "opencode/deepseek-v4.1-flash-free",
       "variant": "high",
       "skills": [
         "code-craft",
@@ -83,7 +83,10 @@
     "resetOnBoot": false
   },
   "worker": {
-    "timeoutSec": 1200,
+    "stallSec": 1200,
+    "resumeMax": 4,
+    "retryBaseSec": 10,
+    "retryCapSec": 300,
     "ladder": [
       "coder-1",
       "coder-2",

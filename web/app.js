@@ -67,6 +67,9 @@ const state = {
   // the DOM or it dies with the next render.
   open: new Set(),
   renderSig: '',
+  // A provider failure shown on a role's card, keyed `${dirKey}|${role}`: red
+  // *text*, never a border, and cleared when that role works again.
+  roleErrors: new Map(),
   // Signature of what the question panel is showing, so a poll does not rebuild
   // it and discard answers the operator has already given.
   askSig: '',
@@ -1478,6 +1481,14 @@ const runIn = (project) => (project ? state.runs.get(dirKey(project.directory)) 
 const currentRun = () => runIn(currentProject());
 const roleLabel = (id) => ROLES.find((r) => r.id === id)?.name || String(id || '');
 
+/** The first sentence of a provider error, short enough for one card line. The
+ *  full sentence rides the slot's tooltip, like every other card text. */
+const shortErr = (s) => {
+  const t = String(s || '').replace(/\s+/g, ' ').trim();
+  const first = t.split(/(?<=[.!?])\s/)[0] || t;
+  return first.length > 92 ? `${first.slice(0, 91)}…` : first;
+};
+
 /** A tool call as the card's phrase: "writing calendar.py". */
 function runPhrase(tool) {
   const name = String(tool?.name || '');
@@ -1629,13 +1640,27 @@ function renderRoleActivity() {
     } else if (blocked) dot = 'err';
     else if (participated) dot = 'ok';
 
+    // A provider failure is *news*, shown as red text while it lasts. The border
+    // keeps its own meaning — blocked, live, settled — so an error never borrows
+    // it. The live run's own retry state is the freshest source; `roleErrors`
+    // covers the Architect's wake, which happens after the run is gone.
+    const cardErr =
+      (run && run.role === role && run.retry) ||
+      state.roleErrors.get(`${dirKey(currentProject()?.directory)}|${role}`) ||
+      null;
+    if (cardErr) {
+      const at = Number(cardErr.at) || 0;
+      const head = shortErr(cardErr.message);
+      text = cardErr.retrying !== false && at ? `Retrying at ${hhmm(at)} — ${head}` : head;
+    }
+
     // Dimmed cards are the ones that have never been in this project at all. A
     // card that is taking part is solid by definition, and the Architect is never
     // dimmed: it is the role that exists before any of this. A skipped card is
     // solid too — it is news, not absence.
     const dim = role !== 'architect' && !participated && !part && !skipped;
-    rows.push({ card, text, part, dot, dim, chip, settled, skipped });
-    sig += `${role}\u0001${part}\u0001${dot}\u0001${dim ? 1 : 0}\u0001${settled ? 1 : 0}\u0001${skipped ? 1 : 0}\u0001${chip ? chip.text : ''}\u0001${text}\u0002`;
+    rows.push({ card, text, part, dot, dim, chip, settled, skipped, err: Boolean(cardErr) });
+    sig += `${role}\u0001${part}\u0001${dot}\u0001${dim ? 1 : 0}\u0001${settled ? 1 : 0}\u0001${skipped ? 1 : 0}\u0001${chip ? chip.text : ''}\u0001${cardErr ? 1 : 0}\u0001${text}\u0002`;
   }
 
   if (sig === state.roleSig) return;
@@ -1647,7 +1672,7 @@ function renderRoleActivity() {
   // definite height, so anything that did grow would take room from the
   // transcript's top edge.
   const fromH = Math.ceil($('topologyWrap')?.getBoundingClientRect().height || 0);
-  for (const { card, text, part, dot, dim, chip, settled, skipped } of rows) {
+  for (const { card, text, part, dot, dim, chip, settled, skipped, err } of rows) {
     const slot = card.querySelector('.role-task');
     // The status dot is the markup's own — it ships as `idle` and is only ever
     // changed here. Yellow breathes because it means "taking part right now",
@@ -1678,6 +1703,9 @@ function renderRoleActivity() {
         `<span class="${chip.cls}">${esc(chip.text)}</span>` +
         (chip.note ? `<span class="role-summary">${esc(chip.note)}</span>` : '');
     } else slot.textContent = text;
+    // Red ink for a provider failure, cleared when the role works again. A class
+    // on the text slot only: the card's border is a different sentence.
+    slot.classList.toggle('is-err', Boolean(err));
     slot.title = text;
   }
   if (state.view === 'session') {
@@ -1701,8 +1729,15 @@ async function loadRuns() {
 function handleRunEvent(ev) {
   const key = dirKey(ev.dir);
   if (ev.type === 'run.started' || ev.type === 'run.progress') {
+    // A run reaching a role is that role working again, so its last error is no
+    // longer the news. `run.progress` cannot clear it: the runner sends one right
+    // after a retry notice, which would erase the notice it just sent.
+    if (ev.type === 'run.started' && ev.role) state.roleErrors.delete(`${key}|${ev.role}`);
     state.runs.set(key, { ...(state.runs.get(key) || {}), ...ev });
   } else if (ev.type === 'run.finished') {
+    // A finished, successful run is the role working again; a run that failed is
+    // the one case where the red line stays until the next attempt.
+    if (ev.role && ev.outcome === 'completed') state.roleErrors.delete(`${key}|${ev.role}`);
     state.runs.delete(key);
   } else {
     return;
@@ -2868,7 +2903,9 @@ function renderComposer() {
   // attention is the thing the run is waiting on, and a worker's question is no
   // different from the Architect's in that respect.
   $('sendBtn').disabled = (state.busy && !hasSession) || asking;
-  $('stopBtn').disabled = !state.busy || !hasSession;
+  // Stop has to work while a worker is running or waiting out a retry, when the
+  // open session is idle — that is exactly when it is the only way out.
+  $('stopBtn').disabled = !(state.busy || (hasSession && currentRun())) || !hasSession;
   const input = $('promptInput');
   if (input) {
     input.disabled = asking;
@@ -2951,6 +2988,19 @@ async function ensureSession() {
 }
 
 async function interrupt() {
+  // A delegated run is the thing to stop when one is live: the open session is
+  // the Architect, and it is usually idle while a worker works. Stopping the
+  // session instead would leave the worker running and the project locked.
+  const run = currentRun();
+  if (run) {
+    try {
+      const { ok } = await api('POST', '/api/runs/cancel', { dir: run.dir });
+      toast(ok ? 'Stopping' : 'Nothing To Stop', ok ? `${run.title || run.task} is being stopped.` : 'That run had already finished.');
+    } catch (err) {
+      toast('Stop failed', err.message);
+    }
+    return;
+  }
   if (!state.sessionId) return;
   try { await api('POST', `/api/sessions/${encodeURIComponent(state.sessionId)}/interrupt`); }
   catch (err) { toast('Stop failed', err.message); }
@@ -3004,6 +3054,25 @@ function connectStream() {
     // harness declined to do something the operator should know about.
     if (ev.kind === 'note') {
       toast(ev.title || 'Note', ev.body || '');
+      return;
+    }
+
+    // A provider failure against a role: red text on that role's card, cleared
+    // when it works again. Not a blocker and not a border — it is news the
+    // operator should notice while it is true, and forget afterwards.
+    if (ev.kind === 'role-error') {
+      const key = `${dirKey(ev.dir)}|${ev.role || ''}`;
+      if (ev.clear) state.roleErrors.delete(key);
+      else {
+        state.roleErrors.set(key, {
+          message: ev.message || '',
+          attempt: Number(ev.attempt) || 0,
+          at: Number(ev.at) || Date.now(),
+          retrying: ev.retrying !== false,
+        });
+      }
+      state.roleSig = '';
+      renderRoleActivity();
       return;
     }
 
@@ -3173,20 +3242,29 @@ function renderSettings() {
   const c = state.config;
   if (!c) { $('settingsBody').innerHTML = '<p class="rail-note">Config unavailable.</p>'; return; }
 
-  const f = (label, path, opts = {}) => `
-    <label class="set-field${opts.wide ? ' wide' : ''}">
+  // Every control carries a plain-English tooltip: the config file is the source
+  // of truth, but this screen is where a number is actually chosen, and "what is
+  // this?" should not require reading the source. Units live in the label, and
+  // anything long is in minutes — nobody reads 1200 and thinks "twenty minutes".
+  const f = (label, path, opts = {}) => {
+    const scale = Number(opts.scale) || 1;
+    const raw = opts.value !== undefined ? opts.value : readPath(c, path);
+    const shown = scale === 1 ? raw : Number(raw) / scale;
+    return `
+    <label class="set-field${opts.wide ? ' wide' : ''}" title="${esc(opts.hint || '')}">
       <span>${esc(label)}</span>
-      <input data-path="${path}" type="${opts.type || 'text'}" value="${esc(opts.value !== undefined ? opts.value : readPath(c, path))}" ${opts.attr || ''} />
+      <input data-path="${path}"${scale !== 1 ? ` data-scale="${scale}"` : ''} type="${opts.type || 'text'}" value="${esc(shown)}" ${opts.attr || ''} />
     </label>`;
+  };
   const sel = (label, path, options, opts = {}) => `
-    <label class="set-field${opts.wide ? ' wide' : ''}">
+    <label class="set-field${opts.wide ? ' wide' : ''}" title="${esc(opts.hint || '')}">
       <span>${esc(label)}</span>
       <select data-path="${path}">
         ${options.map((o) => `<option value="${esc(o.v)}"${o.v === readPath(c, path) ? ' selected' : ''}>${esc(o.l)}</option>`).join('')}
       </select>
     </label>`;
-  const check = (label, path) => `
-    <label class="set-check">
+  const check = (label, path, hint = '') => `
+    <label class="set-check" title="${esc(hint)}">
       <input data-path="${path}" type="checkbox" ${readPath(c, path) ? 'checked' : ''} />
       <span>${esc(label)}</span>
     </label>`;
@@ -3202,22 +3280,56 @@ function renderSettings() {
   // model and effort, chosen on its card and persisted in the config file.
   $('settingsBody').innerHTML = [
     group('Server',
-      f('Host', 'server.host') +
-      f('Port', 'server.port', { type: 'number' }) +
-      check('Open browser on start', 'server.openBrowser')),
+      f('Host', 'server.host', {
+        hint: 'The address the Synapse window is served on. 127.0.0.1 means only this machine can open it.',
+      }) +
+      f('Port', 'server.port', {
+        type: 'number',
+        hint: 'The port the Synapse window uses. Change it only if another program already uses this one.',
+      }) +
+      check(
+        'Open browser on start',
+        'server.openBrowser',
+        'Open a browser tab on Synapse when it starts. Off means you open it yourself.',
+      )),
     group('Engine',
-      f('Engine type', 'engine.type') +
-      f('Engine port', 'engine.opencode.port', { type: 'number' }) +
-      f('opencode.exe path (blank = auto-detect)', 'engine.opencode.binary', { wide: true, value: binaryValue }) +
-      f('Password (blank = keep existing)', 'engine.opencode.password', { type: 'password', attr: 'placeholder="unchanged"' }) +
-      f('Start timeout (ms)', 'engine.opencode.startTimeoutMs', { type: 'number' }) +
-      f('Engine home (blank = data\\engine\\opencode)', 'engine.opencode.home', { wide: true, value: homeValue })),
+      f('Engine type', 'engine.type', {
+        hint: 'Which agent engine Synapse drives. Only OpenCode is implemented.',
+      }) +
+      f('Engine port', 'engine.opencode.port', {
+        type: 'number',
+        hint: 'The port Synapse asks the engine to listen on. It must differ from the Synapse port above.',
+      }) +
+      f('opencode.exe path (blank = auto-detect)', 'engine.opencode.binary', {
+        wide: true,
+        value: binaryValue,
+        hint: 'The engine program. Leave it blank and Synapse finds it by itself.',
+      }) +
+      f('Password (blank = keep existing)', 'engine.opencode.password', {
+        type: 'password',
+        attr: 'placeholder="unchanged"',
+        hint: 'Password for the engine\'s local API. Leave it blank to keep the password already saved.',
+      }) +
+      f('Start timeout (seconds)', 'engine.opencode.startTimeoutMs', {
+        type: 'number',
+        scale: 1000,
+        hint: 'How long Synapse waits for the engine to report ready when it starts. Seconds.',
+      }) +
+      f('Engine home (blank = data\\engine\\opencode)', 'engine.opencode.home', {
+        wide: true,
+        value: homeValue,
+        hint: 'Where the engine keeps its own settings, logs and data. Blank uses the copy inside Synapse; the machine-wide OpenCode install is never touched.',
+      })),
     group('Working directory',
-      f('Where new sessions run (blank = workspace)', 'defaults.directory', { wide: true })),
+      f('Where new sessions run (blank = workspace)', 'defaults.directory', {
+        wide: true,
+        hint: 'The folder new sessions start in when no project is chosen. Blank uses the projects folder.',
+      })),
     group('Skills',
       f('Extra skill folders (separate with ;)', 'engine.opencode.skillPaths', {
         wide: true,
         value: (c.engine?.opencode?.skillPaths || []).join(';'),
+        hint: 'Extra folders of agent skills, separated by semicolons. Synapse\'s own skills and your ~/.agents/skills always load; add a folder here only for skills in neither.',
       }) +
       `<p class="set-note">${esc(skillsSummary())}</p>` +
       `<p class="set-note">Synapse's own skills ship in <code>skills\\</code> beside the app and always load, ` +
@@ -3227,28 +3339,57 @@ function renderSettings() {
       `not in either. A skill a role names but this machine does not have is listed above instead of ` +
       `disappearing quietly.</p>`),
     group('Model checks',
-      f('Max asks per model (1–20)', 'modelChecks.maxAsks', { type: 'number' }) +
-      `<div class="set-field"><span>Ask counters</span>
+      f('Max asks per model (1–20)', 'modelChecks.maxAsks', {
+        type: 'number',
+        hint: 'How many times Synapse may ask one model which tools it has before it stops asking. Between 1 and 20, counted across sessions and restarts.',
+      }) +
+      `<div class="set-field" title="Set every model's ask count back to zero. Answers already learned are kept."><span>Ask counters</span>
         <button type="button" class="btn btn-warn btn-sm" data-reset-asks>Reset Ask Counters</button>
       </div>`),
     group('Tools',
-      check('Clear the tool census on every start', 'tools.resetOnBoot') +
-      `<div class="set-field"><span>Tool census</span>
+      check(
+        'Clear the tool census on every start',
+        'tools.resetOnBoot',
+        'Start the tool-call counts from zero each time Synapse starts, so they describe this session rather than every test run ever.',
+      ) +
+      `<div class="set-field" title="Delete the tool-call counts now."><span>Tool census</span>
         <button type="button" class="btn btn-warn btn-sm" data-clear-tools>Clear Tool Census</button>
       </div>`),
     group('Workers',
-      f('Timeout per task (seconds)', 'worker.timeoutSec', { type: 'number' }) +
-      `<p class="set-note">A delegated task is interrupted after this long and its partial work is reported. ` +
-      `A role can override it in the config (<code>roles.&lt;id&gt;.timeoutSec</code>) — the hacker is the one that needs more.</p>`),
+      f('Restart after silence (minutes)', 'worker.stallSec', {
+        type: 'number',
+        scale: 60,
+        hint: 'If a worker writes, reads and says nothing at all for this long, Synapse interrupts it and tells it to carry on from where it stopped. Any activity resets the clock, so a slow turn is never cut short however long it takes. Minutes.',
+      }) +
+      f('Restarts allowed per task', 'worker.resumeMax', {
+        type: 'number',
+        hint: 'How many times one task may be interrupted for silence and told to continue before it is reported as stuck. 0 turns restarts off.',
+      }) +
+      f('First retry wait (seconds)', 'worker.retryBaseSec', {
+        type: 'number',
+        hint: 'After a rate limit or a dropped connection, how long Synapse waits before asking the same worker to continue. It doubles with each retry. Seconds.',
+      }) +
+      f('Longest retry wait (minutes)', 'worker.retryCapSec', {
+        type: 'number',
+        scale: 60,
+        hint: 'The ceiling for that wait. Recoverable failures are retried indefinitely at this interval; there is no attempt limit, so only Stop ends one. Minutes.',
+      }) +
+      `<p class="set-note">Rate limits, dropped connections and server errors are retried for as long as it takes, and they do not count as attempts: the worker keeps its progress. A retired model, a wrong key or a malformed request is final, and is reported. Every provider failure is written to <code>data\\provider-errors.log</code>, which keeps 30 days regardless of the log retention above.</p>`),
     group('Logging',
       sel('Level', 'logging.level', [
         { v: 'debug', l: 'Debug' },
         { v: 'info', l: 'Info' },
         { v: 'warn', l: 'Warn' },
         { v: 'error', l: 'Error' },
-      ]) +
-      f('Retention (days)', 'logging.retentionDays', { type: 'number' }) +
-      f('Max file size (MB)', 'logging.maxFileMb', { type: 'number' }), 3),
+      ], { hint: 'How much Synapse writes to its own logs. Debug is for diagnosing a problem; Info is the normal setting.' }) +
+      f('Retention (days)', 'logging.retentionDays', {
+        type: 'number',
+        hint: 'How many days the app, engine, session and tool logs are kept. Days.',
+      }) +
+      f('Max file size (MB)', 'logging.maxFileMb', {
+        type: 'number',
+        hint: 'When a log file reaches this size it is rotated to a .1 file and a fresh one is started. Megabytes.',
+      }), 3),
   ].join('');
 }
 
@@ -3259,6 +3400,9 @@ async function saveSettings() {
     let value = el.type === 'checkbox' ? el.checked : el.value;
     if (el.type === 'number') value = Number(value);
     if (el.type === 'number' && !Number.isFinite(value)) continue;
+    // A field shown in seconds or minutes but stored in the base unit: the
+    // conversion belongs with the setting, not in the operator's head.
+    if (el.dataset.scale) value = Math.round(value * Number(el.dataset.scale));
     // A folder list is one line in the form and an array in the config.
     if (path === 'engine.opencode.skillPaths') {
       writePath(draft, path, String(value).split(';').map((p) => p.trim()).filter(Boolean));

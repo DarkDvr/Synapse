@@ -130,6 +130,9 @@ export function createServer({ api, engine, logger, config }) {
 
     // GET /api/runs — delegated work in flight (the live path + role cards)
     if (seg[0] === 'runs' && method === 'GET') return sendJson(res, 200, await api.runs());
+    if (seg[0] === 'runs' && seg[1] === 'cancel' && method === 'POST') {
+      return sendJson(res, 200, await api.cancelRun(await readBody(req)));
+    }
 
     // GET /api/tools/stats — the tool-call census · POST /api/tools/reset — clear it
     if (seg[0] === 'tools' && seg[1] === 'stats' && method === 'GET') return sendJson(res, 200, await api.toolStats());

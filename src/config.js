@@ -56,13 +56,20 @@ export const DEFAULTS = {
     resetOnBoot: true,
   },
   worker: {
-    // How long one delegated task may run before the harness interrupts it and
-    // reports a timeout. A timeout is a report, not a failed task: whatever the
-    // worker produced up to that point is still evidence and is handed over.
-    // A role that genuinely needs longer overrides it on its own entry
-    // (`roles.<id>.timeoutSec`) — the hacker, which fuzzes a build, is the one
-    // that hits this ceiling in practice.
-    timeoutSec: 300,
+    // A worker is never killed for taking a long time: a designer or a coder can
+    // legitimately spend forty minutes on one turn, and an evening on a busy
+    // provider is slower still. What is worth stopping is a turn that produces
+    // *nothing at all* — no tool call, no text, no reasoning — for this long,
+    // which is what a silently lost session looks like. It is interrupted and
+    // told to carry on, up to `resumeMax` times.
+    stallSec: 600,
+    resumeMax: 4,
+    // Recoverable provider failures (rate limits, resets, 5xx) are retried with
+    // exponential backoff from this base and capped here, for as long as it takes.
+    // The delays are deliberately courteous: a thirty-minute outage costs about
+    // nine requests, not hundreds.
+    retryBaseSec: 10,
+    retryCapSec: 300,
     // Roles that can stand in for one another, in escalation order. A task is
     // written for one role; when that coder cannot do the job the harness moves
     // the same task down this list (see src/runs.js candidatesFor). A role not in
@@ -100,6 +107,12 @@ const clampInt = (v, lo, hi, fallback) => {
 
 /** Coerce/validate a config object into a safe shape. */
 export function normalize(raw) {
+  // A config written before the stall timer carries `worker.timeoutSec`, and
+  // `merge()` fills `stallSec` from DEFAULTS before anything can look — so the
+  // old number is read from the raw file first. Without this the operator's own
+  // choice (they raised it mid-run) would be silently replaced by the default.
+  const rawWorker = isPlainObject(raw?.worker) ? raw.worker : {};
+  const carriedStall = rawWorker.stallSec !== undefined ? rawWorker.stallSec : rawWorker.timeoutSec;
   const cfg = merge(DEFAULTS, raw || {});
   cfg.server.host = String(cfg.server.host || '127.0.0.1');
   cfg.server.port = clampInt(cfg.server.port, 1, 65535, 8700);
@@ -112,7 +125,16 @@ export function normalize(raw) {
   delete cfg.ui;
 
   cfg.worker = cfg.worker || {};
-  cfg.worker.timeoutSec = clampInt(cfg.worker.timeoutSec, 30, 3600, DEFAULTS.worker.timeoutSec);
+  delete cfg.worker.timeoutSec;
+  cfg.worker.stallSec = clampInt(
+    carriedStall !== undefined ? carriedStall : cfg.worker.stallSec,
+    30,
+    7200,
+    DEFAULTS.worker.stallSec,
+  );
+  cfg.worker.resumeMax = clampInt(cfg.worker.resumeMax, 0, 20, DEFAULTS.worker.resumeMax);
+  cfg.worker.retryBaseSec = clampInt(cfg.worker.retryBaseSec, 5, 300, DEFAULTS.worker.retryBaseSec);
+  cfg.worker.retryCapSec = clampInt(cfg.worker.retryCapSec, 10, 3600, DEFAULTS.worker.retryCapSec);
   // The peer ladder is a list of role ids; anything unknown is dropped rather than
   // left to confuse a delegation with a role that has no card and no model.
   cfg.worker.ladder = Array.isArray(cfg.worker.ladder)
@@ -172,10 +194,11 @@ export function normalize(raw) {
       if (ref) entry.ref = ref;
       const variant = isPlainObject(spec) && typeof spec.variant === 'string' ? spec.variant.trim() : '';
       if (variant) entry.variant = variant;
-      // A role may need longer than the default worker timeout (the hacker
-      // fuzzes a build, which takes time). Only a real number is kept.
-      const timeoutSec = isPlainObject(spec) ? Number(spec.timeoutSec) : NaN;
-      if (Number.isFinite(timeoutSec)) entry.timeoutSec = clampInt(timeoutSec, 30, 3600, DEFAULTS.worker.timeoutSec);
+      // A role may need a longer silence window than the default (the hacker
+      // fuzzes a build; a designer writes for a long time between steps). Only a
+      // real number is kept; the old `timeoutSec` name is read once and dropped.
+      const stallSec = isPlainObject(spec) ? Number(spec.stallSec ?? spec.timeoutSec) : NaN;
+      if (Number.isFinite(stallSec)) entry.stallSec = clampInt(stallSec, 30, 7200, DEFAULTS.worker.stallSec);
       // Which skills this role may load. Absent means "no restriction"; an empty
       // list means "none", which is a deliberate choice and is kept as one.
       if (isPlainObject(spec) && Array.isArray(spec.skills)) {

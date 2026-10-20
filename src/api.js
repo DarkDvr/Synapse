@@ -286,6 +286,20 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
      *  this is what a page opened mid-run starts from. */
     runs: async () => ({ runs: runs?.active() || [] }),
 
+    // POST /api/runs/cancel - stop the delegated run in a project. The UI's Stop
+    // button uses this when the open session is idle and a worker is not: the
+    // worker is the thing that needs stopping, and a run waiting out a five-minute
+    // backoff has to stop immediately.
+    cancelRun: async ({ dir } = {}) => {
+      const directory = String(dir || '').trim();
+      if (!directory) {
+        const err = new Error('a directory is needed to stop a run');
+        err.status = 400;
+        throw err;
+      }
+      return { ok: Boolean(runs?.cancel?.(directory)) };
+    },
+
     // ── projects ─────────────────────────────────────────────
     projects: async () => ({ projects: await projectsWithSessions() }),
 
