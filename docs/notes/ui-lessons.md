@@ -733,20 +733,22 @@ bold, italic, strikethrough and links: the range these models actually produce.
   drew a line under the gap. `align-items: stretch` puts both bottoms on 1692, with
   the plan scrolling inside its panel. (Wide, the fault was different and older —
   see the `fit-content(55%)` note above.)
-- **Panel grounds: two photographs, and 96% was the wrong instinct.** Both images
-  are already near-black with a glow, so the overlay only has to take the glare
-  off — **50%** over the central frame, **30%** over the sidebar's ribbon. At 96%
-  the operator's word for the sidebar was "pretty much just 1 color"; a photograph
-  dark enough to sit under text needs no help being quiet. The central frame goes on
-  `.stage` (the whole working column), not on the chat panel: the frame's edges are
-  the point, and an opaque dock over it cuts the picture in half — the dock is now
-  `rgba(29,31,35,0.86)` so the ground carries on underneath.
-  Two things worth keeping: `body.dark .sidebar`, because the locked baseline sets
-  that background with a two-class shorthand and would reset a bare `.sidebar` rule;
-  and **JPEG had no MIME type** in the static server, so `bg-left.jpg` was served as
-  `application/octet-stream` — it "usually" paints, which is not a reason to leave
-  a type out of a table that exists to hold types. `.jpg`, `.jpeg` and `.webp` are
-  there now.
+- **A background belongs to the sidebar only.** The central pane is one flat
+  `#0E161E` (`.control-room .main-content`): the cards and the chat should be the
+  only things in it with edges. It carried a framed photograph for a while, then a
+  translucent dock to let that frame continue underneath — both are gone, and the
+  dock is an opaque surface again. The sidebar keeps `bg-left2.png`, a 259x931
+  image made for that column, at **100%** with `background-size: 100% 100%`: no
+  overlay, no crop. `cover` would have cropped up to a third of the ribbon's width
+  at a tall window, and a soft abstract tolerates the stretch.
+  Two faults found on the way, both worth keeping: **96% overlays** — a photograph
+  dark enough to sit under text needs no help being quiet, and at 96% the operator's
+  word for it was "pretty much just 1 color"; and **JPEG had no MIME type** in the
+  static server, so `bg-left.jpg` was served as `application/octet-stream` — it
+  "usually" paints, which is not a reason to leave a type out of a table that exists
+  to hold types. `.jpg`, `.jpeg` and `.webp` are there now.
+  One selector trap: `body.dark .sidebar`, not `.sidebar` — the locked baseline sets
+  that background with a two-class shorthand and resets a bare rule's image.
 - **The ask row is right-aligned, state first.** The counter and the buttons sit
   together at the right and the warning text takes the left — which needed the
   DOM order changed as well as `justify-content: flex-end`, since `margin-left:

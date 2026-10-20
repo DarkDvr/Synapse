@@ -908,10 +908,7 @@ body.dark .sidebar-bottom,
 .chat-dock {
   position: relative;
   display: grid; grid-template-rows: minmax(0, 1fr) auto;
-  /* Slightly translucent so the stage's ground carries on underneath it: an
-     opaque panel over a framed background cut the frame in half at the dock's
-     edge. 86% keeps the transcript's surface dark and its contrast intact. */
-  background: rgba(29, 31, 35, 0.86); border: 1px solid var(--line);
+  background: var(--surface); border: 1px solid var(--line);
   border-radius: 14px; overflow: hidden; min-height: 0;
 }
 
@@ -1850,26 +1847,20 @@ body:has(.modal-backdrop:not([hidden])) { overflow: hidden; }
 
 /* ── 16. faint grounds ──────────────────────────────────────────────────── */
 
-/* Two reference photographs used as grounds, not as pictures. Both are already
-   near-black with a glow, so the overlay only has to take the glare off: 50% over
-   the central frame, 45% over the sidebar's ribbon. At 96% (the first attempt) the
-   operator's word was "pretty much just 1 color" — a photograph dark enough to sit
-   under text needs no help being quiet.
-   `background-size: cover` keeps the composition whatever the panel size. */
-.stage {
-  background-image:
-    linear-gradient(rgba(20, 21, 34, 0.78), rgba(20, 21, 34, 0.78)),
-    url("/assets/bg-center.jpg");
-  background-size: cover;
-  background-position: center;
-  border-radius: 16px;
-}
-/* `body.dark .sidebar`, not `.sidebar`: the locked baseline sets that background
+/* The central pane is one flat colour. It carried the framed photograph for a
+   while; the operator's call was that a background belongs to the sidebar only,
+   and that the working area should be a single dark plane so the cards and the
+   chat are the only things with edges. */
+.control-room .main-content { background: #0e161e; }
+/* The sidebar's ground, used exactly as drawn: a 259x931 image made for this
+   panel, at 100%, no overlay. `100% 100%` rather than `cover` so it fills the
+   column at any window height without cropping the ribbon's curve — a soft
+   abstract tolerates the stretch and cannot lose an edge.
+   `body.dark .sidebar`, not `.sidebar`: the locked baseline sets that background
    with a two-class selector and a shorthand, which would reset the image. */
 body.dark .sidebar {
-  background-image:
-    linear-gradient(rgba(21, 22, 34, 0.3), rgba(21, 22, 34, 0.3)),
-    url("/assets/bg-left.jpg");
-  background-size: cover;
+  background-image: url("/assets/bg-left2.png");
+  background-size: 100% 100%;
+  background-repeat: no-repeat;
   background-position: center;
 }
