@@ -40,6 +40,7 @@ for (const [file, max] of Object.entries(BUDGET)) {
 const NOTES = [
   'docs/notes/engine-notes.md',
   'docs/notes/models-and-tools.md',
+  'docs/notes/runtime-scope.md',
   'docs/notes/ui-lessons.md',
   'docs/notes/runbook.md',
 ];
