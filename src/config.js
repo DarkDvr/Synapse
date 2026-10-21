@@ -31,7 +31,7 @@ export const DEFAULTS = {
       // Folders of agent skills to hand to the engine. Empty by default: this
       // is the operator's choice, not something Synapse should assume.
       skillPaths: [],
-      // Other model servers — usually a local LLM on this machine — registered
+      // Other model servers — a local LLM, or a vendor's own API — registered
       // with the engine as an OpenAI-compatible provider, so they appear in the
       // model menu like any other model. Nothing is contacted until a model is
       // picked and a turn is run; an unreachable server simply fails that turn.
@@ -39,6 +39,11 @@ export const DEFAULTS = {
       //   { "id": "bionic", "name": "Bionic",
       //     "baseURL": "http://localhost:1235/v1", "apiKey": "",
       //     "models": [{ "id": "qwen3.8-27b-ud", "name": "...", "context": 65536, "output": 8192 }] }
+      //
+      // `apiKey` may be a literal key, `env:NAME` to read an environment
+      // variable, or empty to use the conventional `<ID>_API_KEY` when one is
+      // set — see providerApiKey below. The env form keeps a billed key out of
+      // this file, which git tracks.
       //
       // `context`/`output` are optional and only used for the window watchdog and
       // the engine's own budgeting. Left out, nothing is assumed — see
@@ -99,6 +104,37 @@ export const DEFAULTS = {
 
 function isPlainObject(v) {
   return v !== null && typeof v === 'object' && !Array.isArray(v);
+}
+
+/**
+ * A provider's API key, resolved to the value the engine has to send.
+ *
+ * Three forms, in order of preference for a vendor that bills:
+ *
+ *   "apiKey": "env:DEEPSEEK_API_KEY"  read the environment variable
+ *   "apiKey": ""                      the conventional `<ID>_API_KEY`, if set
+ *   "apiKey": "sk-..."                the literal key, for a server with no env
+ *
+ * The env form exists because `config/synapse.config.json` is tracked by git and
+ * a real key must never be one commit away from the repository. A keyless local
+ * server is not an error: a blank entry with no environment variable simply
+ * means "no key", and `missing` stays false. It is only true when the operator
+ * *asked* for a variable that is not set, which is a mistake worth saying out
+ * loud once, at boot.
+ */
+export function providerApiKey(provider, env = process.env) {
+  const id = String(provider?.id || '').trim();
+  const raw = String(provider?.apiKey || '').trim();
+  const explicit = /^env:(.+)$/i.exec(raw);
+  if (explicit) {
+    const name = explicit[1].trim();
+    const key = String(env[name] || '').trim();
+    return { key, source: `env ${name}`, missing: !key };
+  }
+  if (raw) return { key: raw, source: 'config', missing: false };
+  const conventional = `${id.toUpperCase().replace(/[^A-Z0-9]+/g, '_')}_API_KEY`;
+  const key = String(env[conventional] || '').trim();
+  return { key, source: `env ${conventional}`, missing: false };
 }
 
 /** Deep-merge user config over defaults (arrays are replaced, not merged). */

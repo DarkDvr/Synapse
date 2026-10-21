@@ -764,3 +764,11 @@ bold, italic, strikethrough and links: the range these models actually produce.
   saying what did **not** happen (nothing was changed automatically, the run was
   not stopped) and the command in a mono block. It no longer repeats its own
   title as the first line of the body.
+- **A status row that says "not wired yet" has to be wired when the thing is.** The
+  sidebar's `Local LLM` row read `not set` from the day it was written until the
+  local provider shipped — a placeholder telling the operator a capability was
+  absent while the model was already in every role's menu. It now reads the
+  configured local servers out of `engine.opencode.providers`
+  (`Bionic · 1 model`) and its tooltip lists the base URL and the models. The dot
+  stays grey: registering a server is not evidence it is running, and only a turn
+  is. Placeholder copy is a claim; it ages badly.

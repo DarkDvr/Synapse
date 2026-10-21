@@ -15,6 +15,7 @@ import {
   parseModelRef,
 } from './base.js';
 import { SEARCH_SERVER, DELEGATE_SERVER, ENGINE_PID_FILE, SKILLS_DIR } from '../paths.js';
+import { providerApiKey } from '../config.js';
 
 const ENGINE_USERNAME = 'opencode';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -184,10 +185,19 @@ export class OpenCodeEngine extends Engine {
               : {}),
           };
         }
+        // The key travels as the engine's `apiKey`, resolved here rather than in
+        // the engine: a missing variable is then a sentence in our log instead of
+        // an unexplained 401 on the first turn. The value is never logged.
+        const key = providerApiKey(p);
+        if (key.missing) {
+          this.log.warn(
+            `${p.name || p.id}: ${key.source} is not set - its models will be refused until you set it and restart Synapse`,
+          );
+        }
         defs[p.id] = {
           npm: p.npm || '@ai-sdk/openai-compatible',
           name: p.name || p.id,
-          options: { baseURL: p.baseURL, ...(p.apiKey ? { apiKey: p.apiKey } : {}) },
+          options: { baseURL: p.baseURL, ...(key.key ? { apiKey: key.key } : {}) },
           models,
         };
       }

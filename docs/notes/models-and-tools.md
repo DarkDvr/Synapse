@@ -137,6 +137,49 @@ and read 541k prompt tokens, peaking at 24.6k. That is workable for a small task
 would be constant churn for a big one — which is the argument for splitting tasks
 rather than for a bigger window.
 
+### A vendor's own API (DeepSeek, and any other)
+
+The same `providers` list carries a billed vendor, not just a local server. DeepSeek
+publishes an OpenAI-format endpoint, so it needs no code — one entry, and it appears
+in the picker with a **DeepSeek** badge beside its models:
+
+```json
+{ "id": "deepseek", "name": "DeepSeek",
+  "baseURL": "https://api.deepseek.com/v1",
+  "apiKey": "env:DEEPSEEK_API_KEY",
+  "models": [
+    { "id": "deepseek-flash",   "name": "DeepSeek Flash", "context": 1048576, "output": 65536 },
+    { "id": "deepseek-v4-pro",  "name": "DeepSeek Pro",   "context": 1048576, "output": 65536 }
+  ] }
+```
+
+**The key never goes in the config file.** `config\synapse.config.json` is tracked
+by git, so `apiKey` takes three forms, resolved by `providerApiKey()` in
+`src/config.js` at boot:
+
+| written | means |
+|---|---|
+| `"env:DEEPSEEK_API_KEY"` | read that variable (`setx DEEPSEEK_API_KEY "sk-…"`, then restart Synapse) |
+| `""` | read the conventional `<ID>_API_KEY` if it is set; otherwise a keyless server, which is not an error |
+| `"sk-…"` | a literal key, for a server that has no environment. Then never `git add -A` the config |
+
+The value that reaches the engine is written into the engine's own config inside
+`data\`, which `.gitignore` covers, and is never logged — a missing variable is one
+warning line at boot ("`DeepSeek: env DEEPSEEK_API_KEY is not set - its models will
+be refused until you set it and restart Synapse`") instead of a 401 hours into a
+project. Everything downstream — the model cache, the picker, the probe, the role
+cards — treats these models exactly like the engine's own, and the badge label comes
+from `PROVIDER_LABELS` in `web\app.js`.
+
+What the vendor's docs say about these two (Oct 2026, not measured here): **1M
+context, 384K max output**, tool calls on both, vision on Flash only, thinking mode
+**on by default at `high`**. That last one matters for cost: the OpenAI format
+switches it with `{"thinking": {"type": "disabled"}}` and scales it with
+`reasoning_effort`, and the engine's `low/medium/high` variants map to the vendor's
+`low/high/max` — so `medium` is *not* a middle setting here, it is high. `output` is
+set to 65536 rather than the API's 384K because it is the engine's per-turn budget,
+not a capability claim: a turn that writes more than that has gone wrong.
+
 ### The model cache (`data\model-cache.json`)
 
 Models come and go; what we learned about one should outlive it leaving the

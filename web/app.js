@@ -359,6 +359,38 @@ function renderLastEventAge() {
     : 'Last event';
 }
 
+/**
+ * The sidebar's Local LLM row: the local, OpenAI-compatible servers the config
+ * registers. It used to read "not set" permanently, which was true when nothing
+ * was wired and a lie the moment one was — the badge on those models is the same
+ * fact seen from the other side. Nothing is probed: the dot stays grey, and the
+ * first turn is what proves the server is up.
+ */
+function renderLlmStatus() {
+  const row = $('llmRow');
+  const out = $('llmState');
+  if (!row || !out) return;
+  const providers = Array.isArray(state.config?.engine?.opencode?.providers)
+    ? state.config.engine.opencode.providers
+    : [];
+  const local = providers.filter((p) => /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:|\/|$)/i.test(String(p.baseURL || '')));
+  if (!local.length) {
+    out.textContent = 'not set';
+    row.title = 'No local model server is registered. Add one under engine.opencode.providers in the config file.';
+    return;
+  }
+  const count = (p) => (Array.isArray(p.models) ? p.models.length : 0);
+  out.textContent = local.map((p) => `${p.name || p.id} · ${count(p)} model${count(p) === 1 ? '' : 's'}`).join(' + ');
+  row.title =
+    local
+      .map(
+        (p) =>
+          `${p.name || p.id} at ${p.baseURL}: ` +
+          (p.models || []).map((m) => m.name || m.id).filter(Boolean).join(', '),
+      )
+      .join('\n') + '\nConfigured, not probed — a turn is what proves it is running.';
+}
+
 // ── clocks ──────────────────────────────────────────────────────
 // Three stopwatches: how long a card has been working right now, how long that
 // role has worked in total this session, and how much wall time the session has
@@ -738,7 +770,7 @@ const issuesTitle = (m) =>
 // `opencode-go/…` can be the same model with different backends, and local
 // runtimes will be a third source later. The provider id is the source, so show
 // it; unknown providers fall back to a readable form of the id.
-const PROVIDER_LABELS = { opencode: 'OpenCode', 'opencode-go': 'OpenCode Go' };
+const PROVIDER_LABELS = { opencode: 'OpenCode', 'opencode-go': 'OpenCode Go', deepseek: 'DeepSeek' };
 const providerLabel = (p) => {
   const id = String(p || 'unknown');
   if (PROVIDER_LABELS[id]) return PROVIDER_LABELS[id];
@@ -3884,6 +3916,7 @@ async function saveSettings() {
   try {
     state.config = await api('PUT', '/api/config', draft);
     toast('Settings saved', 'Restart Synapse to apply engine or server changes.');
+    renderLlmStatus();
     await loadModels();
     // A new skills folder is worth reading before the operator closes the panel.
     await checkSkills({ quiet: true });
@@ -4206,6 +4239,7 @@ async function boot() {
   initRoleCards();
   fitStageHeight();
   state.config = await api('GET', '/api/config').catch(() => null);
+  renderLlmStatus();
   // every new session starts Single; an opened session sets its own mode
   state.mode = 'single';
   renderMode();
