@@ -1086,7 +1086,12 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     }
 
     await wake(architectId, dir, {
-      description: `worker ${request.task} (${role}) ${outcome}`,
+      // The header of the yellow Synopsis line in the chat. "failed" says nothing
+      // about who ended the run; a harness stop is the one the operator cannot
+      // work out for themselves, so the line names it.
+      description: stopReason
+        ? `${request.task} (${role}) stopped by the harness`
+        : `worker ${request.task} (${role}) ${outcome}`,
       text: report({
         task,
         role,

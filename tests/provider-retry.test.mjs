@@ -46,6 +46,7 @@ function project(name) {
 function makeEngine({ dir, script, wakeScript }) {
   const sessions = new Map();
   const woke = [];
+  const descriptions = [];
   const interrupts = [];
   let seq = 0;
 
@@ -82,9 +83,10 @@ function makeEngine({ dir, script, wakeScript }) {
     async prompt(id, text) {
       push(id, { id: `${id}-u`, type: 'user', parts: [{ type: 'text', text }] });
     },
-    async synthetic(id, text) {
+    async synthetic(id, text, opts) {
       if (!sessions.has(id)) sessions.set(id, { messages: [], script: [...wakeScript] });
       woke.push(text);
+      descriptions.push(opts?.description || '');
       push(id, { id: `${id}-s${woke.length}`, type: 'synthetic', parts: [{ type: 'text', text }] });
     },
     async getMessages(id) {
@@ -94,13 +96,13 @@ function makeEngine({ dir, script, wakeScript }) {
     async interrupt(id) { interrupts.push(id); },
     async updateSessionPermissions() {},
   };
-  return { engine, sessions, woke, interrupts };
+  return { engine, sessions, woke, descriptions, interrupts };
 }
 
 async function runCase({ name, script, wakeScript = [{}], ladder = ['coder-1'], roleRef = 'opencode/deepseek-v4.1-flash-free', cancelAfter = 0, untilWoke = 1, harnessStopAfter = 0, harnessReason = '' }) {
   const dir = project(name);
   const runsFile = path.join(dir, '.synapse', 'runs.jsonl');
-  const { engine, sessions, woke, interrupts } = makeEngine({ dir, script, wakeScript });
+  const { engine, sessions, woke, descriptions, interrupts } = makeEngine({ dir, script, wakeScript });
   const events = [];
   const noted = [];
   const logged = [];
@@ -162,7 +164,7 @@ async function runCase({ name, script, wakeScript = [{}], ladder = ['coder-1'], 
   const lines = fs.existsSync(runsFile)
     ? fs.readFileSync(runsFile, 'utf8').trim().split('\n').filter(Boolean).map((l) => JSON.parse(l))
     : [];
-  return { dir, result, runs: lines, woke, interrupts, events, noted, logged, sessions: [...sessions.values()] };
+  return { dir, result, runs: lines, woke, descriptions, interrupts, events, noted, logged, sessions: [...sessions.values()] };
 }
 
 const checks = [];
@@ -267,6 +269,13 @@ expect(
   (looped.woke[0] || '').slice(0, 80),
 );
 expect('harness stop: the reason survives the trip', /asked the same question/.test(looped.woke[0] || ''), (looped.woke[0] || '').slice(-260));
+expect(
+  // This is the header of the yellow Synapse line in the chat: it is what the
+  // operator reads first, so it must name the stop rather than say "failed".
+  'harness stop: the chat header names it',
+  /stopped by the harness/.test(looped.descriptions[0] || ''),
+  looped.descriptions[0],
+);
 expect(
   'harness stop: it is not called "could not run"',
   !/could not run/.test(looped.woke[0] || ''),
