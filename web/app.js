@@ -4237,7 +4237,7 @@ function renderSettingsTabs() {
   ).join('');
 }
 
-function renderSettings() {
+function renderSettings({ scrollTop } = {}) {
   const c = state.setDraft;
   if (!c) {
     $('settingsBody').innerHTML = '<p class="rail-note">Config unavailable.</p>';
@@ -4245,9 +4245,15 @@ function renderSettings() {
     return;
   }
   if (!SETTINGS_PANES[state.settingsTab]) state.settingsTab = 'general';
+  const body = $('settingsBody');
+  // Keep the pane where it was. Every edit re-renders this markup — a Refresh
+  // List, an eye toggle, a provider picked — and jumping to the top after each
+  // one loses the operator's place, which is worst for the button they just
+  // pressed. Only a tab switch or opening the window starts at the top.
+  const keep = scrollTop === undefined ? body.scrollTop : scrollTop;
   renderSettingsTabs();
-  $('settingsBody').innerHTML = SETTINGS_PANES[state.settingsTab](c);
-  $('settingsBody').scrollTop = 0;
+  body.innerHTML = SETTINGS_PANES[state.settingsTab](c);
+  body.scrollTop = keep;
 }
 
 /** The visible pane's controls into the draft. Called before switching tabs and
@@ -4284,7 +4290,7 @@ function switchSettingsTab(id) {
   state.settingsTab = id;
   state.setKeyRevealed = false;
   state.setProvFetch = null;
-  renderSettings();
+  renderSettings({ scrollTop: 0 });
 }
 
 // ── providers: the editor's own small state machine ─────────────
@@ -4663,7 +4669,7 @@ function openSettings() {
   state.setProvSelected = null;
   state.setKeyRevealed = false;
   state.setProvFetch = null;
-  renderSettings();
+  renderSettings({ scrollTop: 0 });
   $('settingsModal').hidden = false;
 }
 function closeSettings() {

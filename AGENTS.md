@@ -134,6 +134,7 @@ an agent does not know to open is a document that does not exist:
 |---|---|
 | `docs/notes/engine-notes.md` | changing `src/api.js`, `src/runs.js`, `src/plans.js` or `src/engines/opencode.js` — the plan-file contract, delegation and its ladder, instruction entries, what a permission rule really does |
 | `docs/notes/models-and-tools.md` | touching model choice, the catalog cache, the probe or the engine update — context limits, variants, marks, ask counters |
+| `docs/notes/runtime-scope.md` | before starting work on Synapse's own runtime (independence from OpenCode) — what the runtime does, what a replacement costs, the staged path |
 | `docs/notes/ui-lessons.md` | touching `web/` — layout invariants, the chat dock, the ask panel, the cards and the picker, with the measurements that prove them |
 | `docs/notes/runbook.md` | running, restarting or debugging it; anything that kills a process |
 
