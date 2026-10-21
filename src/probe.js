@@ -144,6 +144,10 @@ export function parseToolNames(text) {
  * and the caller then leaves the record unmarked so a later attempt can retry.
  */
 export async function discoverToolsetForModel(engine, log, model, directory) {
+  // A session cannot run in a directory that does not exist — the engine answers
+  // LocationNotFoundError on the prompt, which reads as "the model refused" and
+  // left every model unmarked. The folder is ours; make sure it is there.
+  try { fs.mkdirSync(directory, { recursive: true }); } catch { /* the prompt will say so */ }
   const session = await engine.createSession({ title: 'Model check', model, directory });
   try {
     await engine.prompt(

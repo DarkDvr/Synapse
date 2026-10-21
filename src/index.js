@@ -26,7 +26,7 @@ let http = null;
 
 async function main() {
   // ── directories ──────────────────────────────────────────────
-  for (const dir of [DATA_DIR, LOGS_DIR, WORKSPACE_DIR, GENERAL_DIR, ENGINE_HOME]) {
+  for (const dir of [DATA_DIR, LOGS_DIR, WORKSPACE_DIR, GENERAL_DIR, ENGINE_HOME, PROBE_DIR]) {
     fs.mkdirSync(dir, { recursive: true });
   }
 
@@ -330,6 +330,10 @@ async function main() {
     probeDir: PROBE_DIR,
     runs: runner,
     engineUpdate,
+    // Settings > Save Changes offers a restart, so the server can hand its own
+    // relaunch to the script an operator would run by hand — one restart path,
+    // one set of pid-file rules. See restartSelf below.
+    restart: restartSelf,
     notify: (ev) => http?.broadcast({ ...ev, ts: Date.now() }),
     guard,
   });
@@ -357,9 +361,43 @@ function openBrowser(url) {
   }
 }
 
+/**
+ * Relaunch Synapse — the button in Settings > Save Changes.
+ *
+ * It does not re-implement stopping and starting: it hands the job to
+ * `restart.ps1`, the same script an operator runs, which reads the pid files and
+ * refuses anything under the desktop app's folder. Whatever the ordering (the
+ * script stopping this process, or this process exiting first), exactly one new
+ * server is left behind.
+ */
+function restartSelf() {
+  const script = path.join(ROOT, 'restart.ps1');
+  if (!fs.existsSync(script)) {
+    bootLog.error(`cannot restart: ${script} is missing`);
+    return { ok: false, error: `Restart needs ${script}, which is missing.` };
+  }
+  bootLog.info('restart requested from the UI');
+  try {
+    // `cmd /c start` hands the script to Windows as its own process. A *detached*
+    // child of this one does not survive here — measured: it never ran — and a
+    // plain child dies with the parent when the script stops this process.
+    const child = spawn(
+      'cmd.exe',
+      ['/c', 'start', '', '/min', 'powershell.exe', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', script],
+      { cwd: ROOT, stdio: 'ignore', windowsHide: true },
+    );
+    child.unref();
+  } catch (err) {
+    bootLog.error(`could not start the restarter: ${err.message}`);
+    return { ok: false, error: err.message };
+  }
+  // Let the HTTP response reach the browser before this process goes down.
+  setTimeout(() => shutdown('restart'), 600);
+  return { ok: true };
+}
+
 let shuttingDown = false;
-async function shutdown(signal) {
-  if (shuttingDown) return;
+async function shutdown(signal) {  if (shuttingDown) return;
   shuttingDown = true;
   const app = logger.channel('app');
   app.info(`${signal} received, shutting down...`);
