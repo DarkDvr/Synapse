@@ -34,7 +34,7 @@ html { scrollbar-gutter: stable; }
   --sidebar-w: 256px;
   /* the narrowest a role card may get before its select/buttons/label start
      hiding; two columns + the spine therefore need ~786px of stage */
-  --card-min: 360px;
+  --card-min: 288px;
   /* the capped working area: cards+chat + rail. Left-anchored, so on a wide
      window the leftover space sits at the right edge. */
   --work-w: 1240px;
@@ -594,10 +594,17 @@ body.dark .sidebar-bottom,
   position: relative;
   display: grid;
   /* cards never go below --card-min: beneath that the select, the buttons and
-     the name start colliding (~360px is the measured floor). Two columns plus
-     the spine therefore need ~790px of stage; the page's minimum width
-     guarantees it instead of squeezing the cards. */
+     the name start colliding. The floor is 288 because the whole card area is
+     capped at 80% of the stage (below), so the two columns share less room than
+     before; 288 is 80% of the old 360 floor. */
   grid-template-columns: minmax(var(--card-min), 1fr) var(--spine-w) minmax(var(--card-min), 1fr);
+  /* The card area is deliberately narrower than the stage: the operator asked
+     for the maximum card width down by a fifth so the rail gets its room sooner
+     instead of the cards stretching to fill every pixel. Centred, so the spine
+     stays under the Architect. The live path is measured from the real boxes, so
+     it follows this without knowing about it. */
+  max-width: 80%;
+  margin-inline: auto;
   /* rows keep their natural height: stretching them would push each
      connector cell's midline below its cards' midline and the orange path
      would no longer sit on the dots */
@@ -627,7 +634,17 @@ body.dark .sidebar-bottom,
 }
 
 .topo-architect { grid-column: 1 / -1; display: flex; justify-content: center; }
-.topo-architect .role-card { width: min(640px, 100%); }
+/* 512, not 640: the same fifth off the top card as the area around it. */
+.topo-architect .role-card { width: min(512px, 100%); }
+/* The Architect's card is the wide one, so its label needs two lines where a
+   worker card needs three. One line less comes off the TOP of the chat:
+   the stage has a definite height and the composer is its last row, so the
+   chat's bottom edge does not move and the transcript simply starts a line
+   higher. The finished state still fits the shorter slot — 15px chip, 4px gap
+   and one 14px line is 33px against a 33px slot — so the DONE summary is one
+   line here and the full sentence stays in its tooltip. */
+.topo-architect .role-card { --task-lines: 2; }
+.topo-architect .role-summary { -webkit-line-clamp: 1; }
 
 /* ── 9. connectors ─────────────────────────────────────────────────────── */
 /* idle structure: small round dots at 75%, no arrowheads. The dot band is
@@ -759,7 +776,8 @@ body.dark .sidebar-bottom,
 .role-head h3 {
   margin: 0; font: 700 13px var(--display); letter-spacing: -0.15px;
   color: var(--text); white-space: nowrap;
-  overflow: hidden; text-overflow: ellipsis; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; min-width: 2.5em;
+  flex: 0 1 auto;
 }
 /* short role names on the left, so the picker is a fixed, generous width and
    always butts up against the edit button on the right */
@@ -768,7 +786,7 @@ body.dark .sidebar-bottom,
    inside the tools row, so the picker's right edge stays put. */
 .role-tools {
   display: flex; align-items: center; gap: 5px;
-  flex: none; margin-left: auto; padding-left: 8px;
+  flex: 0 1 auto; min-width: 0; margin-left: auto; padding-left: 8px;
 }
 .role-model {
   appearance: none;
@@ -787,11 +805,17 @@ body.dark .sidebar-bottom,
    keeps working) but is hidden; an input drives it. The menu is one shared,
    fixed-position node so it can escape the role-card wrapper's overflow. */
 .role-model { display: none; }
+/* The model name is a label, and it has to give way with the card rather than
+   squeeze the role's name out of the head. Measured before this: the picker was a
+   fixed 180px and the name was the only thing that could shrink, so a narrow card
+   ellipsised "Coder 1" to "C…" while the picker kept its full width. It now takes
+   whatever room is left, up to the same 180px, and never below a readable stub. */
 .model-search {
   appearance: none; background: #202226;
   border: 1px solid var(--line); border-radius: 7px;
   color: #b6bac1; font-family: var(--mono); font-size: 10.5px;
-  padding: 3px 8px; width: 180px; flex: none;
+  padding: 3px 8px; flex: 1 1 auto; width: auto;
+  min-width: 76px; max-width: 180px;
   text-overflow: ellipsis; cursor: text;
 }
 .model-search:hover { border-color: #454950; color: var(--text); }
@@ -1481,6 +1505,15 @@ body[data-mode="single"] .keep-toggle { display: none; }
    the step in hand, red = blocked or failed. */
 .plan-task[data-status="todo"] { border-color: rgba(92, 96, 104, 0.55); }
 .plan-task[data-status="done"] { border-color: rgba(53, 192, 138, 0.55); }
+/* Handed back, not yet accepted. The worker has reported and the Architect is
+   reading it, so the plan file still says todo — but the step is not untouched,
+   and dropping it back to grey read as a revert. A green dot with the step-in-hand
+   glow says "the work is there"; a dashed amber border says "the verdict is not".
+   Dashed, not a lighter solid: at these alphas a lighter border just looks faded. */
+.plan-task[data-status="review"] {
+  border-color: rgba(237, 194, 90, 0.5); border-style: dashed;
+  background: rgba(53, 192, 138, 0.04);
+}
 /* The step in hand: a FILLED yellow dot, the same shape as every other state.
    It used to be a yellow ring on a transparent centre, which on a dark row read
    as a black dot inside a ring — two styles at once, and the operator said so.
@@ -1492,6 +1525,12 @@ body[data-mode="single"] .keep-toggle { display: none; }
   box-shadow: 0 0 0 3px rgba(237, 194, 90, 0.16);
 }
 .plan-task[data-status="done"] .plan-dot { background: var(--green); }
+/* The reviewer's eye: the work's own green, lit by the same glow the step in
+   hand wears. Same size as `doing`, so the mark does not shrink as it hands over. */
+.plan-task[data-status="review"] .plan-dot {
+  width: 11px; height: 11px; background: var(--green);
+  box-shadow: 0 0 0 3px rgba(237, 194, 90, 0.2);
+}
 .plan-task[data-status="blocked"],
 .plan-task[data-status="failed"] { background: rgba(240, 86, 63, 0.07); border-color: rgba(240, 86, 63, 0.5); }
 .plan-task[data-status="blocked"] .plan-dot,
@@ -1501,6 +1540,7 @@ body[data-mode="single"] .keep-toggle { display: none; }
    step in hand is still the only line that is white and bold. */
 .plan-task[data-status="todo"] .plan-id { color: #6f747c; }
 .plan-task[data-status="done"] .plan-id { color: var(--green); }
+.plan-task[data-status="review"] .plan-id { color: var(--green); }
 .plan-task[data-status="doing"] .plan-id { color: var(--yellow); }
 .plan-task[data-status="blocked"] .plan-id,
 .plan-task[data-status="failed"] .plan-id { color: var(--red); }

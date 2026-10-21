@@ -762,14 +762,20 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
       // the time this browser has been open). A step in flight adds its own
       // elapsed time on top — the UI already has the live run and its start.
       const spent = {};
+      const reported = new Set();
       if (directory) {
         for (const record of readRuns(directory)) {
           if (record.kind !== 'result' || !record.task) continue;
           const ms = Number(record.ms);
           if (ms > 0) spent[record.task] = (spent[record.task] || 0) + ms;
+          if (record.outcome === 'completed') reported.add(record.task);
         }
       }
-      return { ...state, used: usedRoles(directory, sessionId), spent };
+      // `reported` is the middle state: the worker has handed its result back and
+      // the Architect has not judged it yet, so the plan file still says `todo`.
+      // Without it the step loses its highlight the moment the run ends and looks
+      // like it was never done - the operator read that as a revert.
+      return { ...state, used: usedRoles(directory, sessionId), spent, reported: [...reported] };
     },
 
     sendMessage: async (sessionId, body) => {

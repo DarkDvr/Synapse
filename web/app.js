@@ -22,7 +22,7 @@ const ROLES = [
   { id: 'coder-1', name: 'Coder 1' },
   { id: 'coder-2', name: 'Coder 2' },
   { id: 'coder-3', name: 'Coder 3' },
-  { id: 'hacker', name: 'Hacker' },
+  { id: 'qc', name: 'QC' },
 ];
 
 const TBD_TITLE = 'TBD';
@@ -1392,17 +1392,17 @@ async function editRoleSettings(roleId) {
   // skill is installed), and unticking it is the clean way to drop the reference.
   const missingHere = (state.skillsInfo?.missing || []).filter((m) => m.roles.includes(roleId));
   const fields = [];
-  // The Hacker's dial is the one role-specific setting: the same role, at two
-  // very different volumes. `app` is the default because a person typing
-  // something wrong is what actually breaks a small tool.
-  if (roleId === 'hacker') {
+  // QC's dial is the one role-specific setting: the same role, at two very
+  // different volumes. `app` is the default because an ordinary person meeting
+  // the build is what finds the wording defects and the clipped layouts.
+  if (roleId === 'qc') {
     fields.push({
       name: 'focus',
       type: 'select',
       label: 'How hard should it push?',
       value: entry.focus === 'security' ? 'security' : 'app',
       options: [
-        { v: 'app', l: 'Real use — user mistakes, wrong input, the edges a person hits' },
+        { v: 'app', l: 'Real use — confusing wording, clipping, bad input, states that lie' },
         { v: 'security', l: 'Security — hunt for a way in, hostile input, break out' },
       ],
     });
@@ -1438,8 +1438,8 @@ async function editRoleSettings(roleId) {
   const result = await openDialog({
     title: `Settings for ${role?.name || roleId}`,
     message:
-      roleId === 'hacker'
-        ? 'Real use is the default: what a person typing something wrong would hit. Security is there when this one has to withstand someone trying.'
+      roleId === 'qc'
+        ? 'Real use is the default: the wording, the clipping and the bad input an ordinary person meets. Security is there when this one has to withstand someone trying.'
         : 'Anything unticked is refused by the engine, not just unmentioned. Instructions are added to what the role is told on every turn.',
     fields,
     confirmLabel: 'Save',
@@ -1454,7 +1454,7 @@ async function editRoleSettings(roleId) {
   // operator coming back to tick it.
   if (result.skills.length === installed.length) delete next.skills;
   else next.skills = result.skills;
-  if (roleId === 'hacker') next.focus = result.focus === 'security' ? 'security' : 'app';
+  if (roleId === 'qc') next.focus = result.focus === 'security' ? 'security' : 'app';
   const text = String(result.instructions || '').trim();
   if (text) next.instructions = text;
   else delete next.instructions;
@@ -1464,7 +1464,7 @@ async function editRoleSettings(roleId) {
     state.config = await api('PUT', '/api/config', draft);
     toast(
       'Role Saved',
-      `${role?.name || roleId}${roleId === 'hacker' ? ` · ${next.focus === 'security' ? 'security' : 'real use'}` : ''}.`,
+      `${role?.name || roleId}${roleId === 'qc' ? ` · ${next.focus === 'security' ? 'security' : 'real use'}` : ''}.`,
     );
     // The Architect's own session runs under a ruleset, so the change reaches it
     // now rather than at the next restart - the same PATCH the mode switch uses.
@@ -3167,7 +3167,16 @@ async function refreshPending() {
 // `.synapse\plan.json` in the session's project folder, written by the Architect
 // and read here. The file is the source of truth: this pane only renders it, and
 // says so plainly when the file is malformed rather than hiding the problem.
-const PLAN_STATUS = { todo: 'Todo', doing: 'Doing', done: 'Done', blocked: 'Blocked', failed: 'Failed' };
+const PLAN_STATUS = {
+  todo: 'Todo',
+  doing: 'Doing',
+  // Not a plan file status: a step whose worker has reported and whose result the
+  // Architect has not judged yet. See renderPlan.
+  review: 'Reported, waiting for review',
+  done: 'Done',
+  blocked: 'Blocked',
+  failed: 'Failed',
+};
 
 function ago(ms) {
   if (!ms) return '';
@@ -3242,11 +3251,19 @@ function renderPlan() {
   // Work already spent on each step, from the harness's own run records. A step
   // with a worker on it keeps counting from the live run's start.
   const spent = st.spent || {};
+  // Steps whose worker has reported and whose result the Architect has not
+  // written back yet (see the plan route).
+  const reported = new Set(st.reported || []);
   body.innerHTML =
     (st.plan.goal ? `<p class="plan-goal">${esc(st.plan.goal)}</p>` : '') +
     `<ol class="plan-list">${tasks
       .map((t) => {
         const status = liveRun && liveRun.task === t.id ? 'doing' : PLAN_STATUS[t.status] ? t.status : 'todo';
+        // Between the worker's result and the Architect's judgement the plan file
+        // still says `todo`, but the step is not untouched: it is in review. Shown
+        // as `review` so the row keeps a mark of its own instead of dropping back
+        // to grey, which read as a revert.
+        const shown = status === 'todo' && reported.has(t.id) ? 'review' : status;
         // The result is not printed under the title: the row stays one line per
         // task, and the detail is a hover away. A blocked note is the exception —
         // that one is the reason the operator is being asked, so it shows.
@@ -3265,9 +3282,9 @@ function renderPlan() {
         const base = Number(spent[t.id]) || 0;
         const since = liveRun && liveRun.task === t.id ? Number(liveRun.startedAt) || 0 : 0;
         const total = base + (since ? Date.now() - since : 0);
-        return `<li class="plan-task" data-status="${status}">
+        return `<li class="plan-task" data-status="${shown}">
           <span class="plan-node">
-            <span class="plan-dot" role="img" aria-label="${esc(PLAN_STATUS[status])}"></span>
+            <span class="plan-dot" role="img" aria-label="${esc(PLAN_STATUS[shown])}"></span>
             <span class="plan-id">${esc(t.id || '?')}</span>
           </span>
           <span class="plan-main">
