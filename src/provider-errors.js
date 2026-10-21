@@ -39,6 +39,18 @@ const PRUNE_EVERY_MS = 6 * 60 * 60 * 1000;
  */
 const RULES = [
   {
+    // The session (or the folder it ran in) no longer exists. That is the operator
+    // deleting it — stopped the run, deleted the session, removed the project — so
+    // no retry can succeed and there is nothing to report as a failure either.
+    // The runner ends the run as `stopped` when it sees this reason. Before this
+    // rule, "404 Session not found" fell through to `unknown`, was treated as
+    // transient, and the Architect card sat on "Retrying at …" for a session
+    // that had been gone for minutes.
+    reason: 'gone',
+    kind: 'terminal',
+    re: /session not found|no such session|unknown session|session (?:has been |was )?deleted|session does not exist|location not found/i,
+  },
+  {
     reason: 'deprecated',
     kind: 'terminal',
     re: /deprecat|retired|no longer (available|supported)|not available|no such model|model not found|unknown model|does not exist/i,

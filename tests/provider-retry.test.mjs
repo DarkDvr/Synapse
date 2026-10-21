@@ -156,6 +156,19 @@ expect('connection is transient', classifyFailure('read ECONNRESET').kind === 't
 expect('deprecated is terminal', classifyFailure(DEPRECATED).kind === 'terminal');
 expect('invalid key is terminal', classifyFailure('Invalid API key').kind === 'terminal');
 expect('bad request is terminal', classifyFailure('Invalid request: text is required').kind === 'terminal');
+// A session the operator deleted answers 404. It is terminal, and the runner
+// treats `gone` as "stopped", not as an error: a retry cannot reach a session
+// that no longer exists, and the work was cancelled on purpose.
+expect(
+  'a deleted session is gone, not transient',
+  classifyFailure('POST /api/session/ses_x/synthetic -> 404 Session not found: ses_x').kind === 'terminal' &&
+    classifyFailure('POST /api/session/ses_x/synthetic -> 404 Session not found: ses_x').reason === 'gone',
+  JSON.stringify(classifyFailure('404 Session not found: ses_x')),
+);
+expect(
+  'a deleted project folder is gone too',
+  classifyFailure('LocationNotFoundError: location not found').reason === 'gone',
+);
 // LM Studio refuses an oversized prompt with a 400 that reads like a bad request.
 // It is a context failure: compaction makes it fit, and Shift Test 2 lost a task
 // to this exact sentence being classified as terminal.

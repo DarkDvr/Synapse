@@ -811,6 +811,15 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
           }
 
           const cls = classifyFailure(turnError);
+          // The session is gone: the operator stopped the run and deleted the
+          // session (or the project folder) while this turn was in flight. No
+          // retry can reach a session that no longer exists, and this is not a
+          // failure to paint on a card — the work was cancelled on purpose.
+          if (cls.reason === 'gone') {
+            outcome = 'stopped';
+            log.info(`worker ${request.task} (${role}) ended: its session no longer exists`);
+            break;
+          }
           recordProviderError({
             message: turnError,
             classification: cls,
@@ -1531,6 +1540,13 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
         });
       } catch (err) {
         const cls = classifyFailure(err.message);
+        // Nothing to wake: the Architect's session was deleted under us, which is
+        // the operator's own cancellation. Quiet on purpose — a red card for work
+        // they stopped is noise.
+        if (cls.reason === 'gone') {
+          log.info(`nothing to wake: ${architectId} no longer exists`);
+          return { ok: false, gone: true };
+        }
         recordProviderError({
           message: err.message,
           classification: cls,

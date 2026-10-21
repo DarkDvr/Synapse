@@ -727,6 +727,12 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
 
     deleteSession: async (sessionId) => {
       requireReady();
+      // A run that still holds this session stops first. A worker finishing into a
+      // deleted session, or a wake aimed at one, used to surface as "404 Session
+      // not found" on the Architect card and was retried as if the server were
+      // busy. Deleting the session is the operator ending that run, so it ends
+      // here, as stopped.
+      try { runs?.stopWithReason?.(sessionId, 'the session was deleted'); } catch { /* nothing running */ }
       await engine.deleteSession(sessionId);
       briefed.delete(sessionId);
       // Tell every open UI. Another tab can have it on screen, and a UI left
