@@ -123,7 +123,7 @@
       "focus": "app"
     },
     "architect": {
-      "ref": "deepseek/deepseek-flash",
+      "ref": "local/qwen3.8-27b-ud",
       "variant": "high",
       "skills": [
         "visual-review"
