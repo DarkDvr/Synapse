@@ -148,7 +148,7 @@ export function createHarnessGuard({ root, logger, notify }) {
       const files = await staged();
       if (!files) return { committed: false };
       await git(['commit', '-m', `snapshot: ${label}`]);
-      log.info(`harness snapshot committed before ${label} (${files.split('\n').length} file(s))`);
+      log.info(`harness snapshot committed (${label}) — ${files.split('\n').length} file(s)`);
       return { committed: true, files: files.split('\n').length };
     } catch (err) {
       log.warn(`harness snapshot skipped (${label}): ${err.message}`);
