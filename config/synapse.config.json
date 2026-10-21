@@ -95,7 +95,7 @@
   },
   "roles": {
     "designer": {
-      "ref": "deepseek/deepseek-flash",
+      "ref": "local/qwen3.8-27b-ud",
       "skills": [
         "ui-design",
         "frontend-design",
