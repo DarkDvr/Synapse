@@ -97,15 +97,23 @@ function makeEngine({ dir, script, wakeScript }) {
   return { engine, sessions, woke, interrupts };
 }
 
-async function runCase({ name, script, wakeScript = [{}], ladder = ['coder-1'], roleRef = 'opencode/deepseek-v4.1-flash-free', cancelAfter = 0, untilWoke = 1 }) {
+async function runCase({ name, script, wakeScript = [{}], ladder = ['coder-1'], roleRef = 'opencode/deepseek-v4.1-flash-free', cancelAfter = 0, untilWoke = 1, harnessStopAfter = 0, harnessReason = '' }) {
   const dir = project(name);
   const runsFile = path.join(dir, '.synapse', 'runs.jsonl');
   const { engine, sessions, woke, interrupts } = makeEngine({ dir, script, wakeScript });
   const events = [];
   const noted = [];
+  const logged = [];
   const runner = createRunner({
     engine,
-    logger: { channel: () => quiet },
+    logger: {
+      channel: () => ({
+        info: () => {},
+        debug: () => {},
+        warn: (m) => logged.push(`warn ${m}`),
+        error: (m) => logged.push(`error ${m}`),
+      }),
+    },
     getConfig: () => ({
       roles: { 'coder-1': { ref: roleRef } },
       worker: { ladder, stallSec: 30, resumeMax: 2, retryBaseSec: 5, retryCapSec: 10 },
@@ -128,6 +136,17 @@ async function runCase({ name, script, wakeScript = [{}], ladder = ['coder-1'], 
     setTimeout(() => runner.cancel(dir), cancelAfter);
   }
 
+  // A harness stop is the question-loop guard's verdict: the worker asked the
+  // same thing three times and had the answer. It must reach the Architect, so
+  // this finds the worker session as soon as the run creates it and stops *it*.
+  if (harnessStopAfter) {
+    setTimeout(async () => {
+      for (let i = 0; i < 50 && sessions.size === 0; i += 1) await sleep(20);
+      const workerId = [...sessions.keys()][0];
+      if (workerId) runner.stopWithReason(workerId, harnessReason);
+    }, harnessStopAfter);
+  }
+
   // Wait for the result line (the run is detached), then for the wake it sends.
   // The stall case needs ~35s of real time, so this is generous on purpose.
   let result = null;
@@ -143,7 +162,7 @@ async function runCase({ name, script, wakeScript = [{}], ladder = ['coder-1'], 
   const lines = fs.existsSync(runsFile)
     ? fs.readFileSync(runsFile, 'utf8').trim().split('\n').filter(Boolean).map((l) => JSON.parse(l))
     : [];
-  return { dir, result, runs: lines, woke, interrupts, events, noted, sessions: [...sessions.values()] };
+  return { dir, result, runs: lines, woke, interrupts, events, noted, logged, sessions: [...sessions.values()] };
 }
 
 const checks = [];
@@ -224,6 +243,39 @@ expect('silence: logged as stalled', fs.readFileSync(PROVIDER_LOG, 'utf8').inclu
 const stopped = await runCase({ name: 'stopped', script: [{ error: RATE }], cancelAfter: 900, untilWoke: 0 });
 expect('stop: outcome stopped', stopped.result?.outcome === 'stopped', stopped.result?.outcome);
 expect('stop: the Architect was not woken', stopped.woke.length === 0, String(stopped.woke.length));
+
+// 5b. A harness stop with a reason still reports. It used to be handed the run's
+// own aborted signal, which wake() reads as "the operator said stop, say
+// nothing": the reason was written, logged, and never delivered, so the screen
+// said "Waiting on you" with no question to answer (shift-test-5).
+const LOOP =
+  'Stopped: the worker asked the same question 3 times and had the answer. ' +
+  'Question: "Overtime flag style | Invalid input style". The operator answered: "Grouped". ' +
+  'Do not re-delegate this task as it is: split it, or make the decision yourself and say what you chose.';
+const looped = await runCase({
+  name: 'looped',
+  script: [{ silent: true }],
+  harnessStopAfter: 400,
+  harnessReason: LOOP,
+});
+expect('harness stop: outcome failed', looped.result?.outcome === 'failed', looped.result?.outcome);
+expect('harness stop: the reason is the report', looped.result?.text === LOOP, String(looped.result?.text).slice(0, 200) || looped.logged.join(' / '));
+expect('harness stop: the Architect was told', looped.woke.length === 1, `woke=${looped.woke.length}`);
+expect(
+  'harness stop: the report says who stopped it',
+  /stopped by the harness, not by the operator/.test(looped.woke[0] || ''),
+  (looped.woke[0] || '').slice(0, 80),
+);
+expect('harness stop: the reason survives the trip', /asked the same question/.test(looped.woke[0] || ''), (looped.woke[0] || '').slice(-260));
+expect(
+  'harness stop: it is not called "could not run"',
+  !/could not run/.test(looped.woke[0] || ''),
+  (looped.woke[0] || '').slice(0, 80),
+);
+expect(
+  'harness stop: the operator is told',
+  looped.events.some((e) => e.kind === 'note' && /Harness/.test(e.title || '')),
+);
 
 // 6. the Architect's failed wake is retried
 const woken = await runCase({ name: 'woken', script: [{}], wakeScript: [{ error: RATE }, {}], untilWoke: 2 });

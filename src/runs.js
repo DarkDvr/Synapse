@@ -899,7 +899,12 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
         }
 
         const messages = await engine.getMessages(worker.id);
-        text = workerText(messages);
+        // A stop with a reason *is* the report: the reason explains a run that
+        // ended early, and a worker interrupted mid-question has nothing to say
+        // for itself. Recomputing this from the transcript overwrote the reason
+        // with an empty string, so the Architect was told "It reported nothing"
+        // and the run log recorded no reason at all.
+        if (!stopReason) text = workerText(messages);
         files = workerFiles(messages);
         context = contextStats(messages);
         // The brief tells a role to load its skills before its first edit. This is
@@ -1063,6 +1068,23 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
       auto = (await engine.getSession(architectId))?.auto === true;
     } catch { /* session gone; treat as off */ }
 
+    // A harness stop still owes the Architect the report: the reason *is* the
+    // report, and the guard that stopped the run said so. Two things had to be
+    // handled here. The head used to read "could not run", which is a lie about a
+    // task that ran for nine minutes, so it says who stopped it. And the wake used
+    // to be handed the run's own signal — already aborted by the stop — which
+    // `wake()` reads as "the operator said stop, say nothing". The report was
+    // written, logged and never delivered: the screen then said "Waiting on you"
+    // with no question and no reason (shift-test-5, the designer looping on its
+    // own question).
+    if (stopReason) {
+      notify?.({
+        kind: 'note',
+        title: 'Run Stopped By The Harness',
+        body: `${request.task} (${role}) was stopped: ${firstSentence(stopReason)} The Architect is being told.`,
+      });
+    }
+
     await wake(architectId, dir, {
       description: `worker ${request.task} (${role}) ${outcome}`,
       text: report({
@@ -1071,6 +1093,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
         insteadOf: task.role !== role ? task.role : null,
         skipped,
         outcome,
+        harnessStop: Boolean(stopReason),
         ms: Date.now() - startedAt,
         text,
         files,
@@ -1087,7 +1110,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
         retries,
         resumes,
       }),
-    }, signal);
+    }, stopReason ? undefined : signal);
   }
 
   /** Tell a session to carry on after a failure. `synthetic`, so it reads as the
@@ -1448,16 +1471,25 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     return seen;
   }
 
-  function report({ task, role, insteadOf, skipped, outcome, ms, text, files, context, workerId, planTouched, synapseTouched, qcRound, skillsRequired, skillsMissing, auto, stallSec, retries, resumes, error }) {
+  /** The first sentence of a long reason, for the line the operator reads in a toast. */
+  function firstSentence(s) {
+    const t = String(s || '').replace(/\s+/g, ' ').trim();
+    const at = t.indexOf('. ');
+    return at === -1 ? t : t.slice(0, at + 1);
+  }
+
+  function report({ task, role, insteadOf, skipped, outcome, harnessStop, ms, text, files, context, workerId, planTouched, synapseTouched, qcRound, skillsRequired, skillsMissing, auto, stallSec, retries, resumes, error }) {
     const head =
       outcome === 'completed'
         ? `${task.id} (${role}) finished in ${Math.round(ms / 1000)}s.`
         : outcome === 'timeout'
           ? `${task.id} (${role}) produced nothing for ${Math.round(stallSec / 60)} minutes in a row and was stopped` +
             `${resumes ? ` after ${resumes} restart${resumes === 1 ? '' : 's'}` : ''}.`
-          : outcome === 'error'
-            ? `${task.id} (${role}) could not run - the provider refused the turn, so no further work was attempted.`
-            : `${task.id} (${role}) could not run.`;
+          : harnessStop
+            ? `${task.id} (${role}) ran for ${Math.round(ms / 1000)}s and was stopped by the harness, not by the operator.`
+            : outcome === 'error'
+              ? `${task.id} (${role}) could not run - the provider refused the turn, so no further work was attempted.`
+              : `${task.id} (${role}) could not run.`;
     const lines = [head];
     if (insteadOf) {
       const why = (skipped || []).find((s) => s.role === insteadOf);
