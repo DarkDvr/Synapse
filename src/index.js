@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn, execFile } from 'node:child_process';
-import { DATA_DIR, LOGS_DIR, WORKSPACE_DIR, GENERAL_DIR, ENGINE_HOME, PID_FILE, PROJECTS_FILE, TOOL_STATS_FILE, PROBE_DIR, PROBE_FILE, MODEL_CACHE_FILE, ROOT } from './paths.js';
+import { DATA_DIR, LOGS_DIR, WORKSPACE_DIR, GENERAL_DIR, ENGINE_HOME, PID_FILE, PROJECTS_FILE, TOOL_STATS_FILE, PROBE_DIR, PROBE_FILE, MODEL_CACHE_FILE, ROOT, VENDOR_ENGINE } from './paths.js';
 import { loadConfig, saveConfig } from './config.js';
 import { logger } from './logger.js';
 import { createEngine } from './engines/index.js';
@@ -18,17 +18,88 @@ import { createModelCache, MAX_TOOL_ASKS } from './modelcache.js';
 import { createApi } from './api.js';
 import { createServer } from './server.js';
 import { pruneProviderLog } from './provider-errors.js';
+import { hasNpm, installNode, npmPlan, ask, runtimePresent } from './npm-check.js';
 
 const bootLog = logger.channel('app');
 let bootError = null;
 let engine = null;
 let http = null;
 
+/**
+ * npm, and what its absence means. See src/npm-check.js for the three cases.
+ *
+ * The console is the output here, not the log: this happens before anything is
+ * serving, and the operator is looking at the window start.bat opened.
+ */
+async function ensureNpm() {
+  const log = logger.channel('app');
+  if (await hasNpm()) return;
+  const runtime = runtimePresent(VENDOR_ENGINE);
+  const plan = npmPlan({ npmFound: false, runtimeFound: runtime });
+  const say = (line) => {
+    console.log(`[Synapse] ${line}`);
+    log.warn(line);
+  };
+
+  say('npm was not found on PATH.');
+  if (plan === 'warn') {
+    say('The app runs without it — the runtime here is the copy inside bin\\opencode.');
+    say('npm is used for one thing: Settings > Runtime > Check for Updates.');
+  } else {
+    say('There is no runtime to run either: bin\\opencode is empty and @opencode/cli is not installed.');
+    say('Synapse cannot start a single turn without one.');
+  }
+
+  if (!process.stdin.isTTY) {
+    // Started hidden (restart.ps1, a shortcut, a service): nobody can answer.
+    if (plan === 'block') {
+      console.error('[Synapse] Install Node.js from https://nodejs.org and run start.bat again.');
+      process.exit(1);
+    }
+    say('Install Node.js when you can; until then runtime updates will not work.');
+    return;
+  }
+
+  const answer = await ask('Install Node.js (LTS) now with winget? [Y/n] ');
+  if (/^n/i.test(answer)) {
+    if (plan === 'block') {
+      console.error('');
+      console.error('[Synapse] No runtime, and npm was declined. Nothing here can run a model turn, so');
+      console.error('[Synapse] Synapse is stopping. To fix it, either install Node.js from');
+      console.error('[Synapse] https://nodejs.org, or copy bin\\opencode\\opencode.exe in from another machine.');
+      process.exit(1);
+    }
+    say('Starting without npm. Runtime updates will not work until Node.js is installed.');
+    return;
+  }
+
+  say('Installing Node.js LTS with winget. This can take a few minutes...');
+  const installed = await installNode({ log: (line) => say(line) });
+  if (!installed.ok) {
+    console.error(`[Synapse] ${installed.error}`);
+    if (plan === 'block') {
+      console.error('[Synapse] Install Node.js from https://nodejs.org and run start.bat again.');
+      process.exit(1);
+    }
+    say('Starting without npm. Runtime updates will not work until Node.js is installed.');
+    return;
+  }
+  const now = await hasNpm();
+  if (!now) {
+    say('Node.js was installed, but npm still is not on this window\'s PATH — close this window and run start.bat again.');
+    if (plan === 'block') process.exit(1);
+    return;
+  }
+  say(`npm is available now (${'ready'}).`);
+}
+
 async function main() {
   // ── directories ──────────────────────────────────────────────
   for (const dir of [DATA_DIR, LOGS_DIR, WORKSPACE_DIR, GENERAL_DIR, ENGINE_HOME, PROBE_DIR]) {
     fs.mkdirSync(dir, { recursive: true });
   }
+
+  await ensureNpm();
 
   // ── config ───────────────────────────────────────────────────
   const { config, created, error } = loadConfig();
