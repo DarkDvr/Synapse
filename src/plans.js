@@ -163,7 +163,11 @@ export function appendAnswers(dir, { at = Date.now(), signature = '', fields = [
       const key = String(f?.key || f?.name || '').trim();
       const title = String(f?.title || key).trim();
       const said = answer?.[key];
-      const value = Array.isArray(said) ? said.join(', ') : said == null ? '' : String(said);
+      const raw = Array.isArray(said) ? said.join(', ') : said == null ? '' : String(said);
+      // "(Recommended)" is the Architect nudging the operator, not part of what
+      // they decided. Recording it would make a later reader think the operator
+      // weighed the options when in fact they took the one marked for them.
+      const value = raw.replace(/\s*\(recommended\)/gi, '').trim();
       return value ? `- **${title}** -> ${value}` : `- **${title}** -> (left blank)`;
     })
     .filter(Boolean);
@@ -178,8 +182,8 @@ export function appendAnswers(dir, { at = Date.now(), signature = '', fields = [
     const exists = fs.existsSync(target);
     const header =
       '# The operator\'s answers\n\n' +
-      'Written by Synapse from the operator\'s own replies, append-only. A question answered here is\n' +
-      'settled: read this file before you ask one, and never ask it again.\n';
+      'Written by Synapse from the operator\'s own replies, append-only. A question answered here is settled: ' +
+      'read this file before you ask one, and never ask it again.\n';
     const block = `\n## ${stamp}${signature ? ` - ${signature}` : ''}\n\n${rows.join('\n')}\n`;
     fs.appendFileSync(target, exists ? block : `${header}${block}`, 'utf8');
     return true;

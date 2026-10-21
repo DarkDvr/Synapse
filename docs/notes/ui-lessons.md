@@ -125,6 +125,22 @@ it as a panel **painted over the chat, anchored just above the composer**.
 
 ## UI lessons
 
+- **A worker's work is shown in the chat, in the quietest grey there is.** A
+  delegated worker runs in its own session, so *nothing* of its turn reaches the
+  Architect's transcript: the operator watched a nine-minute design run with an
+  idle chat and then one report, and asked why. The trace is a light-grey block
+  after the last message, built from two sources and nothing invented — the
+  runner's `run.progress` gives the newest tool call, and the worker's own newest
+  sentence is read from `GET /api/sessions/{workerId}/messages` once per
+  `session.text.ended` (the delta payload is the engine's business; the session is
+  the honest source). It is placed by **start time, merged into the transcript**,
+  so a run that began at 19:45 sits above the report that lands at 19:54 rather
+  than under it. When the run ends the block folds to one line — role, task,
+  duration, files — because the report is the thing to read and the trace is the
+  evidence behind it. A page opened mid-run seeds the trace from `GET /api/runs`
+  (`loadRuns`), so the chat is alive immediately; a page reloaded *after* a run
+  ends has no trace, which is deliberate for now: the run log keeps the numbers,
+  and rebuilding a fold per past run is a second feature.
 - **The app icon is generated, not drawn.** `references\synapse_icon_full.png`
   (471×472) is the source; `web\icon-{16,32,48,64,180,256}.png` and `favicon.ico`
   are rendered from it, and the sidebar mark and the welcome screen use the same

@@ -1072,6 +1072,40 @@ body[data-mode="single"] .keep-toggle { display: none; }
 .msg.assistant { --speaker: var(--green); }
 .msg.harness { --speaker: var(--yellow); }
 
+/* A worker's own working, while it works. It is deliberately the quietest thing
+   in the chat: no speaker colour, no filled panel, a thin rule in the same grey
+   as its text, so the eye skips it and lands on the report when the report
+   arrives. When the run ends the whole block folds to one grey line — the
+   evidence stays one click away, and the chat reads as it did before. */
+.trace { margin-bottom: 15px; color: #8b8f97; }
+.trace:last-child { margin-bottom: 0; }
+.trace.is-live, .trace.is-fold {
+  border-left: 2px solid #3a3d43; padding-left: 10px;
+}
+.trace-head, .trace summary {
+  font-size: 9.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+  color: #6f747c;
+}
+.trace summary { cursor: pointer; list-style: none; }
+.trace summary::-webkit-details-marker { display: none; }
+.trace summary::before { content: '▸ '; font-size: 9px; }
+.trace[open] summary::before { content: '▾ '; }
+.trace summary:hover { color: var(--muted); }
+.trace-lines { margin-top: 3px; display: flex; flex-direction: column; gap: 1px; }
+.trace-line {
+  font-size: 11.5px; line-height: 1.45; color: #8b8f97;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.trace-line.is-word { font-style: italic; color: #767b83; }
+/* The live rule breathes, the way the sidebar's live dot does: something is
+   happening, and it costs nothing to say so. */
+.trace.is-live { border-left-color: #4a4e56; }
+.trace.is-live .trace-head::after {
+  content: ''; display: inline-block; width: 5px; height: 5px; margin-left: 6px;
+  border-radius: 50%; background: var(--yellow); animation: dot-breathe 1.6s ease-in-out infinite;
+  vertical-align: 1px;
+}
+
 /* role label shares the first line with the text; the time rides the right */
 .msg-role {
   display: inline-block; font-size: 9.5px; font-weight: 700;

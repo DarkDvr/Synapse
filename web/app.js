@@ -56,6 +56,11 @@ const state = {
   // project has at most one entry. The cards and the live path are drawn from
   // this, and `GET /api/runs` is what a page opened mid-run starts from.
   runs: new Map(),
+  // What each worker has said and done, keyed `${dir}|${task}|${startedAt}`. A
+  // worker runs in its own session, so nothing of its own ever reached this
+  // transcript: the chat sat idle for nine minutes and then a report appeared.
+  // The trace is shown light grey while it runs and folds to one line at the end.
+  traces: new Map(),
   // Signature of what the role cards are showing, so a poll that learned nothing
   // does not re-measure the wrapper and jiggle the chat.
   roleSig: '',
@@ -2289,6 +2294,24 @@ async function loadRuns() {
   try {
     const { runs } = await api('GET', '/api/runs');
     state.runs = new Map((runs || []).map((r) => [dirKey(r.dir), r]));
+    // A page opened mid-run has no trace of its own yet: make one from what the
+    // server knows, so the chat shows the worker working straight away rather
+    // than waiting for the next progress tick.
+    for (const run of runs || []) {
+      const key = traceKeyOf(run);
+      if (!state.traces.has(key)) {
+        state.traces.set(key, {
+          key,
+          dir: run.dir,
+          role: run.role,
+          task: run.task,
+          title: run.title,
+          startedAt: Number(run.startedAt) || Date.now(),
+          finishedAt: 0,
+          lines: [],
+        });
+      }
+    }
   } catch { /* the stream will catch up */ }
   state.roleSig = '';
   renderRoleActivity();
@@ -2303,10 +2326,46 @@ function handleRunEvent(ev) {
     // after a retry notice, which would erase the notice it just sent.
     if (ev.type === 'run.started' && ev.role) state.roleErrors.delete(`${key}|${ev.role}`);
     state.runs.set(key, { ...(state.runs.get(key) || {}), ...ev });
+    const run = state.runs.get(key);
+    const trace = traceOf(run);
+    if (!trace && ev.type === 'run.started') {
+      state.traces.set(traceKeyOf(run), {
+        key: traceKeyOf(run),
+        dir: run.dir,
+        role: run.role,
+        task: run.task,
+        title: run.title,
+        startedAt: Number(run.startedAt) || Date.now(),
+        finishedAt: 0,
+        lines: [],
+      });
+    } else if (trace && run.tool) {
+      // One line per new tool call, not one per event: the runner repeats the
+      // same call on every progress tick. A call with no target ("reading") is
+      // dropped when the line above it already said "reading <file>" — the
+      // engine reports the target a moment after the call starts.
+      const said = runPhrase(run.tool);
+      const last = [...trace.lines].reverse().find((l) => l.kind === 'tool');
+      const generic = !String(run.tool.target || '').trim();
+      const repeated = generic && last && last.text.split(' ')[0] === said.split(' ')[0];
+      if (!repeated && !trace.lines.some((l) => l.kind === 'tool' && l.text === said)) {
+        trace.lines.push({ kind: 'tool', text: said });
+      }
+    }
   } else if (ev.type === 'run.finished') {
     // A finished, successful run is the role working again; a run that failed is
     // the one case where the red line stays until the next attempt.
     if (ev.role && ev.outcome === 'completed') state.roleErrors.delete(`${key}|${ev.role}`);
+    const done = state.runs.get(key);
+    const trace = done ? traceOf(done) : null;
+    if (trace) {
+      // Folded, not deleted: the report is the thing to read, but the evidence of
+      // what the worker actually did stays one click away.
+      trace.finishedAt = Date.now();
+      trace.ms = Number(ev.ms) || 0;
+      trace.files = Number(ev.files) || 0;
+      trace.outcome = ev.outcome || 'finished';
+    }
     state.runs.delete(key);
   } else {
     return;
@@ -2316,6 +2375,7 @@ function handleRunEvent(ev) {
   // whatever the file says), so it needs to know when a run starts and stops — but
   // not on every tool call: that would rebuild the rail for nothing.
   if (ev.type !== 'run.progress') renderPlan();
+  else renderTranscript();
 }
 
 // The live path: one solid arrow from the requester down the spine and across
@@ -2497,7 +2557,7 @@ function renderTranscript() {
   // Nothing in the conversation changed since the last render: leave the DOM —
   // and whatever the operator has open — exactly as it is.
   const sig = hasHistory
-    ? `${showable.map((m) => `${m.id}:${m.completed || 0}:${(m.parts || []).length}`).join(',')}|${pending.length}|${state.streaming}`
+    ? `${showable.map((m) => `${m.id}:${m.completed || 0}:${(m.parts || []).length}`).join(',')}|${pending.length}|${state.streaming}|${traceSig()}`
     : '';
   if (sig && sig === state.renderSig) {
     renderChatNav();
@@ -2514,9 +2574,108 @@ function renderTranscript() {
     return;
   }
   el.classList.remove('is-empty');
-  el.innerHTML = showable.map(renderMessage).join('') + pending;
+  // The conversation, with each worker's trace where it happened: a run that
+  // started at 19:45 belongs above the report that arrives at 19:54, not under
+  // it. Traces are merged by start time and fall off the end when they outlast
+  // the newest message.
+  const traces = tracesFor(currentProject()?.directory).sort((a, b) => a.startedAt - b.startedAt);
+  let html = '';
+  let next = 0;
+  for (const m of showable) {
+    const at = Number(m.created) || 0;
+    while (next < traces.length && at && traces[next].startedAt < at) html += renderTrace(traces[next++]);
+    html += renderMessage(m);
+  }
+  while (next < traces.length) html += renderTrace(traces[next++]);
+  el.innerHTML = html + pending;
   if (stick) scrollChatToBottom();
   renderChatNav();
+}
+
+/**
+ * What a worker is doing, in the chat, while it does it.
+ *
+ * A worker's session is its own, so its turns never reach this transcript — the
+ * operator watched a nine-minute design run with nothing on screen and then one
+ * report. Its newest tool call (from the runner) and its newest sentence (read
+ * from its session, because that is the only honest source) are shown light grey
+ * so the chat is visibly alive, and the whole thing folds to a single line once
+ * the run ends: the report is the thing to read, not the transcript behind it.
+ */
+function renderTrace(t) {
+  const name = roleLabel(t.role);
+  const head = [name, t.task, t.title].filter(Boolean);
+  const lines = (t.lines || [])
+    .slice(-8)
+    .map((l) =>
+      l.kind === 'word'
+        ? `<div class="trace-line is-word">“${esc(l.text)}”</div>`
+        : `<div class="trace-line">${esc(l.text)}</div>`,
+    )
+    .join('');
+  if (!t.finishedAt) {
+    return `<div class="trace is-live" data-trace="${esc(t.key)}">
+      <div class="trace-head">${esc(head.join(' · '))}</div>
+      <div class="trace-lines">${lines || '<div class="trace-line">starting…</div>'}</div>
+    </div>`;
+  }
+  const took = t.ms ? ` · ${shortSpan(t.ms)}` : '';
+  const written = t.files ? ` · ${t.files} file${t.files === 1 ? '' : 's'}` : '';
+  return `<details class="trace is-fold" data-trace="${esc(t.key)}">
+    <summary>${esc(head.join(' · '))}${took}${written}</summary>
+    <div class="trace-lines">${lines}</div>
+  </details>`;
+}
+
+/** The traces that belong to a project, in the order they started. */
+function tracesFor(dir) {
+  const key = dirKey(dir);
+  return [...state.traces.values()].filter((t) => dirKey(t.dir) === key);
+}
+
+// A worker's own words are read from its session rather than guessed from the
+// event stream: the delta payload is the engine's business and has changed
+// shape before. One read per finished text block, debounced, and only while a
+// run for this project is live.
+const wordTimers = new Map();
+function noteWorkerWords(sessionId) {
+  const run = currentRun();
+  if (!run || !sessionId || run.workerId !== sessionId) return;
+  clearTimeout(wordTimers.get(sessionId));
+  wordTimers.set(
+    sessionId,
+    setTimeout(async () => {
+      try {
+        const { messages } = await api('GET', `/api/sessions/${encodeURIComponent(sessionId)}/messages`);
+        let said = '';
+        for (const m of messages || []) {
+          if (m.type !== 'assistant') continue;
+          for (const p of m.parts || []) if (p.type === 'text' && p.text && String(p.text).trim()) said = String(p.text);
+        }
+        said = said.replace(/\s+/g, ' ').trim();
+        if (!said) return;
+        const trace = traceOf(run);
+        if (!trace) return;
+        const short = said.length > 220 ? `${said.slice(0, 219)}…` : said;
+        if (trace.lines.some((l) => l.kind === 'word' && l.text === short)) return;
+        trace.lines.push({ kind: 'word', text: short });
+        renderTranscript();
+      } catch { /* the worker's session may be gone; the tool line still moves */ }
+    }, 400),
+  );
+}
+
+const traceKeyOf = (run) => `${dirKey(run.dir)}|${run.task}|${Number(run.startedAt) || 0}`;
+function traceOf(run) {
+  return run ? state.traces.get(traceKeyOf(run)) || null : null;
+}
+
+/** What the traces are showing, so a rebuilt transcript is not rebuilt for
+ *  nothing while they sit still. */
+function traceSig() {
+  return [...state.traces.values()]
+    .map((t) => `${t.key}:${t.finishedAt || 0}:${(t.lines || []).length}`)
+    .join(';');
 }
 
 // The role label shares the first line with the text; the time rides the right.
@@ -3775,6 +3934,9 @@ function connectStream() {
 
     setEventChip(ev.type);
     const mine = !ev.sessionId || ev.sessionId === state.sessionId;
+    // A worker's session is not the open one, so nothing of it renders through
+    // `mine`. Its words are read here instead, for the trace in the chat.
+    if (ev.type === 'session.text.ended') noteWorkerWords(ev.sessionId);
     // any traffic from a session counts as progress against the stall timer
     if (ev.sessionId) state.busySince.set(ev.sessionId, Date.now());
 
