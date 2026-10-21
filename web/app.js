@@ -56,6 +56,9 @@ const state = {
   // project has at most one entry. The cards and the live path are drawn from
   // this, and `GET /api/runs` is what a page opened mid-run starts from.
   runs: new Map(),
+  // Tokens per second for each project's live run, from the engine's usage
+  // events; empty the moment there is nothing to measure.
+  rates: new Map(),
   // What each worker has said and done, keyed `${dir}|${task}|${startedAt}`. A
   // worker runs in its own session, so nothing of its own ever reached this
   // transcript: the chat sat idle for nine minutes and then a report appeared.
@@ -606,6 +609,7 @@ function paintClocks(now) {
   if (clock) {
     clock.textContent = hhmmss(c.session.ms + (c.session.since ? now - c.session.since : 0));
   }
+  paintRates(now);
 }
 
 // ── engine updates ──────────────────────────────────────────────
@@ -2382,7 +2386,8 @@ async function loadRuns() {
           title: run.title,
           startedAt: Number(run.startedAt) || Date.now(),
           finishedAt: 0,
-          lines: [],
+          notes: [],
+          stream: null,
         });
       }
     }
@@ -2411,25 +2416,28 @@ function handleRunEvent(ev) {
         title: run.title,
         startedAt: Number(run.startedAt) || Date.now(),
         finishedAt: 0,
-        lines: [],
+        notes: [],
+        stream: null,
       });
     } else if (trace && run.tool) {
-      // One line per new tool call, not one per event: the runner repeats the
+      // One note per new tool call, not one per event: the runner repeats the
       // same call on every progress tick. A call with no target ("reading") is
-      // dropped when the line above it already said "reading <file>" — the
+      // dropped when the note above it already said "reading <file>" — the
       // engine reports the target a moment after the call starts.
       const said = runPhrase(run.tool);
-      const last = [...trace.lines].reverse().find((l) => l.kind === 'tool');
+      const last = trace.notes[trace.notes.length - 1];
       const generic = !String(run.tool.target || '').trim();
-      const repeated = generic && last && last.text.split(' ')[0] === said.split(' ')[0];
-      // The trace is a glance, not a transcript: a long shell command is cut by
-      // the line's own width (CSS ellipsis), never by a character count, because
-      // the chat is not a fixed width. The cap here is only a guard against a
-      // pathological command; anything under it is cut where the column ends.
+      const repeated = generic && last && last.split(' ')[0] === said.split(' ')[0];
+      // A shell note carries the whole command, quotes and all. One line of the
+      // trace is not the place to read it; the card's tooltip and the report are.
       const line = said.length > 300 ? `${said.slice(0, 299)}…` : said;
-      if (!repeated && !trace.lines.some((l) => l.kind === 'tool' && l.text === line)) {
-        trace.lines.push({ kind: 'tool', text: line });
+      if (!repeated && !trace.notes.includes(line)) {
+        trace.notes.push(line);
+        if (trace.notes.length > 60) trace.notes.splice(0, trace.notes.length - 60);
       }
+      // The step is over: whatever it was saying belonged to the step that just
+      // ended, and the note is what remains of it.
+      trace.stream = null;
     }
   } else if (ev.type === 'run.finished') {
     // A finished, successful run is the role working again; a run that failed is
@@ -2690,24 +2698,27 @@ function renderTranscript() {
 function renderTrace(t) {
   const name = roleLabel(t.role);
   const head = [name, t.task, t.title].filter(Boolean);
-  const line = (l) =>
-    l.kind === 'word'
-      ? `<div class="trace-line is-word">“${esc(l.text)}”</div>`
-      : l.kind === 'think'
-        ? `<div class="trace-line is-think">${esc(l.text)}</div>`
-        : `<div class="trace-line">${esc(l.text)}</div>`;
-  const all = t.lines || [];
+  const note = (text) => `<div class="trace-line">${esc(text)}</div>`;
+  const notes = t.notes || [];
   // Only the last few steps stay open. Everything before is one line that opens:
   // a worker ten minutes in has done forty things, and forty lines of it is the
   // whole chat. This is the shape an editor's agent uses, for the same reason.
-  const tail = all.slice(-4);
-  const older = all.slice(0, Math.max(0, all.length - 4));
+  const tail = notes.slice(-4);
+  const older = notes.slice(0, Math.max(0, notes.length - 4));
   const archive = older.length
     ? `<details class="trace-archive"><summary>${older.length} earlier step${older.length === 1 ? '' : 's'}</summary>${older
-        .map(line)
+        .map(note)
         .join('')}</details>`
     : '';
-  const body = `${archive}${tail.map(line).join('')}`;
+  // What it is saying *now*. The words stream in as they are written and go when
+  // the step ends — the note that follows ("reading qc-1.md") is the record, and
+  // a chat cannot be a transcript of every sentence every worker thought.
+  const streaming = t.stream && t.stream.text
+    ? `<div class="trace-line is-stream${t.stream.kind === 'think' ? ' is-think' : ''}">${esc(
+        t.stream.text.length > 600 ? `…${t.stream.text.slice(-599)}` : t.stream.text,
+      )}</div>`
+    : '';
+  const body = `${archive}${tail.map(note).join('')}${streaming}`;
   if (!t.finishedAt) {
     return `<div class="trace is-live" data-trace="${esc(t.key)}">
       <div class="trace-head" title="${esc(head.join(' · '))}">${esc(head.join(' · '))}</div>
@@ -2731,51 +2742,87 @@ function tracesFor(dir) {
   return [...state.traces.values()].filter((t) => dirKey(t.dir) === key);
 }
 
-// A worker's own words are read from its session rather than guessed from the
-// event stream: the delta payload is the engine's business and has changed
-// shape before. One read per finished text or reasoning block, debounced, and
-// only while a run for this project is live.
-const wordTimers = new Map();
-/** Keep a trace from growing without limit: it is a glance, not a log. */
-function pushTraceLine(trace, entry) {
-  if (!trace) return false;
-  if (trace.lines.some((l) => l.kind === entry.kind && l.text === entry.text)) return false;
-  trace.lines.push(entry);
-  if (trace.lines.length > 60) trace.lines.splice(0, trace.lines.length - 60);
-  return true;
-}
-function noteWorkerWords(sessionId) {
+// The worker's own words, streamed.
+//
+// The engine sends `session.text.delta` and `session.reasoning.delta` with the
+// piece of text in `data.delta` (measured, 21 Oct), so there is nothing to guess
+// and nothing to poll: the page accumulates what arrives and shows the tail. The
+// block is dropped when its step ends — a text block ending, or the next tool
+// call — because a chat cannot be a transcript of every sentence every worker
+// thought. The one-line note of the tool call is what survives.
+let streamTimer = null;
+function appendStream(kind, delta) {
   const run = currentRun();
-  if (!run || !sessionId || run.workerId !== sessionId) return;
-  clearTimeout(wordTimers.get(sessionId));
-  wordTimers.set(
-    sessionId,
-    setTimeout(async () => {
-      try {
-        const { messages } = await api('GET', `/api/sessions/${encodeURIComponent(sessionId)}/messages`);
-        let said = '';
-        let thought = '';
-        for (const m of messages || []) {
-          if (m.type !== 'assistant') continue;
-          for (const p of m.parts || []) {
-            if (p.type === 'text' && p.text && String(p.text).trim()) said = String(p.text);
-            else if (p.type === 'reasoning' && p.text && String(p.text).trim()) thought = String(p.text);
-          }
-        }
-        const trace = traceOf(run);
-        if (!trace) return;
-        const trim = (s) => {
-          const t = s.replace(/\s+/g, ' ').trim();
-          return t.length > 220 ? `${t.slice(0, 219)}…` : t;
-        };
-        let changed = false;
-        // Its thinking first, then what it said: the order a reader follows.
-        if (thought) changed = pushTraceLine(trace, { kind: 'think', text: trim(thought) }) || changed;
-        if (said) changed = pushTraceLine(trace, { kind: 'word', text: trim(said) }) || changed;
-        if (changed) renderTranscript();
-      } catch { /* the worker's session may be gone; the tool line still moves */ }
-    }, 400),
-  );
+  const trace = traceOf(run);
+  if (!trace || !delta) return;
+  if (!trace.stream || trace.stream.kind !== kind) trace.stream = { kind, text: '' };
+  trace.stream.text = (trace.stream.text + String(delta)).slice(-2000);
+  // A delta arrives per token; rebuilding the whole transcript for each one would
+  // repaint forty messages sixty times a second. Patch the one line that changed,
+  // and only rebuild when it is not on screen yet — a few times a second at most.
+  if (streamTimer) return;
+  streamTimer = setTimeout(() => {
+    streamTimer = null;
+    paintStream();
+  }, 120);
+}
+
+/** Write the streaming text into its line, or rebuild if the line is not there. */
+function paintStream() {
+  const trace = traceOf(currentRun());
+  if (!trace) return;
+  const text = trace.stream?.text || '';
+  const el = document.querySelector(`.trace.is-live[data-trace="${CSS.escape(trace.key)}"] .trace-line.is-stream`);
+  if (el) {
+    const shown = text.length > 600 ? `…${text.slice(-599)}` : text;
+    if (el.textContent !== shown) el.textContent = shown;
+    return;
+  }
+  renderTranscript();
+}
+
+function endStream() {
+  const trace = traceOf(currentRun());
+  if (!trace || !trace.stream) return;
+  trace.stream = null;
+  renderTranscript();
+}
+
+// Tokens per second, from the engine's own meter.
+//
+// `session.usage.updated` carries the running token counts for the session
+// (measured: `{input, output, reasoning, cache}`), so the rate is the change in
+// written tokens over the time between two of them. It is the rate of the last
+// step, not of the last three seconds — the engine reports per step, so there is
+// nothing finer to average — and it is shown only while the step is recent.
+const usageSamples = new Map(); // dirKey -> { at, tokens }
+const RATE_FRESH_MS = 45000;
+function noteWorkerUsage(ev) {
+  const run = currentRun();
+  if (!run || !ev.sessionId || ev.sessionId !== run.workerId) return;
+  const tokens = ev.raw?.data?.tokens;
+  if (!tokens) return;
+  const total = (Number(tokens.output) || 0) + (Number(tokens.reasoning) || 0);
+  const key = dirKey(run.dir);
+  const prev = usageSamples.get(key);
+  const at = Number(ev.ts) || Date.now();
+  usageSamples.set(key, { at, total });
+  if (!prev || total <= prev.total) return;
+  const seconds = Math.max(0.25, (at - prev.at) / 1000);
+  state.rates.set(key, { role: run.role, tps: (total - prev.total) / seconds, at });
+  paintRates();
+}
+
+function paintRates(now = Date.now()) {
+  const run = currentRun();
+  const rate = run ? state.rates.get(dirKey(run.dir)) : null;
+  for (const card of document.querySelectorAll('#topology .role-card')) {
+    const el = card.querySelector('.role-rate');
+    if (!el) continue;
+    const show = run && rate && rate.role === card.dataset.role && now - rate.at < RATE_FRESH_MS;
+    const text = show ? `${Math.round(rate.tps)} tok/s` : '';
+    if (el.textContent !== text) el.textContent = text;
+  }
 }
 
 const traceKeyOf = (run) => `${dirKey(run.dir)}|${run.task}|${Number(run.startedAt) || 0}`;
@@ -2787,7 +2834,7 @@ function traceOf(run) {
  *  nothing while they sit still. */
 function traceSig() {
   return [...state.traces.values()]
-    .map((t) => `${t.key}:${t.finishedAt || 0}:${(t.lines || []).length}`)
+    .map((t) => `${t.key}:${t.finishedAt || 0}:${(t.notes || []).length}:${t.stream ? t.stream.text.length : 0}`)
     .join(';');
 }
 
@@ -4048,9 +4095,14 @@ function connectStream() {
     setEventChip(ev.type);
     const mine = !ev.sessionId || ev.sessionId === state.sessionId;
     // A worker's session is not the open one, so nothing of it renders through
-    // `mine`. Its words are read here instead, for the trace in the chat.
-    if (ev.type === 'session.text.ended' || ev.type === 'session.reasoning.ended') {
-      noteWorkerWords(ev.sessionId);
+    // `mine`. Its words and its thinking stream in here instead, and its steps
+    // become the one-line notes in the trace.
+    const liveRun = currentRun();
+    if (liveRun && ev.sessionId && ev.sessionId === liveRun.workerId) {
+      if (ev.type === 'session.text.delta') appendStream('word', ev.raw?.data?.delta);
+      else if (ev.type === 'session.reasoning.delta') appendStream('think', ev.raw?.data?.delta);
+      else if (ev.type === 'session.usage.updated') noteWorkerUsage(ev);
+      else if (ev.type === 'session.text.ended' || ev.type === 'session.reasoning.ended') endStream();
     }
     // any traffic from a session counts as progress against the stall timer
     if (ev.sessionId) state.busySince.set(ev.sessionId, Date.now());
@@ -5106,6 +5158,14 @@ function wire() {
     if (!card.querySelector('.role-clock')) {
       const el = document.createElement('span');
       el.className = 'role-clock';
+      el.setAttribute('aria-hidden', 'true');
+      card.append(el);
+    }
+    // The other corner: how fast this role's model is writing. Only while it is
+    // writing — a rate with nothing being written is a lie.
+    if (!card.querySelector('.role-rate')) {
+      const el = document.createElement('span');
+      el.className = 'role-rate';
       el.setAttribute('aria-hidden', 'true');
       card.append(el);
     }

@@ -1114,6 +1114,14 @@ body[data-mode="single"] .keep-toggle { display: none; }
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .trace-line.is-word { font-style: italic; color: #767b83; }
+/* The words being written *now*. Unlike a note, this wraps: it is a paragraph
+   streaming past, not a label, and cutting it to one line would hide the point of
+   showing it. It disappears when the step ends. */
+.trace-line.is-stream {
+  white-space: pre-wrap; overflow: visible; text-overflow: clip;
+  color: #8b8f97;
+}
+.trace-line.is-stream.is-think { color: #6a6f77; font-style: italic; }
 /* Thinking is the quietest of the three: no quotes, dimmer, so a model's
    deliberation never reads as something it told the operator. */
 .trace-line.is-think { color: #6a6f77; font-style: italic; opacity: 0.9; }
@@ -1666,6 +1674,14 @@ body[data-mode="single"] .keep-toggle { display: none; }
    with the text and never changes a card's height when it appears. */
 .role-clock {
   position: absolute; right: 13px; bottom: 5px;
+  font-family: var(--mono); font-size: 9.5px; line-height: 1;
+  letter-spacing: 0.02em; color: #6c7079;
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+  pointer-events: none;
+}
+/* the same readout, mirrored: how fast this role's model is writing */
+.role-rate {
+  position: absolute; left: 13px; bottom: 5px;
   font-family: var(--mono); font-size: 9.5px; line-height: 1;
   letter-spacing: 0.02em; color: #6c7079;
   font-variant-numeric: tabular-nums; white-space: nowrap;
