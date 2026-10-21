@@ -9,6 +9,7 @@ import { skillRules, describeSkills } from './skills.js';
 import { PROJECTS_ROOT, SKILLS_DIR } from './paths.js';
 import { fetchProviderModels } from './providers.js';
 import { providerId } from './providers.js';
+import { providerApiKey } from './config.js';
 import { setProviderKey, providerKeyState, maskKey } from './secrets.js';
 
 export function createApi({ getConfig, applyConfig, engine, logger, getBootError, projects, toolStats, probe, modelCache, inspectModel: inspectRef, probeDir, runs, engineUpdate, restart, notify, guard }) {
@@ -201,9 +202,18 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
     getConfig: async () => toClientConfig(getConfig()),
 
     // "Refresh List" in Settings > Providers: ask a server what it serves. The
-    // operator's click is the only reason this contacts anything — see
+    // operator's click is the only reason this contacts anything - see
     // src/providers.js.
-    providerModels: async (body) => fetchProviderModels(body || {}),
+    //
+    // The key is resolved on this side: the browser is never given one, so the
+    // only thing it can send is a key typed into the field and not yet saved. A
+    // stored key (or `env:...` in the config) is what an unsaved row's call has
+    // to use, or every provider with a key answers 401 here and works nowhere.
+    providerModels: async (body) => {
+      const id = String(body?.id || '').trim();
+      const key = id ? providerApiKey({ id, apiKey: body?.apiKey }, process.env).key : String(body?.apiKey || '').trim();
+      return fetchProviderModels({ ...(body || {}), apiKey: key });
+    },
 
     // Settings > Save Changes asks whether to restart. The engine and the server
     // read their settings at start, so this is the honest answer to "apply now".

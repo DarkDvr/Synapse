@@ -287,8 +287,12 @@ const windows = await fetchProviderModels(
   },
 );
 check('a local list asks for the reported windows', calls.length === 2 && /\/api\/v0\/models$/.test(calls[1].url), JSON.stringify(calls.map((c) => c.url)));
-check('the loaded length wins over the maximum', windows.models.find((m) => m.id === 'qwen3.8-27b-ud')?.context === 39168, JSON.stringify(windows.models));
-check('a model with only a maximum uses it', windows.models.find((m) => m.id === 'gemma-4-e4b-it')?.context === 131072, JSON.stringify(windows.models));
+check('the loaded length is taken', windows.models.find((m) => m.id === 'qwen3.8-27b-ud')?.context === 39168, JSON.stringify(windows.models));
+check(
+  'an unloaded model is left without a window, not given its maximum',
+  !windows.models.find((m) => m.id === 'gemma-4-e4b-it')?.context,
+  JSON.stringify(windows.models),
+);
 
 // A vendor is not asked: its OpenAI list is all there is, and a stray probe would
 // be one more request to a billed endpoint for an answer it does not have.

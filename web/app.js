@@ -4137,7 +4137,7 @@ function providerEditor(providers, index) {
             : fromEnv
               ? `Read from the environment when Synapse starts — the config file keeps the variable's name, not the key. Type over it to store a key beside the app instead.`
               : stored
-                ? `Stored beside the app's data, not in the config file. Shown as ${esc(p.apiKeyMasked || '')} — type over it to replace it.`
+                ? `Stored beside the app's data, not in the config file — type over it to replace it.`
                 : 'Kept beside the app\'s data, never in the config file. Only needed for a service.'
         }</small>
         ${stored || fromEnv ? `<div class="prov-tools"><button type="button" class="btn btn-danger btn-sm" data-prov-remove>Remove Key</button></div>` : ''}
@@ -4346,6 +4346,7 @@ async function refreshProviderModels(index) {
   const stateEl = $('settingsBody').querySelector('.prov-fetch-state');
   if (stateEl) { stateEl.className = 'prov-fetch-state'; stateEl.textContent = 'Asking the server…'; }
   const r = await api('POST', '/api/providers/models', {
+    id: p.id,
     baseURL: p.baseURL,
     apiKey: p.apiKey,
     format: p.format,
@@ -4360,15 +4361,28 @@ async function refreshProviderModels(index) {
     renderSettings();
     return;
   }
-  const have = new Set((p.models || []).map((m) => m.id));
+  const have = new Map((p.models || []).map((m) => [m.id, m]));
   const added = r.models.filter((m) => !have.has(m.id));
+  // Refresh is not only "add what is new": a runtime reports the window of the
+  // model it has *loaded*, and that changes when the operator reloads it with a
+  // different context. So a reported window overwrites the old one — otherwise
+  // the number stays whatever was true the first time this list was fetched.
+  for (const m of r.models) {
+    const entry = have.get(m.id);
+    if (!entry || !m.context) continue;
+    entry.context = m.context;
+  }
   p.models = [
     ...(p.models || []),
     ...added.map((m) => ({ id: m.id, name: m.name || m.id, ...(m.context ? { context: m.context } : {}) })),
   ].sort((a, b) => a.id.localeCompare(b.id));
+  const withWindow = p.models.filter((m) => m.context).length;
   state.setProvFetch = {
     ok: true,
-    text: `${r.models.length} on the server · ${added.length} added${have.size ? ` · ${have.size} already listed` : ''}`,
+    text:
+      `${r.models.length} on the server · ${added.length} added` +
+      (have.size ? ` · ${have.size} already listed` : '') +
+      (withWindow < p.models.length ? ` · ${p.models.length - withWindow} without a reported window` : ''),
   };
   renderSettings();
 }

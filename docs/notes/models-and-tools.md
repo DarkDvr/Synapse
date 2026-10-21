@@ -159,12 +159,20 @@ connection stops after one attempt).
 
 **Ask the runtime what window it reserved.** An OpenAI-shaped `/models` answer
 carries no context at all, so a local provider's list also asks LM Studio's
-`/api/v0/models`, whose `loaded_context_length` is what the server actually
-reserved and `max_context_length` is what the model supports. Measured: 39,168
-and 262,144 for a 27B at IQ3_S. Without it every discovered model falls back to
-the engine's **200,000 default**, which is a lie in both directions for a 16 GB
-card. A remote vendor is not probed (`type: openai`) — one request fewer to a
-billed endpoint, for an answer it does not have.
+`/api/v0/models`. **Only `loaded_context_length` is taken** — the window the server
+has actually reserved for the model it has loaded. An unloaded model reports only
+`max_context_length`, which is what it *could* take; storing that would be a worse
+lie than storing nothing, because the watchdog would never compact and the server
+would truncate the middle of the prompt instead of failing. Measured: 39,168
+loaded and 262,144 maximum for a 27B at IQ3_S, and the other seven models on that
+machine report no window at all until each is loaded once. A remote vendor is not
+probed (`type: openai`) — one request fewer to a billed endpoint, for an answer it
+does not have.
+
+Refresh also **updates** the windows of models already in the list, not just the
+ones it adds: reload a model with a different context and the number follows. A
+model the server currently has unloaded keeps the last value measured for it
+rather than being erased, and the status line says how many still have none.
 
 **A provider removed in Settings stops being served.** The engine's `provider`
 map is rebuilt from Synapse's config on every start (it used to be merged into

@@ -100,10 +100,11 @@ export async function fetchProviderModels({ baseURL, apiKey, format, type } = {}
         notes.push(`listed no models at ${label(url)}`);
         continue;
       }
-      // A local runtime often knows each model's real window even when its
-      // OpenAI-shaped list does not carry one — LM Studio answers /api/v0/models
-      // with loaded_context_length (what it actually reserved) and
-      // max_context_length. Ask it before falling back to the engine's default.
+      // A local runtime knows the window of the model it has *loaded* — LM
+      // Studio answers /api/v0/models with loaded_context_length. An unloaded
+      // model reports none, and guessing its maximum would be a bigger lie than
+      // saying nothing: the watchdog would never compact and the server would
+      // truncate. So only the loaded length is taken.
       if (type === 'local' && models.some((m) => !m.context)) {
         const windows = await lmStudioWindows(root, fetchImpl, timeoutMs);
         if (windows.size) {
@@ -129,8 +130,8 @@ export async function fetchProviderModels({ baseURL, apiKey, format, type } = {}
 }
 
 /**
- * LM Studio's own endpoint, which reports the window each model really has.
- * Silently empty when the server is not LM Studio: the caller already has a list.
+ * LM Studio's own endpoint, which reports the window of the model it has loaded.
+ * Silently empty when the server is not LM Studio — the caller already has a list.
  */
 async function lmStudioWindows(root, fetchImpl, timeoutMs) {
   const windows = new Map();
@@ -149,8 +150,10 @@ async function lmStudioWindows(root, fetchImpl, timeoutMs) {
     for (const m of list) {
       const id = String(m?.id || m?.model_key || '').trim();
       if (!id) continue;
-      // The loaded length is the honest one: it is what the server reserved.
-      const n = Number.parseInt(m?.loaded_context_length ?? m?.max_context_length, 10);
+      // Only what the server has actually reserved. `max_context_length` is what
+      // the model *could* take; it is not what this server will serve, and a
+      // model that is not loaded has not been given a window at all.
+      const n = Number.parseInt(m?.loaded_context_length, 10);
       if (Number.isFinite(n) && n > 0) windows.set(id, n);
     }
   } catch {
