@@ -107,7 +107,10 @@
     "qc": {
       "ref": "deepseek/deepseek-flash",
       "variant": "low",
-      "focus": "app"
+      "focus": "app",
+      "skills": [
+        "aesthetic-foundations"
+      ]
     },
     "architect": {
       "ref": "deepseek/deepseek-flash",

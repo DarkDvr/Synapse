@@ -36,15 +36,20 @@ export function skillRules(config, role) {
 }
 
 /**
- * One line for the brief. The model should not have to discover by being
- * refused, and a role that was given nothing should know that too.
+ * One line for the brief. A role's skills are not a menu: the operator listed them
+ * because that is how the role is meant to work, and in Shift Test 3 and 4 not one
+ * coder ever loaded `code-craft` — the brief said "may", so nobody did. The line
+ * is an instruction now, and the runner checks it: a skill that was never loaded is
+ * named in the report the Architect judges (see `skillsMissing` in runs.js).
  */
 export function describeSkills(config, role) {
   const list = roleSkillList(config, role);
   if (list === null) return '';
   if (!list.length) return 'You have no skills: do the task with the tools you have.';
+  const before = role === 'architect' ? 'before you judge the next piece of work' : 'before your first edit';
   return (
-    `Skills you may use: ${list.join(', ')}. Load one with the skill tool when it fits the task; ` +
-    `any other skill is refused.`
+    `Skills for this role: ${list.join(', ')}. Load every one of them with the skill tool ${before} — they are ` +
+    `how this role does its work, not optional reading, and a skill you skipped is part of the job you ` +
+    `skipped. Say in your report which ones you loaded.`
   );
 }

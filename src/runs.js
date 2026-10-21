@@ -38,7 +38,7 @@ import {
   uncoveredPhases,
   SHARED_DIR,
 } from './plans.js';
-import { skillRules, describeSkills } from './skills.js';
+import { skillRules, describeSkills, roleSkillList } from './skills.js';
 import { configSavedAt } from './config.js';
 import { classifyFailure, recordProviderError, pruneProviderLog } from './provider-errors.js';
 import { providerLoadedWindow } from './providers.js';
@@ -572,6 +572,9 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     let files = [];
     let context = null;
     let turnError = null;
+    // Skills the brief required and the worker never loaded; see workerSkills.
+    let skillsMissing = [];
+    let skillsRequired = [];
     // How many times this delegation was rescued rather than abandoned. Recorded
     // on the result line so the morning's log explains a long night.
     let retries = 0;
@@ -899,6 +902,17 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
         text = workerText(messages);
         files = workerFiles(messages);
         context = contextStats(messages);
+        // The brief tells a role to load its skills before its first edit. This is
+        // the only way to know whether it did: Shift Test 3 and 4 both shipped
+        // without a single `code-craft` load, and nothing noticed.
+        const skillsUsed = workerSkills(messages);
+        skillsRequired = roleSkillList(getConfig(), role) || [];
+        skillsMissing = skillsRequired.filter((s) => !skillsUsed.has(s));
+        if (skillsMissing.length) {
+          out.warn(
+            `${request.task} (${role}) never loaded ${skillsMissing.join(', ')} — the brief asks for it before the first edit`,
+          );
+        }
 
         // The provider refused this model outright: the next rung can still do the
         // work, and the operator is not asked to decide anything about it.
@@ -1065,6 +1079,8 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
         planTouched,
         synapseTouched: strayWrites,
         qcRound: qcRoundsUsed(dir),
+        skillsRequired,
+        skillsMissing,
         error: turnError,
         auto,
         stallSec,
@@ -1414,7 +1430,25 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     return [...seen];
   }
 
-  function report({ task, role, insteadOf, skipped, outcome, ms, text, files, context, workerId, planTouched, synapseTouched, qcRound, auto, stallSec, retries, resumes, error }) {
+  /** Which skills a worker actually loaded, read from its own tool calls. The
+   *  `skill` tool carries `input.id`; older shapes put the name in `title`, and the
+   *  returned text always starts `<skill_content name="…">`, so all three are read. */
+  function workerSkills(messages) {
+    const seen = new Set();
+    for (const message of messages || []) {
+      for (const part of message?.parts || []) {
+        if (part?.type !== 'tool' || part.name !== 'skill') continue;
+        const input = parseInput(part.input) || {};
+        const named = input.id || input.name || input.skill || part.title;
+        if (named) seen.add(String(named).trim());
+        const m = String(part.output || '').match(/<skill_content name="([^"]+)"/);
+        if (m) seen.add(m[1]);
+      }
+    }
+    return seen;
+  }
+
+  function report({ task, role, insteadOf, skipped, outcome, ms, text, files, context, workerId, planTouched, synapseTouched, qcRound, skillsRequired, skillsMissing, auto, stallSec, retries, resumes, error }) {
     const head =
       outcome === 'completed'
         ? `${task.id} (${role}) finished in ${Math.round(ms / 1000)}s.`
@@ -1439,7 +1473,12 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     // bin/calendar_design.md and no such file existed). "Files written: none"
     // is what made the claim obvious to the Architect.
     lines.push(files.length ? `Files written: ${files.join(', ')}` : `Files written: none.`);
-    // The cost of the run, in the only unit that explains its speed. A task that
+    if (skillsMissing?.length) {
+      lines.push(
+        `Skills this role is required to load, and did not: ${skillsMissing.join(', ')}. The brief asks for ` +
+          `them before the first edit; judge whether the work is complete without them.`,
+      );
+    }
     // reached 200k generated at half the rate of one that stayed under 50k, so a
     // long run is mostly a big transcript — which is the signal to split it, not
     // to doubt the model.
