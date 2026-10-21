@@ -445,7 +445,8 @@ tasks. Roles are identities plus one mandate each (`ROLE_MANDATES` in
 
 **The file contract is the point.** `.synapse/` holds `requirement.md` (written by
 the harness from the operator's own message, append-only — never a model's
-paraphrase), `plan.json`, `features.json` (confirmed + rejected, every confirmed
+paraphrase), `decisions.md` (the operator's answers to every question asked, same
+rule), `plan.json`, `features.json` (confirmed + rejected, every confirmed
 item naming the task that delivers it), `ideas/`, `design/`, `qc_findings/` and
 `runs.jsonl`. Each brief is assembled from those files, so a worker receives the
 operator's words and the confirmed features verbatim, and the rejected ones are
@@ -782,4 +783,33 @@ Two rules follow.
    marks the session that is waiting (Answer / Decide) and a waiting question is
    announced once. A blocked session and an idle one both emit nothing, so the
    rail is the only honest signal.
+
+## An answer is delivered once, into a transcript a compaction can replace
+
+The operator's reply goes back through `form/{id}/reply`, the engine records it as
+the `question` tool's output, and the model reads it in its next turn. That is the
+whole mechanism — there is no separate channel, and no confirmation the model read
+it. Shift Test 5 showed the seam: the designer was given the same two decisions at
+19:46 and 19:51 (both recorded verbatim in the transcript, both printed as *"User
+has answered your questions … you can now continue with the user's answers in
+mind"*), kept working, then re-opened the settled question at 19:51 and asked it
+twice more at 19:53 and 19:54 — 90 seconds apart, with the answer in its own
+context and nothing compacted in between. That repetition is the model's, and the
+question-loop guard is what stops it.
+
+What is ours is that the answer had no life beyond that transcript. A compaction
+replaces older turns with a summary, and a summary is a model's account of an
+answer; the requirement file exists for exactly this reason and the answer needed
+the same treatment. So `replyForm` now appends to **`.synapse/decisions.md`** — the
+question titles and the operator's values, verbatim, append-only, written by
+Synapse and never by a model, with a header saying an answered question is settled.
+Every brief that finds the file says so: *"read it before you ask anything, and
+never ask a question it already answers"*. The Architect's features multiselect
+lands there too, which is what makes a rejected idea stay rejected.
+
+Two edges worth knowing. The guard's own memory (`questionHistory`) is in-process:
+a restart forgets which questions were already asked, so the file is the only
+durable record for the *next* run, not a replacement for the guard. And a session
+outside a project has no `.synapse`, so nothing is written — the reply still goes
+through, and the missing file is not an error.
 

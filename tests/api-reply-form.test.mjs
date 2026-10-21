@@ -7,6 +7,9 @@
 // is the happy path: the reply is sent, and a *failed lookup* around it does not
 // stop it.
 import { createApi } from '../src/api.js';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 
 const checks = [];
 const check = (name, ok, detail = '') => {
@@ -21,7 +24,7 @@ const FORM = {
   fields: [{ key: '0', title: 'How should the report be structured?' }],
 };
 
-function harness({ listFormsThrows = false } = {}) {
+function harness({ listFormsThrows = false, directory = null } = {}) {
   const sent = [];
   const warnings = [];
   const engine = {
@@ -32,6 +35,10 @@ function harness({ listFormsThrows = false } = {}) {
     },
     listPendingPermissions: async () => [],
     listActiveSessions: async () => [],
+    // An answer is also written to the project's .synapse/decisions.md, so the
+    // reply path asks which directory the session runs in. A session outside any
+    // project has none, and that is the default here.
+    getSession: async (id) => ({ id, directory }),
     replyForm: async (sessionId, formId, answer) => { sent.push({ sessionId, formId, answer }); },
   };
   const logger = {
@@ -91,6 +98,21 @@ function harness({ listFormsThrows = false } = {}) {
   check('a form list that fails does not stop the reply', !threw, threw?.message);
   check('the answer still reaches the engine', sent.length === 1, JSON.stringify(sent));
   check('and the failure is written down', warnings.some((w) => w.includes('engine said no')), warnings.join(' | '));
+}
+
+// ── the answer is written where a compaction cannot reach it ─────
+{
+  const dir = path.join(os.tmpdir(), `synapse-reply-${process.pid}`, 'project');
+  fs.rmSync(dir, { recursive: true, force: true });
+  fs.mkdirSync(dir, { recursive: true });
+  const { api, warnings } = harness({ directory: dir });
+  await api.replyForm('ses_x', 'frm_1', { answer: { 0: 'Minimal pass/fail only' } });
+  const file = path.join(dir, '.synapse', 'decisions.md');
+  const text = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '';
+  check('the answer is written to .synapse/decisions.md', text.includes('Minimal pass/fail only'), text.slice(0, 120));
+  check('the question is written with it, so the answer means something', text.includes('How should the report be structured?'), text.slice(0, 160));
+  check('writing it logs nothing', warnings.length === 0, warnings.join(' | '));
+  fs.rmSync(path.dirname(dir), { recursive: true, force: true });
 }
 
 // ── pending shares the same wrapper ─────────────────────────────

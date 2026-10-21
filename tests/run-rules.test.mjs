@@ -14,7 +14,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { readPlan, briefSession } from '../src/plans.js';
+import { readPlan, briefSession, appendAnswers } from '../src/plans.js';
 import { contextStats, windowRoom, windowAction, steerDue } from '../src/runs.js';
 import { createHarnessGuard } from '../src/harness.js';
 
@@ -111,6 +111,37 @@ try {
   expect('the architect caps reads at two files', architect.includes('Two files at most'));
   expect('the architect is told to write provable tasks', architect.includes('the command that proves'));
   expect('the architect is not given the worker bill rules', !architect.includes('Mind the bill'));
+}
+
+// ── the operator's answers live on disk, not only in the transcript ──
+{
+  const dir = path.join(ROOT, 'with-answers');
+  fs.mkdirSync(dir, { recursive: true });
+  const fields = [
+    { key: 'ot', title: 'Overtime flag style' },
+    { key: 'bad', title: 'Invalid input style' },
+  ];
+  appendAnswers(dir, {
+    at: Date.parse('2026-10-21T19:51:00'),
+    signature: 'Overtime flag style | Invalid input style',
+    fields,
+    answer: { ot: 'Allow amber for warnings', bad: 'Ink + glyph, no hue' },
+  });
+  const file = path.join(dir, '.synapse', 'decisions.md');
+  const first = fs.readFileSync(file, 'utf8');
+  expect('the answer is written as a line a model can read', /\*\*Overtime flag style\*\* -> Allow amber/.test(first), first.slice(-80));
+  expect('the file says an answered question is settled', /settled/.test(first));
+  appendAnswers(dir, { fields: [fields[0]], answer: { ot: 'Green + text only' } });
+  const both = fs.readFileSync(file, 'utf8');
+  expect('answers append, they never overwrite', both.includes('Allow amber') && both.includes('Green + text only'));
+  appendAnswers(dir, { fields: [fields[0]], answer: { ot: '' } });
+  expect('a blank answer is recorded as blank', fs.readFileSync(file, 'utf8').includes('(left blank)'));
+
+  const brief = briefSession({ dir, role: 'designer' });
+  expect('the brief points at the answers file', brief.includes('.synapse/decisions.md'));
+  expect('the brief says not to re-ask', /never ask a question it already answers/.test(brief));
+  const before = briefSession({ dir: path.join(ROOT, 'still-none'), role: 'designer' });
+  expect('no answers file, no line about one', !before.includes('decisions.md'));
 }
 
 // ── what a run cost ─────────────────────────────────────────────

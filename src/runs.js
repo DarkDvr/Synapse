@@ -64,7 +64,7 @@ const qcRoundsUsed = (dir) =>
 // Written by Synapse itself on every run, so a change to one of these is never a
 // worker's doing. plan.json is reported separately (planTouched), which is why it
 // is ignored here rather than alarming twice.
-const HARNESS_FILES = new Set(['plan.json', 'runs.jsonl', 'requirement.md']);
+const HARNESS_FILES = new Set(['plan.json', 'runs.jsonl', 'requirement.md', 'decisions.md']);
 // Fallbacks only: the real numbers come from config (`worker.*`).
 const DEFAULT_STALL_SEC = 600;
 const DEFAULT_RESUME_MAX = 4;

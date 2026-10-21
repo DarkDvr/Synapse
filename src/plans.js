@@ -75,6 +75,7 @@ export const PLAN_NAME = 'plan.json';
 export const RUNS_NAME = 'runs.jsonl';
 export const REQUIREMENT_NAME = 'requirement.md';
 export const FEATURES_NAME = 'features.json';
+export const DECISIONS_NAME = 'decisions.md';
 
 /** The instruction-entry key the brief is attached to, per session. */
 export const BRIEF_KEY = 'synapse.plan';
@@ -141,6 +142,58 @@ export function readRequirement(dir) {
       .trim();
   } catch {
     return '';
+  }
+}
+
+/** The operator's answers to the questions the roles asked, verbatim, append-only.
+ *
+ * An answer is delivered to a model as the tool's result, which lives in the
+ * transcript — and a transcript is exactly what a compaction replaces with a
+ * summary. A designer was given the same two decisions three times and asked
+ * again 90 seconds later; a file on disk is the one form of memory a compaction
+ * cannot touch. So the answer goes where the plan and the requirement go: into
+ * .synapse, written by Synapse, never restated by a model.
+ *
+ * It also makes an answered question *settled* in a place every later turn reads,
+ * which is the only way to stop the next worker asking it again. */
+export function appendAnswers(dir, { at = Date.now(), signature = '', fields = [], answer = {} } = {}) {
+  if (!dir) return false;
+  const rows = (Array.isArray(fields) ? fields : [])
+    .map((f) => {
+      const key = String(f?.key || f?.name || '').trim();
+      const title = String(f?.title || key).trim();
+      const said = answer?.[key];
+      const value = Array.isArray(said) ? said.join(', ') : said == null ? '' : String(said);
+      return value ? `- **${title}** -> ${value}` : `- **${title}** -> (left blank)`;
+    })
+    .filter(Boolean);
+  if (!rows.length) return false;
+  const when = new Date(at);
+  const stamp = `${when.getDate()} ${when.toLocaleString('en-GB', { month: 'short' })} ${when.getFullYear()}, ${String(
+    when.getHours(),
+  ).padStart(2, '0')}:${String(when.getMinutes()).padStart(2, '0')}`;
+  const target = path.join(String(dir), PLAN_DIR, DECISIONS_NAME);
+  try {
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    const exists = fs.existsSync(target);
+    const header =
+      '# The operator\'s answers\n\n' +
+      'Written by Synapse from the operator\'s own replies, append-only. A question answered here is\n' +
+      'settled: read this file before you ask one, and never ask it again.\n';
+    const block = `\n## ${stamp}${signature ? ` - ${signature}` : ''}\n\n${rows.join('\n')}\n`;
+    fs.appendFileSync(target, exists ? block : `${header}${block}`, 'utf8');
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** How many answers are on file, and the file's own path for the brief. */
+export function decisionsExist(dir) {
+  try {
+    return fs.readFileSync(path.join(String(dir || ''), PLAN_DIR, DECISIONS_NAME), 'utf8').includes('\n## ');
+  } catch {
+    return false;
   }
 }
 
@@ -776,6 +829,17 @@ export function briefSession({ dir, role = 'architect', auto = false, skills = '
             : `Do not write anything inside ${PLAN_DIR}/. `) +
           `Your task is in the message you were given; do only that task.`,
   );
+
+  // The operator's answers to everything asked so far. It is on disk because a
+  // compaction replaces the transcript that carried the answer, and a worker that
+  // lost it asks the same settled question again - which is a loop the guard has
+  // to stop, at the cost of the run. Reading the file is cheaper than that.
+  if (decisionsExist(dir)) {
+    lines.push(
+      `The operator's answers so far are in ${PLAN_DIR}/${DECISIONS_NAME}. Read it before you ask ` +
+        `anything, and never ask a question it already answers - those decisions are settled.`,
+    );
+  }
 
   // A worker knows what its job is *in general*; the message tells it which
   // specific task. Coders share one mandate, including coder-2 and coder-3.

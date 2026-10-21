@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { TBD_TITLE } from './titles.js';
-import { ensurePlan, readPlan, readRuns, briefSession, logPlanState, BRIEF_KEY, appendRequirement } from './plans.js';
+import { ensurePlan, readPlan, readRuns, briefSession, logPlanState, BRIEF_KEY, appendRequirement, appendAnswers } from './plans.js';
 import { skillRules, describeSkills } from './skills.js';
 import { PROJECTS_ROOT, SKILLS_DIR } from './paths.js';
 import { fetchProviderModels } from './providers.js';
@@ -909,6 +909,18 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
         const per = questionHistory.get(sessionId) || new Map();
         per.set(signature, { answer, asks: 1 });
         questionHistory.set(sessionId, per);
+      }
+      // Written where the model can find it after a compaction, which is the one
+      // thing the transcript cannot survive. Best-effort: a session outside a
+      // project has no .synapse, and an answer already given is not worth failing
+      // the reply over.
+      try {
+        const session = await safe(() => engine.getSession(sessionId), null);
+        if (session?.directory && Array.isArray(form?.fields) && form.fields.length) {
+          appendAnswers(session.directory, { signature, fields: form.fields, answer });
+        }
+      } catch (err) {
+        app.warn(`could not write the operator's answer to decisions.md: ${err.message}`);
       }
       return { ok: true };
     },
