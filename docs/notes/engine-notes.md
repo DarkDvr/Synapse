@@ -713,3 +713,29 @@ user message yet.
 Naming is **self-healing**: a name that failed on a transient 503 keeps its
 attempt and retries with backoff, and a sweep at boot names anything still
 unnamed.
+
+## A question lives in the engine's memory, so a restart loses it
+
+The `question` tool does not write the question into the transcript and wait. It
+opens a **form**, and the engine holds that form in memory. Synapse only ever
+sees it through the engine's own routes, so if the engine goes away the question
+goes with it.
+
+Measured on 21 Oct: a form was waiting, the operator restarted Synapse to pick up
+a fix, and afterwards there was nothing to show. `GET /api/pending` returned no
+forms and no active sessions, and the transcript's `question` card still read
+**running** — a state that can never finish, because the engine that was going to
+answer it no longer exists. That session cannot be resumed from there; a new
+session is the honest fix.
+
+Two rules follow.
+
+1. **A restart abandons a pending question.** Nothing recovers it. Say so before
+   restarting while a run is waiting on the operator, and expect that run to be
+   started again.
+2. **The question has to be findable outside the open session.** The answer panel
+   only exists inside a session view, and a page load opens nothing, so the rail
+   marks the session that is waiting (Answer / Decide) and a waiting question is
+   announced once. A blocked session and an idle one both emit nothing, so the
+   rail is the only honest signal.
+

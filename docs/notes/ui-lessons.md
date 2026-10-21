@@ -865,3 +865,19 @@ bold, italic, strikethrough and links: the range these models actually produce.
   honest answer to "why can I not pick OC Go".
 - **The add button is violet on grey, not a violet fill.** It is a secondary
   action and Save Changes is the one filled button in the footer.
+
+## Reading a mockup: it is a shape record, not a pixel source
+
+The mockups in `docs/` are **PDFs and there is no PDF renderer on this machine**
+(no `pdftoppm`, `magick`, `gswin64c`, `mutool`). Chrome renders them: open
+`file:///F:/dev/Synapse/docs/<name>.pdf` in a browser session.
+
+Two limits make them awkward to read as pictures. A `#zoom=200` fragment works
+only on a *fresh* URL, so add a query string to force one. And the viewer cannot
+be scrolled from the page, so only the top-left is readable at a time.
+
+The answer is not to fight the viewer. A mockup records **shape**: where the
+spine sits, how wide the band is, how big the cards are. The numbers that matter
+are measured live in the page and asserted against, so the mockup is read for
+intent and the layout is proved by measurement.
+

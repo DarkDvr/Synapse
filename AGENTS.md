@@ -30,18 +30,14 @@ or speed.
 
 ## How to write
 
-Plain English first, then the detail. The operator reads the console, the logs,
-the cards and the commit messages — not the code — so say what happened in words
-someone outside this repo would understand, and only then name the file.
+Plain English first, then the detail: the operator reads the console, the logs,
+the cards and the commits, not the code. One reason per sentence, not a chain.
 
-- Use the everyday word: "the server is down", not "the listener is
-  unreachable"; "the run stopped because the worker asked the same question
-  twice", not "the guard tripped on a repeat signature". Keep a technical word
-  only when it is the real name of the thing (`engine`, `session`, `plan`, `run`,
-  `form`).
-- One reason per sentence. A chain of clauses hides the cause.
-- This covers comments, log lines, commit messages, docs and UI text. Code keeps
-  its own names: `guardQuestions` says more than `checkStuff`.
+- The everyday word: "the server is down", not "the listener is unreachable";
+  "the run stopped because the worker asked twice", not "the guard tripped on a
+  repeat signature". Names that are real stay: `engine`, `session`, `plan`, `run`.
+- It covers comments, logs, commits, docs and UI text. Code keeps its own names:
+  `guardQuestions` says more than `checkStuff`.
 
 ---
 
@@ -248,14 +244,9 @@ docs/                 design mockups (*.pdf), clock-test-2.md and shift-test-1.m
   notes/              engine-notes, models-and-tools, ui-lessons, runbook
 ```
 
-**The mockups are PDFs and there is no PDF renderer on this machine** (no
-`pdftoppm`, `magick`, `gswin64c`, `mutool`). Chrome renders them: open
-`file:///F:/dev/Synapse/docs/<name>.pdf` in a `browser-control` session. A
-`#zoom=200` fragment works only on a *fresh* URL (add a query string to force
-one) and the viewer cannot be scrolled from the page, so the page is only
-readable top-left at a time. The right answer is that the mockup is a *shape*
-record, not a pixel source: the numbers that matter (spine centre, band centre,
-card boxes) are measured live and asserted against.
+**The mockups are PDFs and there is no PDF renderer here**: a mockup is a *shape*
+record, not a pixel source. How to open one, and why the numbers are measured
+live instead: `docs/notes/ui-lessons.md`.
 
 **`web/vendor/summit.css` is a locked baseline.** The only edit ever made to it
 is line 1: the Google Fonts `@import` was replaced with a comment, because
