@@ -164,6 +164,42 @@ async function lmStudioWindows(root, fetchImpl, timeoutMs) {
   return windows;
 }
 
+/**
+ * The window a local server has *actually loaded* for one model, or 0 when it
+ * cannot say. Separate from fetchProviderModels because this is asked at run
+ * start, per model, and must be one cheap request: LM Studio answers
+ * /api/v0/models with `loaded_context_length` for whatever is loaded.
+ *
+ * This is the check that would have saved Shift Test 2: the operator changed the
+ * context in LM Studio to 16k while Synapse still believed the 39k in its config,
+ * and a 17.7k request was refused by the server mid-task.
+ */
+export async function providerLoadedWindow({ baseURL, model }, { fetchImpl = fetch, timeoutMs = 4000 } = {}) {
+  const root = String(baseURL || '').trim().replace(/\/+$/, '');
+  if (!/^https?:\/\//i.test(root)) return 0;
+  const base = root.replace(/\/v1$/i, '');
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  timer.unref?.();
+  try {
+    const res = await fetchImpl(`${base}/api/v0/models`, { headers: { accept: 'application/json' }, signal: controller.signal });
+    if (!res.ok) return 0;
+    const body = JSON.parse(await res.text());
+    const list = Array.isArray(body?.data) ? body.data : Array.isArray(body?.models) ? body.models : [];
+    const wanted = String(model || '').trim();
+    for (const m of list) {
+      if (String(m?.id || '').trim() !== wanted) continue;
+      const n = Number.parseInt(m?.loaded_context_length, 10);
+      return Number.isFinite(n) && n > 0 ? n : 0;
+    }
+    return 0;
+  } catch {
+    return 0;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /** The endpoint as the operator sees it: /models or /api/tags. */
 function label(url) {
   try { return new URL(url).pathname; } catch { return url; }

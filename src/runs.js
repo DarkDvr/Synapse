@@ -36,10 +36,12 @@ import {
   fingerprintDiff,
   ownedFolder,
   uncoveredPhases,
+  SHARED_DIR,
 } from './plans.js';
 import { skillRules, describeSkills } from './skills.js';
 import { configSavedAt } from './config.js';
 import { classifyFailure, recordProviderError, pruneProviderLog } from './provider-errors.js';
+import { providerLoadedWindow } from './providers.js';
 
 const POLL_MS = 1500;
 const RESULT_MAX = 4000;
@@ -658,6 +660,9 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
         live.tool = null;
         emit('run.progress', { ...live });
 
+        // What the server really has loaded, before anything is sent to it.
+        await noteLoadedWindow(modelRef).catch(() => {});
+
         worker = await engine.createSession({
           title: `${request.task} - ${role}`,
           model: modelRef ? { ref: modelRef, variant } : undefined,
@@ -898,9 +903,12 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     // an absolute path can still land, so the folder is compared around the turn
     // the way the harness repository is.
     const synapseAfter = synapseFingerprint(dir);
-    const strayWrites = fingerprintDiff(synapseBefore, synapseAfter, ownedFolder(role)).filter(
-      (p) => !HARNESS_FILES.has(p),
-    );
+    const shared = SHARED_DIR.split('/').pop();
+    const strayWrites = fingerprintDiff(synapseBefore, synapseAfter, ownedFolder(role))
+      // Screenshots are everyone's folder: the visual-review skill writes there
+      // from whichever role is looking at the page.
+      .filter((p) => !(p === shared || p.startsWith(`${shared}/`)))
+      .filter((p) => !HARNESS_FILES.has(p));
     if (strayWrites.length) {
       if (guard?.alarm) {
         guard.alarm({
@@ -1093,10 +1101,40 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
       try { return modelCache?.get?.(ref); } catch { return null; }
     })();
     const override = getConfig()?.modelLimits?.[ref] || {};
-    const context = Number(override.context) || Number(cached?.context) || 0;
+    const declared = Number(override.context) || Number(cached?.context) || 0;
+    // What a local server has actually loaded wins when it is smaller: the config
+    // is a claim, the loaded length is a measurement.
+    const loaded = loadedWindows.get(ref) || 0;
+    const context = loaded ? Math.min(declared || loaded, loaded) : declared;
     const output = Number(override.output) || Number(cached?.output) || 0;
     if (!context) return null;
     return { context, output, room: windowRoom({ context, output }) };
+  }
+
+  /**
+   * Ask a local server what window it has loaded for this model, once per run.
+   *
+   * Shift Test 2 died on the gap this closes: LM Studio was serving a 16,384-token
+   * window while the config still said 39,168, so the watchdog thought there was
+   * room and the server refused a 17.7k request mid-task. The config is what the
+   * operator meant; the loaded length is what the server will do.
+   */
+  const loadedWindows = new Map();
+  async function noteLoadedWindow(ref) {
+    const [providerId, modelId] = String(ref || '').split('/');
+    if (!providerId || !modelId) return;
+    const provider = (getConfig()?.engine?.opencode?.providers || []).find((p) => p.id === providerId);
+    if (!provider || provider.type !== 'local') return;
+    const loaded = await providerLoadedWindow({ baseURL: provider.baseURL, model: modelId }).catch(() => 0);
+    if (!loaded) return;
+    loadedWindows.set(ref, loaded);
+    const declared = Number(getConfig()?.modelLimits?.[ref]?.context) || Number(modelCache?.get?.(ref)?.context) || 0;
+    if (declared && loaded < declared) {
+      log.warn(
+        `${ref}: the server has ${loaded} tokens loaded but the config says ${declared} - using ${loaded} for this run. ` +
+          `Reload the model at the larger window, or lower its context in Settings > Providers.`,
+      );
+    }
   }
 
   // One entry per session: the last turn's prompt size, whether the watchdog is

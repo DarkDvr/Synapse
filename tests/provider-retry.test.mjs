@@ -156,6 +156,16 @@ expect('connection is transient', classifyFailure('read ECONNRESET').kind === 't
 expect('deprecated is terminal', classifyFailure(DEPRECATED).kind === 'terminal');
 expect('invalid key is terminal', classifyFailure('Invalid API key').kind === 'terminal');
 expect('bad request is terminal', classifyFailure('Invalid request: text is required').kind === 'terminal');
+// LM Studio refuses an oversized prompt with a 400 that reads like a bad request.
+// It is a context failure: compaction makes it fit, and Shift Test 2 lost a task
+// to this exact sentence being classified as terminal.
+expect(
+  'LM Studio context refusal is a context failure, not terminal',
+  classifyFailure(
+    'Engine protocol predict request returned 400: {"error":{"code":400,"message":"request (17704 tokens) exceeds the available context size (16384 tokens)"}}',
+  ).kind === 'context',
+  classifyFailure('request (17704 tokens) exceeds the available context size (16384 tokens)').kind,
+);
 expect('unknown defaults to transient', classifyFailure('a brand new sentence').kind === 'transient');
 // A prompt that does not fit is neither: retrying it cannot help, and it is not
 // the end of the run - a compaction makes it fit. Local servers set to "Stop at

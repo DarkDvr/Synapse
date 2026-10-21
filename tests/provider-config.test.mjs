@@ -9,7 +9,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { providerApiKey, normalize } from '../src/config.js';
-import { fetchProviderModels } from '../src/providers.js';
+import { fetchProviderModels, providerLoadedWindow } from '../src/providers.js';
 
 const checks = [];
 const check = (name, ok, detail = '') => {
@@ -302,6 +302,37 @@ await fetchProviderModels(
   { fetchImpl: async (url) => { calls.push({ url }); return { ok: true, status: 200, text: async () => JSON.stringify({ data: [{ id: 'x' }] }) }; } },
 );
 check('a remote provider is not probed for windows', calls.length === 1, String(calls.length));
+
+// ── the window a local server has *loaded* (asked at run start) ──
+// This is the check that would have saved Shift Test 2: the config said 39k, the
+// server was serving 16k, and a 17.7k prompt was refused mid-task.
+const loaded = await providerLoadedWindow(
+  { baseURL: 'http://localhost:1235/v1', model: 'qwen3.8-27b-ud' },
+  {
+    fetchImpl: async (url) => ({
+      ok: true,
+      status: 200,
+      text: async () =>
+        JSON.stringify({
+          data: [
+            { id: 'qwen3.8-27b-ud', loaded_context_length: 16384 },
+            { id: 'other', max_context_length: 262144, state: 'not-loaded' },
+          ],
+        }),
+    }),
+  },
+);
+check('the loaded window is read for one model', loaded === 16384, String(loaded));
+const notLoaded = await providerLoadedWindow(
+  { baseURL: 'http://localhost:1235', model: 'gemma-4-e4b-it' },
+  { fetchImpl: async () => ({ ok: true, status: 200, text: async () => JSON.stringify({ data: [{ id: 'gemma-4-e4b-it', max_context_length: 262144 }] }) }) },
+);
+check('an unloaded model reports no window', notLoaded === 0, String(notLoaded));
+const noServer = await providerLoadedWindow(
+  { baseURL: 'http://localhost:9/v1', model: 'x' },
+  { fetchImpl: async () => { throw new Error('refused'); } },
+);
+check('a dead server is 0, not a throw', noServer === 0);
 
 calls.length = 0;
 const noScheme = await fetchProviderModels({ baseURL: 'localhost:1234' }, { fetchImpl: stub('{}') });

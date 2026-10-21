@@ -32,7 +32,7 @@ operator's browser, and it must never be pointed at one.
 
 ## Where the images go
 
-Put them in the project: `.synapse/design/shots/` (the default). What you looked
+Put them in the project: `.synapse/shots/` (the default). What you looked
 at is then an artifact the operator can open too. Never write screenshots into
 `C:/Users/Andrew/.agents`.
 

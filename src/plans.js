@@ -598,6 +598,11 @@ const OWNED_DIR = {
   hacker: `${PLAN_DIR}/reports`,
 };
 
+/** A folder every role may write: screenshots the visual-review skill produces. It
+ *  used to point at `.synapse/design/shots/`, which is the Designer's folder — so a
+ *  coder that rendered the page tripped the write rules and the harness alarm. */
+export const SHARED_DIR = `${PLAN_DIR}/shots`;
+
 /** The folder inside .synapse that a role owns, or '' for none. */
 export function ownedFolder(role) {
   const dir = OWNED_DIR[role];
@@ -629,6 +634,9 @@ export function roleWriteRules(dir, role) {
   for (const base of [PLAN_DIR, `${root}/${PLAN_DIR}`]) {
     rules.push({ action: 'edit', resource: `${base}/**`, effect: 'deny' });
     if (owned) rules.push({ action: 'edit', resource: `${base}/${owned}/**`, effect: 'allow' });
+    // Screenshots are everyone's: the visual-review skill writes them, and a role
+    // that renders a page must not need another role's folder to keep one.
+    rules.push({ action: 'edit', resource: `${base}/shots/**`, effect: 'allow' });
   }
   return rules;
 }

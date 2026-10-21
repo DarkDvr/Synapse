@@ -55,7 +55,7 @@ const RULES = [
     // set to "Stop at Limit" answers exactly this way instead of truncating.
     reason: 'context',
     kind: 'context',
-    re: /context (length|window|limit)|maximum context|context_length_exceeded|prompt is too (long|large)|too many tokens|exceeds? (the )?(model'?s )?(maximum|context)|input is too long/i,
+    re: /context (length|window|limit|size)|maximum context|context_length_exceeded|prompt is too (long|large)|too many tokens|exceeds? (the )?(model'?s )?(maximum|context)|exceeds the available context|input is too long/i,
   },
   {
     reason: 'bad-request',
