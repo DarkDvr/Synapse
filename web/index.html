@@ -43,8 +43,8 @@
 
     <div class="sidebar-bottom status-block">
       <div class="sidebar-label">STATUS</div>
-      <div class="status-row" title="Engine process state">
-        <span class="status-dot idle" id="engineDot"></span>Engine
+      <div class="status-row" title="Runtime process state">
+        <span class="status-dot idle" id="engineDot"></span>Runtime
         <span class="status-state" id="engineState">starting…</span>
       </div>
       <!-- The stream has no row of its own: this dot *is* the stream's state, and
@@ -303,7 +303,7 @@
       <h3 id="settingsTitle">Settings</h3>
       <button class="close-x" id="closeSettings" aria-label="Close">✕</button>
     </div>
-    <p class="modal-sub">Writes <code>config/synapse.config.json</code>. Engine and provider changes apply on restart.</p>
+    <p class="modal-sub">Writes <code>config/synapse.config.json</code>. Runtime and provider changes apply on restart.</p>
     <div class="set-shell">
       <nav class="set-tabs" id="settingsTabs" role="tablist" aria-label="Settings sections"></nav>
       <div class="settings-body" id="settingsBody" role="tabpanel"></div>
@@ -319,7 +319,7 @@
 <div class="modal-backdrop" id="updateModal" hidden>
   <div class="modal panel" role="dialog" aria-modal="true" aria-labelledby="updateTitle">
     <div class="panel-head" style="margin-bottom:0">
-      <h3 id="updateTitle">Engine Update</h3>
+      <h3 id="updateTitle">Runtime Update</h3>
       <button class="close-x" id="closeUpdate" aria-label="Close">✕</button>
     </div>
     <p class="modal-sub" id="updateSub"></p>

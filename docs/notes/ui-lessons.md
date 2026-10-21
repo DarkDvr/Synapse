@@ -855,12 +855,13 @@ bold, italic, strikethrough and links: the range these models actually produce.
   is used, so saving it is done: the toast says "These take effect straight away"
   and no dialog appears. Adding a key to a provider used to demand a restart; it
   never needed one.
-- **Provider badges are a fixed vocabulary, and local is not a vendor.** The
-  engine's own providers are **OpenCode** (free tier, public key), **OC Go** and
-  **OC Zen** (paid plans, key in the engine); a configured provider is **Local**
-  when it points at this machine, whatever runs it, or its own name otherwise
-  (**DeepSeek**). The Providers tab lists the three engine providers as read-only
-  rows with their live model counts — "not connected" where the engine has none —
-  because that is the honest answer to "why can I not pick OC Zen".
+- **Provider badges are a fixed vocabulary, and local is not a vendor.** There are
+  **two** engine badges: **OC Zen** (provider id `opencode`) and **OC Go**
+  (`opencode-go`) — OpenCode *is* Zen, and its free models need no key while a Zen
+  key unlocks the paid ones. A configured provider is **Local** when it points at
+  this machine, whatever runs it, or its own name otherwise (**DeepSeek**). The
+  Providers tab lists the two engine providers as read-only rows with their live
+  model counts — "not connected" where the engine has none — because that is the
+  honest answer to "why can I not pick OC Go".
 - **The add button is violet on grey, not a violet fill.** It is a secondary
   action and Save Changes is the one filled button in the footer.

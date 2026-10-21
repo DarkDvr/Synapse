@@ -557,8 +557,8 @@ function renderUpdateChip() {
   chip.hidden = !show;
   if (show) {
     chip.title =
-      `The engine is ${u.current || 'unknown'}; ${u.latest} is available (${u.source}). ` +
-      'The engine carries the model catalog, so updating it is how the list gets current.';
+      `The runtime is ${u.current || 'unknown'}; ${u.latest} is available (${u.source}). ` +
+      'The runtime carries the model catalog, so updating it is how the list gets current.';
   }
 }
 
@@ -584,10 +584,10 @@ function renderUpdateDialog() {
 
   if (sub) {
     sub.textContent = state.updating
-      ? 'Updating. The engine is stopped, replaced and started again — this takes about a minute.'
+      ? 'Updating. The runtime is stopped, replaced and started again - this takes about a minute.'
       : u.newer
-        ? 'A newer engine is available. The model catalog ships inside it, so this is also how the model list gets current.'
-        : 'The engine carries the model catalog, the tools and the API. Nothing to do right now.';
+        ? 'A newer runtime is available. The model catalog ships inside it, so this is also how the model list gets current.'
+        : 'The runtime carries the model catalog, the tools and the API. Nothing to do right now.';
   }
 
   const checked = u.checkedAt ? `checked ${ago(Date.parse(u.checkedAt))}` : 'not checked with npm yet';
@@ -601,7 +601,7 @@ function renderUpdateDialog() {
       `${u.latest ? `<b>${esc(u.latest)}</b>` : 'unknown'}` +
         (source ? ` <small>${esc(source)}${esc(published)} · ${esc(checked)}</small>` : ''),
     ],
-    ['Engine file', `<code title="${esc(u.binary || '')}">${esc(u.binary || 'auto-detected')}</code>`],
+    ['Runtime file', `<code title="${esc(u.binary || '')}">${esc(u.binary || 'auto-detected')}</code>`],
   ];
 
   const notes = [];
@@ -610,7 +610,7 @@ function renderUpdateDialog() {
   }
   if (!u.managedByNpm) {
     notes.push(
-      '<p class="upd-note is-warn">This engine was not installed with npm, so Synapse will not replace it. ' +
+      '<p class="upd-note is-warn">This runtime was not installed with npm, so Synapse will not replace it. ' +
         'Update it where it came from, or point Settings → Engine at an npm install.</p>',
     );
   }
@@ -618,7 +618,7 @@ function renderUpdateDialog() {
   if (u.newer) {
     notes.push(
       '<p class="upd-note">The npm package publishes no release notes — the version number is all it tells us. ' +
-        'The engine brings its own model catalog, tools and API, and updating restarts it; any turn in flight ' +
+        'The runtime brings its own model catalog, tools and API, and updating restarts it; any turn in flight ' +
         'would be lost, which is why Synapse refuses while one is running.</p>',
     );
   }
@@ -634,7 +634,7 @@ function renderUpdateDialog() {
     `</div>` +
     (state.updating
       ? '<div class="upd-busy"><span class="upd-bar"></span>' +
-        'Stopping the engine, installing, starting it again…</div>'
+        'Stopping the runtime, installing, starting it again…</div>'
       : '') +
     notes.join('');
 
@@ -679,9 +679,9 @@ async function applyEngineUpdate() {
   }
   state.updating = false;
   if (r.ok) {
-    toast('Engine Updated', `${r.from || 'previous'} → ${r.to || 'new'}. The model list has been re-read.`);
+    toast('Runtime Updated', `${r.from || 'previous'} → ${r.to || 'new'}. The model list has been re-read.`);
   } else {
-    toast('Update Failed', r.error || 'The engine was not updated.');
+    toast('Update Failed', r.error || 'The runtime was not updated.');
   }
   await refreshStatus();
   await refreshUpdate();
@@ -781,15 +781,15 @@ const modelMeta = (m) => {
 const issuesTitle = (m) =>
   [...(m.issues || []).map((i) => `${new Date(i.at).toLocaleString()} - ${i.message}`), 'Click to clear.'].join('\n');
 
-// Where a model comes from is part of its identity. These are the engine's own
-// providers: **OpenCode** is the free tier (public key, free models only), **OC
-// Go** and **OC Zen** are the paid plans and their keys live in the engine, never
+// Where a model comes from is part of its identity. Two engine providers, not
+// three: `opencode` **is** OpenCode Zen — the free models need no key at all, and
+// a Zen key on the same provider unlocks the paid ones. `opencode-go` is the Go
+// plan, a separate provider with its own key. Both keys live in the engine, never
 // here. A provider the operator adds in Settings is labelled by its *type* —
 // `Local` for anything on this machine, its own name for a vendor (DeepSeek).
 const ENGINE_PROVIDERS = [
-  { id: 'opencode', label: 'OpenCode', note: 'Free tier — free models only, no key.' },
-  { id: 'opencode-go', label: 'OC Go', note: 'Paid plan — the key lives in the engine.' },
-  { id: 'opencode-zen', label: 'OC Zen', note: 'Paid plan — the key lives in the engine.' },
+  { id: 'opencode', label: 'OC Zen', note: 'Free models need no key; a Zen key unlocks the paid ones.' },
+  { id: 'opencode-go', label: 'OC Go', note: 'Paid plan — its key lives in the engine.' },
 ];
 const ENGINE_BADGES = Object.fromEntries(ENGINE_PROVIDERS.map((p) => [p.id, p.label]));
 const PROVIDER_LABELS = id => ENGINE_BADGES[id];
@@ -3794,7 +3794,7 @@ const setIcon = (name) =>
 
 const SETTINGS_TABS = [
   { id: 'general', label: 'General', icon: 'sliders' },
-  { id: 'engine', label: 'Engine', icon: 'engine' },
+  { id: 'engine', label: 'Runtime', icon: 'engine' },
   { id: 'providers', label: 'Providers', icon: 'plug' },
   { id: 'workers', label: 'Workers', icon: 'nodes' },
   { id: 'tools', label: 'Tools', icon: 'tools' },
@@ -3877,15 +3877,15 @@ function settingsEngine(c) {
   const homeValue = readPath(c, 'engine.opencode.home') || detected.home || '';
   return [
     setGroup(
-      'Engine',
+      'Runtime',
       setSelect(
         c,
-        'Engine type',
+        'Runtime',
         'engine.type',
         [{ v: 'opencode', l: 'OpenCode' }],
         { hint: 'Which agent engine Synapse drives. Only OpenCode is implemented.', restart: true },
       ) +
-        setField(c, 'Engine port', 'engine.opencode.port', {
+        setField(c, 'Runtime port', 'engine.opencode.port', {
           type: 'number',
           restart: true,
           hint: 'The port Synapse asks the engine to listen on. It must differ from the Synapse port.',
@@ -3900,7 +3900,7 @@ function settingsEngine(c) {
           type: 'password',
           restart: true,
           attr: 'placeholder="unchanged"',
-          hint: "Password for the engine's local API. Leave it blank to keep the password already saved.",
+          hint: "Password for the runtime's local API. Leave it blank to keep the password already saved.",
         }) +
         setField(c, 'Start timeout (seconds)', 'engine.opencode.startTimeoutMs', {
           type: 'number',
@@ -3908,7 +3908,7 @@ function settingsEngine(c) {
           restart: true,
           hint: 'How long Synapse waits for the engine to report ready when it starts. Seconds.',
         }) +
-        setField(c, 'Engine home (blank = data\\engine\\opencode)', 'engine.opencode.home', {
+        setField(c, 'Runtime home (blank = data\\engine\\opencode)', 'engine.opencode.home', {
           wide: true,
           restart: true,
           value: homeValue,
@@ -3917,8 +3917,8 @@ function settingsEngine(c) {
         `<p class="set-note">Running <strong>${esc(detected.version || 'not started')}</strong> from ` +
         `<code>${esc(detected.binary || 'auto-detected')}</code>. The model list is read from this engine at ` +
         `every launch, but the catalog ships inside the engine binary — so when OpenCode Desktop shows models ` +
-        `that are missing here, its engine is newer and <code>@opencode/cli</code> is the thing to update.</p>` +
-        `<div class="set-field wide" title="Ask npm whether a newer engine has been published. The engine carries the model catalog, so this is also how the model list gets current."><span>Engine version</span>` +
+        `that are missing here, its runtime is newer and <code>@opencode/cli</code> is the thing to update.</p>` +
+        `<div class="set-field wide" title="Ask npm whether a newer engine has been published. The engine carries the model catalog, so this is also how the model list gets current."><span>Runtime version</span>` +
         `<button type="button" class="btn btn-secondary btn-sm" data-check-update>Check for Updates</button></div>`,
     ),
     setGroup(

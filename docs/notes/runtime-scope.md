@@ -89,25 +89,23 @@ Badges are the vocabulary; a provider is an endpoint plus a key.
 
 | badge | endpoint | key | type |
 |---|---|---|---|
-| OPENCODE | OpenCode inference | public | OpenAI Compatible |
-| OC ZEN | OpenCode inference | your Zen key | OpenAI Compatible |
-| OC GO | OpenCode Go | your Go key | OpenAI Compatible |
+| OC ZEN | OpenCode inference (`opencode`) | optional — free models need none | OpenAI Compatible |
+| OC GO | OpenCode Go (`opencode-go`) | your Go key | OpenAI Compatible |
 | DEEPSEEK | `api.deepseek.com/v1` | your key | OpenAI Compatible |
 | OPENAI COMPATIBLE | anything | optional | OpenAI Compatible |
 | LOCAL | this machine | usually none | OpenAI Compatible **or** Ollama |
 
-One correction worth having before it is coded: **OpenCode Zen and OpenCode are
-the same provider id in the engine's catalog** — `opencode`, with `apiKey:
-"public"` for the free models; a Zen key unlocks the paid ones. So today
-"OpenCode" and "OC Zen" are one endpoint with two credentials, not two providers.
-`opencode-go` is genuinely a separate provider. In our own runtime the distinction
-would be a label over one entry (free models vs paid ones), which is exactly what
-the badge should say.
+There are **two** OpenCode badges, not three. `opencode` *is* OpenCode Zen: the
+free models work with no key at all (`apiKey: "public"` in the engine's catalog),
+and a Zen key on that same provider unlocks the paid models. `opencode-go` is the
+Go plan — genuinely a separate provider with its own key. So "OpenCode" and
+"OC Zen" are one endpoint with two credentials, and the badge is the pair
+(OC ZEN / OC GO), not the key's presence.
 
-That is why "Add Provider lists all six badges" is not implementable honestly
-against OpenCode today: three of the six are providers the runtime already owns,
-and one of them is not a separate provider at all. In our runtime they become three
-presets — endpoint filled in, key field for the two paid ones.
+In our own runtime, OC ZEN's key being optional is a property of the provider, not
+of the app: the same entry serves free models with no key and paid ones with one.
+That is what makes "Add Provider lists all six badges" possible at all — today
+three of them are owned by the runtime, and two of the six are the same provider.
 
 ## 6. If we do it: staged, each stage shippable
 
@@ -140,7 +138,33 @@ and Synapse stops depending on a binary that updates itself.
 tool-call format is our bug; permission handling and shell safety are ours; and
 the first month will be spent on reliability, not features.
 
-## 8. Recommendation
+## 8. Existing runtimes we could use instead of writing one
+
+Surveyed 2026-10: the open-source agent field is mature, and the question is
+whether any of it is a *server* Synapse could drive, not a UI.
+
+| candidate | licence | shape | fit for Synapse |
+|---|---|---|---|
+| **OpenCode** (current) | MIT | HTTP + SSE, sessions, tools, providers | known; the thing we are considering leaving |
+| **Goose** (AAIF / Linux Foundation) | Apache 2.0 | Rust; desktop, CLI and "an API to embed it"; 70+ MCP extensions, subagents, ACP providers | **closest analogue.** Needs a spike: is `goosed`'s HTTP surface as complete as OpenCode's (sessions, tool events, permissions)? I have not driven it |
+| **OpenHands** | MIT | Python; server + websocket; sandboxed workspace, Docker-based execution | real server, but heavyweight: a Python service and a container per workspace |
+| **Codex CLI** | Apache 2.0 | Rust CLI with an `app-server` JSON-RPC mode | good tool loop; a subprocess protocol rather than a server, and OpenAI-shaped |
+| **Cline / Kilo Code** | Apache 2.0 | VS Code extension + headless CLI (JSON) | no long-lived server; would mean shelling out per task |
+| **Aider** | Apache 2.0 | CLI, git-native, architect mode | excellent loop for edits as commits; not a session server |
+| **Tabby** | Apache 2.0 | self-hosted completion server | completion, not an agent loop |
+
+**The cheap-independence test** is therefore not "write 4,000 lines" but "spike
+Goose": if `goosed` can hold a session, run tools and stream events over local
+HTTP, then an `engines/goose.js` adapter next to `engines/opencode.js` is a few
+hundred lines, not weeks. The adapter contract already exists, so the spike is
+bounded and reversible — and it would also tell us whether a second runtime is
+cheap in general, which is the real question behind the whole plan.
+
+Worth noting from the survey: the field consolidates (Continue.dev acquired,
+Roo Code archived in 2026), which is an argument for owning the *contract* and
+keeping more than one runtime able to satisfy it.
+
+## 9. Recommendation
 
 Do **0** now — it is cheap, it improves today, and it is needed either way. Then
 decide between C and A once stage 1 is proven on a real task, because the cost of
