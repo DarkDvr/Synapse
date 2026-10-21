@@ -985,21 +985,24 @@ body[data-view="session"] .chat-dock.has-ask { overflow: visible; }
    step one message, then the two that go all the way to either end. Purple is the
    operator's call here — violet is the palette's surface/accent colour, and the
    ink is `--violet-bright` because plain `--violet` is a surface tone that does
-   not read as text on the panel. */
+   not read as text on the panel. 25px is the old 22 plus the 15% the operator
+   asked for; the group is anchored on the right, so it grows leftward and the
+   gap to the scrollbar stays exactly as it was. */
 .fab {
-  width: 22px; height: 22px; border-radius: 50%;
+  width: 25px; height: 25px; border-radius: 50%;
   display: grid; place-items: center;
   background: rgba(35, 38, 44, 0.86); border: 1px solid var(--violet-line); color: var(--violet-bright);
-  font-size: 11px; line-height: 1; cursor: pointer; padding: 0;
+  font-size: 15px; line-height: 1; cursor: pointer; padding: 0;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
 }
 .fab:hover { background: var(--violet-soft); border-color: var(--violet-bright); color: #fff; }
 .fab:disabled { opacity: 0.35; cursor: default; }
 .fab:disabled:hover { background: #23262c; border-color: var(--violet-line); color: var(--violet-bright); }
-/* The two "all the way" glyphs (arrow to a bar, U+2912/U+2913) are drawn smaller
-   than a plain arrow at the same size — measured 5.2px against 9.4px — so they get
-   a pixel back. Same button, same margin: only the ink is bigger. */
-#navTop, #navBottom { font-size: 12px; }
+/* The two "all the way" buttons carry double arrows: an arrow-to-a-bar (U+2912)
+   drew 6px of ink at the same size as a plain arrow's 11px, so at 25px it read as
+   a smudge. The double arrow is a size larger again, because it is drawn smaller
+   than a single one (8px against 11px) and it has to carry the same meaning legibly. */
+#navTop, #navBottom { font-size: 17px; }
 
 /* ── mode toggle: Multi is orange, Single is violet, white text on both ──── */
 .mode-toggle {
