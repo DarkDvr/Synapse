@@ -34,7 +34,7 @@ html { scrollbar-gutter: stable; }
   --sidebar-w: 256px;
   /* the narrowest a role card may get before its select/buttons/label start
      hiding; two columns + the spine therefore need ~786px of stage */
-  --card-min: 288px;
+  --card-min: 290px;
   /* the capped working area: cards+chat + rail. Left-anchored, so on a wide
      window the leftover space sits at the right edge. */
   --work-w: 1240px;
@@ -593,18 +593,13 @@ body.dark .sidebar-bottom,
 .topology {
   position: relative;
   display: grid;
-  /* cards never go below --card-min: beneath that the select, the buttons and
-     the name start colliding. The floor is 288 because the whole card area is
-     capped at 80% of the stage (below), so the two columns share less room than
-     before; 288 is 80% of the old 360 floor. */
+  /* The cards' outer edges are the chat's outer edges: the topology fills the
+     stage, no cap of its own. A narrower card area left the first card inset from
+     the transcript below it, which reads as a layout that lost its alignment.
+     `--card-min` is the floor the operator set by eye, measured on a card that
+     was squeezed by the old 80% cap: beneath it the select, the buttons and the
+     name start colliding. */
   grid-template-columns: minmax(var(--card-min), 1fr) var(--spine-w) minmax(var(--card-min), 1fr);
-  /* The card area is deliberately narrower than the stage: the operator asked
-     for the maximum card width down by a fifth so the rail gets its room sooner
-     instead of the cards stretching to fill every pixel. Centred, so the spine
-     stays under the Architect. The live path is measured from the real boxes, so
-     it follows this without knowing about it. */
-  max-width: 80%;
-  margin-inline: auto;
   /* rows keep their natural height: stretching them would push each
      connector cell's midline below its cards' midline and the orange path
      would no longer sit on the dots */
@@ -636,15 +631,11 @@ body.dark .sidebar-bottom,
 .topo-architect { grid-column: 1 / -1; display: flex; justify-content: center; }
 /* 512, not 640: the same fifth off the top card as the area around it. */
 .topo-architect .role-card { width: min(512px, 100%); }
-/* The Architect's card is the wide one, so its label needs two lines where a
-   worker card needs three. One line less comes off the TOP of the chat:
-   the stage has a definite height and the composer is its last row, so the
-   chat's bottom edge does not move and the transcript simply starts a line
-   higher. The finished state still fits the shorter slot — 15px chip, 4px gap
-   and one 14px line is 33px against a 33px slot — so the DONE summary is one
-   line here and the full sentence stays in its tooltip. */
-.topo-architect .role-card { --task-lines: 2; }
-.topo-architect .role-summary { -webkit-line-clamp: 1; margin-top: 2px; }
+/* Three lines, and all three are the role's own text: the chip that used to take
+   the first of them now sits beside the name. The card is one line taller than
+   the two-line version, but the line it gained is a line the Architect can
+   actually use — its subtitle and its closing summary were both being cut. */
+.topo-architect .role-card { --task-lines: 3; }
 
 /* ── 9. connectors ─────────────────────────────────────────────────────── */
 /* idle structure: small round dots at 75%, no arrowheads. The dot band is
@@ -701,36 +692,30 @@ body.dark .sidebar-bottom,
   overflow: hidden; overflow-wrap: anywhere;
 }
 
-/* The plan's state, as a chip rather than a line of prose — it replaces the
-   subtitle text in the same slot, so it cannot change the card's height. Two
+/* The role's verdict chip, beside its name in the head row. It used to sit in the
+   text slot, where it bought a line of chip and cost a line of the role's own
+   text: the Architect's three-line slot held a chip and one line of summary. Two
    chips, one geometry: green is "done and nothing is wanted", yellow is "the move
-   is yours", which is the loudest thing a card can say without a panel.
+   is yours", which is the loudest thing a card can say without a panel. The head
+   row's height is set by the model picker, so a 15px chip beside the name cannot
+   grow the card.
 
-   `line-height: 1` is not cosmetic: this chip sits in a slot whose line-height is
-   1.45, and inheriting that made the box taller than its own text and pushed the
-   ink above centre. With the em box as the line box the only bias left is the
-   font's: **uppercase has no descenders, so the ink sits high in the em box**, and
+   `line-height: 1` is not cosmetic: the pill's own line box must be its text, or
+   the inherited 1.45 makes the box taller than its text and pushes the ink above
+   centre. **Uppercase has no descenders, so the ink sits high in the em box**, and
    the way to put it on the pill's centre is one pixel of padding more above than
    below — checked at 4x against a line drawn at 50% of the pill, which is what
    the eye actually compares. Centring the *em box* (equal padding) still reads a
    half-pixel high. */
+.role-chip { display: inline-flex; align-items: center; flex: none; }
+.role-chip:empty { display: none; }
 .role-done, .role-waiting {
   display: inline-block; line-height: 1; padding: 3.75px 7px 1.25px; border-radius: 999px;
   font-size: 9.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+  white-space: nowrap;
 }
 .role-done { color: #0f2a1f; background: var(--green); }
 .role-waiting { color: #241a12; background: var(--yellow); }
-
-/* The customer-facing line under the DONE chip: what the project actually delivers,
-   in the Architect's own words (it writes `summary` into the plan). It shares the
-   card's fixed three-line subtitle slot with the chip — 15px chip + 4px gap + two
-   lines of 11px — so it still cannot change a card's height. Clamped, with the full
-   sentence in the tooltip. */
-.role-summary {
-  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
-  overflow: hidden; overflow-wrap: anywhere;
-  margin-top: 4px; font-size: 11px; line-height: 1.3; color: #b9bdc4;
-}
 
 /* On a short window the reserve is a luxury paid out of the chat, which is
    already tight. Two lines still holds nearly every task line, and the space

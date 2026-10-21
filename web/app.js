@@ -2050,6 +2050,16 @@ function initRoleCards() {
       slot.className = 'role-task';
       card.append(slot);
     }
+    // The verdict chip (DONE / WAITING ON YOU) belongs beside the name, not in the
+    // text slot: in the slot it took the first of the Architect's three lines and
+    // left the two that were left for one line of summary. Created here rather
+    // than in index.html so a card added there gets its holder without a second
+    // edit, the same way the text slot above does.
+    if (!card.querySelector('.role-chip')) {
+      const hold = document.createElement('span');
+      hold.className = 'role-chip';
+      card.querySelector('.role-head h3')?.after(hold);
+    }
   }
 }
 
@@ -2120,7 +2130,7 @@ function renderRoleActivity() {
       else if (planFinished) {
         const summary = state.planState?.plan?.summary || '';
         text = summary || 'Plan complete';
-        chip = { cls: 'role-done', text: 'Done', note: summary };
+        chip = { cls: 'role-done', text: 'Done' };
         dot = 'ok';
         settled = true;
       }
@@ -2199,15 +2209,10 @@ function renderRoleActivity() {
     card.classList.toggle('is-skipped', skipped);
     card.querySelector('.model-search')?.classList.toggle('is-skipped', skipped);
     if (!slot) continue;
-    // The slot never appears or disappears: it is a fixed three-line hole in the
-    // card, so filling it cannot change the card's height and cannot move the
-    // chat. The full text rides the tooltip because the slot clamps. A chip is
-    // the same size as a line of text for the same reason.
-    if (chip) {
-      slot.innerHTML =
-        `<span class="${chip.cls}">${esc(chip.text)}</span>` +
-        (chip.note ? `<span class="role-summary">${esc(chip.note)}</span>` : '');
-    } else slot.textContent = text;
+    // The chip goes beside the name; the slot carries only the role's own text.
+    const chipHost = card.querySelector('.role-chip');
+    if (chipHost) chipHost.innerHTML = chip ? `<span class="${chip.cls}">${esc(chip.text)}</span>` : '';
+    slot.textContent = text;
     // Red ink for a provider failure, cleared when the role works again. A class
     // on the text slot only: the card's border is a different sentence.
     slot.classList.toggle('is-err', Boolean(err));
