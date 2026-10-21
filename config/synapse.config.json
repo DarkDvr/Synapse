@@ -95,8 +95,8 @@
   },
   "roles": {
     "designer": {
-      "ref": "deepseek/deepseek-flash",
-      "variant": "low",
+      "ref": "local/qwen3.8-27b-ud",
+      "variant": "medium",
       "skills": [
         "aesthetic-foundations",
         "frontend-design",
@@ -109,8 +109,8 @@
       ]
     },
     "qc": {
-      "ref": "deepseek/deepseek-flash",
-      "variant": "low",
+      "ref": "local/qwen3.8-27b-ud",
+      "variant": "medium",
       "skills": [
         "web-guidelines",
         "aesthetic-foundations",
@@ -123,7 +123,7 @@
       "focus": "app"
     },
     "architect": {
-      "ref": "deepseek/deepseek-flash",
+      "ref": "opencode/deepseek-v4.1-flash-free",
       "variant": "high",
       "skills": [
         "visual-review"
@@ -133,8 +133,8 @@
       ]
     },
     "coder-1": {
-      "ref": "deepseek/deepseek-flash",
-      "variant": "low",
+      "ref": "local/qwen3.8-27b-ud",
+      "variant": "medium",
       "skills": [
         "code-craft",
         "visual-review"
@@ -144,8 +144,8 @@
       ]
     },
     "coder-2": {
-      "ref": "deepseek/deepseek-flash",
-      "variant": "low",
+      "ref": "local/qwen3.8-27b-ud",
+      "variant": "medium",
       "skills": [
         "code-craft",
         "visual-review"
@@ -155,8 +155,8 @@
       ]
     },
     "coder-3": {
-      "ref": "deepseek/deepseek-flash",
-      "variant": "low",
+      "ref": "local/qwen3.8-27b-ud",
+      "variant": "medium",
       "skills": [
         "code-craft",
         "visual-review"
@@ -166,8 +166,8 @@
       ]
     },
     "inventor": {
-      "ref": "deepseek/deepseek-flash",
-      "variant": "low",
+      "ref": "local/qwen3.8-27b-ud",
+      "variant": "medium",
       "skills": [
         "frontend-design"
       ]
