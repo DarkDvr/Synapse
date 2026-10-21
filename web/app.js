@@ -560,19 +560,47 @@ function tickClocks() {
   if (changed || c.ticks % 15 === 0) saveClocks();
 }
 
+/**
+ * How long a role's work took, from the record rather than from this page.
+ *
+ * `GET /api/plan` sums every completed run for a task out of `runs.jsonl`, and the
+ * live run adds its own elapsed time on top. That means the number is the same
+ * after a reload as it was before one — which is what a stopwatch kept in
+ * localStorage could never do: it started again from zero on every page load, and
+ * knew nothing about time spent before this browser was open.
+ */
+function roleTime(role, now) {
+  const tasks = state.planState?.plan?.tasks || [];
+  const spent = state.planState?.spent || {};
+  const live = currentRun();
+  let total = 0;
+  let running = 0;
+  let last = 0;
+  for (const t of tasks) {
+    if (t.role !== role) continue;
+    const base = Number(spent[t.id]) || 0;
+    total += base;
+    if (base > 0) last = base;
+    if (live && live.task === t.id) {
+      running = Math.max(0, now - (Number(live.startedAt) || now));
+      total += running;
+    }
+  }
+  return { total, running, last };
+}
+
 function paintClocks(now) {
   const c = state.clocks;
   if (!c) return;
   for (const card of document.querySelectorAll('#topology .role-card')) {
     const el = card.querySelector('.role-clock');
     if (!el) continue;
-    const rec = c.roles[card.dataset.role];
-    const running = rec?.since ? now - rec.since : 0;
-    if (!rec || (!rec.ms && !rec.since && !rec.last)) {
+    const { total, running, last } = roleTime(card.dataset.role, now);
+    if (!total) {
       el.textContent = '';
       continue;
     }
-    el.textContent = `${hhmmss(running || rec.last || 0)} / ${hhmmss(rec.ms + running)}`;
+    el.textContent = `${hhmmss(running || last || 0)} / ${hhmmss(total)}`;
   }
   const clock = $('planClock');
   if (clock) {
@@ -948,11 +976,20 @@ async function refreshModels() {
 function syncPickerInput(input) {
   const p = pickers.get(input.dataset.role);
   if (!p) return;
-  const m = modelByRef(p.sel.value);
-  input.value = m ? shortModel(m.name) : '';
+  const ref = p.sel.value;
+  const m = modelByRef(ref);
+  // The name of the model the operator chose, or the ref itself when the catalog
+  // is not offering it at the moment. Never another model's name: two providers
+  // can serve the same name, and that is exactly how a card lies.
+  input.value = m ? shortModel(m.name) : ref ? String(ref).split('/').pop() : '';
   const issues = m?.issues?.length ? ` · ISSUES: ${m.issues[0].message}` : '';
-  input.title = m ? `${modelTitle(m)}${issues} · type to search` : 'Type to search models';
+  input.title = m
+    ? `${modelTitle(m)}${issues} · type to search`
+    : ref
+      ? `${ref} is not in the engine's catalog right now · type to search`
+      : 'Type to search models';
   input.classList.toggle('has-issues', Boolean(m?.issues?.length));
+  input.classList.toggle('is-missing', Boolean(ref && !m));
 }
 
 /**
@@ -1375,17 +1412,36 @@ function renderEffort(roleId) {
 
 function fillRoleModels() {
   if (state.models.length === 0) return;
-  const free = state.models.filter((m) => m.free);
-  const pool = free.length ? free : state.models;
   document.querySelectorAll('.role-model').forEach((sel, i) => {
     const role = sel.dataset.role || String(i);
     sel.innerHTML = state.models
       .map((m) => `<option value="${esc(m.ref)}">${esc(shortModel(m.name))}</option>`)
       .join('');
-    let chosen = selectionFor(role).ref;
-    if (!modelByRef(chosen)) chosen = (pool[i % pool.length] || state.models[0]).ref;
-    sel.value = chosen;
-    sel.title = modelTitle(modelByRef(chosen)) || `Model for the ${role} role`;
+    // The saved ref is the identity, and it is never replaced. A role whose model
+    // is missing from the catalog *right now* — a provider had a bad minute, its
+    // key was refused, the engine was restarting — keeps its own ref in an option
+    // of its own, marked as missing. This used to fall back to another model by
+    // position in the list, which is how the Architect's card came back showing a
+    // DeepSeek from a different provider: same name, different source, and the
+    // picker's value is what a later save would have written.
+    const chosen = selectionFor(role).ref;
+    const known = modelByRef(chosen);
+    if (chosen && !known) {
+      const id = String(chosen).split('/').pop();
+      sel.insertAdjacentHTML(
+        'beforeend',
+        `<option value="${esc(chosen)}">${esc(id)} — not in the catalog</option>`,
+      );
+    }
+    // Nothing saved at all is the only case where a model is offered: the first
+    // free one, so a fresh install has something selectable rather than a blank.
+    const fallback = state.models.find((m) => m.free) || state.models[0];
+    sel.value = chosen || fallback.ref;
+    sel.title = known
+      ? modelTitle(known)
+      : chosen
+        ? `${chosen} is not in the engine's catalog right now — the choice is kept, not replaced`
+        : `Model for the ${role} role`;
     const p = pickers.get(role);
     if (p) syncPickerInput(p.input);
     renderEffort(role);
@@ -2018,6 +2074,8 @@ function currentProject() {
 async function openSession(id) {
   state.view = 'session';
   state.sessionId = id;
+  // The next page load opens this one again (see restoreOpenSession).
+  rememberSession(id);
   state.permissions = [];
   // A stopwatch belongs to the session it measured, so opening another one swaps
   // the totals rather than carrying them across.
@@ -2632,28 +2690,38 @@ function renderTranscript() {
 function renderTrace(t) {
   const name = roleLabel(t.role);
   const head = [name, t.task, t.title].filter(Boolean);
-  // The folded line is one line by definition: role, task, time, files. The task
-  // title would push it past the column and wrap, and a wrap is not a line.
-  const short = [name, t.task].filter(Boolean).join(' · ');
-  const lines = (t.lines || [])
-    .slice(-8)
-    .map((l) =>
-      l.kind === 'word'
-        ? `<div class="trace-line is-word">“${esc(l.text)}”</div>`
-        : `<div class="trace-line">${esc(l.text)}</div>`,
-    )
-    .join('');
+  const line = (l) =>
+    l.kind === 'word'
+      ? `<div class="trace-line is-word">“${esc(l.text)}”</div>`
+      : l.kind === 'think'
+        ? `<div class="trace-line is-think">${esc(l.text)}</div>`
+        : `<div class="trace-line">${esc(l.text)}</div>`;
+  const all = t.lines || [];
+  // Only the last few steps stay open. Everything before is one line that opens:
+  // a worker ten minutes in has done forty things, and forty lines of it is the
+  // whole chat. This is the shape an editor's agent uses, for the same reason.
+  const tail = all.slice(-4);
+  const older = all.slice(0, Math.max(0, all.length - 4));
+  const archive = older.length
+    ? `<details class="trace-archive"><summary>${older.length} earlier step${older.length === 1 ? '' : 's'}</summary>${older
+        .map(line)
+        .join('')}</details>`
+    : '';
+  const body = `${archive}${tail.map(line).join('')}`;
   if (!t.finishedAt) {
     return `<div class="trace is-live" data-trace="${esc(t.key)}">
       <div class="trace-head" title="${esc(head.join(' · '))}">${esc(head.join(' · '))}</div>
-      <div class="trace-lines">${lines || '<div class="trace-line">starting…</div>'}</div>
+      <div class="trace-lines">${body || '<div class="trace-line">starting…</div>'}</div>
     </div>`;
   }
   const took = t.ms ? ` · ${shortSpan(t.ms)}` : '';
   const written = t.files ? ` · ${t.files} file${t.files === 1 ? '' : 's'}` : '';
+  // The task's own title belongs on the folded line: "Coder 1 · t8" says where,
+  // not what. It ellipsizes when the column is short, and the tooltip has the lot.
+  const foldHead = [name, t.task, t.title].filter(Boolean).join(' · ');
   return `<details class="trace is-fold" data-trace="${esc(t.key)}">
-    <summary title="${esc(head.join(' · '))}">${esc(short)}${took}${written}</summary>
-    <div class="trace-lines">${lines}</div>
+    <summary title="${esc(foldHead)}">${esc(foldHead)}${took}${written}</summary>
+    <div class="trace-lines">${body}</div>
   </details>`;
 }
 
@@ -2665,9 +2733,17 @@ function tracesFor(dir) {
 
 // A worker's own words are read from its session rather than guessed from the
 // event stream: the delta payload is the engine's business and has changed
-// shape before. One read per finished text block, debounced, and only while a
-// run for this project is live.
+// shape before. One read per finished text or reasoning block, debounced, and
+// only while a run for this project is live.
 const wordTimers = new Map();
+/** Keep a trace from growing without limit: it is a glance, not a log. */
+function pushTraceLine(trace, entry) {
+  if (!trace) return false;
+  if (trace.lines.some((l) => l.kind === entry.kind && l.text === entry.text)) return false;
+  trace.lines.push(entry);
+  if (trace.lines.length > 60) trace.lines.splice(0, trace.lines.length - 60);
+  return true;
+}
 function noteWorkerWords(sessionId) {
   const run = currentRun();
   if (!run || !sessionId || run.workerId !== sessionId) return;
@@ -2678,18 +2754,25 @@ function noteWorkerWords(sessionId) {
       try {
         const { messages } = await api('GET', `/api/sessions/${encodeURIComponent(sessionId)}/messages`);
         let said = '';
+        let thought = '';
         for (const m of messages || []) {
           if (m.type !== 'assistant') continue;
-          for (const p of m.parts || []) if (p.type === 'text' && p.text && String(p.text).trim()) said = String(p.text);
+          for (const p of m.parts || []) {
+            if (p.type === 'text' && p.text && String(p.text).trim()) said = String(p.text);
+            else if (p.type === 'reasoning' && p.text && String(p.text).trim()) thought = String(p.text);
+          }
         }
-        said = said.replace(/\s+/g, ' ').trim();
-        if (!said) return;
         const trace = traceOf(run);
         if (!trace) return;
-        const short = said.length > 220 ? `${said.slice(0, 219)}…` : said;
-        if (trace.lines.some((l) => l.kind === 'word' && l.text === short)) return;
-        trace.lines.push({ kind: 'word', text: short });
-        renderTranscript();
+        const trim = (s) => {
+          const t = s.replace(/\s+/g, ' ').trim();
+          return t.length > 220 ? `${t.slice(0, 219)}…` : t;
+        };
+        let changed = false;
+        // Its thinking first, then what it said: the order a reader follows.
+        if (thought) changed = pushTraceLine(trace, { kind: 'think', text: trim(thought) }) || changed;
+        if (said) changed = pushTraceLine(trace, { kind: 'word', text: trim(said) }) || changed;
+        if (changed) renderTranscript();
       } catch { /* the worker's session may be gone; the tool line still moves */ }
     }, 400),
   );
@@ -3966,7 +4049,9 @@ function connectStream() {
     const mine = !ev.sessionId || ev.sessionId === state.sessionId;
     // A worker's session is not the open one, so nothing of it renders through
     // `mine`. Its words are read here instead, for the trace in the chat.
-    if (ev.type === 'session.text.ended') noteWorkerWords(ev.sessionId);
+    if (ev.type === 'session.text.ended' || ev.type === 'session.reasoning.ended') {
+      noteWorkerWords(ev.sessionId);
+    }
     // any traffic from a session counts as progress against the stall timer
     if (ev.sessionId) state.busySince.set(ev.sessionId, Date.now());
 
@@ -5347,13 +5432,48 @@ async function boot() {
   await refreshUpdate();
   await loadModels();
   await loadProjects();
+  await restoreOpenSession();
   await checkSkills();
   await loadRuns();
   renderTranscript();
   connectStream();
   refreshPending();
   renderProbe();
-  // nothing is auto-opened: the operator picks what to work on
+}
+
+/** Where the operator was when they last had this page open.
+ *
+ * Nothing used to be opened on load, and every project was collapsed except
+ * General — so a reload in the middle of a run left an empty screen with the
+ * work one click away. A session that has a question waiting, or a turn in
+ * flight, is the one they left whatever the last page thought; otherwise it is
+ * the session they last opened.
+ */
+const LAST_SESSION_KEY = 'synapse.lastSession';
+function rememberSession(id) {
+  try {
+    if (id) localStorage.setItem(LAST_SESSION_KEY, id);
+  } catch { /* full or blocked storage must not break a turn */ }
+}
+async function restoreOpenSession() {
+  if (state.sessionId) return;
+  let target = null;
+  try {
+    const pending = await api('GET', '/api/pending');
+    const ids = [...(pending.forms || []).map((f) => f.sessionId), ...(pending.active || [])];
+    target = ids.find((id) => id && findSession(id)) || null;
+  } catch { /* the pending list is a nicety here, not a requirement */ }
+  if (!target) {
+    let saved = null;
+    try { saved = localStorage.getItem(LAST_SESSION_KEY); } catch { /* blocked storage */ }
+    if (saved && findSession(saved)) target = saved;
+  }
+  if (!target) return;
+  // The auto-collapse above put every project away; the one holding this session
+  // has to be open or the selection is invisible.
+  const project = projectOf(target);
+  if (project) state.collapsed.delete(project.id);
+  await openSession(target);
 }
 
 boot();

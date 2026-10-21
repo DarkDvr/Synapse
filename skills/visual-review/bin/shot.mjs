@@ -1,14 +1,32 @@
 #!/usr/bin/env node
-// Render an HTML file or URL to PNGs using the machine's own browser.
+// Render an HTML file or URL to PNGs using the machine's own browser — and
+// answer questions about the page it rendered.
 //
 // Why a script and not a pile of flags in the skill text: browser discovery,
 // quoting, a throwaway profile and waiting for the file to land are all things a
 // model gets wrong once and then works around badly. One command, one JSON line
-// per shot.
+// per width.
 //
-// No dependencies. Edge/Chrome already exist on a Windows box; if none is found
-// we exit 2 and say so rather than pretend.
-import { execFile } from 'node:child_process';
+// Two modes, one launch path:
+//
+//   shot.mjs <file|url> --widths 1280,390                     → PNG for each width
+//   shot.mjs <file|url> --eval "document.body.scrollWidth"    → the answer, as JSON
+//
+// The second exists because a picture cannot say *why* something is clipped. A
+// designer needed a measurement, found only screenshots on offer, and spent ten
+// minutes writing its own Chrome DevTools driver that then fought a stale
+// browser over a profile. Measuring belongs here.
+//
+// Everything goes through the DevTools protocol, screenshots included, for one
+// reason: `--window-size` does not set the *layout* viewport in headless Edge.
+// A "390px" shot was laid out at 492px and cropped to 390 — so every mobile
+// review judged a page that was never 390 wide. `Emulation.setDeviceMetricsOverride`
+// sets the viewport for real.
+//
+// No dependencies: Node ships `fetch` and `WebSocket`, and Edge/Chrome already
+// exist on a Windows box. If none is found we exit 2 and say so rather than
+// pretend.
+import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -29,11 +47,12 @@ const fail = (code, message) => {
 };
 
 function parseArgs(argv) {
-  const out = { target: '', outDir: path.resolve('.synapse/design/shots'), widths: [1280], height: 900 };
+  const out = { target: '', outDir: path.resolve('.synapse/design/shots'), widths: [1280], height: 900, evalExpr: '' };
   const rest = [];
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--out') out.outDir = path.resolve(argv[++i] || '');
+    else if (a === '--eval') out.evalExpr = String(argv[++i] || '');
     else if (a === '--widths') {
       out.widths = String(argv[++i] || '')
         .split(',')
@@ -60,7 +79,9 @@ if (!browser) {
 }
 
 const args = parseArgs(process.argv.slice(2));
-if (!args.target) fail(1, 'Usage: shot.mjs <file|url> [--out DIR] [--widths 1280,390] [--height 900]');
+if (!args.target) {
+  fail(1, 'Usage: shot.mjs <file|url> [--out DIR] [--widths 1280,390] [--height 900] [--eval "<js>"]');
+}
 
 // A file path becomes a file:// URL; anything with a scheme is left alone.
 const target = /^[a-z]+:\/\//i.test(args.target)
@@ -69,54 +90,172 @@ const target = /^[a-z]+:\/\//i.test(args.target)
 
 fs.mkdirSync(args.outDir, { recursive: true });
 const base = path.basename(decodeURIComponent(new URL(target).pathname)).replace(/\.[^.]+$/, '') || 'shot';
-const profile = path.join(os.tmpdir(), `visual-review-${process.pid}-${Date.now()}`);
 
-const run = (width) =>
-  new Promise((resolve, reject) => {
-    const out = path.join(args.outDir, `${base}-${width}.png`);
-    try {
-      fs.rmSync(out, { force: true });
-    } catch { /* nothing to remove */ }
-    const flags = [
-      '--headless=new',
-      '--disable-gpu',
-      '--hide-scrollbars',
-      '--no-first-run',
-      '--no-default-browser-check',
-      '--disable-extensions',
-      `--user-data-dir=${profile}`,
-      `--window-size=${width},${args.height}`,
-      `--screenshot=${out}`,
-      target,
-    ];
-    execFile(browser, flags, { timeout: 60000, windowsHide: true }, (err) => {
-      // The browser writes its "bytes written to …" notice to stderr; the exit
-      // code is the thing to trust, and even then the file is the real answer.
-      if (err && !fs.existsSync(out)) return reject(err);
-      // The screenshot is written just after the process lets go of it.
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/** One browser, one width, one job. Resolves with whatever `job(send)` returns. */
+function withPage(width, job) {
+  const profile = path.join(os.tmpdir(), `visual-review-${process.pid}-${width}-${Date.now()}`);
+  const portFile = path.join(profile, 'DevToolsActivePort');
+  return new Promise((resolve, reject) => {
+    const child = spawn(
+      browser,
+      [
+        '--headless=new',
+        '--disable-gpu',
+        '--hide-scrollbars',
+        '--no-first-run',
+        '--no-default-browser-check',
+        '--disable-extensions',
+        `--user-data-dir=${profile}`,
+        '--remote-debugging-port=0',
+        `--window-size=${width},${args.height}`,
+        'about:blank',
+      ],
+      { windowsHide: true, stdio: 'ignore' },
+    );
+    let settled = false;
+    const finish = (fn, value) => {
+      if (settled) return;
+      settled = true;
+      try { child.kill(); } catch { /* already gone */ }
+      setTimeout(() => {
+        try { fs.rmSync(profile, { recursive: true, force: true }); } catch { /* locked temp dir */ }
+      }, 300);
+      fn(value);
+    };
+    const timer = setTimeout(() => finish(reject, new Error('the browser did not answer within 60s')), 60000);
+    timer.unref?.();
+
+    (async () => {
+      // The port the browser actually chose is written into the profile; polling
+      // for it is the only honest way to know when it is ready.
+      let port = 0;
       let waited = 0;
-      const poll = () => {
+      while (!port && waited < 20000) {
         try {
-          const size = fs.statSync(out).size;
-          if (size > 0) return resolve({ target, width, height: args.height, path: out.replace(/\\/g, '/'), bytes: size });
-        } catch { /* not yet */ }
-        if (waited >= 5000) return reject(new Error(`no screenshot at ${out}`));
-        waited += 100;
-        setTimeout(poll, 100);
-      };
-      poll();
+          port = Number(String(fs.readFileSync(portFile, 'utf8')).split(/\r?\n/)[0]) || 0;
+        } catch { /* not written yet */ }
+        if (!port) {
+          await sleep(120);
+          waited += 120;
+        }
+      }
+      if (!port) throw new Error('the browser never reported a debugging port');
+      let list = [];
+      for (let i = 0; i < 40 && !list.length; i += 1) {
+        list = await fetch(`http://127.0.0.1:${port}/json/list`).then((r) => r.json()).catch(() => []);
+        if (!list || !list.length) await sleep(120);
+      }
+      const page = (list || []).find((t) => t.type === 'page');
+      if (!page?.webSocketDebuggerUrl) throw new Error('the browser opened no page to drive');
+
+      const ws = new WebSocket(page.webSocketDebuggerUrl);
+      let id = 0;
+      const pending = new Map();
+      let loadResolve = null;
+      const send = (method, params = {}) =>
+        new Promise((res, rej) => {
+          const n = (id += 1);
+          pending.set(n, { res, rej });
+          ws.send(JSON.stringify({ id: n, method, params }));
+        });
+      ws.addEventListener('message', (e) => {
+        let msg;
+        try { msg = JSON.parse(e.data); } catch { return; }
+        if (msg.id && pending.has(msg.id)) {
+          const { res, rej } = pending.get(msg.id);
+          pending.delete(msg.id);
+          if (msg.error) rej(new Error(msg.error.message));
+          else res(msg.result);
+        }
+        if (msg.method === 'Page.loadEventFired') loadResolve?.();
+      });
+      await new Promise((res, rej) => {
+        ws.addEventListener('open', res, { once: true });
+        ws.addEventListener('error', () => rej(new Error('could not open the debugger socket')), { once: true });
+      });
+
+      await send('Page.enable');
+      await send('Runtime.enable');
+      // The whole point: the layout viewport is what we asked for, so a 390px
+      // review is a review of a 390px page.
+      await send('Emulation.setDeviceMetricsOverride', {
+        width,
+        height: args.height,
+        deviceScaleFactor: 1,
+        mobile: false,
+      });
+      const loaded = new Promise((res) => {
+        loadResolve = res;
+        setTimeout(res, 15000);
+      });
+      await send('Page.navigate', { url: target });
+      await loaded;
+      // A page that lays itself out in a script, or waits on a font, needs one
+      // more turn of the loop before it is the page a person would see.
+      await sleep(250);
+
+      const out = await job(send, ws);
+      try { ws.close(); } catch { /* closing */ }
+      clearTimeout(timer);
+      finish(resolve, out);
+    })().catch((err) => {
+      clearTimeout(timer);
+      finish(reject, err);
     });
   });
+}
+
+/** A full-page PNG at exactly `width`, however tall the page turned out to be. */
+async function shoot(width) {
+  const out = path.join(args.outDir, `${base}-${width}.png`);
+  try { fs.rmSync(out, { force: true }); } catch { /* nothing to remove */ }
+  const png = await withPage(width, async (send) => {
+    const metrics = await send('Page.getLayoutMetrics');
+    const content = metrics.cssContentSize || metrics.contentSize || { width, height: args.height };
+    const height = Math.max(args.height, Math.ceil(content.height || 0));
+    const shot = await send('Page.captureScreenshot', {
+      format: 'png',
+      captureBeyondViewport: true,
+      clip: { x: 0, y: 0, width, height, scale: 1 },
+    });
+    return Buffer.from(shot.data, 'base64');
+  });
+  fs.writeFileSync(out, png);
+  const size = fs.statSync(out).size;
+  if (!size) throw new Error(`the browser captured an empty image for ${width}px`);
+  return { target, width, height: args.height, path: out.replace(/\\/g, '/'), bytes: size };
+}
+
+/** Load the page at `width` and answer `expr` from inside it. */
+async function evaluate(width, expr) {
+  return withPage(width, async (send) => {
+    const out = await send('Runtime.evaluate', {
+      expression: expr,
+      returnByValue: true,
+      awaitPromise: true,
+      userGesture: true,
+    });
+    if (out.exceptionDetails) return { value: null, error: out.exceptionDetails.text || 'the expression threw' };
+    return { value: out.result?.value ?? null, error: null };
+  });
+}
 
 try {
-  for (const width of args.widths) {
-    const shot = await run(width);
-    process.stdout.write(`${JSON.stringify(shot)}\n`);
+  if (args.evalExpr) {
+    for (const width of args.widths) {
+      const answer = await evaluate(width, args.evalExpr);
+      process.stdout.write(
+        `${JSON.stringify({ target, width, height: args.height, value: answer.value, error: answer.error })}\n`,
+      );
+    }
+  } else {
+    for (const width of args.widths) {
+      const shot = await shoot(width);
+      process.stdout.write(`${JSON.stringify(shot)}\n`);
+    }
   }
 } catch (err) {
   fail(1, `Screenshot failed: ${err.message}`);
-} finally {
-  try {
-    fs.rmSync(profile, { recursive: true, force: true });
-  } catch { /* a locked temp dir is not worth failing a run over */ }
 }

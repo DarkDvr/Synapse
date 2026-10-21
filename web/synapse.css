@@ -820,6 +820,10 @@ body.dark .sidebar-bottom,
    sits on a dead model and the card looks fine. */
 .model-search.has-issues { border-color: rgba(232, 163, 61, 0.55); color: var(--amber); }
 .model-search.has-issues:hover { border-color: var(--amber); }
+/* The saved model is not in the catalog at this moment. Amber, not red: nothing
+   failed, the choice is simply not on offer right now — and it is still the
+   choice, so it is shown rather than replaced. */
+.model-search.is-missing { border-color: rgba(232, 163, 61, 0.4); color: var(--amber); font-style: italic; }
 /* Skipped just now: red, text included. The background stays as it is — this is a
    mark on the control, not a new control. */
 .model-search.is-skipped {
@@ -1110,6 +1114,19 @@ body[data-mode="single"] .keep-toggle { display: none; }
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .trace-line.is-word { font-style: italic; color: #767b83; }
+/* Thinking is the quietest of the three: no quotes, dimmer, so a model's
+   deliberation never reads as something it told the operator. */
+.trace-line.is-think { color: #6a6f77; font-style: italic; opacity: 0.9; }
+/* Everything older than the last few steps, folded to one line of its own. */
+.trace-archive { margin-bottom: 3px; }
+.trace-archive > summary {
+  cursor: pointer; list-style: none;
+  font-size: 10px; color: #6a6f77; letter-spacing: 0.04em;
+}
+.trace-archive > summary::-webkit-details-marker { display: none; }
+.trace-archive > summary::before { content: '▸ '; font-size: 9px; }
+.trace-archive[open] > summary::before { content: '▾ '; }
+.trace-archive > summary:hover { color: var(--muted); }
 /* The live rule breathes, the way the sidebar's live dot does: something is
    happening, and it costs nothing to say so. */
 .trace.is-live { border-left-color: #4a4e56; }

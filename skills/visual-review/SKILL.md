@@ -30,6 +30,31 @@ say in your report that you did not see it rendered.
 The script uses its own throwaway browser profile. It never touches the
 operator's browser, and it must never be pointed at one.
 
+## Measure it, do not guess from the picture
+
+A still cannot tell you a number, and clipping has a cause. The same script
+answers a question from inside the loaded page, at the width you name:
+
+```
+node ".../shot.mjs" <target> --widths 390 --eval "JSON.stringify({w: innerWidth, body: document.body.scrollWidth})"
+```
+
+```
+{"target":"…","width":390,"height":900,"value":"{\"w\":390,\"body\":477}","error":null}
+```
+
+Everything in the page is fair game — a computed colour, an element's box, a
+`querySelectorAll(...).length`. The expression runs after load and may `await`.
+The viewport is set for real before the page lays itself out, so `innerWidth` is
+the width you asked for; if `document.body.scrollWidth` is wider than that, you
+have found the overflow and can name the element causing it.
+
+**Do not write your own browser automation.** No Playwright, no Puppeteer, no
+DevTools script of your own, no launching Edge by hand and hunting a stray
+process that holds a profile. The script owns the browser, the port and the
+profile. If it cannot answer what you need, say so in your report — that is a
+finding about the tool, and worth more than ten minutes of workarounds.
+
 ## Where the images go
 
 Put them in the project: `.synapse/shots/` (the default). What you looked
