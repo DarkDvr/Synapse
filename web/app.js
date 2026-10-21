@@ -2348,8 +2348,11 @@ function handleRunEvent(ev) {
       const last = [...trace.lines].reverse().find((l) => l.kind === 'tool');
       const generic = !String(run.tool.target || '').trim();
       const repeated = generic && last && last.text.split(' ')[0] === said.split(' ')[0];
-      if (!repeated && !trace.lines.some((l) => l.kind === 'tool' && l.text === said)) {
-        trace.lines.push({ kind: 'tool', text: said });
+      // A shell line carries the whole command, quotes and all. One line of the
+      // trace is not the place to read it; the card's tooltip and the report are.
+      const line = said.length > 84 ? `${said.slice(0, 83)}…` : said;
+      if (!repeated && !trace.lines.some((l) => l.kind === 'tool' && l.text === line)) {
+        trace.lines.push({ kind: 'tool', text: line });
       }
     }
   } else if (ev.type === 'run.finished') {
