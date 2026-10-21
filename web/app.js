@@ -781,11 +781,18 @@ const modelMeta = (m) => {
 const issuesTitle = (m) =>
   [...(m.issues || []).map((i) => `${new Date(i.at).toLocaleString()} - ${i.message}`), 'Click to clear.'].join('\n');
 
-// Where a model comes from is part of its identity: `opencode/…-free` and
-// `opencode-go/…` can be the same model with different backends, and local
-// runtimes will be a third source later. The provider id is the source, so show
-// it; unknown providers fall back to a readable form of the id.
-const PROVIDER_LABELS = { opencode: 'OpenCode', 'opencode-go': 'OpenCode Go', deepseek: 'DeepSeek' };
+// Where a model comes from is part of its identity. These are the engine's own
+// providers: **OpenCode** is the free tier (public key, free models only), **OC
+// Go** and **OC Zen** are the paid plans and their keys live in the engine, never
+// here. A provider the operator adds in Settings is labelled by its *type* —
+// `Local` for anything on this machine, its own name for a vendor (DeepSeek).
+const ENGINE_PROVIDERS = [
+  { id: 'opencode', label: 'OpenCode', note: 'Free tier — free models only, no key.' },
+  { id: 'opencode-go', label: 'OC Go', note: 'Paid plan — the key lives in the engine.' },
+  { id: 'opencode-zen', label: 'OC Zen', note: 'Paid plan — the key lives in the engine.' },
+];
+const ENGINE_BADGES = Object.fromEntries(ENGINE_PROVIDERS.map((p) => [p.id, p.label]));
+const PROVIDER_LABELS = id => ENGINE_BADGES[id];
 const providerLabel = (p) => {
   const id = String(p || 'unknown');
   const configured = (state.config?.engine?.opencode?.providers || []).find((x) => x.id === id);
@@ -793,7 +800,7 @@ const providerLabel = (p) => {
   // be running it: the next machine's may be Ollama or vLLM, and a badge naming
   // one of them would be wrong everywhere else.
   if (configured) return configured.type === 'local' ? 'Local' : configured.name || id;
-  if (PROVIDER_LABELS[id]) return PROVIDER_LABELS[id];
+  if (ENGINE_BADGES[id]) return ENGINE_BADGES[id];
   return id
     .split(/[-_]/)
     .filter(Boolean)
@@ -3802,17 +3809,19 @@ function setField(c, label, path, opts = {}) {
   const scale = Number(opts.scale) || 1;
   const raw = opts.value !== undefined ? opts.value : readPath(c, path);
   const shown = scale === 1 ? raw : Number(raw) / scale;
+  const badge = opts.restart ? ' <em class="set-restart">Restart</em>' : '';
   return `
     <label class="set-field${opts.wide ? ' wide' : ''}" title="${esc(opts.hint || '')}">
-      <span>${esc(label)}</span>
+      <span>${esc(label)}${badge}</span>
       <input data-path="${path}"${scale !== 1 ? ` data-scale="${scale}"` : ''} type="${opts.type || 'text'}" value="${esc(shown)}" ${opts.attr || ''} />
     </label>`;
 }
 
 function setSelect(c, label, path, options, opts = {}) {
+  const badge = opts.restart ? ' <em class="set-restart">Restart</em>' : '';
   return `
     <label class="set-field${opts.wide ? ' wide' : ''}" title="${esc(opts.hint || '')}">
-      <span>${esc(label)}</span>
+      <span>${esc(label)}${badge}</span>
       <select data-path="${path}">
         ${options.map((o) => `<option value="${esc(o.v)}"${o.v === readPath(c, path) ? ' selected' : ''}>${esc(o.l)}</option>`).join('')}
       </select>
@@ -3835,10 +3844,12 @@ function settingsGeneral(c) {
     setGroup(
       'Server',
       setField(c, 'Host', 'server.host', {
+        restart: true,
         hint: 'The address the Synapse window is served on. 127.0.0.1 means only this machine can open it.',
       }) +
         setField(c, 'Port', 'server.port', {
           type: 'number',
+          restart: true,
           hint: 'The port the Synapse window uses. Change it only if another program already uses this one.',
         }) +
         setCheck(
@@ -3872,29 +3883,34 @@ function settingsEngine(c) {
         'Engine type',
         'engine.type',
         [{ v: 'opencode', l: 'OpenCode' }],
-        { hint: 'Which agent engine Synapse drives. Only OpenCode is implemented.' },
+        { hint: 'Which agent engine Synapse drives. Only OpenCode is implemented.', restart: true },
       ) +
         setField(c, 'Engine port', 'engine.opencode.port', {
           type: 'number',
+          restart: true,
           hint: 'The port Synapse asks the engine to listen on. It must differ from the Synapse port.',
         }) +
         setField(c, 'opencode.exe path (blank = auto-detect)', 'engine.opencode.binary', {
           wide: true,
+          restart: true,
           value: binaryValue,
           hint: 'The engine program. Leave it blank and Synapse finds it by itself.',
         }) +
         setField(c, 'Password (blank = keep existing)', 'engine.opencode.password', {
           type: 'password',
+          restart: true,
           attr: 'placeholder="unchanged"',
           hint: "Password for the engine's local API. Leave it blank to keep the password already saved.",
         }) +
         setField(c, 'Start timeout (seconds)', 'engine.opencode.startTimeoutMs', {
           type: 'number',
           scale: 1000,
+          restart: true,
           hint: 'How long Synapse waits for the engine to report ready when it starts. Seconds.',
         }) +
         setField(c, 'Engine home (blank = data\\engine\\opencode)', 'engine.opencode.home', {
           wide: true,
+          restart: true,
           value: homeValue,
           hint: 'Where the engine keeps its own settings, logs and data. Blank uses the copy inside Synapse; the machine-wide OpenCode install is never touched.',
         }) +
@@ -3970,6 +3986,7 @@ function settingsTools(c) {
       'Skills',
       setField(c, 'Extra skill folders (separate with ;)', 'engine.opencode.skillPaths', {
         wide: true,
+        restart: true,
         value: (c.engine?.opencode?.skillPaths || []).join(';'),
         hint: "Extra folders of agent skills, separated by semicolons. Synapse's own skills and your ~/.agents/skills always load; add a folder here only for skills in neither.",
       }) +
@@ -4068,8 +4085,11 @@ function providerEditor(providers, index) {
   if (!p) return '';
   const key = String(p.apiKey || '');
   const revealed = Boolean(state.setKeyRevealed);
-  const fromEnv = key.startsWith('env:');
-  const shown = !key ? '' : fromEnv ? key : revealed ? key : maskSecret(key);
+  const fromEnv = /^env:/i.test(key);
+  const typed = Boolean(key) && !fromEnv;              // typed in this window, never sent by the server
+  const stored = Boolean(p.apiKeySet) && !p.apiKeyRemoved;
+  const shown = typed ? (revealed ? key : maskSecret(key)) : fromEnv ? key : stored ? p.apiKeyMasked || '' : '';
+  const canReveal = typed;
   const taken = providers.filter((q, i) => i !== index).map((q) => q.id || slugify(q.name));
   const previewId = p.id || slugify(p.name || '') || 'provider';
   const clash = !p.id && taken.includes(previewId);
@@ -4104,14 +4124,23 @@ function providerEditor(providers, index) {
         </select>
         <small class="prov-hint">${p.format === 'ollama' ? 'Ollama' : 'LM Studio, vLLM, llama.cpp'} — either one answers the other endpoint too, so this only decides which is asked first.</small>
       </label>` : ''}
-      <div class="set-field wide" title="Sent as a bearer token. env:NAME reads the environment when Synapse starts, so the key never has to live in the config file.">
+      <div class="set-field wide" title="Sent as a bearer token. A key typed here is stored beside the app's data (not in the config file); env:NAME reads the environment when Synapse starts.">
         <span>API Key</span>
         <div class="set-key">
-          <input data-prov="apiKey" value="${esc(shown)}" data-masked="${key && !fromEnv && !revealed ? '1' : '0'}" type="text" spellcheck="false"
+          <input data-prov="apiKey" value="${esc(shown)}" data-masked="${typed && !revealed ? '1' : '0'}" type="text" spellcheck="false"
                  placeholder="${p.type === 'local' ? 'Empty for local servers' : 'sk-…'}" autocomplete="off" />
-          ${fromEnv || !key ? '' : `<button type="button" class="input-eye" data-prov-eye aria-label="${revealed ? 'Hide the key' : 'Show the key'}" title="${revealed ? 'Hide the key' : 'Show the key'}">${setIcon(revealed ? 'eyeOff' : 'eye')}</button>`}
+          ${canReveal ? `<button type="button" class="input-eye" data-prov-eye aria-label="${revealed ? 'Hide the key' : 'Show the key'}" title="${revealed ? 'Hide the key' : 'Show the key'}">${setIcon(revealed ? 'eyeOff' : 'eye')}</button>` : ''}
         </div>
-        <small class="prov-hint">${fromEnv ? `The key is read from the environment when Synapse starts — the config file keeps the variable's name, not the key. Type over it to store a key here instead.` : key ? `Stored in the config file as ${esc(maskSecret(key))}. Type over it to replace it.` : 'Only needed for a service. Nothing is written to the config file until you save.'}</small>
+        <small class="prov-hint">${
+          p.apiKeyRemoved
+            ? 'The stored key is removed when you save.'
+            : fromEnv
+              ? `Read from the environment when Synapse starts — the config file keeps the variable's name, not the key. Type over it to store a key beside the app instead.`
+              : stored
+                ? `Stored beside the app's data, not in the config file. Shown as ${esc(p.apiKeyMasked || '')} — type over it to replace it.`
+                : 'Kept beside the app\'s data, never in the config file. Only needed for a service.'
+        }</small>
+        ${stored || fromEnv ? `<div class="prov-tools"><button type="button" class="btn btn-danger btn-sm" data-prov-remove>Remove Key</button></div>` : ''}
       </div>
       <div class="set-field wide">
         <span>Models</span>
@@ -4135,7 +4164,19 @@ function providerEditor(providers, index) {
 function settingsProviders(c) {
   const providers = c.engine?.opencode?.providers || [];
   const selected = Number.isInteger(state.setProvSelected) ? state.setProvSelected : -1;
-  const engineModels = (state.models || []).filter((m) => m.provider === 'opencode').length;
+  const countsByProvider = (state.models || []).reduce((acc, m) => {
+    acc[m.provider] = (acc[m.provider] || 0) + 1;
+    return acc;
+  }, {});
+  const builtins = ENGINE_PROVIDERS.map((p) => {
+    const count = countsByProvider[p.id] || 0;
+    return `<div class="prov-row is-builtin" title="${esc(p.note)}">
+        <span class="prov-type">${esc(p.label)}</span>
+        <span class="prov-name">Engine catalog</span>
+        <span class="prov-url">${esc(p.note)}</span>
+        <span class="prov-meta">${count ? `${count} model${count === 1 ? '' : 's'}` : 'not connected'}</span>
+      </div>`;
+  }).join('');
 
   const rows = providers
     .map((p, i) => {
@@ -4156,9 +4197,9 @@ function settingsProviders(c) {
     .join('');
 
   return `
-    <section class="set-group"><h4>Providers</h4>
+    <section class="set-group"><h4>Providers <em class="set-restart">Restart</em></h4>
       <div class="prov-add">
-        <button type="button" class="btn btn-ghost btn-sm" data-prov-add>+ Add Provider</button>
+        <button type="button" class="btn btn-provider btn-sm" data-prov-add>+ Add Provider</button>
         <div class="prov-add-menu" id="provAddMenu" hidden>
           <button type="button" data-prov-new="local">Local Provider</button>
           <button type="button" data-prov-new="openai">OpenAI Compatible</button>
@@ -4166,19 +4207,14 @@ function settingsProviders(c) {
         </div>
       </div>
       <div class="prov-list">
-        <div class="prov-row is-builtin" title="The engine's own catalog, always registered. Its key lives in the engine, not here.">
-          <span class="prov-type">OpenCode</span>
-          <span class="prov-name">Engine catalog</span>
-          <span class="prov-url">built in — registered by the engine itself</span>
-          <span class="prov-meta">${engineModels} model${engineModels === 1 ? '' : 's'}</span>
-        </div>
+        ${builtins}
         ${rows}
       </div>
       <hr class="prov-divider" />
       ${providerEditor(providers, selected)}
       <p class="set-note">A new or changed provider reaches the model menu after a restart: the engine reads its
-      provider list when it starts. A key written as <code>env:NAME</code> is read from the environment at boot and
-      the config file keeps only the variable's name; a literal key is stored in the file, which git tracks.</p>
+      provider list when it starts. A key written as <code>env:NAME</code> is read from the environment at boot;
+      a key typed here is kept beside the app's data, never in the config file.</p>
     </section>`;
 }
 
@@ -4313,6 +4349,7 @@ async function refreshProviderModels(index) {
     baseURL: p.baseURL,
     apiKey: p.apiKey,
     format: p.format,
+    type: p.type,
   }).catch((err) => ({
     ok: false,
     models: [],
@@ -4353,7 +4390,12 @@ function onSettingsInput(e) {
   if (!p) return;
   const field = el.dataset.prov;
   if (field === 'models') { p.models = parseModelLines(el.value); return; }
-  if (field === 'apiKey') { p.apiKey = el.value; el.dataset.masked = '0'; return; }
+  if (field === 'apiKey') {
+    p.apiKey = el.value;
+    p.apiKeyRemoved = false;
+    el.dataset.masked = '0';
+    return;
+  }
   if (field === 'type') {
     p.type = el.value === 'local' ? 'local' : 'openai';
     if (p.type !== 'local') p.format = 'openai';
@@ -4401,6 +4443,17 @@ async function onSettingsClick(e) {
     }
     return;
   }
+  if (e.target.closest('[data-prov-remove]')) {
+    const p = providerAt(state.setProvSelected);
+    if (p) {
+      p.apiKey = null;
+      p.apiKeySet = false;
+      p.apiKeyRemoved = true;
+      state.setKeyRevealed = false;
+      renderSettings();
+    }
+    return;
+  }
   if (e.target.closest('[data-prov-fetch]')) {
     await refreshProviderModels(state.setProvSelected);
   }
@@ -4428,6 +4481,7 @@ async function saveSettings() {
     if (!effortIds(entry.ref).includes(entry.variant)) delete entry.variant;
   }
   try {
+    const restart = restartNeeded(state.settingsSnapshot || state.config, draft);
     state.config = await api('PUT', '/api/config', draft);
     state.setDraft = JSON.parse(JSON.stringify(state.config));
     state.setProvSelected = null;
@@ -4436,12 +4490,49 @@ async function saveSettings() {
     // A new skills folder is worth reading before the operator closes the panel.
     await checkSkills({ quiet: true });
     renderSettings();
-    // Writing the file is the easy half; the engine, the providers and the port
-    // are read at start, so the operator is asked what should happen next.
-    await askRestart();
+    // Only changes the engine or the server reads at start need the question.
+    if (restart) await askRestart();
+    else toast('Settings Saved', 'These take effect straight away.');
   } catch (err) {
     toast('Could not save settings', err.message);
   }
+}
+
+/**
+ * Which saved values only take effect when Synapse starts again. Everything else
+ * — roles, worker timers, log level, the tool census flag — is read at the moment
+ * it is used, so changing it is done the instant Save returns and asking for a
+ * restart would be noise. These are the paths the UI badges with "Restart".
+ */
+function restartNeeded(before, after) {
+  const changed = (path) => JSON.stringify(readPath(before, path) ?? null) !== JSON.stringify(readPath(after, path) ?? null);
+  const paths = [
+    'server.host',
+    'server.port',
+    'engine.type',
+    'engine.opencode.port',
+    'engine.opencode.binary',
+    'engine.opencode.home',
+    'engine.opencode.password',
+    'engine.opencode.startTimeoutMs',
+    'engine.opencode.skillPaths',
+  ];
+  if (paths.some(changed)) return true;
+  // Providers are one more thing the engine reads at start: adding a server,
+  // editing its address, its models or its key all change what it serves.
+  const shape = (c) =>
+    JSON.stringify(
+      (c?.engine?.opencode?.providers || []).map((p) => [
+        p.id,
+        p.type,
+        p.format,
+        p.name,
+        p.baseURL,
+        p.apiKey,
+        p.models,
+      ]),
+    );
+  return shape(before) !== shape(after);
 }
 
 /**
@@ -4457,7 +4548,7 @@ async function askRestart() {
     title: 'Settings Saved',
     message:
       'The config file is written. The engine, the providers and the server port are read when Synapse ' +
-      'starts, so a restart is what applies them. Changes to roles and skills apply straight away.',
+      'starts, so a restart is what applies them. Changes to roles, workers and logging apply straight away.',
     confirmLabel: 'Restart Now',
     okResult: 'restart',
     extra: { label: 'Revert All Changes', result: 'revert', danger: true },

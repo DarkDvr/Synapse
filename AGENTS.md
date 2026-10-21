@@ -197,6 +197,7 @@ src/
   toolstats.js        the tool-call census (data\tool-stats.json)
   probe.js            the tool probe: one turn per tool
   providers.js        provider types, ids, and "ask a server what it serves"
+  secrets.js          provider keys in data\provider-keys.json, never the config
   engine-update.js    is there a newer engine, and stop/install/start
   search.js           dependency-free DuckDuckGo search
   mcp/search-server.js stdio MCP server exposing websearch to the engine

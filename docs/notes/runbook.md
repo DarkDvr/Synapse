@@ -62,24 +62,31 @@ and the snapshots in place it is overkill on this machine — the operator's cal
 
 ## Restarting from inside the app
 
-Settings > Save Changes offers **Restart Now**, which posts `/api/restart`. The
-server does not stop and start itself: it hands the job to `restart.ps1` — the
-same script an operator runs — so there is one restart path and one set of pid-file
-rules.
+Settings > Save Changes offers **Restart Now** — but only when the saved values
+include something the engine or the server reads at start. Everything else
+(roles, worker timers, logging, the provider key) applies the moment Save returns,
+and the dialog would be noise.
 
-**How it hands over matters, and was measured.** A `detached: true` child of the
-server process **never ran** (three variants tried; the detached one was the only
-one that died), and a plain child is killed when `restart.ps1` stops the parent by
-pid. `cmd.exe /c start "" /min powershell.exe -File restart.ps1` is what works: the
-script becomes Windows' own process, outliving the server that launched it. The
-server then exits 600ms later, after the HTTP answer has flushed.
+A restart is **`start.bat` in a new console**, not a hidden process: this is a
+console application and the operator watches the engine in that window.
 
-It runs the way `restart.ps1` always does: hidden, with stdout in
-`%TEMP%\synapse.out` and stderr in `%TEMP%\synapse.err`. A console window that was
-running `start.bat` is not carried over — after an in-app restart the app is a
-background process and `logs\` is the place to read. The browser tab is polled back
-with `/api/status` and reloaded (closed first, if the browser allows a script to
-close it).
+```
+cmd /c start "" /D <root> start.bat restart
+```
+
+- `start.bat restart` waits ~3 s (`ping`, not `timeout`, which needs a console) so
+  the old process can release the port before the new one binds it.
+- The old process stops its engine, removes its pid file and exits **with code 2**.
+  `start.bat` reads that as "another console is taking over" and closes instead of
+  hitting `pause`, so there is exactly one window, one engine and one server.
+- `cmd /c start` is the only hand-off that works here: a `detached: true` child of
+  the server **never ran** (measured, three ways), and a plain child dies with the
+  parent.
+
+`restart.ps1` is still the right thing for a restart from a terminal — it reads
+both pid files and refuses anything under the desktop app's folder. The app no
+longer uses it, because it starts node hidden with output in `%TEMP%\synapse.out`,
+and the operator wants the window.
 
 ---
 

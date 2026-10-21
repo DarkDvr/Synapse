@@ -1700,6 +1700,21 @@ body[data-mode="single"] .keep-toggle { display: none; }
 
 /* ── providers: a list of servers, and one editor ──────────────────────── */
 .prov-list { display: grid; gap: 6px; }
+/* The add button is a secondary action: violet text on the panel's grey, never a
+   violet fill — Save Changes is the one filled button in the footer. */
+.btn-provider {
+  background: #24262b; border-color: #3a3d43; color: var(--violet-bright); font-weight: 600;
+}
+.btn-provider:hover { background: var(--violet-soft); border-color: var(--violet-line); color: #fff; }
+/* A value the engine reads when it starts. The badge is why the save dialog may
+   offer a restart, so it has to be visible before the operator saves. */
+.set-restart {
+  display: inline-block; margin-left: 6px; padding: 0 5px;
+  font-style: normal; font-size: 8.5px; font-weight: 700; letter-spacing: 0.07em;
+  text-transform: uppercase; color: #9a9ea6;
+  border: 1px solid #3a3d43; border-radius: 4px; line-height: 1.55;
+  vertical-align: 1px; white-space: nowrap;
+}
 .prov-row {
   display: flex; align-items: center; gap: 9px;
   padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px;

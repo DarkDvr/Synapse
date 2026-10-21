@@ -846,3 +846,21 @@ bold, italic, strikethrough and links: the range these models actually produce.
 - **Revert and Stop are red, not hover-red.** Both throw work away. Stop was a
   neutral icon that blushed on hover — the one destructive control in the row was
   something to discover; Revert was ghost-grey beside a violet Save.
+- **A field that needs a restart says so, and the save dialog asks only then.**
+  Server host/port, the engine's port, binary, home, password, start timeout and
+  the extra skill folders carry a small grey `RESTART` chip after the label, and
+  the Providers heading carries one for the whole section (`restartNeeded()` in
+  web/app.js lists the same paths by name). Everything else — roles, worker
+  timers, log level, the census flag, a provider key — is read at the moment it
+  is used, so saving it is done: the toast says "These take effect straight away"
+  and no dialog appears. Adding a key to a provider used to demand a restart; it
+  never needed one.
+- **Provider badges are a fixed vocabulary, and local is not a vendor.** The
+  engine's own providers are **OpenCode** (free tier, public key), **OC Go** and
+  **OC Zen** (paid plans, key in the engine); a configured provider is **Local**
+  when it points at this machine, whatever runs it, or its own name otherwise
+  (**DeepSeek**). The Providers tab lists the three engine providers as read-only
+  rows with their live model counts — "not connected" where the engine has none —
+  because that is the honest answer to "why can I not pick OC Zen".
+- **The add button is violet on grey, not a violet fill.** It is a secondary
+  action and Save Changes is the one filled button in the footer.

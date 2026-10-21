@@ -71,7 +71,7 @@
           "format": "openai",
           "name": "DeepSeek",
           "baseURL": "https://api.deepseek.com/v1",
-          "apiKey": "env:DEEPSEEK_API_KEY",
+          "apiKey": "",
           "models": [
             {
               "id": "deepseek-flash",

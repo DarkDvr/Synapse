@@ -63,7 +63,7 @@ function ollamaTagsUrl(root) {
  * name, a window when the server offers one) and an error is returned as a
  * sentence, never as a stack trace. The API key is never echoed back.
  */
-export async function fetchProviderModels({ baseURL, apiKey, format } = {}, { fetchImpl = fetch, timeoutMs = 8000 } = {}) {
+export async function fetchProviderModels({ baseURL, apiKey, format, type } = {}, { fetchImpl = fetch, timeoutMs = 8000 } = {}) {
   const root = String(baseURL || '').trim().replace(/\/+$/, '');
   if (!/^https?:\/\//i.test(root)) return { ok: false, models: [], error: 'The server URL must start with http:// or https://.' };
   const key = String(apiKey || '').trim();
@@ -100,6 +100,16 @@ export async function fetchProviderModels({ baseURL, apiKey, format } = {}, { fe
         notes.push(`listed no models at ${label(url)}`);
         continue;
       }
+      // A local runtime often knows each model's real window even when its
+      // OpenAI-shaped list does not carry one — LM Studio answers /api/v0/models
+      // with loaded_context_length (what it actually reserved) and
+      // max_context_length. Ask it before falling back to the engine's default.
+      if (type === 'local' && models.some((m) => !m.context)) {
+        const windows = await lmStudioWindows(root, fetchImpl, timeoutMs);
+        if (windows.size) {
+          for (const m of models) if (!m.context && windows.has(m.id)) m.context = windows.get(m.id);
+        }
+      }
       return { ok: true, models, error: '' };
     } catch (err) {
       notes.push(
@@ -116,6 +126,39 @@ export async function fetchProviderModels({ baseURL, apiKey, format } = {}, { fe
     }
   }
   return { ok: false, models: [], error: sentence(notes) };
+}
+
+/**
+ * LM Studio's own endpoint, which reports the window each model really has.
+ * Silently empty when the server is not LM Studio: the caller already has a list.
+ */
+async function lmStudioWindows(root, fetchImpl, timeoutMs) {
+  const windows = new Map();
+  const base = root.replace(/\/v1$/i, '');
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  timer.unref?.();
+  try {
+    const res = await fetchImpl(`${base}/api/v0/models`, {
+      headers: { accept: 'application/json' },
+      signal: controller.signal,
+    });
+    if (!res.ok) return windows;
+    const body = JSON.parse(await res.text());
+    const list = Array.isArray(body?.data) ? body.data : Array.isArray(body?.models) ? body.models : [];
+    for (const m of list) {
+      const id = String(m?.id || m?.model_key || '').trim();
+      if (!id) continue;
+      // The loaded length is the honest one: it is what the server reserved.
+      const n = Number.parseInt(m?.loaded_context_length ?? m?.max_context_length, 10);
+      if (Number.isFinite(n) && n > 0) windows.set(id, n);
+    }
+  } catch {
+    /* not LM Studio, or it went away: the list stands as it is */
+  } finally {
+    clearTimeout(timer);
+  }
+  return windows;
 }
 
 /** The endpoint as the operator sees it: /models or /api/tags. */

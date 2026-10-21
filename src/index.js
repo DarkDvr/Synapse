@@ -364,40 +364,43 @@ function openBrowser(url) {
 /**
  * Relaunch Synapse — the button in Settings > Save Changes.
  *
- * It does not re-implement stopping and starting: it hands the job to
- * `restart.ps1`, the same script an operator runs, which reads the pid files and
- * refuses anything under the desktop app's folder. Whatever the ordering (the
- * script stopping this process, or this process exiting first), exactly one new
- * server is left behind.
+ * The app is a console application: the operator watches the engine in the window
+ * `start.bat` opened, so a restart must open that window again rather than leave a
+ * hidden process somewhere. `start.bat` is the only launcher, and this spawns it
+ * in a *new* console with the `restart` argument, so the batch waits a few seconds
+ * for this process to release the port. This process then stops its engine and
+ * exits with code 2, which tells the old window's batch not to pause — the new
+ * window is the app now. One window, one engine, one process.
  */
 function restartSelf() {
-  const script = path.join(ROOT, 'restart.ps1');
-  if (!fs.existsSync(script)) {
-    bootLog.error(`cannot restart: ${script} is missing`);
-    return { ok: false, error: `Restart needs ${script}, which is missing.` };
+  const bat = path.join(ROOT, 'start.bat');
+  if (!fs.existsSync(bat)) {
+    bootLog.error(`cannot restart: ${bat} is missing`);
+    return { ok: false, error: `Restart needs ${bat}, which is missing.` };
   }
-  bootLog.info('restart requested from the UI');
+  bootLog.info('restart requested from the UI - opening a new console');
   try {
-    // `cmd /c start` hands the script to Windows as its own process. A *detached*
-    // child of this one does not survive here — measured: it never ran — and a
-    // plain child dies with the parent when the script stops this process.
-    const child = spawn(
-      'cmd.exe',
-      ['/c', 'start', '', '/min', 'powershell.exe', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', script],
-      { cwd: ROOT, stdio: 'ignore', windowsHide: true },
-    );
+    // `cmd /c start` gives the batch file a console of its own. A *detached* child
+    // of this process was measured not to survive here, and a plain child dies
+    // with the parent — `start` is the one form that outlives both.
+    const child = spawn('cmd.exe', ['/c', 'start', '', '/D', ROOT, bat, 'restart'], {
+      cwd: ROOT,
+      stdio: 'ignore',
+      windowsHide: false,
+    });
     child.unref();
   } catch (err) {
-    bootLog.error(`could not start the restarter: ${err.message}`);
+    bootLog.error(`could not open the new console: ${err.message}`);
     return { ok: false, error: err.message };
   }
   // Let the HTTP response reach the browser before this process goes down.
-  setTimeout(() => shutdown('restart'), 600);
+  setTimeout(() => shutdown('restart', 2), 600);
   return { ok: true };
 }
 
 let shuttingDown = false;
-async function shutdown(signal) {  if (shuttingDown) return;
+async function shutdown(signal, code = 0) {
+  if (shuttingDown) return;
   shuttingDown = true;
   const app = logger.channel('app');
   app.info(`${signal} received, shutting down...`);
@@ -405,7 +408,7 @@ async function shutdown(signal) {  if (shuttingDown) return;
   try { await engine?.stop(); } catch { /* ignore */ }
   try { fs.rmSync(PID_FILE, { force: true }); } catch { /* ignore */ }
   app.info('Synapse stopped.');
-  process.exit(0);
+  process.exit(code);
 }
 
 process.on('SIGINT', () => shutdown('SIGINT'));

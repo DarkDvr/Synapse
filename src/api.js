@@ -8,6 +8,8 @@ import { ensurePlan, readPlan, readRuns, briefSession, logPlanState, BRIEF_KEY, 
 import { skillRules, describeSkills } from './skills.js';
 import { PROJECTS_ROOT, SKILLS_DIR } from './paths.js';
 import { fetchProviderModels } from './providers.js';
+import { providerId } from './providers.js';
+import { setProviderKey, providerKeyState, maskKey } from './secrets.js';
 
 export function createApi({ getConfig, applyConfig, engine, logger, getBootError, projects, toolStats, probe, modelCache, inspectModel: inspectRef, probeDir, runs, engineUpdate, restart, notify, guard }) {
   const app = logger.channel('app');
@@ -121,11 +123,28 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
       const pw = c.engine.opencode.password || '';
       c.engine.opencode.password = '';
       c.engine.opencode.passwordSet = Boolean(pw);
+      // A provider's key is never sent to the browser. The screen shows a mask
+      // and knows whether one exists; the value itself stays on this side.
+      c.engine.opencode.providers = (c.engine.opencode.providers || []).map((p) => {
+        const stored = providerKeyState(p.id);
+        const literal = String(p.apiKey || '');
+        const fromEnv = /^env:/i.test(literal);
+        return {
+          ...p,
+          apiKey: fromEnv ? literal : '',
+          apiKeySet: stored.set || Boolean(literal && !fromEnv),
+          apiKeyMasked: stored.set ? stored.masked : literal && !fromEnv ? maskKey(literal) : '',
+          apiKeyFrom: stored.set ? 'stored' : fromEnv ? literal : literal ? 'config' : '',
+        };
+      });
     }
     return c;
   };
 
-  // When the UI saves config with an empty password, keep the existing one.
+  // When the UI saves config with an empty password, keep the existing one — and
+  // a typed provider key moves to data\provider-keys.json instead of the config
+  // file. `null` means the operator removed the key; `''` means they did not
+  // touch it (the browser never received the literal, so it cannot send it back).
   function reconcile(incoming) {
     const next = structuredClone(incoming || {});
     if (next.engine?.opencode) {
@@ -134,6 +153,31 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
         next.engine.opencode.password = getConfig().engine?.opencode?.password || '';
       }
       delete next.engine.opencode.passwordSet;
+    }
+    const list = next.engine?.opencode?.providers;
+    if (Array.isArray(list)) {
+      // The id is what a key is filed under, and a provider added in Settings has
+      // none until its first save — so decide it here, with the same rule
+      // config.normalize uses, or the new provider's key would be filed under ''.
+      const taken = [];
+      for (const p of list) {
+        if (!p.id) p.id = providerId(p.name, taken);
+        if (p.id) taken.push(p.id);
+      }
+      for (const p of list) {
+        delete p.apiKeySet;
+        delete p.apiKeyMasked;
+        delete p.apiKeyFrom;
+        delete p.apiKeyRemoved;
+        const key = p.apiKey;
+        if (key === null) {
+          if (p.id) setProviderKey(p.id, '');
+          p.apiKey = '';
+        } else if (typeof key === 'string' && key.trim() && !/^env:/i.test(key.trim())) {
+          if (p.id) setProviderKey(p.id, key.trim());
+          p.apiKey = '';
+        }
+      }
     }
     return next;
   }

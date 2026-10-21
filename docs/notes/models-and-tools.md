@@ -155,8 +155,16 @@ the OpenAI-compatible URL either way — Ollama serves that at `/v1`, which is w
 the same provider definition works for both — so `format` only decides which list
 endpoint `Refresh List` asks *first*: `src/providers.js` tries the other one
 automatically (a 404 at `/models` falls through to `/api/tags`, and a refused
-connection stops after one attempt). The measured result here: a local server
-listing eight models while the config named one, found by exactly that button.
+connection stops after one attempt).
+
+**Ask the runtime what window it reserved.** An OpenAI-shaped `/models` answer
+carries no context at all, so a local provider's list also asks LM Studio's
+`/api/v0/models`, whose `loaded_context_length` is what the server actually
+reserved and `max_context_length` is what the model supports. Measured: 39,168
+and 262,144 for a 27B at IQ3_S. Without it every discovered model falls back to
+the engine's **200,000 default**, which is a lie in both directions for a 16 GB
+card. A remote vendor is not probed (`type: openai`) — one request fewer to a
+billed endpoint, for an answer it does not have.
 
 **A provider removed in Settings stops being served.** The engine's `provider`
 map is rebuilt from Synapse's config on every start (it used to be merged into
@@ -179,23 +187,29 @@ in the picker with a **DeepSeek** badge beside its models:
   ] }
 ```
 
-**The key never goes in the config file.** `config\synapse.config.json` is tracked
-by git, so `apiKey` takes three forms, resolved by `providerApiKey()` in
-`src/config.js` at boot:
+**The key never goes in the config file.** It lives in `data\provider-keys.json` —
+the pattern Peri.Scope uses for the secrets its own config must not carry: a small
+JSON file beside the app's data, which `.gitignore` already covers. The tracked
+config keeps only the provider's shape. `providerApiKey()` in `src/config.js`
+resolves in this order:
 
-| written | means |
+| stored in | means |
 |---|---|
-| `"env:DEEPSEEK_API_KEY"` | read that variable (`setx DEEPSEEK_API_KEY "sk-…"`, then restart Synapse) |
-| `""` | read the conventional `<ID>_API_KEY` if it is set; otherwise a keyless server, which is not an error |
-| `"sk-…"` | a literal key, for a server that has no environment. Then never `git add -A` the config |
+| `data\provider-keys.json` | what the operator typed in Settings — wins over everything |
+| `"apiKey": "env:DEEPSEEK_API_KEY"` | read that variable (`setx …`, then restart Synapse) |
+| `"apiKey": ""` | the conventional `<ID>_API_KEY` if it is set; otherwise a keyless server, which is not an error |
 
-The value that reaches the engine is written into the engine's own config inside
-`data\`, which `.gitignore` covers, and is never logged — a missing variable is one
-warning line at boot ("`DeepSeek: env DEEPSEEK_API_KEY is not set - its models will
-be refused until you set it and restart Synapse`") instead of a 401 hours into a
-project. Everything downstream — the model cache, the picker, the probe, the role
-cards — treats these models exactly like the engine's own, and the badge label comes
-from `PROVIDER_LABELS` in `web\app.js`.
+A key typed in the Settings field is sent once, over localhost, and written to
+that file by `reconcile()` in `src/api.js`; the config is then saved with an empty
+`apiKey`. The browser is never *given* a key: `toClientConfig()` returns
+`apiKey: ""` plus `apiKeySet`, `apiKeyMasked` (`sk-liv***7df`) and `apiKeyFrom`, so
+the screen can say "a key is stored" without holding one. **Remove Key** sends
+`apiKey: null`, which deletes the entry.
+
+Everything downstream — the model cache, the picker, the probe, the role cards —
+treats these models exactly like the engine's own. The badge comes from
+`providerLabel()` in `web\app.js`: **Local** for anything on this machine, the
+provider's own name otherwise.
 
 What the vendor's docs say about these two (Oct 2026, not measured here): **1M
 context, 384K max output**, tool calls on both, vision on Flash only, thinking mode

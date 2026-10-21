@@ -17,36 +17,47 @@ const check = (name, ok, detail = '') => {
   console.log(`${ok ? 'ok  ' : 'FAIL'}  ${name}${ok || !detail ? '' : ` — ${detail}`}`);
 };
 
+// These tests must not touch the machine's real key store: `providerApiKey`
+// reads data/provider-keys.json by default, and a key in it would answer every
+// case below. Each call passes an empty store; one case passes its own.
+const noStore = () => '';
+
 // ── the three forms a key can take ───────────────────────────────
 const withEnv = (vars) => new Proxy({}, { get: (_, k) => (typeof k === 'string' ? vars[k] : undefined) });
 
-const explicit = providerApiKey({ id: 'deepseek', apiKey: 'env:DEEPSEEK_API_KEY' }, withEnv({ DEEPSEEK_API_KEY: 'sk-live' }));
+const explicit = providerApiKey({ id: 'deepseek', apiKey: 'env:DEEPSEEK_API_KEY' }, withEnv({ DEEPSEEK_API_KEY: 'sk-live' }), noStore);
 check('env: form reads the variable', explicit.key === 'sk-live', explicit.key);
 check('env: form is not a literal', !String(explicit.key).includes('env:'), explicit.key);
 check('env: form reports where it came from', explicit.source === 'env DEEPSEEK_API_KEY', explicit.source);
 check('env: form present is not missing', explicit.missing === false);
 
-const absent = providerApiKey({ id: 'deepseek', apiKey: 'env:DEEPSEEK_API_KEY' }, withEnv({}));
+const absent = providerApiKey({ id: 'deepseek', apiKey: 'env:DEEPSEEK_API_KEY' }, withEnv({}), noStore);
 check('env: form with no variable is missing, not empty', absent.missing === true, JSON.stringify(absent));
 check('env: form with no variable yields no key', absent.key === '', absent.key);
 
-const literal = providerApiKey({ id: 'vendor', apiKey: 'sk-direct' }, withEnv({}));
+const literal = providerApiKey({ id: 'vendor', apiKey: 'sk-direct' }, withEnv({}), noStore);
 check('a literal key passes through', literal.key === 'sk-direct', literal.key);
 check('a literal key is never "missing"', literal.missing === false);
 check('a literal key says it came from config', literal.source === 'config', literal.source);
 
 // A keyless local server must stay quiet: no warning, no key, no fuss.
-const keyless = providerApiKey({ id: 'bionic', apiKey: '' }, withEnv({}));
+const keyless = providerApiKey({ id: 'bionic', apiKey: '' }, withEnv({}), noStore);
 check('a keyless server is not an error', keyless.missing === false && keyless.key === '', JSON.stringify(keyless));
 
 // …but a blank entry still picks up the conventional variable when one is set,
 // which is what every SDK on this machine does.
-const conventional = providerApiKey({ id: 'deepseek', apiKey: '' }, withEnv({ DEEPSEEK_API_KEY: 'sk-conv' }));
+const conventional = providerApiKey({ id: 'deepseek', apiKey: '' }, withEnv({ DEEPSEEK_API_KEY: 'sk-conv' }), noStore);
 check('a blank key falls back to <ID>_API_KEY', conventional.key === 'sk-conv', conventional.key);
 check('the fallback names the variable it used', conventional.source === 'env DEEPSEEK_API_KEY', conventional.source);
 
-const dashed = providerApiKey({ id: 'open-code-direct', apiKey: '' }, withEnv({ OPEN_CODE_DIRECT_API_KEY: 'k' }));
+const dashed = providerApiKey({ id: 'open-code-direct', apiKey: '' }, withEnv({ OPEN_CODE_DIRECT_API_KEY: 'k' }), noStore);
 check('a dashed id makes a valid variable name', dashed.key === 'k', dashed.source);
+
+// A key typed in Settings is stored beside the app's data and outranks both the
+// environment and the config — that is the one the operator actually entered.
+const storedKey = providerApiKey({ id: 'deepseek', apiKey: 'env:DEEPSEEK_API_KEY' }, withEnv({ DEEPSEEK_API_KEY: 'from-env' }), () => 'from-store');
+check('a stored key outranks the environment', storedKey.key === 'from-store', storedKey.source);
+check('a stored key is named as such', storedKey.source === 'stored', storedKey.source);
 
 // ── the config keeps a hosted vendor next to a local server ───────
 const sample = normalize({
@@ -144,7 +155,11 @@ check(
 const repoConfig = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, '..', 'config', 'synapse.config.json'), 'utf8'));
 const repoDs = (repoConfig.engine?.opencode?.providers || []).find((p) => p.id === 'deepseek');
 check('the shipped config registers DeepSeek', Boolean(repoDs));
-check('the shipped config holds no key', repoDs?.apiKey === 'env:DEEPSEEK_API_KEY', repoDs?.apiKey);
+check(
+  'the shipped config holds no key',
+  !String(repoDs?.apiKey || '').trim() || /^env:/i.test(String(repoDs.apiKey)),
+  String(repoDs?.apiKey || '').slice(0, 3),
+);
 check(
   'the shipped config names the two official models',
   JSON.stringify(repoDs?.models?.map((m) => m.id)) === JSON.stringify(['deepseek-flash', 'deepseek-v4-pro']),
@@ -243,6 +258,46 @@ check(
   refusedBoth.ok === false && /refused the connection/.test(refusedBoth.error) && !/api\/tags/.test(refusedBoth.error),
   refusedBoth.error,
 );
+
+// ── the window a local runtime reports, when its list does not ───
+// LM Studio's OpenAI list carries no context at all, but /api/v0/models knows the
+// loaded length. Without this, every model discovered from a local server looks
+// like the engine's 200,000 default.
+calls.length = 0;
+const windows = await fetchProviderModels(
+  { baseURL: 'http://localhost:1235/v1', type: 'local' },
+  {
+    fetchImpl: async (url) => {
+      calls.push({ url });
+      if (url.endsWith('/api/v0/models')) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              data: [
+                { id: 'qwen3.8-27b-ud', loaded_context_length: 39168, max_context_length: 262144 },
+                { id: 'gemma-4-e4b-it', max_context_length: 131072 },
+              ],
+            }),
+        };
+      }
+      return { ok: true, status: 200, text: async () => JSON.stringify({ data: [{ id: 'qwen3.8-27b-ud' }, { id: 'gemma-4-e4b-it' }] }) };
+    },
+  },
+);
+check('a local list asks for the reported windows', calls.length === 2 && /\/api\/v0\/models$/.test(calls[1].url), JSON.stringify(calls.map((c) => c.url)));
+check('the loaded length wins over the maximum', windows.models.find((m) => m.id === 'qwen3.8-27b-ud')?.context === 39168, JSON.stringify(windows.models));
+check('a model with only a maximum uses it', windows.models.find((m) => m.id === 'gemma-4-e4b-it')?.context === 131072, JSON.stringify(windows.models));
+
+// A vendor is not asked: its OpenAI list is all there is, and a stray probe would
+// be one more request to a billed endpoint for an answer it does not have.
+calls.length = 0;
+await fetchProviderModels(
+  { baseURL: 'https://api.deepseek.com/v1', type: 'openai' },
+  { fetchImpl: async (url) => { calls.push({ url }); return { ok: true, status: 200, text: async () => JSON.stringify({ data: [{ id: 'x' }] }) }; } },
+);
+check('a remote provider is not probed for windows', calls.length === 1, String(calls.length));
 
 calls.length = 0;
 const noScheme = await fetchProviderModels({ baseURL: 'localhost:1234' }, { fetchImpl: stub('{}') });

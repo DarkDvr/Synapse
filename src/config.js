@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { CONFIG_FILE, CONFIG_DIR } from './paths.js';
 import { providerType, providerId } from './providers.js';
+import { getProviderKey } from './secrets.js';
 
 export const DEFAULTS = {
   server: {
@@ -123,8 +124,13 @@ function isPlainObject(v) {
  * *asked* for a variable that is not set, which is a mistake worth saying out
  * loud once, at boot.
  */
-export function providerApiKey(provider, env = process.env) {
+export function providerApiKey(provider, env = process.env, stored = getProviderKey) {
   const id = String(provider?.id || '').trim();
+  // A key typed in Settings lives in data\provider-keys.json — never in the
+  // config file — and that is the one to use when it exists. The config's own
+  // `apiKey` is then only for `env:NAME` or a deliberately hand-written literal.
+  const kept = typeof stored === 'function' ? stored(id) : '';
+  if (kept) return { key: kept, source: 'stored', missing: false };
   const raw = String(provider?.apiKey || '').trim();
   const explicit = /^env:(.+)$/i.exec(raw);
   if (explicit) {
