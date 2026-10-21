@@ -1635,6 +1635,23 @@ function newSessionRow(projectId) {
 }
 
 const isBusy = (sessionId) => state.busySessions.has(sessionId);
+/**
+ * Is anything being done on this session's behalf?
+ *
+ * The engine only knows about its own turns, and the Architect's turn ends the
+ * moment it delegates: for the whole worker run that follows, the engine says
+ * the session is idle. The rail then showed a yellow breathing dot while the
+ * Architect was thinking and a dead one while a worker built the thing — the
+ * exact opposite of when the work is happening. So a run the session started
+ * counts as work too.
+ */
+const sessionWorking = (sessionId) => {
+  if (!sessionId) return false;
+  if (isBusy(sessionId)) return true;
+  const project = projectOf(sessionId);
+  const run = project ? runIn(project) : null;
+  return Boolean(run && (!run.architect || run.architect === sessionId));
+};
 const lastProgress = (sessionId) => state.busySince.get(sessionId) || 0;
 // A running session that has produced nothing for this long is not "working",
 // it is waiting on an upstream request that is never coming back. A tool that
@@ -1648,14 +1665,13 @@ const isStalled = (sessionId) =>
   !state.toolsInFlight.has(sessionId) &&
   Date.now() - lastProgress(sessionId) > STALL_MS;
 
-function liveDot(sessionId, { clickable = true } = {}) {
-  const busy = isBusy(sessionId);
+function liveDot(sessionId, { clickable = true, on = sessionWorking(sessionId) } = {}) {
   const stalled = isStalled(sessionId);
   if (stalled && clickable) {
     return `<button class="tree-live on stalled" data-interrupt="${esc(sessionId)}" title="No response for over ${Math.round(STALL_MS / 1000)}s — click to interrupt"></button>`;
   }
   if (stalled) return '<span class="tree-live on stalled" title="Stalled"></span>';
-  return `<span class="tree-live${busy ? ' on' : ''}" title="${busy ? 'Working' : ''}"></span>`;
+  return `<span class="tree-live${on ? ' on' : ''}" title="${on ? 'Working' : ''}"></span>`;
 }
 
 /**
@@ -1684,16 +1700,16 @@ function sessionRow(s) {
   // Recency lives in the tooltip: the name needs the width more than "8m ago" does,
   // and the list is already newest-first.
   const when = relTime(s.updated || s.created);
-  const busy = isBusy(s.id);
+  const busy = sessionWorking(s.id);
   const waiting = waitingFor(s.id);
   const waitNote = waiting === 'answer' ? ' · waiting on your answer' : waiting === 'decision' ? ' · waiting for your decision' : '';
-  return `<div class="tree-row session${current ? ' is-current' : ''}" data-session="${esc(s.id)}">
+  return `<div class="tree-row session${current ? ' is-current' : ''}${waiting ? ' has-question' : ''}" data-session="${esc(s.id)}">
     <button class="tree-open" title="${esc(title)}${when ? ` · ${esc(when)}` : ''}${busy ? ' · working' : ''}${waitNote}">
       <span class="tree-name">${esc(title)}</span>
     </button>
     <span class="tree-actions">
+      ${waiting ? `<span class="tree-wait" title="${waiting === 'answer' ? 'Waiting on your answer' : 'Waiting for your decision'}" aria-label="${waiting === 'answer' ? 'Waiting on your answer' : 'Waiting for your decision'}">?</span>` : ''}
       <button class="tree-edit ic-edit" data-rename="${esc(s.id)}" title="Rename Session" aria-label="Rename Session">✎</button>
-      ${waiting ? `<span class="tree-wait" title="${waiting === 'answer' ? 'Waiting on your answer' : 'Waiting for your decision'}">${waiting === 'answer' ? 'Answer' : 'Decide'}</span>` : ''}
       ${liveDot(s.id)}
       <button class="tree-x" data-del-session="${esc(s.id)}" title="Delete Session" aria-label="Delete Session">✕</button>
     </span>
@@ -1717,7 +1733,7 @@ function renderTree() {
         ${p.exists === false ? '<span class="tree-missing" title="This folder no longer exists — sessions cannot run here">!</span>' : ''}
         <span class="tree-actions">
           ${p.general ? '' : `<button class="tree-edit ic-edit" data-rename-project="${esc(p.id)}" title="Rename Project" aria-label="Rename Project">✎</button>`}
-          ${liveDot((p.sessions.find((s) => isBusy(s.id)) || {}).id || '__none__', { clickable: false })}
+          ${liveDot('', { clickable: false, on: p.sessions.some((s) => sessionWorking(s.id)) })}
           ${p.general ? '' : `<button class="tree-x" data-del-project="${esc(p.id)}" title="Delete Project" aria-label="Delete Project">✕</button>`}
         </span>
       </div>
@@ -2376,6 +2392,10 @@ function handleRunEvent(ev) {
     return;
   }
   renderRoleActivity();
+  // The rail's dot says whether anything is being done for a project, and a run
+  // starting or ending is exactly that — the engine's own busy state cannot see
+  // a worker, because the Architect's turn is already over by then.
+  if (ev.type !== 'run.progress') renderTree();
   // The plan pane overlays the live run too (a running task renders as `doing`
   // whatever the file says), so it needs to know when a run starts and stops — but
   // not on every tool call: that would rebuild the rail for nothing.
