@@ -413,16 +413,18 @@ Non-obvious, all verified on 2.0.30:
 
 ## The pipeline: ideas, design, a build, and an adversary
 
-The seven cards are `architect, inventor, coder-1, designer, coder-2, hacker,
+The seven cards are `architect, inventor, coder-1, designer, coder-2, qc,
 coder-3`. `auditor` and `critic` are retired: the Architect verifies its own
-delegations against the disk, so a second confirmation was redundant, and the two
-slots are better spent on an idea generator and an adversary. A config written
-before the rename is migrated once (`normalize()` folds `auditor`→`inventor`,
-`critic`→`hacker`), so a saved model choice is never lost.
+delegations against the disk, so a second confirmation was redundant. The
+adversary slot is **QC** (quality control) — the role that judges the build the
+way an ordinary person meets it. A config written before a rename is migrated once
+(`normalize()` folds `auditor`→`inventor`, `critic`→`hacker`, `hacker`→`qc`), and a
+plan file written before it is translated on read (`LEGACY_ROLE` in `plans.js`), so
+neither a saved model choice nor an existing plan is lost.
 
 The pipeline is a **menu**, not a checklist: the Architect picks the phases per
 project and records them in the plan's `phases`. A clock pays for invent → design
-→ build the shell → wire it → hack → fix → re-hack; a word-count CLI pays for two
+→ build the shell → wire it → QC → fix → re-check; a word-count CLI pays for two
 tasks. Roles are identities plus one mandate each (`ROLE_MANDATES` in
 `plans.js`), and each owns one folder:
 
@@ -430,13 +432,13 @@ tasks. Roles are identities plus one mandate each (`ROLE_MANDATES` in
 |---|---|---|
 | inventor | `.synapse/ideas/` | `ideas-1.md`, ranked, with a one-line why and effort |
 | designer | `.synapse/design/` | `design.md` (the spec) + `mock-N.html` |
-| hacker | `.synapse/reports/` | `hack-N.md`: ids `H1…`, severity, exact repro |
+| qc | `.synapse/qc_findings/` | `qc-N.md`: ids `Q1…`, severity, exact repro |
 | coders | the project | `bin/` |
 
 **The file contract is the point.** `.synapse/` holds `requirement.md` (written by
 the harness from the operator's own message, append-only — never a model's
 paraphrase), `plan.json`, `features.json` (confirmed + rejected, every confirmed
-item naming the task that delivers it), `ideas/`, `design/`, `reports/` and
+item naming the task that delivers it), `ideas/`, `design/`, `qc_findings/` and
 `runs.jsonl`. Each brief is assembled from those files, so a worker receives the
 operator's words and the confirmed features verbatim, and the rejected ones are
 never passed on.
@@ -467,16 +469,16 @@ thinking**; 13% of the time in tools, the rest in generation.
   phase`. "The plan is finished" also means every declared phase is covered, which
   is what stopped the missing-summary note firing at 10:59 while the Architect was
   still writing the plan.
-- **A re-hack is a check, not a second hunt.** Round 1 (38m) found nine issues;
-  round 2 (32m) re-verified them and opened a new matrix ("every UTC offset from
-  -12 to +14") for two off-path edges; round 3 (6m) re-ran the repros and the
-  suites and stamped SHIP. The cheap round is the model: the brief now says a
-  re-hack re-runs the listed repros *and nothing else*, and anything new goes in
-  an "observed, not fixed" list.
+- **A second QC pass is a check, not a new hunt.** Round 1 (38m) found nine
+  issues; round 2 (32m) re-verified them and opened a new matrix ("every UTC
+  offset from -12 to +14") for two off-path edges; round 3 (6m) re-ran the repros
+  and the suites and stamped SHIP. The cheap round is the model: the brief now
+  says a second pass re-runs the listed repros *and nothing else*, and anything
+  new goes in an "observed, not fixed" list.
 - **A task that runs long gets slower per turn.** Throughput by prompt size, same
   model: **157 tok/s under 50k, 145 at 50–100k, 117 at 100–150k, 68 at 150–200k**.
   Every long task here finished at 212–290k, and its second half ran at half the
-  speed of its first (t2 151→76, t4 167→75, t5 165→82). The Hacker hit 290k and
+  speed of its first (t2 151→76, t4 167→75, t5 165→82). QC hit 290k and
   auto-compacted (a 228k-token summarise call). The causes are visible: 84% of
   turns issued exactly one tool call, and the engine stores `reasoning` parts in
   the transcript (985 of them here), so thinking is re-sent every turn —
@@ -505,8 +507,8 @@ thinking**; 13% of the time in tools, the rest in generation.
   `context: {turns, peak, generated, thinking, compactions, thinkShare}` and in the
   app log, so an audit reads the run log instead of the engine database. Not on the
   role card: the operator asked for the chat and the log.
-- **The Hacker's default focus was dialled down.** `app` now judges the operator's
-  own screen and machine, calls another hemisphere / another screen size / a
+- **QC's default focus was dialled down.** `app` now judges the operator's own
+  screen and machine, calls another hemisphere / another screen size / a
   hand-edited constant an observation rather than a finding, and says a minor or
   nice-to-have is a note, not a reason for another fix round.
 - **Harness alarms judge what a shell does, not what it names.** Eleven of the
@@ -555,19 +557,24 @@ the ✎ button on the role card, which now holds three things:
 
 - **Skills** — ticked = allowed. Ticking every skill stores *no* list, because
   that is the same thing and it lets a skill added later reach the role.
-- **Focus** (the Hacker only) — `app` by default, `security` when needed.
+- **Focus** (QC only) — `app` by default, `security` when needed.
 - **Instructions** — free text appended to the role's brief on every turn
   (`roles.<id>.instructions`, capped at 2000 characters).
 
-**The Hacker has a volume dial, and it starts low.** `roles.hacker.focus` is
-`app` unless it is set to `security`. In `app` the mandate is what a *person*
-does: empty and whitespace input, text in a number field, a negative or enormous
-number, accented letters, a missing or wrong file, a path with spaces, a flag
-that does not exist, starting from the wrong folder, Enter twice, a window closed
-half-way — and it is told, in those words, not to build hostile environments, run
-locale or interpreter matrices, or fuzz in loops. `security` is the same role
-with the gloves off. Both carry a proportion rule ("the cases with the best
-chance of happening beat a complete matrix"), because the 197-second
+**QC has a volume dial, and it starts low.** `roles.qc.focus` is `app` unless it
+is set to `security`, and in `app` it judges the build the way an ordinary,
+non-technical person meets it, in this order: **wording** (labels, errors and
+reports written in a coder's voice or in jargon — a message the reader cannot
+understand is a defect, and QC quotes it and gives the plain version), **design
+flaws** (clipped or overlapping text, broken layout, unreadable contrast at the
+sizes the project must support), **missing input validation**, and **states that
+lie** (silence where something happened, a wrong status, work lost on refresh).
+The old `Hacker` tested an app the way a person types into it; QC is that, plus
+the reading a non-technical user does. It is still told, in those words, not to
+build hostile environments, run locale or interpreter matrices, or fuzz in loops —
+`security` is the same role with the gloves off. Both carry a proportion rule ("the
+cases with the best chance of happening beat a complete matrix"), because the
+197-second
 locale-matrix run was technically correct and useless for a small tool.
 
 **Ideas are hidden from coders.** `roleReadRules` denies `read` on
@@ -605,8 +612,8 @@ ship the copy Synapse should use, and leave the global one alone.
 **What each role gets by default.** Architect `visual-review`; Designer all four
 design skills; every coder `code-craft` plus `visual-review` (a coder that can
 screenshot its own shell before reporting is cheaper than a round trip); the
-Inventor and the Hacker get none — the Hacker's work is the focus dial, and an
-ideas role handed design skills starts designing.
+Inventor and QC get none — QC's work is the focus dial, and an ideas role handed
+design skills starts designing.
 
 **One skill was deliberately not shipped, and why matters.**
 `using-superpowers` reads like coding guidance and is not: it is a rule about

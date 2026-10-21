@@ -21,9 +21,15 @@ import path from 'node:path';
 
 // The roles the topology has cards for, in card order. The `auditor` and the
 // `critic` were retired: the Architect verifies its own delegations against the
-// disk, so a second confirmation was redundant, and the two slots are better
-// spent on an idea generator and an adversary.
-export const ROLES = ['architect', 'inventor', 'coder-1', 'designer', 'coder-2', 'hacker', 'coder-3'];
+// disk, so a second confirmation was redundant. The adversary slot is now **QC**
+// (quality control): the role that reads the build the way a non-technical person
+// will, and says where it confuses, clips or lies.
+export const ROLES = ['architect', 'inventor', 'coder-1', 'designer', 'coder-2', 'qc', 'coder-3'];
+
+/** Role ids that existed before a rename, mapped to the id that replaced them.
+ *  A plan file is the Architect's, not ours, so old plans are translated as they
+ *  are read rather than rewritten. */
+const LEGACY_ROLE = { hacker: 'qc' };
 
 // `blocked` is the one that matters: the work cannot proceed without the
 // operator, which is why it is the one painted red.
@@ -44,7 +50,7 @@ const PHASE_ROLES = {
   invent: ['inventor'],
   design: ['designer'],
   build: ['coder-1', 'coder-2', 'coder-3'],
-  hack: ['hacker'],
+  hack: ['qc'],
 };
 
 /**
@@ -340,7 +346,11 @@ export function readPlan(dir) {
       }
     }
 
-    const role = asText(source.role) || 'architect';
+    // The role id, translated from names that no longer exist. The Hacker became
+    // QC, and a plan written before the rename must keep working: translating on
+    // read is cheaper and safer than asking the Architect to rewrite old plans.
+    const rawRole = asText(source.role);
+    const role = LEGACY_ROLE[rawRole] || rawRole || 'architect';
     if (source.role && !ROLES.includes(role)) {
       problems.push(`${where} names an unknown role "${role}" (cards: ${ROLES.join(', ')})`);
     }
@@ -540,15 +550,24 @@ const ROLE_MANDATES = {
     'settled to two decimal places is not a design decision. If you measure the same thing twice, put the number',
     'in the spec and move on.',
   ].join(' '),
-  hacker: [
-    'You are the Hacker. Use the build the way the operator will, then the way a person in a hurry will, and report',
-    'what would actually stop them or mislead them. Do not fix anything and do not edit the build.',
-    'Write the findings to .synapse/reports/hack-1.md (create the folder): each with an id (H1, H2...), a severity',
-    '(critical, major, minor, nice-to-have), the exact command and input that reproduces it, what happened and what',
-    'should have happened. Then one line per area you checked, not a matrix. Batch: when you need several files or',
-    'several probes, ask for them in one turn, and run a suite once per batch of changes rather than after every',
-    'edit - every extra turn is a full round-trip, and everything you did stays in your context and is paid for',
-    'again on every later turn.',
+  qc: [
+    'You are QC - quality control. You judge the build a real, non-technical person will meet, not the code:',
+    'use it the way they will, then the way someone in a hurry will, and report what confuses them, misleads',
+    'them, clips in front of them or stops them.',
+    'Look for four things, in this order. (1) Wording: text, labels, buttons, errors and reports written in a',
+    'coder\'s voice or in technical jargon, where the reader is an ordinary person. A message they cannot',
+    'understand is a defect, not a nit - quote what it said and give the plain version. (2) Design flaws:',
+    'clipped or overlapping text and controls, broken layout, unreadable contrast, at each size the project',
+    'must support. (3) Missing input validation: anything a person can type or paste that crashes, is',
+    'silently accepted, or produces a wrong answer. (4) Missing or dishonest states: no feedback where',
+    'something happened, a status that is not true, work lost on refresh or on a second click.',
+    'Do not fix anything and do not edit the build.',
+    'Write the findings to .synapse/qc_findings/qc-1.md (create the folder): each with an id (Q1, Q2...), a',
+    'severity (critical, major, minor, nice-to-have), the exact command and input that reproduces it, what',
+    'happened and what should have happened. Then one line per area you checked, not a matrix. Batch: when',
+    'you need several files or several probes, ask for them in one turn, and run a suite once per batch of',
+    'changes rather than after every edit - every extra turn is a full round-trip, and everything you did',
+    'stays in your context and is paid for again on every later turn.',
   ].join(' '),
   'coder-1': [
     'You are a Coder. Build exactly what the task names and nothing else: the plan, the confirmed features and the',
@@ -558,34 +577,36 @@ const ROLE_MANDATES = {
   ].join(' '),
 };
 
-// How hard the Hacker pushes. `app` is the default and the honest one for most
-// projects: a person typing something wrong is what actually breaks a small
-// tool, and an hour of hostile-environment construction answers a question
-// nobody asked. `security` is the same role with the gloves off, one setting
-// away in the role card's ✎ dialog.
-const HACKER_FOCUS = {
+// How hard QC pushes. `app` is the default and the honest one for most projects:
+// the ordinary person using the thing is what breaks a small tool or makes it
+// confusing, and an hour of hostile-environment construction answers a question
+// nobody asked. `security` is the same role with the gloves off, one setting away
+// in the role card's ✎ dialog.
+const QC_FOCUS = {
   app: [
-    'Focus: real use, not security. The user is a person typing into this app or running this command. Test what',
-    'they actually do - empty and whitespace-only input, text where a number belongs, a very long line, accented',
-    'letters and emoji, a missing file, the wrong file, a path with spaces, an option that does not exist, starting',
-    'it from the wrong folder, pressing Enter twice, closing the window half-way. Judge what they would see on',
-    'their own screen and machine: a crash, a wrong answer, silence where something should happen, a message',
-    'nobody can understand, work lost. An edge that needs another hemisphere or a hand-edited constant is an',
-    'observation, not a finding. Do not audit the security of',
-    'the build: no hostile-environment construction, no locale or interpreter matrices, no fuzzing loops. If',
+    'Focus: the ordinary person, not an attacker. They type into this tool, read what it says, and give up if',
+    'it does not make sense. Test empty and whitespace-only input, text where a number belongs, a very long',
+    'line, accented letters and emoji, a missing file, the wrong file, a path with spaces, an option that does',
+    'not exist, starting it from the wrong folder, pressing Enter twice, closing the window half-way. Then read',
+    'every sentence the tool shows them and ask whether their mother would know what it means: jargon,',
+    'abbreviations, the developer\'s words for things, and errors that name a variable instead of a fix are all',
+    'findings. Judge what they would see on their own screen and machine: a crash, a wrong answer, silence',
+    'where something should happen, a message nobody can understand, work lost. An edge that needs another',
+    'hemisphere or a hand-edited constant is an observation, not a finding. Do not audit the security of the',
+    'build: no hostile-environment construction, no locale or interpreter matrices, no fuzzing loops. If',
     'something looks genuinely dangerous, note it as an observation and move on.',
   ].join(' '),
   security: [
     'Focus: adversarial. Treat the build as hostile territory - try to make it lie, escape its folder, run',
-    'something it should not, or lose data under duress. Hostile input, unusual encodings, broken output streams,',
-    'missing permissions, and anything that would matter if this were exposed to someone trying to break it. Say',
-    'plainly what you did not cover.',
+    'something it should not, or lose data under duress. Hostile input, unusual encodings, broken output',
+    'streams, missing permissions, and anything that would matter if this were exposed to someone trying to',
+    'break it. Say plainly what you did not cover.',
   ].join(' '),
 };
 
-// A handful of the cases a real user hits beats an exhaustive matrix, in either
+// A handful of the cases a real person hits beats an exhaustive matrix, in either
 // focus: the report is read by a person who wants to know what to fix.
-const HACKER_PROPORTION =
+const QC_PROPORTION =
   'Keep it proportionate: the cases with the best chance of happening are worth more than a complete matrix, and ' +
   'the report is judged on what it found, not on how long it ran. A minor or nice-to-have finding is a note for ' +
   'the operator, not a reason for another fix round, and a re-run is a check of the ids already listed, not a ' +
@@ -595,7 +616,7 @@ const HACKER_PROPORTION =
 const OWNED_DIR = {
   inventor: `${PLAN_DIR}/ideas`,
   designer: `${PLAN_DIR}/design`,
-  hacker: `${PLAN_DIR}/reports`,
+  qc: `${PLAN_DIR}/qc_findings`,
 };
 
 /** A folder every role may write: screenshots the visual-review skill produces. It
@@ -767,9 +788,9 @@ export function briefSession({ dir, role = 'architect', auto = false, skills = '
         'and it stays in the conversation.',
     );
   }
-  if (role === 'hacker') {
-    lines.push(HACKER_FOCUS[focus === 'security' ? 'security' : 'app']);
-    lines.push(HACKER_PROPORTION);
+  if (role === 'qc') {
+    lines.push(QC_FOCUS[focus === 'security' ? 'security' : 'app']);
+    lines.push(QC_PROPORTION);
   }
   // The operator's own words for this role. Anything typed here is what the
   // role is told on every turn, which is the cheapest way to correct a habit
@@ -888,18 +909,19 @@ export function briefSession({ dir, role = 'architect', auto = false, skills = '
         `reads everything it has already done.`,
     );
     lines.push(
-      `hack: delegate to hacker with the request, the confirmed features and the design spec. It writes ` +
-        `${PLAN_DIR}/reports/hack-N.md with ids (H1, H2...) and a repro for each. Then one fix task naming the ids ` +
-        `to fix. Then a verification task: re-run exactly those repros and the supplied suites, and nothing else - ` +
-        `a re-hack is a check, not a second hunt, so anything new it notices goes in a short "observed, not fixed" ` +
-        `list for the operator instead of becoming another round. A third round only if the verification found a ` +
-        `real regression. Three is the limit; after that, stop and tell the operator what is still open. ` +
-        `A worker's report goes in that role's own folder or in the task's "result": never point a coder at ` +
-        `${PLAN_DIR}/reports/, which belongs to the Hacker - the file tools refuse it and the harness reports the ` +
-        `stray write as tampering.`,
+      `qc: delegate to qc with the request, the confirmed features and the design spec. It reports on wording, ` +
+        `clipping and layout, missing input validation, and states that lie - see its mandate. It writes ` +
+        `${PLAN_DIR}/qc_findings/qc-N.md with ids (Q1, Q2...) and a repro for each. Then one fix task naming the ` +
+        `ids to fix. Then a verification task: re-run exactly those repros and the supplied suites, and nothing ` +
+        `else - a second QC pass is a check, not a new hunt, so anything new it notices goes in a short ` +
+        `"observed, not fixed" list for the operator instead of becoming another round. A third round only if the ` +
+        `verification found a real regression. Three is the limit; after that, stop and tell the operator what is ` +
+        `still open. A worker's report goes in that role's own folder or in the task's "result": never point a ` +
+        `coder at ${PLAN_DIR}/qc_findings/, which belongs to QC - the file tools refuse it and the harness ` +
+        `reports the stray write as tampering.`,
     );
     lines.push(
-      `A task's "reads" lists the files the worker must read first (a design spec, the feature list, a hack ` +
+      `A task's "reads" lists the files the worker must read first (a design spec, the feature list, a QC ` +
         `report). Use it instead of restating their contents in "detail": the files are the contract, and a ` +
         `paraphrase is how a project drifts. Two files at most, and never a file the previous task wrote - a ` +
         `worker that opens four documents spends its first turns paying for them.`,

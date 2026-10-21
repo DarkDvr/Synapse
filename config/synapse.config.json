@@ -103,7 +103,7 @@
         "visual-review"
       ]
     },
-    "hacker": {
+    "qc": {
       "ref": "local/qwen3.8-27b-ud",
       "focus": "app"
     },

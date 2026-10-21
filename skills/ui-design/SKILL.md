@@ -68,7 +68,7 @@ the token table, the screen table and the state list.
 
 ## 5. Hand over
 
-The spec is what the builder is held to and what the Hacker checks against:
+The spec is what the builder is held to and what QC checks against:
 
 - every control in a mock appears in the spec table, and vice versa;
 - no feature outside the confirmed list appears in the design;

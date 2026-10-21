@@ -93,14 +93,15 @@ project needs and records them in the plan:
 | Architect | the plan, the decisions, the judgement after every worker |
 | Designer | a design spec, and mock pages to choose from |
 | Coders 1–3 | the code, in `bin\` |
-| Hacker | what a real person would break, then a fix round |
+| QC | what a real person would break or misread, then a fix round |
 
 Two decisions are yours, and the Architect asks for them with a form: **which of
 the proposed features to build** (one multiselect, one option per feature) and
-**which mock to build to**. The Hacker has a volume dial — ordinary user mistakes
-by default, hostile testing when you turn it up — and the hack/fix loop is capped
-at three rounds. **Keep building**, between Stop and Send, decides whether the
-Architect delegates the next task by itself or stops after judging each one.
+**which mock to build to**. QC has a volume dial — ordinary user mistakes and
+confusing wording by default, hostile testing when you turn it up — and the
+QC/fix loop is capped at three rounds. **Keep building**, between Stop and Send,
+decides whether the Architect delegates the next task by itself or stops after
+judging each one.
 
 ## Models
 

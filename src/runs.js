@@ -50,14 +50,17 @@ const NOTE_MAX = 1000;
 // Architect is told, and it is the Architect that marks the task blocked — the
 // harness never writes the plan, and never decides a task is hopeless.
 const MAX_ATTEMPTS = 3;
-// How many hack rounds a project gets before the harness closes the loop. A
-// model will keep finding "one more issue" until the quota runs out; three
-// rounds is the deal, then the remainder is the operator's to judge.
-const HACK_ROUNDS = 3;
-/** Completed hack rounds on a project: the loop is bounded by them, not by the
- *  model's appetite for one more issue. */
-const hackRoundsUsed = (dir) =>
-  readRuns(dir).filter((r) => r.kind === 'result' && r.role === 'hacker' && r.outcome === 'completed').length;
+// How many QC rounds a project gets before the harness closes the loop. A model
+// will keep finding "one more issue" until the quota runs out; three rounds is
+// the deal, then the remainder is the operator's to judge.
+const QC_ROUNDS = 3;
+/** Completed QC rounds on a project: the loop is bounded by them, not by the
+ *  model's appetite for one more issue. `hacker` is the role's old id, and rounds
+ *  spent under it still count. */
+const qcRoundsUsed = (dir) =>
+  readRuns(dir).filter(
+    (r) => r.kind === 'result' && (r.role === 'qc' || r.role === 'hacker') && r.outcome === 'completed',
+  ).length;
 // Written by Synapse itself on every run, so a change to one of these is never a
 // worker's doing. plan.json is reported separately (planTouched), which is why it
 // is ignored here rather than alarming twice.
@@ -455,22 +458,22 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
           continue;
         }
 
-        // The hack loop closes after three completed rounds. A model will keep
+        // The QC loop closes after three completed rounds. A model will keep
         // finding one more issue until the quota is gone; the third report says so
         // too, and this is what makes it true if the model ignores it.
         const asked = (currentPlan?.tasks || []).find((t) => t.id === request.task);
-        if (asked?.role === 'hacker' && hackRoundsUsed(session.directory) >= HACK_ROUNDS) {
+        if (asked?.role === 'qc' && qcRoundsUsed(session.directory) >= QC_ROUNDS) {
           appendRun(session.directory, {
             kind: 'delegate',
             callId: request.callId,
             task: request.task,
-            outcome: 'hack-cap',
+            outcome: 'qc-cap',
           });
-          log.info(`delegation refused: ${request.task} - ${HACK_ROUNDS} hack rounds are already spent`);
+          log.info(`delegation refused: ${request.task} - ${QC_ROUNDS} QC rounds are already spent`);
           notify?.({
             kind: 'note',
-            title: 'Hack Loop Capped',
-            body: `${HACK_ROUNDS} hack rounds are spent on this project, so ${request.task} was not run.`,
+            title: 'QC Loop Capped',
+            body: `${QC_ROUNDS} QC rounds are spent on this project, so ${request.task} was not run.`,
           });
           continue;
         }
@@ -1046,7 +1049,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
         workerId: worker?.id,
         planTouched,
         synapseTouched: strayWrites,
-        hackRound: hackRoundsUsed(dir),
+        qcRound: qcRoundsUsed(dir),
         error: turnError,
         auto,
         stallSec,
@@ -1396,7 +1399,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     return [...seen];
   }
 
-  function report({ task, role, insteadOf, skipped, outcome, ms, text, files, context, workerId, planTouched, synapseTouched, hackRound, auto, stallSec, retries, resumes, error }) {
+  function report({ task, role, insteadOf, skipped, outcome, ms, text, files, context, workerId, planTouched, synapseTouched, qcRound, auto, stallSec, retries, resumes, error }) {
     const head =
       outcome === 'completed'
         ? `${task.id} (${role}) finished in ${Math.round(ms / 1000)}s.`
@@ -1474,9 +1477,9 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
           `around them; check the contents before you trust the plan or the contract.`,
       );
     }
-    if (role === 'hacker' && hackRound >= HACK_ROUNDS) {
+    if (role === 'qc' && qcRound >= QC_ROUNDS) {
       lines.push(
-        `That was hack round ${hackRound} of ${HACK_ROUNDS} - the loop is closed. Do not delegate another hack: ` +
+        `That was QC round ${qcRound} of ${QC_ROUNDS} - the loop is closed. Do not delegate another QC pass: ` +
           `tell the operator what is still open, with the issue ids, and let them decide.`,
       );
     }

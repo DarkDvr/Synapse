@@ -63,7 +63,7 @@ try {
     version: 1,
     goal: 'A clock.',
     phases: ['invent', 'build', 'hack'],
-    tasks: [task('t1', 'inventor', 'done'), task('t2', 'coder-1', 'done'), task('t3', 'hacker', 'done')],
+    tasks: [task('t1', 'inventor', 'done'), task('t2', 'coder-1', 'done'), task('t3', 'qc', 'done')],
   });
   expect('finished and covered asks for the summary', has(s, 'no "summary"'));
 

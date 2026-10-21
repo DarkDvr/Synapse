@@ -301,9 +301,10 @@ export function normalize(raw) {
       if (ref) entry.ref = ref;
       const variant = isPlainObject(spec) && typeof spec.variant === 'string' ? spec.variant.trim() : '';
       if (variant) entry.variant = variant;
-      // A role may need a longer silence window than the default (the hacker
-      // fuzzes a build; a designer writes for a long time between steps). Only a
-      // real number is kept; the old `timeoutSec` name is read once and dropped.
+      // A role may need a longer silence window than the default (QC drives a
+      // build through awkward input; a designer writes for a long time between
+      // steps). Only a real number is kept; the old `timeoutSec` name is read
+      // once and dropped.
       const stallSec = isPlainObject(spec) ? Number(spec.stallSec ?? spec.timeoutSec) : NaN;
       if (Number.isFinite(stallSec)) entry.stallSec = clampInt(stallSec, 30, 7200, DEFAULTS.worker.stallSec);
       // Which skills this role may load. Absent means "no restriction"; an empty
@@ -311,8 +312,8 @@ export function normalize(raw) {
       if (isPlainObject(spec) && Array.isArray(spec.skills)) {
         entry.skills = spec.skills.map((s) => String(s || '').trim()).filter(Boolean);
       }
-      // The Hacker's dial: `app` tests what a real user types, `security` hunts
-      // for a way in. Anything else is the safe default.
+      // QC's dial: `app` judges the build the way an ordinary person uses it,
+      // `security` looks for a way in. Anything else is the safe default.
       if (isPlainObject(spec) && typeof spec.focus === 'string') {
         entry.focus = spec.focus === 'security' ? 'security' : 'app';
       }
@@ -324,10 +325,11 @@ export function normalize(raw) {
       roles[String(id)] = entry;
     }
   }
-  // The Auditor and the Critic were retired in favour of the Inventor and the
-  // Hacker. Fold their saved choices into the new roles once and drop the old
-  // ids: a config written before the rename must not lose the operator's pick.
-  for (const [oldId, newId] of Object.entries({ auditor: 'inventor', critic: 'hacker' })) {
+  // The Auditor and the Critic were retired in favour of the Inventor, and the
+  // Hacker became QC (quality control). Fold saved choices into the current role
+  // ids once and drop the old ones: a config written before a rename must not
+  // lose the operator's pick.
+  for (const [oldId, newId] of Object.entries({ auditor: 'inventor', critic: 'hacker', hacker: 'qc' })) {
     if (!roles[oldId]) continue;
     if (!roles[newId]) roles[newId] = roles[oldId];
     delete roles[oldId];
