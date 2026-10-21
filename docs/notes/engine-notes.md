@@ -451,6 +451,19 @@ item naming the task that delivers it), `ideas/`, `design/`, `qc_findings/` and
 operator's words and the confirmed features verbatim, and the rejected ones are
 never passed on.
 
+**An example in a brief is a template, not an illustration.** The Inventor's first
+mandate said "build me a clock, go" and offered an alarm, a theme and a second time
+zone as the shape of a good answer. It was written for the clock project and would
+have been sent to every project after it — which is the rule in AGENTS.md, and the
+reason it was pulled before a run rather than after one. Few-shot examples are the
+strongest thing in a brief and the least controllable: the model copies the surface,
+not the lesson, and the mandate is the one place with no operator in the loop to
+notice it. It now asks for the same thing without a subject — a named behaviour
+small enough to say in a sentence and sayable out loud the way a user would, with
+"settings / polish / good UX are not features" as the anti-pattern — plus a rule to
+take any illustration from the operator's own request. Write the general rule in
+the brief; keep the incident that earned it here.
+
 **The features gate is a multiselect, one option per proposed feature.** The
 Inventor proposes; the Architect asks which to include. It used to ask "how much
 of it should the clock do" with three bundles, which hid ten individual ideas
