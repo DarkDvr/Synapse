@@ -79,6 +79,20 @@ check(
   JSON.stringify(ds?.models),
 );
 
+// A local server's list format is remembered; anything else is the OpenAI one.
+const formats = normalize({
+  engine: {
+    opencode: {
+      providers: [
+        { name: 'Ollama', baseURL: 'http://localhost:11434/v1', format: 'ollama', models: [{ id: 'qwen3:8b' }] },
+        { name: 'Studio', baseURL: 'http://localhost:1234/v1', format: 'nonsense', models: [{ id: 'x' }] },
+      ],
+    },
+  },
+});
+check('an ollama provider keeps its format', formats.engine.opencode.providers[0]?.format === 'ollama');
+check('an unknown format falls back to openai', formats.engine.opencode.providers[1]?.format === 'openai');
+
 // A provider with no models is work in progress, not a typo: it is kept, and the
 // engine config leaves it out until it has something to serve (see the writer in
 // src/engines/opencode.js). A row with neither a name nor a server is dropped.
@@ -182,7 +196,53 @@ const html = await fetchProviderModels({ baseURL: 'https://x.example/v1' }, { fe
 check('a non-JSON answer is a sentence, not a crash', html.ok === false && /not JSON/.test(html.error), html.error);
 
 const empty = await fetchProviderModels({ baseURL: 'https://x.example/v1' }, { fetchImpl: stub(JSON.stringify({ data: [] })) });
-check('an empty list says so', empty.ok === true && empty.models.length === 0 && /no models/i.test(empty.error), empty.error);
+check(
+  'an empty list is a failure naming both endpoints',
+  empty.ok === false && /no models/.test(empty.error) && /\/api\/tags/.test(empty.error),
+  empty.error,
+);
+
+// ── the two list formats ─────────────────────────────────────────
+// Ollama answers /api/tags, everything else answers /models. The setting only
+// chooses which is asked first; a server that speaks the other one still works.
+calls.length = 0;
+const ollamaFirst = await fetchProviderModels(
+  { baseURL: 'http://localhost:11434/v1', format: 'ollama' },
+  { fetchImpl: stub(JSON.stringify({ models: [{ name: 'qwen3:8b' }, { name: 'gemma4:12b' }] })) },
+);
+check('the Ollama format asks /api/tags first', calls[0].url === 'http://localhost:11434/api/tags', calls[0].url);
+check('Ollama tags are read from `name`', ollamaFirst.ok && ollamaFirst.models[0].id === 'gemma4:12b', JSON.stringify(ollamaFirst.models));
+
+calls.length = 0;
+let first = true;
+const fallback = await fetchProviderModels(
+  { baseURL: 'http://localhost:11434/v1', format: 'openai' },
+  {
+    fetchImpl: async (url, opts) => {
+      calls.push({ url, opts });
+      if (first) { first = false; return { ok: false, status: 404, text: async () => 'not found' }; }
+      return { ok: true, status: 200, text: async () => JSON.stringify({ models: [{ name: 'qwen3:8b' }] }) };
+    },
+  },
+);
+check('a 404 at /models falls back to /api/tags', calls.length === 2 && /\/api\/tags$/.test(calls[1].url), JSON.stringify(calls.map((c) => c.url)));
+check('the fallback answer is used', fallback.ok && fallback.models[0].id === 'qwen3:8b', JSON.stringify(fallback));
+
+const refusedBoth = await fetchProviderModels(
+  { baseURL: 'http://localhost:9/v1' },
+  {
+    fetchImpl: async () => {
+      const err = new Error('fetch failed');
+      err.cause = { code: 'ECONNREFUSED' };
+      throw err;
+    },
+  },
+);
+check(
+  'a refused connection is one sentence, not two attempts',
+  refusedBoth.ok === false && /refused the connection/.test(refusedBoth.error) && !/api\/tags/.test(refusedBoth.error),
+  refusedBoth.error,
+);
 
 calls.length = 0;
 const noScheme = await fetchProviderModels({ baseURL: 'localhost:1234' }, { fetchImpl: stub('{}') });

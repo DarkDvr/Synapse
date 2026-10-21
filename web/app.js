@@ -93,6 +93,7 @@ const state = {
   // Refresh List said) lives here because the pane is re-rendered, not patched.
   settingsTab: 'general',
   setDraft: null,
+  settingsSnapshot: null,
   setProvSelected: null,
   setKeyRevealed: false,
   setProvFetch: null,
@@ -243,6 +244,7 @@ function openDialog({
     if (extra) {
       extraBtn.textContent = extra.label;
       extraBtn.dataset.result = extra.result || 'extra';
+      extraBtn.className = `btn btn-sm ${extra.danger ? 'btn-danger' : 'btn-secondary'}`;
     }
     // "Non-bypassable" means exactly this: no close button, no backdrop dismiss, no
     // Escape. The operator must pick one of the answers.
@@ -374,6 +376,9 @@ function renderLastEventAge() {
  * was wired and a lie the moment one was — the badge on those models is the same
  * fact seen from the other side. Nothing is probed: the dot stays grey, and the
  * first turn is what proves the server is up.
+ *
+ * It says how many models, never the name of the app serving them: "Bionic" is
+ * one machine's runtime, and the row has to mean the same thing on the next one.
  */
 function renderLlmStatus() {
   const row = $('llmRow');
@@ -382,21 +387,22 @@ function renderLlmStatus() {
   const providers = Array.isArray(state.config?.engine?.opencode?.providers)
     ? state.config.engine.opencode.providers
     : [];
-  const local = providers.filter((p) => /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:|\/|$)/i.test(String(p.baseURL || '')));
+  const local = providers.filter(
+    (p) => (p.type ? p.type === 'local' : /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:|\/|$)/i.test(String(p.baseURL || ''))),
+  );
   if (!local.length) {
     out.textContent = 'not set';
-    row.title = 'No local model server is registered. Add one under engine.opencode.providers in the config file.';
+    row.title = 'No local model server is registered. Add one in Settings > Providers.';
     return;
   }
-  const count = (p) => (Array.isArray(p.models) ? p.models.length : 0);
-  out.textContent = local.map((p) => `${p.name || p.id} · ${count(p)} model${count(p) === 1 ? '' : 's'}`).join(' + ');
+  const modelCount = local.reduce((n, p) => n + (Array.isArray(p.models) ? p.models.length : 0), 0);
+  out.textContent =
+    local.length === 1
+      ? `${modelCount} model${modelCount === 1 ? '' : 's'}`
+      : `${local.length} servers · ${modelCount} models`;
   row.title =
     local
-      .map(
-        (p) =>
-          `${p.name || p.id} at ${p.baseURL}: ` +
-          (p.models || []).map((m) => m.name || m.id).filter(Boolean).join(', '),
-      )
+      .map((p) => `${p.baseURL}: ${(p.models || []).map((m) => m.name || m.id).filter(Boolean).join(', ')}`)
       .join('\n') + '\nConfigured, not probed — a turn is what proves it is running.';
 }
 
@@ -782,11 +788,11 @@ const issuesTitle = (m) =>
 const PROVIDER_LABELS = { opencode: 'OpenCode', 'opencode-go': 'OpenCode Go', deepseek: 'DeepSeek' };
 const providerLabel = (p) => {
   const id = String(p || 'unknown');
-  // A provider the operator added in Settings has a name of their own — show
-  // that, not a tidied-up id: "DeepSeek" is what they typed and what the badge
-  // in Settings says.
   const configured = (state.config?.engine?.opencode?.providers || []).find((x) => x.id === id);
-  if (configured?.name) return configured.name;
+  // A local server is labelled by what it *is*, not by the app that happens to
+  // be running it: the next machine's may be Ollama or vLLM, and a badge naming
+  // one of them would be wrong everywhere else.
+  if (configured) return configured.type === 'local' ? 'Local' : configured.name || id;
   if (PROVIDER_LABELS[id]) return PROVIDER_LABELS[id];
   return id
     .split(/[-_]/)
@@ -4090,12 +4096,20 @@ function providerEditor(providers, index) {
         <span>Server URL</span>
         <input data-prov="baseURL" value="${esc(p.baseURL || '')}" placeholder="http://localhost:1234/v1" spellcheck="false" />
       </label>
+      ${p.type === 'local' ? `<label class="set-field" title="Which endpoint Refresh List asks for the model list. Chat goes through the OpenAI-compatible URL either way; the other endpoint is tried automatically if this one fails.">
+        <span>Format</span>
+        <select data-prov="format">
+          <option value="openai"${p.format !== 'ollama' ? ' selected' : ''}>OpenAI API (/models)</option>
+          <option value="ollama"${p.format === 'ollama' ? ' selected' : ''}>Ollama (/api/tags)</option>
+        </select>
+        <small class="prov-hint">${p.format === 'ollama' ? 'Ollama' : 'LM Studio, vLLM, llama.cpp'} — either one answers the other endpoint too, so this only decides which is asked first.</small>
+      </label>` : ''}
       <div class="set-field wide" title="Sent as a bearer token. env:NAME reads the environment when Synapse starts, so the key never has to live in the config file.">
         <span>API Key</span>
         <div class="set-key">
           <input data-prov="apiKey" value="${esc(shown)}" data-masked="${key && !fromEnv && !revealed ? '1' : '0'}" type="text" spellcheck="false"
                  placeholder="${p.type === 'local' ? 'Empty for local servers' : 'sk-…'}" autocomplete="off" />
-          ${fromEnv ? '' : `<button type="button" class="input-eye" data-prov-eye aria-label="${revealed ? 'Hide the key' : 'Show the key'}" title="${revealed ? 'Hide the key' : 'Show the key'}">${setIcon(revealed ? 'eyeOff' : 'eye')}</button>`}
+          ${fromEnv || !key ? '' : `<button type="button" class="input-eye" data-prov-eye aria-label="${revealed ? 'Hide the key' : 'Show the key'}" title="${revealed ? 'Hide the key' : 'Show the key'}">${setIcon(revealed ? 'eyeOff' : 'eye')}</button>`}
         </div>
         <small class="prov-hint">${fromEnv ? `The key is read from the environment when Synapse starts — the config file keeps the variable's name, not the key. Type over it to store a key here instead.` : key ? `Stored in the config file as ${esc(maskSecret(key))}. Type over it to replace it.` : 'Only needed for a service. Nothing is written to the config file until you save.'}</small>
       </div>
@@ -4143,6 +4157,14 @@ function settingsProviders(c) {
 
   return `
     <section class="set-group"><h4>Providers</h4>
+      <div class="prov-add">
+        <button type="button" class="btn btn-ghost btn-sm" data-prov-add>+ Add Provider</button>
+        <div class="prov-add-menu" id="provAddMenu" hidden>
+          <button type="button" data-prov-new="local">Local Provider</button>
+          <button type="button" data-prov-new="openai">OpenAI Compatible</button>
+          <button type="button" disabled title="The engine's own catalog is always registered. A second copy would list the same models twice.">OpenCode (built in)</button>
+        </div>
+      </div>
       <div class="prov-list">
         <div class="prov-row is-builtin" title="The engine's own catalog, always registered. Its key lives in the engine, not here.">
           <span class="prov-type">OpenCode</span>
@@ -4152,14 +4174,7 @@ function settingsProviders(c) {
         </div>
         ${rows}
       </div>
-      <div class="prov-add">
-        <button type="button" class="btn btn-ghost btn-sm" data-prov-add>+ Add Provider</button>
-        <div class="prov-add-menu" id="provAddMenu" hidden>
-          <button type="button" data-prov-new="local">Local Provider</button>
-          <button type="button" data-prov-new="openai">OpenAI Compatible</button>
-          <button type="button" disabled title="The engine's own catalog is always registered. A second copy would list the same models twice.">OpenCode (built in)</button>
-        </div>
-      </div>
+      <hr class="prov-divider" />
       ${providerEditor(providers, selected)}
       <p class="set-note">A new or changed provider reaches the model menu after a restart: the engine reads its
       provider list when it starts. A key written as <code>env:NAME</code> is read from the environment at boot and
@@ -4294,7 +4309,11 @@ async function refreshProviderModels(index) {
   if (!p) return;
   const stateEl = $('settingsBody').querySelector('.prov-fetch-state');
   if (stateEl) { stateEl.className = 'prov-fetch-state'; stateEl.textContent = 'Asking the server…'; }
-  const r = await api('POST', '/api/providers/models', { baseURL: p.baseURL, apiKey: p.apiKey }).catch((err) => ({
+  const r = await api('POST', '/api/providers/models', {
+    baseURL: p.baseURL,
+    apiKey: p.apiKey,
+    format: p.format,
+  }).catch((err) => ({
     ok: false,
     models: [],
     error: err.message,
@@ -4335,6 +4354,12 @@ function onSettingsInput(e) {
   const field = el.dataset.prov;
   if (field === 'models') { p.models = parseModelLines(el.value); return; }
   if (field === 'apiKey') { p.apiKey = el.value; el.dataset.masked = '0'; return; }
+  if (field === 'type') {
+    p.type = el.value === 'local' ? 'local' : 'openai';
+    if (p.type !== 'local') p.format = 'openai';
+    renderSettings();
+    return;
+  }
   p[field] = el.value;
   // A hand-typed key is no longer the mask, and the hint under the field says so
   // — but re-rendering on every keystroke would take the caret with it.
@@ -4406,14 +4431,100 @@ async function saveSettings() {
     state.config = await api('PUT', '/api/config', draft);
     state.setDraft = JSON.parse(JSON.stringify(state.config));
     state.setProvSelected = null;
-    toast('Settings saved', 'Restart Synapse to apply engine or server changes.');
     renderLlmStatus();
     await loadModels();
     // A new skills folder is worth reading before the operator closes the panel.
     await checkSkills({ quiet: true });
     renderSettings();
+    // Writing the file is the easy half; the engine, the providers and the port
+    // are read at start, so the operator is asked what should happen next.
+    await askRestart();
   } catch (err) {
     toast('Could not save settings', err.message);
+  }
+}
+
+/**
+ * After a save: restart now, undo it, or leave it for the next start.
+ *
+ * The middle option is the one that needs explaining. "Revert All Changes"
+ * writes back the config as it was when this window opened — the file, not just
+ * the form — so a save that turns out to be a mistake is undone in one click
+ * instead of by hand-editing JSON.
+ */
+async function askRestart() {
+  const choice = await openDialog({
+    title: 'Settings Saved',
+    message:
+      'The config file is written. The engine, the providers and the server port are read when Synapse ' +
+      'starts, so a restart is what applies them. Changes to roles and skills apply straight away.',
+    confirmLabel: 'Restart Now',
+    okResult: 'restart',
+    extra: { label: 'Revert All Changes', result: 'revert', danger: true },
+  });
+  if (choice === 'restart') return restartSynapse();
+  if (choice === 'revert') return revertSavedSettings();
+  toast('Settings Saved', 'They apply the next time Synapse starts.');
+}
+
+/** Wait for the new process to answer, then bring this window back. */
+async function restartSynapse() {
+  $('restartCurtain').hidden = false;
+  $('restartState').textContent = 'Stopping Synapse…';
+  try {
+    await api('POST', '/api/restart');
+  } catch {
+    // The connection dropping is the expected answer: the server is going away.
+  }
+  $('restartState').textContent = 'Waiting for Synapse to come back…';
+  const back = await waitForSynapse(90000);
+  if (!back) {
+    $('restartState').textContent =
+      'Synapse did not come back by itself. Start it with start.bat, then reload this page.';
+    $('restartCurtain').classList.add('is-stuck');
+    return;
+  }
+  $('restartState').textContent = 'Back. Reopening…';
+  // Closing is what the operator asked for; a tab that was not opened by script
+  // cannot be closed, and then reloading is the useful thing instead.
+  try { window.close(); } catch { /* blocked, fall through */ }
+  setTimeout(() => location.reload(), 350);
+}
+
+async function waitForSynapse(timeoutMs) {
+  const started = Date.now();
+  // The old process needs a moment to die; asking straight away would get the
+  // answer from the server we are waiting to replace.
+  await new Promise((r) => setTimeout(r, 1500));
+  while (Date.now() - started < timeoutMs) {
+    try {
+      const res = await fetch('/api/status', { cache: 'no-store' });
+      if (res.ok) {
+        const body = await res.json();
+        if (body?.engine?.endpoint) return true;
+      }
+    } catch { /* still down */ }
+    await new Promise((r) => setTimeout(r, 1000));
+  }
+  return false;
+}
+
+/** Put the config file (and the form) back to what this window opened with. */
+async function revertSavedSettings() {
+  if (!state.settingsSnapshot) return;
+  try {
+    state.config = await api('PUT', '/api/config', state.settingsSnapshot);
+    state.setDraft = JSON.parse(JSON.stringify(state.config));
+    state.setProvSelected = null;
+    state.setKeyRevealed = false;
+    state.setProvFetch = null;
+    renderLlmStatus();
+    await loadModels();
+    await checkSkills({ quiet: true });
+    renderSettings();
+    toast('Changes Reverted', 'The config file is back to what it held when this window opened.');
+  } catch (err) {
+    toast('Could Not Revert', err.message);
   }
 }
 
@@ -4440,6 +4551,9 @@ function openSettings() {
   if (!state.config) { toast('Config Unavailable', 'Synapse could not read its own config file.'); return; }
   // Every edit in this window happens to a copy; the file only changes on Save.
   state.setDraft = JSON.parse(JSON.stringify(state.config));
+  // And this copy is what "Revert All Changes" puts back if the save was a
+  // mistake — the file as it was when the window opened, not the form.
+  state.settingsSnapshot = JSON.parse(JSON.stringify(state.config));
   state.settingsTab = state.settingsTab || 'general';
   state.setProvSelected = null;
   state.setKeyRevealed = false;

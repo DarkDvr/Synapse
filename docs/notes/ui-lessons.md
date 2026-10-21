@@ -818,3 +818,31 @@ bold, italic, strikethrough and links: the range these models actually produce.
   `m.provider` changes (the list is already sorted by provider, so no grouping
   pass). The separators live outside `.model-opt`, which keeps `menuRefs`
   aligned with the options for keyboard navigation.
+- **Saving asks a question; it does not print a reminder.** "Restart Synapse to
+  apply engine or server changes" was a toast the operator could only answer by
+  leaving the app. Save now ends in a dialog with three answers: **Restart Now**,
+  **Revert All Changes** (danger, red) and dismiss. Restart shows a curtain
+  ("Restarting Synapse", a violet spinner) while the process is replaced, polls
+  `/api/status` every second, and then calls `window.close()` — falling back to a
+  reload 350ms later, because a tab nobody opened by script cannot be closed and
+  a dead tab is worse than a revived one. Revert writes back the config as it was
+  when the window opened (`state.settingsSnapshot`), so a save that turns out to
+  be a mistake is undone in one click rather than by hand-editing JSON.
+- **The save dialog is the only place a restart is offered, and a restart is
+  `cmd /c start`.** A *detached* child of the server process does not survive it
+  here — measured, three ways: `spawn(..., {detached:true})` never ran, a plain
+  `spawn` child died with the parent, `cmd /c start` lived. The command is the
+  same `restart.ps1` an operator runs, so there is one restart path and one set of
+  pid-file rules.
+- **A local provider is badged LOCAL, not by the app serving it.** "Bionic" is one
+  machine's runtime; the next is Ollama or vLLM, and the same config has to read
+  correctly there. `providerLabel()` asks the config for the provider's *type* and
+  returns "Local" for `type: local`, the operator's own name for anything else
+  ("DeepSeek"). The sidebar row follows: `Local LLM · 8 models`, never a vendor.
+- **Add Provider sits above the list, the list is separated from the editor by a
+  rule.** The button was below the rows, where it read as "add to what is above
+  me" only after scrolling; the divider is what says the editor belongs to the
+  selected row rather than to the list.
+- **Revert and Stop are red, not hover-red.** Both throw work away. Stop was a
+  neutral icon that blushed on hover — the one destructive control in the row was
+  something to discover; Revert was ghost-grey beside a violet Save.

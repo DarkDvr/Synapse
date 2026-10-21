@@ -148,6 +148,23 @@ server URL and a key, and *Refresh List* asks that server what it serves. Saving
 writes the same `providers` array documented here, so a hand-written entry and a
 clicked one are the same thing.
 
+**A local server is one of two list formats.** `format: "openai"` (LM Studio,
+vLLM, llama.cpp) answers `GET /models`; `format: "ollama"` answers
+`GET /api/tags`, whose entries are `{name}` rather than `{id}`. Chat goes through
+the OpenAI-compatible URL either way — Ollama serves that at `/v1`, which is why
+the same provider definition works for both — so `format` only decides which list
+endpoint `Refresh List` asks *first*: `src/providers.js` tries the other one
+automatically (a 404 at `/models` falls through to `/api/tags`, and a refused
+connection stops after one attempt). The measured result here: a local server
+listing eight models while the config named one, found by exactly that button.
+
+**A provider removed in Settings stops being served.** The engine's `provider`
+map is rebuilt from Synapse's config on every start (it used to be merged into
+whatever was already on disk, which left a deleted provider's models in the menu
+for ever — the `bionic` rename is what surfaced it). A provider with no models
+yet is kept in Synapse's config and left out of the engine's, so half-finished
+work survives a save without registering an empty catalog.
+
 The same `providers` list carries a billed vendor, not just a local server. DeepSeek
 publishes an OpenAI-format endpoint, so it needs no code — one entry, and it appears
 in the picker with a **DeepSeek** badge beside its models:

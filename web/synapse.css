@@ -1362,12 +1362,15 @@ body[data-mode="single"] .keep-toggle { display: none; }
 .composer textarea:focus-visible { outline: 2px solid var(--orange); outline-offset: 1px; }
 .composer textarea::placeholder { color: #6d717a; }
 .composer .icon-button { width: 36px; height: 36px; border-radius: 9px; flex: none; }
-/* The stop button is the one destructive control in the composer, so it says so
-   on hover. The baseline gives every icon button a violet hover, hence the id. */
+/* The stop button stops work that is running, so it is red whether or not the
+   pointer is over it: a neutral icon that blushed on hover made the one
+   destructive control in the row something to discover. The baseline gives every
+   icon button a violet hover, hence the id. */
+#stopBtn:not(:disabled) { border-color: rgba(240, 86, 63, 0.45); color: var(--red); }
 #stopBtn:not(:disabled):hover {
-  border-color: var(--red); color: var(--red); background: var(--red-soft);
+  border-color: var(--red); color: #fff; background: var(--red);
 }
-#stopBtn:not(:disabled):active { border-color: var(--red); color: #fff; background: var(--red); }
+#stopBtn:not(:disabled):active { border-color: var(--red); color: var(--red); background: var(--red-soft); }
 
 /* ── 13. inspector panels ──────────────────────────────────────────────── */
 
@@ -1723,6 +1726,7 @@ body[data-mode="single"] .keep-toggle { display: none; }
 .prov-del:hover { background: var(--red-soft); border-color: rgba(240, 86, 63, 0.5); }
 
 .prov-add { display: flex; align-items: center; gap: 8px; position: relative; }
+.prov-divider { border: 0; border-top: 1px solid var(--line); margin: 2px 0 0; width: 100%; }
 .prov-add-menu {
   position: absolute; z-index: 4; top: calc(100% + 5px); left: 0;
   display: grid; min-width: 190px; padding: 5px;
@@ -1769,6 +1773,30 @@ body[data-mode="single"] .keep-toggle { display: none; }
 .prov-badge-line code { font-family: var(--mono); font-size: 10px; color: #a8acb3; }
 .prov-warn { color: var(--amber); }
 .prov-inuse { color: #8f939b; }
+
+/* ── restart curtain ───────────────────────────────────────────────────── */
+/* Shown between "Restart Now" and the new process answering. Without it the tab
+   is a dead page for the 10-15 seconds the engine takes to boot, which reads as a
+   crash rather than as a restart. */
+.restart-curtain {
+  position: fixed; inset: 0; z-index: 90;
+  display: grid; place-items: center;
+  background: #0e1117;
+}
+.restart-curtain[hidden] { display: none; }
+.restart-box { display: grid; justify-items: center; gap: 9px; max-width: 420px; padding: 0 24px; text-align: center; }
+.restart-box h3 { margin: 0; font: 700 17px var(--display); color: var(--text); }
+.restart-box p { margin: 0; font-size: 12.5px; line-height: 1.6; color: var(--muted); }
+.restart-spin {
+  width: 26px; height: 26px; margin-bottom: 4px;
+  border: 2px solid var(--violet-line); border-top-color: var(--violet);
+  border-radius: 50%;
+  animation: restart-spin 0.9s linear infinite;
+}
+@keyframes restart-spin { to { transform: rotate(360deg); } }
+/* It did not come back: stop pretending work is in progress. */
+.restart-curtain.is-stuck .restart-spin { animation: none; border-color: var(--red); border-top-color: var(--red); }
+.restart-curtain.is-stuck p { color: var(--amber); }
 
 /* ── 15. modal + toast ─────────────────────────────────────────────────── */
 

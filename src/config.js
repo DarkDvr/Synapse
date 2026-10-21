@@ -246,6 +246,10 @@ export function normalize(raw) {
       return {
         id: String(p.id || '').trim(),
         type: providerType(p),
+        // How the server lists its models. Both kinds speak the OpenAI chat API
+        // — Ollama's is at /v1 — so this only decides which list endpoint is
+        // tried first; src/providers.js falls back to the other one anyway.
+        format: p.format === 'ollama' ? 'ollama' : 'openai',
         name: String(p.name || '').trim(),
         baseURL: String(p.baseURL || '').trim(),
         apiKey: String(p.apiKey || ''),

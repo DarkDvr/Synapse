@@ -22,23 +22,53 @@
       "skillPaths": [],
       "providers": [
         {
-          "id": "bionic",
+          "id": "local",
           "type": "local",
-          "name": "Bionic",
+          "format": "openai",
+          "name": "Local LLM",
           "baseURL": "http://localhost:1235/v1",
           "apiKey": "",
           "models": [
+            {
+              "id": "dirty-muse-writer-v01",
+              "name": "dirty-muse-writer-v01"
+            },
+            {
+              "id": "gemma-2-ataraxy-9b",
+              "name": "gemma-2-ataraxy-9b"
+            },
+            {
+              "id": "gemma-4-e4b-it",
+              "name": "gemma-4-e4b-it"
+            },
             {
               "id": "qwen3.8-27b-ud",
               "name": "Qwen 3.8 27B UD",
               "context": 39168,
               "output": 8192
+            },
+            {
+              "id": "qwen3.8-4b-distill-heretic-abliterated",
+              "name": "qwen3.8-4b-distill-heretic-abliterated"
+            },
+            {
+              "id": "qwen3.8-9b-distill",
+              "name": "qwen3.8-9b-distill"
+            },
+            {
+              "id": "qwen3.8-9b-distill-slerp-f451-pro-writer-uncensored",
+              "name": "qwen3.8-9b-distill-slerp-f451-pro-writer-uncensored"
+            },
+            {
+              "id": "text-embedding-nomic-embed-text-v1.5",
+              "name": "text-embedding-nomic-embed-text-v1.5"
             }
           ]
         },
         {
           "id": "deepseek",
           "type": "openai",
+          "format": "openai",
           "name": "DeepSeek",
           "baseURL": "https://api.deepseek.com/v1",
           "apiKey": "env:DEEPSEEK_API_KEY",
@@ -65,7 +95,7 @@
   },
   "roles": {
     "designer": {
-      "ref": "bionic/qwen3.8-27b-ud",
+      "ref": "local/qwen3.8-27b-ud",
       "skills": [
         "ui-design",
         "frontend-design",
@@ -74,7 +104,7 @@
       ]
     },
     "hacker": {
-      "ref": "bionic/qwen3.8-27b-ud",
+      "ref": "local/qwen3.8-27b-ud",
       "focus": "app"
     },
     "architect": {
@@ -85,28 +115,28 @@
       ]
     },
     "coder-1": {
-      "ref": "bionic/qwen3.8-27b-ud",
+      "ref": "local/qwen3.8-27b-ud",
       "skills": [
         "code-craft",
         "visual-review"
       ]
     },
     "coder-2": {
-      "ref": "bionic/qwen3.8-27b-ud",
+      "ref": "local/qwen3.8-27b-ud",
       "skills": [
         "code-craft",
         "visual-review"
       ]
     },
     "coder-3": {
-      "ref": "bionic/qwen3.8-27b-ud",
+      "ref": "local/qwen3.8-27b-ud",
       "skills": [
         "code-craft",
         "visual-review"
       ]
     },
     "inventor": {
-      "ref": "bionic/qwen3.8-27b-ud"
+      "ref": "local/qwen3.8-27b-ud"
     }
   },
   "modelChecks": {

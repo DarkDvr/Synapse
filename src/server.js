@@ -108,6 +108,8 @@ export function createServer({ api, engine, logger, config }) {
 
     // GET /api/status
     if (seg[0] === 'status' && method === 'GET') return sendJson(res, 200, await api.status());
+    // POST /api/restart — relaunch Synapse (Settings > Save Changes).
+    if (seg[0] === 'restart' && method === 'POST') return sendJson(res, 200, await api.restart());
     // GET|PUT /api/config
     if (seg[0] === 'config') {
       if (method === 'GET') return sendJson(res, 200, await api.getConfig());

@@ -60,6 +60,29 @@ and the snapshots in place it is overkill on this machine — the operator's cal
 
 ---
 
+## Restarting from inside the app
+
+Settings > Save Changes offers **Restart Now**, which posts `/api/restart`. The
+server does not stop and start itself: it hands the job to `restart.ps1` — the
+same script an operator runs — so there is one restart path and one set of pid-file
+rules.
+
+**How it hands over matters, and was measured.** A `detached: true` child of the
+server process **never ran** (three variants tried; the detached one was the only
+one that died), and a plain child is killed when `restart.ps1` stops the parent by
+pid. `cmd.exe /c start "" /min powershell.exe -File restart.ps1` is what works: the
+script becomes Windows' own process, outliving the server that launched it. The
+server then exits 600ms later, after the HTTP answer has flushed.
+
+It runs the way `restart.ps1` always does: hidden, with stdout in
+`%TEMP%\synapse.out` and stderr in `%TEMP%\synapse.err`. A console window that was
+running `start.bat` is not carried over — after an in-app restart the app is a
+background process and `logs\` is the place to read. The browser tab is polled back
+with `/api/status` and reloaded (closed first, if the browser allows a script to
+close it).
+
+---
+
 ## Browsers
 
 `browser-control-mcp-server` is registered in the machine-wide

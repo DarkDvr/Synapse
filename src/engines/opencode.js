@@ -174,36 +174,40 @@ export class OpenCodeEngine extends Engine {
     // silent, so both are written deliberately and only these keys are ours.
     const providers = Array.isArray(this.cfg.providers) ? this.cfg.providers : [];
     const registrable = providers.filter((p) => (p.models || []).length);
-    if (registrable.length) {
-      const defs = { ...(cfg.provider || {}) };
-      for (const p of registrable) {
-        const models = {};
-        for (const m of p.models) {
-          models[m.id] = {
-            name: m.name,
-            ...(m.context || m.output
-              ? { limit: { ...(m.context ? { context: m.context } : {}), ...(m.output ? { output: m.output } : {}) } }
-              : {}),
-          };
-        }
-        // The key travels as the engine's `apiKey`, resolved here rather than in
-        // the engine: a missing variable is then a sentence in our log instead of
-        // an unexplained 401 on the first turn. The value is never logged.
-        const key = providerApiKey(p);
-        if (key.missing) {
-          this.log.warn(
-            `${p.name || p.id}: ${key.source} is not set - its models will be refused until you set it and restart Synapse`,
-          );
-        }
-        defs[p.id] = {
-          npm: p.npm || '@ai-sdk/openai-compatible',
-          name: p.name || p.id,
-          options: { baseURL: p.baseURL, ...(key.key ? { apiKey: key.key } : {}) },
-          models,
+    // The `provider` map is ours to rebuild, like the MCP servers above: a
+    // provider deleted (or renamed) in Settings must not keep its models in the
+    // menu for ever because an older write left the definition on disk.
+    const defs = {};
+    for (const p of registrable) {
+      const models = {};
+      for (const m of p.models) {
+        models[m.id] = {
+          name: m.name,
+          ...(m.context || m.output
+            ? { limit: { ...(m.context ? { context: m.context } : {}), ...(m.output ? { output: m.output } : {}) } }
+            : {}),
         };
       }
-      next.provider = defs;
+      // The key travels as the engine's `apiKey`, resolved here rather than in
+      // the engine: a missing variable is then a sentence in our log instead of
+      // an unexplained 401 on the first turn. The value is never logged.
+      const key = providerApiKey(p);
+      if (key.missing) {
+        this.log.warn(
+          `${p.name || p.id}: ${key.source} is not set - its models will be refused until you set it and restart Synapse`,
+        );
+      }
+      defs[p.id] = {
+        npm: p.npm || '@ai-sdk/openai-compatible',
+        name: p.name || p.id,
+        options: { baseURL: p.baseURL, ...(key.key ? { apiKey: key.key } : {}) },
+        models,
+      };
     }
+    // Written even when empty: that is how a provider the operator removed stops
+    // being served. An absent `provider` key is the engine's own default state.
+    if (Object.keys(defs).length) next.provider = defs;
+    else delete next.provider;
 
     // Skills Synapse ships, plus any folder the operator adds.
     //

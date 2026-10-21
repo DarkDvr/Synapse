@@ -309,7 +309,7 @@
       <div class="settings-body" id="settingsBody" role="tabpanel"></div>
     </div>
     <div class="set-foot">
-      <button class="btn btn-ghost btn-sm" id="revertSettings" type="button">Revert</button>
+      <button class="btn btn-danger btn-sm" id="revertSettings" type="button">Revert</button>
       <button class="btn btn-primary btn-sm" id="saveSettings" type="button">Save Changes</button>
     </div>
   </div>
@@ -346,6 +346,15 @@
       <button class="btn btn-secondary btn-sm" id="dialogExtra" hidden></button>
       <button class="btn btn-primary btn-sm" id="dialogOk">OK</button>
     </div>
+  </div>
+</div>
+
+<!-- restart curtain: what the operator sees while the server is replaced -->
+<div class="restart-curtain" id="restartCurtain" hidden>
+  <div class="restart-box">
+    <span class="restart-spin" aria-hidden="true"></span>
+    <h3>Restarting Synapse</h3>
+    <p id="restartState">Stopping Synapse…</p>
   </div>
 </div>
 

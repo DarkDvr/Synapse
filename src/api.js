@@ -9,7 +9,7 @@ import { skillRules, describeSkills } from './skills.js';
 import { PROJECTS_ROOT, SKILLS_DIR } from './paths.js';
 import { fetchProviderModels } from './providers.js';
 
-export function createApi({ getConfig, applyConfig, engine, logger, getBootError, projects, toolStats, probe, modelCache, inspectModel: inspectRef, probeDir, runs, engineUpdate, notify, guard }) {
+export function createApi({ getConfig, applyConfig, engine, logger, getBootError, projects, toolStats, probe, modelCache, inspectModel: inspectRef, probeDir, runs, engineUpdate, restart, notify, guard }) {
   const app = logger.channel('app');
 
   // The last brief we handed each session, so an unchanged plan does not PUT
@@ -160,6 +160,13 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
     // operator's click is the only reason this contacts anything — see
     // src/providers.js.
     providerModels: async (body) => fetchProviderModels(body || {}),
+
+    // Settings > Save Changes asks whether to restart. The engine and the server
+    // read their settings at start, so this is the honest answer to "apply now".
+    restart: async () => {
+      if (!restart) return { ok: false, error: 'This build cannot restart itself.' };
+      return restart();
+    },
 
     // The engine updates often and the model catalog ships inside it, so this is
     // the one place Synapse will talk to the network for something other than a

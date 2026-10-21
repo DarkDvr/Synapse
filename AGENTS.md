@@ -57,7 +57,8 @@ or speed.
   dot-ants). **Never orange text on a violet fill** — use white.
 - Green / amber / red are semantic only, never decorative.
 - Affordances: `+` green, `✕` red, edit/settings icons yellow. The composer's
-  **Stop turns red on hover** — it is the one destructive control in that row.
+  **Stop is red** whether or not it is hovered, and Settings' **Revert** is red
+  too — they are the two controls that throw work away.
 - **The live path is one colour: a yellow arrow with yellow ants.** Orange is this
   palette's accent (text, borders), and it used to be the dot-ant colour too — the
   operator changed that: a different hue on a 2.5px line read as one object with a
