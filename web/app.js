@@ -1726,7 +1726,7 @@ function renderTree() {
     const current = state.view === 'session' && p.sessions.some((s) => s.id === state.sessionId);
     html.push(`<div class="tree-project">
       <div class="tree-row project${current ? ' is-current' : ''}">
-        <button class="tree-open" data-project="${esc(p.id)}" aria-expanded="${open}">
+        <button class="tree-open" data-project="${esc(p.id)}" aria-expanded="${open}" title="${esc(p.name)}">
           <span class="tree-caret" aria-hidden="true"></span>
           <span class="tree-name">${esc(p.name)}</span>
         </button>

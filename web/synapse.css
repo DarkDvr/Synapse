@@ -471,7 +471,7 @@ body.dark .sidebar .nav-link.active > span:first-child { color: #fff; }
    title, permanently, for a control only visible on hover. It is the same trade
    a file tree makes. */
 .tree-edit {
-  position: absolute; right: 25px; top: 50%; transform: translateY(-50%);
+  position: absolute; right: 33px; top: 50%; transform: translateY(-50%);
   width: 18px; height: 18px; padding: 0;
   display: inline-flex; align-items: center; justify-content: center;
   border: 0; background: transparent; color: var(--yellow); opacity: 0;
@@ -526,7 +526,12 @@ body.dark .sidebar .nav-link.active > span:first-child { color: #fff; }
    the rail had to say it in words. Amber because waiting is a state, not a
    failure. */
 .tree-wait {
-  flex: none; margin-right: 1px; padding: 0;
+  /* 23px of margin is the pencil's 18px plus a gap: the pencil is an overlay at
+     the end of the name, and on a row with a badge it must sit to the RIGHT of
+     the badge. Reserving the space here keeps the order name -> badge -> pencil
+     -> dot -> delete, and the title just ellipsizes earlier (its tooltip has the
+     whole name). */
+  flex: none; margin-right: 25px; padding: 0;
   width: 15px; height: 15px; border-radius: 50%;
   display: inline-flex; align-items: center; justify-content: center;
   font-size: 10px; font-weight: 700; line-height: 1;
@@ -535,11 +540,9 @@ body.dark .sidebar .nav-link.active > span:first-child { color: #fff; }
   color: var(--amber); background: transparent;
   border: 1px solid rgba(232, 163, 61, 0.75);
 }
-/* The pencil overlays the end of the name, so it has to move left when the badge
-   is there — otherwise it draws on top of the badge, which is what happened with
-   the old "ANSWER" chip. Measured: the 15px badge plus its 1px margin ends 46px
-   from the row's right edge, so 47 clears it. */
-.tree-row.has-question .tree-edit { right: 47px; }
+/* The pencil overlays the end of the name at a fixed 33px, clear of the live dot
+   and the delete. A row with a question needs no override: the badge reserves
+   the pencil's own width in its margin, so the pencil keeps one place everywhere. */
 
 /* inline rename */
 .tree-rename {
