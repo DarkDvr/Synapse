@@ -74,6 +74,8 @@ const state = {
   lastEventAt: 0,
   clocks: null,
   collapsed: new Set(),
+  // True once the first project list has arrived; see loadProjects.
+  collapsedInit: false,
   // Keys of reasoning blocks and tool cards the operator has opened. The
   // transcript is rebuilt on every poll, so expansion state has to live outside
   // the DOM or it dies with the next render.
@@ -1539,6 +1541,14 @@ async function loadProjects() {
     renderTree();
     return;
   }
+  // On a fresh page, every project starts closed except General. It is done once
+  // per load, not on every refresh of the list: `loadProjects` also runs after
+  // creating a session or adding a project, and re-collapsing then would shut the
+  // project the operator is working in.
+  if (!state.collapsedInit) {
+    state.collapsedInit = true;
+    for (const p of state.projects) if (!p.general) state.collapsed.add(p.id);
+  }
   renderTree();
   // The open session can be deleted from another tab, or by Synapse's own
   // scaffolding sweep. Left alone, the UI keeps a dead session open and every
@@ -2666,10 +2676,14 @@ function renderChatNav() {
   const canScroll = el ? el.scrollHeight - el.clientHeight > 2 : document.documentElement.scrollHeight > window.innerHeight + 2;
   const at = el ? el.scrollTop : window.scrollY;
   const atEnd = el ? el.scrollHeight - el.clientHeight : document.documentElement.scrollHeight - window.innerHeight;
+  const atBottom = at >= atEnd - 1;
   $('navTop').disabled = !canScroll || at <= 1;
   $('navPrev').disabled = !canScroll || cur <= 0;
-  $('navNext').disabled = !canScroll || cur >= tops.length - 1;
-  $('navBottom').disabled = !canScroll || at >= atEnd - 1;
+  // At the bottom the last message is already in view, but its anchor can sit
+  // below the fold — so `cur` still points at the one before it and Next looked
+  // available with nowhere to go. The bottom button is the honest authority.
+  $('navNext').disabled = !canScroll || atBottom || cur >= tops.length - 1;
+  $('navBottom').disabled = !canScroll || atBottom;
 }
 
 /**

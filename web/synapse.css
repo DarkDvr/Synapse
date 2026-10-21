@@ -998,11 +998,16 @@ body[data-view="session"] .chat-dock.has-ask { overflow: visible; }
 .fab:hover { background: var(--violet-soft); border-color: var(--violet-bright); color: #fff; }
 .fab:disabled { opacity: 0.35; cursor: default; }
 .fab:disabled:hover { background: #23262c; border-color: var(--violet-line); color: var(--violet-bright); }
-/* The two "all the way" buttons carry double arrows: an arrow-to-a-bar (U+2912)
-   drew 6px of ink at the same size as a plain arrow's 11px, so at 25px it read as
-   a smudge. The double arrow is a size larger again, because it is drawn smaller
-   than a single one (8px against 11px) and it has to carry the same meaning legibly. */
-#navTop, #navBottom { font-size: 17px; }
+/* The two "all the way" buttons wear the same arrow as their neighbours, one
+   weight heavier. The symbol font has no bold face — `font-weight` alone changes
+   nothing — so the ink is thickened with a hairline stroke in the current colour.
+   Same 15px size, same button, same margin; only the weight differs, which is what
+   says "all the way" without a second glyph. */
+#navTop, #navBottom {
+  font-size: 15px;
+  font-weight: 700;
+  -webkit-text-stroke: 0.45px currentColor;
+}
 
 /* ── mode toggle: Multi is orange, Single is violet, white text on both ──── */
 .mode-toggle {
