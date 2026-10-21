@@ -84,7 +84,14 @@ try {
   expect('result+todo is named once settled', has(s, 'has a result but its status'));
 
   const real = readPlan('F:/dev/Synapse.Projects/clock-test-2');
-  expect('clock-test-2 has no problems under the new rules', real.problems.length === 0, real.problems.join(' | '));
+  // This plan was written before the ladder rule, by an Architect that spread the
+  // build tasks across all three coders — which is the thing the rule was added
+  // for. So the assertion is that every *other* rule stays quiet on a real plan,
+  // and that the ladder rule is the only thing it now trips.
+  const ladder = real.problems.filter((p) => /is written for coder-/.test(p));
+  const other = real.problems.filter((p) => !/is written for coder-/.test(p));
+  expect('clock-test-2 trips no rule but the coder ladder', other.length === 0, other.join(' | '));
+  expect('and it does trip that one, as the old Architect did', ladder.length === 2, ladder.join(' | '));
 } finally {
   fs.rmSync(ROOT, { recursive: true, force: true });
 }

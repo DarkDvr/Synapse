@@ -304,6 +304,14 @@ Non-obvious, all verified on 2.0.30:
   badge in the picker. The first production run of this (`test-project-2`, t1) went
   exactly that way: 1.8s refusal → `coder-2` in 87s, with the move written into
   `runs.jsonl` as `role=coder-2 plannedRole=coder-1`.
+- **Build tasks are planned for coder-1, and only coder-1.** The ladder is the
+  harness's, not the Architect's, so a plan that names coder-2 or coder-3 starts on
+  that rung immediately (`candidatesFor` slices from the role's own rung) and spends
+  the fallback on work the first coder could have done — the operator pays for it. The
+  brief's `build:` rule now says so in those words, and `validatePlan` reports any
+  task written for coder-2 or coder-3 as a problem with the reason attached. Shift
+  Test 4 was the evidence: the Architect spread six build tasks across all three
+  coders while coder-1 was idle, and the cheap model was never tried.
 - **Single mode refuses.** Tool rulesets cannot hide an MCP tool, so the promise
   is kept in the runner: a delegation request in a Single session is refused out
   loud and the Architect is told to ask for Multi.
@@ -555,7 +563,16 @@ answers "Permission denied: skill (type: permission.rejected)" while an allowed
 one loads. No list means no restriction; an empty list means none. The picker is
 the ✎ button on the role card, which now holds three things:
 
-- **Skills** — ticked = allowed. Ticking every skill stores *no* list, because
+- **Skills** — two levels, in one row of the dialog. The tick on the left is
+  *allowed*: the engine refuses anything unticked. The small **Required** box on the
+  right is `roles.<id>.mustLoad`, and it changes the brief from "here is what you
+  may load" to "load every one of them before your first edit … a skill you skipped
+  is part of the job you skipped"; the runner then reads the worker's transcript and
+  tells the Architect which required skills never appeared. Required is a subset of
+  allowed by construction: the box is dead until the skill is allowed, `normalize()`
+  filters it again on the way in, and the dialog filters it on save. A required skill
+  the engine refuses would be reported missing on every run, for ever.
+  Ticking every skill stores *no* `skills` list, because
   that is the same thing and it lets a skill added later reach the role.
 - **Focus** (QC only) — `app` by default, `security` when needed.
 - **Instructions** — free text appended to the role's brief on every turn
@@ -597,6 +614,7 @@ with it:
 | `frontend-design` | taste and direction: distinctiveness, typography, avoiding template defaults (Apache 2.0, licence kept) |
 | `aesthetic-foundations` | composition, colour and hierarchy theory plus a critique protocol, for judging a design |
 | `code-craft` | the coders' brief: match the surrounding style, keep the surface small, fail loudly, prove it, report what ran |
+| `web-guidelines` | the Web Interface Guidelines snapshot (MIT, 21 Oct 2026): focus, forms, motion, hit areas, contrast — the rules QC holds a build to |
 
 **Where the engine looks, and which copy wins.** The engine reads the configured
 `skills.paths` *and* `~/.agents/skills` by default — so the operator's own library
@@ -609,11 +627,17 @@ listed. (An earlier test of the opposite was wrong because PowerShell's
 was never written — verify the file, not the edit.) The consequence is simple:
 ship the copy Synapse should use, and leave the global one alone.
 
-**What each role gets by default.** Architect `visual-review`; Designer all four
-design skills; every coder `code-craft` plus `visual-review` (a coder that can
-screenshot its own shell before reporting is cheaper than a round trip); the
-Inventor and QC get none — QC's work is the focus dial, and an ideas role handed
-design skills starts designing.
+**What each role gets by default.** Architect may load `visual-review`, and must
+load it before judging. Designer may load all four design skills and must load
+`frontend-design` and `aesthetic-foundations`. Every coder may load `code-craft`
+and `visual-review`, and must load `code-craft` (a coder that can screenshot its
+own shell before reporting is cheaper than a round trip). QC may load
+`web-guidelines`, `aesthetic-foundations` and `visual-review`, and must load the
+first two; its volume dial is `roles.qc.focus`, not a missing skill. The Inventor
+may load `frontend-design` and must load nothing: an ideas role handed design
+skills starts designing, but a vague request ("build me a clock, go") is where
+direction and typography talk actually helps it name features instead of
+categories.
 
 **One skill was deliberately not shipped, and why matters.**
 `using-superpowers` reads like coding guidance and is not: it is a rule about

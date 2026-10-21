@@ -354,6 +354,17 @@ export function readPlan(dir) {
     if (source.role && !ROLES.includes(role)) {
       problems.push(`${where} names an unknown role "${role}" (cards: ${ROLES.join(', ')})`);
     }
+    // The coders are a ladder, not a pool. Every build task is written for
+    // coder-1 and the harness escalates on its own when that coder cannot do the
+    // work (see candidatesFor in runs.js). A plan that names coder-2 or coder-3 is
+    // spending a fallback rung on work the first coder could have done - in Shift
+    // Test 4 the Architect spread six build tasks across all three coders.
+    if (role === 'coder-2' || role === 'coder-3') {
+      problems.push(
+        `${where} is written for ${role}; build tasks are written for coder-1, and the harness moves a task to ` +
+          `coder-2 then coder-3 by itself when the coder before it cannot do the job`,
+      );
+    }
 
     const rawStatus = asText(source.status) || 'todo';
     const status = STATUSES.includes(rawStatus) ? rawStatus : 'todo';
@@ -530,6 +541,12 @@ const counts = (tasks) => {
 const ROLE_MANDATES = {
   inventor: [
     'You are the Inventor. You generate and rank ideas; you do not design screens and you do not write application code.',
+    'The request is often one sentence - "build me a clock, go". Your job is to imagine the person using it on a',
+    'real day: what they reach for first, what they forget to do, what they ask for the week after. Name concrete',
+    'features a builder can put on the screen - an alarm with a snooze, a theme that follows the room, a second',
+    'time zone - not categories like "time features" or "polish". At least two of them should be things the',
+    'operator did not think to ask for, and every one must be justifiable in a single sentence: what it saves the',
+    'person, or what it stops them getting wrong.',
     'Write the list to .synapse/ideas/ideas-1.md (create the folder): most valuable first, each item with a one-line',
     'reason it matters and an effort estimate (small, medium or large). After the list, say what you would leave out',
     'and why. Be opinionated - ten ideas of equal weight is not a ranking. Work from the operator\'s request and the',
@@ -903,10 +920,13 @@ export function briefSession({ dir, role = 'architect', auto = false, skills = '
     );
     lines.push(
       `build: one task that builds the shell from the design with no wiring, then one that wires it. The titles ` +
-        `say which is which. A shell task must not wire; a wiring task must not redesign. If a task will take ` +
-        `more than about forty turns or touch more than one subsystem, split it into two tasks joined by a ` +
-        `handoff - a worker that runs a hundred turns is slower on its last turn than on its first, because it ` +
-        `reads everything it has already done.`,
+        `say which is which. A shell task must not wire; a wiring task must not redesign. Every build task is ` +
+        `written for coder-1: the coders are a ladder, not a pool, and the harness moves a task to coder-2 and ` +
+        `then coder-3 by itself when the coder before it cannot do the work. Never plan a task for coder-2 or ` +
+        `coder-3 - that spends the fallback on work the first coder could have done, and the operator pays for ` +
+        `it. If a task will take more than about forty turns or touch more than one subsystem, split it into two ` +
+        `tasks joined by a handoff - a worker that runs a hundred turns is slower on its last turn than on its ` +
+        `first, because it reads everything it has already done.`,
     );
     lines.push(
       `qc: delegate to qc with the request, the confirmed features and the design spec. It reports on wording, ` +

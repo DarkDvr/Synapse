@@ -312,6 +312,15 @@ export function normalize(raw) {
       if (isPlainObject(spec) && Array.isArray(spec.skills)) {
         entry.skills = spec.skills.map((s) => String(s || '').trim()).filter(Boolean);
       }
+      // The subset the brief demands, not merely permits. Kept inside the allowed
+      // list so the two can never disagree: a required skill the role may not load
+      // would be refused by the engine and reported as missing on every run.
+      if (isPlainObject(spec) && Array.isArray(spec.mustLoad)) {
+        const allowed = Array.isArray(entry.skills) ? entry.skills : null;
+        const must = spec.mustLoad.map((s) => String(s || '').trim()).filter(Boolean);
+        const kept = allowed ? must.filter((s) => allowed.includes(s)) : must;
+        if (kept.length) entry.mustLoad = kept;
+      }
       // QC's dial: `app` judges the build the way an ordinary person uses it,
       // `security` looks for a way in. Anything else is the safe default.
       if (isPlainObject(spec) && typeof spec.focus === 'string') {

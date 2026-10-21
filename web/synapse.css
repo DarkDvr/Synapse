@@ -1739,6 +1739,23 @@ body[data-mode="single"] .keep-toggle { display: none; }
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
   overflow: hidden;
 }
+/* A skill row carries two states: allowed (the tick on the left) and required
+   (the box on the right, which the brief demands and the runner checks). The
+   required box is dead until the skill is allowed, so the two can never
+   disagree — the same rule config.normalize applies on the way in. */
+.dlg-skill { display: flex; align-items: flex-start; gap: 8px; border-radius: 6px; }
+.dlg-skill:hover { background: var(--violet-faint); }
+.dlg-skill > .dlg-check { flex: 1 1 auto; min-width: 0; }
+.dlg-skill > .dlg-check:hover { background: transparent; }
+.dlg-must {
+  flex: none; display: flex; align-items: center; gap: 5px;
+  padding: 5px 6px 5px 0; cursor: pointer;
+  font-size: 10px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;
+  color: var(--violet-bright);
+}
+.dlg-must input { width: 13px; height: 13px; min-height: 0; margin: 0; padding: 0; accent-color: var(--violet-bright); }
+.dlg-must input:disabled { opacity: 0.35; }
+.dlg-must:has(input:disabled) { color: #5f636b; cursor: default; }
 
 /* the checkbox leads its label, on one row */
 .set-check {  grid-column: 1 / -1;

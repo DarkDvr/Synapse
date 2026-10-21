@@ -271,6 +271,29 @@ function openDialog({
             .join('');
           return `<div class="set-field wide"><span>${esc(f.label)}</span><div class="dlg-checklist">${rows}</div></div>`;
         }
+        // Skills carry two levels: allowed (the engine refuses anything else) and
+        // required (the brief demands it, and the runner reports it to the
+        // Architect if the worker never loaded it). Two boxes per row; the
+        // required box is dead until the skill is allowed, so the two lists can
+        // never disagree.
+        if (f.type === 'skills') {
+          const rows = f.options
+            .map(
+              (o) =>
+                `<div class="dlg-skill">` +
+                `<label class="dlg-check"><input type="checkbox" data-skill-allow="${esc(o.v)}"${o.allowed ? ' checked' : ''} />` +
+                `<span>${esc(o.l)}</span>` +
+                (o.hint ? `<small>${esc(o.hint)}</small>` : '') +
+                `</label>` +
+                `<label class="dlg-must" title="The brief requires it">` +
+                `<input type="checkbox" data-skill-must="${esc(o.v)}"${o.must ? ' checked' : ''}${o.allowed ? '' : ' disabled'} />` +
+                `<span>Required</span>` +
+                `</label>` +
+                `</div>`,
+            )
+            .join('');
+          return `<div class="set-field wide"><span>${esc(f.label)}</span><div class="dlg-checklist">${rows}</div></div>`;
+        }
         const control = f.type === 'select'
           ? `<select id="dlg-${esc(f.name)}">${f.options
               .map((o) => `<option value="${esc(o.v)}"${o.v === f.value ? ' selected' : ''}>${esc(o.l)}</option>`)
@@ -297,6 +320,16 @@ function readDialog() {
       values[f.name] = [...$('dialogBody').querySelectorAll('input[data-check]')]
         .filter((el) => el.checked)
         .map((el) => el.dataset.check);
+      continue;
+    }
+    if (f.type === 'skills') {
+      const body = $('dialogBody');
+      values[f.name] = [...body.querySelectorAll('input[data-skill-allow]')]
+        .filter((el) => el.checked)
+        .map((el) => el.dataset.skillAllow);
+      values.mustLoad = [...body.querySelectorAll('input[data-skill-must]')]
+        .filter((el) => el.checked)
+        .map((el) => el.dataset.skillMust);
       continue;
     }
     const el = $(`dlg-${f.name}`);
@@ -1411,23 +1444,22 @@ async function editRoleSettings(roleId) {
   }
   fields.push({
     name: 'skills',
-    type: 'checklist',
-    label: 'Installed skills',
+    type: 'skills',
+    label: 'Skills — tick to allow, “Required” to make the brief demand it',
     options: installed
-      .map((s) => ({
-        v: s.name,
-        l: s.name,
-        hint: s.description,
-        checked: allowed.includes(s.name),
-      }))
+      .map((s) => ({ v: s.name, l: s.name, hint: s.description }))
       .concat(
         missingHere.map((m) => ({
           v: m.name,
           l: m.name,
           hint: 'Not installed on this machine — the reference is kept, but nothing loads.',
-          checked: allowed.includes(m.name),
         })),
-      ),
+      )
+      .map((o) => ({
+        ...o,
+        allowed: allowed.includes(o.v),
+        must: (entry.mustLoad || []).includes(o.v),
+      })),
   });
   fields.push({
     name: 'instructions',
@@ -1441,10 +1473,23 @@ async function editRoleSettings(roleId) {
     title: `Settings for ${role?.name || roleId}`,
     message:
       roleId === 'qc'
-        ? 'Real use is the default: the wording, the clipping and the bad input an ordinary person meets. Security is there when this one has to withstand someone trying.'
-        : 'Anything unticked is refused by the engine, not just unmentioned. Instructions are added to what the role is told on every turn.',
+        ? 'Tick a skill to let this role load it; “Required” makes the brief demand it, and the Architect is told if it was skipped. Real use is the default focus: the wording, the clipping and the bad input an ordinary person meets.'
+        : 'Tick a skill to let this role load it; “Required” makes the brief demand it, and the Architect is told if it was skipped. Instructions are added to what the role is told on every turn.',
     fields,
     confirmLabel: 'Save',
+    afterRender: () => {
+      // The required box follows the allowed one: unticking a skill clears and
+      // disables it, so a required skill can never be one the engine refuses.
+      const body = $('dialogBody');
+      body.addEventListener('change', (e) => {
+        const allow = e.target.closest?.('input[data-skill-allow]');
+        if (!allow) return;
+        const must = body.querySelector(`input[data-skill-must="${CSS.escape(allow.dataset.skillAllow)}"]`);
+        if (!must) return;
+        must.disabled = !allow.checked;
+        if (!allow.checked) must.checked = false;
+      });
+    },
   });
   if (!result || !Array.isArray(result.skills)) return;
 
@@ -1456,6 +1501,10 @@ async function editRoleSettings(roleId) {
   // operator coming back to tick it.
   if (result.skills.length === installed.length) delete next.skills;
   else next.skills = result.skills;
+  // Required is a subset of allowed, always.
+  const mustLoad = (result.mustLoad || []).filter((s) => result.skills.includes(s));
+  if (mustLoad.length) next.mustLoad = mustLoad;
+  else delete next.mustLoad;
   if (roleId === 'qc') next.focus = result.focus === 'security' ? 'security' : 'app';
   const text = String(result.instructions || '').trim();
   if (text) next.instructions = text;

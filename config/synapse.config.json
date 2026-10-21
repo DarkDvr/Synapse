@@ -98,20 +98,19 @@
       "ref": "deepseek/deepseek-flash",
       "variant": "low",
       "skills": [
-        "ui-design",
-        "frontend-design",
         "aesthetic-foundations",
+        "frontend-design",
+        "ui-design",
         "visual-review"
       ],
       "mustLoad": [
-        "frontend-design",
-        "aesthetic-foundations"
+        "aesthetic-foundations",
+        "frontend-design"
       ]
     },
     "qc": {
       "ref": "deepseek/deepseek-flash",
       "variant": "low",
-      "focus": "app",
       "skills": [
         "web-guidelines",
         "aesthetic-foundations",
@@ -120,7 +119,8 @@
       "mustLoad": [
         "web-guidelines",
         "aesthetic-foundations"
-      ]
+      ],
+      "focus": "app"
     },
     "architect": {
       "ref": "deepseek/deepseek-flash",
@@ -168,7 +168,9 @@
     "inventor": {
       "ref": "deepseek/deepseek-flash",
       "variant": "low",
-      "skills": []
+      "skills": [
+        "frontend-design"
+      ]
     }
   },
   "modelChecks": {
