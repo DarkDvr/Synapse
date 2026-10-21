@@ -1,3 +1,8 @@
+---
+name: web-guidelines
+description: A checklist for judging a built web page - accessibility and labels, focus, forms, animation and reduced motion, typography, long and empty content, dark mode, copy, and the anti-patterns that give generated UI away. Use when reviewing someone else's page, or before calling UI work done. Findings are reported as file:line.
+---
+
 # Web Interface Guidelines
 
 A local snapshot of [Vercel Labs' Web Interface Guidelines](https://github.com/vercel-labs/web-interface-guidelines)
