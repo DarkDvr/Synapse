@@ -567,9 +567,19 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     // on the result line so the morning's log explains a long night.
     let retries = 0;
     let resumes = 0;
-    // Stop: the operator's way out of a retry loop that is going nowhere.
+    // Stop: the operator's way out of a retry loop that is going nowhere — and
+    // the question-loop guard's way out of a worker that keeps asking the same
+    // thing. A plain abort leaves the run "stopped"; a stop with a reason says
+    // why, and the report carries it to the Architect and the operator.
     const controller = new AbortController();
-    controls.set(dirKey(dir), { abort: () => controller.abort() });
+    let stopReason = null;
+    controls.set(dirKey(dir), {
+      abort: () => controller.abort(),
+      stop: (why) => {
+        stopReason = String(why || '').trim() || null;
+        controller.abort();
+      },
+    });
     const signal = controller.signal;
     // Roles that were tried for this task and refused by their model. The report
     // carries the reason and the cards show it while the run is live.
@@ -725,7 +735,16 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
           );
 
           if (finished.stopped) {
-            outcome = 'stopped';
+            if (stopReason) {
+              // A harness stop with a reason is a failure the operator must see,
+              // not a quiet "stopped": the worker was looping on a question it
+              // already had the answer to.
+              outcome = 'failed';
+              text = stopReason;
+              log.warn(`${request.task} (${role}) stopped by the harness: ${stopReason}`);
+            } else {
+              outcome = 'stopped';
+            }
             try { await engine.interrupt(worker.id); } catch { /* already gone */ }
             break;
           }
@@ -1618,6 +1637,26 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     return true;
   }
 
-  return { handleTurn, requestsIn, active, cancel };
+  /**
+   * Stop the run a session belongs to, with a reason the report will carry.
+   *
+   * Used by the question-loop guard in src/api.js: a worker that asks the same
+   * question a third time is not gathering information, it is stuck, and the
+   * operator asked to be told that rather than asked again. Returns whether a run
+   * was found.
+   */
+  function stopWithReason(sessionId, reason) {
+    const live = [...running.values()].find((r) => r.workerId === sessionId || r.architectId === sessionId);
+    if (!live) return false;
+    const control = controls.get(dirKey(live.dir));
+    if (!control) return false;
+    if (typeof control.stop === 'function') control.stop(reason);
+    else control.abort();
+    if (live.workerId) engine.interrupt(live.workerId).catch(() => { /* already gone */ });
+    log.warn(`run in ${live.dir} stopped by the harness: ${reason}`);
+    return true;
+  }
+
+  return { handleTurn, requestsIn, active, cancel, stopWithReason };
 }
 

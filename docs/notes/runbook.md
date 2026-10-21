@@ -198,3 +198,22 @@ Updates stops the runtime, installs `@opencode/cli@latest`, copies the new binar
 over `bin\opencode\opencode.exe` (keeping `opencode.exe.bak`) and restarts. The
 copy is what makes the update visible — without it the app would keep starting
 the old file.
+
+---
+
+## A worker that asks the same question twice
+
+A question is answered once by the operator, and the engine records the answer as
+the tool result. If the identical question comes back, the worker is looping, not
+gathering information — measured on Shift Test 2, where one question arrived four
+times with every answer stored and ignored (`src/question-loop.js`).
+
+| ask | what happens |
+|---|---|
+| first | shown to the operator, as usual |
+| second | answered automatically with the operator's own earlier answer, not shown; logged as a warning |
+| third | the run is **stopped**, `runs.stopWithReason()`, and the report says the worker was looping, what it asked, and what it was told |
+
+The third is a deliberate show stopper: it is a model problem the operator wants
+to see, not to be asked again. The reason travels into the run result, so the
+Architect is told not to re-delegate the task as it is.

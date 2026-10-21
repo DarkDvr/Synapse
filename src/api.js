@@ -10,6 +10,7 @@ import { PROJECTS_ROOT, SKILLS_DIR } from './paths.js';
 import { fetchProviderModels } from './providers.js';
 import { providerId } from './providers.js';
 import { providerApiKey } from './config.js';
+import { questionSignature, guardDecision, readableAnswer } from './question-loop.js';
 import { setProviderKey, providerKeyState, maskKey } from './secrets.js';
 
 export function createApi({ getConfig, applyConfig, engine, logger, getBootError, projects, toolStats, probe, modelCache, inspectModel: inspectRef, probeDir, runs, engineUpdate, restart, notify, guard }) {
@@ -183,8 +184,75 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
     return next;
   }
 
-  const requireReady = () => {
-    const st = engine.status();
+  /**
+   * Question loops.
+   *
+   * A worker asking a question gets one answer from the operator, which the engine
+   * records as the tool's result. If the same question comes back, the worker is
+   * not asking for information any more — it is looping, and the operator is being
+   * asked to answer the same thing twice. Measured on Shift Test 2: four asks, the
+   * same one three times, every answer recorded and every answer ignored.
+   *
+   * So: the second ask is answered with the operator's own earlier answer, without
+   * showing it to them; the third stops the run with a reason the report carries.
+   * That is a show stopper on purpose — the operator wants to see it and fix the
+   * model, not be asked again.
+   */
+  const questionHistory = new Map(); // sessionId -> Map(signature -> { answer, asks })
+  const autoAnswered = new Set();    // form ids already answered here
+
+  const formSignature = questionSignature;
+  const readableAnswerOf = readableAnswer;
+
+  /** Returns the forms that should still be shown; answers or stops the rest. */
+  async function guardQuestions(forms) {
+    const open = [];
+    for (const form of forms || []) {
+      const sessionId = form?.sessionID;
+      const signature = formSignature(form);
+      if (!sessionId || !form.id || !signature) { open.push(form); continue; }
+      const per = questionHistory.get(sessionId);
+      const decision = guardDecision(per, form.id, signature);
+      if (decision.action === 'show') { open.push(form); continue; }
+      if (autoAnswered.has(form.id)) continue;
+
+      if (decision.action === 'stop') {
+        const seen = per.get(signature);
+        seen.asks = decision.asks;
+        seen.stopped = true;
+        autoAnswered.add(form.id);
+        const reason =
+          `Stopped: the worker asked the same question ${decision.asks} times and had the answer. ` +
+          `Question: "${signature}". The operator answered: "${readableAnswerOf(decision.answer)}". ` +
+          `Do not re-delegate this task as it is: split it, or make the decision yourself and say what you chose.`;
+        app.error(`question loop in ${sessionId} (${decision.asks} asks) - stopping the run`);
+        const stopped = runs?.stopWithReason?.(sessionId, reason);
+        if (!stopped) {
+          // No run to stop (an Architect turn, or the worker is already gone):
+          // interrupt the session so it cannot ask a fourth time.
+          try { await engine.interrupt(sessionId); } catch { /* already gone */ }
+        }
+        continue; // never shown again
+      }
+
+      // Second ask: answer it for them, with the answer they already gave.
+      autoAnswered.add(form.id);
+      per.get(signature).asks = decision.asks;
+      try {
+        await engine.replyForm(sessionId, form.id, decision.answer);
+        app.warn(
+          `question loop in ${sessionId}: answered "${signature.slice(0, 80)}" again with the operator's earlier answer ` +
+            `(ask ${decision.asks}); the next repeat stops the run`,
+        );
+      } catch (err) {
+        app.warn(`could not answer the repeated question in ${sessionId}: ${err.message}`);
+        open.push(form);
+      }
+    }
+    return open;
+  }
+
+  const requireReady = () => {    const st = engine.status();
     if (!st.ready) {
       const err = new Error(getBootError() || `${st.kind} engine is not ready`);
       err.status = 503;
@@ -788,6 +856,11 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
         }
       }
 
+      // A worker that asks the same question again is looping, not gathering
+      // information. See guardQuestions: the second ask is answered for it, the
+      // third stops the run and says so.
+      const open = await guardQuestions(forms);
+
       return {
         permissions: permissions.map((p) => ({
           requestId: p.id || p.requestID || null,
@@ -796,7 +869,7 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
           resources: Array.isArray(p.resources) ? p.resources : [],
           message: p.message || null,
         })),
-        forms: forms.map((f) => ({
+        forms: open.map((f) => ({
           id: f.id,
           sessionId: f.sessionID,
           title: f.title || 'Input needed',
@@ -809,7 +882,15 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
     replyForm: async (sessionId, formId, body) => {
       requireReady();
       const answer = body?.answer && typeof body.answer === 'object' ? body.answer : {};
+      // The form goes away once answered, so remember what it asked first.
+      const form = await safe(() => engine.listForms(sessionId), []).then((list) => (list || []).find((f) => f.id === formId));
       await engine.replyForm(sessionId, formId, answer);
+      const signature = formSignature(form);
+      if (signature) {
+        const per = questionHistory.get(sessionId) || new Map();
+        per.set(signature, { answer, asks: 1 });
+        questionHistory.set(sessionId, per);
+      }
       return { ok: true };
     },
 
