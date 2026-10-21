@@ -2348,9 +2348,11 @@ function handleRunEvent(ev) {
       const last = [...trace.lines].reverse().find((l) => l.kind === 'tool');
       const generic = !String(run.tool.target || '').trim();
       const repeated = generic && last && last.text.split(' ')[0] === said.split(' ')[0];
-      // A shell line carries the whole command, quotes and all. One line of the
-      // trace is not the place to read it; the card's tooltip and the report are.
-      const line = said.length > 84 ? `${said.slice(0, 83)}…` : said;
+      // The trace is a glance, not a transcript: a long shell command is cut by
+      // the line's own width (CSS ellipsis), never by a character count, because
+      // the chat is not a fixed width. The cap here is only a guard against a
+      // pathological command; anything under it is cut where the column ends.
+      const line = said.length > 300 ? `${said.slice(0, 299)}…` : said;
       if (!repeated && !trace.lines.some((l) => l.kind === 'tool' && l.text === line)) {
         trace.lines.push({ kind: 'tool', text: line });
       }
@@ -2520,11 +2522,13 @@ function renderTranscript() {
   // up" even though nobody moved — which is why new reasoning and tool lines
   // arrived without the chat following them.
   //
-  // And while a turn is streaming, follow unconditionally: the operator's words
-  // were "they should, to make sure I always see any new info in chat being
-  // added". Reading back through history mid-turn will be pulled to the end by
-  // the next part; that is the trade they asked for.
-  const stick = chatAtBottom() || state.streaming || state.busy;
+  // And then follow only if the reader was already at the end. This used to stick
+  // unconditionally while a turn was running, which meant a report arriving under
+  // a worker's trace dragged the page down while the operator was reading an old
+  // message. Being pulled away from what you are reading is worse than missing
+  // the end of a long turn: the scroll button and the rail already say something
+  // arrived.
+  const stick = chatAtBottom();
   // The Architect's card shows what its own turn is doing, read from this same
   // transcript, so it is refreshed wherever the transcript is.
   renderRoleActivity();
@@ -2608,6 +2612,9 @@ function renderTranscript() {
 function renderTrace(t) {
   const name = roleLabel(t.role);
   const head = [name, t.task, t.title].filter(Boolean);
+  // The folded line is one line by definition: role, task, time, files. The task
+  // title would push it past the column and wrap, and a wrap is not a line.
+  const short = [name, t.task].filter(Boolean).join(' · ');
   const lines = (t.lines || [])
     .slice(-8)
     .map((l) =>
@@ -2618,14 +2625,14 @@ function renderTrace(t) {
     .join('');
   if (!t.finishedAt) {
     return `<div class="trace is-live" data-trace="${esc(t.key)}">
-      <div class="trace-head">${esc(head.join(' · '))}</div>
+      <div class="trace-head" title="${esc(head.join(' · '))}">${esc(head.join(' · '))}</div>
       <div class="trace-lines">${lines || '<div class="trace-line">starting…</div>'}</div>
     </div>`;
   }
   const took = t.ms ? ` · ${shortSpan(t.ms)}` : '';
   const written = t.files ? ` · ${t.files} file${t.files === 1 ? '' : 's'}` : '';
   return `<details class="trace is-fold" data-trace="${esc(t.key)}">
-    <summary>${esc(head.join(' · '))}${took}${written}</summary>
+    <summary title="${esc(head.join(' · '))}">${esc(short)}${took}${written}</summary>
     <div class="trace-lines">${lines}</div>
   </details>`;
 }
@@ -2809,7 +2816,7 @@ function chatScrollTop() {
   return el ? el.scrollTop : window.scrollY;
 }
 
-function chatAtBottom(slack = 60) {
+function chatAtBottom(slack = 96) {
   const el = chatScroller();
   if (el) return el.scrollHeight - el.scrollTop - el.clientHeight <= slack;
   // No internal scroller: the whole conversation fits its box. "At the bottom"
