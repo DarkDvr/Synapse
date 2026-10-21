@@ -15,7 +15,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { readPlan, briefSession, appendAnswers } from '../src/plans.js';
-import { contextStats, windowRoom, windowAction, steerDue } from '../src/runs.js';
+import { contextStats, windowRoom, windowAction, steerDue, nextRung } from '../src/runs.js';
 import { createHarnessGuard } from '../src/harness.js';
 
 const checks = [];
@@ -142,6 +142,35 @@ try {
   expect('the brief says not to re-ask', /never ask a question it already answers/.test(brief));
   const before = briefSession({ dir: path.join(ROOT, 'still-none'), role: 'designer' });
   expect('no answers file, no line about one', !before.includes('decisions.md'));
+}
+
+// ── the coder ladder moves only when a coder failed ──────────────
+{
+  const same = JSON.stringify(['coder-1', 'coder-2', 'coder-3']);
+  expect('first attempt starts on coder-1', JSON.stringify(nextRung('coder-1', 1)) === same);
+  // The case that cost 136k prompt tokens in Shift Test 6: a *completed* task,
+  // sent back with a one-character change, moved to a fresh coder-2 session.
+  expect(
+    'a completed task re-delegated stays on the same coder',
+    JSON.stringify(nextRung('coder-1', 2, { stepDown: false })) === same,
+  );
+  expect(
+    'a failed attempt steps one rung down',
+    JSON.stringify(nextRung('coder-1', 2, { stepDown: true })) === JSON.stringify(['coder-2', 'coder-3']),
+  );
+  expect(
+    'two failures reach coder-3',
+    JSON.stringify(nextRung('coder-1', 3, { stepDown: true })) === JSON.stringify(['coder-3']),
+  );
+  expect(
+    'the ladder floors at its last rung',
+    JSON.stringify(nextRung('coder-1', 9, { stepDown: true })) === JSON.stringify(['coder-3']),
+  );
+  expect('a role off the ladder is tried alone', JSON.stringify(nextRung('designer', 2, { stepDown: true })) === '["designer"]');
+  expect(
+    'a task written for coder-2 starts there',
+    JSON.stringify(nextRung('coder-2', 1)) === JSON.stringify(['coder-2', 'coder-3']),
+  );
 }
 
 // ── what a run cost ─────────────────────────────────────────────

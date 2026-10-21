@@ -82,6 +82,23 @@ const MAX_RETRY_CAP_SEC = 3600;
 // its own.
 const DEFAULT_LADDER = ['coder-1', 'coder-2', 'coder-3'];
 
+/**
+ * Which rungs this attempt may use, starting with the one it starts on.
+ *
+ * `stepDown` is the only thing that moves a task down the ladder, and it is true
+ * only when the previous attempt actually failed — not when the same coder
+ * completed the work and the Architect wants it changed. Exported so the rule can
+ * be asserted without a runner: it is one line, and one line that decides who
+ * spends the next twenty minutes.
+ */
+export function nextRung(role, attempt, { stepDown = false, ladder = DEFAULT_LADDER } = {}) {
+  const at = ladder.indexOf(role);
+  if (at === -1) return [role];
+  const room = Math.max(0, ladder.length - at - 1);
+  const skip = stepDown ? Math.min(Math.max(0, (attempt || 1) - 1), room) : 0;
+  return ladder.slice(at + skip);
+}
+
 // What the harness says when it restarts a turn. Short deliberately: the whole
 // conversation is already in the session, and repeating the brief would invite
 // the model to start over.
@@ -309,29 +326,27 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
   /**
    * The rungs to try, in order, for this attempt of this task.
    *
-   * Two rules, both about the same thing — a coder that cannot do the job:
+   * Three rules, all about a coder that cannot do the job:
    *
-   *  - an attempt after the first starts a rung further down, because the
-   *    Architect re-delegating the same task *is* its verdict that the previous
-   *    coder did not deliver. It is the only verdict the harness can see, and it
-   *    is exactly "blocked by a coder not able to do its job";
+   *  - **a failed attempt starts a rung further down.** Not every attempt: a
+   *    task the coder *completed* and the Architect sent back with a note is a
+   *    task the same coder can finish. The verdict "this coder cannot do it" is
+   *    a run that failed or timed out, or a model the provider has refused. In
+   *    Shift Test 6 a one-character regex change sent a completed task to a fresh
+   *    coder-2 session for 136k tokens of prompt, and coder-1 was told nothing;
    *  - a rung whose model carries a provider mark is skipped, because the provider
-   *    has already said it will not run it.
+   *    has already said it will not run it;
+   *  - the next rung is tried after a failure, floored at the last one.
    *
    * A role outside the ladder has no peers and is tried alone.
    */
-  function candidatesFor(role, attempt, config) {
+  function candidatesFor(role, attempt, config, { stepDown = false } = {}) {
     const ladder =
       Array.isArray(config?.worker?.ladder) && config.worker.ladder.length ? config.worker.ladder : DEFAULT_LADDER;
-    const at = ladder.indexOf(role);
-    if (at === -1) return [role];
-    // Start at the role's own rung, not at the ladder's first: this used to be
-    // `ladder.slice(skip)`, so a task written for coder-2 began on coder-1 — which
-    // is how test-project-1's t2 "ran on coder-1, not coder-2" without anything
-    // having failed. Step one rung per attempt, floored at the last rung.
-    const room = Math.max(0, ladder.length - at - 1);
-    const skip = Math.min(Math.max(0, (attempt || 1) - 1), room);
-    const rest = ladder.slice(at + skip);
+    const rest = nextRung(role, attempt, { stepDown, ladder });
+    // A rung whose model the provider has refused is skipped: the provider has
+    // already said it will not run it. If every rung is marked, the list is left
+    // as it was — a refusal inside the run is a better answer than no attempt.
     const clean = rest.filter((id) => !providerMarked(id, config));
     return clean.length ? clean : rest;
   }
@@ -525,9 +540,15 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
 
     // How many times this task has actually been run. A refusal is not an
     // attempt, so refusals are recorded without an `attempt` number.
-    const attempts = readRuns(dir).filter(
+    const history = readRuns(dir);
+    const attempts = history.filter(
       (r) => r.kind === 'delegate' && r.task === task.id && typeof r.attempt === 'number',
     ).length;
+    // What the last attempt actually achieved. Only a run that *failed* — or a
+    // coder whose model the provider has refused — moves the task down the ladder;
+    // a completed run that the Architect wants changed is the same coder's work.
+    const previous = history.filter((r) => r.kind === 'result' && r.task === task.id).pop() || null;
+    const stepDown = Boolean(previous && previous.outcome !== 'completed');
     if (attempts >= MAX_ATTEMPTS) {
       appendRun(dir, {
         kind: 'delegate',
@@ -554,7 +575,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     // the first rung of its ladder. See candidatesFor().
     const config = getConfig() || {};
     const settings = workerSettings(config);
-    const candidates = candidatesFor(task.role, attempts + 1, config);
+    const candidates = candidatesFor(task.role, attempts + 1, config, { stepDown });
     let role = candidates[0];
     let roleConfig = config.roles?.[role] || {};
     let modelRef = roleConfig.ref || null;
