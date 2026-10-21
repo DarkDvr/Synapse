@@ -869,6 +869,12 @@ body.dark .sidebar-bottom,
 }
 .model-opt .mo-issues:hover { background: #ffa14d; }
 .model-opt.is-active .mo-meta { color: #b9bdc4; }
+/* One rule per provider group. Muted, inset to the text column, so it reads as a
+   grouping line rather than as another row. */
+.model-sep {
+  height: 1px; margin: 4px 6px 4px 9px;
+  background: var(--line);
+}
 .model-empty { padding: 6px 8px; font-size: 10.5px; color: #6d717a; font-family: var(--mono); }
 
 .role-btn {
@@ -1555,11 +1561,47 @@ body[data-mode="single"] .keep-toggle { display: none; }
    either be theirs to act on or not be on screen. It is not on screen; the log
    keeps it. */
 
-/* ── settings: a compact two-column form ───────────────────────────────── */
-#settingsModal .modal { width: min(640px, 100%); }
+/* ── settings: tabs over one config file ───────────────────────────────── */
+/* The window is a rail of panes, not a column of sections: the old form put the
+   port you need and the log level you never touch at the same weight, and the
+   Providers editor needed more room than a 640px column had. */
+#settingsModal .modal { width: min(980px, 100%); }
+.set-shell {
+  display: grid;
+  grid-template-columns: 176px minmax(0, 1fr);
+  gap: 20px;
+  flex: 1 1 auto;
+  min-height: 0;
+  margin-top: 2px;
+}
+.set-tabs {
+  display: grid; align-content: start; gap: 2px;
+  padding-right: 14px; border-right: 1px solid var(--line);
+  overflow-y: auto;
+}
+.set-tab {
+  display: flex; align-items: center; gap: 9px;
+  padding: 8px 10px; border: 0; border-radius: 9px;
+  background: transparent; color: var(--muted);
+  font-family: inherit; font-size: 12.5px; text-align: left; cursor: pointer;
+}
+.set-tab:hover { background: var(--surface-soft); color: var(--text); }
+/* Violet is this palette's surface, white is the only text on it. */
+.set-tab.is-active { background: var(--violet-soft); color: #fff; font-weight: 600; }
+.set-ic { width: 15px; height: 15px; flex: none; }
+.set-tab.is-active .set-ic { color: #fff; }
+/* focus rings are drawn inside the tab so the rail cannot clip them */
+.set-tab:focus-visible { outline: 2px solid var(--orange); outline-offset: -2px; }
+
+.set-foot {
+  display: flex; align-items: center; justify-content: flex-end; gap: 9px;
+  margin-top: 16px; padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+.set-foot #revertSettings { margin-right: auto; }
 /* focus rings must never be clipped by the scroll container, so leave room */
 .settings-body {
-  flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 4px 6px;
+  flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 2px 6px 2px 2px;
   display: grid; gap: 19px; align-content: start;
   overscroll-behavior: contain;
 }
@@ -1579,6 +1621,9 @@ body[data-mode="single"] .keep-toggle { display: none; }
   font-size: 11px; color: var(--muted);
 }
 .set-field.wide { grid-column: 1 / -1; }
+/* A button inside a field is an action, not a control: it takes its own width
+   rather than stretching to the column like an input. */
+.set-field > .btn { justify-self: start; }
 .set-field > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .set-field input,
 .set-field select,
@@ -1649,6 +1694,81 @@ body[data-mode="single"] .keep-toggle { display: none; }
   grid-column: 1 / -1; margin: 0; font-size: 11.5px; line-height: 1.5; color: #82868e;
 }
 .set-note code { font-family: var(--mono); font-size: 11px; color: #a8acb3; }
+
+/* ── providers: a list of servers, and one editor ──────────────────────── */
+.prov-list { display: grid; gap: 6px; }
+.prov-row {
+  display: flex; align-items: center; gap: 9px;
+  padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px;
+  background: #17181b; cursor: pointer; min-width: 0;
+}
+.prov-row:hover { border-color: #4a4d54; }
+.prov-row.is-active { border-color: var(--violet-line); background: rgba(98, 91, 246, 0.10); }
+.prov-row.is-builtin { cursor: default; opacity: 0.72; }
+.prov-row.is-builtin:hover { border-color: var(--line); }
+.prov-type {
+  flex: none; font-family: var(--mono); font-size: 8.5px; font-weight: 700;
+  letter-spacing: 0.06em; text-transform: uppercase; color: #9a9ea6;
+  border: 1px solid #3a3d43; border-radius: 4px; padding: 0 5px; line-height: 1.6;
+}
+.prov-row.is-active .prov-type { color: #d5d7dc; border-color: #565a63; }
+.prov-name { flex: none; font-size: 12.5px; font-weight: 600; color: var(--text); }
+.prov-url {
+  flex: 1 1 auto; min-width: 0; font-family: var(--mono); font-size: 10.5px; color: #6d717a;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.prov-meta { flex: none; font-family: var(--mono); font-size: 9.5px; color: #6d717a; }
+.prov-acts { flex: none; display: flex; gap: 4px; }
+.prov-del { color: var(--red); }
+.prov-del:hover { background: var(--red-soft); border-color: rgba(240, 86, 63, 0.5); }
+
+.prov-add { display: flex; align-items: center; gap: 8px; position: relative; }
+.prov-add-menu {
+  position: absolute; z-index: 4; top: calc(100% + 5px); left: 0;
+  display: grid; min-width: 190px; padding: 5px;
+  background: #1b1d21; border: 1px solid var(--line); border-radius: 9px;
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.55);
+}
+.prov-add-menu[hidden] { display: none; }
+.prov-add-menu button {
+  border: 0; background: transparent; color: var(--text); text-align: left;
+  padding: 7px 8px; border-radius: 6px; font-family: inherit; font-size: 12px; cursor: pointer;
+}
+.prov-add-menu button:hover:not(:disabled) { background: var(--violet-soft); color: #fff; }
+.prov-add-menu button:disabled { color: #5e626a; cursor: not-allowed; }
+
+.prov-edit {
+  display: grid; gap: 10px; margin-top: 4px; padding: 13px;
+  border: 1px solid var(--line); border-radius: 12px;
+  background: rgba(255, 255, 255, 0.02);
+}
+.prov-edit .set-grid { gap: 10px 12px; }
+.prov-hint { font-size: 10.5px; color: #7c808a; line-height: 1.5; }
+/* A placeholder is a hint, not content: in the models box it looked like a model
+   the provider already had. */
+.set-field input::placeholder,
+.set-field textarea::placeholder { color: #5d616a; }
+.prov-hint code { font-family: var(--mono); font-size: 10px; color: #a8acb3; }
+/* The key field and its eye share one box: the eye sits inside the input's own
+   right padding, so the mask and the control read as one field. */
+.set-key { position: relative; display: grid; }
+.set-key input { padding-right: 34px; }
+.input-eye {
+  position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
+  width: 24px; height: 24px; display: grid; place-items: center;
+  border: 0; border-radius: 6px; background: transparent;
+  color: var(--yellow); cursor: pointer;
+}
+.input-eye:hover { background: var(--amber-soft); }
+.input-eye .set-ic { width: 14px; height: 14px; }
+.prov-tools { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
+.prov-fetch-state { font-size: 10.5px; color: #7c808a; }
+.prov-fetch-state.is-ok { color: var(--green); }
+.prov-fetch-state.is-bad { color: var(--red); }
+.prov-badge-line { margin: 0; font-size: 10.5px; color: #7c808a; line-height: 1.6; }
+.prov-badge-line code { font-family: var(--mono); font-size: 10px; color: #a8acb3; }
+.prov-warn { color: var(--amber); }
+.prov-inuse { color: #8f939b; }
 
 /* ── 15. modal + toast ─────────────────────────────────────────────────── */
 

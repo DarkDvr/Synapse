@@ -173,9 +173,10 @@ export class OpenCodeEngine extends Engine {
     // per-provider overrides; getting those two names the wrong way round is
     // silent, so both are written deliberately and only these keys are ours.
     const providers = Array.isArray(this.cfg.providers) ? this.cfg.providers : [];
-    if (providers.length) {
+    const registrable = providers.filter((p) => (p.models || []).length);
+    if (registrable.length) {
       const defs = { ...(cfg.provider || {}) };
-      for (const p of providers) {
+      for (const p of registrable) {
         const models = {};
         for (const m of p.models) {
           models[m.id] = {

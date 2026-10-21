@@ -108,8 +108,7 @@ model menu like any other model:
 ]
 ```
 
-`src/engines/opencode.js` writes each one into the engine's own config as
-`provider.<id>` with `npm: "@ai-sdk/openai-compatible"`, `options.baseURL` and a
+`src/engines/opencode.js` writes each one into the engine's own config as`provider.<id>` with `npm: "@ai-sdk/openai-compatible"`, `options.baseURL` and a
 `models` map — **`provider` singular for definitions, `providers` plural for
 per-provider overrides**, and getting those two names the wrong way round is
 silent. Nothing is contacted until a model is picked and a turn is run; an
@@ -138,6 +137,16 @@ would be constant churn for a big one — which is the argument for splitting ta
 rather than for a bigger window.
 
 ### A vendor's own API (DeepSeek, and any other)
+
+**The way in is Settings > Providers**, not this file by hand: the tab lists the
+engine's built-in catalog as a read-only row and every registered provider below
+it, and offers *Local Provider* and *OpenAI Compatible* (the two ids differ only
+by where they point — see `providerType()` in `src/providers.js`). `OpenCode` is
+in the add menu but disabled: the engine's catalog is always registered, and a
+second copy would be the same models twice. A row can be added, renamed, given a
+server URL and a key, and *Refresh List* asks that server what it serves. Saving
+writes the same `providers` array documented here, so a hand-written entry and a
+clicked one are the same thing.
 
 The same `providers` list carries a billed vendor, not just a local server. DeepSeek
 publishes an OpenAI-format endpoint, so it needs no code — one entry, and it appears

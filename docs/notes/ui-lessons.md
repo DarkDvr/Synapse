@@ -772,3 +772,49 @@ bold, italic, strikethrough and links: the range these models actually produce.
   (`Bionic · 1 model`) and its tooltip lists the base URL and the models. The dot
   stays grey: registering a server is not evidence it is running, and only a turn
   is. Placeholder copy is a claim; it ages badly.
+- **Settings is six tabs, and the tabs are the app's own nouns.** One column of
+  fourteen sections gave the server port and the log retention the same weight,
+  and the Providers list needed a wider window than 640px. The rail is
+  `General · Engine · Providers · Workers · Tools · Logging`, 176px, with
+  inline-SVG icons at 15px; the active tab is a violet fill with white text and a
+  white icon (violet is this palette's fill, and orange text on violet is still
+  forbidden — it is the accent, not a surface colour). The window is 980px wide
+  and the body scrolls, not the page: `.set-shell` is `grid-template-columns:
+  176px 1fr`, so the rail keeps its own height and the pane scrolls under it.
+  `Revert` (ghost, left) and `Save Changes` (primary, right) sit in a footer above
+  a rule; the close X and Revert both mean "discard", one closes and one does not.
+- **Every pane edits a draft, and the draft survives a tab switch.** Collecting
+  the DOM on *save* only would have thrown away a half-typed Engine port the
+  moment the operator looked at Providers, so `collectSettings()` runs on every
+  tab change into `state.setDraft` (a deep copy taken when the window opens).
+  Nothing reaches the file until Save; Revert is then exactly "throw the copy
+  away". A provider is the one thing that is not a `data-path` field — it is an
+  object in a list, edited straight into the draft as it is typed.
+- **A provider's id is derived once, from its name, and then locked.** Model refs
+  are `provider/model` (`deepseek/deepseek-flash`), so an id that moved when a
+  name was corrected would strand every role's choice. The editor shows the id it
+  will get (`test-vendor/…`) while the row is new, and after the first save the
+  id is what the row is keyed by. Two providers with one name get `-2`, decided
+  in `src/config.js` — the same rule in `src/providers.js` — never in the markup.
+- **A key is shown masked, and only while it is being typed or deliberately
+  revealed.** `sk-live-0123…7df` renders as `sk-liv***7df` (first six, three
+  stars, last three): enough to tell two keys apart, never enough to use one.
+  The eye is a drawn SVG at 14px in yellow (an edit affordance, like the pencil),
+  toggling `type`-less text rather than the browser's password dots, because a
+  row of dots cannot answer "is the right key in there?". Focusing a masked field
+  selects it so typing replaces rather than appends; leaving it re-masks; a key
+  written as `env:NAME` shows the variable and has no eye at all — there is
+  nothing to hide when the file holds a variable name.
+- **Refresh List is a real call, and it is the only one.** It posts
+  `/api/providers/models`, which fetches `<baseURL>/models` with an 8s timeout and
+  returns either a sorted list or one sentence ("The server answered 401. …",
+  "Nothing is listening at that address."). It is how the operator learns a local
+  server has eight models when the config names one. Nothing periodic touches a
+  provider: the sidebar's `Local LLM` row reads the config, and a turn is what
+  proves a server is running.
+- **The model menu draws a rule between sources.** Eleven rows of five providers
+  read as one list, and the selection highlight across a boundary made it worse.
+  `.model-sep` is a 1px `--line` rule inset to the text column, inserted only when
+  `m.provider` changes (the list is already sorted by provider, so no grouping
+  pass). The separators live outside `.model-opt`, which keeps `menuRefs`
+  aligned with the options for keyboard navigation.

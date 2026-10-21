@@ -195,6 +195,7 @@ src/
   titles.js           the shared "TBD" placeholder
   toolstats.js        the tool-call census (data\tool-stats.json)
   probe.js            the tool probe: one turn per tool
+  providers.js        provider types, ids, and "ask a server what it serves"
   engine-update.js    is there a newer engine, and stop/install/start
   search.js           dependency-free DuckDuckGo search
   mcp/search-server.js stdio MCP server exposing websearch to the engine
@@ -270,9 +271,10 @@ update dialog (see `docs/notes/models-and-tools.md`) is the fix.
 
 - **3.4 — the live per-session Tools-in-Use feed.** The main pane's napkin with its
   live path is done; what is left is the per-session tool feed the rail shows.
-- **3.5 — housekeeping**: `engine.type` as a dropdown (only `opencode` is
-  registered), **Browse Folder** / **Cmd Here** still `data-soon` for stage 4, and
-  zeroing the stored probe results if the panel should start blank.
+- **3.5 — housekeeping**: `engine.type` is a dropdown in Settings now and only
+  `opencode` is registered; **Browse Folder** / **Cmd Here** are still `data-soon`
+  for stage 4, and the stored probe results are not zeroed if the panel should
+  start blank.
 - **The census double-counts after a restart** — known, reproduced, not yet fixed;
   the detail and the near-miss in testing are in `docs/notes/engine-notes.md`.
 - The composer has **no target picker**: every message goes to the Architect, and

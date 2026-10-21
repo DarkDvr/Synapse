@@ -7,6 +7,7 @@ import { TBD_TITLE } from './titles.js';
 import { ensurePlan, readPlan, readRuns, briefSession, logPlanState, BRIEF_KEY, appendRequirement } from './plans.js';
 import { skillRules, describeSkills } from './skills.js';
 import { PROJECTS_ROOT, SKILLS_DIR } from './paths.js';
+import { fetchProviderModels } from './providers.js';
 
 export function createApi({ getConfig, applyConfig, engine, logger, getBootError, projects, toolStats, probe, modelCache, inspectModel: inspectRef, probeDir, runs, engineUpdate, notify, guard }) {
   const app = logger.channel('app');
@@ -154,6 +155,11 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
     }),
 
     getConfig: async () => toClientConfig(getConfig()),
+
+    // "Refresh List" in Settings > Providers: ask a server what it serves. The
+    // operator's click is the only reason this contacts anything — see
+    // src/providers.js.
+    providerModels: async (body) => fetchProviderModels(body || {}),
 
     // The engine updates often and the model catalog ships inside it, so this is
     // the one place Synapse will talk to the network for something other than a

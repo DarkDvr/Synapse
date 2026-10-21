@@ -87,6 +87,15 @@ const state = {
   askPage: 0,
   renaming: null,
   view: 'none', // none | session
+  // Settings is a draft, not the file: `setDraft` is a copy of the config that
+  // the panes edit, `settingsTab` is the open pane, and the provider editor's
+  // own state (which row is selected, whether the key is revealed, what the last
+  // Refresh List said) lives here because the pane is re-rendered, not patched.
+  settingsTab: 'general',
+  setDraft: null,
+  setProvSelected: null,
+  setKeyRevealed: false,
+  setProvFetch: null,
 };
 
 // ── helpers ─────────────────────────────────────────────────────
@@ -773,6 +782,11 @@ const issuesTitle = (m) =>
 const PROVIDER_LABELS = { opencode: 'OpenCode', 'opencode-go': 'OpenCode Go', deepseek: 'DeepSeek' };
 const providerLabel = (p) => {
   const id = String(p || 'unknown');
+  // A provider the operator added in Settings has a name of their own — show
+  // that, not a tidied-up id: "DeepSeek" is what they typed and what the badge
+  // in Settings says.
+  const configured = (state.config?.engine?.opencode?.providers || []).find((x) => x.id === id);
+  if (configured?.name) return configured.name;
   if (PROVIDER_LABELS[id]) return PROVIDER_LABELS[id];
   return id
     .split(/[-_]/)
@@ -942,18 +956,24 @@ function openModelMenu(role, fromTyping) {
     .filter((m) => !q || m.name.toLowerCase().includes(q) || m.ref.toLowerCase().includes(q))
     .sort((a, b) => String(a.provider).localeCompare(String(b.provider)) || a.name.localeCompare(b.name));
   menuRefs = list.map((m) => m.ref);
-  menu.innerHTML = list.length
-    ? list
-        .map(
-          (m) => `<div class="model-opt${m.ref === p.sel.value ? ' is-current' : ''}" role="option" data-ref="${esc(m.ref)}">
+  // A rule between provider groups. Eleven rows of eight different sources read
+  // as one list until the source changes are visible: the chip alone was too
+  // quiet, and the selection highlight made it worse when it landed across two.
+  const rows = [];
+  let previousProvider = null;
+  for (const m of list) {
+    if (previousProvider !== null && m.provider !== previousProvider) {
+      rows.push('<div class="model-sep" role="separator"></div>');
+    }
+    previousProvider = m.provider;
+    rows.push(`<div class="model-opt${m.ref === p.sel.value ? ' is-current' : ''}" role="option" data-ref="${esc(m.ref)}">
             <span class="mo-src">${esc(providerLabel(m.provider))}</span>
             <span class="mo-name">${esc(shortModel(m.name))}</span>
             ${m.issues?.length ? `<span class="mo-issues" data-clear-issues="${esc(m.ref)}" title="${esc(issuesTitle(m))}">Issues</span>` : ''}
             <span class="mo-meta">${esc(modelMeta(m))}</span>
-          </div>`,
-        )
-        .join('')
-    : '<div class="model-empty">No models match</div>';
+          </div>`);
+  }
+  menu.innerHTML = rows.length ? rows.join('') : '<div class="model-empty">No models match</div>';
   menu.hidden = false;
   p.input.setAttribute('aria-expanded', 'true');
   positionModelMenu(p.input, menu);
@@ -3727,169 +3747,463 @@ function skillsSummary() {
   return bits.join(' · ');
 }
 
-function renderSettings() {
-  const c = state.config;
-  if (!c) { $('settingsBody').innerHTML = '<p class="rail-note">Config unavailable.</p>'; return; }
+// ── settings: six tabs over one config file ─────────────────────
+// It used to be one long column of fourteen sections, which read as a wall: the
+// port you need and the log level you never change had the same weight. The tabs
+// are the app's own vocabulary - server, engine, providers, workers, tools,
+// logging - and they buy the room to make Providers a real editor instead of two
+// JSON blobs in a text field.
+//
+// Every pane renders from a *draft* (state.setDraft), not from the saved file.
+// Leaving a tab collects its fields into the draft first, so a half-typed port
+// survives a look at Providers, and Revert is then exactly "throw the draft away".
+// Nothing reaches disk until Save Changes.
 
-  // Every control carries a plain-English tooltip: the config file is the source
-  // of truth, but this screen is where a number is actually chosen, and "what is
-  // this?" should not require reading the source. Units live in the label, and
-  // anything long is in minutes — nobody reads 1200 and thinks "twenty minutes".
-  const f = (label, path, opts = {}) => {
-    const scale = Number(opts.scale) || 1;
-    const raw = opts.value !== undefined ? opts.value : readPath(c, path);
-    const shown = scale === 1 ? raw : Number(raw) / scale;
-    return `
+const ICONS = {
+  sliders:
+    '<path d="M2 5h6.4M11.4 5H14M2 11h3.4M8.4 11H14"/><circle cx="9.9" cy="5" r="1.5"/><circle cx="6.9" cy="11" r="1.5"/>',
+  engine:
+    '<rect x="3.6" y="3.6" width="8.8" height="8.8" rx="2"/><path d="M6.2 1.9v1.7M9.8 1.9v1.7M6.2 12.4v1.7M9.8 12.4v1.7M1.9 6.2h1.7M1.9 9.8h1.7M12.4 6.2h1.7M12.4 9.8h1.7"/>',
+  plug: '<path d="M5.3 1.9v3.3M10.7 1.9v3.3"/><path d="M3.7 5.2h8.6v1.9a4.3 4.3 0 0 1-8.6 0z"/><path d="M8 11.4v2.6"/>',
+  nodes:
+    '<circle cx="8" cy="3.1" r="1.6"/><circle cx="3.5" cy="12.3" r="1.6"/><circle cx="12.5" cy="12.3" r="1.6"/><path d="M8 4.7v3M8 7.7 4.6 11M8 7.7 11.4 11"/>',
+  tools:
+    '<path d="M2.5 9.5h2.8l1 1.9h3.4l1-1.9h2.8"/><rect x="2.5" y="2.9" width="11" height="10.3" rx="2"/>',
+  lines: '<path d="M2.7 4.1h10.6M2.7 8h10.6M2.7 11.9h6.2"/>',
+  eye: '<path d="M1.7 8S4 3.9 8 3.9 14.3 8 14.3 8 12 12.1 8 12.1 1.7 8 1.7 8z"/><circle cx="8" cy="8" r="1.9"/>',
+  eyeOff:
+    '<path d="M2.3 9.3C3.6 6.4 5.6 5 8 5s4.4 1.4 5.7 4.3"/><path d="M4 11.2 2.7 12.9M8 10.3v2.3M12 11.2 13.3 12.9"/>',
+};
+
+const setIcon = (name) =>
+  `<svg class="set-ic" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" ` +
+  `stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">${ICONS[name] || ''}</svg>`;
+
+const SETTINGS_TABS = [
+  { id: 'general', label: 'General', icon: 'sliders' },
+  { id: 'engine', label: 'Engine', icon: 'engine' },
+  { id: 'providers', label: 'Providers', icon: 'plug' },
+  { id: 'workers', label: 'Workers', icon: 'nodes' },
+  { id: 'tools', label: 'Tools', icon: 'tools' },
+  { id: 'logging', label: 'Logging', icon: 'lines' },
+];
+
+// Every control carries a plain-English tooltip: the config file is the source
+// of truth, but this screen is where a number is actually chosen, and "what is
+// this?" should not require reading the source. Units live in the label, and
+// anything long is in minutes — nobody reads 1200 and thinks "twenty minutes".
+function setField(c, label, path, opts = {}) {
+  const scale = Number(opts.scale) || 1;
+  const raw = opts.value !== undefined ? opts.value : readPath(c, path);
+  const shown = scale === 1 ? raw : Number(raw) / scale;
+  return `
     <label class="set-field${opts.wide ? ' wide' : ''}" title="${esc(opts.hint || '')}">
       <span>${esc(label)}</span>
       <input data-path="${path}"${scale !== 1 ? ` data-scale="${scale}"` : ''} type="${opts.type || 'text'}" value="${esc(shown)}" ${opts.attr || ''} />
     </label>`;
-  };
-  const sel = (label, path, options, opts = {}) => `
+}
+
+function setSelect(c, label, path, options, opts = {}) {
+  return `
     <label class="set-field${opts.wide ? ' wide' : ''}" title="${esc(opts.hint || '')}">
       <span>${esc(label)}</span>
       <select data-path="${path}">
         ${options.map((o) => `<option value="${esc(o.v)}"${o.v === readPath(c, path) ? ' selected' : ''}>${esc(o.l)}</option>`).join('')}
       </select>
     </label>`;
-  const check = (label, path, hint = '') => `
+}
+
+const setCheck = (c, label, path, hint = '') => `
     <label class="set-check" title="${esc(hint)}">
       <input data-path="${path}" type="checkbox" ${readPath(c, path) ? 'checked' : ''} />
       <span>${esc(label)}</span>
     </label>`;
-  const group = (title, body, cols) => `<section class="set-group"><h4>${title}</h4><div class="set-grid${cols === 3 ? ' cols-3' : ''}">${body}</div></section>`;
 
+const setGroup = (title, body, cols) =>
+  `<section class="set-group"><h4>${title}</h4><div class="set-grid${cols === 3 ? ' cols-3' : ''}">${body}</div></section>`;
+
+// ── panes ───────────────────────────────────────────────────────
+
+function settingsGeneral(c) {
+  return [
+    setGroup(
+      'Server',
+      setField(c, 'Host', 'server.host', {
+        hint: 'The address the Synapse window is served on. 127.0.0.1 means only this machine can open it.',
+      }) +
+        setField(c, 'Port', 'server.port', {
+          type: 'number',
+          hint: 'The port the Synapse window uses. Change it only if another program already uses this one.',
+        }) +
+        setCheck(
+          c,
+          'Open browser on start',
+          'server.openBrowser',
+          'Open a browser tab on Synapse when it starts. Off means you open it yourself.',
+        ),
+    ),
+    setGroup(
+      'Working Directory',
+      setField(c, 'Where new sessions run (blank = workspace)', 'defaults.directory', {
+        wide: true,
+        hint: 'The folder new sessions start in when no project is chosen. Blank uses the projects folder.',
+      }),
+    ),
+  ].join('');
+}
+
+function settingsEngine(c) {
   // Show what the engine actually resolved when the config is blank: these two
   // fields mean "auto" when empty, and an empty box hides the path in use.
   const detected = state.status?.engine || {};
   const binaryValue = readPath(c, 'engine.opencode.binary') || detected.binary || '';
   const homeValue = readPath(c, 'engine.opencode.home') || detected.home || '';
-
-  // No model or agent fields here: there is no "default" — every role owns its
-  // model and effort, chosen on its card and persisted in the config file.
-  $('settingsBody').innerHTML = [
-    group('Server',
-      f('Host', 'server.host', {
-        hint: 'The address the Synapse window is served on. 127.0.0.1 means only this machine can open it.',
-      }) +
-      f('Port', 'server.port', {
-        type: 'number',
-        hint: 'The port the Synapse window uses. Change it only if another program already uses this one.',
-      }) +
-      check(
-        'Open browser on start',
-        'server.openBrowser',
-        'Open a browser tab on Synapse when it starts. Off means you open it yourself.',
-      )),
-    group('Engine',
-      f('Engine type', 'engine.type', {
-        hint: 'Which agent engine Synapse drives. Only OpenCode is implemented.',
-      }) +
-      f('Engine port', 'engine.opencode.port', {
-        type: 'number',
-        hint: 'The port Synapse asks the engine to listen on. It must differ from the Synapse port above.',
-      }) +
-      f('opencode.exe path (blank = auto-detect)', 'engine.opencode.binary', {
-        wide: true,
-        value: binaryValue,
-        hint: 'The engine program. Leave it blank and Synapse finds it by itself.',
-      }) +
-      f('Password (blank = keep existing)', 'engine.opencode.password', {
-        type: 'password',
-        attr: 'placeholder="unchanged"',
-        hint: 'Password for the engine\'s local API. Leave it blank to keep the password already saved.',
-      }) +
-      f('Start timeout (seconds)', 'engine.opencode.startTimeoutMs', {
-        type: 'number',
-        scale: 1000,
-        hint: 'How long Synapse waits for the engine to report ready when it starts. Seconds.',
-      }) +
-      f('Engine home (blank = data\\engine\\opencode)', 'engine.opencode.home', {
-        wide: true,
-        value: homeValue,
-        hint: 'Where the engine keeps its own settings, logs and data. Blank uses the copy inside Synapse; the machine-wide OpenCode install is never touched.',
-      }) +
-      `<p class="set-note">Running <strong>${esc(detected.version || 'not started')}</strong> from ` +
-      `<code>${esc(detected.binary || 'auto-detected')}</code>. The model list is read from this engine at ` +
-      `every launch, but the catalog ships inside the engine binary - so when OpenCode Desktop shows models ` +
-      `that are missing here, its engine is newer and <code>@opencode/cli</code> is the thing to update.</p>` +
-      `<div class="set-field" title="Ask npm whether a newer engine has been published. The engine carries the model catalog, so this is also how the model list gets current."><span>Engine version</span>` +
-      `<button type="button" class="btn btn-secondary btn-sm" data-check-update>Check for Updates</button></div>`),
-    group('Working directory',
-      f('Where new sessions run (blank = workspace)', 'defaults.directory', {
-        wide: true,
-        hint: 'The folder new sessions start in when no project is chosen. Blank uses the projects folder.',
-      })),
-    group('Skills',
-      f('Extra skill folders (separate with ;)', 'engine.opencode.skillPaths', {
-        wide: true,
-        value: (c.engine?.opencode?.skillPaths || []).join(';'),
-        hint: 'Extra folders of agent skills, separated by semicolons. Synapse\'s own skills and your ~/.agents/skills always load; add a folder here only for skills in neither.',
-      }) +
-      `<p class="set-note">${esc(skillsSummary())}</p>` +
-      `<p class="set-note">Synapse's own skills ship in <code>skills\\</code> beside the app and always load, ` +
-      `so the pipeline works on a fresh machine with nothing installed. The engine also reads your own ` +
-      `<code>~/.agents/skills</code>, which is why your library appears here too — and where a name exists in ` +
-      `both places, the copy Synapse ships is the one that loads. Add a folder below only for skills that are ` +
-      `not in either. A skill a role names but this machine does not have is listed above instead of ` +
-      `disappearing quietly.</p>`),
-    group('Model checks',
-      f('Max asks per model (1–20)', 'modelChecks.maxAsks', {
+  return [
+    setGroup(
+      'Engine',
+      setSelect(
+        c,
+        'Engine type',
+        'engine.type',
+        [{ v: 'opencode', l: 'OpenCode' }],
+        { hint: 'Which agent engine Synapse drives. Only OpenCode is implemented.' },
+      ) +
+        setField(c, 'Engine port', 'engine.opencode.port', {
+          type: 'number',
+          hint: 'The port Synapse asks the engine to listen on. It must differ from the Synapse port.',
+        }) +
+        setField(c, 'opencode.exe path (blank = auto-detect)', 'engine.opencode.binary', {
+          wide: true,
+          value: binaryValue,
+          hint: 'The engine program. Leave it blank and Synapse finds it by itself.',
+        }) +
+        setField(c, 'Password (blank = keep existing)', 'engine.opencode.password', {
+          type: 'password',
+          attr: 'placeholder="unchanged"',
+          hint: "Password for the engine's local API. Leave it blank to keep the password already saved.",
+        }) +
+        setField(c, 'Start timeout (seconds)', 'engine.opencode.startTimeoutMs', {
+          type: 'number',
+          scale: 1000,
+          hint: 'How long Synapse waits for the engine to report ready when it starts. Seconds.',
+        }) +
+        setField(c, 'Engine home (blank = data\\engine\\opencode)', 'engine.opencode.home', {
+          wide: true,
+          value: homeValue,
+          hint: 'Where the engine keeps its own settings, logs and data. Blank uses the copy inside Synapse; the machine-wide OpenCode install is never touched.',
+        }) +
+        `<p class="set-note">Running <strong>${esc(detected.version || 'not started')}</strong> from ` +
+        `<code>${esc(detected.binary || 'auto-detected')}</code>. The model list is read from this engine at ` +
+        `every launch, but the catalog ships inside the engine binary — so when OpenCode Desktop shows models ` +
+        `that are missing here, its engine is newer and <code>@opencode/cli</code> is the thing to update.</p>` +
+        `<div class="set-field wide" title="Ask npm whether a newer engine has been published. The engine carries the model catalog, so this is also how the model list gets current."><span>Engine version</span>` +
+        `<button type="button" class="btn btn-secondary btn-sm" data-check-update>Check for Updates</button></div>`,
+    ),
+    setGroup(
+      'Model Checks',
+      setField(c, 'Max asks per model (1–20)', 'modelChecks.maxAsks', {
         type: 'number',
         hint: 'How many times Synapse may ask one model which tools it has before it stops asking. Between 1 and 20, counted across sessions and restarts.',
       }) +
-      `<div class="set-field" title="Set every model's ask count back to zero. Answers already learned are kept."><span>Ask counters</span>
-        <button type="button" class="btn btn-warn btn-sm" data-reset-asks>Reset Ask Counters</button>
-      </div>`),
-    group('Tools',
-      check(
-        'Clear the tool census on every start',
-        'tools.resetOnBoot',
-        'Start the tool-call counts from zero each time Synapse starts, so they describe this session rather than every test run ever.',
-      ) +
-      `<div class="set-field" title="Delete the tool-call counts now."><span>Tool census</span>
-        <button type="button" class="btn btn-warn btn-sm" data-clear-tools>Clear Tool Census</button>
-      </div>`),
-    group('Workers',
-      f('Restart after silence (minutes)', 'worker.stallSec', {
+        `<div class="set-field" title="Set every model's ask count back to zero. Answers already learned are kept."><span>Ask counters</span>` +
+        `<button type="button" class="btn btn-warn btn-sm" data-reset-asks>Reset Ask Counters</button></div>`,
+    ),
+  ].join('');
+}
+
+function settingsWorkers(c) {
+  return [
+    setGroup(
+      'Timers',
+      setField(c, 'Restart after silence (minutes)', 'worker.stallSec', {
         type: 'number',
         scale: 60,
         hint: 'If a worker writes, reads and says nothing at all for this long, Synapse interrupts it and tells it to carry on from where it stopped. Any activity resets the clock, so a slow turn is never cut short however long it takes. Minutes.',
       }) +
-      f('Restarts allowed per task', 'worker.resumeMax', {
-        type: 'number',
-        hint: 'How many times one task may be interrupted for silence and told to continue before it is reported as stuck. 0 turns restarts off.',
+        setField(c, 'Restarts allowed per task', 'worker.resumeMax', {
+          type: 'number',
+          hint: 'How many times one task may be interrupted for silence and told to continue before it is reported as stuck. 0 turns restarts off.',
+        }) +
+        setField(c, 'First retry wait (seconds)', 'worker.retryBaseSec', {
+          type: 'number',
+          hint: 'After a rate limit or a dropped connection, how long Synapse waits before asking the same worker to continue. It doubles with each retry. Seconds.',
+        }) +
+        setField(c, 'Longest retry wait (minutes)', 'worker.retryCapSec', {
+          type: 'number',
+          scale: 60,
+          hint: 'The ceiling for that wait. Recoverable failures are retried indefinitely at this interval; there is no attempt limit, so only Stop ends one. Minutes.',
+        }) +
+        `<p class="set-note">Rate limits, dropped connections and server errors are retried for as long as it takes, and they do not count as attempts: the worker keeps its progress. A retired model, a wrong key or a malformed request is final, and is reported. Every provider failure is written to <code>data\\provider-errors.log</code>, which keeps 30 days regardless of the log retention below.</p>`,
+    ),
+    setGroup(
+      'Escalation',
+      setField(c, 'Coder ladder (role ids, in order)', 'worker.ladder', {
+        wide: true,
+        value: (readPath(c, 'worker.ladder') || []).join(', '),
+        hint: 'Roles that can stand in for one another, in escalation order. When a coder cannot do the job, the same task moves down this list.',
       }) +
-      f('First retry wait (seconds)', 'worker.retryBaseSec', {
-        type: 'number',
-        hint: 'After a rate limit or a dropped connection, how long Synapse waits before asking the same worker to continue. It doubles with each retry. Seconds.',
-      }) +
-      f('Longest retry wait (minutes)', 'worker.retryCapSec', {
-        type: 'number',
-        scale: 60,
-        hint: 'The ceiling for that wait. Recoverable failures are retried indefinitely at this interval; there is no attempt limit, so only Stop ends one. Minutes.',
-      }) +
-      `<p class="set-note">Rate limits, dropped connections and server errors are retried for as long as it takes, and they do not count as attempts: the worker keeps its progress. A retired model, a wrong key or a malformed request is final, and is reported. Every provider failure is written to <code>data\\provider-errors.log</code>, which keeps 30 days regardless of the log retention above.</p>`),
-    group('Logging',
-      sel('Level', 'logging.level', [
-        { v: 'debug', l: 'Debug' },
-        { v: 'info', l: 'Info' },
-        { v: 'warn', l: 'Warn' },
-        { v: 'error', l: 'Error' },
-      ], { hint: 'How much Synapse writes to its own logs. Debug is for diagnosing a problem; Info is the normal setting.' }) +
-      f('Retention (days)', 'logging.retentionDays', {
-        type: 'number',
-        hint: 'How many days the app, engine, session and tool logs are kept. Days.',
-      }) +
-      f('Max file size (MB)', 'logging.maxFileMb', {
-        type: 'number',
-        hint: 'When a log file reaches this size it is rotated to a .1 file and a fresh one is started. Megabytes.',
-      }), 3),
+        `<p class="set-note">A task is written for one role. When that coder cannot do the job, the harness hands the same task down this list — never to a role that is not on it.</p>`,
+    ),
   ].join('');
 }
 
-async function saveSettings() {
-  const draft = JSON.parse(JSON.stringify(state.config));
+function settingsTools(c) {
+  return [
+    setGroup(
+      'Tool Census',
+      setCheck(
+        c,
+        'Clear the tool census on every start',
+        'tools.resetOnBoot',
+        'Start the tool-call counts from zero each time Synapse starts, so they describe this session rather than every test run ever.',
+      ) +
+        `<div class="set-field wide" title="Delete the tool-call counts now."><span>Counts</span>` +
+        `<button type="button" class="btn btn-warn btn-sm" data-clear-tools>Clear Tool Census</button></div>`,
+    ),
+    setGroup(
+      'Skills',
+      setField(c, 'Extra skill folders (separate with ;)', 'engine.opencode.skillPaths', {
+        wide: true,
+        value: (c.engine?.opencode?.skillPaths || []).join(';'),
+        hint: "Extra folders of agent skills, separated by semicolons. Synapse's own skills and your ~/.agents/skills always load; add a folder here only for skills in neither.",
+      }) +
+        `<p class="set-note">${esc(skillsSummary())}</p>` +
+        `<p class="set-note">Synapse's own skills ship in <code>skills\\</code> beside the app and always load, ` +
+        `so the pipeline works on a fresh machine with nothing installed. The engine also reads your own ` +
+        `<code>~/.agents/skills</code>, which is why your library appears here too — and where a name exists in ` +
+        `both places, the copy Synapse ships is the one that loads. A skill a role names but this machine does ` +
+        `not have is listed above instead of disappearing quietly.</p>`,
+    ),
+  ].join('');
+}
+
+function settingsLogging(c) {
+  return [
+    setGroup(
+      'Logging',
+      setSelect(
+        c,
+        'Level',
+        'logging.level',
+        [
+          { v: 'debug', l: 'Debug' },
+          { v: 'info', l: 'Info' },
+          { v: 'warn', l: 'Warn' },
+          { v: 'error', l: 'Error' },
+        ],
+        {
+          hint: 'How much Synapse writes to its own logs. Debug is for diagnosing a problem; Info is the normal setting.',
+        },
+      ) +
+        setField(c, 'Retention (days)', 'logging.retentionDays', {
+          type: 'number',
+          hint: 'How many days the app, engine, session and tool logs are kept. Days.',
+        }) +
+        setField(c, 'Max file size (MB)', 'logging.maxFileMb', {
+          type: 'number',
+          hint: 'When a log file reaches this size it is rotated to a .1 file and a fresh one is started. Megabytes.',
+        }) +
+        `<p class="set-note">One file per channel: <code>app</code>, <code>engine</code>, <code>session</code> and ` +
+        `<code>tools</code>, in <code>logs\\</code>. The console mirrors the app channel and every warning or error ` +
+        `from any channel, so a retry or a stall shows up in the window Synapse was started from. ` +
+        `<code>data\\provider-errors.log</code> keeps 30 days on its own.</p>`,
+    ),
+  ].join('');
+}
+
+// ── providers: the only editable list in this window ────────────
+
+/** `sk-efn1***f7df`: enough to tell two keys apart, never enough to use one. */
+function maskSecret(key) {
+  const k = String(key || '');
+  if (!k) return '';
+  if (k.length <= 8) return `${k.slice(0, 2)}${'*'.repeat(6)}`;
+  return `${k.slice(0, 6)}***${k.slice(-3)}`;
+}
+
+/** The same rule as src/providers.js: one id, chosen once, used in model refs. */
+function slugify(name) {
+  return (
+    String(name || '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 32) || 'provider'
+  );
+}
+
+/** Models as the editor shows them: `id | name | context | output`. */
+function modelLines(models) {
+  return (models || [])
+    .map((m) => [m.id, m.name && m.name !== m.id ? m.name : '', m.context || '', m.output || ''].join(' | ').replace(/(\s*\|\s*)+$/, ''))
+    .join('\n');
+}
+
+function parseModelLines(text) {
+  return String(text || '')
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const [id = '', name = '', context = '', output = ''] = line.split('|').map((s) => s.trim());
+      if (!id) return null;
+      const model = { id, name: name || id };
+      const ctx = Number.parseInt(context, 10);
+      const out = Number.parseInt(output, 10);
+      if (Number.isFinite(ctx) && ctx > 0) model.context = ctx;
+      if (Number.isFinite(out) && out > 0) model.output = out;
+      return model;
+    })
+    .filter(Boolean);
+}
+
+function providerEditor(providers, index) {
+  const p = providers[index];
+  if (!p) return '';
+  const key = String(p.apiKey || '');
+  const revealed = Boolean(state.setKeyRevealed);
+  const fromEnv = key.startsWith('env:');
+  const shown = !key ? '' : fromEnv ? key : revealed ? key : maskSecret(key);
+  const taken = providers.filter((q, i) => i !== index).map((q) => q.id || slugify(q.name));
+  const previewId = p.id || slugify(p.name || '') || 'provider';
+  const clash = !p.id && taken.includes(previewId);
+  const fetchNote = state.setProvFetch;
+  const roles = Object.entries(state.setDraft?.roles || {})
+    .filter(([, r]) => String(r?.ref || '').startsWith(`${p.id || previewId}/`))
+    .map(([role]) => role);
+
+  return `
+  <section class="prov-edit" data-prov-edit-form>
+    <div class="set-grid">
+      <label class="set-field" title="A local server runs on this machine. An OpenAI-compatible endpoint can be anything that speaks the same API, including a paid service.">
+        <span>Type</span>
+        <select data-prov="type">
+          <option value="local"${p.type === 'local' ? ' selected' : ''}>Local provider</option>
+          <option value="openai"${p.type !== 'local' ? ' selected' : ''}>OpenAI Compatible</option>
+        </select>
+      </label>
+      <label class="set-field" title="The name on the badge beside this provider's models in every role's menu.">
+        <span>Name</span>
+        <input data-prov="name" value="${esc(p.name || '')}" placeholder="DeepSeek" />
+      </label>
+      <label class="set-field wide" title="The server's address, including /v1 when it needs one. Nothing is contacted until you press Refresh List or run a turn.">
+        <span>Server URL</span>
+        <input data-prov="baseURL" value="${esc(p.baseURL || '')}" placeholder="http://localhost:1234/v1" spellcheck="false" />
+      </label>
+      <div class="set-field wide" title="Sent as a bearer token. env:NAME reads the environment when Synapse starts, so the key never has to live in the config file.">
+        <span>API Key</span>
+        <div class="set-key">
+          <input data-prov="apiKey" value="${esc(shown)}" data-masked="${key && !fromEnv && !revealed ? '1' : '0'}" type="text" spellcheck="false"
+                 placeholder="${p.type === 'local' ? 'Empty for local servers' : 'sk-…'}" autocomplete="off" />
+          ${fromEnv ? '' : `<button type="button" class="input-eye" data-prov-eye aria-label="${revealed ? 'Hide the key' : 'Show the key'}" title="${revealed ? 'Hide the key' : 'Show the key'}">${setIcon(revealed ? 'eyeOff' : 'eye')}</button>`}
+        </div>
+        <small class="prov-hint">${fromEnv ? `The key is read from the environment when Synapse starts — the config file keeps the variable's name, not the key. Type over it to store a key here instead.` : key ? `Stored in the config file as ${esc(maskSecret(key))}. Type over it to replace it.` : 'Only needed for a service. Nothing is written to the config file until you save.'}</small>
+      </div>
+      <div class="set-field wide">
+        <span>Models</span>
+        <textarea data-prov="models" rows="4" spellcheck="false">${esc(modelLines(p.models))}</textarea>
+        <div class="prov-tools">
+          <button type="button" class="btn btn-secondary btn-sm" data-prov-fetch>Refresh List</button>
+          <span class="prov-fetch-state${fetchNote ? (fetchNote.ok ? ' is-ok' : ' is-bad') : ''}">${esc(fetchNote?.text || '')}</span>
+        </div>
+        <small class="prov-hint">One model per line: <code>id | name | context | output</code>. Only the id is required; the window is what the watchdog and the engine budget from.</small>
+      </div>
+    </div>
+    <p class="prov-badge-line">
+      Model refs use <code>${esc(p.id || previewId)}/…</code>.
+      ${(p.models || []).length ? '' : '<span class="prov-warn">No models yet — saved, but not registered with the engine until it has one.</span>'}
+      ${clash ? '<span class="prov-warn">That id is already used — pick another name.</span>' : ''}
+      ${roles.length ? `<span class="prov-inuse">In use by ${esc(roles.join(', '))}.</span>` : ''}
+    </p>
+  </section>`;
+}
+
+function settingsProviders(c) {
+  const providers = c.engine?.opencode?.providers || [];
+  const selected = Number.isInteger(state.setProvSelected) ? state.setProvSelected : -1;
+  const engineModels = (state.models || []).filter((m) => m.provider === 'opencode').length;
+
+  const rows = providers
+    .map((p, i) => {
+      const used = Object.entries(c.roles || {}).filter(([, r]) => String(r?.ref || '').startsWith(`${p.id || slugify(p.name)}/`));
+      const count = (p.models || []).length;
+      return `<div class="prov-row${i === selected ? ' is-active' : ''}" data-prov-row="${i}" role="button" tabindex="0"
+                   aria-label="Edit ${esc(p.name || 'provider')}">
+        <span class="prov-type">${p.type === 'openai' ? 'OpenAI' : 'Local'}</span>
+        <span class="prov-name">${esc(p.name || 'Untitled provider')}</span>
+        <span class="prov-url">${esc(p.baseURL || 'no server URL yet')}</span>
+        <span class="prov-meta">${count} model${count === 1 ? '' : 's'}${used.length ? ` · ${used.length} role${used.length === 1 ? '' : 's'}` : ''}</span>
+        <span class="prov-acts">
+          <button type="button" class="role-btn ic-edit" data-prov-edit="${i}" title="Edit ${esc(p.name || 'this provider')}" aria-label="Edit ${esc(p.name || 'this provider')}">✎</button>
+          <button type="button" class="role-btn prov-del" data-prov-del="${i}" title="Remove ${esc(p.name || 'this provider')}" aria-label="Remove ${esc(p.name || 'this provider')}">✕</button>
+        </span>
+      </div>`;
+    })
+    .join('');
+
+  return `
+    <section class="set-group"><h4>Providers</h4>
+      <div class="prov-list">
+        <div class="prov-row is-builtin" title="The engine's own catalog, always registered. Its key lives in the engine, not here.">
+          <span class="prov-type">OpenCode</span>
+          <span class="prov-name">Engine catalog</span>
+          <span class="prov-url">built in — registered by the engine itself</span>
+          <span class="prov-meta">${engineModels} model${engineModels === 1 ? '' : 's'}</span>
+        </div>
+        ${rows}
+      </div>
+      <div class="prov-add">
+        <button type="button" class="btn btn-ghost btn-sm" data-prov-add>+ Add Provider</button>
+        <div class="prov-add-menu" id="provAddMenu" hidden>
+          <button type="button" data-prov-new="local">Local Provider</button>
+          <button type="button" data-prov-new="openai">OpenAI Compatible</button>
+          <button type="button" disabled title="The engine's own catalog is always registered. A second copy would list the same models twice.">OpenCode (built in)</button>
+        </div>
+      </div>
+      ${providerEditor(providers, selected)}
+      <p class="set-note">A new or changed provider reaches the model menu after a restart: the engine reads its
+      provider list when it starts. A key written as <code>env:NAME</code> is read from the environment at boot and
+      the config file keeps only the variable's name; a literal key is stored in the file, which git tracks.</p>
+    </section>`;
+}
+
+const SETTINGS_PANES = {
+  general: settingsGeneral,
+  engine: settingsEngine,
+  providers: settingsProviders,
+  workers: settingsWorkers,
+  tools: settingsTools,
+  logging: settingsLogging,
+};
+
+function renderSettingsTabs() {
+  const nav = $('settingsTabs');
+  if (!nav) return;
+  nav.innerHTML = SETTINGS_TABS.map(
+    (t) =>
+      `<button type="button" class="set-tab${t.id === state.settingsTab ? ' is-active' : ''}" role="tab" ` +
+      `aria-selected="${t.id === state.settingsTab}" data-set-tab="${t.id}">${setIcon(t.icon)}<span>${t.label}</span></button>`,
+  ).join('');
+}
+
+function renderSettings() {
+  const c = state.setDraft;
+  if (!c) {
+    $('settingsBody').innerHTML = '<p class="rail-note">Config unavailable.</p>';
+    $('settingsTabs').innerHTML = '';
+    return;
+  }
+  if (!SETTINGS_PANES[state.settingsTab]) state.settingsTab = 'general';
+  renderSettingsTabs();
+  $('settingsBody').innerHTML = SETTINGS_PANES[state.settingsTab](c);
+  $('settingsBody').scrollTop = 0;
+}
+
+/** The visible pane's controls into the draft. Called before switching tabs and
+ *  before saving, so nothing typed is lost by looking at something else. */
+function collectSettings() {
+  const c = state.setDraft;
+  if (!c) return null;
   for (const el of $('settingsBody').querySelectorAll('[data-path]')) {
     const path = el.dataset.path;
     let value = el.type === 'checkbox' ? el.checked : el.value;
@@ -3900,10 +4214,185 @@ async function saveSettings() {
     if (el.dataset.scale) value = Math.round(value * Number(el.dataset.scale));
     // A folder list is one line in the form and an array in the config.
     if (path === 'engine.opencode.skillPaths') {
-      writePath(draft, path, String(value).split(';').map((p) => p.trim()).filter(Boolean));
+      writePath(c, path, String(value).split(';').map((p) => p.trim()).filter(Boolean));
       continue;
     }
-    writePath(draft, path, value);
+    // The ladder is a comma list in the form and an array in the config.
+    if (path === 'worker.ladder') {
+      writePath(c, path, String(value).split(',').map((r) => r.trim()).filter(Boolean));
+      continue;
+    }
+    writePath(c, path, value);
+  }
+  return c;
+}
+
+function switchSettingsTab(id) {
+  if (id === state.settingsTab) return;
+  collectSettings();
+  state.settingsTab = id;
+  state.setKeyRevealed = false;
+  state.setProvFetch = null;
+  renderSettings();
+}
+
+// ── providers: the editor's own small state machine ─────────────
+
+function providerAt(index) {
+  const list = state.setDraft?.engine?.opencode?.providers;
+  return Array.isArray(list) && list[index] ? list[index] : null;
+}
+
+function addProvider(type) {
+  const c = collectSettings();
+  if (!c) return;
+  c.engine.opencode = c.engine.opencode || {};
+  const list = Array.isArray(c.engine.opencode.providers) ? c.engine.opencode.providers : (c.engine.opencode.providers = []);
+  list.push({
+    id: '',
+    type,
+    name: type === 'local' ? 'Local Server' : 'OpenAI Compatible',
+    baseURL: '',
+    apiKey: '',
+    models: [],
+  });
+  state.setProvSelected = list.length - 1;
+  state.setKeyRevealed = false;
+  state.setProvFetch = null;
+  renderSettings();
+  $('settingsBody').querySelector('[data-prov="name"]')?.focus();
+}
+
+async function removeProvider(index) {
+  const p = providerAt(index);
+  if (!p) return;
+  const c = state.setDraft;
+  const used = Object.entries(c.roles || {}).filter(([, r]) =>
+    String(r?.ref || '').startsWith(`${p.id || slugify(p.name)}/`),
+  );
+  if (used.length) {
+    const ok = await openDialog({
+      title: 'Remove Provider',
+      message:
+        `${p.name || 'This provider'} is in use by ${used.map(([role]) => role).join(', ')}. ` +
+        `Removing it leaves those roles pointing at models that will no longer exist, until you pick another on the card.`,
+      confirmLabel: 'Remove',
+      danger: true,
+      okResult: true,
+    });
+    if (!ok) return;
+  }
+  c.engine.opencode.providers.splice(index, 1);
+  state.setProvSelected = null;
+  state.setKeyRevealed = false;
+  state.setProvFetch = null;
+  renderSettings();
+}
+
+async function refreshProviderModels(index) {
+  const p = providerAt(index);
+  if (!p) return;
+  const stateEl = $('settingsBody').querySelector('.prov-fetch-state');
+  if (stateEl) { stateEl.className = 'prov-fetch-state'; stateEl.textContent = 'Asking the server…'; }
+  const r = await api('POST', '/api/providers/models', { baseURL: p.baseURL, apiKey: p.apiKey }).catch((err) => ({
+    ok: false,
+    models: [],
+    error: err.message,
+  }));
+  if (!r.ok) {
+    state.setProvFetch = { ok: false, text: r.error || 'The server did not answer.' };
+    renderSettings();
+    return;
+  }
+  const have = new Set((p.models || []).map((m) => m.id));
+  const added = r.models.filter((m) => !have.has(m.id));
+  p.models = [
+    ...(p.models || []),
+    ...added.map((m) => ({ id: m.id, name: m.name || m.id, ...(m.context ? { context: m.context } : {}) })),
+  ].sort((a, b) => a.id.localeCompare(b.id));
+  state.setProvFetch = {
+    ok: true,
+    text: `${r.models.length} on the server · ${added.length} added${have.size ? ` · ${have.size} already listed` : ''}`,
+  };
+  renderSettings();
+}
+
+function selectProvider(index) {
+  collectSettings();
+  state.setProvSelected = index;
+  state.setKeyRevealed = false;
+  state.setProvFetch = null;
+  renderSettings();
+}
+
+// The editor's fields write straight into the selected draft provider: there is
+// no data-path for them because a provider is an object in a list, not a path.
+function onSettingsInput(e) {
+  const el = e.target.closest('[data-prov]');
+  if (!el) return;
+  const p = providerAt(state.setProvSelected);
+  if (!p) return;
+  const field = el.dataset.prov;
+  if (field === 'models') { p.models = parseModelLines(el.value); return; }
+  if (field === 'apiKey') { p.apiKey = el.value; el.dataset.masked = '0'; return; }
+  p[field] = el.value;
+  // A hand-typed key is no longer the mask, and the hint under the field says so
+  // — but re-rendering on every keystroke would take the caret with it.
+  if (field === 'name') {
+    const row = $('settingsBody').querySelector(`[data-prov-row="${state.setProvSelected}"] .prov-name`);
+    if (row) row.textContent = el.value.trim() || 'Untitled provider';
+    if (!p.id) {
+      const code = $('settingsBody').querySelector('.prov-badge-line code');
+      if (code) code.textContent = `${slugify(el.value)}/…`;
+    }
+  }
+}
+
+async function onSettingsClick(e) {
+  const add = e.target.closest('[data-prov-add]');
+  if (add) {
+    const menu = $('provAddMenu');
+    if (menu) menu.hidden = !menu.hidden;
+    return;
+  }
+  const newProvider = e.target.closest('[data-prov-new]');
+  if (newProvider) {
+    const menu = $('provAddMenu');
+    if (menu) menu.hidden = true;
+    addProvider(newProvider.dataset.provNew);
+    return;
+  }
+  const del = e.target.closest('[data-prov-del]');
+  if (del) { await removeProvider(Number(del.dataset.provDel)); return; }
+  const row = e.target.closest('[data-prov-row]');
+  if (row) { selectProvider(Number(row.dataset.provRow)); return; }
+  if (e.target.closest('[data-prov-eye]')) {
+    if (providerAt(state.setProvSelected)) {
+      state.setKeyRevealed = !state.setKeyRevealed;
+      renderSettings();
+      // Put the caret back at the end of the key rather than at the start.
+      const field = $('settingsBody').querySelector('[data-prov="apiKey"]');
+      if (field) { field.focus(); field.setSelectionRange(field.value.length, field.value.length); }
+    }
+    return;
+  }
+  if (e.target.closest('[data-prov-fetch]')) {
+    await refreshProviderModels(state.setProvSelected);
+  }
+}
+
+async function saveSettings() {
+  const draft = collectSettings();
+  if (!draft) return;
+  // A provider row added by mistake - never named, never given a server - is
+  // dropped here rather than half-registered. One that has a name and a server
+  // but no models yet is kept: that is work in progress, and the engine simply
+  // does not register it until it has something to serve.
+  const providers = draft.engine?.opencode?.providers;
+  if (Array.isArray(providers)) {
+    draft.engine.opencode.providers = providers.filter(
+      (p) => String(p.name || '').trim() || String(p.baseURL || '').trim(),
+    );
   }
   // A model change can strand a thinking effort the new model does not offer
   // (or that the chevron control cannot express). Clear it rather than let the
@@ -3915,6 +4404,8 @@ async function saveSettings() {
   }
   try {
     state.config = await api('PUT', '/api/config', draft);
+    state.setDraft = JSON.parse(JSON.stringify(state.config));
+    state.setProvSelected = null;
     toast('Settings saved', 'Restart Synapse to apply engine or server changes.');
     renderLlmStatus();
     await loadModels();
@@ -3945,8 +4436,31 @@ async function clearToolCensus() {
   }
 }
 
-function openSettings() { renderSettings(); $('settingsModal').hidden = false; }
-function closeSettings() { $('settingsModal').hidden = true; }
+function openSettings() {
+  if (!state.config) { toast('Config Unavailable', 'Synapse could not read its own config file.'); return; }
+  // Every edit in this window happens to a copy; the file only changes on Save.
+  state.setDraft = JSON.parse(JSON.stringify(state.config));
+  state.settingsTab = state.settingsTab || 'general';
+  state.setProvSelected = null;
+  state.setKeyRevealed = false;
+  state.setProvFetch = null;
+  renderSettings();
+  $('settingsModal').hidden = false;
+}
+function closeSettings() {
+  $('settingsModal').hidden = true;
+  state.setDraft = null;
+}
+/** Throw the draft away and read the file again, without closing the window. */
+function revertSettings() {
+  if (!state.config) return;
+  state.setDraft = JSON.parse(JSON.stringify(state.config));
+  state.setProvSelected = null;
+  state.setKeyRevealed = false;
+  state.setProvFetch = null;
+  renderSettings();
+  toast('Changes Discarded', 'The form shows what is saved in the config file.');
+}
 
 // ── wiring ──────────────────────────────────────────────────────
 function wire() {
@@ -4035,8 +4549,33 @@ function wire() {
   }, true);
   $('settingsBtn').addEventListener('click', openSettings);
   $('closeSettings').addEventListener('click', closeSettings);
-  $('cancelSettings').addEventListener('click', closeSettings);
+  $('revertSettings').addEventListener('click', revertSettings);
   $('saveSettings').addEventListener('click', saveSettings);
+  $('settingsTabs').addEventListener('click', (e) => {
+    const tab = e.target.closest('[data-set-tab]');
+    if (tab) switchSettingsTab(tab.dataset.setTab);
+  });
+  // One delegated pair for the whole pane: the Providers editor rebuilds its own
+  // markup on every change (a new row, a revealed key, a refreshed list), so
+  // per-element listeners would have to be re-attached each time.
+  $('settingsBody').addEventListener('click', onSettingsClick);
+  $('settingsBody').addEventListener('input', onSettingsInput);
+  // A masked key is far shorter than the real one; selecting it on focus means
+  // typing replaces it instead of appending to the mask.
+  $('settingsBody').addEventListener('focusin', (e) => {
+    const el = e.target.closest('[data-prov="apiKey"]');
+    if (el && el.dataset.masked === '1') el.select();
+  });
+  // And leaving the field re-masks it: a key stays on screen only while it is
+  // being typed into or was deliberately revealed.
+  $('settingsBody').addEventListener('focusout', (e) => {
+    const el = e.target.closest('[data-prov="apiKey"]');
+    if (!el) return;
+    const p = providerAt(state.setProvSelected);
+    if (!p) return;
+    const literal = String(p.apiKey || '') && !String(p.apiKey).startsWith('env:');
+    if (literal && !state.setKeyRevealed) renderSettings();
+  });
 
   // The engine's own version: the chip, its dialog, and the two buttons.
   $('updateChip').addEventListener('click', openUpdateDialog);

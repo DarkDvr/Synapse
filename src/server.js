@@ -125,6 +125,11 @@ export function createServer({ api, engine, logger, config }) {
     }
 
     // GET /api/models  /api/agents  /api/skills
+    // POST /api/providers/models — ask a provider what it serves (Settings >
+    // Providers > Refresh List); it is the only provider call outside a turn.
+    if (seg[0] === 'providers' && seg[1] === 'models' && method === 'POST') {
+      return sendJson(res, 200, await api.providerModels(await readBody(req)));
+    }
     if (seg[0] === 'models' && seg.length === 1 && method === 'GET') return sendJson(res, 200, await api.models());
     if (seg[0] === 'skills' && seg.length === 1 && method === 'GET') return sendJson(res, 200, await api.skills());
     if (seg[0] === 'models' && seg[1] === 'cache' && method === 'GET') return sendJson(res, 200, await api.modelCache());

@@ -23,6 +23,7 @@
       "providers": [
         {
           "id": "bionic",
+          "type": "local",
           "name": "Bionic",
           "baseURL": "http://localhost:1235/v1",
           "apiKey": "",
@@ -37,6 +38,7 @@
         },
         {
           "id": "deepseek",
+          "type": "openai",
           "name": "DeepSeek",
           "baseURL": "https://api.deepseek.com/v1",
           "apiKey": "env:DEEPSEEK_API_KEY",
@@ -76,7 +78,7 @@
       "focus": "app"
     },
     "architect": {
-      "ref": "opencode/deepseek-v4.1-flash-free",
+      "ref": "deepseek/deepseek-flash",
       "variant": "high",
       "skills": [
         "visual-review"

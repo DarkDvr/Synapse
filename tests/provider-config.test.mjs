@@ -9,6 +9,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { providerApiKey, normalize } from '../src/config.js';
+import { fetchProviderModels } from '../src/providers.js';
 
 const checks = [];
 const check = (name, ok, detail = '') => {
@@ -78,12 +79,51 @@ check(
   JSON.stringify(ds?.models),
 );
 
-// A provider with no models is dropped rather than half-registered: the engine
-// would list a provider with nothing in it and the menu would show an empty one.
+// A provider with no models is work in progress, not a typo: it is kept, and the
+// engine config leaves it out until it has something to serve (see the writer in
+// src/engines/opencode.js). A row with neither a name nor a server is dropped.
 const half = normalize({
   engine: { opencode: { providers: [{ id: 'empty', baseURL: 'https://example.com/v1', models: [] }] } },
 });
-check('a provider with no models is dropped', half.engine.opencode.providers.length === 0);
+check('a provider with no models is kept', half.engine.opencode.providers.length === 1);
+const blank = normalize({
+  engine: { opencode: { providers: [{ id: 'blank', baseURL: '', name: '', models: [] }] } },
+});
+check('a row with no name and no server is dropped', blank.engine.opencode.providers.length === 0);
+
+// ── the type, and the id a provider gets when it was added in Settings ──
+const typed = normalize({
+  engine: {
+    opencode: {
+      providers: [
+        { name: 'DeepSeek', baseURL: 'https://api.deepseek.com/v1', models: [{ id: 'deepseek-flash' }] },
+        { name: 'Local', baseURL: 'http://localhost:1234/v1', models: [{ id: 'x' }] },
+        { name: 'LAN Box', baseURL: 'http://192.168.50.9:1234/v1', type: 'local', models: [{ id: 'y' }] },
+      ],
+    },
+  },
+});
+const [ds2, local2, lan] = typed.engine.opencode.providers;
+check('an https vendor is type openai', ds2?.type === 'openai', ds2?.type);
+check('a localhost server is type local', local2?.type === 'local', local2?.type);
+check('a declared type wins over the address', lan?.type === 'local', lan?.type);
+check('a missing id comes from the name', ds2?.id === 'deepseek', ds2?.id);
+check('the second provider keeps its own id', local2?.id === 'local', local2?.id);
+const clash2 = normalize({
+  engine: {
+    opencode: {
+      providers: [
+        { name: 'DeepSeek', baseURL: 'https://a.example/v1', models: [{ id: 'm1' }] },
+        { name: 'DeepSeek', baseURL: 'https://b.example/v1', models: [{ id: 'm2' }] },
+      ],
+    },
+  },
+});
+check(
+  'two providers with one name get different ids',
+  clash2.engine.opencode.providers[1]?.id === 'deepseek-2',
+  clash2.engine.opencode.providers[1]?.id,
+);
 
 // And the repo's own config: DeepSeek is registered, and its key is a variable
 // name — never a key.
@@ -96,6 +136,57 @@ check(
   JSON.stringify(repoDs?.models?.map((m) => m.id)) === JSON.stringify(['deepseek-flash', 'deepseek-v4-pro']),
   JSON.stringify(repoDs?.models?.map((m) => m.id)),
 );
+
+// ── Refresh List: asking a server what it serves ─────────────────
+// The one call Synapse makes to a provider outside a turn, so the shape it
+// accepts and the sentence it returns when the server is wrong both matter.
+
+const calls = [];
+const stub = (body, { ok = true, status = 200 } = {}) => async (url, opts) => {
+  calls.push({ url, opts });
+  return { ok, status, text: async () => body };
+};
+
+calls.length = 0;
+const oa = await fetchProviderModels(
+  { baseURL: 'https://api.example.com/v1/', apiKey: 'sk-secret-123456' },
+  { fetchImpl: stub(JSON.stringify({ data: [{ id: 'b-model' }, { id: 'a-model', context_length: 65536, name: 'A Model' }] })) },
+);
+check('the list is read from an OpenAI-style answer', oa.ok && oa.models.length === 2, JSON.stringify(oa.error));
+check('models are sorted by id', oa.models[0].id === 'a-model' && oa.models[1].id === 'b-model', JSON.stringify(oa.models.map((m) => m.id)));
+check('a context length is carried over', oa.models[0].context === 65536, String(oa.models[0].context));
+check('a missing name falls back to the id', oa.models[1].name === 'b-model', oa.models[1].name);
+check('the URL is trimmed and /models appended', calls[0].url === 'https://api.example.com/v1/models', calls[0].url);
+check('the key is sent as a bearer token', calls[0].opts.headers.authorization === 'Bearer sk-secret-123456');
+check('the key never appears in the result', !JSON.stringify(oa).includes('sk-secret'), 'leaked');
+
+calls.length = 0;
+const lm = await fetchProviderModels(
+  { baseURL: 'http://localhost:1235/v1', apiKey: '' },
+  { fetchImpl: stub(JSON.stringify({ models: [{ id: 'qwen', max_context_length: 262144 }] })) },
+);
+check('a {models:[]} answer is accepted too', lm.ok && lm.models[0].id === 'qwen', JSON.stringify(lm));
+check('a keyless server sends no Authorization', !calls[0].opts.headers.authorization);
+check('max_context_length is read as the window', lm.models[0].context === 262144, String(lm.models[0].context));
+
+const refused = await fetchProviderModels(
+  { baseURL: 'https://api.example.com/v1', apiKey: 'sk-secret-123456' },
+  { fetchImpl: stub(JSON.stringify({ error: { message: 'Authentication Fails (no such user)' } }), { ok: false, status: 401 }) },
+);
+check('a 401 is reported, not thrown', refused.ok === false);
+check('the status is in the sentence', refused.error.includes('401'), refused.error);
+check('the provider sentence is kept', refused.error.includes('Authentication'), refused.error);
+check('a failure never echoes the key', !refused.error.includes('sk-secret'), refused.error);
+
+const html = await fetchProviderModels({ baseURL: 'https://x.example/v1' }, { fetchImpl: stub('<html>nope</html>') });
+check('a non-JSON answer is a sentence, not a crash', html.ok === false && /not JSON/.test(html.error), html.error);
+
+const empty = await fetchProviderModels({ baseURL: 'https://x.example/v1' }, { fetchImpl: stub(JSON.stringify({ data: [] })) });
+check('an empty list says so', empty.ok === true && empty.models.length === 0 && /no models/i.test(empty.error), empty.error);
+
+calls.length = 0;
+const noScheme = await fetchProviderModels({ baseURL: 'localhost:1234' }, { fetchImpl: stub('{}') });
+check('a URL without a scheme never leaves the app', noScheme.ok === false && calls.length === 0, noScheme.error);
 
 const failed = checks.filter((c) => !c.ok);
 console.log(`\n${checks.length - failed.length}/${checks.length} passed`);

@@ -3,6 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { CONFIG_FILE, CONFIG_DIR } from './paths.js';
+import { providerType, providerId } from './providers.js';
 
 export const DEFAULTS = {
   server: {
@@ -217,10 +218,15 @@ export function normalize(raw) {
     ? oc.skillPaths.map((p) => String(p || '').trim()).filter(Boolean)
     : [];
 
-  // Other model servers: [ { id, name, baseURL, apiKey?, models: [{id, name?, context?, output?}] } ].
+  // Other model servers: [ { id, type, name, baseURL, apiKey?, models: [{id, name?, context?, output?}] } ].
   // A provider without an id, a base URL or at least one model is dropped rather
   // than half-registered - the engine would answer an empty catalog and the menu
   // would show a provider with nothing in it.
+  //
+  // `type` is what the Settings screen shows as the provider's kind: `local` for
+  // a server on this machine, `openai` for anything reached over the network.
+  // It is not stored twice - a provider that never declared one gets the answer
+  // its address already gives (see providerType in src/providers.js).
   oc.providers = (Array.isArray(oc.providers) ? oc.providers : [])
     .filter(isPlainObject)
     .map((p) => {
@@ -239,13 +245,25 @@ export function normalize(raw) {
         .filter(Boolean);
       return {
         id: String(p.id || '').trim(),
+        type: providerType(p),
         name: String(p.name || '').trim(),
         baseURL: String(p.baseURL || '').trim(),
         apiKey: String(p.apiKey || ''),
         models,
       };
     })
-    .filter((p) => p.id && p.baseURL && p.models.length);
+    // A provider with no models yet is kept: it is half-typed work, not a typo,
+    // and the engine config simply does not register it until it has one. A row
+    // with neither a name nor a server is the only thing dropped.
+    .filter((p) => p.name || p.baseURL)
+    // A provider added in Settings has no id until its first save: the name is
+    // the operator's, the id is the machine's, and it is chosen here - once -
+    // because model refs are built from it (`deepseek/deepseek-flash`).
+    .map(((seen) => (p) => {
+      const id = p.id || providerId(p.name, seen);
+      seen.push(id);
+      return { ...p, id };
+    })([]));
 
   cfg.defaults.directory = String(cfg.defaults.directory || '');
   // The mode is per session now (Single at creation, switched live), so the old
