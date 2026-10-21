@@ -3102,6 +3102,9 @@ async function replyForm(formId) {
     await api('POST', `/api/sessions/${encodeURIComponent(sessionId)}/forms/${encodeURIComponent(formId)}/reply`, { answer });
     state.forms = state.forms.filter((f) => f.id !== formId);
     renderAskPanel();
+    // The rail's Answer mark is part of the same fact: clear it now, or it
+    // outlives the question until the next poll.
+    renderTree();
     renderComposer();
     renderTranscript();
     toast('Answer Sent', 'The session will carry on from it.');
