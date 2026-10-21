@@ -3191,11 +3191,17 @@ function renderPlan() {
 
   const counts = {};
   for (const t of tasks) counts[t.status] = (counts[t.status] || 0) + 1;
-  const meta = [`${counts.done || 0}/${tasks.length} done`];
-  if (counts.doing) meta.push(`${counts.doing} in flight`);
+  // The line has to fit a 300px rail beside the session clock, so it carries the
+  // three facts that change and nothing else: how far the plan got, how much is
+  // running, how much is blocked. "done" rides on the fraction only when the
+  // plan is finished (it then says the job is closed); the plan's age moved into
+  // the tooltip, where it costs no width.
+  const done = counts.done || 0;
+  const meta = [done === tasks.length ? `${done}/${tasks.length} done` : `${done}/${tasks.length}`];
+  if (counts.doing) meta.push(`${counts.doing} running`);
   if (counts.blocked) meta.push(`${counts.blocked} blocked`);
   if (counts.failed) meta.push(`${counts.failed} failed`);
-  if (st.mtime) meta.push(ago(st.mtime));
+  const metaTitle = `${done} of ${tasks.length} tasks done${st.mtime ? `; the plan changed ${ago(st.mtime)}` : ''}`;
 
   // Work already spent on each step, from the harness's own run records. A step
   // with a worker on it keeps counting from the live run's start.
@@ -3247,7 +3253,7 @@ function renderPlan() {
     // Printing them here put four lines of housekeeping under the operator's
     // plan and asked them to care about a job that was not theirs. The log keeps
     // them (`logPlanState`), which is where a run is read afterwards.
-    `<p class="rail-note plan-meta"><span>${esc(meta.join(' · '))}</span>${planClockMarkup()}</p>`;
+    `<p class="rail-note plan-meta"><span title="${esc(metaTitle)}">${esc(meta.join(' · '))}</span>${planClockMarkup()}</p>`;
 }
 
 /** The session's own stopwatch, in the plan footer: time spent working, paused
