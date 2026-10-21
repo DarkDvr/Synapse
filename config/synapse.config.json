@@ -95,7 +95,8 @@
   },
   "roles": {
     "designer": {
-      "ref": "local/qwen3.8-27b-ud",
+      "ref": "deepseek/deepseek-flash",
+      "variant": "low",
       "skills": [
         "ui-design",
         "frontend-design",
@@ -104,7 +105,8 @@
       ]
     },
     "qc": {
-      "ref": "local/qwen3.8-27b-ud",
+      "ref": "deepseek/deepseek-flash",
+      "variant": "low",
       "focus": "app"
     },
     "architect": {
@@ -115,28 +117,32 @@
       ]
     },
     "coder-1": {
-      "ref": "local/qwen3.8-27b-ud",
+      "ref": "deepseek/deepseek-flash",
+      "variant": "low",
       "skills": [
         "code-craft",
         "visual-review"
       ]
     },
     "coder-2": {
-      "ref": "local/qwen3.8-27b-ud",
+      "ref": "deepseek/deepseek-flash",
+      "variant": "low",
       "skills": [
         "code-craft",
         "visual-review"
       ]
     },
     "coder-3": {
-      "ref": "local/qwen3.8-27b-ud",
+      "ref": "deepseek/deepseek-flash",
+      "variant": "low",
       "skills": [
         "code-craft",
         "visual-review"
       ]
     },
     "inventor": {
-      "ref": "local/qwen3.8-27b-ud"
+      "ref": "deepseek/deepseek-flash",
+      "variant": "low"
     }
   },
   "modelChecks": {
