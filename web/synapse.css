@@ -644,7 +644,7 @@ body.dark .sidebar-bottom,
    and one 14px line is 33px against a 33px slot — so the DONE summary is one
    line here and the full sentence stays in its tooltip. */
 .topo-architect .role-card { --task-lines: 2; }
-.topo-architect .role-summary { -webkit-line-clamp: 1; }
+.topo-architect .role-summary { -webkit-line-clamp: 1; margin-top: 2px; }
 
 /* ── 9. connectors ─────────────────────────────────────────────────────── */
 /* idle structure: small round dots at 75%, no arrowheads. The dot band is
