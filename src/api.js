@@ -201,6 +201,16 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
   const questionHistory = new Map(); // sessionId -> Map(signature -> { answer, asks })
   const autoAnswered = new Set();    // form ids already answered here
 
+  /**
+   * A read that is allowed to fail. Listing what waits on the operator must not
+   * throw because one engine route is unhappy — and the form lookup after a
+   * reply must not throw either, or the reply never gets sent (it lived inside
+   * `pending` once, which is exactly how `safe is not defined` stopped a run).
+   */
+  const safe = async (fn, fallback) => {
+    try { return await fn(); } catch (err) { app.warn(`pending: ${err.message}`); return fallback; }
+  };
+
   const formSignature = questionSignature;
   const readableAnswerOf = readableAnswer;
 
@@ -826,9 +836,6 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
      */
     pending: async (focusSessionId = null) => {
       if (!engine.status().ready) return { permissions: [], forms: [], active: [] };
-      const safe = async (fn, fallback) => {
-        try { return await fn(); } catch (err) { app.warn(`pending: ${err.message}`); return fallback; }
-      };
       const [permissions, active] = await Promise.all([
         safe(() => engine.listPendingPermissions(), []),
         safe(() => engine.listActiveSessions(), []),
