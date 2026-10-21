@@ -140,7 +140,8 @@ try {
   // 1,048,576 - 32,000 output - 52,429 (5%) slack.
   expect('a 1M model keeps room for output and slack', big === 964147, String(big));
   expect('a 200k model lands near 158k', free === 158000, String(free));
-  expect('a 62k local model lands near 46k', local === 46000, String(local));
+  // 62,000 - 8,000 output - 6,000 slack floor (5% of 62k would be 3,100).
+  expect('a 62k local model lands near 48k', local === 48000, String(local));
   expect('an unknown window has no ceiling', windowRoom({}) === 0 && windowRoom({ context: 0 }) === 0);
 
   // The state machine: ask once at the boundary, then stay quiet until the

@@ -190,13 +190,19 @@ const tokens = (n) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : `${Math.round(n /
  *
  * The next turn needs room for its own output and for the tool results it will
  * pull in, so the ceiling is the window minus the model's output limit minus a
- * slice (5%, floor 8k). Deliberately derived from the model's own numbers: 1M
+ * slice (5%, floor 6k). Deliberately derived from the model's own numbers: 1M
  * hosted models and 62k local ones both land on something sane, and a model whose
  * window nobody recorded gets no ceiling at all rather than a guessed one.
+ *
+ * The floor was 8k. It is 6k because Shift Test 3 never filled the extra 2k: the
+ * biggest prompt a local 42k model accepted was 31,902 tokens, with no truncation
+ * and no error, while the watchdog compacted at 26,048. The output limit is
+ * already subtracted on top of this, so this floor is a second reserve for tool
+ * results, not the output budget.
  */
 export function windowRoom({ context, output } = {}) {
   if (!Number(context)) return 0;
-  const slack = Math.max(8000, Math.round(context * 0.05));
+  const slack = Math.max(6000, Math.round(context * 0.05));
   return Math.max(0, context - (Number(output) || 0) - slack);
 }
 
