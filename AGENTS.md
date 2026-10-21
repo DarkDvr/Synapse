@@ -28,6 +28,23 @@ or speed.
 
 ---
 
+## How to write
+
+Plain English first, then the detail. The operator reads the console, the logs,
+the cards and the commit messages — not the code — so say what happened in words
+someone outside this repo would understand, and only then name the file.
+
+- Use the everyday word: "the server is down", not "the listener is
+  unreachable"; "the run stopped because the worker asked the same question
+  twice", not "the guard tripped on a repeat signature". Keep a technical word
+  only when it is the real name of the thing (`engine`, `session`, `plan`, `run`,
+  `form`).
+- One reason per sentence. A chain of clauses hides the cause.
+- This covers comments, log lines, commit messages, docs and UI text. Code keeps
+  its own names: `guardQuestions` says more than `checkStuff`.
+
+---
+
 ## Hard rules
 
 1. **Zero npm dependencies.** Plain Node: `http`, global `fetch`,
