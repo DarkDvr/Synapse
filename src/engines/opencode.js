@@ -14,7 +14,7 @@ import {
   normalizeSession,
   parseModelRef,
 } from './base.js';
-import { SEARCH_SERVER, DELEGATE_SERVER, ENGINE_PID_FILE, SKILLS_DIR } from '../paths.js';
+import { SEARCH_SERVER, DELEGATE_SERVER, ENGINE_PID_FILE, SKILLS_DIR, VENDOR_ENGINE } from '../paths.js';
 import { providerApiKey } from '../config.js';
 
 const ENGINE_USERNAME = 'opencode';
@@ -45,6 +45,9 @@ export class OpenCodeEngine extends Engine {
     const explicit = (this.cfg.binary || '').trim();
     if (explicit) return explicit;
     const candidates = [];
+    // A copy vendored with Synapse wins: it is the version this app was shipped
+    // with, and it is the one that works on a machine with no npm at all.
+    candidates.push(VENDOR_ENGINE);
     if (process.env.APPDATA) {
       candidates.push(path.join(process.env.APPDATA, 'npm', 'node_modules', '@opencode', 'cli', 'bin', 'opencode.exe'));
     }

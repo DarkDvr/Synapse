@@ -23,7 +23,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFile } from 'node:child_process';
-import { DATA_DIR } from './paths.js';
+import { DATA_DIR, VENDOR_ENGINE } from './paths.js';
 
 const REGISTRY = 'https://registry.npmjs.org/@opencode/cli';
 const CACHE_FILE = path.join(DATA_DIR, 'engine-update.json');
@@ -150,7 +150,30 @@ export function createEngineUpdate({ engine, logger, runs, notify }) {
     try { status = engine.status() || {}; } catch { status = {}; }
     const pkg = packageRoot(status.binary);
     const version = (status.ready && status.version) || pkg?.version || null;
-    return { version, binary: status.binary || null, packageRoot: pkg?.root || null, managedByNpm: Boolean(pkg) };
+    // A copy that travels with Synapse has no package.json above it, so npm has
+    // nothing to replace — but ours is ours to replace, by copying the freshly
+    // installed binary over it.
+    const vendored = Boolean(status.binary) && path.resolve(String(status.binary)) === path.resolve(VENDOR_ENGINE);
+    return { version, binary: status.binary || null, packageRoot: pkg?.root || null, managedByNpm: Boolean(pkg), vendored };
+  }
+
+  /** Where npm puts the binary on this machine, if it is there. */
+  function npmBinary() {
+    const appData = process.env.APPDATA;
+    if (!appData) return null;
+    const candidate = path.join(appData, 'npm', 'node_modules', '@opencode', 'cli', 'bin', 'opencode.exe');
+    try { return fs.existsSync(candidate) ? candidate : null; } catch { return null; }
+  }
+
+  /** Copy the npm-installed binary over the vendored copy, keeping the old one. */
+  function copyOverVendored(log) {
+    const from = npmBinary();
+    if (!from) throw new Error('npm installed the engine, but no binary was found to copy.');
+    if (path.resolve(from) === path.resolve(VENDOR_ENGINE)) return false;
+    try { fs.copyFileSync(VENDOR_ENGINE, `${VENDOR_ENGINE}.bak`); } catch { /* the old one may not exist */ }
+    fs.copyFileSync(from, VENDOR_ENGINE);
+    log.info(`engine update: copied ${from} over the vendored copy`);
+    return true;
   }
 
   /** Why an update cannot run right now, in the operator's words; null when it can. */
@@ -232,7 +255,8 @@ export function createEngineUpdate({ engine, logger, runs, notify }) {
       binary: here.binary,
       packageRoot: here.packageRoot,
       managedByNpm: here.managedByNpm,
-      canUpdate: here.managedByNpm && !busy,
+      vendored: here.vendored,
+      canUpdate: (here.managedByNpm || here.vendored) && !busy,
       blocked: busy,
     };
   }
@@ -241,10 +265,10 @@ export function createEngineUpdate({ engine, logger, runs, notify }) {
    *  is down because an update went wrong is a worse state than an old engine. */
   async function update() {
     const before = installed();
-    if (!before.managedByNpm) {
+    if (!before.managedByNpm && !before.vendored) {
       return {
         ok: false,
-        error: `This engine (${before.binary || 'auto-detected'}) was not installed with npm, so Synapse will not replace it. Update it where it came from, or point Settings → Engine at an npm install.`,
+        error: `This runtime (${before.binary || 'auto-detected'}) was not installed with npm and is not the copy that travels with Synapse, so Synapse will not replace it. Update it where it came from, or point Settings → Runtime at an npm install.`,
       };
     }
     const busy = blocked();
@@ -272,6 +296,7 @@ export function createEngineUpdate({ engine, logger, runs, notify }) {
     try {
       await engine.stop();
       await runNpmInstall(log);
+      if (before.vendored) copyOverVendored(log);
     } catch (err) {
       installError = err.message;
       log.error(`engine update failed: ${err.message}`);

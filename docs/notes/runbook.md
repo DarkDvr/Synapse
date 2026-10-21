@@ -142,3 +142,32 @@ one per desktop-app restart, because nothing reaps the old ones. That is ~180 MB
 not gigabytes. Worth knowing; not worth panicking about.
 
 ---
+
+---
+
+## Moving to another PC
+
+Synapse is self-contained except for two things: Node itself, and the runtime.
+The runtime can travel with the folder.
+
+```
+.\vendor-engine.ps1        # copies the engine from the npm global install into bin\opencode
+```
+
+`bin\opencode\opencode.exe` (about 210 MB, `bin/` is not in git) is what the app
+runs when it is present — it is checked *before* any global install, so a machine
+with no npm and no `@opencode/cli` still works. With the copy in place the folder
+is the app: copy `F:\dev\Synapse` to the new machine, run `start.bat`, and it
+starts. Nothing is written outside it, and the engine's home (`data\engine\opencode`)
+is created fresh on first boot.
+
+- Keep the licence. It is MIT, so the copy must carry the notice:
+  `vendor-engine.ps1` writes `bin\opencode\LICENSE` from the project.
+- `VERSION.txt` beside it records what the copy is and where it came from.
+- To use the machine's own install instead, delete `bin\opencode` — auto-detect
+  falls back to the npm path.
+- **Settings > Runtime > Check for Updates** still works on a vendored copy: it
+  installs the newest from npm and copies it over this one, keeping the previous
+  binary as `opencode.exe.bak`.
+- The model catalog lives inside that binary, so a stale model list means a stale
+  copy — not a stale cache.

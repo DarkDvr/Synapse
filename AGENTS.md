@@ -148,6 +148,7 @@ a section out, leave its invariant behind in one line, with the pointer.
 start.bat        # starts Synapse (UI on 8700, engine on 8720)
 stop.bat         # reads data\synapse.pid
 restart.ps1      # dev restart — stops the engine by PID, never by name
+vendor-engine.ps1  # copies the runtime into bin\opencode so it travels with the app
 ```
 
 ```powershell
@@ -222,6 +223,8 @@ skills/               shipped WITH Synapse, always on the engine's skill path
   code-craft/         the coders' brief: small surface, fail loudly, prove it
 data/                 runtime state (projects, census, probe results, engine home)
 logs/                 one file per channel: app, engine, session, tools
+bin/opencode/         a copy of the runtime that travels with the app (not in git;
+                      vendor-engine.ps1 puts it there, ~210 MB, with its MIT licence)
 docs/                 design mockups (*.pdf), clock-test-2.md and shift-test-1.md
                       (the runs the briefs were rewritten around), and the detail
                       behind this file

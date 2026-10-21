@@ -3915,9 +3915,10 @@ function settingsEngine(c) {
           hint: 'Where the engine keeps its own settings, logs and data. Blank uses the copy inside Synapse; the machine-wide OpenCode install is never touched.',
         }) +
         `<p class="set-note">Running <strong>${esc(detected.version || 'not started')}</strong> from ` +
-        `<code>${esc(detected.binary || 'auto-detected')}</code>. The model list is read from this engine at ` +
-        `every launch, but the catalog ships inside the engine binary — so when OpenCode Desktop shows models ` +
-        `that are missing here, its runtime is newer and <code>@opencode/cli</code> is the thing to update.</p>` +
+        `<code>${esc(detected.binary || 'auto-detected')}</code>. The model list is read from this runtime at ` +
+        `every launch, but the catalog ships inside its binary — so a stale model list means a stale copy. ` +
+        `A copy inside <code>bin\\opencode</code> travels with Synapse and wins over a global install; ` +
+        `Check for Updates fetches the newest from npm and copies it over this one.</p>` +
         `<div class="set-field wide" title="Ask npm whether a newer engine has been published. The engine carries the model catalog, so this is also how the model list gets current."><span>Runtime version</span>` +
         `<button type="button" class="btn btn-secondary btn-sm" data-check-update>Check for Updates</button></div>`,
     ),

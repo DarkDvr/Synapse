@@ -7,7 +7,7 @@
   "engine": {
     "type": "opencode",
     "opencode": {
-      "binary": "C:\\Users\\Andrew\\AppData\\Roaming\\npm\\node_modules\\@opencode\\cli\\bin\\opencode.exe",
+      "binary": "",
       "port": 8720,
       "host": "127.0.0.1",
       "password": "",

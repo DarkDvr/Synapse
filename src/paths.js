@@ -16,6 +16,11 @@ export const WEB_DIR = path.join(ROOT, 'web');
 export const SKILLS_DIR = path.join(ROOT, 'skills');
 export const DATA_DIR = path.join(ROOT, 'data');
 export const LOGS_DIR = path.join(ROOT, 'logs');
+// A copy of the runtime that travels WITH Synapse. When it is present it is what
+// the app runs, so a machine with no npm and no global install still works: copy
+// the folder, and the engine comes along. `vendor-engine.ps1` puts it here.
+export const VENDOR_DIR = path.join(ROOT, 'bin', 'opencode');
+export const VENDOR_ENGINE = path.join(VENDOR_DIR, process.platform === 'win32' ? 'opencode.exe' : 'opencode');
 
 // Where the operator's projects live: a SIBLING of the harness, never inside it.
 // A project folder is a place the models work, and the engine's file and shell
