@@ -181,7 +181,7 @@ export function createEngineUpdate({ engine, logger, runs, notify }) {
   function copyOverVendored() {
     const from = npmBinary();
     if (!from) throw new Error('npm installed the engine, but no binary was found to copy.');
-    return copyRuntimeOver(from, VENDOR_ENGINE, log);
+    return copyRuntimeOver(from, VENDOR_ENGINE, (line) => log.info(line));
   }
 
   /** Why an update cannot run right now, in the operator's words; null when it can. */

@@ -171,3 +171,30 @@ is created fresh on first boot.
   binary as `opencode.exe.bak`.
 - The model catalog lives inside that binary, so a stale model list means a stale
   copy — not a stale cache.
+
+---
+
+## npm, and what happens without it
+
+Synapse uses npm for exactly one thing: **updating the runtime**. The app itself
+is plain Node, and the runtime travels in `bin\opencode`, so a machine with no
+toolchain can still run projects.
+
+At boot (`src/npm-check.js`):
+
+| situation | what happens |
+|---|---|
+| npm on PATH | nothing is printed |
+| npm missing, `bin\opencode` present | offered: install Node.js LTS with winget. Declined → starts anyway, one line says the update button will not work |
+| npm missing, no runtime anywhere | offered: install Node.js LTS with winget. Declined → explains that nothing here can run a turn, and exits |
+
+Started hidden (restart.ps1, a shortcut), nobody can answer the question, so the
+same split applies without the prompt. The install is `winget install -e --id
+OpenJS.NodeJS.LTS`, printed before it runs — it is the only moment the app fetches
+something other than a model, and only after a yes.
+
+**Updates on the vendored copy** use npm too: Settings > Runtime > Check for
+Updates stops the runtime, installs `@opencode/cli@latest`, copies the new binary
+over `bin\opencode\opencode.exe` (keeping `opencode.exe.bak`) and restarts. The
+copy is what makes the update visible — without it the app would keep starting
+the old file.

@@ -1535,6 +1535,10 @@ body[data-mode="single"] .keep-toggle { display: none; }
 .plan-task[data-status="doing"] .plan-spent { color: var(--yellow); }
 .plan-meta { margin-top: 10px; font-family: var(--mono); font-size: 11px;
   display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+/* The status text never wraps: "1/6 done · 1 in flight · 1 blocked · just now"
+   broke after the clock and left a stray "just now" on its own line under the
+   pane. One line, and the tail ellipses when the pane is narrow. */
+.plan-meta > span:first-child { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* The session's own stopwatch: time spent working, grey and quiet, in the corner
    where a reader looks last. */
 .plan-clock { color: #6c7079; font-variant-numeric: tabular-nums; flex: none; }
