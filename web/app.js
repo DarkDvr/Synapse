@@ -2661,11 +2661,15 @@ function renderChatNav() {
   // clipped to the chat pane and stays put when the window resizes.
 
   const { tops, cur } = navAnchors();
-  // Never offer a jump that cannot happen: with nothing to scroll, both rest.
-  const canScroll =
-    chatScroller() !== null || document.documentElement.scrollHeight > window.innerHeight + 2;
+  // Never offer a jump that cannot happen: with nothing to scroll, all four rest.
+  const el = chatScroller();
+  const canScroll = el ? el.scrollHeight - el.clientHeight > 2 : document.documentElement.scrollHeight > window.innerHeight + 2;
+  const at = el ? el.scrollTop : window.scrollY;
+  const atEnd = el ? el.scrollHeight - el.clientHeight : document.documentElement.scrollHeight - window.innerHeight;
+  $('navTop').disabled = !canScroll || at <= 1;
   $('navPrev').disabled = !canScroll || cur <= 0;
   $('navNext').disabled = !canScroll || cur >= tops.length - 1;
+  $('navBottom').disabled = !canScroll || at >= atEnd - 1;
 }
 
 /**
@@ -4775,9 +4779,20 @@ function wire() {
   $('emptyNewSession').addEventListener('click', () => createSession(state.projects.find((p) => p.general)?.id));
   $('addProjectBtn').addEventListener('click', addProject);
 
-  // conversation navigation + collapsible tool calls
+  // conversation navigation + collapsible tool calls. Four buttons on one row:
+  // the pair in the middle steps one message, the outer pair goes all the way.
+  $('navTop').addEventListener('click', () => {
+    const el = chatScroller();
+    if (el) animateScroll(el, 0);
+    else window.scrollTo({ top: 0 });
+  });
   $('navPrev').addEventListener('click', () => jumpMessage(-1));
   $('navNext').addEventListener('click', () => jumpMessage(1));
+  $('navBottom').addEventListener('click', () => {
+    const el = chatScroller();
+    if (el) animateScroll(el, el.scrollHeight);
+    else scrollChatToBottom();
+  });
   let navRaf = 0;
   $('transcript').addEventListener('scroll', () => {
     if (navRaf) return;

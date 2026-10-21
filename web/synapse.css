@@ -981,16 +981,25 @@ body[data-view="session"] .chat-dock.has-ask { overflow: visible; }
   position: absolute; right: 22px; top: 7px;
   display: flex; gap: 4px; z-index: 30;
 }
+/* Four buttons on one row, right-aligned in the transcript's top corner: two to
+   step one message, then the two that go all the way to either end. Purple is the
+   operator's call here — violet is the palette's surface/accent colour, and the
+   ink is `--violet-bright` because plain `--violet` is a surface tone that does
+   not read as text on the panel. */
 .fab {
   width: 22px; height: 22px; border-radius: 50%;
   display: grid; place-items: center;
-  background: rgba(35, 38, 44, 0.86); border: 1px solid var(--line); color: #c3c6cc;
-  font-size: 10px; line-height: 1; cursor: pointer; padding: 0;
+  background: rgba(35, 38, 44, 0.86); border: 1px solid var(--violet-line); color: var(--violet-bright);
+  font-size: 11px; line-height: 1; cursor: pointer; padding: 0;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
 }
-.fab:hover { background: var(--violet-soft); border-color: var(--violet-line); color: #fff; }
+.fab:hover { background: var(--violet-soft); border-color: var(--violet-bright); color: #fff; }
 .fab:disabled { opacity: 0.35; cursor: default; }
-.fab:disabled:hover { background: #23262c; border-color: var(--line); color: #c3c6cc; }
+.fab:disabled:hover { background: #23262c; border-color: var(--violet-line); color: var(--violet-bright); }
+/* The two "all the way" glyphs (arrow to a bar, U+2912/U+2913) are drawn smaller
+   than a plain arrow at the same size — measured 5.2px against 9.4px — so they get
+   a pixel back. Same button, same margin: only the ink is bigger. */
+#navTop, #navBottom { font-size: 12px; }
 
 /* ── mode toggle: Multi is orange, Single is violet, white text on both ──── */
 .mode-toggle {
