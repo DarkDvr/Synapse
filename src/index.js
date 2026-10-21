@@ -90,7 +90,7 @@ async function ensureNpm() {
     if (plan === 'block') process.exit(1);
     return;
   }
-  say(`npm is available now (${'ready'}).`);
+  say('npm is available now.');
 }
 
 async function main() {
@@ -99,13 +99,14 @@ async function main() {
     fs.mkdirSync(dir, { recursive: true });
   }
 
-  await ensureNpm();
-
   // ── config ───────────────────────────────────────────────────
   const { config, created, error } = loadConfig();
   logger.configure(config.logging);
   logger.startCleanupLoop();
   const app = logger.channel('app');
+
+  // npm: offered, explained, and only refused when there is nothing to run.
+  await ensureNpm();
 
   app.info('----------------------------------------------');
   app.info(`Synapse starting (pid ${process.pid})`);

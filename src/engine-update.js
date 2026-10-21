@@ -140,9 +140,21 @@ function runNpmInstall(log) {
   });
 }
 
+/** Copy a freshly installed runtime over the vendored copy, keeping the old one
+ *  as `<name>.bak`. Exported so the copy itself can be tested without npm. */
+export function copyRuntimeOver(from, to, log = () => {}) {
+  const source = path.resolve(String(from || ''));
+  const target = path.resolve(String(to || ''));
+  if (!source || !target || source === target) return false;
+  if (!fs.existsSync(source)) throw new Error(`nothing to copy at ${source}`);
+  try { fs.copyFileSync(target, `${target}.bak`); } catch { /* no previous copy */ }
+  fs.copyFileSync(source, target);
+  log(`engine update: copied ${source} over ${target}`);
+  return true;
+}
+
 export function createEngineUpdate({ engine, logger, runs, notify }) {
   const log = logger.channel('app');
-
   /** What the running engine is; the package on disk is the fallback when it is
    *  down, and the package is what npm would replace. */
   function installed() {
@@ -166,14 +178,10 @@ export function createEngineUpdate({ engine, logger, runs, notify }) {
   }
 
   /** Copy the npm-installed binary over the vendored copy, keeping the old one. */
-  function copyOverVendored(log) {
+  function copyOverVendored() {
     const from = npmBinary();
     if (!from) throw new Error('npm installed the engine, but no binary was found to copy.');
-    if (path.resolve(from) === path.resolve(VENDOR_ENGINE)) return false;
-    try { fs.copyFileSync(VENDOR_ENGINE, `${VENDOR_ENGINE}.bak`); } catch { /* the old one may not exist */ }
-    fs.copyFileSync(from, VENDOR_ENGINE);
-    log.info(`engine update: copied ${from} over the vendored copy`);
-    return true;
+    return copyRuntimeOver(from, VENDOR_ENGINE, log);
   }
 
   /** Why an update cannot run right now, in the operator's words; null when it can. */
