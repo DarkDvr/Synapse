@@ -60,6 +60,9 @@ const state = {
   // does not re-measure the wrapper and jiggle the chat.
   roleSig: '',
   forms: [],
+  // Form ids already announced since this page loaded, so a waiting question is
+  // announced once rather than on every poll.
+  announcedForms: new Set(),
   // 'single' (one Architect, all tools, no delegation) or 'multi' (delegation
   // allowed, role cards revealed). New sessions start single; the toggle
   // switches the open session live.
@@ -1591,6 +1594,21 @@ function liveDot(sessionId, { clickable = true } = {}) {
   return `<span class="tree-live${busy ? ' on' : ''}" title="${busy ? 'Working' : ''}"></span>`;
 }
 
+/**
+ * What a session is stopped on, if anything.
+ *
+ * A session waiting on an answer emits nothing, exactly like an idle one, and
+ * the question panel only exists inside an open session — so after a reload a
+ * blocked session used to look like any other and the operator had no way to
+ * know a question was sitting there. The rail says it instead.
+ */
+function waitingFor(sessionId) {
+  if (!sessionId) return null;
+  if ((state.forms || []).some((f) => f.sessionId === sessionId)) return 'answer';
+  if ((state.permissions || []).some((p) => p.sessionId === sessionId)) return 'decision';
+  return null;
+}
+
 function sessionRow(s) {
   if (state.renaming === s.id) {
     return `<div class="tree-row session" data-session="${esc(s.id)}">
@@ -1603,12 +1621,15 @@ function sessionRow(s) {
   // and the list is already newest-first.
   const when = relTime(s.updated || s.created);
   const busy = isBusy(s.id);
+  const waiting = waitingFor(s.id);
+  const waitNote = waiting === 'answer' ? ' · waiting on your answer' : waiting === 'decision' ? ' · waiting for your decision' : '';
   return `<div class="tree-row session${current ? ' is-current' : ''}" data-session="${esc(s.id)}">
-    <button class="tree-open" title="${esc(title)}${when ? ` · ${esc(when)}` : ''}${busy ? ' · working' : ''}">
+    <button class="tree-open" title="${esc(title)}${when ? ` · ${esc(when)}` : ''}${busy ? ' · working' : ''}${waitNote}">
       <span class="tree-name">${esc(title)}</span>
     </button>
     <span class="tree-actions">
       <button class="tree-edit ic-edit" data-rename="${esc(s.id)}" title="Rename Session" aria-label="Rename Session">✎</button>
+      ${waiting ? `<span class="tree-wait" title="${waiting === 'answer' ? 'Waiting on your answer' : 'Waiting for your decision'}">${waiting === 'answer' ? 'Answer' : 'Decide'}</span>` : ''}
       ${liveDot(s.id)}
       <button class="tree-x" data-del-session="${esc(s.id)}" title="Delete Session" aria-label="Delete Session">✕</button>
     </span>
@@ -3118,6 +3139,18 @@ async function refreshPending() {
     resources: x.resources,
   }));
   state.forms = p.forms || [];
+
+  // A question must not be able to hide. The panel lives inside the session
+  // view and a reload opens no session, so a waiting question says so once —
+  // and the rail carries a mark on the session that asked it, so a page left
+  // open on the project list still shows where the run is stuck.
+  for (const form of state.forms) {
+    if (state.announcedForms.has(form.id)) continue;
+    state.announcedForms.add(form.id);
+    if (state.view === 'session') continue; // the panel is on screen already
+    const who = findSession(form.sessionId)?.title || TBD_TITLE;
+    toast('Answer Needed', `${who} is waiting on a question. Open it in the rail to answer.`);
+  }
 
   renderTree();
   if (state.view === 'session') {
