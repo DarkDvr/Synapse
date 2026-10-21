@@ -102,6 +102,10 @@
         "frontend-design",
         "aesthetic-foundations",
         "visual-review"
+      ],
+      "mustLoad": [
+        "frontend-design",
+        "aesthetic-foundations"
       ]
     },
     "qc": {
@@ -109,6 +113,12 @@
       "variant": "low",
       "focus": "app",
       "skills": [
+        "web-guidelines",
+        "aesthetic-foundations",
+        "visual-review"
+      ],
+      "mustLoad": [
+        "web-guidelines",
         "aesthetic-foundations"
       ]
     },
@@ -116,6 +126,9 @@
       "ref": "deepseek/deepseek-flash",
       "variant": "high",
       "skills": [
+        "visual-review"
+      ],
+      "mustLoad": [
         "visual-review"
       ]
     },
@@ -125,6 +138,9 @@
       "skills": [
         "code-craft",
         "visual-review"
+      ],
+      "mustLoad": [
+        "code-craft"
       ]
     },
     "coder-2": {
@@ -133,6 +149,9 @@
       "skills": [
         "code-craft",
         "visual-review"
+      ],
+      "mustLoad": [
+        "code-craft"
       ]
     },
     "coder-3": {
@@ -141,11 +160,15 @@
       "skills": [
         "code-craft",
         "visual-review"
+      ],
+      "mustLoad": [
+        "code-craft"
       ]
     },
     "inventor": {
       "ref": "deepseek/deepseek-flash",
-      "variant": "low"
+      "variant": "low",
+      "skills": []
     }
   },
   "modelChecks": {

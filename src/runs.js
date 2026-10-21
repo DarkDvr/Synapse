@@ -38,7 +38,7 @@ import {
   uncoveredPhases,
   SHARED_DIR,
 } from './plans.js';
-import { skillRules, describeSkills, roleSkillList } from './skills.js';
+import { skillRules, describeSkills, roleMustLoad } from './skills.js';
 import { configSavedAt } from './config.js';
 import { classifyFailure, recordProviderError, pruneProviderLog } from './provider-errors.js';
 import { providerLoadedWindow } from './providers.js';
@@ -906,7 +906,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
         // the only way to know whether it did: Shift Test 3 and 4 both shipped
         // without a single `code-craft` load, and nothing noticed.
         const skillsUsed = workerSkills(messages);
-        skillsRequired = roleSkillList(getConfig(), role) || [];
+        skillsRequired = roleMustLoad(getConfig(), role);
         skillsMissing = skillsRequired.filter((s) => !skillsUsed.has(s));
         if (skillsMissing.length) {
           out.warn(

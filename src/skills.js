@@ -35,21 +35,38 @@ export function skillRules(config, role) {
   return rules;
 }
 
+/** The skills a role must load before it starts, or [] when none were set. */
+export function roleMustLoad(config, role) {
+  const entry = config?.roles?.[role];
+  if (!entry || !Array.isArray(entry.mustLoad)) return [];
+  return entry.mustLoad.map((s) => String(s || '').trim()).filter(Boolean);
+}
+
 /**
- * One line for the brief. A role's skills are not a menu: the operator listed them
- * because that is how the role is meant to work, and in Shift Test 3 and 4 not one
- * coder ever loaded `code-craft` — the brief said "may", so nobody did. The line
- * is an instruction now, and the runner checks it: a skill that was never loaded is
- * named in the report the Architect judges (see `skillsMissing` in runs.js).
+ * One line for the brief, in two parts: what must be loaded and what may be.
+ *
+ * In Shift Test 3 and 4 the brief said a role *may* load its skills — a
+ * permission — and not one coder ever loaded `code-craft`. So the required list
+ * is now an instruction, and the runner checks it (`skillsMissing` in runs.js).
+ * The rest stay available without being mandatory: every skill read is context
+ * spent, and a local model with a 28k room feels that.
  */
 export function describeSkills(config, role) {
-  const list = roleSkillList(config, role);
-  if (list === null) return '';
-  if (!list.length) return 'You have no skills: do the task with the tools you have.';
+  const all = roleSkillList(config, role);
+  if (all === null) return '';
+  if (!all.length) return 'You have no skills: do the task with the tools you have.';
+  const must = roleMustLoad(config, role);
+  const optional = all.filter((s) => !must.includes(s));
   const before = role === 'architect' ? 'before you judge the next piece of work' : 'before your first edit';
-  return (
-    `Skills for this role: ${list.join(', ')}. Load every one of them with the skill tool ${before} — they are ` +
-    `how this role does its work, not optional reading, and a skill you skipped is part of the job you ` +
-    `skipped. Say in your report which ones you loaded.`
-  );
+  const parts = [];
+  if (must.length) {
+    parts.push(
+      `Skills for this role — load every one of them with the skill tool ${before}: ${must.join(', ')}. They ` +
+        `are how this role does its work, not optional reading, and a skill you skipped is part of the job you ` +
+        `skipped.`,
+    );
+  }
+  if (optional.length) parts.push(`Also available when the task needs it: ${optional.join(', ')}.`);
+  parts.push('Any other skill is refused. Say in your report which ones you loaded.');
+  return parts.join(' ');
 }
