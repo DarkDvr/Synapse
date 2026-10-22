@@ -3864,6 +3864,17 @@ async function refreshPending() {
   for (const id of active) if (!state.busySince.has(id)) state.busySince.set(id, Date.now());
   for (const id of [...state.busySince.keys()]) if (!active.has(id)) state.busySince.delete(id);
   state.busySessions = active;
+  // A page opened, or reloaded, in the middle of a turn never saw the
+  // `session.execution.started` that began it — so the composer showed no Stop and
+  // the card looked idle while the engine was working. The engine's own list of
+  // active sessions is the authority, and it is already in hand here. It only ever
+  // turns this *on*: clearing it is the transcript's job (`updateBusyFromMessages`)
+  // and the turn's own end event, so a poll that races the engine cannot take the
+  // Stop button away from a session that is working.
+  if (state.sessionId && active.has(state.sessionId) && !state.busy) {
+    state.busy = true;
+    renderComposer();
+  }
 
   state.permissions = (p.permissions || []).map((x) => ({
     sessionId: x.sessionId,

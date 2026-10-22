@@ -880,7 +880,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
           log.warn(`worker brief failed for ${request.task}: ${err.message}`);
         }
 
-        let before = (await engine.getMessages(worker.id)).length;
+        let before = markOf(await engine.getMessages(worker.id));
         await engine.prompt(worker.id, workerPrompt({ task, note: request.note, goal: plan.plan?.goal }));
 
         // Rescue loop: one turn at a time, with the whole session kept between
@@ -986,7 +986,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
             await sleep(1500, signal);
             if (signal?.aborted) { outcome = 'stopped'; break; }
             await nudge(worker.id, STALL_NUDGE, signal);
-            before = (await engine.getMessages(worker.id)).length;
+            before = markOf(await engine.getMessages(worker.id));
             continue;
           }
 
@@ -1065,7 +1065,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
             live.retry = null;
             emit('run.progress', { ...live });
             await nudge(worker.id, CONTEXT_NUDGE, signal);
-            before = (await engine.getMessages(worker.id)).length;
+            before = markOf(await engine.getMessages(worker.id));
             continue;
           }
 
@@ -1093,7 +1093,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
           live.retry = null;
           emit('run.progress', { ...live });
           await nudge(worker.id, RETRY_NUDGE, signal);
-          before = (await engine.getMessages(worker.id)).length;
+          before = markOf(await engine.getMessages(worker.id));
         }
 
         const messages = await engine.getMessages(worker.id);
@@ -1646,7 +1646,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
       }
       asking = waiting;
 
-      if (messages.length > before && messages[messages.length - 1]?.type === 'idle') {
+      if (messages.length && messages[messages.length - 1]?.type === 'idle' && messages[messages.length - 1]?.id !== before) {
         return { timedOut: false };
       }
       if (Date.now() - lastActivity >= stallMs) return { timedOut: true, stalled: true };
@@ -1662,10 +1662,10 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
    * skill and subagent targets are all read here: the card says "writing
    * calendar.py", not "write".
    */
-  function latestTool(messages, from = 0) {
+  function latestTool(messages, mark = '') {
     let found = null;
-    for (let i = Math.max(0, from | 0); i < (messages || []).length; i += 1) {
-      for (const part of messages[i]?.parts || []) {
+    for (const message of afterMark(messages, mark)) {
+      for (const part of message?.parts || []) {
         if (part?.type !== 'tool' || !part.name) continue;
         const input = parseInput(part.input) || {};
         const raw =
@@ -1703,8 +1703,26 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
    *  HTTP 410 in about two seconds — so the idle message alone cannot be read as
    *  success. Both it and the assistant message carry the error, which is also the
    *  only place the reason is written down. */
-  function turnErrorOf(messages, from = 0) {
-    for (const message of (messages || []).slice(Math.max(0, from | 0))) {
+  /**
+   * The last message id, used as "where I was" when a turn starts.
+   *
+   * It replaces the message *count*, which was the right idea and the wrong
+   * number: `getMessages` returns a fixed-size page of the newest messages, so
+   * past that size the length stops growing and `length > before` is never true —
+   * a long session would look like a turn that never ends, or (worse) never look
+   * finished at all. An id keeps working however much the window slides.
+   */
+  const markOf = (messages) => (messages?.[messages?.length - 1]?.id || '');
+
+  /** The messages after `mark`. Everything, when the mark has aged out of the page. */
+  function afterMark(messages, mark) {
+    if (!mark) return messages || [];
+    const at = (messages || []).findIndex((m) => m.id === mark);
+    return at >= 0 ? messages.slice(at + 1) : messages || [];
+  }
+
+  function turnErrorOf(messages, mark = '') {
+    for (const message of afterMark(messages, mark)) {
       if (message?.error) return String(message.error);
     }
     return null;
@@ -1884,9 +1902,9 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     let tries = 0;
     for (;;) {
       if (signal?.aborted) return { ok: false, stopped: true };
-      let before = 0;
+      let before = '';
       try {
-        before = (await engine.getMessages(architectId)).length;
+        before = markOf(await engine.getMessages(architectId));
       } catch { /* the send below will surface it */ }
 
       try {

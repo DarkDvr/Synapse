@@ -582,10 +582,24 @@ export class OpenCodeEngine extends Engine {
     return true;
   }
 
+  /**
+   * The newest page of a session's transcript, oldest first.
+   *
+   * `order` is not cosmetic: the engine applies `limit` **before** it sorts, so
+   * `order=asc&limit=200` returns the *first* 200 messages — the oldest ones — and
+   * a session that has ever exceeded 200 messages appears to stop dead at that
+   * point. The Architect's session (1,800 messages) showed nothing newer than
+   * 22:12 for three hours while the engine was working, because everything after
+   * message 200 was outside the page. Ask for `desc` and put it back in order.
+   *
+   * 200 is enough for the tail this is used for (turn end, prompt size, the
+   * compactions in hand); the oldest messages of a very long turn can fall off,
+   * which the census and the trace both tolerate.
+   */
   async getMessages(sessionId) {
     const r = await this.request(
       'GET',
-      `/api/session/${encodeURIComponent(sessionId)}/message?limit=200&order=asc`,
+      `/api/session/${encodeURIComponent(sessionId)}/message?limit=200&order=desc`,
     );
     const data = Array.isArray(r?.data) ? r.data : [];
     const messages = data.map(normalizeMessage);

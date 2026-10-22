@@ -72,6 +72,29 @@ const written = (dirs) => JSON.parse(fs.readFileSync(path.join(dirs.config, 'ope
   check('unknown keys survive', cfg.theme === 'dark', String(cfg.theme));
 }
 
+// ── which page of the transcript we ask for ─────────────────────
+// The engine applies `limit` before it sorts, so `order=asc` returns the OLDEST
+// 200 messages. An Architect session past 200 messages then looks frozen: the UI
+// renders nothing new and the runner cannot see a turn end. This is the assertion
+// that would have caught three hours of an apparently idle session.
+{
+  const engine = new OpenCodeEngine({}, { logger: silentLogger() });
+  let asked = '';
+  engine.request = async (method, apiPath) => {
+    asked = apiPath;
+    // A desc page comes back newest first, as the engine sends it.
+    return {
+      data: [
+        { id: 'msg_b', type: 'assistant', time: { created: 2000 } },
+        { id: 'msg_a', type: 'assistant', time: { created: 1000 } },
+      ],
+    };
+  };
+  const messages = await engine.getMessages('ses_x');
+  check('the newest page is requested, not the oldest', /order=desc/.test(asked), asked);
+  check('and it is put back into reading order', messages[0].id === 'msg_a' && messages[1].id === 'msg_b', JSON.stringify(messages.map((m) => m.id)));
+}
+
 // ── the setting's shape in the config file ──────────────────────
 {
   const c1 = normalize({ engine: { opencode: { compactionKeepTokens: 4000 } } });
