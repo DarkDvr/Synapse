@@ -577,25 +577,28 @@ it as a panel **painted over the chat, anchored just above the composer**.
   name, the picker and the two buttons collide. It was 290 while the name was
   free to shrink; now the name holds and the picker gives way to a 76px stub, so
   250 is what is left. Two columns + the 66px spine need 566px of stage.
-  **The plan has two homes, and one node.** It is the only panel that moves:
-  - **1124–1354px**: the plan sits in the cards' row, to their right, with the
-    conversation underneath **both** at the full width. It **shrinks before it
-    gives up**: 341 down to 240 (`--panel-floor`), never taking the cards below
-    their own minimum. From 1225 up it holds its full 341 and the cards take the
-    rest, so widening the window widens the cards; in 1124–1224 the cards hold
-    their minimum (`2 x --card-min + --spine-w` = 566) and the plan takes what is
-    left.
-  - **1355px and up**: the window can hold three panels of 341 + two gaps
-    (1023 + 28 = 1051 of room), so the plan joins the census and the probe in the
-    row under the chat and the cards get the whole top row back.
+  **The plan is beside the role cards, always.** The operator's rule, verbatim:
+  "Project plan IS ALWAYS to the right of role cards, ALWAYS above the chat.
+  There is only 1 exception possible — that is when role cards are more narrow
+  than [their minimum]." So:
+  - **1124px and up**: the plan sits in the cards' row, to their right, the
+    conversation runs underneath **both** at the full width. It **shrinks before
+    it gives up** — 341 down to 240 (`--panel-floor`) — because it is the card
+    column that is protected. From 1225 up it holds its full 341 and the cards
+    take the rest (widening the window widens the cards); in 1124–1224 the cards
+    hold their minimum (`2 x --card-min + --spine-w` = 566) and the plan takes
+    what is left.
   - **below 1124**: the cards' minimum plus the plan's floor no longer fit, so the
-    plan falls under the chat at full width and the two tables share the line
-    beneath it. Below 1183 the panels lose their size range and fill whatever
-    they are given; below 760 it is one column.
-  The operator's rule, in their words: "Project always wants to live to the right
-  of role cards, unless the cards are lower than their min width. Then Project is
-  forced to be below the chat." The cards' minimum is the constraint; the plan's
-  width is not.
+    plan falls under the chat at full width. That is the only exception.
+  It lives in the stage, not in the inspector, and there is no JS that moves it —
+  an earlier version re-parented it into the row of three panels on wide windows
+  and the operator rejected that outright: three panels under the chat is not a
+  thing they want at any width. The two reference tables are always under the
+  chat, two of them, never holding the plan; below 1183 they lose the 284–341
+  range and share the room, below 760 they stack.
+  `fitChatHeight` counts the plan in the row only while it is placed in row 1
+  (`gridRowStart === '1'`), otherwise the plan below the chat would be mistaken
+  for part of the cards' row.
   **Beside the cards the plan is as tall as they are.** `contain: size` keeps the
   row sized by the cards, and `max-height: none` (in that band only) lets the plan
   stretch to it — the panel's bottom edge is the Coder 3 row's bottom edge. The

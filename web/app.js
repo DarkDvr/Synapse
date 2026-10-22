@@ -3351,10 +3351,11 @@ function fitChatHeight() {
     || 0;
   // When the plan sits beside the cards it shares their row, and in Single its
   // floor is taller than the Architect card — so the row, not the wrapper, is
-  // what the chat has to start below. In the row of three it is not in the stage
-  // at all and this finds nothing.
+  // what the chat has to start below. On a window too narrow for that, the plan
+  // is placed under the chat and counts for nothing here.
   const planEl = $('stage')?.querySelector('.rail-plan');
-  const rowH = Math.max(settled, planEl?.getBoundingClientRect().height || 0);
+  const planInRow = planEl && getComputedStyle(planEl).gridRowStart === '1';
+  const rowH = Math.max(settled, planInRow ? planEl.getBoundingClientRect().height : 0);
   const room = window.innerHeight - (stageTop() + rowH + stageGap()) - 12;
   const next = `${Math.max(180, Math.floor(room))}px`;
   // A definite height, not a ceiling. A ceiling only ever took room away, so a
@@ -3787,25 +3788,6 @@ async function loadPlan() {
   // and whether the whole thing is finished. Without this a status change would
   // only reach the dots on the next run or session event.
   renderRoleActivity();
-}
-
-/** The plan has two homes and only one node. While the window is too narrow to
- *  hold three panels in one row it belongs in the stage, to the right of the role
- *  cards, with the chat running underneath both; from 1355 it belongs in the
- *  inspector, as the first of the three panels in the row under the chat. CSS can
- *  place it in either, but it cannot move it between two parents, so this does. */
-function placePlanPanel() {
-  const plan = document.querySelector('.rail-plan');
-  const stage = $('stage');
-  const inspector = document.querySelector('.inspector');
-  const chat = $('chatDock');
-  if (!plan || !stage || !inspector || !chat) return;
-  const inRow = window.matchMedia('(min-width: 1355px)').matches;
-  const target = inRow ? inspector : stage;
-  if (plan.parentElement === target) return;
-  if (inRow) inspector.insertBefore(plan, inspector.firstElementChild);
-  else stage.insertBefore(plan, chat);
-  updatePlanOverflow();
 }
 
 function renderPlan() {
@@ -5719,7 +5701,6 @@ function wire() {
   });
 
   window.addEventListener('resize', () => requestAnimationFrame(() => {
-    placePlanPanel();
     fitStageHeight();
     if (state.view === 'session') applyRoleCardsLayout({ animate: false });
     fitChatHeight();
@@ -5774,9 +5755,6 @@ async function boot() {
   // Before anything is measured: the cards need their role id and their
   // subtitle slot, and a card's height is what the wrapper is measured against.
   initRoleCards();
-  // The plan's home depends on the window's width, and a panel in the wrong
-  // parent is a panel in the wrong row — settle it before the first measurement.
-  placePlanPanel();
   fitStageHeight();
   state.config = await api('GET', '/api/config').catch(() => null);
   renderLlmStatus();

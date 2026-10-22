@@ -314,16 +314,15 @@ body[data-view="session"] .chat-dock { grid-column: 1; grid-row: 2; }
    panels now, capped like them, so a long plan is routine rather than rare. */
 body[data-view="session"] .rail-plan { position: relative; }
 
-/* ── the plan beside the role cards ───────────────────────────────────────
-   The plan wants to be to the right of the role cards, and it stays there for
-   as long as it can: it shrinks from 341 down to 240 before it gives up, and it
-   is the CARD column that is protected — the cards never go below their own
-   minimum. Only when that minimum plus the plan's floor do not fit does the plan
-   drop under the chat, which is the operator's rule: "Project always wants to
-   live to the right of role cards, unless the cards are lower than their min
-   width."
-   The conversation runs underneath the two of them at the full width. */
-@media (min-width: 1124px) and (max-width: 1354px) {
+/* ── the plan beside the role cards, always ───────────────────────────────
+   The rule the operator set: the Project plan is ALWAYS to the right of the role
+   cards and ALWAYS above the chat. The only exception is that the cards may not
+   be squeezed narrower than their own minimum — when that minimum plus the
+   plan's floor no longer fit, the plan goes under the chat instead. So it is the
+   PLAN that gives width away first (341 down to 240), and only then moves.
+   The conversation runs underneath the two of them at the full width, and the two
+   reference tables stay under the chat at every width. */
+@media (min-width: 1124px) {
   body[data-view="session"] .stage {
     /* the plan's floor, for Single: the cards collapse to the Architect card and
        the plan would otherwise take the row to nothing */
@@ -332,7 +331,7 @@ body[data-view="session"] .rail-plan { position: relative; }
   body[data-view="session"] .topology-wrap { grid-column: 1; grid-row: 1; }
   /* `contain: size` keeps the row sized by the cards, and `max-height: none`
      lets the plan stretch to that row — the panel's bottom edge is the cards'
-     bottom edge, not 420px down. The 420 cap is for the row of three under the
+     bottom edge, not 420px down. The 420 cap is for the row of panels under the
      chat, where every panel is the same fixed height. */
   body[data-view="session"] .rail-plan {
     grid-column: 2; grid-row: 1;
@@ -343,17 +342,17 @@ body[data-view="session"] .rail-plan { position: relative; }
 }
 
 /* Room to spare: the plan takes its full width and the cards take the rest, so
-   widening the window widens the cards. 1225 is where the cards would otherwise
-   have exactly their minimum. */
-@media (min-width: 1225px) and (max-width: 1354px) {
+   widening the window widens the cards rather than the plan. 1225 is where the
+   cards would otherwise be exactly at their minimum. */
+@media (min-width: 1225px) {
   body[data-view="session"] .stage {
     grid-template-columns: minmax(0, 1fr) var(--panel-max);
   }
 }
 
 /* Tight: the cards hold their minimum (`2 x --card-min + --spine-w` = 566) and
-   the plan takes whatever is left, down to 240. From 1124 down the two of them
-   no longer fit and the plan goes under the chat. */
+   the plan takes whatever is left, down to 240. Below 1124 the two no longer fit
+   and the plan goes under the chat — the one exception. */
 @media (min-width: 1124px) and (max-width: 1224px) {
   body[data-view="session"] .stage {
     grid-template-columns: minmax(0, calc(2 * var(--card-min) + var(--spine-w)))
@@ -2173,20 +2172,9 @@ body:has(.modal-backdrop:not([hidden])) { overflow: hidden; }
 
 /* ── 15. responsive ────────────────────────────────────────────────────── */
 
-/* From here three panels of at most 341 + two gaps fit in one row (1023 + 28 =
-   1051 of room), so the plan leaves the cards' row and joins the census and the
-   probe under the chat. placePlanPanel() moves the node; this is the grid it
-   lands in. */
-@media (min-width: 1355px) {
-  .inspector {
-    grid-template-columns: repeat(3, minmax(var(--panel-min), var(--panel-max)));
-  }
-}
-
-/* Three panels of at least 284 + two gaps need 880 of room, i.e. 1184 of window
-   (256 sidebar + 48 padding + 880). Below that they cannot sit in one row, so the
-   plan takes the full width of the row and the two tables share the line under
-   it; at 760 everything is one column. */
+/* The two reference tables are under the chat at every width and never hold the
+   plan. Below 1184 they lose the 284–341 range and simply share the room, and
+   below 760 they stack. */
 @media (max-width: 1183px) {
   .inspector { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .inspector .rail-panel { min-width: 0; max-width: none; }
