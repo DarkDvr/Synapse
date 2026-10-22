@@ -28,7 +28,9 @@ html { scrollbar-gutter: stable; }
 
   /* layout */
   --gap-rail: 20px;
-  --rail-w: 330px;
+  /* the Project plan's column, beside the role cards. 284 is the width the
+     operator's mockup gives it; the cards keep two columns above 1250px. */
+  --plan-w: 284px;
   --spine-w: 66px;
   --row-gap: 12px;
   --sidebar-w: 256px;
@@ -185,17 +187,11 @@ body { min-width: 1100px; }
   width: 100%;
 }
 
-/* Wide: three columns, so the Project plan can sit to the right of the role
-   cards without the chat paying for it. Row 1 is the stage — cards over the
-   chat — spanning the two left columns; row 2 is the census and the probe side
-   by side under the chat. The plan is the right column for its full height: it
-   is the one panel that has to be read next to the cards it was written for.
-   The inspector is `display: contents` at this size so its three panels become
-   grid items here and can be placed independently; it goes back to being a grid
-   of its own when the window is narrow (see the 1460px block). */
+/* One column: the stage first — role cards with the Project plan beside them and
+   the conversation underneath — then the two reference tables. */
 .room {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) var(--rail-w);
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto auto;
   gap: var(--gap-rail);
   align-items: stretch;
@@ -203,13 +199,8 @@ body { min-width: 1100px; }
   /* the working area cap; anything beyond it stays empty at the right edge */
   max-width: var(--work-w);
 }
-.room > .stage { grid-column: 1 / 3; grid-row: 1; }
-.room > .inspector { display: contents; }
-.room .rail-plan { grid-column: 3; grid-row: 1 / 3; }
-.room .rail-tools { grid-column: 1; grid-row: 2; }
-.room .rail-probe { grid-column: 2; grid-row: 2; }
-body[data-view="none"] .room { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto; }
-body[data-view="none"] .inspector { display: none; }
+body[data-view="none"] .inspector,
+body[data-view="none"] .rail-plan { display: none; }
 
 .stage {
   display: grid;
@@ -227,27 +218,23 @@ body[data-view="none"] .inspector { display: none; }
   height: var(--stage-h, calc(100vh - 26px));
 }
 
-/* The rail: plan beside the cards, census and probe under the chat. The comment
-   that used to explain a fixed-height column beside the chat no longer applies —
-   what matters now is that every panel is a box with its own scrollbar, so a row's
-   bottom edge is one straight line whatever the plan or the census contain. */
+/* The two reference tables, side by side under the conversation. They used to be
+   one column with the plan on top of the census and the probe bolted to its
+   foot; as two panels they are shorter than the chat and read as reference. */
 .inspector {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
   align-items: stretch;
   align-content: start;
   min-width: 0; min-height: 0;
 }
 /* Every panel is a box of the same height with its own scrollbar, so the row's
-   bottom edge is one straight line whatever the plan or the census contain. */
+   bottom edge is one straight line whatever the tables contain. */
 .inspector .rail-panel {
   display: flex; flex-direction: column; min-height: 0; min-width: 0;
   max-height: 420px; overflow: hidden;
 }
-/* The plan runs the full height of the stage it sits beside: a column of brief
-   beside a column of conversation, with no hole under it. It scrolls inside. */
-.inspector .rail-plan { max-height: none; }
 .inspector .rail-panel .panel-head { flex: none; }
 .inspector .rail-plan .plan-body { overflow-y: auto; min-height: 0; }
 .inspector .rail-tools .tool-table,
@@ -291,11 +278,31 @@ body[data-view="none"] .stage-empty {
 body[data-view="none"] .topology-wrap,
 body[data-view="none"] .chat-dock { display: none; }
 
-/* A session's stage is two rows: the role-card wrapper and the chat dock. The
-   wrapper animates max-height rather than using display, so switching modes is
-   a smooth height change. The Architect card is always present; Single hides
-   the workers, Multi reveals them. */
-body[data-view="session"] .stage { grid-template-rows: auto minmax(0, 1fr); gap: 14px; }
+/* A session's stage is two columns and two rows (from 1250px up): the role
+   cards keep the left of the first row, the Project plan takes the right of it,
+   and the conversation runs underneath BOTH at the full width of the room. That
+   is the whole point of the arrangement: the plan is readable beside the cards
+   it was written for, and the chat pays nothing for it. The wrapper animates
+   max-height rather than using display, so switching modes is a smooth height
+   change. The Architect card is always present; Single hides the workers. */
+body[data-view="session"] .stage {
+  grid-template-columns: minmax(0, 1fr) var(--plan-w);
+  /* the plan's floor, for Single: the cards collapse to the Architect card and
+     the plan would otherwise take the row to nothing */
+  grid-template-rows: minmax(200px, auto) minmax(0, 1fr);
+  gap: 14px;
+}
+body[data-view="session"] .topology-wrap { grid-column: 1; grid-row: 1; }
+/* The plan's height is the cards' height, not its own length: `contain: size`
+   makes the row ignore the plan's content — without it a long plan would
+   stretch the row and push the chat off the stage. The plan scrolls inside a
+   box that lines up with the cards. */
+body[data-view="session"] .rail-plan {
+  grid-column: 2; grid-row: 1;
+  max-height: none;
+  contain: size;
+}
+body[data-view="session"] .chat-dock { grid-column: 1 / -1; grid-row: 2; }
 
 .topology-wrap {
   display: block; overflow: hidden;
@@ -780,11 +787,16 @@ body.dark .sidebar-bottom,
 .role-task.is-err { color: var(--red); font-weight: 600; }
 
 .role-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
+/* The name does not shrink: the model label is the flexible one. With both able
+   to shrink, a narrower card (the plan now sits beside the cards, so a 290px card
+   is normal) ellipsised "Inventor" to "Inven…" and "Coder 1" to "Cod…" while
+   the picker kept 137px of room. Role names are app vocabulary and fixed, so
+   they never need to give way. */
 .role-head h3 {
   margin: 0; font: 700 13px var(--display); letter-spacing: -0.15px;
   color: var(--text); white-space: nowrap;
-  overflow: hidden; text-overflow: ellipsis; min-width: 2.5em;
-  flex: 0 1 auto;
+  overflow: hidden; text-overflow: ellipsis;
+  flex: 0 0 auto;
 }
 /* short role names on the left, so the picker is a fixed, generous width and
    always butts up against the edit button on the right */
@@ -821,7 +833,7 @@ body.dark .sidebar-bottom,
   appearance: none; background: #202226;
   border: 1px solid var(--line); border-radius: 7px;
   color: #b6bac1; font-family: var(--mono); font-size: 10.5px;
-  padding: 3px 8px; flex: 1 1 auto; width: auto;
+  padding: 3px 8px; flex: 0 1 auto; width: auto;
   min-width: 76px; max-width: 210px;
   text-overflow: ellipsis; cursor: text;
 }
@@ -2096,28 +2108,30 @@ body:has(.modal-backdrop:not([hidden])) { overflow: hidden; }
 
 /* ── 15. responsive ────────────────────────────────────────────────────── */
 
-/* Wide: the plan sits to the right of the role cards with a fixed width, so the
-   room needs 256 sidebar + 48 padding + 790 stage + 20 gap + 330 plan = 1444.
-   Narrow (rounded up to 1460): the plan comes back down under the chat, the
-   stage gets its full width so the cards never squeeze, and the page scrolls. */
-@media (max-width: 1460px) {
-  /* one column again: the stage keeps the width, the panels line up under it */
-  .room { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto; }
-  /* The inspector is a grid of its own at this size, and the panels are its
-     items rather than the room's — so their wide-window placements are cleared
-     and the plan gets its height cap back. */
-  .room > .inspector {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    grid-template-rows: auto;
+/* The plan needs a card column of its own to sit in, so it stays beside the
+   cards while the stage can still hold two card columns plus a plan column:
+   2 x 290 cards + 66 spine + 14 gap + 284 plan = 944 of room, i.e. 1248 of
+   window with the 256 sidebar and 48 of padding. Below 1250 it comes down under
+   the chat at full width, where a narrow window can still read it. */
+@media (max-width: 1249px) {
+  body[data-view="session"] .stage {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr) auto;
   }
-  .room .rail-plan,
-  .room .rail-tools,
-  .room .rail-probe { grid-column: auto; grid-row: auto; }
-  .room > .stage { grid-column: auto; grid-row: auto; }
-  .room .rail-plan { max-height: 420px; }
+  body[data-view="session"] .topology-wrap { grid-column: 1; grid-row: 1; }
+  body[data-view="session"] .chat-dock { grid-column: 1; grid-row: 2; }
+  /* under the chat the plan is content-sized again, and capped like the tables */
+  body[data-view="session"] .rail-plan {
+    grid-column: 1; grid-row: 3;
+    contain: none;
+    max-height: 420px;
+  }
+}
 
-  /* stacked, the stage is content-sized and the page scrolls again */
+/* Below 1460 the stage is content-sized and the page scrolls — the cards and the
+   chat together are taller than a short window. The cards keep their two columns
+   down to 1250, where the plan leaves their row. */
+@media (max-width: 1460px) {
   .stage { height: auto; min-height: 0; }
   .chat-scroll { min-height: clamp(150px, 32vh, 360px); }
   /* A long conversation must not stretch the page: cap the chat panel and let
@@ -2127,23 +2141,9 @@ body:has(.modal-backdrop:not([hidden])) { overflow: hidden; }
   .rail-actions { grid-template-columns: 1fr 1fr; }
 }
 
-/* Below this the three tables stop fitting side by side: the probe spans the row
-   and the plan stays to the left of the census. */
-@media (max-width: 1150px) {
-  .inspector {
-    grid-template-columns: 1fr 1fr;
-    grid-template-rows: auto auto;
-  }
-  .inspector .rail-probe { grid-column: 1 / -1; }
-}
-
 /* Below this nothing is side by side: one column, in the order it is read. */
 @media (max-width: 760px) {
-  .inspector {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: auto;
-  }
-  .inspector .rail-probe { grid-column: auto; }
+  .inspector { grid-template-columns: minmax(0, 1fr); }
 }
 
 /* Narrow windows are not supported: the page keeps its layout and grows a

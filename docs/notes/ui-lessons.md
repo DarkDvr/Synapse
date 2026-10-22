@@ -573,35 +573,32 @@ it as a panel **painted over the chat, anchored just above the composer**.
   The ask panel is no longer a floating card at all — it covers the chat's
   transcript area edge to edge, so there is no `max-height` to floor; its fields
   scroll inside it and the action row is pinned to its bottom row.
-- **Cards have a hard minimum width** (`--card-min: 360px`): below that the
-  select, the chevron and the edit button start colliding and the name is
-  ellipsised away. Two columns + the 66px spine need ~790px of stage, so the
-  full three-column layout needs **1460px** (256 sidebar + 48 padding + 790
-  stage + 20 gap + 330 rail = 1444, rounded up). Below that the rail flows under
-  the chat (single-column `.room`, `body { min-width: 1100px }` so the stage
-  alone still fits two columns); narrower than 1100 the window scrolls
-  horizontally rather than squeezing the cards. The baseline's ≤950px sidebar
-  drawer behaviour is overridden for the same reason.
-  **Wide, the room is three columns** (`1fr 1fr 330px`) and two rows. The stage
-  spans the two left columns — role cards over the chat — and the plan owns the
-  third column for **both** rows, so it runs the full height beside the cards and
-  the chat and there is no hole under it. The census and the probe are the two
-  left cells of row 2: side by side, under the chat, where they do not cost the
-  conversation its width. At the 1240px working cap that is 435 / 435 / 330 with
-  an 890px stage — measured, not guessed.
-  The plan is the one panel that has to be read next to the cards it was written
-  for, which is why it is the panel that keeps a column; the two tables are
-  reference material. Before this the plan sat under the chat with them, and the
-  operator asked for it beside the cards "when space allows".
-  **The inspector is `display: contents` above 1460px**, so its three panels are
-  grid items of `.room` and can be placed independently; below 1460 it becomes a
-  grid of its own again (three across, two with the probe spanning under 1150,
-  one column under 760) and the plan's own placement is cleared. Forgetting that
-  reset leaves the plan pinned to a column that no longer exists.
-  **The chat's height and its bottom anchor are not touched by any of this.** It
-  is the stage's second row and the stage keeps `--stage-h`; the panels begin
-  where the stage ends, so on a window too short for both the page scrolls —
-  which is the same deal the stacked layout has always made.
+- **Cards have a hard minimum width** (`--card-min: 290px`): below that the
+  name, the picker and the two buttons start colliding. Two columns + the 66px
+  spine need 646px of stage.
+  **The stage — not the room — is where the plan lives.** It is a child of
+  `.stage`, beside the role cards in the cards' row, and *the conversation runs
+  underneath both at the full width of the room*. That is the whole point: the
+  plan is readable beside the cards the Architect writes it for, and the chat
+  pays nothing for it. The operator's mockup is the shape; the census and the
+  probe are the two `.inspector` panels below the stage, side by side.
+  Two columns of stage, a gap and the plan need **1248px** of window (2 x 290
+  cards + 66 spine + 14 gap + 284 plan = 944 of room, + 256 sidebar + 48
+  padding). Below 1250 the plan drops under the chat at full width — a narrow
+  window can still read it there — and below 1460 the stage is content-sized and
+  the page scrolls. `body { min-width: 1100px }` keeps two card columns at the
+  floor; narrower windows scroll horizontally rather than squeezing the cards.
+  **The plan may not stretch its row.** `.rail-plan` carries `contain: size`, so
+  a two-thousand-line plan cannot push the chat off the stage: the row is sized
+  by the cards, the plan stretches to it and scrolls inside. The row has a
+  `minmax(200px, auto)` floor because in Single the cards collapse to the
+  Architect card and the plan would otherwise take the row to nothing. `fitChatHeight`
+  counts that floor (it measures the plan, not just the wrapper) or the composer
+  sits 60px below the window in Single.
+  **The role name does not shrink; the model label does.** With both free to
+  shrink, a 290px card turned "Inventor" into "Inven…" and "Coder 1" into "Cod…"
+  while the picker kept 137px. Role names are fixed app vocabulary, so the h3 is
+  `flex: 0 0 auto` and `.model-search` is the one that gives way.
   The glyph measurements that matter: both button glyphs are centred on the 22px
   button to within 0.01px, with ~1.5px of margin left top and bottom at three
   chevrons — if the glyph or border size changes, re-measure with

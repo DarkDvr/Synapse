@@ -180,6 +180,19 @@
           </div>
           </div>
 
+          <!-- ── the plan: the right column of the cards' row ───────────────
+               It is a child of the stage, not of the inspector rail, because
+               it lives beside the role cards the Architect writes it for —
+               with the conversation beneath both of them at full width. -->
+          <section class="panel rail-panel rail-plan">
+            <div class="panel-head">
+              <h3>Project plan</h3>
+            </div>
+            <div id="planBody" class="plan-body">
+              <p class="rail-note">No plan yet. Ask the Architect to plan this job.</p>
+            </div>
+          </section>
+
           <!-- ── conversation (live · no header) ─────────────────────── -->
           <section class="chat-dock" id="chatDock" aria-label="Conversation">
             <div class="chat-scroll" id="transcript"></div>
@@ -216,17 +229,8 @@
           </section>
         </section>
 
-        <!-- ── inspector rail ─────────────────────────────────────────── -->
+        <!-- ── inspector rail: the two reference tables ─────────────────── -->
         <aside class="inspector">
-
-          <section class="panel rail-panel rail-plan">
-            <div class="panel-head">
-              <h3>Project plan</h3>
-            </div>
-            <div id="planBody" class="plan-body">
-              <p class="rail-note">No plan yet. Ask the Architect to plan this job.</p>
-            </div>
-          </section>
 
           <!-- the census: what the models are calling, here and now -->
           <section class="panel rail-panel rail-tools">
