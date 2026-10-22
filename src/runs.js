@@ -859,6 +859,11 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
               },
               onCompact: (times, used, context) => {
                 live.compactions = times;
+                // Also on the run itself, not just in the note: a page opened after
+                // this happened has only `/api/runs` to rebuild the trace from, and
+                // a count with no size beside it says less than it could.
+                live.compactAt = used;
+                live.compactLimit = context;
                 emit('run.note', {
                   dir,
                   role,

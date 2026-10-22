@@ -2494,6 +2494,12 @@ async function loadRuns() {
           finishedAt: 0,
           notes: [],
           stream: null,
+          // Runs already compacted before this page was opened. Without it the
+          // count starts at nothing and the chat says nothing about a run that is
+          // on its fourth compaction — the operator watched exactly that.
+          compactions: Number(run.compactions) || 0,
+          compactAt: Number(run.compactAt) || 0,
+          compactLimit: Number(run.compactLimit) || 0,
         });
       }
     }
@@ -2508,12 +2514,8 @@ function handleRunEvent(ev) {
   // A compaction is news about the run, not a step in it: it lands on the trace as
   // a pinned line, and it is the one note that must survive the four-line tail.
   if (ev.type === 'run.note') {
-    const trace = state.traces.get(traceKeyOf({ dir: ev.dir, task: ev.task, startedAt: ev.startedAt }));
-    if (trace && ev.kind === 'compact') {
-      trace.compactions = Number(ev.times) || (trace.compactions || 0) + 1;
-      trace.compactAt = Number(ev.used) || 0;
-      trace.compactLimit = Number(ev.context) || 0;
-    }
+    const trace = traceFor(ev);
+    if (trace && ev.kind === 'compact') noteCompaction(trace, ev);
     renderTranscript();
     return;
   }
@@ -2556,6 +2558,16 @@ function handleRunEvent(ev) {
       // The step is over: whatever it was saying belonged to the step that just
       // ended, and the note is what remains of it.
       trace.stream = null;
+    }
+    // Every progress tick carries the run's own compaction tally, which was read
+    // from the transcript by the runner. Taking it here is what makes the count
+    // survive a page reload — the `run.note` for a compaction may well have been
+    // sent while this page was not listening, and a trace rebuilt from
+    // `/api/runs` starts with no notes at all.
+    if (trace && Number(run.compactions) > (Number(trace.compactions) || 0)) {
+      trace.compactions = Number(run.compactions);
+      if (Number(run.compactAt)) trace.compactAt = Number(run.compactAt);
+      if (Number(run.compactLimit)) trace.compactLimit = Number(run.compactLimit);
     }
   } else if (ev.type === 'run.finished') {
     // A finished, successful run is the role working again; a run that failed is
@@ -3055,11 +3067,52 @@ function traceOf(run) {
   return run ? state.traces.get(traceKeyOf(run)) || null : null;
 }
 
+/**
+ * The trace a runner event belongs to.
+ *
+ * Its own key when the page saw the run start, and otherwise the newest trace for
+ * that task in that project: the same run before a reload has a different
+ * `startedAt` (the page rebuilds it from `/api/runs`), and a note that lands in
+ * that gap must still reach the right line rather than being dropped in silence.
+ */
+function traceFor(ev) {
+  const exact = state.traces.get(traceKeyOf(ev));
+  if (exact) return exact;
+  const dir = dirKey(ev.dir);
+  let best = null;
+  for (const t of state.traces.values()) {
+    if (dirKey(t.dir) !== dir || t.task !== ev.task) continue;
+    if (!best || (Number(t.startedAt) || 0) > (Number(best.startedAt) || 0)) best = t;
+  }
+  return best;
+}
+
+/** One compaction, on a trace. `times` is the transcript's own tally, so the
+ *  count only ever goes up: a note repeated (a re-sent event, two pages open) must
+ *  not become "Compacting ×2" for one compaction. */
+function noteCompaction(trace, { times, used, context } = {}) {
+  const counted = Number(times) || 0;
+  const known = Number(trace.compactions) || 0;
+  trace.compactions = counted > known ? counted : known || 1;
+  if (Number(used)) trace.compactAt = Number(used);
+  if (Number(context)) trace.compactLimit = Number(context);
+}
+
 /** What the traces are showing, so a rebuilt transcript is not rebuilt for
- *  nothing while they sit still. */
+ *  nothing while they sit still.
+ *
+ *  The compaction count is part of it and has to be: a compaction changes no note
+ *  and no stream, so without this the `run.note` arrived, set the count, asked for
+ *  a re-render — and the re-render found nothing new in this signature and
+ *  returned, which is why the operator saw "compaction" in the chip and nothing
+ *  in the chat. */
 function traceSig() {
   return [...state.traces.values()]
-    .map((t) => `${t.key}:${t.finishedAt || 0}:${(t.notes || []).length}:${t.stream ? t.stream.text.length : 0}`)
+    .map(
+      (t) =>
+        `${t.key}:${t.finishedAt || 0}:${(t.notes || []).length}:${t.stream ? t.stream.text.length : 0}:` +
+        `${Number(t.compactions) || 0}`,
+    )
     .join(';');
 }
 
