@@ -576,19 +576,34 @@ it as a panel **painted over the chat, anchored just above the composer**.
 - **Cards have a hard minimum width** (`--card-min: 290px`): below that the
   name, the picker and the two buttons start colliding. Two columns + the 66px
   spine need 646px of stage.
-  **One row of three panels under the chat**, each between **284 and 341**
-  (`--panel-min` / `--panel-max`: the plan's old fixed width, and that +20%): the
-  plan, the census, the probe. That is why the role cards keep the whole top row
-  and the chat keeps the whole width beneath them — with the panels capped, all
-  three fit on one line instead of the plan having to borrow a column beside the
-  cards. `justify-content: start` keeps them against the chat's left edge and
-  leaves the spare room at the right, where a fourth panel would go.
-  Three panels at their minimum need 880 of room, i.e. **1184px** of window (256
-  sidebar + 48 padding + 3 x 284 + 2 x 14). Below that one row cannot hold them:
-  the plan spans the row and the two tables share the line under it. Below 1460
-  the stage is content-sized and the page scrolls. `body { min-width: 1100px }`
-  keeps the cards' two columns at the floor; narrower windows scroll horizontally
-  rather than squeezing the cards.
+  **The plan has two homes, and one node.** It is the only panel that moves:
+  - **1248–1354px**: the plan sits in the cards' row, to their right, with the
+    conversation underneath **both** at the full width — the operator's mockup,
+    and what their own 1264px window shows. The stage has two tracks:
+    `minmax(auto, 1fr)` for the cards (`auto` resolves to their 646px minimum, so
+    the plan can never squeeze them below it) and
+    `minmax(284px, 341px)` for the plan. Both rows start at the same top and end
+    on the same line.
+  - **1355px and up**: the window can hold three panels of 341 + two gaps
+    (1023 + 28 = 1051 of room), so the plan joins the census and the probe in the
+    row under the chat and the cards get the whole top row back.
+  - **below 1248**: there is not room for cards and plan side by side, so the
+    plan falls under the chat at full width and the two tables share the line
+    beneath it. Below 1183 the panels lose their size range and fill whatever
+    they are given; below 760 it is one column.
+  Panels are **284 to 341** wide (`--panel-min` / `--panel-max`: the plan's old
+  fixed width, and that +20%), two tracks while the plan is upstairs and three
+  when it joins them, `justify-content: start` so the spare room waits at the
+  right where a fourth panel would go.
+  **CSS can place an element in two grids but cannot move it between two
+  parents**, so `placePlanPanel()` does that one job: at boot, on resize and at
+  the 1355 boundary it re-parents the plan between `.stage` and `.inspector`.
+  Anything that assumes a fixed parent for the plan (a `.stage > .rail-plan`
+  selector, a `closest('.stage')` in a measurement) is wrong on one side of that
+  line.
+  Below 1460 the stage is content-sized and the page scrolls.
+  `body { min-width: 1100px }` keeps the cards' two columns at the floor;
+  narrower windows scroll horizontally rather than squeezing the cards.
   The plan's goal is 11px and its step titles 11.5px — a point down from 12/12.5
   at the operator's request, because the panel is now 300-odd pixels wide rather
   than 400 and the old sizes ran to four lines each.

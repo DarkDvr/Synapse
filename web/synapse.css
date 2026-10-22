@@ -220,15 +220,14 @@ body[data-view="none"] .rail-plan { display: none; }
   height: var(--stage-h, calc(100vh - 26px));
 }
 
-/* The three panels, side by side under the conversation. One row of three, each
-   between 284 and 341 wide: that is the whole reason the roles-cards row no
-   longer has to give up a column to the plan. `justify-content: start` keeps them
-   against the chat's left edge and leaves the spare room at the right, where a
-   fourth panel would go — rather than scattering three equal boxes across the
-   width. */
+/* The panels under the conversation, each between 284 and 341 wide. Two while
+   the plan is up beside the cards (then the row holds the census and the probe),
+   three once the window is wide enough for the plan to join them. `justify-content:
+   start` keeps them against the chat's left edge instead of scattering equal
+   boxes across the width. */
 .inspector {
   display: grid;
-  grid-template-columns: repeat(3, minmax(var(--panel-min), var(--panel-max)));
+  grid-template-columns: repeat(2, minmax(var(--panel-min), var(--panel-max)));
   justify-content: start;
   gap: 14px;
   align-items: stretch;
@@ -243,8 +242,13 @@ body[data-view="none"] .rail-plan { display: none; }
 .inspector .rail-panel,
 .rail-panel {
   display: flex; flex-direction: column; min-height: 0;
-  min-width: var(--panel-min); max-width: var(--panel-max);
+  min-width: 0; max-width: none;
   max-height: 420px; overflow: hidden;
+}
+/* The row of three is where the shared size range applies; a panel that spans
+   the row (the plan on a narrow window) takes the room it is given. */
+.inspector .rail-panel {
+  min-width: var(--panel-min); max-width: var(--panel-max);
 }
 .rail-panel .panel-head { flex: none; }
 .rail-plan .plan-body { overflow-y: auto; min-height: 0; }
@@ -304,6 +308,26 @@ body[data-view="session"] .chat-dock { grid-column: 1; grid-row: 2; }
    `.is-clipped` class comes from updatePlanOverflow). It sits in the row of
    panels now, capped like them, so a long plan is routine rather than rare. */
 body[data-view="session"] .rail-plan { position: relative; }
+
+/* ── the plan beside the role cards ───────────────────────────────────────
+   While the window is too narrow to hold three panels in one row (which needs
+   1355; see the responsive block) the plan takes the right of the cards' row
+   instead, with the conversation underneath the two of them at the full width —
+   the operator's mockup. Two tracks: the cards cannot go below their own
+   minimum (646 = two 290 columns plus the 66 spine, which is what `auto`
+   resolves to), and the plan takes what is left, within the shared range.
+   Below 1248 there is not room for both, so the plan falls under the chat. */
+@media (min-width: 1248px) and (max-width: 1354px) {
+  body[data-view="session"] .stage {
+    grid-template-columns: minmax(auto, 1fr) minmax(var(--panel-min), var(--panel-max));
+    /* the plan's floor, for Single: the cards collapse to the Architect card and
+       the plan would otherwise take the row to nothing */
+    grid-template-rows: minmax(200px, auto) minmax(0, 1fr);
+  }
+  body[data-view="session"] .topology-wrap { grid-column: 1; grid-row: 1; }
+  body[data-view="session"] .rail-plan { grid-column: 2; grid-row: 1; contain: size; }
+  body[data-view="session"] .chat-dock { grid-column: 1 / -1; grid-row: 2; }
+}
 body[data-view="session"] .rail-plan::after {
   content: ''; position: absolute; left: 1px; right: 1px; bottom: 1px; height: 30px;
   background: linear-gradient(to top, var(--surface), rgba(29, 31, 35, 0));
@@ -2117,6 +2141,16 @@ body:has(.modal-backdrop:not([hidden])) { overflow: hidden; }
 
 /* ── 15. responsive ────────────────────────────────────────────────────── */
 
+/* From here three panels of at most 341 + two gaps fit in one row (1023 + 28 =
+   1051 of room), so the plan leaves the cards' row and joins the census and the
+   probe under the chat. placePlanPanel() moves the node; this is the grid it
+   lands in. */
+@media (min-width: 1355px) {
+  .inspector {
+    grid-template-columns: repeat(3, minmax(var(--panel-min), var(--panel-max)));
+  }
+}
+
 /* Three panels of at least 284 + two gaps need 880 of room, i.e. 1184 of window
    (256 sidebar + 48 padding + 880). Below that they cannot sit in one row, so the
    plan takes the full width of the row and the two tables share the line under
@@ -2124,7 +2158,6 @@ body:has(.modal-backdrop:not([hidden])) { overflow: hidden; }
 @media (max-width: 1183px) {
   .inspector { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .inspector .rail-panel { min-width: 0; max-width: none; }
-  .inspector .rail-plan { grid-column: 1 / -1; }
 }
 
 /* Below 1460 the stage is content-sized and the page scrolls — the cards and the
