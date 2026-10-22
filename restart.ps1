@@ -94,7 +94,11 @@ Stop-ByPort -Port 8720 -Label 'engine'
 Start-Sleep -Seconds 2
 
 Write-Host 'starting Synapse...'
-Start-Process -FilePath node -ArgumentList 'src/index.js' -WorkingDirectory $root -WindowStyle Hidden `
+# The vendored runtime first (vendor-node.ps1), so a copied folder needs nothing
+# installed; the machine's own node is only a fallback for a dev checkout.
+$nodeExe = Join-Path $root 'bin\node\node.exe'
+if (-not (Test-Path $nodeExe)) { $nodeExe = 'node' }
+Start-Process -FilePath $nodeExe -ArgumentList 'src/index.js' -WorkingDirectory $root -WindowStyle Hidden `
   -RedirectStandardOutput "$env:TEMP\synapse.out" -RedirectStandardError "$env:TEMP\synapse.err"
 Start-Sleep -Seconds 14
 

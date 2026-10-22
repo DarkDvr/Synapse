@@ -14,7 +14,7 @@ import {
   normalizeSession,
   parseModelRef,
 } from './base.js';
-import { SEARCH_SERVER, DELEGATE_SERVER, ENGINE_PID_FILE, SKILLS_DIR, VENDOR_ENGINE } from '../paths.js';
+import { ROOT, SEARCH_SERVER, DELEGATE_SERVER, ENGINE_PID_FILE, SKILLS_DIR, VENDOR_ENGINE } from '../paths.js';
 import { providerApiKey } from '../config.js';
 
 const ENGINE_USERNAME = 'opencode';
@@ -276,6 +276,11 @@ export class OpenCodeEngine extends Engine {
     this.ensureEngineConfig(home);
 
     const args = ['serve', '--port', String(this.cfg.port), '--hostname', this.cfg.host, ...(this.cfg.args || [])];
+    // The vendored NuGet cache, if vendor-nuget.ps1 has been run. Workers build with
+    // `dotnet` inside the engine's shells, and those inherit this environment — so a
+    // project builds on a copied folder with no network, which is the whole point of
+    // vendoring it. Absent, nothing is set and NuGet behaves normally.
+    const nugetCache = path.join(ROOT, 'vendor', 'nuget-packages');
     const env = {
       ...process.env,
       OPENCODE_SERVER_PASSWORD: this.password,
@@ -283,6 +288,7 @@ export class OpenCodeEngine extends Engine {
       XDG_DATA_HOME: home.data,
       XDG_STATE_HOME: home.state,
       TMPDIR: home.tmp,
+      ...(fs.existsSync(nugetCache) ? { NUGET_PACKAGES: nugetCache } : {}),
     };
 
     this.log.info(`engine binary: ${binary}`);

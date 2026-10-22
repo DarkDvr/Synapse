@@ -13,3 +13,6 @@ bin/
 
 # .NET build output (a project or the template)
 obj/
+
+# Vendored build caches (vendor-node.ps1, vendor-nuget.ps1) - they travel with the folder
+vendor/

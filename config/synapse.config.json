@@ -99,6 +99,7 @@
       "variant": "medium",
       "skills": [
         "aesthetic-foundations",
+        "app-check",
         "frontend-design",
         "ui-design",
         "visual-review"
@@ -178,6 +179,10 @@
   },
   "tools": {
     "resetOnBoot": false
+  },
+  "cleanup": {
+    "onFinish": true,
+    "onBoot": true
   },
   "worker": {
     "stallSec": 1200,

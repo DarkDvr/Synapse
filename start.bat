@@ -10,12 +10,21 @@ REM the old window closes itself instead of waiting at the pause below.
 setlocal
 cd /d "%~dp0"
 
+REM The vendored runtime first: the copy in bin\node is what makes a folder copied
+REM to another PC run without installing anything. vendor-node.ps1 puts it there.
+set "NODE=%~dp0bin\node\node.exe"
+if exist "%NODE%" goto :run
+
 where node >NUL 2>&1
 if errorlevel 1 (
-  echo [Synapse] Node.js was not found on PATH. Install Node 20+ and retry.
+  echo [Synapse] No Node.js found: neither bin\node\node.exe nor one on PATH.
+  echo [Synapse] Run vendor-node.ps1 once, or install Node 22+ and retry.
   pause
   exit /b 1
 )
+set "NODE=node"
+
+:run
 
 if /i "%~1"=="restart" (
   echo [Synapse] restarting - waiting for the old process to let go of the port...
@@ -23,7 +32,7 @@ if /i "%~1"=="restart" (
 )
 
 echo [Synapse] starting... (Ctrl+C to stop)
-node "src\index.js"
+"%NODE%" "src\index.js"
 
 REM Exit code 2 is "asked to restart": another console is taking over, so this
 REM window has nothing left to show and closes rather than waiting for a keypress.
