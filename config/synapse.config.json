@@ -278,7 +278,7 @@
       "focus": "app"
     },
     "architect": {
-      "ref": "opencode-go/deepseek-v4.1-flash",
+      "ref": "deepseek/deepseek-flash",
       "variant": "high",
       "skills": [
         "visual-review"
