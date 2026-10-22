@@ -115,6 +115,14 @@ was `min(declared, loaded)`, which kept the **smaller** number — so raising a 
 window from 42,240 to 60,160 (Bionic, 22 Oct) was silently ignored, and the warning
 only fired in the other direction. Both directions are logged now.
 
+**What that cost, on one run.** Fever Tracker's t7 ran 86 turns and 81 minutes, and
+`logs\app.log` holds **32** lines of `context 30k of 42k … compacting before the
+window closes` while the server had **60,160** loaded: the watchdog was compacting
+against a window 18k too small, over and over (the run's own tally: 49 compactions).
+Every one of those threw away the transcript the coder was working from. That is
+the shape of the bug — not a wrong number, but a *silently* wrong number that the
+harness acts on forty-nine times.
+
 **The operator can see it while it runs**: the role card carries
 `27k/60k ctx` beside the rate, and every compaction adds a pinned amber line to the
 worker's trace (`⏳ Compacting ×2 · context at 32k/60k`), which is not a step and is
