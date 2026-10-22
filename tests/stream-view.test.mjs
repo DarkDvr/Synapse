@@ -1,105 +1,135 @@
-// The streamed worker text leaves the top of its line a step at a time.
+// The worker's streamed text slides up through a panel, and it slides like a
+// spring rather than a command: it is dragged along by the writing, lags a little
+// and eases to a stop when the model pauses.
 //
-// This is the regression the operator saw: the window was written as
-// `text.slice(-600)`, so everything that had arrived since the last frame came off
-// the top at once. At speed the text looked like it vanished word by word.
-// `streamView` is the shipped function from `web/stream-view.js`, so these are the
-// real numbers the UI uses.
+// These are the numbers the UI actually runs — `nextOffset` etc. are imported from
+// `web/stream-view.js`, not copied — because smoothing is the kind of thing that
+// reads fine and looks wrong.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { streamView, newStream, pushStream, STREAM_VIEW, STREAM_BUFFER } from '../web/stream-view.js';
+import {
+  newStream,
+  pushStream,
+  slideTarget,
+  nextOffset,
+  STREAM_BUFFER,
+} from '../web/stream-view.js';
 
-/** Run frames until the front stops moving, or the cap is reached. */
-function frames(s, cap = 400) {
-  const shown = [];
-  for (let i = 0; i < cap; i += 1) {
-    const v = streamView(s);
-    shown.push(v.text.length);
-    if (!v.moving) break;
+/** Drive the spring for `seconds` at a given refresh rate and return the trace. */
+function run(s, target, seconds, hz = 60) {
+  const frames = Math.max(1, Math.round(seconds * hz));
+  const dt = 1 / hz;
+  const offsets = [];
+  for (let i = 0; i < frames; i += 1) {
+    nextOffset(s, target, dt);
+    offsets.push(s.offset);
   }
-  return shown;
+  return offsets;
 }
 
-test('a short block is shown whole, with no ellipsis', () => {
-  const s = newStream('word');
-  pushStream(s, 'hello');
-  const v = streamView(s);
-  assert.equal(v.text, 'hello');
-  assert.equal(v.moving, false);
+test('a block that fits needs no travel', () => {
+  assert.equal(slideTarget(120, 183), 0);
+  assert.equal(slideTarget(0, 183), 0);
+  assert.equal(slideTarget(undefined, 183), 0);
+  assert.equal(slideTarget(400, 183), 217);
 });
 
-test('the window settles on the last STREAM_VIEW characters', () => {
+test('a new block starts at rest', () => {
   const s = newStream('word');
-  pushStream(s, 'abcdefghij'.repeat(STREAM_VIEW));
-  frames(s);
-  const v = streamView(s);
-  assert.equal(v.text.length, STREAM_VIEW + 1, 'ellipsis plus the window');
-  assert.ok(v.text.startsWith('…'));
-  assert.equal(v.text.slice(-1), s.text.at(-1));
-  assert.equal(v.moving, false);
+  assert.deepEqual({ text: s.text, total: s.total, offset: s.offset, settled: s.settled }, {
+    text: '',
+    total: 0,
+    offset: 0,
+    settled: true,
+  });
 });
 
-test('a burst leaves the top a step at a time, never in one jump', () => {
+test('the text arrives at the target and stops exactly there', () => {
   const s = newStream('word');
-  pushStream(s, 'x'.repeat(STREAM_VIEW)); // a full window already on screen
-  assert.equal(streamView(s).text.length, STREAM_VIEW); // settled, nothing to cut
-  pushStream(s, 'y'.repeat(30)); // one delta of thirty characters
-  const shown = frames(s);
-  assert.ok(shown.length > 4, `expected several frames, got ${shown.length}`);
-  // Every step shrinks the visible line, and no step takes more than a fifth of
-  // the backlog: the first cut is the largest and it is still small.
-  assert.equal(shown[0], 624, '30 characters are on screen before any of it leaves');
-  for (let i = 1; i < shown.length; i += 1) {
-    assert.ok(shown[i] <= shown[i - 1], 'the window never grows while easing');
-    assert.ok(shown[i - 1] - shown[i] <= 8, `step of ${shown[i - 1] - shown[i]} characters is a jump`);
+  run(s, 300, 1.5);
+  assert.equal(s.offset, 300, 'lands on the target, not near it');
+  assert.equal(s.velocity, 0);
+  assert.equal(s.settled, true);
+});
+
+test('it gets there lazily, in about half a second, not in one frame', () => {
+  const s = newStream('word');
+  const offsets = run(s, 300, 1);
+  assert.ok(offsets[0] < 30, `the first frame should not jump the whole way: ${offsets[0]}`);
+  // Half a second in, most of the distance is covered and it is still moving.
+  const half = offsets[Math.round(offsets.length / 2) - 1];
+  assert.ok(half > 200 && half < 300, `half a second in: ${half}`);
+  assert.ok(offsets.at(-1) === 300, 'and it does finish inside a second');
+});
+
+test('there is no overshoot to see', () => {
+  const s = newStream('word');
+  const offsets = run(s, 400, 1.5);
+  assert.ok(Math.max(...offsets) <= 401, `peak ${Math.max(...offsets)}`);
+  assert.ok(offsets.every((v, i) => i === 0 || v >= offsets[i - 1]), 'never goes backwards');
+});
+
+test('a 144Hz screen and a 60Hz one arrive at the same moment', () => {
+  const a = newStream('word');
+  const b = newStream('word');
+  run(a, 300, 0.2, 60);
+  run(b, 300, 0.2, 144);
+  assert.ok(Math.abs(a.offset - b.offset) < 1.5, `60Hz ${a.offset} vs 144Hz ${b.offset}`);
+});
+
+test('a tab that was hidden does not teleport the text', () => {
+  const s = newStream('word');
+  nextOffset(s, 600, 12); // twelve seconds of debt
+  assert.ok(s.offset > 0 && s.offset < 600, `moved ${s.offset} of 600, not all of it`);
+  run(s, 600, 1.5);
+  assert.equal(s.offset, 600);
+});
+
+test('reduced motion puts it where it belongs at once', () => {
+  const s = newStream('word');
+  nextOffset(s, 250, 1 / 60, { reduced: true });
+  assert.equal(s.offset, 250);
+  assert.equal(s.settled, true);
+});
+
+test('it lags the writing while the writing continues, by a bounded amount', () => {
+  // A target that grows a line every 150ms, as a fast model does.
+  const s = newStream('word');
+  const dt = 1 / 60;
+  const line = 17; // px
+  let target = 0;
+  const lag = [];
+  for (let i = 0; i < 180; i += 1) {
+    if (i % 9 === 0) target += line;
+    nextOffset(s, target, dt);
+    lag.push(target - s.offset);
   }
-  assert.equal(shown.at(-1), STREAM_VIEW + 1);
+  const tail = lag.slice(-90);
+  assert.ok(Math.min(...tail) > 0, 'it is always a little behind: the text is still below the edge');
+  assert.ok(Math.max(...tail) < 6 * line, `lag stays under six lines, saw ${Math.max(...tail)}`);
 });
 
-test('a slow stream keeps the line still: one character in, one character out', () => {
-  const s = newStream('think');
-  pushStream(s, 'z'.repeat(STREAM_VIEW));
-  streamView(s);
-  const lengths = [];
-  for (let i = 0; i < 40; i += 1) {
-    if (i % 4 === 0) pushStream(s, 'q'); // about 15 characters a second at 60fps
-    lengths.push(streamView(s).text.length);
-  }
-  assert.equal(new Set(lengths).size, 1, `the window should hold its size, saw ${[...new Set(lengths)]}`);
-  assert.equal(lengths[0], STREAM_VIEW + 1);
-});
-
-test('the window keeps easing between bursts, so a pause cannot leave it wide', () => {
+test('a pause lets it settle without any new text', () => {
   const s = newStream('word');
-  pushStream(s, 'x'.repeat(STREAM_VIEW));
-  streamView(s);
-  pushStream(s, 'y'.repeat(40));
-  // No further deltas: frames alone must finish the slide.
-  const shown = frames(s);
-  assert.equal(shown.at(-1), STREAM_VIEW + 1);
+  run(s, 340, 0.1); // interrupted mid-slide
+  assert.equal(s.settled, false);
+  run(s, 340, 1.5); // no further deltas, only frames
+  assert.equal(s.offset, 340);
+  assert.equal(s.settled, true);
 });
 
-test('the buffer is trimmed but the window position survives it', () => {
+test('the buffer is a guard, not a window: every character is counted', () => {
   const s = newStream('word');
-  for (let i = 0; i < 40; i += 1) pushStream(s, 'abcdefghij'); // 400 characters
-  frames(s);
-  for (let i = 0; i < 1200; i += 1) pushStream(s, 'abcd');
+  pushStream(s, 'a'.repeat(100));
+  assert.equal(s.text.length, 100);
+  assert.equal(s.total, 100);
+  assert.equal(s.dirty, true);
+  pushStream(s, 'b'.repeat(STREAM_BUFFER));
   assert.equal(s.text.length, STREAM_BUFFER, 'the buffer is capped');
-  assert.equal(s.total, 400 + 4800, 'but every character is still counted');
-  frames(s);
-  const v = streamView(s);
-  assert.equal(v.text.length, STREAM_VIEW + 1);
-  assert.equal(v.text.slice(-1), 'd', 'the window is at the end of what was written');
-  assert.equal(v.text.slice(1), s.text.slice(-STREAM_VIEW), 'and the window is the very end of the buffer');
-});
-
-test('a block restarted for a rebuild shows its tail without sliding', () => {
-  // renderTrace calls streamView on a block that was never on screen: it should
-  // paint the tail at once rather than easing from the first character.
-  const s = { kind: 'word', text: 'x'.repeat(1200), total: 1200 };
-  const v = streamView(s);
-  assert.equal(v.text.length, STREAM_VIEW + 1);
-  assert.equal(v.moving, false);
+  assert.equal(s.total, 100 + STREAM_BUFFER, 'but the count is the whole block');
+  assert.equal(s.text.at(-1), 'b');
+  pushStream(s, ''); // an empty delta changes nothing
+  assert.equal(s.total, 100 + STREAM_BUFFER);
 });

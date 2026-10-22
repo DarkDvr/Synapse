@@ -9,7 +9,7 @@
 // wired yet — the orchestration layer will drive them (stage 3+).
 
 import { renderMarkdown } from './md.js';
-import { streamView, newStream, pushStream } from './stream-view.js';
+import { newStream, pushStream, slideTarget, nextOffset, STREAM_BUFFER } from './stream-view.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -2812,11 +2812,13 @@ function renderTrace(t) {
     : '';
   // What it is saying *now*. The words stream in as they are written and go when
   // the step ends — the note that follows ("reading qc-1.md") is the record, and
-  // a chat cannot be a transcript of every sentence every worker thought.
+  // a chat cannot be a transcript of every sentence every worker thought. The whole
+  // block is rendered and the panel keeps its window; nothing is sliced here, so a
+  // re-render never changes a line break.
   const streaming = t.stream && t.stream.text
-    ? `<div class="trace-line is-stream${t.stream.kind === 'think' ? ' is-think' : ''}">${esc(
-        streamView(t.stream).text,
-      )}</div>`
+    ? `<div class="trace-flow${t.stream.kind === 'think' ? ' is-think' : ''}"><div class="trace-flow-view"><div class="trace-flow-body">${esc(
+        t.stream.text,
+      )}</div></div></div>`
     : '';
   const body = `${archive}${tail.map(note).join('')}${streaming}`;
   if (!t.finishedAt) {
@@ -2850,35 +2852,58 @@ function tracesFor(dir) {
 // block is dropped when its step ends — a text block ending, or the next tool
 // call — because a chat cannot be a transcript of every sentence every worker
 // thought. The one-line note of the tool call is what survives.
-// Streaming text, once per animation frame.
+// Streaming text, inside a panel that slides.
 //
 // Two costs had to stay out of this. It must not rebuild the transcript — that is
-// an innerHTML of every message, and it would run sixty times a second. And it
-// must not touch `textContent`, which replaces the text node and re-lays out the
-// line, making the words jump. So the line is written by assigning `data` on one
-// text node: the cheapest write the DOM has, and it only happens when the visible
-// text has actually changed. Frames run while the top edge is still easing and
-// stop as soon as it has caught up, so an idle page is still doing nothing.
-// The window itself is `streamView` in ./stream-view.js — a plain function, tested
-// on its own, so the slide is not something to take on trust.
+// an innerHTML of every message. And it must not rewrite the text each frame: the
+// old window replaced the *front* of the paragraph sixty times a second, which
+// re-broke every line and forced a layout of the whole chat. So the text node is
+// written once per delta and never touched in between, and a frame does one thing
+// only — move the block by a few pixels with `transform`, which the compositor
+// handles without laying anything out. Frames stop as soon as the slide settles.
+//
+// The travel itself is `nextOffset` in ./stream-view.js: a damped spring, so the
+// text is dragged along by the writing and eases to a stop when the model pauses.
 let streamRaf = 0;
-let streamEl = null;
+let streamEl = null; // { mask, view, body, node, scrolling } once the panel is on screen
+let streamFrameAt = 0; // performance.now() of the last frame, for the real dt
+const reducedMotion = Boolean(window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches);
+
+/** The panel's parts, or null if it is not on screen yet. */
+function findStreamEl(key) {
+  const mask = document.querySelector(`.trace.is-live[data-trace="${CSS.escape(key)}"] .trace-flow`);
+  const view = mask?.querySelector('.trace-flow-view');
+  const body = view?.firstElementChild;
+  const node = body?.firstChild;
+  if (!body || !node || node.nodeType !== Node.TEXT_NODE) return null;
+  return { mask, view, body, node, scrolling: null };
+}
+
+/** How far the text has to move up for its last line to sit at the bottom edge. */
+function measureStream(s) {
+  if (!streamEl) return 0;
+  s.target = slideTarget(streamEl.body.offsetHeight, streamEl.view.clientHeight);
+  return s.target;
+}
 
 function appendStream(kind, delta) {
   const trace = traceOf(currentRun());
   if (!trace || !delta) return;
   if (!trace.stream || trace.stream.kind !== kind) {
-    // A new block (thinking, then speech). Its class differs, so the line is
-    // replaced on the next pump rather than patched; nothing is on screen between
+    // A new block (thinking, then speech). Its class differs, so the panel is
+    // replaced on the next frame rather than patched; nothing is on screen between
     // the two, because the previous block was cleared when its step ended.
     trace.stream = newStream(kind);
     streamEl = null;
   }
   pushStream(trace.stream, delta);
-  if (!streamRaf) streamRaf = requestAnimationFrame(pumpStream);
+  if (!streamRaf) {
+    streamFrameAt = 0;
+    streamRaf = requestAnimationFrame(pumpStream);
+  }
 }
 
-function pumpStream() {
+function pumpStream(now) {
   streamRaf = 0;
   const trace = traceOf(currentRun());
   const s = trace?.stream;
@@ -2886,41 +2911,59 @@ function pumpStream() {
     streamEl = null;
     return;
   }
-  if (!streamEl || !streamEl.isConnected) {
-    // The line is a div holding one text node; the node is what gets written to.
-    const line = document.querySelector(
-      `.trace.is-live[data-trace="${CSS.escape(trace.key)}"] .trace-line.is-stream`,
-    );
-    const node = line?.firstChild;
-    streamEl = node && node.nodeType === Node.TEXT_NODE ? node : null;
+  if (!streamEl || !streamEl.mask.isConnected) {
+    streamEl = findStreamEl(trace.key);
     if (!streamEl) {
-      // The line is not on screen — the first delta of a run, or a rebuild in
-      // between. One render puts it there; the next delta finds it.
+      // Not on screen — the first delta of a run, or a rebuild in between. One
+      // render puts it there; the next frame finds it.
       renderTranscript();
       return;
     }
+    // A panel that appears mid-block is already showing its last line: start it
+    // there rather than sliding the whole block up from the beginning.
+    s.velocity = 0;
+    s.offset = measureStream(s);
   }
-  const view = streamView(s);
-  if (view.moving) streamRaf = requestAnimationFrame(pumpStream);
-  if (streamEl.data === view.text) return;
-  // Follow the text only if the reader was already at the end, measured before the
-  // line grows — the same rule the transcript uses for new messages.
-  const scroller = chatScroller();
-  const follow = scroller ? chatAtBottom(140) : false;
-  streamEl.data = view.text;
-  if (follow && scroller) scroller.scrollTop = scroller.scrollHeight;
+  let follow = false;
+  if (s.dirty) {
+    // Read the chat's position *before* the text grows, the same rule the
+    // transcript uses for new messages, and only on a frame that writes.
+    const scroller = chatScroller();
+    follow = Boolean(scroller && chatAtBottom(140));
+    if (streamEl.node.data !== s.text) streamEl.node.data = s.text;
+    s.dirty = false;
+    measureStream(s);
+  }
+  const scrolling = (s.target || 0) > 0.5;
+  if (scrolling !== streamEl.scrolling) {
+    // The fade at the top edge only belongs there while text is leaving through
+    // it; a short block sits in the same panel unclipped.
+    streamEl.scrolling = scrolling;
+    streamEl.mask.classList.toggle('is-scrolling', scrolling);
+  }
+  const dt = streamFrameAt ? (now - streamFrameAt) / 1000 : 1 / 60;
+  streamFrameAt = now;
+  const was = s.offset;
+  const offset = nextOffset(s, s.target || 0, dt, { reduced: reducedMotion });
+  if (offset !== was) streamEl.body.style.transform = `translate3d(0, ${-offset}px, 0)`;
+  if (follow) {
+    const scroller = chatScroller();
+    if (scroller) scroller.scrollTop = scroller.scrollHeight;
+  }
+  if (!s.settled || s.dirty) streamRaf = requestAnimationFrame(pumpStream);
 }
 
 function endStream() {
   const trace = traceOf(currentRun());
   if (!trace || !trace.stream) return;
   // A frame may still be queued with the old text; cancel it, or it would write
-  // the finished block back into a line that is about to disappear.
+  // the finished block back into a panel that is about to disappear.
   if (streamRaf) {
     cancelAnimationFrame(streamRaf);
     streamRaf = 0;
   }
   streamEl = null;
+  streamFrameAt = 0;
   trace.stream = null;
   renderTranscript();
 }

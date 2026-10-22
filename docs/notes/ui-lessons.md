@@ -141,20 +141,35 @@ it as a panel **painted over the chat, anchored just above the composer**.
   (`loadRuns`), so the chat is alive immediately; a page reloaded *after* a run
   ends has no trace, which is deliberate for now: the run log keeps the numbers,
   and rebuilding a fold per past run is a second feature.
-- **The worker's words stream, and the top of the line leaves a step at a time.**
-  `session.text.delta` / `session.reasoning.delta` carry the piece of text, so the
-  live block is written from deltas rather than polled — one text node, `data`
-  assigned, never `textContent` (that replaces the node and re-lays out the line).
-  The line keeps a **600-character window**. Writing `text.slice(-600)` dropped
-  everything that had arrived since the last frame off the top in one go: after a
-  burst the line lurched, and at speed the text looked like it vanished word by
-  word. `web/stream-view.js` now eases the window's start instead — each frame it
-  gives up 22% of its backlog, never less than one character — so text leaves at
-  the monitor's refresh rate and the line slides. Frames keep running while the
-  front is still behind and stop the moment it has caught up, so a paused model
-  still costs nothing. The window is a plain function over numbers because it is
-  the kind of smoothing that looks fine in code and wrong on screen: it is tested
-  in `tests/stream-view.test.mjs`, including that no single step is a jump.
+- **The worker's words stream through a panel that slides, not a block that
+  grows.** Deltas are appended to one text node — write once per delta, never per
+  frame, and never `textContent` (that replaces the node and re-wraps the line).
+  The panel is **11 lines** tall (measured 183px at 11.5px/1.45, 191.4px with its
+  3px padding and 1px border) and the text inside it is moved with `transform`.
+  Two earlier versions were wrong and each taught half the lesson. Keeping a
+  **600-character window** (`text.slice(-600)`) rewrote the *front* of the
+  paragraph every frame, which re-breaks every line — a full re-wrap, then a
+  `scrollHeight` read and `scrollTop` write forced a layout of the whole chat,
+  sixty times a second — and pinned the newest line to the bottom edge, so each
+  new line shoved the rest up by a line at a time. Easing that window by
+  characters smoothed the removal but not the re-wrap, and the chat's own edge
+  still looked like it was eating the text. The panel fixes all three: the text is
+  append-only so line breaking is incremental, a frame is one `transform` (compositor
+  work, no layout), and the clip is a border the operator can see. The top edge
+  **fades** — a hard cut reads as the box eating the text — and only while text is
+  leaving through it (`is-scrolling`), so a short block sits unfaded. The bottom
+  stays crisp: the newest words are the ones being watched.
+- **The slide is a damped spring, not a tween.** It is `nextOffset` in
+  `web/stream-view.js`: stiffness 90, damping 18 (ζ ≈ 0.95), integrated in 8ms
+  sub-steps against the *real* frame time so 60Hz and 144Hz arrive together, with a
+  snap below 0.35px and 6px/s. It reads as laziness — the text is dragged along by
+  the writing, lags it by under a couple of lines while the model is fast, and eases
+  to a stop when the model pauses — because that lag is where "still generating
+  below the mask" comes from. A hidden tab can come back with seconds of debt; the
+  step is clamped to 250ms so the text arrives rather than teleporting.
+  `tests/stream-view.test.mjs` holds the numbers, including that no frame jumps the
+  whole way and that a 60Hz and a 144Hz run land within a pixel of each other.
+  Reduced motion skips the spring entirely.
 - **The app icon is generated, not drawn.** `references\synapse_icon_full.png`
   (471×472) is the source; `web\icon-{16,32,48,64,180,256}.png` and `favicon.ico`
   are rendered from it, and the sidebar mark and the welcome screen use the same
