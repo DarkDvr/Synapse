@@ -279,6 +279,11 @@ try {
   const events = compactionEvents([msg(9000, 23000), { type: 'compaction' }, msg(4000, 9000), { type: 'compaction' }]);
   expect('two compactions, each with the prompt that caused it', events.length === 2 && events[0].used === 32000);
   expect('a transcript with none reports none', compactionEvents([msg(100, 100)]).length === 0);
+  // The engine records the prompt it sent to write its summary. That is the size
+  // the decision was made on — a step earlier is one tool result short, and this
+  // reported 38k for a compaction that fired at 44k.
+  const own = compactionEvents([msg(9000, 29000), { type: 'compaction', raw: { tokens: { input: 48243, output: 2552 } } }]);
+  expect('the size is what the compaction itself sent', own[0].used === 48243, String(own[0]?.used));
 }
 
 // ── which number wins ────────────────────────────────────────

@@ -264,11 +264,15 @@ export function promptSize(messages) {
 }
 
 /**
- * Every compaction in a transcript, with the prompt size that preceded it.
+ * Every compaction in a transcript, with the size that went with it.
  *
  * A compaction is a real message the engine writes (`type: 'compaction'`), so
- * counting them needs nothing from the provider. The size is the last turn's
- * prompt before it, which is what the operator wants to see next to "compacting".
+ * counting them needs nothing from the provider. The size shown beside it is the
+ * prompt the engine *sent to write the summary* — that is the whole history as it
+ * stood when the decision was made. Reading the last step's prompt instead (what
+ * this used to do) is one tool result behind: it reported "context at 38k" for a
+ * compaction the engine fired at 44k, which reads like a bug in the engine and is
+ * really a bug in the label.
  */
 export function compactionEvents(messages) {
   const out = [];
@@ -278,7 +282,9 @@ export function compactionEvents(messages) {
       const t = m.raw.tokens;
       used = (t.input || 0) + (t.cache?.read || 0);
     } else if (m.type === 'compaction') {
-      out.push({ used });
+      const t = m.raw?.tokens;
+      const sent = t ? (t.input || 0) + (t.cache?.read || 0) : 0;
+      out.push({ used: sent || used });
     }
   }
   return out;
