@@ -1186,6 +1186,10 @@ body[data-mode="single"] .keep-toggle { display: none; }
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .trace-line.is-word { font-style: italic; color: #767b83; }
+/* A compaction is the one line in a worker's trace that is not a step: it explains
+   why the next step is slower and why the window is empty again, so it is amber,
+   pinned above the four-line tail, and never trimmed away with the steps. */
+.trace-line.is-compact { color: var(--amber); font-weight: 600; }
 /* The words being written *now*. Unlike a note, this wraps: it is a paragraph
    streaming past, not a label, and cutting it to one line would hide the point of
    showing it. It disappears when the step ends.

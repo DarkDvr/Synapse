@@ -2505,6 +2505,18 @@ async function loadRuns() {
 /** One delegated run, live: started, its newest tool call, then finished. */
 function handleRunEvent(ev) {
   const key = dirKey(ev.dir);
+  // A compaction is news about the run, not a step in it: it lands on the trace as
+  // a pinned line, and it is the one note that must survive the four-line tail.
+  if (ev.type === 'run.note') {
+    const trace = state.traces.get(traceKeyOf({ dir: ev.dir, task: ev.task, startedAt: ev.startedAt }));
+    if (trace && ev.kind === 'compact') {
+      trace.compactions = Number(ev.times) || (trace.compactions || 0) + 1;
+      trace.compactAt = Number(ev.used) || 0;
+      trace.compactLimit = Number(ev.context) || 0;
+    }
+    renderTranscript();
+    return;
+  }
   if (ev.type === 'run.started' || ev.type === 'run.progress') {
     // A run reaching a role is that role working again, so its last error is no
     // longer the news. `run.progress` cannot clear it: the runner sends one right
@@ -2564,6 +2576,7 @@ function handleRunEvent(ev) {
     return;
   }
   renderRoleActivity();
+  paintRates();
   // The rail's dot says whether anything is being done for a project, and a run
   // starting or ending is exactly that — the engine's own busy state cannot see
   // a worker, because the Architect's turn is already over by then.
@@ -2826,7 +2839,16 @@ function renderTrace(t) {
         t.stream.text,
       )}</div></div></div>`
     : '';
-  const body = `${archive}${tail.map(note).join('')}${streaming}`;
+  // A compaction line is pinned: the four-line tail is for steps, and this is not
+  // a step — it is the reason the next step is slower and the window is empty
+  // again. It stays for the whole run, and the folded summary counts it.
+  const packed = Number(t.compactions) || 0;
+  const compactLine = packed
+    ? `<div class="trace-line is-compact">⏳ Compacting ×${packed}` +
+      (t.compactAt ? ` · context at ${fmtTokens(t.compactAt)}${t.compactLimit ? `/${fmtTokens(t.compactLimit)}` : ''}` : '') +
+      '</div>'
+    : '';
+  const body = `${archive}${compactLine}${tail.map(note).join('')}${streaming}`;
   if (!t.finishedAt) {
     return `<div class="trace is-live" data-trace="${esc(t.key)}">
       <div class="trace-head" title="${esc(head.join(' · '))}">${esc(head.join(' · '))}</div>
@@ -2835,11 +2857,14 @@ function renderTrace(t) {
   }
   const took = t.ms ? ` · ${shortSpan(t.ms)}` : '';
   const written = t.files ? ` · ${t.files} file${t.files === 1 ? '' : 's'}` : '';
+  // A compaction is not a step of the work, and it is the one thing the operator
+  // needs to still see an hour later, so it rides the folded line too.
+  const packedNote = Number(t.compactions) ? ` · compacted ×${t.compactions}` : '';
   // The task's own title belongs on the folded line: "Coder 1 · t8" says where,
   // not what. It ellipsizes when the column is short, and the tooltip has the lot.
   const foldHead = [name, t.task, t.title].filter(Boolean).join(' · ');
   return `<details class="trace is-fold" data-trace="${esc(t.key)}">
-    <summary title="${esc(foldHead)}">${esc(foldHead)}${took}${written}</summary>
+    <summary title="${esc(foldHead)}">${esc(foldHead)}${took}${written}${packedNote}</summary>
     <div class="trace-lines">${body}</div>
   </details>`;
 }
@@ -3005,9 +3030,23 @@ function paintRates(now = Date.now()) {
   for (const card of document.querySelectorAll('#topology .role-card')) {
     const el = card.querySelector('.role-rate');
     if (!el) continue;
-    const show = run && rate && rate.role === card.dataset.role && now - rate.at < RATE_FRESH_MS;
-    const text = show ? `${Math.round(rate.tps)} tok/s` : '';
+    const mine = run && rate && rate.role === card.dataset.role && now - rate.at < RATE_FRESH_MS;
+    const bits = [];
+    if (mine) bits.push(`${Math.round(rate.tps)} tok/s`);
+    // The window, in the corner the operator already looks at: "27k/60k ctx". It
+    // is the pair that explains a slowdown (a full window is re-read every turn)
+    // and the compaction that follows. Shown even when the rate has gone stale —
+    // the fill of the window is true whether or not the model is writing.
+    if (run && run.role === card.dataset.role && Number(run.ctx) > 0) {
+      bits.push(`${fmtTokens(run.ctx)}${run.ctxLimit ? `/${fmtTokens(run.ctxLimit)}` : ''} ctx`);
+    }
+    const text = bits.join(' · ');
     if (el.textContent !== text) el.textContent = text;
+    const tip = Number(run?.ctx) > 0
+      ? `Prompt ${run.ctx} tokens of ${run.ctxLimit || 'an unknown window'}` +
+        (run.ctxRoom ? `; Synapse compacts near ${run.ctxRoom}` : '')
+      : '';
+    if (el.title !== tip) el.title = tip;
   }
 }
 
