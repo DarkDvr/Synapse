@@ -36,9 +36,10 @@ html { scrollbar-gutter: stable; }
   --spine-w: 66px;
   --row-gap: 12px;
   --sidebar-w: 256px;
-  /* the narrowest a role card may get before its select/buttons/label start
-     hiding; two columns + the spine therefore need ~786px of stage */
-  --card-min: 290px;
+  /* the narrowest a worker card may get before its own two labels collide. The
+     name no longer shrinks and the model picker gives way down to 76px, so the
+     real floor is ~235; 250 leaves the picker a readable stub. */
+  --card-min: 250px;
   /* the capped working area: cards+chat + rail. Left-anchored, so on a wide
      window the leftover space sits at the right edge. */
   --work-w: 1240px;
@@ -311,21 +312,32 @@ body[data-view="session"] .rail-plan { position: relative; }
 
 /* ── the plan beside the role cards ───────────────────────────────────────
    While the window is too narrow to hold three panels in one row (which needs
-   1355; see the responsive block) the plan takes the right of the cards' row
-   instead, with the conversation underneath the two of them at the full width —
-   the operator's mockup. Two tracks: the cards cannot go below their own
-   minimum (646 = two 290 columns plus the 66 spine, which is what `auto`
-   resolves to), and the plan takes what is left, within the shared range.
-   Below 1248 there is not room for both, so the plan falls under the chat. */
-@media (min-width: 1248px) and (max-width: 1354px) {
+   1355; see the responsive block) the plan takes the right of the cards' row,
+   with the conversation underneath the two of them at the full width — the
+   operator's mockup. The plan gets its FULL width first (`--panel-max`) and the
+   cards take what is left, so widening the window widens the cards rather than
+   the plan: that is the operator's rule, and it keeps the plan readable at the
+   widths where it is the reference you read while the cards work.
+   The floor is the cards' own minimum track (`auto` = 2 x 250 + 66 spine = 566)
+   plus the plan and the gap = 921 of room, i.e. 1225 of window. Below that the
+   plan falls under the chat instead of squeezing the cards flat. */
+@media (min-width: 1225px) and (max-width: 1354px) {
   body[data-view="session"] .stage {
-    grid-template-columns: minmax(auto, 1fr) minmax(var(--panel-min), var(--panel-max));
+    grid-template-columns: minmax(auto, 1fr) var(--panel-max);
     /* the plan's floor, for Single: the cards collapse to the Architect card and
        the plan would otherwise take the row to nothing */
     grid-template-rows: minmax(200px, auto) minmax(0, 1fr);
   }
   body[data-view="session"] .topology-wrap { grid-column: 1; grid-row: 1; }
-  body[data-view="session"] .rail-plan { grid-column: 2; grid-row: 1; contain: size; }
+  /* `contain: size` keeps the row sized by the cards, and `max-height: none`
+     lets the plan stretch to that row — the panel's bottom edge is the cards'
+     bottom edge, not 420px down. The 420 cap is for the row of three under the
+     chat, where every panel is the same fixed height. */
+  body[data-view="session"] .rail-plan {
+    grid-column: 2; grid-row: 1;
+    contain: size;
+    max-height: none;
+  }
   body[data-view="session"] .chat-dock { grid-column: 1 / -1; grid-row: 2; }
 }
 body[data-view="session"] .rail-plan::after {

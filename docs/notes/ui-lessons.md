@@ -573,24 +573,31 @@ it as a panel **painted over the chat, anchored just above the composer**.
   The ask panel is no longer a floating card at all — it covers the chat's
   transcript area edge to edge, so there is no `max-height` to floor; its fields
   scroll inside it and the action row is pinned to its bottom row.
-- **Cards have a hard minimum width** (`--card-min: 290px`): below that the
-  name, the picker and the two buttons start colliding. Two columns + the 66px
-  spine need 646px of stage.
+- **Cards have a hard minimum width** (`--card-min: 250px`): below that the
+  name, the picker and the two buttons collide. It was 290 while the name was
+  free to shrink; now the name holds and the picker gives way to a 76px stub, so
+  250 is what is left. Two columns + the 66px spine need 566px of stage.
   **The plan has two homes, and one node.** It is the only panel that moves:
-  - **1248–1354px**: the plan sits in the cards' row, to their right, with the
+  - **1225–1354px**: the plan sits in the cards' row, to their right, with the
     conversation underneath **both** at the full width — the operator's mockup,
-    and what their own 1264px window shows. The stage has two tracks:
-    `minmax(auto, 1fr)` for the cards (`auto` resolves to their 646px minimum, so
-    the plan can never squeeze them below it) and
-    `minmax(284px, 341px)` for the plan. Both rows start at the same top and end
-    on the same line.
+    and what their own 1264px window shows. **The plan gets its full 341 first**
+    and the cards take the rest (`minmax(auto, 1fr) var(--panel-max)`), so
+    widening the window widens the cards rather than the plan. Its floor is the
+    cards' own track plus the plan and the gap (566 + 14 + 341 = 921 of room =
+    1225 of window); below that it falls under the chat.
   - **1355px and up**: the window can hold three panels of 341 + two gaps
     (1023 + 28 = 1051 of room), so the plan joins the census and the probe in the
     row under the chat and the cards get the whole top row back.
-  - **below 1248**: there is not room for cards and plan side by side, so the
+  - **below 1225**: there is not room for cards and plan side by side, so the
     plan falls under the chat at full width and the two tables share the line
     beneath it. Below 1183 the panels lose their size range and fill whatever
     they are given; below 760 it is one column.
+  **Beside the cards the plan is as tall as they are.** `contain: size` keeps the
+  row sized by the cards, and `max-height: none` (in that band only) lets the plan
+  stretch to it — the panel's bottom edge is the Coder 3 row's bottom edge. The
+  420 cap belongs to the row of three under the chat, where every panel is the
+  same fixed height. A 420 cap beside the cards left the plan 35px short of the
+  cards and the operator spotted it immediately.
   Panels are **284 to 341** wide (`--panel-min` / `--panel-max`: the plan's old
   fixed width, and that +20%), two tracks while the plan is upstairs and three
   when it joins them, `justify-content: start` so the spare room waits at the
