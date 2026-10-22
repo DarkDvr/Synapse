@@ -40,7 +40,7 @@ import {
 } from './plans.js';
 import { skillRules, describeSkills, roleMustLoad } from './skills.js';
 import { configSavedAt } from './config.js';
-import { sweepProject } from './cleanup.js';
+import { sweepProject, sweepScratch } from './cleanup.js';
 import { classifyFailure, recordProviderError, pruneProviderLog } from './provider-errors.js';
 import { providerLoadedWindow } from './providers.js';
 
@@ -202,6 +202,57 @@ export function contextStats(messages) {
 
 /** Token counts read as words, not as digits: 212k, 1.4M. */
 const tokens = (n) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : `${Math.round(n / 1e3)}k`);
+
+/**
+ * Attempts a task has really spent.
+ *
+ * A refusal is not an attempt (it is recorded without an `attempt` number), and
+ * neither is a run the operator stopped: the harness did not spend that attempt,
+ * the operator cancelled it. Counting stops spent t1's whole budget on two stops
+ * and one real run, and the Architect was then refused the retry it needed.
+ */
+export function countedAttempts(history, taskId) {
+  const stopped = new Set(
+    (history || []).filter((r) => r.kind === 'result' && r.outcome === 'stopped').map((r) => r.callId),
+  );
+  return (history || []).filter(
+    (r) => r.kind === 'delegate' && r.task === taskId && typeof r.attempt === 'number' && !stopped.has(r.callId),
+  ).length;
+}
+
+/**
+ * How big the last prompt this session sent was, in tokens.
+ *
+ * The whole prompt, cached or not: `input` plus `cache.read`. That is the number
+ * the window is measured against, and the number the operator wants beside the
+ * rate, not the delta since the previous turn.
+ */
+export function promptSize(messages) {
+  const last = [...(messages || [])].reverse().find((m) => m.type === 'assistant' && m.raw?.tokens);
+  const t = last?.raw?.tokens;
+  return t ? (t.input || 0) + (t.cache?.read || 0) : 0;
+}
+
+/**
+ * Every compaction in a transcript, with the prompt size that preceded it.
+ *
+ * A compaction is a real message the engine writes (`type: 'compaction'`), so
+ * counting them needs nothing from the provider. The size is the last turn's
+ * prompt before it, which is what the operator wants to see next to "compacting".
+ */
+export function compactionEvents(messages) {
+  const out = [];
+  let used = 0;
+  for (const m of messages || []) {
+    if (m.type === 'assistant' && m.raw?.tokens) {
+      const t = m.raw.tokens;
+      used = (t.input || 0) + (t.cache?.read || 0);
+    } else if (m.type === 'compaction') {
+      out.push({ used });
+    }
+  }
+  return out;
+}
 
 /**
  * How much of a model's window a prompt may use before it is full.
@@ -542,12 +593,9 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
       return;
     }
 
-    // How many times this task has actually been run. A refusal is not an
-    // attempt, so refusals are recorded without an `attempt` number.
+    // How many times this task has actually been run — see countedAttempts.
     const history = readRuns(dir);
-    const attempts = history.filter(
-      (r) => r.kind === 'delegate' && r.task === task.id && typeof r.attempt === 'number',
-    ).length;
+    const attempts = countedAttempts(history, task.id);
     // What the last attempt actually achieved. Only a run that *failed* — or a
     // coder whose model the provider has refused — moves the task down the ladder;
     // a completed run that the Architect wants changed is the same coder's work.
@@ -767,8 +815,32 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
             },
             signal,
             // The room this model actually has (or nothing at all), and the one
-            // "are you done" steer a long worker gets.
-            { window: contextWindow(modelRef), steer: true },
+            // "are you done" steer a long worker gets. Context and compactions ride
+            // out on the same poll, so the card can say "27k/60k ctx" while it
+            // works and the chat keeps a line for every compaction.
+            {
+              window: contextWindow(modelRef),
+              steer: true,
+              onContext: (used, room, context) => {
+                live.ctx = used;
+                live.ctxRoom = room;
+                live.ctxLimit = context;
+                emit('run.progress', { ...live });
+              },
+              onCompact: (times, used, context) => {
+                live.compactions = times;
+                emit('run.note', {
+                  dir,
+                  role,
+                  task: request.task,
+                  startedAt,
+                  kind: 'compact',
+                  times,
+                  used,
+                  context,
+                });
+              },
+            },
           );
 
           if (finished.stopped) {
@@ -880,6 +952,18 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
             out.warn(
               `context limit hit in ${request.task} (${role}); asking the engine to compact and carrying on`,
             );
+            // The provider just refused a prompt this big. For a cloud model that
+            // refusal is the only measurement there is — there is no endpoint that
+            // reports a loaded window — so it is recorded and the next turn budgets
+            // under it instead of trusting the catalog.
+            try {
+              const refusedAt = promptSize(now);
+              if (refusedAt && modelCache?.noteContext?.(modelRef, { refusedAt })) {
+                log.warn(
+                  `${modelRef}: refused a ${tokens(refusedAt)} prompt - the window is smaller than that; budgeting below it`,
+                );
+              }
+            } catch { /* the run matters more than the bookkeeping */ }
             live.retry = { attempt: rungRetries, at: Date.now(), message: turnError, reason: 'context' };
             emit('run.progress', { ...live });
             try {
@@ -1096,6 +1180,18 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
       const complete = Boolean(done?.tasks?.length) && done.tasks.every((t) => t.status === 'done');
       if (complete && !cleaned.has(dir) && getConfig()?.cleanup?.onFinish !== false) {
         cleaned.add(dir);
+        // Files first: a helper script is not a process, and the two left behind
+        // by the Designer (contrast.mjs, serve.mjs) were the operator's to clean.
+        // Only scripts and temp files inside .synapse, never a plan deliverable.
+        try {
+          const named = (done?.tasks || []).flatMap((t) => (Array.isArray(t.reads) ? t.reads : []));
+          const files = sweepScratch(dir, { log, named });
+          if (files.removed.length) {
+            out.info(`cleanup: ${files.removed.length} scratch file(s) removed (${files.removed.join(', ')})`);
+          }
+        } catch (err) {
+          log.warn(`scratch cleanup failed for ${dir}: ${err.message}`);
+        }
         sweepProject(dir, { log })
           .then((r) => {
             if (!r.found) return;
@@ -1238,10 +1334,18 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     })();
     const override = getConfig()?.modelLimits?.[ref] || {};
     const declared = Number(override.context) || Number(cached?.context) || 0;
-    // What a local server has actually loaded wins when it is smaller: the config
-    // is a claim, the loaded length is a measurement.
+    // The loaded length is a measurement, so it wins in BOTH directions: a server
+    // with 60k loaded has 60k, whether the config says 42k or 100k. `min()` kept
+    // the smaller number, so raising the window in the local runtime (42k -> 60k)
+    // never reached Synapse; the measurement was thrown away precisely because it
+    // went up, and the mismatch was silent.
     const loaded = loadedWindows.get(ref) || 0;
-    const context = loaded ? Math.min(declared || loaded, loaded) : declared;
+    // A prompt the provider actually refused is the other measurement: the window
+    // is smaller than that. It is how a cloud model corrects a wrong catalog
+    // number, which has no endpoint to ask.
+    const refused = Number(cached?.refusedAt) || 0;
+    let context = loaded || declared;
+    if (refused && (!context || refused < context)) context = refused;
     const output = Number(override.output) || Number(cached?.output) || 0;
     if (!context) return null;
     return { context, output, room: windowRoom({ context, output }) };
@@ -1265,10 +1369,14 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     if (!loaded) return;
     loadedWindows.set(ref, loaded);
     const declared = Number(getConfig()?.modelLimits?.[ref]?.context) || Number(modelCache?.get?.(ref)?.context) || 0;
-    if (declared && loaded < declared) {
-      log.warn(
-        `${ref}: the server has ${loaded} tokens loaded but the config says ${declared} - using ${loaded} for this run. ` +
-          `Reload the model at the larger window, or lower its context in Settings > Providers.`,
+    if (declared && loaded !== declared) {
+      // Said both ways, because both ways were a bug: a smaller loaded window made
+      // the watchdog compact too late, and a larger one was silently ignored.
+      log.info(
+        `${ref}: the server has ${loaded} tokens loaded, the config says ${declared} - using ${loaded} for this run.` +
+          (loaded < declared
+            ? ' Lower its context in Settings > Providers, or reload the model at the larger window.'
+            : ' Set its context to ' + loaded + ' in Settings > Providers to keep the two in step.'),
       );
     }
   }
@@ -1368,9 +1476,11 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
    * A pending question also pauses the clock: the operator may take hours, and
    * the transcript itself says so.
    */
-  async function waitForIdle(sessionId, before, stallMs, onTool, signal, { window = null, steer = false } = {}) {
+  async function waitForIdle(sessionId, before, stallMs, onTool, signal, { window = null, steer = false, onContext = null, onCompact = null } = {}) {
     let lastActivity = Date.now();
     let lastKey = '';
+    let lastCtx = 0;
+    let compactions = 0;
     let sig = '';
     let asking = false;
     for (;;) {
@@ -1399,6 +1509,22 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
         if (key && key !== lastKey) {
           lastKey = key;
           onTool(tool);
+        }
+      }
+
+      // Two numbers the operator watches, read from the same poll: how full the
+      // window is, and how many times it has been compacted. Both are facts from
+      // the transcript, so neither costs an engine call.
+      if (onContext || onCompact) {
+        const used = promptSize(messages);
+        if (used && used !== lastCtx) {
+          lastCtx = used;
+          onContext?.(used, window?.room || 0, window?.context || 0);
+        }
+        const events = compactionEvents(messages);
+        if (events.length > compactions) {
+          compactions = events.length;
+          onCompact?.(compactions, events[compactions - 1]?.used || used, window?.context || 0);
         }
       }
 

@@ -76,6 +76,10 @@ export function createModelCache({ logger, file }) {
       const isNew = !prev.ref;
       const metadataMoved =
         !same(prev.variants, next.variants) || prev.context !== next.context || prev.output !== next.output;
+      // A catalog that now reports a different window supersedes a refusal we
+      // learned earlier: the provider has changed its mind, so the old evidence
+      // is stale.
+      if (prev.context !== next.context && next.refusedAt) delete next.refusedAt;
       if (isNew || metadataMoved) changed += 1;
       // a model that is still in the catalog is not "gone"
       if (!isNew) next.lastSeen = now;
@@ -174,5 +178,25 @@ export function createModelCache({ logger, file }) {
     return true;
   }
 
-  return { record, get, setTools, isChecked, attempts, resetAsks, noteIssue, clearIssues, clearIssueKind, snapshot: () => data };
+  /**
+   * A provider refused a prompt of this size: the real window is smaller than it.
+   *
+   * The cloud equivalent of reading a local server's loaded window. A local
+   * runtime can be asked what it has loaded; a hosted model cannot, and its
+   * catalog entry is a claim that can be out of date in either direction. The
+   * refusal is the one measurement it gives, so it is kept — smallest wins, since
+   * a later, larger refusal says nothing about an earlier one.
+   */
+  function noteContext(ref, { refusedAt } = {}) {
+    const rec = ref ? data.models[ref] : null;
+    const n = Number(refusedAt) || 0;
+    if (!rec || !n) return false;
+    if (rec.refusedAt && rec.refusedAt <= n) return false;
+    rec.refusedAt = n;
+    rec.refusedAtAt = Date.now();
+    persist();
+    return true;
+  }
+
+  return { record, get, setTools, isChecked, attempts, resetAsks, noteIssue, clearIssues, clearIssueKind, noteContext, snapshot: () => data };
 }

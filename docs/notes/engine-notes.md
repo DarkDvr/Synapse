@@ -273,7 +273,11 @@ Non-obvious, all verified on 2.0.30:
   do not count against the cap. A refusal is a real answer, not a silent retry.
   A recoverable provider failure is not an attempt either: a task that was rate
   limited five times and then finished is on attempt 1, because nothing about the
-  task failed.
+  task failed. **An operator stop is not an attempt either** (`countedAttempts`):
+  Fever Tracker's t1 was "attempted" three times — two of them stops by the
+  operator — so the cap was spent before the design had ever been judged, and the
+  Architect was then refused the retry it needed and had to invent a new task.
+  The harness did not spend those attempts; the operator cancelled them.
 - **A coder that cannot do the job hands it down the line.** The three coder roles
   are peers (`worker.ladder`, default `coder-1 → coder-2 → coder-3`), and the
   harness moves the *same task* between them — the Architect cannot, because the

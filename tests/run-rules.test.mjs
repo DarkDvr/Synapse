@@ -15,7 +15,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { readPlan, briefSession, appendAnswers } from '../src/plans.js';
-import { contextStats, windowRoom, windowAction, steerDue, nextRung } from '../src/runs.js';
+import { contextStats, windowRoom, windowAction, steerDue, nextRung, countedAttempts, promptSize, compactionEvents } from '../src/runs.js';
 import { createHarnessGuard } from '../src/harness.js';
 
 const checks = [];
@@ -241,6 +241,44 @@ try {
   expect('the second lands at 90', steerDue(90, 1) === 90);
   expect('and then it is quiet for good', steerDue(400, 2) === null);
   expect('a session that starts past 40 still gets one', steerDue(52, 0) === 40);
+}
+
+// ── the attempt budget ──────────────────────────────────────────
+// Fever Tracker: t1 was run three times, two of them stopped by the operator.
+// Counting the stops spent the whole budget, and the Architect was then refused
+// the retry it needed — so the cap is spent by real attempts, not by cancels.
+{
+  const at = (n) => ({ kind: 'delegate', callId: `c${n}`, task: 't1', attempt: n });
+  const res = (n, outcome) => ({ kind: 'result', callId: `c${n}`, task: 't1', outcome });
+  expect(
+    'three runs, two of them operator stops, spend one attempt',
+    countedAttempts([at(1), res(1, 'stopped'), at(2), res(2, 'stopped'), at(3), res(3, 'completed')], 't1') === 1,
+  );
+  expect(
+    'a delivered run is still an attempt',
+    countedAttempts([at(1), res(1, 'completed')], 't1') === 1,
+  );
+  expect(
+    'a harness stop counts: the harness spent it',
+    countedAttempts([at(1), res(1, 'failed')], 't1') === 1,
+  );
+  expect(
+    'a refusal without an attempt number is not one',
+    countedAttempts([{ kind: 'delegate', callId: 'r1', task: 't1', outcome: 'too-many-attempts' }], 't1') === 0,
+  );
+  expect('another task does not count', countedAttempts([at(1), res(1, 'completed')], 't2') === 0);
+}
+
+// ── the context numbers ─────────────────────────────────────────
+// What the card shows beside the rate, and the size that preceded a compaction.
+{
+  const msg = (input, read) => ({ type: 'assistant', raw: { tokens: { input, cache: { read } } } });
+  expect('prompt size is input plus cache read', promptSize([msg(12000, 15000)]) === 27000);
+  expect('the last turn wins, not the first', promptSize([msg(1000, 0), msg(9000, 18000)]) === 27000);
+  expect('no tokens, no number', promptSize([{ type: 'user' }]) === 0);
+  const events = compactionEvents([msg(9000, 23000), { type: 'compaction' }, msg(4000, 9000), { type: 'compaction' }]);
+  expect('two compactions, each with the prompt that caused it', events.length === 2 && events[0].used === 32000);
+  expect('a transcript with none reports none', compactionEvents([msg(100, 100)]).length === 0);
 }
 
 // ── the harness guard ───────────────────────────────────────────

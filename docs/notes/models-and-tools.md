@@ -94,6 +94,32 @@ a boundary check, and only from facts:
   request, which is the one error a retry can never fix. Prevention — shorter
   tasks, batched tools — is the strategy.
 
+**Where the number comes from, and which source wins.** Three answers can disagree,
+and the rule is *measurement beats claim*:
+
+1. **What a local server has loaded** (`providerLoadedWindow`) — asked once per run,
+   per model. LM Studio answers `/api/v0/models` with `loaded_context_length`; a
+   llama.cpp-family server answers `/props` with `n_ctx`; vLLM puts `max_model_len`
+   in `/v1/models`. Only what is *loaded* counts: a model nobody loaded has no
+   window.
+2. **A prompt the provider refused.** This is the cloud equivalent, because a hosted
+   model has no endpoint to ask. `classifyFailure` already labels it `kind:
+   'context'`; the size of the refused prompt is recorded by
+   `modelCache.noteContext()` and the next turn budgets *below* it. A catalog that
+   later reports a different window clears the refusal, so the two cannot fight.
+3. **The claim**: the operator's `modelLimits` override, else the engine catalog's
+   `limit.context`.
+
+Loaded beats both, and refused beats a claim that is larger than it. The old code
+was `min(declared, loaded)`, which kept the **smaller** number — so raising a local
+window from 42,240 to 60,160 (Bionic, 22 Oct) was silently ignored, and the warning
+only fired in the other direction. Both directions are logged now.
+
+**The operator can see it while it runs**: the role card carries
+`27k/60k ctx` beside the rate, and every compaction adds a pinned amber line to the
+worker's trace (`⏳ Compacting ×2 · context at 32k/60k`), which is not a step and is
+never trimmed out of the trace's four-line tail.
+
 ### Other model servers: a local LLM in the same dropdown
 
 `engine.opencode.providers` in `config\synapse.config.json` registers any
