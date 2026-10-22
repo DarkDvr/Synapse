@@ -1409,13 +1409,20 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     const override = limits[ref] || limits[bare] || {};
     const declared = Number(override.context) || Number(modelCache?.get?.(ref)?.context) || 0;
     if (declared && loaded !== declared) {
-      // Said both ways, because both ways were a bug: a smaller loaded window made
-      // the watchdog compact too late, and a larger one was silently ignored.
-      log.info(
-        `${ref}: the server has ${loaded} tokens loaded, the config says ${declared} - using ${loaded} for this run.` +
-          (loaded < declared
-            ? ' Lower its context in Settings > Providers, or reload the model at the larger window.'
-            : ' Set its context to ' + loaded + ' in Settings > Providers to keep the two in step.'),
+      // A disagreement is never good news, whichever way it points — and the old
+      // wording read like the problem was solved ("using 60160 for this run"). It
+      // is not: the watchdog is ours, but compaction is the engine's, and the
+      // engine still believes the declared number. Its own rule reserves
+      // `max(15%, 16k)` of the context it was given, so on 42,240 it compacts at
+      // 26,240 while our watchdog waits for 45,968 and never gets there first.
+      const reserve = Math.max(Math.floor(declared * 0.15), declared >= 32000 ? 16000 : 0);
+      log.warn(
+        loaded < declared
+          ? `${ref}: the server has only ${loaded} tokens loaded, the config says ${declared} - using ${loaded} for this run. ` +
+            `Reload the model at the larger window, or set its context to ${loaded} in Settings > Providers.`
+          : `${ref}: the server has ${loaded} tokens loaded, the config says ${declared} - this run budgets for ${loaded}. ` +
+            `The engine still compacts at ${declared - reserve}, because that is what it was told; set its context to ` +
+            `${loaded} in Settings > Providers or it will compact every few turns.`,
       );
     }
   }

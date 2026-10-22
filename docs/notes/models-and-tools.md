@@ -94,6 +94,44 @@ a boundary check, and only from facts:
   request, which is the one error a retry can never fix. Prevention — shorter
   tasks, batched tools — is the strategy.
 
+**What the engine actually does, read out of its own bundle** (2.1.2, the
+`@opencode/SessionCompaction` chunk). This is not documented anywhere and it
+explains every "why did it compact *now*" question:
+
+```
+threshold = context − max(floor(context × 0.15), context ≥ 32,000 ? 16,000 : 0)
+fires when   last step's (input + cache.read + cache.write + output + reasoning)
+             + an estimate of the tool results that arrived since >= threshold
+```
+
+- So the reserve is **15% of the context, but never less than 16,000 tokens** — on
+  a 42,240 window that is 16,000, and it compacts at **26,240**. On 60,160 it is
+  still 16,000 → 44,160. On 1,048,576 it is 15% → 891,290.
+- The count is not the provider's prompt size: it adds an *estimate* of the tool
+  results waiting to be sent, which is why a run can compact at 19,981 one minute
+  and 26,812 the next. Chasing a single "compaction size" is chasing a moving
+  number.
+- `compaction.buffer` replaces that whole `max(15%, 16k)` reserve when set.
+  `compaction.auto` defaults to true; `keep` defaults to **15,000** tokens, which
+  is why a compacted transcript comes back at ~11k and refills within a few turns.
+- `output` plays no part in this: the reserve is a flat share of `context`, and
+  `limit.output` only limits what the model may write.
+
+**The number the engine compacts on is the number the *engine* was told** — the
+catalog/provider-config copy, not what the runtime has loaded. Ours is the loaded
+one. When the two differ the engine wins the race, because it is the thing that
+compacts.
+
+**The incident that proves it (22 Oct, t7 again).** A local model with 60,160
+loaded and `limit.context: 42240` in the engine config: six compactions in
+thirteen minutes, at prompt sizes of 19,981–26,812, every one of them
+`"reason":"auto"`, and **not one** `compacting before the window closes` line in
+`app.log` — the watchdog was waiting for 45,968, which the engine's 26,240 always
+arrives first, so our safeguard never fired at all. The warning that would have
+told us was logged at INFO on the `tools` channel, which is not mirrored to the
+console: it read *"using 60160 for this run"*, and sounded like good news. It is
+now a warning that names the number the engine will compact at.
+
 **Where the number comes from, and which source wins.** Three answers can disagree,
 and the rule is *measurement beats claim*:
 

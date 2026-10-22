@@ -2854,12 +2854,17 @@ function renderTrace(t) {
   // A compaction line is pinned: the four-line tail is for steps, and this is not
   // a step — it is the reason the next step is slower and the window is empty
   // again. It stays for the whole run, and the folded summary counts it.
-  const packed = Number(t.compactions) || 0;
-  const compactLine = packed
-    ? `<div class="trace-line is-compact">⏳ Compacting ×${packed}` +
-      (t.compactAt ? ` · context at ${fmtTokens(t.compactAt)}${t.compactLimit ? `/${fmtTokens(t.compactLimit)}` : ''}` : '') +
+    const packed = Number(t.compactions) || 0;
+  const compacting = Number(t.compactingSince) || 0;
+  const compactLine = compacting
+    ? `<div class="trace-line is-compact">⏳ Compacting the transcript…` +
+      (packed ? ` (this is number ${packed + 1})` : '') +
       '</div>'
-    : '';
+    : packed
+      ? `<div class="trace-line is-compact">⏳ Compacted ×${packed}` +
+        (t.compactAt ? ` · context at ${fmtTokens(t.compactAt)}${t.compactLimit ? `/${fmtTokens(t.compactLimit)}` : ''}` : '') +
+        '</div>'
+      : '';
   const body = `${archive}${compactLine}${tail.map(note).join('')}${streaming}`;
   if (!t.finishedAt) {
     return `<div class="trace is-live" data-trace="${esc(t.key)}">
@@ -3098,6 +3103,43 @@ function noteCompaction(trace, { times, used, context } = {}) {
   if (Number(context)) trace.compactLimit = Number(context);
 }
 
+/** The trace of a delegated run whose worker session is this one, if any. */
+function traceForSession(sessionId) {
+  if (!sessionId) return null;
+  for (const run of state.runs.values()) {
+    if (run.workerId === sessionId) return traceOf(run);
+  }
+  return null;
+}
+
+/**
+ * The engine compacting a worker's transcript, seen on its own stream.
+ *
+ * `started` puts the line in the chat while it is happening — the operator watched
+ * "compaction.started" sit in the status rail with nothing in the chat beside it,
+ * which is the one moment they could have used a word in the conversation. `ended`
+ * counts it; `failed` clears the line and counts nothing. The size beside it is the
+ * prompt the run last reported, which is the size that caused it.
+ */
+function noteCompactionEvent(ev) {
+  const trace = traceForSession(ev.sessionId);
+  if (!trace) return;
+  if (ev.type === 'session.compaction.started') {
+    trace.compactingSince = Date.now();
+  } else {
+    trace.compactingSince = 0;
+    if (ev.type === 'session.compaction.ended') {
+      const run = [...state.runs.values()].find((r) => r.workerId === ev.sessionId);
+      noteCompaction(trace, {
+        times: (Number(trace.compactions) || 0) + 1,
+        used: Number(run?.ctx) || 0,
+        context: Number(run?.ctxLimit) || 0,
+      });
+    }
+  }
+  renderTranscript();
+}
+
 /** What the traces are showing, so a rebuilt transcript is not rebuilt for
  *  nothing while they sit still.
  *
@@ -3111,7 +3153,7 @@ function traceSig() {
     .map(
       (t) =>
         `${t.key}:${t.finishedAt || 0}:${(t.notes || []).length}:${t.stream ? t.stream.text.length : 0}:` +
-        `${Number(t.compactions) || 0}`,
+        `${Number(t.compactions) || 0}:${Number(t.compactingSince) || 0}`,
     )
     .join(';');
 }
@@ -4394,6 +4436,13 @@ function connectStream() {
     }
 
     setEventChip(ev.type, ev.sessionId);
+    // A compaction is the engine's own decision, and the chip has always said so
+    // (`session.compaction.started`) while the chat said nothing at all. Taking it
+    // from here is the honest source: whatever asked for it — the engine's rule or
+    // our watchdog — this is the one event that proves one is happening.
+    if (ev.sessionId && /^session\.compaction\.(started|ended|failed)$/.test(ev.type)) {
+      noteCompactionEvent(ev);
+    }
     const mine = !ev.sessionId || ev.sessionId === state.sessionId;
     // A worker's session is not the open one, so nothing of it renders through
     // `mine`. Its words and its thinking stream in here instead, and its steps
