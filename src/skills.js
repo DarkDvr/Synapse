@@ -21,7 +21,13 @@
 
 import path from 'node:path';
 
-import { SKILLS_DIR } from './paths.js';
+import { ROOT, SKILLS_DIR } from './paths.js';
+
+/** Skills that carry a script, and the file a role should run. */
+const SHIPPED_TOOLS = {
+  'visual-review': 'shot.mjs',
+  'app-check': 'app-check.mjs',
+};
 
 /** The configured list for a role, or null when it was never set. */
 export function roleSkillList(config, role) {
@@ -77,11 +83,23 @@ export function describeSkills(config, role) {
   // so the designer, a coder and QC each searched the disk for `shot.mjs`, tripped
   // the harness alarm doing it, and then called the tool with a flag it does not
   // have. The path is the harness's fact, so the harness says it.
-  if (all.includes('visual-review')) {
-    const tool = path.join(SKILLS_DIR, 'visual-review', 'bin', 'shot.mjs');
+  for (const [skill, tool] of Object.entries(SHIPPED_TOOLS)) {
+    if (!all.includes(skill)) continue;
+    const full = path.join(SKILLS_DIR, skill, 'bin', tool);
     parts.push(
-      `The visual-review tool ships with Synapse and its full path is ${tool} — run that file with node, as ` +
+      `The ${skill} tool ships with Synapse and its full path is ${full} — run that file with node, as ` +
         `the skill says. It is the only copy: do not search the disk for another one.`,
+    );
+  }
+  // A Windows app is copied from the shell that ships here, not hand-rolled: the
+  // parts that are easy to get wrong (DPI, the dark frame, the https origin for the
+  // UI, the single-file publish) are already right in it. Only mentioned to a role
+  // that can check a window, because that is the role that builds one.
+  if (all.includes('app-check')) {
+    parts.push(
+      `A Windows app is copied from the shell that ships with Synapse, at ` +
+        `${path.join(ROOT, 'templates', 'win-app')} — copy that folder into the project and work in ` +
+        `its ui\\ folder. Do not write a new WPF project from scratch.`,
     );
   }
   parts.push('Any other skill is refused. Say in your report which ones you loaded.');

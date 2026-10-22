@@ -12,6 +12,7 @@ import { providerId } from './providers.js';
 import { providerApiKey } from './config.js';
 import { questionSignature, guardDecision, readableAnswer } from './question-loop.js';
 import { setProviderKey, providerKeyState, maskKey } from './secrets.js';
+import { probeToolchain } from './toolchain.js';
 
 export function createApi({ getConfig, applyConfig, engine, logger, getBootError, projects, toolStats, probe, modelCache, inspectModel: inspectRef, probeDir, runs, engineUpdate, restart, notify, guard }) {
   const app = logger.channel('app');
@@ -351,6 +352,10 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
     engineUpdate: async () => engineUpdate.check({ online: false }),
     checkEngineUpdate: async () => engineUpdate.check({ online: true }),
     updateEngine: async () => engineUpdate.update(),
+
+    // What this machine can build with, for Settings → Windows. Cheap and cached:
+    // one PowerShell call, no builds, so the tab opens instantly.
+    toolchain: async ({ force = false } = {}) => probeToolchain({ force }),
 
     saveConfig: async (body) => {
       const saved = applyConfig(reconcile(body));

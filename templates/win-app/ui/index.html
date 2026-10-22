@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>App</title>
+<style>
+  /* A placeholder, not a design system. Delete all of it.
+     The interface is plain HTML/CSS/JS on purpose: it is the only part the
+     Designer and QC can see, measure and screenshot, so it is the only part
+     worth judging. Keep assets local — no CDN, no web fonts — because the app
+     must run on a machine with no network. */
+  :root {
+    color-scheme: dark;
+    --bg: #12120f;
+    --ink: #f0eae0;
+    --dim: #9a8f7d;
+    --line: #2a261e;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+    display: grid;
+    place-items: center;
+    -webkit-font-smoothing: antialiased;
+    user-select: none;
+  }
+  main { text-align: center; padding: 32px; }
+  h1 { margin: 0 0 8px; font-size: 22px; font-weight: 600; letter-spacing: -0.01em; }
+  p { margin: 0; color: var(--dim); font-size: 13px; }
+  code {
+    font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+    font-size: 12px; color: var(--ink);
+    border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px;
+  }
+  @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+</style>
+</head>
+<body>
+  <main>
+    <h1>This window is yours</h1>
+    <p>The shell works. Replace <code>ui/index.html</code> with the real interface.</p>
+  </main>
+</body>
+</html>

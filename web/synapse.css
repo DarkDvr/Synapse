@@ -1898,6 +1898,11 @@ body[data-mode="single"] .keep-toggle { display: none; }
   grid-column: 1 / -1; margin: 0; font-size: 11.5px; line-height: 1.5; color: #82868e;
 }
 .set-note code { font-family: var(--mono); font-size: 11px; color: #a8acb3; }
+/* Settings → Windows: a fact about this machine, never decoration. Green is a
+   thing that is here, amber a thing that is not — the same two colours the rest of
+   the app uses for "working" and "needs you". */
+.tool-ok { color: #7fd18b; font-weight: 600; }
+.tool-bad { color: var(--amber); font-weight: 600; }
 
 /* ── providers: a list of servers, and one editor ──────────────────────── */
 .prov-list { display: grid; gap: 6px; }

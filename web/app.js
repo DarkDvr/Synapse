@@ -78,6 +78,8 @@ const state = {
   mode: 'single',
   streaming: false,
   streamLive: false,
+  // What this PC can build with, for Settings → Windows (src/toolchain.js).
+  toolchain: null,
   // When the last engine event arrived, so the sidebar can say "10s" instead of
   // just naming it, and which session it came from: a clock that ages beside an
   // event from a session the operator has deleted is describing something that
@@ -4438,6 +4440,7 @@ const SETTINGS_TABS = [
   { id: 'providers', label: 'Providers', icon: 'plug' },
   { id: 'workers', label: 'Workers', icon: 'nodes' },
   { id: 'tools', label: 'Tools', icon: 'tools' },
+  { id: 'windows', label: 'Windows', icon: 'engine' },
   { id: 'logging', label: 'Logging', icon: 'lines' },
 ];
 
@@ -4639,6 +4642,60 @@ function settingsTools(c) {
         `not have is listed above instead of disappearing quietly.</p>`,
     ),
   ].join('');
+}
+
+/**
+ * Settings → Windows: what this machine can build with.
+ *
+ * A Windows app is a WPF window hosting a WebView2 page, so it needs two things
+ * here — the .NET SDK to build it, the WebView2 runtime to run it — plus the
+ * template it is copied from and the checker that photographs its window. The point
+ * of the pane is a *copied* Synapse: on a new PC it says what that PC is missing,
+ * rather than a build dying three turns into a project.
+ */
+function settingsWindows(c) {
+  const t = state.toolchain;
+  const row = (label, item, extra) => {
+    const ok = Boolean(item?.ok);
+    const state = ok ? (item.version || 'ready') : 'missing';
+    return `
+      <div class="set-field wide" title="${esc(item?.note || '')}">
+        <span>${esc(label)} <b class="${ok ? 'tool-ok' : 'tool-bad'}">${esc(state)}</b></span>
+        <span class="set-note" style="margin:0">${esc(extra || item?.note || '')}</span>
+      </div>`;
+  };
+  if (!t) {
+    return setGroup(
+      'Building Windows Apps',
+      '<p class="set-note">Checking this machine…</p>',
+    );
+  }
+  return [
+    setGroup(
+      `Building Windows Apps ${t.ready ? '— ready' : '— something is missing'}`,
+      row('The window shell (.NET SDK)', t.dotnet, 'Builds the WPF window and the exe. Not needed to run one.') +
+        row('The page engine (WebView2 runtime)', t.webview2, 'What draws the interface inside the window.') +
+        row('The app template', t.template, t.template?.path || '') +
+        row('The window checker', t.appCheck, 'Launches a built app, photographs its window, says whether it survived.') +
+        row('Rust (optional)', t.rust, 'Only for the smaller Tauri shell — not needed for the C# one.') +
+        `<div class="set-field wide"><span>&nbsp;</span>` +
+        `<button type="button" class="btn btn-sm" data-check-toolchain>Check Again</button></div>` +
+        `<p class="set-note">A new app is copied from <code>templates\\win-app</code>: a window, a <code>ui\\</code> ` +
+        `folder holding the interface, and a <code>build.ps1</code> that publishes one folder you can copy to ` +
+        `another PC and run. The interface inside is a web page, so the Designer mocks it and QC measures it with ` +
+        `the visual-review tool; the window around it is checked with <code>skills\\app-check</code>.</p>`,
+    ),
+  ].join('');
+}
+
+async function loadToolchain(force = false) {
+  try {
+    state.toolchain = await api('GET', `/api/toolchain${force ? '?force=1' : ''}`);
+  } catch (err) {
+    state.toolchain = null;
+    if (force) toast('Could not check', err.message);
+  }
+  if (state.settingsTab === 'windows' && state.setDraft) renderSettings({ scrollTop: 0 });
 }
 
 function settingsLogging(c) {
@@ -4865,6 +4922,7 @@ const SETTINGS_PANES = {
   providers: settingsProviders,
   workers: settingsWorkers,
   tools: settingsTools,
+  windows: settingsWindows,
   logging: settingsLogging,
 };
 
@@ -5312,6 +5370,9 @@ function openSettings() {
   state.setProvFetch = null;
   renderSettings({ scrollTop: 0 });
   $('settingsModal').hidden = false;
+  // Settings → Windows answers "what can this PC build", which is a machine probe
+  // and not config: read it once when the window opens, and again on demand.
+  loadToolchain();
 }
 function closeSettings() {
   $('settingsModal').hidden = true;
@@ -5561,6 +5622,9 @@ function wire() {
 
     const clearTools = e.target.closest('[data-clear-tools]');
     if (clearTools) { e.preventDefault(); clearToolCensus(); return; }
+
+    const checkTools = e.target.closest('[data-check-toolchain]');
+    if (checkTools) { e.preventDefault(); loadToolchain(true); return; }
 
     const perm = e.target.closest('[data-perm]');
     if (perm) { e.preventDefault(); replyPermission(perm.dataset.permId, perm.dataset.perm); return; }

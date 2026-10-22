@@ -108,6 +108,10 @@ export function createServer({ api, engine, logger, config }) {
 
     // GET /api/status
     if (seg[0] === 'status' && method === 'GET') return sendJson(res, 200, await api.status());
+    // GET /api/toolchain — what this PC can build (Settings → Windows)
+    if (seg[0] === 'toolchain' && method === 'GET') {
+      return sendJson(res, 200, await api.toolchain({ force: query?.get('force') === '1' }));
+    }
     // POST /api/restart — relaunch Synapse (Settings > Save Changes).
     if (seg[0] === 'restart' && method === 'POST') return sendJson(res, 200, await api.restart());
     // GET|PUT /api/config

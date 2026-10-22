@@ -691,6 +691,25 @@ The SKILL.md carries the honesty rules: say what is measurable, say what a still
 cannot show, never invent a label. Without it, "the Architect checked the design"
 is a sentence about HTML rather than pixels.
 
+**Desktop apps are a window around a web page, and both halves are checkable.**
+The interface of a Windows app is HTML in `ui/`, so everything built for the web
+pipeline applies to the app itself — the measurement report, the contact sheet,
+the state capture. The window around it is not HTML, so `skills/app-check` closes
+that gap: it starts the exe, waits for a window, photographs it (`PrintWindow`
+first, the screen only as a fallback), and reports title, size, DPI scale, whether
+the process is **alive and responding after the shot** — a window that dies on its
+first paint looks exactly like a working one in a picture — and whether the app
+exited before showing anything. `templates/win-app` is the shell a project is
+copied from: WPF, WebView2, `PerMonitorV2` DPI awareness, a dark title bar (Windows
+10 draws white chrome otherwise, which reads as unfinished next to a dark page),
+and `ui/` served over a **virtual https host**, not `file://`, so localStorage,
+modules and a reload behave the way the page was designed for. Measured on this
+machine: `dotnet publish` → a 58.9 MB single-file `App.exe` plus `ui/`, which runs
+on a Win10/11 machine with no .NET installed. Settings → Windows reports what the
+machine can build (`src/toolchain.js`), which is the answer to "copy Synapse
+somewhere else and start": the pane says what that PC is missing instead of a build
+failing three turns in.
+
 **A skill may not say where a shipped tool lives; the brief does.** The skill text
 used to carry the full path of `shot.mjs` as it was on the machine it was written
 on — the operator's own `~/.agents/skills`, which does not carry it here. Three

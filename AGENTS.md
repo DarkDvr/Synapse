@@ -177,13 +177,9 @@ It stops Synapse and its engine by reading `data\synapse.pid` and
 browser tab. Turn it on in Settings if you want one opened for you.
 
 Gotchas:
-- **The desktop app also shows as process name `opencode`, and its install path
-  is `...\Programs\@opencodedesktop\OpenCode.exe` — which contains `@opencode`**,
-  so `Get-Process -Name opencode | Where Path -like '*@opencode*'` force-kills
-  the operator's editor along with the engine. That one mistake caused a string
-  of "the desktop app keeps crashing" reports — it was being killed, which is
-  also why it left no crash dump. This is why nothing here matches on a name.
-- `stop.bat` must not use `$pid` as a variable — it is read-only in PowerShell.
+- **Nothing here matches on a process name** — the desktop app, the rule and the
+  incident that earned it are in "Destructive commands" above. `stop.bat` must not
+  use `$pid` as a variable: it is read-only in PowerShell.
 - The console is a first-class output. `start.bat` leaves a window open all day, so
   `logger` mirrors the `app` channel **and every warning or error from any channel**
   to stdout, and the runner writes its milestones (run started, outcome, stopped) to
@@ -230,6 +226,8 @@ web/
   favicon.ico         the same, packed as a multi-size icon
 skills/               shipped WITH Synapse, always on the engine's skill path
   visual-review/      render a page to PNG, then read it (the agents' eyes)
+  app-check/          launch a desktop app, photograph its window, report if it lived
+templates/win-app/    the Windows shell a new app is copied from (WPF + WebView2)
   ui-design/          the Designer's craft brief: direction, tokens, states, spec
   frontend-design/    taste and direction (Apache 2.0)
   aesthetic-foundations/  composition, colour, hierarchy, a critique protocol

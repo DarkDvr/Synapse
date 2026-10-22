@@ -1,0 +1,41 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The window around a web UI.
+       The interface lives in ui/ and is plain HTML/CSS/JS: that is the only part
+       the Designer and QC can see, measure and screenshot, so it is the only part
+       they should be asked to judge. This file is the shell, and it should stay
+       boring. -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>App</AssemblyName>
+    <RootNamespace>App</RootNamespace>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- One folder that runs anywhere: the runtime travels inside the exe. -->
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>true</SelfContained>
+    <PublishSingleFile>true</PublishSingleFile>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.3351.48" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The UI travels with the exe, and is copied next to it too, so the built
+         app and the reviewed files are the same bytes. -->
+    <Content Include="ui\**\*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
+    <!-- Documentation XML from NuGet packages is not part of a shipped app. -->
+    <None Include="$(PublishDir)**\*.xml" />
+  </ItemGroup>
+
+</Project>
