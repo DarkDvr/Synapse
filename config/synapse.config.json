@@ -123,8 +123,8 @@
       "focus": "app"
     },
     "architect": {
-      "ref": "local/qwen3.8-27b-ud",
-      "variant": "medium",
+      "ref": "deepseek/deepseek-flash",
+      "variant": "high",
       "skills": [
         "visual-review"
       ],
@@ -133,8 +133,8 @@
       ]
     },
     "coder-1": {
-      "ref": "local/qwen3.8-27b-ud",
-      "variant": "low",
+      "ref": "deepseek/deepseek-flash",
+      "variant": "max",
       "skills": [
         "code-craft",
         "visual-review"
