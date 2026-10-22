@@ -19,6 +19,10 @@
 // No list at all means no restriction, which is what every role had before this
 // existed. An explicit empty list means "no skills" and is kept as a choice.
 
+import path from 'node:path';
+
+import { SKILLS_DIR } from './paths.js';
+
 /** The configured list for a role, or null when it was never set. */
 export function roleSkillList(config, role) {
   const entry = config?.roles?.[role];
@@ -67,6 +71,19 @@ export function describeSkills(config, role) {
     );
   }
   if (optional.length) parts.push(`Also available when the task needs it: ${optional.join(', ')}.`);
+  // A skill that ships a script cannot say where the script is: the folder is
+  // true on one machine and false on the next. In Timer Test 1 the visual-review
+  // skill named the operator's own skills folder, which does not carry it here —
+  // so the designer, a coder and QC each searched the disk for `shot.mjs`, tripped
+  // the harness alarm doing it, and then called the tool with a flag it does not
+  // have. The path is the harness's fact, so the harness says it.
+  if (all.includes('visual-review')) {
+    const tool = path.join(SKILLS_DIR, 'visual-review', 'bin', 'shot.mjs');
+    parts.push(
+      `The visual-review tool ships with Synapse and its full path is ${tool} — run that file with node, as ` +
+        `the skill says. It is the only copy: do not search the disk for another one.`,
+    );
+  }
   parts.push('Any other skill is refused. Say in your report which ones you loaded.');
   return parts.join(' ');
 }

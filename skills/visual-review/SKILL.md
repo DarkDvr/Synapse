@@ -12,8 +12,15 @@ you.
 
 ## Render it
 
+This skill ships its own script, `bin/shot.mjs`, in the same folder as this file.
+**Your brief names its full path — use that one.** It is the only copy on this
+machine, so do not go looking for another: a search of the disk is a turn spent
+and, if it names the harness, an alarm the operator has to read. If the path in
+your brief does not work, say so in your report and review the HTML/CSS
+structurally instead.
+
 ```
-node "C:/Users/Andrew/.agents/skills/visual-review/bin/shot.mjs" <target> [--out DIR] [--widths 1280,390] [--height 900]
+node "<the shot.mjs path from your brief>" <target> [--out DIR] [--widths 1280,390] [--height 900]
 ```
 
 `<target>` is either an absolute path to an HTML file or an `http(s)://` URL.
@@ -36,7 +43,7 @@ A still cannot tell you a number, and clipping has a cause. The same script
 answers a question from inside the loaded page, at the width you name:
 
 ```
-node ".../shot.mjs" <target> --widths 390 --eval "JSON.stringify({w: innerWidth, body: document.body.scrollWidth})"
+node "<the shot.mjs path from your brief>" <target> --widths 390 --eval "JSON.stringify({w: innerWidth, body: document.body.scrollWidth})"
 ```
 
 ```
@@ -59,7 +66,8 @@ finding about the tool, and worth more than ten minutes of workarounds.
 
 Put them in the project: `.synapse/shots/` (the default). What you looked
 at is then an artifact the operator can open too. Never write screenshots into
-`C:/Users/Andrew/.agents`.
+the harness's own folders — `skills/`, where `shot.mjs` lives, and `src/` beside
+it are not yours to add files to.
 
 ## Budget
 

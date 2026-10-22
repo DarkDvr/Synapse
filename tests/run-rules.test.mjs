@@ -88,10 +88,18 @@ try {
   // build tasks across all three coders — which is the thing the rule was added
   // for. So the assertion is that every *other* rule stays quiet on a real plan,
   // and that the ladder rule is the only thing it now trips.
-  const ladder = real.problems.filter((p) => /is written for coder-/.test(p));
-  const other = real.problems.filter((p) => !/is written for coder-/.test(p));
-  expect('clock-test-2 trips no rule but the coder ladder', other.length === 0, other.join(' | '));
-  expect('and it does trip that one, as the old Architect did', ladder.length === 2, ladder.join(' | '));
+  //
+  // It lives in the operator's projects folder, which they are free to delete —
+  // and did, on 22 Oct. A missing fixture is a skip that says so, never a silent
+  // pass: the rules above still cover the behaviour with plans made here.
+  if (!real.exists) {
+    expect('clock-test-2 is gone, so the real-plan check was skipped', true);
+  } else {
+    const ladder = real.problems.filter((p) => /is written for coder-/.test(p));
+    const other = real.problems.filter((p) => !/is written for coder-/.test(p));
+    expect('clock-test-2 trips no rule but the coder ladder', other.length === 0, other.join(' | '));
+    expect('and it does trip that one, as the old Architect did', ladder.length === 2, ladder.join(' | '));
+  }
 } finally {
   fs.rmSync(ROOT, { recursive: true, force: true });
 }

@@ -691,6 +691,20 @@ The SKILL.md carries the honesty rules: say what is measurable, say what a still
 cannot show, never invent a label. Without it, "the Architect checked the design"
 is a sentence about HTML rather than pixels.
 
+**A skill may not say where a shipped tool lives; the brief does.** The skill text
+used to carry the full path of `shot.mjs` as it was on the machine it was written
+on — the operator's own `~/.agents/skills`, which does not carry it here. Three
+roles in Timer Test 1 hit `MODULE_NOT_FOUND`, searched the disk for the script
+(which raised the harness's *shell command naming the harness* alarm), and then
+called it with a flag it does not have (`--help`), which wrote a picture of the
+browser's error page into the designer's folder and tripped the stray-write alarm
+too. Every one of those turns was spent on a fact the harness already knew. So
+`describeSkills()` names the absolute path of the shipped script for any role whose
+list includes `visual-review`, the SKILL.md says "the path is in your brief, do not
+search for another copy", and `tests/skills.test.mjs` fails if any shipped `.md`
+mentions a machine-specific folder again. The general rule: **a skill describes
+how to work, the harness describes where things are.**
+
 ---
 
 ## Git on a session's first successful turn
