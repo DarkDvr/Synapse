@@ -64,6 +64,7 @@ const USAGE = `Usage: shot.mjs <file|url> [options]
   --out DIR             where the PNGs go (default .synapse/design/shots)
   --do "steps"          before the capture, per width:
                           click:#start   wait:600   key:s   eval:<js>
+  --expect "sel|regex"   fail unless that element's RENDERED text matches
   --file                keep the page on file:// (default: serve it over http)
   --no-sheet            do not build the contact sheet
   --eval "<js>"         answer one expression instead of taking a picture
@@ -76,6 +77,7 @@ function parseArgs(argv) {
     widths: [1280],
     height: 900,
     evalExpr: '',
+    expect: [],
     steps: [],
     serve: true,
     sheet: true,
@@ -88,6 +90,9 @@ function parseArgs(argv) {
     const a = argv[i];
     if (a === '--out') out.outDir = path.resolve(argv[++i] || '');
     else if (a === '--eval') out.evalExpr = String(argv[++i] || '');
+    // A rendered string is the only honest test of a control: an attribute can say
+    // "en-GB" and the browser still draws 12-hour US time. See --expect below.
+    else if (a === '--expect') out.expect.push(String(argv[++i] || ''));
     else if (a === '--do') {
       out.steps = String(argv[++i] || '')
         .split(';')
@@ -120,6 +125,14 @@ if (args.help) {
 if (args.unknown) fail(1, `shot.mjs: no such option: ${args.unknown}\n${USAGE}`);
 if (args.extra.length) fail(1, `shot.mjs: one target at a time, got "${args.extra.join('", "')}"\n${USAGE}`);
 if (!args.target) fail(1, USAGE);
+// A malformed --expect is a typo, not a page problem: refuse it before a browser
+// is launched, the same way an unknown option is refused.
+for (const want of args.expect) {
+  const at = want.indexOf('|');
+  if (at < 1 || !want.slice(at + 1).trim()) {
+    fail(1, `shot.mjs: --expect needs "selector|regex", got "${want}"\n${USAGE}`);
+  }
+}
 
 const isUrl = /^[a-z]+:\/\//i.test(args.target);
 const localFile = isUrl ? '' : path.resolve(args.target);
@@ -208,6 +221,7 @@ const REPORT_JS = `(() => {
     doc: { scrollW: document.documentElement.scrollWidth, scrollH: document.documentElement.scrollHeight },
     painted: { elements: 0, textChars: 0, images: 0 },
     overflow: [],
+    overlaps: [],
     small: [],
     contrast: [],
     focusables: 0,
@@ -233,6 +247,43 @@ const REPORT_JS = `(() => {
     const r = el.getBoundingClientRect();
     if (r.right > vw + 1 || r.left < -1) {
       out.overflow.push({ el: desc(el), left: Math.round(r.left), right: Math.round(r.right) });
+    }
+  }
+
+  // Two controls on top of each other are invisible to an overflow test: neither
+  // leaves the viewport, and the picture looks like a layout somebody chose. This
+  // is the check the Designer had to invent by hand after two rejections — Save
+  // sitting on the Amount input at 1024. Ancestors and descendants are skipped (a
+  // label inside its row is not a collision), and so are fixed/absolute boxes,
+  // which are supposed to sit over the flow.
+  const boxes = all.filter((el) => {
+    if (!visible(el)) return false;
+    if (el === document.body || el === document.documentElement) return false;
+    const s = style(el);
+    if (s.position === 'fixed' || s.position === 'absolute') return false;
+    if (el.closest('details:not([open])')) return false;
+    const own = (el.textContent || '').trim();
+    const interactive = el.matches('button,a[href],input,select,textarea,[role="button"]');
+    return interactive || own.length > 0;
+  });
+  const hits = new Set();
+  for (let i = 0; i < boxes.length && out.overlaps.length < 6; i += 1) {
+    const a = boxes[i];
+    const ra = a.getBoundingClientRect();
+    if (ra.width < 4 || ra.height < 4) continue;
+    for (let j = i + 1; j < boxes.length && out.overlaps.length < 6; j += 1) {
+      const b = boxes[j];
+      if (a.contains(b) || b.contains(a)) continue;
+      const rb = b.getBoundingClientRect();
+      if (rb.width < 4 || rb.height < 4) continue;
+      // Siblings share an edge by design; only real intersection counts.
+      const x = Math.min(ra.right, rb.right) - Math.max(ra.left, rb.left);
+      const y = Math.min(ra.bottom, rb.bottom) - Math.max(ra.top, rb.top);
+      if (x <= 1 || y <= 1) continue;
+      const key = desc(a) + '|' + desc(b);
+      if (hits.has(key)) continue;
+      hits.add(key);
+      out.overlaps.push({ a: desc(a), b: desc(b), w: Math.round(x), h: Math.round(y) });
     }
   }
 
@@ -314,8 +365,7 @@ const REPORT_JS = `(() => {
   return out;
 })()`;
 
-/** One browser, one width, one job. Resolves with whatever `job(send)` returns. */
-function withPage(width, job, url = target) {
+/** One browser, one width, one job. Resolves with whatever `job(send)` returns. */function withPage(width, job, url = target) {
   const profile = path.join(os.tmpdir(), `visual-review-${process.pid}-${width}-${Date.now()}`);
   const portFile = path.join(profile, 'DevToolsActivePort');
   return new Promise((resolve, reject) => {
@@ -482,6 +532,23 @@ async function shoot(width) {
     try {
       report = await evalIn(send, REPORT_JS);
     } catch { /* a page that kills its own script still gets photographed */ }
+    // --expect: is that element showing the string we meant it to show? The
+    // attribute is not the answer — a date control can carry lang="en-GB" and
+    // still draw "10/22/2026 04:00 PM" — so this reads the rendered text.
+    for (const want of args.expect) {
+      const at = want.indexOf('|');
+      if (at < 1) throw new Error(`--expect needs "selector|regex", got "${want}"`);
+      const sel = want.slice(0, at).trim();
+      const re = want.slice(at + 1).trim();
+      const seen = await evalIn(
+        send,
+        `(() => { const el = document.querySelector(${jsonLit(sel)}); if (!el) return null; const v = 'value' in el && el.value ? el.value : el.textContent; return String(v || '').trim(); })()`,
+      );
+      if (seen === null) throw new Error(`--expect: nothing matches ${sel} at ${width}px`);
+      let ok = false;
+      try { ok = new RegExp(re).test(seen); } catch { ok = seen.includes(re); }
+      if (!ok) throw new Error(`--expect: ${sel} reads "${seen}" at ${width}px, which does not match ${re}`);
+    }
     const metrics = await send('Page.getLayoutMetrics');
     const content = metrics.cssContentSize || metrics.contentSize || { width, height: args.height };
     const height = Math.max(args.height, Math.ceil(content.height || 0));

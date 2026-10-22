@@ -44,3 +44,18 @@ test('no target at all prints the usage', () => {
   assert.equal(r.status, 1);
   assert.match(r.stderr, /Usage: shot\.mjs/);
 });
+
+// --expect asserts the RENDERED text of a control, because the attribute is the
+// lie: a date input can carry lang="en-GB" and still draw "10/22/2026 04:00 PM".
+// A malformed expectation is refused before a browser is launched.
+test('a malformed --expect is refused without a page', () => {
+  const r = run('somewhere.html', '--expect', 'no-pipe-here');
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /--expect needs "selector\|regex"/);
+});
+
+test('--expect with an empty pattern is refused', () => {
+  const r = run('somewhere.html', '--expect', '#when|');
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /--expect needs "selector\|regex"/);
+});
