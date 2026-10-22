@@ -222,14 +222,84 @@ export async function sweepProject(dir, { log = null, keep = [], dryRun = false 
 }
 
 /**
+ * Files a worker left behind in `.synapse/` that its plan never asked for.
+ *
+ * The Designer on Fever Tracker finished with `contrast.mjs` and `serve.mjs` in
+ * `.synapse/design/`, and a nested `.synapse/design/.synapse/design/shots/` where
+ * a render wrote to a relative output path twice. None of it is a deliverable, all
+ * of it makes the next worker's folder look like it contains something meant, and
+ * the operator had to clean it by hand.
+ *
+ * Deliberately narrow, because this deletes: only scripts, logs and temp files;
+ * only inside `.synapse/`; never a file the plan names in `reads`, and never one of
+ * the files Synapse itself reads (plan, runs, features, requirement, decisions).
+ * A nested `.synapse` under `.synapse` is always scratch. Anything it removes is
+ * logged by path, and `dryRun` lists instead of deleting.
+ */
+const SCRATCH = /\.(mjs|js|cjs|ts|ps1|sh|bat|cmd|py|tmp|log|bak)$/i;
+const KEEP = new Set(['plan.json', 'runs.jsonl', 'features.json', 'requirement.md', 'decisions.md']);
+
+export function findScratch(dir, { named = [] } = {}) {
+  const root = path.join(dir, '.synapse');
+  const keep = new Set([...named].map((n) => path.resolve(dir, n).toLowerCase()));
+  const out = [];
+  const walk = (at, depth) => {
+    if (depth > 4) return;
+    let entries = [];
+    try {
+      entries = fs.readdirSync(at, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      const full = path.join(at, entry.name);
+      if (entry.isDirectory()) {
+        // `.synapse` inside `.synapse` is a doubled relative path, not structure.
+        if (entry.name === '.synapse') {
+          out.push({ path: full, why: 'nested .synapse (a relative path doubled)' });
+          continue;
+        }
+        walk(full, depth + 1);
+        continue;
+      }
+      if (!SCRATCH.test(entry.name)) continue;
+      if (KEEP.has(entry.name.toLowerCase())) continue;
+      if (keep.has(full.toLowerCase())) continue;
+      out.push({ path: full, why: 'scratch file' });
+    }
+  };
+  walk(root, 0);
+  return out;
+}
+
+/** Remove them, saying what first. `dryRun` lists and deletes nothing. */
+export function sweepScratch(dir, { log = null, named = [], dryRun = false } = {}) {
+  const found = findScratch(dir, { named });
+  if (!found.length) return { found: 0, removed: [] };
+  const list = found.map((f) => path.relative(dir, f.path).replace(/\\/g, '/'));
+  log?.info?.(`cleanup: ${found.length} scratch item(s) in .synapse for ${path.basename(dir)}: ${list.join(', ')}`);
+  if (dryRun) return { found: found.length, removed: [], would: list };
+  const removed = [];
+  for (const f of found) {
+    try {
+      fs.rmSync(f.path, { recursive: true, force: true });
+      removed.push(path.relative(dir, f.path).replace(/\\/g, '/'));
+    } catch (err) {
+      log?.warn?.(`cleanup: could not remove ${f.path}: ${err.message}`);
+    }
+  }
+  if (removed.length) log?.info?.(`cleanup: removed ${removed.length} scratch item(s) (${removed.join(', ')})`);
+  return { found: found.length, removed };
+}
+
+/**
  * Helper processes left behind by an engine that is gone.
  *
  * The engine spawns its MCP servers as children; they should die with it, and when
  * it is killed outright they do not. A node process whose command line is under
  * this repository's `src/mcp/` and whose parent is no longer running is exactly
  * that, and nothing else.
- */
-export async function sweepOrphans(root, { log = null, keep = [], dryRun = false } = {}) {
+ */export async function sweepOrphans(root, { log = null, keep = [], dryRun = false } = {}) {
   const all = await listProcesses();
   const live = new Set(all.map((p) => p.pid));
   const mine = `${String(root).toLowerCase().replace(/\\/g, '/')}/src/mcp/`;

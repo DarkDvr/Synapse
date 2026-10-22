@@ -990,6 +990,16 @@ export function briefSession({ dir, role = 'architect', auto = false, skills = '
         `skill renders them), then ask the operator to pick one - design is the one thing only they can judge. ` +
         `Pin the stack first: if "runs like an app" could mean a local page, a Tkinter window or something else, ask.`,
     );
+    // The trap that cost a whole rejection round: a native date/time control is
+    // drawn by the BROWSER, in the browser's locale, whatever the markup says. An
+    // attribute is not a mechanism, and a picture of the target is not a test.
+    lines.push(
+      `A control's locale is drawn by the browser, not by the markup: a native date/time input with lang="en-GB" ` +
+        `still renders MM/DD/YYYY and AM/PM on a US-locale machine. If the design depends on a format, either pin the ` +
+        `mechanism that actually produces it (a host setting, or your own drawn control) or draw the field yourself and ` +
+        `say that it is a picture of the target. Prove the RENDERED text of the control matches ` +
+        `"selector|regex" via shot.mjs --expect, not that the attribute is present.`,
+    );
     lines.push(
       `build: one task that builds the shell from the design with no wiring, then one that wires it. The titles ` +
         `say which is which. A shell task must not wire; a wiring task must not redesign. Every build task is ` +
