@@ -44,7 +44,7 @@
             {
               "id": "qwen3.8-27b-ud",
               "name": "Qwen 3.8 27B UD",
-              "context": 42240,
+              "context": 60160,
               "output": 8192
             },
             {
