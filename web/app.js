@@ -306,9 +306,18 @@ function openDialog({
           // One flag, not a list: the dialog's checklist is a set of choices, and
           // readDialog collects every checkbox it finds for those. A separate
           // attribute keeps the two kinds apart.
-          return `<label class="dlg-check wide"><input type="checkbox" data-flag="${esc(f.name)}"${
-            f.value ? ' checked' : ''
-          } /><span>${esc(f.label)}</span></label>`;
+          //
+          // It gets its own bordered row with a title and a line of consequence:
+          // as a bare checkbox under the message it read as the tail of the
+          // sentence, which is the worst thing an option that deletes a plan can
+          // read as.
+          return `<label class="dlg-option">
+            <input type="checkbox" data-flag="${esc(f.name)}"${f.value ? ' checked' : ''} />
+            <span class="dlg-option-text">
+              <span>${esc(f.label)}</span>
+              ${f.hint ? `<small>${esc(f.hint)}</small>` : ''}
+            </span>
+          </label>`;
         }
         const control = f.type === 'select'
           ? `<select id="dlg-${esc(f.name)}">${f.options
@@ -1886,23 +1895,48 @@ async function removeSession(id) {
   // folder, not in the session, so deleting the *last* session leaves them behind
   // and the next one opens onto the previous session's work. That is not a bug in
   // itself — a new session continuing a plan is a normal thing to want — but the
-  // operator has to be able to say which they mean.
+  // operator has to be able to say which they mean, and to see what is at stake.
   const last = Boolean(project && project.sessions.filter((x) => x.id !== id).length === 0);
+  let plan = null;
+  if (last) {
+    try {
+      const state = await api('GET', `/api/sessions/${encodeURIComponent(id)}/plan`);
+      if (state?.exists !== false && state?.plan?.tasks?.length) plan = state.plan;
+    } catch { /* the question is still worth asking without the count */ }
+  }
   const ok = await openDialog({
     title: 'Delete Session',
     message: `"${s?.title || TBD_TITLE}" and its whole transcript are removed from the engine. This cannot be undone.`,
     confirmLabel: 'Delete',
     danger: true,
-    fields: last
-      ? [
-          {
-            name: 'forget',
-            type: 'check',
-            label: `Also delete ${project.name}'s plan and scratch files (.synapse: plan, design, ideas, answers, findings, run log)`,
-            value: false,
+    // No plan, no question: offering to delete something that is not there is how
+    // a dialog teaches the operator to stop reading it.
+    ...(plan
+      ? {
+          fields: [
+            {
+              name: 'forget',
+              type: 'check',
+              value: false,
+              label: `Forget ${project.name}'s plan too`,
+              hint:
+                `${plan.tasks.length} task${plan.tasks.length === 1 ? '' : 's'} on file, with the request, the answers, ` +
+                `the design, the ideas, the findings and the run log in .synapse. Leave it unticked to let the next ` +
+                `session here carry on with them.`,
+            },
+          ],
+          // The button says what it will do, and changes when the answer does.
+          afterRender: () => {
+            const box = $('dialogBody').querySelector('input[data-flag="forget"]');
+            const btn = $('dialogOk');
+            const label = () => {
+              btn.textContent = box?.checked ? 'Delete and Forget Plan' : 'Delete';
+            };
+            box?.addEventListener('change', label);
+            label();
           },
-        ]
-      : [],
+        }
+      : {}),
   });
   if (!ok) return;
   try {

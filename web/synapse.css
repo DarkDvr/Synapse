@@ -1807,6 +1807,26 @@ body[data-mode="single"] .keep-toggle { display: none; }
   display: grid; grid-template-columns: 16px minmax(0, 1fr); gap: 0 8px;
   align-items: start; padding: 5px 6px; border-radius: 6px; cursor: pointer;
 }
+
+/* An option that changes what a destructive button does. Bordered and on its own
+   line: as a bare checkbox under the message it read as the tail of the sentence.
+   The border goes amber while it is ticked, because the button beside it has just
+   become "Delete and Forget Plan" and the two should agree. */
+.dlg-option {
+  display: flex; align-items: flex-start; gap: 9px;
+  margin: 2px 0 6px; padding: 9px 10px;
+  border: 1px solid #34373d; border-radius: 9px; background: #17181b;
+  cursor: pointer;
+}
+.dlg-option:hover { border-color: var(--violet-line); }
+.dlg-option:has(input:checked) { border-color: rgba(232, 163, 61, 0.55); background: rgba(232, 163, 61, 0.06); }
+.dlg-option input {
+  flex: none; width: 14px; height: 14px; min-height: 0; margin: 1px 0 0; padding: 0;
+  accent-color: var(--violet-bright); cursor: pointer;
+}
+.dlg-option-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.dlg-option-text > span { font-size: 12.5px; color: var(--text); }
+.dlg-option-text > small { font-size: 11px; line-height: 1.45; color: var(--muted); }
 .dlg-check:hover { background: var(--violet-faint); }
 .dlg-check input {
   width: 14px; height: 14px; min-height: 0; margin: 2px 0 0; padding: 0;

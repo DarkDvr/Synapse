@@ -233,6 +233,14 @@ it as a panel **painted over the chat, anchored just above the composer**.
   itself), evicts the location first, then deletes with retries. The dialog is the
   one place `openDialog` takes `dismissable: false`, an `extra` button and a
   `tone: 'clash'`; the generic dialog's Cancel/OK pair is unchanged elsewhere.
+- **A destructive dialog says what is at stake, in a row, and names the act.** A
+  bare checkbox under a sentence reads as a form field with no weight. The delete
+  dialog's optional extra is a **bordered option row**: the label is the choice
+  ("Forget Shift Test 6's plan too"), the hint is what the choice does to the
+  folder, and ticking it turns the row amber and renames the confirm button to
+  **Delete and Forget Plan**, so the button says what it will do. The option only
+  appears for a session that is the last one on a project whose plan has tasks —
+  no plan, no question, and the dialog stays a plain confirm.
 - **A name-only create makes its own folder.** `projects.create` derives
   `<projects root>/<slug>` when no directory is given. Before this,
   `normalizeDir('')` resolved to the process's working directory — which is the
