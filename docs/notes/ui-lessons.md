@@ -573,23 +573,27 @@ it as a panel **painted over the chat, anchored just above the composer**.
   The ask panel is no longer a floating card at all — it covers the chat's
   transcript area edge to edge, so there is no `max-height` to floor; its fields
   scroll inside it and the action row is pinned to its bottom row.
-- **Cards have a hard minimum width** (`--card-min: 250px`): below that the
-  name, the picker and the two buttons collide. It was 290 while the name was
-  free to shrink; now the name holds and the picker gives way to a 76px stub, so
-  250 is what is left. Two columns + the 66px spine need 566px of stage.
+- **Cards have a hard minimum width** (`--card-min: 310px`): the operator's own
+  screenshot of one card at its minimum — name, full model label, both buttons on
+  one line, clock still inside the frame. Two columns + the 66px spine need 686px
+  of stage. (It was 250 for one revision; both 250 and 290 were "too narrow" by
+  their measurement.)
   **The plan is beside the role cards, always.** The operator's rule, verbatim:
   "Project plan IS ALWAYS to the right of role cards, ALWAYS above the chat.
   There is only 1 exception possible — that is when role cards are more narrow
   than [their minimum]." So:
-  - **1124px and up**: the plan sits in the cards' row, to their right, the
-    conversation runs underneath **both** at the full width. It **shrinks before
-    it gives up** — 341 down to 240 (`--panel-floor`) — because it is the card
-    column that is protected. From 1225 up it holds its full 341 and the cards
-    take the rest (widening the window widens the cards); in 1124–1224 the cards
-    hold their minimum (`2 x --card-min + --spine-w` = 566) and the plan takes
-    what is left.
-  - **below 1124**: the cards' minimum plus the plan's floor no longer fit, so the
-    plan falls under the chat at full width. That is the only exception.
+  - **1334px and up**: the plan sits in the cards' row, to their right, and the
+    conversation runs underneath **both** at the full width. The plan is **330 to
+    341** wide (`--plan-min` from the operator's screenshot of the pane at its
+    minimum, `--panel-max` = +20% of the old fixed width): from 1345 it holds its
+    full 341 and the cards take the rest, so widening the window widens the
+    cards; in 1334–1344 the cards hold their 310 minimum and the plan gets the
+    last 10px.
+  - **below 1334**: the two minimums plus the gap no longer fit, so the plan goes
+    under the chat at full width. That is the only exception.
+  Neither side is allowed below its measured minimum — that is the whole point of
+  measuring them. An earlier revision let the plan shrink to 240 to stay put; the
+  operator's screenshot of the pane at 330 said that was too narrow.
   It lives in the stage, not in the inspector, and there is no JS that moves it —
   an earlier version re-parented it into the row of three panels on wide windows
   and the operator rejected that outright: three panels under the chat is not a

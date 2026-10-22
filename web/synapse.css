@@ -33,17 +33,18 @@ html { scrollbar-gutter: stable; }
      under the chat on a wide window, wide enough to read. */
   --panel-min: 284px;
   --panel-max: 341px;
-  /* the narrowest the plan may be squeezed while it stands beside the role
-     cards. Below this the cards are at their own minimum and there is nothing
-     left to give, so the plan goes under the chat instead. */
-  --panel-floor: 240px;
+  /* the narrowest the plan may be: the operator's own screenshot of the plan
+     pane at its minimum (330). Below that the two-line rows and the goal run out
+     of room, so the plan moves under the chat rather than shrinking further. */
+  --plan-min: 330px;
   --spine-w: 66px;
   --row-gap: 12px;
   --sidebar-w: 256px;
-  /* the narrowest a worker card may get before its own two labels collide. The
-     name no longer shrinks and the model picker gives way down to 76px, so the
-     real floor is ~235; 250 leaves the picker a readable stub. */
-  --card-min: 250px;
+  /* the narrowest a worker card may get: the operator's own screenshot of a card
+     at its minimum, with the name, the full model label and both buttons on one
+     line and the clock still inside the frame. Two columns + the 66px spine
+     therefore need 686px of stage. */
+  --card-min: 310px;
   /* the capped working area: cards+chat + rail. Left-anchored, so on a wide
      window the leftover space sits at the right edge. */
   --work-w: 1240px;
@@ -316,13 +317,13 @@ body[data-view="session"] .rail-plan { position: relative; }
 
 /* ── the plan beside the role cards, always ───────────────────────────────
    The rule the operator set: the Project plan is ALWAYS to the right of the role
-   cards and ALWAYS above the chat. The only exception is that the cards may not
-   be squeezed narrower than their own minimum — when that minimum plus the
-   plan's floor no longer fit, the plan goes under the chat instead. So it is the
-   PLAN that gives width away first (341 down to 240), and only then moves.
+   cards and ALWAYS above the chat. The only exception is that neither side may
+   go below the width the operator measured as its minimum — the cards at 310 a
+   column, the plan at 330 — so when the two minimums plus the gap no longer fit
+   (below 1334 of window) the plan goes under the chat.
    The conversation runs underneath the two of them at the full width, and the two
    reference tables stay under the chat at every width. */
-@media (min-width: 1124px) {
+@media (min-width: 1334px) {
   body[data-view="session"] .stage {
     /* the plan's floor, for Single: the cards collapse to the Architect card and
        the plan would otherwise take the row to nothing */
@@ -342,21 +343,20 @@ body[data-view="session"] .rail-plan { position: relative; }
 }
 
 /* Room to spare: the plan takes its full width and the cards take the rest, so
-   widening the window widens the cards rather than the plan. 1225 is where the
+   widening the window widens the cards rather than the plan. 1345 is where the
    cards would otherwise be exactly at their minimum. */
-@media (min-width: 1225px) {
+@media (min-width: 1345px) {
   body[data-view="session"] .stage {
     grid-template-columns: minmax(0, 1fr) var(--panel-max);
   }
 }
 
-/* Tight: the cards hold their minimum (`2 x --card-min + --spine-w` = 566) and
-   the plan takes whatever is left, down to 240. Below 1124 the two no longer fit
-   and the plan goes under the chat — the one exception. */
-@media (min-width: 1124px) and (max-width: 1224px) {
+/* The tight 10px between the cards' minimum and the plan's maximum: the cards
+   hold their minimum and the plan takes what is left (330 to 341). */
+@media (min-width: 1334px) and (max-width: 1344px) {
   body[data-view="session"] .stage {
     grid-template-columns: minmax(0, calc(2 * var(--card-min) + var(--spine-w)))
-                           minmax(var(--panel-floor), 1fr);
+                           minmax(var(--plan-min), 1fr);
   }
 }
 body[data-view="session"] .rail-plan::after {
