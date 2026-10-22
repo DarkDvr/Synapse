@@ -32,6 +32,23 @@ const SHELL_TOOLS = /^(shell|bash|execute)$/;
 // writes without a path a tool could check. `2>&1` is not a redirect to a file.
 const REDIRECT_INTO = /(?:^|[^0-9&])>>?\s*("[^"]+"|'[^']+'|[^\s;&|]+)/g;
 
+// And a command that only *looks* is not tampering either. In Timer Test 1 a
+// worker could not find the renderer its skill named, so it listed Synapse's own
+// folders to find it — `Get-ChildItem … F:\dev\Synapse\skills -Recurse` — and that
+// harmless read raised the alarm the operator sees as a popup. Every model that
+// cannot find a tool does this first, so the popup was guaranteed. A command made
+// only of read verbs is logged and not raised; anything else that names the
+// harness still rings, because the safe default is to over-report a rare thing
+// rather than to miss the write that matters.
+const READ_ONLY_COMMAND = new RegExp(
+  '^(?:\\s*(?:Get|Test|Resolve|Select|Where|Measure|Sort|Format|Out-String|' +
+    'findstr|where|type|cat|ls|dir|head|tail|more|echo)\\b[^;&|]*[;&|]?\\s*)+$',
+  'i',
+);
+
+/** Could a script inside the harness be running, whatever it is named? */
+const RUNS_HARNESS_CODE = /\b(?:node|nodejs|pwsh|powershell|python|python3|deno|bun|cmd|sh)\b[^;&|]*\.(?:js|mjs|cjs|ps1|py|bat|cmd)\b/i;
+
 export function createHarnessGuard({ root, logger, notify }) {
   const log = logger.channel('app');
   const asKey = (p) => String(p || '').replace(/\\/g, '/').toLowerCase();
@@ -71,6 +88,21 @@ export function createHarnessGuard({ root, logger, notify }) {
   };
 
   /**
+   * Could this command change the harness, or run its code?
+   *
+   * A read of the harness is worth a log line and not an alarm: `Get-ChildItem`,
+   * `Get-Content`, `Select-String` and their like cannot write, whatever they
+   * name. Everything else — a redirect, a script inside the harness, any verb not
+   * on the read list — is treated as a write risk, which is the safe way round.
+   */
+  const couldWriteHarness = (command) => {
+    const text = String(command || '');
+    if (redirectsInto(text)) return true;
+    if (RUNS_HARNESS_CODE.test(text)) return true;
+    return !READ_ONLY_COMMAND.test(text.trim());
+  };
+
+  /**
    * The ruleset every session carries: everything allowed, the harness denied.
    *
    * Order matters — the engine takes the LAST matching rule — so the broad allow
@@ -86,13 +118,15 @@ export function createHarnessGuard({ root, logger, notify }) {
 
   /**
    * What a transcript touched inside the harness. Only write-shaped tools name a
-   * path, so those are reported as writes; a shell command that mentions the
-   * harness is reported verbatim, because reading it is harmless but it is also
-   * how a write would go around a path rule, and the operator should see it.
+   * path, so those are reported as writes. A shell command is split in two: one
+   * that could change the harness is reported verbatim, because reading it is
+   * harmless but it is also how a write would go around a path rule; one that
+   * only looks is returned separately, for the log and never for the alarm.
    */
   function inspect(messages) {
     const writes = new Set();
     const shells = new Set();
+    const reads = new Set();
     for (const message of messages || []) {
       for (const part of message?.parts || []) {
         if (part?.type !== 'tool') continue;
@@ -101,11 +135,13 @@ export function createHarnessGuard({ root, logger, notify }) {
         const target = input.filePath || input.file_path || input.path || '';
         if (WRITE_TOOLS.test(name) && inHarness(target)) writes.add(String(target));
         if (SHELL_TOOLS.test(name) && inHarness(input.command) && !runsTheToolbox(input.command)) {
-          shells.add(String(input.command).replace(/\s+/g, ' ').slice(0, 160));
+          const shown = String(input.command).replace(/\s+/g, ' ').slice(0, 160);
+          if (couldWriteHarness(input.command)) shells.add(shown);
+          else reads.add(shown);
         }
       }
     }
-    return { writes: [...writes], shells: [...shells] };
+    return { writes: [...writes], shells: [...shells], reads: [...reads] };
   }
 
   /** Say it loudly, once, in both places the operator looks: the log and the UI. */
@@ -119,12 +155,13 @@ export function createHarnessGuard({ root, logger, notify }) {
 
   /** Report a turn's own tool calls. Cheap: the caller already has the messages. */
   function checkTurn({ sessionId, messages, label }) {
-    const { writes, shells } = inspect(messages);
+    const { writes, shells, reads } = inspect(messages);
     if (writes.length) alarm({ sessionId, what: 'WRITE INSIDE THE HARNESS', paths: writes, note: label });
     if (shells.length) {
       alarm({ sessionId, what: 'shell command naming the harness', paths: shells, note: label });
     }
-    return { writes, shells };
+    for (const read of reads) log.info(`read the harness${label ? ` (${label})` : ''}: ${read}`);
+    return { writes, shells, reads };
   }
 
   const git = (args) =>

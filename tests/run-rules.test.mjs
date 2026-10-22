@@ -288,6 +288,25 @@ try {
     'a command naming the rest of the harness is an alarm',
     alarmCount(turn('node F:/dev/Synapse/src/index.js')) === 1,
   );
+  // Timer Test 1: a worker could not find the renderer its skill named, so it
+  // listed the harness to look for it. A read cannot write, and every model that
+  // loses a tool does this first — a popup for it is noise where the alarm has to
+  // stay loud.
+  seen.length = 0;
+  guard.checkTurn({
+    sessionId: 'arch',
+    label: 'turn',
+    messages: turn(
+      'Get-ChildItem -Recurse F:\\dev\\Synapse.Projects\\x\\.synapse -Filter shot.mjs | Select-Object FullName; ' +
+        'Get-ChildItem F:\\dev\\Synapse\\skills -Recurse -Filter shot.mjs',
+    ),
+  });
+  expect('looking for a tool in the harness is not an alarm', seen.filter((s) => s.startsWith('alarm:')).length === 0);
+  expect('but it is written down', seen.some((s) => s.startsWith('info: read the harness')));
+  expect(
+    'a read that is told to remove something is still an alarm',
+    alarmCount(turn('Get-ChildItem F:/dev/Synapse/src | Remove-Item -Recurse')) === 1,
+  );
   expect(
     'a write tool on a harness file is an alarm',
     alarmCount([{ parts: [{ type: 'tool', name: 'write', input: { filePath: 'F:\\dev\\Synapse\\src\\index.js' } }] }]) === 1,

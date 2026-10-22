@@ -46,8 +46,11 @@ const fail = (code, message) => {
   process.exit(code);
 };
 
+const USAGE =
+  'Usage: shot.mjs <file|url> [--out DIR] [--widths 1280,390] [--height 900] [--eval "<js>"]';
+
 function parseArgs(argv) {
-  const out = { target: '', outDir: path.resolve('.synapse/design/shots'), widths: [1280], height: 900, evalExpr: '' };
+  const out = { target: '', outDir: path.resolve('.synapse/design/shots'), widths: [1280], height: 900, evalExpr: '', help: false, unknown: '', extra: [] };
   const rest = [];
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -59,9 +62,16 @@ function parseArgs(argv) {
         .map((w) => Number.parseInt(w, 10))
         .filter((w) => Number.isFinite(w) && w > 0);
     } else if (a === '--height') out.height = Number.parseInt(argv[++i], 10) || 900;
+    else if (a === '--help' || a === '-h') out.help = true;
+    // An option this script does not have is not a file to photograph. It used to
+    // fall through to the target, so `shot.mjs --help` screenshotted a file called
+    // `--help`, wrote `--help-1280.png` — a picture of the browser's error page —
+    // and reported success. Three runs in Timer Test 1 believed it had worked.
+    else if (a.startsWith('-') && a !== '-') out.unknown = a;
     else rest.push(a);
   }
   out.target = rest[0] || '';
+  out.extra = rest.slice(1);
   if (!out.widths.length) out.widths = [1280];
   return out;
 }
@@ -79,8 +89,23 @@ if (!browser) {
 }
 
 const args = parseArgs(process.argv.slice(2));
+if (args.help) {
+  process.stdout.write(`${USAGE}\n`);
+  process.exit(0);
+}
+if (args.unknown) {
+  fail(1, `shot.mjs: no such option: ${args.unknown}\n${USAGE}`);
+}
+if (args.extra.length) {
+  fail(1, `shot.mjs: one target at a time, got "${args.extra.join('", "')}"\n${USAGE}`);
+}
 if (!args.target) {
-  fail(1, 'Usage: shot.mjs <file|url> [--out DIR] [--widths 1280,390] [--height 900] [--eval "<js>"]');
+  fail(1, USAGE);
+}
+// A file that is not there cannot be rendered. Saying so is the whole point: the
+// browser would happily render its own error page and call that a screenshot.
+if (!/^[a-z]+:\/\//i.test(args.target) && !fs.existsSync(path.resolve(args.target))) {
+  fail(1, `shot.mjs: no such file: ${path.resolve(args.target)}`);
 }
 
 // A file path becomes a file:// URL; anything with a scheme is left alone.
