@@ -55,6 +55,14 @@ const makeRunner = () => {
     async getMessages(id) {
       return id === 'ses_arch' ? [...arch] : [];
     },
+    // The recovery asks which conversations exist, newest first.
+    async listSessions() {
+      return [
+        { id: 'ses_old', directory: DIR, internal: false, created: 1 },
+        { id: 'ses_arch', directory: DIR, internal: false, created: 2 },
+        { id: 'ses_worker', directory: DIR, internal: true, created: 3 },
+      ];
+    },
     // A wake is "landed" when the session grows an idle message, which is exactly
     // how the real engine ends a turn.
     async synthetic(id, text) {
@@ -79,7 +87,7 @@ const makeRunner = () => {
     notify: () => {},
     modelCache: null,
   });
-  return { runner, woke, ran, warns };
+  return { runner, woke, ran, warns, arch };
 };
 
 /** A run is started without being awaited, so give it a tick to reach the prompt. */
@@ -113,6 +121,26 @@ try {
     await settle();
     expect('a whole plan lets the work start', ran.includes('prompt'), ran.join(',') + ' warns=' + warns.join(' | '));
     expect('and nothing is refused', woke.length === 0);
+  }
+  // 3. a delegation no turn ever read: picked up once, at boot
+  // Fever Tracker, 22 Oct: the Architect delegated t8 inside a turn that ended in
+  // a question, Synapse restarted, the engine cancelled the question, the turn
+  // never ended — and the delegation sat in the transcript for ever, answered
+  // "Queued", with nothing running. This is the pass that notices.
+  writePlan(plan(['invent', 'build'], [task('t1', 'inventor'), task('t8', 'coder-1')]));
+  {
+    const { runner, ran, arch, warns } = makeRunner();
+    arch.push(...delegate('t8', 'call_recover'));
+    const n = await runner.recoverDelegations([DIR]);
+    await settle();
+    expect('a delegation with no turn behind it is picked up', n === 1, String(n));
+    expect('and the work starts', ran.includes('prompt'), `${ran.join(',')} warns=${warns.join(' | ')}`);
+
+    // 4. the same pass again: it is journalled now, so nothing runs twice
+    const before = ran.length;
+    const again = await runner.recoverDelegations([DIR]);
+    await settle();
+    expect('a journalled delegation is not run twice', again === 0 && ran.length === before, `${again} / ${ran.join(',')}`);
   }
 } finally {
   fs.rmSync(ROOT, { recursive: true, force: true });

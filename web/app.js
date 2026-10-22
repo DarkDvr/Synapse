@@ -3827,6 +3827,18 @@ async function replyForm(formId) {
     renderTranscript();
     toast('Answer Sent', 'The session will carry on from it.');
   } catch (err) {
+    // A question can be cancelled under us: the engine rebuilds its locations when
+    // it restarts, and every pending form goes with them. Answering one that no
+    // longer exists is not the operator's mistake, and leaving the dead panel up
+    // means they keep pressing a button that cannot work.
+    if (/Form not found/i.test(String(err.message || ''))) {
+      state.forms = state.forms.filter((f) => f.id !== formId);
+      renderAskPanel();
+      renderComposer();
+      renderTranscript();
+      toast('That Question Is Gone', 'The session was restarted and the engine cancelled it. Message the session to carry on.');
+      return;
+    }
     toast('Could Not Send The Answer', err.message);
     refreshPending();
   }

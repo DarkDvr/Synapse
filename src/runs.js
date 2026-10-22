@@ -481,6 +481,54 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
   }
 
   /**
+   * Pick up a delegation nobody read.
+   *
+   * A delegation is read when its turn ends (`session.execution.succeeded` →
+   * `handleTurn`). If that turn never comes back — Synapse restarted while the
+   * session was waiting on a question, so the engine cancelled the question and
+   * the turn has nothing left to finish — the request sits in the transcript for
+   * ever: answered "Queued", unjournalled, unrun. The operator then has an
+   * Architect that says the work is done, a plan with one task in `todo`, nothing
+   * running and nothing to press. That is Fever Tracker on 22 Oct.
+   *
+   * One pass at boot, over each project's newest conversation. Safe by
+   * construction: `requestsIn` only returns calls that are neither journalled nor
+   * claimed, and every gate in `handleTurn` still applies — single mode, keep
+   * building, an unplanned phase, the QC cap.
+   */
+  async function recoverDelegations(dirs) {
+    let picked = 0;
+    let sessions = [];
+    try {
+      sessions = await engine.listSessions();
+    } catch {
+      return 0;
+    }
+    for (const dir of dirs || []) {
+      if (!dir || running.has(dirKey(dir))) continue;
+      const newest = sessions
+        .filter((s) => s && s.id && !s.internal && dirKey(s.directory) === dirKey(dir))
+        .sort((a, b) => (Number(b.created) || 0) - (Number(a.created) || 0))[0];
+      if (!newest) continue;
+      let messages = [];
+      try {
+        messages = await engine.getMessages(newest.id);
+      } catch {
+        continue;
+      }
+      const pending = requestsIn(messages, dir);
+      if (!pending.length) continue;
+      out.warn(
+        `no turn ever read ${pending.length} delegation${pending.length === 1 ? '' : 's'} in ${dir} ` +
+          `(${pending.map((r) => r.task).join(', ')}) - reading them now`,
+      );
+      await handleTurn(newest.id, messages);
+      picked += pending.length;
+    }
+    return picked;
+  }
+
+  /**
    * Look for delegation requests in a session's transcript. Called on every
    * finished turn; only a non-internal session (the Architect) can ask for work.
    */
@@ -1989,6 +2037,6 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     return true;
   }
 
-  return { handleTurn, requestsIn, active, cancel, stopWithReason };
+  return { handleTurn, recoverDelegations, requestsIn, active, cancel, stopWithReason };
 }
 

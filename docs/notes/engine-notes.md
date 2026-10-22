@@ -266,6 +266,20 @@ Non-obvious, all verified on 2.0.30:
   `files: []` from its own tool calls. The Architect checked the disk, kept the
   task `todo`, wrote the reason into `note`, and re-delegated — attempt two wrote
   the real file. This is why the report always prints `Files written: none.`
+
+- **A delegation can be orphaned by a turn that never ends.** "Read on the turn
+  boundary" means `session.execution.succeeded|failed|interrupted` → `handleTurn`.
+  Fever Tracker, 22 Oct: the Architect delegated t8 and then asked the operator a
+  question in the same turn; Synapse was restarted, the engine rebuilt its
+  locations and **cancelled the pending form** (`Form not found: frm_…`), so the
+  turn could not end — and the delegation stayed in the transcript for ever,
+  answered "Queued", unjournalled and unrun. Nothing was running, t8 stayed
+  `todo`, and the Architect looked idle with the work "finished". `recoverDelegations`
+  now makes one pass at boot (5 s in) over each project's newest conversation and
+  runs anything `requestsIn` still reports — safe because a call id is journalled
+  before the worker starts, so a re-scan can never run one twice.
+  The lesson for the UI: a form reply that answers `Form not found` means the
+  question is gone, so clear the panel and say so — never leave a dead form up.
   rather than omitting the line, and why the harness never moves a task.
 - **Retry cap: 3 attempts per task**, then the harness refuses with a report
   telling the Architect to break the task down, change the role/model, or mark it

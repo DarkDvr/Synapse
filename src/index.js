@@ -409,6 +409,23 @@ async function main() {
     t.unref?.();
   }
 
+  // A delegation is read when its turn ends. If Synapse stopped before that turn
+  // did — a question was pending, the engine cancelled it on restart — the request
+  // is in the transcript, answered "Queued", and nobody will ever run it. One pass
+  // shortly after boot, once the engine is answering, is enough to notice.
+  {
+    const t = setTimeout(() => {
+      const dirs = projects.list().filter((p) => p.exists).map((p) => p.directory);
+      runner
+        .recoverDelegations(dirs)
+        .then((n) => {
+          if (n) app.warn(`picked up ${n} delegation${n === 1 ? '' : 's'} no turn had read`);
+        })
+        .catch((err) => app.warn(`could not check for unread delegations: ${err.message}`));
+    }, 5000);
+    t.unref?.();
+  }
+
   // Record the live catalog once the engine is up. Metadata is free; the
   // toolset discovery is the part that costs a turn, and that only happens when
   // the operator selects a model.
