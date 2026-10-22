@@ -214,6 +214,50 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
   const formSignature = questionSignature;
   const readableAnswerOf = readableAnswer;
 
+  /**
+   * Remove a project's `.synapse` — its plan, requirement, answers, ideas, design,
+   * findings and run log.
+   *
+   * It is the *project's* memory, not a session's, which is why deleting a session
+   * never touched it: a new session in the same folder opens the same plan, and
+   * after the last session was deleted that looks exactly like a fresh session
+   * inheriting a dead one. The operator may ask for it to go, and the asking is
+   * guarded: only inside the projects root, only when no other session uses the
+   * folder, and never while a run is in flight there.
+   */
+  async function forgetProjectPlan(directory) {
+    const dir = path.resolve(String(directory || ''));
+    const rel = path.relative(PROJECTS_ROOT, dir);
+    if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) {
+      return { ok: false, reason: `${dir} is not inside the projects root` };
+    }
+    const target = path.join(dir, '.synapse');
+    if (!fs.existsSync(target)) return { ok: false, reason: 'this project has no .synapse to forget' };
+    if ((runs?.active?.() || []).some((r) => path.resolve(r.dir || '') === dir)) {
+      return { ok: false, reason: 'a run is still working in this project' };
+    }
+    let others = [];
+    try {
+      others = (await engine.listSessions()).filter(
+        (s) => !s.internal && path.resolve(s.directory || '') === dir,
+      );
+    } catch {
+      return { ok: false, reason: 'could not list the sessions in this project' };
+    }
+    // The session being deleted is still in the list, so more than one means the
+    // plan belongs to somebody else too.
+    if (others.length > 1) {
+      return { ok: false, reason: `${others.length} sessions still use this project` };
+    }
+    try {
+      fs.rmSync(target, { recursive: true, force: true });
+      app.info(`forgot the plan and scratch of ${dir}`);
+      return { ok: true, directory: dir };
+    } catch (err) {
+      return { ok: false, reason: err.message };
+    }
+  }
+
   /** Returns the forms that should still be shown; answers or stops the rest. */
   async function guardQuestions(forms) {
     const open = [];
@@ -725,7 +769,7 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
       return { ok: true };
     },
 
-    deleteSession: async (sessionId) => {
+    deleteSession: async (sessionId, { forget = false } = {}) => {
       requireReady();
       // A run that still holds this session stops first. A worker finishing into a
       // deleted session, or a wake aimed at one, used to surface as "404 Session
@@ -733,13 +777,22 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
       // busy. Deleting the session is the operator ending that run, so it ends
       // here, as stopped.
       try { runs?.stopWithReason?.(sessionId, 'the session was deleted'); } catch { /* nothing running */ }
+      // Where it lived, and whether anything else lives there, read before the
+      // session goes: a plan is the project's, not the session's, and it is only
+      // the operator's to throw away when no other session can lose it.
+      let forgetResult = null;
+      if (forget) {
+        let directory = null;
+        try { directory = (await engine.getSession(sessionId))?.directory || null; } catch { /* gone already */ }
+        forgetResult = directory ? forgetProjectPlan(directory) : { ok: false, reason: 'the session has no directory' };
+      }
       await engine.deleteSession(sessionId);
       briefed.delete(sessionId);
       // Tell every open UI. Another tab can have it on screen, and a UI left
       // holding a deleted session answers 404 on every control it offers —
       // which is how a mode switch ended up reporting "Session not found".
       notify?.({ kind: 'sessions', type: 'session.deleted', sessionId });
-      return { ok: true };
+      return { ok: true, forgotten: forgetResult };
     },
 
     messages: async (sessionId) => {

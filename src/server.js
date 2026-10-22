@@ -192,7 +192,12 @@ export function createServer({ api, engine, logger, config }) {
       if (seg.length === 1 && method === 'POST') return sendJson(res, 200, await api.createSession(await readBody(req)));
       const sessionId = decodeURIComponent(seg[1] || '');
       if (seg.length === 2 && method === 'PATCH') return sendJson(res, 200, await api.updateSession(sessionId, await readBody(req)));
-      if (seg.length === 2 && method === 'DELETE') return sendJson(res, 200, await api.deleteSession(sessionId));
+      if (seg.length === 2 && method === 'DELETE') {
+        // `?forget=1` also removes the project's `.synapse` — its plan and scratch —
+        // which is what the operator means when they delete the last session and
+        // then find a new one opening the old plan.
+        return sendJson(res, 200, await api.deleteSession(sessionId, { forget: url.searchParams.get('forget') === '1' }));
+      }
       if (seg[2] === 'model' && method === 'POST') return sendJson(res, 200, await api.switchModel(sessionId, await readBody(req)));
       if (seg[2] === 'messages' && method === 'GET') return sendJson(res, 200, await api.messages(sessionId));
       if (seg[2] === 'plan' && method === 'GET') return sendJson(res, 200, await api.plan(sessionId));

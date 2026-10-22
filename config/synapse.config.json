@@ -124,7 +124,7 @@
     },
     "architect": {
       "ref": "local/qwen3.8-27b-ud",
-      "variant": "high",
+      "variant": "medium",
       "skills": [
         "visual-review"
       ],

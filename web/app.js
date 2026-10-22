@@ -302,6 +302,14 @@ function openDialog({
             .join('');
           return `<div class="set-field wide"><span>${esc(f.label)}</span><div class="dlg-checklist">${rows}</div></div>`;
         }
+        if (f.type === 'check') {
+          // One flag, not a list: the dialog's checklist is a set of choices, and
+          // readDialog collects every checkbox it finds for those. A separate
+          // attribute keeps the two kinds apart.
+          return `<label class="dlg-check wide"><input type="checkbox" data-flag="${esc(f.name)}"${
+            f.value ? ' checked' : ''
+          } /><span>${esc(f.label)}</span></label>`;
+        }
         const control = f.type === 'select'
           ? `<select id="dlg-${esc(f.name)}">${f.options
               .map((o) => `<option value="${esc(o.v)}"${o.v === f.value ? ' selected' : ''}>${esc(o.l)}</option>`)
@@ -323,7 +331,13 @@ function openDialog({
 function readDialog() {
   if (!dialogFields.length) return true;
   const values = {};
+  // Single flags first: they are read by their own attribute, so a checklist of
+  // options and a yes/no choice can live in the same dialog without meeting.
+  for (const el of $('dialogBody').querySelectorAll('input[data-flag]')) {
+    values[el.dataset.flag] = el.checked;
+  }
   for (const f of dialogFields) {
+    if (f.type === 'check') continue;
     if (f.type === 'checklist') {
       values[f.name] = [...$('dialogBody').querySelectorAll('input[data-check]')]
         .filter((el) => el.checked)
@@ -1867,21 +1881,54 @@ function confirmDelete({ kind, name, consequence, extra }) {
 
 async function removeSession(id) {
   const s = findSession(id);
-  const ok = await confirmDelete({
-    kind: 'session',
-    name: s?.title || TBD_TITLE,
-    consequence: 'and its whole transcript are removed from the engine.',
-    extra: 'This cannot be undone.',
+  const project = projectOf(id);
+  // The plan, the requirement, the answers and the findings live in the project's
+  // folder, not in the session, so deleting the *last* session leaves them behind
+  // and the next one opens onto the previous session's work. That is not a bug in
+  // itself — a new session continuing a plan is a normal thing to want — but the
+  // operator has to be able to say which they mean.
+  const last = Boolean(project && project.sessions.filter((x) => x.id !== id).length === 0);
+  const ok = await openDialog({
+    title: 'Delete Session',
+    message: `"${s?.title || TBD_TITLE}" and its whole transcript are removed from the engine. This cannot be undone.`,
+    confirmLabel: 'Delete',
+    danger: true,
+    fields: last
+      ? [
+          {
+            name: 'forget',
+            type: 'check',
+            label: `Also delete ${project.name}'s plan and scratch files (.synapse: plan, design, ideas, answers, findings, run log)`,
+            value: false,
+          },
+        ]
+      : [],
   });
   if (!ok) return;
   try {
-    await api('DELETE', `/api/sessions/${encodeURIComponent(id)}`);
+    const q = ok.forget ? '?forget=1' : '';
+    const res = await api('DELETE', `/api/sessions/${encodeURIComponent(id)}${q}`);
     state.busySessions.delete(id);
     if (state.sessionId === id) showNothing();
     await loadProjects();
+    const forgotten = res?.forgotten;
+    if (ok.forget && forgotten && !forgotten.ok) {
+      toast('The Plan Was Kept', forgetReason(forgotten.reason));
+    } else if (forgotten?.ok) {
+      toast('Plan Forgotten', `${project.name}'s plan and scratch files are gone.`);
+    }
   } catch (err) {
     toast('Could not delete the session', err.message);
   }
+}
+
+/** The server's own words for why a plan was not removed, in the operator's terms. */
+function forgetReason(reason) {
+  const text = String(reason || 'the server did not say why');
+  if (/run is still working/i.test(text)) return 'A run was still working in that project. Try again when it has stopped.';
+  if (/sessions still use/i.test(text)) return 'Another session in this project still uses that plan.';
+  if (/no \.synapse/i.test(text)) return 'There was nothing to delete.';
+  return text;
 }
 
 async function removeProject(id) {
