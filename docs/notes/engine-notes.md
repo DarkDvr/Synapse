@@ -759,6 +759,25 @@ Naming is **self-healing**: a name that failed on a transient 503 keeps its
 attempt and retries with backoff, and a sweep at boot names anything still
 unnamed.
 
+## A session's memory is the project's, so deleting sessions leaves it behind
+
+`.synapse` — the plan, the requirement, the answers, the ideas, the design, the
+findings and the run log — belongs to the **directory**, not to a session. Two
+sessions in one project share one plan by design: the Architect owns the file, and
+a second session continues the work. The consequence the operator met: delete every
+session in a project, start a new one, and it opens onto the previous session's plan
+and looks as if it inherited a dead conversation. Nothing was broken; the state had
+never been the session's to delete.
+
+Deleting the **last** session in a project now offers a checkbox for it, off by
+default — continuing a plan is a normal thing to want, and the operator may have
+deleted the session precisely to start a fresh one on the same plan. The server
+removes `dir\.synapse` only when all of these hold: the path is inside the projects
+root, no other session lists that directory, no run is active there, and the folder
+actually has one. A refusal comes back with a reason and the UI says it in the
+operator's words. `wipeProjectDir` (deleting a project) was already the bigger
+hammer; this is the small one, and it is the only place the harness deletes a plan.
+
 ## A question lives in the engine's memory, so a restart loses it
 
 The `question` tool does not write the question into the transcript and wait. It

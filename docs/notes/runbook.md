@@ -88,6 +88,20 @@ both pid files and refuses anything under the desktop app's folder. The app no
 longer uses it, because it starts node hidden with output in `%TEMP%\synapse.out`,
 and the operator wants the window.
 
+**A pid file can lie, and then a restart changes nothing.** Measured on 22 Oct: a
+second copy was started while the first still held 8700, it died on `EADDRINUSE`,
+and it left *its* pid in `data\synapse.pid`. After that `restart.ps1` reported
+"synapse pid … is not running", started another copy, and the console kept serving
+the old code — every fix looked like it had not applied. The script now falls back
+to **the process holding the port**, and proves it is this install before stopping
+it: on 8700 the port must answer `/api/status` with *this* folder's engine home, and
+on 8720 the engine's own binary must sit under this folder. Nothing is matched by
+name, and anything under `@opencodedesktop` is refused as before.
+
+The tell to remember: a restart that reports success while the UI still behaves
+like the old build. Check `GET /api/status` → `engine.home`, and compare the pid
+there with the one in the port's socket.
+
 ---
 
 ## Browsers
