@@ -104,11 +104,15 @@ export async function fetchProviderModels({ baseURL, apiKey, format, type } = {}
       // Studio answers /api/v0/models with loaded_context_length. An unloaded
       // model reports none, and guessing its maximum would be a bigger lie than
       // saying nothing: the watchdog would never compact and the server would
-      // truncate. So only the loaded length is taken.
-      if (type === 'local' && models.some((m) => !m.context)) {
+      // truncate. So only the loaded length is taken — and it wins over any
+      // maximum the list itself offered, because a maximum is not a window.
+      if (type === 'local') {
         const windows = await lmStudioWindows(root, fetchImpl, timeoutMs);
         if (windows.size) {
-          for (const m of models) if (!m.context && windows.has(m.id)) m.context = windows.get(m.id);
+          for (const m of models) {
+            if (windows.has(m.id)) m.context = windows.get(m.id);
+            else delete m.context;
+          }
         }
       }
       return { ok: true, models, error: '' };
@@ -165,39 +169,61 @@ async function lmStudioWindows(root, fetchImpl, timeoutMs) {
 }
 
 /**
+ * Every window a local runtime reports as *loaded*, by model id. One request.
+ *
+ * This is the number that matters, and it is the runtime's, not this app's: LM
+ * Studio loads a model at whatever context the operator picked over there, and
+ * the engine's own compaction rule is a function of the number the engine was
+ * told. Empty when the server is not LM Studio or is not answering.
+ */
+export async function providerLoadedWindows({ baseURL } = {}, { fetchImpl = fetch, timeoutMs = 1500 } = {}) {
+  const root = String(baseURL || '').trim().replace(/\/+$/, '');
+  if (!/^https?:\/\//i.test(root)) return new Map();
+  return lmStudioWindows(root, fetchImpl, timeoutMs);
+}
+
+/**
  * The window a local server has *actually loaded* for one model, or 0 when it
- * cannot say. Separate from fetchProviderModels because this is asked at run
- * start, per model, and must be one cheap request: LM Studio answers
- * /api/v0/models with `loaded_context_length` for whatever is loaded.
+ * cannot say. Asked at run start, per model, so it must be one cheap request.
  *
  * This is the check that would have saved Shift Test 2: the operator changed the
  * context in LM Studio to 16k while Synapse still believed the 39k in its config,
  * and a 17.7k request was refused by the server mid-task.
  */
-export async function providerLoadedWindow({ baseURL, model }, { fetchImpl = fetch, timeoutMs = 4000 } = {}) {
-  const root = String(baseURL || '').trim().replace(/\/+$/, '');
-  if (!/^https?:\/\//i.test(root)) return 0;
-  const base = root.replace(/\/v1$/i, '');
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  timer.unref?.();
-  try {
-    const res = await fetchImpl(`${base}/api/v0/models`, { headers: { accept: 'application/json' }, signal: controller.signal });
-    if (!res.ok) return 0;
-    const body = JSON.parse(await res.text());
-    const list = Array.isArray(body?.data) ? body.data : Array.isArray(body?.models) ? body.models : [];
-    const wanted = String(model || '').trim();
-    for (const m of list) {
-      if (String(m?.id || '').trim() !== wanted) continue;
-      const n = Number.parseInt(m?.loaded_context_length, 10);
-      return Number.isFinite(n) && n > 0 ? n : 0;
+export async function providerLoadedWindow({ baseURL, model }, opts = {}) {
+  const windows = await providerLoadedWindows({ baseURL }, opts);
+  return windows.get(String(model || '').trim()) || 0;
+}
+
+/**
+ * Put what the local runtimes have loaded into the config, and say what changed.
+ *
+ * Called once at boot, before the engine is handed its config: a window typed
+ * into a form is a claim, and this is the measurement that outranks it. Two
+ * things follow from doing it here rather than in the UI — nobody has to retype
+ * a number when they reload a model, and the engine is *told* the same window the
+ * watchdog uses, so its own compaction point is not 18k below ours.
+ *
+ * A server that is not answering changes nothing: the last known window stands.
+ */
+export async function measureLocalWindows(config, { fetchImpl = fetch, timeoutMs = 1500 } = {}) {
+  const providers = config?.engine?.opencode?.providers;
+  if (!Array.isArray(providers)) return [];
+  const changes = [];
+  for (const p of providers) {
+    if (providerType(p) !== 'local') continue;
+    const windows = await providerLoadedWindows(p, { fetchImpl, timeoutMs });
+    if (!windows.size) continue;
+    for (const m of Array.isArray(p.models) ? p.models : []) {
+      const loaded = windows.get(String(m.id || '').trim());
+      if (!loaded) continue;
+      const from = Number(m.context) || 0;
+      if (from === loaded) continue;
+      m.context = loaded;
+      changes.push({ ref: `${p.id || 'local'}/${m.id}`, from, to: loaded });
     }
-    return 0;
-  } catch {
-    return 0;
-  } finally {
-    clearTimeout(timer);
   }
+  return changes;
 }
 
 /** The endpoint as the operator sees it: /models or /api/tags. */

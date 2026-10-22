@@ -122,6 +122,28 @@ catalog/provider-config copy, not what the runtime has loaded. Ours is the loade
 one. When the two differ the engine wins the race, because it is the thing that
 compacts.
 
+**The window is measured, not declared.** A number typed into Settings is a claim;
+what the runtime has loaded is the thing itself, and nobody should have to retype it
+after reloading a model. So:
+
+- **At boot**, before the engine is created, `measureLocalWindows()` asks every
+  local provider what it has loaded (LM Studio: `/api/v0/models` →
+  `loaded_context_length`; a model that is not loaded reports nothing) and writes
+  it into `engine.opencode.providers[].models[].context`, then saves. The engine is
+  then handed the same window the watchdog uses. Settings shows a local model as
+  `id | name` only — there is nothing to type, because nothing there could be
+  better than the measurement.
+- **At run start**, `noteLoadedWindow()` repeats the measurement for that one model
+  before its session exists. Normally it agrees. When it does not, the model was
+  reloaded while Synapse was running: the run budgets for the new window, the
+  config is updated, and a warning says the engine keeps its old compaction point
+  until Synapse restarts. `POST /api/location/reload` exists and would apply it
+  immediately, but it cancels every pending permission and form — never mid-run.
+- A remote provider keeps its typed window (`id | name | context | output`) because
+  there is nobody to ask; that is where a tested override belongs.
+- A server that is not answering changes nothing: the last known window stands,
+  and the boot log says nothing about it.
+
 **The incident that proves it (22 Oct, t7 again).** A local model with 60,160
 loaded and `limit.context: 42240` in the engine config: six compactions in
 thirteen minutes, at prompt sizes of 19,981–26,812, every one of them
@@ -129,8 +151,8 @@ thirteen minutes, at prompt sizes of 19,981–26,812, every one of them
 `app.log` — the watchdog was waiting for 45,968, which the engine's 26,240 always
 arrives first, so our safeguard never fired at all. The warning that would have
 told us was logged at INFO on the `tools` channel, which is not mirrored to the
-console: it read *"using 60160 for this run"*, and sounded like good news. It is
-now a warning that names the number the engine will compact at.
+console: it read *"using 60160 for this run"*, and sounded like good news. That is
+now a boot-time measurement instead of a warning nobody reads.
 
 **Where the number comes from, and which source wins.** Three answers can disagree,
 and the rule is *measurement beats claim*:

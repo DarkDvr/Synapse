@@ -18,6 +18,7 @@ import { createModelCache, MAX_TOOL_ASKS } from './modelcache.js';
 import { createApi } from './api.js';
 import { createServer } from './server.js';
 import { pruneProviderLog } from './provider-errors.js';
+import { measureLocalWindows } from './providers.js';
 import { sweepOrphans } from './cleanup.js';
 import { hasNpm, installNode, npmPlan, ask, runtimePresent } from './npm-check.js';
 
@@ -148,8 +149,22 @@ async function main() {
     if (made.created) app.info(`plan file created: ${made.path}`);
   }
 
+  // ── what the local runtimes have loaded ──────────────────────
+  // A window typed into a form is a claim; what the runtime has actually loaded
+  // is the measurement that outranks it. This runs before the engine is handed
+  // its config, so both halves of the harness start from the same number — the
+  // engine's own compaction rule is a function of the context it was told, and a
+  // stale one compacts every few turns without anything saying why.
+  const measured = await measureLocalWindows(currentConfig).catch(() => []);
+  if (measured.length) {
+    for (const m of measured) {
+      app.info(`${m.ref}: ${m.to} tokens loaded by the server (was ${m.from || 'nothing'}) - the engine will compact on ${m.to}`);
+    }
+    currentConfig = applyConfig(currentConfig);
+  }
+
   // ── engine ───────────────────────────────────────────────────
-  engine = createEngine(config, {
+  engine = createEngine(currentConfig, {
     logger,
     workspaceDir: config.defaults.directory || WORKSPACE_DIR,
     dataDir: DATA_DIR,
@@ -174,15 +189,6 @@ async function main() {
     );
   }
 
-  // An engine that was killed outright leaves its MCP helpers running: they are
-  // its children, so they have no owner once it is gone, and nothing else will
-  // ever notice them. Listed in the log, then stopped — the selection is only ever
-  // this repository's own `src/mcp/` scripts with a dead parent (src/cleanup.js).
-  if (config.cleanup?.onBoot !== false) {
-    sweepOrphans(ROOT, { log: app, keep: [process.pid, Number(engine.status?.().pid) || 0] }).catch((err) =>
-      app.warn(`orphan sweep failed: ${err.message}`),
-    );
-  }
 
   // ── session naming + tool census ─────────────────────────────
   const titler = createTitler({
@@ -225,6 +231,17 @@ async function main() {
     guard,
     modelCache,
     notify: (ev) => http?.broadcast({ ...ev, ts: Date.now() }),
+    // A model reloaded in its own app while we run: the measurement is used for
+    // this run either way, and this keeps the config file in step so the next
+    // boot hands the engine the same number.
+    onModelWindow: (ref, loaded) => {
+      const [providerId, modelId] = String(ref || '').split('/');
+      const provider = (currentConfig.engine?.opencode?.providers || []).find((p) => p.id === providerId);
+      const model = (provider?.models || []).find((m) => m.id === modelId);
+      if (!model || Number(model.context) === Number(loaded)) return;
+      model.context = Number(loaded) || model.context;
+      currentConfig = applyConfig(currentConfig);
+    },
   });
 
   // The engine is a separate program and it updates often, and the model catalog

@@ -9,7 +9,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { providerApiKey, normalize } from '../src/config.js';
-import { fetchProviderModels, providerLoadedWindow } from '../src/providers.js';
+import { fetchProviderModels, providerLoadedWindow, providerLoadedWindows, measureLocalWindows } from '../src/providers.js';
 
 const checks = [];
 const check = (name, ok, detail = '') => {
@@ -337,6 +337,56 @@ check('a dead server is 0, not a throw', noServer === 0);
 calls.length = 0;
 const noScheme = await fetchProviderModels({ baseURL: 'localhost:1234' }, { fetchImpl: stub('{}') });
 check('a URL without a scheme never leaves the app', noScheme.ok === false && calls.length === 0, noScheme.error);
+
+// ── what the runtime has loaded wins, at boot, without anyone typing it ──
+// The whole point of measuring: a window in the config is a claim, and the only
+// claim worth keeping is one nobody had to update when they reloaded the model.
+const bionicAnswer = {
+  ok: true,
+  status: 200,
+  text: async () =>
+    JSON.stringify({
+      data: [
+        { id: 'qwen3.8-27b-ud', loaded_context_length: 60160, max_context_length: 262144, state: 'loaded' },
+        { id: 'gemma-4-e4b-it', max_context_length: 131072, state: 'not-loaded' },
+      ],
+    }),
+};
+const draft = () => ({
+  engine: {
+    opencode: {
+      providers: [
+        {
+          id: 'local',
+          type: 'local',
+          baseURL: 'http://localhost:1235/v1',
+          models: [
+            { id: 'qwen3.8-27b-ud', name: 'Qwen 3.8 27B UD', context: 42240, output: 8192 },
+            { id: 'gemma-4-e4b-it', name: 'Gemma 4 E4B', context: 96000 },
+          ],
+        },
+        { id: 'deepseek', type: 'openai', baseURL: 'https://api.deepseek.com/v1', models: [{ id: 'deepseek-flash', context: 1048576 }] },
+      ],
+    },
+  },
+});
+
+const cfg1 = draft();
+const changes = await measureLocalWindows(cfg1, { fetchImpl: async () => bionicAnswer });
+const qwen = cfg1.engine.opencode.providers[0].models[0];
+const gemma = cfg1.engine.opencode.providers[0].models[1];
+check('a loaded window replaces the stale one', qwen.context === 60160, String(qwen.context));
+check('one change is reported, with both numbers', changes.length === 1 && changes[0].from === 42240 && changes[0].to === 60160, JSON.stringify(changes));
+check('a model nobody loaded keeps its last known window', gemma.context === 96000, String(gemma.context));
+check('an unmeasurable remote provider is untouched', cfg1.engine.opencode.providers[1].models[0].context === 1048576);
+check('the name and output are left alone', qwen.name === 'Qwen 3.8 27B UD' && qwen.output === 8192, JSON.stringify(qwen));
+
+const cfg2 = draft();
+const dead = await measureLocalWindows(cfg2, { fetchImpl: async () => { throw new Error('refused'); } });
+check('a dead server changes nothing', dead.length === 0 && cfg2.engine.opencode.providers[0].models[0].context === 42240, JSON.stringify(dead));
+
+const both = await providerLoadedWindows({ baseURL: 'http://localhost:1235/v1' }, { fetchImpl: async () => bionicAnswer });
+check('every loaded window comes back in one request', both.get('qwen3.8-27b-ud') === 60160 && !both.has('gemma-4-e4b-it'), JSON.stringify([...both]));
 
 const failed = checks.filter((c) => !c.ok);
 console.log(`\n${checks.length - failed.length}/${checks.length} passed`);

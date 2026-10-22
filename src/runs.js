@@ -42,7 +42,7 @@ import { skillRules, describeSkills, roleMustLoad } from './skills.js';
 import { configSavedAt } from './config.js';
 import { sweepProject, sweepScratch } from './cleanup.js';
 import { classifyFailure, recordProviderError, pruneProviderLog } from './provider-errors.js';
-import { providerLoadedWindow } from './providers.js';
+import { providerLoadedWindow, providerType } from './providers.js';
 
 const POLL_MS = 1500;
 const RESULT_MAX = 4000;
@@ -328,7 +328,7 @@ export function windowAction(state, ctx, room) {
   return ctx < room * 0.7 ? 'arm' : 'none';
 }
 
-export function createRunner({ engine, logger, getConfig, guard, notify, modelCache }) {
+export function createRunner({ engine, logger, getConfig, guard, notify, modelCache, onModelWindow }) {
   const log = logger.channel('tools');
   // The same milestones into the app channel, which is mirrored to the console:
   // a bat file leaves a window open all day, and "what is it doing" should be
@@ -1398,7 +1398,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     const [providerId, modelId] = String(ref || '').split('/');
     if (!providerId || !modelId) return;
     const provider = (getConfig()?.engine?.opencode?.providers || []).find((p) => p.id === providerId);
-    if (!provider || provider.type !== 'local') return;
+    if (!provider || providerType(provider) !== 'local') return;
     const loaded = await providerLoadedWindow({ baseURL: provider.baseURL, model: modelId }).catch(() => 0);
     if (!loaded) return;
     loadedWindows.set(ref, loaded);
@@ -1407,24 +1407,22 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     const limits = getConfig()?.modelLimits || {};
     const bare = String(ref || '').split('/').pop();
     const override = limits[ref] || limits[bare] || {};
-    const declared = Number(override.context) || Number(modelCache?.get?.(ref)?.context) || 0;
-    if (declared && loaded !== declared) {
-      // A disagreement is never good news, whichever way it points — and the old
-      // wording read like the problem was solved ("using 60160 for this run"). It
-      // is not: the watchdog is ours, but compaction is the engine's, and the
-      // engine still believes the declared number. Its own rule reserves
-      // `max(15%, 16k)` of the context it was given, so on 42,240 it compacts at
-      // 26,240 while our watchdog waits for 45,968 and never gets there first.
-      const reserve = Math.max(Math.floor(declared * 0.15), declared >= 32000 ? 16000 : 0);
-      log.warn(
-        loaded < declared
-          ? `${ref}: the server has only ${loaded} tokens loaded, the config says ${declared} - using ${loaded} for this run. ` +
-            `Reload the model at the larger window, or set its context to ${loaded} in Settings > Providers.`
-          : `${ref}: the server has ${loaded} tokens loaded, the config says ${declared} - this run budgets for ${loaded}. ` +
-            `The engine still compacts at ${declared - reserve}, because that is what it was told; set its context to ` +
-            `${loaded} in Settings > Providers or it will compact every few turns.`,
-      );
-    }
+    const declared = Number(override.context) || Number((provider.models || []).find((m) => m.id === modelId)?.context) || 0;
+    if (declared === loaded) return;
+    // Boot keeps these two in step, so a difference here means the model was
+    // reloaded in its own app while Synapse was running. This run budgets for the
+    // real window either way; the engine keeps the old compaction point until it
+    // is restarted, because reloading its config would cancel every open form.
+    const reserve = Math.max(Math.floor(declared * 0.15), declared >= 32000 ? 16000 : 0);
+    log.warn(
+      declared
+        ? `${ref}: the server now has ${loaded} tokens loaded, the config says ${declared}. This run budgets for ` +
+          `${loaded}, but the engine still compacts at ${declared - reserve} - restart Synapse to hand it ${loaded}.`
+        : `${ref}: the server has ${loaded} tokens loaded and nothing is configured. This run budgets for ${loaded}; ` +
+          `set its context in Settings > Providers so the engine compacts on the same number.`,
+    );
+    // Keep the file in step, so the next boot starts from the truth.
+    try { onModelWindow?.(ref, loaded); } catch { /* the run does not depend on it */ }
   }
 
   // One entry per session: the last turn's prompt size, whether the watchdog is

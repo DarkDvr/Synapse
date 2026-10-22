@@ -4921,14 +4921,28 @@ function slugify(name) {
   );
 }
 
-/** Models as the editor shows them: `id | name | context | output`. */
-function modelLines(models) {
+/** Models as the editor shows them.
+ *
+ * A local runtime owns the window, so its lines carry none: Synapse asks the
+ * server what it has loaded at every boot, and that is the number the engine and
+ * the watchdog both use. A remote provider has nobody to ask, so its window is
+ * typed here — `id | name | context | output` — and it is the only number the
+ * engine will have. */
+function modelLines(models, withWindow = true) {
   return (models || [])
-    .map((m) => [m.id, m.name && m.name !== m.id ? m.name : '', m.context || '', m.output || ''].join(' | ').replace(/(\s*\|\s*)+$/, ''))
+    .map((m) => {
+      const bits = [m.id, m.name && m.name !== m.id ? m.name : ''];
+      if (withWindow) bits.push(m.context || '', m.output || '');
+      return bits.join(' | ').replace(/(\s*\|\s*)+$/, '');
+    })
     .join('\n');
 }
 
-function parseModelLines(text) {
+/** Lines back into models. A window the line does not mention is kept from the
+ *  model that was already there: editing a name used to drop a context with it,
+ *  silently, and for a local runtime nothing in the form would ever put it back. */
+function parseModelLines(text, previous = []) {
+  const had = new Map((previous || []).map((m) => [m.id, m]));
   return String(text || '')
     .split(/\r?\n/)
     .map((line) => line.trim())
@@ -4936,11 +4950,12 @@ function parseModelLines(text) {
     .map((line) => {
       const [id = '', name = '', context = '', output = ''] = line.split('|').map((s) => s.trim());
       if (!id) return null;
+      const old = had.get(id) || {};
       const model = { id, name: name || id };
-      const ctx = Number.parseInt(context, 10);
-      const out = Number.parseInt(output, 10);
-      if (Number.isFinite(ctx) && ctx > 0) model.context = ctx;
-      if (Number.isFinite(out) && out > 0) model.output = out;
+      const ctx = Number.parseInt(context, 10) || Number(old.context) || 0;
+      const out = Number.parseInt(output, 10) || Number(old.output) || 0;
+      if (ctx > 0) model.context = ctx;
+      if (out > 0) model.output = out;
       return model;
     })
     .filter(Boolean);
@@ -5010,12 +5025,16 @@ function providerEditor(providers, index) {
       </div>
       <div class="set-field wide">
         <span>Models</span>
-        <textarea data-prov="models" rows="4" spellcheck="false">${esc(modelLines(p.models))}</textarea>
+        <textarea data-prov="models" rows="4" spellcheck="false">${esc(modelLines(p.models, p.type !== 'local'))}</textarea>
         <div class="prov-tools">
           <button type="button" class="btn btn-secondary btn-sm" data-prov-fetch>Refresh List</button>
           <span class="prov-fetch-state${fetchNote ? (fetchNote.ok ? ' is-ok' : ' is-bad') : ''}">${esc(fetchNote?.text || '')}</span>
         </div>
-        <small class="prov-hint">One model per line: <code>id | name | context | output</code>. Only the id is required; the window is what the watchdog and the engine budget from.</small>
+        <small class="prov-hint">${
+          p.type === 'local'
+            ? 'One model per line: <code>id | name</code>. The context window is read from the server at every start — that is the number the engine compacts on, so there is nothing to type here.'
+            : 'One model per line: <code>id | name | context | output</code>. Only the id is required; nobody can be asked for the window, so this is the one the engine budgets from.'
+        }</small>
       </div>
     </div>
     <p class="prov-badge-line">
@@ -5276,7 +5295,7 @@ function onSettingsInput(e) {
   const p = providerAt(state.setProvSelected);
   if (!p) return;
   const field = el.dataset.prov;
-  if (field === 'models') { p.models = parseModelLines(el.value); return; }
+  if (field === 'models') { p.models = parseModelLines(el.value, p.models); return; }
   if (field === 'apiKey') {
     p.apiKey = el.value;
     p.apiKeyRemoved = false;
