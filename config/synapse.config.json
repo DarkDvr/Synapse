@@ -96,7 +96,7 @@
   "roles": {
     "designer": {
       "ref": "local/qwen3.8-27b-ud",
-      "variant": "low",
+      "variant": "medium",
       "skills": [
         "aesthetic-foundations",
         "frontend-design",
@@ -110,7 +110,7 @@
     },
     "qc": {
       "ref": "local/qwen3.8-27b-ud",
-      "variant": "low",
+      "variant": "medium",
       "skills": [
         "web-guidelines",
         "aesthetic-foundations",
@@ -133,8 +133,8 @@
       ]
     },
     "coder-1": {
-      "ref": "deepseek/deepseek-flash",
-      "variant": "max",
+      "ref": "local/qwen3.8-27b-ud",
+      "variant": "medium",
       "skills": [
         "code-craft",
         "visual-review"
@@ -145,7 +145,7 @@
     },
     "coder-2": {
       "ref": "local/qwen3.8-27b-ud",
-      "variant": "low",
+      "variant": "medium",
       "skills": [
         "code-craft",
         "visual-review"
@@ -156,7 +156,7 @@
     },
     "coder-3": {
       "ref": "local/qwen3.8-27b-ud",
-      "variant": "low",
+      "variant": "medium",
       "skills": [
         "code-craft",
         "visual-review"
@@ -167,7 +167,7 @@
     },
     "inventor": {
       "ref": "local/qwen3.8-27b-ud",
-      "variant": "low",
+      "variant": "medium",
       "skills": [
         "frontend-design"
       ]
