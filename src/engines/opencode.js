@@ -170,6 +170,16 @@ export class OpenCodeEngine extends Engine {
       next.providers = providers;
     }
 
+    // How much conversation survives a compaction verbatim. The engine's own
+    // summary is written from a template baked into its binary and cannot be made
+    // shorter — but the tail it carries over can, and that tail is most of what
+    // the prompt is after a compaction. Left at 0, this key is not written at all
+    // and the engine keeps its 15,000-token default.
+    const keep = Number(this.cfg.compactionKeepTokens) || 0;
+    if (keep > 0) {
+      next.compaction = { ...(cfg.compaction || {}), keep: { tokens: keep } };
+    }
+
     // Other model servers — a local LLM, a second vendor — declared in Synapse's
     // config and handed to the engine as OpenAI-compatible providers. The engine
     // reads `provider` (singular) for definitions and `providers` (plural) for

@@ -117,6 +117,21 @@ fires when   last step's (input + cache.read + cache.write + output + reasoning)
 - `output` plays no part in this: the reserve is a flat share of `context`, and
   `limit.output` only limits what the model may write.
 
+**What a compaction actually leaves behind, measured** (one local run, 60,160):
+summary written = **2,552 output tokens**; the first prompt after it = **10,613**,
+so about **8,061 tokens were conversation carried over verbatim**. In other words
+the summary is a quarter of what you pay to re-read, and the `keep` tail is the
+rest.
+
+- **The summary cannot be shortened.** It is written against a template inside the
+  engine's binary (`## Objective`, `## Important Details`, …), and the engine even
+  re-asks if the reply misses a section. No config key reaches it.
+- **The tail can.** `engine.opencode.compactionKeepTokens` is written into the
+  engine's `compaction.keep.tokens` (Settings → Engine → Compaction). Default 0 =
+  write nothing, so the engine keeps its own 15,000. A smaller number lowers the
+  floor after every compaction — and costs the worker that much verbatim context
+  when it resumes, which is the trade to make deliberately rather than by default.
+
 **The number the engine compacts on is the number the *engine* was told** — the
 catalog/provider-config copy, not what the runtime has loaded. Ours is the loaded
 one. When the two differ the engine wins the race, because it is the thing that

@@ -36,8 +36,7 @@ export const DEFAULTS = {
       // Other model servers — a local LLM, or a vendor's own API — registered
       // with the engine as an OpenAI-compatible provider, so they appear in the
       // model menu like any other model. Nothing is contacted until a model is
-      // picked and a turn is run; an unreachable server simply fails that turn.
-      //
+      // picked and a turn is run; an unreachable server simply fails that turn.      //
       //   { "id": "bionic", "name": "Bionic",
       //     "baseURL": "http://localhost:1235/v1", "apiKey": "",
       //     "models": [{ "id": "qwen3.8-27b-ud", "name": "...", "context": 65536, "output": 8192 }] }
@@ -51,6 +50,12 @@ export const DEFAULTS = {
       // the engine's own budgeting. Left out, nothing is assumed — see
       // docs/notes/models-and-tools.md.
       providers: [],
+      // How much conversation the engine carries over verbatim when it compacts.
+      // The summary itself is the engine's own template and cannot be shortened,
+      // but this can: it is the "keep the last N tokens" budget, 15,000 by
+      // default, and the prompt after a compaction is (summary + this). 0 leaves
+      // the engine's default alone. See docs/notes/models-and-tools.md.
+      compactionKeepTokens: 0,
     },
   },
   defaults: {
@@ -232,6 +237,12 @@ export function normalize(raw) {
   oc.skillPaths = Array.isArray(oc.skillPaths)
     ? oc.skillPaths.map((p) => String(p || '').trim()).filter(Boolean)
     : [];
+  // 0 means "whatever the engine does by itself", and that is the default: this
+  // is a number about one engine's internals, not something to guess at.
+  {
+    const n = Number.parseInt(oc.compactionKeepTokens, 10);
+    oc.compactionKeepTokens = Number.isFinite(n) && n > 0 ? n : 0;
+  }
 
   // Other model servers: [ { id, type, name, baseURL, apiKey?, models: [{id, name?, context?, output?}] } ].
   // A provider without an id, a base URL or at least one model is dropped rather

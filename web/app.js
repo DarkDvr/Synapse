@@ -4742,6 +4742,18 @@ function settingsEngine(c) {
         `<div class="set-field" title="Set every model's ask count back to zero. Answers already learned are kept."><span>Ask counters</span>` +
         `<button type="button" class="btn btn-warn btn-sm" data-reset-asks>Reset Ask Counters</button></div>`,
     ),
+    setGroup(
+      'Compaction',
+      setField(c, 'Keep after compacting (tokens, 0 = engine default)', 'engine.opencode.compactionKeepTokens', {
+        type: 'number',
+        restart: true,
+        hint: 'When the engine compacts, it writes a summary and carries the last N tokens of the conversation over word for word. 15,000 by default. The summary itself is the engine\'s and cannot be shortened; this can, and it is most of the prompt afterwards. 0 leaves the engine alone.',
+      }) +
+        `<p class="set-note">The engine compacts by itself once the prompt reaches its own ceiling: the window it was told,
+      minus the larger of 15% of it or 16,000 tokens. On a 60,160 window that is 44,160. The summary it writes is about
+      2,500 tokens and is not configurable; the text carried over beside it is, with the number above. A smaller
+      number means less to re-read after a compaction and the same ceiling to reach, so the window lasts longer.</p>`,
+    ),
   ].join('');
 }
 
