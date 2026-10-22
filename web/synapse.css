@@ -185,20 +185,30 @@ body { min-width: 1100px; }
   width: 100%;
 }
 
-/* One column: the chat owns the full width, and the three panels sit under it.
-   The rail used to be a 330px column beside the chat, which made the conversation
-   pay for the plan it was arguing about. Underneath, everything shares the chat's
-   left and right edges, so the panels line up with what they describe. */
+/* Wide: three columns, so the Project plan can sit to the right of the role
+   cards without the chat paying for it. Row 1 is the stage — cards over the
+   chat — spanning the two left columns; row 2 is the census and the probe side
+   by side under the chat. The plan is the right column for its full height: it
+   is the one panel that has to be read next to the cards it was written for.
+   The inspector is `display: contents` at this size so its three panels become
+   grid items here and can be placed independently; it goes back to being a grid
+   of its own when the window is narrow (see the 1460px block). */
 .room {
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) var(--rail-w);
+  grid-template-rows: auto auto;
   gap: var(--gap-rail);
   align-items: stretch;
   width: 100%;
   /* the working area cap; anything beyond it stays empty at the right edge */
   max-width: var(--work-w);
 }
-body[data-view="none"] .room { grid-template-columns: minmax(0, 1fr); }
+.room > .stage { grid-column: 1 / 3; grid-row: 1; }
+.room > .inspector { display: contents; }
+.room .rail-plan { grid-column: 3; grid-row: 1 / 3; }
+.room .rail-tools { grid-column: 1; grid-row: 2; }
+.room .rail-probe { grid-column: 2; grid-row: 2; }
+body[data-view="none"] .room { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto; }
 body[data-view="none"] .inspector { display: none; }
 
 .stage {
@@ -217,11 +227,10 @@ body[data-view="none"] .inspector { display: none; }
   height: var(--stage-h, calc(100vh - 26px));
 }
 
-/* The rail is a row of panels under the conversation: plan, census, probe. It
-   used to be a fixed-height column beside the chat, with the plan on top taking
-   55% and the census taking the rest, and the probe bolted onto the bottom of the
-   census as one long column. Side by side they are three short panels that line up
-   with the chat's edges; a long plan scrolls inside its own box. */
+/* The rail: plan beside the cards, census and probe under the chat. The comment
+   that used to explain a fixed-height column beside the chat no longer applies —
+   what matters now is that every panel is a box with its own scrollbar, so a row's
+   bottom edge is one straight line whatever the plan or the census contain. */
 .inspector {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -236,6 +245,9 @@ body[data-view="none"] .inspector { display: none; }
   display: flex; flex-direction: column; min-height: 0; min-width: 0;
   max-height: 420px; overflow: hidden;
 }
+/* The plan runs the full height of the stage it sits beside: a column of brief
+   beside a column of conversation, with no hole under it. It scrolls inside. */
+.inspector .rail-plan { max-height: none; }
 .inspector .rail-panel .panel-head { flex: none; }
 .inspector .rail-plan .plan-body { overflow-y: auto; min-height: 0; }
 .inspector .rail-tools .tool-table,
@@ -2084,12 +2096,27 @@ body:has(.modal-backdrop:not([hidden])) { overflow: hidden; }
 
 /* ── 15. responsive ────────────────────────────────────────────────────── */
 
-/* Wide: the rail sits to the right of the stage with a fixed width. Narrow
-   (the room needs 256 sidebar + 48 padding + 790 stage + 20 gap + 330 rail =
-   1444, rounded up): the rail flows to the bottom and the page scrolls — the
-   stage keeps its full width so the cards never squeeze. */
+/* Wide: the plan sits to the right of the role cards with a fixed width, so the
+   room needs 256 sidebar + 48 padding + 790 stage + 20 gap + 330 plan = 1444.
+   Narrow (rounded up to 1460): the plan comes back down under the chat, the
+   stage gets its full width so the cards never squeeze, and the page scrolls. */
 @media (max-width: 1460px) {
-  .room { grid-template-columns: minmax(0, 1fr); }
+  /* one column again: the stage keeps the width, the panels line up under it */
+  .room { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto; }
+  /* The inspector is a grid of its own at this size, and the panels are its
+     items rather than the room's — so their wide-window placements are cleared
+     and the plan gets its height cap back. */
+  .room > .inspector {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-rows: auto;
+  }
+  .room .rail-plan,
+  .room .rail-tools,
+  .room .rail-probe { grid-column: auto; grid-row: auto; }
+  .room > .stage { grid-column: auto; grid-row: auto; }
+  .room .rail-plan { max-height: 420px; }
+
   /* stacked, the stage is content-sized and the page scrolls again */
   .stage { height: auto; min-height: 0; }
   .chat-scroll { min-height: clamp(150px, 32vh, 360px); }
@@ -2097,10 +2124,6 @@ body:has(.modal-backdrop:not([hidden])) { overflow: hidden; }
      the transcript scroll inside it. This is the point where the panel stops
      growing and its own scrollbar appears. */
   body[data-view="session"] .chat-dock.has-history { max-height: min(70vh, 720px); }
-  /* The panels keep their three-column row while there is room for it — plan,
-     census, probe, lined up under the chat's edges. Only when a third column
-     would squeeze the tables does the probe take a row of its own, which still
-     leaves the plan to the left of the tools. */
   .rail-actions { grid-template-columns: 1fr 1fr; }
 }
 

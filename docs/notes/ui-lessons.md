@@ -582,14 +582,26 @@ it as a panel **painted over the chat, anchored just above the composer**.
   alone still fits two columns); narrower than 1100 the window scrolls
   horizontally rather than squeezing the cards. The baseline's ≤950px sidebar
   drawer behaviour is overridden for the same reason.
-  Below the chat the rail itself is two equal halves: **Project above Project
-  plan on the left**, **Tools in use on the right** spanning the full height.
-  The left pair lives in a `.rail-col` wrapper that is `display: contents` in
-  the wide layout — so the two panels are ordinary grid rows there — and becomes
-  its own grid column when stacked. Without that wrapper the tall tools panel
-  spans both rows and stretches the row heights, opening a 300px hole between
-  Project and Project plan. Both halves are start-aligned so a short "No plan
-  yet" never stretches.
+  **Wide, the room is three columns** (`1fr 1fr 330px`) and two rows. The stage
+  spans the two left columns — role cards over the chat — and the plan owns the
+  third column for **both** rows, so it runs the full height beside the cards and
+  the chat and there is no hole under it. The census and the probe are the two
+  left cells of row 2: side by side, under the chat, where they do not cost the
+  conversation its width. At the 1240px working cap that is 435 / 435 / 330 with
+  an 890px stage — measured, not guessed.
+  The plan is the one panel that has to be read next to the cards it was written
+  for, which is why it is the panel that keeps a column; the two tables are
+  reference material. Before this the plan sat under the chat with them, and the
+  operator asked for it beside the cards "when space allows".
+  **The inspector is `display: contents` above 1460px**, so its three panels are
+  grid items of `.room` and can be placed independently; below 1460 it becomes a
+  grid of its own again (three across, two with the probe spanning under 1150,
+  one column under 760) and the plan's own placement is cleared. Forgetting that
+  reset leaves the plan pinned to a column that no longer exists.
+  **The chat's height and its bottom anchor are not touched by any of this.** It
+  is the stage's second row and the stage keeps `--stage-h`; the panels begin
+  where the stage ends, so on a window too short for both the page scrolls —
+  which is the same deal the stacked layout has always made.
   The glyph measurements that matter: both button glyphs are centred on the 22px
   button to within 0.01px, with ~1.5px of margin left top and bottom at three
   chevrons — if the glyph or border size changes, re-measure with
