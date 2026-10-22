@@ -578,20 +578,24 @@ it as a panel **painted over the chat, anchored just above the composer**.
   free to shrink; now the name holds and the picker gives way to a 76px stub, so
   250 is what is left. Two columns + the 66px spine need 566px of stage.
   **The plan has two homes, and one node.** It is the only panel that moves:
-  - **1225–1354px**: the plan sits in the cards' row, to their right, with the
-    conversation underneath **both** at the full width — the operator's mockup,
-    and what their own 1264px window shows. **The plan gets its full 341 first**
-    and the cards take the rest (`minmax(auto, 1fr) var(--panel-max)`), so
-    widening the window widens the cards rather than the plan. Its floor is the
-    cards' own track plus the plan and the gap (566 + 14 + 341 = 921 of room =
-    1225 of window); below that it falls under the chat.
+  - **1124–1354px**: the plan sits in the cards' row, to their right, with the
+    conversation underneath **both** at the full width. It **shrinks before it
+    gives up**: 341 down to 240 (`--panel-floor`), never taking the cards below
+    their own minimum. From 1225 up it holds its full 341 and the cards take the
+    rest, so widening the window widens the cards; in 1124–1224 the cards hold
+    their minimum (`2 x --card-min + --spine-w` = 566) and the plan takes what is
+    left.
   - **1355px and up**: the window can hold three panels of 341 + two gaps
     (1023 + 28 = 1051 of room), so the plan joins the census and the probe in the
     row under the chat and the cards get the whole top row back.
-  - **below 1225**: there is not room for cards and plan side by side, so the
+  - **below 1124**: the cards' minimum plus the plan's floor no longer fit, so the
     plan falls under the chat at full width and the two tables share the line
     beneath it. Below 1183 the panels lose their size range and fill whatever
     they are given; below 760 it is one column.
+  The operator's rule, in their words: "Project always wants to live to the right
+  of role cards, unless the cards are lower than their min width. Then Project is
+  forced to be below the chat." The cards' minimum is the constraint; the plan's
+  width is not.
   **Beside the cards the plan is as tall as they are.** `contain: size` keeps the
   row sized by the cards, and `max-height: none` (in that band only) lets the plan
   stretch to it — the panel's bottom edge is the Coder 3 row's bottom edge. The

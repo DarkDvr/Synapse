@@ -33,6 +33,10 @@ html { scrollbar-gutter: stable; }
      under the chat on a wide window, wide enough to read. */
   --panel-min: 284px;
   --panel-max: 341px;
+  /* the narrowest the plan may be squeezed while it stands beside the role
+     cards. Below this the cards are at their own minimum and there is nothing
+     left to give, so the plan goes under the chat instead. */
+  --panel-floor: 240px;
   --spine-w: 66px;
   --row-gap: 12px;
   --sidebar-w: 256px;
@@ -311,19 +315,16 @@ body[data-view="session"] .chat-dock { grid-column: 1; grid-row: 2; }
 body[data-view="session"] .rail-plan { position: relative; }
 
 /* ── the plan beside the role cards ───────────────────────────────────────
-   While the window is too narrow to hold three panels in one row (which needs
-   1355; see the responsive block) the plan takes the right of the cards' row,
-   with the conversation underneath the two of them at the full width — the
-   operator's mockup. The plan gets its FULL width first (`--panel-max`) and the
-   cards take what is left, so widening the window widens the cards rather than
-   the plan: that is the operator's rule, and it keeps the plan readable at the
-   widths where it is the reference you read while the cards work.
-   The floor is the cards' own minimum track (`auto` = 2 x 250 + 66 spine = 566)
-   plus the plan and the gap = 921 of room, i.e. 1225 of window. Below that the
-   plan falls under the chat instead of squeezing the cards flat. */
-@media (min-width: 1225px) and (max-width: 1354px) {
+   The plan wants to be to the right of the role cards, and it stays there for
+   as long as it can: it shrinks from 341 down to 240 before it gives up, and it
+   is the CARD column that is protected — the cards never go below their own
+   minimum. Only when that minimum plus the plan's floor do not fit does the plan
+   drop under the chat, which is the operator's rule: "Project always wants to
+   live to the right of role cards, unless the cards are lower than their min
+   width."
+   The conversation runs underneath the two of them at the full width. */
+@media (min-width: 1124px) and (max-width: 1354px) {
   body[data-view="session"] .stage {
-    grid-template-columns: minmax(auto, 1fr) var(--panel-max);
     /* the plan's floor, for Single: the cards collapse to the Architect card and
        the plan would otherwise take the row to nothing */
     grid-template-rows: minmax(200px, auto) minmax(0, 1fr);
@@ -339,6 +340,25 @@ body[data-view="session"] .rail-plan { position: relative; }
     max-height: none;
   }
   body[data-view="session"] .chat-dock { grid-column: 1 / -1; grid-row: 2; }
+}
+
+/* Room to spare: the plan takes its full width and the cards take the rest, so
+   widening the window widens the cards. 1225 is where the cards would otherwise
+   have exactly their minimum. */
+@media (min-width: 1225px) and (max-width: 1354px) {
+  body[data-view="session"] .stage {
+    grid-template-columns: minmax(0, 1fr) var(--panel-max);
+  }
+}
+
+/* Tight: the cards hold their minimum (`2 x --card-min + --spine-w` = 566) and
+   the plan takes whatever is left, down to 240. From 1124 down the two of them
+   no longer fit and the plan goes under the chat. */
+@media (min-width: 1124px) and (max-width: 1224px) {
+  body[data-view="session"] .stage {
+    grid-template-columns: minmax(0, calc(2 * var(--card-min) + var(--spine-w)))
+                           minmax(var(--panel-floor), 1fr);
+  }
 }
 body[data-view="session"] .rail-plan::after {
   content: ''; position: absolute; left: 1px; right: 1px; bottom: 1px; height: 30px;
