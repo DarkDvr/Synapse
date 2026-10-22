@@ -221,6 +221,36 @@ export function countedAttempts(history, taskId) {
 }
 
 /**
+ * Which number a model's window is, given four claims about it.
+ *
+ * The order is the whole rule, and every step of it was earned:
+ *  1. **loaded** — what a local runtime has actually reserved. A measurement, so
+ *     it beats every claim, in both directions (Bionic: 42k in the config, 60,160
+ *     loaded, and the smaller number was used for weeks).
+ *  2. **override** — the operator's own `modelLimits` entry. It exists because a
+ *     catalog can be wrong on the low side and was boundary-tested by hand: the
+ *     engine's config takes `limit.context` per model, and DeepSeek V4.1 Flash
+ *     Free serves 1,048,576 where the catalog says 200k. A refusal must NOT undo
+ *     this one — the override is a deliberate test, and a provider's bad minute is
+ *     not a verdict on it.
+ *  3. **refused** — the size of a prompt the provider actually rejected. That is
+ *     the only measurement a hosted model gives, and it beats a catalog claim that
+ *     is larger than it.
+ *  4. **catalog** — what the engine says, which is what we started with.
+ */
+export function resolveWindow({ override = 0, loaded = 0, refused = 0, catalog = 0 } = {}) {
+  const n = (v) => Number(v) || 0;
+  const o = n(override);
+  const l = n(loaded);
+  const r = n(refused);
+  const c = n(catalog);
+  if (l) return l;
+  if (o) return o;
+  if (r && (!c || r < c)) return r;
+  return c;
+}
+
+/**
  * How big the last prompt this session sent was, in tokens.
  *
  * The whole prompt, cached or not: `input` plus `cache.read`. That is the number
@@ -1332,20 +1362,19 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     const cached = (() => {
       try { return modelCache?.get?.(ref); } catch { return null; }
     })();
-    const override = getConfig()?.modelLimits?.[ref] || {};
-    const declared = Number(override.context) || Number(cached?.context) || 0;
-    // The loaded length is a measurement, so it wins in BOTH directions: a server
-    // with 60k loaded has 60k, whether the config says 42k or 100k. `min()` kept
-    // the smaller number, so raising the window in the local runtime (42k -> 60k)
-    // never reached Synapse; the measurement was thrown away precisely because it
-    // went up, and the mismatch was silent.
-    const loaded = loadedWindows.get(ref) || 0;
-    // A prompt the provider actually refused is the other measurement: the window
-    // is smaller than that. It is how a cloud model corrects a wrong catalog
-    // number, which has no endpoint to ask.
-    const refused = Number(cached?.refusedAt) || 0;
-    let context = loaded || declared;
-    if (refused && (!context || refused < context)) context = refused;
+    // The operator's override may be keyed either way: the engine's config takes
+    // the BARE model id under its provider (`providers.opencode.models.<id>.limit`),
+    // while a ref here is `provider/model`. Honouring only the ref spelling meant
+    // the engine and the watchdog could disagree about the same model.
+    const limits = getConfig()?.modelLimits || {};
+    const bare = String(ref).split('/').pop();
+    const override = limits[ref] || limits[bare] || {};
+    const context = resolveWindow({
+      override: override.context,
+      loaded: loadedWindows.get(ref) || 0,
+      refused: cached?.refusedAt,
+      catalog: cached?.context,
+    });
     const output = Number(override.output) || Number(cached?.output) || 0;
     if (!context) return null;
     return { context, output, room: windowRoom({ context, output }) };
@@ -1368,7 +1397,12 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     const loaded = await providerLoadedWindow({ baseURL: provider.baseURL, model: modelId }).catch(() => 0);
     if (!loaded) return;
     loadedWindows.set(ref, loaded);
-    const declared = Number(getConfig()?.modelLimits?.[ref]?.context) || Number(modelCache?.get?.(ref)?.context) || 0;
+    // The same lookup as contextWindow: the operator's `modelLimits` may use the
+    // bare model id, which is what the engine config takes.
+    const limits = getConfig()?.modelLimits || {};
+    const bare = String(ref || '').split('/').pop();
+    const override = limits[ref] || limits[bare] || {};
+    const declared = Number(override.context) || Number(modelCache?.get?.(ref)?.context) || 0;
     if (declared && loaded !== declared) {
       // Said both ways, because both ways were a bug: a smaller loaded window made
       // the watchdog compact too late, and a larger one was silently ignored.

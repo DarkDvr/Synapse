@@ -107,13 +107,55 @@ and the rule is *measurement beats claim*:
    'context'`; the size of the refused prompt is recorded by
    `modelCache.noteContext()` and the next turn budgets *below* it. A catalog that
    later reports a different window clears the refusal, so the two cannot fight.
-3. **The claim**: the operator's `modelLimits` override, else the engine catalog's
-   `limit.context`.
+3. **The operator's `modelLimits` override.** A deliberate, boundary-tested
+   number, not a claim — see "The override is a documented field" below.
+4. **The claim**: the engine catalog's `limit.context`, which is where all these
+   numbers came from in the first place.
 
-Loaded beats both, and refused beats a claim that is larger than it. The old code
-was `min(declared, loaded)`, which kept the **smaller** number — so raising a local
-window from 42,240 to 60,160 (Bionic, 22 Oct) was silently ignored, and the warning
-only fired in the other direction. Both directions are logged now.
+That order is one function now, `resolveWindow()` in `src/runs.js`, because the
+order *is* the rule and it needs to be readable and tested in one place:
+
+| | beats | loses to |
+|---|---|---|
+| loaded | everything | nothing |
+| override | refused, catalog | loaded |
+| refused | a catalog larger than it | loaded, override |
+| catalog | nothing | all three |
+
+Loaded beats everything, which fixes the old `min(declared, loaded)`: that kept the
+**smaller** number, so raising a local window from 42,240 to 60,160 (Bionic,
+22 Oct) was silently ignored, and the warning only fired in the other direction.
+Both directions are logged now.
+
+**The override outranks a refusal on purpose.** A refusal is one provider's answer
+on one afternoon; an override is a number the operator made that provider serve, by
+hand, at the boundary. Before this, a single 200k refusal would have cancelled a
+working 1M setting and the run would have started compacting at a fifth of its real
+window — the Fever Tracker mistake again, with a different cause.
+
+**Both spellings of the key are honoured.** The engine config takes the **bare**
+model id (`providers.opencode.models.<id>.limit`), while a ref in Synapse is
+`provider/model`. `modelLimits` may be written either way and `contextWindow()`
+finds it either way; when only the ref was checked, the engine could be serving 1M
+while the watchdog believed 200k.
+
+**The override is a documented field, not a hack.** OpenCode's config schema
+(`https://opencode.ai/config.json`, `ProviderConfig.models.*.limit`) defines
+`limit {context, input, output}` per model — so `engine.opencode.modelLimits` writes
+exactly where the format says a model's window is declared, and the engine's own
+budgeting then uses it. The schema also documents `compaction`
+(`auto`, `keep.tokens`, `buffer`; `reserved`/`prune`/`tail_turns` are deprecated),
+which is the *other* lever on the 49-compaction problem — unproven here, do not
+turn it without a run to show it helped.
+
+**Asking the engine about limits.** The catalog Synapse stores
+(`data\model-cache.json`) is `GET /api/model` → `{data:[{id, providerID, limit:
+{context, output}, variants}]}`, re-read at boot and after an engine update; the
+console line `catalog: N model(s) from engine X` is the check. The v2 server docs
+list the provider-shaped routes instead — `GET /config` (the merged config, which
+includes our own `limit` overrides), `GET /config/providers` and `GET /provider`
+(`{all, default, connected}`) — so if `/api/model` ever disappears, those are
+where a window can be read from.
 
 **What that cost, on one run.** Fever Tracker's t7 ran 86 turns and 81 minutes, and
 `logs\app.log` holds **32** lines of `context 30k of 42k … compacting before the

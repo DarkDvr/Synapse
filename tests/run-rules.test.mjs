@@ -15,7 +15,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { readPlan, briefSession, appendAnswers } from '../src/plans.js';
-import { contextStats, windowRoom, windowAction, steerDue, nextRung, countedAttempts, promptSize, compactionEvents } from '../src/runs.js';
+import { contextStats, windowRoom, windowAction, steerDue, nextRung, countedAttempts, promptSize, compactionEvents, resolveWindow } from '../src/runs.js';
 import { createHarnessGuard } from '../src/harness.js';
 
 const checks = [];
@@ -279,6 +279,35 @@ try {
   const events = compactionEvents([msg(9000, 23000), { type: 'compaction' }, msg(4000, 9000), { type: 'compaction' }]);
   expect('two compactions, each with the prompt that caused it', events.length === 2 && events[0].used === 32000);
   expect('a transcript with none reports none', compactionEvents([msg(100, 100)]).length === 0);
+}
+
+// ── which number wins ────────────────────────────────────────
+// Four claims about one window, and the order is the rule. The override is there
+// because a catalog can be wrong on the low side: DeepSeek V4.1 Flash Free serves
+// 1,048,576 when asked via the engine's per-model `limit`, and was tested by hand.
+// A provider refusing a prompt one afternoon must not quietly cancel that test.
+{
+  expect(
+    'a hand-tested override beats the catalog',
+    resolveWindow({ override: 1048576, catalog: 200000 }) === 1048576,
+  );
+  expect(
+    'a refusal does not undo the override',
+    resolveWindow({ override: 1048576, refused: 200000, catalog: 200000 }) === 1048576,
+  );
+  expect(
+    'what the local runtime loaded beats a stale override, both ways',
+    resolveWindow({ loaded: 60160, override: 42240 }) === 60160,
+  );
+  expect(
+    'a refusal corrects a catalog that is too big',
+    resolveWindow({ refused: 128000, catalog: 200000 }) === 128000,
+  );
+  expect(
+    'a refusal bigger than the catalog changes nothing',
+    resolveWindow({ refused: 400000, catalog: 200000 }) === 200000,
+  );
+  expect('nothing said, nothing known', resolveWindow({}) === 0);
 }
 
 // ── the harness guard ───────────────────────────────────────────
