@@ -231,3 +231,33 @@ times with every answer stored and ignored (`src/question-loop.js`).
 The third is a deliberate show stopper: it is a model problem the operator wants
 to see, not to be asked again. The reason travels into the run result, so the
 Architect is told not to re-delegate the task as it is.
+
+## There is no 'cleaning up' to remember any more
+
+Two test runs left static web servers running for hours — ` python -m http.server
+8765 ` from Timer Test 1 and ` qc-serve.js ` on 8321 from Shift Test 6 — because a
+worker needed an http origin to test localStorage and nothing owned the process when
+the run ended. Both were found by hand, by making the port speak.
+
+Synapse sweeps them now, in two places, with a narrow proved selection
+(`src/cleanup.js`):
+
+| when | what | proof it may stop it |
+|---|---|---|
+| a project's plan reaches all-done | anything still running for that project | the command line names the project folder, **or** a listening port serves a file from it byte for byte |
+| at boot | MCP helpers under `src/mcp/` whose parent is gone | our own script path, and a parent that is not running |
+
+A dry run happens first in the log — `cleanup: 2 process(es) still running …, pid 1 (…), pid 2 (…) ` — and only then are they stopped, followed by `cleanup: stopped 2 (…) `. Both halves can be turned off in the config file under `cleanup.onFinish` / `cleanup.onBoot`.
+
+What it will never do:
+
+- **match a process by name.** `opencode` is also the operator's editor;
+- stop anything under `@opencodedesktop` or `ai.opencode.desktop`;
+- stop a runtime it cannot prove is serving this project. **Two projects with a
+  `bin/` and an `index.html` have identical directory listings**, which is why
+  the proof is a file served byte for byte and not a name in a listing — the first
+  version swept a neighbour's server off the machine in testing;
+- touch the engine's own MCP children: they belong to a live engine and die with it.
+
+If a server you *wanted* is gone, the log says which pid went and why. Start it
+again — nothing on disk was touched.

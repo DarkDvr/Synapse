@@ -40,6 +40,7 @@ import {
 } from './plans.js';
 import { skillRules, describeSkills, roleMustLoad } from './skills.js';
 import { configSavedAt } from './config.js';
+import { sweepProject } from './cleanup.js';
 import { classifyFailure, recordProviderError, pruneProviderLog } from './provider-errors.js';
 import { providerLoadedWindow } from './providers.js';
 
@@ -257,6 +258,9 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
   const busy = new Set();
   // Requests picked up in this process, so a transcript re-read cannot re-run one.
   const claimed = new Set();
+  // Projects whose leftovers have already been swept, so a finished plan that is
+  // opened again does not go hunting every time a note is added.
+  const cleaned = new Set();
   // What is running right now, keyed by directory. The UI draws the cards' state
   // and the live path from this; it is also served over HTTP so a page reload
   // mid-run does not lose the picture.
@@ -1080,6 +1084,36 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
         body: `${request.task} was stopped. Nothing was reported to the Architect.`,
       });
       return;
+    }
+
+    // A finished plan is the end of the project, and the end of everything its
+    // workers started: a static server, a watcher. Nothing else owns them, so they
+    // outlive the run by hours (Timer Test 1 left one on 8765, Shift Test 6 one on
+    // 8321). Swept once per directory, and only when the operator has not turned it
+    // off — see src/cleanup.js for what may and may not be stopped.
+    try {
+      const done = readPlan(dir).plan;
+      const complete = Boolean(done?.tasks?.length) && done.tasks.every((t) => t.status === 'done');
+      if (complete && !cleaned.has(dir) && getConfig()?.cleanup?.onFinish !== false) {
+        cleaned.add(dir);
+        sweepProject(dir, { log })
+          .then((r) => {
+            if (!r.found) return;
+            out.info(`cleanup: ${r.stopped.length} process(es) from this project stopped`);
+            notify?.({
+              kind: 'note',
+              title: 'Project Finished',
+              body: r.stopped.length
+                ? `Stopped ${r.stopped.length} process(es) the project left running (${r.stopped
+                    .map((s) => s.pid)
+                    .join(', ')}).`
+                : 'Everything the project left running has already gone.',
+            });
+          })
+          .catch((err) => log.warn(`cleanup failed for ${dir}: ${err.message}`));
+      }
+    } catch (err) {
+      log.warn(`cleanup check failed for ${dir}: ${err.message}`);
     }
 
     // The "keep building" switch is read at report time, so flipping it while a

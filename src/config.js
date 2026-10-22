@@ -75,6 +75,15 @@ export const DEFAULTS = {
     // boot unless the operator turns that off. Settings also clears it by hand.
     resetOnBoot: true,
   },
+  cleanup: {
+    // What a project left running, stopped when the project finishes and again
+    // when Synapse boots (see src/cleanup.js). The selection is narrow and
+    // proved — this repository's own helper scripts with a dead parent, or a
+    // process whose command line or served page really is the project's — and
+    // the operator can turn either half off here.
+    onFinish: true,
+    onBoot: true,
+  },
   worker: {
     // A worker is never killed for taking a long time: a designer or a coder can
     // legitimately spend forty minutes on one turn, and an evening on a busy

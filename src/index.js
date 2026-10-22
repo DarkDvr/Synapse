@@ -18,6 +18,7 @@ import { createModelCache, MAX_TOOL_ASKS } from './modelcache.js';
 import { createApi } from './api.js';
 import { createServer } from './server.js';
 import { pruneProviderLog } from './provider-errors.js';
+import { sweepOrphans } from './cleanup.js';
 import { hasNpm, installNode, npmPlan, ask, runtimePresent } from './npm-check.js';
 
 const bootLog = logger.channel('app');
@@ -161,6 +162,26 @@ async function main() {
     bootError = err.message;
     app.error(`engine failed to start: ${err.message}`);
     app.error('Synapse will still serve the UI so the problem is visible.');
+  }
+
+  // An engine that was killed outright leaves its MCP helpers running: they are
+  // its children, so they have no owner once it is gone, and nothing else will ever
+  // notice them. Listed in the log, then stopped — the selection is only this
+  // repository's own `src/mcp/` scripts whose parent is dead (src/cleanup.js).
+  if (config.cleanup?.onBoot !== false) {
+    sweepOrphans(ROOT, { log: app, keep: [process.pid, Number(engine.status?.().pid) || 0] }).catch((err) =>
+      app.warn(`orphan sweep failed: ${err.message}`),
+    );
+  }
+
+  // An engine that was killed outright leaves its MCP helpers running: they are
+  // its children, so they have no owner once it is gone, and nothing else will
+  // ever notice them. Listed in the log, then stopped — the selection is only ever
+  // this repository's own `src/mcp/` scripts with a dead parent (src/cleanup.js).
+  if (config.cleanup?.onBoot !== false) {
+    sweepOrphans(ROOT, { log: app, keep: [process.pid, Number(engine.status?.().pid) || 0] }).catch((err) =>
+      app.warn(`orphan sweep failed: ${err.message}`),
+    );
   }
 
   // ── session naming + tool census ─────────────────────────────

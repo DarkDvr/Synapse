@@ -705,6 +705,31 @@ search for another copy", and `tests/skills.test.mjs` fails if any shipped `.md`
 mentions a machine-specific folder again. The general rule: **a skill describes
 how to work, the harness describes where things are.**
 
+**The renderer measures, serves and refuses.** `shot.mjs` is ours, not the
+engine's, and Timer Test 1 showed how thin it was. Now:
+
+- **It refuses what it cannot do.** An unknown `--option` used to fall through to
+  the target, so `--help` photographed a file named `--help` and exited 0. Unknown
+  options, extra targets and a missing file are all errors with the usage line, and
+  `tests/visual-review.test.mjs` holds them.
+- **It serves the page itself**, on a random port, from the file's own folder, and
+  closes on exit — because `file://` cannot test localStorage or a reload, which is
+  the reason agents kept writing `qc-serve.js` / `python -m http.server` and leaving
+  them running (two orphans were still holding 8321 and 8765 hours later).
+- **It reports numbers next to the picture**: `status`, `viewport`, `doc.scrollW`
+  against the width, elements crossing the edge (`overflow`), WCAG `contrast` below
+  4.5 (or 3 for large text, with ancestor opacity folded in and disabled controls
+  exempted), controls under 44px, and `painted` counts. On the timer page it found
+  six under-44px targets and six shortcut chips at 2.47:1 that the QC pass had
+  called fine — which is the argument for measurements over impressions.
+- **It fails on a blank page** (0 visible elements, no text, no images) or a 4xx/5xx
+  status, because a blank PNG is the one answer that looks like success.
+- **Several widths become one contact sheet**, so a narrow-vs-wide comparison is a
+  single image read instead of two.
+- **`--do "click:#start; wait:800"`** photographs a *state* rather than a guess;
+  keys are synthetic events on `document`, which is what a page's own handler
+  listens for.
+
 ---
 
 ## Git on a session's first successful turn
