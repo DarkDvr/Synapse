@@ -2750,40 +2750,74 @@ function tracesFor(dir) {
 // block is dropped when its step ends — a text block ending, or the next tool
 // call — because a chat cannot be a transcript of every sentence every worker
 // thought. The one-line note of the tool call is what survives.
-let streamTimer = null;
+// Streaming text, once per animation frame.
+//
+// Two costs had to stay out of this. It must not rebuild the transcript — that is
+// an innerHTML of every message, and it would run sixty times a second. And it
+// must not touch `textContent`, which replaces the text node and re-lays out the
+// line, making the words jump. So the line is written by assigning `data` on one
+// text node: the cheapest write the DOM has, and it only happens when a delta has
+// actually arrived. Between deltas nothing runs at all.
+const STREAM_VIEW = 600; // characters kept on screen; the rest has scrolled by
+let streamRaf = 0;
+let streamEl = null;
+
 function appendStream(kind, delta) {
-  const run = currentRun();
-  const trace = traceOf(run);
+  const trace = traceOf(currentRun());
   if (!trace || !delta) return;
-  if (!trace.stream || trace.stream.kind !== kind) trace.stream = { kind, text: '' };
-  trace.stream.text = (trace.stream.text + String(delta)).slice(-2000);
-  // A delta arrives per token; rebuilding the whole transcript for each one would
-  // repaint forty messages sixty times a second. Patch the one line that changed,
-  // and only rebuild when it is not on screen yet — a few times a second at most.
-  if (streamTimer) return;
-  streamTimer = setTimeout(() => {
-    streamTimer = null;
-    paintStream();
-  }, 120);
+  if (!trace.stream || trace.stream.kind !== kind) {
+    // A new block (thinking, then speech). Its class differs, so the line is
+    // replaced on the next pump rather than patched; nothing is on screen between
+    // the two, because the previous block was cleared when its step ended.
+    trace.stream = { kind, text: '' };
+    streamEl = null;
+  }
+  trace.stream.text = (trace.stream.text + String(delta)).slice(-4000);
+  if (!streamRaf) streamRaf = requestAnimationFrame(pumpStream);
 }
 
-/** Write the streaming text into its line, or rebuild if the line is not there. */
-function paintStream() {
+function pumpStream() {
+  streamRaf = 0;
   const trace = traceOf(currentRun());
-  if (!trace) return;
-  const text = trace.stream?.text || '';
-  const el = document.querySelector(`.trace.is-live[data-trace="${CSS.escape(trace.key)}"] .trace-line.is-stream`);
-  if (el) {
-    const shown = text.length > 600 ? `…${text.slice(-599)}` : text;
-    if (el.textContent !== shown) el.textContent = shown;
+  const text = trace?.stream?.text || '';
+  if (!text) {
+    streamEl = null;
     return;
   }
-  renderTranscript();
+  if (!streamEl || !streamEl.isConnected) {
+    // The line is a div holding one text node; the node is what gets written to.
+    const line = document.querySelector(
+      `.trace.is-live[data-trace="${CSS.escape(trace.key)}"] .trace-line.is-stream`,
+    );
+    const node = line?.firstChild;
+    streamEl = node && node.nodeType === Node.TEXT_NODE ? node : null;
+    if (!streamEl) {
+      // The line is not on screen — the first delta of a run, or a rebuild in
+      // between. One render puts it there; the next delta finds it.
+      renderTranscript();
+      return;
+    }
+  }
+  const tail = text.length > STREAM_VIEW ? `…${text.slice(-(STREAM_VIEW - 1))}` : text;
+  if (streamEl.data === tail) return;
+  // Follow the text only if the reader was already at the end, measured before the
+  // line grows — the same rule the transcript uses for new messages.
+  const scroller = chatScroller();
+  const follow = scroller ? chatAtBottom(140) : false;
+  streamEl.data = tail;
+  if (follow && scroller) scroller.scrollTop = scroller.scrollHeight;
 }
 
 function endStream() {
   const trace = traceOf(currentRun());
   if (!trace || !trace.stream) return;
+  // A frame may still be queued with the old text; cancel it, or it would write
+  // the finished block back into a line that is about to disappear.
+  if (streamRaf) {
+    cancelAnimationFrame(streamRaf);
+    streamRaf = 0;
+  }
+  streamEl = null;
   trace.stream = null;
   renderTranscript();
 }
