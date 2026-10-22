@@ -45,9 +45,52 @@ function Stop-ByPidFile {
   Write-Host "  stopped $Label pid $target ($($proc.ProcessName))"
 }
 
+# The pid file is not always the truth. A console started by hand writes one, but a
+# second copy that died on EADDRINUSE leaves its own pid behind — and then this
+# script reports "not running" while the real server keeps serving the OLD code.
+# So: find the process by the socket it holds, and prove it is this Synapse before
+# touching it. Proof, not a name: the port answers /api/status with an engine home
+# under THIS folder, or the engine's own binary sits under this folder.
+function Stop-ByPort {
+  param([int]$Port, [string]$Label)
+
+  $conns = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue
+  foreach ($c in $conns) {
+    $proc = Get-Process -Id $c.OwningProcess -ErrorAction SilentlyContinue
+    if (-not $proc) { continue }
+    if ($proc.Path -and ($proc.Path -like '*@opencodedesktop*' -or $proc.Path -like '*ai.opencode.desktop*')) {
+      Write-Host "  REFUSING: port $Port is held by the desktop app ($($proc.Path))"
+      continue
+    }
+    if ($Label -eq 'synapse') {
+      $expected = Join-Path $root 'data\engine\opencode'
+      try {
+        $st = Invoke-RestMethod "http://127.0.0.1:$Port/api/status" -TimeoutSec 3
+      } catch {
+        Write-Host "  port $Port is held by pid $($proc.Id) and does not answer /api/status - leaving it alone"
+        continue
+      }
+      if ($st.engine.home -ne $expected) {
+        Write-Host "  port $Port answers as '$($st.engine.home)', not '$expected' - leaving it alone"
+        continue
+      }
+    } else {
+      if (-not $proc.Path -or -not $proc.Path.StartsWith($root, [StringComparison]::OrdinalIgnoreCase)) {
+        Write-Host "  port $Port is held by $($proc.Path) - not this install, leaving it alone"
+        continue
+      }
+    }
+    Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+    Write-Host "  stopped $Label pid $($proc.Id) (found by listening on $Port)"
+  }
+}
+
 Write-Host 'stopping Synapse...'
 Stop-ByPidFile -File (Join-Path $root 'data\synapse.pid') -Label 'synapse'
 Stop-ByPidFile -File (Join-Path $root 'data\engine.pid') -Label 'engine'
+# and whatever is still holding the ports, if it proves to be ours
+Stop-ByPort -Port 8700 -Label 'synapse'
+Stop-ByPort -Port 8720 -Label 'engine'
 Start-Sleep -Seconds 2
 
 Write-Host 'starting Synapse...'

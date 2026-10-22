@@ -784,7 +784,7 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
       if (forget) {
         let directory = null;
         try { directory = (await engine.getSession(sessionId))?.directory || null; } catch { /* gone already */ }
-        forgetResult = directory ? forgetProjectPlan(directory) : { ok: false, reason: 'the session has no directory' };
+        forgetResult = directory ? await forgetProjectPlan(directory) : { ok: false, reason: 'the session has no directory' };
       }
       await engine.deleteSession(sessionId);
       briefed.delete(sessionId);
