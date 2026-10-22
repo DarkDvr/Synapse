@@ -219,10 +219,6 @@
         <!-- ── inspector rail ─────────────────────────────────────────── -->
         <aside class="inspector">
 
-          <!-- left half when stacked: the plan -->
-          <div class="rail-col rail-col-left">
-
-          <!-- plan -->
           <section class="panel rail-panel rail-plan">
             <div class="panel-head">
               <h3>Project plan</h3>
@@ -232,9 +228,7 @@
             </div>
           </section>
 
-          </div>
-
-          <!-- tools -->
+          <!-- the census: what the models are calling, here and now -->
           <section class="panel rail-panel rail-tools">
             <div class="panel-head">
               <h3>Tools in use</h3>
@@ -247,26 +241,29 @@
               <tbody></tbody>
             </table>
             <p class="rail-note" id="toolUsageMeta"></p>
+          </section>
 
-            <!-- the probe: exercise every tool once and record what happens -->
-            <div class="probe-block">
-              <div class="probe-head">
-                <span class="probe-title">Tool probe</span>
-                <button class="btn btn-secondary btn-sm" id="runProbe">Run Tool Probe</button>
-              </div>
-              <p class="rail-note" id="probeNote">Runs every tool once and records what happened, and how long it took.</p>
-              <table class="tool-table" id="probeTable" hidden>
-                <thead>
-                  <tr>
-                    <th>Case</th>
-                    <th style="text-align:right" title="the tool's own execution time, not the model's">Time</th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody></tbody>
-              </table>
-              <p class="rail-note" id="probeMeta"></p>
+          <!-- the probe: exercise every tool once and record what happened.
+               Its own panel, not a tail on the census: under the chat the row is
+               wide and short, and one tall column of two tables was the thing
+               that made this look like a leftover. -->
+          <section class="panel rail-panel rail-probe">
+            <div class="panel-head">
+              <h3>Tool probe</h3>
+              <button class="btn btn-secondary btn-sm" id="runProbe">Run Tool Probe</button>
             </div>
+            <p class="rail-note" id="probeNote">Runs every tool once and records what happened, and how long it took.</p>
+            <table class="tool-table" id="probeTable" hidden>
+              <thead>
+                <tr>
+                  <th>Case</th>
+                  <th style="text-align:right" title="the tool's own execution time, not the model's">Time</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+            <p class="rail-note" id="probeMeta"></p>
           </section>
         </aside>
       </div>

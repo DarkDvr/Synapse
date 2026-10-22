@@ -185,9 +185,13 @@ body { min-width: 1100px; }
   width: 100%;
 }
 
+/* One column: the chat owns the full width, and the three panels sit under it.
+   The rail used to be a 330px column beside the chat, which made the conversation
+   pay for the plan it was arguing about. Underneath, everything shares the chat's
+   left and right edges, so the panels line up with what they describe. */
 .room {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) var(--rail-w);
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--gap-rail);
   align-items: stretch;
   width: 100%;
@@ -213,36 +217,31 @@ body[data-view="none"] .inspector { display: none; }
   height: var(--stage-h, calc(100vh - 26px));
 }
 
-/* the rail owns the full column height; the tools panel takes the slack. The
-   inspector is capped to the viewport so a long tool census scrolls inside the
-   panel instead of making the whole page scroll — which used to move the stage
-   (and the Architect card) off-screen. Below 1460px the page scrolls by design
-   and this cap is lifted. */
+/* The rail is a row of panels under the conversation: plan, census, probe. It
+   used to be a fixed-height column beside the chat, with the plan on top taking
+   55% and the census taking the rest, and the probe bolted onto the bottom of the
+   census as one long column. Side by side they are three short panels that line up
+   with the chat's edges; a long plan scrolls inside its own box. */
 .inspector {
   display: grid;
-  /* Plan on top (it may be long), tools below taking the rest — so the tools
-     panel's bottom edge lands on the chat's. The row template used to have three
-     auto rows and two children, which left the last row empty and the panel
-     content-height: 40px short of the chat, and it was the operator who noticed.
-     The tools panel keeps 180px whatever the plan does; a longer plan scrolls
-     inside its own panel instead of squeezing the census to nothing. */
-  grid-template-rows: fit-content(55%) minmax(180px, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 14px;
-  align-content: stretch;
+  align-items: stretch;
+  align-content: start;
   min-width: 0; min-height: 0;
-  max-height: var(--stage-h, calc(100vh - 26px));
 }
-/* .rail-col is display: contents, so the plan is a grid item of the inspector
-   even though it is not a DOM child of it. */
-.inspector .rail-plan { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+/* Every panel is a box of the same height with its own scrollbar, so the row's
+   bottom edge is one straight line whatever the plan or the census contain. */
+.inspector .rail-panel {
+  display: flex; flex-direction: column; min-height: 0; min-width: 0;
+  max-height: 420px; overflow: hidden;
+}
+.inspector .rail-panel .panel-head { flex: none; }
 .inspector .rail-plan .plan-body { overflow-y: auto; min-height: 0; }
-.inspector > .rail-tools { display: flex; flex-direction: column; min-height: 0; overflow-y: auto; }
-.inspector > .rail-tools .tool-table { overflow: auto; }
-
-/* The left pair (Project + Project plan) lives in a wrapper so it can stack as
-   one column when the rail moves under the chat. Wide, the wrapper dissolves
-   and its two panels are ordinary grid rows. */
-.rail-col { display: contents; }
+.inspector .rail-tools .tool-table,
+.inspector .rail-probe .tool-table { overflow: auto; min-height: 0; }
+.inspector .rail-panel .rail-note { flex: none; }
+.inspector .rail-panel .rail-note:last-child { margin-top: auto; }
 
 /* Long tool names (synapse-search_websearch) must never stretch the pane: fix
    the layout and ellipsise the cells instead of letting the table grow. */
@@ -2098,27 +2097,30 @@ body:has(.modal-backdrop:not([hidden])) { overflow: hidden; }
      the transcript scroll inside it. This is the point where the panel stops
      growing and its own scrollbar appears. */
   body[data-view="session"] .chat-dock.has-history { max-height: min(70vh, 720px); }
-  /* the rail flows below the chat in two equal halves: Project above Project
-     plan on the left, Tools in use owning the right. The tools panel is not
-     allowed to size the left column, so it cannot stretch a gap between the two
-     left panels; each side is start-aligned. */
-  .inspector {
-    max-height: none;
-    grid-template-columns: 1fr 1fr;
-    grid-template-rows: auto;
-    /* Stretch, not start: the plan and the tools sit side by side here, and with
-       `start` each sized to its own content, so their bottoms missed by 100px and
-       the operator drew a line under the gap. Stretched, both end on the same
-       edge; a long plan scrolls inside its panel and the census keeps its height. */
-    align-items: stretch;
-    align-content: start;
-  }
-  .inspector > .rail-col {
-    display: grid; gap: 14px; align-content: start; min-width: 0;
-    grid-column: 1; grid-row: 1;
-  }
-  .inspector > .rail-tools { grid-column: 2; grid-row: 1; }
+  /* The panels keep their three-column row while there is room for it — plan,
+     census, probe, lined up under the chat's edges. Only when a third column
+     would squeeze the tables does the probe take a row of its own, which still
+     leaves the plan to the left of the tools. */
   .rail-actions { grid-template-columns: 1fr 1fr; }
+}
+
+/* Below this the three tables stop fitting side by side: the probe spans the row
+   and the plan stays to the left of the census. */
+@media (max-width: 1150px) {
+  .inspector {
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: auto auto;
+  }
+  .inspector .rail-probe { grid-column: 1 / -1; }
+}
+
+/* Below this nothing is side by side: one column, in the order it is read. */
+@media (max-width: 760px) {
+  .inspector {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto;
+  }
+  .inspector .rail-probe { grid-column: auto; }
 }
 
 /* Narrow windows are not supported: the page keeps its layout and grows a
@@ -2137,11 +2139,9 @@ body:has(.modal-backdrop:not([hidden])) { overflow: hidden; }
 .btn-warn:hover:not(:disabled) { background: var(--amber-soft); border-color: var(--amber); }
 
 /* ── 16. tool probe ────────────────────────────────────────────────────── */
-.probe-block { margin-top: 12px; padding-top: 11px; border-top: 1px solid var(--line); }
-.probe-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 7px; }
-.probe-title {
-  font-size: 12.5px; font-weight: 600; color: var(--text);
-}
+/* The probe is its own panel now (plan, census, probe in a row under the chat),
+   so it has no divider to draw and no title of its own: the panel head says it. */
+.rail-probe .panel-head { margin-bottom: 9px; }
 /* a short control, not a full-height button */
 #runProbe { height: 26px; min-height: 26px; padding: 0 10px; font-size: 11px; }
 .probe-block .tool-table { margin-top: 4px; }
