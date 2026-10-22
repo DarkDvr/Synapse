@@ -315,16 +315,16 @@ body[data-view="session"] .chat-dock { grid-column: 1; grid-row: 2; }
    panels now, capped like them, so a long plan is routine rather than rare. */
 body[data-view="session"] .rail-plan { position: relative; }
 
-/* ── the plan beside the role cards, always ───────────────────────────────
-   The rule the operator set: the Project plan is ALWAYS to the right of the role
-   cards and ALWAYS above the chat. The only exception is that neither side may
-   go below the width the operator measured as its minimum — the cards at 310 a
-   column, the plan at 330 — so when the two minimums plus the gap no longer fit
-   (below 1334 of window) the plan goes under the chat.
-   The conversation runs underneath the two of them at the full width, and the two
+/* ── the plan beside the role cards, above the chat ───────────────────────
+   The operator's rule, and the switch is their own window: at 1358 they want the
+   plan BELOW the chat, and only a wider window brings it up beside the cards.
+   So the beside layout starts at 1359 — one pixel past their window, which is
+   what "unless the window becomes wider than this" means. Above that it stays
+   beside: the conversation runs underneath both at the full width, and the two
    reference tables stay under the chat at every width. */
-@media (min-width: 1334px) {
+@media (min-width: 1359px) {
   body[data-view="session"] .stage {
+    grid-template-columns: minmax(0, 1fr) var(--panel-max);
     /* the plan's floor, for Single: the cards collapse to the Architect card and
        the plan would otherwise take the row to nothing */
     grid-template-rows: minmax(200px, auto) minmax(0, 1fr);
@@ -340,24 +340,6 @@ body[data-view="session"] .rail-plan { position: relative; }
     max-height: none;
   }
   body[data-view="session"] .chat-dock { grid-column: 1 / -1; grid-row: 2; }
-}
-
-/* Room to spare: the plan takes its full width and the cards take the rest, so
-   widening the window widens the cards rather than the plan. 1345 is where the
-   cards would otherwise be exactly at their minimum. */
-@media (min-width: 1345px) {
-  body[data-view="session"] .stage {
-    grid-template-columns: minmax(0, 1fr) var(--panel-max);
-  }
-}
-
-/* The tight 10px between the cards' minimum and the plan's maximum: the cards
-   hold their minimum and the plan takes what is left (330 to 341). */
-@media (min-width: 1334px) and (max-width: 1344px) {
-  body[data-view="session"] .stage {
-    grid-template-columns: minmax(0, calc(2 * var(--card-min) + var(--spine-w)))
-                           minmax(var(--plan-min), 1fr);
-  }
 }
 body[data-view="session"] .rail-plan::after {
   content: ''; position: absolute; left: 1px; right: 1px; bottom: 1px; height: 30px;

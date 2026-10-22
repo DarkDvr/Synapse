@@ -578,19 +578,25 @@ it as a panel **painted over the chat, anchored just above the composer**.
   one line, clock still inside the frame. Two columns + the 66px spine need 686px
   of stage. (It was 250 for one revision; both 250 and 290 were "too narrow" by
   their measurement.)
-  **The plan is beside the role cards, always.** The operator's rule, verbatim:
-  "Project plan IS ALWAYS to the right of role cards, ALWAYS above the chat.
-  There is only 1 exception possible — that is when role cards are more narrow
-  than [their minimum]." So:
-  - **1334px and up**: the plan sits in the cards' row, to their right, and the
-    conversation runs underneath **both** at the full width. The plan is **330 to
-    341** wide (`--plan-min` from the operator's screenshot of the pane at its
-    minimum, `--panel-max` = +20% of the old fixed width): from 1345 it holds its
-    full 341 and the cards take the rest, so widening the window widens the
-    cards; in 1334–1344 the cards hold their 310 minimum and the plan gets the
-    last 10px.
-  - **below 1334**: the two minimums plus the gap no longer fit, so the plan goes
-    under the chat at full width. That is the only exception.
+  **The plan is beside the role cards above 1358, and under the chat at or below
+  it.** The operator's rule, verbatim: "Project plan IS ALWAYS to the right of role
+  cards, ALWAYS above the chat. There is only 1 exception possible — that is when
+  role cards are more narrow than [their minimum]." The switch is their own
+  window: at **1358** CSS px they want the plan below the chat, so the
+  beside-the-cards media query starts at **1359** — one pixel past their window,
+  which is what "unless the window becomes wider than this" means. Above that:
+  - the plan sits in the cards' row, to their right, the conversation underneath
+    **both** at full width, and the two reference tables under the chat;
+  - the plan holds its full **341** and the cards take the rest, so widening the
+    window widens the cards;
+  - both boxes end on the same line (`contain: size` on the plan keeps the row
+    sized by the cards, `max-height: none` lets it stretch to them).
+  Below 1359 the plan falls under the chat at full width and the two tables share
+  the line beneath it; below 1183 the panels lose the 284–341 range and fill
+  whatever they are given; below 760 it is one column.
+  The minimums the cards and the plan may not go below are **310** per card
+  (`--card-min`) and **330** for the plan (`--plan-min`), both from the
+  operator's own screenshots of each box at its limit.
   Neither side is allowed below its measured minimum — that is the whole point of
   measuring them. An earlier revision let the plan shrink to 240 to stay put; the
   operator's screenshot of the pane at 330 said that was too narrow.
