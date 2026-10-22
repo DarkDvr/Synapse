@@ -1083,7 +1083,7 @@ body[data-view="session"] .chat-dock.has-ask { overflow: visible; }
    operator was reading, and a pair in the corner covers a sliver of one. Smaller
    for the same reason — they are a convenience, not a control surface. */
 .chat-nav {
-  position: absolute; right: 22px; top: 7px;
+  position: absolute; right: 112px; top: 7px;
   display: flex; gap: 4px; z-index: 30;
 }
 /* Four buttons on one row, right-aligned in the transcript's top corner: two to
@@ -2110,6 +2110,13 @@ body[data-mode="single"] .keep-toggle { display: none; }
 .restart-curtain.is-stuck p { color: var(--amber); }
 
 /* ── 15. modal + toast ─────────────────────────────────────────────────── */
+
+/* The baseline puts the toast stack in the bottom-right corner, which is where
+   the composer's buttons are: a toast about the run landed on top of Send. It
+   goes to the upper-right corner of the window instead, clear of the composer,
+   the jump buttons and the conversation. (`summit.css` is a locked baseline, so
+   this is an override, not an edit.) */
+.toast-region { top: 16px; right: 24px; bottom: auto; }
 
 .modal-backdrop {
   position: fixed; inset: 0; z-index: 60;

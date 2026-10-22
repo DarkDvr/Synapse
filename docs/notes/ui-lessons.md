@@ -843,10 +843,18 @@ bold, italic, strikethrough and links: the range these models actually produce.
   scrolls inside its panel, and the census always gets 180px instead of being
   squeezed to nothing. The bottoms now land on the same pixel (988/988 at a
   1000px window).
-- **The jump buttons live in the transcript's top-right corner, at 22px.** At the
+- **The jump buttons live in the transcript's top-right corner, at 112px.** At the
   middle of the pane they covered two lines of whatever was being read; in the
   corner they cover a sliver of one, and the pair sits side by side rather than
-  stacked.
+  stacked. The 22px they started at put them under the plan panel's right edge and
+  close to the window's own corner; the operator asked for them about 90px further
+  left, which is the 112 that `right` now carries.
+- **Popups go to the window's top-right, not the bottom-right.** The baseline's
+  `.toast-region` is `fixed; right: 24px; bottom: 24px`, which parked a toast about
+  the run on top of the composer's Send and Stop. It is now `top: 16px; right:
+  24px; bottom: auto` (an override in `synapse.css` — `summit.css` is locked), so
+  the stack grows downward from the corner and no chat control is ever under it.
+  It does overlap the plan panel's head, which is the corner the operator chose.
 - **The PHASES line is gone.** It was the Architect's menu choice, not something
   the operator acts on, and it was not always true — a phase can be declared and
   then dropped.
