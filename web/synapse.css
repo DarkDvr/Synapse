@@ -28,9 +28,11 @@ html { scrollbar-gutter: stable; }
 
   /* layout */
   --gap-rail: 20px;
-  /* the Project plan's column, beside the role cards. 284 is the width the
-     operator's mockup gives it; the cards keep two columns above 1250px. */
-  --plan-w: 284px;
+  /* The three rail panels share ONE size range: 284 (the plan's old fixed
+     width) to 341 (+20%). Narrow enough that all three fit in a single row
+     under the chat on a wide window, wide enough to read. */
+  --panel-min: 284px;
+  --panel-max: 341px;
   --spine-w: 66px;
   --row-gap: 12px;
   --sidebar-w: 256px;
@@ -218,12 +220,16 @@ body[data-view="none"] .rail-plan { display: none; }
   height: var(--stage-h, calc(100vh - 26px));
 }
 
-/* The two reference tables, side by side under the conversation. They used to be
-   one column with the plan on top of the census and the probe bolted to its
-   foot; as two panels they are shorter than the chat and read as reference. */
+/* The three panels, side by side under the conversation. One row of three, each
+   between 284 and 341 wide: that is the whole reason the roles-cards row no
+   longer has to give up a column to the plan. `justify-content: start` keeps them
+   against the chat's left edge and leaves the spare room at the right, where a
+   fourth panel would go — rather than scattering three equal boxes across the
+   width. */
 .inspector {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(var(--panel-min), var(--panel-max)));
+  justify-content: start;
   gap: 14px;
   align-items: stretch;
   align-content: start;
@@ -236,7 +242,8 @@ body[data-view="none"] .rail-plan { display: none; }
    simply clipped, with rows sliced and no way to reach them. */
 .inspector .rail-panel,
 .rail-panel {
-  display: flex; flex-direction: column; min-height: 0; min-width: 0;
+  display: flex; flex-direction: column; min-height: 0;
+  min-width: var(--panel-min); max-width: var(--panel-max);
   max-height: 420px; overflow: hidden;
 }
 .rail-panel .panel-head { flex: none; }
@@ -282,36 +289,21 @@ body[data-view="none"] .stage-empty {
 body[data-view="none"] .topology-wrap,
 body[data-view="none"] .chat-dock { display: none; }
 
-/* A session's stage is two columns and two rows (from 1250px up): the role
-   cards keep the left of the first row, the Project plan takes the right of it,
-   and the conversation runs underneath BOTH at the full width of the room. That
-   is the whole point of the arrangement: the plan is readable beside the cards
-   it was written for, and the chat pays nothing for it. The wrapper animates
-   max-height rather than using display, so switching modes is a smooth height
-   change. The Architect card is always present; Single hides the workers. */
+/* A session's stage is two rows: the role-card wrapper and the chat dock. The
+   wrapper animates max-height rather than using display, so switching modes is
+   a smooth height change. The Architect card is always present; Single hides
+   the workers, Multi reveals them. */
 body[data-view="session"] .stage {
-  grid-template-columns: minmax(0, 1fr) var(--plan-w);
-  /* the plan's floor, for Single: the cards collapse to the Architect card and
-     the plan would otherwise take the row to nothing */
-  grid-template-rows: minmax(200px, auto) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
   gap: 14px;
 }
 body[data-view="session"] .topology-wrap { grid-column: 1; grid-row: 1; }
-/* The plan's height is the cards' height, not its own length: `contain: size`
-   makes the row ignore the plan's content — without it a long plan would
-   stretch the row and push the chat off the stage. The plan scrolls inside a
-   box that lines up with the cards. */
-body[data-view="session"] .rail-plan {
-  grid-column: 2; grid-row: 1;
-  max-height: none;
-  contain: size;
-  /* the fade below is positioned against this */
-  position: relative;
-}
-/* The plan box is exactly as tall as the role cards, so a long plan is cut
-   mid-row by design. The cut has to read as "there is more" rather than as a
-   card sliced by a hard line: the bottom edge fades into the panel while
-   anything is left to scroll. `is-clipped` comes from updatePlanOverflow(). */
+body[data-view="session"] .chat-dock { grid-column: 1; grid-row: 2; }
+/* The plan's bottom edge fades while there is more of it below the fold (the
+   `.is-clipped` class comes from updatePlanOverflow). It sits in the row of
+   panels now, capped like them, so a long plan is routine rather than rare. */
+body[data-view="session"] .rail-plan { position: relative; }
 body[data-view="session"] .rail-plan::after {
   content: ''; position: absolute; left: 1px; right: 1px; bottom: 1px; height: 30px;
   background: linear-gradient(to top, var(--surface), rgba(29, 31, 35, 0));
@@ -1613,7 +1605,7 @@ body[data-mode="single"] .keep-toggle { display: none; }
    flight, red blocked (needs the operator) or failed, grey not started. */
 .plan-body { min-width: 0; }
 .plan-goal {
-  margin: 0 0 10px; font-size: 12px; line-height: 1.45; color: #b9bdc4;
+  margin: 0 0 10px; font-size: 11px; line-height: 1.45; color: #b9bdc4;
 }
 /* The phases line used to sit here. Removed: it was internal — the Architect's
    menu choice, not a fact the operator acts on — and it was not even always true
@@ -1703,7 +1695,7 @@ body[data-mode="single"] .keep-toggle { display: none; }
 .plan-title {
   display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;
   overflow: hidden; overflow-wrap: anywhere;
-  font-size: 12.5px; line-height: 1.4; font-weight: 600; color: #9aa0a8;
+  font-size: 11.5px; line-height: 1.4; font-weight: 600; color: #9aa0a8;
 }
 .plan-task[data-status="doing"] .plan-title { color: #fff; font-weight: 700; }
 /* Under the dot, centred, and quiet: it is an address, not a title. */
@@ -2125,29 +2117,18 @@ body:has(.modal-backdrop:not([hidden])) { overflow: hidden; }
 
 /* ── 15. responsive ────────────────────────────────────────────────────── */
 
-/* The plan needs a card column of its own to sit in, so it stays beside the
-   cards while the stage can still hold two card columns plus a plan column:
-   2 x 290 cards + 66 spine + 14 gap + 284 plan = 944 of room, i.e. 1248 of
-   window with the 256 sidebar and 48 of padding. Below 1250 it comes down under
-   the chat at full width, where a narrow window can still read it. */
-@media (max-width: 1249px) {
-  body[data-view="session"] .stage {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: auto minmax(0, 1fr) auto;
-  }
-  body[data-view="session"] .topology-wrap { grid-column: 1; grid-row: 1; }
-  body[data-view="session"] .chat-dock { grid-column: 1; grid-row: 2; }
-  /* under the chat the plan is content-sized again, and capped like the tables */
-  body[data-view="session"] .rail-plan {
-    grid-column: 1; grid-row: 3;
-    contain: none;
-    max-height: 420px;
-  }
+/* Three panels of at least 284 + two gaps need 880 of room, i.e. 1184 of window
+   (256 sidebar + 48 padding + 880). Below that they cannot sit in one row, so the
+   plan takes the full width of the row and the two tables share the line under
+   it; at 760 everything is one column. */
+@media (max-width: 1183px) {
+  .inspector { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .inspector .rail-panel { min-width: 0; max-width: none; }
+  .inspector .rail-plan { grid-column: 1 / -1; }
 }
 
 /* Below 1460 the stage is content-sized and the page scrolls — the cards and the
-   chat together are taller than a short window. The cards keep their two columns
-   down to 1250, where the plan leaves their row. */
+   chat together are taller than a short window. */
 @media (max-width: 1460px) {
   .stage { height: auto; min-height: 0; }
   .chat-scroll { min-height: clamp(150px, 32vh, 360px); }

@@ -3349,14 +3349,7 @@ function fitChatHeight() {
   const settled = parseFloat(wrap?.style.getPropertyValue('--reveal-h'))
     || wrap?.getBoundingClientRect().height
     || 0;
-  // Above 1250 the plan shares the cards' row, and in Single its floor is taller
-  // than the Architect card — so the row, not the wrapper, is what the chat has
-  // to start below. Below 1250 the plan is under the chat and counts for nothing.
-  const plan = window.matchMedia('(min-width: 1250px)').matches
-    ? $('stage')?.querySelector('.rail-plan')
-    : null;
-  const rowH = Math.max(settled, plan?.getBoundingClientRect().height || 0);
-  const room = window.innerHeight - (stageTop() + rowH + stageGap()) - 12;
+  const room = window.innerHeight - (stageTop() + settled + stageGap()) - 12;
   const next = `${Math.max(180, Math.floor(room))}px`;
   // A definite height, not a ceiling. A ceiling only ever took room away, so a
   // conversation shorter than the ceiling left the chat stopping above the

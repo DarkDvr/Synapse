@@ -576,33 +576,29 @@ it as a panel **painted over the chat, anchored just above the composer**.
 - **Cards have a hard minimum width** (`--card-min: 290px`): below that the
   name, the picker and the two buttons start colliding. Two columns + the 66px
   spine need 646px of stage.
-  **The stage — not the room — is where the plan lives.** It is a child of
-  `.stage`, beside the role cards in the cards' row, and *the conversation runs
-  underneath both at the full width of the room*. That is the whole point: the
-  plan is readable beside the cards the Architect writes it for, and the chat
-  pays nothing for it. The operator's mockup is the shape; the census and the
-  probe are the two `.inspector` panels below the stage, side by side.
-  Two columns of stage, a gap and the plan need **1248px** of window (2 x 290
-  cards + 66 spine + 14 gap + 284 plan = 944 of room, + 256 sidebar + 48
-  padding). Below 1250 the plan drops under the chat at full width — a narrow
-  window can still read it there — and below 1460 the stage is content-sized and
-  the page scrolls. `body { min-width: 1100px }` keeps two card columns at the
-  floor; narrower windows scroll horizontally rather than squeezing the cards.
-  **The plan may not stretch its row.** `.rail-plan` carries `contain: size`, so
-  a two-thousand-line plan cannot push the chat off the stage: the row is sized
-  by the cards, the plan stretches to it and scrolls inside. The row has a
-  `minmax(200px, auto)` floor because in Single the cards collapse to the
-  Architect card and the plan would otherwise take the row to nothing. `fitChatHeight`
-  counts that floor (it measures the plan, not just the wrapper) or the composer
-  sits 60px below the window in Single.
+  **One row of three panels under the chat**, each between **284 and 341**
+  (`--panel-min` / `--panel-max`: the plan's old fixed width, and that +20%): the
+  plan, the census, the probe. That is why the role cards keep the whole top row
+  and the chat keeps the whole width beneath them — with the panels capped, all
+  three fit on one line instead of the plan having to borrow a column beside the
+  cards. `justify-content: start` keeps them against the chat's left edge and
+  leaves the spare room at the right, where a fourth panel would go.
+  Three panels at their minimum need 880 of room, i.e. **1184px** of window (256
+  sidebar + 48 padding + 3 x 284 + 2 x 14). Below that one row cannot hold them:
+  the plan spans the row and the two tables share the line under it. Below 1460
+  the stage is content-sized and the page scrolls. `body { min-width: 1100px }`
+  keeps the cards' two columns at the floor; narrower windows scroll horizontally
+  rather than squeezing the cards.
+  The plan's goal is 11px and its step titles 11.5px — a point down from 12/12.5
+  at the operator's request, because the panel is now 300-odd pixels wide rather
+  than 400 and the old sizes ran to four lines each.
   **A panel's scroller must not be scoped to where the panel used to live.** The
-  rules were written as `.inspector .rail-panel …`, which was true while all
-  three panels sat in the rail; moving the plan into the stage left it with no
-  `overflow-y` and no `overflow: hidden` content box, so its bottom rows were
-  sliced and unreachable — the operator saw exactly that and asked whether it was
-  acceptable. The rules are now `.rail-panel …`, independent of the parent.
-  **A cut row must read as "more below".** The plan box is only as tall as the
-  cards, so it is routinely clipped mid-row: `.rail-plan::after` fades the bottom
+  rules were written as `.inspector .rail-panel …`; when the plan briefly lived
+  in the stage they stopped matching, and its bottom rows were sliced and
+  unreachable — the operator saw exactly that and asked whether it was
+  acceptable. They are now `.rail-panel …`, independent of the parent.
+  **A cut row must read as "more below".** The panels are a fixed 420px tall, so
+  a long plan is routinely clipped mid-row: `.rail-plan::after` fades the bottom
   edge into the panel's surface while `updatePlanOverflow()` reports something
   still below (set on repaint, on resize, on the plan's own scroll, and when the
   cards settle). A hard line through a card looks like clipping; a fade looks
