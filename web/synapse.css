@@ -257,7 +257,7 @@ body[data-view="none"] .rail-plan { display: none; }
   min-width: var(--panel-min); max-width: var(--panel-max);
 }
 .rail-panel .panel-head { flex: none; }
-.rail-plan .plan-body { overflow-y: auto; min-height: 0; }
+.rail-plan .plan-body { overflow-y: auto; min-height: 0; padding-bottom: 6px; }
 .rail-tools .tool-table,
 .rail-probe .tool-table { overflow: auto; min-height: 0; }
 .rail-panel .rail-note { flex: none; }
@@ -360,7 +360,7 @@ body[data-view="session"] .rail-plan { position: relative; }
   }
 }
 body[data-view="session"] .rail-plan::after {
-  content: ''; position: absolute; left: 1px; right: 1px; bottom: 1px; height: 30px;
+  content: ''; position: absolute; left: 1px; right: 1px; bottom: 1px; height: 34px;
   background: linear-gradient(to top, var(--surface), rgba(29, 31, 35, 0));
   border-radius: 0 0 16px 16px;
   pointer-events: none; opacity: 0; transition: opacity 0.18s ease;
@@ -760,7 +760,7 @@ body.dark .sidebar-bottom,
 
 .role-card {
   background: var(--surface); border: 1px solid var(--line);
-  border-radius: 12px; padding: 11px 13px 19px;
+  border-radius: 12px; padding: 11px 13px 24px;
   min-width: 0; height: auto; overflow: hidden;
   position: relative;
   display: grid; grid-template-rows: auto;
@@ -1787,9 +1787,11 @@ body[data-mode="single"] .keep-toggle { display: none; }
 
 /* One stopwatch per role card: current task, then total for this session. It
    sits in the extra strip under the clamped subtitle, so it can never collide
-   with the text and never changes a card's height when it appears. */
+   with the text and never changes a card's height when it appears. The strip is
+   24px of bottom padding and the clock sits 8px off the border: at 19/5 the
+   readout looked cut by the card's own edge, which is what the operator saw. */
 .role-clock {
-  position: absolute; right: 13px; bottom: 5px;
+  position: absolute; right: 13px; bottom: 8px;
   font-family: var(--mono); font-size: 9.5px; line-height: 1;
   letter-spacing: 0.02em; color: #6c7079;
   font-variant-numeric: tabular-nums; white-space: nowrap;
@@ -1797,7 +1799,7 @@ body[data-mode="single"] .keep-toggle { display: none; }
 }
 /* the same readout, mirrored: how fast this role's model is writing */
 .role-rate {
-  position: absolute; left: 13px; bottom: 5px;
+  position: absolute; left: 13px; bottom: 8px;
   font-family: var(--mono); font-size: 9.5px; line-height: 1;
   letter-spacing: 0.02em; color: #6c7079;
   font-variant-numeric: tabular-nums; white-space: nowrap;
