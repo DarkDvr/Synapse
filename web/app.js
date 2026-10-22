@@ -172,11 +172,15 @@ function toolTarget(part) {
   return clean(part?.title);
 }
 
-// selects cannot render `text-overflow: ellipsis`, so truncate the label itself
-const shortModel = (name) => {
-  const s = String(name || '').replace(/\s*free\s*/i, ' ').trim();
-  return s.length > 28 ? s.slice(0, 28).trimEnd() + '…' : s;
-};
+// The model's own name, whole.
+//
+// It used to have "free" stripped out and be cut at 28 characters, because a
+// `<select>` cannot ellipsize. That hid the one word that says a model costs
+// nothing — "Beam" and "Beam Free" are the same list entry otherwise — and cut
+// `Nemotron 3.5 Super VL Free` to `Nemotron 3.5 Super VL Free` for no reason the
+// operator could see. Nothing logical reads this text (the ref is what is stored),
+// so it is the full name and CSS does the ellipsizing where it really does not fit.
+const modelLabel = (name) => String(name || '').trim();
 
 const slug = (s) => String(s || '').trim().toLowerCase().replace(/[^a-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '') || 'project';
 
@@ -1004,7 +1008,7 @@ async function clearModelIssues(ref) {
   }
   const m = modelByRef(ref);
   if (m) m.issues = null;
-  toast('Issues Cleared', `${m ? shortModel(m.name) : ref} is unmarked.`);
+  toast('Issues Cleared', `${m ? modelLabel(m.name) : ref} is unmarked.`);
   // Re-open unfiltered: the input holds the model's *name*, so passing it through
   // as a search would leave the operator looking at a one-row menu.
   if (role) openModelMenu(role, false);
@@ -1026,7 +1030,7 @@ function syncPickerInput(input) {
   // The name of the model the operator chose, or the ref itself when the catalog
   // is not offering it at the moment. Never another model's name: two providers
   // can serve the same name, and that is exactly how a card lies.
-  input.value = m ? shortModel(m.name) : ref ? String(ref).split('/').pop() : '';
+  input.value = m ? modelLabel(m.name) : ref ? String(ref).split('/').pop() : '';
   const issues = m?.issues?.length ? ` · ISSUES: ${m.issues[0].message}` : '';
   input.title = m
     ? `${modelTitle(m)}${issues} · type to search`
@@ -1106,7 +1110,7 @@ function openModelMenu(role, fromTyping) {
     previousProvider = m.provider;
     rows.push(`<div class="model-opt${m.ref === p.sel.value ? ' is-current' : ''}" role="option" data-ref="${esc(m.ref)}">
             <span class="mo-src">${esc(providerLabel(m.provider))}</span>
-            <span class="mo-name">${esc(shortModel(m.name))}</span>
+            <span class="mo-name">${esc(modelLabel(m.name))}</span>
             ${m.issues?.length ? `<span class="mo-issues" data-clear-issues="${esc(m.ref)}" title="${esc(issuesTitle(m))}">Issues</span>` : ''}
             <span class="mo-meta">${esc(modelMeta(m))}</span>
           </div>`);
@@ -1460,7 +1464,7 @@ function fillRoleModels() {
   document.querySelectorAll('.role-model').forEach((sel, i) => {
     const role = sel.dataset.role || String(i);
     sel.innerHTML = state.models
-      .map((m) => `<option value="${esc(m.ref)}">${esc(shortModel(m.name))}</option>`)
+      .map((m) => `<option value="${esc(m.ref)}">${esc(modelLabel(m.name))}</option>`)
       .join('');
     // The saved ref is the identity, and it is never replaced. A role whose model
     // is missing from the catalog *right now* — a provider had a bad minute, its

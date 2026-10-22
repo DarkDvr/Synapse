@@ -710,6 +710,18 @@ machine can build (`src/toolchain.js`), which is the answer to "copy Synapse
 somewhere else and start": the pane says what that PC is missing instead of a build
 failing three turns in.
 
+**The free zen models are in the catalog; the account is what runs out.** Nine
+`opencode/*-free` models are listed by the engine (`/api/model`) and are selectable:
+Beam, DeepSeek V4.1 Flash, Flint 40B, GLM-5.3-Flash, Jev 1.13, MiMo-V2.6-Flash,
+MiniMax M3.1 Flash, the Nemotron 3s and LongCat. Each was given one prompt in a
+throwaway session, and every one came back `idle` with `provider.free-limit`, status
+429, `retryAfterMs` about 12.4 hours. So nothing needs plugging in and the routing is
+right; the free allowance for this account is spent, and a *run* (rather than a probe)
+marks the model, which is what the ISSUES chip in the picker is for. Two route facts
+cost a cycle here: `GET /api/session/{id}/message` is **singular**, and `prompt` only
+*admits* the message — the turn runs on afterwards, so
+`POST /api/experimental/session/{id}/wait` is what blocks until the session is idle.
+
 **A skill may not say where a shipped tool lives; the brief does.** The skill text
 used to carry the full path of `shot.mjs` as it was on the machine it was written
 on — the operator's own `~/.agents/skills`, which does not carry it here. Three

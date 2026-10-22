@@ -4,6 +4,17 @@ Layout invariants, the chat dock, the ask panel, the role cards and the model
 picker — with the measurements that prove them. Split out of `AGENTS.md`
 verbatim; read it before changing anything in `web/`.
 
+- **A model name is the model's name.** The picker used to strip the word "free"
+  from every label and cut the rest at 28 characters, because a `<select>` cannot
+  ellipsize — so `Beam Free` read `Beam`, and the nine zen models that cost nothing
+  looked like nine models with no particular property. The name is shown whole now
+  and the ellipsis is the layout's job. That made the menu the place a name is
+  actually read in, so it sizes to its content: `width: max-content` with a 320px
+  floor and a 560px cap, measured **484px** on a catalog whose longest row is
+  `qwen3.8-9b-distill-slerp-f451-pro-writer-uncensored` plus an ISSUES chip, with
+  no row clipped. The card's own box still ellipsizes — it has a tooltip, and the
+  list is where the choice happens.
+
 ## Questions: a panel over the chat, never in it
 
 A model asking the operator something is not a chat message — it is a blocked

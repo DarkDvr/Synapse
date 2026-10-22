@@ -811,7 +811,7 @@ body.dark .sidebar-bottom,
   border: 1px solid var(--line); border-radius: 7px;
   color: #b6bac1; font-family: var(--mono); font-size: 10.5px;
   padding: 3px 8px; flex: 1 1 auto; width: auto;
-  min-width: 76px; max-width: 180px;
+  min-width: 76px; max-width: 210px;
   text-overflow: ellipsis; cursor: text;
 }
 .model-search:hover { border-color: #454950; color: var(--text); }
@@ -874,8 +874,11 @@ body.dark .sidebar-bottom,
   box-shadow: 0 14px 34px rgba(0, 0, 0, 0.55);
   max-height: 300px; overflow-y: auto; padding: 3px;
   /* Wide enough for the source chip, the name, an ISSUES badge and the limits on
-     one line: a row that has to squeeze the badge reads as a clipped control. */
-  min-width: 320px; max-width: min(560px, calc(100vw - 24px));
+     one line: a row that has to squeeze the badge reads as a clipped control.
+     `max-content` so a long name WIDENS the list instead of being cut — the list is
+     the thing the operator reads a model name in, and `Nemotron 3.5 Super VL Free`
+     plus an ISSUES chip does not fit in the old 320px floor. */
+  width: max-content; min-width: 320px; max-width: min(560px, calc(100vw - 24px));
   overscroll-behavior: contain;
 }
 .model-opt {
