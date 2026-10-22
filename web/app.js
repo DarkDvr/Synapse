@@ -1327,7 +1327,7 @@ function applyRoleCardsLayout({ animate = true, from = null, remeasure = false }
   // The chat's cap is set from the reveal's *target* (so the two transitions can
   // run together), and re-fitted once more when everything has settled. The
   // question panel needs none of this: as the dock's child it moves with it.
-  chatFitTimer = setTimeout(fitChatHeight, 340);
+  chatFitTimer = setTimeout(() => { fitChatHeight(); updatePlanOverflow(); }, 340);
 
   if (state.mode === 'multi') {
     // `max-height: none` does not interpolate, so growing straight out of the
@@ -3793,6 +3793,22 @@ async function loadPlan() {
 function renderPlan() {
   const body = $('planBody');
   if (!body) return;
+  paintPlan(body);
+  updatePlanOverflow();
+}
+
+/** The plan box is as tall as the role cards, so a long plan is routinely cut
+ *  mid-row. Mark the panel while there is more below the fold, so its bottom
+ *  edge fades instead of drawing a hard line through a card. */
+function updatePlanOverflow() {
+  const body = $('planBody');
+  const panel = body?.closest('.rail-plan');
+  if (!body || !panel) return;
+  const more = body.scrollHeight - body.scrollTop - body.clientHeight > 2;
+  panel.classList.toggle('is-clipped', more);
+}
+
+function paintPlan(body) {
   const st = state.planState;
   const rel = st?.relative || '.synapse\\plan.json';
 
@@ -5688,9 +5704,12 @@ function wire() {
     fitStageHeight();
     if (state.view === 'session') applyRoleCardsLayout({ animate: false });
     fitChatHeight();
+    updatePlanOverflow();
     drawActivePath();
     renderChatNav();
   }));
+  // The plan's own scroller: the fade has to go the moment the last row is in view.
+  $('planBody')?.addEventListener('scroll', updatePlanOverflow, { passive: true });
 
   // The card heights change after the fonts load (and with any content change),
   // which used to leave the wrapper's max-height stale by a pixel or two — the

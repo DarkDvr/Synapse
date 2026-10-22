@@ -595,6 +595,18 @@ it as a panel **painted over the chat, anchored just above the composer**.
   Architect card and the plan would otherwise take the row to nothing. `fitChatHeight`
   counts that floor (it measures the plan, not just the wrapper) or the composer
   sits 60px below the window in Single.
+  **A panel's scroller must not be scoped to where the panel used to live.** The
+  rules were written as `.inspector .rail-panel …`, which was true while all
+  three panels sat in the rail; moving the plan into the stage left it with no
+  `overflow-y` and no `overflow: hidden` content box, so its bottom rows were
+  sliced and unreachable — the operator saw exactly that and asked whether it was
+  acceptable. The rules are now `.rail-panel …`, independent of the parent.
+  **A cut row must read as "more below".** The plan box is only as tall as the
+  cards, so it is routinely clipped mid-row: `.rail-plan::after` fades the bottom
+  edge into the panel's surface while `updatePlanOverflow()` reports something
+  still below (set on repaint, on resize, on the plan's own scroll, and when the
+  cards settle). A hard line through a card looks like clipping; a fade looks
+  like scrolling.
   **The role name does not shrink; the model label does.** With both free to
   shrink, a 290px card turned "Inventor" into "Inven…" and "Coder 1" into "Cod…"
   while the picker kept 137px. Role names are fixed app vocabulary, so the h3 is

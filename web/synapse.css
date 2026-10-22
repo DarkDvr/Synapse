@@ -229,18 +229,22 @@ body[data-view="none"] .rail-plan { display: none; }
   align-content: start;
   min-width: 0; min-height: 0;
 }
-/* Every panel is a box of the same height with its own scrollbar, so the row's
-   bottom edge is one straight line whatever the tables contain. */
-.inspector .rail-panel {
+/* Every rail panel is the same shape — a fixed head, a body that scrolls, an
+   optional note pinned to the foot — wherever it lives. These rules are NOT
+   scoped to `.inspector`: the plan moved into the stage's cards' row, and while
+   they were scoped to the old rail the plan had no scroller at all and was
+   simply clipped, with rows sliced and no way to reach them. */
+.inspector .rail-panel,
+.rail-panel {
   display: flex; flex-direction: column; min-height: 0; min-width: 0;
   max-height: 420px; overflow: hidden;
 }
-.inspector .rail-panel .panel-head { flex: none; }
-.inspector .rail-plan .plan-body { overflow-y: auto; min-height: 0; }
-.inspector .rail-tools .tool-table,
-.inspector .rail-probe .tool-table { overflow: auto; min-height: 0; }
-.inspector .rail-panel .rail-note { flex: none; }
-.inspector .rail-panel .rail-note:last-child { margin-top: auto; }
+.rail-panel .panel-head { flex: none; }
+.rail-plan .plan-body { overflow-y: auto; min-height: 0; }
+.rail-tools .tool-table,
+.rail-probe .tool-table { overflow: auto; min-height: 0; }
+.rail-panel .rail-note { flex: none; }
+.rail-panel .rail-note:last-child { margin-top: auto; }
 
 /* Long tool names (synapse-search_websearch) must never stretch the pane: fix
    the layout and ellipsise the cells instead of letting the table grow. */
@@ -301,7 +305,20 @@ body[data-view="session"] .rail-plan {
   grid-column: 2; grid-row: 1;
   max-height: none;
   contain: size;
+  /* the fade below is positioned against this */
+  position: relative;
 }
+/* The plan box is exactly as tall as the role cards, so a long plan is cut
+   mid-row by design. The cut has to read as "there is more" rather than as a
+   card sliced by a hard line: the bottom edge fades into the panel while
+   anything is left to scroll. `is-clipped` comes from updatePlanOverflow(). */
+body[data-view="session"] .rail-plan::after {
+  content: ''; position: absolute; left: 1px; right: 1px; bottom: 1px; height: 30px;
+  background: linear-gradient(to top, var(--surface), rgba(29, 31, 35, 0));
+  border-radius: 0 0 16px 16px;
+  pointer-events: none; opacity: 0; transition: opacity 0.18s ease;
+}
+body[data-view="session"] .rail-plan.is-clipped::after { opacity: 1; }
 body[data-view="session"] .chat-dock { grid-column: 1 / -1; grid-row: 2; }
 
 .topology-wrap {
