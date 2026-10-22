@@ -141,6 +141,20 @@ it as a panel **painted over the chat, anchored just above the composer**.
   (`loadRuns`), so the chat is alive immediately; a page reloaded *after* a run
   ends has no trace, which is deliberate for now: the run log keeps the numbers,
   and rebuilding a fold per past run is a second feature.
+- **The worker's words stream, and the top of the line leaves a step at a time.**
+  `session.text.delta` / `session.reasoning.delta` carry the piece of text, so the
+  live block is written from deltas rather than polled — one text node, `data`
+  assigned, never `textContent` (that replaces the node and re-lays out the line).
+  The line keeps a **600-character window**. Writing `text.slice(-600)` dropped
+  everything that had arrived since the last frame off the top in one go: after a
+  burst the line lurched, and at speed the text looked like it vanished word by
+  word. `web/stream-view.js` now eases the window's start instead — each frame it
+  gives up 22% of its backlog, never less than one character — so text leaves at
+  the monitor's refresh rate and the line slides. Frames keep running while the
+  front is still behind and stop the moment it has caught up, so a paused model
+  still costs nothing. The window is a plain function over numbers because it is
+  the kind of smoothing that looks fine in code and wrong on screen: it is tested
+  in `tests/stream-view.test.mjs`, including that no single step is a jump.
 - **The app icon is generated, not drawn.** `references\synapse_icon_full.png`
   (471×472) is the source; `web\icon-{16,32,48,64,180,256}.png` and `favicon.ico`
   are rendered from it, and the sidebar mark and the welcome screen use the same
@@ -685,6 +699,15 @@ bold, italic, strikethrough and links: the range these models actually produce.
   reset together were one fact printed twice, and "connected" beside a clock is
   the weaker half. The age repaints on a one-second interval; a tick is a text
   node.
+- **Only a session's own traffic is liveness, and the clock dies with its session.**
+  The age is worth a lot while you are waiting on the engine and nothing at all
+  afterwards, so two rules keep it from outliving what it describes. Registry
+  events (`project.updated` and friends) arrive whenever the rail is reloaded —
+  including on the delete that follows a finished run — and they carry no session,
+  so `setEventChip` ignores them: counting them kept the clock ticking over a
+  session that was gone. And deleting the session that emitted the event clears
+  the readout back to `Last event` / `idle` instead of leaving an age climbing
+  beside a name that no longer exists.
 - **`opencode v2.1.0`** — the `v` is part of a version, not a word.
 - **The STATUS label is yellow**, like every other section heading in the rail,
   and its block lost 2px of the air above it (13 → 11): the divider and its label

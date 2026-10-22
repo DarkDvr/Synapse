@@ -9,6 +9,7 @@
 // wired yet — the orchestration layer will drive them (stage 3+).
 
 import { renderMarkdown } from './md.js';
+import { streamView, newStream, pushStream } from './stream-view.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -78,8 +79,11 @@ const state = {
   streaming: false,
   streamLive: false,
   // When the last engine event arrived, so the sidebar can say "10s" instead of
-  // just naming it. And the stopwatches for the open session (see tickClocks).
+  // just naming it, and which session it came from: a clock that ages beside an
+  // event from a session the operator has deleted is describing something that
+  // no longer exists. And the stopwatches for the open session (see tickClocks).
   lastEventAt: 0,
+  lastEventSessionId: null,
   clocks: null,
   collapsed: new Set(),
   // True once the first project list has arrived; see loadProjects.
@@ -800,12 +804,24 @@ async function applyEngineUpdate() {
   if (!$('updateModal').hidden) renderUpdateDialog();
 }
 
-function setEventChip(type) {
+/**
+ * The sidebar's liveness clock: when a *session* last did something.
+ *
+ * The age beside the label is the readout now, so this only records when; the dot
+ * belongs to the stream and is not flashed here. Two rules keep it honest:
+ * an event with no session behind it is not work — `project.updated` and the other
+ * registry events arrive whenever the rail is reloaded, including on the delete
+ * itself, so counting them kept the clock ticking over a session that was gone —
+ * and a `null` type is the reset, used when the session that emitted the event is
+ * deleted: there is nothing left for the age to describe.
+ */
+function setEventChip(type, sessionId) {
+  const clear = !type;
+  if (!clear && !sessionId) return;
   const el = $('lastEvent');
-  if (el) el.textContent = String(type || 'idle').replace(/^session\./, '');
-  // The age beside the label is the liveness readout now, so this only records
-  // when; the dot belongs to the stream and is not flashed here.
-  state.lastEventAt = Date.now();
+  if (el) el.textContent = clear ? 'idle' : String(type).replace(/^session\./, '');
+  state.lastEventAt = clear ? 0 : Date.now();
+  state.lastEventSessionId = clear ? null : sessionId;
   renderLastEventAge();
 }
 
@@ -1943,6 +1959,9 @@ async function removeSession(id) {
     const q = ok.forget ? '?forget=1' : '';
     const res = await api('DELETE', `/api/sessions/${encodeURIComponent(id)}${q}`);
     state.busySessions.delete(id);
+    // The sidebar's last-event clock was reading that session's traffic. With the
+    // session gone, an age beside its name is a leftover, not news.
+    if (state.lastEventSessionId === id) setEventChip(null, null);
     if (state.sessionId === id) showNothing();
     await loadProjects();
     const forgotten = res?.forgotten;
@@ -2796,7 +2815,7 @@ function renderTrace(t) {
   // a chat cannot be a transcript of every sentence every worker thought.
   const streaming = t.stream && t.stream.text
     ? `<div class="trace-line is-stream${t.stream.kind === 'think' ? ' is-think' : ''}">${esc(
-        t.stream.text.length > 600 ? `…${t.stream.text.slice(-599)}` : t.stream.text,
+        streamView(t.stream).text,
       )}</div>`
     : '';
   const body = `${archive}${tail.map(note).join('')}${streaming}`;
@@ -2837,9 +2856,11 @@ function tracesFor(dir) {
 // an innerHTML of every message, and it would run sixty times a second. And it
 // must not touch `textContent`, which replaces the text node and re-lays out the
 // line, making the words jump. So the line is written by assigning `data` on one
-// text node: the cheapest write the DOM has, and it only happens when a delta has
-// actually arrived. Between deltas nothing runs at all.
-const STREAM_VIEW = 600; // characters kept on screen; the rest has scrolled by
+// text node: the cheapest write the DOM has, and it only happens when the visible
+// text has actually changed. Frames run while the top edge is still easing and
+// stop as soon as it has caught up, so an idle page is still doing nothing.
+// The window itself is `streamView` in ./stream-view.js — a plain function, tested
+// on its own, so the slide is not something to take on trust.
 let streamRaf = 0;
 let streamEl = null;
 
@@ -2850,18 +2871,18 @@ function appendStream(kind, delta) {
     // A new block (thinking, then speech). Its class differs, so the line is
     // replaced on the next pump rather than patched; nothing is on screen between
     // the two, because the previous block was cleared when its step ended.
-    trace.stream = { kind, text: '' };
+    trace.stream = newStream(kind);
     streamEl = null;
   }
-  trace.stream.text = (trace.stream.text + String(delta)).slice(-4000);
+  pushStream(trace.stream, delta);
   if (!streamRaf) streamRaf = requestAnimationFrame(pumpStream);
 }
 
 function pumpStream() {
   streamRaf = 0;
   const trace = traceOf(currentRun());
-  const text = trace?.stream?.text || '';
-  if (!text) {
+  const s = trace?.stream;
+  if (!s || !s.text) {
     streamEl = null;
     return;
   }
@@ -2879,13 +2900,14 @@ function pumpStream() {
       return;
     }
   }
-  const tail = text.length > STREAM_VIEW ? `…${text.slice(-(STREAM_VIEW - 1))}` : text;
-  if (streamEl.data === tail) return;
+  const view = streamView(s);
+  if (view.moving) streamRaf = requestAnimationFrame(pumpStream);
+  if (streamEl.data === view.text) return;
   // Follow the text only if the reader was already at the end, measured before the
   // line grows — the same rule the transcript uses for new messages.
   const scroller = chatScroller();
   const follow = scroller ? chatAtBottom(140) : false;
-  streamEl.data = tail;
+  streamEl.data = view.text;
   if (follow && scroller) scroller.scrollTop = scroller.scrollHeight;
 }
 
@@ -4207,7 +4229,7 @@ function connectStream() {
       return;
     }
 
-    setEventChip(ev.type);
+    setEventChip(ev.type, ev.sessionId);
     const mine = !ev.sessionId || ev.sessionId === state.sessionId;
     // A worker's session is not the open one, so nothing of it renders through
     // `mine`. Its words and its thinking stream in here instead, and its steps
