@@ -2984,6 +2984,28 @@ let streamEl = null; // { mask, view, body, node, scrolling } once the panel is 
 let streamFrameAt = 0; // performance.now() of the last frame, for the real dt
 const reducedMotion = Boolean(window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches);
 
+// Is the chat still being carried along by the writing?
+//
+// A distance test alone cannot answer that. Within any slack at all, every written
+// frame snapped the chat back to the end, so a reader who scrolled up was fighting
+// the page for the width of the slack — and the wheel always lost, because the snap
+// ran sixty times a second. So the rule is now: two lines from the end is "following",
+// and an upward scroll is a reader who has taken over — the follow lets go at once
+// and stays let go until they are back at the end. Nothing is disabled; it is a
+// hand-off, and the hand comes back.
+let chatFollowArmed = true;
+let lastChatTop = 0;
+const CHAT_FOLLOW_SLACK = 48; // two lines
+
+function noteChatScroll() {
+  const el = chatScroller();
+  if (!el) return;
+  const fromEnd = el.scrollHeight - el.scrollTop - el.clientHeight;
+  if (el.scrollTop < lastChatTop - 4) chatFollowArmed = false;
+  else if (fromEnd <= CHAT_FOLLOW_SLACK) chatFollowArmed = true;
+  lastChatTop = el.scrollTop;
+}
+
 /** The panel's parts, or null if it is not on screen yet. */
 function findStreamEl(key) {
   const mask = document.querySelector(`.trace.is-live[data-trace="${CSS.escape(key)}"] .trace-flow`);
@@ -3010,6 +3032,10 @@ function appendStream(kind, delta) {
     // the two, because the previous block was cleared when its step ended.
     trace.stream = newStream(kind);
     streamEl = null;
+    // A new block is a fresh start: whatever the reader did with the last one does
+    // not hold this one hostage.
+    chatFollowArmed = true;
+    lastChatTop = chatScroller()?.scrollTop || 0;
   }
   pushStream(trace.stream, delta);
   if (!streamRaf) {
@@ -3044,7 +3070,7 @@ function pumpStream(now) {
     // Read the chat's position *before* the text grows, the same rule the
     // transcript uses for new messages, and only on a frame that writes.
     const scroller = chatScroller();
-    follow = Boolean(scroller && chatAtBottom(140));
+    follow = Boolean(scroller && chatFollowArmed && chatAtBottom(CHAT_FOLLOW_SLACK));
     if (streamEl.node.data !== s.text) streamEl.node.data = s.text;
     s.dirty = false;
     measureStream(s);
@@ -3063,7 +3089,12 @@ function pumpStream(now) {
   if (offset !== was) streamEl.body.style.transform = `translate3d(0, ${-offset}px, 0)`;
   if (follow) {
     const scroller = chatScroller();
-    if (scroller) scroller.scrollTop = scroller.scrollHeight;
+    if (scroller) {
+      scroller.scrollTop = scroller.scrollHeight;
+      // The follow's own move is not the reader scrolling: keep the comparison
+      // baseline in step, or the next frame reads it as an upward scroll.
+      lastChatTop = scroller.scrollTop;
+    }
   }
   if (!s.settled || s.dirty) streamRaf = requestAnimationFrame(pumpStream);
 }
@@ -5739,9 +5770,12 @@ function wire() {
   });
   let navRaf = 0;
   $('transcript').addEventListener('scroll', () => {
+    // The reader's own position, first and on every event: a stream is allowed to
+    // follow a chat that is at the end, and must let go the moment it is not.
+    noteChatScroll();
     if (navRaf) return;
     navRaf = requestAnimationFrame(() => { navRaf = 0; renderChatNav(); });
-  });
+  }, { passive: true });
   // The question panel. Its answer changes what is required and what other
   // fields even exist, so every keystroke and every pick re-checks the panel.
   const askHost = $('askHost');
