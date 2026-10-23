@@ -311,6 +311,39 @@ export function windowRoom({ context, output } = {}) {
   return Math.max(0, context - (Number(output) || 0) - slack);
 }
 
+/**
+ * Where the engine compacts by itself, read from its own rule.
+ *
+ * `@opencode/SessionCompaction`, 2.1.2: it fires at `context − max(15%, 16,000)`.
+ * On a 60,160 window that is 44,160; on 1,048,576 it is 891,290. Written down here
+ * because the watchdog has to know it: two guards with their own numbers, ~1,800
+ * tokens apart, is a race, and the engine won it.
+ */
+export function engineCompactAt({ context } = {}) {
+  const c = Number(context) || 0;
+  if (!c) return 0;
+  const reserve = Math.max(Math.floor(c * 0.15), c >= 32000 ? 16000 : 0);
+  return Math.max(0, c - reserve);
+}
+
+/**
+ * Where *our* backstop sits — above the engine's trigger, never beside it.
+ *
+ * This is a safeguard for the case the engine cannot see the truth (a window it
+ * was told wrongly, or a provider that refuses what the catalog promised), so by
+ * definition it must act only after the engine's own rule has had its turn. On 23
+ * Oct the two sat 1,808 tokens apart and both fired: the engine compacted at
+ * 46,329, our request was queued one second later, and it ran four minutes later
+ * against the fresh 10,986-token transcript — a compaction of nothing, on the
+ * operator's log, for no reason.
+ */
+export function watchdogRoom({ context, output } = {}) {
+  const base = windowRoom({ context, output });
+  const engine = engineCompactAt({ context });
+  if (!engine) return base;
+  return Math.max(base, engine + Math.max(2000, Math.round((Number(context) || 0) * 0.05)));
+}
+
 // Turns at which a worker is asked, once, whether it is done. Not a limit and not
 // a kill: the model decides, and a task that genuinely needs more carries on.
 // Clock Test 3's designer was finished by turn ~50 and ran to 92 — the last twenty
@@ -1450,7 +1483,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     });
     const output = Number(override.output) || Number(cached?.output) || 0;
     if (!context) return null;
-    return { context, output, room: windowRoom({ context, output }) };
+    return { context, output, room: watchdogRoom({ context, output }) };
   }
 
   /**
@@ -1547,8 +1580,26 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     const ctx = (t.input || 0) + (t.cache?.read || 0);
     if (!ctx) return;
 
-    const state = windows.get(sessionId) || { armed: true, times: 0, off: false };
+    const state = windows.get(sessionId) || { armed: true, times: 0, off: false, compactions: 0 };
     windows.set(sessionId, state);
+
+    // The engine compacted while we were watching. Two things follow, and both
+    // were learned on one run: the transcript in hand is stale (it still carries
+    // the large prompt), so this poll must not act on it, and the request that a
+    // "compact" would send cannot be cancelled — a queued compaction runs at the
+    // next step boundary even if the transcript has shrunk by then. On 23 Oct the
+    // engine compacted at 46,329 and our watchdog asked again one second later;
+    // the second request ran four minutes later against the *fresh* 10,986-token
+    // transcript, throwing away what the first had just kept.
+    const seen = compactionEvents(messages).length;
+    if (seen > state.compactions) {
+      state.compactions = seen;
+      state.armed = false;
+      out.info(
+        `the engine compacted ${sessionId} at ${tokens(ctx)} - not asking again; waiting for the transcript to shrink`,
+      );
+      return;
+    }
 
     const action = windowAction(state, ctx, window.room);
     if (action === 'arm') { state.armed = true; return; }
