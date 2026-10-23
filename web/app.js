@@ -2836,17 +2836,22 @@ function renderTranscript() {
   // The conversation, with each worker's trace where it happened: a run that
   // started at 19:45 belongs above the report that arrives at 19:54, not under
   // it. Traces are merged by start time and fall off the end when they outlast
-  // the newest message.
-  const traces = tracesFor(currentProject()?.directory).sort((a, b) => a.startedAt - b.startedAt);
+  // the newest message. An alarm is merged the same way for the same reason: it is
+  // a line *in* the conversation, so it scrolls up and away with the rest of it
+  // instead of standing at the bottom for ever.
+  const items = [
+    ...tracesFor(currentProject()?.directory).map((t) => ({ at: Number(t.startedAt) || 0, html: renderTrace(t) })),
+    ...alarmsHere().map((a) => ({ at: Number(a.at) || 0, html: renderAlarm(a) })),
+  ].sort((x, y) => x.at - y.at);
   let html = '';
   let next = 0;
   for (const m of showable) {
     const at = Number(m.created) || 0;
-    while (next < traces.length && at && traces[next].startedAt < at) html += renderTrace(traces[next++]);
+    while (next < items.length && at && items[next].at < at) html += items[next++].html;
     html += renderMessage(m);
   }
-  while (next < traces.length) html += renderTrace(traces[next++]);
-  el.innerHTML = `${html}${alarmsHere().map(renderAlarm).join('')}${pending}`;
+  while (next < items.length) html += items[next++].html;
+  el.innerHTML = html + pending;
   if (stick) scrollChatToBottom();
   renderChatNav();
 }
@@ -3348,7 +3353,15 @@ function chatScrollTop() {
   return el ? el.scrollTop : window.scrollY;
 }
 
-function chatAtBottom(slack = 96) {
+/** Is the reader at the end of the conversation — close enough to be followed?
+ *
+ *  The window is two lines (48px), not four. Four was enough room to be "at the
+ *  bottom" while reading the last thing said, so a new message arriving pulled the
+ *  page out from under a reader who had not finished it. Two lines still forgives
+ *  the odd stray pixel of sub-pixel layout, and forgiving any more than that is not
+ *  forgiveness, it is being yanked.
+ */
+function chatAtBottom(slack = 48) {
   const el = chatScroller();
   if (el) return el.scrollHeight - el.scrollTop - el.clientHeight <= slack;
   // No internal scroller: the whole conversation fits its box. "At the bottom"
