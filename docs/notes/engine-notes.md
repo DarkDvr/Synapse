@@ -920,3 +920,34 @@ durable record for the *next* run, not a replacement for the guard. And a sessio
 outside a project has no `.synapse`, so nothing is written — the reply still goes
 through, and the missing file is not an error.
 
+## Stop means stop
+
+Measured 23 Oct: the operator pressed Stop, and the run carried on to the end and
+started the next task. Nothing was broken in the runner — the stop button was
+aimed at the wrong thing.
+
+**A delegated task runs in its own worker session.** The operator has the Architect
+open, so Stop interrupted the Architect, which is not the thing doing the work. The
+worker finished, reported back, the Architect was woken by the report, and it
+delegated the next task: from the operator's seat, "it just retried later". There
+was also a third way back in — `remindSkippedWork`, which nudges the Architect when
+a ready task was never asked for.
+
+So Stop now does three things, and all three are needed:
+
+1. **It cancels the run**, not just the session: `runs.cancel(dir)` aborts the
+   runner, cuts any backoff short and interrupts the worker session.
+2. **It puts the task back to `todo`.** Nothing is running, so a task left as
+   `doing` makes the plan say "1 running" for the rest of the day. That is the one
+   write the harness makes to the plan (`setTaskStatus`), and it changes one field.
+3. **It holds the project** (`stoppedByOperator`): a delegation arriving while held
+   is recorded as `stopped-by-operator` and not run, and the "ready but never
+   asked for" reminder stays quiet. The hold lifts when the operator speaks —
+   `POST /messages` or turning keep-building on — because that message is their
+   answer to "what now".
+
+A stop with *no* run in flight still holds the project: interrupting the Architect
+mid-turn is the same request, and otherwise its next turn delegates the work that
+was just stopped.
+
+
