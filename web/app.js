@@ -469,10 +469,14 @@ function isLocalServer(p) {
   return /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:|\/|$)/i.test(String(p?.baseURL || ''));
 }
 
-/** The badge beside this provider's models. */
+/** The badge beside this provider's models.
+ *
+ * There is one badge for every server on this machine, whichever dialect it speaks.
+ * A `llamacpp` server is a local LLM exactly as an LM Studio one is — the difference
+ * is which endpoint answers "what is your window", not what kind of thing it is —
+ * so labelling it separately split the model picker into a second LOCAL-looking
+ * section for no reason the operator cares about. */
 function providerBadge(p) {
-  const type = String(p?.type || '').toLowerCase();
-  if (type === 'llamacpp') return 'Llama.cpp';
   return isLocalServer(p) ? 'Local' : p?.name || '';
 }
 
@@ -1147,18 +1151,28 @@ function openModelMenu(role, fromTyping) {
   const q = fromTyping ? p.input.value.trim().toLowerCase() : '';
   const list = state.models
     .filter((m) => !q || m.name.toLowerCase().includes(q) || m.ref.toLowerCase().includes(q))
-    .sort((a, b) => String(a.provider).localeCompare(String(b.provider)) || a.name.localeCompare(b.name));
+    // Grouped by the chip the operator reads, not by provider id. Two local
+    // servers (a runtime on 1235 and a llama.cpp one on 8080) are one visually
+    // distinct group of "Local", so sorting by id put the second one after every
+    // hosted provider — the same badge twice, with other sources in between.
+    .sort(
+      (a, b) =>
+        providerLabel(a.provider).localeCompare(providerLabel(b.provider)) ||
+        String(a.provider).localeCompare(String(b.provider)) ||
+        a.name.localeCompare(b.name),
+    );
   menuRefs = list.map((m) => m.ref);
   // A rule between provider groups. Eleven rows of eight different sources read
   // as one list until the source changes are visible: the chip alone was too
   // quiet, and the selection highlight made it worse when it landed across two.
   const rows = [];
-  let previousProvider = null;
+  let previousGroup = null;
   for (const m of list) {
-    if (previousProvider !== null && m.provider !== previousProvider) {
+    const group = providerLabel(m.provider);
+    if (previousGroup !== null && group !== previousGroup) {
       rows.push('<div class="model-sep" role="separator"></div>');
     }
-    previousProvider = m.provider;
+    previousGroup = group;
     rows.push(`<div class="model-opt${m.ref === p.sel.value ? ' is-current' : ''}" role="option" data-ref="${esc(m.ref)}">
             <span class="mo-src">${esc(providerLabel(m.provider))}</span>
             <span class="mo-name">${esc(modelLabel(m.name))}</span>
@@ -5150,7 +5164,7 @@ function providerEditor(providers, index) {
         <span>Type</span>
         <select data-prov="type">
           <option value="local"${p.type === 'local' || !p.type ? ' selected' : ''}>Local provider (LM Studio)</option>
-          <option value="llamacpp"${p.type === 'llamacpp' ? ' selected' : ''}>llama.cpp server</option>
+          <option value="llamacpp"${p.type === 'llamacpp' ? ' selected' : ''}>Local provider (llama.cpp)</option>
           <option value="openai"${p.type && p.type !== 'local' && p.type !== 'llamacpp' ? ' selected' : ''}>OpenAI Compatible</option>
         </select>
         <small class="prov-hint">${
@@ -5259,7 +5273,7 @@ function settingsProviders(c) {
         <button type="button" class="btn btn-provider btn-sm" data-prov-add>+ Add Provider</button>
         <div class="prov-add-menu" id="provAddMenu" hidden>
           <button type="button" data-prov-new="local">Local Provider</button>
-          <button type="button" data-prov-new="llamacpp">llama.cpp Server</button>
+          <button type="button" data-prov-new="llamacpp">Local Provider (llama.cpp)</button>
           <button type="button" data-prov-new="openai">OpenAI Compatible</button>
           <button type="button" disabled title="The engine's own catalog is always registered. A second copy would list the same models twice.">OpenCode (built in)</button>
         </div>
@@ -5370,7 +5384,7 @@ function addProvider(type) {
     // Three kinds, two behaviours: a `llamacpp` server *is* a local server, it just
     // answers /props rather than LM Studio's /api/v0/models. Named for the dialect
     // so it fits every wrapper of it, not one product.
-    name: type === 'local' ? 'Local Server' : type === 'llamacpp' ? 'llama.cpp Server' : 'OpenAI Compatible',
+    name: type === 'local' ? 'Local Server' : type === 'llamacpp' ? 'Local Server' : 'OpenAI Compatible',
     format: 'openai',
     baseURL: type === 'llamacpp' ? 'http://localhost:8080/v1' : '',
     apiKey: '',
