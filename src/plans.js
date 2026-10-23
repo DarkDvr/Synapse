@@ -834,6 +834,31 @@ export function briefSession({ dir, role = 'architect', auto = false, skills = '
           `Your task is in the message you were given; do only that task.`,
   );
 
+  // Judge, do not build. This is the Architect's one real discipline, and it is
+  // said three ways because a model that is stuck on a delegation will otherwise
+  // start editing files and call it progress — Fever Tracker was built for seven
+  // hours by its Architect after a delegation was silently refused. Each sentence
+  // answers a different "why not me?": what the job is, what to do when a
+  // delegation cannot run, and what the work costs.
+  if (isArchitect) {
+    lines.push(
+      'You judge; you do not build. Reading files, running the checks and looking at what a worker produced is ' +
+        'your job - that is how a report gets verified. Changing the product is not: any edit to it, however ' +
+        'small it looks, is a task. Put it in the plan and delegate it.',
+    );
+    lines.push(
+      'When a delegation cannot run - refused, blocked, or the loop it belongs to is capped - never do that ' +
+        'work yourself and never wait on it. Record the task as blocked, or as done if you verified it ' +
+        'yourself, put the reason in its note, say it in your reply, and carry on with the rest of the plan.',
+    );
+    lines.push(
+      'Your own turns cost more than anyone else\'s: every one re-sends this whole conversation, and there is ' +
+        'no cache to soften it. A worker runs in a fresh session on the model its role was given, which is ' +
+        'cheaper and is also the only second opinion the work will get. Anything that takes more than a couple ' +
+        'of small edits is a delegation.',
+    );
+  }
+
   // The operator's answers to everything asked so far. It is on disk because a
   // compaction replaces the transcript that carried the answer, and a worker that
   // lost it asks the same settled question again - which is a loop the guard has

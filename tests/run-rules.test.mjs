@@ -119,6 +119,14 @@ try {
   expect('the architect caps reads at two files', architect.includes('Two files at most'));
   expect('the architect is told to write provable tasks', architect.includes('the command that proves'));
   expect('the architect is not given the worker bill rules', !architect.includes('Mind the bill'));
+  // Judge, don't build: Fever Tracker was built for seven hours by its Architect
+  // after one delegation was silently refused. The rule has to be in the brief it
+  // re-reads every step, and the two escape hatches have to be named, or a stuck
+  // Architect invents a third one.
+  expect('the architect is told to judge, not build', architect.includes('You judge; you do not build'));
+  expect('a refused delegation has two ways out, not self-service', architect.includes('never do that') && architect.includes('Record the task as blocked'));
+  expect('the architect is told its own turns are the dearest', architect.includes('cost more than anyone else'));
+  expect('a worker is not told to judge anything', !coder.includes('You judge; you do not build'));
 }
 
 // ── the operator's answers live on disk, not only in the transcript ──
