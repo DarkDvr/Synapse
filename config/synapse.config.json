@@ -241,7 +241,8 @@
             }
           ]
         }
-      ]
+      ],
+      "compactionKeepTokens": 0
     }
   },
   "defaults": {
@@ -278,8 +279,8 @@
       "focus": "app"
     },
     "architect": {
-      "ref": "deepseek/deepseek-flash",
-      "variant": "high",
+      "ref": "opencode-go/deepseek-v4.1-flash",
+      "variant": "low",
       "skills": [
         "visual-review"
       ],
@@ -339,7 +340,7 @@
     "onBoot": true
   },
   "worker": {
-    "stallSec": 1200,
+    "stallSec": 900,
     "resumeMax": 4,
     "retryBaseSec": 10,
     "retryCapSec": 300,
