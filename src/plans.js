@@ -840,11 +840,16 @@ export function briefSession({ dir, role = 'architect', auto = false, skills = '
   // hours by its Architect after a delegation was silently refused. Each sentence
   // answers a different "why not me?": what the job is, what to do when a
   // delegation cannot run, and what the work costs.
+  //
+  // Nothing here may describe *this* harness's shape. A worker's session, the model
+  // behind a role, whether a run is cheap or independent — all of that is whatever
+  // the operator configured, and Synapse runs any project on any model. State the
+  // rule; leave the arrangement to the config.
   if (isArchitect) {
     lines.push(
       'You judge; you do not build. Reading files, running the checks and looking at what a worker produced is ' +
-        'your job - that is how a report gets verified. Changing the product is not: any edit to it, however ' +
-        'small it looks, is a task. Put it in the plan and delegate it.',
+        'your job - that is how a report gets verified. What a task produces is not yours to change: any edit to ' +
+        'it, however small, is a task. Put it in the plan and delegate it.',
     );
     lines.push(
       'When a delegation cannot run - refused, blocked, or the loop it belongs to is capped - never do that ' +
@@ -852,10 +857,9 @@ export function briefSession({ dir, role = 'architect', auto = false, skills = '
         'yourself, put the reason in its note, say it in your reply, and carry on with the rest of the plan.',
     );
     lines.push(
-      'Your own turns cost more than anyone else\'s: every one re-sends this whole conversation, and there is ' +
-        'no cache to soften it. A worker runs in a fresh session on the model its role was given, which is ' +
-        'cheaper and is also the only second opinion the work will get. Anything that takes more than a couple ' +
-        'of small edits is a delegation.',
+      'Your own turns are the dearest in the harness: every one re-sends this whole conversation. Delegation is ' +
+        'how the work gets done without that bill - it is what the roles and the plan are for. Anything that ' +
+        'takes more than a couple of small edits is a delegation, not a turn of yours.',
     );
   }
 

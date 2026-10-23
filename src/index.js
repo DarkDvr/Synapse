@@ -397,9 +397,44 @@ async function main() {
     }
   }
 
+  // How long a step waits for its first token, per session.
+  //
+  // This is the number that answers "is the provider slow, or are we?" — and
+  // until now nothing measured it, which is why two five-minute silences on 23 Oct
+  // had to be reconstructed from timestamps hours later. A step that opens and then
+  // produces nothing is the provider holding the request: the engine logs no retry,
+  // no error, and no other traffic in between, so there is nothing else it can be.
+  // Logged only when it is slow enough to matter, so the console stays readable.
+  const stepClock = new Map();
+  const FIRST_TOKEN_WARN_MS = 20000;
+  function watchFirstToken(ev) {
+    const sid = ev.sessionId;
+    if (ev.type === 'session.step.started') {
+      stepClock.set(sid, { at: Date.now(), told: false });
+      return;
+    }
+    if (/\.(text|reasoning)\.delta$/.test(ev.type)) {
+      const clock = stepClock.get(sid);
+      if (!clock || clock.told) return;
+      clock.told = true;
+      const waited = Date.now() - clock.at;
+      if (waited >= FIRST_TOKEN_WARN_MS) {
+        app.warn(
+          `${sid}: the model took ${Math.round(waited / 1000)}s to say anything. ` +
+            `That is the provider holding the request, not this harness - nothing is retried or waited on in between.`,
+        );
+      }
+      return;
+    }
+    if (/^session\.(step\.ended|execution\.(succeeded|failed|interrupted))$/.test(ev.type)) {
+      stepClock.delete(sid);
+    }
+  }
+
   engine.on('event', (ev) => {
     const type = ev?.type;
     if (!ev?.sessionId) return;
+    watchFirstToken(ev);
     if (type === 'session.execution.succeeded') titler.maybeTitle(ev.sessionId);
     if (/^session\.execution\.(succeeded|failed|interrupted)$/.test(type)) afterTurn(ev.sessionId, type);
   });

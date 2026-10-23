@@ -125,8 +125,20 @@ try {
   // Architect invents a third one.
   expect('the architect is told to judge, not build', architect.includes('You judge; you do not build'));
   expect('a refused delegation has two ways out, not self-service', architect.includes('never do that') && architect.includes('Record the task as blocked'));
-  expect('the architect is told its own turns are the dearest', architect.includes('cost more than anyone else'));
+  expect('the architect is told its own turns are the dearest', architect.includes('the dearest in the harness'));
   expect('a worker is not told to judge anything', !coder.includes('You judge; you do not build'));
+  // The brief is sent to every project this harness will ever run, so it may not
+  // describe the arrangement of the day: a worker's session, the model a role was
+  // given, whether a run is cheap or independent. Those belong to the config.
+  for (const [label, pattern] of [
+    ['a fresh session', /fresh session/i],
+    ['the model a role was given', /model its role/i],
+    ['a warm cache', /no cache/i],
+    ['a second opinion', /second opinion/i],
+    ['a named model or project', /fever|tracker|bionic|qwen|deepseek|opencode-go/i],
+  ]) {
+    expect(`the brief does not assume ${label}`, !pattern.test(architect), 'brief mentions it');
+  }
 }
 
 // ── the operator's answers live on disk, not only in the transcript ──
