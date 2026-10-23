@@ -42,6 +42,47 @@ export function providerId(name, taken = []) {
 
 const CONTEXT_KEYS = ['context_length', 'max_context_length', 'loaded_context_length', 'max_model_len', 'context_window'];
 
+// Which of those describe what the server will *serve*, and which only describe the
+// model's ceiling. The difference matters: LM Studio's `max_context_length` is what
+// the model could take, not what it was loaded at, and reporting it as a window is
+// how a 42k model gets treated as a 262k one.
+const LOADED_KEYS = ['loaded_context_length', 'n_ctx', 'context_length', 'max_model_len'];
+const MAX_ONLY_KEYS = ['max_context_length', 'context_window'];
+
+/**
+ * The window a list entry reports, wherever that server chose to put it.
+ *
+ * Three shapes are in the wild and each nests it differently: LM Studio puts
+ * `loaded_context_length` at the top of each entry, vLLM puts `max_model_len`
+ * there, and a llama.cpp-family server answers `/v1/models` with
+ * `meta: { n_ctx }`. Reading only the top level meant a server that was saying
+ * its window plainly was reported as having none — and for a local provider that
+ * is a model with no window at all: no watchdog, and no limit handed to the
+ * engine, which then budgets from a catalog that has never heard of it.
+ *
+ * `loadedOnly` is for the probe that decides what a run budgets from: there a
+ * maximum is not an answer, so the keys that only describe the ceiling are skipped.
+ */
+function contextFrom(m, { loadedOnly = false } = {}) {
+  if (!m || typeof m !== 'object') return 0;
+  const keys = loadedOnly ? LOADED_KEYS : [...LOADED_KEYS, ...MAX_ONLY_KEYS];
+  const pick = (holder) => {
+    for (const key of keys) {
+      const n = Number.parseInt(holder[key], 10);
+      if (Number.isFinite(n) && n > 0) return n;
+    }
+    return 0;
+  };
+  const top = pick(m);
+  if (top) return top;
+  for (const nested of [m.meta, m.status, m.default_generation_settings]) {
+    if (!nested || typeof nested !== 'object') continue;
+    const n = pick(nested);
+    if (n) return n;
+  }
+  return 0;
+}
+
 /** Ollama's native list is at `/api/tags`, and its base URL is usually given with
  *  the OpenAI `/v1` on the end. Both spellings land on the same place here. */
 function ollamaTagsUrl(root) {
@@ -107,10 +148,13 @@ export async function fetchProviderModels({ baseURL, apiKey, format, type } = {}
       // truncate. So only the loaded length is taken — and it wins over any
       // maximum the list itself offered, because a maximum is not a window.
       if (type === 'local') {
-        const windows = await lmStudioWindows(root, fetchImpl, timeoutMs);
+        const windows = await probeLoadedWindows(root, fetchImpl, timeoutMs);
         if (windows.size) {
           for (const m of models) {
-            if (windows.has(m.id)) m.context = windows.get(m.id);
+            // `*` is the single loaded model a /props server reports; it applies to
+            // any id, because that server can only have the one loaded.
+            const known = windows.get(m.id) || windows.get('*') || 0;
+            if (known) m.context = known;
             else delete m.context;
           }
         }
@@ -134,36 +178,77 @@ export async function fetchProviderModels({ baseURL, apiKey, format, type } = {}
 }
 
 /**
- * LM Studio's own endpoint, which reports the window of the model it has loaded.
- * Silently empty when the server is not LM Studio — the caller already has a list.
+ * Every window a local runtime reports as *loaded*, by model id.
+ *
+ * Several answers exist and a server has whichever it has, so all of them are
+ * tried against one shared deadline — this runs at boot, and a provider that
+ * cannot be reached must cost the start-up a second at most, not three:
+ *
+ *   /api/v0/models   LM Studio   — `loaded_context_length` per model
+ *   /props           llama.cpp   — `default_generation_settings.n_ctx` for the one
+ *                                  model it has loaded, named by `model_alias`
+ *   /v1/models       a wrapper   — `meta.n_ctx`, via contextFrom
+ *
+ * Only what the server has *reserved* is taken. `max_context_length` is what the
+ * model could take; a model nobody loaded has been given no window at all, and
+ * guessing one would have the watchdog wait for a limit the server never had.
  */
-async function lmStudioWindows(root, fetchImpl, timeoutMs) {
+async function probeLoadedWindows(root, fetchImpl, timeoutMs) {
   const windows = new Map();
   const base = root.replace(/\/v1$/i, '');
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  timer.unref?.();
-  try {
-    const res = await fetchImpl(`${base}/api/v0/models`, {
-      headers: { accept: 'application/json' },
-      signal: controller.signal,
-    });
-    if (!res.ok) return windows;
-    const body = JSON.parse(await res.text());
-    const list = Array.isArray(body?.data) ? body.data : Array.isArray(body?.models) ? body.models : [];
-    for (const m of list) {
-      const id = String(m?.id || m?.model_key || '').trim();
-      if (!id) continue;
-      // Only what the server has actually reserved. `max_context_length` is what
-      // the model *could* take; it is not what this server will serve, and a
-      // model that is not loaded has not been given a window at all.
-      const n = Number.parseInt(m?.loaded_context_length, 10);
-      if (Number.isFinite(n) && n > 0) windows.set(id, n);
+  const deadline = Date.now() + Math.max(200, Number(timeoutMs) || 1500);
+
+  const get = async (path) => {
+    const left = deadline - Date.now();
+    if (left < 150) return null;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), left);
+    timer.unref?.();
+    try {
+      const res = await fetchImpl(`${base}${path}`, {
+        headers: { accept: 'application/json' },
+        signal: controller.signal,
+      });
+      if (!res.ok) return null;
+      return JSON.parse(await res.text());
+    } catch {
+      return null;
+    } finally {
+      clearTimeout(timer);
     }
-  } catch {
-    /* not LM Studio, or it went away: the list stands as it is */
-  } finally {
-    clearTimeout(timer);
+  };
+
+  // LM Studio first: it reports a window for every loaded model at once, and its
+  // answer is the most precise of the three.
+  const lm = await get('/api/v0/models');
+  const lmList = Array.isArray(lm?.data) ? lm.data : Array.isArray(lm?.models) ? lm.models : [];
+  for (const m of lmList) {
+    const id = String(m?.id || m?.model_key || '').trim();
+    const n = Number.parseInt(m?.loaded_context_length, 10);
+    if (id && Number.isFinite(n) && n > 0) windows.set(id, n);
+  }
+  if (windows.size) return windows;
+
+  // Then llama.cpp's own endpoint: one loaded model, named by its alias.
+  const props = await get('/props');
+  const alias = String(props?.model_alias || '').trim();
+  const ctx = Number.parseInt(props?.default_generation_settings?.n_ctx, 10);
+  if (Number.isFinite(ctx) && ctx > 0) {
+    if (alias) windows.set(alias, ctx);
+    // A /props server has loaded exactly one model and has told us its window.
+    // Recorded under `*` as well, so a model whose id differs from the alias still
+    // gets the right number rather than none.
+    windows.set('*', ctx);
+  }
+  if (windows.size) return windows;
+
+  // Last, a wrapper's own list: meta.n_ctx and friends, read by contextFrom.
+  const list = await get('/v1/models');
+  const entries = Array.isArray(list?.data) ? list.data : Array.isArray(list?.models) ? list.models : [];
+  for (const m of entries) {
+    const id = String(m?.id || m?.model || m?.name || '').trim();
+    const n = contextFrom(m, { loadedOnly: true });
+    if (id && n > 0) windows.set(id, n);
   }
   return windows;
 }
@@ -179,7 +264,7 @@ async function lmStudioWindows(root, fetchImpl, timeoutMs) {
 export async function providerLoadedWindows({ baseURL } = {}, { fetchImpl = fetch, timeoutMs = 1500 } = {}) {
   const root = String(baseURL || '').trim().replace(/\/+$/, '');
   if (!/^https?:\/\//i.test(root)) return new Map();
-  return lmStudioWindows(root, fetchImpl, timeoutMs);
+  return probeLoadedWindows(root, fetchImpl, timeoutMs);
 }
 
 /**
@@ -192,7 +277,9 @@ export async function providerLoadedWindows({ baseURL } = {}, { fetchImpl = fetc
  */
 export async function providerLoadedWindow({ baseURL, model }, opts = {}) {
   const windows = await providerLoadedWindows({ baseURL }, opts);
-  return windows.get(String(model || '').trim()) || 0;
+  const wanted = String(model || '').trim();
+  // `*` is the one model a /props server has loaded, whichever name it gives it.
+  return windows.get(wanted) || windows.get('*') || 0;
 }
 
 /**
@@ -215,7 +302,7 @@ export async function measureLocalWindows(config, { fetchImpl = fetch, timeoutMs
     const windows = await providerLoadedWindows(p, { fetchImpl, timeoutMs });
     if (!windows.size) continue;
     for (const m of Array.isArray(p.models) ? p.models : []) {
-      const loaded = windows.get(String(m.id || '').trim());
+      const loaded = windows.get(String(m.id || '').trim()) || windows.get('*') || 0;
       if (!loaded) continue;
       const from = Number(m.context) || 0;
       if (from === loaded) continue;
@@ -242,14 +329,11 @@ function normaliseList(body) {
   return list
     .map((m) => {
       // Ollama tags carry `name` and `model`; OpenAI carries `id`.
-      const id = String(typeof m === 'string' ? m : m?.id || m?.name || m?.model || '').trim();
+      const id = String(typeof m === 'string' ? '' : m?.id || m?.name || m?.model || '').trim();
       if (!id) return null;
+      // A bare string entry names a model and nothing else.
       const name = String(typeof m === 'string' ? '' : m?.name || m?.display_name || '').trim();
-      let context = 0;
-      for (const k of CONTEXT_KEYS) {
-        const n = Number.parseInt(m?.[k], 10);
-        if (Number.isFinite(n) && n > 0) { context = n; break; }
-      }
+      const context = typeof m === 'string' ? 0 : contextFrom(m);
       return { id, name: name || id, context };
     })
     .filter(Boolean)

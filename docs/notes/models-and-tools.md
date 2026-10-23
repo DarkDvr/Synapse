@@ -173,10 +173,19 @@ now a boot-time measurement instead of a warning nobody reads.
 and the rule is *measurement beats claim*:
 
 1. **What a local server has loaded** (`providerLoadedWindow`) — asked once per run,
-   per model. LM Studio answers `/api/v0/models` with `loaded_context_length`; a
-   llama.cpp-family server answers `/props` with `n_ctx`; vLLM puts `max_model_len`
-   in `/v1/models`. Only what is *loaded* counts: a model nobody loaded has no
-   window.
+   per model. Three dialects exist and a server has whichever it has, all tried
+   against one deadline at boot:
+
+   | endpoint | who answers | where the window is |
+   |---|---|---|
+   | `/api/v0/models` | LM Studio | `loaded_context_length`, per model |
+   | `/props` | llama.cpp family (Strata, llama-server, KoboldCpp) | `default_generation_settings.n_ctx`, for the one loaded model, named by `model_alias` |
+   | `/v1/models` | a wrapper's own list | `meta.n_ctx` (also read by Refresh List) |
+
+   Only what is *served* counts: `max_context_length` is what the model could take,
+   so the probe skips it. A `/props` server has exactly one model loaded, and its
+   answer is recorded under `*` as well as the alias, so an id that differs from the
+   alias still gets the right number. A model nobody loaded has no window at all.
 2. **A prompt the provider refused.** This is the cloud equivalent, because a hosted
    model has no endpoint to ask. `classifyFailure` already labels it `kind:
    'context'`; the size of the refused prompt is recorded by

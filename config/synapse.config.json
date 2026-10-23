@@ -22,6 +22,20 @@
       "skillPaths": [],
       "providers": [
         {
+          "id": "strata",
+          "type": "local",
+          "format": "openai",
+          "name": "Strata",
+          "baseURL": "http://127.0.0.1:8080/v1",
+          "apiKey": "",
+          "models": [
+            {
+              "id": "qwen3.8-flash-next-iq2_xs",
+              "name": "Qwen 3.8 Flash Next (IQ2_XS)"
+            }
+          ]
+        },
+        {
           "id": "local",
           "type": "local",
           "format": "openai",

@@ -334,6 +334,85 @@ const noServer = await providerLoadedWindow(
 );
 check('a dead server is 0, not a throw', noServer === 0);
 
+// ── a llama.cpp-family server says its window two other ways ─────
+// Measured against a real server (Strata 0.1.48) that answers neither /api/v0/models
+// nor a context at the top level of /v1/models: its window is at /props and at
+// meta.n_ctx. Reading only LM Studio's shape left such a provider with no window at
+// all — no watchdog, and no limit handed to the engine.
+const strataModels = {
+  ok: true,
+  status: 200,
+  text: async () =>
+    JSON.stringify({
+      object: 'list',
+      data: [
+        {
+          id: 'qwen3.8-flash-next-iq2_xs',
+          object: 'model',
+          status: { value: 'loaded' },
+          meta: { n_ctx: 131072 },
+          architecture: { input_modalities: ['text', 'image'], output_modalities: ['text'] },
+        },
+      ],
+    }),
+};
+const strataProps = {
+  ok: true,
+  status: 200,
+  text: async () =>
+    JSON.stringify({
+      default_generation_settings: { n_ctx: 131072, params: { temperature: 1, n_predict: -1 } },
+      total_slots: 1,
+      model_alias: 'qwen3.8-flash-next-iq2_xs',
+      modalities: { vision: true },
+      build_info: 'Strata 0.1.48',
+    }),
+};
+const notFound = { ok: false, status: 404, text: async () => 'Not Found' };
+
+// /props names the one loaded model, and knows its window.
+{
+  const props = await providerLoadedWindow(
+    { baseURL: 'http://127.0.0.1:8080/v1', model: 'qwen3.8-flash-next-iq2_xs' },
+    { fetchImpl: async (url) => (url.endsWith('/props') ? strataProps : notFound) },
+  );
+  check('a /props server reports its loaded window', props === 131072, String(props));
+
+  // A model id that differs from the alias still gets the number: that server can
+  // only have one model loaded, and it has just said which window it has.
+  const aliased = await providerLoadedWindow(
+    { baseURL: 'http://127.0.0.1:8080/v1', model: 'some-other-id' },
+    { fetchImpl: async (url) => (url.endsWith('/props') ? strataProps : notFound) },
+  );
+  check('an id that differs from the alias still gets the window', aliased === 131072, String(aliased));
+}
+
+// meta.n_ctx on /v1/models is the third shape, and the list carries it too.
+{
+  const only = async (url) => {
+    if (url.endsWith('/v1/models') || url.endsWith('/models')) return strataModels;
+    return notFound;
+  };
+  const list = await fetchProviderModels({ baseURL: 'http://127.0.0.1:8080/v1', type: 'local' }, { fetchImpl: only });
+  check('meta.n_ctx is read as the window', list.ok && list.models[0].context === 131072, JSON.stringify(list.models));
+  const one = await providerLoadedWindow({ baseURL: 'http://127.0.0.1:8080/v1', model: 'qwen3.8-flash-next-iq2_xs' }, { fetchImpl: only });
+  check('and the loaded-window probe finds it too', one === 131072, String(one));
+}
+
+// LM Studio's answer still wins: it is the only one that is per model.
+{
+  const both = async (url) => {
+    if (url.endsWith('/api/v0/models')) {
+      return { ok: true, status: 200, text: async () => JSON.stringify({ data: [{ id: 'qwen3.8-27b-ud', loaded_context_length: 60160 }] }) };
+    }
+    return strataProps;
+  };
+  const win = await providerLoadedWindow({ baseURL: 'http://localhost:1235/v1', model: 'qwen3.8-27b-ud' }, { fetchImpl: both });
+  check('LM Studio wins when it answers', win === 60160, String(win));
+  const other = await providerLoadedWindow({ baseURL: 'http://localhost:1235/v1', model: 'not-there' }, { fetchImpl: both });
+  check('a model LM Studio did not load gets no window, not /props\' one', other === 0, String(other));
+}
+
 calls.length = 0;
 const noScheme = await fetchProviderModels({ baseURL: 'localhost:1234' }, { fetchImpl: stub('{}') });
 check('a URL without a scheme never leaves the app', noScheme.ok === false && calls.length === 0, noScheme.error);
