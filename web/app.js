@@ -831,6 +831,32 @@ function setEventChip(type, sessionId) {
   renderLastEventAge();
 }
 
+/** The engine events that are a *model doing something*. Everything else is news
+ *  about the rail — a session being deleted, renamed, or its instructions being
+ *  rewritten — and used to leave this clock reading "deleted" for hours after a
+ *  project was finished, gently counting up at a session that no longer existed. */
+const WORK_EVENT = /^(step|text|reasoning|tool|usage|idle|execution|compaction|inbox|instructions|retry|permission|question)\b/;
+
+/** How long the last event stays on the clock after the work stops, so the final
+ *  one can be read before the row goes quiet. */
+const CHIP_QUIET_MS = 30000;
+
+/**
+ * Nothing is working: stop counting.
+ *
+ * An age that climbs for ever is worse than no age — after a while it says
+ * "something is still going on" about a project that finished this morning, and
+ * there is no way to tell it apart from a run that is genuinely stuck. So when no
+ * session is active and no run is live, the row returns to idle instead of
+ * timing the silence.
+ */
+function settleEventChip(active) {
+  if (!state.lastEventAt) return;
+  if ((active && active.size) || state.runs.size) return;
+  if (Date.now() - state.lastEventAt < CHIP_QUIET_MS) return;
+  setEventChip(null, null);
+}
+
 // ── models / modes ──────────────────────────────────────────────
 async function loadModels() {
   try { state.models = (await api('GET', '/api/models')).models; } catch { state.models = []; }
@@ -3896,6 +3922,10 @@ async function refreshPending() {
     toast('Answer Needed', `${who} is waiting on a question. Open it in the rail to answer.`);
   }
 
+  // The same poll is the only place that knows, for certain, that nothing is
+  // running anywhere — so it is where the sidebar clock is allowed to stop.
+  settleEventChip(state.busySessions);
+
   renderTree();
   if (state.view === 'session') {
     renderAskPanel();
@@ -4458,7 +4488,9 @@ function connectStream() {
       return;
     }
 
-    setEventChip(ev.type, ev.sessionId);
+    // Only work moves the clock. A `session.deleted` or `session.named` is about
+    // the rail, and the chip is about what a model is doing.
+    if (WORK_EVENT.test(String(ev.type || '').replace(/^session\./, ''))) setEventChip(ev.type, ev.sessionId);
     // A compaction is the engine's own decision, and the chip has always said so
     // (`session.compaction.started`) while the chat said nothing at all. Taking it
     // from here is the honest source: whatever asked for it — the engine's rule or
