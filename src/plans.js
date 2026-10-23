@@ -1019,6 +1019,19 @@ export function briefSession({ dir, role = 'architect', auto = false, skills = '
         `skill renders them), then ask the operator to pick one - design is the one thing only they can judge. ` +
         `Pin the stack first: if "runs like an app" could mean a local page, a Tkinter window or something else, ask.`,
     );
+    // Measured 23 Oct: a brief made almost entirely of visual constraints (a
+    // palette, a type pairing, an 8px scale, alignment, two widths to prove) was
+    // planned as "build, qc" with every task on a coder. The model took the
+    // shortest path that satisfied the deliverables, which a menu of phases
+    // allows - so the one thing the operator asked to see was the thing skipped.
+    lines.push(
+      `When the operator's request is about how something LOOKS - a screen, a page, a design, a mock, a palette, ` +
+        `"make it look X" - the look is the work, not a side effect of it: list design in "phases", give designer ` +
+        `its own task, and make every build task read ${PLAN_DIR}/design/design.md. A coder deciding the palette, ` +
+        `the type or the spacing on the way past is the failure this rule exists to stop, however competent the ` +
+        `result looks. The reverse is also a rule: when the operator has already named the features, invent has ` +
+        `nothing to decide, and inventing anyway is a round nobody needed.`,
+    );
     // The trap that cost a whole rejection round: a native date/time control is
     // drawn by the BROWSER, in the browser's locale, whatever the markup says. An
     // attribute is not a mechanism, and a picture of the target is not a test.
