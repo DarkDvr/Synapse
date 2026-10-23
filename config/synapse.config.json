@@ -265,7 +265,7 @@
   },
   "roles": {
     "designer": {
-      "ref": "local/qwen3.8-27b-ud",
+      "ref": "strata/qwen3.8-flash-next-iq2_xs",
       "variant": "medium",
       "skills": [
         "aesthetic-foundations",
@@ -280,7 +280,7 @@
       ]
     },
     "qc": {
-      "ref": "local/qwen3.8-27b-ud",
+      "ref": "strata/qwen3.8-flash-next-iq2_xs",
       "variant": "medium",
       "skills": [
         "web-guidelines",
@@ -304,7 +304,7 @@
       ]
     },
     "coder-1": {
-      "ref": "local/qwen3.8-27b-ud",
+      "ref": "strata/qwen3.8-flash-next-iq2_xs",
       "variant": "medium",
       "skills": [
         "code-craft",
@@ -315,8 +315,8 @@
       ]
     },
     "coder-2": {
-      "ref": "opencode-go/deepseek-v4.1-flash",
-      "variant": "high",
+      "ref": "strata/qwen3.8-flash-next-iq2_xs",
+      "variant": "medium",
       "skills": [
         "code-craft",
         "visual-review"
@@ -326,8 +326,8 @@
       ]
     },
     "coder-3": {
-      "ref": "opencode-go/deepseek-v4.1-flash",
-      "variant": "high",
+      "ref": "strata/qwen3.8-flash-next-iq2_xs",
+      "variant": "medium",
       "skills": [
         "code-craft",
         "visual-review"
@@ -337,7 +337,7 @@
       ]
     },
     "inventor": {
-      "ref": "local/qwen3.8-27b-ud",
+      "ref": "strata/qwen3.8-flash-next-iq2_xs",
       "variant": "medium",
       "skills": [
         "frontend-design"
