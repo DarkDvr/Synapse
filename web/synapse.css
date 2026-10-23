@@ -1240,6 +1240,10 @@ body[data-mode="single"] .keep-toggle { display: none; }
   will-change: transform;
 }
 .trace-flow.is-think .trace-flow-body { color: #6a6f77; font-style: italic; }
+/* The step has ended and its last window is waiting for the next one. Dimmed, so
+   the panel never reads as words still arriving. It keeps its space on purpose:
+   removing it is what made the chat jump at every step boundary. */
+.trace-flow.is-idle { opacity: 0.7; }
 /* Thinking is the quietest of the three: no quotes, dimmer, so a model's
    deliberation never reads as something it told the operator. */
 .trace-line.is-think { color: #6a6f77; font-style: italic; opacity: 0.9; }

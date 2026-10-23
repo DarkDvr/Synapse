@@ -9,7 +9,7 @@
 // wired yet — the orchestration layer will drive them (stage 3+).
 
 import { renderMarkdown } from './md.js';
-import { newStream, pushStream, slideTarget, nextOffset, STREAM_BUFFER } from './stream-view.js';
+import { newStream, pushStream, slideTarget, nextOffset, takePending, freezeStream, STREAM_BUFFER } from './stream-view.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -2621,8 +2621,11 @@ function handleRunEvent(ev) {
         if (trace.notes.length > 60) trace.notes.splice(0, trace.notes.length - 60);
       }
       // The step is over: whatever it was saying belonged to the step that just
-      // ended, and the note is what remains of it.
-      trace.stream = null;
+      // ended, and the note is what remains of it. The window it was showing is
+      // left in place, dimmed and still — removing it made the chat shrink by
+      // eleven lines and grow again at every step, which a fast model does several
+      // times a second.
+      if (trace.stream) freezeStream(trace.stream);
     }
     // Every progress tick carries the run's own compaction tally, which was read
     // from the transcript by the runner. Taking it here is what makes the count
@@ -2938,13 +2941,14 @@ function renderTrace(t) {
         .map(note)
         .join('')}</details>`
     : '';
-  // What it is saying *now*. The words stream in as they are written and go when
-  // the step ends — the note that follows ("reading qc-1.md") is the record, and
-  // a chat cannot be a transcript of every sentence every worker thought. The whole
-  // block is rendered and the panel keeps its window; nothing is sliced here, so a
-  // re-render never changes a line break.
+  // What it is saying *now*. The words stream in as they are written, and the last
+  // window stays on screen when the step ends — still, and dimmed. Removing it took
+  // eleven lines out of the chat and put them back at every step boundary, which a
+  // fast model does several times a second. The whole block is rendered and the
+  // panel keeps its window; nothing is sliced here, so a re-render never changes a
+  // line break.
   const streaming = t.stream && t.stream.text
-    ? `<div class="trace-flow${t.stream.kind === 'think' ? ' is-think' : ''}"><div class="trace-flow-view"><div class="trace-flow-body">${esc(
+    ? `<div class="trace-flow${t.stream.kind === 'think' ? ' is-think' : ''}${t.stream.ended ? ' is-idle' : ''}"><div class="trace-flow-view"><div class="trace-flow-body">${esc(
         t.stream.text,
       )}</div></div></div>`
     : '';
@@ -3057,10 +3061,10 @@ function measureStream(s) {
 function appendStream(kind, delta) {
   const trace = traceOf(currentRun());
   if (!trace || !delta) return;
-  if (!trace.stream || trace.stream.kind !== kind) {
+  if (!trace.stream || trace.stream.kind !== kind || trace.stream.ended) {
     // A new block (thinking, then speech). Its class differs, so the panel is
     // replaced on the next frame rather than patched; nothing is on screen between
-    // the two, because the previous block was cleared when its step ended.
+    // the two, because the previous block was frozen when its step ended.
     trace.stream = newStream(kind);
     streamEl = null;
     // A new block is a fresh start: whatever the reader did with the last one does
@@ -3092,9 +3096,11 @@ function pumpStream(now) {
       return;
     }
     // A panel that appears mid-block is already showing its last line: start it
-    // there rather than sliding the whole block up from the beginning.
+    // there rather than sliding the whole block up from the beginning. A *fresh*
+    // block starts at its own top — the panel still holds the previous block's
+    // words, and measuring those would start this block scrolled by their height.
     s.velocity = 0;
-    s.offset = measureStream(s);
+    s.offset = s.shown > 0 ? measureStream(s) : 0;
   }
   let follow = false;
   if (s.dirty) {
@@ -3102,7 +3108,11 @@ function pumpStream(now) {
     // transcript uses for new messages, and only on a frame that writes.
     const scroller = chatScroller();
     follow = Boolean(scroller && chatFollowArmed && chatAtBottom(CHAT_FOLLOW_SLACK));
-    if (streamEl.node.data !== s.text) streamEl.node.data = s.text;
+    // Append, never rewrite: the block can be twenty thousand characters and
+    // replacing its text re-breaks every line of it, once per frame.
+    const piece = takePending(s);
+    if (piece.reset) streamEl.node.data = piece.text;
+    else if (piece.text) streamEl.node.data += piece.text;
     s.dirty = false;
     measureStream(s);
   }
@@ -3133,15 +3143,13 @@ function pumpStream(now) {
 function endStream() {
   const trace = traceOf(currentRun());
   if (!trace || !trace.stream) return;
-  // A frame may still be queued with the old text; cancel it, or it would write
-  // the finished block back into a panel that is about to disappear.
-  if (streamRaf) {
-    cancelAnimationFrame(streamRaf);
-    streamRaf = 0;
-  }
+  // The last window stays on screen, still, until the next block replaces it or
+  // the run folds. Taking it away here pulled eleven lines out of the chat at every
+  // step boundary and put them back at the next one — a fast model does that
+  // several times a second. Let any frame already queued finish the slide, then
+  // stop: the text is frozen, so nothing new arrives.
+  freezeStream(trace.stream);
   streamEl = null;
-  streamFrameAt = 0;
-  trace.stream = null;
   renderTranscript();
 }
 
@@ -3178,7 +3186,13 @@ function paintRates(now = Date.now()) {
     if (!el) continue;
     const mine = run && rate && rate.role === card.dataset.role && now - rate.at < RATE_FRESH_MS;
     const bits = [];
-    if (mine) bits.push(`${Math.round(rate.tps)} tok/s`);
+    // The runner reads the speed of the last turn from the turn's own clock
+    // (`time.created` → `time.streamed`), which is the number the model's own log
+    // prints. The fallback below divides by the whole step, tool and all, and
+    // therefore reads low — it is only there while a step's timings are missing.
+    const measured = run && run.role === card.dataset.role ? Number(run.tps) || 0 : 0;
+    if (measured) bits.push(`${measured} tok/s`);
+    else if (mine) bits.push(`${Math.round(rate.tps)} tok/s`);
     // The window, in the corner the operator already looks at: "27k/60k ctx". It
     // is the pair that explains a slowdown (a full window is re-read every turn)
     // and the compaction that follows. Shown even when the rate has gone stale —
@@ -3282,7 +3296,7 @@ function traceSig() {
     .map(
       (t) =>
         `${t.key}:${t.finishedAt || 0}:${(t.notes || []).length}:${t.stream ? t.stream.text.length : 0}:` +
-        `${Number(t.compactions) || 0}:${Number(t.compactingSince) || 0}`,
+        `${t.stream?.ended ? 1 : 0}:${Number(t.compactions) || 0}:${Number(t.compactingSince) || 0}`,
     )
     .join(';');
 }

@@ -171,10 +171,16 @@ export function contextStats(messages) {
   let prompt = 0;
   let generated = 0;
   let thinking = 0;
+  let thinkingChars = 0;
   let compactions = 0;
   for (const m of messages || []) {
     if (m.type === 'compaction') compactions += 1;
     if (m.type !== 'assistant') continue;
+    // The reasoning block's own text, so a provider that reports no reasoning
+    // tokens can still be described truthfully instead of as "0% thinking".
+    for (const p of m.parts || []) {
+      if (p?.type === 'reasoning') thinkingChars += String(p.text || '').length;
+    }
     const t = m.raw?.tokens;
     if (!t) continue;
     turns += 1;
@@ -195,10 +201,43 @@ export function contextStats(messages) {
     prompt,
     generated,
     thinking,
+    thinkingChars,
     compactions,
     thinkShare: generated ? Math.round((thinking / generated) * 100) : 0,
+    // The provider did not split thinking out of the answer: it is in `generated`
+    // (so the total is right) but saying "0% thinking" would be a claim we cannot
+    // make. Measured 23 Oct on a model whose own log showed 43k characters of
+    // thinking in one turn while the engine reported `reasoning: 0`.
+    thinkUnsplit: thinking === 0 && thinkingChars > 0,
   };
 }
+
+/**
+ * How fast the model was actually writing, from the last finished turn.
+ *
+ * The engine stamps a turn with the moment it started and the moment its last
+ * piece was streamed, so the difference is the time the model spent writing. The
+ * rate between two step reports is not that: it divides by the whole step, which
+ * includes the tool that ran and the seconds the engine took to ask again, so it
+ * reads low by that share. Measured on one turn: 882 tokens in 7.9 s here, where
+ * the model's own server clocked the same work at 95-110 tok/s.
+ */
+export function writingSpeed(messages) {
+  const last = [...(messages || [])].reverse().find((m) => m.type === 'assistant' && m.raw?.tokens);
+  if (!last) return 0;
+  const t = last.raw.tokens;
+  const time = last.raw.time || {};
+  const start = Number(time.created) || 0;
+  const end = Number(time.streamed) || Number(time.completed) || 0;
+  const written = (Number(t.output) || 0) + (Number(t.reasoning) || 0);
+  const ms = end - start;
+  if (!start || ms < 400 || !written) return 0;
+  return Math.round((written / ms) * 1000);
+}
+
+/** "23% thinking", or the truth when the provider did not separate it. */
+export const thinkNote = (context) =>
+  context?.thinkUnsplit ? 'thinking included, not counted separately' : `${context?.thinkShare || 0}% thinking`;
 
 /** Token counts read as words, not as digits: 212k, 1.4M. */
 const tokens = (n) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : `${Math.round(n / 1e3)}k`);
@@ -1028,10 +1067,11 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
             {
               window: contextWindow(modelRef),
               steer: true,
-              onContext: (used, room, context) => {
+              onContext: (used, room, context, speed) => {
                 live.ctx = used;
                 live.ctxRoom = room;
                 live.ctxLimit = context;
+                if (speed) live.tps = speed;
                 emit('run.progress', { ...live });
               },
               onCompact: (times, used, context) => {
@@ -1364,7 +1404,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
         (files.length ? `, ${files.length} file(s)` : '') +
         (context?.turns
           ? `, ${context.turns} turns, ctx peak ${tokens(context.peak)}, ${tokens(context.prompt)} prompt tok, ` +
-            `${tokens(context.generated)} written (${context.thinkShare}% thinking)` +
+            `${tokens(context.generated)} written (${thinkNote(context)})` +
             (context.compactions ? `, ${context.compactions} compaction(s)` : '')
           : ''),
     );
@@ -1763,7 +1803,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
         const used = promptSize(messages);
         if (used && used !== lastCtx) {
           lastCtx = used;
-          onContext?.(used, window?.room || 0, window?.context || 0);
+          onContext?.(used, window?.room || 0, window?.context || 0, writingSpeed(messages));
         }
         const events = compactionEvents(messages);
         if (events.length > compactions) {
@@ -1965,7 +2005,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     if (context && context.turns) {
       lines.push(
         `Effort: ${context.turns} turn${context.turns === 1 ? '' : 's'}, ${tokens(context.prompt)} prompt tokens ` +
-          `read (the provider's meter), ${tokens(context.generated)} written (${context.thinkShare}% thinking), ` +
+          `read (the provider's meter), ${tokens(context.generated)} written (${thinkNote(context)}), ` +
           `context peaked at ${tokens(context.peak)}` +
           (context.compactions
             ? context.compactions === 1

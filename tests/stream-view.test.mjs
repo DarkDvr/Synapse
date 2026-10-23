@@ -14,7 +14,10 @@ import {
   pushStream,
   slideTarget,
   nextOffset,
+  takePending,
+  freezeStream,
   STREAM_BUFFER,
+  STREAM_KEEP,
 } from '../web/stream-view.js';
 
 /** Drive the spring for `seconds` at a given refresh rate and return the trace. */
@@ -127,9 +130,48 @@ test('the buffer is a guard, not a window: every character is counted', () => {
   assert.equal(s.total, 100);
   assert.equal(s.dirty, true);
   pushStream(s, 'b'.repeat(STREAM_BUFFER));
-  assert.equal(s.text.length, STREAM_BUFFER, 'the buffer is capped');
+  assert.equal(s.text.length, STREAM_KEEP, 'the buffer is trimmed to the keep size');
   assert.equal(s.total, 100 + STREAM_BUFFER, 'but the count is the whole block');
   assert.equal(s.text.at(-1), 'b');
+  // The trim happens once, not on every character after it: pushing the character
+  // that follows must not trim again, or the panel would rewrite its whole text
+  // every frame for the rest of the block.
+  pushStream(s, 'c');
+  assert.equal(s.text.length, STREAM_KEEP + 1);
+  assert.equal(s.text.endsWith('bc'), true);
   pushStream(s, ''); // an empty delta changes nothing
-  assert.equal(s.total, 100 + STREAM_BUFFER);
+  assert.equal(s.total, 100 + STREAM_BUFFER + 1, 'the empty delta added nothing');
 });
+
+// The panel is given the text in pieces, never rewritten, because rewriting a
+// twenty-thousand-character block re-breaks every line of it once per frame.
+test('the panel is handed only the new tail', () => {
+  const s = newStream('word');
+  pushStream(s, 'hello ');
+  assert.deepEqual(takePending(s), { text: 'hello ', reset: false });
+  pushStream(s, 'world');
+  assert.deepEqual(takePending(s), { text: 'world', reset: false });
+  assert.deepEqual(takePending(s), { text: '', reset: false }, 'nothing new, nothing written');
+});
+
+test('a trim moves the start of the text, so the panel is rewritten once', () => {
+  const s = newStream('word');
+  pushStream(s, 'a'.repeat(STREAM_BUFFER + 50));
+  assert.equal(takePending(s).reset, true, 'the front is gone: the whole block is written again');
+  pushStream(s, 'b');
+  assert.deepEqual(takePending(s), { text: 'b', reset: false }, 'and then it appends again');
+});
+
+// A finished block keeps its last window: its height is what the chat hangs on,
+// and removing it at every step boundary made the chat jump.
+test('a frozen block adds nothing and asks for no frames', () => {
+  const s = newStream('think');
+  pushStream(s, 'reasoning');
+  takePending(s);
+  freezeStream(s);
+  assert.equal(s.ended, true);
+  assert.equal(s.dirty, false);
+  assert.deepEqual(takePending(s), { text: '', reset: false });
+  assert.equal(pushStream(s, 'more') && s.text.endsWith('more'), true, 'the text is still there to be replaced');
+});
+

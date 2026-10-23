@@ -1003,6 +1003,25 @@ bold, italic, strikethrough and links: the range these models actually produce.
 - **The add button is violet on grey, not a violet fill.** It is a secondary
   action and Save Changes is the one filled button in the footer.
 
+## The worker's streaming panel, and what speed does to it
+
+- **The text is appended, never rewritten.** The body holds one text node, and the
+  page used to assign the whole block to it every frame: up to twenty thousand
+  characters re-broken per frame, which is exactly the cost the panel exists to
+  avoid. Now the module hands over only the new tail (`takePending`), and the
+  panel appends it.
+- **The buffer trims in one chunk, not one character.** Capping at 20,000 and
+  keeping 20,000 means the next character trims again — a full rewrite on every
+  frame for the rest of the step. One long reasoning block reached it in one turn
+  on 23 Oct (43,526 characters). It now keeps 15,000 when the guard fires, so the
+  rewrite happens about once every few thousand characters.
+- **A finished block keeps its last window.** The panel is up to eleven lines
+  tall; taking it away when the step ended pulled eleven lines out of the chat and
+  put them back at the next step. At 50-60 tok/s a step is long enough that
+  nobody saw it; at 100+ tok/s the steps are one to six seconds, so it happened
+  several times a second. The window now stays, dimmed (`.is-idle`), until the
+  next block replaces it or the run folds to its one-line summary.
+
 ## Reading a mockup: it is a shape record, not a pixel source
 
 The mockups in `docs/` are **PDFs and there is no PDF renderer on this machine**

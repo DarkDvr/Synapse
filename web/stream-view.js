@@ -10,7 +10,13 @@
 // Everything here is a plain function over plain numbers, so it is tested in
 // `tests/stream-view.test.mjs` rather than taken on trust.
 
-export const STREAM_BUFFER = 20000; // characters kept; a guard, not a window
+export const STREAM_BUFFER = 20000; // characters allowed before a trim
+// What is kept when the guard fires. Trimming to exactly the cap means the *next*
+// character trims again, so a block that has reached the cap rewrites its whole
+// text on every frame — the one cost this panel exists to avoid, and one long
+// reasoning block reaches in under a minute on a fast model. Dropping a quarter
+// of it at a time turns thousands of rewrites into one every few seconds.
+export const STREAM_KEEP = 15000;
 // A damped spring, not a straight line to the target: the text is dragged along by
 // the writing rather than commanded by it, which is what makes it look like a
 // scroll instead of a page refilling. Stiffness 90 and damping 18 give ζ ≈ 0.95 —
@@ -23,7 +29,19 @@ const SNAP_V = 6; // px/s
 
 /** A fresh block: nothing written, nothing scrolled. */
 export function newStream(kind) {
-  return { kind, text: '', total: 0, offset: 0, velocity: 0, dirty: false, settled: true };
+  return {
+    kind, text: '', total: 0,
+    // How much of `text` the panel has already been given. The text node is
+    // appended to, never rewritten: rewriting it re-breaks every line of a block
+    // that can be twenty thousand characters long, once per frame.
+    shown: 0,
+    // A trim moves the start of the text, so the panel has to be rewritten once.
+    trimmed: false,
+    // The block has stopped (its step ended) but its last window is still on
+    // screen. The next block starts a fresh stream.
+    ended: false,
+    offset: 0, velocity: 0, dirty: false, settled: true,
+  };
 }
 
 /**
@@ -38,9 +56,39 @@ export function pushStream(s, delta) {
   // The cap is a memory guard, not a window: it fires after twenty thousand
   // characters in one step, and the one re-wrap it causes is invisible next to a
   // frame-by-frame version of the same thing.
-  if (s.text.length > STREAM_BUFFER) s.text = s.text.slice(-STREAM_BUFFER);
+  if (s.text.length > STREAM_BUFFER) {
+    s.text = s.text.slice(-STREAM_KEEP);
+    s.trimmed = true;
+  }
   s.dirty = true;
   s.settled = false;
+  return s;
+}
+
+/**
+ * What the panel has not been given yet.
+ *
+ * `reset` means the text starts somewhere else than last time (a trim), so the
+ * whole thing is written once. Otherwise `text` is only the new tail, and the
+ * panel appends it — the line breaking above the change is left alone.
+ */
+export function takePending(s) {
+  if (s.trimmed || s.shown > s.text.length) {
+    s.trimmed = false;
+    s.shown = s.text.length;
+    return { text: s.text, reset: true };
+  }
+  if (s.shown === s.text.length) return { text: '', reset: false };
+  const text = s.text.slice(s.shown);
+  s.shown = s.text.length;
+  return { text, reset: false };
+}
+
+/** The step ended. The words stay where they are; nothing new is added. */
+export function freezeStream(s) {
+  if (!s) return s;
+  s.ended = true;
+  s.dirty = false;
   return s;
 }
 
