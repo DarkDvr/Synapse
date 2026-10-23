@@ -951,3 +951,27 @@ mid-turn is the same request, and otherwise its next turn delegates the work tha
 was just stopped.
 
 
+
+---
+
+## A plan that routes every task to a coder skips the craft
+
+A brief made almost entirely of visual constraints - a palette, a type pairing, an
+8px scale, two widths to prove - came back as `phases: ["build","qc"]` with all six
+tasks on `coder-1`. Nothing was broken: the plan delivered every file the request
+named, and the one thing the operator wanted to see (the look, decided by someone
+whose job is deciding looks) was never planned. The phase lines said what each
+*phase* was for and never said who was for *what*, so the shortest path that
+satisfied the deliverables won.
+
+Two things came out of it:
+
+- **The brief names the crafts, and the routing rule is one sentence**: send a task
+  to the craft it needs, not to whichever role is free; a coder builds a decision,
+  never makes one. Picking colours, type, spacing or states is not a coder's task,
+  and the coder's task reads `design.md` afterwards.
+- **A rule that lands while Synapse is running has not landed.** The design rule
+  was committed at 20:41 and the plan written at 20:42 - under a process that had
+  booted at 20:16. Reading the commit and reading the behaviour would have given
+  the same answer for the wrong reason. When a brief change "does not work", check
+  the boot line in `logs\app.log` before the rule.
