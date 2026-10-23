@@ -458,6 +458,24 @@ function renderLastEventAge() {
     : 'Last event';
 }
 
+/** Is this provider a server on this machine? True for `local` and for
+ *  `llamacpp`, which is the same kind of thing speaking a slightly different
+ *  dialect about itself. Mirrors providerType() in src/providers.js — the UI has no
+ *  imports from the server, so the rule is written once here too. */
+function isLocalServer(p) {
+  const type = String(p?.type || '').toLowerCase();
+  if (type === 'local' || type === 'llamacpp') return true;
+  if (type) return false;
+  return /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:|\/|$)/i.test(String(p?.baseURL || ''));
+}
+
+/** The badge beside this provider's models. */
+function providerBadge(p) {
+  const type = String(p?.type || '').toLowerCase();
+  if (type === 'llamacpp') return 'Llama.cpp';
+  return isLocalServer(p) ? 'Local' : p?.name || '';
+}
+
 /**
  * The sidebar's Local LLM row: the local, OpenAI-compatible servers the config
  * registers. It used to read "not set" permanently, which was true when nothing
@@ -475,9 +493,7 @@ function renderLlmStatus() {
   const providers = Array.isArray(state.config?.engine?.opencode?.providers)
     ? state.config.engine.opencode.providers
     : [];
-  const local = providers.filter(
-    (p) => (p.type ? p.type === 'local' : /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:|\/|$)/i.test(String(p.baseURL || ''))),
-  );
+  const local = providers.filter(isLocalServer);
   if (!local.length) {
     out.textContent = 'not set';
     row.title = 'No local model server is registered. Add one in Settings > Providers.';
@@ -954,7 +970,7 @@ const providerLabel = (p) => {
   // A local server is labelled by what it *is*, not by the app that happens to
   // be running it: the next machine's may be Ollama or vLLM, and a badge naming
   // one of them would be wrong everywhere else.
-  if (configured) return configured.type === 'local' ? 'Local' : configured.name || id;
+  if (configured) return providerBadge(configured) || id;
   if (ENGINE_BADGES[id]) return ENGINE_BADGES[id];
   return id
     .split(/[-_]/)
@@ -5130,12 +5146,20 @@ function providerEditor(providers, index) {
   return `
   <section class="prov-edit" data-prov-edit-form>
     <div class="set-grid">
-      <label class="set-field" title="A local server runs on this machine. An OpenAI-compatible endpoint can be anything that speaks the same API, including a paid service.">
+      <label class="set-field" title="A local server runs on this machine. llama.cpp Server is one of those too: the same kind of server, which reports its window at /props. An OpenAI-compatible endpoint can be anything that speaks the same API, including a paid service.">
         <span>Type</span>
         <select data-prov="type">
-          <option value="local"${p.type === 'local' ? ' selected' : ''}>Local provider</option>
-          <option value="openai"${p.type !== 'local' ? ' selected' : ''}>OpenAI Compatible</option>
+          <option value="local"${p.type === 'local' || !p.type ? ' selected' : ''}>Local provider (LM Studio)</option>
+          <option value="llamacpp"${p.type === 'llamacpp' ? ' selected' : ''}>llama.cpp server</option>
+          <option value="openai"${p.type && p.type !== 'local' && p.type !== 'llamacpp' ? ' selected' : ''}>OpenAI Compatible</option>
         </select>
+        <small class="prov-hint">${
+          p.type === 'llamacpp'
+            ? 'Strata, llama-server and KoboldCpp all speak this one: the window comes from /props, and no key is needed on this machine.'
+            : p.type === 'openai'
+              ? 'Reached over the network. Its window is whatever you type in the model list — nobody can be asked.'
+              : 'LM Studio and friends: the window is asked for at /api/v0/models.'
+        }</small>
       </label>
       <label class="set-field" title="The name on the badge beside this provider's models in every role's menu.">
         <span>Name</span>
@@ -5157,7 +5181,7 @@ function providerEditor(providers, index) {
         <span>API Key</span>
         <div class="set-key">
           <input data-prov="apiKey" value="${esc(shown)}" data-masked="${typed && !revealed ? '1' : '0'}" type="text" spellcheck="false"
-                 placeholder="${p.type === 'local' ? 'Empty for local servers' : 'sk-…'}" autocomplete="off" />
+                 placeholder="${isLocalServer(p) ? 'Empty for local servers' : 'sk-…'}" autocomplete="off" />
           ${canReveal ? `<button type="button" class="input-eye" data-prov-eye aria-label="${revealed ? 'Hide the key' : 'Show the key'}" title="${revealed ? 'Hide the key' : 'Show the key'}">${setIcon(revealed ? 'eyeOff' : 'eye')}</button>` : ''}
         </div>
         <small class="prov-hint">${
@@ -5173,13 +5197,13 @@ function providerEditor(providers, index) {
       </div>
       <div class="set-field wide">
         <span>Models</span>
-        <textarea data-prov="models" rows="4" spellcheck="false">${esc(modelLines(p.models, p.type !== 'local'))}</textarea>
+        <textarea data-prov="models" rows="4" spellcheck="false">${esc(modelLines(p.models, !isLocalServer(p)))}</textarea>
         <div class="prov-tools">
           <button type="button" class="btn btn-secondary btn-sm" data-prov-fetch>Refresh List</button>
           <span class="prov-fetch-state${fetchNote ? (fetchNote.ok ? ' is-ok' : ' is-bad') : ''}">${esc(fetchNote?.text || '')}</span>
         </div>
         <small class="prov-hint">${
-          p.type === 'local'
+          isLocalServer(p)
             ? 'One model per line: <code>id | name</code>. The context window is read from the server at every start — that is the number the engine compacts on, so there is nothing to type here.'
             : 'One model per line: <code>id | name | context | output</code>. Only the id is required; nobody can be asked for the window, so this is the one the engine budgets from.'
         }</small>
@@ -5217,7 +5241,7 @@ function settingsProviders(c) {
       const count = (p.models || []).length;
       return `<div class="prov-row${i === selected ? ' is-active' : ''}" data-prov-row="${i}" role="button" tabindex="0"
                    aria-label="Edit ${esc(p.name || 'provider')}">
-        <span class="prov-type">${p.type === 'openai' ? 'OpenAI' : 'Local'}</span>
+        <span class="prov-type">${esc(providerBadge(p))}</span>
         <span class="prov-name">${esc(p.name || 'Untitled provider')}</span>
         <span class="prov-url">${esc(p.baseURL || 'no server URL yet')}</span>
         <span class="prov-meta">${count} model${count === 1 ? '' : 's'}${used.length ? ` · ${used.length} role${used.length === 1 ? '' : 's'}` : ''}</span>
@@ -5235,6 +5259,7 @@ function settingsProviders(c) {
         <button type="button" class="btn btn-provider btn-sm" data-prov-add>+ Add Provider</button>
         <div class="prov-add-menu" id="provAddMenu" hidden>
           <button type="button" data-prov-new="local">Local Provider</button>
+          <button type="button" data-prov-new="llamacpp">llama.cpp Server</button>
           <button type="button" data-prov-new="openai">OpenAI Compatible</button>
           <button type="button" disabled title="The engine's own catalog is always registered. A second copy would list the same models twice.">OpenCode (built in)</button>
         </div>
@@ -5342,8 +5367,12 @@ function addProvider(type) {
   list.push({
     id: '',
     type,
-    name: type === 'local' ? 'Local Server' : 'OpenAI Compatible',
-    baseURL: '',
+    // Three kinds, two behaviours: a `llamacpp` server *is* a local server, it just
+    // answers /props rather than LM Studio's /api/v0/models. Named for the dialect
+    // so it fits every wrapper of it, not one product.
+    name: type === 'local' ? 'Local Server' : type === 'llamacpp' ? 'llama.cpp Server' : 'OpenAI Compatible',
+    format: 'openai',
+    baseURL: type === 'llamacpp' ? 'http://localhost:8080/v1' : '',
     apiKey: '',
     models: [],
   });
@@ -5451,7 +5480,9 @@ function onSettingsInput(e) {
     return;
   }
   if (field === 'type') {
-    p.type = el.value === 'local' ? 'local' : 'openai';
+    // Three choices, two behaviours: llama.cpp is a local server that answers
+    // `/props` instead of LM Studio's list endpoint.
+    p.type = el.value === 'llamacpp' ? 'llamacpp' : el.value === 'local' ? 'local' : 'openai';
     if (p.type !== 'local') p.format = 'openai';
     renderSettings();
     return;

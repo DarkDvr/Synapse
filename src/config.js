@@ -3,7 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { CONFIG_FILE, CONFIG_DIR } from './paths.js';
-import { providerType, providerId } from './providers.js';
+import { providerType, providerId, declaredProviderType } from './providers.js';
 import { getProviderKey } from './secrets.js';
 
 export const DEFAULTS = {
@@ -271,7 +271,10 @@ export function normalize(raw) {
         .filter(Boolean);
       return {
         id: String(p.id || '').trim(),
-        type: providerType(p),
+        // The declared type, not the kind: `llamacpp` is kept so the screen can
+        // show which dialect this server speaks, and providerType() folds it to
+        // `local` for every decision that cares.
+        type: declaredProviderType(p),
         // How the server lists its models. Both kinds speak the OpenAI chat API
         // — Ollama's is at /v1 — so this only decides which list endpoint is
         // tried first; src/providers.js falls back to the other one anyway.

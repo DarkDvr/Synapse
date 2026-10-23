@@ -18,6 +18,11 @@ import { ROOT, SEARCH_SERVER, DELEGATE_SERVER, ENGINE_PID_FILE, SKILLS_DIR, VEND
 import { providerApiKey } from '../config.js';
 
 const ENGINE_USERNAME = 'opencode';
+// What the engine reports as a model's output limit when a provider entry carries
+// no limit at all (measured: a custom provider with no `limit` gets context 200,000
+// and output 32,000). Written beside a measured context so the pair is valid and the
+// generation cap stays exactly what it already was.
+const ENGINE_DEFAULT_OUTPUT = 32000;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 export class OpenCodeEngine extends Engine {
@@ -194,10 +199,20 @@ export class OpenCodeEngine extends Engine {
     for (const p of registrable) {
       const models = {};
       for (const m of p.models) {
+        const context = Number(m.context) || 0;
+        const output = Number(m.output) || 0;
         models[m.id] = {
           name: m.name,
-          ...(m.context || m.output
-            ? { limit: { ...(m.context ? { context: m.context } : {}), ...(m.output ? { output: m.output } : {}) } }
+          // A provider model's `limit` is **all or nothing**: measured on 2.1.2 with
+          // a scratch engine, a limit carrying `context` alone makes the engine skip
+          // the entire provider ("skipped malformed recognized value"), so the model
+          // never reaches the catalog and never appears on a role card. So both keys
+          // are always written together, and an output the operator never chose gets
+          // the engine's own default for a model it does not know — 32,000, which is
+          // exactly what a provider with no limit at all reports, so nothing changes
+          // except the context we actually measured.
+          ...(context
+            ? { limit: { context, output: output || ENGINE_DEFAULT_OUTPUT } }
             : {}),
         };
       }

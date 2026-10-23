@@ -186,6 +186,15 @@ and the rule is *measurement beats claim*:
    so the probe skips it. A `/props` server has exactly one model loaded, and its
    answer is recorded under `*` as well as the alias, so an id that differs from the
    alias still gets the right number. A model nobody loaded has no window at all.
+
+   **A provider model's `limit` is all or nothing** (measured on 2.1.2 with a
+   scratch engine, four variants): `limit: { context }` alone makes the engine answer
+   `skipped malformed recognized value` at `$.provider.<id>` and **drop the whole
+   provider** — the model never reaches the catalog and never appears on a role
+   card. `{ context, output }` is accepted; so is no limit at all, which is why this
+   only bites a local server whose window was just measured and whose output nobody
+   chose. `opencode.js` therefore always writes the pair, filling an unchosen output
+   with the engine's own default for a model it does not know (32,000).
 2. **A prompt the provider refused.** This is the cloud equivalent, because a hosted
    model has no endpoint to ask. `classifyFailure` already labels it `kind:
    'context'`; the size of the refused prompt is recorded by

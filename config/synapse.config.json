@@ -23,7 +23,7 @@
       "providers": [
         {
           "id": "strata",
-          "type": "local",
+          "type": "llamacpp",
           "format": "openai",
           "name": "Strata",
           "baseURL": "http://127.0.0.1:8080/v1",
@@ -31,7 +31,8 @@
           "models": [
             {
               "id": "qwen3.8-flash-next-iq2_xs",
-              "name": "Qwen 3.8 Flash Next (IQ2_XS)"
+              "name": "Qwen 3.8 Flash Next (IQ2_XS)",
+              "context": 131072
             }
           ]
         },
@@ -294,7 +295,7 @@
     },
     "architect": {
       "ref": "opencode-go/deepseek-v4.1-flash",
-      "variant": "low",
+      "variant": "high",
       "skills": [
         "visual-review"
       ],

@@ -8,17 +8,39 @@
 
 /** The types the Settings screen offers. `opencode` is not one of them: the
  *  engine's own catalog is already registered and always will be, so a second
- *  copy would be the same models twice under a different name. */
-export const ADDABLE_PROVIDER_TYPES = ['local', 'openai'];
+ *  copy would be the same models twice under a different name.
+ *
+ *  `llamacpp` is a *local* server too — it is the same kind of thing as `local`,
+ *  reached over the same OpenAI chat API, and it differs only in how it answers
+ *  questions about itself (`/props` instead of LM Studio's `/api/v0/models`). It is
+ *  named for the dialect rather than for one product, because any wrapper around
+ *  llama.cpp speaks it: llama-server, KoboldCpp, and the game-PC MoE engines. */
+export const ADDABLE_PROVIDER_TYPES = ['local', 'llamacpp', 'openai'];
+
+/** Is this provider a server on this machine? `llamacpp` is one, and so is any
+ *  address that points at localhost whatever it calls itself. */
+export function isLocalProvider(provider) {
+  return providerType(provider) === 'local';
+}
 
 /** What a provider *is*, from what it points at. A config written before types
  *  existed answers the same way the screen would, so nothing is lost by not
- *  having stored it. */
+ *  having stored it. `llamacpp` is folded into `local`: every check downstream is
+ *  about "a server on this machine", not about which dialect it speaks. */
 export function providerType(provider) {
   const declared = String(provider?.type || '').trim().toLowerCase();
+  if (declared === 'llamacpp') return 'local';
   if (ADDABLE_PROVIDER_TYPES.includes(declared)) return declared;
   const url = String(provider?.baseURL || '');
   return /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\]|0\.0\.0\.0)(:|\/|$)/i.test(url) ? 'local' : 'openai';
+}
+
+/** The declared type, kept for the screen. A stored `llamacpp` stays `llamacpp`;
+ *  anything unrecognised becomes the kind it behaves as. */
+export function declaredProviderType(provider) {
+  const declared = String(provider?.type || '').trim().toLowerCase();
+  if (ADDABLE_PROVIDER_TYPES.includes(declared)) return declared;
+  return providerType(provider);
 }
 
 /** A stable id from a display name: `DeepSeek (official)` -> `deepseek-official`.

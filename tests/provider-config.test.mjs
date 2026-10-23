@@ -9,7 +9,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { providerApiKey, normalize } from '../src/config.js';
-import { fetchProviderModels, providerLoadedWindow, providerLoadedWindows, measureLocalWindows } from '../src/providers.js';
+import { fetchProviderModels, providerLoadedWindow, providerLoadedWindows, measureLocalWindows, providerType, declaredProviderType } from '../src/providers.js';
 
 const checks = [];
 const check = (name, ok, detail = '') => {
@@ -411,6 +411,31 @@ const notFound = { ok: false, status: 404, text: async () => 'Not Found' };
   check('LM Studio wins when it answers', win === 60160, String(win));
   const other = await providerLoadedWindow({ baseURL: 'http://localhost:1235/v1', model: 'not-there' }, { fetchImpl: both });
   check('a model LM Studio did not load gets no window, not /props\' one', other === 0, String(other));
+}
+
+// ── the three types, two behaviours ─────────────────────────────
+// `llamacpp` is a local server that answers /props instead of LM Studio's list.
+// Stored as declared so the screen can say which it is; folded to `local` for
+// every decision downstream, which is why these two must agree.
+{
+  check('a llama.cpp provider counts as local', providerType({ type: 'llamacpp', baseURL: 'http://127.0.0.1:8080/v1' }) === 'local');
+  check('and is still recognisable as itself', declaredProviderType({ type: 'llamacpp' }) === 'llamacpp');
+  check('a plain local provider is unchanged', declaredProviderType({ type: 'local' }) === 'local');
+  check('an undeclared provider answers by its address', declaredProviderType({ baseURL: 'http://localhost:1235/v1' }) === 'local');
+  check('a vendor stays a vendor', declaredProviderType({ type: 'openai', baseURL: 'https://api.example.com/v1' }) === 'openai');
+
+  // The measured window must reach a llama.cpp provider exactly as it does a
+  // local one — that is the whole reason the type exists.
+  const cfg = {
+    engine: {
+      opencode: {
+        providers: [{ id: 'probe', type: 'llamacpp', baseURL: 'http://127.0.0.1:8080/v1', models: [{ id: 'm' }] }],
+      },
+    },
+  };
+  const changes = await measureLocalWindows(cfg, { fetchImpl: async (url) => (url.endsWith('/props') ? strataProps : notFound) });
+  check('a llama.cpp provider is measured at boot', changes.length === 1 && changes[0].to === 131072, JSON.stringify(changes));
+  check('and the number lands on the model', cfg.engine.opencode.providers[0].models[0].context === 131072);
 }
 
 calls.length = 0;

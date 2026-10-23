@@ -60,6 +60,46 @@ const written = (dirs) => JSON.parse(fs.readFileSync(path.join(dirs.config, 'ope
   check('mcp servers are still registered', Boolean(cfg.mcp?.servers?.['synapse-search']), JSON.stringify(Object.keys(cfg.mcp?.servers || {})));
 }
 
+// A provider model's limit must carry BOTH numbers.
+// Measured on engine 2.1.2 with a scratch instance: `limit: { context }` alone made
+// the engine answer "skipped malformed recognized value" at `$.provider.<id>` and
+// drop the whole provider — so the model never reached the catalog and never
+// appeared on a role card. `{ context, output }` was accepted; so was no limit at
+// all, which is why a local server with a measured window and no chosen output is
+// the exact case that broke.
+{
+  const dirs = home();
+  const engine = new OpenCodeEngine(
+    {
+      providers: [
+        { id: 'strata', type: 'local', baseURL: 'http://127.0.0.1:8080/v1', models: [{ id: 'big-model', context: 131072 }] },
+        { id: 'local', type: 'local', baseURL: 'http://localhost:1235/v1', models: [{ id: 'small', context: 60160, output: 8192 }] },
+      ],
+    },
+    { logger: silentLogger() },
+  );
+  engine.ensureEngineConfig(dirs);
+  const cfg = written(dirs);
+  const big = cfg.provider?.strata?.models?.['big-model'];
+  check('a measured context is never left on its own', big?.limit?.context === 131072 && Number.isFinite(big?.limit?.output), JSON.stringify(big));
+  check(
+    'the output it gets is the engine\'s own default, so nothing changes',
+    big?.limit?.output === 32000,
+    String(big?.limit?.output),
+  );
+  check(
+    'a chosen output is left exactly as chosen',
+    cfg.provider?.local?.models?.small?.limit?.output === 8192,
+    JSON.stringify(cfg.provider?.local?.models?.small),
+  );
+  check('a model with no window gets no limit at all', (() => {
+    const d2 = home();
+    const e2 = new OpenCodeEngine({ providers: [{ id: 'p', type: 'local', baseURL: 'http://localhost:1/v1', models: [{ id: 'x' }] }] }, { logger: silentLogger() });
+    e2.ensureEngineConfig(d2);
+    return !('limit' in (written(d2).provider?.p?.models?.x || {}));
+  })(), 'limit written without a window');
+}
+
 // Anything already in the file that is not ours is left alone.
 {
   const dirs = home();
