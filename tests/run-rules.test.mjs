@@ -432,6 +432,32 @@ try {
     'naming the projects root is not naming the harness',
     alarmCount(turn('node F:/dev/Synapse.Projects/x/bin/app.js')) === 0,
   );
+  // 23 Oct, every delegation: the Architect starts each command with `cd <project>`
+  // and then reads Synapse's own log to diagnose its run. The whole-string check
+  // needed a read verb at character one, so the `cd` made it a popup — on a benign
+  // read, every single time, which is exactly what trains an operator to ignore it.
+  const diagnose =
+    'cd F:\\dev\\Synapse.Projects\\fever-tracker; Get-Content F:\\dev\\Synapse\\logs\\app.log -Tail 5';
+  seen.length = 0;
+  guard.checkTurn({ sessionId: 'arch', label: 'turn', messages: turn(diagnose) });
+  expect('cd then reading the harness log is not an alarm', seen.filter((s) => s.startsWith('alarm:')).length === 0);
+  expect('and it is written down', seen.some((s) => s.startsWith('info: read the harness')));
+  expect(
+    'cd then deleting a harness file still is',
+    alarmCount(turn('cd F:\\dev\\Synapse; Remove-Item logs\\app.log -Force')) === 1,
+  );
+  expect(
+    'a read followed by a write is judged on the write',
+    alarmCount(turn('Get-Content F:\\dev\\Synapse\\logs\\app.log; Set-Content F:\\dev\\Synapse\\logs\\app.log ""')) === 1,
+  );
+  expect(
+    'a semicolon inside a quoted path is not a second command',
+    alarmCount(turn('Get-Content "F:\\dev\\Synapse\\logs\\a;b.log" -Tail 3')) === 0,
+  );
+  expect(
+    'a variable holding a read is still a read',
+    alarmCount(turn('$a = Get-Content F:\\dev\\Synapse\\logs\\app.log; $a | Select-String error')) === 0,
+  );
 }
 
 console.log(checks.join('\n'));

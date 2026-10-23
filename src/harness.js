@@ -40,11 +40,55 @@ const REDIRECT_INTO = /(?:^|[^0-9&])>>?\s*("[^"]+"|'[^']+'|[^\s;&|]+)/g;
 // only of read verbs is logged and not raised; anything else that names the
 // harness still rings, because the safe default is to over-report a rare thing
 // rather than to miss the write that matters.
-const READ_ONLY_COMMAND = new RegExp(
-  '^(?:\\s*(?:Get|Test|Resolve|Select|Where|Measure|Sort|Format|Out-String|' +
-    'findstr|where|type|cat|ls|dir|head|tail|more|echo)\\b[^;&|]*[;&|]?\\s*)+$',
+//
+// Judged **piece by piece**, because a command is a list of them: `cd <project>;
+// Get-Content F:\dev\Synapse\logs\app.log -Tail 5` is a read of the harness's own
+// log, and reading that log is how the Architect diagnoses its own runs. The old
+// rule matched the whole string against a list of verbs starting at character one,
+// so `cd` in front of a `Get-Content` was enough to turn a read into a popup — on
+// every delegation, since every worker starts by changing directory.
+const READ_VERBS = new RegExp(
+  '^(?:get|test|resolve|select|where|measure|sort|format|out-string|' +
+    'findstr|type|cat|ls|dir|head|tail|more|echo|' +
+    'cd|chdir|set-location|push-location|pop-location|sl|pwd)\\b',
   'i',
 );
+
+/** The pieces a shell would run in sequence. Quote-aware: a `;` inside a string is
+ *  part of an argument, not a second command. */
+function segmentsOf(command) {
+  const text = String(command || '');
+  const out = [];
+  let current = '';
+  let quote = '';
+  for (let i = 0; i < text.length; i += 1) {
+    const char = text[i];
+    if (quote) {
+      current += char;
+      if (char === quote) quote = '';
+      continue;
+    }
+    if (char === '"' || char === "'") { quote = char; current += char; continue; }
+    if (char === ';' || char === '|') { out.push(current); current = ''; continue; }
+    if (char === '&' && text[i + 1] === '&') { out.push(current); current = ''; i += 1; continue; }
+    current += char;
+  }
+  out.push(current);
+  return out.map((s) => s.trim()).filter(Boolean);
+}
+
+/** Does every piece of this command only look? */
+function onlyReads(command) {
+  for (let piece of segmentsOf(command)) {
+    piece = piece.replace(/^\(\s*/, '').replace(/\)+$/, '').trim();
+    // `$a = Get-Content …` is the same read, and `$a` on its own reads the variable.
+    const assigned = piece.match(/^\$\w+\s*=\s*(.*)$/);
+    if (assigned) piece = assigned[1].trim();
+    if (!piece || /^\$[\w.:]+$/.test(piece)) continue;
+    if (!READ_VERBS.test(piece)) return false;
+  }
+  return true;
+}
 
 /** Could a script inside the harness be running, whatever it is named? */
 const RUNS_HARNESS_CODE = /\b(?:node|nodejs|pwsh|powershell|python|python3|deno|bun|cmd|sh)\b[^;&|]*\.(?:js|mjs|cjs|ps1|py|bat|cmd)\b/i;
@@ -99,7 +143,7 @@ export function createHarnessGuard({ root, logger, notify }) {
     const text = String(command || '');
     if (redirectsInto(text)) return true;
     if (RUNS_HARNESS_CODE.test(text)) return true;
-    return !READ_ONLY_COMMAND.test(text.trim());
+    return !onlyReads(text);
   };
 
   /**
@@ -134,7 +178,7 @@ export function createHarnessGuard({ root, logger, notify }) {
         const input = part.input && typeof part.input === 'object' ? part.input : {};
         const target = input.filePath || input.file_path || input.path || '';
         if (WRITE_TOOLS.test(name) && inHarness(target)) writes.add(String(target));
-        if (SHELL_TOOLS.test(name) && inHarness(input.command) && !runsTheToolbox(input.command)) {
+        if (SHELL_TOOLS.test(name) && harnessPathsIn(input.command).length && !runsTheToolbox(input.command)) {
           const shown = String(input.command).replace(/\s+/g, ' ').slice(0, 160);
           if (couldWriteHarness(input.command)) shells.add(shown);
           else reads.add(shown);
