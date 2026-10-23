@@ -37,6 +37,7 @@ import {
   ownedFolder,
   uncoveredPhases,
   SHARED_DIR,
+  setTaskStatus,
 } from './plans.js';
 import { skillRules, describeSkills, roleMustLoad } from './skills.js';
 import { configSavedAt } from './config.js';
@@ -444,6 +445,9 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
   const running = new Map();
   // One stop button per live run: Stop must cut a backoff short, not wait it out.
   const controls = new Map();
+  // Projects the operator has stopped. Nothing is delegated and no reminder is
+  // sent until they speak again: their next message is the answer to "what now".
+  const stoppedByOperator = new Set();
   const dirKey = (d) => String(d ?? '').replace(/[\\/]+$/, '').toLowerCase();
 
   /** The worker settings, read once per decision so a change lands next time. */
@@ -651,6 +655,25 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
       }
       for (const request of requests) {
         claimed.add(request.callId);
+        // The operator stopped the run. A task arriving now is the Architect
+        // carrying on by itself, which is the one thing Stop exists to prevent.
+        // Recorded rather than refused silently, and no wake: waking it would open
+        // another turn to delegate in.
+        if (stoppedByOperator.has(dirKey(session.directory))) {
+          appendRun(session.directory, {
+            kind: 'delegate',
+            callId: request.callId,
+            task: request.task,
+            outcome: 'stopped-by-operator',
+          });
+          log.info(`delegation refused: ${request.task} - the operator stopped this run`);
+          notify?.({
+            kind: 'note',
+            title: 'Run Stopped',
+            body: `${request.task} was not started: the operator stopped this run. Nothing runs until they say what is next.`,
+          });
+          continue;
+        }
         // Keep building is off, and the operator has not spoken since the last
         // report: a delegation now is the model deciding to carry on by itself.
         // A *re-delegation of the task that was just reported* is still allowed —
@@ -776,6 +799,10 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
   async function remindSkippedWork(session, messages) {
     const dir = session.directory;
     if (!session.auto) return;
+    // The operator stopped the run. Nothing starts again, and nobody is nudged,
+    // until they say what they want next: a reminder here is the "it retried on
+    // its own" that made Stop mean nothing.
+    if (stoppedByOperator.has(dirKey(dir))) return;
     if (operatorSpokeSince(messages)) return;
     if (running.has(dirKey(dir))) return;
     const plan = readPlan(dir).plan;
@@ -2210,14 +2237,39 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
    *  there was anything to stop. The wait loops see the abort on their next poll
    *  (and a backoff sleep is cut short), so this is immediate even mid-retry. */
   function cancel(dir) {
-    const control = controls.get(dirKey(dir));
+    const key = dirKey(dir);
+    const control = controls.get(key);
     if (!control) return false;
+    // Stop means stop: nothing is delegated and nobody is reminded until the
+    // operator speaks again. Without this the run stopped and the next task
+    // started anyway, which is what the operator saw as "it just retries later".
+    stoppedByOperator.add(key);
+    const live = running.get(key);
     control.abort();
-    const live = running.get(dirKey(dir));
     if (live?.workerId) {
       engine.interrupt(live.workerId).catch(() => { /* already gone */ });
     }
+    // Nothing is running now, so a task marked `doing` is not doing anything — and
+    // an untouched one says "1 running" on the plan for the rest of the day.
+    if (live?.task) setTaskStatus(dir, live.task, 'todo');
     log.warn(`run in ${dir} stopped by the operator`);
+    return true;
+  }
+
+  /** The operator has spoken. Whatever they stopped may run again. */
+  function resume(dir) {
+    const key = dirKey(dir);
+    if (!stoppedByOperator.delete(key)) return false;
+    log.info(`the operator spoke in ${dir} - runs may start again`);
+    return true;
+  }
+
+  /** Nothing was running, but the operator pressed Stop: hold the project so the
+   *  Architect's next turn cannot delegate the work they just stopped. */
+  function hold(dir) {
+    if (stoppedByOperator.has(dirKey(dir))) return false;
+    stoppedByOperator.add(dirKey(dir));
+    log.warn(`run in ${dir} stopped by the operator - nothing will be delegated until they speak`);
     return true;
   }
 
@@ -2241,6 +2293,6 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     return true;
   }
 
-  return { handleTurn, recoverDelegations, requestsIn, active, cancel, stopWithReason };
+  return { handleTurn, recoverDelegations, requestsIn, active, cancel, resume, hold, stopWithReason };
 }
 

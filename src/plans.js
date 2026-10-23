@@ -112,6 +112,29 @@ export function ensurePlan(dir) {
 const asText = (v) => (typeof v === 'string' ? v.trim() : v == null ? '' : String(v));
 const asId = (v) => asText(v).replace(/[^A-Za-z0-9._-]/g, '');
 
+/**
+ * Put one task's status back, and change nothing else.
+ *
+ * Used by the one moment the harness owns: the operator stopped a run, so a task
+ * the Architect marked `doing` is not doing anything. Left alone it would say
+ * "1 running" on the plan for the rest of the day. Everything else in the file is
+ * the Architect's, so this reads, edits one field and writes the same shape back;
+ * a file that does not parse is left exactly as it is.
+ */
+export function setTaskStatus(dir, taskId, status) {
+  try {
+    const file = planPath(dir);
+    const plan = JSON.parse(fs.readFileSync(file, 'utf8'));
+    const task = (Array.isArray(plan?.tasks) ? plan.tasks : []).find((t) => t.id === taskId);
+    if (!task || task.status === status) return false;
+    task.status = status;
+    fs.writeFileSync(file, `${JSON.stringify(plan, null, 2)}\n`, 'utf8');
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** The operator's words, verbatim, append-only.
  *
  * Synapse writes this, never a model: a requirement that a model restates is a

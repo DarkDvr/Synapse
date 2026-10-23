@@ -863,6 +863,9 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
       // The operator's own words, written down before any model can restate
       // them. This file is the requirement every role is judged against.
       if (directory) appendRequirement(directory, text);
+      // Speaking is the answer to "what now" after a stop: whatever they stopped
+      // may run again from here.
+      if (directory) runs?.resume?.(directory);
       await engine.prompt(sessionId, text);
       return { ok: true };
     },
@@ -883,14 +886,34 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
       // The brief carries the mode, so the Architect hears about it on the very
       // next message rather than discovering it mid-run.
       await brief(sessionId, session?.directory, 'architect', auto);
+      // Turning keep-building on is the operator saying "carry on", so a project
+      // they stopped may run again.
+      if (auto && session?.directory) runs?.resume?.(session.directory);
       app.info(`keep-building ${auto ? 'on' : 'off'} for ${sessionId}`);
       return { ok: true, auto };
     },
 
     interrupt: async (sessionId) => {
       requireReady();
+      // Stop means stop. A delegated task runs in its own worker session, so
+      // interrupting the session on screen did nothing to it: the worker carried
+      // on to the end, the Architect was woken by the report and started the next
+      // task. The operator saw a run that would not stop. Stop the run first — it
+      // is the thing that is actually working — then the session.
+      let stoppedRun = false;
+      try {
+        const session = await engine.getSession(sessionId);
+        if (session?.directory) {
+          stoppedRun = Boolean(runs?.cancel?.(session.directory));
+          // No run in flight (the Architect was thinking): hold the project anyway,
+          // or the next turn delegates the work that was just stopped.
+          if (!stoppedRun) runs?.hold?.(session.directory);
+        }
+      } catch (err) {
+        app.warn(`could not look up the session before stopping it: ${err.message}`);
+      }
       await engine.interrupt(sessionId);
-      return { ok: true };
+      return { ok: true, stoppedRun };
     },
 
     permission: async (sessionId, body) => {
