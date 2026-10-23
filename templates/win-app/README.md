@@ -20,15 +20,19 @@ cd <project>\app
   `MainWindow.xaml`: `Title`, `Width`/`Height`, `MinWidth`/`MinHeight`.
 
 ## Build
-
 ```
-.\build.ps1                 single-file exe in dist\ (no .NET needed on the target)
-.\build.ps1 -Framework      small exe; needs the .NET 10 runtime on the target
+.\build.ps1                 lean: small exe in dist\; needs the .NET 10 Desktop Runtime
+.\build.ps1 -Portable       self-contained single-file exe; runs with no .NET installed
 ```
 
-`dist\` holds `App.exe` (about 59 MB self-contained) and `ui\`. Copy that folder to
-another Windows 10/11 machine and run it. The machine needs the **WebView2
-runtime** — shipped with Windows 11, present on nearly every Windows 10 machine.
+Lean is the default. The .NET runtime is a system component: bundling it into every
+app duplicates about 140 MB and pins that copy to the build machine's version,
+security fixes included. A lean `App.exe` is roughly 1.4 MB — with the WebView2
+wrapper DLLs the folder is about 2 MB. `-Portable` exists for a PC with no .NET 10
+Desktop Runtime; that is the only thing it buys, and 60 MB is what it costs.
+
+Either way the machine needs the **WebView2 runtime** — shipped with Windows 11,
+present on nearly every Windows 10 machine through Edge.
 
 ## Verify it, both halves
 

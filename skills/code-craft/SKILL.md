@@ -57,6 +57,18 @@ habits that separate code that gets accepted from code that comes back.
 - If a dependency is genuinely required, say so in the report *before* the
   Architect discovers it.
 
+## Do not ship the platform
+
+- A runtime, an SDK or a browser engine is a **system component**. Use the copy
+  the machine has; do not bundle a second one beside the app unless the operator
+  asked for a build that runs where it is missing.
+- In practice: publish framework-dependent by default, and offer the
+  self-contained build as the deliberate exception. A .NET window app is about
+  1.5 MB that way and about 60 MB with the runtime inside — 140 MB once the
+  un-bundled build output is counted too.
+- Say which one you built, and what it needs on the target, in the report. "It
+  runs here" is not the same sentence as "it runs on their PC".
+
 ## Prove it
 
 - Run it. At least once with a real input, and once with the obvious bad input.
