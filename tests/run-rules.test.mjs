@@ -15,7 +15,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { readPlan, briefSession, appendAnswers } from '../src/plans.js';
-import { contextStats, windowRoom, windowAction, steerDue, nextRung, countedAttempts, promptSize, compactionEvents, resolveWindow } from '../src/runs.js';
+import { contextStats, windowRoom, windowAction, steerDue, nextRung, countedAttempts, promptSize, compactionEvents, resolveWindow, engineCompactAt, watchdogRoom } from '../src/runs.js';
 import { createHarnessGuard } from '../src/harness.js';
 
 const checks = [];
@@ -304,6 +304,31 @@ try {
   // reported 38k for a compaction that fired at 44k.
   const own = compactionEvents([msg(9000, 29000), { type: 'compaction', raw: { tokens: { input: 48243, output: 2552 } } }]);
   expect('the size is what the compaction itself sent', own[0].used === 48243, String(own[0]?.used));
+  // A compaction with no usage of its own falls back to the prompt before it —
+  // never to zero, which would read as "compacted at 0".
+  const bare = compactionEvents([msg(9000, 29000), { type: 'compaction' }]);
+  expect('no usage on the compaction means the prompt before it', bare[0].used === 38000, String(bare[0].used));
+}
+
+// ── the two compaction guards must not race ──────────────────
+// The engine fires at `context − max(15%, 16k)`; ours has to sit above that, or the
+// two fire a second apart and the second request compacts the transcript the first
+// just wrote — which is what produced "Compacted ×2 · context at 11K" on 23 Oct.
+{
+  const engineAt = engineCompactAt({ context: 60160 });
+  expect('the engine compacts 60,160 at 44,160', engineAt === 44160, String(engineAt));
+  expect('a million-token window has no 16k floor', engineCompactAt({ context: 1048576 }) === 891290, String(engineCompactAt({ context: 1048576 })));
+  expect('an unknown window has no trigger', engineCompactAt({}) === 0);
+
+  const ours = watchdogRoom({ context: 60160, output: 8192 });
+  expect('our backstop sits above the engine, not beside it', ours > engineAt, `${ours} vs ${engineAt}`);
+  expect(
+    'and leaves the engine room to act first',
+    ours - engineAt >= 2000 && ours - engineAt <= 60160 * 0.1,
+    `${ours - engineAt} tokens of separation`,
+  );
+  expect('it is never earlier than the plain room', watchdogRoom({ context: 60160, output: 8192 }) >= windowRoom({ context: 60160, output: 8192 }));
+  expect('a small window still gets a sane ceiling', watchdogRoom({ context: 8192, output: 2048 }) > 0);
 }
 
 // ── which number wins ────────────────────────────────────────

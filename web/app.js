@@ -3155,12 +3155,12 @@ function noteCompactionEvent(ev) {
   } else {
     trace.compactingSince = 0;
     if (ev.type === 'session.compaction.ended') {
-      const run = [...state.runs.values()].find((r) => r.workerId === ev.sessionId);
-      noteCompaction(trace, {
-        times: (Number(trace.compactions) || 0) + 1,
-        used: Number(run?.ctx) || 0,
-        context: Number(run?.ctxLimit) || 0,
-      });
+      // Count it; do not guess its size. The runner reads the compaction's own
+      // usage out of the transcript and sends it a moment later, and that is the
+      // only number worth printing — `run.ctx` here is *this* poll's prompt, which
+      // is the small one if the transcript has already shrunk. Showing that was
+      // the "Compacted ×2 · context at 11K" the operator was rightly suspicious of.
+      noteCompaction(trace, { times: (Number(trace.compactions) || 0) + 1 });
     }
   }
   renderTranscript();

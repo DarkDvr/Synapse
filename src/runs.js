@@ -1580,7 +1580,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     const ctx = (t.input || 0) + (t.cache?.read || 0);
     if (!ctx) return;
 
-    const state = windows.get(sessionId) || { armed: true, times: 0, off: false, compactions: 0 };
+    const state = windows.get(sessionId) || { armed: true, times: 0, off: false };
     windows.set(sessionId, state);
 
     // The engine compacted while we were watching. Two things follow, and both
@@ -1591,8 +1591,13 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     // engine compacted at 46,329 and our watchdog asked again one second later;
     // the second request ran four minutes later against the *fresh* 10,986-token
     // transcript, throwing away what the first had just kept.
+    //
+    // A session that compacted before this run existed is not news: the first look
+    // takes the count as the baseline rather than treating old compactions as one
+    // that has just happened.
     const seen = compactionEvents(messages).length;
-    if (seen > state.compactions) {
+    if (!Number.isInteger(state.compactions)) state.compactions = seen;
+    else if (seen > state.compactions) {
       state.compactions = seen;
       state.armed = false;
       out.info(
