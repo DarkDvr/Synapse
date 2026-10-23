@@ -311,8 +311,8 @@
       ]
     },
     "coder-3": {
-      "ref": "local/qwen3.8-27b-ud",
-      "variant": "medium",
+      "ref": "opencode-go/deepseek-v4.1-flash",
+      "variant": "high",
       "skills": [
         "code-craft",
         "visual-review"
