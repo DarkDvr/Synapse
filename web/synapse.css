@@ -1190,6 +1190,22 @@ body[data-mode="single"] .keep-toggle { display: none; }
    why the next step is slower and why the window is empty again, so it is amber,
    pinned above the four-line tail, and never trimmed away with the steps. */
 .trace-line.is-compact { color: var(--amber); font-weight: 600; }
+
+/* Something a model did to Synapse itself — naming it in a shell command, or a
+   write shaped at it. Amber like a compaction, for the same reason: news about the
+   run rather than a step in it. It was a modal once; a modal for a thing the
+   operator cannot act on is a click and a distraction, so it is a line here and
+   the detail stays in the log. */
+.chat-alarm {
+  display: flex; gap: 7px; align-items: baseline;
+  margin: 15px 0 0; padding-left: 13px;
+  border-left: 2px solid var(--amber);
+  font-size: 11.5px; line-height: 1.45; color: var(--amber);
+}
+.chat-alarm-mark { font-size: 11px; }
+.chat-alarm-text {
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 /* The words being written *now*. Unlike a note, this wraps: it is a paragraph
    streaming past, not a label, and cutting it to one line would hide the point of
    showing it. It disappears when the step ends.

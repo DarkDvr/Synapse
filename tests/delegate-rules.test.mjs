@@ -43,13 +43,13 @@ expect(
 expect('an empty plan has nothing to complain about', uncoveredPhases({ phases: [], tasks: [] }).length === 0);
 
 // ── the refusal, through handleTurn ─────────────────────────────
-const makeRunner = () => {
+const makeRunner = ({ auto = true } = {}) => {
   const woke = [];
   const ran = [];
   const arch = [{ id: 'm0', type: 'user', parts: [] }];
   const engine = {
     async getSession(id) {
-      if (id === 'ses_arch') return { id, directory: DIR, internal: false, single: false, auto: true };
+      if (id === 'ses_arch') return { id, directory: DIR, internal: false, single: false, auto };
       return { id, directory: DIR, internal: true };
     },
     async getMessages(id) {
@@ -159,6 +159,42 @@ try {
     expect('a QC task past the cap does not run', !ran.includes('prompt'), ran.join(','));
     expect('and the Architect is told, not left waiting', woke.length === 1 && /will not start however many times/.test(woke[0]), woke[0]?.slice(0, 110));
     expect('the refusal is journalled as qc-cap', fs.readFileSync(journal, 'utf8').includes('"qc-cap"'));
+  }
+  // 6. a plan step nobody asked for: reminded once, then left alone
+  // t16 and t19 were both planned, never delegated, and left the project one task
+  // short of finished with nothing running. A delegation that is never attempted
+  // cannot be refused, so nothing else in the harness could notice it.
+  writePlan(
+    plan(
+      ['build', 'qc'],
+      [{ ...task('t1', 'coder-1'), status: 'done' }, { ...task('t20', 'coder-1'), status: 'done' }, { ...task('t21', 'qc'), dependsOn: ['t20'] }],
+    ),
+  );
+  {
+    const { runner, woke, arch } = makeRunner();
+    // A report has just arrived, so the Architect is working on its own and the
+    // newest message is not the operator's.
+    arch.push({ id: 's1', type: 'synthetic', parts: [{ type: 'text', text: 't20 finished.' }], created: Date.now() });
+    await runner.handleTurn('ses_arch', arch);
+    expect('a ready step nobody asked for gets one reminder', woke.length === 1 && /t21 is still to do/.test(woke[0]), woke[0]?.slice(0, 120));
+    expect('and it is told to try once more', /delegate t21 as the plan has it/.test(woke[0] || ''));
+    expect('with the way out named', /mark it `blocked`/.test(woke[0] || ''));
+
+    const before = woke.length;
+    await runner.handleTurn('ses_arch', arch);
+    expect('the reminder is not repeated', woke.length === before, `${woke.length} vs ${before}`);
+  }
+
+  // …and quiet when it is not safe: the operator is driving, or they just spoke.
+  {
+    const { runner, woke } = makeRunner({ auto: false });
+    await runner.handleTurn('ses_arch', [{ id: 'm1', type: 'user', parts: [], created: Date.now() }]);
+    expect('keep-building off means no reminder', woke.length === 0, woke.join(' | ').slice(0, 90));
+  }
+  {
+    const { runner, woke } = makeRunner();
+    await runner.handleTurn('ses_arch', [{ id: 'm2', type: 'user', parts: [], created: Date.now() }]);
+    expect('an operator waiting for an answer means no reminder', woke.length === 0, woke.join(' | ').slice(0, 90));
   }
 } finally {
   fs.rmSync(ROOT, { recursive: true, force: true });

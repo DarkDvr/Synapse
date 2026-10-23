@@ -381,6 +381,10 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
   // Projects whose leftovers have already been swept, so a finished plan that is
   // opened again does not go hunting every time a note is added.
   const cleaned = new Set();
+  // Steps the Architect has already been reminded about, keyed `${dir}|${task}`.
+  // One reminder each: the point is to break a silence, not to nag a model that
+  // has read the message and decided otherwise.
+  const nudged = new Set();
   // What is running right now, keyed by directory. The UI draws the cards' state
   // and the live path from this; it is also served over HTTP so a page reload
   // mid-run does not lose the picture.
@@ -689,9 +693,67 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
         run(sessionId, session.directory, request).catch((err) =>
           log.warn(`delegation ${request.task} failed: ${err.message}`),
         );      }
+
+      // The Architect asked for nothing this turn. That is usually right — it has
+      // just read a report — but twice now it has meant a plan step nobody will
+      // ever start: t16 and t19 were both planned, never asked for, and left the
+      // project one task short of finished with nothing running.
+      if (!requests.length) await remindSkippedWork(session, messages);
     } catch (err) {
       log.warn(`could not look for delegation requests in ${sessionId}: ${err.message}`);
     }
+  }
+
+  /**
+   * A plan step nobody asked for.
+   *
+   * A delegation that is never *attempted* cannot be refused, so no gate in this
+   * file will notice it: the plan simply sits one task short of finished, nothing
+   * is running, and the Architect looks idle next to a task it forgot. This is the
+   * one word that notices — after a turn in which the Architect asked for nothing,
+   * if a step's dependencies are met and it is still `todo`, say so, once.
+   *
+   * Quiet unless it is safe to run. It needs keep-building on (otherwise the
+   * operator is driving the project turn by turn), an Architect that is not
+   * answering the operator, nothing already running in the project, the plan
+   * itself whole, and a role whose model the provider has not marked. One reminder
+   * per step per process: a model that ignores it is not nagged, and the operator
+   * can always say what they want.
+   */
+  async function remindSkippedWork(session, messages) {
+    const dir = session.directory;
+    if (!session.auto) return;
+    if (operatorSpokeSince(messages)) return;
+    if (running.has(dirKey(dir))) return;
+    const plan = readPlan(dir).plan;
+    const tasks = Array.isArray(plan?.tasks) ? plan.tasks : [];
+    if (!tasks.length) return;
+    // An unplanned phase is a different problem, with its own wake: the plan is
+    // not yet the thing the operator agreed to.
+    if (uncoveredPhases(plan).length) return;
+    const done = new Set(tasks.filter((t) => t.status === 'done').map((t) => t.id));
+    const ready = tasks.find(
+      (t) =>
+        t.status === 'todo' &&
+        !nudged.has(`${dirKey(dir)}|${t.id}`) &&
+        (Array.isArray(t.dependsOn) ? t.dependsOn : []).every((d) => done.has(d)),
+    );
+    if (!ready) return;
+    if (providerMarked(ready.role, getConfig() || {})) return;
+    nudged.add(`${dirKey(dir)}|${ready.id}`);
+    out.info(
+      `plan step ${ready.id} (${ready.role}) is ready and was never asked for - reminding the Architect once`,
+    );
+    await wake(session.id, dir, {
+      description: `${ready.id} is ready and was not asked for`,
+      text:
+        `Nothing is running and ${ready.id} is still to do: its dependencies are met, nothing has asked for ` +
+        `it, and the plan cannot finish without it. Start it now - delegate ${ready.id} as the plan has it. ` +
+        `If it cannot run - refused, a loop that is capped, or a model the provider has marked - do not wait ` +
+        `on it and do not do the work yourself: mark it \`blocked\` with the reason, or \`done\` if you have ` +
+        `verified it yourself, and say so in your reply. This is the one reminder the harness gives; nothing ` +
+        `else will arrive.`,
+    });
   }
 
   async function run(architectId, dir, request) {

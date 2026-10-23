@@ -86,6 +86,10 @@ const state = {
   // no longer exists. And the stopwatches for the open session (see tickClocks).
   lastEventAt: 0,
   lastEventSessionId: null,
+  // Things a model did to Synapse itself. They used to be a modal dialog, which
+  // was one click to dismiss and impossible to act on; the log has the detail, so
+  // the chat gets a line and the operator gets on with their work.
+  alarms: [],
   clocks: null,
   collapsed: new Set(),
   // True once the first project list has arrived; see loadProjects.
@@ -211,24 +215,29 @@ function openError(title, text, opts = {}) {
   $('closeError').focus();
 }
 
-/** An agent touched Synapse itself. Not an error to retry: a report to read, so
- *  it gets a sentence saying what happened and what did not. */
+/** An agent touched Synapse itself. Not an error to retry and not something the
+ *  operator can act on: it is *news*, and the log has the detail. It used to open
+ *  a modal — one click to close, nothing to do — so it is a line in the chat now,
+ *  in the same amber as a compaction, and the popup is gone. */
 function openAlarm(ev) {
-  const what = String(ev.what || '');
-  const title = /shell|command/i.test(what)
-    ? 'A shell command named Synapse'
-    : /write|edit/i.test(what)
-      ? 'Something tried to write inside Synapse'
-      : 'Synapse was named in a tool call';
-  toast('Synapse Activity Warning', what || 'something touched Synapse itself');
-  openError(title, (ev.paths || []).slice(0, 6).join('\n'), {
-    lead:
-      'A model named this folder in a tool call. It is logged, and Synapse takes a restore point before ' +
-      'every delegation, so the repository can be put back. Nothing was changed automatically and the run ' +
-      'was not stopped — this is the report, not the repair.',
+  const what = String(ev.what || 'something touched Synapse itself');
+  const paths = (ev.paths || []).map(String);
+  // Which project this belongs to, when it came from a delegated run: a worker's
+  // session cannot be opened from the rail, so a line only shown in the session it
+  // came from would be a line the operator never sees.
+  const run = ev.sessionId ? [...state.runs.values()].find((r) => r.workerId === ev.sessionId) : null;
+  const line = {
+    at: Date.now(),
+    sessionId: ev.sessionId || null,
+    dir: run?.dir || null,
+    what,
+    paths,
     note: ev.note ? String(ev.note) : '',
-    alarm: true,
-  });
+  };
+  state.alarms.push(line);
+  // One page, not a history: the log keeps every one of them.
+  if (state.alarms.length > 20) state.alarms.splice(0, state.alarms.length - 20);
+  renderTranscript();
 }
 function closeError() { $('errorModal').hidden = true; }
 
@@ -2796,7 +2805,7 @@ function renderTranscript() {
   // dock's own child and takes its height from the dock, so a freshly opened
   // session (a strip of composer) would show a 64px form with its buttons
   // hanging outside it. A form is something to read, so the dock opens for it.
-  const hasHistory = showable.length > 0 || Boolean(pending) || Boolean(currentForm());
+  const hasHistory = showable.length > 0 || Boolean(pending) || Boolean(currentForm()) || alarmsHere().length > 0;
   // The dock is a bare composer while empty and fills the stage once there is
   // anything to show; the CSS keys off this class, so set it on every render.
   $('chatDock')?.classList.toggle('has-history', hasHistory);
@@ -2807,7 +2816,7 @@ function renderTranscript() {
   // Nothing in the conversation changed since the last render: leave the DOM —
   // and whatever the operator has open — exactly as it is.
   const sig = hasHistory
-    ? `${showable.map((m) => `${m.id}:${m.completed || 0}:${(m.parts || []).length}`).join(',')}|${pending.length}|${state.streaming}|${traceSig()}`
+    ? `${showable.map((m) => `${m.id}:${m.completed || 0}:${(m.parts || []).length}`).join(',')}|${pending.length}|${state.streaming}|${traceSig()}|${alarmsHere().length}`
     : '';
   if (sig && sig === state.renderSig) {
     renderChatNav();
@@ -2837,9 +2846,36 @@ function renderTranscript() {
     html += renderMessage(m);
   }
   while (next < traces.length) html += renderTrace(traces[next++]);
-  el.innerHTML = html + pending;
+  el.innerHTML = `${html}${alarmsHere().map(renderAlarm).join('')}${pending}`;
   if (stick) scrollChatToBottom();
   renderChatNav();
+}
+
+/** The alarms that belong in this conversation: this session's, or this project's
+ *  when a delegated worker was the one that named the harness. */
+function alarmsHere() {
+  const dir = currentProject()?.directory;
+  return state.alarms.filter(
+    (a) => !a.sessionId || a.sessionId === state.sessionId || (a.dir && dir && dirKey(a.dir) === dirKey(dir)),
+  );
+}
+
+/**
+ * A model touched Synapse itself, said in the chat.
+ *
+ * Amber, like a compaction, because it is the same kind of news: something the
+ * harness noticed about the run rather than a step in it. The command is cut to one
+ * line and the full text is in the tooltip and the log — the operator cannot act on
+ * it, so what they need is to know it happened, not to read it.
+ */
+function renderAlarm(a) {
+  const title = /write|edit/i.test(a.what) ? 'Something tried to write inside Synapse' : 'A model named Synapse in a tool call';
+  const detail = a.paths.join(' | ');
+  const shown = detail.length > 150 ? `${detail.slice(0, 149)}…` : detail;
+  return `<div class="chat-alarm" title="${esc(`${title}: ${detail}${a.note ? ` — ${a.note}` : ''}`)}">
+    <span class="chat-alarm-mark">⚠</span>
+    <span class="chat-alarm-text">${esc(title)}${shown ? ` · ${esc(shown)}` : ''}</span>
+  </div>`;
 }
 
 /**
