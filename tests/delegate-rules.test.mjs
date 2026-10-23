@@ -142,6 +142,24 @@ try {
     await settle();
     expect('a journalled delegation is not run twice', again === 0 && ran.length === before, `${again} / ${ran.join(',')}`);
   }
+  // 5. a QC task past the cap: refused, and the Architect is told to settle it
+  // Silent refusal is how t16 sat in `doing` for hours with nothing running — a
+  // plan with one unfinished task cannot close, so a refusal the Architect never
+  // hears about is a project that never finishes.
+  writePlan(plan(['build', 'qc'], [task('t1', 'coder-1'), { ...task('t16', 'qc'), status: 'doing' }]));
+  {
+    const journal = path.join(DIR, '.synapse', 'runs.jsonl');
+    const rounds = ['t6', 't8', 't13']
+      .map((id) => JSON.stringify({ at: Date.now(), kind: 'result', task: id, role: 'qc', outcome: 'completed' }))
+      .join('\n');
+    fs.writeFileSync(journal, `${rounds}\n`, 'utf8');
+    const { runner, woke, ran } = makeRunner();
+    await runner.handleTurn('ses_arch', delegate('t16', 'call_qc_cap'));
+    await settle();
+    expect('a QC task past the cap does not run', !ran.includes('prompt'), ran.join(','));
+    expect('and the Architect is told, not left waiting', woke.length === 1 && /will not start however many times/.test(woke[0]), woke[0]?.slice(0, 110));
+    expect('the refusal is journalled as qc-cap', fs.readFileSync(journal, 'utf8').includes('"qc-cap"'));
+  }
 } finally {
   fs.rmSync(ROOT, { recursive: true, force: true });
 }

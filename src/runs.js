@@ -635,6 +635,20 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
             title: 'QC Loop Capped',
             body: `${QC_ROUNDS} QC rounds are spent on this project, so ${request.task} was not run.`,
           });
+          // And it has to be *told*, not just toasted at the operator. The first
+          // version of this branch was silent, so the Architect went on believing
+          // its check was queued: Fever Tracker's t16 sat in `doing` for hours with
+          // nothing running, and a plan with one task unfinished cannot close. The
+          // task is the Architect's to settle, and saying so is the whole fix.
+          await wake(sessionId, session.directory, {
+            description: `delegate ${request.task} refused: QC cap reached`,
+            text:
+              `Nothing was run: ${QC_ROUNDS} QC rounds are already spent on this project, so ${request.task} will ` +
+              `not start however many times it is asked for. Do not wait for it. Settle it yourself: mark it ` +
+              `\`blocked\` with a note saying the independent check was not run, or \`done\` if you have verified ` +
+              `it yourself and say how - then finish the plan, write its summary, and hand over. Anything still ` +
+              `unverified is the operator's to judge, and the plan is how you say so.`,
+          });
           continue;
         }
         // Deliberately not awaited: the Architect's turn is over, and the worker
