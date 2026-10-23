@@ -126,6 +126,12 @@ try {
   expect('the architect is told to judge, not build', architect.includes('You judge; you do not build'));
   expect('a refused delegation has two ways out, not self-service', architect.includes('never do that') && architect.includes('Record the task as blocked'));
   expect('the architect is told its own turns are the dearest', architect.includes('the dearest in the harness'));
+  // Routing is the failure that survives a menu: a plan whose every task is on a
+  // coder delivers the files and skips the craft. The brief has to name the
+  // crafts and say a coder builds a decision rather than making one.
+  expect('the architect is told who does what', architect.includes('Who does what') && architect.includes('qc uses the finished thing'));
+  expect('and that a coder does not decide the look', architect.includes('a coder builds a decision, never makes one'));
+  expect('a worker is not told who does what', !coder.includes('Who does what'));
   expect('a worker is not told to judge anything', !coder.includes('You judge; you do not build'));
   // The brief is sent to every project this harness will ever run, so it may not
   // describe the arrangement of the day: a worker's session, the model a role was

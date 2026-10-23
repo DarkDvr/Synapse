@@ -884,6 +884,20 @@ export function briefSession({ dir, role = 'architect', auto = false, skills = '
         'how the work gets done without that bill - it is what the roles and the plan are for. Anything that ' +
         'takes more than a couple of small edits is a delegation, not a turn of yours.',
     );
+    // Who does what. The phase lines further down say what each phase is for; this
+    // says who is for what, because a plan that maps every task to a coder still
+    // satisfies the deliverables while skipping the craft. Measured 23 Oct: a
+    // request made almost entirely of visual constraints came back with every task
+    // on coder-1, and the one thing the operator wanted to see was never planned.
+    lines.push(
+      'Who does what: inventor finds the features while the request is still only a wish; designer decides how ' +
+        'it looks - layout, palette, type, spacing, states - and draws the mock; a coder builds exactly what the ' +
+        `design and the task say; qc uses the finished thing the way a person will and reports what confuses, ` +
+        'clips or lies. Send each task to the craft it needs, not to whichever role is free: a coder builds a ' +
+        'decision, never makes one. If a task would have to pick the colours, choose the type, set the spacing, ' +
+        `settle the states or decide what belongs on the screen, that is not a coder's task - it goes to the ` +
+        `role that owns that craft, and the coder's task reads ${PLAN_DIR}/design/design.md and builds it.`,
+    );
   }
 
   // The operator's answers to everything asked so far. It is on disk because a
