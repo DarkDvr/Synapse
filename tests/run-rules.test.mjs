@@ -15,7 +15,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { readPlan, briefSession, appendAnswers } from '../src/plans.js';
-import { contextStats, windowRoom, windowAction, steerDue, nextRung, countedAttempts, promptSize, compactionEvents, resolveWindow, engineCompactAt, watchdogRoom } from '../src/runs.js';
+import { contextStats, windowRoom, windowAction, steerDue, nextRung, countedAttempts, promptSize, compactionEvents, compactionMessages, resolveWindow, engineCompactAt, watchdogRoom } from '../src/runs.js';
 import { createHarnessGuard } from '../src/harness.js';
 
 const checks = [];
@@ -308,6 +308,18 @@ try {
   // never to zero, which would read as "compacted at 0".
   const bare = compactionEvents([msg(9000, 29000), { type: 'compaction' }]);
   expect('no usage on the compaction means the prompt before it', bare[0].used === 38000, String(bare[0].used));
+  // The engine writes the message when a compaction *starts*, so counting it at
+  // that moment made the chat's "this is number N" one too high while the operator
+  // was watching it happen. Only finished ones count; a running one is still a
+  // running one for the watchdog, which needs to know it began.
+  const running = [
+    { type: 'assistant', raw: { tokens: { input: 40000 } } },
+    { type: 'compaction', raw: { status: 'completed', tokens: { input: 46000 } } },
+    { type: 'compaction', raw: { status: 'running' } },
+  ];
+  expect('a compaction in flight is not yet counted', compactionEvents(running).length === 1, String(compactionEvents(running).length));
+  expect('the finished one keeps its own size', compactionEvents(running)[0].used === 46000);
+  expect('the watchdog still sees both', compactionMessages(running).length === 2, String(compactionMessages(running).length));
 }
 
 // ── the two compaction guards must not race ──────────────────

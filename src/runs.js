@@ -273,6 +273,13 @@ export function promptSize(messages) {
  * this used to do) is one tool result behind: it reported "context at 38k" for a
  * compaction the engine fired at 44k, which reads like a bug in the engine and is
  * really a bug in the label.
+ *
+ * **A compaction that is still running does not count.** The engine writes the
+ * message when it starts (`status: 'running'`), keeps it while it summarizes and
+ * marks it `completed` at the end. Counting it early made the tally disagree with
+ * itself wherever the two are added together: the line in the chat says "this is
+ * number N", built as *finished so far + 1*, and a running one already in the
+ * transcript made that one too high while the operator was watching the real thing.
  */
 export function compactionEvents(messages) {
   const out = [];
@@ -282,12 +289,19 @@ export function compactionEvents(messages) {
       const t = m.raw.tokens;
       used = (t.input || 0) + (t.cache?.read || 0);
     } else if (m.type === 'compaction') {
+      if (m.raw?.status === 'running') continue;
       const t = m.raw?.tokens;
       const sent = t ? (t.input || 0) + (t.cache?.read || 0) : 0;
       out.push({ used: sent || used });
     }
   }
   return out;
+}
+
+/** Every compaction message, running or not — what the watchdog needs to know a
+ *  compaction has begun, rather than how many have finished. */
+export function compactionMessages(messages) {
+  return (messages || []).filter((m) => m.type === 'compaction');
 }
 
 /**
@@ -1657,7 +1671,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     // A session that compacted before this run existed is not news: the first look
     // takes the count as the baseline rather than treating old compactions as one
     // that has just happened.
-    const seen = compactionEvents(messages).length;
+    const seen = compactionMessages(messages).length;
     if (!Number.isInteger(state.compactions)) state.compactions = seen;
     else if (seen > state.compactions) {
       state.compactions = seen;

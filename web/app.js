@@ -2923,10 +2923,11 @@ function renderTrace(t) {
   // again. It stays for the whole run, and the folded summary counts it.
     const packed = Number(t.compactions) || 0;
   const compacting = Number(t.compactingSince) || 0;
+  // While one is in flight the count is "the ones that have finished, plus this
+  // one" — `compactions` only ever counts finished compactions, so the number here
+  // is the number of the one being written.
   const compactLine = compacting
-    ? `<div class="trace-line is-compact">⏳ Compacting the transcript…` +
-      (packed ? ` (this is number ${packed + 1})` : '') +
-      '</div>'
+    ? `<div class="trace-line is-compact">⏳ Compacting ×${packed + 1}</div>`
     : packed
       ? `<div class="trace-line is-compact">⏳ Compacted ×${packed}` +
         (t.compactAt ? ` · context at ${fmtTokens(t.compactAt)}${t.compactLimit ? `/${fmtTokens(t.compactLimit)}` : ''}` : '') +
