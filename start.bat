@@ -7,6 +7,7 @@ REM
 REM Pass "restart" when the app relaunches itself (Settings > Restart Now). The
 REM old process needs a moment to release the port before this one binds it, and
 REM the old window closes itself instead of waiting at the pause below.
+title Synapse Server
 setlocal
 cd /d "%~dp0"
 
