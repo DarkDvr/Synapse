@@ -2753,6 +2753,10 @@ async function loadMessages() {
   if (!state.sessionId) return;
   try {
     state.messages = (await api('GET', `/api/sessions/${encodeURIComponent(state.sessionId)}/messages`)).messages;
+    // The Architect's card reads its window from the usage event, which a page
+    // opened later never saw. The transcript carries the same number, so seed it
+    // here rather than showing an empty corner until the next turn.
+    state.archCtx = lastPromptOf(state.messages) || state.archCtx;
     updateBusyFromMessages();
   } catch (err) {
     if (/not found|404/i.test(err.message)) {
@@ -3194,6 +3198,18 @@ function noteArchitectUsage(ev) {
     at: Date.now(),
   };
   paintRates();
+}
+
+/** The same number, from the transcript: the open session's newest prompt. */
+function lastPromptOf(messages) {
+  const last = [...(messages || [])].reverse().find((m) => m.type === 'assistant' && m.raw?.tokens);
+  const t = last?.raw?.tokens;
+  if (!t) return null;
+  return {
+    sessionId: state.sessionId,
+    used: (Number(t.input) || 0) + (Number(t.cache?.read) || 0),
+    at: Date.now(),
+  };
 }
 
 function noteWorkerUsage(ev) {
