@@ -47,6 +47,15 @@ export function createToolStats({ file, logger }) {
         });
         for (const id of Array.isArray(saved.seen) ? saved.seen : []) seen.add(String(id));
         log.info(`census restored: ${state.total} calls, ${state.failed} failed`);
+        // A census written before the ids were kept cannot tell which calls it has
+        // already counted, which is exactly the state that double-counted a resumed
+        // session. Say so once rather than quietly being wrong about the number.
+        if (state.total && !seen.size) {
+          log.warn(
+            'this census predates id tracking, so a session it has already counted will be counted once more; ' +
+              'start a new session to clear it',
+          );
+        }
       }
     }
   } catch (err) {
