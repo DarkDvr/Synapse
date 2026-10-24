@@ -207,7 +207,6 @@ body { min-width: 1100px; }
   /* the working area cap; anything beyond it stays empty at the right edge */
   max-width: var(--work-w);
 }
-body[data-view="none"] .inspector,
 body[data-view="none"] .rail-plan { display: none; }
 
 .stage {
@@ -226,60 +225,34 @@ body[data-view="none"] .rail-plan { display: none; }
   height: var(--stage-h, calc(100vh - 26px));
 }
 
-/* The panels under the conversation, each between 284 and 341 wide. Two while
-   the plan is up beside the cards (then the row holds the census and the probe),
-   three once the window is wide enough for the plan to join them. `justify-content:
-   start` keeps them against the chat's left edge instead of scattering equal
-   boxes across the width. */
-.inspector {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(var(--panel-min), var(--panel-max)));
-  justify-content: start;
-  gap: 14px;
-  align-items: stretch;
-  align-content: start;
-  min-width: 0; min-height: 0;
-}
-/* Every rail panel is the same shape — a fixed head, a body that scrolls, an
-   optional note pinned to the foot — wherever it lives. These rules are NOT
-   scoped to `.inspector`: the plan moved into the stage's cards' row, and while
-   they were scoped to the old rail the plan had no scroller at all and was
-   simply clipped, with rows sliced and no way to reach them. */
-.inspector .rail-panel,
+/* The census and the probe were two panels under the conversation, sized to the
+   rail's 284-341px. They are popups now, so what is left here is the shape every
+   rail panel shares - a fixed head, a body that scrolls, an optional note pinned
+   to the foot - and the two popups' geometry below. */
 .rail-panel {
   display: flex; flex-direction: column; min-height: 0;
   min-width: 0; max-width: none;
   max-height: 420px; overflow: hidden;
 }
-/* The row of three is where the shared size range applies; a panel that spans
-   the row (the plan on a narrow window) takes the room it is given. */
-.inspector .rail-panel {
-  min-width: var(--panel-min); max-width: var(--panel-max);
+/* A popup gives the panel the whole window width, so the tables can breathe:
+   the fixed layout and ellipsis stay (a long tool name must never stretch it). */
+.rail-modal { width: min(760px, calc(100vw - 40px)); }
+.rail-modal .rail-panel { max-height: min(62vh, 540px); }
+.rail-modal .tool-table { table-layout: fixed; width: 100%; }
+.rail-modal .tool-table th,
+.rail-modal .tool-table td {
+  padding: 3px 8px; line-height: 16px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
+.rail-modal .tool-table tbody tr { height: 24px; }
+.rail-modal .tool-table tbody td { vertical-align: middle; }
+.rail-modal .tool-table .state-pill { line-height: 13px; padding: 0 5px; }
 .rail-panel .panel-head { flex: none; }
 .rail-plan .plan-body { overflow-y: auto; min-height: 0; }
 .rail-tools .tool-table,
 .rail-probe .tool-table { overflow: auto; min-height: 0; }
 .rail-panel .rail-note { flex: none; }
 .rail-panel .rail-note:last-child { margin-top: auto; }
-
-/* Long tool names (synapse-search_websearch) must never stretch the pane: fix
-   the layout and ellipsise the cells instead of letting the table grow. */
-.inspector .tool-table { table-layout: fixed; width: 100%; }
-/* One geometry for both rail tables, and a compact one. They are lists before
-   they are tables: the operator had two different row heights in two adjacent
-   panels and asked for equal and smaller. The state pill is capped too — it is
-   taller than a status dot, which is why single rows measured 29px against 24.8px
-   in the same table. */
-.inspector .tool-table th,
-.inspector .tool-table td {
-  padding: 2px 6px; line-height: 15px;
-}
-.inspector .tool-table tbody tr { height: 21px; }
-.inspector .tool-table tbody td { vertical-align: middle; }
-.inspector .tool-table .state-pill { line-height: 13px; padding: 0 5px; }
-.inspector .tool-table th,
-.inspector .tool-table td { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* ── 4. view states ────────────────────────────────────────────────────── */
 
@@ -655,6 +628,29 @@ body.dark .sidebar-bottom,
   margin-left: auto; font-family: var(--mono); font-size: 10.5px;
   color: #9aa0a8; overflow: hidden; text-overflow: ellipsis;
 }
+/* The rail's foot: two popups, in the same thin buttons a project's Browse and
+   Cmd use, so the rail reads as one set of controls rather than two designs. */
+.sidebar-tools { display: flex; gap: 6px; padding: 8px 4px 2px; }
+
+/* ── EXPERIMENT: no bold anywhere in the rail ────────────────────────────────
+   The operator asked to see the left pane with every weight flattened. It is one
+   block on purpose: deleting it restores the type exactly. Hierarchy then rests
+   on colour and size alone - the project name is brighter and larger than a
+   session, the labels are tracked and grey - which may be enough, and whether it
+   is is the question this experiment answers. */
+.sidebar .brand,
+.sidebar .version,
+.sidebar .sidebar-label,
+.sidebar .tree-open,
+.sidebar .tree-row.project .tree-open,
+.sidebar .tree-row.session.is-current .tree-open,
+.sidebar .btn-thin,
+.sidebar .engine-update,
+.sidebar .tree-wait,
+.sidebar .tree-add,
+.sidebar .tree-add-row,
+.sidebar .nav-link,
+.sidebar .nav-link.active { font-weight: 400; }
 
 /* ── 7. shared control styles ──────────────────────────────────────────── */
 /* the topbar is gone: the only selects left are the settings modal's model

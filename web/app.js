@@ -4318,6 +4318,28 @@ function planClockMarkup() {
   return `<span class="plan-clock" id="planClock" title="Time this session has spent working — it pauses whenever no card is working, and whenever you are being waited on.">${hhmmss(ms)}</span>`;
 }
 
+/**
+ * A popup opened from the rail's foot.
+ *
+ * The two tables used to render into panels under the conversation; the ids and
+ * the renderers are unchanged, so opening one is: show the backdrop, then let the
+ * caller refresh what is inside it. Closing is the same in reverse, and the
+ * refresh is skipped when the panel is not on screen.
+ */
+function openRailModal(id, refresh) {
+  const el = $(id);
+  if (!el) return;
+  el.hidden = false;
+  const focusable = el.querySelector('[data-close-modal], .close-x, button');
+  focusable?.focus?.();
+  Promise.resolve(refresh?.()).catch(() => {});
+}
+
+function closeRailModal(id) {
+  const el = $(id);
+  if (el) el.hidden = true;
+}
+
 async function renderToolUsage() {
   const note = $('toolUsageNote');
   const table = $('toolUsage');
@@ -6016,6 +6038,24 @@ function wire() {
   $('closeUpdateFoot').addEventListener('click', closeUpdateDialog);
   $('checkUpdate').addEventListener('click', checkEngineUpdate);
   $('applyUpdate').addEventListener('click', applyEngineUpdate);
+
+  // The two reference tables open from the rail's foot. They are rendered on
+  // open rather than only on the 30-second poll, so what the operator sees is
+  // what the server said a moment ago.
+  $('toolsBtn')?.addEventListener('click', () => openRailModal('toolsModal', renderToolUsage));
+  $('probeBtn')?.addEventListener('click', () => openRailModal('probeModal', renderProbe));
+  for (const btn of document.querySelectorAll('[data-close-modal]')) {
+    btn.addEventListener('click', () => closeRailModal(btn.dataset.closeModal));
+  }
+  for (const id of ['toolsModal', 'probeModal']) {
+    $(id)?.addEventListener('click', (e) => { if (e.target === $(id)) closeRailModal(id); });
+  }
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    for (const id of ['toolsModal', 'probeModal']) {
+      if ($(id)?.hidden === false) { e.preventDefault(); closeRailModal(id); return; }
+    }
+  });
 
   // The probe takes minutes, so it is started and then reported over the stream.
   $('runProbe').addEventListener('click', async () => {

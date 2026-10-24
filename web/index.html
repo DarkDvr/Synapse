@@ -59,6 +59,15 @@
         <span class="status-state" id="llmState">not set</span>
       </div>
     </div>
+
+    <!-- The two reference tables used to sit under the conversation, taking a
+         third of its width every day for something opened now and then. They are
+         popups from the rail's foot now, in the same thin buttons a project's
+         Browse and Cmd use. -->
+    <div class="sidebar-tools">
+      <button class="btn-thin" id="toolsBtn" title="What the models are calling, here and now">Tools in Use</button>
+      <button class="btn-thin" id="probeBtn" title="Run every tool once and record what happened">Tool Probe</button>
+    </div>
   </aside>
 
   <main class="main-content">
@@ -229,48 +238,6 @@
             <div class="ask-host" id="askHost" hidden></div>
           </section>
         </section>
-
-        <!-- ── inspector rail: the two reference tables ─────────────────── -->
-        <aside class="inspector">
-
-          <!-- the census: what the models are calling, here and now -->
-          <section class="panel rail-panel rail-tools">
-            <div class="panel-head">
-              <h3>Tools in use</h3>
-            </div>
-            <p class="rail-note" id="toolUsageNote">No tool calls recorded yet.</p>
-            <table class="tool-table" id="toolUsage" hidden>
-              <thead>
-                <tr><th>Tool</th><th style="text-align:right">Calls</th><th style="text-align:right">Fail</th><th style="text-align:right">Avg</th></tr>
-              </thead>
-              <tbody></tbody>
-            </table>
-            <p class="rail-note" id="toolUsageMeta"></p>
-          </section>
-
-          <!-- the probe: exercise every tool once and record what happened.
-               Its own panel, not a tail on the census: under the chat the row is
-               wide and short, and one tall column of two tables was the thing
-               that made this look like a leftover. -->
-          <section class="panel rail-panel rail-probe">
-            <div class="panel-head">
-              <h3>Tool probe</h3>
-              <button class="btn btn-secondary btn-sm" id="runProbe">Run Tool Probe</button>
-            </div>
-            <p class="rail-note" id="probeNote">Runs every tool once and records what happened, and how long it took.</p>
-            <table class="tool-table" id="probeTable" hidden>
-              <thead>
-                <tr>
-                  <th>Case</th>
-                  <th style="text-align:right" title="the tool's own execution time, not the model's">Time</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody></tbody>
-            </table>
-            <p class="rail-note" id="probeMeta"></p>
-          </section>
-        </aside>
       </div>
     </div>
   </main>
@@ -349,6 +316,59 @@
       <button class="btn btn-ghost btn-sm" id="dialogCancel">Cancel</button>
       <button class="btn btn-secondary btn-sm" id="dialogExtra" hidden></button>
       <button class="btn btn-primary btn-sm" id="dialogOk">OK</button>
+    </div>
+  </div>
+</div>
+
+<!-- Tools in use: the census of what the models are calling, here and now.
+     Same ids and same renderers as when it lived under the chat - only the
+     container moved, so nothing had to be rewritten to open it in a popup. -->
+<div class="modal-backdrop" id="toolsModal" hidden>
+  <div class="modal panel rail-modal" role="dialog" aria-modal="true" aria-labelledby="toolsTitle">
+    <div class="panel-head" style="margin-bottom:0">
+      <h3 id="toolsTitle">Tools in Use</h3>
+      <button class="close-x" data-close-modal="toolsModal" aria-label="Close">✕</button>
+    </div>
+    <p class="modal-sub">What the models have actually called since this start. Clears on every boot unless the census is kept.</p>
+    <section class="rail-panel rail-tools">
+      <p class="rail-note" id="toolUsageNote">No tool calls recorded yet.</p>
+      <table class="tool-table" id="toolUsage" hidden>
+        <thead>
+          <tr><th>Tool</th><th style="text-align:right">Calls</th><th style="text-align:right">Fail</th><th style="text-align:right">Avg</th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+      <p class="rail-note" id="toolUsageMeta"></p>
+    </section>
+  </div>
+</div>
+
+<!-- Tool probe: every tool exercised once, and what happened. It reports over
+     the stream while it runs, so the popup can be closed and reopened. -->
+<div class="modal-backdrop" id="probeModal" hidden>
+  <div class="modal panel rail-modal" role="dialog" aria-modal="true" aria-labelledby="probeTitle">
+    <div class="panel-head" style="margin-bottom:0">
+      <h3 id="probeTitle">Tool Probe</h3>
+      <button class="close-x" data-close-modal="probeModal" aria-label="Close">✕</button>
+    </div>
+    <p class="modal-sub">Runs every tool once and records what happened, and how long it took.</p>
+    <section class="rail-panel rail-probe">
+      <p class="rail-note" id="probeNote">Runs every tool once and records what happened, and how long it took.</p>
+      <table class="tool-table" id="probeTable" hidden>
+        <thead>
+          <tr>
+            <th>Case</th>
+            <th style="text-align:right" title="the tool's own execution time, not the model's">Time</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+      <p class="rail-note" id="probeMeta"></p>
+    </section>
+    <div class="modal-actions" style="display:flex;gap:9px;margin-top:16px;justify-content:flex-end">
+      <button class="btn btn-secondary btn-sm" id="runProbe">Run Tool Probe</button>
+      <button class="btn btn-primary btn-sm" data-close-modal="probeModal">Close</button>
     </div>
   </div>
 </div>
