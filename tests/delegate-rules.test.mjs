@@ -185,6 +185,34 @@ try {
     expect('the reminder is not repeated', woke.length === before, `${woke.length} vs ${before}`);
   }
 
+  // 6b. a step marked doing with nothing running: woken, once
+  // 24 Oct, on a real project: the Architect wrote "Now delegate t5 with concrete
+  // instructions…" as a sentence and ended its turn. The plan claimed a task was
+  // doing, the status made the rule below blind to it, and ten minutes passed with
+  // nothing running. A sentence is not a tool call, and only this can tell.
+  writePlan(
+    plan(
+      ['build', 'qc'],
+      [{ ...task('t1', 'coder-1'), status: 'done' }, { ...task('t5', 'coder-1'), status: 'doing' }, { ...task('t6', 'qc'), dependsOn: ['t5'] }],
+    ),
+  );
+  {
+    const { runner, woke, arch } = makeRunner();
+    arch.push({ id: 's2', type: 'synthetic', parts: [{ type: 'text', text: 't4 finished.' }], created: Date.now() });
+    await runner.handleTurn('ses_arch', arch);
+    expect(
+      'a step marked doing with nothing running wakes the Architect',
+      woke.length === 1 && /says t5 is `doing`, and nothing is running/.test(woke[0]),
+      woke[0]?.slice(0, 130),
+    );
+    expect('it is told a sentence is not a delegation', /is not a delegation/.test(woke[0] || ''));
+    expect('and given both ways out', /Delegate t5 now/.test(woke[0] || '') && /back to `todo`/.test(woke[0] || ''));
+
+    const before = woke.length;
+    await runner.handleTurn('ses_arch', arch);
+    expect('the doing reminder is not repeated', woke.length === before, `${woke.length} vs ${before}`);
+  }
+
   // …and quiet when it is not safe: the operator is driving, or they just spoke.
   {
     const { runner, woke } = makeRunner({ auto: false });

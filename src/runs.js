@@ -851,6 +851,31 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     // not yet the thing the operator agreed to.
     if (uncoveredPhases(plan).length) return;
     const done = new Set(tasks.filter((t) => t.status === 'done').map((t) => t.id));
+
+    // A step the Architect claimed and never started.
+    //
+    // It says `doing`, so the rule below cannot see it — that one looks for `todo`
+    // — and every other gate in this file is about a delegation that was
+    // *attempted*. Measured 24 Oct: the Architect wrote "Now delegate t5 with
+    // concrete instructions…" as a sentence, ended its turn with no tool call, and
+    // the project sat for ten minutes with the plan claiming a task was running and
+    // nothing running at all. A sentence about delegating is not a delegation, and
+    // only the harness can tell the two apart.
+    const claimed = tasks.find((t) => t.status === 'doing' && !nudged.has(`${dirKey(dir)}|doing|${t.id}`));
+    if (claimed) {
+      nudged.add(`${dirKey(dir)}|doing|${claimed.id}`);
+      out.info(`plan says ${claimed.id} (${claimed.role}) is doing, and nothing is running - waking the Architect`);
+      await wake(session.id, dir, {
+        description: `${claimed.id} is marked doing, but nothing is running`,
+        text:
+          `The plan says ${claimed.id} is \`doing\`, and nothing is running in this project. Writing that you ` +
+          `will delegate is not a delegation: nothing starts until the delegate call is made, in the turn ` +
+          `where you decide it. Delegate ${claimed.id} now — or put it back to \`todo\` if it is not next. ` +
+          `This is the one reminder the harness gives about it.`,
+      });
+      return;
+    }
+
     const ready = tasks.find(
       (t) =>
         t.status === 'todo' &&
