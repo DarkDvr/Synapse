@@ -1763,6 +1763,16 @@ body[data-mode="single"] .keep-toggle { display: none; }
 /* Under the dot, centred, and quiet: it is an address, not a title. */
 .plan-id { font-family: var(--mono); font-size: 9.5px; color: #7b8089; letter-spacing: 0.02em; line-height: 1; }
 .plan-note { font-size: 11px; line-height: 1.4; color: var(--red); overflow-wrap: anywhere; }
+/* A row the Architect added after the list was made - something it noticed while
+   the work was happening. Amber and quiet: it is information for the operator (the
+   list grew, here is where), not a problem, and the important thing is that it is
+   visible without reading the row. */
+.plan-origin {
+  font-family: var(--mono); font-size: 8.5px; line-height: 1; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--amber); opacity: 0.85;
+  border: 1px solid rgba(232, 163, 61, 0.4); border-radius: 4px;
+  padding: 2px 4px 1px; margin-left: 5px; vertical-align: 1px; white-space: nowrap;
+}
 /* The right-hand column of a step: the role badge, and under it the step's own
    stopwatch. That stack is what makes two lines the minimum height of a row, which
    is the point — the clock has to fit under the badge, not beside it. */

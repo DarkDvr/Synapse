@@ -35,7 +35,6 @@ import {
   synapseFingerprint,
   fingerprintDiff,
   ownedFolder,
-  uncoveredPhases,
   SHARED_DIR,
   setTaskStatus,
 } from './plans.js';
@@ -735,40 +734,12 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
           });
           continue;
         }
-        // Nothing runs while the plan declares a phase it has not planned. The
-        // operator approves a plan, not a plan-shaped thing that grows a task at a
-        // time: on Clock Test 3 the Architect wrote t1, delegated it in the same
-        // turn, and only then added t2-t10 — so the first task ran against a
-        // two-task plan that became a ten-task one behind the operator's back.
-        // The brief asks for the whole plan and the validator says so; this is the
-        // part that does not depend on the model reading either.
+        // The list is live, so nothing is refused for being incomplete: a work list
+        // that grows is the point, and the operator is told in one line what was
+        // added (see the brief). Clock Test 3 refused a delegation for this and the
+        // rule was right for a plan signed off once; it is wrong for a list that is
+        // allowed to grow, and it stopped productive work to enforce a fiction.
         const currentPlan = readPlan(session.directory).plan;
-        const unplanned = uncoveredPhases(currentPlan);
-        if (unplanned.length) {
-          const list = unplanned.map((p) => `"${p}"`).join(', ');
-          appendRun(session.directory, {
-            kind: 'delegate',
-            callId: request.callId,
-            task: request.task,
-            outcome: 'plan-incomplete',
-          });
-          log.info(`delegation refused: ${request.task} - the plan declares ${unplanned.join(', ')} with no task`);
-          notify?.({
-            kind: 'note',
-            title: 'Plan Not Finished',
-            body: `The plan declares ${list} but has no task for ${unplanned.length === 1 ? 'it' : 'them'}, so ${request.task} was not run.`,
-          });
-          await wake(sessionId, session.directory, {
-            description: `delegate ${request.task} refused: plan incomplete`,
-            text:
-              `Nothing was run: the plan declares the phase${unplanned.length === 1 ? '' : 's'} ${list} but has no ` +
-              `task for ${unplanned.length === 1 ? 'it' : 'them'}. Write the whole plan - every declared phase ` +
-              `with its tasks, role and order - or drop the phase${unplanned.length === 1 ? '' : 's'} you are not ` +
-              `using, and then delegate ${request.task} again. The operator reviews the plan, so what they agreed ` +
-              `to on the first screen has to be what runs.`,
-          });
-          continue;
-        }
 
         // The QC loop closes after three completed rounds. A model will keep
         // finding one more issue until the quota is gone; the third report says so
@@ -847,9 +818,6 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     const plan = readPlan(dir).plan;
     const tasks = Array.isArray(plan?.tasks) ? plan.tasks : [];
     if (!tasks.length) return;
-    // An unplanned phase is a different problem, with its own wake: the plan is
-    // not yet the thing the operator agreed to.
-    if (uncoveredPhases(plan).length) return;
     const done = new Set(tasks.filter((t) => t.status === 'done').map((t) => t.id));
 
     // A step the Architect claimed and never started.

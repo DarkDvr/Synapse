@@ -4326,7 +4326,11 @@ function paintPlan(body) {
             <span class="plan-id">${esc(t.id || '?')}</span>
           </span>
           <span class="plan-main">
-            <span class="plan-title" title="${esc(tooltip)}">${esc(t.title)}</span>
+            <span class="plan-title" title="${esc(tooltip)}">${esc(t.title)}</span>${
+              t.origin === 'found'
+                ? `<span class="plan-origin" title="Noticed during the work - this row was not in the list when the operator first saw it">added</span>`
+                : ''
+            }
             ${t.note && asking ? `<span class="plan-note">${esc(t.note)}</span>` : ''}
           </span>
           <span class="plan-side">

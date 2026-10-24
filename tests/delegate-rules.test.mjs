@@ -1,15 +1,17 @@
-// A delegation is refused while the plan declares a phase it has not planned.
+// A delegation is not refused for a list that is still growing.
 //
-// This is the enforcement behind the brief line "write the whole plan before the
-// first task runs". Clock Test 3 showed the instruction alone was not enough: the
-// Architect wrote t1, delegated it in the same turn, and added t2-t10 afterwards,
-// so the first task ran against a two-task plan that grew to ten behind the
-// operator's back. Driven through the real runner with a stubbed engine.
+// This file used to enforce "write the whole plan before the first task runs": a
+// declared phase with no task under it refused the delegation. The record retired
+// that rule - the Architect invented t3b and t3c to insert work between existing
+// items, reopened a finished task after judging it, and added two more the next
+// day. The list is a work list now, so what has to hold is the opposite: a partial
+// list runs, and nothing is refused for being incomplete. Driven through the real
+// runner with a stubbed engine.
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { createRunner } from '../src/runs.js';
-import { uncoveredPhases } from '../src/plans.js';
+import { readPlan, ORIGINS } from '../src/plans.js';
 
 const ROOT = path.join(os.tmpdir(), `synapse-delegate-rules-${process.pid}`);
 const DIR = path.join(ROOT, 'project');
@@ -19,7 +21,7 @@ const checks = [];
 const expect = (label, ok, detail) =>
   checks.push(`${ok ? 'PASS' : 'FAIL'}  ${label}${detail ? `  <- ${detail}` : ''}`);
 
-const plan = (phases, tasks) => ({ version: 1, goal: 'x', phases, tasks });
+const plan = (phases, tasks) => ({ version: 1, goal: 'x', ...(phases ? { phases } : {}), tasks });
 const task = (id, role) => ({ id, title: `Do ${id}`, role, status: 'todo', detail: 'd', reads: [], dependsOn: [] });
 
 const writePlan = (p) => {
@@ -27,20 +29,28 @@ const writePlan = (p) => {
   fs.writeFileSync(path.join(DIR, '.synapse', 'plan.json'), JSON.stringify(p, null, 2), 'utf8');
 };
 
-// ── the pure answer ─────────────────────────────────────────────
-expect(
-  'an unplanned phase is reported',
-  uncoveredPhases(plan(['invent', 'build'], [task('t1', 'inventor')])).join() === 'build',
-);
-expect(
-  'a covered phase is not',
-  uncoveredPhases(plan(['build'], [task('t1', 'coder-2')])).length === 0,
-);
-expect(
-  'an unknown phase is the Architect\'s menu, not ours',
-  uncoveredPhases(plan(['polish'], [task('t1', 'coder-1')])).length === 0,
-);
-expect('an empty plan has nothing to complain about', uncoveredPhases({ phases: [], tasks: [] }).length === 0);
+// ── the file's shape ────────────────────────────────────────────
+writePlan(plan(['build', 'qc'], [
+  task('t1', 'coder-1'),
+  { ...task('t2', 'qc'), origin: 'found' },
+  { ...task('t3', 'coder-1'), origin: 'operator' },
+  { ...task('t4', 'coder-1'), origin: 'nonsense' },
+]));
+{
+  const st = readPlan(DIR);
+  const byId = Object.fromEntries((st.plan?.tasks || []).map((t) => [t.id, t]));
+  expect(
+    'an old plan that still names phases reads without a complaint',
+    !(st.problems || []).some((p) => /phases/.test(p)),
+    (st.problems || []).join(' | '),
+  );
+  expect('phases are dropped from what the harness reads', st.plan && !('phases' in st.plan), Object.keys(st.plan || {}).join(','));
+  expect('a planned row defaults to origin=plan', byId.t1?.origin === 'plan', byId.t1?.origin);
+  expect('a row noticed during the work keeps origin=found', byId.t2?.origin === 'found', byId.t2?.origin);
+  expect('a row the operator asked for keeps origin=operator', byId.t3?.origin === 'operator', byId.t3?.origin);
+  expect('an unknown origin is plan, not a complaint', byId.t4?.origin === 'plan', byId.t4?.origin);
+  expect('the origins are named in one place', ORIGINS.join() === 'plan,found,operator', ORIGINS.join());
+}
 
 // ── the refusal, through handleTurn ─────────────────────────────
 const makeRunner = ({ auto = true } = {}) => {
@@ -100,20 +110,24 @@ const delegate = (taskId, callId = `call_${taskId}`) => [
 ];
 
 try {
-  // 1. an unplanned phase: refused, the Architect is told, nothing runs
+  // 1. a list that is still growing runs anyway
+  // The operator's list is a work list, so a partial one is the normal case. This
+  // used to be the refusal case, and it is now the opposite: the delegation goes
+  // through and nothing is written to runs.jsonl as a refusal.
   writePlan(plan(['invent', 'build', 'hack'], [task('t1', 'inventor')]));
   {
     const { runner, woke, ran } = makeRunner();
     await runner.handleTurn('ses_arch', delegate('t1'));
+    await settle();
     const run = fs.existsSync(path.join(DIR, '.synapse', 'runs.jsonl'))
       ? fs.readFileSync(path.join(DIR, '.synapse', 'runs.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l))
       : [];
-    expect('the delegation is refused', ran.length === 0, ran.join(','));
-    expect('the Architect is woken with what to do', woke.length === 1 && /declares the phases "build", "hack"/.test(woke[0]), woke[0]?.slice(0, 90));
-    expect('the refusal is recorded', run.some((r) => r.outcome === 'plan-incomplete'));
+    expect('a partial list is not refused', ran.includes('prompt'), ran.join(','));
+    expect('so nothing is woken to complain', woke.length === 0, woke[0]?.slice(0, 90));
+    expect('and no refusal is recorded', !run.some((r) => r.outcome === 'plan-incomplete'), JSON.stringify(run));
   }
 
-  // 2. the same delegation, once the plan is whole: it runs
+  // 2. a second task on the same list still runs
   writePlan(plan(['invent', 'build'], [task('t1', 'inventor'), task('t2', 'coder-1')]));
   {
     const { runner, woke, ran, warns } = makeRunner();

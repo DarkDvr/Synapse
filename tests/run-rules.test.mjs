@@ -49,15 +49,17 @@ const task = (id, role, status = 'todo', extra = {}) => ({
 });
 
 try {
+  // A plan written before the work-list migration still names its phases. They are
+  // ignored rather than policed: the list grows, so a declared phase with no task
+  // under it is not a fault - it is a row that has not been written yet.
   let s = write({
     version: 1,
     goal: 'A clock.',
     phases: ['invent', 'build', 'hack'],
     tasks: [task('t1', 'inventor', 'done'), task('t2', 'coder-1')],
   });
-  expect('uncovered phase is named', has(s, 'phases lists "hack" but the plan has no task'));
-  expect('covered phase is not named', !has(s, 'phases lists "build"'));
-  expect('unknown phase is left alone', !has(s, '"design"'));
+  expect('phases are not policed any more', !has(s, 'phases lists'), (s.problems || []).join(' | '));
+  expect('and the plan still reads', !s.error, s.error || '');
 
   s = write({
     version: 1,
@@ -65,15 +67,14 @@ try {
     phases: ['invent', 'build', 'hack'],
     tasks: [task('t1', 'inventor', 'done'), task('t2', 'coder-1', 'done'), task('t3', 'qc', 'done')],
   });
-  expect('finished and covered asks for the summary', has(s, 'no "summary"'));
+  expect('finished asks for the summary', has(s, 'no "summary"'));
 
   s = write({
     version: 1,
     goal: 'A clock.',
-    phases: ['invent', 'build', 'hack'],
-    tasks: [task('t1', 'inventor', 'done'), task('t2', 'coder-1', 'done')],
+    tasks: [task('t1', 'inventor', 'done'), task('t2', 'coder-1', 'todo')],
   });
-  expect('unfinished plan does not ask for the summary', !has(s, 'no "summary"'));
+  expect('unfinished does not ask for the summary', !has(s, 'no "summary"'));
 
   const half = { ...task('t2', 'coder-1', 'todo'), result: 'All nine findings fixed.' };
   s = write({ version: 1, goal: 'A clock.', phases: ['build'], tasks: [task('t1', 'inventor', 'done'), half] }, 0);

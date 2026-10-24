@@ -78,14 +78,21 @@ Adding a project creates the folder. Removing one only forgets it — nothing on
 disk is deleted — and releases the folder so you can delete it straight after.
 Re-adding a folder that already holds a plan asks first, showing what is at stake.
 
-## The plan and the pipeline
+## The work list and the pipeline
 
-The Architect writes the plan as a file, with its ordinary file tools. Synapse
-only reads and renders it and **never repairs it**: a malformed file is named, in
-the pane and in the Architect's own brief, so the model fixes its own document.
+The Architect keeps its list of work as a file, with its ordinary file tools.
+Synapse only reads and renders it and **never repairs it**: a malformed file is
+named, in the pane and in the Architect's own brief, so the model fixes its own
+document.
 
-The pipeline is a **menu, not a checklist** — the Architect picks the phases a
-project needs and records them in the plan:
+The list is live. It starts with the work the Architect can see and grows while the
+work happens — a defect a worker reported, a decision the build exposed — and every
+row added that way is marked `found` in the pane, so a list that changed after you
+looked says so. What stays fixed is the scope: `features.json` is the agreed
+contract, and a new feature still comes back to you as a question.
+
+The pipeline behind it is a **menu, not a checklist** — a clock pays for invent,
+design, build and review, a one-file script pays for two tasks:
 
 | Role | Produces |
 |---|---|

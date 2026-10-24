@@ -448,10 +448,11 @@ way an ordinary person meets it. A config written before a rename is migrated on
 plan file written before it is translated on read (`LEGACY_ROLE` in `plans.js`), so
 neither a saved model choice nor an existing plan is lost.
 
-The pipeline is a **menu**, not a checklist: the Architect picks the phases per
-project and records them in the plan's `phases`. A clock pays for invent → design
-→ build the shell → wire it → QC → fix → re-check; a word-count CLI pays for two
-tasks. Roles are identities plus one mandate each (`ROLE_MANDATES` in
+The pipeline is a **menu**, not a checklist: a clock pays for invent → design →
+build the shell → wire it → QC → fix → re-check; a word-count CLI pays for two
+tasks. The Architect used to record that choice in the plan's `phases` field; it
+no longer does, and the field is ignored on read (see "The plan became a work
+list" below). Roles are identities plus one mandate each (`ROLE_MANDATES` in
 `plans.js`), and each owns one folder:
 
 | role | may write | produces |
@@ -501,12 +502,13 @@ Measured from the engine's own store (`data\engine\opencode\data\opencode\openco
 retries and zero resumes; 749 model turns; 727k tokens written, **70% of it
 thinking**; 13% of the time in tools, the rest in generation.
 
-- **The plan is written in full before the first task runs.** It opened with two
-  steps and the Architect added seven while it worked, so what the operator
-  approved on the first screen was not what ran. The brief now says so, and the
-  validator names the visible symptom: `phases lists "build" but the plan has no
+- **The plan is written in full before the first task runs.** *(Superseded on
+  24 Oct: the list is allowed to grow. See "The plan became a work list" below.)*
+  It opened with two  steps and the Architect added seven while it worked, so what the operator
+  approved on the first screen was not what ran. The brief said so, and the
+  validator named the visible symptom: `phases lists "build" but the plan has no
   task for it - write the whole plan before the first task runs, or drop the
-  phase`. "The plan is finished" also means every declared phase is covered, which
+  phase`. "The plan is finished" also meant every declared phase was covered, which
   is what stopped the missing-summary note firing at 10:59 while the Architect was
   still writing the plan.
 - **A second QC pass is a check, not a new hunt.** Round 1 (38m) found nine
@@ -975,3 +977,50 @@ Two things came out of it:
   booted at 20:16. Reading the commit and reading the behaviour would have given
   the same answer for the wrong reason. When a brief change "does not work", check
   the boot line in `logs\app.log` before the rule.
+
+## The plan became a work list
+
+The file was designed as a plan: written in full, reviewed once, then executed.
+The record says it became something else, and the harness was fighting it.
+
+**What the record shows.** On one project the Architect invented `t3b` and `t3c`
+to insert work *between* existing items — the schema had no insertion, so it made
+up a naming convention. It set a finished task back to `todo` after judging it
+(`t3:done` → `t3:todo`, 19:41). It added `t9` and `t10` the next day. Sixteen plan
+changes in one evening. On the next project it inserted `t7` between `t2` and
+`t3` mid-flight: the array order is the work order and the id is only a reference.
+
+Meanwhile three rules assumed the old shape, and one of them was actively harmful:
+a delegation was **refused** while a declared phase had no task under it. On Clock
+Test 3 that refusal was right — a two-task plan silently became ten. On a list that
+is allowed to grow it is a rule against the behaviour that makes the harness good.
+
+**What changed.**
+
+- **The word.** The brief, the docs and the pane call it a work list. The file is
+  still `.synapse\plan.json`: renaming it would migrate every existing project for
+  a word, and the file name is not a claim about how it is used.
+- **`phases` is gone.** The top-level field, `PHASE_ROLES`, `uncoveredPhases`, the
+  validator complaint, the delegation refusal and the "finished means every phase
+  is covered" rule. Old plans keep the field and it is ignored on read. The role on
+  each task is what says whether design was planned; the order of the array is the
+  order of work.
+- **`origin` is new** — `plan`, `found` or `operator`. It is a fact about where the
+  row came from, not a rating. The pane marks `found` rows with a quiet amber
+  "added" chip, so a list that grew after the operator looked says so in one
+  glance. An unknown value reads as `plan`; nothing is policed.
+- **The brief asks for the opposite of what it asked before**: start with the work
+  you can see, add items where they belong in the order, and say in one line what
+  you added and why. Scope is still the operator's: `features.json` is the contract
+  and a new feature still goes through the feature question.
+
+**What a rating would have cost.** A `priority` field was considered and left out.
+A model asked to rate its own additions rates them all high, and a list where
+everything is marked is a list where nothing is marked. QC findings already carry
+severity (critical / major / minor) inside the finding, which is where a rating
+means something because it comes with a repro.
+
+**What it costs, honestly.** The operator's protection against scope creep was "I
+saw the whole plan". It is now "the list says what changed, and the features file
+says what was agreed". That is weaker on paper and stronger in practice, because
+the old rule was being broken productively every single run.

@@ -1,5 +1,11 @@
 # The pipeline: roles, files, and eyes
 
+> **Superseded in part, 24 Oct 2026.** The pipeline itself stands. Two things in
+> this document no longer describe the harness: the plan is now a **work list**
+> that is allowed to grow while the work happens, and `phases` is retired. Where
+> this document says "written in full" or "records the phases", read the note
+> "The plan became a work list" in `docs/notes/engine-notes.md`.
+
 Agreed with the operator, 19 Oct 2026. This is the implementation plan: what is
 locked, in what order it gets built, and what "done" means for each stage. It
 lives in the repo so it survives the session; AGENTS.md gets the durable lessons

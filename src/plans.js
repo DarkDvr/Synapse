@@ -43,32 +43,13 @@ export const STATUSES = ['todo', 'doing', 'done', 'blocked', 'failed'];
 // Architect turn past three minutes, and the note fired while it was still working.
 const RESULT_STATUS_GRACE_MS = 10 * 60 * 1000;
 
-// Which roles belong to a phase the Architect declared. `phases` is a menu, so an
-// empty or unknown phase name is not ours to police; a declared phase with no task
-// under it is the symptom of a plan written one step at a time.
-const PHASE_ROLES = {
-  invent: ['inventor'],
-  design: ['designer'],
-  build: ['coder-1', 'coder-2', 'coder-3'],
-  hack: ['qc'],
-};
-
-/**
- * Phases the plan declares but has not planned: a phase whose roles no task
- * carries. Unknown phase names are left alone — they are the Architect's menu,
- * not ours to police.
- *
- * Exported because two callers need the same answer: the validator, which says it,
- * and the runner, which refuses to start work while it is true.
- */
-export function uncoveredPhases(plan) {
-  const phases = Array.isArray(plan?.phases) ? plan.phases : [];
-  const tasks = Array.isArray(plan?.tasks) ? plan.tasks : [];
-  return phases.filter((phase) => {
-    const roles = PHASE_ROLES[String(phase).toLowerCase()];
-    return roles ? !tasks.some((t) => roles.includes(t.role)) : false;
-  });
-}
+// The origins a work item can have. `plan` is the list the Architect started
+// with, `found` is something it noticed while the work was happening, and
+// `operator` is work the operator asked for. The field is a fact about where the
+// row came from, not a judgement of how important it is: a model asked to rate
+// its own additions rates them all high, and a list that flags everything flags
+// nothing.
+export const ORIGINS = ['plan', 'found', 'operator'];
 
 export const PLAN_DIR = '.synapse';
 export const PLAN_NAME = 'plan.json';
@@ -395,9 +376,6 @@ export function readPlan(dir) {
   }
 
   const goal = asText(parsed.goal);
-  // The phases the Architect chose for this project: a menu, not a checklist,
-  // and this is the record of what it picked. Tolerant, like everything else.
-  const phases = Array.isArray(parsed.phases) ? parsed.phases.map(asText).filter(Boolean).slice(0, 8) : [];
   const rawTasks = Array.isArray(parsed.tasks) ? parsed.tasks : null;
   if (rawTasks === null) problems.push('"tasks" is missing or is not an array');
 
@@ -469,6 +447,12 @@ export function readPlan(dir) {
       );
     }
 
+    // Where the row came from. Tolerant on purpose: an unknown value is read as
+    // `plan` rather than complained about, because the field exists to tell the
+    // operator what appeared after they looked, not to be policed.
+    const rawOrigin = asText(source.origin).toLowerCase();
+    const origin = ORIGINS.includes(rawOrigin) ? rawOrigin : 'plan';
+
     // What the task points at. Only checked for the step in hand: a later task's
     // `reads` may name a file an earlier task has not written yet, and flagging
     // that would have the Architect rewriting a perfectly good plan.
@@ -494,6 +478,7 @@ export function readPlan(dir) {
       role,
       status,
       rawStatus,
+      origin,
       detail: asText(source.detail) || null,
       dependsOn: Array.isArray(source.dependsOn) ? source.dependsOn.map(asText).filter(Boolean) : [],
       reads,
@@ -502,34 +487,17 @@ export function readPlan(dir) {
     };
   });
 
-  // The plan is written once, in full, before the first delegation: the operator
-  // reviews a plan, not something that grows a task at a time. On the clock
-  // project it opened with two steps and the Architect added seven more while it
-  // worked, so what was approved on the first screen was not what ran. A declared
-  // phase with no task under it is the visible symptom, so that is what is named —
-  // and the fix is the Architect's own: add the tasks, or drop the phase.
-  const uncovered = uncoveredPhases({ phases, tasks });
-  for (const phase of uncovered) {
-    problems.push(
-      `phases lists "${phase}" but the plan has no task for it - write the whole plan before the first task ` +
-        `runs, or drop the phase`,
-    );
-  }
+  // Nothing is policed about the shape of the list. It is a work list and it grows
+  // while the work happens — that is not a fault to name, it is the thing this
+  // harness is for. What protects the operator is `features.json` (the scope) and
+  // the brief's one-line announcement of each addition, not a rule that the list be
+  // complete before anything starts. A task's `origin` is what records the
+  // difference, and unknown values are read as `plan`: tolerance, as everywhere.
 
   // A finished plan owes the operator a customer-facing summary: the Architect's
   // card shows it once the work is done, instead of only a DONE chip. The Architect
   // writes it itself, so this is a note to it rather than something we invent.
-  //
-  // "Finished" means every task is done *and* the plan still matches the phases it
-  // declared: a two-task plan with four phases is a plan being written, not a
-  // finished one, and asking for its summary there is how the clock project got
-  // the complaint at 10:59 while the Architect was still planning.
-  if (
-    tasks.length &&
-    tasks.every((t) => t.status === 'done') &&
-    !uncovered.length &&
-    !asText(parsed.summary)
-  ) {
+  if (tasks.length && tasks.every((t) => t.status === 'done') && !asText(parsed.summary)) {
     problems.push(
       'the plan is finished but has no "summary" - add one sentence a customer would understand: ' +
         'what this project delivers, with no file paths and no tool names',
@@ -550,7 +518,7 @@ export function readPlan(dir) {
     problems,
     features,
     requirement: readRequirement(dir),
-    plan: { version: Number(parsed.version) || 1, goal, summary: asText(parsed.summary), phases, tasks },
+    plan: { version: Number(parsed.version) || 1, goal, summary: asText(parsed.summary), tasks },
   };}
 
 /** A cheap change fingerprint, so the harness can tell that something wrote to
@@ -896,6 +864,20 @@ export function briefSession({ dir, role = 'architect', auto = false, skills = '
         'everything you have said and everything a worker reported. So do not quote a report back - name its ' +
         'file, and say in one line what you checked yourself.',
     );
+    // Measured 24 Oct on one project: the Architect ran the renderer 55 times and
+    // read 29 of the pictures - the same contact sheets over and over, in folders
+    // that each render created fresh. Images were two thirds of its transcript and
+    // about a third of its window, every turn, for the rest of the project.
+    lines.push(
+      'Look at what a worker produced, but never re-render it: the picture you need was already taken by the ' +
+        'role that made the thing, and its report carries the numbers with it. Rendering it yourself costs a ' +
+        'shell call and a picture that stays in your conversation for the rest of the project, and it is a ' +
+        'second copy of something you have already seen.',
+    );
+    lines.push(
+      'And read a picture once. Every render writes a new copy into a new folder, so two files with the same ' +
+        'shape are the same picture: read the contact sheet for the width that matters, once, and judge from it.',
+    );
     // Who does what. The phase lines further down say what each phase is for; this
     // says who is for what, because a plan that maps every task to a coder still
     // satisfies the deliverables while skipping the craft. Measured 23 Oct: a
@@ -1012,7 +994,7 @@ export function briefSession({ dir, role = 'architect', auto = false, skills = '
 
   if (isArchitect) {
     lines.push(
-      `Format: {"version":1,"goal":"...","summary":"","phases":["invent","design","build","hack"],"tasks":[{"id":"t1","title":"...","role":"coder-1","status":"todo",` +
+      `Format: {"version":1,"goal":"...","summary":"","tasks":[{"id":"t1","title":"...","role":"coder-1","status":"todo","origin":"plan|found|operator",` +
         `"detail":"...","reads":[],"dependsOn":[],"result":null,"note":null}]} - ` +
         `statuses: ${STATUSES.join(', ')}. Keep ids short and unique, titles under ${TITLE_MAX} characters, ` +
         `and mark a task "blocked" only when it needs the operator.`,
@@ -1040,12 +1022,21 @@ export function briefSession({ dir, role = 'architect', auto = false, skills = '
         `coding work for one of them; if that coder cannot do it, Synapse moves the task down the line ` +
         `itself and the report tells you which role actually ran it.`,
     );
-    // The pipeline is a menu: a clock pays for all of it, a one-file script does
-    // not. These are the rules that change behaviour, not a description of a
-    // process - every one of them exists because a project drifted without it.
+    // The list is live: this file is a work list, not a plan signed off once. The
+    // record says so - on one project the Architect invented t3b and t3c to insert
+    // work between existing items, reopened a finished task after judging it, and
+    // added two more the next day. A schema that calls that drift fights the thing
+    // that makes the harness good, so the rule is now: add freely, say so.
     lines.push(
-      `The work is a menu, not a checklist - pick the phases this project needs and put them in "phases". ` +
-        `invent: when the operator wants something built but the features are open, delegate to inventor, which ` +
+      `This file is a work list, not a plan you sign off once. Start with the work you can see, and add items as ` +
+        `you find them - a defect a worker reported, a decision the build exposed, a gap between the design and ` +
+        `the screen. Put each new item where it belongs in the order, not at the end of the list, and set its ` +
+        `"origin": a row you planned is "plan", one you noticed while the work was happening is "found", one ` +
+        `the operator asked for is "operator". Say in one line what you added and why: the list may grow, the ` +
+        `operator may not be surprised by it.`,
+    );
+    lines.push(
+      `invent: when the operator wants something built but the features are open, delegate to inventor, which ` +
         `writes ${PLAN_DIR}/ideas/ideas-1.md ranked with effort. Then YOU ask the operator which to include: ` +
         `ONE multiselect, one option per proposed feature - never bundles and never a "how much of it do you ` +
         `want" choice, because they are picking features, not a mood. Put the ones you recommend first with ` +
@@ -1056,27 +1047,21 @@ export function briefSession({ dir, role = 'architect', auto = false, skills = '
         `feature names the task that delivers it; rejected ones stay in the file and are never passed on.`,
     );
     lines.push(
-      `Write the whole plan before the first task runs: every phase you listed needs its tasks in the file now, ` +
-        `with role, order and dependsOn, so the operator can read the job end to end on one screen. A plan that ` +
-        `grows a task at a time is not a plan anyone can approve: what they agreed to on the first screen has to ` +
-        `be what runs. If a task must be added, removed or reordered later, make the change and say why in one ` +
-        `line to the operator - a justified change is fine, an unannounced one is drift.`,
-    );
-    lines.push(
       `design: delegate to designer, which writes ${PLAN_DIR}/design/design.md (screens, controls, colour tokens, ` +
         `theme values) and one mock per screen, two at most for the project - a screen with four states is one ` +
-        `mock behind a switch, not four files. Look at the mocks yourself before showing them (the visual-review ` +
-        `skill renders them), then ask the operator to pick one - design is the one thing only they can judge. ` +
+        `mock behind a switch, not four files. The designer renders its own mocks and reports the numbers, so ` +
+        `read the sheet it produced rather than taking the pictures yourself, then ask the operator to pick one ` +
+        `- design is the one thing only they can judge. ` +
         `Pin the stack first: if "runs like an app" could mean a local page, a Tkinter window or something else, ask.`,
     );
     // Measured 23 Oct: a brief made almost entirely of visual constraints (a
     // palette, a type pairing, an 8px scale, alignment, two widths to prove) was
     // planned as "build, qc" with every task on a coder. The model took the
-    // shortest path that satisfied the deliverables, which a menu of phases
-    // allows - so the one thing the operator asked to see was the thing skipped.
+    // shortest path that satisfied the deliverables, so the one thing the operator
+    // asked to see was the thing skipped.
     lines.push(
       `When the operator's request is about how something LOOKS - a screen, a page, a design, a mock, a palette, ` +
-        `"make it look X" - the look is the work, not a side effect of it: list design in "phases", give designer ` +
+        `"make it look X" - the look is the work, not a side effect of it: give designer ` +
         `its own task, and make every build task read ${PLAN_DIR}/design/design.md. A coder deciding the palette, ` +
         `the type or the spacing on the way past is the failure this rule exists to stop, however competent the ` +
         `result looks. The reverse is also a rule: when the operator has already named the features, invent has ` +
