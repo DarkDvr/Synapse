@@ -129,8 +129,12 @@ try {
   // Routing is the failure that survives a menu: a plan whose every task is on a
   // coder delivers the files and skips the craft. The brief has to name the
   // crafts and say a coder builds a decision rather than making one.
-  expect('the architect is told who does what', architect.includes('Who does what') && architect.includes('qc uses the finished thing'));
+  expect('the architect is told who does what', architect.includes('Who does what') && architect.includes('qc judges the finished thing'));
   expect('and that a coder does not decide the look', architect.includes('a coder builds a decision, never makes one'));
+  // QC has two focuses and the harness picks which one by config, so the table may
+  // not describe QC as a person's-use reviewer: that would be the wrong hunt in
+  // Security mode, written into the plan before QC is ever asked.
+  expect('the qc line leaves the focus to its own brief', architect.includes('what it hunts for is set by the brief'));
   expect('a worker is not told who does what', !coder.includes('Who does what'));
   expect('a worker is not told to judge anything', !coder.includes('You judge; you do not build'));
   // The brief is sent to every project this harness will ever run, so it may not

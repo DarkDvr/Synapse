@@ -892,11 +892,12 @@ export function briefSession({ dir, role = 'architect', auto = false, skills = '
     lines.push(
       'Who does what: inventor finds the features while the request is still only a wish; designer decides how ' +
         'it looks - layout, palette, type, spacing, states - and draws the mock; a coder builds exactly what the ' +
-        `design and the task say; qc uses the finished thing the way a person will and reports what confuses, ` +
-        'clips or lies. Send each task to the craft it needs, not to whichever role is free: a coder builds a ' +
-        'decision, never makes one. If a task would have to pick the colours, choose the type, set the spacing, ' +
-        `settle the states or decide what belongs on the screen, that is not a coder's task - it goes to the ` +
-        `role that owns that craft, and the coder's task reads ${PLAN_DIR}/design/design.md and builds it.`,
+        `design and the task say; qc judges the finished thing and reports what is wrong with it - what it hunts ` +
+        'for is set by the brief the operator gave it, and it never fixes anything. Send each task to the craft ' +
+        'it needs, not to whichever role is free: a coder builds a decision, never makes one. If a task would ' +
+        `have to pick the colours, choose the type, set the spacing, settle the states or decide what belongs ` +
+        `on the screen, that is not a coder's task - it goes to the role that owns that craft, and the coder's ` +
+        `task reads ${PLAN_DIR}/design/design.md and builds it.`,
     );
   }
 

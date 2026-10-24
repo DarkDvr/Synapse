@@ -14,12 +14,13 @@ const check = (name, ok, detail = '') => {
   console.log(`${ok ? 'ok  ' : 'FAIL'}  ${name}${ok || !detail ? '' : ` — ${detail}`}`);
 };
 
-const turn = ({ out = 100, reasoning = 0, created = 1000, streamed = null, completed = null, reasoningText = '' }) => ({
+const turn = ({ out = 100, reasoning = 0, created = 1000, streamed = null, completed = null, reasoningText = '', retry = null }) => ({
   type: 'assistant',
   parts: reasoningText ? [{ type: 'reasoning', text: reasoningText }] : [],
   raw: {
     tokens: { input: 10, output: out, reasoning, cache: { read: 90, write: 0 } },
     time: { created, streamed, completed },
+    ...(retry ? { retry } : {}),
   },
 });
 
@@ -74,6 +75,33 @@ const turn = ({ out = 100, reasoning = 0, created = 1000, streamed = null, compl
 {
   check('a transcript with no assistant turn has no speed', writingSpeed([]) === 0);
   check('and neither does one with no timings', writingSpeed([turn({ out: 10, created: 0 })]) === 0);
+}
+
+// ── a short turn is overhead, not speed ──────────────────────────
+{
+  // The same session, same model, same minute: 4,243 tokens in 29.4 s is 144 tok/s,
+  // and the 48-token turn after it (1.59 s) is 30. Reading the last one made the
+  // card look broken; the model had not slowed down at all.
+  const speed = writingSpeed([
+    turn({ out: 4243, created: 1000, streamed: 30_400 }),
+    turn({ out: 48, created: 40_000, streamed: 41_590 }),
+  ]);
+  check('a 48-token turn does not redefine the speed', speed === 144, String(speed));
+}
+
+{
+  // A retried turn waited for the provider before it wrote: 264 s for 117 tokens.
+  const speed = writingSpeed([
+    turn({ out: 2000, created: 1000, streamed: 21_000 }),
+    turn({ out: 117, created: 40_000, streamed: 304_000, retry: { attempt: 1, at: 41_000, error: { message: 'x' } } }),
+  ]);
+  check('a retried turn is not a speed', speed === 100, String(speed));
+}
+
+{
+  // A run of short turns only: better the newest small one than nothing.
+  const speed = writingSpeed([turn({ out: 60, created: 1000, streamed: 3000 })]);
+  check('with nothing big enough, the newest turn is still shown', speed === 30, String(speed));
 }
 
 const failed = checks.filter((c) => !c.ok);

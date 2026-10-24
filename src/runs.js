@@ -214,7 +214,7 @@ export function contextStats(messages) {
 }
 
 /**
- * How fast the model was actually writing, from the last finished turn.
+ * How fast the model was actually writing, from the last turn big enough to say.
  *
  * The engine stamps a turn with the moment it started and the moment its last
  * piece was streamed, so the difference is the time the model spent writing. The
@@ -222,18 +222,41 @@ export function contextStats(messages) {
  * includes the tool that ran and the seconds the engine took to ask again, so it
  * reads low by that share. Measured on one turn: 882 tokens in 7.9 s here, where
  * the model's own server clocked the same work at 95-110 tok/s.
+ *
+ * A short turn cannot be measured this way, because the fixed cost of a turn — the
+ * first token, the round trip, the tool coming back — is a fixed second sitting
+ * inside a one-second window. Measured on one session, same model, same minute:
+ * 48 tokens in 1.59 s read 30 tok/s, 94 in 2.5 s read 38, 4,243 in 29.4 s read 145.
+ * Only the long turn is the model's speed; the short ones are the overhead. So the
+ * newest turn that wrote enough wins, and a retried turn is never used: its window
+ * is the wait for the provider plus the writing, which is not a rate at all.
  */
+const RATE_MIN_TOKENS = 200;
+
 export function writingSpeed(messages) {
-  const last = [...(messages || [])].reverse().find((m) => m.type === 'assistant' && m.raw?.tokens);
-  if (!last) return 0;
-  const t = last.raw.tokens;
-  const time = last.raw.time || {};
-  const start = Number(time.created) || 0;
-  const end = Number(time.streamed) || Number(time.completed) || 0;
-  const written = (Number(t.output) || 0) + (Number(t.reasoning) || 0);
-  const ms = end - start;
-  if (!start || ms < 400 || !written) return 0;
-  return Math.round((written / ms) * 1000);
+  const turns = [...(messages || [])]
+    .reverse()
+    .filter((m) => m.type === 'assistant' && m.raw?.tokens && !m.raw?.retry);
+  const rateOf = (m) => {
+    const t = m.raw.tokens;
+    const time = m.raw.time || {};
+    const start = Number(time.created) || 0;
+    const end = Number(time.streamed) || Number(time.completed) || 0;
+    const written = (Number(t.output) || 0) + (Number(t.reasoning) || 0);
+    const ms = end - start;
+    return start && ms >= 400 && written ? { written, speed: Math.round((written / ms) * 1000) } : null;
+  };
+  for (const m of turns) {
+    const r = rateOf(m);
+    if (r?.speed && r.written >= RATE_MIN_TOKENS) return r.speed;
+  }
+  // Nothing that big yet (the first turn of a run, or a model that only answers in
+  // short steps): say what the newest measurable turn says rather than nothing.
+  for (const m of turns) {
+    const r = rateOf(m);
+    if (r?.speed) return r.speed;
+  }
+  return 0;
 }
 
 /** "23% thinking", or the truth when the provider did not separate it. */

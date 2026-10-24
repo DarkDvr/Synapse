@@ -60,6 +60,10 @@ const state = {
   // Tokens per second for each project's live run, from the engine's usage
   // events; empty the moment there is nothing to measure.
   rates: new Map(),
+  // The open session's own last prompt, for the corner of the Architect's card: it
+  // is not a delegated run, so nothing in `runs` describes it. Kept with the
+  // session id that sent it, so switching sessions cannot show the old one's size.
+  archCtx: null,
   // What each worker has said and done, keyed `${dir}|${task}|${startedAt}`. A
   // worker runs in its own session, so nothing of its own ever reached this
   // transcript: the chat sat idle for nine minutes and then a report appeared.
@@ -635,6 +639,16 @@ function tickClocks() {
  * knew nothing about time spent before this browser was open.
  */
 function roleTime(role, now) {
+  // The Architect has no task in the plan, so the plan has nothing to say about
+  // it. Its clock is the one tickClocks keeps per card: time it was actually
+  // working, which the same reading that lights its dot stops for a waiting
+  // question, a permission prompt and a delegation in flight.
+  if (role === 'architect') {
+    const rec = state.clocks?.roles?.architect;
+    if (!rec) return { total: 0, running: 0, last: 0 };
+    const running = rec.since ? Math.max(0, now - rec.since) : 0;
+    return { total: rec.ms + running, running, last: rec.last || 0 };
+  }
   const tasks = state.planState?.plan?.tasks || [];
   const spent = state.planState?.spent || {};
   const live = currentRun();
@@ -3162,6 +3176,26 @@ function endStream() {
 // nothing finer to average — and it is shown only while the step is recent.
 const usageSamples = new Map(); // dirKey -> { at, tokens }
 const RATE_FRESH_MS = 45000;
+
+/**
+ * The open session's own last prompt, for the Architect's card.
+ *
+ * A worker's usage arrives for the worker's session and is read by the runner; the
+ * Architect's own never went anywhere, so its card could say how long it had been
+ * working and nothing about what it was carrying. The event is the same one, on
+ * the same stream, so this is a copy and not a measurement of its own.
+ */
+function noteArchitectUsage(ev) {
+  const tokens = ev.raw?.data?.tokens;
+  if (!tokens) return;
+  state.archCtx = {
+    sessionId: ev.sessionId,
+    used: (Number(tokens.input) || 0) + (Number(tokens.cache?.read) || 0),
+    at: Date.now(),
+  };
+  paintRates();
+}
+
 function noteWorkerUsage(ev) {
   const run = currentRun();
   if (!run || !ev.sessionId || ev.sessionId !== run.workerId) return;
@@ -3181,6 +3215,11 @@ function noteWorkerUsage(ev) {
 function paintRates(now = Date.now()) {
   const run = currentRun();
   const rate = run ? state.rates.get(dirKey(run.dir)) : null;
+  // The Architect is not a delegated run, so no `runs` record describes it. Its
+  // window comes from the usage event its own session sends, and the window size
+  // from the model on its card — the same pair, in the same corner.
+  const arch = state.archCtx?.sessionId === state.sessionId ? state.archCtx : null;
+  const archLimit = arch ? Number(modelByRef(selectionFor('architect').ref)?.context) || 0 : 0;
   for (const card of document.querySelectorAll('#topology .role-card')) {
     const el = card.querySelector('.role-rate');
     if (!el) continue;
@@ -3197,15 +3236,18 @@ function paintRates(now = Date.now()) {
     // is the pair that explains a slowdown (a full window is re-read every turn)
     // and the compaction that follows. Shown even when the rate has gone stale —
     // the fill of the window is true whether or not the model is writing.
-    if (run && run.role === card.dataset.role && Number(run.ctx) > 0) {
+    let tip = '';
+    if (card.dataset.role === 'architect' && Number(arch?.used) > 0) {
+      bits.push(`${fmtTokens(arch.used)}${archLimit ? `/${fmtTokens(archLimit)}` : ''} ctx`);
+      tip = `The Architect's last prompt: ${arch.used} tokens` + (archLimit ? ` of ${archLimit}` : '');
+    } else if (run && run.role === card.dataset.role && Number(run.ctx) > 0) {
       bits.push(`${fmtTokens(run.ctx)}${run.ctxLimit ? `/${fmtTokens(run.ctxLimit)}` : ''} ctx`);
+      tip =
+        `Prompt ${run.ctx} tokens of ${run.ctxLimit || 'an unknown window'}` +
+        (run.ctxRoom ? `; Synapse compacts near ${run.ctxRoom}` : '');
     }
     const text = bits.join(' · ');
     if (el.textContent !== text) el.textContent = text;
-    const tip = Number(run?.ctx) > 0
-      ? `Prompt ${run.ctx} tokens of ${run.ctxLimit || 'an unknown window'}` +
-        (run.ctxRoom ? `; Synapse compacts near ${run.ctxRoom}` : '')
-      : '';
     if (el.title !== tip) el.title = tip;
   }
 }
@@ -4634,6 +4676,9 @@ function connectStream() {
       else if (ev.type === 'session.usage.updated') noteWorkerUsage(ev);
       else if (ev.type === 'session.text.ended' || ev.type === 'session.reasoning.ended') endStream();
     }
+    // The Architect's own card gets the same number from the same event. Its
+    // session is never a worker's, so the two cannot both claim it.
+    if (ev.sessionId && ev.sessionId === state.sessionId && ev.type === 'session.usage.updated') noteArchitectUsage(ev);
     // any traffic from a session counts as progress against the stall timer
     if (ev.sessionId) state.busySince.set(ev.sessionId, Date.now());
 
