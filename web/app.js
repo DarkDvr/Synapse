@@ -523,8 +523,11 @@ async function renderLlmStatus() {
   try {
     servers = (await api('GET', '/api/providers/health')).servers || [];
   } catch {
-    // The status call is the sidebar's; a failure is not worth a toast.
-    servers = [];
+    // Asking failed, so the row must not guess. Grey and "unknown" is the honest
+    // reading: it is what a server that cannot answer the question looks like,
+    // and it is not a claim about any model server.
+    paint('idle', 'unknown', 'Cannot ask Synapse which local servers are answering right now. The Runtime row says whether the engine itself is up.');
+    return;
   }
   const up = servers.filter((s) => s.up);
   const down = servers.filter((s) => !s.up);
