@@ -126,6 +126,13 @@ try {
   expect('the architect is told to judge, not build', architect.includes('You judge; you do not build'));
   expect('a refused delegation has two ways out, not self-service', architect.includes('never do that') && architect.includes('Record the task as blocked'));
   expect('the architect is told its own turns are the dearest', architect.includes('the dearest in the harness'));
+  // Measured on one project: the Architect conversation reached 308k tokens, so
+  // every later turn re-read every worker report that had been quoted into it.
+  expect('the architect is told its own conversation is the bill', architect.includes('Your conversation is the bill'));
+  expect('and to name a report rather than quote it', architect.includes('do not quote a report back'));
+  // A coder rendering the page into the designer's folder is a stray write and an
+  // alarm, six times over across projects. The sent folder is named in its brief.
+  expect('a coder is told where renders go', coder.includes('.synapse/shots/') && coder.includes('stray write'));
   // Routing is the failure that survives a menu: a plan whose every task is on a
   // coder delivers the files and skips the craft. The brief has to name the
   // crafts and say a coder builds a decision rather than making one.

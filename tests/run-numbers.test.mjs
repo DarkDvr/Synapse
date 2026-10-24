@@ -6,7 +6,7 @@
 //    transcript;
 //  - the card's speed, divided by the whole step, read ~60 tok/s where the same
 //    turn's own clock said 110.
-import { contextStats, writingSpeed, thinkNote } from '../src/runs.js';
+import { contextStats, writingSpeed, thinkNote, outsideProject } from '../src/runs.js';
 
 const checks = [];
 const check = (name, ok, detail = '') => {
@@ -102,6 +102,18 @@ const turn = ({ out = 100, reasoning = 0, created = 1000, streamed = null, compl
   // A run of short turns only: better the newest small one than nothing.
   const speed = writingSpeed([turn({ out: 60, created: 1000, streamed: 3000 })]);
   check('with nothing big enough, the newest turn is still shown', speed === 30, String(speed));
+}
+
+// ── a write outside the project ─────────────────────────────────
+{
+  // Measured 23 Oct: a coder wrote a scratch script to %TEMP% through `shell`,
+  // where no path rule reaches, and nothing anywhere said so.
+  const dir = 'F:\\dev\\Synapse.Projects\\tide';
+  check('a relative path is inside the project', outsideProject('bin/index.html', dir) === false);
+  check('a file under the project is inside it', outsideProject('F:\\dev\\Synapse.Projects\\tide\\bin\\index.html', dir) === false);
+  check('the same folder in forward slashes is inside', outsideProject('F:/dev/Synapse.Projects/tide/bin/index.html', dir) === false);
+  check('a sibling project is outside', outsideProject('F:\\dev\\Synapse.Projects\\other\\x.txt', dir) === true);
+  check('a temp file is outside', outsideProject('C:\\Users\\Andrew\\AppData\\Local\\Temp\\opencode\\kbd.ps1', dir) === true);
 }
 
 const failed = checks.filter((c) => !c.ok);

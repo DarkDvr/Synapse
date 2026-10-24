@@ -267,6 +267,22 @@ export const thinkNote = (context) =>
 const tokens = (n) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : `${Math.round(n / 1e3)}k`);
 
 /**
+ * Did this write land outside the project folder?
+ *
+ * Relative paths are inside by definition: the worker's own working directory is
+ * the project. Only an absolute path that is not under it counts, and the
+ * comparison is done on forward slashes in one case, because Windows gives the
+ * same folder in three spellings and a false "outside" is worse than none.
+ */
+export function outsideProject(file, dir) {
+  const norm = (p) => String(p || '').replace(/\\/g, '/').toLowerCase();
+  const target = norm(file);
+  if (!/^[a-z]:\//i.test(target)) return false;
+  const root = norm(dir).replace(/\/+$/, '');
+  return Boolean(root) && !target.startsWith(`${root}/`);
+}
+
+/**
  * Attempts a task has really spent.
  *
  * A refusal is not an attempt (it is recorded without an `attempt` number), and
@@ -939,6 +955,8 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     let outcome = 'failed';
     let text = '';
     let files = [];
+    // The subset of `files` that landed outside the project folder; see outsideProject.
+    let filesOutside = [];
     let context = null;
     let turnError = null;
     // Skills the brief required and the worker never loaded; see workerSkills.
@@ -1317,6 +1335,11 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
         // and the run log recorded no reason at all.
         if (!stopReason) text = workerText(messages);
         files = workerFiles(messages);
+        // A file written outside the project is odd enough to say out loud: a coder
+        // ran a scratch script out of %TEMP% through `shell`, where no path rule can
+        // reach it. It is a note and not a refusal - a scratch script is not an act
+        // of vandalism - but the operator should be able to see it happened.
+        filesOutside = files.filter((file) => outsideProject(file, dir));
         context = contextStats(messages);
         // The brief tells a role to load its skills before its first edit. This is
         // the only way to know whether it did: Shift Test 3 and 4 both shipped
@@ -1437,6 +1460,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
       context,
       planTouched,
       synapseTouched: strayWrites,
+      filesOutside,
     });
     log.info(
       `delegation finished: ${request.task} (${role}) ${outcome} in ${Math.round((Date.now() - startedAt) / 1000)}s` +
@@ -1444,7 +1468,8 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
         (resumes ? `, ${resumes} restart${resumes === 1 ? '' : 's'}` : '') +
         (files.length ? `, ${files.length} file(s) written` : '') +
         (planTouched ? ' - THE PLAN FILE CHANGED DURING THE WORKER TURN' : '') +
-        (strayWrites.length ? ` - .synapse WRITTEN OUTSIDE ITS FOLDER: ${strayWrites.join(', ')}` : ''),
+        (strayWrites.length ? ` - .synapse WRITTEN OUTSIDE ITS FOLDER: ${strayWrites.join(', ')}` : '') +
+        (filesOutside.length ? ` - WROTE OUTSIDE THE PROJECT: ${filesOutside.join(', ')}` : ''),
     );
 
     out.info(

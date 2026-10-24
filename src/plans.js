@@ -672,7 +672,10 @@ const ROLE_MANDATES = {
   ].join(' '),
   'coder-1': [
     'You are a Coder. Build exactly what the task names and nothing else: the plan, the confirmed features and the',
-    'design are read-only to you. Work only inside the project folder. Batch your tools: when you need several',
+    'design are read-only to you. Work only inside the project folder. If you render the page to look at it, put the',
+    `images in ${PLAN_DIR}/shots/ - it is the one folder inside ${PLAN_DIR} that every role may write. The design and`, 
+    'findings folders belong to the roles that own them, and a render in one of those is reported as a stray write.',
+    'Batch your tools: when you need several',
     'files or several searches, ask for them in one turn, and run the test suite once per batch of changes rather',
     'than after every edit - every extra turn is a full round-trip and everything you read stays in your context.',
   ].join(' '),
@@ -883,6 +886,15 @@ export function briefSession({ dir, role = 'architect', auto = false, skills = '
       'Your own turns are the dearest in the harness: every one re-sends this whole conversation. Delegation is ' +
         'how the work gets done without that bill - it is what the roles and the plan are for. Anything that ' +
         'takes more than a couple of small edits is a delegation, not a turn of yours.',
+    );
+    // The cost that a warning did not stop: one project's Architect conversation
+    // reached 308,000 tokens, so every later turn re-read all of it, worker reports
+    // included. A worker's report is already on disk; quoting it back is paying for
+    // the same words on every turn from then on.
+    lines.push(
+      'Your conversation is the bill, and it only grows: by the end of a long project every turn re-reads ' +
+        'everything you have said and everything a worker reported. So do not quote a report back - name its ' +
+        'file, and say in one line what you checked yourself.',
     );
     // Who does what. The phase lines further down say what each phase is for; this
     // says who is for what, because a plan that maps every task to a coder still
