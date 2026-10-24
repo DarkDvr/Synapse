@@ -538,9 +538,10 @@ testing it read 184 calls from sessions that no longer existed.
 
 ---
 
-## Two numbers that were not what they said
+## Three numbers that were not what they said
 
-Measured on 23 Oct, on a provider whose own server log prints its speed per step.
+Measured on 23 Oct and 24 Oct, on a provider whose own server log prints its
+speed per step.
 
 **"0% thinking" was a claim we could not make.** The run line takes the thinking
 share from `tokens.reasoning`, and this provider reports `reasoning: 0` while
@@ -555,7 +556,33 @@ arrives once per step, so dividing written tokens by the gap between two of them
 also divides by the tool that ran and the seconds the engine took to ask again.
 The same turn the provider logged at 100-137 tok/s read 60-70 on the card. Each
 turn carries its own clock — `time.created` → `time.streamed` — and the writer
-uses it (`writingSpeed` in `src/runs.js`), so the card now shows the number the
-model's own log does. The event-based rate stays as the fallback for a provider
-that sends no timings.
+uses it (`writingSpeed` in `src/runs.js`). The event-based rate stays as the
+fallback for a provider that sends no timings.
+
+**That clock still contained reading the prompt, so the card stayed low.** The
+provider's own log is the measurement, and it is two lines about the same turn:
+
+```
+[strata] done: 60 tokens in 8 s (93.4 tok/s) (stop, cancel=False)
+[strata] reading the prompt: 28,699 of 28,704 tokens, 4 s so far
+```
+
+Eight seconds elapsed, sixty tokens were written, and the provider called it 93.4
+— because it divides by the time between the first token and the last. Our 60/8
+was 7.5, and the card said 8. It was never stale, and never a different turn: it
+was a different quantity. A long enough turn hides the difference (4 s of prefill
+inside 42 s reads 10% low), a short one is nothing but the difference.
+
+The fix measures what the provider measures. The page already receives every
+`session.text.delta` and `session.reasoning.delta`, so it keeps the first and the
+last of each step (`deltaWindow` in `web/app.js`) and divides the step's tokens by
+that span. Nothing is estimated and nothing is adjusted: the prompt, the round
+trip and the tool that follows are simply not inside the window.
+
+The order of the two events does not matter, which is why this needed no new
+plumbing. Deltas between one `usage.updated` and the next belong to that step
+whichever end of the step the usage figure arrives on, because the window is
+taken and cleared every time one is used. A step with no streamed text has no
+window and falls back to the whole-step rate.
+
 

@@ -57,8 +57,9 @@ const state = {
   // project has at most one entry. The cards and the live path are drawn from
   // this, and `GET /api/runs` is what a page opened mid-run starts from.
   runs: new Map(),
-  // Tokens per second for each project's live run, from the engine's usage
-  // events; empty the moment there is nothing to measure.
+  // Tokens per second for each project's live run: the tokens a step wrote over
+  // the time between its first and last streamed piece, which is what the model's
+  // own log calls speed. Empty the moment there is nothing to measure.
   rates: new Map(),
   // The open session's own last prompt, for the corner of the Architect's card: it
   // is not a delegated run, so nothing in `runs` describes it. Kept with the
@@ -3182,6 +3183,26 @@ const usageSamples = new Map(); // dirKey -> { at, tokens }
 const RATE_FRESH_MS = 45000;
 
 /**
+ * When a step's first and last piece were streamed, per session.
+ *
+ * This is the only place a speed can honestly be measured. The engine stamps a
+ * turn with when it started and when its last piece left, and that difference
+ * contains reading the prompt: on the turn the provider's own log recorded as
+ * `60 tokens in 8 s (93.4 tok/s)`, 4 s of the 8 were a 28,700-token prompt being
+ * read, so the card said 8. Counting from the first piece leaves the prompt, the
+ * round trip and the tool out of it — which is what "tokens per second" means.
+ */
+const deltaWindow = new Map(); // sessionId -> { first, last }
+function noteDelta(ev) {
+  if (!ev.sessionId) return;
+  const w = deltaWindow.get(ev.sessionId) || { first: 0, last: 0 };
+  const now = Date.now();
+  if (!w.first) w.first = now;
+  w.last = now;
+  deltaWindow.set(ev.sessionId, w);
+}
+
+/**
  * The open session's own last prompt, for the Architect's card.
  *
  * A worker's usage arrives for the worker's session and is read by the runner; the
@@ -3222,9 +3243,16 @@ function noteWorkerUsage(ev) {
   const prev = usageSamples.get(key);
   const at = Number(ev.ts) || Date.now();
   usageSamples.set(key, { at, total });
+  // The window belongs to the step this usage figure is about, so it is taken
+  // whatever the outcome: a step that wrote nothing must not leave its timings
+  // behind to be paired with the next step's tokens.
+  const w = deltaWindow.get(ev.sessionId);
+  deltaWindow.delete(ev.sessionId);
   if (!prev || total <= prev.total) return;
-  const seconds = Math.max(0.25, (at - prev.at) / 1000);
-  state.rates.set(key, { role: run.role, tps: (total - prev.total) / seconds, at });
+  const written = total - prev.total;
+  const streamed = w && w.last - w.first >= 250 ? (w.last - w.first) / 1000 : 0;
+  const tps = streamed ? written / streamed : written / Math.max(0.25, (at - prev.at) / 1000);
+  state.rates.set(key, { role: run.role, tps, at });
   paintRates();
 }
 
@@ -3241,13 +3269,14 @@ function paintRates(now = Date.now()) {
     if (!el) continue;
     const mine = run && rate && rate.role === card.dataset.role && now - rate.at < RATE_FRESH_MS;
     const bits = [];
-    // The runner reads the speed of the last turn from the turn's own clock
-    // (`time.created` → `time.streamed`), which is the number the model's own log
-    // prints. The fallback below divides by the whole step, tool and all, and
-    // therefore reads low — it is only there while a step's timings are missing.
+    // The live rate first: it is measured between the first and the last piece the
+    // model streamed, which is the number the model's own log prints. The runner's
+    // figure (`run.tps`) is the same idea from the transcript, and it carries the
+    // prompt read inside it — so it is the fallback for a page that opened mid-run
+    // and has not seen a stream yet.
     const measured = run && run.role === card.dataset.role ? Number(run.tps) || 0 : 0;
-    if (measured) bits.push(`${measured} tok/s`);
-    else if (mine) bits.push(`${Math.round(rate.tps)} tok/s`);
+    if (mine) bits.push(`${Math.round(rate.tps)} tok/s`);
+    else if (measured) bits.push(`${measured} tok/s`);
     // The window, in the corner the operator already looks at: "27k/60k ctx". It
     // is the pair that explains a slowdown (a full window is re-read every turn)
     // and the compaction that follows. Shown even when the rate has gone stale —
@@ -4687,8 +4716,8 @@ function connectStream() {
     // become the one-line notes in the trace.
     const liveRun = currentRun();
     if (liveRun && ev.sessionId && ev.sessionId === liveRun.workerId) {
-      if (ev.type === 'session.text.delta') appendStream('word', ev.raw?.data?.delta);
-      else if (ev.type === 'session.reasoning.delta') appendStream('think', ev.raw?.data?.delta);
+      if (ev.type === 'session.text.delta') { noteDelta(ev); appendStream('word', ev.raw?.data?.delta); }
+      else if (ev.type === 'session.reasoning.delta') { noteDelta(ev); appendStream('think', ev.raw?.data?.delta); }
       else if (ev.type === 'session.usage.updated') noteWorkerUsage(ev);
       else if (ev.type === 'session.text.ended' || ev.type === 'session.reasoning.ended') endStream();
     }
