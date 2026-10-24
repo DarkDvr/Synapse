@@ -313,7 +313,7 @@ export async function providerLoadedWindow({ baseURL, model }, opts = {}) {
  * off, which is the case the operator keeps hitting - they turn one on and want
  * to know whether Synapse can see it.
  */
-export async function providerUp(provider, { fetchImpl = fetch, timeoutMs = 1200 } = {}) {
+export async function providerUp(provider, { fetchImpl = fetch, timeoutMs = 3000 } = {}) {
   const root = String(provider?.baseURL || '').trim().replace(/\/+$/, '');
   if (!/^https?:\/\//i.test(root)) return false;
   const ctrl = new AbortController();

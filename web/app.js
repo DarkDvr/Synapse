@@ -522,6 +522,7 @@ async function renderLlmStatus() {
   let servers = [];
   try {
     servers = (await api('GET', '/api/providers/health')).servers || [];
+    state.llmAsked = true;
   } catch {
     // Asking failed, so the row must not guess. Grey and "unknown" is the honest
     // reading: it is what a server that cannot answer the question looks like,
@@ -538,6 +539,13 @@ async function renderLlmStatus() {
     .join('\n');
 
   if (!up.length) {
+    // Red is a claim that something that should answer does not. Before the row
+    // has had one answer at all it cannot make that claim: a server still loading
+    // its model, or one busy enough to be slow for a moment, is not down.
+    if (!state.llmAsked) {
+      paint('idle', 'asking…', `${count}\n${detail}`);
+      return;
+    }
     paint('err', 'no answer', `${count}\n${detail}\nA configured server that does not answer fails its turn.`);
     return;
   }
