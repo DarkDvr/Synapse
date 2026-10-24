@@ -9,6 +9,7 @@ import { skillRules, describeSkills } from './skills.js';
 import { PROJECTS_ROOT, SKILLS_DIR } from './paths.js';
 import { fetchProviderModels } from './providers.js';
 import { providerId } from './providers.js';
+import { isLocalProvider, providerUp } from './providers.js';
 import { providerApiKey } from './config.js';
 import { questionSignature, guardDecision, readableAnswer } from './question-loop.js';
 import { setProviderKey, providerKeyState, maskKey } from './secrets.js';
@@ -20,6 +21,10 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
   // The last brief we handed each session, so an unchanged plan does not PUT
   // the same text again on every message.
   const briefed = new Map();
+
+  // Is each local model server answering, and when did we last ask. Four seconds:
+  // the sidebar polls, and a dead port must not be retried on every tick.
+  const healthCache = new Map();
 
   /**
    * Which roles this *session* has used, ever.
@@ -332,6 +337,38 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
     // only thing it can send is a key typed into the field and not yet saved. A
     // stored key (or `env:...` in the config) is what an unsaved row's call has
     // to use, or every provider with a key answers 401 here and works nowhere.
+    /**
+     * Which local model servers are answering right now, and their names.
+     *
+     * The sidebar's Local LLM row answers one question — "is the thing I turned on
+     * actually there" — so it needs a *now* answer, not the config. Each probe is
+     * one short GET, and the result is held for a few seconds: the row is polled,
+     * and a dead port must not be re-tried on every tick.
+     */
+    providerHealth: async () => {
+      const providers = Array.isArray(getConfig()?.engine?.opencode?.providers)
+        ? getConfig().engine.opencode.providers
+        : [];
+      const local = providers.filter(isLocalProvider);
+      const now = Date.now();
+      const stale = local.some((p) => !healthCache.has(p.id) || now - healthCache.get(p.id).at > 4000);
+      if (stale) {
+        await Promise.all(
+          local.map(async (p) => {
+            const up = await providerUp(p);
+            healthCache.set(p.id, { at: Date.now(), up });
+          }),
+        );
+      }
+      return {
+        servers: local.map((p) => ({
+          id: p.id,
+          name: p.name || p.id,
+          up: healthCache.get(p.id)?.up ?? false,
+        })),
+      };
+    },
+
     providerModels: async (body) => {
       const id = String(body?.id || '').trim();
       const key = id ? providerApiKey({ id, apiKey: body?.apiKey }, process.env).key : String(body?.apiKey || '').trim();
@@ -720,6 +757,11 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
       // From the first turn, the Architect knows where it is and that the plan
       // file is its own to keep.
       await brief(session.id, project.directory, 'architect', false);
+      // A new session is a new piece of work, and the census is a picture of what
+      // the models are doing *now*: left to accumulate it describes a machine that
+      // no longer exists. The operator opens the popup to answer "what is being
+      // called", not "what has ever been called".
+      if (toolStats) toolStats.clear();
       return { session, projectId: project.id };
     },
 

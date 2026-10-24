@@ -131,6 +131,11 @@ export function createServer({ api, engine, logger, config }) {
     }
 
     // GET /api/models  /api/agents  /api/skills
+    // GET /api/providers/health — which local servers are answering right now
+    // (the sidebar's Local LLM row), and no cached claim is given when none is up.
+    if (seg[0] === 'providers' && seg[1] === 'health' && method === 'GET') {
+      return sendJson(res, 200, await api.providerHealth());
+    }
     // POST /api/providers/models — ask a provider what it serves (Settings >
     // Providers > Refresh List); it is the only provider call outside a turn.
     if (seg[0] === 'providers' && seg[1] === 'models' && method === 'POST') {

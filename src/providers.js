@@ -305,6 +305,30 @@ export async function providerLoadedWindow({ baseURL, model }, opts = {}) {
 }
 
 /**
+ * Is this local server answering right now?
+ *
+ * One GET to the models endpoint, which every OpenAI-compatible server has, and
+ * a timeout short enough that a dead port cannot hold the sidebar. It is a
+ * question about *now*, not about configuration: a server can be registered and
+ * off, which is the case the operator keeps hitting - they turn one on and want
+ * to know whether Synapse can see it.
+ */
+export async function providerUp(provider, { fetchImpl = fetch, timeoutMs = 1200 } = {}) {
+  const root = String(provider?.baseURL || '').trim().replace(/\/+$/, '');
+  if (!/^https?:\/\//i.test(root)) return false;
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const res = await fetchImpl(`${root}/models`, { signal: ctrl.signal });
+    return Boolean(res?.ok);
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
  * Put what the local runtimes have loaded into the config, and say what changed.
  *
  * Called once at boot, before the engine is handed its config: a window typed

@@ -329,7 +329,7 @@
       <h3 id="toolsTitle">Tools in Use</h3>
       <button class="close-x" data-close-modal="toolsModal" aria-label="Close">✕</button>
     </div>
-    <p class="modal-sub">What the models have actually called since this start. Clears on every boot unless the census is kept.</p>
+    <p class="modal-sub">What the models have called in this session. It clears when you start a new session.</p>
     <section class="rail-panel rail-tools">
       <p class="rail-note" id="toolUsageNote">No tool calls recorded yet.</p>
       <table class="tool-table" id="toolUsage" hidden>
@@ -340,6 +340,9 @@
       </table>
       <p class="rail-note" id="toolUsageMeta"></p>
     </section>
+    <div class="modal-actions">
+      <button class="btn btn-primary btn-sm" data-close-modal="toolsModal">Close</button>
+    </div>
   </div>
 </div>
 
@@ -366,8 +369,8 @@
       </table>
       <p class="rail-note" id="probeMeta"></p>
     </section>
-    <div class="modal-actions" style="display:flex;gap:9px;margin-top:16px;justify-content:flex-end">
-      <button class="btn btn-secondary btn-sm" id="runProbe">Run Tool Probe</button>
+    <div class="modal-actions">
+      <button class="btn btn-amber btn-sm" id="runProbe">Run Tool Probe</button>
       <button class="btn btn-primary btn-sm" data-close-modal="probeModal">Close</button>
     </div>
   </div>

@@ -195,12 +195,13 @@ body { min-width: 1100px; }
   width: 100%;
 }
 
-/* One column: the stage first — role cards with the Project plan beside them and
-   the conversation underneath — then the two reference tables. */
+/* One column: the stage. The two reference tables that used to sit under it are
+   popups now, so the second row and its gap are gone - a phantom row still
+   reserved 20px and put a scrollbar on a window that had room to spare. */
 .room {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: auto auto;
+  grid-template-rows: auto;
   gap: var(--gap-rail);
   align-items: stretch;
   width: 100%;
@@ -621,9 +622,13 @@ body.dark .sidebar-bottom,
 }
 .status-block .sidebar-label { margin-bottom: 1px; padding-bottom: 0; color: var(--yellow); }
 .status-row {
-  display: flex; align-items: center; gap: 8px;
+  display: flex; align-items: baseline; gap: 8px;
   font-size: 12px; color: var(--muted); white-space: nowrap;
 }
+/* The dot keeps its own geometry while the two texts share one baseline: centred
+   boxes at 12px sans against 10.5px mono sat a pixel apart, which reads as a
+   mistake in a row that is only two words wide. */
+.status-row .status-dot { align-self: center; }
 .status-row .status-state {
   margin-left: auto; font-family: var(--mono); font-size: 10.5px;
   color: #9aa0a8; overflow: hidden; text-overflow: ellipsis;
@@ -2178,16 +2183,16 @@ body:has(.modal-backdrop:not([hidden])) { overflow: hidden; }
 #errorModal.is-alarm .err-detail { border-left-color: rgba(232, 163, 61, 0.6); }
 .err-note { margin: 9px 0 0; font-family: var(--mono); font-size: 10.5px; color: #74787f; }
 .err-modal .modal-actions { display: flex; gap: 9px; margin-top: 16px; justify-content: flex-end; }
+/* One row of buttons is one height. The baseline gives the primary 31px and the
+   secondary 26px, so a pair sitting side by side read as a mistake - most
+   visibly on the probe popup, where Run and Close sat 5px apart. */
+.modal-actions { display: flex; gap: 9px; margin-top: 16px; justify-content: flex-end; align-items: center; }
+.modal-actions > .btn { min-height: 31px; }
 
 /* ── 15. responsive ────────────────────────────────────────────────────── */
 
-/* The two reference tables are under the chat at every width and never hold the
-   plan. Below 1184 they lose the 284–341 range and simply share the room, and
-   below 760 they stack. */
-@media (max-width: 1183px) {
-  .inspector { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .inspector .rail-panel { min-width: 0; max-width: none; }
-}
+/* The two reference tables are popups at every width now, so nothing here
+   depends on how wide the conversation gets. */
 
 /* Below 1460 the stage is content-sized and the page scrolls — the cards and the
    chat together are taller than a short window. */
@@ -2201,10 +2206,7 @@ body:has(.modal-backdrop:not([hidden])) { overflow: hidden; }
   .rail-actions { grid-template-columns: 1fr 1fr; }
 }
 
-/* Below this nothing is side by side: one column, in the order it is read. */
-@media (max-width: 760px) {
-  .inspector { grid-template-columns: minmax(0, 1fr); }
-}
+/* Below 760 nothing is side by side: one column, in the order it is read. */
 
 /* Narrow windows are not supported: the page keeps its layout and grows a
    horizontal scrollbar instead of collapsing the cards. The baseline's mobile
@@ -2220,13 +2222,20 @@ body:has(.modal-backdrop:not([hidden])) { overflow: hidden; }
 .btn-danger:hover:not(:disabled) { background: var(--red-soft); border-color: var(--red); }
 .btn-warn { color: var(--amber); border-color: #5a4725; background: rgba(232, 163, 61, 0.07); }
 .btn-warn:hover:not(:disabled) { background: var(--amber-soft); border-color: var(--amber); }
+/* The one button that starts ten minutes of work with one click. Yellow is this
+   palette's affordance colour (edit, settings), and it is outlined rather than
+   filled so it reads as a caution beside the popup's primary action, not as it. */
+.btn-amber { color: var(--yellow); border-color: rgba(237, 194, 90, 0.55); background: transparent; }
+.btn-amber:hover:not(:disabled) { background: rgba(237, 194, 90, 0.12); border-color: var(--yellow); color: #fff; }
+.btn-amber:focus-visible { outline: 2px solid var(--orange); outline-offset: 1px; }
 
 /* ── 16. tool probe ────────────────────────────────────────────────────── */
 /* The probe is its own panel now (plan, census, probe in a row under the chat),
    so it has no divider to draw and no title of its own: the panel head says it. */
 .rail-probe .panel-head { margin-bottom: 9px; }
-/* a short control, not a full-height button */
-#runProbe { height: 26px; min-height: 26px; padding: 0 10px; font-size: 11px; }
+/* a short control, not a full-height button. Its height comes from
+   `.modal-actions > .btn`, so Run and Close are one size. */
+#runProbe { padding: 0 12px; font-size: 11px; }
 .probe-block .tool-table { margin-top: 4px; }
 /* The case name is an identifier, not prose - mono keeps the column aligned. Row
    geometry is the inspector-wide one (2px cells, 21px rows); this table used to
@@ -2236,7 +2245,7 @@ body:has(.modal-backdrop:not([hidden])) { overflow: hidden; }
    table 29px against 22px neighbours. Inside a rail table it is a label: 15px tall,
    centred rather than baseline-aligned, which is what the last pixel of difference
    was (an inline control sits on the baseline and drags descender space with it). */
-.inspector .tool-table .err-btn {
+.rail-modal .tool-table .err-btn {
   display: inline-flex; vertical-align: middle;
   height: 15px; min-height: 0; box-sizing: border-box;
   line-height: 13px; padding: 0 5px; font-size: 9px;

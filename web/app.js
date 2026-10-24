@@ -486,38 +486,74 @@ function providerBadge(p) {
 }
 
 /**
- * The sidebar's Local LLM row: the local, OpenAI-compatible servers the config
- * registers. It used to read "not set" permanently, which was true when nothing
- * was wired and a lie the moment one was — the badge on those models is the same
- * fact seen from the other side. Nothing is probed: the dot stays grey, and the
- * first turn is what proves the server is up.
+ * The sidebar's Local LLM row: which local model servers are answering right now.
  *
- * It says how many models, never the name of the app serving them: "Bionic" is
- * one machine's runtime, and the row has to mean the same thing on the next one.
+ * It used to count them — "2 servers · 9 models" — which describes the shape of
+ * the config and nothing the operator can act on. They turn a server on and want
+ * to know Synapse can see it, so the row names the ones that answer: "Strata,
+ * Bionic". The count is in the tooltip, where it costs nothing.
+ *
+ * One dot, four meanings, and each is a different colour on purpose:
+ *   grey   - nothing is registered here
+ *   red    - registered, and none of it answers
+ *   green  - answering, and nothing is using it
+ *   yellow - answering, and serving a turn right now
  */
-function renderLlmStatus() {
+async function renderLlmStatus() {
   const row = $('llmRow');
   const out = $('llmState');
   if (!row || !out) return;
+  const dot = row.querySelector('.status-dot');
+  const paint = (state, text, title) => {
+    if (dot) dot.className = `status-dot ${state}`;
+    if (out.textContent !== text) out.textContent = text;
+    if (row.title !== title) row.title = title;
+  };
+
   const providers = Array.isArray(state.config?.engine?.opencode?.providers)
     ? state.config.engine.opencode.providers
     : [];
   const local = providers.filter(isLocalServer);
   if (!local.length) {
-    out.textContent = 'not set';
-    row.title = 'No local model server is registered. Add one in Settings > Providers.';
+    paint('idle', 'not set', 'No local model server is registered. Add one in Settings > Providers.');
     return;
   }
-  const modelCount = local.reduce((n, p) => n + (Array.isArray(p.models) ? p.models.length : 0), 0);
-  out.textContent =
-    local.length === 1
-      ? `${modelCount} model${modelCount === 1 ? '' : 's'}`
-      : `${local.length} servers · ${modelCount} models`;
-  row.title =
-    local
-      .map((p) => `${p.baseURL}: ${(p.models || []).map((m) => m.name || m.id).filter(Boolean).join(', ')}`)
-      .join('\n') + '\nConfigured, not probed — a turn is what proves it is running.';
+
+  let servers = [];
+  try {
+    servers = (await api('GET', '/api/providers/health')).servers || [];
+  } catch {
+    // The status call is the sidebar's; a failure is not worth a toast.
+    servers = [];
+  }
+  const up = servers.filter((s) => s.up);
+  const down = servers.filter((s) => !s.up);
+  const count = `${local.length} server${local.length === 1 ? '' : 's'}, ` +
+    `${local.reduce((n, p) => n + (Array.isArray(p.models) ? p.models.length : 0), 0)} models`;
+  const detail = servers
+    .map((s) => `${s.name}: ${s.up ? 'answering' : 'not answering'}`)
+    .join('\n');
+
+  if (!up.length) {
+    paint('err', 'no answer', `${count}\n${detail}\nA configured server that does not answer fails its turn.`);
+    return;
+  }
+
+  // Yellow only when the server doing the work is one of these: a cloud turn must
+  // not make the local row look busy.
+  const working = Boolean(currentRun()) || isBusy(state.sessionId);
+  const busyRef = currentRun()?.model || architectSelection()?.ref || '';
+  const busyId = String(busyRef).split('/')[0];
+  const serving = working && up.some((s) => s.id === busyId);
+
+  paint(
+    serving ? 'live' : 'ok',
+    up.map((s) => s.name).join(', '),
+    `${count}\n${detail}` + (serving ? '\nServing a turn right now.' : ''),
+  );
+  if (down.length && out) out.title = `${out.textContent} (${down.length} not answering)`;
 }
+
 
 // ── clocks ──────────────────────────────────────────────────────
 // Three stopwatches: how long a card has been working right now, how long that
@@ -4352,7 +4388,7 @@ async function renderToolUsage() {
 
   if (!stats || !stats.total) {
     note.hidden = false;
-    note.textContent = 'No tool calls recorded yet. The census fills in as sessions run.';
+    note.textContent = `No tool calls yet. The census is cleared when a new session starts.`;
     table.hidden = true;
     if (meta) meta.textContent = '';
     return;
@@ -6245,6 +6281,10 @@ function wire() {
     if (stalled !== lastStalled) { lastStalled = stalled; renderTree(); }
   }, 5000);
   setInterval(() => { if (state.view !== 'none') renderToolUsage(); }, 30000);
+  // The local-server row answers "is it on", which changes without any event, so
+  // it is polled. Fifteen seconds is often enough to see a server come up while
+  // the operator is looking at the rail, and rare enough to be free.
+  setInterval(() => renderLlmStatus(), 15000);
   // Belt and braces for the plan pane: the SSE event is the fast path, this
   // catches a tab that missed it.
   setInterval(() => { if (state.view !== 'none') loadPlan(); }, 30000);
