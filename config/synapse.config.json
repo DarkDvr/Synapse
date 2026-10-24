@@ -294,7 +294,7 @@
       "focus": "app"
     },
     "architect": {
-      "ref": "opencode-go/deepseek-v4.1-flash",
+      "ref": "strata/qwen3.8-flash-next-iq2_xs",
       "variant": "high",
       "skills": [
         "visual-review"
