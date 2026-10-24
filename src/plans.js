@@ -61,6 +61,17 @@ export const DECISIONS_NAME = 'decisions.md';
 /** The instruction-entry key the brief is attached to, per session. */
 export const BRIEF_KEY = 'synapse.plan';
 
+// A read that lands inside a write is retried twice, 25 ms apart (see readPlan).
+const PLAN_READ_TRIES = 3;
+const PLAN_READ_WAIT_MS = 25;
+
+/** Wait without yielding the thread: readPlan is synchronous by design. */
+const sleepBriefly = (ms) => {
+  try {
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+  } catch { /* no SharedArrayBuffer: take the retry with no pause */ }
+};
+
 export const planPath = (dir) => path.join(String(dir || ''), PLAN_DIR, PLAN_NAME);
 export const runsPath = (dir) => path.join(String(dir || ''), PLAN_DIR, RUNS_NAME);
 export const planRelPath = () => `${PLAN_DIR}\\${PLAN_NAME}`;
@@ -354,16 +365,33 @@ export function readPlan(dir) {
 
   const problems = [];
   let parsed;
-  try {
-    parsed = JSON.parse(raw || '{}');
-  } catch (err) {
-    return {
-      ...base,
-      exists: true,
-      mtime: stat.mtimeMs,
-      stat: { size: stat.size, mtime: stat.mtimeMs },
-      error: `plan.json is not valid JSON: ${err.message}`,
-    };
+  // A plan is replaced wholesale by the tool that writes it, so a read can land
+  // inside that write and see half a document. Measured 24 Oct: two such reads in
+  // one project, and the window is short enough that neither is a real fault. The
+  // cost of believing it is worse than the wait - a delegation arriving in that gap
+  // reads a plan with no tasks and is refused as "no such task", which the
+  // Architect then has to argue with. So a failed parse gets two more tries, 25 ms
+  // apart, and only then is the file called broken.
+  for (let attempt = 0; attempt < PLAN_READ_TRIES; attempt += 1) {
+    try {
+      parsed = JSON.parse(raw || '{}');
+      break;
+    } catch (err) {
+      if (attempt === PLAN_READ_TRIES - 1) {
+        return {
+          ...base,
+          exists: true,
+          mtime: stat.mtimeMs,
+          stat: { size: stat.size, mtime: stat.mtimeMs },
+          error: `plan.json is not valid JSON: ${err.message}`,
+        };
+      }
+      sleepBriefly(PLAN_READ_WAIT_MS);
+      try {
+        raw = fs.readFileSync(target, 'utf8');
+        stat = fs.statSync(target);
+      } catch { /* the file went away; the next attempt says so */ }
+    }
   }
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
     return {
@@ -864,19 +892,25 @@ export function briefSession({ dir, role = 'architect', auto = false, skills = '
         'everything you have said and everything a worker reported. So do not quote a report back - name its ' +
         'file, and say in one line what you checked yourself.',
     );
-    // Measured 24 Oct on one project: the Architect ran the renderer 55 times and
+    // The cost is real: on one project the Architect ran the renderer 55 times and
     // read 29 of the pictures - the same contact sheets over and over, in folders
     // that each render created fresh. Images were two thirds of its transcript and
     // about a third of its window, every turn, for the rest of the project.
+    //
+    // But the rule cannot be "take the worker's word for it": a report is a claim,
+    // and checking claims is the one thing this role does. So the rule is about
+    // *why* a picture is taken, not whether it is allowed - render to answer a
+    // question, never to look at something you have already seen.
     lines.push(
-      'Look at what a worker produced, but never re-render it: the picture you need was already taken by the ' +
-        'role that made the thing, and its report carries the numbers with it. Rendering it yourself costs a ' +
-        'shell call and a picture that stays in your conversation for the rest of the project, and it is a ' +
-        'second copy of something you have already seen.',
+      'Rendering is how a claim about how something looks gets checked, and that is your job: the renderer, the ' +
+        'page and the file are the evidence, and a worker\'s report is a claim like any other. What wastes the ' +
+        'work is taking the same picture again: a render you cannot ask a new question of is a shell call and a ' +
+        'picture that stays in your conversation for the rest of the project.',
     );
     lines.push(
-      'And read a picture once. Every render writes a new copy into a new folder, so two files with the same ' +
-        'shape are the same picture: read the contact sheet for the width that matters, once, and judge from it.',
+      'Read a picture once, and ask it everything you need before you move on. Every render writes a new copy ' +
+        'into a new folder, so two files with the same shape are the same picture: read the contact sheet for ' +
+        'the width that matters, once, measure what you need from it, and keep the number rather than the image.',
     );
     // Who does what. The phase lines further down say what each phase is for; this
     // says who is for what, because a plan that maps every task to a coder still
@@ -1049,9 +1083,10 @@ export function briefSession({ dir, role = 'architect', auto = false, skills = '
     lines.push(
       `design: delegate to designer, which writes ${PLAN_DIR}/design/design.md (screens, controls, colour tokens, ` +
         `theme values) and one mock per screen, two at most for the project - a screen with four states is one ` +
-        `mock behind a switch, not four files. The designer renders its own mocks and reports the numbers, so ` +
-        `read the sheet it produced rather than taking the pictures yourself, then ask the operator to pick one ` +
-        `- design is the one thing only they can judge. ` +
+        `mock behind a switch, not four files. The designer renders its own mocks and reports the numbers - a ` +
+        `claim like any other, so check the ones you rely on. Read the sheet it produced, and render again only ` +
+        `to answer a question that sheet cannot, then ask the operator to pick one - design is the one thing only ` +
+        `they can judge. ` +
         `Pin the stack first: if "runs like an app" could mean a local page, a Tkinter window or something else, ask.`,
     );
     // Measured 23 Oct: a brief made almost entirely of visual constraints (a

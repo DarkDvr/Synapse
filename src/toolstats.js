@@ -10,9 +10,16 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 const MAX_RECENT_ERRORS = 40;
+// Ids kept on disk so a restart cannot re-count a transcript. Capped: this is a
+// dedupe list, not a history, and the census is cleared often enough that the cap
+// is never reached in normal use.
+const MAX_SEEN = 4000;
 
 export function createToolStats({ file, logger }) {
   const log = logger.channel('tools');
+  // Which tool parts have been counted. It has to survive a restart: the whole
+  // transcript is re-scanned on the next turn, so an in-memory set alone counted a
+  // session's entire tool history twice (measured: 2 calls -> restart -> 4).
   const seen = new Set();
   const state = {
     since: Date.now(),
@@ -38,6 +45,7 @@ export function createToolStats({ file, logger }) {
           exits: saved.exits || {},
           recentErrors: Array.isArray(saved.recentErrors) ? saved.recentErrors : [],
         });
+        for (const id of Array.isArray(saved.seen) ? saved.seen : []) seen.add(String(id));
         log.info(`census restored: ${state.total} calls, ${state.failed} failed`);
       }
     }
@@ -50,7 +58,11 @@ export function createToolStats({ file, logger }) {
     try {
       fs.mkdirSync(path.dirname(file), { recursive: true });
       const tmp = `${file}.${process.pid}.tmp`;
-      fs.writeFileSync(tmp, JSON.stringify(state, null, 2) + '\n', 'utf8');
+      // The dedupe ids ride along, newest last, so a restart resumes where the
+      // previous process stopped counting instead of starting over on history it
+      // has already added up.
+      const doc = { ...state, seen: [...seen].slice(-MAX_SEEN) };
+      fs.writeFileSync(tmp, JSON.stringify(doc, null, 2) + '\n', 'utf8');
       fs.renameSync(tmp, file);
     } catch (err) {
       log.warn(`could not persist tool stats: ${err.message}`);
@@ -75,7 +87,7 @@ export function createToolStats({ file, logger }) {
     if (id && seen.has(id)) return false;
     if (id) {
       seen.add(id);
-      if (seen.size > 20000) seen.clear();
+      if (seen.size > MAX_SEEN * 2) seen.clear();
     }
     state.total += 1;
     if (failed) state.failed += 1;

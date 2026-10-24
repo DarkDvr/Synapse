@@ -139,6 +139,13 @@ try {
   // crafts and say a coder builds a decision rather than making one.
   expect('the architect is told who does what', architect.includes('Who does what') && architect.includes('qc judges the finished thing'));
   expect('and that a coder does not decide the look', architect.includes('a coder builds a decision, never makes one'));
+  // The render rules have to sit UNDER the pillar, not over it: a worker's report
+  // is a claim, so the Architect renders to check one. The rule is about taking the
+  // same picture twice, never about trusting a report instead of checking it.
+  expect('rendering is named as how a claim gets checked', architect.includes('Rendering is how a claim about how something looks gets checked'));
+  expect('and a report is a claim like any other', architect.includes('a worker\'s report is a claim like any other'));
+  expect('the waste is the second picture, not the check', architect.includes('a render you cannot ask a new question of'));
+  expect('nothing tells it to trust a report over the render', !/report carries the numbers/i.test(architect));
   // QC has two focuses and the harness picks which one by config, so the table may
   // not describe QC as a person's-use reviewer: that would be the wrong hunt in
   // Security mode, written into the plan before QC is ever asked.

@@ -295,7 +295,10 @@
     },
     "architect": {
       "ref": "strata/qwen3.8-flash-next-iq2_xs",
-      "variant": "high"
+      "variant": "high",
+      "skills": [
+        "visual-review"
+      ]
     },
     "coder-1": {
       "ref": "strata/qwen3.8-flash-next-iq2_xs",
