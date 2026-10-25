@@ -61,6 +61,10 @@ const state = {
   // the time between its first and last streamed piece, which is what the model's
   // own log calls speed. Empty the moment there is nothing to measure.
   rates: new Map(),
+  // Files the operator attached to the message they are writing: { id, name, mime,
+  // size, data }, where `data` is base64 without the data: prefix. Cleared on a
+  // successful send, kept on a failed one.
+  attachments: [],
   // The open session's own last prompt, for the corner of the Architect's card: it
   // is not a delegated run, so nothing in `runs` describes it. Kept with the
   // session id that sent it, so switching sessions cannot show the old one's size.
@@ -3469,8 +3473,17 @@ function renderMessage(m) {
   const stamp = t ? `<span class="msg-time">${t}</span>` : '';
 
   if (m.type === 'user') {
+    // What was attached is part of the message, not a footnote to it: the operator
+    // asked about a file, and a transcript that shows the sentence and hides the
+    // file cannot be read later.
+    const files = Array.isArray(m.files) ? m.files : [];
+    const chips = files.length
+      ? `<span class="msg-files">${files
+          .map((f) => `<span class="msg-file" title="${esc(f.name)}">${esc(shortName(f.name))}</span>`)
+          .join('')}</span>`
+      : '';
     return `<div class="msg user" data-msg="user"><div class="msg-body">
-      ${stamp}<span class="msg-role">You</span><span class="msg-text">${esc(m.text)}</span>
+      ${stamp}<span class="msg-role">You</span><span class="msg-text">${esc(m.text)}</span>${chips}
     </div></div>`;
   }
   if (m.type === 'synthetic') {
@@ -4594,7 +4607,8 @@ function renderComposer() {
 async function send() {
   const input = $('promptInput');
   const text = input.value.trim();
-  if (!text) return;
+  const files = state.attachments.slice();
+  if (!text && !files.length) return;
 
   if (!state.sessionId) {
     toast('No session open', 'Pick a session on the left, or start a new one.');
@@ -4608,12 +4622,26 @@ async function send() {
     state.streaming = true;
     state.busy = true;
     renderComposer();
-    state.messages.push({ id: 'local-' + Date.now(), type: 'user', text, created: Date.now() });
+    state.messages.push({
+      id: 'local-' + Date.now(),
+      type: 'user',
+      text,
+      created: Date.now(),
+      files: files.map((f) => ({ name: f.name, mime: f.mime })),
+    });
     renderTranscript();
     // Sending is a statement of intent to read the answer: put the newest message
     // in view, and again after the turn's messages land.
     scrollChatToEnd();
-    await api('POST', `/api/sessions/${encodeURIComponent(state.sessionId)}/messages`, { text });
+    await api('POST', `/api/sessions/${encodeURIComponent(state.sessionId)}/messages`, {
+      text,
+      // The bytes go with the message, in the engine's own shape, so the file is
+      // the operator's message rather than something the harness put on disk.
+      files: files.map((f) => ({ name: f.name, mime: f.mime, data: f.data })),
+    });
+    // Only after the server has taken them: a failed send must not eat the files.
+    state.attachments = [];
+    renderAttachments();
     await loadMessages();
     scrollChatToEnd();
   } catch (err) {
@@ -4622,6 +4650,62 @@ async function send() {
     state.streaming = false;
     renderComposer();
   }
+}
+
+/** A file name that fits a chip: the last 14 characters, with an ellipsis. */
+function shortName(name) {
+  const s = String(name || '');
+  return s.length <= 14 ? s : `${s.slice(0, 13)}…`;
+}
+
+/** Read a picked file into the shape the message needs. */
+function readFileAsAttachment(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error(`could not read ${file.name}`));
+    reader.onload = () => {
+      const url = String(reader.result || '');
+      const comma = url.indexOf(',');
+      resolve({
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        name: file.name,
+        mime: file.type || 'application/octet-stream',
+        size: file.size,
+        data: comma >= 0 ? url.slice(comma + 1) : '',
+      });
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+/**
+ * The attachments waiting to be sent, as panels above the box.
+ *
+ * They sit inside the composer rather than floating over the transcript: the
+ * operator's own sketch had them overlaying the chat's last line, and in practice
+ * that hides the sentence you are about to send. The strip takes its own row, so
+ * nothing is covered and the box does not move when the first file is added.
+ */
+function renderAttachments() {
+  const strip = $('attachStrip');
+  if (!strip) return;
+  const list = state.attachments || [];
+  strip.hidden = list.length === 0;
+  strip.innerHTML = list
+    .map(
+      (f) => `<span class="attach-chip" title="${esc(f.name)} · ${fmtBytes(f.size)}">
+        <span class="attach-name">${esc(shortName(f.name))}</span>
+        <button type="button" class="attach-x" data-detach="${esc(f.id)}" title="Remove ${esc(f.name)}" aria-label="Remove ${esc(f.name)}">✕</button>
+      </span>`,
+    )
+    .join('');
+}
+
+function fmtBytes(n) {
+  const v = Number(n) || 0;
+  if (v < 1024) return `${v} B`;
+  if (v < 1024 * 1024) return `${Math.round(v / 1024)} KB`;
+  return `${(v / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 /** Put the newest message in view, and the cards above it.
@@ -5998,6 +6082,35 @@ function wire() {
   }
   setInterval(tickClocks, 1000);
   $('composer').addEventListener('submit', (e) => { e.preventDefault(); send(); });
+  // The paperclip opens the system picker; the picker's own change event is what
+  // adds the files, so a cancelled dialog adds nothing.
+  $('attachBtn').addEventListener('click', () => $('attachInput').click());
+  $('attachInput').addEventListener('change', async (e) => {
+    const picked = [...(e.target.files || [])];
+    e.target.value = '';
+    for (const file of picked) {
+      if (file.size > 8 * 1024 * 1024) {
+        toast('File Too Large', `${file.name} is ${fmtBytes(file.size)}; the limit is 8 MB.`);
+        continue;
+      }
+      if (state.attachments.length >= 6) {
+        toast('Too Many Files', 'Six attachments is the limit for one message.');
+        break;
+      }
+      try {
+        state.attachments.push(await readFileAsAttachment(file));
+      } catch (err) {
+        toast('Could Not Read That File', err.message);
+      }
+    }
+    renderAttachments();
+  });
+  $('attachStrip').addEventListener('click', (e) => {
+    const x = e.target.closest('[data-detach]');
+    if (!x) return;
+    state.attachments = state.attachments.filter((f) => f.id !== x.dataset.detach);
+    renderAttachments();
+  });
   $('stopBtn').addEventListener('click', interrupt);
   $('modeToggle').addEventListener('click', switchMode);
   $('keepBtn').addEventListener('click', toggleKeep);

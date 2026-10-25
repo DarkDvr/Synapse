@@ -1582,8 +1582,38 @@ body[data-mode="single"] .keep-toggle { display: none; }
 /* ── 12. composer ──────────────────────────────────────────────────────── */
 
 .composer {
-  display: flex; gap: 8px; align-items: center;
+  display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
   border-top: 1px solid var(--line); padding: 9px 11px; background: #1a1c20;
+}
+/* The attachments take their own row inside the composer: full width, above the
+   box, so nothing floats over the last line of the conversation. */
+.attach-strip {
+  flex: 0 0 100%; display: flex; flex-wrap: wrap; gap: 6px;
+  padding: 1px 2px 7px;
+}
+.attach-strip[hidden] { display: none; }
+.attach-chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  max-width: 190px; padding: 3px 4px 3px 8px;
+  background: var(--violet-faint); border: 1px solid var(--violet-line);
+  border-radius: 7px; color: var(--text);
+  font-family: var(--mono); font-size: 10.5px; line-height: 1.2;
+}
+.attach-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.attach-x {
+  flex: none; width: 15px; height: 15px; padding: 0; border: 0; border-radius: 4px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: transparent; color: var(--red); opacity: 0.8;
+  font-size: 9px; line-height: 1; cursor: pointer;
+}
+.attach-x:hover { background: var(--red-soft); opacity: 1; }
+.attach-x:focus-visible { outline: 2px solid var(--orange); outline-offset: 1px; }
+/* What was sent, under the sentence that carried it. */
+.msg-files { display: inline-flex; flex-wrap: wrap; gap: 5px; margin-left: 8px; vertical-align: 1px; }
+.msg-file {
+  padding: 1px 6px; border-radius: 5px;
+  background: var(--violet-faint); border: 1px solid var(--violet-line);
+  color: #c9c6ff; font-family: var(--mono); font-size: 10px; line-height: 1.4;
 }
 
 .composer textarea {
@@ -1595,11 +1625,26 @@ body[data-mode="single"] .keep-toggle { display: none; }
 .composer textarea:focus-visible { outline: 2px solid var(--orange); outline-offset: 1px; }
 .composer textarea::placeholder { color: #6d717a; }
 .composer .icon-button { width: 36px; height: 36px; border-radius: 9px; flex: none; }
+/* The paperclip is borderless: it is an offer, not a control with state, and a
+   second outlined square beside Stop made the row read as three equal choices. */
+.composer .attach-btn {
+  background: transparent; border: 0; color: #82868e;
+}
+.composer .attach-btn:hover:not(:disabled) { background: transparent; color: #e6e8ec; }
+.composer .attach-btn:active:not(:disabled) { background: transparent; color: #fff; }
+.composer .attach-btn:focus-visible { outline: 2px solid var(--orange); outline-offset: 1px; }
+/* Stop has exactly two looks and neither is the baseline's violet: grey while
+   nothing is running (it cannot do anything), red the moment a run is live. */
+#stopBtn {
+  background: transparent; border: 1px solid #33363c; color: #6d717a;
+}
+#stopBtn:disabled { background: transparent; border-color: #2c2f35; color: #55595f; cursor: default; }
+#stopBtn:disabled:hover { background: transparent; border-color: #2c2f35; color: #55595f; }
 /* The stop button stops work that is running, so it is red whether or not the
    pointer is over it: a neutral icon that blushed on hover made the one
    destructive control in the row something to discover. The baseline gives every
    icon button a violet hover, hence the id. */
-#stopBtn:not(:disabled) { border-color: rgba(240, 86, 63, 0.45); color: var(--red); }
+#stopBtn:not(:disabled) { border-color: rgba(240, 86, 63, 0.45); color: var(--red); background: transparent; }
 #stopBtn:not(:disabled):hover {
   border-color: var(--red); color: #fff; background: var(--red);
 }
@@ -1691,11 +1736,11 @@ body[data-mode="single"] .keep-toggle { display: none; }
    and paints as a 4px square (cost an hour once; it is in AGENTS.md) */
 /* The node: the state's dot with the step id under it, both centred on the same
    axis. The id used to ride inline in front of the title, which made the title
-   wrap around a mark that had nothing to do with it. Two pixels between the three
-   rows, not three: the column has to stay shorter than a two-line title, or every
-   row with a NEW chip would be taller than one without. */
+   wrap around a mark that had nothing to do with it. Five pixels between the three
+   rows: the operator asked for three more than the two they had, which is enough
+   for the mark and its address to read as two things. */
 .plan-node {
-  display: grid; justify-items: center; gap: 2px;
+  display: grid; justify-items: center; gap: 5px;
   align-self: center; min-width: 0;
 }
 .plan-dot {

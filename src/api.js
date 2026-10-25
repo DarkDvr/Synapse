@@ -15,6 +15,41 @@ import { questionSignature, guardDecision, readableAnswer } from './question-loo
 import { setProviderKey, providerKeyState, maskKey } from './secrets.js';
 import { probeToolchain } from './toolchain.js';
 
+// What an attachment may be, in bytes before base64. One message carrying eight
+// megabytes is already a large prompt; a hundred is a request the provider will
+// refuse after we have paid to send it.
+const ATTACH_MAX_BYTES = 8 * 1024 * 1024;
+const ATTACH_MAX_COUNT = 6;
+
+/**
+ * The files on an outgoing message, as the engine wants them.
+ *
+ * Tolerant by design: a malformed entry is dropped rather than failing the whole
+ * send, because the operator's sentence matters more than their attachment. What
+ * survives is bounded — count and size — and named, so the transcript can say what
+ * arrived.
+ */
+export function normalizeAttachments(list) {
+  if (!Array.isArray(list)) return [];
+  const out = [];
+  for (const item of list) {
+    if (!item || typeof item !== 'object') continue;
+    const data = String(item.data || '').replace(/^data:[^;]*;base64,/, '');
+    if (!data || !/^[A-Za-z0-9+/]+={0,2}$/.test(data)) continue;
+    // Base64 length to bytes, minus the padding: len*3/4 alone over-counts by the
+    // two '=' of a single-byte tail, which refused a file of exactly the limit.
+    const pad = data.endsWith('==') ? 2 : data.endsWith('=') ? 1 : 0;
+    if (Math.floor((data.length * 3) / 4) - pad > ATTACH_MAX_BYTES) continue;
+    out.push({
+      name: String(item.name || 'attachment').slice(0, 120),
+      mime: String(item.mime || 'application/octet-stream').slice(0, 120),
+      data,
+    });
+    if (out.length >= ATTACH_MAX_COUNT) break;
+  }
+  return out;
+}
+
 export function createApi({ getConfig, applyConfig, engine, logger, getBootError, projects, toolStats, probe, modelCache, inspectModel: inspectRef, probeDir, runs, engineUpdate, restart, notify, guard }) {
   const app = logger.channel('app');
 
@@ -887,7 +922,11 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
     sendMessage: async (sessionId, body) => {
       requireReady();
       const text = String(body?.text ?? '').trim();
-      if (!text) {
+      // An attachment on its own is a message: "look at this" with the file in
+      // hand is a request, and refusing it because there was no sentence would be
+      // the harness being pedantic about the shape of a sentence.
+      const attachments = normalizeAttachments(body?.files);
+      if (!text && !attachments.length) {
         const err = new Error('message text is required');
         err.status = 400;
         throw err;
@@ -904,11 +943,11 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
       }
       // The operator's own words, written down before any model can restate
       // them. This file is the requirement every role is judged against.
-      if (directory) appendRequirement(directory, text);
+      if (directory) appendRequirement(directory, text || `(attached ${attachments.length} file(s))`);
       // Speaking is the answer to "what now" after a stop: whatever they stopped
       // may run again from here.
       if (directory) runs?.resume?.(directory);
-      await engine.prompt(sessionId, text);
+      await engine.prompt(sessionId, text, { files: attachments });
       return { ok: true };
     },
 

@@ -216,7 +216,17 @@
               <button type="button" class="mode-toggle" id="modeToggle" aria-pressed="false" title="Switch between Multi and Single">
                 <span class="mode-dot" aria-hidden="true"></span><span id="modeLabel">Single</span>
               </button>
+              <!-- Attached files, one little panel each, floating above the box.
+                   Kept outside the textarea so the text can grow under them. -->
+              <div class="attach-strip" id="attachStrip" hidden></div>
               <textarea id="promptInput" rows="1" placeholder="Message" title="Ctrl+Enter to send · Enter adds a new line"></textarea>
+              <input type="file" id="attachInput" multiple hidden />
+              <button type="button" class="icon-button attach-btn" id="attachBtn" title="Attach a file" aria-label="Attach a file">
+                <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="none"
+                     stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M10.6 4.6 5.2 10a2.1 2.1 0 0 0 3 3l5.4-5.4a3.5 3.5 0 0 0-5-5L3.1 8a4.9 4.9 0 0 0 6.9 6.9l4.4-4.4"/>
+                </svg>
+              </button>
               <button type="button" class="icon-button" id="stopBtn" title="Stop the current run" aria-label="Stop the current run" disabled>■</button>
               <button type="button" class="keep-toggle" id="keepBtn" aria-pressed="false" hidden
                 title="Ask the Architect to keep building until it's done, unless a hard blocker stops it"

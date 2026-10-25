@@ -1024,3 +1024,33 @@ means something because it comes with a repro.
 saw the whole plan". It is now "the list says what changed, and the features file
 says what was agreed". That is weaker on paper and stronger in practice, because
 the old rule was being broken productively every single run.
+
+## An attachment is a URI, not bytes — and the dump is older than the server
+
+Measured 25 Oct on engine **2.1.2**, while adding a paperclip to the composer.
+
+The OpenAPI dump at `%TEMP%\opencode\openapi.json` describes `Prompt.FileAttachment`
+as `{ data, mime, source: {type:'inline'} }`. The server refuses exactly that:
+
+```
+400 Missing key at ["files"][0]["uri"]
+```
+
+What it takes is a **`uri`**, and a `data:` URI is accepted:
+
+```
+{ uri: "data:application/json;base64,eyJuYW1l...", name: "package.json" }   200
+{ uri: "file:///F:/dev/Synapse/package.json", name: "package.json" }        200
+{ uri: "F:/dev/Synapse/package.json" }   400 Unsupported attachment URI
+```
+
+Two consequences worth keeping. A `file://` URI makes the **server** read the file,
+so the bytes have to be on disk first — fine for a path the operator typed, useless
+for a browser's file picker, which never reveals a path. A `data:` URI needs no
+disk at all, so that is what Synapse sends: the operator attached a file to a
+sentence, and nothing appears in the project folder because of it.
+
+And the file stays on the message. The engine records its `data` on the user
+message, so a big attachment is re-read on every later turn of that session —
+the same bill as quoting a report back. The composer caps one file at 8 MB and six
+files per message, and the cap is about the window as much as the network.

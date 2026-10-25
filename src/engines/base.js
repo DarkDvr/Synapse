@@ -211,6 +211,15 @@ export function normalizeMessage(raw) {
 
   if (type === 'user') {
     msg.text = raw?.text || '';
+    // The engine keeps the attachments on the operator's own message, so the chat
+    // can say what was sent — after a reload as well as when it was sent. The bytes
+    // are dropped here: they are in the raw message if anything needs them, and
+    // carrying a base64 copy through every render is a lot of string for a name.
+    const files = Array.isArray(raw?.files) ? raw.files : [];
+    msg.files = files.map((f) => ({
+      name: String(f?.name || 'attachment'),
+      mime: String(f?.mime || ''),
+    }));
     return msg;
   }
 

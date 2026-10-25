@@ -622,9 +622,26 @@ export class OpenCodeEngine extends Engine {
     return messages;
   }
 
-  async prompt(sessionId, text) {
+  async prompt(sessionId, text, { files } = {}) {
     this.sessionLog.info(`prompt -> ${sessionId}: ${String(text).replace(/\s+/g, ' ').slice(0, 300)}`);
-    return this.request('POST', `/api/session/${encodeURIComponent(sessionId)}/prompt`, { text });
+    const body = { text };
+    // An attachment is a `uri`, measured on 2.1.2 (the OpenAPI dump is older and
+    // describes a `{data, mime, source}` shape the server now refuses with
+    // `Missing key at ["files"][0]["uri"]`). A `data:` URI is accepted and keeps
+    // the file in the message, so nothing is written to the project folder: the
+    // operator attached a file to a sentence, not to the work list. A `file://`
+    // URI works too and would need the bytes on disk first.
+    if (Array.isArray(files) && files.length) {
+      body.files = files.map((f) => {
+        const mime = String(f.mime || 'application/octet-stream');
+        return {
+          uri: `data:${mime};base64,${String(f.data || '')}`,
+          ...(f.name ? { name: String(f.name) } : {}),
+        };
+      });
+      this.sessionLog.info(`prompt -> ${sessionId}: ${files.length} attachment(s)`);
+    }
+    return this.request('POST', `/api/session/${encodeURIComponent(sessionId)}/prompt`, body);
   }
 
   /**
