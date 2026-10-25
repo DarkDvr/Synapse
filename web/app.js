@@ -4587,8 +4587,14 @@ async function renderProbe() {
   table.hidden = false;
   table.querySelector('tbody').innerHTML = results
     .map((r) => {
+      // One word per case, and one meaning. A case that exists to exercise a
+      // failure path reports `failed as asked` and shows no Error button: before,
+      // it read `clean` and carried an Error chip at the same time, which is a
+      // contradiction on one row.
       const label = r.ok
-        ? 'clean'
+        ? r.expectFail
+          ? 'failed as asked'
+          : 'clean'
         : r.offered === false
           ? 'not offered'
           : r.timedOut
@@ -4596,10 +4602,11 @@ async function renderProbe() {
             : r.missing
               ? 'not called'
               : 'failed';
-      const cls = r.ok ? 'ok' : r.offered === false || r.timedOut ? 'warn' : 'err';
-      const detail = r.errors?.length
-        ? r.errors.map((e) => `${e.tool}${e.exitCode != null ? ` (exit ${e.exitCode})` : ''}: ${e.detail}`).join('\n\n')
-        : r.error || '';
+      const detail = r.expectFail
+        ? ''
+        : r.errors?.length
+          ? r.errors.map((e) => `${e.tool}${e.exitCode != null ? ` (exit ${e.exitCode})` : ''}: ${e.detail}`).join('\n\n')
+          : r.error || '';
       const errBtn = detail
         ? `<button class="err-btn" data-error-title="${esc(r.id)}" data-error="${esc(detail)}">Error</button>`
         : '';
@@ -4608,17 +4615,12 @@ async function renderProbe() {
       // here would make every tool look slow.
       const turn = r.ms ? `turn ${fmtMs(r.ms)}` : '';
       const tool = (r.used || []).join(', ') || r.expect || '—';
-      // A failed case shows the Error button alone; a red dot next to it said
-      // exactly the same thing and cost a column of width.
-      const status = errBtn || '';
-      // The state as a word, not a breathing dot: a dot that pulses means "still
-      // going", and a finished case wearing one reads as a probe that never ended.
       const pill = `<span class="state-pill probe-state ${r.ok ? 'ok' : r.offered === false || r.timedOut ? 'warn' : 'err'}">${esc(label)}</span>`;
       return `<tr>
         <td class="tool-name" title="${esc(r.id)} · ran ${esc(tool)} · ${esc(label)}${turn ? ` · ${esc(turn)}` : ''}">${esc(r.id)}</td>
-        <td class="tool-result">${pill}</td>
         <td class="tool-time${r.toolMs > 1000 ? ' slow' : ''}" title="tool ${fmtMs(r.toolMs)}${turn ? ` · ${turn}` : ''}">${r.toolMs ? fmtMs(r.toolMs) : ''}</td>
-        <td class="probe-err">${status}</td>
+        <td class="probe-status">${pill}</td>
+        <td class="probe-err">${errBtn}</td>
       </tr>`;
     })
     .join('');
