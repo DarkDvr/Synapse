@@ -1135,6 +1135,29 @@ Measured: starting slack 0 / 12 / 30 / 47 ends at **0** in both directions; 60 /
 900 (deliberately scrolled up) is preserved exactly. And the settle happens once, at the
 click, not during the animation.
 
+Two more, both of which only showed in the **wide** layout — the one where the grid owns
+the chat's height:
+
+- **The settle has to run before the paint, so it cannot be an observer's job.** In the
+  narrow layout `fitChatHeight` writes the height and settles the scroll in the same
+  call, before the frame is drawn; in the wide layout there is no height to write, so
+  the settle ran only from a `ResizeObserver`, which reports *after* the layout that
+  changed — every frame painted once at the old offset and corrected afterwards. That is
+  a sub-pixel shift per frame: invisible in one layout, a shimmer on the text in the
+  other, and it is why exactly the wide window was wrong. `watchChatGeometry` now reads
+  the geometry once a frame (rAF runs before paint) and settles there.
+- **A scroll event from our own write is not the reader's place.** A scroll event is
+  dispatched after the frame's layout, so by the time `noteChatScroll` measured the
+  distance from the end, the box had already changed again — every reading a little
+  larger than the last. Over one switch a 300px scroll-up compounded to 496px, and the
+  chat drifted 196px under the reader. Writes record the offset they landed on
+  (`chatScrollWritten`), and a scroll event matching it is ignored.
+
+Measured after both, at 1600px (wide, grid-owned height) and 1243px (narrow, us): switch
+either way, at the end and 300px scrolled up — message **0.0–0.1px**, slack **unchanged**,
+composer **0.0**, and the box's top edge on whole pixels every frame.
+
+
 
 The instrument, since it is reusable: this machine has ffmpeg (winget: `Gyan.FFmpeg`,
 not on `PATH`), so a recording becomes frames with `ffmpeg -i in.mp4 -f rawvideo -pix_fmt

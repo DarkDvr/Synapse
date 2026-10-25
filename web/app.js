@@ -3205,10 +3205,22 @@ function noteChatScroll() {
   if (byReader && el.scrollTop < lastChatTop - 4) chatFollowArmed = false;
   else if (fromEnd <= CHAT_FOLLOW_SLACK) chatFollowArmed = true;
   lastChatTop = el.scrollTop;
-  // The reader's place, kept from the end of the conversation: this is the one
-  // value that survives the box changing size under them (see restoreChatSlack).
-  chatSlack = fromEnd;
+  // The reader's place, kept from the end of the conversation: the one value that
+  // survives the box changing size under them (see restoreChatSlack).
+  //
+  // Only when the *reader* put the conversation there. Our own writes fire this
+  // event too, and a scroll event is dispatched after the frame's layout: by then the
+  // box has already changed size again, so measuring here records the next frame's
+  // height against this frame's offset. Every such reading is a little bigger than
+  // the last, and one switch compounded 300px into 496px that way.
+  const ours = chatScrollWritten !== null && Math.abs(el.scrollTop - chatScrollWritten) <= 1;
+  chatScrollWritten = null;
+  if (!ours) chatSlack = fromEnd;
 }
+
+/** The offset our own last write landed on, so a scroll event it caused is not
+ *  mistaken for the reader moving. */
+let chatScrollWritten = null;
 
 /** The operator moved the conversation. Only this may release the follow. */
 function noteUserScrollIntent(deltaY) {
@@ -3319,6 +3331,7 @@ function pumpStream(now) {
       scroller.scrollTop = scroller.scrollHeight;
       // The follow's own move is not the reader scrolling: keep the comparison
       // baseline in step, or the next frame reads it as an upward scroll.
+      chatScrollWritten = scroller.scrollTop;
       lastChatTop = scroller.scrollTop;
     }
   }
@@ -3717,7 +3730,7 @@ function chatAtBottom(slack = 48) {
 
 function scrollChatToBottom(behavior = 'auto') {
   const el = chatScroller();
-  if (el) { el.scrollTo({ top: el.scrollHeight, behavior }); return; }
+  if (el) { el.scrollTo({ top: el.scrollHeight, behavior }); chatScrollWritten = el.scrollTop; return; }
   // The transcript already fits its box: the newest message is laid out and
   // there is nothing to scroll to. This used to fall through to the WINDOW and
   // jump to `documentElement.scrollHeight` — past the chat, to the very bottom
@@ -3994,7 +4007,10 @@ function restoreChatSlack() {
   const want = el.scrollHeight - el.clientHeight - slack;
   if (Math.abs(el.scrollTop - want) < 0.5) return;
   el.scrollTop = Math.max(0, want);
-  // Our own move is not the reader scrolling (same rule as the stream's follow).
+  // Our own move is not the reader scrolling: recorded so the scroll event it causes
+  // is not mistaken for one (see noteChatScroll), and not read back as the place to
+  // keep.
+  chatScrollWritten = el.scrollTop;
   lastChatTop = el.scrollTop;
 }
 
@@ -4005,28 +4021,44 @@ function restoreChatSlack() {
  * observed box changing size — a row that shifts, a margin, a font that re-breaks a
  * line elsewhere. Three separate attempts to watch "the things above the chat" each
  * found one more source and each missed the next one, the last of them a 6px jump
- * during a run that no size change accounted for. The top edge is the fact; so it is
- * read, once per frame, and when it is not where it was, the height is fitted to it.
+ * during a run that no size change accounted for. The geometry is the fact; so it is
+ * read once per frame, and only when it is not where it was does anything run.
  *
- * The read is one `getBoundingClientRect` and a comparison — no layout is invalidated
- * by reading, so on a still frame this costs nothing measurable, and it is exact on
- * every frame that moves.
+ * Per frame, and not "when the observer says so", because a frame late is a frame
+ * wrong: an observer reports after the layout that changed, so every frame of an
+ * animation draws once at the old offset and is corrected afterwards. That is
+ * invisible in the layout where the height is ours (we write it before the paint)
+ * and visible in the other one, where the grid owns the height and there is nothing
+ * to write — which is exactly the difference the operator reported between a narrow
+ * window and a wide one.
+ *
+ * One rect read and a comparison per frame invalidates no layout, so a still frame
+ * costs nothing measurable.
  */
-let chatTopRaf = 0;
-let lastChatTopSeen = null;
-function watchChatTop() {
-  if (chatTopRaf) return;
+let chatGeoRaf = 0;
+let lastChatGeo = null;
+function watchChatGeometry() {
+  if (chatGeoRaf) return;
   const tick = () => {
-    chatTopRaf = requestAnimationFrame(tick);
+    chatGeoRaf = requestAnimationFrame(tick);
     const dock = $('chatDock');
-    // Nothing to hold when the stage owns the height (wide layout, or no session).
-    if (!dock || !dock.style.height) { lastChatTopSeen = null; return; }
+    const el = $('transcript');
+    if (!dock || !el || state.view !== 'session') { lastChatGeo = null; return; }
     const top = dock.getBoundingClientRect().top;
-    if (lastChatTopSeen !== null && Math.abs(top - lastChatTopSeen) < 0.01) return;
-    lastChatTopSeen = top;
-    fitChatHeight();
+    const boxTop = el.getBoundingClientRect().top;
+    const h = el.clientHeight;
+    if (lastChatGeo
+      && Math.abs(top - lastChatGeo.top) < 0.01
+      && Math.abs(boxTop - lastChatGeo.boxTop) < 0.01
+      && h === lastChatGeo.h) return;
+    lastChatGeo = { top, boxTop, h };
+    // Narrow layout: the height is ours to write, and writing it settles the content.
+    // Wide layout: the grid owns the height, so only the content is settled — the
+    // same work, one line earlier than an observer could do it.
+    if (dock.style.height) fitChatHeight();
+    else settleChatBox();
   };
-  chatTopRaf = requestAnimationFrame(tick);
+  chatGeoRaf = requestAnimationFrame(tick);
 }
 
 function askOption(kind, name, value, label, description) {
@@ -6718,12 +6750,10 @@ function wire() {
     }).catch(() => {});
   }
 
-  // The chat's top edge is watched by reading it (see watchChatTop), and the
-  // transcript's own size by an observer, so the conversation stays put when the
-  // box changes for any reason at all — including the composer row growing.
-  watchChatTop();
-  const transcript = $('transcript');
-  if (transcript) new ResizeObserver(() => settleChatBox()).observe(transcript);
+  // The chat's geometry is watched by reading it every frame (see
+  // watchChatGeometry), which is what keeps the conversation still while the box
+  // around it moves — in either layout, for any reason the box moves.
+  watchChatGeometry();
 
   setInterval(refreshStatus, 10000);
 
