@@ -1903,6 +1903,20 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
       if (messages.length && messages[messages.length - 1]?.type === 'idle' && messages[messages.length - 1]?.id !== before) {
         return { timedOut: false };
       }
+      // A step that ended in an error is over, whether or not the engine appends an
+      // idle after it. Measured 25 Oct: two aborted steps left this loop waiting the
+      // full fifteen-minute stall window - twice - which was 30 of a 33-minute QC
+      // run. The transcript already said the step had failed; the watchdog was
+      // waiting for a message that was never coming. A retried step is the engine
+      // trying again in place, so only an error with no retry ends the wait.
+      if (
+        last?.type === 'assistant' &&
+        last.id !== before &&
+        last.raw?.error &&
+        !last.raw?.retry
+      ) {
+        return { timedOut: false, ended: 'error' };
+      }
       if (Date.now() - lastActivity >= stallMs) return { timedOut: true, stalled: true };
     }
   }

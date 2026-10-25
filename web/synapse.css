@@ -1674,7 +1674,11 @@ body[data-mode="single"] .keep-toggle { display: none; }
    (a phase can be declared and then dropped). */
 .plan-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; }
 .plan-task {
-  display: grid; grid-template-columns: 18px minmax(0, 1fr) auto;
+  /* 21px, not 18: the NEW chip under the id is 21px wide, and a column narrower
+     than its content let that row's dot sit 2px right of every other row's. The
+     column is sized for the widest node content, so the marks line up down the
+     list whatever a row carries. */
+  display: grid; grid-template-columns: 21px minmax(0, 1fr) auto;
   /* Centre every cell on the node: one line of title, two or three all sit level
      with the dot, which is what makes a row of them scan as a list of marks. */
   align-items: center; gap: 9px; padding: 6px 7px; border-radius: 7px;
@@ -1687,9 +1691,11 @@ body[data-mode="single"] .keep-toggle { display: none; }
    and paints as a 4px square (cost an hour once; it is in AGENTS.md) */
 /* The node: the state's dot with the step id under it, both centred on the same
    axis. The id used to ride inline in front of the title, which made the title
-   wrap around a mark that had nothing to do with it. */
+   wrap around a mark that had nothing to do with it. Two pixels between the three
+   rows, not three: the column has to stay shorter than a two-line title, or every
+   row with a NEW chip would be taller than one without. */
 .plan-node {
-  display: grid; justify-items: center; gap: 3px;
+  display: grid; justify-items: center; gap: 2px;
   align-self: center; min-width: 0;
 }
 .plan-dot {
@@ -1764,17 +1770,16 @@ body[data-mode="single"] .keep-toggle { display: none; }
 .plan-id { font-family: var(--mono); font-size: 9.5px; color: #7b8089; letter-spacing: 0.02em; line-height: 1; }
 .plan-note { font-size: 11px; line-height: 1.4; color: var(--red); overflow-wrap: anywhere; }
 /* A row the Architect added after the list was made - something it noticed while
-   the work was happening. Amber and quiet: it is information for the operator (the
-   list grew, here is where), not a problem, and the important thing is that it is
-   visible without reading the row. */
+   the work was happening. It sits under the id in the node column, centred on the
+   same axis as the dot: in the title column it cost a whole extra line of height on
+   every such row, and this pane is a list of eight of them. Amber and quiet:
+   information for the operator (the list grew, here is where), not a problem. */
 .plan-origin {
-  /* A grid item in `.plan-main`, so it stretches to the column by default: a chip
-     644px wide is not a chip. It must be its own width, aligned to the start. */
-  display: inline-block; justify-self: start; width: max-content;
-  font-family: var(--mono); font-size: 8.5px; line-height: 1; letter-spacing: 0.06em;
-  text-transform: uppercase; color: var(--amber); opacity: 0.85;
-  border: 1px solid rgba(232, 163, 61, 0.4); border-radius: 4px;
-  padding: 2px 4px 1px; margin-left: 5px; vertical-align: 1px; white-space: nowrap;
+  display: inline-block;
+  font-family: var(--mono); font-size: 8px; line-height: 1; letter-spacing: 0.04em;
+  color: var(--amber); opacity: 0.9;
+  border: 1px solid rgba(232, 163, 61, 0.4); border-radius: 3px;
+  padding: 1px 2px; white-space: nowrap;
 }
 /* The right-hand column of a step: the role badge, and under it the step's own
    stopwatch. That stack is what makes two lines the minimum height of a row, which

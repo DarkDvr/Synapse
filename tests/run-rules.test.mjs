@@ -150,6 +150,10 @@ try {
   // not describe QC as a person's-use reviewer: that would be the wrong hunt in
   // Security mode, written into the plan before QC is ever asked.
   expect('the qc line leaves the focus to its own brief', architect.includes('what it hunts for is set by the brief'));
+  // Measured 25 Oct: a coder's fix was verified by a coder, and then by the
+  // architect itself. Checking a fix is QC's job whoever wrote it.
+  expect('verification is routed to qc', architect.includes('The task that checks a fix belongs to qc'));
+  expect('and self-verification is named as not a check', architect.includes('judging its own') && architect.includes('standing in for one'));
   expect('a worker is not told who does what', !coder.includes('Who does what'));
   expect('a worker is not told to judge anything', !coder.includes('You judge; you do not build'));
   // The brief is sent to every project this harness will ever run, so it may not

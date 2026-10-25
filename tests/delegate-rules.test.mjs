@@ -53,9 +53,10 @@ writePlan(plan(['build', 'qc'], [
 }
 
 // ── the refusal, through handleTurn ─────────────────────────────
-const makeRunner = ({ auto = true } = {}) => {
+const makeRunner = ({ auto = true, stallSec = 5, workerMessages = null } = {}) => {
   const woke = [];
   const ran = [];
+  const nudged = [];
   const arch = [{ id: 'm0', type: 'user', parts: [] }];
   const engine = {
     async getSession(id) {
@@ -63,7 +64,7 @@ const makeRunner = ({ auto = true } = {}) => {
       return { id, directory: DIR, internal: true };
     },
     async getMessages(id) {
-      return id === 'ses_arch' ? [...arch] : [];
+      return id === 'ses_arch' ? [...arch] : workerMessages ? workerMessages() : [];
     },
     // The recovery asks which conversations exist, newest first.
     async listSessions() {
@@ -83,7 +84,8 @@ const makeRunner = ({ auto = true } = {}) => {
     async createSession() { ran.push('createSession'); return { id: 'ses_w1' }; },
     async prompt() { ran.push('prompt'); },
     async setInstruction() {},
-    async nudge() {},
+    async nudge(id, text) { nudged.push(text); },
+    async interrupt() {},
   };
   const warns = [];
   const runner = createRunner({
@@ -91,13 +93,13 @@ const makeRunner = ({ auto = true } = {}) => {
     logger: { channel: () => ({ ...quiet, warn: (m) => warns.push(String(m)) }) },
     getConfig: () => ({
       roles: { 'coder-1': { ref: 'opencode/x' } },
-      worker: { ladder: ['coder-1'], stallSec: 5, resumeMax: 0 },
+      worker: { ladder: ['coder-1'], stallSec, resumeMax: 0 },
     }),
     guard: null,
     notify: () => {},
     modelCache: null,
   });
-  return { runner, woke, ran, warns, arch };
+  return { runner, woke, ran, warns, arch, nudged };
 };
 
 /** A run is started without being awaited, so give it a tick to reach the prompt. */
@@ -225,6 +227,28 @@ try {
     const before = woke.length;
     await runner.handleTurn('ses_arch', arch);
     expect('the doing reminder is not repeated', woke.length === before, `${woke.length} vs ${before}`);
+  }
+
+  // 6c. a step that ends in an error is over — do not wait out the stall window
+  // 25 Oct, a real QC run: two steps ended `error: aborted, "Step interrupted"` and
+  // the runner sat on each for the full 900-second stall window, which was 30 of a
+  // 33-minute run. The transcript had already said the step failed; the watchdog was
+  // waiting for an idle that was never coming.
+  writePlan(plan(['build'], [{ ...task('t1', 'coder-1'), status: 'doing' }]));
+  {
+    const aborted = [
+      { id: 'w1', type: 'user', parts: [] },
+      { id: 'w2', type: 'assistant', parts: [], raw: { error: { type: 'aborted', message: 'Step interrupted' }, finish: 'error' } },
+    ];
+    // stallSec 30: without the early return this case cannot finish inside the test.
+    const { runner, ran } = makeRunner({ stallSec: 30, workerMessages: () => [...aborted] });
+    const started = Date.now();
+    await runner.handleTurn('ses_arch', delegate('t1'));
+    // Wait for the run to end, up to 12s: the point is that it is far short of 30.
+    for (let i = 0; i < 24 && !ran.includes('prompt'); i += 1) await settle();
+    const took = (Date.now() - started) / 1000;
+    expect('an errored step is noticed at once', ran.includes('prompt'), ran.join(','));
+    expect('and the wait is seconds, not the stall window', took < 12, `${took.toFixed(1)}s of a 30s window`);
   }
 
   // …and quiet when it is not safe: the operator is driving, or they just spoke.

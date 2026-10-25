@@ -4359,14 +4359,14 @@ function paintPlan(body) {
         return `<li class="plan-task" data-status="${shown}">
           <span class="plan-node">
             <span class="plan-dot" role="img" aria-label="${esc(PLAN_STATUS[shown])}"></span>
-            <span class="plan-id">${esc(t.id || '?')}</span>
-          </span>
-          <span class="plan-main">
-            <span class="plan-title" title="${esc(tooltip)}">${esc(t.title)}</span>${
+            <span class="plan-id">${esc(t.id || '?')}</span>${
               t.origin === 'found'
-                ? `<span class="plan-origin" title="Noticed during the work - this row was not in the list when the operator first saw it">added</span>`
+                ? `<span class="plan-origin" title="Noticed during the work - this row was not in the list when the operator first saw it">NEW</span>`
                 : ''
             }
+          </span>
+          <span class="plan-main">
+            <span class="plan-title" title="${esc(tooltip)}">${esc(t.title)}</span>
             ${t.note && asking ? `<span class="plan-note">${esc(t.note)}</span>` : ''}
           </span>
           <span class="plan-side">

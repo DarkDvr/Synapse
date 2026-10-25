@@ -1126,13 +1126,22 @@ export function briefSession({ dir, role = 'architect', auto = false, skills = '
       `qc: delegate to qc with the request, the confirmed features and the design spec. It reports on wording, ` +
         `clipping and layout, missing input validation, and states that lie - see its mandate. It writes ` +
         `${PLAN_DIR}/qc_findings/qc-N.md with ids (Q1, Q2...) and a repro for each. Then one fix task naming the ` +
-        `ids to fix. Then a verification task: re-run exactly those repros and the supplied suites, and nothing ` +
-        `else - a second QC pass is a check, not a new hunt, so anything new it notices goes in a short ` +
+        `ids to fix. Then a verification task, on qc: re-run exactly those repros and the supplied suites, and ` +
+        `nothing else - a second QC pass is a check, not a new hunt, so anything new it notices goes in a short ` +
         `"observed, not fixed" list for the operator instead of becoming another round. A third round only if the ` +
         `verification found a real regression. Three is the limit; after that, stop and tell the operator what is ` +
         `still open. A worker's report goes in that role's own folder or in the task's "result": never point a ` +
         `coder at ${PLAN_DIR}/qc_findings/, which belongs to QC - the file tools refuse it and the harness ` +
         `reports the stray write as tampering.`,
+    );
+    // Measured 25 Oct on a byte-level tool: the fix round was a coder's task, and
+    // the architect then put the verification of that coder's work on a coder too -
+    // its own judgement about what is safe, and the one judgement that cannot be
+    // left to the role being judged. Checking a fix is QC's job whoever wrote it.
+    lines.push(
+      `The task that checks a fix belongs to qc, not to the role that made the fix. A worker judging its own ` +
+        `work is not a check, and neither is your own run of it standing in for one: delegate the verification ` +
+        `to qc, with the ids and the repros.`,
     );
     lines.push(
       `A task's "reads" lists the files the worker must read first (a design spec, the feature list, a QC ` +
