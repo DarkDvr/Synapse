@@ -1157,6 +1157,28 @@ Measured after both, at 1600px (wide, grid-owned height) and 1243px (narrow, us)
 either way, at the end and 300px scrolled up — message **0.0–0.1px**, slack **unchanged**,
 composer **0.0**, and the box's top edge on whole pixels every frame.
 
+**A floor taller than the room does not grow the room.** `min-height: clamp(150px, 32vh,
+360px)` on the chat was written for the content-sized layout, where without it the chat
+could collapse to its composer. It applied up to 1460px, and between 1359 and 1460 the
+stage has a *definite* height, so the chat's row is the room that is actually left — on a
+1369×770 window that is 214.9px, and a 246.4px floor does not enlarge it: the transcript
+sits 31.5px lower than its own row, *behind the composer*. The newest lines were covered,
+the hidden amount changed with every mode switch, and the words under the composer edge
+moved with it. Two rules came out of it: the floor is scoped to the content-sized layout
+(`<=1358px`), and the height fit now reads that floor from the stylesheet instead of
+assuming one — `composer + computed min-height` — so a floor can be honoured by making
+the whole dock overflow the page rather than by the transcript overflowing the dock.
+
+Two ways to measure this, both worth keeping. The layout tells you *where* boxes are; the
+pixels tell you whether anything was repainted: screenshot a fixed clip during the
+animation and compare frames byte-wise (they came back **identical** for `c3..c7`), which
+distinguishes "the content moved" from "the content was re-drawn". And `Emulation.
+setDeviceMetricsOverride` through CDP is the only way to test the `>=1461px` layout here —
+`page.setViewportSize` silently does not exceed the real window (it reported 1600 while
+`innerWidth` stayed 1369), and the override is dropped when the call ends, so it has to be
+set *inside* every measurement.
+
+
 
 
 The instrument, since it is reusable: this machine has ffmpeg (winget: `Gyan.FFmpeg`,

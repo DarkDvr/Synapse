@@ -3914,7 +3914,15 @@ function fitChatHeight() {
   const scroll = window.scrollY;
   const top = dock.getBoundingClientRect().top + scroll;
   const bottom = window.innerHeight + scroll - 12;
-  const next = `${Math.max(180, bottom - top)}px`;
+  // The floor is the composer plus whatever the stylesheet says the transcript needs,
+  // read from it rather than repeated here: on a short window the room left under the
+  // cards can be less than that floor, and a chat held *taller* than its own row does
+  // not grow the row — it slides down behind the composer, hiding the newest lines and
+  // shifting them whenever the box changes size. The floor belongs in the height, so
+  // the whole dock overflows the page instead of the transcript overflowing the dock.
+  const composerH = $('composer')?.getBoundingClientRect().height ?? 58;
+  const floor = composerH + (parseFloat(getComputedStyle($('transcript')).minHeight) || 0) + 2;
+  const next = `${Math.max(floor, bottom - top)}px`;
   if (dock.style.height !== next) setChatHeight(dock, next);
   if (dock.style.maxHeight) dock.style.maxHeight = '';
 }

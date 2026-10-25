@@ -2402,9 +2402,16 @@ body:has(.modal-backdrop:not([hidden])) { overflow: hidden; }
    edge. Measured 25 Oct at 1366x1000: a 72px gap under the composer. */
 @media (max-width: 1358px) {
   .stage { height: auto; min-height: 0; }
+  /* A floor under the chat belongs only where the page is content-sized and the
+     chat would otherwise collapse to its composer. Between 1359 and 1460 the stage
+     has a definite height, so the chat's row is the room that is actually left —
+     and a 32vh floor there is *bigger* than that room, which pushed the transcript
+     31.5px down behind the composer (measured at 1369x770: row 214.9, transcript
+     246.4). Its bottom half was covered, and during a mode switch the overlap
+     changed, so the words under the composer edge moved with it. */
+  .chat-scroll { min-height: clamp(150px, 32vh, 360px); }
 }
 @media (max-width: 1460px) {
-  .chat-scroll { min-height: clamp(150px, 32vh, 360px); }
   .rail-actions { grid-template-columns: 1fr 1fr; }
 }
 
