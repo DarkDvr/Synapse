@@ -43,6 +43,7 @@ const NOTES = [
   'docs/notes/runtime-scope.md',
   'docs/notes/ui-lessons.md',
   'docs/notes/runbook.md',
+  'docs/notes/handover.md',
 ];
 const agents = read('AGENTS.md');
 const slashed = (rel) => [rel, rel.replace(/\//g, '\\')];

@@ -150,6 +150,7 @@ an agent does not know to open is a document that does not exist:
 | `docs/notes/runtime-scope.md` | before starting work on Synapse's own runtime (independence from OpenCode) — what the runtime does, what a replacement costs, the staged path |
 | `docs/notes/ui-lessons.md` | touching `web/` — layout invariants, the chat dock, the ask panel, the cards and the picker, with the measurements that prove them |
 | `docs/notes/runbook.md` | running, restarting or debugging it; anything that kills a process |
+| `docs/notes/handover.md` | picking this up mid-stream — the chat dock's state of play, its instruments, the dead ends, and what is still open. Delete it when those items close |
 
 Two rules for this file. **A new lesson goes in `docs/notes/`, not here** — this
 file changes when a rule changes, not when something is learned. And if you move
@@ -280,10 +281,8 @@ update dialog (see `docs/notes/models-and-tools.md`) is the fix.
 
 ## Open items
 
-- **3.4 — the live per-session Tools-in-Use feed.** The main pane's napkin with its
-  live path is done; what is left is the per-session tool feed the rail shows.
-- **The composer has no target picker**: every message goes to the Architect; make
-  the card itself the affordance if worker addressing is ever wanted.
+Kept in `docs/notes/handover.md` while that file exists — it changes weekly, this file does not.
+Two are long-standing: the per-session Tools-in-Use feed (3.4), and no target picker in the composer.
 
 ## Lessons that cost a day each
 
@@ -295,5 +294,6 @@ update dialog (see `docs/notes/models-and-tools.md`) is the fix.
 - **A rule must not contradict the pillar.** "Never re-render what a worker made"
   read as "trust its numbers", which inverts: a worker's output is a claim.
 - **A watchdog that listens for one signal waits out its whole timeout.** An `idle`
-  message a failed step never sends cost 30 of a 33-minute run.- **Measure the number, then believe it.** Most "slow model" reports were our
+  message a failed step never sends cost 30 of a 33-minute run.
+- **Measure the number, then believe it.** Most "slow model" reports were our
   arithmetic; one "stall" was the provider's VRAM, in its own boot log.
