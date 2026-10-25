@@ -3097,14 +3097,30 @@ const reducedMotion = Boolean(window.matchMedia?.('(prefers-reduced-motion: redu
 let chatFollowArmed = true;
 let lastChatTop = 0;
 const CHAT_FOLLOW_SLACK = 48; // two lines
+// The last time the operator themselves moved the conversation: a wheel, a key, a
+// finger. A scroll *event* cannot tell their move from ours, and that was the bug:
+// a rebuild resets the scroller and our own follow fires an event, so a declining
+// scrollTop read as "the reader took over" and the follow let go in the middle of a
+// stream. It came back when the block folded and the next render re-armed it, which
+// is why it looked intermittent and why it only happened while thinking streamed.
+let chatUserMovedAt = 0;
+const CHAT_USER_WINDOW_MS = 1500;
 
 function noteChatScroll() {
   const el = chatScroller();
   if (!el) return;
   const fromEnd = el.scrollHeight - el.scrollTop - el.clientHeight;
-  if (el.scrollTop < lastChatTop - 4) chatFollowArmed = false;
+  const byReader = Date.now() - chatUserMovedAt < CHAT_USER_WINDOW_MS;
+  if (byReader && el.scrollTop < lastChatTop - 4) chatFollowArmed = false;
   else if (fromEnd <= CHAT_FOLLOW_SLACK) chatFollowArmed = true;
   lastChatTop = el.scrollTop;
+}
+
+/** The operator moved the conversation. Only this may release the follow. */
+function noteUserScrollIntent(deltaY) {
+  // A wheel down at the end is them coming back, not leaving.
+  if (deltaY > 0 && chatAtBottom(CHAT_FOLLOW_SLACK)) chatFollowArmed = true;
+  else chatUserMovedAt = Date.now();
 }
 
 /** The panel's parts, or null if it is not on screen yet. */
@@ -3193,7 +3209,16 @@ function pumpStream(now) {
   streamFrameAt = now;
   const was = s.offset;
   const offset = nextOffset(s, s.target || 0, dt, { reduced: reducedMotion });
-  if (offset !== was) streamEl.body.style.transform = `translate3d(0, ${-offset}px, 0)`;
+  // The slide is damped, so a fast model outruns it: the target grows faster than
+  // the spring arrives, and the newest lines sit below the panel's edge until it
+  // catches up — text the operator is watching arrive but cannot read. When the
+  // chat is following, the lag is capped at a sliver, so the last line is always
+  // readable and the easing only shows when the writing slows down.
+  const bounded = follow ? Math.max(offset, (s.target || 0) - STREAM_MAX_LAG) : offset;
+  if (bounded !== was) {
+    s.offset = bounded;
+    streamEl.body.style.transform = `translate3d(0, ${-bounded}px, 0)`;
+  }
   if (follow) {
     const scroller = chatScroller();
     if (scroller) {
@@ -3228,6 +3253,9 @@ function endStream() {
 // nothing finer to average — and it is shown only while the step is recent.
 const usageSamples = new Map(); // dirKey -> { at, tokens }
 const RATE_FRESH_MS = 45000;
+// How much of the newest line the damped slide may hide while the chat follows.
+// Under a line's height, so nothing readable is ever behind the edge.
+const STREAM_MAX_LAG = 8;
 
 /**
  * When a step's first and last piece were streamed, per session.
@@ -5992,6 +6020,13 @@ function wire() {
     else scrollChatToBottom();
   });
   let navRaf = 0;
+  // A real gesture, before the scroll it causes arrives.
+  $('transcript').addEventListener('wheel', (e) => noteUserScrollIntent(-e.deltaY), { passive: true });
+  $('transcript').addEventListener('touchmove', () => noteUserScrollIntent(-1), { passive: true });
+  $('transcript').addEventListener('keydown', (e) => {
+    if (['PageUp', 'ArrowUp', 'Home'].includes(e.key)) noteUserScrollIntent(-1);
+    else if (['PageDown', 'ArrowDown', 'End'].includes(e.key)) noteUserScrollIntent(1);
+  });
   $('transcript').addEventListener('scroll', () => {
     // The reader's own position, first and on every event: a stream is allowed to
     // follow a chat that is at the end, and must let go the moment it is not.
