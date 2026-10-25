@@ -204,14 +204,11 @@ src/
   api.js              engine-agnostic operations the routes call
   projects.js         the project registry (a project IS a directory)
   titler.js           names a session after its first answer
-  titles.js           the shared "TBD" placeholder
   toolstats.js        the tool-call census (data\tool-stats.json)
   probe.js            the tool probe: one turn per tool
   providers.js        provider types, ids, and "ask a server what it serves"
   secrets.js          provider keys in data\provider-keys.json, never the config
-  engine-update.js    is there a newer engine, and stop/install/start
-  search.js           dependency-free DuckDuckGo search
-  mcp/search-server.js stdio MCP server exposing websearch to the engine
+  engine-update.js    is there a newer engine, and stop/install/start  mcp/search-server.js stdio MCP server exposing websearch to the engine
   engines/base.js     engine contract + message normalisation
   engines/opencode.js the OpenCode adapter
 web/
@@ -222,7 +219,6 @@ web/
   synapse.css         theme + shell (Summit baseline stays locked)
   vendor/summit.css   LOCKED baseline — one deliberate edit, see below
   vendor/fonts.css    vendored DM Sans + Manrope (offline)
-  icon-16…256.png     the app icon, rendered from references\synapse_icon_full.png
   favicon.ico         the same, packed as a multi-size icon
 skills/               shipped WITH Synapse, always on the engine's skill path
   visual-review/      render a page to PNG, then read it (the agents' eyes)
@@ -235,8 +231,8 @@ templates/win-app/    the Windows shell a new app is copied from (WPF + WebView2
 data/                 runtime state (projects, census, probe results, engine home)
 logs/                 one file per channel: app, engine, session, tools
 bin/opencode/         a copy of the runtime that travels with the app (not in git;
-                      vendor-engine.ps1 puts it there, ~210 MB, with its MIT licence)
-docs/                 design mockups (*.pdf), clock-test-2.md and shift-test-1.md
+                      vendor-engine.ps1 puts it there, ~210 MB, with its licence)
+docs/                 design mockups (*.pdf) and the runs the briefs were rewritten
                       (the runs the briefs were rewritten around), and the detail
                       behind this file
   notes/              engine-notes, models-and-tools, ui-lessons, runbook
@@ -244,7 +240,7 @@ docs/                 design mockups (*.pdf), clock-test-2.md and shift-test-1.m
 
 **The mockups are PDFs and there is no PDF renderer here**: a mockup is a *shape*
 record, not a pixel source. How to open one, and why the numbers are measured
-live instead: `docs/notes/ui-lessons.md`.
+live: `docs/notes/ui-lessons.md`.
 
 **`web/vendor/summit.css` is a locked baseline.** The only edit ever made to it
 is line 1: the Google Fonts `@import` was replaced with a comment, because
@@ -254,11 +250,15 @@ fonts must be local. Do not restyle it — put changes in `synapse.css`.
 
 ## Engine API: the things that cost time
 
-Route and schema ground truth is the OpenAPI dump at
-`%LOCALAPPDATA%\Temp\opencode\openapi.json`. Check it before
-guessing.
+**The schema dump is a starting point, not the truth. The running engine is the
+truth.** `%LOCALAPPDATA%\Temp\opencode\openapi.json` is a snapshot
+of some earlier engine, and on 25 Oct it described an attachment shape that 2.1.2
+refuses outright (`Missing key at ["files"][0]["uri"]` — it wants `{uri}`, not
+`{data, mime, source}`). Read the dump to know what to try, then **probe the live
+engine once before building on it**: send the body you expect and read the 400.
+Minutes spent probing beat a feature that only fails when the operator uses it.
 
-**The engine is 2.1.0 (20 Oct 2026).** The table below was measured on 2.0.30
+**The engine is 2.1.2.** The table below was measured on 2.0.30
 unless it says otherwise, and the upgrade was re-verified on the routes Synapse
 depends on. **The model catalog ships inside the engine binary, not in Synapse** —
 so a stale model list means a stale *binary*, never a stale cache. The console
@@ -271,11 +271,10 @@ update dialog (see `docs/notes/models-and-tools.md`) is the fix.
 | `PATCH /api/session/{id}` | accepts only `title`, `metadata`, `permissions`. **Not `agent`.** Returns **204 with an empty body** — do not try to parse it. `permissions: []` clears the ruleset; that is how Single→Multi is applied to an open session. |
 | `POST /api/session/{id}/model` | switches model and thinking effort for later turns. Body `{model:{providerID,id,variant?}}`; **204, empty body**. Omitting `variant` makes the engine store `"default"` — see "Context windows and thinking effort". |
 | `POST /api/session/{id}/generate` | one-shot completion in the session's context. Returns `{data:{text}}`. **Adds nothing to the transcript** — this is how sessions get named. |
-| `POST /api/session/{id}/prompt` | accepts `text`, `files`, `agents`, `skills`, `metadata`, `delivery`, `resume`. An `agents:[{name}]` attachment does **not** change the acting agent. |
+| `POST /api/session/{id}/prompt` | accepts `text`, `files`, `agents`, `skills`, `metadata`, `delivery`, `resume`. An `agents:[{name}]` attachment does **not** change the acting agent. **A file is `{uri, name}`, and a `data:` URI is accepted** — measured on 2.1.2, see the dump warning above. |
 | Turn boundaries | every turn ends with an **`idle` message** appended. That is the reliable end-of-turn signal — do not invent a timer. |
 | Shell exit codes | a shell command exiting non-zero is reported by the engine as `status=completed`. Synapse derives `failed` from the output. Never trust the raw status for shell. |
-| `GET /api/session/active` | the authority on what is running. Survives a Synapse restart. |
-| `GET /api/project` | returns a bare array, not `{data:…}`. |
+| `GET /api/session/active` | the authority on what is running; survives a restart. `GET /api/project` returns a bare array, not `{data:…}`. |
 
 ---
 
@@ -283,15 +282,18 @@ update dialog (see `docs/notes/models-and-tools.md`) is the fix.
 
 - **3.4 — the live per-session Tools-in-Use feed.** The main pane's napkin with its
   live path is done; what is left is the per-session tool feed the rail shows.
-- **3.5 — housekeeping**: `engine.type` is a dropdown in Settings now and only
-  `opencode` is registered; **Browse Folder** / **Cmd Here** are still `data-soon`
-  for stage 4, and the stored probe results are not zeroed if the panel should
-  start blank.
-- **The census double-counts after a restart** — known, reproduced, not yet fixed;
-  the detail and the near-miss in testing are in `docs/notes/engine-notes.md`.
-- The composer has **no target picker**: every message goes to the Architect, and
-  per-role model and effort live on the cards. If direct worker addressing is ever
-  wanted, make the card itself the affordance rather than reintroducing a
-  dropdown.
-- Adding skills later is just files in `%USERPROFILE%\.agents\skills` — they are
-  already wired in.
+- **The composer has no target picker**: every message goes to the Architect; make
+  the card itself the affordance if worker addressing is ever wanted.
+
+## Lessons that cost a day each
+
+- **A rule can be older than the thing it describes.** The plan was designed to be
+  written once and executed; the record showed the Architect inserting tasks,
+  reopening finished ones and adding rows the next day. It is a work list now.
+- **A brief change that lands while the server runs has not landed.** Check the
+  boot line in `logs\app.log` before blaming the rule.
+- **A rule must not contradict the pillar.** "Never re-render what a worker made"
+  read as "trust its numbers", which inverts: a worker's output is a claim.
+- **A watchdog that listens for one signal waits out its whole timeout.** An `idle`
+  message a failed step never sends cost 30 of a 33-minute run.- **Measure the number, then believe it.** Most "slow model" reports were our
+  arithmetic; one "stall" was the provider's VRAM, in its own boot log.

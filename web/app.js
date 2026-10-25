@@ -1964,7 +1964,7 @@ function renderTree() {
     // its sessions is working, green when a session is chosen and waiting.
     const working = p.sessions.some((s) => sessionWorking(s.id));
     html.push(`<div class="tree-project">
-      <div class="tree-row project${current ? ' is-current' : ''}">
+      <div class="tree-row project${current ? ' is-current' : ''}${working ? ' has-work' : ''}">
         <button class="tree-open" data-project="${esc(p.id)}" aria-expanded="${open}" title="${esc(p.name)}">
           <span class="tree-caret" aria-hidden="true"></span>
           <span class="tree-name">${esc(p.name)}</span>
@@ -4631,6 +4631,11 @@ async function send() {
 
   input.value = '';
   autoGrow(input);
+  // Sending is the moment the operator knows work is starting, and the rail should
+  // say so on the same click — the engine's first status event can arrive a second
+  // later, and a green row after pressing Send reads as "nothing happened".
+  state.busySessions.add(state.sessionId);
+  renderTree();
   try {
     await ensureSession();
     state.streaming = true;
@@ -4659,6 +4664,9 @@ async function send() {
     await loadMessages();
     scrollChatToEnd();
   } catch (err) {
+    // The send failed, so the work the rail was told about is not happening.
+    state.busySessions.delete(state.sessionId);
+    renderTree();
     toast('Send failed', err.message);
   } finally {
     state.streaming = false;
@@ -4707,12 +4715,47 @@ function renderAttachments() {
   strip.hidden = list.length === 0;
   strip.innerHTML = list
     .map(
-      (f) => `<span class="attach-chip" title="${esc(f.name)} · ${fmtBytes(f.size)}">
+      (f) => {
+        const image = /^image\//i.test(f.mime);
+        // A picture says more than its name, so the chip carries the bytes for a
+        // preview; anything else keeps the tooltip that already showed its name.
+        return `<span class="attach-chip" data-attach="${esc(f.id)}"${image ? ' data-image="1"' : ''} title="${image ? '' : `${esc(f.name)} · ${fmtBytes(f.size)}`}">
         <span class="attach-name">${esc(shortName(f.name))}</span>
         <button type="button" class="attach-x" data-detach="${esc(f.id)}" title="Remove ${esc(f.name)}" aria-label="Remove ${esc(f.name)}">✕</button>
-      </span>`,
+      </span>`;
+      },
     )
     .join('');
+}
+
+/**
+ * The picture behind an image chip, on hover.
+ *
+ * Fixed-position and outside the composer: a popup drawn inside it would be
+ * clipped by the dock at the exact moment you wanted to look at it. It appears
+ * above the chip, and never off the top of the window - the composer is at the
+ * bottom, which is where the room is.
+ */
+function showAttachPreview(id) {
+  const box = $('attachPreview');
+  const img = $('attachPreviewImg');
+  const name = $('attachPreviewName');
+  const f = (state.attachments || []).find((a) => a.id === id);
+  const chip = document.querySelector(`.attach-chip[data-attach="${CSS.escape(String(id))}"]`);
+  if (!box || !img || !name || !f || !chip) return;
+  img.src = `data:${f.mime};base64,${f.data}`;
+  name.textContent = f.name;
+  box.hidden = false;
+  const c = chip.getBoundingClientRect();
+  const b = box.getBoundingClientRect();
+  const left = Math.max(8, Math.min(c.left, window.innerWidth - b.width - 8));
+  box.style.left = `${left}px`;
+  box.style.top = `${Math.max(8, c.top - b.height - 8)}px`;
+}
+
+function hideAttachPreview() {
+  const box = $('attachPreview');
+  if (box) box.hidden = true;
 }
 
 function fmtBytes(n) {
@@ -6123,7 +6166,16 @@ function wire() {
     const x = e.target.closest('[data-detach]');
     if (!x) return;
     state.attachments = state.attachments.filter((f) => f.id !== x.dataset.detach);
+    hideAttachPreview();
     renderAttachments();
+  });
+  $('attachStrip').addEventListener('mouseover', (e) => {
+    const chip = e.target.closest('.attach-chip[data-image]');
+    if (chip) showAttachPreview(chip.dataset.attach);
+  });
+  $('attachStrip').addEventListener('mouseout', (e) => {
+    const chip = e.target.closest('.attach-chip');
+    if (chip && !chip.contains(e.relatedTarget)) hideAttachPreview();
   });
   $('stopBtn').addEventListener('click', interrupt);
   $('modeToggle').addEventListener('click', switchMode);

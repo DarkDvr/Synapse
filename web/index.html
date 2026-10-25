@@ -255,6 +255,13 @@
   </main>
 </div>
 
+<!-- one image preview, for the attachment chips: fixed-position so the composer
+     cannot clip it, and only ever shown for a picture -->
+<div class="attach-preview" id="attachPreview" hidden>
+  <img id="attachPreviewImg" alt="" />
+  <span class="attach-preview-name" id="attachPreviewName"></span>
+</div>
+
 <!-- one shared searchable-model menu; fixed-position so it can escape the
      clipped role-card wrapper -->
 <div class="model-menu" id="modelMenu" role="listbox" hidden></div>

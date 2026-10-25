@@ -299,9 +299,11 @@ body[data-view="session"] .rail-plan { position: relative; }
 @media (min-width: 1359px) {
   body[data-view="session"] .stage {
     grid-template-columns: minmax(0, 1fr) var(--panel-max);
-    /* the plan's floor, for Single: the cards collapse to the Architect card and
-       the plan would otherwise take the row to nothing */
-    grid-template-rows: minmax(200px, auto) minmax(0, 1fr);
+    /* `auto`, not a 200px floor: the floor existed for Single, where the plan
+       would have taken the row to nothing. The row is as tall as the taller of the
+       two, which is the cards in Single and the plan in Multi - a floor only added
+       empty space above and below the card, and that space is chat. */
+    grid-template-rows: auto minmax(0, 1fr);
   }
   body[data-view="session"] .topology-wrap { grid-column: 1; grid-row: 1; }
   /* `contain: size` keeps the row sized by the cards, and `max-height: none`
@@ -313,13 +315,20 @@ body[data-view="session"] .rail-plan { position: relative; }
     contain: size;
     max-height: none;
   }
+  /* The cards start var(--row-gap) below the row's top because the path layer sits
+     above them; the plan has no such sibling, so without this its top edge was 12px
+     above the card's. Aligned tops, and the row is as tall as the cards. */
+  body[data-view="session"] .rail-plan { margin-top: var(--row-gap); }
   body[data-view="session"] .chat-dock { grid-column: 1 / -1; grid-row: 2; }
 }
 /* Single mode: one card, and a plan panel that is a summary rather than a list.
    `contain: size` is what makes the panel match the cards' row in Multi, and it
    makes the height ignore the content — so it has to go here, or the summary
    collapses to its padding. */
-body[data-mode="single"] .rail-plan { align-self: start; contain: none; max-height: none; }
+body[data-mode="single"] .rail-plan { align-self: start; contain: none; max-height: none; margin-top: 0; }
+/* In Single there is nothing to path to, so the gap the path needs above the cards
+   is space the conversation could have. */
+body[data-mode="single"] .topo-architect { margin-top: 0; }
 body[data-mode="single"] .plan-goal-single {
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
   overflow: hidden; margin: 0 0 6px;
@@ -431,10 +440,17 @@ body.dark .sidebar .nav-link.active > span:first-child { color: #fff; }
    composer, and it read as a different product. Same recipe as the plan row —
    a faint yellow wash and a yellow border — so "this is the one you are in"
    looks the same in both places. */
-/* The current project is the loudest row in the rail: a 2px yellow border and a
-   barely-there wash. The 2px is a 1px border plus an inset ring of the same
-   colour, so selecting a project does not move the tree by a pixel. */
+/* The current project wears the same mark as its session: a 1px border plus an
+   inset ring of the same colour, so selecting a project does not move the tree by
+   a pixel. Green when the chosen session is waiting, yellow while work is in
+   flight — the rail says what the rest of the app says, and "chosen" is not the
+   same fact as "busy". */
 .tree-row.project.is-current {
+  background: rgba(53, 192, 138, 0.08);
+  border-color: rgba(53, 192, 138, 0.7);
+  box-shadow: inset 0 0 0 1px rgba(53, 192, 138, 0.7);
+}
+.tree-row.project.is-current.has-work {
   background: rgba(237, 194, 90, 0.10);
   border-color: var(--yellow);
   box-shadow: inset 0 0 0 1px var(--yellow);
@@ -463,7 +479,7 @@ body.dark .sidebar .nav-link.active > span:first-child { color: #fff; }
 .tree-row.project:hover .tree-open { color: #fff; }
 /* The project you are in is marked in yellow: this rail's one "active" colour,
    and the same yellow a running session wears. */
-.tree-row.project.is-current .tree-open { color: var(--yellow); }
+.tree-row.project.is-current .tree-open { color: #fff; }
 .tree-open .tree-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 
 /* chevron drawn in CSS so it stays crisp and consistent */
@@ -1638,6 +1654,24 @@ body[data-mode="single"] .keep-toggle { display: none; }
 }
 .attach-x:hover { background: var(--red-soft); opacity: 1; }
 .attach-x:focus-visible { outline: 2px solid var(--orange); outline-offset: 1px; }
+/* A picture behind an image chip, on hover: fixed, so the dock cannot clip it. */
+.attach-preview {
+  position: fixed; z-index: 60; max-width: 240px;
+  padding: 6px; border-radius: 10px;
+  background: #14161a; border: 1px solid #3a3d43;
+  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+}
+.attach-preview[hidden] { display: none; }
+.attach-preview img {
+  display: block; max-width: 228px; max-height: 170px;
+  border-radius: 6px; object-fit: contain; background: #0f1114;
+}
+.attach-preview-name {
+  display: block; margin-top: 5px;
+  font-family: var(--mono); font-size: 10px; line-height: 1.3; color: #c3c6cc;
+  overflow-wrap: anywhere;
+}
 /* What was sent, under the sentence that carried it. */
 .msg-files { display: inline-flex; flex-wrap: wrap; gap: 5px; margin-left: 8px; vertical-align: 1px; }
 .msg-file {
