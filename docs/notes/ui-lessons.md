@@ -251,14 +251,44 @@ it as a panel **painted over the chat, anchored just above the composer**.
   that lives in a cell is capped to that height — the probe's Error is a real
   `.btn` (22px min-height) and its own `td` rule set 3px, so one table had 29px rows
   beside 22px ones. Measured after the fix: 8 rows and 14 rows, every one 21px.
-- **Adding a project can adopt a folder that already has a plan.** Deleting a
-  project only unregisters it (documented, and right: the folder is the operator's),
+- **Adding a project can adopt a folder that already has a plan.** A folder can
+  outlive its project — the operator may add a directory that already holds work —
   so a reused name like `Test Project 1` resolves to the same slug on disk and the
-  new project inherits the old plan — the pane opened onto a finished 4/4 plan and
+  new project inherits the old plan: the pane opened onto a finished 4/4 plan and
   the Architect card said DONE before anything was typed. That is now a three-way
   question (see the next bullet) rather than a toast, and `createProject` also
   reports `existingPlan` for API callers. It never wipes the plan by itself:
   re-adding a real project must continue its work.
+- **Deleting a project deletes its folder, and the Recycle Bin is the undo.**
+  Deleting used to only unregister — defensible for a folder the operator owns, and
+  wrong for what it caused: a project deleted and re-created by name opened onto the
+  previous run's plan. A project with no sessions has no session that still needs the
+  folder, so the folder goes with it, into the **Recycle Bin** rather than out of
+  existence (`Microsoft.VisualBasic.FileIO.FileSystem::DeleteDirectory` with
+  `SendToRecycleBin`, called through PowerShell with the path in the **environment**,
+  never in the command text, so a folder name cannot become code). Measured: a
+  project holding `bin\App.exe` and `bin\ui\index.html` left the disk, the bin listed
+  it from its parent folder, and the project left the rail.
+  The refusals are structural and asserted in `tests/project-delete.test.mjs`: a drive
+  root, the projects root, the harness, and anything containing the harness. **A drive
+  root has to be judged before the path is normalised** — stripping the trailing
+  separator turns `F:\` into `F:`, a drive-relative path that reads as an ordinary
+  folder. A sibling whose name merely starts with the harness's (`Synapse.Projects`)
+  is not the harness: only a path boundary counts.
+  **The deliverables in `bin\` are their own consent.** `bin` is the one folder in a
+  project whose contents are the app that was built rather than working state, so
+  when it holds anything the dialog shows a checkbox with the count and the size, and
+  its **Delete stays disabled until it is ticked**; the server refuses with a 409 as
+  well, because a dialog is not the only way to send that request. An empty `bin\`
+  needs no consent. `openDialog` re-arms its confirm button on every open, since a
+  gated dialog would otherwise leave the next one disabled.
+  A folder that fails to move keeps its project registered — a folder still on disk
+  with its registry entry gone is the worse half of a failed delete.
+  Two traps met on the way: the script was first assembled by joining its lines with
+  `;`, which ends the call right after `DeleteDirectory(` and returns
+  `MissingEndParenthesisInMethodCall`; and PowerShell's stderr is a stack trace, so
+  the message shown to the operator is the first line that is not a `+ CategoryInfo`
+  one, not the last line of noise.
 - **A reused folder is a decision, not a toast.** Adding a project to a directory
   that already holds a plan now asks, in a **non-dismissable dialog with a red
   frame**: *cancel and pick another name*, *delete that folder and start fresh*, or

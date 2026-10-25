@@ -278,6 +278,10 @@ function openDialog({
     $('dialogMessage').hidden = !message;
     $('dialogOk').textContent = confirmLabel;
     $('dialogOk').className = `btn btn-sm ${danger ? 'btn-danger' : 'btn-primary'}`;
+    // A dialog may gate its own confirm (the deliverables in `bin\` have to be
+    // ticked first), so the button is re-armed on every open instead of inheriting
+    // the state the last dialog left it in.
+    $('dialogOk').disabled = false;
     // A third choice, for the one dialog that needs three (a folder that already
     // exists: cancel, wipe it, or carry on with it).
     const extraBtn = $('dialogExtra');
@@ -2087,16 +2091,6 @@ async function createSession(projectId) {
   }
 }
 
-// One shape for every destructive confirmation.
-function confirmDelete({ kind, name, consequence, extra }) {
-  return openDialog({
-    title: `Delete ${kind}`,
-    message: `"${name}" ${consequence}${extra ? ` ${extra}` : ''}`,
-    confirmLabel: 'Delete',
-    danger: true,
-  });
-}
-
 async function removeSession(id) {
   const s = findSession(id);
   const project = projectOf(id);
@@ -2188,20 +2182,70 @@ async function removeProject(id) {
     });
     return;
   }
-  const ok = await confirmDelete({
-    kind: 'project',
-    name: p.name,
-    consequence: 'is removed from Synapse.',
-    extra: 'The folder and every file in it are left untouched.',
+  // The folder goes with the project, so the dialog has to say what is in it. The
+  // server answers from the disk rather than from the list's memory of it.
+  let info = null;
+  try {
+    info = await api('GET', `/api/projects/${encodeURIComponent(id)}/delete-info`);
+  } catch (err) {
+    toast('Could Not Look At The Project', err.message);
+    return;
+  }
+  const bin = info?.bin || { files: 0, bytes: 0 };
+  // The built app in `bin\` is a deliverable, not working state: deleting it is a
+  // separate consent, and Delete stays disabled until the box is ticked.
+  const deliverables = bin.files > 0;
+  const ok = await openDialog({
+    title: 'Delete Project',
+    message:
+      info?.exists === false
+        ? `"${p.name}" is no longer a folder on disk. Remove the project from Synapse?`
+        : `"${p.name}" and everything in it are deleted. The folder goes to the Recycle Bin, so it can be restored from there.`,
+    confirmLabel: 'Delete',
+    danger: true,
+    fields: deliverables
+      ? [
+          {
+            name: 'deliverables',
+            type: 'check',
+            value: false,
+            label: `Delete the ${bin.files === 1 ? 'file' : `${bin.files} files`} in bin\\ as well`,
+            hint:
+              `${fmtBytes(bin.bytes)} of deliverables — the built app — in ${info.directory}\\bin. ` +
+              'They go to the Recycle Bin with the rest of the folder; nothing is deleted for good.',
+          },
+        ]
+      : [],
+    afterRender: deliverables
+      ? () => {
+          const box = $('dialogBody').querySelector('input[data-flag="deliverables"]');
+          const btn = $('dialogOk');
+          const gate = () => { btn.disabled = !box?.checked; };
+          box?.addEventListener('change', gate);
+          gate();
+        }
+      : undefined,
   });
   if (!ok) return;
   try {
-    await api('DELETE', `/api/projects/${encodeURIComponent(id)}`);
+    const res = await api('DELETE', `/api/projects/${encodeURIComponent(id)}`, {
+      binConfirmed: Boolean(ok.deliverables),
+    });
     await loadProjects();
-    toast('Project Removed', 'Nothing on disk was touched.');
+    if (res?.recycled) toast('Project Deleted', `"${p.name}" and its folder are in the Recycle Bin.`);
+    else toast('Project Removed', `"${p.name}" was no longer a folder on disk.`);
   } catch (err) {
-    toast('Could not remove the project', err.message);
+    toast('Could Not Delete The Project', recycleReason(err.message));
   }
+}
+
+/** The server's words for a folder that would not go to the bin, in the operator's terms. */
+function recycleReason(message) {
+  const text = String(message || 'the server did not say why');
+  if (/denied/i.test(text)) return 'Windows would not let go of that folder — a file inside it may be open in another program. Close it and try again.';
+  if (/in use|being used by another process/i.test(text)) return 'A file in that folder is open in another program. Close it and try again.';
+  if (/not found|cannot find/i.test(text)) return 'The folder had already been moved or deleted.';
+  return text;
 }
 
 async function renameProject(id) {

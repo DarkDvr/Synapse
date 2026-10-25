@@ -6,7 +6,8 @@ import { spawn } from 'node:child_process';
 import { TBD_TITLE } from './titles.js';
 import { ensurePlan, readPlan, readRuns, briefSession, logPlanState, BRIEF_KEY, appendRequirement, appendAnswers } from './plans.js';
 import { skillRules, describeSkills } from './skills.js';
-import { PROJECTS_ROOT, SKILLS_DIR } from './paths.js';
+import { PROJECTS_ROOT, SKILLS_DIR, ROOT } from './paths.js';
+import { mayRecycleFolder } from './projects.js';
 import { fetchProviderModels } from './providers.js';
 import { providerId } from './providers.js';
 import { isLocalProvider, providerUp } from './providers.js';
@@ -29,6 +30,92 @@ const ATTACH_MAX_COUNT = 6;
  * survives is bounded — count and size — and named, so the transcript can say what
  * arrived.
  */
+/** What is in the project's `bin\`, if anything.
+ *
+ * A project's `bin` is the one folder whose contents are a *deliverable* — the app
+ * that was built — rather than working state. Deleting it is a different consent
+ * from deleting the sources beside it, so the dialog asks for it separately, and
+ * this is what tells the dialog to ask.
+ */
+export function binContents(dir) {
+  const bin = path.join(dir, 'bin');
+  const found = { path: bin, exists: false, files: 0, bytes: 0 };
+  try {
+    if (!fs.statSync(bin).isDirectory()) return found;
+  } catch {
+    return found;
+  }
+  found.exists = true;
+  const walk = (at) => {
+    let entries;
+    try {
+      entries = fs.readdirSync(at, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      const full = path.join(at, entry.name);
+      if (entry.isDirectory()) {
+        walk(full);
+        continue;
+      }
+      if (!entry.isFile()) continue;
+      found.files += 1;
+      try {
+        found.bytes += fs.statSync(full).size;
+      } catch { /* it went away while we looked */ }
+    }
+  };
+  walk(bin);
+  return found;
+}
+
+/**
+ * Send a folder to the Windows Recycle Bin.
+ *
+ * `fs.rm` is permanent, and a project's folder is the operator's work, so deleting
+ * a project has to be something they can take back. The shell is the only thing
+ * that puts a folder in the bin, and .NET's FileSystem is the one API that asks it
+ * to; it is called with the path in the *environment*, never spliced into the
+ * command text, so a folder name can never become code.
+ *
+ * Resolves only when the folder is really gone — the exit code alone is not proof.
+ */
+function recycleFolder(dir) {
+  return new Promise((resolve, reject) => {
+    // Newlines, never semicolons: the call is one statement spread over six lines,
+    // and a `;` after `DeleteDirectory(` ends it mid-call — "MissingEndParenthesis
+    // InMethodCall", which is what a join on ';' produced the first time.
+    const script = [
+      'Add-Type -AssemblyName Microsoft.VisualBasic',
+      "$ErrorActionPreference = 'Stop'",
+      '[Microsoft.VisualBasic.FileIO.FileSystem]::DeleteDirectory(',
+      '  $env:SYNAPSE_RECYCLE_TARGET,',
+      '  [Microsoft.VisualBasic.FileIO.UIOption]::OnlyErrorDialogs,',
+      '  [Microsoft.VisualBasic.FileIO.RecycleOption]::SendToRecycleBin)',
+    ].join('\n');
+    const child = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-WindowStyle', 'Hidden', '-Command', script], {
+      windowsHide: true,
+      env: { ...process.env, SYNAPSE_RECYCLE_TARGET: dir },
+      stdio: ['ignore', 'ignore', 'pipe'],
+    });
+    let noise = '';
+    child.stderr.on('data', (chunk) => { noise += chunk; });
+    child.on('error', reject);
+    child.on('exit', (code) => {
+      if (code === 0 && !fs.existsSync(dir)) return resolve();
+      // PowerShell's stderr is a stack trace: the useful line is the one that says
+      // what went wrong, not the `+ CategoryInfo` noise around it.
+      const lines = String(noise).split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+      const detail =
+        lines.find((l) => !l.startsWith('+') && /exception|denied|not found|in use|cannot/i.test(l)) ||
+        lines.find((l) => !l.startsWith('+')) ||
+        `the Recycle Bin refused it (exit ${code})`;
+      reject(new Error(detail));
+    });
+  });
+}
+
 export function normalizeAttachments(list) {
   if (!Array.isArray(list)) return [];
   const out = [];
@@ -738,7 +825,42 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
       return { ok: true, removed: !fs.existsSync(dir) };
     },
 
-    deleteProject: async (id) => {
+    /**
+     * What deleting this project would do, before anything is deleted.
+     *
+     * The dialog needs two facts the project list does not carry: whether the
+     * folder is still on disk, and whether there are deliverables in `bin\` — the
+     * one thing in a project that has to be agreed to separately.
+     */
+    projectDeleteInfo: async (id) => {
+      const current = projects.find(id);
+      if (!current) {
+        const err = new Error('project not found');
+        err.status = 404;
+        throw err;
+      }
+      const withSessions = (await projectsWithSessions()).find((p) => p.id === id);
+      return {
+        id,
+        name: current.name,
+        directory: current.directory,
+        exists: fs.existsSync(current.directory),
+        general: Boolean(current.general),
+        sessions: withSessions?.sessions?.length || 0,
+        bin: binContents(current.directory),
+      };
+    },
+
+    /**
+     * Delete a project — and its folder, to the Recycle Bin.
+     *
+     * A project with no sessions is a folder nobody is using, and leaving it on disk
+     * was what made a reused name open onto a finished plan: the next project
+     * inherited the last one's work. So the folder goes with the project. It goes to
+     * the bin rather than out of existence, and `bin\` — the built app, which is a
+     * deliverable rather than working state — has to be agreed to on its own.
+     */
+    deleteProject: async (id, body) => {
       const current = projects.find(id);
       if (!current) {
         const err = new Error('project not found');
@@ -760,18 +882,47 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
         err.status = 409;
         throw err;
       }
-      projects.remove(id);
-      // And let the engine go of the directory. It keeps a location "loaded" once
-      // it has served a turn there, and that handle is what made a finished
-      // project's folder undeletable until Synapse was stopped. `DELETE
-      // /api/debug/location` disposes a location's cached services; the folder is
-      // then the operator's to delete, which is the whole point.
-      try {
-        await engine.evictLocation?.(current.directory);
-      } catch (err) {
-        app.warn(`could not release ${current.directory} from the engine: ${err.message}`);
+      const bin = binContents(current.directory);
+      // Enforced here as well as in the dialog: the checkbox is the operator's
+      // consent, and a request may not assert one it was never asked for.
+      if (bin.files > 0 && body?.binConfirmed !== true) {
+        const err = new Error(
+          `"${current.name}" has ${bin.files} file${bin.files === 1 ? '' : 's'} in bin\\. Confirm that the deliverables there are to be deleted with the project.`,
+        );
+        err.status = 409;
+        throw err;
       }
-      return { ok: true };
+      let recycled = false;
+      if (fs.existsSync(current.directory)) {
+        const allowed = mayRecycleFolder(current.directory, { projectsRoot: PROJECTS_ROOT, harness: ROOT });
+        if (!allowed.ok) {
+          const err = new Error(`refusing to delete the folder: ${allowed.reason}`);
+          err.status = 400;
+          throw err;
+        }
+        // The engine keeps a location "loaded" once it has served a turn there, and
+        // that handle is what made a finished project's folder undeletable until
+        // Synapse was stopped. Release it first; the folder is then ours to move.
+        try {
+          await engine.evictLocation?.(current.directory);
+        } catch (err) {
+          app.warn(`could not release ${current.directory} from the engine: ${err.message}`);
+        }
+        try {
+          await recycleFolder(current.directory);
+          recycled = true;
+        } catch (err) {
+          // The project stays registered. A folder still on disk with its registry
+          // entry gone is the worse half of a failed delete: the operator can see the
+          // folder but Synapse no longer knows it is there.
+          const e = new Error(`could not move ${current.directory} to the Recycle Bin: ${err.message}`);
+          e.status = 423; // locked
+          throw e;
+        }
+        app.info(`deleted project folder to the Recycle Bin: ${current.directory}`);
+      }
+      projects.remove(id);
+      return { ok: true, recycled, directory: current.directory, binFiles: bin.files };
     },
 
     createSession: async (body) => {

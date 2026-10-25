@@ -21,6 +21,41 @@ export function normalizeDir(dir) {
 
 const key = (dir) => normalizeDir(dir).toLowerCase();
 
+/** One spelling for comparing two paths on this machine: folded case, one
+ *  separator, no trailing slash. */
+const fold = (dir) => normalizeDir(dir).replace(/\//g, '\\').toLowerCase();
+
+/**
+ * May this folder be sent to the Recycle Bin as a deleted project?
+ *
+ * Deleting a project removes its folder whole, and the folder is the operator's,
+ * so the refusals are explicit and provable rather than "it will be fine". The
+ * three that must never happen: a drive root, the projects root itself, and the
+ * harness — or anything that contains it, because `F:\dev` is somebody's project
+ * folder and `F:\dev\Synapse` is this program.
+ *
+ * Everything else is allowed. The bin is the undo, which is what makes that safe.
+ */
+export function mayRecycleFolder(dir, { projectsRoot = '', harness = '' } = {}) {
+  const absolute = path.resolve(String(dir ?? '').trim());
+  const target = normalizeDir(absolute);
+  if (!target) return { ok: false, reason: 'there is no folder to delete' };
+  // A root is the one path whose parent is itself — `F:\`, `\\server\share`. Tested
+  // before the normalised form, because stripping the trailing separator turns `F:\`
+  // into `F:`, which is a drive-relative path and not a root at all.
+  if (path.dirname(absolute) === absolute) return { ok: false, reason: `${absolute} is a drive root` };
+  if (projectsRoot && fold(target) === fold(projectsRoot)) {
+    return { ok: false, reason: `${target} is the projects root, which holds every project` };
+  }
+  if (harness) {
+    if (fold(target) === fold(harness)) return { ok: false, reason: `${target} is Synapse itself` };
+    if (fold(harness).startsWith(`${fold(target)}\\`)) {
+      return { ok: false, reason: `${target} contains Synapse` };
+    }
+  }
+  return { ok: true, reason: '' };
+}
+
 export function createProjectStore({ file, generalDir, logger }) {
   const log = logger.channel('app');
 
