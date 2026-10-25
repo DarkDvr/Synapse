@@ -1525,6 +1525,12 @@ async function switchMode() {
   }
   const previous = state.mode;
   const next = previous === 'single' ? 'multi' : 'single';
+  // The reader's place, read now rather than carried from whenever it was last
+  // touched, and settled once before anything moves: a chat that was a line short of
+  // the end is put at the end here, where it is a small nudge, instead of being held
+  // a line short through the switch and looking scrolled up afterwards.
+  captureChatSlack();
+  restoreChatSlack();
   state.mode = next;
   renderMode();
   // The plan panel is different in Single (a summary, no task list). Repaint it
@@ -3972,11 +3978,20 @@ function captureChatSlack() {
 /**
  * Put the conversation back where the reader had it, whatever the box has done
  * since. Safe to call at any time; does nothing if there is no place to keep.
+ *
+ * A reader within two lines of the end is *at* the end, and is held there as the
+ * end rather than as a two-line gap. That is the same rule the follow uses
+ * (`CHAT_FOLLOW_SLACK`), and it has to be the same rule: a chat that happened to sit
+ * 12px short of the end keeps 12px of gap through a switch, and in Multi — a short box
+ * with no spare room under the last line — that reads as "the chat ended up scrolled
+ * up a bit", while the same 12px in Single's tall box is invisible. Being "at the
+ * end" should mean the newest line is flush with the bottom, wherever it was before.
  */
 function restoreChatSlack() {
   const el = $('transcript');
   if (!el || chatSlack === null) return;
-  const want = el.scrollHeight - el.clientHeight - chatSlack;
+  const slack = chatSlack <= CHAT_FOLLOW_SLACK ? 0 : chatSlack;
+  const want = el.scrollHeight - el.clientHeight - slack;
   if (Math.abs(el.scrollTop - want) < 0.5) return;
   el.scrollTop = Math.max(0, want);
   // Our own move is not the reader scrolling (same rule as the stream's follow).

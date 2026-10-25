@@ -1124,6 +1124,18 @@ scrolled up — line **0.00–0.02px**, composer **0.00**, dock bottom **0.00**,
 361–371px as intended. A 30-second run in Multi — top edge 6px, bottom **0.00**,
 composer **0.00**, a fixed line **0.00**. Ten seconds idle — **0.00** everywhere.
 
+One thing the invariant alone got wrong, because it is only as right as the number it
+holds: a chat that sat **12px short of the end** kept those 12px through a switch. In
+Single's tall box that gap is invisible; in Multi's short one there is no spare room
+under the last line, so it read as "Single → Multi leaves the chat scrolled up", while
+the other direction looked fine. The app already has a definition of *at the end* —
+`CHAT_FOLLOW_SLACK`, two lines, the window in which a new message pulls the chat down —
+so anchoring uses the same one: within two lines is held *as* the end, not as a gap.
+Measured: starting slack 0 / 12 / 30 / 47 ends at **0** in both directions; 60 / 200 /
+900 (deliberately scrolled up) is preserved exactly. And the settle happens once, at the
+click, not during the animation.
+
+
 The instrument, since it is reusable: this machine has ffmpeg (winget: `Gyan.FFmpeg`,
 not on `PATH`), so a recording becomes frames with `ffmpeg -i in.mp4 -f rawvideo -pix_fmt
 gray out.gray`, and a band's row signature then shows a one-pixel shift honestly —
