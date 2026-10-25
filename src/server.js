@@ -22,13 +22,24 @@ const MIME = {
   '.woff2': 'font/woff2',
 };
 
+// A message carries attachments as base64: six files of up to 8 MB is about 66 MB
+// of JSON, so the message route gets its own ceiling and every other route keeps
+// the 2 MB the rest of the API was written against.
+const MESSAGE_BODY_LIMIT = 70 * 1024 * 1024;
+
 function readBody(req, limit = 2 * 1024 * 1024) {
   return new Promise((resolve, reject) => {
     let data = '';
     let size = 0;
     req.on('data', (chunk) => {
       size += chunk.length;
-      if (size > limit) { req.destroy(); reject(new Error('request body too large')); return; }
+      if (size > limit) {
+        req.destroy();
+        const err = new Error(`request body too large: ${(size / (1024 * 1024)).toFixed(1)} MB, the limit is ${Math.round(limit / (1024 * 1024))} MB`);
+        err.status = 413;
+        reject(err);
+        return;
+      }
       data += chunk;
     });
     req.on('end', () => {
@@ -211,7 +222,12 @@ export function createServer({ api, engine, logger, config }) {
       if (seg[2] === 'messages' && method === 'GET') return sendJson(res, 200, await api.messages(sessionId));
       if (seg[2] === 'plan' && method === 'GET') return sendJson(res, 200, await api.plan(sessionId));
       if (seg[2] === 'auto' && method === 'POST') return sendJson(res, 200, await api.setAuto(sessionId, await readBody(req)));
-      if (seg[2] === 'messages' && method === 'POST') return sendJson(res, 200, await api.sendMessage(sessionId, await readBody(req)));
+      // A message can carry attachments, which travel as base64 — 8 MB of file is
+      // 11 MB of JSON. Measured 25 Oct: an ordinary screenshot was refused with
+      // "request body too large" and the operator saw a toast that vanished.
+      if (seg[2] === 'messages' && method === 'POST') {
+        return sendJson(res, 200, await api.sendMessage(sessionId, await readBody(req, MESSAGE_BODY_LIMIT)));
+      }
       if (seg[2] === 'interrupt' && method === 'POST') return sendJson(res, 200, await api.interrupt(sessionId));
       if (seg[2] === 'permission' && method === 'POST') return sendJson(res, 200, await api.permission(sessionId, await readBody(req)));
       if (seg[2] === 'forms' && seg[4] === 'reply' && method === 'POST') {

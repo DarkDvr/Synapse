@@ -2948,6 +2948,7 @@ function renderTranscript() {
   const items = [
     ...tracesFor(currentProject()?.directory).map((t) => ({ at: Number(t.startedAt) || 0, html: renderTrace(t) })),
     ...alarmsHere().map((a) => ({ at: Number(a.at) || 0, html: renderAlarm(a) })),
+    ...chatErrorsHere().map((e) => ({ at: Number(e.at) || 0, html: renderChatError(e) })),
   ].sort((x, y) => x.at - y.at);
   let html = '';
   let next = 0;
@@ -2986,6 +2987,64 @@ function renderAlarm(a) {
   return `<div class="chat-alarm" title="${esc(`${title}: ${detail}${a.note ? ` — ${a.note}` : ''}`)}">
     <span class="chat-alarm-mark">⚠</span>
     <span class="chat-alarm-text">${esc(title)}${shown ? ` · ${esc(shown)}` : ''}</span>
+  </div>`;
+}
+
+/**
+ * A failure, in the conversation, in red, and kept.
+ *
+ * Measured 25 Oct: a message with a picture was refused because the body was too
+ * large, the panel said so in a toast that vanished in four seconds, and nothing
+ * was left anywhere the operator could look. A toast is the right shape for "saved"
+ * and the wrong shape for "your message was not sent": the reason is the thing they
+ * need, and they need it after the toast is gone.
+ */
+const CHAT_ERRORS_KEY = 'synapse.chatErrors';
+const CHAT_ERRORS_MAX = 20;
+
+function chatErrorsAll() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(CHAT_ERRORS_KEY) || '{}');
+    return raw && typeof raw === 'object' ? raw : {};
+  } catch {
+    return {};
+  }
+}
+
+function addChatError({ title, detail }) {
+  const id = state.sessionId || 'no-session';
+  const all = chatErrorsAll();
+  const list = Array.isArray(all[id]) ? all[id] : [];
+  const entry = {
+    at: Date.now(),
+    sessionId: state.sessionId || null,
+    title: String(title || 'Something failed'),
+    detail: String(detail || '').slice(0, 20000),
+  };
+  // The same failure twice in a row is one line, not two: a retry that fails the
+  // same way should not fill the conversation.
+  const last = list[list.length - 1];
+  if (!(last && last.title === entry.title && last.detail === entry.detail)) list.push(entry);
+  all[id] = list.slice(-CHAT_ERRORS_MAX);
+  try { localStorage.setItem(CHAT_ERRORS_KEY, JSON.stringify(all)); } catch { /* full storage must not break a turn */ }
+  return entry;
+}
+
+function chatErrorsHere() {
+  const id = state.sessionId || 'no-session';
+  const list = chatErrorsAll()[id];
+  return Array.isArray(list) ? list : [];
+}
+
+/** One failure: what happened, the reason, and a way to take the whole thing away. */
+function renderChatError(e) {
+  const detail = String(e.detail || '');
+  const long = detail.length > 220 || detail.split('\n').length > 3;
+  const shown = long ? `${detail.slice(0, 220).trimEnd()}…` : detail;
+  return `<div class="chat-error" data-chat-error>
+    <div class="chat-error-head"><span class="chat-error-mark">!</span><span class="chat-error-title">${esc(e.title)}</span></div>
+    ${shown ? `<div class="chat-error-detail">${esc(shown)}</div>` : ''}
+    ${long ? `<button type="button" class="chat-error-copy" data-copy-error="${esc(e.at)}">Copy Error</button>` : ''}
   </div>`;
 }
 
@@ -4551,13 +4610,15 @@ async function renderProbe() {
       const tool = (r.used || []).join(', ') || r.expect || '—';
       // A failed case shows the Error button alone; a red dot next to it said
       // exactly the same thing and cost a column of width.
-      const status = errBtn
-        ? errBtn
-        : `<span class="status-dot ${r.ok ? 'ok' : 'warn'}" role="img" aria-label="${esc(label)}"></span>`;
+      const status = errBtn || '';
+      // The state as a word, not a breathing dot: a dot that pulses means "still
+      // going", and a finished case wearing one reads as a probe that never ended.
+      const pill = `<span class="state-pill probe-state ${r.ok ? 'ok' : r.offered === false || r.timedOut ? 'warn' : 'err'}">${esc(label)}</span>`;
       return `<tr>
         <td class="tool-name" title="${esc(r.id)} · ran ${esc(tool)} · ${esc(label)}${turn ? ` · ${esc(turn)}` : ''}">${esc(r.id)}</td>
+        <td class="tool-result">${pill}</td>
         <td class="tool-time${r.toolMs > 1000 ? ' slow' : ''}" title="tool ${fmtMs(r.toolMs)}${turn ? ` · ${turn}` : ''}">${r.toolMs ? fmtMs(r.toolMs) : ''}</td>
-        <td class="tool-result">${status}</td>
+        <td class="probe-err">${status}</td>
       </tr>`;
     })
     .join('');
@@ -4667,6 +4728,12 @@ async function send() {
     // The send failed, so the work the rail was told about is not happening.
     state.busySessions.delete(state.sessionId);
     renderTree();
+    // In the conversation, in red, and kept: a toast is gone in four seconds and
+    // this is the message they just lost.
+    addChatError({ title: 'Message not sent', detail: err.message });
+    // A failed send re-renders so the line is where the message would have been.
+    state.streaming = false;
+    renderTranscript();
     toast('Send failed', err.message);
   } finally {
     state.streaming = false;
@@ -6198,6 +6265,21 @@ function wire() {
     if (el) animateScroll(el, el.scrollHeight);
     else scrollChatToBottom();
   });
+  $('transcript').addEventListener('click', async (e) => {
+    const btn = e.target.closest('[data-copy-error]');
+    if (!btn) return;
+    const at = Number(btn.dataset.copyError);
+    const hit = chatErrorsHere().find((x) => Number(x.at) === at);
+    if (!hit) return;
+    try {
+      await navigator.clipboard.writeText(`${hit.title}\n${hit.detail}`);
+      btn.textContent = 'Copied';
+      setTimeout(() => { btn.textContent = 'Copy Error'; }, 1600);
+    } catch {
+      toast('Could Not Copy', 'The clipboard is not available in this window.');
+    }
+  });
+
   let navRaf = 0;
   // A real gesture, before the scroll it causes arrives.
   $('transcript').addEventListener('wheel', (e) => noteUserScrollIntent(-e.deltaY), { passive: true });
