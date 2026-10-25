@@ -269,6 +269,9 @@ async function main() {
     scratchDir: PROBE_DIR,
     file: PROBE_FILE,
     modelCache,
+    // Which model to test: the operator's own choice, so the answer describes the
+    // thing they will actually run.
+    getConfig: () => currentConfig,
     notify: (ev) => http?.broadcast({ ...ev, ts: Date.now() }),
   });
   // Clear any probe/model-check session a killed process left behind; they are

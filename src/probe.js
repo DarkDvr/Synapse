@@ -39,6 +39,8 @@ export const PROBE_CASES = [
   {
     id: 'shell-fail',
     tool: 'shell',
+    // The failure is the point: a non-zero exit must come back as one.
+    expectFail: true,
     prompt: 'Use the shell tool. Run exactly this command and nothing else: probe-no-such-command-xyz',
   },
   {
@@ -81,6 +83,8 @@ export const PROBE_CASES = [
   {
     id: 'webfetch-bad',
     tool: 'webfetch',
+    // A refused fetch is the result this case is for.
+    expectFail: true,
     prompt: 'Use the webfetch tool to fetch https://probe-host-does-not-exist.invalid and report what happens.',
   },
   {
@@ -174,7 +178,23 @@ export async function discoverToolsetForModel(engine, log, model, directory) {
   }
 }
 
-export function createProbe({ engine, logger, notify, scratchDir, file, modelCache }) {  const log = logger.channel('tools');
+export function createProbe({ engine, logger, notify, scratchDir, file, modelCache, getConfig }) {
+  const log = logger.channel('tools');
+  /** The Architect's model as a Model.Ref, or null when none is configured. */
+  function configuredModel() {
+    try {
+      const role = getConfig?.()?.roles?.architect || {};
+      const ref = String(role.ref || '');
+      const cut = ref.indexOf('/');
+      if (cut <= 0) return null;
+      const model = { providerID: ref.slice(0, cut), id: ref.slice(cut + 1) };
+      const variant = String(role.variant || '');
+      if (variant && variant !== 'default') model.variant = variant;
+      return model;
+    } catch {
+      return null;
+    }
+  }
   let state = {
     running: false,
     startedAt: null,
@@ -323,6 +343,17 @@ export function createProbe({ engine, logger, notify, scratchDir, file, modelCac
     // null when the model did not report a toolset at all.
     const offered = state.toolset.length ? state.toolset.some((n) => matches(n, c.tool)) : null;
 
+    // A turn that ended in an error is the reason a case produced nothing, and
+    // without it the report says "not called" - which reads as "the model chose
+    // not to" when the truth may be "the provider refused the turn". Measured
+    // 25 Oct: fourteen cases each failed in 240 ms and nothing said why.
+    const turnError = [...messages]
+      .reverse()
+      .find((m) => m.type === 'assistant' && m.raw?.error);
+    const errorText = turnError
+      ? String(turnError.raw.error.message || turnError.raw.error.type || 'the turn failed')
+      : '';
+
     const result = {
       id: c.id,
       expect: c.tool,
@@ -332,11 +363,15 @@ export function createProbe({ engine, logger, notify, scratchDir, file, modelCac
       used,
       formsAnswered,
       offered,
-      // "ok" means: the turn closed, the tool we asked for actually ran, and
-      // none of the calls in the turn failed.
-      ok: closed && fresh.length > 0 && expected && failed.length === 0,
+      // "ok" means: the turn closed, the tool we asked for actually ran, and the
+      // turn failed only where the case asked it to. Two cases exist to exercise a
+      // failure path — a command that cannot exist, a host that cannot resolve — so
+      // counting their failure against the model made a healthy probe read as 11/14.
+      ok: closed && fresh.length > 0 && expected && (c.expectFail ? true : failed.length === 0),
+      expectFail: Boolean(c.expectFail),
       timedOut: !closed,
       missing: fresh.length === 0,
+      error: errorText,
       wrongTool: fresh.length > 0 && !expected,
       durations: fresh.map((p) => ({ tool: p.name, ms: p.ms })),
       errors: failed.map((p) => ({
@@ -383,7 +418,14 @@ export function createProbe({ engine, logger, notify, scratchDir, file, modelCac
 
     let session = null;
     try {
-      session = await engine.createSession({ title: 'Tool Probe', directory: scratchDir });
+      // Test the model the operator actually uses, not whatever the engine happens
+      // to default to. Measured 25 Oct: the probe created its scratch session with
+      // no model, the engine's default was a retired free model, and all fourteen
+      // cases failed in 240 ms each — "Model minimax-m3.1-flash-free has been
+      // deprecated" — while the report said "not called", which reads as a model
+      // choosing not to use a tool.
+      const wanted = configuredModel();
+      session = await engine.createSession({ title: 'Tool Probe', directory: scratchDir, ...(wanted ? { model: wanted } : {}) });
       // Which tools this model was actually given comes first: it decides how
       // the results should be read.
       state.current = 'toolset';
