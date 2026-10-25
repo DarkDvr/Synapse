@@ -1028,6 +1028,42 @@ The mockups in `docs/` are **PDFs and there is no PDF renderer on this machine**
 (no `pdftoppm`, `magick`, `gswin64c`, `mutool`). Chrome renders them: open
 `file:///F:/dev/Synapse/docs/<name>.pdf` in a browser session.
 
+## A mode switch: two things move, and neither re-renders
+
+Reported on the Fever Tracker session (15 tasks, wide layout, 1400x900): switching
+Multi → Single made the conversation seem to vanish, and the text shimmered and
+twitched by about a pixel while the cards slid.
+
+Measured with a 40ms sampler on `.chat-dock` and `#transcript`, both directions:
+
+- The dock went 355 → 366, held for 250ms, then 521 → 733. Two movements, not one.
+  `fitChatHeight()` reads the row as `max(wrapper, planInRow ? planEl.height : 0)`,
+  and at the moment `setView()` fitted, the plan still had its *Multi* height (472px,
+  the pre-repaint list). The chat was squeezed to 366 for the length of the slide,
+  then the 340ms settle timer refitted it to 733 — the drop. In Single the plan's
+  wrapper is exactly the Architect card, so the plan must not size row 1 at all:
+  `planInRow` now also requires `state.mode !== 'single'`.
+- The scroll was never re-pinned. A mode switch changes the dock's height with no
+  render, so nothing called the follow; a reader at the end in Multi ended up 385px
+  short of it in Single and the newest messages sat below the fold. `holdChatFollow`
+  holds the pin for 500ms on the frames the browser is already painting, and still
+  lets go on an upward wheel, like every other follow.
+- The residual twitch is **in the box, not the scroll**. With the height
+  interpolated, its edges land on fractions of a pixel, so the text's offset from
+  the bottom edge moves by up to ~0.5px per frame. Making the scroll offset
+  "stable" (flooring it below the true end instead of letting the browser clamp)
+  was measured and changed nothing; forcing the scroller's height to whole pixels
+  froze the box at 673px, because a definite height stops following its parent.
+  What does help is not re-rasterising: `is-mode-animating` promotes the dock
+  (`translateZ(0)`) and the scroller (`will-change: scroll-position`,
+  `overflow-anchor: none`, so nothing else nudges the offset we just wrote).
+
+The instrument worth keeping: sample `dock.height`, `scrollTop` and the bottom of
+the last transcript child every 25–40ms across a switch. "One movement", "slack 0
+on every frame" and "the last message visible on every frame" are three separate
+claims, and only the first was ever true by accident.
+
+
 Two limits make them awkward to read as pictures. A `#zoom=200` fragment works
 only on a *fresh* URL, so add a query string to force one. And the viewer cannot
 be scrolled from the page, so only the top-left is readable at a time.

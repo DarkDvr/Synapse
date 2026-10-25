@@ -263,7 +263,7 @@ body[data-view="none"] .stage-empty {
   text-align: center; color: var(--muted);
 }
 .stage-empty-mark {
-  width: 44px; height: 44px; border-radius: 12px;
+  width: 44px; height: 44px; border-radius: 8px;
   box-shadow: 0 10px 28px rgba(0, 0, 0, 0.35);
   margin-bottom: 4px;
 }
@@ -381,7 +381,7 @@ body[data-view="session"]:not(.workers-on) .topology > *:not(.topo-architect):no
 .sidebar .nav-link {
   width: 100%; background: transparent; border: 0;
   padding: 7px 10px; gap: 10px; font-size: 13.5px;
-  border-radius: 9px; line-height: 1.35;
+  border-radius: 8px; line-height: 1.35;
   text-align: left; font-family: inherit; cursor: pointer;
   display: flex; align-items: center;
 }
@@ -442,7 +442,7 @@ body.dark .sidebar .nav-link.active > span:first-child { color: #fff; }
 .tree-row.project {
   background: #212329;
   border: 1px solid #2c2f36;
-  border-radius: 9px;
+  border-radius: 8px;
 }
 .tree-row.project:hover { background: #262931; border-color: #363a42; }
 /* The current project and session are yellow, the plan's in-hand colour, not a
@@ -475,7 +475,7 @@ body.dark .sidebar .nav-link.active > span:first-child { color: #fff; }
 
 .tree-row {
   display: flex; align-items: center; gap: 4px;
-  min-width: 0; padding: 0 5px 0 0; border-radius: 9px;
+  min-width: 0; padding: 0 5px 0 0; border-radius: 8px;
   position: relative;
 }
 
@@ -483,7 +483,7 @@ body.dark .sidebar .nav-link.active > span:first-child { color: #fff; }
   flex: 1; min-width: 0; display: flex; align-items: center; gap: 7px;
   padding: 7px 6px 7px 8px; border: 0; background: transparent;
   color: var(--muted); font: inherit; font-size: 13px; text-align: left;
-  cursor: pointer; border-radius: 9px;
+  cursor: pointer; border-radius: 8px;
 }
 .tree-row.project .tree-open { color: #e6e8ec; font-weight: 650; font-size: 13px; }
 .tree-row.project:hover .tree-open { color: #fff; }
@@ -582,7 +582,7 @@ body.dark .sidebar .nav-link.active > span:first-child { color: #fff; }
 .btn-thin {
   flex: 1 1 0; min-width: 0; height: 22px; padding: 0 6px;
   display: inline-flex; align-items: center; justify-content: center;
-  border-radius: 6px; cursor: pointer;
+  border-radius: 8px; cursor: pointer;
   background: rgba(255, 255, 255, 0.035); border: 1px solid #33363c;
   color: #a8acb3; font-family: inherit; font-size: 10.5px; font-weight: 600;
   letter-spacing: 0.02em;
@@ -632,7 +632,7 @@ body.dark .sidebar .nav-link.active > span:first-child { color: #fff; }
 /* inline rename */
 .tree-rename {
   flex: 1; min-width: 0; background: #17181b; border: 1px solid var(--violet-line);
-  border-radius: 7px; color: var(--text); font: inherit; font-size: 12.5px;
+  border-radius: 8px; color: var(--text); font: inherit; font-size: 12.5px;
   padding: 4px 7px; margin: 1px 0;
 }
 .tree-rename:focus-visible { outline: 2px solid var(--orange); outline-offset: 1px; }
@@ -654,7 +654,7 @@ body.dark .sidebar .nav-link.active > span:first-child { color: #fff; }
 
 .tree-add {
   margin-left: auto; border: 0; background: transparent; color: var(--green);
-  font-size: 16px; line-height: 1; padding: 0 6px; border-radius: 6px;
+  font-size: 16px; line-height: 1; padding: 0 6px; border-radius: 8px;
   cursor: pointer; font-weight: 700;
 }
 .tree-add:hover { background: var(--green-soft); }
@@ -790,7 +790,7 @@ body.dark .sidebar-bottom,
 
 .role-card {
   background: var(--surface); border: 1px solid var(--line);
-  border-radius: 12px; padding: 11px 13px 19px;
+  border-radius: 8px; padding: 11px 13px 19px;
   min-width: 0; height: auto; overflow: hidden;
   position: relative;
   display: grid; grid-template-rows: auto;
@@ -904,7 +904,7 @@ body.dark .sidebar-bottom,
 .role-model {
   appearance: none;
   background: #202226 url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='8' height='5'><path d='M0 0h8L4 5z' fill='%2394979e'/></svg>") right 7px center no-repeat;
-  border: 1px solid var(--line); border-radius: 7px;
+  border: 1px solid var(--line); border-radius: 8px;
   color: #b6bac1; font-family: var(--mono); font-size: 10.5px;
   padding: 3px 20px 3px 7px;
   width: 180px; flex: none;
@@ -925,7 +925,7 @@ body.dark .sidebar-bottom,
    whatever room is left, up to the same 180px, and never below a readable stub. */
 .model-search {
   appearance: none; background: #202226;
-  border: 1px solid var(--line); border-radius: 7px;
+  border: 1px solid var(--line); border-radius: 8px;
   color: #b6bac1; font-family: var(--mono); font-size: 10.5px;
   padding: 3px 8px; flex: 0 1 auto; width: auto;
   min-width: 76px; max-width: 210px;
@@ -987,7 +987,7 @@ body.dark .sidebar-bottom,
 
 .model-menu {
   position: fixed; z-index: 80;
-  background: #1b1d21; border: 1px solid var(--line); border-radius: 9px;
+  background: #1b1d21; border: 1px solid var(--line); border-radius: 8px;
   box-shadow: 0 14px 34px rgba(0, 0, 0, 0.55);
   max-height: 300px; overflow-y: auto; padding: 3px;
   /* Wide enough for the source chip, the name, an ISSUES badge and the limits on
@@ -1035,7 +1035,7 @@ body.dark .sidebar-bottom,
 
 .role-btn {
   width: 22px; height: 22px; flex: none; display: grid; place-items: center;
-  border: 1px solid var(--line); border-radius: 7px; background: transparent;
+  border: 1px solid var(--line); border-radius: 8px; background: transparent;
   font-size: 11px; line-height: 1; cursor: pointer; padding: 0;
 }
 
@@ -1071,7 +1071,7 @@ body.dark .sidebar-bottom,
   position: relative;
   display: grid; grid-template-rows: minmax(0, 1fr) auto;
   background: var(--surface); border: 1px solid var(--line);
-  border-radius: 14px; overflow: hidden; min-height: 0;
+  border-radius: 8px; overflow: hidden; min-height: 0;
 }
 
 /* In a session the dock fills the stage row once there is history: the
@@ -1147,7 +1147,7 @@ body[data-view="session"] .chat-dock.has-ask { overflow: visible; }
 /* ── mode toggle: Multi is orange, Single is violet, white text on both ──── */
 .mode-toggle {
   flex: none; display: inline-flex; align-items: center; gap: 6px;
-  height: 32px; padding: 0 10px; border-radius: 9px; cursor: pointer;
+  height: 32px; padding: 0 10px; border-radius: 8px; cursor: pointer;
   background: var(--orange); border: 1px solid var(--orange);
   color: #fff; font-family: inherit; font-size: 11.5px; font-weight: 600;
   letter-spacing: 0.02em; white-space: nowrap;
@@ -1168,7 +1168,7 @@ body[data-view="session"] .chat-dock.has-ask { overflow: visible; }
    delegation is refused — the switch would be a lie there. */
 .keep-toggle {
   flex: none; display: inline-flex; align-items: center; justify-content: center;
-  width: 36px; height: 36px; padding: 0; border-radius: 9px; cursor: pointer;
+  width: 36px; height: 36px; padding: 0; border-radius: 8px; cursor: pointer;
   background: transparent; border: 1px solid #3a3d43; color: #82868e;
 }
 .keep-toggle:hover { border-color: #4a4e56; color: #c3c6cc; }
@@ -1369,7 +1369,7 @@ body[data-mode="single"] .keep-toggle { display: none; }
 }
 .msg-answer pre.md-code {
   margin: 7px 0; padding: 8px 9px; max-height: 260px; overflow: auto;
-  background: #14161a; border: 1px solid var(--line); border-radius: 7px;
+  background: #14161a; border: 1px solid var(--line); border-radius: 8px;
 }
 .msg-answer pre.md-code code { background: none; padding: 0; font-size: 11.5px; line-height: 1.5; }
 .msg-answer blockquote {
@@ -1395,7 +1395,7 @@ body[data-mode="single"] .keep-toggle { display: none; }
 .msg-answer li.md-task input[type="checkbox"] {
   margin-right: 6px; accent-color: var(--primary); vertical-align: -1px;
 }
-.msg-answer img { max-width: 100%; border-radius: 7px; }
+.msg-answer img { max-width: 100%; border-radius: 8px; }
 .msg-error {
   margin-top: 5px; padding: 7px 9px; border-radius: 8px;
   background: var(--red-soft); border: 1px solid #5d2f27; color: #ffb4a6;
@@ -1417,7 +1417,7 @@ body[data-mode="single"] .keep-toggle { display: none; }
 /* tool calls: one compact line until you ask for the detail. Kept deliberately
    short vertically — a busy turn emits dozens of them, so the dot, the type and
    the padding are all smaller than the rest of the transcript. */
-.tool-card { margin: 2px 0; border: 1px solid var(--line); border-radius: 7px; background: #1a1c20; overflow: hidden; }
+.tool-card { margin: 2px 0; border: 1px solid var(--line); border-radius: 8px; background: #1a1c20; overflow: hidden; }
 .tool-head {
   display: flex; align-items: center; gap: 6px;
   padding: 2px 7px; font-family: var(--mono); font-size: 10.5px;
@@ -1459,7 +1459,7 @@ body[data-mode="single"] .keep-toggle { display: none; }
 .state-pill.err   { color: var(--red);   border-color: #5d2f27; background: var(--red-soft); }
 
 .perm-card {
-  margin: 6px 0; padding: 10px 11px; border-radius: 10px;
+  margin: 6px 0; padding: 10px 11px; border-radius: 8px;
   background: #241f16; border: 1px solid #5a4725;
 }
 .perm-head { display: flex; align-items: center; gap: 8px; font-size: 11.5px; font-weight: 700; color: var(--amber); }
@@ -1503,7 +1503,7 @@ body[data-mode="single"] .keep-toggle { display: none; }
      as the chat showing through. */
   display: flex; flex-direction: column;
   background: #1a1c20; border: 1px solid var(--orange);
-  border-radius: 16px; padding: 12px 14px 0;
+  border-radius: 8px; padding: 12px 14px 0;
   /* Clipped, or the action row's square background paints over the bottom corners
      and hides the border's curve there. */
   overflow: hidden;
@@ -1544,7 +1544,7 @@ body[data-mode="single"] .keep-toggle { display: none; }
    lifted background and a white label. */
 .ask-opt {
   display: flex; align-items: flex-start; gap: 8px;
-  padding: 6px 8px; border-radius: 9px; cursor: pointer;
+  padding: 6px 8px; border-radius: 8px; cursor: pointer;
   border: 1px solid var(--orange); background: rgba(255, 255, 255, 0.015);
 }
 .ask-opt:hover { background: rgba(255, 255, 255, 0.045); }
@@ -1652,7 +1652,7 @@ body[data-mode="single"] .keep-toggle { display: none; }
   display: inline-flex; align-items: center; gap: 5px;
   max-width: 190px; padding: 3px 4px 3px 8px;
   background: var(--violet-faint); border: 1px solid var(--violet-line);
-  border-radius: 7px; color: var(--text);
+  border-radius: 8px; color: var(--text);
   font-family: var(--mono); font-size: 10.5px; line-height: 1.2;
 }
 .attach-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -1669,19 +1669,23 @@ body[data-mode="single"] .keep-toggle { display: none; }
 .probe-state.ok { color: var(--green); border-color: rgba(53, 192, 138, 0.5); }
 .probe-state.warn { color: var(--amber); border-color: rgba(232, 163, 61, 0.5); }
 .probe-state.err { color: var(--red); border-color: rgba(240, 86, 63, 0.5); }
-/* Four columns, and every header line sits over the top of what it names. */
-.rail-modal #probeTable { table-layout: auto; }
-.rail-modal #probeTable th { text-align: left; font-weight: 600; }
-.rail-modal #probeTable .probe-case-col { width: 38%; }
-.rail-modal #probeTable .probe-time-col { width: 15%; }
-.rail-modal #probeTable .probe-status-col { width: 30%; }
-.rail-modal #probeTable .probe-detail-col { width: 17%; }
-.rail-modal #probeTable td.probe-err { text-align: left; }
+/* Four columns, and every header line sits over the top of what it names.
+   Time, Status and Detail are centred: they are short, bounded values, and a
+   column of centred words reads as a table rather than as a ragged list. */
+.rail-modal #probeTable { table-layout: fixed; width: 100%; }
+.rail-modal #probeTable th { font-weight: 600; }
+.rail-modal #probeTable .probe-case-col { width: 46%; text-align: left; }
+.rail-modal #probeTable .probe-time-col { width: 15%; text-align: center; }
+.rail-modal #probeTable .probe-status-col { width: 23%; text-align: center; }
+.rail-modal #probeTable .probe-detail-col { width: 16%; text-align: center; }
+.rail-modal #probeTable td.tool-time,
+.rail-modal #probeTable td.probe-status,
+.rail-modal #probeTable td.probe-err { text-align: center; }
 
 /* A picture behind an image chip, on hover: fixed, so the dock cannot clip it. */
 .attach-preview {
   position: fixed; z-index: 60; max-width: 240px;
-  padding: 6px; border-radius: 10px;
+  padding: 6px; border-radius: 8px;
   background: #14161a; border: 1px solid #3a3d43;
   box-shadow: 0 12px 34px rgba(0, 0, 0, 0.5);
   pointer-events: none;
@@ -1689,7 +1693,7 @@ body[data-mode="single"] .keep-toggle { display: none; }
 .attach-preview[hidden] { display: none; }
 .attach-preview img {
   display: block; max-width: 228px; max-height: 170px;
-  border-radius: 6px; object-fit: contain; background: #0f1114;
+  border-radius: 8px; object-fit: contain; background: #0f1114;
 }
 .attach-preview-name {
   display: block; margin-top: 5px;
@@ -1706,13 +1710,13 @@ body[data-mode="single"] .keep-toggle { display: none; }
 
 .composer textarea {
   flex: 1; min-width: 0; resize: none; min-height: 38px; max-height: 150px;
-  background: #17181b; border: 1px solid #3a3d43; border-radius: 9px;
+  background: #17181b; border: 1px solid #3a3d43; border-radius: 8px;
   color: var(--text); font: inherit; font-size: 12.5px; padding: 10px 11px;
   line-height: 1.3; overflow-y: auto;
 }
 .composer textarea:focus-visible { outline: 2px solid var(--orange); outline-offset: 1px; }
 .composer textarea::placeholder { color: #6d717a; }
-.composer .icon-button { width: 36px; height: 36px; border-radius: 9px; flex: none; }
+.composer .icon-button { width: 36px; height: 36px; border-radius: 8px; flex: none; }
 /* The paperclip is borderless: it is an offer, not a control with state, and a
    second outlined square beside Stop made the row read as three equal choices. */
 .composer .attach-btn {
@@ -1791,7 +1795,7 @@ body[data-mode="single"] .keep-toggle { display: none; }
    borderless, faint red fill, red label */
 .err-btn {
   display: inline-flex; align-items: center; justify-content: center;
-  min-height: 22px; padding: 0 8px; border-radius: 6px;
+  min-height: 22px; padding: 0 8px; border-radius: 8px;
   border: 1px solid transparent;
   background: rgba(240, 86, 63, 0.09); color: var(--red);
   font-family: var(--mono); font-size: 11px; font-weight: 700; line-height: 1;
@@ -1803,7 +1807,7 @@ body[data-mode="single"] .keep-toggle { display: none; }
 .close-x {
   border: 0; background: transparent; color: var(--muted);
   font-size: 14px; line-height: 1; padding: 5px 7px;
-  border-radius: 6px; cursor: pointer;
+  border-radius: 8px; cursor: pointer;
 }
 .close-x:hover { background: var(--hover-bg); color: var(--text); }
 
@@ -1846,7 +1850,7 @@ body[data-mode="single"] .keep-toggle { display: none; }
   display: grid; grid-template-columns: 21px minmax(0, 1fr) auto;
   /* Centre every cell on the node: one line of title, two or three all sit level
      with the dot, which is what makes a row of them scan as a list of marks. */
-  align-items: center; gap: 9px; padding: 6px 7px; border-radius: 7px;
+  align-items: center; gap: 9px; padding: 6px 7px; border-radius: 8px;
   /* 2px, not 1px: on a dark pane a 1px status border was barely a tint and the
      operator's word for it was "too faint". The padding gives back the pixel the
      border took, so the row keeps its size. */
@@ -1995,7 +1999,7 @@ body[data-mode="single"] .keep-toggle { display: none; }
 }
 /* the file could not be read at all — the Architect's to fix, so say so plainly */
 .plan-error {
-  margin: 0; padding: 7px 9px; border-radius: 7px;
+  margin: 0; padding: 7px 9px; border-radius: 8px;
   background: rgba(240, 86, 63, 0.09); border: 1px solid rgba(240, 86, 63, 0.24);
   color: var(--red); font-family: var(--mono); font-size: 11px; line-height: 1.45;
   overflow-wrap: anywhere;
@@ -2028,7 +2032,7 @@ body[data-mode="single"] .keep-toggle { display: none; }
 }
 .set-tab {
   display: flex; align-items: center; gap: 9px;
-  padding: 8px 10px; border: 0; border-radius: 9px;
+  padding: 8px 10px; border: 0; border-radius: 8px;
   background: transparent; color: var(--muted);
   font-family: inherit; font-size: 12.5px; text-align: left; cursor: pointer;
 }
@@ -2111,7 +2115,7 @@ body[data-mode="single"] .keep-toggle { display: none; }
 }
 .dlg-check {
   display: grid; grid-template-columns: 16px minmax(0, 1fr); gap: 0 8px;
-  align-items: start; padding: 5px 6px; border-radius: 6px; cursor: pointer;
+  align-items: start; padding: 5px 6px; border-radius: 8px; cursor: pointer;
 }
 
 /* An option that changes what a destructive button does. Bordered and on its own
@@ -2121,7 +2125,7 @@ body[data-mode="single"] .keep-toggle { display: none; }
 .dlg-option {
   display: flex; align-items: flex-start; gap: 9px;
   margin: 2px 0 6px; padding: 9px 10px;
-  border: 1px solid #34373d; border-radius: 9px; background: #17181b;
+  border: 1px solid #34373d; border-radius: 8px; background: #17181b;
   cursor: pointer;
 }
 .dlg-option:hover { border-color: var(--violet-line); }
@@ -2149,7 +2153,7 @@ body[data-mode="single"] .keep-toggle { display: none; }
    (the box on the right, which the brief demands and the runner checks). The
    required box is dead until the skill is allowed, so the two can never
    disagree — the same rule config.normalize applies on the way in. */
-.dlg-skill { display: flex; align-items: flex-start; gap: 8px; border-radius: 6px; }
+.dlg-skill { display: flex; align-items: flex-start; gap: 8px; border-radius: 8px; }
 .dlg-skill:hover { background: var(--violet-faint); }
 .dlg-skill > .dlg-check { flex: 1 1 auto; min-width: 0; }
 .dlg-skill > .dlg-check:hover { background: transparent; }
@@ -2203,7 +2207,7 @@ body[data-mode="single"] .keep-toggle { display: none; }
 }
 .prov-row {
   display: flex; align-items: center; gap: 9px;
-  padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px;
+  padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px;
   background: #17181b; cursor: pointer; min-width: 0;
 }
 .prov-row:hover { border-color: #4a4d54; }
@@ -2231,20 +2235,20 @@ body[data-mode="single"] .keep-toggle { display: none; }
 .prov-add-menu {
   position: absolute; z-index: 4; top: calc(100% + 5px); left: 0;
   display: grid; min-width: 190px; padding: 5px;
-  background: #1b1d21; border: 1px solid var(--line); border-radius: 9px;
+  background: #1b1d21; border: 1px solid var(--line); border-radius: 8px;
   box-shadow: 0 14px 30px rgba(0, 0, 0, 0.55);
 }
 .prov-add-menu[hidden] { display: none; }
 .prov-add-menu button {
   border: 0; background: transparent; color: var(--text); text-align: left;
-  padding: 7px 8px; border-radius: 6px; font-family: inherit; font-size: 12px; cursor: pointer;
+  padding: 7px 8px; border-radius: 8px; font-family: inherit; font-size: 12px; cursor: pointer;
 }
 .prov-add-menu button:hover:not(:disabled) { background: var(--violet-soft); color: #fff; }
 .prov-add-menu button:disabled { color: #5e626a; cursor: not-allowed; }
 
 .prov-edit {
   display: grid; gap: 10px; margin-top: 4px; padding: 13px;
-  border: 1px solid var(--line); border-radius: 12px;
+  border: 1px solid var(--line); border-radius: 8px;
   background: rgba(255, 255, 255, 0.02);
 }
 .prov-edit .set-grid { gap: 10px 12px; }
@@ -2261,7 +2265,7 @@ body[data-mode="single"] .keep-toggle { display: none; }
 .input-eye {
   position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
   width: 24px; height: 24px; display: grid; place-items: center;
-  border: 0; border-radius: 6px; background: transparent;
+  border: 0; border-radius: 8px; background: transparent;
   color: var(--yellow); cursor: pointer;
 }
 .input-eye:hover { background: var(--amber-soft); }
@@ -2327,7 +2331,7 @@ body:has(.modal-backdrop:not([hidden])) { overflow: hidden; }
 }
 .modal-sub code { font-family: var(--mono); font-size: 11.5px; color: #a8acb3; }
 .modal-err {
-  margin: 12px 0 0; padding: 12px 13px; border-radius: 10px;
+  margin: 12px 0 0; padding: 12px 13px; border-radius: 8px;
   background: #17181b; border: 1px solid #3a3d43;
   font-family: var(--mono); font-size: 11.5px; line-height: 1.55;
   color: #ffc3b8; white-space: pre-wrap; overflow-wrap: anywhere;
@@ -2345,7 +2349,7 @@ body:has(.modal-backdrop:not([hidden])) { overflow: hidden; }
 }
 .err-top .close-x { flex: none; margin: -3px -4px 0 0; }
 .err-badge {
-  flex: none; width: 21px; height: 21px; border-radius: 6px;
+  flex: none; width: 21px; height: 21px; border-radius: 8px;
   display: grid; place-items: center;
   background: rgba(240, 86, 63, 0.12); border: 1px solid rgba(240, 86, 63, 0.45);
   color: var(--red); font-size: 12px; font-weight: 800; line-height: 1;
@@ -2516,10 +2520,10 @@ body.dark .sidebar {
 /* ── one corner, everywhere ──────────────────────────────────────────────
    Every panel used its own radius - 16 on the chat dock, 14 on the plan, 12 in
    places, 10 on chips - so a column of them had four different fillets and read
-   as four components. One size, chosen once (12px), and it does not scale with
-   the panel: a 114px card and a 500px plan have the same corner or the eye reads
-   a difference in kind. */
-:root { --radius-panel: 12px; }
+   as four components. One size, chosen once (8px), and it does not scale with
+   the panel: a 114px card and a 500px plan have the same corner, or the eye reads
+   a difference in kind. The operator's ask, and a rule for anything added later. */
+:root { --radius-panel: 8px; }
 .panel,
 .rail-panel,
 .rail-plan,
@@ -2532,3 +2536,30 @@ body.dark .sidebar {
 /* The plan's bottom fade is drawn inside its own corner, so it follows the same
    fillet rather than keeping the 16px it was cut for. */
 body[data-view="session"] .rail-plan::after { border-radius: 0 0 var(--radius-panel) var(--radius-panel); }
+
+/* And the same for the buttons. The Summit baseline brings its own 10px for a
+   `.btn` and for an icon button, which is the one corner left that is not 8 —
+   measured live, `#sendBtn` was the last survivor at 10. It is set here rather
+   than by editing the locked file. Pills (fully round) and the 2–5px micro radii
+   on dots and bars are a different shape, not a different size, and stay as they
+   are. */
+.btn,
+.icon-button,
+.mobile-menu {
+  border-radius: var(--radius-panel);
+}
+
+/* While the cards and the chat slide past each other, the dock is promoted to its
+   own layer. Without this the browser re-rasterises the transcript every frame at
+   a new sub-pixel offset, which reads as the conversation shimmering and its lines
+   twitching by about a pixel. Layout is unchanged; only rasterisation moves.
+
+   The scroller gets the same treatment for the same reason: its content is what
+   is being read, the box's two edges are being interpolated underneath it, and
+   the browser may also try to "help" by scroll-anchoring — nudging the offset to
+   keep a line still while our own follow writes it back. Two hands on one scroll
+   position is the 1px twitch; `scroll-position` says keep the raster and move it,
+   `overflow-anchor: none` says nobody else adjusts this offset. */
+body.is-mode-animating .chat-dock { will-change: transform; transform: translateZ(0); }
+body.is-mode-animating .chat-scroll { will-change: scroll-position; overflow-anchor: none; }
+body.is-mode-animating .topology-wrap { will-change: max-height; }

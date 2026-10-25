@@ -1393,6 +1393,15 @@ let revealTimer = 0;
 let workersPendingOff = false;
 // While a card transition is in flight, re-measures wait (see applyRoleCardsLayout).
 let revealUntil = 0;
+// And for that same window the body carries `is-mode-animating`: the chat is
+// composited as a layer instead of being re-rasterised at a new sub-pixel offset
+// sixty times a second, which is what made the text shimmer during a switch.
+let animateClassTimer = 0;
+function markAnimating(ms = 340) {
+  document.body.classList.add('is-mode-animating');
+  clearTimeout(animateClassTimer);
+  animateClassTimer = setTimeout(() => document.body.classList.remove('is-mode-animating'), ms);
+}
 // The chat's height is settled after the cards have moved: one correction at the
 // end, not a per-frame chase (that overshoots the window by a frame).
 let chatFitTimer = 0;
@@ -1476,6 +1485,7 @@ function applyRoleCardsLayout({ animate = true, from = null, remeasure = false }
     void wrap.offsetHeight;
     wrap.style.setProperty('--reveal-h', `${measureReveal(topo, $('stage'))}px`);
     revealUntil = performance.now() + 300;
+    markAnimating(360);
     requestAnimationFrame(drawActivePath);
     return;
   }
@@ -1500,6 +1510,7 @@ function applyRoleCardsLayout({ animate = true, from = null, remeasure = false }
   // exact and hide the workers only once the height has fallen.
   wrap.style.setProperty('--reveal-h', `${collapseH}px`);
   revealUntil = performance.now() + 300;
+  markAnimating(380);
   workersPendingOff = true;
   revealTimer = setTimeout(() => {
     if (workersPendingOff && state.mode === 'single') {
@@ -1517,8 +1528,16 @@ async function switchMode() {
   }
   const previous = state.mode;
   const next = previous === 'single' ? 'multi' : 'single';
+  // Read where the reader is *before* the layout moves, then hold it there: the
+  // dock grows or shrinks over the next 380ms and nothing re-renders in between.
+  holdChatFollow(500);
   state.mode = next;
   renderMode();
+  // The plan panel is different in Single (a summary, no task list). Repaint it
+  // before the cards animate, not 340ms later on the fit timer: while it still
+  // held the Multi rendering it sized the row, and the chat was squeezed shut for
+  // the length of the transition — the conversation seemed to vanish.
+  renderPlan();
   setView();
   try {
     // Single denies only the delegation tool; Multi clears the ruleset. The
@@ -3701,6 +3720,44 @@ function scrollChatToBottom(behavior = 'auto') {
   // render.
 }
 
+/**
+ * Hold the chat at its end while the dock changes height.
+ *
+ * A mode switch moves the dock's edges without a render: the transcript's content
+ * does not change, only how much of it the box shows. Nothing re-pins the scroll,
+ * so a reader who was at the end in Multi ended up 385px short of it in Single —
+ * the newest messages were simply below the fold, and the panel looked like it had
+ * lost the conversation. So the follow is held for the length of the transition,
+ * on the frames the browser is already painting. It is still a hand-off: an upward
+ * wheel during the window releases it like any other.
+ */
+let chatPinRaf = 0;
+function holdChatFollow(ms = 420) {
+  cancelAnimationFrame(chatPinRaf);
+  chatPinRaf = 0;
+  if (!chatFollowArmed || !chatAtBottom(CHAT_FOLLOW_SLACK)) return;
+  const until = performance.now() + ms;
+  const step = () => {
+    chatPinRaf = 0;
+    if (!chatFollowArmed) return;
+    const el = chatScroller();
+    if (el) {
+      // Pinned to the end every frame, because the box around it is being resized
+      // and nothing else will move the content. The edges land on fractions of a
+      // pixel while they interpolate and a scroll offset is a whole one, so the
+      // last line settles within half a pixel of the edge — measured at under 0.5px
+      // per frame, which is the floor of what a resizing box can do. Making the
+      // offset "stable" instead was measured and changed nothing: the movement is in
+      // the box, not in the scroll.
+      el.scrollTop = el.scrollHeight;
+      // Our own move is not the reader scrolling (same rule as the stream's follow).
+      lastChatTop = el.scrollTop;
+    }
+    if (performance.now() < until) chatPinRaf = requestAnimationFrame(step);
+  };
+  chatPinRaf = requestAnimationFrame(step);
+}
+
 const navMessages = () => [...document.querySelectorAll('#transcript .msg[data-msg]')];
 
 function myMessageTops() {
@@ -3871,12 +3928,13 @@ function fitChatHeight() {
   const settled = parseFloat(wrap?.style.getPropertyValue('--reveal-h'))
     || wrap?.getBoundingClientRect().height
     || 0;
-  // When the plan sits beside the cards it shares their row, and in Single its
-  // floor is taller than the Architect card — so the row, not the wrapper, is
-  // what the chat has to start below. On a window too narrow for that, the plan
-  // is placed under the chat and counts for nothing here.
+  // When the plan sits beside the cards it shares their row, so the taller of the
+  // two is what the chat starts below. Never in Single: there the row is exactly
+  // the Architect card, and reading the plan's *current* height mid-transition
+  // (470px, still holding the Multi list) gave the chat a 366px height that a
+  // second, later fit had to correct — the "chat hangs, then drops" report.
   const planEl = $('stage')?.querySelector('.rail-plan');
-  const planInRow = planEl && getComputedStyle(planEl).gridRowStart === '1';
+  const planInRow = state.mode !== 'single' && planEl && getComputedStyle(planEl).gridRowStart === '1';
   const rowH = Math.max(settled, planInRow ? planEl.getBoundingClientRect().height : 0);
   const room = window.innerHeight - (stageTop() + rowH + stageGap()) - 12;
   const next = `${Math.max(180, Math.floor(room))}px`;
