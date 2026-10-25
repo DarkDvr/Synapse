@@ -1169,6 +1169,35 @@ moved with it. Two rules came out of it: the floor is scoped to the content-size
 assuming one — `composer + computed min-height` — so a floor can be honoured by making
 the whole dock overflow the page rather than by the transcript overflowing the dock.
 
+**A height measured against the viewport in a scrolling layout chases the scroll.**
+`fitChatHeight` sized the dock as `viewport bottom − dock top`. In the narrow layout the
+viewport's bottom *moves with the page*, so the dock grew by exactly the distance scrolled,
+the document grew by the same amount, and the plan under the chat stayed one screen below
+the fold for ever — the operator's report was "scrolling down simply raises the chat's top
+bar infinitely". Measured at 1160×894, scrolling 0 / 120 / … / 600px gave a dock of
+349 / 469 / … / 949px, the plan's top pinned at **896** on every sample and the document
+growing 1328 → 1928. The height is now the room under the cards in one screen, measured
+from the dock's place in the **document** — which does not move — so it comes out identical
+at every scroll position: 348.875px for all six samples, the document steady at 1328, the
+plan in view after 150px of scroll and fully in view at the 434px maximum. Scrolling the
+page also stopped disturbing the transcript (same offset, 15405, before and after). Any box
+sized for the `<=1358px` layout obeys this rule, not just the dock.
+
+**One breakpoint, in one place.** CSS switches layout at 1359/1358; `fitChatHeight` and
+`stageBudget` still cut at 1461, so the 1359–1460 band was sized by the narrow rules while
+the wide layout was on screen — and JS wrote an inline height over the CSS `height: 100%`.
+`WIDE_LAYOUT` (`min-width: 1359px`) is now the single predicate for both. Verified at
+1400px: no inline height, the plan holds column 2, the page does not scroll, the dock's
+bottom and the composer sit at 888/887 of a 900px window — and at 1600px, identically.
+
+**A toggle that tells the engine afterwards must send its patches in order.** The mode is
+flipped on screen at once and the permission `PATCH` follows, so two clicks inside one
+request left the engine holding whichever answer arrived last — possibly the mode the
+operator had already left, which refuses delegation while the cards say Multi. The patches
+are chained and only the newest switch may report or revert a failure. Verified by
+double-clicking the toggle: the screen and the engine both end on Multi, the dock back at
+348.875px.
+
 Two ways to measure this, both worth keeping. The layout tells you *where* boxes are; the
 pixels tell you whether anything was repainted: screenshot a fixed clip during the
 animation and compare frames byte-wise (they came back **identical** for `c3..c7`), which

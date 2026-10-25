@@ -111,15 +111,24 @@ $ff = (Get-ChildItem "$env:LOCALAPPDATA\Microsoft\WinGet\Packages\*ffmpeg*\**\ff
 
 ---
 
+## Closed since writing
+
+- **The plan panel below the chat could not be reached at all.** In Multi at ~1243px the page
+  scrolls 434px because the plan sits under the chat — but scrolling did not get to it:
+  `fitChatHeight` measured the dock against the *viewport* bottom, which moves with the page,
+  so the dock grew by exactly the distance scrolled, the document grew with it, and the plan
+  stayed one screen below the fold for ever ("scrolling down simply raises the chat's top bar
+  infinitely"). The height is now measured from the dock's place in the document, and JS uses
+  the same 1359px breakpoint as the CSS instead of 1461. The 434px scroll is the layout and
+  stays; the plan is reachable and fully in view at the end of it. Measurements and the two
+  new rules: `ui-lessons.md` → "The chat's geometry".
+
 ## Open items, with what would settle each
 
 1. **The shimmer.** Needs one answer from the operator: the window's **CSS width** (or whether
    the display is scaled — 125% makes a 1920-wide window about 1536 CSS px). That decides which
    layout to look at, and whether the reveal animation is the thing to change.
-2. **The plan panel below the chat at ~1243px.** In Multi the page scrolls 434px because the
-   plan sits under the chat there. Not a bug as such — it is the layout — but if the intent is
-   "everything fits", the plan needs a height budget in that band.
-3. **Carried from earlier, untouched this session:** the per-session Tools-in-Use feed (item
+2. **Carried from earlier, untouched this session:** the per-session Tools-in-Use feed (item
    3.4 in `AGENTS.md`); no target picker in the composer; the `skill` probe case still reports
    "Unable to load skill list"; a 208MB `bin\opencode\opencode.exe.bak` that is safe to delete;
    the Architect's context budget and compaction.

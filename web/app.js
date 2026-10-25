@@ -1400,9 +1400,20 @@ let workersPendingOff = false;
 // The chat needs nothing from this: its height follows the cards through the
 // ResizeObserver in watchChatGeometry.
 let revealUntil = 0;
-// The chat's height is settled after the cards have moved: one correction at the
-// end, not a per-frame chase (that overshoots the window by a frame).
-let chatFitTimer = 0;
+// The plan's fade needs asking again once a mode switch has settled. This is not a
+// chat fit: the chat follows the cards every frame (see watchChatGeometry).
+let planFadeTimer = 0;
+
+/** The one width where the layout changes, and the only place it is decided.
+ *
+ * Above it the stage is given a definite height, so CSS owns the chat's and the page
+ * does not scroll. Below it the stage is content-sized, the page scrolls, and
+ * `fitChatHeight` owns the height. `web/synapse.css` switches at 1359/1358 for exactly
+ * this reason, and the two numbers must agree: while JS cut at 1461 the 1359–1460 band
+ * was sized by the narrow rules while the wide layout was on screen.
+ */
+const WIDE_LAYOUT = '(min-width: 1359px)';
+const wideLayout = () => window.matchMedia(WIDE_LAYOUT).matches;
 
 function topologyTarget() {
   const wrap = $('topologyWrap');
@@ -1412,16 +1423,15 @@ function topologyTarget() {
 
 /**
  * How much vertical room the role-card wrapper may take. In the wide layout the
- * stage has a definite height (viewport minus the frame); below the 1460px
- * breakpoint it is content-sized and the page scrolls. There, using the stage's
- * own height would collapse the reveal to the Architect alone, so the
- * breakpoint itself is the test — `getComputedStyle().height` reports the used
- * height, never `auto`. The chat visibly slides down as the workers reveal.
+ * stage has a definite height (viewport minus the frame); below the breakpoint it
+ * is content-sized and the page scrolls. There, using the stage's own height would
+ * collapse the reveal to the Architect alone, so the breakpoint itself is the test
+ * — `getComputedStyle().height` reports the used height, never `auto`. The chat
+ * visibly slides down as the workers reveal.
  */
 function stageBudget(stage) {
   const composerH = $('composer')?.getBoundingClientRect().height || 58;
-  const wide = window.matchMedia('(min-width: 1461px)').matches;
-  const basis = wide && stage ? stage.getBoundingClientRect().height : window.innerHeight - 40;
+  const basis = wideLayout() && stage ? stage.getBoundingClientRect().height : window.innerHeight - 40;
   // composer row + its borders + the stage gap
   return Math.max(0, basis - composerH - 2 - 14);
 }
@@ -1459,14 +1469,14 @@ function applyRoleCardsLayout({ animate = true, from = null, remeasure = false }
   }
   const { wrap, topo } = els;
   clearTimeout(revealTimer);
-  clearTimeout(chatFitTimer);
+  clearTimeout(planFadeTimer);
   workersPendingOff = false;
   wrap.classList.add('is-open');
   // The chat's height is no longer fitted here: the wrapper is observed (see
   // watchChatGeometry), so every frame of this animation fits it from the height
   // the cards actually have. Only the plan's fade needs asking again once
   // everything has settled.
-  chatFitTimer = setTimeout(() => { updatePlanOverflow(); }, 340);
+  planFadeTimer = setTimeout(() => { updatePlanOverflow(); }, 340);
 
   if (state.mode === 'multi') {
     // `max-height: none` does not interpolate, so growing straight out of the
@@ -1518,6 +1528,12 @@ function applyRoleCardsLayout({ animate = true, from = null, remeasure = false }
   }, 320);
 }
 
+// Which mode switch is the current one, and the queue its engine patch travels in
+// (see switchMode: a toggle clicked twice must not leave the engine on the mode the
+// operator left).
+let modeSeq = 0;
+let modePatch = Promise.resolve();
+
 async function switchMode() {
   if (state.view !== 'session' || !state.sessionId) {
     toast('No Session Open', 'Open or start a session to switch modes.');
@@ -1525,6 +1541,13 @@ async function switchMode() {
   }
   const previous = state.mode;
   const next = previous === 'single' ? 'multi' : 'single';
+  // Whose switch is this. The mode is flipped on screen at once and the engine is
+  // told afterwards, so a second click inside that request used to leave the
+  // engine's ruleset holding whichever answer arrived last — which can be the mode
+  // the operator has already left, and then delegation is refused while the cards
+  // say Multi. The patch is chained so they apply in the order they were asked
+  // for, and only the newest switch is allowed to report or revert.
+  const seq = ++modeSeq;
   // The reader's place, read now rather than carried from whenever it was last
   // touched, and settled once before anything moves: a chat that was a line short of
   // the end is put at the end here, where it is a small nudge, instead of being held
@@ -1539,17 +1562,29 @@ async function switchMode() {
   // the length of the transition — the conversation seemed to vanish.
   renderPlan();
   setView();
+  // Pinned before the await: the session can be closed from the rail while this is
+  // in flight, and the patch belongs to the session that was switched.
+  const sessionId = state.sessionId;
   try {
     // Single denies only the delegation tool; Multi clears the ruleset. The
     // engine applies this to later turns of the same session.
-    await api('PATCH', `/api/sessions/${encodeURIComponent(state.sessionId)}`, {
-      permissions: next === 'single' ? SINGLE_PERMISSIONS : [],
-    });
-    const s = findSession(state.sessionId);
+    const permissions = next === 'single' ? SINGLE_PERMISSIONS : [];
+    modePatch = modePatch
+      .catch(() => {})
+      .then(() => api('PATCH', `/api/sessions/${encodeURIComponent(sessionId)}`, { permissions }));
+    await modePatch;
+    if (seq !== modeSeq) return;
+    const s = findSession(sessionId);
     if (s) s.single = next === 'single';
   } catch (err) {
+    // A newer click owns the screen now: it has already decided what to show and
+    // sent its own patch, so this failure is not ours to report.
+    if (seq !== modeSeq) return;
     state.mode = previous;
     renderMode();
+    // The panel was painted for the mode we are falling back out of: repaint it, or
+    // Single sits beside Multi's task list when the switch fails.
+    renderPlan();
     setView();
     // The session may simply not exist any more (deleted in another tab, or by
     // a scaffolding sweep). Re-reading the projects closes the dead view instead
@@ -3720,9 +3755,9 @@ function chatAtBottom(slack = 48) {
   if (el) return el.scrollHeight - el.scrollTop - el.clientHeight <= slack;
   // No internal scroller: the whole conversation fits its box. "At the bottom"
   // then means the chat's own bottom edge is in view — not that the *page* has
-  // reached its end. Below 1460px the page continues past the chat into the
-  // rail, so the document's bottom is hundreds of pixels below the conversation
-  // and asking about it always answered "scrolled up".
+  // reached its end. In the narrow layout the page continues past the chat into the
+  // plan and the rail, so the document's bottom is hundreds of pixels below the
+  // conversation and asking about it always answered "scrolled up".
   const box = $('transcript');
   if (!box) return true;
   return box.getBoundingClientRect().bottom <= window.innerHeight + slack;
@@ -3901,19 +3936,26 @@ const currentForm = () => {
 function fitChatHeight() {
   const dock = $('chatDock');
   if (!dock) return;
-  // Above the wide breakpoint the stage owns the height, and an empty dock is just
-  // its composer row: neither takes an inline height.
-  const wide = window.matchMedia('(min-width: 1461px)').matches;
+  // The wide layout gives the stage a definite height and CSS fills the dock from it.
+  // An empty dock is just its composer row, in either layout: neither takes an
+  // inline height.
   const inSession = state.view === 'session' && dock.classList.contains('has-history');
-  if (wide || !inSession) {
+  if (wideLayout() || !inSession) {
     if (dock.style.height) dock.style.height = '';
-    if (dock.style.maxHeight) dock.style.maxHeight = '';
     return;
   }
-  // Page coordinates, so a scrolled page measures the same edge as an unscrolled one.
-  const scroll = window.scrollY;
-  const top = dock.getBoundingClientRect().top + scroll;
-  const bottom = window.innerHeight + scroll - 12;
+  // The page scrolls here, so the height has to come out the same at every scroll
+  // position. It is the room under the cards in one screen, measured from the dock's
+  // place in the *document* — which does not move — and never from its place in the
+  // viewport, which does.
+  //
+  // Measured in the viewport, the plan could not be reached: the dock's top rises as
+  // the operator scrolls, so `viewport bottom − dock top` grew by exactly the scroll
+  // distance, the page grew by the same amount, and the plan stayed one screen below
+  // the fold for ever. Measured at 1160x894, scrolling 0/120/…/600px gave a dock of
+  // 349/469/…/949px with the plan's top pinned at 896 on every sample.
+  const topInDoc = dock.getBoundingClientRect().top + window.scrollY;
+  const room = window.innerHeight - 12 - Math.max(0, topInDoc);
   // The floor is the composer plus whatever the stylesheet says the transcript needs,
   // read from it rather than repeated here: on a short window the room left under the
   // cards can be less than that floor, and a chat held *taller* than its own row does
@@ -3922,9 +3964,8 @@ function fitChatHeight() {
   // the whole dock overflows the page instead of the transcript overflowing the dock.
   const composerH = $('composer')?.getBoundingClientRect().height ?? 58;
   const floor = composerH + (parseFloat(getComputedStyle($('transcript')).minHeight) || 0) + 2;
-  const next = `${Math.max(floor, bottom - top)}px`;
+  const next = `${Math.max(floor, room)}px`;
   if (dock.style.height !== next) setChatHeight(dock, next);
-  if (dock.style.maxHeight) dock.style.maxHeight = '';
 }
 
 /**
@@ -5012,11 +5053,11 @@ function fmtBytes(n) {
 
 /** Put the newest message in view, and the cards above it.
  *
- *  Two scrollers can both be live: the transcript scrolls itself, and below the
- *  1460px breakpoint the *page* scrolls as well (rail under chat, one column). The
- *  transcript goes to its end, and the page goes to the top of the role cards — so
- *  sending shows the newest message *and* the cards the work will appear in. In the
- *  wide layout the page does not scroll, so only the transcript moves.
+ *  Two scrollers can both be live: the transcript scrolls itself, and in the narrow
+ *  layout the *page* scrolls as well (one column). The transcript goes to its end,
+ *  and the page goes to the top of the role cards — so sending shows the newest
+ *  message *and* the cards the work will appear in. In the wide layout the page does
+ *  not scroll, so only the transcript moves.
  */
 function scrollChatToEnd(smooth = true) {
   const el = chatScroller();
