@@ -233,8 +233,7 @@ data/                 runtime state (projects, census, probe results, engine hom
 logs/                 one file per channel: app, engine, session, tools
 bin/opencode/         a copy of the runtime that travels with the app (not in git;
                       vendor-engine.ps1 puts it there, ~210 MB, with its licence)
-docs/                 design mockups (*.pdf), the runs the briefs were rewritten
-                      around, and the detail behind this file
+docs/                 design mockups (*.pdf) and the detail behind this file
   notes/              engine-notes, models-and-tools, ui-lessons, runbook
 ```
 

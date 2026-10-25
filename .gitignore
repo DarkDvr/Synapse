@@ -10,6 +10,10 @@ npm-debug.log*
 # The runtime, copied in by vendor-engine.ps1. A 200 MB binary is not something to
 # carry in history: it travels with the folder, and the script can restore it.
 bin/
+# ...but the app-check skill keeps its two tools in a `bin` folder, and those are
+# source: they are the skill, not build output. Without this line the rule above
+# sweeps them out of the repository.
+!skills/app-check/bin/
 
 # .NET build output (a project or the template)
 obj/
