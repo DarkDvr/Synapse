@@ -209,14 +209,15 @@ src/
   probe.js            the tool probe: one turn per tool
   providers.js        provider types, ids, and "ask a server what it serves"
   secrets.js          provider keys in data\provider-keys.json, never the config
-  engine-update.js    is there a newer engine, and stop/install/start  mcp/search-server.js stdio MCP server exposing websearch to the engine
+  engine-update.js    is there a newer engine, and stop/install/start
+  mcp/search-server.js stdio MCP server exposing websearch to the engine
   engines/base.js     engine contract + message normalisation
   engines/opencode.js the OpenCode adapter
 web/
   index.html          the shell
   app.js              all UI logic (ES module)
   md.js               the markdown renderer (escape-first, no dependencies;
-                        fenced code, headings, GFM tables, task lists, images)
+                        fenced code, GFM tables, task lists)
   synapse.css         theme + shell (Summit baseline stays locked)
   vendor/summit.css   LOCKED baseline — one deliberate edit, see below
   vendor/fonts.css    vendored DM Sans + Manrope (offline)
@@ -224,18 +225,16 @@ web/
 skills/               shipped WITH Synapse, always on the engine's skill path
   visual-review/      render a page to PNG, then read it (the agents' eyes)
   app-check/          launch a desktop app, photograph its window, report if it lived
+  ui-design/ frontend-design/ aesthetic-foundations/ code-craft/ web-guidelines/
+                      the craft briefs: direction, tokens, states, composition,
+                      colour, hierarchy, and the coders' rules
 templates/win-app/    the Windows shell a new app is copied from (WPF + WebView2)
-  ui-design/          the Designer's craft brief: direction, tokens, states, spec
-  frontend-design/    taste and direction (Apache 2.0)
-  aesthetic-foundations/  composition, colour, hierarchy, a critique protocol
-  code-craft/         the coders' brief: small surface, fail loudly, prove it
 data/                 runtime state (projects, census, probe results, engine home)
 logs/                 one file per channel: app, engine, session, tools
 bin/opencode/         a copy of the runtime that travels with the app (not in git;
                       vendor-engine.ps1 puts it there, ~210 MB, with its licence)
-docs/                 design mockups (*.pdf) and the runs the briefs were rewritten
-                      (the runs the briefs were rewritten around), and the detail
-                      behind this file
+docs/                 design mockups (*.pdf), the runs the briefs were rewritten
+                      around, and the detail behind this file
   notes/              engine-notes, models-and-tools, ui-lessons, runbook
 ```
 

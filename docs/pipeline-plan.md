@@ -1,10 +1,12 @@
 # The pipeline: roles, files, and eyes
 
-> **Superseded in part, 24 Oct 2026.** The pipeline itself stands. Two things in
+> **Superseded in part, 24 Oct 2026.** The pipeline itself stands. Three things in
 > this document no longer describe the harness: the plan is now a **work list**
-> that is allowed to grow while the work happens, and `phases` is retired. Where
-> this document says "written in full" or "records the phases", read the note
-> "The plan became a work list" in `docs/notes/engine-notes.md`.
+> that is allowed to grow while the work happens, `phases` is retired, and the
+> `hacker` role is now **`qc`** (a saved `hacker` choice is folded to it by
+> `normalize()`). Where this document says "written in full", "records the phases"
+> or "Hacker", read the note "The plan became a work list" in
+> `docs/notes/engine-notes.md` and the role list in `src/plans.js`.
 
 Agreed with the operator, 19 Oct 2026. This is the implementation plan: what is
 locked, in what order it gets built, and what "done" means for each stage. It

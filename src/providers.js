@@ -64,8 +64,7 @@ export function providerId(name, taken = []) {
 
 const CONTEXT_KEYS = ['context_length', 'max_context_length', 'loaded_context_length', 'max_model_len', 'context_window'];
 
-// Which of those describe what the server will *serve*, and which only describe the
-// model's ceiling. The difference matters: LM Studio's `max_context_length` is what
+// Which of those describe what the server will *serve*, and which only describe the// model's ceiling. The difference matters: LM Studio's `max_context_length` is what
 // the model could take, not what it was loaded at, and reporting it as a window is
 // how a 42k model gets treated as a 262k one.
 const LOADED_KEYS = ['loaded_context_length', 'n_ctx', 'context_length', 'max_model_len'];

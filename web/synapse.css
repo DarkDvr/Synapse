@@ -97,13 +97,9 @@ body.dark {
 
 /* The baseline hardcodes a few blue-tinted darks. Re-tint them to gray so the
    shell reads as one material. */
-body.dark .sidebar,
-body.dark .mini-sidebar { background: #191b1f; }
+body.dark .sidebar { background: #191b1f; }
 body.dark .nav-link:hover,
-body.dark .tiny-tag,
-body.dark .segmented,
 body.dark .tag,
-body.dark .table-search,
 body.dark table th,
 body.dark .version { background: #24262b; }
 
@@ -118,8 +114,7 @@ body.dark tbody tr:hover > td:last-child { border-radius: 0 8px 8px 0; }
 body.dark .btn-secondary:hover:not(:disabled) { border-color: var(--violet-line); }
 body.dark .field input:not([type=checkbox]):not([type=radio]):not([type=range]),
 body.dark .field select,
-body.dark .field textarea,
-body.dark .input-with-action input {
+body.dark .field textarea {
   background: #17181b;
   border-color: #3a3d43;
 }
@@ -135,11 +130,6 @@ body.dark .input-with-action input {
 /* The app icon replaced the glyph; the wrapper keeps the flex row's gap honest
    and lets the mark keep its own shadow without summit.css's text box. */
 .brand-mark-wrap { display: inline-flex; flex: none; }
-
-.sr-only {
-  position: absolute; width: 1px; height: 1px;
-  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;
-}
 
 /* affordance colours: add = green · delete = red · edit/settings = yellow */
 .ic-add { color: var(--green); }
@@ -1242,7 +1232,6 @@ body[data-mode="single"] .keep-toggle { display: none; }
   font-size: 11.5px; line-height: 1.45; color: #8b8f97;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.trace-line.is-word { font-style: italic; color: #767b83; }
 /* A compaction is the one line in a worker's trace that is not a step: it explains
    why the next step is slower and why the window is empty again, so it is amber,
    pinned above the four-line tail, and never trimmed away with the steps. */
@@ -1296,14 +1285,13 @@ body[data-mode="single"] .keep-toggle { display: none; }
   transform: translate3d(0, 0, 0);
   will-change: transform;
 }
+/* Thinking is the quietest of the three: no quotes, dimmer, so a model's
+   deliberation never reads as something it told the operator. */
 .trace-flow.is-think .trace-flow-body { color: #6a6f77; font-style: italic; }
 /* The step has ended and its last window is waiting for the next one. Dimmed, so
    the panel never reads as words still arriving. It keeps its space on purpose:
    removing it is what made the chat jump at every step boundary. */
 .trace-flow.is-idle { opacity: 0.7; }
-/* Thinking is the quietest of the three: no quotes, dimmer, so a model's
-   deliberation never reads as something it told the operator. */
-.trace-line.is-think { color: #6a6f77; font-style: italic; opacity: 0.9; }
 /* Everything older than the last few steps, folded to one line of its own. */
 .trace-archive { margin-bottom: 3px; }
 .trace-archive > summary {
@@ -1789,17 +1777,6 @@ body[data-mode="single"] .keep-toggle { display: none; }
 .rail-panel .panel-head { margin-bottom: 11px; align-items: center; }
 .rail-panel .panel-head h3 { font-size: 12.5px; }
 
-.project-name {
-  font: 750 17px var(--display); letter-spacing: -0.35px; margin: 0 0 4px;
-  overflow-wrap: anywhere;
-}
-.project-path {
-  font-family: var(--mono); font-size: 11.5px; color: var(--muted);
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  margin: 0 0 12px;
-}
-.rail-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-
 /* the small red "Error" affordance, matching the reference app's:
    borderless, faint red fill, red label */
 .err-btn {
@@ -1836,9 +1813,6 @@ body[data-mode="single"] .keep-toggle { display: none; }
 .tool-name { font-family: var(--mono); font-size: 12px; color: var(--text); }
 .tool-time { font-family: var(--mono); font-size: 11.5px; color: #82868e; text-align: center; white-space: nowrap; }
 .tool-time.slow { color: var(--amber); }
-/* the outcome column is the last one in the probe table: right-align it so the
-   dots and the Error buttons line up on one edge */
-.tool-result { text-align: right; white-space: nowrap; }
 /* no glow ring in a dense table — bare circles read cleaner here */
 .tool-table .status-dot { box-shadow: none; }
 
@@ -2344,13 +2318,6 @@ body:has(.modal-backdrop:not([hidden])) { overflow: hidden; }
   margin: 2px 0 12px; font-size: 12px; color: #82868e; line-height: 1.45;
 }
 .modal-sub code { font-family: var(--mono); font-size: 11.5px; color: #a8acb3; }
-.modal-err {
-  margin: 12px 0 0; padding: 12px 13px; border-radius: 8px;
-  background: #17181b; border: 1px solid #3a3d43;
-  font-family: var(--mono); font-size: 11.5px; line-height: 1.55;
-  color: #ffc3b8; white-space: pre-wrap; overflow-wrap: anywhere;
-  max-height: 260px; overflow: auto;
-}
 
 /* The error popup carries two kinds of news: a plain failure, and an alarm about
    an agent touching Synapse itself. One shape, two weights — the alarm gets the
@@ -2442,11 +2409,6 @@ body:has(.modal-backdrop:not([hidden])) { overflow: hidden; }
 /* a short control, not a full-height button. Its height comes from
    `.modal-actions > .btn`, so Run and Close are one size. */
 #runProbe { padding: 0 12px; font-size: 11px; }
-.probe-block .tool-table { margin-top: 4px; }
-/* The case name is an identifier, not prose - mono keeps the column aligned. Row
-   geometry is the inspector-wide one (2px cells, 21px rows); this table used to
-   set its own 3px, and its rows were 22px next to the tools table's 21px. */
-.probe-block .tool-name { font-family: var(--mono); font-size: 10.5px; color: #c3c6cc; }
 /* An Error button is a button, and a button's 22px min-height made one row in this
    table 29px against 22px neighbours. Inside a rail table it is a label: 15px tall,
    centred rather than baseline-aligned, which is what the last pixel of difference

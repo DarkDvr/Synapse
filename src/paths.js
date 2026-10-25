@@ -57,12 +57,6 @@ export const TOOL_STATS_FILE = path.join(DATA_DIR, 'tool-stats.json');
 // out of every project and session listing.
 export const PROBE_DIR = path.join(PROJECTS_ROOT, '_probe');
 
-// The harness's own source, for the tamper watchdog: a write to any of these is a
-// write to the tool that is doing the writing.
-export const HARNESS_DIRS = ['src', 'web', 'config', 'docs', 'skills'].map((d) => path.join(ROOT, d));
-export const HARNESS_FILES = ['AGENTS.md', 'README.md', 'package.json', 'start.bat', 'stop.bat', 'restart.ps1']
-  .map((f) => path.join(ROOT, f));
-
 // Restore points for the harness: `git commit` before each delegation lands here
 // as ordinary commits in the harness repository (there is no separate store).
 

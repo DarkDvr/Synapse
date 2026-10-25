@@ -1033,7 +1033,6 @@ const ENGINE_PROVIDERS = [
   { id: 'opencode-go', label: 'OC Go', note: 'Paid plan — its key lives in the engine.' },
 ];
 const ENGINE_BADGES = Object.fromEntries(ENGINE_PROVIDERS.map((p) => [p.id, p.label]));
-const PROVIDER_LABELS = id => ENGINE_BADGES[id];
 const providerLabel = (p) => {
   const id = String(p || 'unknown');
   const configured = (state.config?.engine?.opencode?.providers || []).find((x) => x.id === id);
