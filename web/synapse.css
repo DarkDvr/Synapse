@@ -1819,8 +1819,13 @@ body[data-mode="single"] .keep-toggle { display: none; }
 }
 .tool-table td { padding: 7px 2px; border-bottom: 1px solid #26292e; vertical-align: middle; }
 .tool-table tr:last-child td { border-bottom: 0; }
+/* The first column is a name, so it stays left; every column after it is a number
+   or a word that is read down the column, so those are centred — the census and
+   the probe both, because they are the same table with different columns. */
+.tool-table th:not(:first-child),
+.tool-table td:not(:first-child) { text-align: center; }
 .tool-name { font-family: var(--mono); font-size: 12px; color: var(--text); }
-.tool-time { font-family: var(--mono); font-size: 11.5px; color: #82868e; text-align: right; white-space: nowrap; }
+.tool-time { font-family: var(--mono); font-size: 11.5px; color: #82868e; text-align: center; white-space: nowrap; }
 .tool-time.slow { color: var(--amber); }
 /* the outcome column is the last one in the probe table: right-align it so the
    dots and the Error buttons line up on one edge */

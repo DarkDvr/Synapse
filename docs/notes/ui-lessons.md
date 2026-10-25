@@ -1063,6 +1063,45 @@ the last transcript child every 25–40ms across a switch. "One movement", "slac
 on every frame" and "the last message visible on every frame" are three separate
 claims, and only the first was ever true by accident.
 
+### The twitch was text on pixels, and shapes are not on pixels
+
+The operator's clue was the way to it: **the status dot inside the mode button
+shimmered never, and the words beside it shimmered every time.** Same button, same
+box, same transform. A circle's edge moving 0.87px is invisible because it is
+antialiased and its alpha just redistributes; a line of text is drawn on a whole
+pixel, so 0.87px is a jump of one. The twitch is never in the layout — it is the
+difference between a fractional position and the pixel a glyph is drawn on.
+
+Two things made the fractional value:
+
+- **the dock's height carried a fraction the row did not.** The fit was rounded
+  (`Math.floor(room)`) while its top is where the cards end, and a card row really
+  is 126.281px tall. Both modes predicted their own rounding, so the composer sat
+  0.87px apart in them and stepped as a switch ended. The bottom edge is the one
+  that must be whole (that is where the composer and the mode button are), so the
+  height now carries the fraction instead.
+- **two CSS transitions do not start on the same frame.** The cards' max-height and
+  the dock's height both run `0.26s ease` and still summed to a wandering value,
+  because they begin a frame or two apart. So for the length of a switch, the edges
+  that can be computed exactly are computed: `holdThroughSwitch` writes the dock's
+  height every frame as `(window bottom − dock top)`, with the height transition
+  off underneath it.
+
+And the transcript needed one more thing. A scroll offset is a whole pixel — set
+`15306.75` and Chrome stores `15307`, measured — so where the content lands is
+`box top + padding − offset`. If the box's top is a fraction, the content cannot
+hold still while the box grows: the offset moves in ones, the top moves in
+fractions, and the difference is the dancing. `lockTranscriptTop` lifts the box's
+top onto the pixel with a margin of the leftover; the row is fixed, so the height
+gives the fraction back at the bottom, where a sliver of the panel's own colour is
+invisible.
+
+Measured across a switch, 1400px and at the operator's 1243px: the composer, the
+mode label and the dock's bottom edge **0.00px**, a fixed line of chat text
+**0.05px** (was 0.7–1.6px). Every instrument read `getBoundingClientRect`, which is
+where this is decidable at all.
+
+
 
 Two limits make them awkward to read as pictures. A `#zoom=200` fragment works
 only on a *fresh* URL, so add a query string to force one. And the viewer cannot
