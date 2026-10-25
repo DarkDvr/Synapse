@@ -54,7 +54,13 @@ export function createProjectStore({ file, generalDir, logger }) {
 
   const general = () => shape({ id: GENERAL_ID, name: 'General', directory: generalDir, created: null }, true);
 
-  /** All projects, General first. Stored duplicates of the General directory are hidden. */
+  /** All projects, General first, then the order they were added in. Stored
+   *  duplicates of the General directory are hidden.
+   *
+   * No sort: the registry file is a ledger, and the operator reads it as one - a new
+   * project appears at the bottom, where they just added it, instead of jumping into
+   * the middle of an alphabetical list. Sorting by name also moved every row when a
+   * project was renamed, which is the one moment you are looking for it. */
   function list() {
     const g = general();
     const seen = new Set([key(g.directory)]);
@@ -65,7 +71,6 @@ export function createProjectStore({ file, generalDir, logger }) {
       seen.add(k);
       rest.push(shape(p));
     }
-    rest.sort((a, b) => a.name.localeCompare(b.name));
     return [g, ...rest];
   }
 

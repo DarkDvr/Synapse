@@ -1939,7 +1939,7 @@ function sessionRow(s) {
   const busy = sessionWorking(s.id);
   const waiting = waitingFor(s.id);
   const waitNote = waiting === 'answer' ? ' · waiting on your answer' : waiting === 'decision' ? ' · waiting for your decision' : '';
-  return `<div class="tree-row session${current ? ' is-current' : ''}${waiting ? ' has-question' : ''}" data-session="${esc(s.id)}">
+  return `<div class="tree-row session${current ? ' is-current' : ''}${busy ? ' has-work' : ''}${waiting ? ' has-question' : ''}" data-session="${esc(s.id)}">
     <button class="tree-open" title="${esc(title)}${when ? ` · ${esc(when)}` : ''}${busy ? ' · working' : ''}${waitNote}">
       <span class="tree-name">${esc(title)}</span>
     </button>
@@ -1960,6 +1960,9 @@ function renderTree() {
   for (const p of state.projects) {
     const open = !state.collapsed.has(p.id);
     const current = state.view === 'session' && p.sessions.some((s) => s.id === state.sessionId);
+    // The rule down the left of a project carries its state: yellow while one of
+    // its sessions is working, green when a session is chosen and waiting.
+    const working = p.sessions.some((s) => sessionWorking(s.id));
     html.push(`<div class="tree-project">
       <div class="tree-row project${current ? ' is-current' : ''}">
         <button class="tree-open" data-project="${esc(p.id)}" aria-expanded="${open}" title="${esc(p.name)}">
@@ -1975,7 +1978,7 @@ function renderTree() {
       </div>
       ${
         open
-          ? `<div class="tree-project-body">
+          ? `<div class="tree-project-body${working ? ' has-work' : ''}">
         <div class="tree-project-actions">
           <button class="btn-thin" data-browse-project="${esc(p.id)}" title="Open this project's folder in Explorer">Browse</button>
           <button class="btn-thin" data-cmd-project="${esc(p.id)}" title="Open a command prompt in this project's folder">Cmd</button>
@@ -4298,6 +4301,17 @@ function updatePlanOverflow() {
 function paintPlan(body) {
   const st = state.planState;
   const rel = st?.relative || '.synapse\\plan.json';
+
+  // Single mode is a chat, not a run: there are no roles and no work list, so the
+  // panel says what the conversation is about and how long it has run, and nothing
+  // else. It is short on purpose — the card beside it is the subject.
+  if (state.mode === 'single') {
+    const goal = String(st?.plan?.goal || '').trim();
+    body.innerHTML =
+      `<p class="plan-goal plan-goal-single">${goal ? esc(goal) : 'A conversation with the Architect: it answers here, with no workers and no list.'}</p>` +
+      `<p class="rail-note plan-meta"><span></span>${planClockMarkup()}</p>`;
+    return;
+  }
 
   // A file we cannot read is the Architect's to fix, so say exactly what is
   // wrong and where, rather than showing an empty pane.

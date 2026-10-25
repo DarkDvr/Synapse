@@ -827,12 +827,41 @@ export function fingerprintDiff(before = {}, after = {}, allowFolder = '') {
  * skimmed. Facts first (what the plan currently says), then the one rule that
  * cannot be guessed (the Architect owns the file; nobody else writes it).
  */
-export function briefSession({ dir, role = 'architect', auto = false, skills = '', focus = '', instructions = '' } = {}) {
+export function briefSession({ dir, role = 'architect', auto = false, single = false, skills = '', focus = '', instructions = '' } = {}) {
   const state = readPlan(dir);
   const lines = [];
   const isArchitect = role === 'architect';
 
   lines.push(`Synapse project: ${path.basename(String(dir || '')) || 'unknown'}`);
+
+  // Single mode is not this harness at all: it is a chat that can use tools. No
+  // roles, no work list, no delegation - the operator answers everything in one
+  // conversation with it. Describing a team it cannot call was worse than saying
+  // nothing: the brief told it to delegate and the ruleset refused the tool.
+  if (single && isArchitect) {
+    if (state.requirement) {
+      const text =
+        state.requirement.length > 1600
+          ? `${state.requirement.slice(0, 1600).trimEnd()} [...]`
+          : state.requirement;
+      lines.push(`The operator's request (verbatim):\n${text}`);
+    }
+    lines.push(
+      `You are working in ${dir ? String(dir) : 'this project folder'} and your tools operate there. ` +
+        `Answer what you are asked, and use the tools when the answer needs the disk or a command.`,
+    );
+    if (decisionsExist(dir)) {
+      lines.push(`The operator's earlier answers are in ${PLAN_DIR}/${DECISIONS_NAME}; do not ask again what it answers.`);
+    }
+    if (instructions) lines.push(`The operator adds: ${instructions}`);
+    if (skills) lines.push(skills);
+    lines.push(
+      `If you need a decision from the operator, ask with the question tool: give the question a short human ` +
+        `title, put your recommended option first and end its label with " (Recommended)".`,
+    );
+    return lines.join('\n');
+  }
+
 
   // The operator's own words, verbatim. Capped: the brief is re-read on every
   // step, and a long conversation is not the brief's job — the file keeps all

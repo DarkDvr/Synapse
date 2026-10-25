@@ -99,10 +99,18 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
    */
   async function brief(sessionId, directory, role, auto = false) {
     try {
+      // Which mode the session is in decides what the brief says: Single is a chat
+      // with tools, Multi is the harness. The rule set is the only place the mode is
+      // recorded, so it is read here rather than passed down by every caller.
+      let single = false;
+      try {
+        single = (await engine.getSession(sessionId))?.single === true;
+      } catch { /* the brief still works without it */ }
       const text = briefSession({
         dir: directory,
         role,
         auto,
+        single,
         skills: describeSkills(getConfig(), role),
         focus: getConfig()?.roles?.[role]?.focus,
         instructions: getConfig()?.roles?.[role]?.instructions,
