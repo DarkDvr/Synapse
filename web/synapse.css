@@ -1095,13 +1095,22 @@ body[data-view="session"] .chat-dock:not(.has-history) .composer { border-top-co
    composer, the jump buttons and the border are all behind the panel anyway. */
 body[data-view="session"] .chat-dock.has-ask { overflow: visible; }
 
-/* Below the wide breakpoint the chat's height is set to the room under the cards
-   (fitChatHeight), so it has to move with them: the same 260ms ease as the card
-   reveal, or its bottom jumps while its top slides. Above the breakpoint the stage
-   owns both, so there is nothing to transition. */
-@media (max-width: 1460px) {
-  .chat-dock { transition: height 0.26s ease; }
-}
+/* The chat's height is NOT transitioned.
+
+   It used to be, below the wide breakpoint, with the same 260ms ease as the card
+   reveal: "so it moves with them". That is what put the composer on a spring. The
+   chat's top already moves with the cards on its own — the height only has to fill
+   the room underneath — so a transition on the height means the bottom edge, which
+   is the window's edge and must not move, lags behind every change above it. During
+   a run the Architect's card changes height as its status line comes and goes, and
+   each change dragged the composer along for a quarter of a second: the one-pixel
+   dance, measured at 8.8px between two samples and 1px from frame to frame in the
+   recording of it.
+
+   Height is now written instantly, so the bottom edge lands where it is put. The
+   only case that needs more than one write is a transition above it — a mode switch
+   or a card reveal — and `holdDockBottom` writes it every frame for exactly as long
+   as that runs. */
 
 /* jump between your own requests; only shown for longer conversations.
    Absolute *inside the dock*: the pane is the button's world, so it can never

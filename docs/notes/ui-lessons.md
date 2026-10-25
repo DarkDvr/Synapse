@@ -1067,39 +1067,61 @@ claims, and only the first was ever true by accident.
 
 The operator's clue was the way to it: **the status dot inside the mode button
 shimmered never, and the words beside it shimmered every time.** Same button, same
-box, same transform. A circle's edge moving 0.87px is invisible because it is
-antialiased and its alpha just redistributes; a line of text is drawn on a whole
-pixel, so 0.87px is a jump of one. The twitch is never in the layout — it is the
-difference between a fractional position and the pixel a glyph is drawn on.
+box, same transform. A circle's edge moving a fraction of a pixel is invisible
+because it is antialiased and its alpha just redistributes; a line of text is drawn
+on a whole pixel, so the same fraction is a jump of one. The twitch is therefore
+never *in* the layout — it is the difference between a fractional position and the
+pixel a glyph is drawn on. What produces the fraction is a separate question, and
+answering it wrong is how this took two attempts.
 
-Two things made the fractional value:
+**The first attempt was measured on the wrong trigger.** It watched a mode switch,
+found the composer moving 0.86px, and fixed that: the fit no longer rounds its
+height (`Math.floor(room)` made each mode round its own leftover), and for the
+length of a switch the dock's bottom is written every frame as `window bottom −
+dock top` with the height transition off. All true, all still in place, and it did
+not stop the twitch — because a mode switch is not when the operator sees it.
 
-- **the dock's height carried a fraction the row did not.** The fit was rounded
-  (`Math.floor(room)`) while its top is where the cards end, and a card row really
-  is 126.281px tall. Both modes predicted their own rounding, so the composer sat
-  0.87px apart in them and stepped as a switch ended. The bottom edge is the one
-  that must be whole (that is where the composer and the mode button are), so the
-  height now carries the fraction instead.
-- **two CSS transitions do not start on the same frame.** The cards' max-height and
-  the dock's height both run `0.26s ease` and still summed to a wandering value,
-  because they begin a frame or two apart. So for the length of a switch, the edges
-  that can be computed exactly are computed: `holdThroughSwitch` writes the dock's
-  height every frame as `(window bottom − dock top)`, with the height transition
-  off underneath it.
+**The recording showed the real trigger**: the mode button's box alternating
+between `417..442` and `418..443`, frame after frame, while the chat streamed. The
+cause is the height transition itself, on `<=1460px`:
 
-And the transcript needed one more thing. A scroll offset is a whole pixel — set
-`15306.75` and Chrome stores `15307`, measured — so where the content lands is
-`box top + padding − offset`. If the box's top is a fraction, the content cannot
-hold still while the box grows: the offset moves in ones, the top moves in
-fractions, and the difference is the dancing. `lockTranscriptTop` lifts the box's
-top onto the pixel with a margin of the leftover; the row is fixed, so the height
-gives the fraction back at the bottom, where a sliver of the panel's own colour is
-invisible.
+- It was put there so the chat "moves with the cards". But the chat's *top* already
+  moves with the cards — it is the row underneath them — so all a transition on the
+  height does is make the **bottom edge lag**. The bottom edge is the window's edge
+  and must not move.
+- Anything that changes the row above sets it off. During a run the Architect's card
+  gains and loses its status line several times a second, so the composer was pulled
+  along for 260ms each time: measured at **8.8px** between two idle samples and 1px
+  frame to frame in the recording.
+- With the transition gone, the height is written instantly and the bottom lands
+  where it is put. The only case that needs more than one write is an animation
+  above it (a switch, a card reveal), and `holdDockBottom` writes it every frame for
+  as long as that runs. Measured after: 12s idle — **one height write, no movement**;
+  two 35-second runs in Single and Multi — composer moved on **0 of ~1750 frames**;
+  a switch in either direction — composer, mode label and bottom edge **0.00px**.
 
-Measured across a switch, 1400px and at the operator's 1243px: the composer, the
-mode label and the dock's bottom edge **0.00px**, a fixed line of chat text
-**0.05px** (was 0.7–1.6px). Every instrument read `getBoundingClientRect`, which is
-where this is decidable at all.
+Two more pieces, both needed:
+
+- **The pin was conditional on following.** `holdChatFollow` only held the scroll
+  when the reader was at the end, so for anyone scrolled up the words slid with the
+  box for the length of a switch. Now both readers are served: at the end the end
+  stays at the end; scrolled up, the offset moves by exactly as much as the box's
+  top, so the same lines stay under the same pixel. The invariant to measure is
+  `scrollTop − boxTop`, which was constant to the pixel (−14138) throughout.
+- **A scroll offset is a whole pixel** — set `15306.75` and Chrome stores `15307` —
+  so where the content lands is `box top + padding − offset`. A fractional box top
+  cannot hold still while the box grows. `lockTranscriptTop` lifts the box's top
+  onto the pixel with a margin of the leftover; the row is fixed, so the height
+  gives the fraction back at the bottom, where a sliver of the panel's own colour is
+  invisible.
+
+And the instrument that settled it: there is no ffmpeg on this machine, so the
+recording was served over a local HTTP server **with byte ranges** (without ranges a
+`<video>` cannot seek, and every extracted frame is identical — that cost a round),
+seeked frame by frame, and screenshotted; the frames were then decoded with a
+40-line PNG reader built on `zlib`. `clip` coordinates must be recomputed after any
+layout change, or the screenshots come back empty.
+
 
 
 

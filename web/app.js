@@ -1399,6 +1399,9 @@ let revealUntil = 0;
 let animateClassTimer = 0;
 function markAnimating(ms = 340) {
   document.body.classList.add('is-mode-animating');
+  // Whatever is about to move above the chat, the chat's bottom edge is not to
+  // move with it: the height is rewritten every frame until the animation ends.
+  holdDockBottom(ms + 140);
   clearTimeout(animateClassTimer);
   animateClassTimer = setTimeout(() => {
     document.body.classList.remove('is-mode-animating');
@@ -1535,7 +1538,7 @@ async function switchMode() {
   const next = previous === 'single' ? 'multi' : 'single';
   // Read where the reader is *before* the layout moves, then hold it there: the
   // dock grows or shrinks over the next 380ms and nothing re-renders in between.
-  holdThroughSwitch(500);
+  holdChatFollow(500);
   state.mode = next;
   renderMode();
   // The plan panel is different in Single (a summary, no task list). Repaint it
@@ -3726,72 +3729,100 @@ function scrollChatToBottom(behavior = 'auto') {
 }
 
 /**
- * Hold what is inside the dock still while the dock's own edges move.
+ * Hold the dock's bottom edge on the window while something above it animates.
  *
- * A mode switch changes two heights that no render announces: the cards' (CSS, on
- * the wrapper's max-height) and the chat's (an inline height with its own CSS
- * transition). Two independent transitions never agree to the frame — they are
- * started a frame or two apart — so their sum wanders by up to a pixel, and a line
- * of text is drawn on a whole pixel. That is the twitch: measured at 0.86px, with
- * the composer's labels stepping up for the length of the switch and stepping back
- * when it ended. Shapes do not show it (a circle's antialiased edge moving 0.86px
- * is invisible) which is why the status dot looked immune and the words did not.
+ * The chat sits between two edges that are not symmetrical: its top is wherever the
+ * cards end, its bottom is the window's, and only the bottom must stay put. So its
+ * height is not a number the layout hands us, it is one we keep — `window bottom −
+ * dock top`, written every frame for as long as the top is moving.
  *
- * So for the length of the switch the two things that can be computed exactly are
- * driven instead of interpolated: the dock's bottom edge is held on the window's
- * bottom (height = bottom − top, every frame), and the transcript is held at its
- * end. Everything else is still CSS. It is still a hand-off: an upward wheel during
- * the window releases the scroll like any other.
+ * Written per frame rather than transitioned, because two transitions never agree
+ * to the frame: the cards animate `max-height` on the wrapper while the dock
+ * animated its own `height`, started a frame or two apart, and the sum of the two
+ * wandered by up to a pixel. Worse than the pixel was the trigger: the Architect's
+ * card changes height as its status line comes and goes during a run — a few times
+ * a second — and every one of those changes dragged the composer along for the
+ * length of a 260ms ease. That is the chat dancing, measured at 8.8px between two
+ * samples and 1px frame to frame in the operator's recording. A line of text is
+ * drawn on a whole pixel, which is why the words showed it and the status dot did
+ * not: a circle's antialiased edge moving by a fraction is invisible.
  *
- * The scroll half is also what stops the conversation vanishing: nothing re-pins it
- * during a switch, so a reader who was at the end in Multi ended up 385px short of
- * it in Single and the newest messages sat below the fold.
+ * Started by `markAnimating`, so it covers a mode switch and a card reveal alike,
+ * and it stops when the animation does.
  */
-let chatPinRaf = 0;
-function holdThroughSwitch(ms = 500) {
-  cancelAnimationFrame(chatPinRaf);
-  chatPinRaf = 0;
+let dockPinRaf = 0;
+function holdDockBottom(ms = 500) {
+  cancelAnimationFrame(dockPinRaf);
+  dockPinRaf = 0;
   const dock = $('chatDock');
-  const follow = chatFollowArmed && chatAtBottom(CHAT_FOLLOW_SLACK);
-  const pinDock = Boolean(dock && dock.style.height);
-  if (!pinDock && !follow) return;
-  // The inline height's own transition is exactly what is being compensated for,
-  // so it must not run underneath us.
-  const prevTransition = dock?.style.transition ?? '';
-  if (pinDock) dock.style.transition = 'none';
-  // The bottom edge the fit aims for: the window's, clear of the last 12px.
+  if (!dock || !dock.style.height) return;
+  const prevTransition = dock.style.transition;
+  dock.style.transition = 'none';
+  // The bottom edge every fit aims for: the window's, clear of the last 12px.
   const edge = window.innerHeight - 12;
   const until = performance.now() + ms;
   const step = () => {
-    chatPinRaf = 0;
-    if (pinDock && dock.style.height) {
-      const top = dock.getBoundingClientRect().top;
-      dock.style.height = `${Math.max(180, edge - top)}px`;
-    }
-    const el = $('transcript');
-    if (el) {
-      // Keep the transcript's top on a whole pixel for the length of the switch, or
-      // the whole conversation drifts under a pixel and back as the box grows.
-      lockTranscriptTop();
-    }
-    if (follow && chatFollowArmed) {
-      const scroller = chatScroller();
-      if (scroller) {
-        scroller.scrollTop = scroller.scrollHeight;
-        // Our own move is not the reader scrolling (same rule as the stream's follow).
-        lastChatTop = scroller.scrollTop;
-      }
-    }
-    if (performance.now() < until) {
-      chatPinRaf = requestAnimationFrame(step);
+    dockPinRaf = 0;
+    if (!dock.style.height) {
+      dock.style.transition = prevTransition;
       return;
     }
-    // Hand the height back to the stylesheet, settled on the same edge. The
-    // transcript's top keeps its lock: it is a resting rule, not part of the switch.
-    if (pinDock && dock) {
-      dock.style.transition = prevTransition;
-      settleChatBottom();
+    dock.style.height = `${Math.max(180, edge - dock.getBoundingClientRect().top)}px`;
+    // And the transcript's own top onto a whole pixel: it is the box the
+    // conversation is drawn in, and a scroll offset is a whole pixel (see
+    // lockTranscriptTop).
+    lockTranscriptTop();
+    if (performance.now() < until) {
+      dockPinRaf = requestAnimationFrame(step);
+      return;
     }
+    dock.style.transition = prevTransition;
+    settleChatBottom();
+  };
+  dockPinRaf = requestAnimationFrame(step);
+}
+
+/**
+ * Hold the conversation still inside the dock while the dock changes height.
+ *
+ * A switch moves the box's top edge by hundreds of pixels and no render announces
+ * it, so nothing moves the scroll to match: the words slide up or down the screen
+ * for the length of the animation. Two readers need two different answers, and both
+ * of them are "do not move what is being read":
+ *
+ * - at the end, the end stays at the end: the newest messages are the thing being
+ *   read, and leaving them above the fold is "the chat disappears";
+ * - scrolled up, the *lines* stay where they are: the scroll offset moves by exactly
+ *   as much as the box's top did, so the same words stay under the same pixel. A
+ *   reader who has taken over the scroll is never yanked, in either direction.
+ *
+ * It is still a hand-off: an upward wheel during the window releases the follow,
+ * and the branch below keeps the position instead.
+ */
+let chatPinRaf = 0;
+function holdChatFollow(ms = 500) {
+  cancelAnimationFrame(chatPinRaf);
+  chatPinRaf = 0;
+  const box = $('transcript');
+  if (!box) return;
+  const follow = chatFollowArmed && chatAtBottom(CHAT_FOLLOW_SLACK);
+  const boxTop0 = box.getBoundingClientRect().top;
+  const scroll0 = box.scrollTop;
+  const until = performance.now() + ms;
+  const step = () => {
+    chatPinRaf = 0;
+    const el = chatScroller();
+    if (el) {
+      if (follow && chatFollowArmed) {
+        el.scrollTop = el.scrollHeight;
+      } else {
+        // Follow released, or never at the end: keep the same lines on screen.
+        el.scrollTop = Math.max(0, scroll0 + (box.getBoundingClientRect().top - boxTop0));
+      }
+      // Our own move is not the reader scrolling (same rule as the stream's follow).
+      lastChatTop = el.scrollTop;
+    }
+    if (performance.now() < until) chatPinRaf = requestAnimationFrame(step);
   };
   chatPinRaf = requestAnimationFrame(step);
 }
