@@ -1382,6 +1382,11 @@ function renderMode() {
   if (input) input.placeholder = single ? 'Message' : 'Message the Architect…';
   document.body.dataset.mode = state.mode;
   renderKeep();
+  // The keep-building flag only exists in Multi, so switching modes changes the
+  // composer row's height — and with it the room the transcript has, without the
+  // dock's own height changing. That is a change only the transcript can see, so
+  // it settles it here rather than a frame later.
+  settleChatBox();
 }
 
 // ── role cards: the Architect is always there ───────────────────
@@ -1392,24 +1397,9 @@ function renderMode() {
 let revealTimer = 0;
 let workersPendingOff = false;
 // While a card transition is in flight, re-measures wait (see applyRoleCardsLayout).
+// The chat needs nothing from this: its height follows the cards through the
+// ResizeObserver in watchChatGeometry.
 let revealUntil = 0;
-// And for that same window the body carries `is-mode-animating`: the chat is
-// composited as a layer instead of being re-rasterised at a new sub-pixel offset
-// sixty times a second, which is what made the text shimmer during a switch.
-let animateClassTimer = 0;
-function markAnimating(ms = 340) {
-  document.body.classList.add('is-mode-animating');
-  // Whatever is about to move above the chat, the chat's bottom edge is not to
-  // move with it: the height is rewritten every frame until the animation ends.
-  holdDockBottom(ms + 140);
-  clearTimeout(animateClassTimer);
-  animateClassTimer = setTimeout(() => {
-    document.body.classList.remove('is-mode-animating');
-    // The geometry is at rest now, so the chat's bottom edge can be put on the
-    // whole pixel it is meant to sit on (see settleChatBottom).
-    settleChatBottom();
-  }, ms);
-}
 // The chat's height is settled after the cards have moved: one correction at the
 // end, not a per-frame chase (that overshoots the window by a frame).
 let chatFitTimer = 0;
@@ -1472,10 +1462,11 @@ function applyRoleCardsLayout({ animate = true, from = null, remeasure = false }
   clearTimeout(chatFitTimer);
   workersPendingOff = false;
   wrap.classList.add('is-open');
-  // The chat's cap is set from the reveal's *target* (so the two transitions can
-  // run together), and re-fitted once more when everything has settled. The
-  // question panel needs none of this: as the dock's child it moves with it.
-  chatFitTimer = setTimeout(() => { fitChatHeight(); updatePlanOverflow(); }, 340);
+  // The chat's height is no longer fitted here: the wrapper is observed (see
+  // watchChatGeometry), so every frame of this animation fits it from the height
+  // the cards actually have. Only the plan's fade needs asking again once
+  // everything has settled.
+  chatFitTimer = setTimeout(() => { updatePlanOverflow(); }, 340);
 
   if (state.mode === 'multi') {
     // `max-height: none` does not interpolate, so growing straight out of the
@@ -1493,7 +1484,6 @@ function applyRoleCardsLayout({ animate = true, from = null, remeasure = false }
     void wrap.offsetHeight;
     wrap.style.setProperty('--reveal-h', `${measureReveal(topo, $('stage'))}px`);
     revealUntil = performance.now() + 300;
-    markAnimating(360);
     requestAnimationFrame(drawActivePath);
     return;
   }
@@ -1518,7 +1508,6 @@ function applyRoleCardsLayout({ animate = true, from = null, remeasure = false }
   // exact and hide the workers only once the height has fallen.
   wrap.style.setProperty('--reveal-h', `${collapseH}px`);
   revealUntil = performance.now() + 300;
-  markAnimating(380);
   workersPendingOff = true;
   revealTimer = setTimeout(() => {
     if (workersPendingOff && state.mode === 'single') {
@@ -1536,9 +1525,6 @@ async function switchMode() {
   }
   const previous = state.mode;
   const next = previous === 'single' ? 'multi' : 'single';
-  // Read where the reader is *before* the layout moves, then hold it there: the
-  // dock grows or shrinks over the next 380ms and nothing re-renders in between.
-  holdChatFollow(500);
   state.mode = next;
   renderMode();
   // The plan panel is different in Single (a summary, no task list). Repaint it
@@ -2365,6 +2351,8 @@ async function openSession(id) {
   // are where the operator's eye goes next anyway).
   const el = chatScroller();
   if (el) el.scrollTop = el.scrollHeight;
+  // The place to keep is the end of the conversation just opened.
+  captureChatSlack();
   refreshPending();
   renderToolUsage();
   loadPlan();
@@ -2987,6 +2975,10 @@ function renderTranscript() {
   while (next < items.length) html += items[next++].html;
   el.innerHTML = html + pending;
   if (stick) scrollChatToBottom();
+  // New lines change the distance to the end, not the place the reader is reading:
+  // measure again now that they are laid out, so a box that changes size later
+  // holds these words still rather than the old ones.
+  captureChatSlack();
   renderChatNav();
 }
 
@@ -3207,6 +3199,9 @@ function noteChatScroll() {
   if (byReader && el.scrollTop < lastChatTop - 4) chatFollowArmed = false;
   else if (fromEnd <= CHAT_FOLLOW_SLACK) chatFollowArmed = true;
   lastChatTop = el.scrollTop;
+  // The reader's place, kept from the end of the conversation: this is the one
+  // value that survives the box changing size under them (see restoreChatSlack).
+  chatSlack = fromEnd;
 }
 
 /** The operator moved the conversation. Only this may release the follow. */
@@ -3728,105 +3723,6 @@ function scrollChatToBottom(behavior = 'auto') {
   // render.
 }
 
-/**
- * Hold the dock's bottom edge on the window while something above it animates.
- *
- * The chat sits between two edges that are not symmetrical: its top is wherever the
- * cards end, its bottom is the window's, and only the bottom must stay put. So its
- * height is not a number the layout hands us, it is one we keep — `window bottom −
- * dock top`, written every frame for as long as the top is moving.
- *
- * Written per frame rather than transitioned, because two transitions never agree
- * to the frame: the cards animate `max-height` on the wrapper while the dock
- * animated its own `height`, started a frame or two apart, and the sum of the two
- * wandered by up to a pixel. Worse than the pixel was the trigger: the Architect's
- * card changes height as its status line comes and goes during a run — a few times
- * a second — and every one of those changes dragged the composer along for the
- * length of a 260ms ease. That is the chat dancing, measured at 8.8px between two
- * samples and 1px frame to frame in the operator's recording. A line of text is
- * drawn on a whole pixel, which is why the words showed it and the status dot did
- * not: a circle's antialiased edge moving by a fraction is invisible.
- *
- * Started by `markAnimating`, so it covers a mode switch and a card reveal alike,
- * and it stops when the animation does.
- */
-let dockPinRaf = 0;
-function holdDockBottom(ms = 500) {
-  cancelAnimationFrame(dockPinRaf);
-  dockPinRaf = 0;
-  const dock = $('chatDock');
-  if (!dock || !dock.style.height) return;
-  const prevTransition = dock.style.transition;
-  dock.style.transition = 'none';
-  // The bottom edge every fit aims for: the window's, clear of the last 12px.
-  const edge = window.innerHeight - 12;
-  const until = performance.now() + ms;
-  const step = () => {
-    dockPinRaf = 0;
-    if (!dock.style.height) {
-      dock.style.transition = prevTransition;
-      return;
-    }
-    dock.style.height = `${Math.max(180, edge - dock.getBoundingClientRect().top)}px`;
-    // And the transcript's own top onto a whole pixel: it is the box the
-    // conversation is drawn in, and a scroll offset is a whole pixel (see
-    // lockTranscriptTop).
-    lockTranscriptTop();
-    if (performance.now() < until) {
-      dockPinRaf = requestAnimationFrame(step);
-      return;
-    }
-    dock.style.transition = prevTransition;
-    settleChatBottom();
-  };
-  dockPinRaf = requestAnimationFrame(step);
-}
-
-/**
- * Hold the conversation still inside the dock while the dock changes height.
- *
- * A switch moves the box's top edge by hundreds of pixels and no render announces
- * it, so nothing moves the scroll to match: the words slide up or down the screen
- * for the length of the animation. Two readers need two different answers, and both
- * of them are "do not move what is being read":
- *
- * - at the end, the end stays at the end: the newest messages are the thing being
- *   read, and leaving them above the fold is "the chat disappears";
- * - scrolled up, the *lines* stay where they are: the scroll offset moves by exactly
- *   as much as the box's top did, so the same words stay under the same pixel. A
- *   reader who has taken over the scroll is never yanked, in either direction.
- *
- * It is still a hand-off: an upward wheel during the window releases the follow,
- * and the branch below keeps the position instead.
- */
-let chatPinRaf = 0;
-function holdChatFollow(ms = 500) {
-  cancelAnimationFrame(chatPinRaf);
-  chatPinRaf = 0;
-  const box = $('transcript');
-  if (!box) return;
-  const follow = chatFollowArmed && chatAtBottom(CHAT_FOLLOW_SLACK);
-  const boxTop0 = box.getBoundingClientRect().top;
-  const scroll0 = box.scrollTop;
-  const until = performance.now() + ms;
-  const step = () => {
-    chatPinRaf = 0;
-    const el = chatScroller();
-    if (el) {
-      if (follow && chatFollowArmed) {
-        el.scrollTop = el.scrollHeight;
-      } else {
-        // Follow released, or never at the end: keep the same lines on screen.
-        el.scrollTop = Math.max(0, scroll0 + (box.getBoundingClientRect().top - boxTop0));
-      }
-      // Our own move is not the reader scrolling (same rule as the stream's follow).
-      lastChatTop = el.scrollTop;
-    }
-    if (performance.now() < until) chatPinRaf = requestAnimationFrame(step);
-  };
-  chatPinRaf = requestAnimationFrame(step);
-}
-
 const navMessages = () => [...document.querySelectorAll('#transcript .msg[data-msg]')];
 
 function myMessageTops() {
@@ -3964,98 +3860,72 @@ const currentForm = () => {
 };
 
 /**
- * Below the wide breakpoint the stage is content-sized, so on a short window the
- * card block plus a 70vh chat pushes the composer off the bottom edge — and the
- * one thing the operator needs is the thing that gets cut off.
+ * The chat's geometry, in one place and one rule.
  *
- * The chat is bottom-anchored: its height is exactly the room between where the
- * cards will settle and the bottom of the window, so the composer sits on the
- * window's bottom edge in every mode and only the chat's *top* moves when the
- * cards collapse or reveal. No ceiling — a ceiling is what left the chat floating
- * short of the bottom with the rail showing underneath it.
+ * The dock sits between two edges that are not symmetrical: its **bottom** is the
+ * window's bottom and must not move, its **top** is wherever the cards end and moves
+ * whenever they do. So the height is not a number to guess at — it is `window bottom
+ * − dock top`, both measured now. Every time anything above the chat changes size,
+ * this runs once; the bottom lands exactly where it was and only the top edge has
+ * moved. That is the whole contract.
  *
- * The room is computed from the *settled* card height (`--reveal-h`, the reveal's
- * target), not from where the dock is this instant: mid-slide that is a layout
- * that no longer exists, and a height that chases the moving top overshoots the
- * window by a frame. `.chat-dock` transitions max-height with the same 260ms ease
- * as the cards, so the two move together and the bottom stays put.
+ * Measured *now* rather than predicted from the reveal's target (`--reveal-h`), for
+ * two reasons: the target is rounded up (a cap must not clip a border), and during a
+ * slide it describes a layout that does not exist yet. A height built from it left
+ * the chat a pixel short in one mode and a pixel tall in the other, and the composer
+ * stepped as a switch ended.
+ *
+ * The height carries a fraction on purpose. The top is on a fraction — a card row
+ * really is 126.281px tall — so a whole-pixel height would put the bottom on a
+ * fraction too, and the bottom is where the composer and every label in it live.
  */
 function fitChatHeight() {
   const dock = $('chatDock');
   if (!dock) return;
+  // Above the wide breakpoint the stage owns the height, and an empty dock is just
+  // its composer row: neither takes an inline height.
   const wide = window.matchMedia('(min-width: 1461px)').matches;
   const inSession = state.view === 'session' && dock.classList.contains('has-history');
   if (wide || !inSession) {
-    // The wide layout's stage owns the height, and an empty dock is just its
-    // composer row: neither takes an inline height.
     if (dock.style.height) dock.style.height = '';
     if (dock.style.maxHeight) dock.style.maxHeight = '';
-    if (inSession) lockTranscriptTop();
     return;
   }
-  const wrap = $('topologyWrap');
-  const topo = $('topology');
-  const arch = topo?.querySelector('.topo-architect');
-  // The row's height, measured from what actually sits in it.
-  //
-  // Not from `--reveal-h`: that is rounded UP on purpose, because a cap must not
-  // clip the last card's bottom border. A rounded-up target is fine as a target and
-  // wrong as a measurement — the fit at the start of a switch used it while the fit
-  // at the end read the real wrapper, so the two disagreed by up to a pixel and the
-  // dock's bottom slid that far in between. Text is drawn on whole pixels, so that
-  // pixel is visible as the composer's labels stepping.
-  //
-  // In Single the row is exactly the Architect card, and the card does not move
-  // while the workers are hidden, so it is read straight off the card.
-  let settled = 0;
-  if (state.mode === 'single' && arch && topo) {
-    settled = arch.getBoundingClientRect().bottom - topo.getBoundingClientRect().top;
-  } else if (topo) {
-    settled = Math.min(topo.getBoundingClientRect().height, stageBudget($('stage')));
-  }
-  if (!settled) {
-    settled = parseFloat(wrap?.style.getPropertyValue('--reveal-h'))
-      || wrap?.getBoundingClientRect().height
-      || 0;
-  }
-  // When the plan sits beside the cards it shares their row, so the taller of the
-  // two is what the chat starts below. Never in Single: there the row is exactly
-  // the Architect card, and reading the plan's *current* height mid-transition
-  // (470px, still holding the Multi list) gave the chat a 366px height that a
-  // second, later fit had to correct — the "chat hangs, then drops" report.
-  const planEl = $('stage')?.querySelector('.rail-plan');
-  const planInRow = state.mode !== 'single' && planEl && getComputedStyle(planEl).gridRowStart === '1';
-  const rowH = Math.max(settled, planInRow ? planEl.getBoundingClientRect().height : 0);
-  // Land the dock's *bottom* on a whole pixel, not its height. The bottom edge is
-  // where the composer and the mode button live, and its y is what decides which
-  // whole pixel a line of text is drawn on: with the height rounded and the top
-  // fractional, the two modes settled 0.87px apart, so every label in the composer
-  // stepped up by one pixel at the end of a switch. The top edge is free to be a
-  // fraction — nothing is read from it — so the fraction goes there.
-  const bottomEdge = window.innerHeight - 12;
-  const next = `${Math.max(180, bottomEdge - (stageTop() + rowH + stageGap()))}px`;
-  // A definite height, not a ceiling. A ceiling only ever took room away, so a
-  // conversation shorter than the ceiling left the chat stopping above the
-  // window's bottom with the rail showing underneath it.
-  if (dock.style.height !== next) dock.style.height = next;
+  // Page coordinates, so a scrolled page measures the same edge as an unscrolled one.
+  const scroll = window.scrollY;
+  const top = dock.getBoundingClientRect().top + scroll;
+  const bottom = window.innerHeight + scroll - 12;
+  const next = `${Math.max(180, bottom - top)}px`;
+  if (dock.style.height !== next) setChatHeight(dock, next);
   if (dock.style.maxHeight) dock.style.maxHeight = '';
-  settleChatBottom();
 }
 
 /**
- * Put the transcript's top edge on a whole pixel, with a margin of the leftover.
+ * Set the chat's height, and hold the conversation still in the same breath.
  *
- * A scroll offset is a whole pixel (measured: 15306.75 is stored as 15307), so where
- * the content lands is `box top + padding − offset` — and if the box's top carries a
- * fraction, the content cannot sit still while the box grows: the offset moves in
- * ones and the two disagree by tenths of a pixel every frame. That disagreement is
- * the dancing text. Lifting the box's top onto the pixel leaves it nothing to
- * disagree about; the row is fixed, so the height gives the fraction back at the
- * bottom, where a sliver of the panel's own colour is invisible.
+ * The height and the scroll offset are two halves of one change, so the offset is
+ * settled synchronously — here, before the frame is painted, not a frame later in
+ * the observer, where the error accumulates across an animation.
+ */
+function setChatHeight(dock, value) {
+  dock.style.height = value;
+  settleChatBox();
+}
+
+/**
+ * Put the transcript's top edge on a whole pixel, then hold the conversation still.
  *
- * Measured from where the box sits with no margin: reading the shifted top and
- * writing the difference back made this an oscillator that alternated every frame
- * and moved nothing at all.
+ * A scroll offset is a whole pixel — measured: setting 15306.75 stores 15307 — and a
+ * line sits at `box top + padding − offset`. If the box's top carries a fraction, the
+ * two disagree by that fraction, and while the box's top is *moving* (a card sliding)
+ * the disagreement changes every frame: the text drifts under a pixel and back, which
+ * is what "the chat is dancing" is, once the large movements are gone. Lifting the
+ * box's top onto the pixel with a margin of the leftover leaves nothing to disagree
+ * about. The row is fixed, so the height gives the fraction back at the bottom edge,
+ * where a sliver of the panel's own colour cannot be seen.
+ *
+ * Measured from where the box sits *without* the margin: reading the shifted top and
+ * writing the difference back made this oscillate every frame and move nothing.
  */
 function lockTranscriptTop() {
   const el = $('transcript');
@@ -4067,53 +3937,82 @@ function lockTranscriptTop() {
   if ((el.style.marginTop || '') !== want) el.style.marginTop = want;
 }
 
-/**
- * Close whatever fraction is left between the dock's bottom edge and the window's
- * when the layout is at rest.
- *
- * Only one of the dock's two edges can be a whole pixel: its top is where the cards
- * end, and a card row really is 126.281px tall, so the height has to carry the
- * fraction. The prediction above gets within a pixel but not always to the pixel,
- * because it is built from the reveal's *target* height while the resting wrapper
- * is its measured height. A fraction left over here is not just untidy: text is
- * drawn on whole pixels, so the same line sat one pixel higher in Single than in
- * Multi and stepped as the switch ended — "the text moves and then returns".
- *
- * So it is measured instead of predicted: whatever gap is left is added to the
- * height, with the transition off for that one write so closing 0.87px does not
- * animate.
- */
-let bottomFitRaf = 0;
-function settleChatBottom() {
-  cancelAnimationFrame(bottomFitRaf);
-  bottomFitRaf = requestAnimationFrame(() => {
-    bottomFitRaf = 0;
-    const dock = $('chatDock');
-    // Nothing to close in the wide layout (no inline height) or mid-transition,
-    // where the edges are being interpolated on purpose.
-    if (!dock || !dock.style.height) return;
-    if (document.body.classList.contains('is-mode-animating')) return;
-    const gap = window.innerHeight - 12 - dock.getBoundingClientRect().bottom;
-    if (Math.abs(gap) >= 0.05) {
-      const h = parseFloat(dock.style.height);
-      if (Number.isFinite(h)) {
-        const prev = dock.style.transition;
-        dock.style.transition = 'none';
-        dock.style.height = `${h + gap}px`;
-        void dock.offsetHeight;
-        dock.style.transition = prev;
-      }
-    }
-    // The bottom is where it belongs, so the top can be locked again.
-    lockTranscriptTop();
-  });
+/** Both halves of one change: the box's edges, then the reader's place inside it. */
+function settleChatBox() {
+  lockTranscriptTop();
+  restoreChatSlack();
 }
 
-/** The stage's top edge in page coordinates — the one reference point every
- *  height below the cards is measured from. */
-const stageTop = () => $('stage').getBoundingClientRect().top + window.scrollY;
-/** The stage's own row gap, read rather than assumed. */
-const stageGap = () => parseFloat(getComputedStyle($('stage')).rowGap) || 0;
+/**
+ * Where the reader is, expressed from the *end* of the conversation: the distance
+ * from the last line to the bottom edge of the box.
+ *
+ * This is the whole of the chat's anchoring. A scroll offset is measured from the
+ * top, so when the box grows upward every line moves down the screen unless the
+ * offset moves with it; the slack, measured from the end, does not change when the
+ * box does. Keeping it constant is therefore the same thing as "nothing inside the
+ * chat moves — only the top edge does", for a reader at the end and for a reader
+ * scrolled up into the history alike.
+ *
+ * It is also *idempotent*: restoring it twice, or three times, or from two different
+ * callers, lands on the same offset. That matters more than it sounds. Two earlier
+ * attempts tracked the height change and added it to the offset, which is correct
+ * exactly once and double-counts the moment two paths see the same change — measured
+ * as a 12px jump, then a 1px one, then a 1px one, each a different caller's share.
+ */
+let chatSlack = null;
+
+/** Remember the reader's place. Call after anything that may move them. */
+function captureChatSlack() {
+  const el = $('transcript');
+  if (!el) return;
+  chatSlack = el.scrollHeight - el.clientHeight - el.scrollTop;
+}
+
+/**
+ * Put the conversation back where the reader had it, whatever the box has done
+ * since. Safe to call at any time; does nothing if there is no place to keep.
+ */
+function restoreChatSlack() {
+  const el = $('transcript');
+  if (!el || chatSlack === null) return;
+  const want = el.scrollHeight - el.clientHeight - chatSlack;
+  if (Math.abs(el.scrollTop - want) < 0.5) return;
+  el.scrollTop = Math.max(0, want);
+  // Our own move is not the reader scrolling (same rule as the stream's follow).
+  lastChatTop = el.scrollTop;
+}
+
+/**
+ * Watch the chat's top edge, by the only means there is: look at it.
+ *
+ * ResizeObserver reports *sizes*, and the box above the chat can move without any
+ * observed box changing size — a row that shifts, a margin, a font that re-breaks a
+ * line elsewhere. Three separate attempts to watch "the things above the chat" each
+ * found one more source and each missed the next one, the last of them a 6px jump
+ * during a run that no size change accounted for. The top edge is the fact; so it is
+ * read, once per frame, and when it is not where it was, the height is fitted to it.
+ *
+ * The read is one `getBoundingClientRect` and a comparison — no layout is invalidated
+ * by reading, so on a still frame this costs nothing measurable, and it is exact on
+ * every frame that moves.
+ */
+let chatTopRaf = 0;
+let lastChatTopSeen = null;
+function watchChatTop() {
+  if (chatTopRaf) return;
+  const tick = () => {
+    chatTopRaf = requestAnimationFrame(tick);
+    const dock = $('chatDock');
+    // Nothing to hold when the stage owns the height (wide layout, or no session).
+    if (!dock || !dock.style.height) { lastChatTopSeen = null; return; }
+    const top = dock.getBoundingClientRect().top;
+    if (lastChatTopSeen !== null && Math.abs(top - lastChatTopSeen) < 0.01) return;
+    lastChatTopSeen = top;
+    fitChatHeight();
+  };
+  chatTopRaf = requestAnimationFrame(tick);
+}
 
 function askOption(kind, name, value, label, description) {
   // The models mark their recommendation in the label — "(Recommended)", the
@@ -6803,6 +6702,13 @@ function wire() {
       if (state.view === 'session') applyRoleCardsLayout({ animate: false, remeasure: true });
     }).catch(() => {});
   }
+
+  // The chat's top edge is watched by reading it (see watchChatTop), and the
+  // transcript's own size by an observer, so the conversation stays put when the
+  // box changes for any reason at all — including the composer row growing.
+  watchChatTop();
+  const transcript = $('transcript');
+  if (transcript) new ResizeObserver(() => settleChatBox()).observe(transcript);
 
   setInterval(refreshStatus, 10000);
 

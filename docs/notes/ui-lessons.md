@@ -1063,67 +1063,74 @@ the last transcript child every 25–40ms across a switch. "One movement", "slac
 on every frame" and "the last message visible on every frame" are three separate
 claims, and only the first was ever true by accident.
 
-### The twitch was text on pixels, and shapes are not on pixels
+### The chat's geometry: the bottom edge stays, the top edge moves, nothing else does
 
-The operator's clue was the way to it: **the status dot inside the mode button
-shimmered never, and the words beside it shimmered every time.** Same button, same
-box, same transform. A circle's edge moving a fraction of a pixel is invisible
-because it is antialiased and its alpha just redistributes; a line of text is drawn
-on a whole pixel, so the same fraction is a jump of one. The twitch is therefore
-never *in* the layout — it is the difference between a fractional position and the
-pixel a glyph is drawn on. What produces the fraction is a separate question, and
-answering it wrong is how this took two attempts.
+This one cost three attempts and two wrong diagnoses, so the statement of the problem
+comes first, in the operator's words: **"Have the chat sit in its current spot. The only
+thing that moves is its top edge, uncovering more of the chat history."** Everything
+below follows from that sentence, and every attempt that drifted from it failed.
 
-**The first attempt was measured on the wrong trigger.** It watched a mode switch,
-found the composer moving 0.86px, and fixed that: the fit no longer rounds its
-height (`Math.floor(room)` made each mode round its own leftover), and for the
-length of a switch the dock's bottom is written every frame as `window bottom −
-dock top` with the height transition off. All true, all still in place, and it did
-not stop the twitch — because a mode switch is not when the operator sees it.
+The shape of it: the dock's **bottom** edge is the window's and never moves; its **top**
+edge is wherever the cards end and moves whenever they do; **nothing inside the box
+moves**. Three facts, and each one has exactly one implementation.
 
-**The recording showed the real trigger**: the mode button's box alternating
-between `417..442` and `418..443`, frame after frame, while the chat streamed. The
-cause is the height transition itself, on `<=1460px`:
+**1. The height is measured, not predicted.** It is `window bottom − dock top`, both
+read now. It used to be built from the reveal's *target* height (`--reveal-h`), which is
+rounded up (a cap must not clip a border) and which, during a slide, describes a layout
+that does not exist yet. That is where the two-stage drop came from: the chat was fitted
+to 366px for the length of a switch and then to 733. The height carries a *fraction* on
+purpose — the top is on a fraction (a card row really is 126.281px), and the edge that
+must land on a whole pixel is the bottom, because that is where the composer and every
+label in it live.
 
-- It was put there so the chat "moves with the cards". But the chat's *top* already
-  moves with the cards — it is the row underneath them — so all a transition on the
-  height does is make the **bottom edge lag**. The bottom edge is the window's edge
-  and must not move.
-- Anything that changes the row above sets it off. During a run the Architect's card
-  gains and loses its status line several times a second, so the composer was pulled
-  along for 260ms each time: measured at **8.8px** between two idle samples and 1px
-  frame to frame in the recording.
-- With the transition gone, the height is written instantly and the bottom lands
-  where it is put. The only case that needs more than one write is an animation
-  above it (a switch, a card reveal), and `holdDockBottom` writes it every frame for
-  as long as that runs. Measured after: 12s idle — **one height write, no movement**;
-  two 35-second runs in Single and Multi — composer moved on **0 of ~1750 frames**;
-  a switch in either direction — composer, mode label and bottom edge **0.00px**.
+**2. The offset keeps the reader's place, measured from the end.**
+`chatSlack = scrollHeight − clientHeight − scrollTop`, restored after every change as
+`scrollTop = scrollHeight − clientHeight − chatSlack`. Keeping the slack constant keeps
+the words still whether the reader is at the end or deep in the history. The property
+that matters is that it is **idempotent** — restoring it twice, or from two callers,
+lands on the same offset. Two earlier versions tracked the *height change* and added it
+to the offset: correct exactly once, and double-counted the moment two paths saw the
+same change. That measured as a 12px jump, then a 1px one, then a 1px one — each
+caller's share of one event.
 
-Two more pieces, both needed:
+**3. The top edge is watched by reading it.** `ResizeObserver` reports *sizes*, and the
+box above the chat can move without any observed box changing size. Three attempts to
+watch "the things above it" each found one more source and missed the next: the cards,
+then the plan panel (which sets row 1 in Multi when it is the taller of the two), and
+finally a 6px shift during a run that no size change accounted for at all. So the top
+edge is read once per frame and the height is fitted when it is not where it was. One
+`getBoundingClientRect` and a comparison per frame invalidates no layout, so a still
+frame costs nothing, and a moving one is exact.
 
-- **The pin was conditional on following.** `holdChatFollow` only held the scroll
-  when the reader was at the end, so for anyone scrolled up the words slid with the
-  box for the length of a switch. Now both readers are served: at the end the end
-  stays at the end; scrolled up, the offset moves by exactly as much as the box's
-  top, so the same lines stay under the same pixel. The invariant to measure is
-  `scrollTop − boxTop`, which was constant to the pixel (−14138) throughout.
-- **A scroll offset is a whole pixel** — set `15306.75` and Chrome stores `15307` —
-  so where the content lands is `box top + padding − offset`. A fractional box top
-  cannot hold still while the box grows. `lockTranscriptTop` lifts the box's top
-  onto the pixel with a margin of the leftover; the row is fixed, so the height
-  gives the fraction back at the bottom, where a sliver of the panel's own colour is
-  invisible.
+Two things were removed rather than fixed, and they should stay removed:
 
-And the instrument that settled it: there is no ffmpeg on this machine, so the
-recording was served over a local HTTP server **with byte ranges** (without ranges a
-`<video>` cannot seek, and every extracted frame is identical — that cost a round),
-seeked frame by frame, and screenshotted; the frames were then decoded with a
-40-line PNG reader built on `zlib`. `clip` coordinates must be recomputed after any
-layout change, or the screenshots come back empty.
+- **No transition on the height.** It was there "so the chat moves with the cards". The
+  chat's *top* already moves with the cards — it is the row underneath — so all the
+  transition did was make the bottom edge lag behind every change above it. During a run
+  the Architect's card gains and loses its status line several times a second, and each
+  one dragged the composer along for 260ms: 8.8px between two idle samples and the
+  1px-per-frame bounce visible in the operator's recording.
+- **No per-frame forcing from a timer.** `requestAnimationFrame` loops that rewrote the
+  height for a fixed 380–500ms were guessing when an animation ends. The observer and the
+  position watch both stop when the change stops, because they are driven by the change.
 
+Why the words showed it and the status dot did not: a line of text is drawn on a whole
+pixel, so a fractional drift is a visible jump of one; a circle's antialiased edge moving
+the same amount just redistributes its alpha. That clue was right, and it is worth
+keeping — it points at sub-pixel position, not at layout.
 
+Measured, at the operator's 1243px window: a switch in either direction, at the end and
+scrolled up — line **0.00–0.02px**, composer **0.00**, dock bottom **0.00**, top edge
+361–371px as intended. A 30-second run in Multi — top edge 6px, bottom **0.00**,
+composer **0.00**, a fixed line **0.00**. Ten seconds idle — **0.00** everywhere.
 
+The instrument, since it is reusable: this machine has ffmpeg (winget: `Gyan.FFmpeg`,
+not on `PATH`), so a recording becomes frames with `ffmpeg -i in.mp4 -f rawvideo -pix_fmt
+gray out.gray`, and a band's row signature then shows a one-pixel shift honestly —
+comparing a profile against itself at offsets −3..3 finds the frame-to-frame movement
+without decoding PNGs at all. Screenshots + a `zlib` PNG reader also work and are what
+found the mode button's `417..442 / 418..443` alternation, but the raw dump is faster and
+cannot lie about timing.
 
 Two limits make them awkward to read as pictures. A `#zoom=200` fragment works
 only on a *fresh* URL, so add a query string to force one. And the viewer cannot

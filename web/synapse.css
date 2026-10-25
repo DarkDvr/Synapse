@@ -2563,17 +2563,12 @@ body[data-view="session"] .rail-plan::after { border-radius: 0 0 var(--radius-pa
   border-radius: var(--radius-panel);
 }
 
-/* While the cards and the chat slide past each other, the dock is promoted to its
-   own layer. Without this the browser re-rasterises the transcript every frame at
-   a new sub-pixel offset, which reads as the conversation shimmering and its lines
-   twitching by about a pixel. Layout is unchanged; only rasterisation moves.
-
-   The scroller gets the same treatment for the same reason: its content is what
-   is being read, the box's two edges are being interpolated underneath it, and
-   the browser may also try to "help" by scroll-anchoring — nudging the offset to
-   keep a line still while our own follow writes it back. Two hands on one scroll
-   position is the 1px twitch; `scroll-position` says keep the raster and move it,
-   `overflow-anchor: none` says nobody else adjusts this offset. */
-body.is-mode-animating .chat-dock { will-change: transform; transform: translateZ(0); }
-body.is-mode-animating .chat-scroll { will-change: scroll-position; overflow-anchor: none; }
-body.is-mode-animating .topology-wrap { will-change: max-height; }
+/* Two hands on one scroll position is a one-pixel twitch, and one of the hands was
+   the browser's. Scroll anchoring adjusts an offset to keep a line still when the
+   layout above it changes; the chat already does that arithmetic itself, exactly,
+   from the height it actually got (see anchorChatContent). So the browser is told
+   not to adjust these two boxes, and the offset is the chat's alone. */
+.chat-scroll,
+.chat-dock,
+html,
+body { overflow-anchor: none; }
