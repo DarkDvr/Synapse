@@ -5808,9 +5808,12 @@ function connectStream() {
         toast('Settings Changed', 'Saved on another computer. Close and reopen Settings to load it.');
       } else if (state.status) {
         // A role's model lives in the config, so saving it on one view must
-        // repaint the other view's cards — otherwise the two windows disagree
-        // about which model the Architect is using.
-        renderRoleCards();
+        // repaint the other view's pickers — otherwise the two windows disagree
+        // about which model the Architect is using. fillRoleModels is the one
+        // that rebuilds the options, the hidden select and its visible search
+        // input from selectionFor(); renderRoleActivity repaints the cards.
+        fillRoleModels();
+        renderRoleActivity();
         renderStatus();
       }
       return;
