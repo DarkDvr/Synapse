@@ -285,13 +285,23 @@ const esc = (s) =>
 async function api(method, path, body) {
   const res = await fetch(path, {
     method,
-    headers: body !== undefined ? { 'content-type': 'application/json' } : undefined,
+    headers: {
+      ...(body !== undefined ? { 'content-type': 'application/json' } : {}),
+      // Who is asking, as far as presence is concerned: the Settings lock and the
+      // name in "started from laptop" both come from this header.
+      ...(state.clientId ? { 'x-client-id': state.clientId } : {}),
+    },
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
   const text = await res.text();
   let json = null;
   try { json = text ? JSON.parse(text) : null; } catch { /* non-JSON */ }
-  if (!res.ok) throw new Error(json?.error || `${method} ${path} → ${res.status}`);
+  if (!res.ok) {
+    const err = new Error(json?.error || `${method} ${path} → ${res.status}`);
+    err.status = res.status;
+    err.body = json;
+    throw err;
+  }
   return json;
 }
 
@@ -1600,7 +1610,11 @@ function renderMode() {
   label.textContent = single ? 'Single' : 'Multi';
   btn.classList.toggle('is-single', single);
   btn.setAttribute('aria-pressed', String(single));
-  btn.title = single
+  const busy = Boolean(state.busyInfo?.busy);
+  btn.disabled = busy;
+  btn.title = busy
+    ? 'Switch modes when the project is idle — work is happening now.'
+    : single
     ? 'Single: one Architect, all the tools, no delegation — it answers everything itself. Click for Multi.'
     : 'Multi: the Architect can delegate to subagents and the role cards are shown. Click for Single.';
   const input = $('promptInput');
@@ -1762,6 +1776,10 @@ let modePatch = Promise.resolve();
 async function switchMode() {
   if (state.view !== 'session' || !state.sessionId) {
     toast('No Session Open', 'Open or start a session to switch modes.');
+    return;
+  }
+  if (state.busyInfo?.busy) {
+    toast('Project Busy', 'Switch modes when the project is idle — work is happening now.');
     return;
   }
   const previous = state.mode;
@@ -4914,6 +4932,14 @@ async function refreshPending() {
   for (const id of active) if (!state.busySince.has(id)) state.busySince.set(id, Date.now());
   for (const id of [...state.busySince.keys()]) if (!active.has(id)) state.busySince.delete(id);
   state.busySessions = active;
+  // The project lock. The server decides; this is the face of it: Send and the
+  // mode switch both read it, and both stay open for the cards and Stop.
+  if (state.sessionId) {
+    state.busyInfo = await api('GET', `/api/busy?session=${encodeURIComponent(state.sessionId)}`).catch(() => null);
+  } else {
+    state.busyInfo = null;
+  }
+  renderMode();
   state.canStop = Boolean(p.canStop);
   state.activeHere = Number(p.activeHere) || 0;
   // A page opened, or reloaded, in the middle of a turn never saw the
@@ -5390,6 +5416,20 @@ async function send() {
   const files = state.attachments.slice();
   if (!text && !files.length) return;
 
+  // One project, one conversation. The server refuses too; this keeps the draft
+  // in the box instead of losing it to a round trip.
+  const busy = state.busyInfo;
+  if (busy?.busy) {
+    const who = busy.driver?.name ? ` (started from ${busy.driver.name})` : '';
+    toast(
+      'Project Busy',
+      busy.state === 'waiting'
+        ? `${busy.project} is waiting for an answer${who}. Answer the card or stop it first.`
+        : `${busy.project} is busy${who}. Answer its question or stop it before sending.`,
+    );
+    return;
+  }
+
   if (!state.sessionId) {
     toast('No session open', 'Pick a session on the left, or start a new one.');
     return;
@@ -5430,6 +5470,15 @@ async function send() {
     await loadMessages();
     scrollChatToEnd();
   } catch (err) {
+    // A refused send is not a lost message: the server said the project is busy,
+    // so the words go back in the box exactly as they were.
+    if (err.status === 409 && err.body?.busy) {
+      input.value = text;
+      state.attachments = files;
+      renderAttachments();
+      autoGrow(input);
+      state.busyInfo = err.body.busy;
+    }
     // The send failed, so the work the rail was told about is not happening.
     state.busySessions.delete(state.sessionId);
     renderTree();
@@ -5624,7 +5673,75 @@ function connectStream() {
   es.onmessage = (e) => {
     let ev;
     try { ev = JSON.parse(e.data); } catch { return; }
-    if (ev.kind === 'hello') { state.streamLive = true; renderStatus(); return; }
+    if (ev.kind === 'hello') {
+      state.streamLive = true;
+      // Our own identity, and who else is looking. The id travels on every
+      // request from here on, which is how the Settings lock knows who holds it.
+      if (ev.clientId) state.clientId = ev.clientId;
+      if (ev.presence) {
+        state.views = ev.presence.views || [];
+        state.settingsLock = ev.presence.lock || null;
+      }
+      renderStatus();
+      return;
+    }
+
+    // A view joined or left, or the Settings lock moved.
+    if (ev.kind === 'presence') {
+      state.views = ev.views || [];
+      state.settingsLock = ev.lock || null;
+      if (ev.lock && !ev.lock.yours && !$('settingsModal').hidden) {
+        closeSettings();
+        toast('Settings Closed', `The settings are now being edited on ${ev.lock.name}.`);
+      }
+      return;
+    }
+
+    if (ev.kind === 'settings-lock') {
+      state.settingsLock = ev.holder || null;
+      if (ev.holder && !$('settingsModal').hidden && state.clientId && !state.views.some((v) => v.id === state.clientId && v.name === ev.holder.name)) {
+        closeSettings();
+        toast('Settings Closed', `The settings are now being edited on ${ev.holder.name}.`);
+      }
+      return;
+    }
+
+    // The LAN switch moved on another view.
+    if (ev.kind === 'remote') {
+      state.remote = ev.remote || state.remote;
+      renderRemote();
+      toast(
+        ev.remote?.enabled ? 'Remote Access On' : 'Remote Access Off',
+        ev.by ? `Changed on ${ev.by}.` : 'Changed on another computer.',
+      );
+      return;
+    }
+
+    // Settings were saved on another view. The open form is a draft and is not
+    // rebuilt under the operator's hands; they are told, and a reopen loads it.
+    if (ev.kind === 'config') {
+      state.config = ev.config || state.config;
+      if (!$('settingsModal').hidden) {
+        toast('Settings Changed', 'Saved on another computer. Close and reopen Settings to load it.');
+      } else if (state.status) {
+        renderStatus();
+      }
+      return;
+    }
+
+    // A card was answered somewhere else: the panel is rebuilt from pending.
+    if (ev.kind === 'permission' && ev.type === 'permission.decided') {
+      const decided = ev.decision || {};
+      if (decided.requestId) state.permissionDecisions?.set(decided.requestId, decided);
+      refreshPending();
+      renderTranscript();
+      return;
+    }
+
+    if (ev.kind === 'form' && ev.type === 'form.answered') {
+      refreshPending();
+      return;
+    }
 
     // Synapse's own notification: the session was just auto-named.
     if (ev.kind === 'sessions') {
@@ -6875,8 +6992,16 @@ async function clearToolCensus() {
   }
 }
 
-function openSettings() {
+async function openSettings() {
   if (!state.config) { toast('Config Unavailable', 'Synapse could not read its own config file.'); return; }
+  // One editor at a time. The server owns the lock; this is only its face.
+  try {
+    await api('POST', '/api/settings/lock', { action: 'acquire' });
+    state.settingsLock = { yours: true };
+  } catch (err) {
+    toast('Settings Are Open Elsewhere', err.message);
+    return;
+  }
   // Every edit in this window happens to a copy; the file only changes on Save.
   state.setDraft = JSON.parse(JSON.stringify(state.config));
   // And this copy is what "Revert All Changes" puts back if the save was a
@@ -6895,6 +7020,8 @@ function openSettings() {
 function closeSettings() {
   $('settingsModal').hidden = true;
   state.setDraft = null;
+  api('POST', '/api/settings/lock', { action: 'release' }).catch(() => {});
+  state.settingsLock = null;
 }
 /** Throw the draft away and read the file again, without closing the window. */
 function revertSettings() {

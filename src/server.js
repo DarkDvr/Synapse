@@ -3,8 +3,10 @@
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import { WEB_DIR } from './paths.js';
 import { isLoopback, isPrivateAddress, parseCookies, tokenMatches, loginPage, REMOTE_COOKIE } from './remote.js';
+import { createPresence } from './presence.js';
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -53,16 +55,31 @@ function readBody(req, limit = 2 * 1024 * 1024) {
 
 export function createServer({ api, engine, logger, config, remote, onRemote }) {
   const app = logger.channel('app');
-  const sseClients = new Set();
+  const sseClients = new Map(); // res -> view { id, address, name, local, since }
+  const presence = createPresence({ logger });
 
   // One frame shape for every client: engine events and Synapse's own.
   const broadcast = (ev) => {
     if (sseClients.size === 0) return;
     let frame;
     try { frame = `data: ${JSON.stringify(ev)}\n\n`; } catch { return; }
-    for (const res of sseClients) {
+    for (const res of sseClients.keys()) {
       try { res.write(frame); } catch { /* dropped client */ }
     }
+  };
+
+  /** The views list and the Settings lock, for every page at once. */
+  const broadcastPresence = () => {
+    broadcast({ kind: 'presence', views: presence.list(), lock: presence.holder(), ts: Date.now() });
+  };
+
+  /** Who is asking: the view's name, or the address when the page is unknown. */
+  const actorOf = (req) => {
+    const id = String(req.headers['x-client-id'] || '') || null;
+    const view = id ? presence.byId(id) : null;
+    if (view) return { id: view.id, name: view.name, local: view.local };
+    const address = addressOf(req);
+    return { id: null, name: isLoopback(address) ? presence.hostname : address, local: isLoopback(address) };
   };
 
   engine.on('event', broadcast);
@@ -132,17 +149,68 @@ export function createServer({ api, engine, logger, config, remote, onRemote }) 
         connection: 'keep-alive',
         'x-accel-buffering': 'no',
       });
+      const view = presence.join({ id: crypto.randomUUID(), address: addressOf(req) });
       res.write(': connected\n\n');
-      res.write(`data: ${JSON.stringify({ kind: 'hello', ts: Date.now() })}\n\n`);
-      sseClients.add(res);
+      res.write(`data: ${JSON.stringify({
+        kind: 'hello',
+        clientId: view.id,
+        you: { id: view.id, name: view.name, local: view.local },
+        presence: { views: presence.list(), lock: presence.holder() },
+        ts: Date.now(),
+      })}\n\n`);
+      sseClients.set(res, view);
+      broadcastPresence();
       const ping = setInterval(() => { try { res.write(': ping\n\n'); } catch { /* ignore */ } }, 15000);
       ping.unref?.();
-      req.on('close', () => { clearInterval(ping); sseClients.delete(res); });
+      req.on('close', () => {
+        clearInterval(ping);
+        sseClients.delete(res);
+        const left = presence.leave(view.id);
+        if (left.released) broadcast({ kind: 'settings-lock', holder: null, ts: Date.now() });
+        broadcastPresence();
+      });
       return;
     }
 
     // GET /api/status
     if (seg[0] === 'status' && method === 'GET') return sendJson(res, 200, await api.status());
+
+    // GET /api/views — who is connected, and who is editing Settings. The page
+    // asks once on load; live changes arrive as `presence` and `settings-lock`.
+    if (seg[0] === 'views' && method === 'GET') {
+      return sendJson(res, 200, presence.status(String(req.headers['x-client-id'] || '') || null));
+    }
+
+    // GET|POST /api/settings/lock — one view edits Settings at a time.
+    if (seg[0] === 'settings' && seg[1] === 'lock') {
+      const clientId = String(req.headers['x-client-id'] || '') || null;
+      if (method === 'GET') return sendJson(res, 200, presence.status(clientId).lock || null);
+      if (method === 'POST') {
+        const body = await readBody(req);
+        const action = body?.action === 'release' ? 'release' : 'acquire';
+        if (action === 'release') {
+          const released = presence.release(clientId);
+          broadcast({ kind: 'settings-lock', holder: null, ts: Date.now() });
+          return sendJson(res, 200, { ok: true, released });
+        }
+        const result = presence.acquire(clientId);
+        if (!result.ok) {
+          return sendJson(res, 409, {
+            error: result.holder
+              ? `Settings are open on ${result.holder.name}. Close them there first.`
+              : result.error,
+            holder: result.holder || null,
+          });
+        }
+        broadcast({ kind: 'settings-lock', holder: presence.holder(), ts: Date.now() });
+        return sendJson(res, 200, { ok: true, lock: result.holder });
+      }
+    }
+
+    // GET /api/busy?session= — is this session's project working, and why.
+    if (seg[0] === 'busy' && method === 'GET') {
+      return sendJson(res, 200, await api.busy(query?.get('session') || null));
+    }
     // GET|POST /api/remote — the STATUS > Remote Access switch. GET includes the
     // one-click link only for the host itself; a LAN client never receives it.
     if (seg[0] === 'remote' && seg.length === 1) {
@@ -150,6 +218,9 @@ export function createServer({ api, engine, logger, config, remote, onRemote }) 
       if (method === 'POST') {
         const body = await readBody(req);
         const status = await onRemote(body?.enabled === true);
+        // Before the listener moves and before this response: every other view
+        // must learn the switch changed, including the one that clicked it.
+        broadcast({ kind: 'remote', remote: status, by: actorOf(req).name, ts: Date.now() });
         // Answer first: the listener has to close the sockets before it can move
         // to the other interface, and this response must be on the wire by then.
         sendJson(res, 200, status);
@@ -285,12 +356,14 @@ export function createServer({ api, engine, logger, config, remote, onRemote }) 
       // 11 MB of JSON. Measured 25 Oct: an ordinary screenshot was refused with
       // "request body too large" and the operator saw a toast that vanished.
       if (seg[2] === 'messages' && method === 'POST') {
-        return sendJson(res, 200, await api.sendMessage(sessionId, await readBody(req, MESSAGE_BODY_LIMIT)));
+        return sendJson(res, 200, await api.sendMessage(sessionId, await readBody(req, MESSAGE_BODY_LIMIT), actorOf(req)));
       }
       if (seg[2] === 'interrupt' && method === 'POST') return sendJson(res, 200, await api.interrupt(sessionId));
-      if (seg[2] === 'permission' && method === 'POST') return sendJson(res, 200, await api.permission(sessionId, await readBody(req)));
+      if (seg[2] === 'permission' && method === 'POST') {
+        return sendJson(res, 200, await api.permission(sessionId, await readBody(req), actorOf(req)));
+      }
       if (seg[2] === 'forms' && seg[4] === 'reply' && method === 'POST') {
-        return sendJson(res, 200, await api.replyForm(sessionId, decodeURIComponent(seg[3] || ''), await readBody(req)));
+        return sendJson(res, 200, await api.replyForm(sessionId, decodeURIComponent(seg[3] || ''), await readBody(req), actorOf(req)));
       }
     }
 
@@ -320,7 +393,7 @@ export function createServer({ api, engine, logger, config, remote, onRemote }) 
     } catch (err) {
       const status = err.status || 500;
       if (status >= 500) app.error(`${req.method} ${pathname}: ${err.message}`);
-      if (!res.headersSent) sendJson(res, status, { error: err.message });
+      if (!res.headersSent) sendJson(res, status, { error: err.message, ...(err.busy ? { busy: err.busy } : {}) });
       else res.end();
     }
   });
@@ -358,7 +431,7 @@ export function createServer({ api, engine, logger, config, remote, onRemote }) 
     listen,
     relisten,
     close: () => new Promise((resolve) => {
-      for (const res of sseClients) { try { res.end(); } catch { /* ignore */ } }
+      for (const res of sseClients.keys()) { try { res.end(); } catch { /* ignore */ } }
       sseClients.clear();
       try { server.closeAllConnections?.(); } catch { /* ignore */ }
       server.close(() => resolve());

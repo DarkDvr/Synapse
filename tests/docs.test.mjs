@@ -45,6 +45,7 @@ const NOTES = [
   'docs/notes/runbook.md',
   'docs/notes/desktop-app.md',
   'docs/notes/remote-access.md',
+  'docs/notes/multi-user.md',
 ];
 const agents = read('AGENTS.md');
 const slashed = (rel) => [rel, rel.replace(/\//g, '\\')];

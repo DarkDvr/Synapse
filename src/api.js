@@ -17,6 +17,7 @@ import { providerApiKey } from './config.js';
 import { questionSignature, guardDecision, readableAnswer } from './question-loop.js';
 import { setProviderKey, providerKeyState, maskKey } from './secrets.js';
 import { probeToolchain } from './toolchain.js';
+import { busyInfo, busyMessage } from './busy.js';
 
 // What an attachment may be, in bytes before base64. One message carrying eight
 // megabytes is already a large prompt; a hundred is a request the provider will
@@ -149,6 +150,58 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
   // Is each local model server answering, and when did we last ask. Four seconds:
   // the sidebar polls, and a dead port must not be retried on every tick.
   const healthCache = new Map();
+
+  // Who started the work in each directory. Used only for the sentence a refused
+  // sender reads — "started from laptop" — never to decide anything.
+  const drivers = new Map();
+  const normDir = (value) => String(value || '').replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
+
+  /**
+   * Is the project this session belongs to busy, and why.
+   *
+   * The engine's active list is the authority for a turn, the runner's live map
+   * for a delegated run, and a pending permission for a card. General sessions
+   * have their own directory, so the same comparison locks only themselves.
+   */
+  async function busyFor(sessionId) {
+    let directory = '';
+    try {
+      directory = (await engine.getSession(sessionId))?.directory || '';
+    } catch { return { busy: false }; }
+    if (!directory) return { busy: false };
+
+    const [active, sessions, permissions] = await Promise.all([
+      safe(() => engine.listActiveSessions(), []),
+      safe(() => engine.listSessions(), []),
+      safe(() => engine.listPendingPermissions(), []),
+    ]);
+    const bySession = new Map((sessions || []).map((s) => [s.id, s]));
+    const waiting = (permissions || [])
+      .map((p) => {
+        const session = bySession.get(p.sessionId || p.sessionID);
+        return session && normDir(session.directory) === normDir(directory)
+          ? { ...p, directory, sessionId: session.id, title: session.title }
+          : null;
+      })
+      .filter(Boolean);
+    const forms = await safe(() => engine.listForms(sessionId), []);
+    return busyInfo({
+      directory,
+      active,
+      sessions,
+      runs: runs?.active?.() || [],
+      permissions: waiting,
+      forms: (forms || []).map((f) => ({ ...f, directory })),
+      driver: drivers.get(sessionId) || drivers.get(normDir(directory)) || null,
+    });
+  }
+
+  const refuseBusy = (info) => {
+    const err = new Error(busyMessage(info));
+    err.status = 409;
+    err.busy = info;
+    return err;
+  };
 
   /**
    * Which roles this *session* has used, ever.
@@ -550,7 +603,11 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
     saveConfig: async (body) => {
       const saved = applyConfig(reconcile(body));
       app.info('config saved via UI');
-      return toClientConfig(saved);
+      const shown = toClientConfig(saved);
+      // The other view must not keep showing the old file until somebody
+      // refreshes. The switcher above is the same rule for the LAN toggle.
+      notify?.({ kind: 'config', type: 'config.saved', config: shown });
+      return shown;
     },
 
     models: async () => {
@@ -1036,6 +1093,17 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
           err.status = 400;
           throw err;
         }
+        // Single/Multi decides who may act and what the brief says. Changing it
+        // under a working project changes the rules mid-run, so it waits for idle.
+        const busy = await busyFor(sessionId);
+        if (busy.busy) {
+          const err = new Error(
+            `${busyMessage(busy)} Switch modes when it is idle.`,
+          );
+          err.status = 409;
+          err.busy = busy;
+          throw err;
+        }
         await engine.updateSessionPermissions(sessionId, [
           ...rulesFor(),
           ...(Array.isArray(p) ? p : []),
@@ -1151,7 +1219,7 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
       return { ...state, used: usedRoles(directory, sessionId), spent, reported: [...reported] };
     },
 
-    sendMessage: async (sessionId, body) => {
+    sendMessage: async (sessionId, body, actor = null) => {
       requireReady();
       const text = String(body?.text ?? '').trim();
       // An attachment on its own is a message: "look at this" with the file in
@@ -1162,6 +1230,15 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
         const err = new Error('message text is required');
         err.status = 400;
         throw err;
+      }
+      // One project, one conversation. The rule is the same for both views — a
+      // second prompt into a working project would interleave with a plan that is
+      // already in flight, whoever sends it. Cards and Stop stay open.
+      const busy = await busyFor(sessionId);
+      if (busy.busy) throw refuseBusy(busy);
+      if (actor?.name) {
+        drivers.set(sessionId, { name: actor.name, id: actor.id || null, at: Date.now() });
+        if (busy.directory) drivers.set(normDir(busy.directory), { name: actor.name, id: actor.id || null, at: Date.now() });
       }
       // Re-brief before the turn: the plan may have changed since the last one,
       // and an unchanged plan is not sent twice.
@@ -1267,7 +1344,7 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
       return { ok: true, stoppedRun, stopped };
     },
 
-    permission: async (sessionId, body) => {
+    permission: async (sessionId, body, actor = null) => {
       requireReady();
       const wanted = body?.decision || 'once';
       // "Always" is ours, not the engine's. The engine's `always` saves the
@@ -1276,8 +1353,20 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
       // answer once and remember this exact action + resource for the session.
       const decision = wanted === 'always' ? 'once' : wanted;
       const entry = permissionLog?.get?.(body?.requestId);
-      await engine.replyPermission(sessionId, body?.requestId, decision);
-      if (decision === 'reject') {
+      // Two views can see the same card. The first answer is the answer; the
+      // second is not an error, it is a page that was a moment late — it still
+      // needs the decision broadcast so its panel closes.
+      let already = false;
+      try {
+        await engine.replyPermission(sessionId, body?.requestId, decision);
+      } catch (err) {
+        if (/not found|already|gone|404|409/i.test(String(err?.message || ''))) {
+          already = true;
+        } else {
+          throw err;
+        }
+      }
+      if (!already && decision === 'reject') {
         // The reply's `message` is dropped on this route (measured), so the note
         // is a synthetic message: the only channel that reaches a worker. Not to
         // the Architect: the operator is in its chat, and the extra turn ended
@@ -1290,15 +1379,35 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
           ).catch((err) => app.warn(`could not explain the refusal to ${sessionId}: ${err.message}`));
         }
       }
-      if (wanted === 'always' && entry) {
+      if (!already && wanted === 'always' && entry) {
         permissionGate?.remember?.(entry.sessionId || sessionId, entry.action, entry.resources);
       }
       // The chip on the tool call: this is the moment an ask becomes a decision,
       // and the only one the policy did not already record.
       const answered = permissionLog?.answer?.(body?.requestId, decision);
-      if (answered) notify?.({ kind: 'permission', type: 'permission.decided', decision: answered });
-      return { ok: true };
+      const by = actor?.name || null;
+      if (answered) {
+        notify?.({
+          kind: 'permission',
+          type: 'permission.decided',
+          decision: { ...answered, by },
+          requestId: body?.requestId,
+          sessionId,
+        });
+      } else {
+        notify?.({
+          kind: 'permission',
+          type: 'permission.decided',
+          decision: { requestId: body?.requestId, sessionId, decision, effect: decision === 'reject' ? 'deny' : 'allow', by },
+          requestId: body?.requestId,
+          sessionId,
+        });
+      }
+      return { ok: true, already };
     },
+
+    /** Is this session's project busy, and why — what the composer shows. */
+    busy: async (sessionId) => busyFor(sessionId),
 
     /** Decisions recorded for a session, for the chips on a transcript that was
      *  loaded after they happened. */
@@ -1453,12 +1562,22 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
       };
     },
 
-    replyForm: async (sessionId, formId, body) => {
+    replyForm: async (sessionId, formId, body, actor = null) => {
       requireReady();
       const answer = body?.answer && typeof body.answer === 'object' ? body.answer : {};
       // The form goes away once answered, so remember what it asked first.
       const form = await safe(() => engine.listForms(sessionId), []).then((list) => (list || []).find((f) => f.id === formId));
       await engine.replyForm(sessionId, formId, answer);
+      // The other view's panel has to close: an answered question is a form that
+      // no longer exists, and a page still showing it is a page waiting for a
+      // reply nobody will send.
+      notify?.({
+        kind: 'form',
+        type: 'form.answered',
+        formId,
+        sessionId,
+        by: actor?.name || null,
+      });
       const signature = formSignature(form);
       if (signature) {
         const per = questionHistory.get(sessionId) || new Map();
