@@ -608,6 +608,46 @@ function renderRemote() {
   if (token) token.hidden = !on || !info.token;
 }
 
+// Who is connected. The names are what the lock and the refusal sentences use;
+// this is where they can be read without being refused something first.
+function renderViews() {
+  const views = state.views || [];
+  const el = $('viewsState');
+  if (!el) return;
+  const names = [...new Set(views.map((v) => v.name))];
+  el.textContent = views.length <= 1 ? '1' : `${views.length} — ${names.join(', ')}`;
+  el.title = names.join(', ');
+  const dot = $('viewsDot');
+  if (dot) dot.className = 'status-dot ' + (views.length > 1 ? 'ok' : 'idle');
+}
+
+// The page was cut off. Everything behind the panel is stale, so it is covered
+// and made inert, and only Close ends it: by closing the tab, or by replacing
+// this document where the browser refuses window.close() for a tab the operator
+// opened. There is deliberately no Escape and no backdrop click.
+let disconnectTimer = null;
+function showDisconnected(delay = 4000) {
+  if (disconnectTimer) return;
+  disconnectTimer = setTimeout(() => {
+    disconnectTimer = null;
+    const overlay = $('disconnect');
+    if (!overlay || !overlay.hidden) return;
+    overlay.hidden = false;
+    document.querySelector('.app-shell')?.setAttribute('inert', '');
+    document.body.classList.add('is-disconnected');
+    $('disconnectClose')?.focus();
+  }, delay);
+}
+
+function clearDisconnected() {
+  if (disconnectTimer) { clearTimeout(disconnectTimer); disconnectTimer = null; }
+  const overlay = $('disconnect');
+  if (!overlay || overlay.hidden) return;
+  overlay.hidden = true;
+  document.querySelector('.app-shell')?.removeAttribute('inert');
+  document.body.classList.remove('is-disconnected');
+}
+
 async function copyRemoteToken() {
   const value = state.remote?.token;
   if (!value) return;
@@ -2205,6 +2245,10 @@ const isBusy = (sessionId) => state.busySessions.has(sessionId);
 const sessionWorking = (sessionId) => {
   if (!sessionId) return false;
   if (isBusy(sessionId)) return true;
+  // The engine's active list can be empty in the middle of a turn (measured);
+  // the project lock is the second source, and it is the one the server refuses
+  // on, so the rail must agree with it.
+  if (sessionId === state.sessionId && state.busyInfo?.busy) return true;
   const project = projectOf(sessionId);
   const run = project ? runIn(project) : null;
   return Boolean(run && (!run.architect || run.architect === sessionId));
@@ -2263,6 +2307,7 @@ function sessionRow(s) {
   return `<div class="tree-row session${current ? ' is-current' : ''}${busy ? ' has-work' : ''}${waiting ? ' has-question' : ''}" data-session="${esc(s.id)}">
     <button class="tree-open" title="${esc(title)}${when ? ` · ${esc(when)}` : ''}${busy ? ' · working' : ''}${waitNote}">
       <span class="tree-name">${esc(title)}</span>
+      ${busy ? '<span class="tree-working">working</span>' : ''}
     </button>
     <span class="tree-actions">
       ${waiting ? `<span class="tree-wait" title="${waiting === 'answer' ? 'Waiting on your answer' : 'Waiting for your decision'}" aria-label="${waiting === 'answer' ? 'Waiting on your answer' : 'Waiting for your decision'}">?</span>` : ''}
@@ -4940,6 +4985,7 @@ async function refreshPending() {
     state.busyInfo = null;
   }
   renderMode();
+  renderComposer();
   state.canStop = Boolean(p.canStop);
   state.activeHere = Number(p.activeHere) || 0;
   // A page opened, or reloaded, in the middle of a turn never saw the
@@ -5390,10 +5436,25 @@ async function stopFromPermission(requestId) {
 function renderComposer() {
   const hasSession = Boolean(state.sessionId);
   const asking = Boolean(currentForm());
+  const held = Boolean(state.busyInfo?.busy);
   // Any pending question blocks this composer, whoever asked it: the operator's
   // attention is the thing the run is waiting on, and a worker's question is no
   // different from the Architect's in that respect.
-  $('sendBtn').disabled = (state.busy && !hasSession) || asking;
+  $('sendBtn').disabled = (state.busy && !hasSession) || asking || held;
+  // The reason, in one line above the controls, so a dead Send is not a mystery.
+  const note = $('composerNote');
+  if (note) {
+    if (held) {
+      const who = state.busyInfo.driver?.name ? ` — started from ${state.busyInfo.driver.name}` : '';
+      note.textContent = state.busyInfo.state === 'waiting'
+        ? `${state.busyInfo.project} is waiting for an answer${who}. Send and mode are held until it is answered or stopped.`
+        : `${state.busyInfo.project} is working${who}. Send and mode are held until it finishes or is stopped.`;
+      note.hidden = false;
+    } else {
+      note.hidden = true;
+      note.textContent = '';
+    }
+  }
   // Stop has to work while a worker is running or waiting out a retry, when the
   // open session is idle — that is exactly when it is the only way out. `canStop`
   // is the engine's answer for this project, so a hidden worker enables it even
@@ -5464,6 +5525,9 @@ async function send() {
       // the operator's message rather than something the harness put on disk.
       files: files.map((f) => ({ name: f.name, mime: f.mime, data: f.data })),
     });
+    // The server has accepted it, so the project is busy now: read that state at
+    // once and hold Send and the mode switch, rather than waiting for the poll.
+    refreshPending();
     // Only after the server has taken them: a failed send must not eat the files.
     state.attachments = [];
     renderAttachments();
@@ -5669,7 +5733,18 @@ const reloadProjects = debounce(() => loadProjects(), 600);
 
 function connectStream() {
   const es = new EventSource('/api/stream');
-  es.onopen = () => { state.streamLive = true; renderStatus(); };
+  es.onopen = () => {
+    state.streamLive = true;
+    clearDisconnected();
+    renderStatus();
+  };
+  // The stream dropped. Give it a few seconds to come back (a listener move and
+  // a server restart both do this), then cover the page: it is a snapshot now.
+  es.onerror = () => {
+    state.streamLive = false;
+    renderStatus();
+    showDisconnected();
+  };
   es.onmessage = (e) => {
     let ev;
     try { ev = JSON.parse(e.data); } catch { return; }
@@ -5678,10 +5753,13 @@ function connectStream() {
       // Our own identity, and who else is looking. The id travels on every
       // request from here on, which is how the Settings lock knows who holds it.
       if (ev.clientId) state.clientId = ev.clientId;
+      if (ev.you) state.you = ev.you;
       if (ev.presence) {
         state.views = ev.presence.views || [];
         state.settingsLock = ev.presence.lock || null;
       }
+      clearDisconnected();
+      renderViews();
       renderStatus();
       return;
     }
@@ -5690,6 +5768,7 @@ function connectStream() {
     if (ev.kind === 'presence') {
       state.views = ev.views || [];
       state.settingsLock = ev.lock || null;
+      renderViews();
       if (ev.lock && !ev.lock.yours && !$('settingsModal').hidden) {
         closeSettings();
         toast('Settings Closed', `The settings are now being edited on ${ev.lock.name}.`);
@@ -5699,6 +5778,7 @@ function connectStream() {
 
     if (ev.kind === 'settings-lock') {
       state.settingsLock = ev.holder || null;
+      renderViews();
       if (ev.holder && !$('settingsModal').hidden && state.clientId && !state.views.some((v) => v.id === state.clientId && v.name === ev.holder.name)) {
         closeSettings();
         toast('Settings Closed', `The settings are now being edited on ${ev.holder.name}.`);
@@ -5710,10 +5790,24 @@ function connectStream() {
     if (ev.kind === 'remote') {
       state.remote = ev.remote || state.remote;
       renderRemote();
-      toast(
+      // A remote page whose access was just switched off is about to be cut off.
+      // Say so before the socket dies, not after a failed reconnect.
+      if (state.you?.local === false && ev.remote?.enabled === false) showDisconnected(0);
+      else toast(
         ev.remote?.enabled ? 'Remote Access On' : 'Remote Access Off',
         ev.by ? `Changed on ${ev.by}.` : 'Changed on another computer.',
       );
+      return;
+    }
+
+    // A session's model was switched in another view (or by the API): the card
+    // must agree with the session, not with whatever was there when it opened.
+    if (ev.kind === 'session' && ev.type === 'session.model' && ev.sessionId === state.sessionId) {
+      const ref = ev.model ? `${ev.model.providerID}/${ev.model.id}` : '';
+      const select = document.querySelector('.role-card[data-role="architect"] .role-model');
+      if (select && ref) select.value = ref;
+      if (state.session) state.session.model = ref;
+      renderRoleCards();
       return;
     }
 
@@ -5931,7 +6025,6 @@ function connectStream() {
       if (mine) reloadMessages();
     }
   };
-  es.onerror = () => { state.streamLive = false; renderStatus(); };
 }
 
 // ── settings (live) ─────────────────────────────────────────────
@@ -7099,6 +7192,24 @@ function wire() {
   $('stopBtn').addEventListener('click', interrupt);
   $('modeToggle').addEventListener('click', switchMode);
   $('remoteToggle').addEventListener('click', toggleRemote);
+
+// The disconnected panel: Close ends the page. A browser refuses window.close()
+// for a tab the operator opened, so the fallback replaces the document — the
+// point is that nothing of the stale app stays clickable.
+$('disconnectClose').addEventListener('click', () => {
+  try { window.close(); } catch { /* refused for a tab we did not open */ }
+  setTimeout(() => {
+    try { location.replace('about:blank'); } catch { /* last resort */ }
+  }, 250);
+});
+// No Escape, no shortcuts while the page is a snapshot. Tab and Enter still work,
+// so the one button can be reached and pressed from the keyboard.
+document.addEventListener('keydown', (e) => {
+  if (!document.body.classList.contains('is-disconnected')) return;
+  if (e.key === 'Tab' || e.key === 'Enter') return;
+  e.preventDefault();
+  e.stopPropagation();
+}, true);
   $('remoteToken').addEventListener('click', copyRemoteToken);
   $('keepBtn').addEventListener('click', toggleKeep);
   $('menuBtn').addEventListener('click', () => $('sidebar').classList.toggle('open'));

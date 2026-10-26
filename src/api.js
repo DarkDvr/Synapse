@@ -1132,6 +1132,15 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
         throw err;
       }
       await engine.switchModel(sessionId, model);
+      // The other view's Architect card must agree with the session, not with
+      // whatever was there when it opened.
+      const ref =
+        typeof model === 'string'
+          ? model
+          : model?.providerID && model?.id
+            ? `${model.providerID}/${model.id}`
+            : null;
+      notify?.({ kind: 'session', type: 'session.model', sessionId, model: model && typeof model === 'object' ? { providerID: model.providerID, id: model.id } : ref });
       return { ok: true };
     },
 
@@ -1384,7 +1393,7 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
       }
       // The chip on the tool call: this is the moment an ask becomes a decision,
       // and the only one the policy did not already record.
-      const answered = permissionLog?.answer?.(body?.requestId, decision);
+      const answered = permissionLog?.answer?.(body?.requestId, decision, actor?.name || null);
       const by = actor?.name || null;
       if (answered) {
         notify?.({

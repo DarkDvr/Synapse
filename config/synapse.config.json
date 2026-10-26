@@ -3,7 +3,7 @@
     "host": "127.0.0.1",
     "port": 8700,
     "openBrowser": false,
-    "remote": true
+    "remote": false
   },
   "engine": {
     "type": "opencode",
@@ -294,7 +294,7 @@
       "focus": "app"
     },
     "architect": {
-      "ref": "opencode/deepseek-v4.1-flash-free",
+      "ref": "local/qwen3.8-27b-ud",
       "variant": "high",
       "skills": [
         "visual-review"

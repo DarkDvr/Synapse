@@ -61,6 +61,12 @@
         <span class="status-dot idle" id="eventDot"></span><span id="lastEventLabel">Last event</span>
         <span class="status-state" id="lastEvent">idle</span>
       </div>
+      <!-- Who else is looking. Two people can drive the same server, so the rail
+           has to be able to say whose window is whose. -->
+      <div class="status-row" id="viewsRow" title="Connected views, by computer name">
+        <span class="status-dot idle" id="viewsDot"></span>Views
+        <span class="status-state" id="viewsState">1</span>
+      </div>
       <div class="status-row" id="llmRow" title="A local, OpenAI-compatible model server registered in the config file">
         <span class="status-dot idle"></span>Local LLM
         <span class="status-state" id="llmState">not set</span>
@@ -223,6 +229,9 @@
               <!-- Attached files, one little panel each, above the row. Outside the
                    row so the toggle can never wrap away from the text box. -->
               <div class="attach-strip" id="attachStrip" hidden></div>
+              <!-- Why Send and the mode switch are held: the project is working,
+                   and who started it. One line, above the controls it explains. -->
+              <div class="composer-note" id="composerNote" hidden></div>
               <div class="composer-row">
                 <button type="button" class="mode-toggle" id="modeToggle" aria-pressed="false" title="Switch between Multi and Single">
                   <span class="mode-dot" aria-hidden="true"></span><span id="modeLabel">Single</span>
@@ -429,6 +438,18 @@
     <span class="restart-spin" aria-hidden="true"></span>
     <h3>Restarting Synapse</h3>
     <p id="restartState">Stopping Synapse…</p>
+  </div>
+</div>
+
+<!-- The page was cut off from the server: a laptop whose Remote Access was
+     switched off, or a connection that never came back. Everything behind this
+     is stale, so it is covered and made inert until the tab is closed. There is
+     no Escape, no backdrop click and no close by anything but the button. -->
+<div class="disconnect" id="disconnect" hidden role="alertdialog" aria-modal="true" aria-labelledby="disconnectTitle" aria-describedby="disconnectBody">
+  <div class="disconnect-card">
+    <h2 id="disconnectTitle">Disconnected</h2>
+    <p id="disconnectBody">This page is no longer connected to Synapse. Nothing on it is live any more.</p>
+    <button class="btn btn-primary" id="disconnectClose" type="button">Close</button>
   </div>
 </div>
 

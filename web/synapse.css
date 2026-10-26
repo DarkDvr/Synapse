@@ -2674,3 +2674,40 @@ body { overflow-anchor: none; }
    rather than as focus. The panel is the only thing on screen and its Close is
    one Tab away. */
 .console-body:focus, .console-body:focus-visible { outline: none; }
+
+/* ── two views: working, held, disconnected ─────────────────────────────── */
+
+/* The rail has to say a session is working without being clicked: a word beside
+   the name, not only a dot the eye skips. Amber is the "in flight" colour here,
+   the same one the project rule uses. */
+.tree-working {
+  margin-left: 6px; padding: 0 5px; border: 1px solid rgba(237, 194, 90, 0.55);
+  border-radius: 4px; color: #edc25a; font-size: 10px; letter-spacing: 0.04em;
+}
+.tree-live.on { box-shadow: 0 0 0 2px rgba(237, 194, 90, 0.18); }
+
+/* Why Send and the mode switch are held. One line, above the row it explains. */
+.composer-note {
+  margin: 0 0 8px; padding: 6px 10px; border: 1px solid rgba(237, 194, 90, 0.35);
+  border-radius: 6px; background: rgba(237, 194, 90, 0.06);
+  color: #edc25a; font-size: 12px; line-height: 1.4;
+}
+
+.mode-toggle[disabled] { opacity: 0.45; cursor: not-allowed; }
+.btn[disabled], #sendBtn[disabled] { opacity: 0.45; cursor: not-allowed; }
+
+/* A page that lost its server is a snapshot. It is covered, dimmed, and inert —
+   there is no Escape and no backdrop click, only Close. */
+body.is-disconnected .app-shell { filter: blur(2px) brightness(0.45); pointer-events: none; }
+.disconnect {
+  position: fixed; inset: 0; z-index: 9999; display: grid; place-items: center;
+  background: rgba(8, 10, 14, 0.82);
+}
+.disconnect[hidden] { display: none; }
+.disconnect-card {
+  width: min(460px, calc(100vw - 60px)); padding: 26px 28px;
+  border: 1px solid #2a2f38; border-radius: 12px; background: #151619;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6);
+}
+.disconnect-card h2 { margin: 0 0 10px; font-size: 22px; color: #fff; }
+.disconnect-card p { margin: 0 0 20px; color: #9aa2ad; line-height: 1.5; }

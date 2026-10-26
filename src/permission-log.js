@@ -26,8 +26,9 @@ export function createPermissionLog({ limit = 300 } = {}) {
     return merged;
   }
 
-  /** The operator's answer to a request the policy left to them. */
-  function answer(requestId, decision) {
+  /** The operator's answer to a request the policy left to them. `by` is the
+   *  computer it was answered from — two people can be looking at one card. */
+  function answer(requestId, decision, by = null) {
     const entry = byRequest.get(requestId);
     if (!entry) return null;
     const allowed = decision === 'once' || decision === 'always';
@@ -37,6 +38,7 @@ export function createPermissionLog({ limit = 300 } = {}) {
       asked: true,
       decided: true,
       decidedBy: 'operator',
+      answeredBy: by || null,
       answeredAt: Date.now(),
     });
   }
