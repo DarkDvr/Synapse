@@ -20,3 +20,9 @@ obj/
 
 # Vendored build caches (vendor-node.ps1, vendor-nuget.ps1) - they travel with the folder
 vendor/
+
+# The app and the deliverable zip
+Synapse.exe
+Synapse.pdb
+Synapse.exe.WebView2/
+Synapse.zip
