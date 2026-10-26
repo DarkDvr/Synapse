@@ -161,6 +161,7 @@ an agent does not know to open is a document that does not exist:
 | `docs/notes/runbook.md` | running, restarting or debugging it; anything that kills a process |
 | `docs/notes/desktop-app.md` | touching `shell\`, `Synapse.exe`, `bin\node`, npm or any dependency — the good-tenant rule, the process model, exit codes, where the console lives |
 | `docs/notes/remote-access.md` | the LAN switch, the token or the login page, or changing what the HTTP listener binds |
+| `docs/notes/multi-user.md` | two views at once — what "busy" means, who may send, Stop as the takeover, and the Settings lock |
 
 Two rules for this file. **A new lesson goes in `docs/notes/`, not here** — this
 file changes when a rule changes, not when something is learned. And if you move
