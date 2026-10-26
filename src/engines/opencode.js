@@ -708,6 +708,15 @@ export class OpenCodeEngine extends Engine {
     return Array.isArray(r?.data) ? r.data : [];
   }
 
+  /** Pending requests for one session. Needed because the global list above is
+   *  scoped to the engine's own location; a project session is a subfolder and is
+   *  simply not in it. Verified 26 Oct: the global list was empty while this one
+   *  returned the request that was blocking the turn. */
+  async listSessionPermissions(sessionId) {
+    const r = await this.request('GET', `/api/session/${encodeURIComponent(sessionId)}/permission`);
+    return Array.isArray(r?.data) ? r.data : [];
+  }
+
   /** Sessions the engine currently considers running — survives a Synapse restart. */
   async listActiveSessions() {
     const r = await this.request('GET', '/api/session/active');

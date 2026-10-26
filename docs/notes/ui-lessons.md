@@ -134,6 +134,89 @@ it as a panel **painted over the chat, anchored just above the composer**.
 
 ---
 
+## The permission card: name the role, not the AI
+
+The card sits in the transcript and the engine blocks the session until it is
+answered. It has to say, in words a person reads once: **who** is asking — the
+role's own name ("Coder 1", "The Architect"), with the task id on the right —
+**what it wants to do** ("Coder 1 wants to change a file outside this project"),
+the exact path or command, and **why** it has to ask ("Only the project may be
+changed without asking. This is not in it.").
+
+Never say "The AI", and never phrase the policy as something the operator did.
+"The AI" hides which of five roles is blocked; "outside your workspace" reads as
+the operator being somewhere they shouldn't. The policy returns a `scope`
+(project, outside, harness, secret, unknown) and role-neutral reasons, and the
+card builds the sentence with the role name in front.
+
+Every card also says **Nothing has happened yet. You can still say no.** Four
+narrow buttons stand in one row at the bottom left, each with its consequence as
+a hover tooltip — "Reject" alone does not say whether the role stops or carries
+on:
+
+| button | colour | what pressing it does |
+|---|---|---|
+| Allow Once | green | does it this time only; the next one asks again |
+| Always Allow | amber | does it, and remembers this exact path or command for the session |
+| Reject | amber | says no; the role is told and carries on |
+| Stop Run | red | ends the work, not just the request |
+
+The chip's tooltip is a sentence, not a list of labels: "Coder 1 asked to read
+F:/temp/hi.txt. You allowed it." A refusal adds the policy's reason; an allow
+does not repeat "Reading is allowed", which says nothing the decision line does.
+
+**Always Allow is ours, not the engine's.** The engine's `always` reply saves the
+request's `save` patterns for the whole project — and for an edit those patterns
+are `*`, so one click would let the AI edit anything, Synapse included. Synapse
+answers `once` and keeps its own narrow memory instead: same action, same exact
+resource, this session, and it can only turn an `ask` into an allow — never a
+`deny`.
+
+Two invariants:
+
+- **A worker's request is shown too.** Hidden from the rail is not hidden from the
+  operator: filtered to the open session, a worker's request blocked the worker
+  until its timeout with nothing on screen.
+- **An auto-answered request must not flash.** The gate answers in the same second,
+  so the card is drawn after a 200ms refresh rather than painted straight from the
+  event. A request the policy allows never appears; a real ask appears without a
+  perceptible delay.
+
+**The chip on a tool call** is the same record after the fact: it appears only
+when the call reached outside the project, green when the policy allowed it
+without asking, amber when you had to, red when it was refused. Hovering says who
+asked, what was asked, the policy's reason, and who decided. Four states have to
+stay distinct or the chip is decoration: inside the project → no chip; outside and
+auto-allowed → green; outside and answered by you → amber; refused by anyone →
+red. The record is memory only, so a restart clears the chips and nothing else.
+
+---
+
+## A model change is a repair
+
+Changing a role's model in the picker is the operator saying "this role is fixed".
+It must clear the red provider line for that role and lift the project hold —
+otherwise a Stop or a failed model outlives the fix: the picker shows a healthy
+model while every delegation is refused. The hold also lifts on an operator
+message and on keep-building on; those three are the only exits, and the model
+change is the one that used to be missing.
+
+The picker's own select has to be updated before the card is re-rendered:
+`renderRoleActivity` reads the refused mark from that value, and a stale one keeps
+the old model's red line even after the new model is saved.
+
+The ladder has the matching rule on the server: a stop or a restart is not a
+failed attempt, and a task planned for a role whose model changed starts over on
+that role instead of being stepped down to the next coder.
+
+**The ISSUES badge is not part of that.** It is the model's record, not the
+role's, and a model change does not clear it. It clears when the model delivers:
+a run that completes — the role finished its work — clears its mark, and the
+operator can clear it by hand in the picker at any time. A clean probe does not
+clear it: a test is not work.
+
+---
+
 ## UI lessons
 
 - **A worker's work is shown in the chat, in the quietest grey there is.** A
@@ -1054,9 +1137,9 @@ bold, italic, strikethrough and links: the range these models actually produce.
 
 ## Reading a mockup: it is a shape record, not a pixel source
 
-The mockups in `docs/` are **PDFs and there is no PDF renderer on this machine**
-(no `pdftoppm`, `magick`, `gswin64c`, `mutool`). Chrome renders them: open
-`file:///F:/dev/Synapse/docs/<name>.pdf` in a browser session.
+A mockup may arrive as a PDF, and there is no PDF renderer on this machine
+(no `pdftoppm`, `magick`, `gswin64c`, `mutool`). Chrome renders it: open the
+file in a browser session.
 
 ## A mode switch: two things move, and neither re-renders
 

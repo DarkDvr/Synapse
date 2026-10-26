@@ -37,6 +37,14 @@
 
     <div class="sidebar-bottom status-block">
       <div class="sidebar-label">STATUS</div>
+      <div class="status-row remote-row" title="Remote Access — let another device on this LAN open Synapse in a browser">
+        <span class="status-dot idle" id="remoteDot"></span>Remote Access
+        <button class="switch" id="remoteToggle" type="button" role="switch" aria-checked="false" aria-label="Remote access" title="Off — this PC only; click to allow the LAN"></button>
+      </div>
+      <div class="status-remote" id="remoteInfo" hidden>
+        <span id="remoteUrl"></span>
+        <button class="token-chip" id="remoteToken" type="button" title="Copy the access token" hidden>TOKEN</button>
+      </div>
       <div class="status-row" title="Runtime process state">
         <span class="status-dot idle" id="engineDot"></span>Runtime
         <!-- The console. A boxed "..." because that is what it is: the things you

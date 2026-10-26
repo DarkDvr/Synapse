@@ -599,6 +599,22 @@ export function readRuns(dir) {
   }
 }
 
+/**
+ * Delegations a previous process left open.
+ *
+ * A `delegate` record is closed by a `result` with the same callId. A process
+ * that dies mid-run leaves the delegate alone, and nothing is running after a
+ * boot — so an open record is a worker that no longer exists. Records that carry
+ * their own `outcome` (refused in Single mode, unknown task) are already settled.
+ */
+export function openDelegations(records) {
+  const list = Array.isArray(records) ? records : [];
+  const settled = new Set(
+    list.filter((r) => r && r.kind === 'result' && r.callId).map((r) => r.callId),
+  );
+  return list.filter((r) => r && r.kind === 'delegate' && r.callId && !r.outcome && !settled.has(r.callId));
+}
+
 const counts = (tasks) => {
   const out = {};
   for (const t of tasks) out[t.status] = (out[t.status] || 0) + 1;

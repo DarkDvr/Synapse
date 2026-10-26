@@ -105,7 +105,10 @@ export const PROBE_CASES = [
   {
     id: 'skill',
     tool: 'skill',
-    prompt: 'Use the skill tool to list the skills that are available to you.',
+    // The skill tool loads one named skill; there is no list action, so asking
+    // for a list got an answer and no call. Name a skill that ships with the
+    // harness, so the case tests loading and not the model's imagination.
+    prompt: 'Use the skill tool to load the skill named "code-craft", then report its first heading.',
   },
 ];
 
@@ -478,7 +481,8 @@ export function createProbe({ engine, logger, notify, scratchDir, file, modelCac
       // probe is the honest source for the *tool* half of the badge of shame.
       // Only real failures count: a tool the model was never offered is not a
       // fault (`offered === false`), because the case list asks about tools this
-      // model may simply not have.
+      // model may simply not have. A clean probe does not clear an existing mark:
+      // the badge is the operator's to clear, from the picker, and only theirs.
       const bad = state.results.filter((r) => !r.ok && r.offered !== false);
       if (modelCache && state.modelRef) {
         try {
@@ -491,10 +495,6 @@ export function createProbe({ engine, logger, notify, scratchDir, file, modelCac
                 `(${names.join(', ')}${bad.length > names.length ? ', …' : ''})`,
             });
             if (marked) notify({ kind: 'model', type: 'issues', ref: state.modelRef });
-          } else if (modelCache.clearIssueKind(state.modelRef, 'tools')) {
-            // A clean probe is the same evidence pointing the other way: the
-            // operator does not have to clear this one.
-            notify({ kind: 'model', type: 'issues', ref: state.modelRef });
           }
         } catch { /* the badge is not worth failing a probe over */ }
       }

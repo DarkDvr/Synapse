@@ -27,5 +27,8 @@ bin/
 # .NET build output (a project or the template)
 obj/
 
+# create_deliverable.bat output
+dist/
+
 # Vendored build caches (vendor-node.ps1, vendor-nuget.ps1) - they travel with the folder
 vendor/

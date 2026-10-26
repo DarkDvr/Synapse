@@ -37,8 +37,10 @@ import {
   ownedFolder,
   SHARED_DIR,
   setTaskStatus,
+  openDelegations,
 } from './plans.js';
 import { skillRules, describeSkills, roleMustLoad } from './skills.js';
+import { rulesFor } from './permissions.js';
 import { configSavedAt } from './config.js';
 import { sweepProject, sweepScratch } from './cleanup.js';
 import { classifyFailure, recordProviderError, pruneProviderLog } from './provider-errors.js';
@@ -285,17 +287,69 @@ export function outsideProject(file, dir) {
  * Attempts a task has really spent.
  *
  * A refusal is not an attempt (it is recorded without an `attempt` number), and
- * neither is a run the operator stopped: the harness did not spend that attempt,
- * the operator cancelled it. Counting stops spent t1's whole budget on two stops
- * and one real run, and the Architect was then refused the retry it needed.
+ * neither is a run that did not get to fail: the operator stopped it, or Synapse
+ * restarted under it. Counting those spent t1's whole budget on two stops and one
+ * real run, and it is what pushed t3 off coder-2 after a restart — the ladder
+ * stepped down for an interruption the role never caused.
  */
 export function countedAttempts(history, taskId) {
-  const stopped = new Set(
-    (history || []).filter((r) => r.kind === 'result' && r.outcome === 'stopped').map((r) => r.callId),
+  const unspent = new Set(
+    (history || [])
+      .filter((r) => r.kind === 'result' && (r.outcome === 'stopped' || r.outcome === 'interrupted'))
+      .map((r) => r.callId),
   );
   return (history || []).filter(
-    (r) => r.kind === 'delegate' && r.task === taskId && typeof r.attempt === 'number' && !stopped.has(r.callId),
+    (r) => r.kind === 'delegate' && r.task === taskId && typeof r.attempt === 'number' && !unspent.has(r.callId),
   ).length;
+}
+
+/** Did this finished run count as a failed attempt for the role?
+ *
+ *  Only a run that got to fail does. A completed run, an operator's Stop and a
+ *  restart are all "the role did not fail": stepping the task down for them sends
+ *  it to the next coder for a reason the coder had no part in.
+ */
+const NOT_A_FAILURE = new Set(['completed', 'stopped', 'interrupted']);
+export function attemptFailed(result) {
+  return Boolean(result && !NOT_A_FAILURE.has(String(result.outcome || '')));
+}
+
+/** Has the planned role's model changed since it last tried this task?
+ *
+ *  A task's attempts are attempts on the model it was given. When the operator
+ *  changes that role's model, the earlier failures belong to the old model: the
+ *  task starts fresh, on the role they fixed, instead of being pushed further
+ *  down a ladder for a model that is no longer selected.
+ */
+export function modelChangedSinceAttempt(history, taskId, role, ref) {
+  if (!ref) return false;
+  const modelByCall = new Map(
+    (history || []).filter((r) => r.kind === 'delegate' && r.callId).map((r) => [r.callId, r.model || null]),
+  );
+  const last = (history || [])
+    .filter((r) => r.kind === 'result' && r.task === taskId && r.role === role)
+    .pop();
+  if (!last) return false;
+  const used = modelByCall.get(last.callId);
+  return Boolean(used && used !== ref);
+}
+
+/** A role that finished its work on a marked model has proved the mark wrong.
+ *
+ *  The operator's rule: the badge clears when the model delivers, not when they
+ *  remember to clear it. Only a completed run counts — a test is not work, and a
+ *  model change is not evidence. Returns whether a mark was actually cleared.
+ */
+export function redeemModel({ outcome, modelRef, modelCache, notify, log } = {}) {
+  if (outcome !== 'completed' || !modelRef || !modelCache?.clearIssues) return false;
+  try {
+    if (!modelCache.clearIssues(modelRef)) return false;
+    notify?.({ kind: 'model', type: 'issues', ref: modelRef });
+    log?.info?.(`model ${modelRef} redeemed: a completed run cleared its issue mark`);
+    return true;
+  } catch {
+    return false; // the badge is not worth failing a run over
+  }
 }
 
 /**
@@ -628,6 +682,79 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
    * claimed, and every gate in `handleTurn` still applies — single mode, keep
    * building, an unplanned phase, the QC cap.
    */
+  /**
+   * Close the runs a previous process left open, and tell the Architect.
+   *
+   * Measured 26 Oct: t3 started, asked to write outside the project, and Synapse
+   * was restarted. The runner died before writing a result, so the record stayed
+   * open, the plan said `todo`, and the Architect's last line was "t3 is queued
+   * and waiting to run" — a worker that no longer existed. From the operator's
+   * seat the Architect was stuck waiting on them.
+   *
+   * A boot is the one place that knows the truth: nothing is running yet, so a
+   * delegate with no result was interrupted. Close it, put the task back to
+   * `todo`, hold the project so a wake cannot retry it on its own, and say what
+   * happened in the Architect's own transcript.
+   */
+  async function recoverInterrupted(dirs = []) {
+    const closed = [];
+    for (const dir of dirs || []) {
+      if (!dir) continue;
+      for (const entry of openDelegations(readRuns(dir))) {
+        appendRun(dir, {
+          kind: 'result',
+          callId: entry.callId,
+          task: entry.task,
+          title: entry.title || null,
+          role: entry.role || null,
+          plannedRole: entry.plannedRole || null,
+          worker: null,
+          outcome: 'interrupted',
+          ms: Date.now() - (Number(entry.at) || Date.now()),
+          retries: 0,
+          resumes: 0,
+          error: 'Synapse restarted while this task was running',
+          files: [],
+          text: '',
+          planTouched: false,
+          synapseTouched: [],
+          filesOutside: [],
+        });
+        setTaskStatus(dir, entry.task, 'todo');
+        hold(dir, 'interrupted by a restart');
+        closed.push({ ...entry, dir });
+        out.warn(
+          `run ${entry.task} (${entry.role || 'worker'}) was interrupted by a restart - closed, back to todo`,
+        );
+      }
+    }
+    if (!closed.length) return 0;
+
+    // One message per Architect, however many of its runs were open.
+    const byArchitect = new Map();
+    for (const entry of closed) {
+      if (!entry.architect) continue;
+      if (!byArchitect.has(entry.architect)) byArchitect.set(entry.architect, []);
+      byArchitect.get(entry.architect).push(entry);
+    }
+    for (const [architectId, list] of byArchitect) {
+      const dir = list[0].dir;
+      const what = list.map((e) => `${e.task}${e.title ? ` (${e.title})` : ''}`).join(', ');
+      try {
+        await wake(architectId, dir, {
+          description: 'run interrupted by a restart',
+          text:
+            `Synapse restarted while ${what} was running, so the worker did not finish. ` +
+            `Nothing is running now and the task is back in todo. Do not retry it on your own - ` +
+            `tell the operator it was interrupted and wait for their instruction.`,
+        });
+      } catch (err) {
+        out.warn(`could not tell the Architect about the interrupted run: ${err.message}`);
+      }
+    }
+    return closed.length;
+  }
+
   async function recoverDelegations(dirs) {
     let picked = 0;
     let sessions = [];
@@ -684,7 +811,11 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
             task: request.task,
             outcome: 'single-mode',
           });
-          log.info(`delegation refused: ${request.task} asked in Single mode`);
+          // Redemption: a role that finished its work on a marked model has proved the
+    // mark wrong. Only a completed run counts — a clean probe is a test, not work.
+    redeemModel({ outcome, modelRef, modelCache, notify, log });
+
+    log.info(`delegation refused: ${request.task} asked in Single mode`);
           await wake(sessionId, session.directory, {
             description: `delegate ${request.task} refused`,
             text:
@@ -902,14 +1033,18 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
       return;
     }
 
-    // How many times this task has actually been run — see countedAttempts.
+    const config = getConfig() || {};
+    // How many times this task has actually been run — see countedAttempts. A
+    // model change for the planned role starts the count over: the earlier
+    // failures were the old model's, and the operator has fixed it.
     const history = readRuns(dir);
-    const attempts = countedAttempts(history, task.id);
-    // What the last attempt actually achieved. Only a run that *failed* — or a
-    // coder whose model the provider has refused — moves the task down the ladder;
-    // a completed run that the Architect wants changed is the same coder's work.
+    const plannedRef = config.roles?.[task.role]?.ref || null;
+    const modelChanged = modelChangedSinceAttempt(history, task.id, task.role, plannedRef);
+    const attempts = modelChanged ? 0 : countedAttempts(history, task.id);
+    // What the last attempt actually achieved. Only a real failure moves the task
+    // down the ladder; a stop or a restart is not the role's failure.
     const previous = history.filter((r) => r.kind === 'result' && r.task === task.id).pop() || null;
-    const stepDown = Boolean(previous && previous.outcome !== 'completed');
+    const stepDown = !modelChanged && attemptFailed(previous);
     if (attempts >= MAX_ATTEMPTS) {
       appendRun(dir, {
         kind: 'delegate',
@@ -934,7 +1069,6 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
 
     // Which role gets this attempt, before anything is created: the plan's role is
     // the first rung of its ladder. See candidatesFor().
-    const config = getConfig() || {};
     const settings = workerSettings(config);
     const candidates = candidatesFor(task.role, attempts + 1, config, { stepDown });
     let role = candidates[0];
@@ -1073,12 +1207,12 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
           title: `${request.task} - ${role}`,
           model: modelRef ? { ref: modelRef, variant } : undefined,
           directory: dir,
-          // Workers carry the harness guard too: they have the same toolset as the
-          // Architect, and a worker is the most likely place for a stray absolute
-          // path — it is the one being told to write files. The role's skill list
-          // rides last so its allows beat the broad allow above.
+          // Workers carry the same permission ladder as the Architect: their run
+          // directory is the workspace, the harness is read-only, and anything
+          // outside asks. Role rules come after the ladder so a role's deny wins
+          // by being last; skills live last of all.
           permissions: [
-            ...(guard?.rules?.() || []),
+            ...rulesFor(),
             ...roleWriteRules(dir, role),
             ...roleReadRules(dir, role),
             ...skillRules(config, role),
@@ -1459,6 +1593,20 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
       synapseTouched: strayWrites,
       filesOutside,
     });
+
+    // Redemption: a role that finished its work on a marked model has proved the
+    // mark wrong. The operator's rule — the badge clears when the model delivers,
+    // not when the operator remembers to clear it. A clean probe still does not
+    // clear anything: this is work, not a test.
+    if (outcome === 'completed' && modelRef && modelCache?.clearIssues) {
+      try {
+        if (modelCache.clearIssues(modelRef)) {
+          notify?.({ kind: 'model', type: 'issues', ref: modelRef });
+          log.info(`model ${modelRef} redeemed: a completed run cleared its issue mark`);
+        }
+      } catch { /* the badge is not worth failing a run over */ }
+    }
+
     log.info(
       `delegation finished: ${request.task} (${role}) ${outcome} in ${Math.round((Date.now() - startedAt) / 1000)}s` +
         (retries ? `, ${retries} retr${retries === 1 ? 'y' : 'ies'}` : '') +
@@ -2325,10 +2473,10 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
 
   /** Nothing was running, but the operator pressed Stop: hold the project so the
    *  Architect's next turn cannot delegate the work they just stopped. */
-  function hold(dir) {
+  function hold(dir, why = 'stopped by the operator') {
     if (stoppedByOperator.has(dirKey(dir))) return false;
     stoppedByOperator.add(dirKey(dir));
-    log.warn(`run in ${dir} stopped by the operator - nothing will be delegated until they speak`);
+    log.warn(`run in ${dir} ${why} - nothing will be delegated until they speak`);
     return true;
   }
 
@@ -2352,6 +2500,16 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     return true;
   }
 
-  return { handleTurn, recoverDelegations, requestsIn, active, cancel, resume, hold, stopWithReason };
+  return {
+    handleTurn,
+    recoverDelegations,
+    recoverInterrupted,
+    requestsIn,
+    active,
+    cancel,
+    resume,
+    hold,
+    stopWithReason,
+  };
 }
 

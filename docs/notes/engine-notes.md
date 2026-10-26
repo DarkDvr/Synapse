@@ -111,6 +111,15 @@ ordinary file tools; there is no tool and no store for it.
 - **It belongs to the project, not the conversation**, so a new session
   continues the same plan. It is created empty (`{"version":1,"goal":"","tasks":[]}`)
   when a project is added and at boot for any project missing one.
+- **General is the exception: one workspace per session.** Every other project is
+  one workspace, so the plan is the project's and a new session continues it.
+  General is a scratch area and its conversations are separate pieces of work, so
+  a session created there runs in `<General>\session-<stamp>-<rand>\` with its own
+  `.synapse`; a new chat cannot inherit the previous chat's plan or files.
+  Sessions created before 26 Oct still live in General's root and share its plan.
+  **Deleting the session deletes that folder, its plan and its files** — the
+  workspace exists only for that conversation. General's root .synapse is not
+  created at boot: a project-level plan there is what leaked between sessions.
 - **`id` is required.** Delegation refers to tasks by id, and the Architect may
   rewrite the file at any time; a task without one is flagged and skipped.
 - **Titles over 80 characters are a `problem`, not a silent trim.** The pane
@@ -287,11 +296,15 @@ Non-obvious, all verified on 2.0.30:
   do not count against the cap. A refusal is a real answer, not a silent retry.
   A recoverable provider failure is not an attempt either: a task that was rate
   limited five times and then finished is on attempt 1, because nothing about the
-  task failed. **An operator stop is not an attempt either** (`countedAttempts`):
-  Fever Tracker's t1 was "attempted" three times — two of them stops by the
-  operator — so the cap was spent before the design had ever been judged, and the
-  Architect was then refused the retry it needed and had to invent a new task.
-  The harness did not spend those attempts; the operator cancelled them.
+  task failed. **An operator stop is not an attempt, and neither is a restart**
+  (`countedAttempts`): Fever Tracker's t1 was "attempted" three times — two of
+  them stops by the operator — so the cap was spent before the design had ever
+  been judged, and the Architect was then refused the retry it needed and had to
+  invent a new task. The harness did not spend those attempts; the operator
+  cancelled them, or Synapse died under the worker. For the same reason a stop or
+  a restart does not move the task down the ladder (`attemptFailed`): t3 dropped
+  from coder-2 to coder-3 because a restart interrupted it, and no change to
+  coder-2's model could bring it back.
 - **A coder that cannot do the job hands it down the line.** The three coder roles
   are peers (`worker.ladder`, default `coder-1 → coder-2 → coder-3`), and the
   harness moves the *same task* between them — the Architect cannot, because the
@@ -308,6 +321,11 @@ Non-obvious, all verified on 2.0.30:
   `slice(at + skip)`). A role whose model carries a
   provider mark is skipped from the start. A timeout does not loop: the worker may
   still have produced something, and the attempt counter moves that case next time.
+  **Changing a role's model starts the task over on that role**
+  (`modelChangedSinceAttempt`): a failure on the old model is not a reason to send
+  the task to the next coder once the operator has fixed the planned role. The
+  count and the step-down are reset for that task; a model the provider still
+  marks is skipped until the mark is cleared or another model is chosen.
   The plan's `role` is never rewritten (the Architect owns the file); the report says
   *"this attempt ran on coder-2, not coder-1 — the plan still says coder-1, judge the
   work on its merits"*, and `runs.jsonl` records `role`, `plannedRole` and `ladder`.
@@ -577,18 +595,82 @@ This cost an afternoon and is not guessable:
   not an action name at all — a rule on it denies nothing, which looks exactly
   like a working rule until you test it.
 - **`read` is an action**, so reads can be denied separately.
-- **`action:'*'` with a path denies reads too**, which is why the harness guard
-  uses it and why `.synapse` cannot (the plan and the contract are meant to be
-  read).
+- **`action:'*'` with a path denies reads too** — right for a folder nobody
+  should read, wrong for `.synapse`, which is meant to be read.
 - **`shell` and `execute` are not path-matched.** They take a command, so a
   worker can go around any path rule with a redirect. Hence
   `synapseFingerprint`/`fingerprintDiff`: the runner compares every file under
   `.synapse` before and after a worker turn and reports anything changed outside
   that role's folder as an alarm — prevention for the file tools, detection for
-  the rest, the same split as the harness watchdog. **Verified live:** a coder
-  rule refused `.synapse/probe/x.txt` twice (`write:error`, no file), while the
-  same write with an absolute path in the prompt got through — which is exactly
-  why the detection layer exists.
+  the rest. **Verified live:** a coder rule refused `.synapse/probe/x.txt` twice
+  (`write:error`, no file), while the same write with an absolute path in the
+  prompt got through — which is exactly why the detection layer exists.
+
+### The permission policy (26 Oct 2026)
+
+Three zones, one policy file, and the engine's `ask` as the hook:
+
+| | project | harness | anywhere else |
+|---|---|---|---|
+| read | allow | documents and logs (`data/`, `config/`, `.git/` denied) | allow, credential stores denied |
+| write | allow | denied, no prompt | the operator is asked |
+| shell | allow while it stays inside | toolbox scripts and read verbs; else denied | the operator is asked |
+| execute | asked | asked | asked |
+
+The ruleset is four broad asks (`edit`, `shell`, `execute`, `read`) plus the
+credential denies; `src/permission-gate.js` answers each `permission.asked` from
+`src/permissions.js` and replies `once` or `reject`. **`always` is never used
+automatically** — a saved allow would outlive the policy that granted it, and the
+next identical call must be judged again.
+
+**Always Allow is the operator's decision, so it survives a restart.** The narrow
+memory (same session, same action, same exact resources) is written through to
+`data/permission-memory.json` on every grant, capped at 500 entries, and a
+session's grants are dropped when that session is deleted. The process is not
+allowed to be the only copy of something the operator had to answer.
+
+**A refusal explains itself, through a synthetic note.** The reply body has a
+`message` field, but 2.1.2 drops it on the reject path: the tool error is always
+"The user declined this tool call". The gate follows the rejection with a
+`synthetic` message — why it was refused, that a workaround is not allowed, and
+where to escalate (a worker's report; the Architect asks the operator). Measured
+26 Oct: the model answered "…I won't attempt any alternate path or tool", which
+is the note's instruction.
+
+**Why broad asks instead of path globs.** The engine matches a path *as the model
+wrote it*, so a rule that allows `F:/.../project/**` says nothing about a relative
+`src/app.js`, and the relative twin of every "outside" rule cannot be expressed.
+Resolving both against the session's directory, in one place, judges them the
+same. The price is one local round trip per write, shell and read; the gate
+answers in the same second, and the UI waits 200ms before drawing a card so an
+auto-answered request never flashes.
+
+**Measured on 2.1.2:** `Permission.Effect` is `allow | deny | ask`; the resolver
+is `findLast`, so the last matching rule wins and a session rule beats the agent
+default; with nothing matching, the default is **ask**. The ladder is therefore
+emitted first and the mode/role rules after it — which also fixed Single's
+`subagent` deny, previously overridden by the guard's broad allow.
+
+**What the policy cannot see, and does not pretend to:**
+- a project script (`npm test`, `node build.js`) can write anywhere once it runs;
+- `grep` and `glob` are not path-gated, so they can read what the read tool
+  would be refused;
+- shell analysis is a heuristic: an unresolvable path asks, but a determined
+  wrapper can still get through;
+- **a newline separates commands.** `Test-Path D:\` on one line and
+  `Set-Content …` on the next is two statements, and each is judged on its own.
+  Missing that let a read verb on the first line excuse an outside write —
+  measured live on 26 Oct, with a model that wrote the file through a two-line
+  shell command after its write was refused.
+
+The card says who is asking (role and task, or the session title), the action,
+the resolved path, and why the policy left it to the operator. A worker's request
+must be visible even though its session is hidden from the rail — filtered to the
+open session it would block the worker until its timeout with nothing on screen.
+
+Every decision is also written against the tool call id the request came from
+(`source.id`), which is what draws the chip on that call. The log is memory only
+(`src/permission-log.js`): a restart clears the chips, not the work.
 
 **Skills are per role, and enforced.** `roles.<id>.skills` is an allowlist; the
 session gets `{action:'skill', resource:'*', deny}` plus one allow per name (the
@@ -979,6 +1061,38 @@ So Stop now does three things, and all three are needed:
    asked for" reminder stays quiet. The hold lifts when the operator speaks —
    `POST /messages` or turning keep-building on — because that message is their
    answer to "what now".
+
+**The run record is not the list of live work.** A worker can outlive a run that
+has already reported or been cancelled: the engine still lists its session as
+active, Synapse has no run left to cancel, and the Architect on screen is idle —
+so Stop looked disabled and pressing it did nothing. Stop now asks the engine for
+its active sessions and interrupts every one in the same project as the session
+it was pressed on, plus that session. `/api/pending` reports `canStop` for the
+open session's project, and the composer's Stop is enabled from that answer even
+when nothing looks busy. Measured live on 26 Oct: an idle Architect and a running
+worker in one project — `canStop=true`, one press stopped both, and the engine's
+active list was empty afterwards.
+
+## A restart is not a pause
+
+Measured 26 Oct: a worker was running t3 and waiting on a permission request when
+Synapse restarted. The runner died before writing a result. The plan said `todo`,
+the runs file still had the `delegate` line, and the Architect's last message was
+"t3 is queued and waiting to run" — so the operator was stuck waiting on a worker
+that did not exist. `recoverDelegations` only picks up requests **no turn ever
+read**; this one had been read and started.
+
+A boot is the one place that knows the truth: nothing is running yet, so a
+`delegate` with no matching `result` was interrupted. On start, every such record
+is closed with `outcome: "interrupted"`, the task goes back to `todo`, the project
+is held (so the wake cannot retry it on its own), and the Architect is told in its
+own transcript: "Synapse restarted while t3 was running… do not retry it on your
+own". Order matters: close interrupted runs **before** the unread-delegation pass,
+or that pass mistakes an interrupted run for a queued one.
+
+The invariant: **a `delegate` record is always closed by a `result`.** The runner
+writes it normally; a boot writes the interrupted one. `openDelegations()` in
+`src/plans.js` is the single definition of "open", and it is tested.
 
 A stop with *no* run in flight still holds the project: interrupting the Architect
 mid-turn is the same request, and otherwise its next turn delegates the work that

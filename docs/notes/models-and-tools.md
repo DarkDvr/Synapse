@@ -448,15 +448,15 @@ discovered toolset. `engine.listModels()` is recorded on every boot and every
   **The record never becomes policy:** the badge does not block a selection and is
   never mentioned in a brief. Deliberately, because a model can come back and
   because the operator is the one who checks.
-- **The probe marks a model that cannot drive tools, and clears its own mark.** A
-  probe run counts its *real* failures — a case whose tool the model was never
-  offered does not count (`offered === false`), since the case list asks about
-  tools a model may simply not have — and **3 or more** writes a `kind: 'tools'`
-  issue naming the tools. The threshold is 3 because a probe is one turn per case
-  against a flaky free provider, and two could be an afternoon. A later probe with
-  fewer than 3 clears that *kind* by itself (`clearIssueKind`), because a clean run
-  is the same evidence pointing the other way; a `provider` mark is never cleared
-  automatically — that one is the operator's.
+- **The probe marks a model that cannot drive tools.** A probe run counts its
+  *real* failures — a case whose tool the model was never offered does not count
+  (`offered === false`), since the case list asks about tools a model may simply
+  not have — and **3 or more** writes a `kind: 'tools'` issue naming the tools.
+  The threshold is 3 because a probe is one turn per case against a flaky free
+  provider, and two could be an afternoon. **No probe clears a mark, not even a
+  clean one.** A mark clears when the model delivers: a run that completes using
+  that model — the role finished its work — clears it, or the operator clears it
+  by hand in the picker. A test is not work, and the operator owns the record.
 - `GET /api/models/cache` exposes the raw store for debugging.
 
 ### Is there a newer engine? (`src/engine-update.js`)

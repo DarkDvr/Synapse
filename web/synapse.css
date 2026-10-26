@@ -671,6 +671,48 @@ body.dark .sidebar-bottom,
   margin-left: auto; font-family: var(--mono); font-size: 10.5px;
   color: #9aa0a8; overflow: hidden; text-overflow: ellipsis;
 }
+/* Remote Access: a two-state switch, not a button that says "On". The label is
+   the row; the switch is the state. Green only when the LAN can reach us. Only
+   while it is on does a second line appear: the address and the TOKEN chip. Off
+   has one line and no address at all. */
+.remote-row { align-items: center; }
+.remote-row .switch { margin-left: auto; }
+.switch {
+  position: relative; flex: none; width: 32px; height: 18px; padding: 0;
+  border-radius: 999px; border: 1px solid var(--line);
+  background: #24262b; cursor: pointer; transition: background .15s, border-color .15s;
+}
+.switch::after {
+  content: ""; position: absolute; top: 2px; left: 2px; width: 12px; height: 12px;
+  border-radius: 50%; background: #7d828b;
+  transition: transform .15s, background .15s;
+}
+.switch[aria-checked="true"] {
+  background: rgba(53, 192, 138, 0.18); border-color: rgba(53, 192, 138, 0.65);
+}
+.switch[aria-checked="true"]::after { transform: translateX(14px); background: var(--green); }
+.switch:disabled { opacity: .55; cursor: wait; }
+.switch:focus-visible { outline: 2px solid var(--violet); outline-offset: 2px; }
+.status-remote {
+  display: flex; align-items: center; gap: 7px; min-width: 0;
+  margin: 1px 0 3px 17px; font: 9.5px/1.6 var(--mono); color: #9aa0a8;
+}
+.status-remote[hidden] { display: none; }
+/* The address fills the row; the chip sits hard right so its edge lines up
+   with the switch's edge above it. */
+.status-remote #remoteUrl { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.status-remote .token-chip { margin-left: auto; }
+/* The token is the one thing the other PC needs; a chip says "click me", not a
+   button that competes with the switch. Yellow because it is a secret. */
+.token-chip {
+  flex: none; padding: 1px 6px; border-radius: 5px;
+  border: 1px solid rgba(237, 194, 90, 0.55); background: transparent;
+  color: var(--yellow); font: 700 8.5px/1.6 var(--mono); letter-spacing: .08em;
+  cursor: pointer;
+}
+.token-chip:hover { background: rgba(237, 194, 90, 0.1); }
+.token-chip[hidden] { display: none; }
+.token-chip:focus-visible { outline: 2px solid var(--yellow); outline-offset: 2px; }
 /* The rail's foot: two popups, in the same thin buttons a project's Browse and
    Cmd use, so the rail reads as one set of controls rather than two designs. */
 .sidebar-tools { display: flex; gap: 6px; padding: 8px 4px 2px; }
@@ -1431,6 +1473,11 @@ body[data-mode="single"] .keep-toggle { display: none; }
   color: #8a8e96; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .tool-head .tool-state { flex: none; margin-left: auto; }
+/* The permission chip sits immediately left of the state pill, and only exists
+   when the call reached outside the project. */
+.tool-perm {
+  flex: none; margin-left: auto; cursor: help; white-space: nowrap;
+}
 .tool-chev {
   flex: none; width: 10px; color: #9aa0a8; font-size: 11px; line-height: 1;
   text-align: center; transition: transform 0.15s ease;
@@ -1460,14 +1507,30 @@ body[data-mode="single"] .keep-toggle { display: none; }
   background: #241f16; border: 1px solid #5a4725;
 }
 .perm-head { display: flex; align-items: center; gap: 8px; font-size: 11.5px; font-weight: 700; color: var(--amber); }
-.perm-action { margin: 6px 0 0; font-size: 12.5px; color: var(--text); }
+.perm-who { margin-left: auto; font-weight: 600; font-size: 11px; color: #b6babf; overflow-wrap: anywhere; }
+.perm-lead { margin: 7px 0 0; font-size: 13px; line-height: 1.45; color: var(--text); }
+.perm-why { margin: 6px 0 0; font-size: 11.5px; line-height: 1.45; color: #b6babf; }
+.perm-note { margin: 7px 0 0; font-size: 11px; color: #8a8e96; }
 .perm-res {
   margin: 6px 0 0; padding: 7px 9px; border-radius: 8px;
   background: #191b1f; border: 1px solid #3a3d43; color: #b6babf;
   font-family: var(--mono); font-size: 11px; line-height: 1.45;
   white-space: pre-wrap; overflow-wrap: anywhere; max-height: 130px; overflow: auto;
 }
-.perm-actions { display: flex; gap: 7px; margin-top: 9px; flex-wrap: wrap; }
+.perm-actions { display: flex; gap: 7px; margin-top: 10px; flex-wrap: wrap; justify-content: flex-start; }
+/* Four narrow buttons in one row at the left. The background is the same neutral
+   as every other button; colour lives in the border and the label, so the row
+   reads as four actions rather than four alarm levels. */
+.perm-actions .btn { min-width: 80px; width: auto; padding: 0 10px; background: #24262b; }
+.perm-actions .btn:hover { background: #2b2e33; }
+/* Green is yes, for this one call. */
+.perm-actions .btn-allow { border-color: #26543f; color: var(--green); }
+.perm-actions .btn-allow:hover { border-color: var(--green); }
+.perm-actions .btn-stop { border-color: rgba(240, 86, 63, 0.75); color: var(--red); }
+.perm-actions .btn-stop:hover { border-color: var(--red); }
+.perm-diff { margin-top: 7px; }
+.perm-diff summary { cursor: pointer; font-size: 11.5px; color: var(--amber); }
+.perm-diff summary::marker { color: var(--amber); }
 
 /* ── the question panel ───────────────────────────────────────────────────
    A model that asks the operator something blocks the session until it is

@@ -16,6 +16,12 @@ export const WEB_DIR = path.join(ROOT, 'web');
 export const SKILLS_DIR = path.join(ROOT, 'skills');
 export const DATA_DIR = path.join(ROOT, 'data');
 export const LOGS_DIR = path.join(ROOT, 'logs');
+// "Always Allow" choices, by session. Kept on disk so a restart does not make the
+// operator answer the same exact request again.
+export const PERMISSION_MEMORY_FILE = path.join(DATA_DIR, 'permission-memory.json');
+// The LAN access token. A password for this PC, so it lives with runtime state,
+// not in the committed config.
+export const REMOTE_TOKEN_FILE = path.join(DATA_DIR, 'remote-token');
 // A copy of the runtime that travels WITH Synapse. When it is present it is what
 // the app runs, so a machine with no npm and no global install still works: copy
 // the folder, and the engine comes along. `vendor-engine.ps1` puts it here.

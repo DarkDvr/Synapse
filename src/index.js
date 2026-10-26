@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn, execFile } from 'node:child_process';
-import { DATA_DIR, LOGS_DIR, WORKSPACE_DIR, GENERAL_DIR, ENGINE_HOME, PID_FILE, PROJECTS_FILE, TOOL_STATS_FILE, PROBE_DIR, PROBE_FILE, MODEL_CACHE_FILE, NPM_ATTEMPT_FILE, ROOT } from './paths.js';
+import { DATA_DIR, LOGS_DIR, WORKSPACE_DIR, GENERAL_DIR, ENGINE_HOME, PID_FILE, PROJECTS_FILE, TOOL_STATS_FILE, PROBE_DIR, PROBE_FILE, MODEL_CACHE_FILE, NPM_ATTEMPT_FILE, PERMISSION_MEMORY_FILE, REMOTE_TOKEN_FILE, ROOT } from './paths.js';
 import { loadConfig, saveConfig, repairMachinePaths } from './config.js';
 import { logger } from './logger.js';
 import { createEngine } from './engines/index.js';
@@ -13,6 +13,12 @@ import { ensurePlan, readPlan, logPlanState } from './plans.js';
 import { createRunner } from './runs.js';
 import { createEngineUpdate } from './engine-update.js';
 import { createHarnessGuard } from './harness.js';
+import { createPermissionGate } from './permission-gate.js';
+import { createPermissionMemory } from './permission-memory.js';
+import { createRemoteToken, lanAddresses } from './remote.js';
+import { createPermissionLog } from './permission-log.js';
+import { rulesFor, SINGLE_RULES } from './permissions.js';
+import { skillRules } from './skills.js';
 import { createProbe, discoverToolsetForModel } from './probe.js';
 import { createModelCache, MAX_TOOL_ASKS } from './modelcache.js';
 import { createApi } from './api.js';
@@ -137,6 +143,10 @@ async function main() {
   // point than a missing one, and it makes the file discoverable.
   for (const project of projects.list()) {
     if (!project.exists) continue;
+    // General has no project-level plan: every session there gets its own folder
+    // and plan. Creating one at the root is what made a new session inherit the
+    // previous session's plan.
+    if (project.general) continue;
     const made = ensurePlan(project.directory);
     if (made.created) app.info(`plan file created: ${made.path}`);
   }
@@ -210,6 +220,57 @@ async function main() {
     logger,
     notify: (ev) => http?.broadcast({ ...ev, ts: Date.now() }),
   });
+
+  // The policy behind every `ask` the engine raises. It answers in the same
+  // second when the request is inside the workspace, is a harness read, or is a
+  // harness write (no); anything else is left on screen for the operator.
+  //
+  // Every decision is also recorded against the tool call it belongs to: that is
+  // what puts the chip on the call, green when the policy allowed it, yellow when
+  // the operator did, red when it was refused.
+  const permissionLog = createPermissionLog();
+  // "Always Allow" is the operator's decision, so it outlives the process: the
+  // memory is written to data\permission-memory.json and read back at boot.
+  const permissionMemory = createPermissionMemory({ file: PERMISSION_MEMORY_FILE, logger });
+  const permissionGate = createPermissionGate({
+    engine,
+    logger,
+    root: ROOT,
+    memory: permissionMemory,
+    onDecision: (entry) => {
+      permissionLog.record(entry);
+      if (entry.decided) {
+        http?.broadcast({ kind: 'permission', type: 'permission.decided', decision: entry, ts: Date.now() });
+      }
+    },
+  });
+  app.info('permissions: workspace free, harness read-only, everything else asks the operator');
+
+  // Sessions created before this boot carry the previous ruleset — the old guard
+  // denied the harness and allowed the rest of the machine. Bring the operator's
+  // sessions under the policy now, but leave hidden worker sessions alone: a run
+  // sets its own rules when it starts, and nothing is running across a boot.
+  {
+    const t = setTimeout(async () => {
+      try {
+        const sessions = await engine.listSessions();
+        let n = 0;
+        for (const s of sessions) {
+          if (!s?.id || s.internal) continue;
+          await engine.updateSessionPermissions(s.id, [
+            ...rulesFor(),
+            ...(s.single ? SINGLE_RULES : []),
+            ...skillRules(getConfig(), 'architect'),
+          ]);
+          n += 1;
+        }
+        if (n) app.info(`permissions: ${n} existing session(s) brought under the policy`);
+      } catch (err) {
+        app.warn(`could not bring existing sessions under the policy: ${err.message}`);
+      }
+    }, 5000);
+    t.unref?.();
+  }
 
   // Per-model knowledge. Created before the runner because a run that fails
   // leaves a mark on the model it ran on — that is the picker's badge of shame,
@@ -429,6 +490,9 @@ async function main() {
   engine.on('event', (ev) => {
     const type = ev?.type;
     if (!ev?.sessionId) return;
+    // A blocking permission request is judged before anything else: the engine
+    // is holding a tool until someone answers.
+    permissionGate.handle(ev);
     watchFirstToken(ev);
     if (type === 'session.execution.succeeded') titler.maybeTitle(ev.sessionId);
     if (/^session\.execution\.(succeeded|failed|interrupted)$/.test(type)) afterTurn(ev.sessionId, type);
@@ -439,19 +503,28 @@ async function main() {
     t.unref?.();
   }
 
-  // A delegation is read when its turn ends. If Synapse stopped before that turn
-  // did — a question was pending, the engine cancelled it on restart — the request
-  // is in the transcript, answered "Queued", and nobody will ever run it. One pass
-  // shortly after boot, once the engine is answering, is enough to notice.
+  // Two kinds of unfinished delegation survive a restart, and they need opposite
+  // treatment. A request no turn ever read is still in the transcript, answered
+  // "Queued": read it and run it. A request that *was* read started a worker, and
+  // the process died before its result was written: nothing is running now, so
+  // close it, put the task back to todo, and tell the Architect — otherwise it
+  // waits for a worker that no longer exists. Close first, so the transcript pass
+  // cannot mistake an interrupted run for a queued one.
   {
-    const t = setTimeout(() => {
+    const t = setTimeout(async () => {
       const dirs = projects.list().filter((p) => p.exists).map((p) => p.directory);
-      runner
-        .recoverDelegations(dirs)
-        .then((n) => {
-          if (n) app.warn(`picked up ${n} delegation${n === 1 ? '' : 's'} no turn had read`);
-        })
-        .catch((err) => app.warn(`could not check for unread delegations: ${err.message}`));
+      try {
+        const closed = await runner.recoverInterrupted(dirs);
+        if (closed) app.warn(`closed ${closed} run${closed === 1 ? '' : 's'} interrupted by a restart`);
+      } catch (err) {
+        app.warn(`could not close interrupted runs: ${err.message}`);
+      }
+      try {
+        const n = await runner.recoverDelegations(dirs);
+        if (n) app.warn(`picked up ${n} delegation${n === 1 ? '' : 's'} no turn had read`);
+      } catch (err) {
+        app.warn(`could not check for unread delegations: ${err.message}`);
+      }
     }, 5000);
     t.unref?.();
   }
@@ -471,6 +544,37 @@ async function main() {
       })
       .catch((err) => app.warn(`model cache refresh failed: ${err.message}`));
   }
+
+  // ── remote access (LAN) ──────────────────────────────────────
+  // The token is a password for this PC, so it lives in data\, not the config.
+  // The listener stays on loopback until STATUS > Remote Access is switched on.
+  const remoteToken = createRemoteToken({ file: REMOTE_TOKEN_FILE, logger });
+  const remote = {
+    token: remoteToken,
+    enabled: () => Boolean(currentConfig.server.remote),
+    bindHost: () => (currentConfig.server.remote ? '0.0.0.0' : currentConfig.server.host),
+    status: (local = false) => {
+      const port = currentConfig.server.port;
+      const addresses = lanAddresses().map((entry) => entry.address);
+      const url = addresses.length ? `http://${addresses[0]}:${port}` : null;
+      return {
+        enabled: Boolean(currentConfig.server.remote),
+        port,
+        url,
+        addresses,
+        // The token is a password. Only the PC itself may be given it; a LAN
+        // client gets null and types it into the login page.
+        token: local ? remoteToken : null,
+      };
+    },
+  };
+  const onRemote = async (enabled) => {
+    currentConfig = applyConfig({ ...currentConfig, server: { ...currentConfig.server, remote: Boolean(enabled) } });
+    const state = remote.status(true);
+    app.info(`remote access ${state.enabled ? 'on' : 'off'}${state.enabled && state.url ? ` — ${state.url}` : ''}`);
+    if (state.enabled && !state.url) app.warn('remote access is on, but no private LAN address was found');
+    return state;
+  };
 
   // ── http ─────────────────────────────────────────────────────
   const api = createApi({
@@ -495,13 +599,26 @@ async function main() {
     // left behind for a kill to orphan.
     stopSelf: requestShutdown,
     notify: (ev) => http?.broadcast({ ...ev, ts: Date.now() }),
-    guard,
+    permissionLog,
+    permissionGate,
+    permissionMemory,
   });
-  http = createServer({ api, engine, logger, config: getConfig() });
-  await http.listen();
+  http = createServer({
+    api,
+    engine,
+    logger,
+    config: getConfig(),
+    remote,
+    onRemote,
+  });
+  await http.listen(remote.bindHost());
 
   const url = `http://${currentConfig.server.host}:${currentConfig.server.port}`;
   app.info(`UI ready at ${url}`);
+  if (currentConfig.server.remote) {
+    const state = remote.status(true);
+    app.info(`remote access: on${state.url ? ` — ${state.url}` : ' (no private LAN address found)'}`);
+  }
   app.info('----------------------------------------------');
 
   if (currentConfig.server.openBrowser && process.env.SYNAPSE_SUPERVISED !== '1') openBrowser(url);

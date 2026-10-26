@@ -67,6 +67,11 @@ the cards and the commits, not the code. One reason per sentence, not a chain.
 7. **No code-crutches.** Do not fake capability. If something cannot be done,
    say so rather than drawing a mock that implies it works. Never print secrets
    or tokens.
+8. **A model touches its project, reads the harness, and asks for the rest.**
+   `src/permissions.js` decides and the engine enforces: writes and commands
+   outside the project directory ask the operator, writes inside the harness
+   never happen, and credential stores are refused. Do not widen a zone in a
+   brief or a config — change the policy and its tests.
 
 ### Palette (do not break this)
 
@@ -155,7 +160,7 @@ an agent does not know to open is a document that does not exist:
 | `docs/notes/ui-lessons.md` | touching `web/` — layout invariants, the chat dock, the ask panel, the cards and the picker, with the measurements that prove them |
 | `docs/notes/runbook.md` | running, restarting or debugging it; anything that kills a process |
 | `docs/notes/desktop-app.md` | touching `shell\`, `Synapse.exe`, `bin\node`, npm or any dependency — the good-tenant rule, the process model, exit codes, where the console lives |
-| `docs/notes/handover.md` | picking this up mid-stream — the chat dock's state of play, its instruments, the dead ends, and what is still open. Delete it when those items close |
+| `docs/notes/remote-access.md` | the LAN switch, the token or the login page, or changing what the HTTP listener binds |
 
 Two rules for this file. **A new lesson goes in `docs/notes/`, not here** — this
 file changes when a rule changes, not when something is learned. And if you move
@@ -235,13 +240,10 @@ data/                 runtime state (projects, census, probe results, engine hom
 logs/                 one file per channel: app, engine, session, tools
 bin/opencode/         a copy of the runtime that travels with the app (not in git;
                       vendor-engine.ps1 puts it there, ~210 MB, with its licence)
-docs/                 design mockups (*.pdf) and the detail behind this file
-  notes/              engine-notes, models-and-tools, ui-lessons, runbook
+docs/                 the detail behind this file
+  notes/              engine-notes, models-and-tools, runtime-scope, ui-lessons,
+                      runbook, desktop-app, remote-access
 ```
-
-**The mockups are PDFs and there is no PDF renderer here**: a mockup is a *shape*
-record, not a pixel source. How to open one, and why the numbers are measured
-live: `docs/notes/ui-lessons.md`.
 
 **`web/vendor/summit.css` is a locked baseline.** The only edit ever made to it
 is line 1: the Google Fonts `@import` was replaced with a comment, because
@@ -278,11 +280,6 @@ update dialog (see `docs/notes/models-and-tools.md`) is the fix.
 | `GET /api/session/active` | the authority on what is running; survives a restart. `GET /api/project` returns a bare array, not `{data:…}`. |
 
 ---
-
-## Open items
-
-Kept in `docs/notes/handover.md` while that file exists — it changes weekly, this file does not.
-Two are long-standing: the per-session Tools-in-Use feed (3.4), and no target picker in the composer.
 
 ## Lessons that cost a day each
 

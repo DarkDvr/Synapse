@@ -4,6 +4,7 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { WEB_DIR } from './paths.js';
+import { isLoopback, isPrivateAddress, parseCookies, tokenMatches, loginPage, REMOTE_COOKIE } from './remote.js';
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -50,7 +51,7 @@ function readBody(req, limit = 2 * 1024 * 1024) {
   });
 }
 
-export function createServer({ api, engine, logger, config }) {
+export function createServer({ api, engine, logger, config, remote, onRemote }) {
   const app = logger.channel('app');
   const sseClients = new Set();
 
@@ -71,6 +72,29 @@ export function createServer({ api, engine, logger, config }) {
     res.writeHead(code, { 'content-type': 'application/json; charset=utf-8', 'content-length': Buffer.byteLength(body) });
     res.end(body);
   };
+
+  const addressOf = (req) => req.socket.remoteAddress || '';
+
+  /** The login page, and the one place a token becomes a cookie. */
+  function handleLogin(req, res, query) {
+    const supplied = query?.get('token') || '';
+    if (supplied && tokenMatches(supplied, remote?.token)) {
+      res.writeHead(302, {
+        'set-cookie': `${REMOTE_COOKIE}=${encodeURIComponent(remote.token)}; HttpOnly; SameSite=Strict; Path=/; Max-Age=2592000`,
+        location: '/',
+      });
+      res.end();
+      return;
+    }
+    const html = loginPage({ error: supplied ? 'That token is not valid. Copy the link from the host PC and try again.' : '' });
+    res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
+    res.end(html);
+  }
+
+  function denyRemote(res, message) {
+    res.writeHead(403, { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store' });
+    res.end(message);
+  }
 
   function serveStatic(res, pathname) {
     let rel = decodeURIComponent(pathname);
@@ -119,6 +143,22 @@ export function createServer({ api, engine, logger, config }) {
 
     // GET /api/status
     if (seg[0] === 'status' && method === 'GET') return sendJson(res, 200, await api.status());
+    // GET|POST /api/remote — the STATUS > Remote Access switch. GET includes the
+    // one-click link only for the host itself; a LAN client never receives it.
+    if (seg[0] === 'remote' && seg.length === 1) {
+      if (method === 'GET') return sendJson(res, 200, remote.status(isLoopback(addressOf(req))));
+      if (method === 'POST') {
+        const body = await readBody(req);
+        const status = await onRemote(body?.enabled === true);
+        // Answer first: the listener has to close the sockets before it can move
+        // to the other interface, and this response must be on the wire by then.
+        sendJson(res, 200, status);
+        setTimeout(() => {
+          relisten(remote.bindHost()).catch((err) => app.error(`remote access listener could not move: ${err.message}`));
+        }, 150);
+        return;
+      }
+    }
     // GET /api/toolchain — what this PC can build (Settings → Windows)
     if (seg[0] === 'toolchain' && method === 'GET') {
       return sendJson(res, 200, await api.toolchain({ force: query?.get('force') === '1' }));
@@ -174,10 +214,21 @@ export function createServer({ api, engine, logger, config }) {
       return sendJson(res, 200, await api.pending(query?.get('session') || null));
     }
 
+    // GET /api/permissions?session= — decisions for the permission chip. A page
+    // opened after the fact asks here; live ones arrive on the stream.
+    if (seg[0] === 'permissions' && seg.length === 1 && method === 'GET') {
+      return sendJson(res, 200, await api.permissionDecisions(query?.get('session') || null));
+    }
+
     // GET /api/runs — delegated work in flight (the live path + role cards)
     if (seg[0] === 'runs' && method === 'GET') return sendJson(res, 200, await api.runs());
     if (seg[0] === 'runs' && seg[1] === 'cancel' && method === 'POST') {
       return sendJson(res, 200, await api.cancelRun(await readBody(req)));
+    }
+    // POST /api/runs/resume — the operator fixed what was refused; a stopped
+    // project may take tasks again. Called after a role's model is changed.
+    if (seg[0] === 'runs' && seg[1] === 'resume' && method === 'POST') {
+      return sendJson(res, 200, await api.resumeRuns(await readBody(req)));
     }
 
     // GET /api/tools/stats — the tool-call census · POST /api/tools/reset — clear it
@@ -249,7 +300,21 @@ export function createServer({ api, engine, logger, config }) {
   const server = http.createServer(async (req, res) => {
     const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
     const pathname = url.pathname;
+    const address = addressOf(req);
     try {
+      // The login page is the only thing a remote browser may see before it has
+      // the token. Everything else — API and static UI alike — needs the cookie.
+      if (pathname === '/login') return handleLogin(req, res, url.searchParams);
+      if (!isLoopback(address)) {
+        if (!remote?.enabled()) return denyRemote(res, 'Remote access is off on this PC.');
+        if (!isPrivateAddress(address)) return denyRemote(res, 'Remote access is limited to the local network.');
+        const cookies = parseCookies(req.headers.cookie);
+        if (!tokenMatches(cookies[REMOTE_COOKIE], remote.token)) {
+          if (pathname.startsWith('/api/')) return sendJson(res, 401, { error: 'remote access requires the link from the host PC' });
+          res.writeHead(302, { location: '/login' });
+          return res.end();
+        }
+      }
       if (pathname.startsWith('/api/')) return await handleApi(req, res, pathname, url.searchParams);
       return serveStatic(res, pathname);
     } catch (err) {
@@ -260,16 +325,42 @@ export function createServer({ api, engine, logger, config }) {
     }
   });
 
+  const listen = (host) => new Promise((resolve, reject) => {
+    const onError = (err) => {
+      server.off('error', onError);
+      reject(err);
+    };
+    server.once('error', onError);
+    server.listen(config.server.port, host, () => {
+      server.off('error', onError);
+      resolve();
+    });
+  });
+
+  /**
+   * Move the listener between loopback and the LAN. Closing the old server would
+   * otherwise wait for the SSE connections, which never end on their own, so the
+   * sockets are closed first; browsers reconnect. The API answers before this is
+   * called, so the switch's own response is already delivered.
+   */
+  const relisten = async (host) => {
+    if (!server.listening) return listen(host);
+    await new Promise((resolve) => {
+      server.close(() => resolve());
+      try { server.closeAllConnections?.(); } catch { /* Node without it: close still runs */ }
+    });
+    return listen(host);
+  };
+
   return {
     server,
     broadcast,
-    listen: () => new Promise((resolve, reject) => {
-      server.once('error', reject);
-      server.listen(config.server.port, config.server.host, () => resolve());
-    }),
+    listen,
+    relisten,
     close: () => new Promise((resolve) => {
       for (const res of sseClients) { try { res.end(); } catch { /* ignore */ } }
       sseClients.clear();
+      try { server.closeAllConnections?.(); } catch { /* ignore */ }
       server.close(() => resolve());
     }),
   };

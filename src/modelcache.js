@@ -164,20 +164,6 @@ export function createModelCache({ logger, file }) {
     return true;
   }
 
-  /** Drop one kind of complaint, leaving the others. A probe that comes back
-   *  clean is the same evidence pointing the other way, so it clears its own
-   *  mark without asking the operator. */
-  function clearIssueKind(ref, kind) {
-    const rec = ref ? data.models[ref] : null;
-    if (!rec?.issues?.length) return false;
-    const kept = rec.issues.filter((i) => i.kind !== kind);
-    if (kept.length === rec.issues.length) return false;
-    if (kept.length) rec.issues = kept;
-    else delete rec.issues;
-    persist();
-    return true;
-  }
-
   /**
    * A provider refused a prompt of this size: the real window is smaller than it.
    *
@@ -198,5 +184,5 @@ export function createModelCache({ logger, file }) {
     return true;
   }
 
-  return { record, get, setTools, isChecked, attempts, resetAsks, noteIssue, clearIssues, clearIssueKind, noteContext, snapshot: () => data };
+  return { record, get, setTools, isChecked, attempts, resetAsks, noteIssue, clearIssues, noteContext, snapshot: () => data };
 }

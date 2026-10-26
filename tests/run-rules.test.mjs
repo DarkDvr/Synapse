@@ -15,7 +15,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { readPlan, briefSession, appendAnswers } from '../src/plans.js';
-import { contextStats, windowRoom, windowAction, steerDue, nextRung, countedAttempts, promptSize, compactionEvents, compactionMessages, resolveWindow, engineCompactAt, watchdogRoom } from '../src/runs.js';
+import { contextStats, windowRoom, windowAction, steerDue, nextRung, countedAttempts, attemptFailed, modelChangedSinceAttempt, redeemModel, promptSize, compactionEvents, compactionMessages, resolveWindow, engineCompactAt, watchdogRoom } from '../src/runs.js';
 import { createHarnessGuard } from '../src/harness.js';
 
 const checks = [];
@@ -316,6 +316,65 @@ try {
     countedAttempts([{ kind: 'delegate', callId: 'r1', task: 't1', outcome: 'too-many-attempts' }], 't1') === 0,
   );
   expect('another task does not count', countedAttempts([at(1), res(1, 'completed')], 't2') === 0);
+  expect(
+    'a restart is not an attempt: the role never got to fail',
+    countedAttempts([at(1), res(1, 'interrupted')], 't1') === 0,
+  );
+  expect(
+    'a restart does not step the task down',
+    attemptFailed({ outcome: 'interrupted' }) === false,
+  );
+  expect('nor does an operator stop', attemptFailed({ outcome: 'stopped' }) === false);
+  expect('a real failure does', attemptFailed({ outcome: 'failed' }) === true);
+  expect('a completion does not', attemptFailed({ outcome: 'completed' }) === false);
+  expect('nothing previous does not', attemptFailed(null) === false);
+
+  // A model change is the operator fixing the role: the task starts over on it.
+  const del = (n, model, role = 'coder-1') => ({ kind: 'delegate', callId: `d${n}`, task: 't1', role, attempt: n, model });
+  const fail = (n, role = 'coder-1') => ({ kind: 'result', callId: `d${n}`, task: 't1', role, outcome: 'failed' });
+  expect(
+    'a new model for the planned role resets its attempts',
+    modelChangedSinceAttempt([del(1, 'a/x'), fail(1)], 't1', 'coder-1', 'b/y') === true,
+  );
+  expect(
+    'the same model does not reset',
+    modelChangedSinceAttempt([del(1, 'a/x'), fail(1)], 't1', 'coder-1', 'a/x') === false,
+  );
+  expect(
+    'a task never tried has nothing to reset',
+    modelChangedSinceAttempt([], 't1', 'coder-1', 'b/y') === false,
+  );
+  expect(
+    'another role does not reset this one',
+    modelChangedSinceAttempt([del(1, 'a/x', 'coder-2'), fail(1, 'coder-2')], 't1', 'coder-1', 'b/y') === false,
+  );
+  expect(
+    'no current model means nothing to compare',
+    modelChangedSinceAttempt([del(1, 'a/x'), fail(1)], 't1', 'coder-1', null) === false,
+  );
+
+  // Redemption: a completed run clears the model's mark; nothing else does.
+  let cleared = null;
+  const cache = { clearIssues: (ref) => { cleared = ref; return true; } };
+  const notes = [];
+  expect(
+    'a completed run redeems its model',
+    redeemModel({ outcome: 'completed', modelRef: 'a/b', modelCache: cache, notify: (e) => notes.push(e) }) === true &&
+      cleared === 'a/b' && notes.length === 1,
+  );
+  cleared = null;
+  expect(
+    'a failed run does not',
+    redeemModel({ outcome: 'failed', modelRef: 'a/b', modelCache: cache }) === false && cleared === null,
+  );
+  expect(
+    'no model is nothing to redeem',
+    redeemModel({ outcome: 'completed', modelRef: null, modelCache: cache }) === false,
+  );
+  expect(
+    'a model with no mark is not a redemption',
+    redeemModel({ outcome: 'completed', modelRef: 'a/b', modelCache: { clearIssues: () => false } }) === false,
+  );
 }
 
 // ── the context numbers ─────────────────────────────────────────

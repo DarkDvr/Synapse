@@ -71,6 +71,10 @@ export class Engine extends EventEmitter {
   async listActiveSessions() { return []; }
   /** Pending permission requests (a tool waiting for a yes/no). */
   async listPendingPermissions() { return []; }
+  /** Pending permission requests for one session. The engine's global list is
+   *  scoped to its own location, so a session in a project subfolder is not in
+   *  it — the same reason forms are asked for per session. */
+  async listSessionPermissions() { return []; }
   /** Pending forms (an agent waiting for structured input). */
   async listForms() { return []; }
   async replyForm() { throw new Error(`${this.kind}: replyForm() not implemented`); }

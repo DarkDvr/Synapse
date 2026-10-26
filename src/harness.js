@@ -1,9 +1,9 @@
-// Protecting the harness's own files from the models it runs.
+// Watching the harness's own files while models run.
 //
-// Three mechanisms, because they fail differently:
+// The permission ruleset (src/permissions.js) is the prevention: every write
+// asks, and a write inside the harness is refused. This file is the detection
+// behind it, because prevention has holes a path rule cannot see. Two:
 //
-//   rules()    prevention. A per-session permission ruleset the engine evaluates
-//              before a tool runs: anything the harness owns is denied outright.
 //   inspect()  detection, attributed. A write or an edit tool call that names a
 //              path inside the harness. It reads the transcript Synapse already
 //              fetched, so it costs nothing and cannot slow a turn down.
@@ -12,7 +12,7 @@
 //              before happened while nobody was looking, however it happened — a
 //              shell redirect, a tool the ruleset does not cover.
 //
-// None of them can undo a write. The restore points are ordinary git commits in
+// Neither can undo a write. The restore points are ordinary git commits in
 // the harness repository (`snapshot()` before each delegation), which is the other
 // reason a project never lives inside the harness: a `git add -u` here can never
 // stage a project's deliverables, because none of them are in this repository.
@@ -147,20 +147,6 @@ export function createHarnessGuard({ root, logger, notify }) {
   };
 
   /**
-   * The ruleset every session carries: everything allowed, the harness denied.
-   *
-   * Order matters — the engine takes the LAST matching rule — so the broad allow
-   * comes first and the harness deny after it, and the harness rule wins for any
-   * path under the harness whatever the action. Appending this to a session's own
-   * rules (Single's `subagent` deny, Multi's empty set) rather than replacing them
-   * is what keeps the mode switch and this guard independent of each other.
-   */
-  const rules = () => [
-    { action: '*', resource: '*', effect: 'allow' },
-    { action: '*', resource: `${root.replace(/\\/g, '/')}/**`, effect: 'deny' },
-  ];
-
-  /**
    * What a transcript touched inside the harness. Only write-shaped tools name a
    * path, so those are reported as writes. A shell command is split in two: one
    * that could change the harness is reported verbatim, because reading it is
@@ -198,8 +184,21 @@ export function createHarnessGuard({ root, logger, notify }) {
   }
 
   /** Report a turn's own tool calls. Cheap: the caller already has the messages. */
+  const checked = new Map(); // sessionId -> Set of message ids already inspected
+
   function checkTurn({ sessionId, messages, label }) {
-    const { writes, shells, reads } = inspect(messages);
+    // Every finished turn is handed the whole transcript, so a call from an hour
+    // ago arrived again on every later turn and rang the same alarm each time
+    // (measured 26 Oct: three identical alarms for one command). The alarm is
+    // about a call, not about how many turns have finished since it.
+    let seen = checked.get(sessionId);
+    if (!seen) {
+      seen = new Set();
+      checked.set(sessionId, seen);
+    }
+    const fresh = (messages || []).filter((message) => !message?.id || !seen.has(message.id));
+    for (const message of messages || []) if (message?.id) seen.add(message.id);
+    const { writes, shells, reads } = inspect(fresh);
     if (writes.length) alarm({ sessionId, what: 'WRITE INSIDE THE HARNESS', paths: writes, note: label });
     if (shells.length) {
       alarm({ sessionId, what: 'shell command naming the harness', paths: shells, note: label });
@@ -255,5 +254,5 @@ export function createHarnessGuard({ root, logger, notify }) {
     return String(after).split('\n').filter((line) => line.trim() && !had.has(line));
   };
 
-  return { rules, inspect, checkTurn, alarm, snapshot, state, changed, inHarness };
+  return { inspect, checkTurn, alarm, snapshot, state, changed, inHarness };
 }

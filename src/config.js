@@ -11,6 +11,9 @@ export const DEFAULTS = {
     host: '127.0.0.1',
     port: 8700,
     openBrowser: true,
+    // Let other devices on this LAN open the UI in a browser. Off by default;
+    // the listener binds loopback until the operator turns it on.
+    remote: false,
   },
   engine: {
     type: 'opencode',
@@ -187,6 +190,8 @@ export function normalize(raw) {
   cfg.server.host = String(cfg.server.host || '127.0.0.1');
   cfg.server.port = clampInt(cfg.server.port, 1, 65535, 8700);
   cfg.server.openBrowser = cfg.server.openBrowser !== false;
+  cfg.server.remote = cfg.server.remote === true;
+  cfg.server.remote = cfg.server.remote === true;
   cfg.tools = cfg.tools || {};
   cfg.tools.resetOnBoot = cfg.tools.resetOnBoot !== false;
   // Panel colours were an experiment and are gone: every speaker now gets the

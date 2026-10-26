@@ -6,7 +6,9 @@ import { spawn } from 'node:child_process';
 import { TBD_TITLE } from './titles.js';
 import { ensurePlan, readPlan, readRuns, briefSession, logPlanState, BRIEF_KEY, appendRequirement, appendAnswers } from './plans.js';
 import { skillRules, describeSkills } from './skills.js';
-import { PROJECTS_ROOT, SKILLS_DIR, ROOT } from './paths.js';
+import { rulesFor, decide, resolvePath, refusalNote } from './permissions.js';
+import { stopTargets } from './stop.js';
+import { PROJECTS_ROOT, SKILLS_DIR, GENERAL_DIR, ROOT } from './paths.js';
 import { mayRecycleFolder } from './projects.js';
 import { fetchProviderModels } from './providers.js';
 import { providerId } from './providers.js';
@@ -137,7 +139,7 @@ export function normalizeAttachments(list) {
   return out;
 }
 
-export function createApi({ getConfig, applyConfig, engine, logger, getBootError, projects, toolStats, probe, modelCache, inspectModel: inspectRef, probeDir, runs, engineUpdate, restart, stopSelf, notify, guard }) {
+export function createApi({ getConfig, applyConfig, engine, logger, getBootError, projects, toolStats, probe, modelCache, inspectModel: inspectRef, probeDir, runs, engineUpdate, restart, stopSelf, notify, permissionLog, permissionGate, permissionMemory }) {
   const app = logger.channel('app');
 
   // The last brief we handed each session, so an unchanged plan does not PUT
@@ -256,6 +258,18 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
     }
     return list;
   }
+
+  /**
+   * A General session's workspace is that conversation's folder. Deleting the
+   * session must take it; a project session's folder is the project and is never
+   * touched. The name check is the guard: only a folder Synapse itself created
+   * for a session qualifies.
+   */
+  const isGeneralSessionDir = (dir) => {
+    const d = path.resolve(String(dir || ''));
+    const root = path.resolve(GENERAL_DIR);
+    return d !== root && d.startsWith(`${root}${path.sep}`) && /^session-[a-z0-9-]+$/i.test(path.basename(d));
+  };
 
   const toClientConfig = (cfg) => {
     const c = structuredClone(cfg);
@@ -678,6 +692,18 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
       return { ok: Boolean(runs?.cancel?.(directory)) };
     },
 
+    /**
+     * POST /api/runs/resume — the operator has acted, so a stopped project may run
+     * again. The message path already does this, and so does turning keep-building
+     * on; a model change is the third kind of "I fixed it": the thing that was
+     * refused has been replaced, and the hold has no reason to outlive it.
+     */
+    resumeRuns: async ({ dir } = {}) => {
+      const directory = String(dir || '').trim();
+      if (!directory) return { ok: false, resumed: false };
+      return { ok: true, resumed: Boolean(runs?.resume?.(directory)) };
+    },
+
     // ── projects ─────────────────────────────────────────────
     projects: async () => ({ projects: await projectsWithSessions() }),
 
@@ -942,24 +968,46 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
         err.status = 404;
         throw err;
       }
+      // General is a scratch project, and a conversation there is its own piece of
+      // work: each session gets a folder inside General, so its plan and files are
+      // not the previous chat's. Every other project is one workspace, where the
+      // plan is the project's — the whole design. Measured 26 Oct: a new General
+      // session showed the plan from the last one because both ran in the same
+      // folder.
+      let location = project.directory;
+      if (project.general) {
+        const folder = path.join(
+          project.directory,
+          `session-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+        );
+        try {
+          fs.mkdirSync(folder, { recursive: true });
+          ensurePlan(folder);
+          location = folder;
+          app.info(`General session workspace: ${folder}`);
+        } catch (err) {
+          app.warn(`could not create a workspace for this General session (${err.message}); using General's folder`);
+        }
+      }
       const session = await engine.createSession({
         title: TBD_TITLE,
         model: body?.model,
         agent: body?.agent,
-        // The harness guard rides along with whatever rules the caller asked for:
-        // a session may be Single (deny `subagent`) or Multi (no rules), and the
-        // harness is denied in both. The role's skill list comes last, because
-        // the engine takes the last matching rule and its allow must win.
+        // The permission ladder comes first: every write, shell, read and code
+        // call asks the engine, and the gate answers from the policy. The
+        // caller's own rules (Single's `subagent` deny) come after, so a mode
+        // rule still wins by being last, and the role's skill list comes last of
+        // all for the same reason.
         permissions: [
+          ...rulesFor(),
           ...(Array.isArray(body?.permissions) ? body.permissions : []),
-          ...(guard?.rules?.() || []),
           ...skillRules(getConfig(), 'architect'),
         ],
-        directory: project.directory,
+        directory: location,
       });
       // From the first turn, the Architect knows where it is and that the plan
       // file is its own to keep.
-      await brief(session.id, project.directory, 'architect', false);
+      await brief(session.id, location, 'architect', false);
       // A new session is a new piece of work, and the census is a picture of what
       // the models are doing *now*: left to accumulate it describes a machine that
       // no longer exists. The operator opens the popup to answer "what is being
@@ -989,8 +1037,8 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
           throw err;
         }
         await engine.updateSessionPermissions(sessionId, [
+          ...rulesFor(),
           ...(Array.isArray(p) ? p : []),
-          ...(guard?.rules?.() || []),
           ...skillRules(getConfig(), 'architect'),
         ]);
       }
@@ -1027,17 +1075,33 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
       // busy. Deleting the session is the operator ending that run, so it ends
       // here, as stopped.
       try { runs?.stopWithReason?.(sessionId, 'the session was deleted'); } catch { /* nothing running */ }
-      // Where it lived, and whether anything else lives there, read before the
-      // session goes: a plan is the project's, not the session's, and it is only
-      // the operator's to throw away when no other session can lose it.
+      // Where it lived, read before the session goes. A General session's folder
+      // belongs to that conversation and is deleted with it; a project session's
+      // folder is the project, and is never touched.
+      let directory = null;
+      try { directory = (await engine.getSession(sessionId))?.directory || null; } catch { /* gone already */ }
+      // Whether anything else lives there, for the optional plan forget: a plan is
+      // the project's, not the session's, and it is only the operator's to throw
+      // away when no other session can lose it.
       let forgetResult = null;
       if (forget) {
-        let directory = null;
-        try { directory = (await engine.getSession(sessionId))?.directory || null; } catch { /* gone already */ }
         forgetResult = directory ? await forgetProjectPlan(directory) : { ok: false, reason: 'the session has no directory' };
       }
       await engine.deleteSession(sessionId);
       briefed.delete(sessionId);
+      // A deleted session's "Always Allow" grants are meaningless now.
+      try { permissionMemory?.forgetSession?.(sessionId); } catch { /* the memory is a convenience */ }
+      // The whole session, not just its record: engine session, folder, plan and
+      // files. A General session's workspace exists only for that conversation.
+      if (directory && isGeneralSessionDir(directory)) {
+        try { await engine.evictLocation?.(directory); } catch { /* the engine may be gone */ }
+        try {
+          fs.rmSync(directory, { recursive: true, force: true });
+          app.info(`deleted the General session folder: ${directory}`);
+        } catch (err) {
+          app.warn(`could not delete the General session folder (${err.message}): ${directory}`);
+        }
+      }
       // Tell every open UI. Another tab can have it on screen, and a UI left
       // holding a deleted session answers 404 on every control it offers —
       // which is how a mode switch ended up reporting "Session not found".
@@ -1149,32 +1213,98 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
 
     interrupt: async (sessionId) => {
       requireReady();
-      // Stop means stop. A delegated task runs in its own worker session, so
-      // interrupting the session on screen did nothing to it: the worker carried
-      // on to the end, the Architect was woken by the report and started the next
-      // task. The operator saw a run that would not stop. Stop the run first — it
-      // is the thing that is actually working — then the session.
-      let stoppedRun = false;
+      // Stop means stop, for the whole project. A delegated task runs in its own
+      // hidden session, and the session on screen (the Architect) is usually idle
+      // while a worker works — interrupting it did nothing, and the run's report
+      // woke the Architect to start the next task. Worse, a worker can outlive a
+      // run record that has already reported or been cancelled, which is the
+      // in-between state where Stop looked broken. The engine's active list is the
+      // authority, not the run record.
+      let directory = null;
       try {
         const session = await engine.getSession(sessionId);
-        if (session?.directory) {
-          stoppedRun = Boolean(runs?.cancel?.(session.directory));
-          // No run in flight (the Architect was thinking): hold the project anyway,
-          // or the next turn delegates the work that was just stopped.
-          if (!stoppedRun) runs?.hold?.(session.directory);
-        }
+        directory = session?.directory || null;
       } catch (err) {
         app.warn(`could not look up the session before stopping it: ${err.message}`);
       }
-      await engine.interrupt(sessionId);
-      return { ok: true, stoppedRun };
+
+      let stoppedRun = false;
+      if (directory) {
+        try {
+          stoppedRun = Boolean(runs?.cancel?.(directory));
+        } catch (err) {
+          app.warn(`could not cancel the run before stopping: ${err.message}`);
+        }
+        // No run in flight (the Architect was thinking): hold the project anyway,
+        // or the next turn delegates the work that was just stopped.
+        if (!stoppedRun) runs?.hold?.(directory);
+      }
+
+      let active = [];
+      try {
+        active = await engine.listActiveSessions();
+      } catch { /* an engine without the list gets the asked session only */ }
+      let sessions = [];
+      try {
+        sessions = await engine.listSessions();
+      } catch { /* the target itself is still stopped */ }
+
+      const targets = stopTargets({ sessionId, directory, active, sessions });
+      const stopped = [];
+      for (const id of targets) {
+        try {
+          await engine.interrupt(id);
+          stopped.push(id);
+        } catch (err) {
+          app.warn(`could not interrupt ${id}: ${err.message}`);
+        }
+      }
+      app.info(
+        `stop: ${stopped.length} session(s) interrupted${stoppedRun ? ', run cancelled' : ''} in ${
+          directory || 'an unknown directory'
+        }`,
+      );
+      return { ok: true, stoppedRun, stopped };
     },
 
     permission: async (sessionId, body) => {
       requireReady();
-      await engine.replyPermission(sessionId, body?.requestId, body?.decision || 'once');
+      const wanted = body?.decision || 'once';
+      // "Always" is ours, not the engine's. The engine's `always` saves the
+      // request's `save` patterns for the whole project; for an edit those are
+      // `*`, so one click would let the AI edit anything, including Synapse. We
+      // answer once and remember this exact action + resource for the session.
+      const decision = wanted === 'always' ? 'once' : wanted;
+      const entry = permissionLog?.get?.(body?.requestId);
+      await engine.replyPermission(sessionId, body?.requestId, decision);
+      if (decision === 'reject') {
+        // The reply's `message` is dropped on this route (measured), so the note
+        // is a synthetic message: the only channel that reaches a worker. Not to
+        // the Architect: the operator is in its chat, and the extra turn ended
+        // with an empty message instead of its closing report (26 Oct).
+        if (entry?.role && entry.role !== 'architect') {
+          Promise.resolve(
+            engine.synthetic?.(sessionId, refusalNote({ role: entry.role, scope: entry.scope }), {
+              description: 'permission refused',
+            }),
+          ).catch((err) => app.warn(`could not explain the refusal to ${sessionId}: ${err.message}`));
+        }
+      }
+      if (wanted === 'always' && entry) {
+        permissionGate?.remember?.(entry.sessionId || sessionId, entry.action, entry.resources);
+      }
+      // The chip on the tool call: this is the moment an ask becomes a decision,
+      // and the only one the policy did not already record.
+      const answered = permissionLog?.answer?.(body?.requestId, decision);
+      if (answered) notify?.({ kind: 'permission', type: 'permission.decided', decision: answered });
       return { ok: true };
     },
+
+    /** Decisions recorded for a session, for the chips on a transcript that was
+     *  loaded after they happened. */
+    permissionDecisions: async (sessionId) => ({
+      decisions: sessionId ? permissionLog?.list?.(sessionId) || [] : [],
+    }),
 
     /**
      * Everything currently waiting on the operator. A session blocked on a
@@ -1188,6 +1318,25 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
         safe(() => engine.listActiveSessions(), []),
       ]);
 
+      // Can Stop do anything for the session on screen? A hidden worker in the
+      // same project counts, and it is the case the operator cannot see: the
+      // Architect is idle, the run record may be gone, and the worker is still
+      // working. Without this the button sat disabled while the project ran.
+      let canStop = false;
+      let activeHere = 0;
+      if (focusSessionId && active.length) {
+        try {
+          const focus = await engine.getSession(focusSessionId);
+          const directory = focus?.directory || null;
+          if (directory) {
+            const known = await engine.listSessions();
+            const targets = stopTargets({ sessionId: focusSessionId, directory, active, sessions: known });
+            activeHere = targets.filter((id) => active.includes(id)).length;
+            canStop = activeHere > 0;
+          }
+        } catch { /* the button stays off rather than guessing */ }
+      }
+
       // Forms have to be asked for per session. The engine's global list is
       // scoped to its *own* location (the workspace), so a form raised by a
       // session running in a project subfolder is not in it — which is why a
@@ -1196,6 +1345,27 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
       // engine reports as active, and the session the operator has open is asked
       // for by name as well, so the panel is never wrong about what is on screen.
       const ask = [...new Set([...active, focusSessionId].filter(Boolean))];
+      // Permissions have the same location scope as forms: the engine's global
+      // list only covers its own directory, and every project session runs in a
+      // subfolder of it. Without this, an ask raised inside a project never
+      // reached the UI — measured 26 Oct: the global list was empty while the
+      // session was blocked on a request it held. Ask the active sessions and the
+      // open one directly, and merge by request id.
+      const permissionLists = await Promise.all([
+        Promise.resolve(permissions),
+        ...ask.map((id) => safe(() => engine.listSessionPermissions(id), [])),
+      ]);
+      const allPermissions = [];
+      const seenRequests = new Set();
+      for (const list of permissionLists) {
+        for (const p of list || []) {
+          const id = p?.id || p?.requestID;
+          if (!id || seenRequests.has(id)) continue;
+          seenRequests.add(id);
+          allPermissions.push(p);
+        }
+      }
+
       const lists = await Promise.all([
         safe(() => engine.listForms(), []),
         ...ask.map((id) => safe(() => engine.listForms(id), [])),
@@ -1215,14 +1385,62 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
       // third stops the run and says so.
       const open = await guardQuestions(forms);
 
+      // A permission request carries an action and a path, not a name. The card
+      // has to say who is asking — a hidden worker's request is as real as the
+      // open session's, and "coder-2, t4: write ..\..\Windows\x" is a different
+      // decision from "something wants to write". The session is where the role,
+      // the task and the directory live, so they are read here, once per request.
+      const sessionIds = [...new Set(allPermissions.map((p) => p.sessionID).filter(Boolean))];
+      const sessionInfo = new Map();
+      await Promise.all(
+        sessionIds.map(async (id) => {
+          try {
+            const s = await engine.getSession(id);
+            if (s) sessionInfo.set(id, s);
+          } catch { /* gone between the two calls */ }
+        }),
+      );
+
       return {
-        permissions: permissions.map((p) => ({
-          requestId: p.id || p.requestID || null,
-          sessionId: p.sessionID || null,
-          action: p.action || p.title || 'tool call',
-          resources: Array.isArray(p.resources) ? p.resources : [],
-          message: p.message || null,
-        })),
+        permissions: allPermissions.map((p) => {
+          const s = sessionInfo.get(p.sessionID);
+          const meta = s?.metadata?.synapse || {};
+          const directory = s?.directory || null;
+          const action = p.action || p.title || 'tool call';
+          const resources = Array.isArray(p.resources) ? p.resources : [];
+          const isPath = /^(edit|write|read|patch|create)$/i.test(String(p.action || ''));
+          const resolved =
+            isPath && directory ? resources.map((r) => resolvePath(r, directory)?.path || String(r)) : [];
+          const verdict = directory
+            ? decide({ action, resources, cwd: directory, projectRoot: directory, harnessRoot: ROOT })
+            : null;
+          return {
+            requestId: p.id || p.requestID || null,
+            sessionId: p.sessionID || null,
+            action,
+            resources,
+            resolved,
+            message: p.message || null,
+            title: s?.title || null,
+            role: meta.role || null,
+            task: meta.task || null,
+            directory,
+            reason: verdict?.reason || '',
+            scope: verdict?.scope || '',
+            // A write request carries the diff the model is about to apply. That
+            // is the difference between "a file" and "this exact change", and it
+            // is the operator's best evidence when the card asks them to decide.
+            files: Array.isArray(p.metadata?.files)
+              ? p.metadata.files.map((f) => ({
+                  file: f.file || '',
+                  status: f.status || '',
+                  patch: f.patch || '',
+                  additions: Number(f.additions) || 0,
+                  deletions: Number(f.deletions) || 0,
+                }))
+              : [],
+          };
+        }),
         forms: open.map((f) => ({
           id: f.id,
           sessionId: f.sessionID,
@@ -1230,6 +1448,8 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
           fields: Array.isArray(f.fields) ? f.fields : [],
         })),
         active,
+        canStop,
+        activeHere,
       };
     },
 

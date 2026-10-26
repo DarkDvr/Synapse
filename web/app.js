@@ -185,6 +185,11 @@ const state = {
   busySessions: new Set(),
   busySince: new Map(),
   toolsInFlight: new Set(),
+  // Whether the engine reports any live session in the open session's project.
+  // A hidden worker counts: that is the state where the Architect looks idle and
+  // Stop used to be disabled while the run was still working.
+  canStop: false,
+  activeHere: 0,
   // Delegated work in flight, keyed by directory: one worker per project, so a
   // project has at most one entry. The cards and the live path are drawn from
   // this, and `GET /api/runs` is what a page opened mid-run starts from.
@@ -213,6 +218,16 @@ const state = {
   // Form ids already announced since this page loaded, so a waiting question is
   // announced once rather than on every poll.
   announcedForms: new Set(),
+  // Permission request ids already announced; a hidden worker's request gets a
+  // toast because its card is only in a transcript the operator has not opened.
+  announcedPermissions: new Set(),
+  // Permission decisions by tool-call id, for the chip on a tool card. Filled
+  // from the stream while a session is open and fetched once when it is opened.
+  permissionDecisions: new Map(),
+  decisionsFor: null,
+  // Bumped when a decision arrives, so the transcript's render signature notices
+  // a chip that changed without any message changing.
+  decisionSeq: 0,
   // 'single' (one Architect, all tools, no delegation) or 'multi' (delegation
   // allowed, role cards revealed). New sessions start single; the toggle
   // switches the open session live.
@@ -552,6 +567,70 @@ async function refreshStatus() {
     state.status = { engine: { ready: false, kind: 'engine' }, bootError: err.message };
   }
   renderStatus();
+}
+
+// ── remote access (LAN) ─────────────────────────────────────────
+// The switch is the whole feature from here: GET says whether the listener is on
+// the LAN, POST moves it. The link is only handed to the host itself.
+async function refreshRemote() {
+  try {
+    state.remote = await api('GET', '/api/remote');
+    renderRemote();
+  } catch { /* the status row keeps its last state */ }
+}
+
+function renderRemote() {
+  const info = state.remote || {};
+  const on = Boolean(info.enabled);
+  const toggle = $('remoteToggle');
+  if (!toggle) return;
+  toggle.setAttribute('aria-checked', String(on));
+  toggle.title = on
+    ? 'On — other devices on this LAN can open Synapse; click to stop sharing'
+    : 'Off — this PC only; click to allow other devices on this LAN';
+  const dot = $('remoteDot');
+  if (dot) dot.className = 'status-dot ' + (on ? 'ok' : 'idle');
+  const url = $('remoteUrl');
+  if (url) url.textContent = on ? (info.url ? `${info.url}/` : 'no LAN address') : '';
+  const box = $('remoteInfo');
+  if (box) box.hidden = !on;
+  const token = $('remoteToken');
+  if (token) token.hidden = !on || !info.token;
+}
+
+async function copyRemoteToken() {
+  const value = state.remote?.token;
+  if (!value) return;
+  try {
+    await navigator.clipboard.writeText(value);
+    toast('Token Copied', 'Paste it when Synapse asks for the token on the other PC.');
+  } catch {
+    toast('Could Not Copy', 'The clipboard was refused; the token is in data\\remote-token on this PC.');
+  }
+}
+
+async function toggleRemote() {
+  const next = !state.remote?.enabled;
+  const toggle = $('remoteToggle');
+  if (toggle) toggle.disabled = true;
+  try {
+    state.remote = await api('POST', '/api/remote', { enabled: next });
+    renderRemote();
+    toast(
+      next ? 'Remote Access On' : 'Remote Access Off',
+      next
+        ? 'Open the address on the other PC, then paste the TOKEN when it asks.'
+        : 'Only this PC can open Synapse again.',
+    );
+    // The listener moves just after the response; read the settled state so the
+    // address comes from the interface the switch is actually serving.
+    setTimeout(refreshRemote, 900);
+  } catch (err) {
+    toast('Remote Access Failed', err.message);
+    await refreshRemote();
+  } finally {
+    if (toggle) toggle.disabled = false;
+  }
 }
 
 function renderStatus() {
@@ -1033,6 +1112,7 @@ async function applyEngineUpdate() {
     toast('Update Failed', r.error || 'The runtime was not updated.');
   }
   await refreshStatus();
+  await refreshRemote();
   await refreshUpdate();
   await loadModels();
   // A model that left the catalog leaves a role pointing at nothing. Say it once
@@ -1986,7 +2066,23 @@ async function setRoleModel(roleId, ref) {
   const variant = topEfforts(modelByRef(ref)).some((v) => v.id === current) ? current : '';
   try {
     await saveRoleSelection(roleId, ref, variant);
+    // Keep the card's own select in step: renderRoleActivity reads the refused
+    // mark from it, and a stale value would keep the old model's red line.
+    const select = document.querySelector(`#topology .role-model[data-role="${CSS.escape(roleId)}"]`);
+    if (select) select.value = ref;
+    const picker = pickers.get(roleId);
+    if (picker) syncPickerInput(picker.input);
     renderEffort(roleId);
+    // A model change is the operator saying "this role is fixed". Three things
+    // that were about the old model go with it: the red provider line on the
+    // card, and the project hold that refuses every delegation after a Stop. The
+    // hold is per project, so only the project on screen is lifted.
+    const dir = currentProject()?.directory || '';
+    if (dir) {
+      state.roleErrors.delete(`${dirKey(dir)}|${roleId}`);
+      api('POST', '/api/runs/resume', { dir }).catch(() => {});
+      renderRoleActivity();
+    }
     // first time this model is chosen, learn its toolset in the background;
     // the server answers from cache and never probes the same model twice
     api('POST', '/api/models/inspect', { ref }).catch(() => {});
@@ -1994,7 +2090,15 @@ async function setRoleModel(roleId, ref) {
       await applyArchitectModel();
       toast('Model for Architect', state.sessionId ? 'Saved and applied to the open session.' : 'Saved for new sessions.');
     } else {
-      toast(`Model for ${role?.name || roleId}`, 'Saved. The orchestration layer will use it when this role runs.');
+      // Honest about the one case where changing the model is not a fix: the new
+      // model carries a provider or tools mark of its own.
+      const marked = (modelByRef(ref)?.issues || []).some((i) => i.kind === 'provider' || i.kind === 'tools');
+      toast(
+        `Model for ${role?.name || roleId}`,
+        marked
+          ? 'Saved. This model still carries an issue mark — the picker shows why.'
+          : 'Saved. It can take tasks again.',
+      );
     }
   } catch (err) {
     toast('Could not save the role model', err.message);
@@ -2762,6 +2866,15 @@ function renderRoleActivity() {
       // Nothing in flight and work outstanding: the move is the operator's, so
       // the card says it in the same place a worker's task line would be.
       else if (unfinished) { text = 'Waiting on you'; chip = { cls: 'role-waiting', text: 'Waiting on you' }; dot = 'ok'; settled = true; }
+      // A chat with no plan has nothing outstanding once its turn has ended. The
+      // card says Done, green, rather than sitting blank — the same chip a
+      // finished plan gets, so "done" means the same thing in both.
+      else if (!tasks.length && (state.messages || []).length) {
+        text = 'Done';
+        chip = { cls: 'role-done', text: 'Done' };
+        dot = 'ok';
+        settled = true;
+      }
     } else if (run && run.role === role) {
       // A worker stopped on a question is not working on its task, whatever the
       // newest tool call was — it is waiting, exactly like the Architect does.
@@ -2981,10 +3094,9 @@ function handleRunEvent(ev) {
 }
 
 // The live path: one solid arrow from the requester down the spine and across
-// into the worker, with orange ants travelling it — the design in
-// `docs/stage-1-mockup-rev6.pdf`. It is measured from the real boxes at full
-// precision (the spine's exact centreline, the dotted band's exact centre) so
-// the arrow covers the dots it replaces instead of stepping past them.
+// into the worker, with yellow ants travelling it. It is measured from the real
+// boxes at full precision (the spine's exact centreline, the dotted band's exact
+// centre) so the arrow covers the dots it replaces instead of stepping past them.
 function drawActivePath() {
   const layer = $('pathLayer');
   const topo = $('topology');
@@ -3051,6 +3163,19 @@ async function loadMessages() {
   if (!state.sessionId) return;
   try {
     state.messages = (await api('GET', `/api/sessions/${encodeURIComponent(state.sessionId)}/messages`)).messages;
+    // The chips on tool calls are a record that outlives the request, so a
+    // transcript opened after the fact asks once. While the session is open they
+    // arrive on the stream; this is only the catch-up.
+    if (state.decisionsFor !== state.sessionId) {
+      try {
+        const d = await api('GET', `/api/permissions?session=${encodeURIComponent(state.sessionId)}`);
+        state.permissionDecisions = new Map(
+          (d.decisions || []).filter((x) => x.toolCallId).map((x) => [x.toolCallId, x]),
+        );
+        state.decisionSeq += 1;
+        state.decisionsFor = state.sessionId;
+      } catch { /* a missing chip must not stop the transcript from loading */ }
+    }
     // The Architect's card reads its window from the usage event, which a page
     // opened later never saw. The transcript carries the same number, so seed it
     // here rather than showing an empty corner until the next turn.
@@ -3165,7 +3290,7 @@ function renderTranscript() {
   // Nothing in the conversation changed since the last render: leave the DOM —
   // and whatever the operator has open — exactly as it is.
   const sig = hasHistory
-    ? `${showable.map((m) => `${m.id}:${m.completed || 0}:${(m.parts || []).length}`).join(',')}|${pending.length}|${state.streaming}|${traceSig()}|${alarmsHere().length}`
+    ? `${showable.map((m) => `${m.id}:${m.completed || 0}:${(m.parts || []).length}`).join(',')}|${pending.length}|${state.streaming}|${traceSig()}|${alarmsHere().length}|${state.decisionSeq}`
     : '';
   if (sig && sig === state.renderSig) {
     renderChatNav();
@@ -3887,11 +4012,22 @@ function renderTool(part) {
   const label = failed ? (hasExit ? `Exit ${part.exitCode}` : 'Failed') : status;
   const detail = part.error || output || '(no output)';
 
+  // A chip only when the call reached outside the project: green when the policy
+  // allowed it without asking, amber when the operator had to, red when it was
+  // refused. A write inside the workspace has nothing to report.
+  const decision = part.id ? state.permissionDecisions?.get(part.id) : null;
+  const permChip = decision?.outside
+    ? `<span class="tool-perm state-pill ${
+        decision.effect === 'deny' ? 'err' : decision.asked ? 'warn' : 'ok'
+      }" title="${esc(permissionTip(decision))}">permission</span>`
+    : '';
+
   return `<div class="tool-card${open ? ' open' : ''}" data-tool-card="${esc(id)}">
     <div class="tool-head" role="button" tabindex="0" data-tool-toggle="${esc(id)}" aria-expanded="${open}" aria-controls="${esc(id)}-detail">
       <span class="status-dot ${cls}" role="img" aria-label="${esc(label)}"></span>
       <span class="tool-name">${esc(part.name)}</span>
       <span class="tool-target" title="${esc(target)}">${esc(target)}</span>
+      ${permChip}
       <span class="tool-state state-pill ${cls}">${esc(label)}</span>
       <span class="tool-chev" aria-hidden="true">›</span>
     </div>
@@ -3901,6 +4037,44 @@ function renderTool(part) {
       ${part.error ? `<div class="tool-body"><pre class="is-error">${esc(part.error)}</pre></div>` : ''}
     </div>
   </div>`;
+}
+
+/** The chip's tooltip, as a sentence rather than a list of labels. */
+function permissionTip(d) {
+  const actor = d.role ? roleLabel(d.role) : 'The Architect';
+  const action = String(d.action || '').toLowerCase();
+  const target = (d.resolved && d.resolved.length ? d.resolved : d.resources || []).join(' ');
+  const short = target.length > 220 ? `${target.slice(0, 217)}…` : target;
+  const asks =
+    action === 'read'
+      ? short
+        ? `read ${short}`
+        : 'read a file'
+      : /^(edit|write|patch|create)$/.test(action)
+        ? short
+          ? `change ${short}`
+          : 'change a file'
+        : action === 'shell' || action === 'bash'
+          ? 'run a command'
+          : action === 'execute'
+            ? 'run code'
+            : 'use a tool';
+  const sentence =
+    action === 'shell' && short ? `${actor} asked to run this command:\n${short}` : `${actor} asked to ${asks}.`;
+  const decision =
+    d.effect === 'deny'
+      ? d.decidedBy === 'operator'
+        ? 'You rejected it.'
+        : 'The harness refused it.'
+      : d.asked
+        ? 'You allowed it.'
+        : d.decidedBy === 'operator'
+          ? 'You allowed this exact request earlier.'
+          : 'The harness allowed it without asking.';
+  // The policy sentence explains a refusal; on an allow it is usually just
+  // "Reading is allowed", which says nothing the decision line does not.
+  const reason = d.effect === 'deny' && d.reason ? d.reason : '';
+  return [sentence, reason, decision].filter(Boolean).join('\n');
 }
 
 function toggleTool(id) {
@@ -4058,22 +4232,80 @@ function jumpMessage(dir) {
   animateScroll(chatScroller(), top);
 }
 
-// The engine blocks the session until every permission request is answered.
+// The engine blocks the session until every permission request is answered. A
+// worker's request is as real as the open session's — and a worker session is
+// hidden from the rail, so if its request were filtered to the open session the
+// worker would sit blocked until its timeout with nothing on screen. Every
+// pending request is shown, with the name of who is asking.
+/** What this role is asking to do, in one sentence. Scope comes from the policy,
+ *  so the sentence never claims the operator is the one outside their project. */
+function permissionLead(p) {
+  const actor = p.role ? roleLabel(p.role) : 'The Architect';
+  const action = String(p.action || '').toLowerCase();
+  const verb =
+    action === 'read'
+      ? 'read a file'
+      : action === 'shell' || action === 'bash'
+        ? 'run a command'
+        : action === 'execute'
+          ? 'run code'
+          : /^(edit|write|patch|create)$/.test(action)
+            ? (p.files?.[0]?.status === 'added' ? 'create a file' : 'change a file')
+            : 'use a tool';
+  const where =
+    p.scope === 'harness'
+      ? ' inside Synapse'
+      : p.scope === 'secret'
+        ? ' in a saved-password folder'
+        : p.scope === 'outside'
+          ? ' outside this project'
+          : p.scope === 'project'
+            ? ' in this project'
+            : '';
+  return where
+    ? `${actor} wants to ${verb}${where}.`
+    : `${actor} wants to ${verb}, and the harness cannot tell where it lands.`;
+}
+
 function renderPermissions() {
-  return state.permissions
-    .filter((p) => p.sessionId === state.sessionId)
-    .map(
-      (p) => `<div class="perm-card">
-        <div class="perm-head"><span class="status-dot warn" role="img" aria-label="waiting"></span>Permission needed</div>
-        <p class="perm-action">${esc(p.action)}</p>
-        ${p.resources?.length ? `<pre class="perm-res">${esc(p.resources.join('\n'))}</pre>` : ''}
+  return (state.permissions || [])
+    .map((p) => {
+      const actor = p.role ? roleLabel(p.role) : 'The Architect';
+      const task = p.task || '';
+      const paths = p.resolved && p.resolved.length ? p.resolved : p.resources || [];
+      const files = p.files || [];
+      const adds = files.reduce((n, f) => n + (f.additions || 0), 0);
+      const dels = files.reduce((n, f) => n + (f.deletions || 0), 0);
+      const diff = files.length
+        ? `<details class="perm-diff"><summary>${files.length} file${files.length === 1 ? '' : 's'} · +${adds} −${dels}</summary><pre class="perm-res">${esc(
+            files.map((f) => f.patch || f.file).join('\n'),
+          )}</pre></details>`
+        : '';
+      return `<div class="perm-card">
+        <div class="perm-head"><span class="status-dot warn" role="img" aria-label="waiting"></span>${esc(
+          actor,
+        )} needs your permission${task ? `<span class="perm-who">${esc(task)}</span>` : ''}</div>
+        <p class="perm-lead">${esc(permissionLead(p))}</p>
+        ${paths.length ? `<pre class="perm-res">${esc(paths.join('\n'))}</pre>` : ''}
+        ${p.reason ? `<p class="perm-why">${esc(p.reason)}</p>` : ''}
+        ${diff}
+        <p class="perm-note">Nothing has happened yet. You can still say no.</p>
         <div class="perm-actions">
-          <button class="btn btn-primary btn-sm" data-perm="once" data-perm-id="${esc(p.requestId)}">Allow Once</button>
-          <button class="btn btn-secondary btn-sm" data-perm="always" data-perm-id="${esc(p.requestId)}">Always Allow</button>
-          <button class="btn btn-ghost btn-sm" data-perm="reject" data-perm-id="${esc(p.requestId)}">Reject</button>
+          <button class="btn btn-allow btn-sm" data-perm="once" data-perm-id="${esc(
+            p.requestId,
+          )}" title="Do it this time only.">Allow Once</button>
+          <button class="btn btn-warn btn-sm" data-perm="always" data-perm-id="${esc(
+            p.requestId,
+          )}" title="Do it, and stop asking for this exact request in this session.">Always Allow</button>
+          <button class="btn btn-warn btn-sm" data-perm="reject" data-perm-id="${esc(
+            p.requestId,
+          )}" title="Say no. The role is told and carries on.">Reject</button>
+          <button class="btn btn-stop btn-sm" data-perm-stop="${esc(
+            p.requestId,
+          )}" title="Stop the whole task.">Stop Run</button>
         </div>
-      </div>`,
-    )
+      </div>`;
+    })
     .join('');
 }
 
@@ -4642,6 +4874,32 @@ async function replyForm(formId) {
  * session emits nothing at all, so polling this is the only way to notice it —
  * and it is what restores the prompt after a reload.
  */
+/**
+ * The poll is authoritative, but an ask must not wait eight seconds. A request
+ * the gate answers itself is gone by the time this fires, so it never draws a
+ * card — that is why the refresh is delayed rather than painting the event
+ * straight away.
+ */
+let pendingTimer = null;
+function schedulePendingRefresh() {
+  if (pendingTimer) return;
+  pendingTimer = setTimeout(() => {
+    pendingTimer = null;
+    refreshPending();
+  }, 200);
+}
+
+/** A decision changes a chip on a card that is already drawn. Coalesced, because
+ *  a busy turn produces one decision per read and write. */
+let permissionRenderTimer = null;
+function schedulePermissionRender() {
+  if (permissionRenderTimer) return;
+  permissionRenderTimer = setTimeout(() => {
+    permissionRenderTimer = null;
+    renderTranscript();
+  }, 120);
+}
+
 async function refreshPending() {
   let p;
   try {
@@ -4656,6 +4914,8 @@ async function refreshPending() {
   for (const id of active) if (!state.busySince.has(id)) state.busySince.set(id, Date.now());
   for (const id of [...state.busySince.keys()]) if (!active.has(id)) state.busySince.delete(id);
   state.busySessions = active;
+  state.canStop = Boolean(p.canStop);
+  state.activeHere = Number(p.activeHere) || 0;
   // A page opened, or reloaded, in the middle of a turn never saw the
   // `session.execution.started` that began it — so the composer showed no Stop and
   // the card looked idle while the engine was working. The engine's own list of
@@ -4668,13 +4928,34 @@ async function refreshPending() {
     renderComposer();
   }
 
+  const previousPermissions = new Set((state.permissions || []).map((p) => p.requestId));
   state.permissions = (p.permissions || []).map((x) => ({
     sessionId: x.sessionId,
     requestId: x.requestId,
     action: x.action,
     resources: x.resources,
+    resolved: x.resolved || [],
+    reason: x.reason || '',
+    scope: x.scope || '',
+    role: x.role || null,
+    task: x.task || null,
+    title: x.title || null,
+    directory: x.directory || null,
+    files: x.files || [],
   }));
   state.forms = p.forms || [];
+
+  // A worker's request is a card in a transcript nobody has open, so it is
+  // announced once here — otherwise the worker blocks until its timeout and the
+  // only evidence is a log line. The open session's own asks are not announced:
+  // the card is already on screen.
+  for (const perm of state.permissions) {
+    if (previousPermissions.has(perm.requestId) || state.announcedPermissions.has(perm.requestId)) continue;
+    state.announcedPermissions.add(perm.requestId);
+    if (state.view === 'session' && perm.sessionId === state.sessionId) continue;
+    const who = [perm.role, perm.task].filter(Boolean).join(' · ') || perm.title || 'A session';
+    toast('Permission Needed', `${who} is waiting on ${perm.action}. Open it in the rail to answer.`);
+  }
 
   // A question must not be able to hide. The panel lives inside the session
   // view and a reload opens no session, so a waiting question says so once —
@@ -5037,24 +5318,40 @@ async function renderProbe() {
   }
 }
 
-function permissionFromEvent(ev) {
-  const d = ev.raw?.data || ev.raw?.properties || ev.raw || {};
-  const req = d.request || d;
-  return {
-    requestId: d.requestID || d.id || req.id,
-    action: req.action || req.title || req.metadata?.title || 'tool call',
-    resources: Array.isArray(req.resources) ? req.resources : [],
-  };
-}
-
 async function replyPermission(requestId, decision) {
-  const sessionId = state.sessionId;
+  // The card can belong to a hidden worker session, not the open one. Answering
+  // it on the open session would fail with a request id the engine never saw.
+  const permission = (state.permissions || []).find((p) => p.requestId === requestId);
+  const sessionId = permission?.sessionId || state.sessionId;
   state.permissions = state.permissions.filter((p) => p.requestId !== requestId);
   renderTranscript();
   try {
     await api('POST', `/api/sessions/${encodeURIComponent(sessionId)}/permission`, { requestId, decision });
   } catch (err) {
     toast('Could not answer the request', err.message);
+  }
+}
+
+/** Stop the work that asked, not just the request: a worker refused a write
+ *  would otherwise rephrase and ask again. Falls back to an interrupt when no
+ *  run owns the directory (the Architect thinking on its own). */
+async function stopFromPermission(requestId) {
+  const permission = (state.permissions || []).find((p) => p.requestId === requestId);
+  if (!permission) return;
+  state.permissions = state.permissions.filter((p) => p.requestId !== requestId);
+  renderTranscript();
+  try {
+    if (permission.directory) {
+      const { ok } = await api('POST', '/api/runs/cancel', { dir: permission.directory });
+      if (ok) {
+        toast('Stopping', 'The run is being stopped.');
+        return;
+      }
+    }
+    await api('POST', `/api/sessions/${encodeURIComponent(permission.sessionId)}/interrupt`);
+    toast('Stopping', 'The session was interrupted.');
+  } catch (err) {
+    toast('Could not stop', err.message);
   }
 }
 
@@ -5072,8 +5369,10 @@ function renderComposer() {
   // different from the Architect's in that respect.
   $('sendBtn').disabled = (state.busy && !hasSession) || asking;
   // Stop has to work while a worker is running or waiting out a retry, when the
-  // open session is idle — that is exactly when it is the only way out.
-  $('stopBtn').disabled = !(state.busy || (hasSession && currentRun())) || !hasSession;
+  // open session is idle — that is exactly when it is the only way out. `canStop`
+  // is the engine's answer for this project, so a hidden worker enables it even
+  // when no run record is left.
+  $('stopBtn').disabled = !hasSession || !(state.busy || currentRun() || state.canStop);
   const input = $('promptInput');
   if (input) {
     input.disabled = asking;
@@ -5276,22 +5575,24 @@ async function ensureSession() {
 }
 
 async function interrupt() {
-  // A delegated run is the thing to stop when one is live: the open session is
-  // the Architect, and it is usually idle while a worker works. Stopping the
-  // session instead would leave the worker running and the project locked.
-  const run = currentRun();
-  if (run) {
-    try {
-      const { ok } = await api('POST', '/api/runs/cancel', { dir: run.dir });
-      toast(ok ? 'Stopping' : 'Nothing To Stop', ok ? `${run.title || run.task} is being stopped.` : 'That run had already finished.');
-    } catch (err) {
-      toast('Stop failed', err.message);
-    }
-    return;
-  }
+  // One request stops the project: the server cancels the run and interrupts
+  // every active session in the directory, including hidden workers the operator
+  // cannot see and workers whose run record is already gone.
   if (!state.sessionId) return;
-  try { await api('POST', `/api/sessions/${encodeURIComponent(state.sessionId)}/interrupt`); }
-  catch (err) { toast('Stop failed', err.message); }
+  try {
+    const r = await api('POST', `/api/sessions/${encodeURIComponent(state.sessionId)}/interrupt`);
+    const n = Array.isArray(r.stopped) ? r.stopped.length : 0;
+    toast(
+      'Stopping',
+      n > 1 ? `${n} sessions in this project are being stopped.` : 'The work is being stopped.',
+    );
+    // The engine takes a moment to close the turns; refresh once now and again
+    // after it has had time, so a stop that did not take does not hide the button.
+    refreshPending();
+    setTimeout(refreshPending, 1500);
+  } catch (err) {
+    toast('Stop failed', err.message);
+  }
 }
 
 /** Interrupt any session, from the rail — the way out of a stalled run. */
@@ -5473,17 +5774,35 @@ function connectStream() {
         else if (/^session\.execution\.(succeeded|failed|interrupted)$/.test(ev.type) || ev.type === 'session.idle') state.busy = false;
         renderComposer();
       }
-      if (changed) renderTree();
+      if (changed) {
+        renderTree();
+        // A worker starting or ending changes what Stop can reach. Ask now rather
+        // than waiting out the poll, or the button appears up to eight seconds late.
+        schedulePendingRefresh();
+      }
       reloadProjects();
       if (mine) reloadMessages();
       return;
     }
 
     if (ev.kind === 'permission') {
-      if (ev.type === 'permission.asked' && mine) {
-        const p = permissionFromEvent(ev);
-        if (p.requestId && !state.permissions.some((x) => x.requestId === p.requestId)) {
-          state.permissions.push({ sessionId: ev.sessionId, ...p });
+      if (ev.type === 'permission.decided') {
+        const d = ev.decision;
+        if (d?.toolCallId) {
+          state.permissionDecisions.set(d.toolCallId, d);
+          state.decisionSeq += 1;
+          if (state.view === 'session' && d.sessionId === state.sessionId) schedulePermissionRender();
+        }
+        return;
+      }
+      if (ev.type === 'permission.asked') {
+        // Any session: a hidden worker blocks exactly like the open one.
+        schedulePendingRefresh();
+      } else if (ev.type === 'permission.replied') {
+        const d = ev.raw?.data || ev.raw || {};
+        const id = d.requestID || d.requestId || d.id;
+        if (id && (state.permissions || []).some((p) => p.requestId === id)) {
+          state.permissions = state.permissions.filter((p) => p.requestId !== id);
           renderTranscript();
         }
       }
@@ -6652,6 +6971,8 @@ function wire() {
   });
   $('stopBtn').addEventListener('click', interrupt);
   $('modeToggle').addEventListener('click', switchMode);
+  $('remoteToggle').addEventListener('click', toggleRemote);
+  $('remoteToken').addEventListener('click', copyRemoteToken);
   $('keepBtn').addEventListener('click', toggleKeep);
   $('menuBtn').addEventListener('click', () => $('sidebar').classList.toggle('open'));
   $('emptyNewSession').addEventListener('click', () => createSession(state.projects.find((p) => p.general)?.id));
@@ -6920,6 +7241,9 @@ function wire() {
     const perm = e.target.closest('[data-perm]');
     if (perm) { e.preventDefault(); replyPermission(perm.dataset.permId, perm.dataset.perm); return; }
 
+    const permStop = e.target.closest('[data-perm-stop]');
+    if (permStop) { e.preventDefault(); stopFromPermission(permStop.dataset.permStop); return; }
+
     const soon = e.target.closest('[data-soon]');
     if (soon) { e.preventDefault(); e.stopPropagation(); toast('Not wired yet', soon.dataset.soon); return; }
 
@@ -7040,6 +7364,7 @@ async function boot() {
   renderMode();
   setView();
   await refreshStatus();
+  await refreshRemote();
   await refreshUpdate();
   await loadModels();
   await loadProjects();
