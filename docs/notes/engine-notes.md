@@ -824,6 +824,38 @@ custom-agent session failed at 20:45:37 while a default-agent session succeeded 
 20:45:40). Denying everything also defeats the purpose, because Single is meant to
 have tools. `POST /api/session` accepts `permissions`; `PATCH` replaces them.
 
+### A Single session is not told it is an Architect
+
+The trap is not a fresh Single session — it is a live Multi session switched to
+Single to ask for one small thing. The transcript still contains the whole
+campaign, and the project still carries `.synapse/`. Omitting the harness from the
+brief is not enough; the brief has to overrule what the model can see.
+
+Measured 26 Oct: asked to copy one exe into a folder, the model read
+`.synapse/plan.json`, decided from `t21` whether the build was current, and
+reported on `t18` and `t20`. The brief had also quoted
+`.synapse/requirement.md` verbatim — the old campaign, "Continue work" and all —
+because Single used to present it as "the operator's request".
+
+What the Single brief says now, and nothing else:
+
+- Where the tools operate, and that the answer may need the disk or a command.
+- One conversation, no team, no delegation; ignore a delegation tool if offered.
+- **Only when a plan file exists**: it was written for a different task, it is to
+  be ignored, its tasks are not this conversation's, and it is not to be followed
+  or updated.
+
+It does not quote the requirement, does not mention `decisions.md`, and does not
+call the session a role — the skills line drops "this role", "judge the next piece
+of work" and "your report" (`describeSkills(..., { chat: true })`). A Single
+message is no longer appended to the requirement file either; that file is the
+earlier task's record. A delegation attempted anyway is still refused in the
+runner, but the refusal now says "do it yourself" rather than "ask the operator to
+switch to Multi" — the second reads as an errand, and the operator did not ask for
+one.
+
+Multi is untouched: the same brief it always had.
+
 ## The tool census double-counts after a restart
 
 `recordMessages` is called with the **whole transcript** on every turn and

@@ -17,12 +17,6 @@
 
   <!-- ── left rail ────────────────────────────────────────────────────── -->
   <aside class="sidebar" id="sidebar">
-    <a class="brand" href="#" aria-label="Synapse home">
-      <span class="brand-mark-wrap"><img class="brand-mark" src="/icon-64.png" alt="" width="28" height="28" /></span>
-      <span>Synapse</span>
-      <span class="version">v0.1</span>
-    </a>
-
     <div class="tree-block">
       <div class="sidebar-label">
         PROJECTS
@@ -45,6 +39,11 @@
       <div class="sidebar-label">STATUS</div>
       <div class="status-row" title="Runtime process state">
         <span class="status-dot idle" id="engineDot"></span>Runtime
+        <!-- The console. A boxed "..." because that is what it is: the things you
+             can do to the server, and the log it writes. -->
+        <button class="console-open" id="consoleBtn" title="Server actions and console" aria-label="Server actions and console">
+          <svg width="14" height="4" viewBox="0 0 14 4" aria-hidden="true"><circle cx="2" cy="2" r="1.15" /><circle cx="7" cy="2" r="1.15" /><circle cx="12" cy="2" r="1.15" /></svg>
+        </button>
         <span class="status-state" id="engineState">starting…</span>
       </div>
       <!-- The stream has no row of its own: this dot *is* the stream's state, and
@@ -335,6 +334,26 @@
       <button class="btn btn-ghost btn-sm" id="dialogCancel">Cancel</button>
       <button class="btn btn-secondary btn-sm" id="dialogExtra" hidden></button>
       <button class="btn btn-primary btn-sm" id="dialogOk">OK</button>
+    </div>
+  </div>
+</div>
+
+<!-- The console. Wide and tall on purpose: it is a log to read, not a peek.
+     Fed by the app rather than by the server, so it still works when the server
+     is stopped - which is exactly when it is worth opening. -->
+<div class="modal-backdrop" id="consoleModal" hidden>
+  <div class="modal panel console-modal" role="dialog" aria-modal="true" aria-labelledby="consoleTitle">
+    <div class="panel-head" style="margin-bottom:0">
+      <h3 id="consoleTitle">Console</h3>
+      <span class="console-state" id="consoleState">starting</span>
+    </div>
+    <p class="modal-sub" id="consoleNote">Everything the server has printed, with the last thing that went wrong at the top when there is one.</p>
+    <pre class="console-body" id="consoleBody" tabindex="0"></pre>
+    <div class="modal-actions">
+      <button class="console-action is-start" id="consoleStart" disabled>Start Server</button>
+      <button class="console-action is-restart" id="consoleRestart" disabled>Restart Server</button>
+      <button class="console-action is-stop" id="consoleStop" disabled>Stop Server</button>
+      <button class="btn btn-primary btn-sm" id="consoleClose">Close</button>
     </div>
   </div>
 </div>

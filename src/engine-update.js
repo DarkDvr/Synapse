@@ -19,11 +19,16 @@
  * Updating is: stop the engine, `npm install -g @opencode/cli@latest`, start it.
  * The order is not a preference — on Windows a running .exe cannot be replaced —
  * and it refuses while a turn is in flight, because that turn would be lost.
+ *
+ * Which npm runs matters: ours, in `bin\node`, when it is usable, because that
+ * one's global prefix IS `bin\node` — so `-g` installs into this folder and never
+ * into `%APPDATA%`. See `docs/notes/desktop-app.md`.
  */
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFile } from 'node:child_process';
-import { DATA_DIR, VENDOR_ENGINE } from './paths.js';
+import { DATA_DIR, ROOT, VENDOR_ENGINE } from './paths.js';
+import { hasNpm } from './npm-check.js';
 
 const REGISTRY = 'https://registry.npmjs.org/@opencode/cli';
 const CACHE_FILE = path.join(DATA_DIR, 'engine-update.json');
@@ -114,13 +119,18 @@ async function registryLatest() {
   };
 }
 
-function runNpmInstall(log) {
+async function runNpmInstall(log) {
   const args = ['install', '-g', `${PACKAGE}@latest`, '--no-fund', '--no-audit'];
-  const [file, argv] =
-    process.platform === 'win32'
+  const found = await hasNpm({ root: ROOT });
+  if (!found.ok) throw new Error('npm is not available, and Synapse could not fetch its own copy into bin\\node.');
+  // Our own npm is run as `node npm-cli.js`, never as a .cmd: no shell, so no
+  // quoting and no path in command text. A machine npm is a .cmd and needs one.
+  const [file, argv] = found.pair
+    ? [found.pair.node, [found.pair.cli, ...args]]
+    : process.platform === 'win32'
       ? [process.env.ComSpec || 'cmd.exe', ['/d', '/s', '/c', 'npm', ...args]]
       : ['npm', args];
-  log.info(`engine update: npm ${args.join(' ')}`);
+  log.info(`engine update: npm ${args.join(' ')} (${found.how === 'local' ? 'bin\\node' : 'this machine'})`);
   return new Promise((resolve, reject) => {
     execFile(
       file,
@@ -169,18 +179,30 @@ export function createEngineUpdate({ engine, logger, runs, notify }) {
     return { version, binary: status.binary || null, packageRoot: pkg?.root || null, managedByNpm: Boolean(pkg), vendored };
   }
 
-  /** Where npm puts the binary on this machine, if it is there. */
+  /**
+   * Where npm puts the binary, if it is there.
+   *
+   * Both prefixes, in order: a standalone Node's global prefix is its own folder,
+   * so our npm installs to `bin\node\node_modules`; a machine npm installs to
+   * `%APPDATA%\npm`. The old code knew only the second, so an update run with the
+   * copy that travels with the app would have installed correctly and then
+   * reported "no binary was found to copy".
+   */
   function npmBinary() {
-    const appData = process.env.APPDATA;
-    if (!appData) return null;
-    const candidate = path.join(appData, 'npm', 'node_modules', '@opencode', 'cli', 'bin', 'opencode.exe');
-    try { return fs.existsSync(candidate) ? candidate : null; } catch { return null; }
+    const candidates = [path.join(ROOT, 'bin', 'node', 'node_modules', '@opencode', 'cli', 'bin', 'opencode.exe')];
+    if (process.env.APPDATA) {
+      candidates.push(path.join(process.env.APPDATA, 'npm', 'node_modules', '@opencode', 'cli', 'bin', 'opencode.exe'));
+    }
+    for (const candidate of candidates) {
+      try { if (fs.existsSync(candidate)) return candidate; } catch { /* unreadable is absent */ }
+    }
+    return null;
   }
 
   /** Copy the npm-installed binary over the vendored copy, keeping the old one. */
   function copyOverVendored() {
     const from = npmBinary();
-    if (!from) throw new Error('npm installed the engine, but no binary was found to copy.');
+    if (!from) throw new Error('npm installed the engine, but no binary was found to copy (looked in bin\\node and %APPDATA%\\npm).');
     return copyRuntimeOver(from, VENDOR_ENGINE, (line) => log.info(line));
   }
 

@@ -391,6 +391,40 @@ export function normalize(raw) {
   return cfg;
 }
 
+/** The drive or share a path lives on: `F:\` for a drive, `\\server\share\` for a share. */
+function rootExists(p) {
+  try {
+    const root = path.parse(p).root;
+    return Boolean(root) && fs.existsSync(root);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Clear config paths that name a place this machine does not have.
+ *
+ * The config travels with the folder, so an absolute path in it becomes a reference to
+ * the machine the copy came from. A second PC inherited `F:\dev\Synapse\bin\opencode\
+ * opencode.exe` and `F:\dev\Synapse\data\engine\opencode`: the engine could not be
+ * spawned at all, and the home was *created* on that machine's own F: drive. Empty is
+ * the right value — it means "the copy that travels with the app", which every install
+ * has. Returns true when something was cleared, so the caller can save.
+ */
+export function repairMachinePaths(cfg) {
+  const oc = cfg?.engine?.opencode;
+  if (!oc) return false;
+  let changed = false;
+  for (const field of ['binary', 'home']) {
+    const value = String(oc[field] || '').trim();
+    if (value && !rootExists(value)) {
+      oc[field] = '';
+      changed = true;
+    }
+  }
+  return changed;
+}
+
 /** Read the config file, creating it from defaults if missing. Never throws. */
 export function loadConfig() {
   try {

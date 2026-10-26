@@ -60,20 +60,32 @@ export function roleMustLoad(config, role) {
  * is now an instruction, and the runner checks it (`skillsMissing` in runs.js).
  * The rest stay available without being mandatory: every skill read is context
  * spent, and a local model with a 28k room feels that.
+ *
+ * `chat` is Single mode, which is not this harness: there is no role to judge and
+ * no report to write, so the wording must not say either. Left as it was, a Single
+ * session was told to load its skills "before you judge the next piece of work"
+ * and to say so "in your report" — the Architect's words in a plain conversation.
  */
-export function describeSkills(config, role) {
+export function describeSkills(config, role, { chat = false } = {}) {
   const all = roleSkillList(config, role);
   if (all === null) return '';
   if (!all.length) return 'You have no skills: do the task with the tools you have.';
   const must = roleMustLoad(config, role);
   const optional = all.filter((s) => !must.includes(s));
-  const before = role === 'architect' ? 'before you judge the next piece of work' : 'before your first edit';
+  const before = chat
+    ? 'before you start'
+    : role === 'architect'
+      ? 'before you judge the next piece of work'
+      : 'before your first edit';
   const parts = [];
   if (must.length) {
     parts.push(
-      `Skills for this role — load every one of them with the skill tool ${before}: ${must.join(', ')}. They ` +
-        `are how this role does its work, not optional reading, and a skill you skipped is part of the job you ` +
-        `skipped.`,
+      chat
+        ? `Skills — load every one of them with the skill tool ${before}: ${must.join(', ')}. They are how ` +
+            `this work gets done, and a skill you skipped is part of the job you skipped.`
+        : `Skills for this role — load every one of them with the skill tool ${before}: ${must.join(', ')}. ` +
+            `They are how this role does its work, not optional reading, and a skill you skipped is part of ` +
+            `the job you skipped.`,
     );
   }
   if (optional.length) parts.push(`Also available when the task needs it: ${optional.join(', ')}.`);
@@ -102,6 +114,8 @@ export function describeSkills(config, role) {
         `its ui\\ folder. Do not write a new WPF project from scratch.`,
     );
   }
-  parts.push('Any other skill is refused. Say in your report which ones you loaded.');
+  parts.push(
+    chat ? 'Any other skill is refused. Say which ones you loaded.' : 'Any other skill is refused. Say in your report which ones you loaded.',
+  );
   return parts.join(' ');
 }

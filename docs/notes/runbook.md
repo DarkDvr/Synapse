@@ -67,40 +67,30 @@ include something the engine or the server reads at start. Everything else
 (roles, worker timers, logging, the provider key) applies the moment Save returns,
 and the dialog would be noise.
 
-A restart is **`start.bat` in a new console**, not a hidden process: this is a
-console application and the operator watches the engine in that window.
+A restart is **the app's job**: the window, the tray icon and the page all survive,
+because none of them was ever part of the server.
 
-```
-cmd /c start "" /D <root> start.bat restart
-```
+Under `Synapse.exe` the server stops its engine, removes its pid file and exits
+**with code 2**; the app reads that as "start a new one" and reopens the page when
+the new server says `UI ready at`. That is the whole contract, and it is why there
+is no script to run:
 
-- `start.bat restart` waits ~3 s (`ping`, not `timeout`, which needs a console) so
-  the old process can release the port before the new one binds it.
-- The old process stops its engine, removes its pid file and exits **with code 2**.
-  `start.bat` reads that as "another console is taking over" and closes instead of
-  hitting `pause`, so there is exactly one window, one engine and one server.
-- `cmd /c start` is the only hand-off that works here: a `detached: true` child of
-  the server **never ran** (measured, three ways), and a plain child dies with the
-  parent.
+| exit | means | the app |
+|---|---|---|
+| 2 | restart me | starts a new server and reopens the page |
+| 0 | stopped on purpose | stays stopped until Start Server |
+| anything else | it died | shows the last useful line and the console, and does **not** retry |
 
-`restart.ps1` is still the right thing for a restart from a terminal — it reads
-both pid files and refuses anything under the desktop app's folder. The app no
-longer uses it, because it starts node hidden with output in `%TEMP%\synapse.out`,
-and the operator wants the window.
+Run by hand (`bin\node\node.exe src\index.js`) the restart button says so plainly:
+restarting is the app's job.
 
 **A pid file can lie, and then a restart changes nothing.** Measured on 22 Oct: a
 second copy was started while the first still held 8700, it died on `EADDRINUSE`,
-and it left *its* pid in `data\synapse.pid`. After that `restart.ps1` reported
-"synapse pid … is not running", started another copy, and the console kept serving
-the old code — every fix looked like it had not applied. The script now falls back
-to **the process holding the port**, and proves it is this install before stopping
-it: on 8700 the port must answer `/api/status` with *this* folder's engine home, and
-on 8720 the engine's own binary must sit under this folder. Nothing is matched by
-name, and anything under `@opencodedesktop` is refused as before.
-
-The tell to remember: a restart that reports success while the UI still behaves
-like the old build. Check `GET /api/status` → `engine.home`, and compare the pid
-there with the one in the port's socket.
+and it left *its* pid in `data\synapse.pid`. The symptom is a restart that reports
+success while the UI still behaves like the old build. The app never stops things
+by pid file — it holds a handle to the process it started — but the files are still
+worth checking: `GET /api/status` → `engine.home`, and the pid in
+`data\synapse.pid`, should describe the process that is actually listening.
 
 ---
 
@@ -170,11 +160,21 @@ The runtime can travel with the folder.
 
 `bin\opencode\opencode.exe` (about 210 MB, `bin/` is not in git) is what the app
 runs when it is present — it is checked *before* any global install, so a machine
-with no npm and no `@opencode/cli` still works. With the copy in place the folder
-is the app: copy `F:\dev\Synapse` to the new machine, run `start.bat`, and it
-starts. Nothing is written outside it, and the engine's home (`data\engine\opencode`)
-is created fresh on first boot.
+with no npm and no `@opencode/cli` still works. With the copies in place the folder
+is the app: copy `F:\dev\Synapse` to the new machine, double-click `Synapse.exe`,
+and it starts. Nothing is written outside it, and the engine's home
+(`data\engine\opencode`) is created fresh on first boot.
 
+- **The one thing it does not install for itself is the .NET 10 Desktop Runtime.**
+  The exe is framework-dependent, so a PC without it says so in a Windows dialog
+  before Synapse runs a line. Everything else — Node, the runtime, npm — is inside
+  `bin\`.
+- **A copied folder's config still names the machine it came from**, so paths whose
+  drive is absent are cleared at boot and the copy that travels is used; a project
+  whose folder is gone is dropped from the registry, silently. That is section 6 of
+  `desktop-app.md`, and `tests/portable-paths.test.mjs` guards it.
+- Node travels too: `vendor-node.ps1` puts it in `bin\node`, and the app prefers it
+  over anything on `PATH`.
 - Keep the licence. It is MIT, so the copy must carry the notice:
   `vendor-engine.ps1` writes `bin\opencode\LICENSE` from the project.
 - `VERSION.txt` beside it records what the copy is and where it came from.
@@ -194,24 +194,30 @@ Synapse uses npm for exactly one thing: **updating the runtime**. The app itself
 is plain Node, and the runtime travels in `bin\opencode`, so a machine with no
 toolchain can still run projects.
 
+Which npm matters. The app installs nothing machine-wide (AGENTS.md rule 3), so it
+prefers the copy beside its own `node.exe` in `bin\node`, and fetches the missing
+`node_modules\npm` into that folder when it is not usable. Because that npm's global
+prefix *is* `bin\node`, `npm install -g` lands inside the folder — the update is
+local by construction. See `docs/notes/desktop-app.md`.
+
 At boot (`src/npm-check.js`):
 
 | situation | what happens |
 |---|---|
-| npm on PATH | nothing is printed |
-| npm missing, `bin\opencode` present | offered: install Node.js LTS with winget. Declined → starts anyway, one line says the update button will not work |
-| npm missing, no runtime anywhere | offered: install Node.js LTS with winget. Declined → explains that nothing here can run a turn, and exits |
+| ours in `bin\node` is usable | nothing is printed |
+| only this machine's npm on PATH | used for this session, and one line says so |
+| none, and `bin\node\node.exe` exists | fetched into `bin\node` in the background, silently |
+| the fetch fails | one warning; the app runs, runtime updates wait |
 
-Started hidden (restart.ps1, a shortcut), nobody can answer the question, so the
-same split applies without the prompt. The install is `winget install -e --id
-OpenJS.NodeJS.LTS`, printed before it runs — it is the only moment the app fetches
-something other than a model, and only after a yes.
+The fetch is the one download that happens without a click, and it is bounded: a
+failure is recorded in `data\npm-attempt.json` and not retried for six hours, so a
+machine with no network does not spend every launch on it. There is no prompt — the
+app starts the server hidden, so a question would sit unanswered forever.
 
-**Updates on the vendored copy** use npm too: Settings > Runtime > Check for
-Updates stops the runtime, installs `@opencode/cli@latest`, copies the new binary
-over `bin\opencode\opencode.exe` (keeping `opencode.exe.bak`) and restarts. The
-copy is what makes the update visible — without it the app would keep starting
-the old file.
+**Updates use the same npm**: Settings > Runtime > Check for Updates stops the
+runtime, installs `@opencode/cli@latest`, copies the new binary over
+`bin\opencode\opencode.exe` (keeping `opencode.exe.bak`) and restarts. The copy is
+what makes the update visible — without it the app would keep starting the old file.
 
 ---
 

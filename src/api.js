@@ -137,7 +137,7 @@ export function normalizeAttachments(list) {
   return out;
 }
 
-export function createApi({ getConfig, applyConfig, engine, logger, getBootError, projects, toolStats, probe, modelCache, inspectModel: inspectRef, probeDir, runs, engineUpdate, restart, notify, guard }) {
+export function createApi({ getConfig, applyConfig, engine, logger, getBootError, projects, toolStats, probe, modelCache, inspectModel: inspectRef, probeDir, runs, engineUpdate, restart, stopSelf, notify, guard }) {
   const app = logger.channel('app');
 
   // The last brief we handed each session, so an unchanged plan does not PUT
@@ -198,7 +198,9 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
         role,
         auto,
         single,
-        skills: describeSkills(getConfig(), role),
+        // Single is a chat, not this harness: its skills line may not say "this
+        // role" or "your report", because there is neither.
+        skills: describeSkills(getConfig(), role, { chat: single }),
         focus: getConfig()?.roles?.[role]?.focus,
         instructions: getConfig()?.roles?.[role]?.instructions,
       });
@@ -510,6 +512,13 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
     restart: async () => {
       if (!restart) return { ok: false, error: 'This build cannot restart itself.' };
       return restart();
+    },
+
+    // Tray > Stop Server. Graceful, like the restart: the engine is stopped by the
+    // same shutdown path rather than being killed with its parent.
+    shutdown: async () => {
+      if (!stopSelf) return { ok: false, error: 'This build cannot stop itself.' };
+      return stopSelf();
     },
 
     // The engine updates often and the model catalog ships inside it, so this is
@@ -1093,16 +1102,21 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
       // Re-brief before the turn: the plan may have changed since the last one,
       // and an unchanged plan is not sent twice.
       let directory = '';
+      let single = false;
       try {
         const session = await engine.getSession(sessionId);
         directory = session?.directory || '';
+        single = session?.single === true;
         await brief(sessionId, directory, 'architect', session?.auto === true);
       } catch (err) {
         app.warn(`brief skipped for ${sessionId}: ${err.message}`);
       }
       // The operator's own words, written down before any model can restate
-      // them. This file is the requirement every role is judged against.
-      if (directory) appendRequirement(directory, text || `(attached ${attachments.length} file(s))`);
+      // them. This file is the requirement every role is judged against — which is
+      // why a Single conversation does not write to it: there are no roles and no
+      // plan to judge against, and appending a chat would put words into the
+      // earlier task's record that were never asked of it.
+      if (directory && !single) appendRequirement(directory, text || `(attached ${attachments.length} file(s))`);
       // Speaking is the answer to "what now" after a stop: whatever they stopped
       // may run again from here.
       if (directory) runs?.resume?.(directory);

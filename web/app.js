@@ -13,6 +13,138 @@ import { newStream, pushStream, slideTarget, nextOffset, takePending, freezeStre
 
 const $ = (id) => document.getElementById(id);
 
+// ── the shell's channel ─────────────────────────────────────────────────
+// The window — its bar, its buttons, its size — belongs to the shell, so the page
+// neither draws nor drives any of it. The channel carries the two things only the
+// shell knows: the console, which it writes, and whether the server process is
+// running, which only it can start and stop.
+function initShellChannel() {
+  const host = window.chrome?.webview;
+  if (!host) return;
+
+  host.addEventListener('message', (ev) => {
+    const msg = ev.data;
+    if (!msg || typeof msg !== 'object') return;
+    if (msg.kind === 'console') {
+      consoleOffset = msg.offset ?? consoleOffset;
+      appendConsole(msg.text, msg.dropped);
+    } else if (msg.kind === 'server') {
+      setServerState(msg.state, msg.reason);
+    }
+  });
+
+  // Say hello. The shell answers with the state of the server, and re-checks which
+  // of its windows need the resize band forwarded — Chromium creates the renderer
+  // after the navigation completes, so a page that has loaded is the best evidence
+  // that it now exists.
+  host.postMessage({ kind: 'ready' });
+}
+
+// ── the console ─────────────────────────────────────────────────────────
+// What the server prints, written by the app rather than read from the server —
+// so it still works when the server is stopped, which is exactly when a console
+// is worth opening. The whole ring is asked for on open (offset 0), then only
+// what is new, every 750ms while the panel is up.
+let consoleOffset = 0;
+let consolePoll = 0;
+let consoleFocus = null;
+const CONSOLE_NOTE = 'Everything the server has printed. Select any of it to copy.';
+
+function openConsole() {
+  const modal = $('consoleModal');
+  if (!modal || !modal.hidden) return;
+  consoleFocus = document.activeElement;
+  consoleOffset = 0;
+  $('consoleBody').textContent = '';
+  $('consoleNote').textContent = state.server?.reason || CONSOLE_NOTE;
+  paintConsolePill(state.server?.state);
+  modal.hidden = false;
+  $('consoleBody').focus();
+
+  const host = window.chrome?.webview;
+  if (!host) {
+    // A browser tab has no shell to ask, and inventing a console there would be
+    // the mock this project forbids.
+    $('consoleNote').textContent = 'The console belongs to the app: open Synapse.exe to watch the server there.';
+    paintConsolePill('not in the app');
+    return;
+  }
+  host.postMessage({ kind: 'console', offset: consoleOffset });
+  stopConsolePoll();
+  consolePoll = setInterval(() => host.postMessage({ kind: 'console', offset: consoleOffset }), 750);
+}
+
+function closeConsole() {
+  const modal = $('consoleModal');
+  if (modal) modal.hidden = true;
+  stopConsolePoll();
+  // Back to whatever opened it, so the keyboard does not start over at the top.
+  (consoleFocus || $('consoleBtn'))?.focus?.();
+  consoleFocus = null;
+}
+
+function stopConsolePoll() {
+  if (consolePoll) { clearInterval(consolePoll); consolePoll = 0; }
+}
+
+function appendConsole(text, dropped) {
+  const body = $('consoleBody');
+  if (!body) return;
+  // `dropped` means the ring has already discarded our position, so what arrived
+  // is the whole window and the text has to be replaced, not appended to.
+  if (dropped) body.textContent = '';
+  if (!text) return;
+  const atBottom = body.scrollHeight - body.scrollTop - body.clientHeight < 24;
+  body.appendChild(document.createTextNode(text));
+  if (atBottom) {
+    // Twice: the browser clamps scrollTop to the height it knew about before the
+    // text was laid out, so one assignment lands short of the newest line.
+    body.scrollTop = body.scrollHeight;
+    requestAnimationFrame(() => { body.scrollTop = body.scrollHeight; });
+  }
+}
+
+/** What the app says about the server, which the server cannot say at all. */
+function setServerState(serverState, reason) {
+  state.server = { state: serverState, reason: reason || '' };
+  paintConsolePill(serverState);
+  $('consoleNote').textContent = reason || CONSOLE_NOTE;
+  // The title bar says it too. That strip is the only thing on screen that does
+  // not depend on the page underneath, which is exactly the state it describes.
+  const alert = $('titlebarAlert');
+  if (alert) {
+    const down = serverState === 'stopped' || serverState === 'failed';
+    alert.hidden = !down;
+    alert.textContent = serverState === 'failed' ? 'Server failed' : 'Server stopped';
+  }
+  renderStatus();
+}
+
+function paintConsolePill(serverState) {
+  const pill = $('consoleState');
+  if (pill) {
+    pill.textContent = serverState || 'unknown';
+    pill.className = 'console-state'
+      + (serverState === 'running' ? ' is-ok'
+        : serverState === 'stopped' || serverState === 'failed' ? ' is-err' : '');
+  }
+  renderConsoleActions(serverState);
+}
+
+/**
+ * The three server buttons, mirroring the tray menu: there is nothing to start
+ * while it runs and nothing to stop while it is down, so the dead one is dead.
+ * Outside the app none of them can do anything at all.
+ */
+function renderConsoleActions(serverState) {
+  const up = serverState === 'running' || serverState === 'starting';
+  const host = window.chrome?.webview;
+  for (const [id, allowed] of [['consoleStart', !up], ['consoleRestart', up], ['consoleStop', up]]) {
+    const btn = $(id);
+    if (btn) btn.disabled = !host || !allowed;
+  }
+}
+
 // Orchestration roles. These ids key the per-role model choices in the config
 // file and label the cards. Every chat message goes to the Architect — the
 // composer has no target picker; the philosophy is one interface, one lead.
@@ -413,6 +545,9 @@ async function refreshStatus() {
   try {
     state.status = await api('GET', '/api/status');
     state.workspace = state.status?.engine?.workspace || '';
+    // The page got an answer, so the server is running; the app overrides this the
+    // moment it says otherwise, and a failed fetch below leaves it alone.
+    state.server = { state: 'running', reason: '' };
   } catch (err) {
     state.status = { engine: { ready: false, kind: 'engine' }, bootError: err.message };
   }
@@ -423,12 +558,19 @@ function renderStatus() {
   const engine = state.status?.engine || {};
   const ready = Boolean(engine.ready);
   const failed = Boolean(state.status?.bootError);
+  // The app knows one thing the server cannot tell it: that it is not running.
+  // That answer wins — a stopped server is not "starting", and saying so is the
+  // whole point of the red dot.
+  const server = state.server?.state;
+  const down = server === 'stopped' || server === 'failed';
 
-  $('engineDot').className = 'status-dot ' + (ready ? 'ok' : failed ? 'err' : 'warn');
+  $('engineDot').className = 'status-dot ' + (down || failed ? 'err' : ready ? 'ok' : 'warn');
   // `opencode v2.1.0`: the v is the version's own, not a word.
-  $('engineState').textContent = ready
-    ? `${engine.kind} ${versionTag(engine.version)}`.trim()
-    : failed ? 'failed' : 'starting';
+  $('engineState').textContent = down
+    ? server
+    : ready
+      ? `${engine.kind} ${versionTag(engine.version)}`.trim()
+      : failed ? 'failed' : 'starting';
 
   // There is no separate "Event stream" row any more: this dot is the stream's
   // state, and the age on its label is the evidence. A row that said "connected"
@@ -2026,7 +2168,6 @@ function renderTree() {
           <span class="tree-caret" aria-hidden="true"></span>
           <span class="tree-name">${esc(p.name)}</span>
         </button>
-        ${p.exists === false ? '<span class="tree-missing" title="This folder no longer exists — sessions cannot run here">!</span>' : ''}
         <span class="tree-actions">
           ${p.general ? '' : `<button class="tree-edit ic-edit" data-rename-project="${esc(p.id)}" title="Rename Project" aria-label="Rename Project">✎</button>`}
           ${liveDot('', { clickable: false, on: p.sessions.some((s) => sessionWorking(s.id)) })}
@@ -2390,6 +2531,9 @@ async function commitRename() {
 function fitStageHeight() {
   const doc = document.documentElement;
   const bar = Math.max(0, window.innerHeight - doc.clientHeight);
+  // `innerHeight` is the page's viewport, which starts under the shell's title bar.
+  // The bar used to be part of this page and had to be subtracted here; it is not,
+  // so the only chrome left to account for is a classic scrollbar.
   doc.style.setProperty('--stage-h', `${Math.max(0, window.innerHeight - 26 - bar)}px`);
 }
 
@@ -6345,7 +6489,7 @@ async function restartSynapse() {
   const back = await waitForSynapse(90000);
   if (!back) {
     $('restartState').textContent =
-      'Synapse did not come back by itself. Start it with start.bat, then reload this page.';
+      'Synapse did not come back by itself. Start the server from the Synapse tray icon, then reload this page.';
     $('restartCurtain').classList.add('is-stuck');
     return;
   }
@@ -6653,6 +6797,16 @@ function wire() {
   // what the server said a moment ago.
   $('toolsBtn')?.addEventListener('click', () => openRailModal('toolsModal', renderToolUsage));
   $('probeBtn')?.addEventListener('click', () => openRailModal('probeModal', renderProbe));
+  // The console: one button to open, one to close, and Escape or the backdrop as
+  // the same second way out every other popup here has.
+  $('consoleBtn')?.addEventListener('click', openConsole);
+  $('consoleClose')?.addEventListener('click', closeConsole);
+  $('consoleModal')?.addEventListener('click', (e) => { if (e.target === $('consoleModal')) closeConsole(); });
+  // The same three actions the tray offers. Stopping asks first — the shell owns
+  // that question, so both routes ask it in the same place, once.
+  for (const [id, action] of [['consoleStart', 'start'], ['consoleRestart', 'restart'], ['consoleStop', 'stop']]) {
+    $(id)?.addEventListener('click', () => window.chrome?.webview?.postMessage({ kind: 'server', action }));
+  }
   for (const btn of document.querySelectorAll('[data-close-modal]')) {
     btn.addEventListener('click', () => closeRailModal(btn.dataset.closeModal));
   }
@@ -6661,6 +6815,7 @@ function wire() {
   }
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
+    if ($('consoleModal')?.hidden === false) { e.preventDefault(); closeConsole(); return; }
     for (const id of ['toolsModal', 'probeModal']) {
       if ($(id)?.hidden === false) { e.preventDefault(); closeRailModal(id); return; }
     }
@@ -6870,10 +7025,14 @@ function wire() {
 
 async function boot() {
   wire();
+  initShellChannel();
   // Before anything is measured: the cards need their role id and their
   // subtitle slot, and a card's height is what the wrapper is measured against.
   initRoleCards();
   fitStageHeight();
+  // The stage is a window measurement, so it has to follow the window: without
+  // this a resize left the old height in place and the page grew a scrollbar.
+  window.addEventListener('resize', fitStageHeight);
   state.config = await api('GET', '/api/config').catch(() => null);
   renderLlmStatus();
   // every new session starts Single; an opened session sets its own mode

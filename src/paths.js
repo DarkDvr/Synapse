@@ -63,6 +63,10 @@ export const PROBE_DIR = path.join(PROJECTS_ROOT, '_probe');
 // The last probe run, so the results survive a restart.
 export const PROBE_FILE = path.join(DATA_DIR, 'probe.json');
 
+// When npm was last fetched into bin\node, and whether it worked. Kept so a
+// machine with no network tries once rather than on every launch.
+export const NPM_ATTEMPT_FILE = path.join(DATA_DIR, 'npm-attempt.json');
+
 // What we know about each model: limits, thinking-effort variants and the
 // discovered toolset. Survives models leaving the catalog.
 export const MODEL_CACHE_FILE = path.join(DATA_DIR, 'model-cache.json');

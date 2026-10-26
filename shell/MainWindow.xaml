@@ -1,0 +1,142 @@
+<Window x:Class="Synapse.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
+        Title="Synapse"
+        Width="1400" Height="900"
+        MinWidth="1120" MinHeight="720"
+        WindowStartupLocation="CenterScreen"
+        Background="#151619"
+        WindowStyle="None"
+        ResizeMode="CanResize"
+        UseLayoutRounding="True"
+        SnapsToDevicePixels="True"
+        TextOptions.TextFormattingMode="Display">
+
+  <!-- No Windows frame, but WindowChrome keeps what the frame was for: the resize
+       borders, and a caption — 36px of it, which is the bar below. Making that the
+       caption is what gives dragging, double-click to maximise and the Windows 11
+       snap layouts, with no JavaScript involved. -->
+  <WindowChrome.WindowChrome>
+    <WindowChrome CaptionHeight="36"
+                  ResizeBorderThickness="6"
+                  GlassFrameThickness="0"
+                  CornerRadius="0"
+                  UseAeroCaptionButtons="False" />
+  </WindowChrome.WindowChrome>
+
+  <Window.Resources>
+    <!-- The glyphs are Segoe Fluent Icons (Segoe MDL2 Assets on Windows 10): the
+         marks Windows itself draws on these three buttons. -->
+    <Style x:Key="BarButton" TargetType="Button">
+      <Setter Property="Width" Value="46" />
+      <Setter Property="Height" Value="35" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="Foreground" Value="#94979E" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="FontFamily" Value="Segoe Fluent Icons, Segoe MDL2 Assets" />
+      <Setter Property="FontSize" Value="10" />
+      <Setter Property="Focusable" Value="False" />
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Border Background="{TemplateBinding Background}" SnapsToDevicePixels="True">
+              <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+            </Border>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+      <Style.Triggers>
+        <Trigger Property="IsMouseOver" Value="True">
+          <Setter Property="Background" Value="#1AFFFFFF" />
+          <Setter Property="Foreground" Value="#ECEEF1" />
+        </Trigger>
+      </Style.Triggers>
+    </Style>
+    <!-- Red for close, like the composer's Stop: both throw work away. -->
+    <Style x:Key="BarClose" TargetType="Button" BasedOn="{StaticResource BarButton}">
+      <Style.Triggers>
+        <Trigger Property="IsMouseOver" Value="True">
+          <Setter Property="Background" Value="#F0563F" />
+          <Setter Property="Foreground" Value="#FFFFFF" />
+        </Trigger>
+      </Style.Triggers>
+    </Style>
+  </Window.Resources>
+
+  <Grid>
+    <Grid.RowDefinitions>
+      <RowDefinition Height="36" />
+      <RowDefinition Height="*" />
+    </Grid.RowDefinitions>
+
+    <!-- ── the title bar ──────────────────────────────────────────────────
+         Drawn here rather than by the page, and that is the point: the page's own
+         scrollbar spans its viewport, so a bar inside the page is a bar the
+         scrollbar draws over. Outside the page, the scrollbar starts where the page
+         starts — under this strip. -->
+    <Border Grid.Row="0" Background="#191B1F" BorderBrush="#32353B" BorderThickness="0,0,0,1">
+      <Grid>
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="Auto" />
+          <ColumnDefinition Width="Auto" />
+          <ColumnDefinition Width="Auto" />
+          <ColumnDefinition Width="Auto" />
+          <ColumnDefinition Width="*" />
+          <ColumnDefinition Width="Auto" />
+        </Grid.ColumnDefinitions>
+
+        <Image x:Name="BarMark" Grid.Column="0" Width="18" Height="18" Margin="14,0,8,0" />
+        <TextBlock Grid.Column="1" Text="Synapse" FontSize="12.5" FontWeight="SemiBold"
+                   Foreground="#ECEEF1" VerticalAlignment="Center" />
+        <Border Grid.Column="2" Margin="8,0,0,0" Padding="6,1" CornerRadius="9"
+                BorderBrush="#32353B" BorderThickness="1" VerticalAlignment="Center">
+          <TextBlock Text="v0.1" FontSize="10" Foreground="#94979E" />
+        </Border>
+
+        <!-- The server is down. Said here as well as in the Runtime row, because
+             this strip does not depend on the page below it. -->
+        <Border x:Name="BarAlert" Grid.Column="3" Margin="8,0,0,0" Padding="7,1" CornerRadius="9"
+                BorderBrush="#7A3A2E" BorderThickness="1" VerticalAlignment="Center" Visibility="Collapsed">
+          <TextBlock x:Name="BarAlertText" Text="Server stopped" FontSize="10" Foreground="#F0563F" />
+        </Border>
+
+        <!-- The caption: empty on purpose. Everything clickable is to its right,
+             and marked hit-testable so the caption does not swallow the click. -->
+        <Grid Grid.Column="4" />
+
+        <StackPanel Grid.Column="5" Orientation="Horizontal" WindowChrome.IsHitTestVisibleInChrome="True">
+          <Button x:Name="MinButton" Style="{StaticResource BarButton}" Click="OnMinimize" Content="&#xE921;" />
+          <Button x:Name="MaxButton" Style="{StaticResource BarButton}" Click="OnMaximize" Content="&#xE922;" />
+          <Button x:Name="CloseButton" Style="{StaticResource BarClose}" Click="OnClose" Content="&#xE8BB;" />
+        </StackPanel>
+      </Grid>
+    </Border>
+
+    <!-- The resize border is the window's, and it can only stay the window's if the
+         WebView does not cover it: Chromium's windows live in another process
+         (SetWindowLongPtr answers error 5), so there is no forwarding a hit-test
+         through it. So the WebView is inset by exactly the border, and the strips
+         left over are painted in the colours the page *renders* at those edges —
+         measured, not read off the CSS: the rail declares #191B1F and paints #111417,
+         and the content's edge is #0D161E. That is what keeps it from reading as a
+         frame. -->
+    <Grid Grid.Row="1">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="6" />
+        <ColumnDefinition Width="*" />
+        <ColumnDefinition Width="6" />
+      </Grid.ColumnDefinitions>
+      <Grid.RowDefinitions>
+        <RowDefinition Height="*" />
+        <RowDefinition Height="6" />
+      </Grid.RowDefinitions>
+
+      <Border Grid.RowSpan="2" Grid.Column="0" Background="#111417" />
+      <Border Grid.Row="0" Grid.Column="2" Background="#0D161E" />
+      <Border Grid.Row="1" Grid.ColumnSpan="3" Background="#0D161E" />
+
+      <wv2:WebView2 x:Name="View" Grid.Row="0" Grid.Column="1" DefaultBackgroundColor="#151619" />
+    </Grid>
+  </Grid>
+</Window>

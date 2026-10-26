@@ -23,6 +23,19 @@ const ENGINE_USERNAME = 'opencode';
 // and output 32,000). Written beside a measured context so the pair is valid and the
 // generation cap stays exactly what it already was.
 const ENGINE_DEFAULT_OUTPUT = 32000;
+/** Does this path exist? A missing file is an answer, not a failure. */
+function exists(p) {
+  try { return fs.existsSync(p); } catch { return false; }
+}
+
+/** The drive or share a path lives on, which has to be here before anything is created. */
+function rootExists(p) {
+  try {
+    const root = path.parse(p).root;
+    return Boolean(root) && fs.existsSync(root);
+  } catch { return false; }
+}
+
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 export class OpenCodeEngine extends Engine {
@@ -46,9 +59,21 @@ export class OpenCodeEngine extends Engine {
 
   // ── discovery ────────────────────────────────────────────────
 
+  /** One warning per problem, not one per call: these are asked on every status read. */
+  noteOnce(line) {
+    this._noted ||= new Set();
+    if (this._noted.has(line)) return;
+    this._noted.add(line);
+    this.log.warn(line);
+  }
+
   resolveBinary() {
     const explicit = (this.cfg.binary || '').trim();
-    if (explicit) return explicit;
+    // A configured path is a hint, not an instruction. On a copied folder it names the
+    // machine the copy came from: the second PC inherited this install's path and could
+    // not spawn an engine at all, because that file is not there.
+    if (explicit && exists(explicit)) return explicit;
+    if (explicit) this.noteOnce(`the runtime in the config (${explicit}) is not on this machine; using the copy that travels with the app`);
     const candidates = [];
     // A copy vendored with Synapse wins: it is the version this app was shipped
     // with, and it is the one that works on a machine with no npm at all.
@@ -69,7 +94,13 @@ export class OpenCodeEngine extends Engine {
   }
 
   resolveHome() {
-    const base = (this.cfg.home && this.cfg.home.trim()) || path.join(this.dataDir, 'engine', 'opencode');
+    const configured = (this.cfg.home || '').trim();
+    const fallback = path.join(this.dataDir, 'engine', 'opencode');
+    // The root of the path is the test, not the folder: a home on a drive this machine
+    // does not have would be *created* there, which is how a copy of this folder made a
+    // `F:\dev\Synapse\data\engine` on a PC with no F: drive.
+    const base = configured && rootExists(configured) ? configured : fallback;
+    if (configured && base !== configured) this.noteOnce(`the engine home in the config (${configured}) is not on this machine; using ${fallback}`);
     return {
       base,
       config: path.join(base, 'config'),

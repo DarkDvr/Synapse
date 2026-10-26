@@ -13,11 +13,13 @@
    ══════════════════════════════════════════════════════════════════════════ */
 
 /* ── 0. scrollbar stability ────────────────────────────────────────────── */
-/* The chat panel must never reflow because a scrollbar appeared. Two separate
-   scrollbars can do it: the page's own (expanding a tool makes the document
-   taller than the window) and the transcript's. Reserving both gutters up front
-   means the content width is identical whether a bar is showing or not. */
-html { scrollbar-gutter: stable; }
+/* The chat panel must never reflow because a scrollbar appeared, so the panes
+   that scroll *inside* the page reserve their gutter (see `.transcript` and the
+   rail panels). The page itself no longer reserves one: `scrollbar-gutter:
+   stable` on <html> holds a 10px column open even when nothing scrolls, which in
+   a frameless window is a strip the title bar cannot reach — and a scrollbar that
+   does appear paints over the bar's right-hand end. The window is a fixed size,
+   so the page only scrolls in the narrow layout, where the bar is there anyway. */
 
 /* ── 1. tokens ─────────────────────────────────────────────────────────── */
 
@@ -119,17 +121,15 @@ body.dark .field textarea {
   border-color: #3a3d43;
 }
 
-.brand-mark {
+.titlebar-mark-wrap { display: inline-flex; flex: none; }
+.titlebar-mark {
   display: block;
-  width: 28px; height: 28px;
-  border-radius: 8px;
+  width: 18px; height: 18px;
+  border-radius: 5px;
   background: none;
-  box-shadow: 0 3px 10px rgba(11, 26, 43, 0.45);
+  box-shadow: 0 2px 6px rgba(11, 26, 43, 0.45);
   object-fit: cover;
 }
-/* The app icon replaced the glyph; the wrapper keeps the flex row's gap honest
-   and lets the mark keep its own shadow without summit.css's text box. */
-.brand-mark-wrap { display: inline-flex; flex: none; }
 
 /* affordance colours: add = green · delete = red · edit/settings = yellow */
 .ic-add { color: var(--green); }
@@ -556,8 +556,9 @@ body.dark .sidebar .nav-link.active > span:first-child { color: #fff; }
 .tree-row:hover .tree-edit, .tree-edit:focus-visible { opacity: 0.85; pointer-events: auto; }
 .tree-edit:hover { background: var(--amber-soft); opacity: 1; }
 
-/* a project whose directory is gone: the engine cannot run sessions there */
-.tree-missing { color: var(--red); font-size: 10px; padding: 0 4px; flex: none; }
+/* There was a red "!" here for a project whose directory was gone. It is gone with
+   it: the server no longer lists such a project at all (see `pruneMissing`), so the
+   marker had nothing left to describe. */
 
 /* The project's own two shortcuts, its label and its sessions all sit to the
    right of ONE vertical yellow rule (`.tree-project-body`): the shortcuts open
@@ -680,7 +681,6 @@ body.dark .sidebar-bottom,
    on colour and size alone - the project name is brighter and larger than a
    session, the labels are tracked and grey - which may be enough, and whether it
    is is the question this experiment answers. */
-.sidebar .brand,
 .sidebar .version,
 .sidebar .sidebar-label,
 .sidebar .tree-open,
@@ -2309,8 +2309,7 @@ body[data-mode="single"] .keep-toggle { display: none; }
 }
 /* And while a modal is open the page does not scroll at all: the settings list
    used to reach its end and then the window underneath carried on, which reads as
-   the dialog itself jumping. One rule, no class to keep in sync — and the page's
-   `scrollbar-gutter: stable` means hiding the bar moves nothing. */
+   the dialog itself jumping. One rule, no class to keep in sync. */
 body:has(.modal-backdrop:not([hidden])) { overflow: hidden; }
 .modal { width: min(560px, 100%); max-height: calc(100vh - 48px); display: flex; flex-direction: column; }
 .modal h2 { font-size: 18px; margin: 12px 0 8px; }
@@ -2538,3 +2537,77 @@ body[data-view="session"] .rail-plan::after { border-radius: 0 0 var(--radius-pa
 .chat-dock,
 html,
 body { overflow-anchor: none; }
+/* ── 19. the window's title bar ────────────────────────────────────────── */
+/* Not here. The bar is drawn by the shell, above the WebView, because a page's  
+   own scrollbar spans its viewport: a bar inside the page is a bar the scrollbar  
+   draws over, and no CSS can put it back. Outside the page the scrollbar starts  
+   where the page starts. The window is therefore 36px shorter than it looks, and  
+   nothing below has to reserve that height. */
+:root {
+  /* Native scrollbars, spinners and date pickers follow this. Without it,
+     Chromium paints its own idea of a scrollbar into a dark window. */
+  color-scheme: dark;
+}
+
+/* ── 20. the console ───────────────────────────────────────────────────── */
+
+/* Ten pixels of type on a sixteen-pixel line: this is an affordance, not a
+   label. The Runtime row has no room for a fourth word and does not need one —
+   a boxed ellipsis is the conventional mark for "there is more here". */
+.console-open {
+  align-self: center; margin-left: 1px;
+  display: inline-grid; place-items: center;
+  width: 26px; height: 17px; padding: 0;
+  border: 1px solid var(--line); border-radius: 4px; background: none;
+  color: var(--muted); cursor: pointer;
+}
+.console-open svg { display: block; fill: currentColor; }
+.console-open:hover { border-color: #4a4f57; color: var(--text); }
+.console-open:focus-visible { outline: 1px solid var(--orange); outline-offset: 1px; }
+
+/* Start, Restart, Stop: the same three things the tray menu offers, in the same
+   order. Colour is the border and the label only — a filled button here would
+   be louder than the dialog it sits in, and these are warnings about state, not
+   the primary action (that is Close). */
+.console-action {
+  min-height: 31px; padding: 0 12px; border-radius: 8px;
+  background: none; border: 1px solid currentColor;
+  font: 600 12px var(--font); cursor: pointer;
+  transition: background 90ms ease, opacity 90ms ease;
+}
+.console-action.is-start { color: var(--green); }
+.console-action.is-restart { color: var(--yellow); }
+.console-action.is-stop { color: var(--red); }
+.console-action.is-start:hover:not(:disabled) { background: var(--green-soft); }
+.console-action.is-restart:hover:not(:disabled) { background: var(--amber-soft); }
+.console-action.is-stop:hover:not(:disabled) { background: var(--red-soft); }
+.console-action:disabled { opacity: 0.32; cursor: default; }
+.console-action:focus-visible { outline: 1px solid var(--orange); outline-offset: 2px; }
+
+/* Wide and tall on purpose: it is a log to read, not a peek. */
+.console-modal { width: min(1180px, 100%); height: min(76vh, 780px); }
+.console-state {
+  margin-left: auto; padding: 1px 7px;
+  border: 1px solid var(--line); border-radius: 999px;
+  font-family: var(--mono); font-size: 10.5px; color: var(--muted);
+}
+.console-state.is-ok { color: var(--green); border-color: rgba(53, 192, 138, 0.35); }
+.console-state.is-err { color: var(--red); border-color: rgba(240, 86, 63, 0.35); }
+
+/* The one place a monospace face is the subject rather than the texture. Lines
+   wrap instead of scrolling sideways: a stack trace is read, and a line that runs
+   off the right edge is a line nobody reads. */
+.console-body {
+  flex: 1 1 auto; min-height: 0; margin: 0;
+  padding: 12px 14px; border-radius: 10px;
+  background: #101114; border: 1px solid var(--line);
+  font-family: var(--mono); font-size: 12px; line-height: 1.55;
+  color: #c9ccd2; white-space: pre-wrap; overflow-wrap: anywhere;
+  overflow-y: auto; user-select: text;
+}
+.console-body:empty::after { content: 'Nothing printed yet.'; color: #5c6068; }
+/* No focus ring on the log itself. It is focused on open so the wheel, the keys
+   and Ctrl+A work, and an orange outline there reads as a border somebody chose
+   rather than as focus. The panel is the only thing on screen and its Close is
+   one Tab away. */
+.console-body:focus, .console-body:focus-visible { outline: none; }

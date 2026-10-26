@@ -838,20 +838,30 @@ export function briefSession({ dir, role = 'architect', auto = false, single = f
   // roles, no work list, no delegation - the operator answers everything in one
   // conversation with it. Describing a team it cannot call was worse than saying
   // nothing: the brief told it to delegate and the ruleset refused the tool.
+  //
+  // The failure this branch had not accounted for: the operator switches a live
+  // Multi session to Single to ask for one small thing, and the model is still
+  // standing in the plan it wrote. Measured 26 Oct - asked to copy one exe, it read
+  // .synapse/plan.json, decided from t21 whether the build was current, and reported
+  // on t18 and t20. The transcript cannot be shortened from here, so the brief has
+  // to overrule it: the stored request is not quoted (that is the old campaign, not
+  // this conversation) and a plan on disk is named only to be refused.
   if (single && isArchitect) {
-    if (state.requirement) {
-      const text =
-        state.requirement.length > 1600
-          ? `${state.requirement.slice(0, 1600).trimEnd()} [...]`
-          : state.requirement;
-      lines.push(`The operator's request (verbatim):\n${text}`);
-    }
     lines.push(
       `You are working in ${dir ? String(dir) : 'this project folder'} and your tools operate there. ` +
         `Answer what you are asked, and use the tools when the answer needs the disk or a command.`,
     );
-    if (decisionsExist(dir)) {
-      lines.push(`The operator's earlier answers are in ${PLAN_DIR}/${DECISIONS_NAME}; do not ask again what it answers.`);
+    lines.push(
+      `This is one conversation: do the work yourself, here, with your own tools. There is no team and ` +
+        `nothing to hand work to - do not delegate, and ignore a delegation tool if one is offered.`,
+    );
+    if (state.exists) {
+      lines.push(
+        `This project carries a plan and its working files from earlier work (${PLAN_DIR}/${PLAN_NAME} and the ` +
+          `rest of ${PLAN_DIR}/). It was written for a different task, not for this conversation: ignore it. Do ` +
+          `not take its tasks as yours, do not follow or update it, and do not judge this work against it. What ` +
+          `the operator asks here is the whole job.`,
+      );
     }
     if (instructions) lines.push(`The operator adds: ${instructions}`);
     if (skills) lines.push(skills);

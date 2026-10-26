@@ -52,15 +52,19 @@ the cards and the commits, not the code. One reason per sentence, not a chain.
    exception is the engine update check (`src/engine-update.js`), and only because
    the operator asks for it: npm is contacted when the update dialog opens, never
    at boot, and the answer is cached in `data\engine-update.json`.
-3. **The engine home is isolated.** `data\engine\opencode` is set via
+3. **A good tenant.** Whatever Synapse needs, it installs itself and silently,
+   inside this folder — `bin\node`, `bin\opencode`, `vendor\`. Never `winget`, a
+   global install, a PATH edit, the registry or `%APPDATA%`. The machine is
+   borrowed; the folder is ours. See `docs/notes/desktop-app.md`.
+4. **The engine home is isolated.** `data\engine\opencode` is set via
    `XDG_CONFIG_HOME` / `XDG_DATA_HOME` / `XDG_STATE_HOME` / `TMPDIR`. The
    machine-wide `~/.config/opencode` must never be touched.
-4. **Engine-agnostic core.** Nothing OpenCode-specific outside
+5. **Engine-agnostic core.** Nothing OpenCode-specific outside
    `src/engines/opencode.js`. Swapping engines means writing one file that
    implements the contract in `src/engines/base.js`.
-5. **Config is a file, the UI is a GUI over it.** `config\synapse.config.json`
+6. **Config is a file, the UI is a GUI over it.** `config\synapse.config.json`
    is the source of truth. No hidden state in the UI.
-6. **No code-crutches.** Do not fake capability. If something cannot be done,
+7. **No code-crutches.** Do not fake capability. If something cannot be done,
    say so rather than drawing a mock that implies it works. Never print secrets
    or tokens.
 
@@ -150,6 +154,7 @@ an agent does not know to open is a document that does not exist:
 | `docs/notes/runtime-scope.md` | before starting work on Synapse's own runtime (independence from OpenCode) — what the runtime does, what a replacement costs, the staged path |
 | `docs/notes/ui-lessons.md` | touching `web/` — layout invariants, the chat dock, the ask panel, the cards and the picker, with the measurements that prove them |
 | `docs/notes/runbook.md` | running, restarting or debugging it; anything that kills a process |
+| `docs/notes/desktop-app.md` | touching `shell\`, `Synapse.exe`, `bin\node`, npm or any dependency — the good-tenant rule, the process model, exit codes, where the console lives |
 | `docs/notes/handover.md` | picking this up mid-stream — the chat dock's state of play, its instruments, the dead ends, and what is still open. Delete it when those items close |
 
 Two rules for this file. **A new lesson goes in `docs/notes/`, not here** — this
@@ -159,34 +164,29 @@ a section out, leave its invariant behind in one line, with the pointer.
 ## Running it
 
 ```
-start.bat        # starts Synapse (UI on 8700, engine on 8720)
-stop.bat         # reads data\synapse.pid
-restart.ps1      # dev restart — stops the engine by PID, never by name
+Synapse.exe        # the app: window, tray icon, and the server it starts
+.\shell\build.ps1  # build it — one lean exe at the root, needs the .NET 10 runtime
+vendor-node.ps1    # copies Node into bin\node so the folder travels
 vendor-engine.ps1  # copies the runtime into bin\opencode so it travels with the app
 ```
 
-```powershell
-cd F:\dev\Synapse
-.\restart.ps1
-```
+`Synapse.exe` is the only thing launched. Close hides the window to the tray; the
+tray is where the server is stopped and started, and Exit is the only way to stop
+both. To work on the server on its own: `bin\node\node.exe src\index.js`.
 
-It stops Synapse and its engine by reading `data\synapse.pid` and
-`data\engine.pid`, and refuses to stop anything under `@opencodedesktop` or
-`ai.opencode.desktop` whatever the pid file says.
-
-`server.openBrowser` is off by default here: a restart should not hijack a
-browser tab. Turn it on in Settings if you want one opened for you.
+`server.openBrowser` is off by default here: a restart should not hijack a browser
+tab. It is ignored when the app starts the server.
 
 Gotchas:
 - **Nothing here matches on a process name** — the desktop app, the rule and the
-  incident that earned it are in "Destructive commands" above. `stop.bat` must not
-  use `$pid` as a variable: it is read-only in PowerShell.
-- The console is a first-class output. `start.bat` leaves a window open all day, so
-  `logger` mirrors the `app` channel **and every warning or error from any channel**
-  to stdout, and the runner writes its milestones (run started, outcome, stopped) to
-  the app channel too. A retry or a stall therefore shows up in that window without
-  opening a file. The `tools` channel's *info* lines are not mirrored on purpose —
-  it carries the tool census, which would drown the window.
+  incident that earned it are in "Destructive commands" above. The app stops the
+  process it holds a handle to, and `Kill(entireProcessTree)` is the fallback.
+- The console is a first-class output, and it lives in the window now: the app
+  captures the server's stdout into `logs\console.log` and serves it to the page, so
+  it still works when the server is stopped. `logger` mirrors the `app` channel
+  **and every warning or error from any channel** into that stream, and the runner
+  writes its milestones to the app channel too. The `tools` channel's *info* lines
+  are not mirrored on purpose — it carries the tool census, which would drown it.
 - Ports: **UI 8700, engine 8720**. Ports 1174–1273 are reserved by
   Hyper-V/WSL on this machine — do not pick one (1235 and 1240 both fail with
   `EACCES`; 8701 and 4343 are fine).
@@ -196,6 +196,8 @@ Gotchas:
 ## Layout
 
 ```
+Synapse.exe           the app — window, tray, server supervisor (build output)
+shell/                the WPF frame behind it: App, MainWindow, ServerHost, ConsoleStore
 src/
   index.js            boot wiring: config → projects → engine → titler → probe → server
   paths.js            every filesystem path, derived from the project root

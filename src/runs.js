@@ -671,7 +671,10 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
       const requests = requestsIn(messages, session.directory);
       // Single mode promises no delegation — that is the whole difference
       // between the two modes. The tool is offered by the engine regardless
-      // (tool rulesets cannot see it), so the refusal happens here, out loud.
+      // (tool rulesets cannot see an MCP tool), and its own description tells the
+      // model to use it, so the refusal happens here, out loud — and it says what
+      // Single is, not what Multi would be: telling it to ask the operator for a
+      // mode switch turned one refused call into a question nobody had asked.
       if (session.single) {
         for (const request of requests) {
           claimed.add(request.callId);
@@ -685,8 +688,9 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
           await wake(sessionId, session.directory, {
             description: `delegate ${request.task} refused`,
             text:
-              `Nothing was run: delegation is off in Single mode. ` +
-              `Ask the operator to switch to Multi, then delegate ${request.task} again.`,
+              `Nothing was run: this is a Single conversation, so there is no team to hand work to. ` +
+              `Do ${request.task} yourself, here, with your own tools - and do not delegate again. ` +
+              `If the job is genuinely team-sized, say so to the operator; switching to Multi is theirs to decide.`,
           });
         }
         return;

@@ -200,10 +200,12 @@ it as a panel **painted over the chat, anchored just above the composer**.
   with nine the content exceeded the box and there was no free space to stretch,
   which is exactly how a test with the wrong fixture passes.
 - **Scrollbar stability.** A scroll container must never change the width of its
-  contents. `scrollbar-gutter: stable` is set on `html` and on `.chat-scroll`.
-  Without it, expanding a tool made the page taller, the page scrollbar
-  appeared, and the whole app shifted ~15px. Also: any grid column holding prose
-  is `minmax(0, 1fr)`, never `auto`, so content cannot stretch it.
+  contents, so every pane that scrolls *inside* the page reserves its gutter —
+  `.chat-scroll` and the rail panels. The page itself does **not**: a reserved gutter
+  is a 10px empty column down the right-hand edge whether or not anything scrolls,
+  and the operator saw it as a band. The page only scrolls in the narrow layout, where
+  a bar is expected. Also: any grid column holding prose is `minmax(0, 1fr)`, never
+  `auto`, so content cannot stretch it.
 - **Scrollbars are ours now.** `::-webkit-scrollbar` (+ `scrollbar-width`/
   `scrollbar-color` for the standard path) is styled thin and dark: Chromium stops
   drawing its native bar as soon as that pseudo-element is styled, which is what
@@ -995,12 +997,10 @@ bold, italic, strikethrough and links: the range these models actually produce.
   a dead tab is worse than a revived one. Revert writes back the config as it was
   when the window opened (`state.settingsSnapshot`), so a save that turns out to
   be a mistake is undone in one click rather than by hand-editing JSON.
-- **The save dialog is the only place a restart is offered, and a restart is
-  `cmd /c start`.** A *detached* child of the server process does not survive it
-  here — measured, three ways: `spawn(..., {detached:true})` never ran, a plain
-  `spawn` child died with the parent, `cmd /c start` lived. The command is the
-  same `restart.ps1` an operator runs, so there is one restart path and one set of
-  pid-file rules.
+- **The save dialog is the only place a restart is offered, and the app owns the
+  restart.** The server exits with code 2 and the app starts a new one; the window,
+  the tray and the page all survive because none of them is part of the server. One
+  restart path, one set of exit codes — see `desktop-app.md`.
 - **A local provider is badged LOCAL, not by the app serving it.** "Bionic" is one
   machine's runtime; the next is Ollama or vLLM, and the same config has to read
   correctly there. `providerLabel()` asks the config for the provider's *type* and

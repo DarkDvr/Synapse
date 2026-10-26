@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Synapse</title>
+<link rel="stylesheet" href="/vendor/fonts.css" />
+<style>
+  /* The app's own palette, by hand: this page has to work before the server is
+     running, so it cannot load synapse.css from it. The values are the ones in
+     web/synapse.css — violet surfaces, orange accents, semantic status only. */
+  :root {
+    --bg: #151619; --surface: #1d1f23; --line: #32353b;
+    --text: #eceef1; --muted: #94979e;
+    --green: #35c08a; --amber: #e8a33d; --red: #f0563f;
+    --violet: #625bf6;
+    --font: 'DM Sans', 'Segoe UI', system-ui, sans-serif;
+    --mono: 'Cascadia Mono', Consolas, ui-monospace, monospace;
+    /* Native scrollbars and form controls follow the theme, or Chromium paints
+       its light idea of a scrollbar into a dark panel. */
+    color-scheme: dark;
+  }
+  /* The same slim dark bar as synapse.css: no stepper arrows, no light track. */
+  * { scrollbar-width: thin; scrollbar-color: #3a3e45 transparent; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #3a3e45; border-radius: 6px; background-clip: content-box; border: 2px solid transparent; }
+  ::-webkit-scrollbar-thumb:hover { background: #4a4f57; background-clip: content-box; }
+  ::-webkit-scrollbar-corner { background: transparent; }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--bg); color: var(--text); font-family: var(--font);
+    display: grid; grid-template-rows: 1fr auto; gap: 18px;
+    padding: 28px 40px; min-width: 560px;
+    -webkit-font-smoothing: antialiased;
+  }
+  main { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; min-height: 0; }
+  .mark { width: 56px; height: 56px; border-radius: 14px; object-fit: cover;
+          box-shadow: 0 10px 30px rgba(0,0,0,.45); }
+  h1 { margin: 0; font-size: 21px; font-weight: 600; letter-spacing: -.01em; }
+  .state { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--amber);
+         box-shadow: 0 0 0 4px rgba(232,163,61,.14); animation: breathe 1.4s ease-in-out infinite; }
+  .dot.ok { background: var(--green); box-shadow: 0 0 0 4px rgba(53,192,138,.14); animation: none; }
+  .dot.err { background: var(--red); box-shadow: 0 0 0 4px rgba(240,86,63,.14); animation: none; }
+  .dot.idle { background: #5c6068; box-shadow: 0 0 0 4px rgba(92,96,104,.12); animation: none; }
+  @keyframes breathe { 50% { opacity: .4; } }
+  @media (prefers-reduced-motion: reduce) { .dot { animation: none; } }
+  .reason { max-width: 720px; text-align: center; font-size: 13px; line-height: 1.5;
+            color: var(--red); }
+  .reason:empty { display: none; }
+
+  /* Only when the server is down: while it is starting there is nothing to
+     press, and a button that does nothing is a mock. */
+  .start {
+    border: 1px solid #4a44a8; background: var(--violet); color: #fff;
+    font: 600 12.5px var(--font); padding: 8px 18px; border-radius: 9px; cursor: pointer;
+  }
+  .start:hover { background: #4e47df; }
+  .start:focus-visible { outline: 1px solid var(--orange, #ff7d1a); outline-offset: 2px; }
+
+  /* The tail. Fixed height so the page does not jump as lines arrive, and it is
+     the record of what happened rather than a decoration: it is selectable. */
+  .console { height: 38vh; min-height: 180px; display: flex; flex-direction: column;
+             background: #101114; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+  .console-head { display: flex; align-items: center; justify-content: space-between;
+                  padding: 8px 14px; font-size: 11px; letter-spacing: .08em; text-transform: uppercase;
+                  color: var(--muted); border-bottom: 1px solid var(--line); background: var(--surface); }
+  .console-head .path { text-transform: none; letter-spacing: 0; font-family: var(--mono); font-size: 11px; }
+  pre { flex: 1; margin: 0; padding: 12px 14px; overflow: auto; font-family: var(--mono);
+        font-size: 12px; line-height: 1.55; color: #c9ccd2; white-space: pre-wrap; overflow-wrap: anywhere; }
+  pre:empty::after { content: 'waiting for the server to say something…'; color: #5c6068; }
+</style>
+</head>
+<body>
+<main>
+  <img class="mark" src="/icon-180.png" alt="" />
+  <h1 id="title">Booting up Synapse Server…</h1>
+  <div class="state"><span class="dot" id="dot"></span><span id="detail">starting</span></div>
+  <p class="reason" id="reason"></p>
+  <button class="start" id="startBtn" hidden>Start Server</button>
+</main>
+
+<section class="console">
+  <div class="console-head"><span>Console</span><span class="path">logs\console.log</span></div>
+  <pre id="tail"></pre>
+</section>
+
+<script>
+  // The shell, not the server: this message channel works before the server has
+  // ever answered and after it has stopped, which is the whole reason the console
+  // lives here. Opened in a browser there is nothing to ask, and the page says so
+  // rather than pretending to be the app.
+  const host = window.chrome && window.chrome.webview;
+  const title = document.getElementById('title');
+  const detail = document.getElementById('detail');
+  const dot = document.getElementById('dot');
+  const reason = document.getElementById('reason');
+  const startBtn = document.getElementById('startBtn');
+  const tail = document.getElementById('tail');
+
+  let offset = 0;
+  let poll = 0;
+
+  const TITLES = {
+    starting: 'Booting up Synapse Server…',
+    running: 'Opening the interface…',
+    stopping: 'Stopping the server…',
+    stopped: 'The server is stopped',
+    failed: 'The server stopped unexpectedly',
+  };
+
+  function setState(state, why) {
+    title.textContent = TITLES[state] || 'Synapse';
+    detail.textContent = state;
+    dot.className = 'dot' + (state === 'failed' ? ' err'
+      : state === 'stopped' ? ' idle'
+      : state === 'running' ? ' ok' : '');
+    reason.textContent = why || '';
+    if (startBtn) startBtn.hidden = !(state === 'stopped' || state === 'failed');
+    // Nothing more is coming from a stopped server — but the last lines are, and
+    // they are the ones that say why. Ask once more, then stop.
+    if (state === 'stopped' || state === 'failed') { stopPolling(); ask(); }
+  }
+
+  function append(text, dropped) {
+    if (dropped) tail.textContent = '';
+    if (!text) return;
+    const atBottom = tail.scrollHeight - tail.scrollTop - tail.clientHeight < 24;
+    tail.appendChild(document.createTextNode(text));
+    // Twice: the browser clamps scrollTop to the height it knew about before the
+    // text was laid out, so a single assignment on the same frame under-scrolls
+    // and the newest line ends up below the fold.
+    if (atBottom) {
+      tail.scrollTop = tail.scrollHeight;
+      requestAnimationFrame(() => { tail.scrollTop = tail.scrollHeight; });
+    }
+  }
+
+  function ask() {
+    if (!host) return;
+    host.postMessage({ kind: 'console', offset: offset });
+  }
+
+  function stopPolling() { if (poll) { clearInterval(poll); poll = 0; } }
+
+  if (!host) {
+    setState('stopped', 'This panel is part of the Synapse app: launch Synapse.exe to watch the server start.');
+  } else {
+    startBtn?.addEventListener('click', () => {
+      startBtn.hidden = true;
+      host.postMessage({ kind: 'server', action: 'start' });
+    });
+    host.addEventListener('message', (event) => {
+      const msg = event.data;
+      if (!msg || typeof msg !== 'object') return;
+      if (msg.kind === 'server') setState(msg.state, msg.reason);
+      else if (msg.kind === 'console') {
+        offset = msg.offset ?? offset;
+        append(msg.text, msg.dropped);
+      }
+    });
+    host.postMessage({ kind: 'ready' });
+    // A tail, not a stream: one request every 600 ms is nothing, and it keeps the
+    // page immune to a missed message.
+    poll = setInterval(ask, 600);
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) stopPolling();
+      else if (!poll) poll = setInterval(ask, 600);
+    });
+  }
+</script>
+</body>
+</html>

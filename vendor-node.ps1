@@ -3,11 +3,11 @@
 #   .\vendor-node.ps1                 # fetch the version this app was tested on
 #   .\vendor-node.ps1 -Version 24.21.0
 #
-# The copy lands in bin\node\ with node.exe and its licence. start.bat, stop.bat and
-# restart.ps1 prefer it over whatever is installed on the machine, which is what
-# makes "copy the folder to another PC" enough — the same bargain as
-# vendor-engine.ps1. bin\ is not in git: 80 MB of runtime is not something to carry
-# in history, and this script is how it gets there.
+# The copy lands in bin\node\ with node.exe, npm and their licence. The app prefers
+# it over whatever is installed on the machine, which is what makes "copy the
+# folder to another PC" enough — the same bargain as vendor-engine.ps1. bin\ is not
+# in git: 80 MB of runtime is not something to carry in history, and this script is
+# how it gets there.
 param(
   [string]$Version = '24.21.0',
   [string]$From = ''
@@ -43,9 +43,20 @@ if ($From) {
 
   New-Item -ItemType Directory -Force -Path $dest | Out-Null
   Copy-Item -Force (Join-Path $inner 'node.exe') $destExe
-  # npm is not used by Synapse, but it costs little and makes the copy useful by hand.
+  # npm travels too, and its *code* has to travel with the two .cmd shims: npm.cmd
+  # runs `node_modules\npm\bin\npm-cli.js`, so a copy without that folder is a
+  # shortcut to a file that is not there. This is the npm Synapse uses for one thing
+  # — a runtime update — and because it is this node's own npm, `npm install -g`
+  # puts packages in bin\node instead of %APPDATA%.
   foreach ($extra in @('npm.cmd', 'npx.cmd')) {
     if (Test-Path (Join-Path $inner $extra)) { Copy-Item -Force (Join-Path $inner $extra) $dest }
+  }
+  $npmPackage = Join-Path $inner 'node_modules\npm'
+  if (Test-Path $npmPackage) {
+    $destNpm = Join-Path $dest 'node_modules\npm'
+    if (Test-Path $destNpm) { Remove-Item $destNpm -Recurse -Force }
+    New-Item -ItemType Directory -Force -Path (Split-Path -Parent $destNpm) | Out-Null
+    Copy-Item -Recurse -Force $npmPackage $destNpm
   }
   if (Test-Path (Join-Path $inner 'LICENSE')) { Copy-Item -Force (Join-Path $inner 'LICENSE') $dest }
   Remove-Item $expand -Recurse -Force -ErrorAction SilentlyContinue
@@ -56,8 +67,9 @@ $got = (& $destExe --version).Trim()
 $lines = @(
   "node $got",
   "copied $(Get-Date -Format 'yyyy-MM-dd HH:mm')",
-  "This copy is what Synapse runs: start.bat, stop.bat and restart.ps1 prefer it.",
-  "Delete bin\node and they fall back to the machine's own node."
+  "This copy is what Synapse runs, and its npm is what runtime updates use.",
+  "npm installs into this folder: bin\node is this npm's global prefix.",
+  "Delete bin\node and the app falls back to the machine's own node, if it has one."
 )
 Set-Content -Path (Join-Path $dest 'VERSION.txt') -Value $lines -Encoding utf8
 

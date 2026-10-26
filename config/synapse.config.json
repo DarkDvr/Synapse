@@ -2,16 +2,16 @@
   "server": {
     "host": "127.0.0.1",
     "port": 8700,
-    "openBrowser": true
+    "openBrowser": false
   },
   "engine": {
     "type": "opencode",
     "opencode": {
-      "binary": "F:\\dev\\Synapse\\bin\\opencode\\opencode.exe",
+      "binary": "",
       "port": 8720,
       "host": "127.0.0.1",
       "password": "",
-      "home": "F:\\dev\\Synapse\\data\\engine\\opencode",
+      "home": "",
       "startTimeoutMs": 60000,
       "args": [],
       "modelLimits": {
@@ -294,7 +294,7 @@
       "focus": "app"
     },
     "architect": {
-      "ref": "strata/qwen3.8-flash-next-iq2_xs",
+      "ref": "opencode-go/deepseek-v4.1-flash",
       "variant": "high",
       "skills": [
         "visual-review"
@@ -312,8 +312,7 @@
       ]
     },
     "coder-2": {
-      "ref": "strata/qwen3.8-flash-next-iq2_xs",
-      "variant": "medium",
+      "ref": "opencode-go/beam-free",
       "skills": [
         "code-craft",
         "visual-review"

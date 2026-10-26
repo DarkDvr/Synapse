@@ -143,8 +143,8 @@ the file is source of truth only while its password field is empty.
 
 ```powershell
 cd F:\dev\Synapse
-.\restart.ps1                 # stops by PID from data\*.pid, never by name
-node --test tests\*.test.mjs  # expect 49 pass
+.\shell\build.ps1             # makes Synapse.exe; the tray stops and starts the server
+node --test tests\*.test.mjs  # expect 56 pass
 ```
 
 Then in the running UI: open a long session, scroll to the bottom, switch modes both ways, and

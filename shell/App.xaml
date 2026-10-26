@@ -1,0 +1,9 @@
+<Application x:Class="Synapse.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             ShutdownMode="OnExplicitShutdown">
+  <!-- No StartupUri: the window is created in OnStartup so it can be handed the
+       console store and the server supervisor it talks to. Shutdown is explicit
+       because closing the window is not quitting — the tray is. -->
+  <Application.Resources />
+</Application>

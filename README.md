@@ -9,38 +9,48 @@ genuine **OpenCode** engine over its HTTP + SSE API and rebuilds the interface
 from scratch — today that engine, tomorrow anything that implements the contract
 in `src\engines\base.js`.
 
-Everything lives in this folder. The only things reused from outside are `node`
-and the engine binary.
+Everything lives in this folder. Node, the engine and the fonts travel with it, so
+a copied folder runs on a PC with nothing installed.
 
 ## Requirements
 
-- Windows — the launcher scripts are `.bat` and PowerShell.
-- Node 18 or newer on `PATH`. No packages, no build step, no `node_modules`.
-- An engine: `npm install -g @opencode/cli`, which puts `opencode.exe` where
-  Synapse finds it. Settings → Engine can point somewhere else, and the **Update**
-  chip installs a newer one from the window.
+- Windows 10 or 11, with the **WebView2** runtime. Windows 11 has it; on Windows 10
+  it arrives with Microsoft Edge.
+- The **.NET 10 Desktop Runtime** for `Synapse.exe`. `shell\build.ps1 -Portable`
+  produces a copy that carries its own, for a PC without one.
+- Nothing else. Node and the engine are in `bin\`, and `vendor-node.ps1` and
+  `vendor-engine.ps1` restore them if they are missing.
 
 ## Run it
 
 ```
-start.bat        # starts Synapse: UI on 8700, engine on 8720
-stop.bat         # reads data\synapse.pid
-restart.ps1      # dev restart — stops by PID, never by name
+Synapse.exe       # the app: the window, the tray icon, and the server it starts
 ```
 
-`start.bat` reads `config\synapse.config.json`, launches the engine in an isolated
-home under `data\engine\opencode` (your machine-wide `~/.config/opencode` is never
-touched), and serves the UI at <http://127.0.0.1:8700>. Stop it with `stop.bat` or
-Ctrl+C in the start window. The console is a first-class output: warnings, errors
-and every run milestone are mirrored into it.
+Double-click it. The window opens on the boot panel, which shows the console while
+the server starts, then becomes the interface at <http://127.0.0.1:8700>. The app
+reads `config\synapse.config.json`, launches the engine in an isolated home under
+`data\engine\opencode` (your machine-wide `~/.config/opencode` is never touched),
+and runs its own Node from `bin\node`.
+
+Closing the window hides it to the tray and the server keeps running. The tray icon
+is where the server is stopped and started — **Stop Server** asks first — and
+**Exit Synapse** is the only thing that stops both.
+
+To work on the server itself, without the window:
+
+```
+bin\node\node.exe src\index.js
+```
 
 **Never restart by matching process names.** The desktop app also shows as process
 name `opencode`, and it installs to `...\Programs\@opencodedesktop\OpenCode.exe` —
 a path that contains `@opencode` — so a name filter kills the operator's editor
-along with the engine. `restart.ps1` reads `data\synapse.pid` and
-`data\engine.pid`, and refuses anything under `@opencodedesktop`.
+along with the engine. Nothing here matches on a name: the app stops the process it
+holds a handle to.
 
-`server.openBrowser` is off by default: a restart should not hijack a browser tab.
+`build.ps1` in `shell\` produces `Synapse.exe` — one lean file at the root, about
+1.5 MB. It is build output and is not in git.
 
 ## What you see
 

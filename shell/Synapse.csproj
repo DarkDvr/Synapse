@@ -1,0 +1,46 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The app: a WPF window around a WebView2 page, the supervisor that owns the
+       server process, and the tray icon. Everything the operator sees is drawn by
+       web\ — this project is the frame and the plumbing, and nothing else.
+
+       Lean by default (framework-dependent, single file): the .NET 10 Desktop
+       Runtime is a system component, and bundling a second copy into every app
+       duplicates about 140 MB and pins that copy to this build machine's version,
+       security fixes included. shell\build.ps1 -Portable is the exception for a PC
+       that has none. -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <!-- NotifyIcon is System.Windows.Forms. It is the in-box tray icon, so it
+         costs no dependency; a third-party tray library would. -->
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>enable</Nullable>
+    <!-- Off on purpose: WPF and Windows Forms both define Application, MessageBox,
+         Size and Color, and the implicit set pulls in one of each. Explicit usings
+         keep every name unambiguous. -->
+    <ImplicitUsings>disable</ImplicitUsings>
+    <AssemblyName>Synapse</AssemblyName>
+    <RootNamespace>Synapse</RootNamespace>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- The mark the page already uses, so the exe, the taskbar, the tray and the
+         favicon cannot drift apart. -->
+    <ApplicationIcon>..\web\favicon.ico</ApplicationIcon>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>false</SelfContained>
+    <PublishSingleFile>true</PublishSingleFile>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <!-- WFO0003: the WinForms analyzer wants DPI configured in code because that
+         is how a WinForms app must do it. This is a WPF window and the manifest is
+         how WPF asks for PerMonitorV2, so the manifest stays and the advice does
+         not apply. -->
+    <NoWarn>$(NoWarn);WFO0003</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.3351.48" />
+  </ItemGroup>
+
+</Project>

@@ -43,6 +43,7 @@ const NOTES = [
   'docs/notes/runtime-scope.md',
   'docs/notes/ui-lessons.md',
   'docs/notes/runbook.md',
+  'docs/notes/desktop-app.md',
   'docs/notes/handover.md',
 ];
 const agents = read('AGENTS.md');
@@ -71,16 +72,18 @@ const MUST_KEEP = [
   ['AGENTS.md', '@opencodedesktop', 'the denylist'],
   ['AGENTS.md', 'Zero npm dependencies', 'hard rule 1'],
   ['AGENTS.md', 'Self-contained and offline', 'hard rule 2'],
-  ['AGENTS.md', 'Engine-agnostic core', 'hard rule 4'],
+  ['AGENTS.md', 'A good tenant', 'hard rule 3'],
+  ['AGENTS.md', 'Engine-agnostic core', 'hard rule 5'],
   ['AGENTS.md', 'All button labels are Title Case', 'the label rule'],
   ['AGENTS.md', '8700', 'the UI port'],
-  ['AGENTS.md', 'restart.ps1', 'the restart script'],
+  ['AGENTS.md', 'Synapse.exe', 'the launch path'],
   ['AGENTS.md', 'docs/notes/', 'the index'],
   ['AGENTS.md', 'LocationNotFoundError', 'a session needs a real directory'],
   ['docs/notes/engine-notes.md', 'last matching rule wins', 'permission rule ordering'],
   ['docs/notes/engine-notes.md', 'Never put a lone backslash', 'the brief escaping rule'],
   ['docs/notes/ui-lessons.md', 'overflow: clip', 'the card wrapper must never scroll'],
   ['docs/notes/ui-lessons.md', 'scrollbar-gutter', 'scroll stability'],
+  ['docs/notes/desktop-app.md', 'if this folder is deleted', 'the good-tenant test'],
 ];
 for (const [file, needle, why] of MUST_KEEP) {
   check(read(file).includes(needle), `${file} keeps ${why}`, needle);

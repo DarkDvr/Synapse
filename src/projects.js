@@ -104,9 +104,37 @@ export function createProjectStore({ file, generalDir, logger }) {
       const k = key(p.directory);
       if (seen.has(k)) continue;
       seen.add(k);
-      rest.push(shape(p));
+      const shaped = shape(p);
+      // A project whose folder is gone is not shown. On a copied folder the registry
+      // still names the machine it came from, and a row nobody can open is noise —
+      // the operator's rule is that a missing folder fails silently.
+      if (!shaped.exists) continue;
+      rest.push(shaped);
     }
     return [g, ...rest];
+  }
+
+  /**
+   * Forget registry entries whose folder no longer exists. Run once at boot.
+   *
+   * A project *is* its directory: with the directory gone there is nothing to open,
+   * rename or plan, and leaving the entry to explain itself every session is worse than
+   * removing it. Nothing is lost that cannot be recovered — adding the folder again
+   * adopts it, sessions and plan included. The cost is that a project on a drive that
+   * is temporarily unplugged is forgotten; that was the operator's explicit choice.
+   */
+  function pruneMissing() {
+    const kept = [];
+    const gone = [];
+    for (const p of readRaw()) {
+      const dir = normalizeDir(p.directory);
+      if (fs.existsSync(dir)) kept.push(p);
+      else gone.push(p.name || dir);
+    }
+    if (!gone.length) return gone;
+    try { writeRaw(kept); } catch (err) { log.warn(`could not drop projects that are no longer on this machine (${err.message})`); }
+    log.info(`no longer on this machine, so no longer listed: ${gone.join(', ')}`);
+    return gone;
   }
 
   const find = (id) => list().find((p) => p.id === id) || null;
@@ -206,5 +234,5 @@ export function createProjectStore({ file, generalDir, logger }) {
     return true;
   }
 
-  return { list, find, create, update, remove, general, idFor, normalizeDir };
+  return { list, find, create, update, remove, general, idFor, normalizeDir, pruneMissing };
 }

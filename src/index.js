@@ -2,8 +2,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn, execFile } from 'node:child_process';
-import { DATA_DIR, LOGS_DIR, WORKSPACE_DIR, GENERAL_DIR, ENGINE_HOME, PID_FILE, PROJECTS_FILE, TOOL_STATS_FILE, PROBE_DIR, PROBE_FILE, MODEL_CACHE_FILE, ROOT, VENDOR_ENGINE } from './paths.js';
-import { loadConfig, saveConfig } from './config.js';
+import { DATA_DIR, LOGS_DIR, WORKSPACE_DIR, GENERAL_DIR, ENGINE_HOME, PID_FILE, PROJECTS_FILE, TOOL_STATS_FILE, PROBE_DIR, PROBE_FILE, MODEL_CACHE_FILE, NPM_ATTEMPT_FILE, ROOT } from './paths.js';
+import { loadConfig, saveConfig, repairMachinePaths } from './config.js';
 import { logger } from './logger.js';
 import { createEngine } from './engines/index.js';
 import { createProjectStore } from './projects.js';
@@ -20,7 +20,7 @@ import { createServer } from './server.js';
 import { pruneProviderLog } from './provider-errors.js';
 import { measureLocalWindows } from './providers.js';
 import { sweepOrphans } from './cleanup.js';
-import { hasNpm, installNode, npmPlan, ask, runtimePresent } from './npm-check.js';
+import { hasNpm, installLocalNpm } from './npm-check.js';
 
 const bootLog = logger.channel('app');
 let bootError = null;
@@ -28,71 +28,52 @@ let engine = null;
 let http = null;
 
 /**
- * npm, and what its absence means. See src/npm-check.js for the three cases.
+ * npm, and what its absence means. See src/npm-check.js for the four cases.
  *
- * The console is the output here, not the log: this happens before anything is
- * serving, and the operator is looking at the window start.bat opened.
+ * There is no prompt and no installer. A question cannot be asked: the desktop app
+ * starts this process hidden, so a prompt would sit unanswered forever. And an
+ * installer is not ours to run — Node machine-wide with winget is exactly what
+ * AGENTS.md rule 3 forbids.
+ *
+ * So when the npm beside bin\node is missing or incomplete it is fetched into that
+ * folder, silently. The fetch runs in the background: it is a 30 MB download and
+ * nothing the app does needs it, so the server must not wait behind it. A failure
+ * is remembered, so a machine with no network tries once rather than every launch.
  */
+const NPM_RETRY_MS = 6 * 60 * 60 * 1000;
+
 async function ensureNpm() {
   const log = logger.channel('app');
-  if (await hasNpm()) return;
-  const runtime = runtimePresent(VENDOR_ENGINE);
-  const plan = npmPlan({ npmFound: false, runtimeFound: runtime });
   const say = (line) => {
     console.log(`[Synapse] ${line}`);
-    log.warn(line);
+    log.info(line);
   };
 
-  say('npm was not found on PATH.');
-  if (plan === 'warn') {
-    say('The app runs without it — the runtime here is the copy inside bin\\opencode.');
-    say('npm is used for one thing: Settings > Runtime > Check for Updates.');
-  } else {
-    say('There is no runtime to run either: bin\\opencode is empty and @opencode/cli is not installed.');
-    say('Synapse cannot start a single turn without one.');
-  }
-
-  if (!process.stdin.isTTY) {
-    // Started hidden (restart.ps1, a shortcut, a service): nobody can answer.
-    if (plan === 'block') {
-      console.error('[Synapse] Install Node.js from https://nodejs.org and run start.bat again.');
-      process.exit(1);
+  const found = await hasNpm({ root: ROOT });
+  if (found.ok) {
+    if (found.how === 'machine') {
+      say('npm: using the copy on this machine\'s PATH - runtime updates will install into it');
     }
-    say('Install Node.js when you can; until then runtime updates will not work.');
     return;
   }
 
-  const answer = await ask('Install Node.js (LTS) now with winget? [Y/n] ');
-  if (/^n/i.test(answer)) {
-    if (plan === 'block') {
-      console.error('');
-      console.error('[Synapse] No runtime, and npm was declined. Nothing here can run a model turn, so');
-      console.error('[Synapse] Synapse is stopping. To fix it, either install Node.js from');
-      console.error('[Synapse] https://nodejs.org, or copy bin\\opencode\\opencode.exe in from another machine.');
-      process.exit(1);
-    }
-    say('Starting without npm. Runtime updates will not work until Node.js is installed.');
+  let last = null;
+  try { last = JSON.parse(fs.readFileSync(NPM_ATTEMPT_FILE, 'utf8')); } catch { /* never tried */ }
+  if (last?.at && Date.now() - Date.parse(last.at) < NPM_RETRY_MS) {
+    log.warn(`npm is not available (${last.error || 'the last attempt did not finish'}); runtime updates will wait`);
     return;
   }
 
-  say('Installing Node.js LTS with winget. This can take a few minutes...');
-  const installed = await installNode({ log: (line) => say(line) });
-  if (!installed.ok) {
-    console.error(`[Synapse] ${installed.error}`);
-    if (plan === 'block') {
-      console.error('[Synapse] Install Node.js from https://nodejs.org and run start.bat again.');
-      process.exit(1);
-    }
-    say('Starting without npm. Runtime updates will not work until Node.js is installed.');
-    return;
-  }
-  const now = await hasNpm();
-  if (!now) {
-    say('Node.js was installed, but npm still is not on this window\'s PATH — close this window and run start.bat again.');
-    if (plan === 'block') process.exit(1);
-    return;
-  }
-  say('npm is available now.');
+  say('npm is not usable here - fetching our own copy into bin\\node (local: nothing is installed on this machine)');
+  const attempt = installLocalNpm({ root: ROOT, log: say }).then((result) => {
+    try {
+      fs.writeFileSync(NPM_ATTEMPT_FILE, JSON.stringify({ at: new Date().toISOString(), ...result }, null, 2));
+    } catch { /* a note that cannot be written is not a failure */ }
+    if (!result.ok) log.warn(`npm could not be fetched: ${result.error} - runtime updates will wait`);
+  });
+  // Deliberately not awaited: the boot does not depend on it, and the operator is
+  // looking at a window that is waiting for a server.
+  attempt.catch((err) => log.warn(`npm could not be fetched: ${err.message}`));
 }
 
 async function main() {
@@ -115,6 +96,14 @@ async function main() {
   if (created) app.info('created default config: config/synapse.config.json');
   if (error) app.warn(`config could not be read (${error}); using defaults`);
 
+  // A copied folder carries a config naming the machine it came from. Cleared before
+  // the engine reads it, so the copy that travels is used and nothing is created on a
+  // drive this PC does not have.
+  if (repairMachinePaths(config)) {
+    saveConfig(config);
+    app.info('config: runtime paths that are not on this machine were cleared');
+  }
+
   const getConfig = () => currentConfig;
   let currentConfig = config;
   const applyConfig = (incoming) => {
@@ -123,7 +112,7 @@ async function main() {
     return currentConfig;
   };
 
-  // ── pid file (for stop.bat) ──────────────────────────────────
+  // ── pid file (so the app, and a human, can see what is running) ──
   try { fs.writeFileSync(PID_FILE, String(process.pid), 'utf8'); } catch { /* ignore */ }
 
   // ── projects ─────────────────────────────────────────────────
@@ -139,6 +128,9 @@ async function main() {
     generalDir: GENERAL_DIR,
     logger,
   });
+  // A registry copied from another machine still names that machine's folders. Silent
+  // by the operator's rule: a project whose directory is gone is not a project here.
+  projects.pruneMissing();
   app.info(`projects: ${projects.list().length} (General + ${projects.list().length - 1})`);
   // Every project owns a plan file. Create the ones that are missing rather than
   // waiting for the first session: an empty, valid file is a better starting
@@ -496,9 +488,12 @@ async function main() {
     runs: runner,
     engineUpdate,
     // Settings > Save Changes offers a restart, so the server can hand its own
-    // relaunch to the script an operator would run by hand — one restart path,
-    // one set of pid-file rules. See restartSelf below.
+    // relaunch to the app that supervises it — one restart path, one set of exit
+    // codes. See restartSelf above and docs/notes/desktop-app.md.
     restart: restartSelf,
+    // Tray > Stop Server. Graceful: the engine is stopped by shutdown(), never
+    // left behind for a kill to orphan.
+    stopSelf: requestShutdown,
     notify: (ev) => http?.broadcast({ ...ev, ts: Date.now() }),
     guard,
   });
@@ -509,7 +504,7 @@ async function main() {
   app.info(`UI ready at ${url}`);
   app.info('----------------------------------------------');
 
-  if (currentConfig.server.openBrowser) openBrowser(url);
+  if (currentConfig.server.openBrowser && process.env.SYNAPSE_SUPERVISED !== '1') openBrowser(url);
 }
 
 function openBrowser(url) {
@@ -529,37 +524,30 @@ function openBrowser(url) {
 /**
  * Relaunch Synapse — the button in Settings > Save Changes.
  *
- * The app is a console application: the operator watches the engine in the window
- * `start.bat` opened, so a restart must open that window again rather than leave a
- * hidden process somewhere. `start.bat` is the only launcher, and this spawns it
- * in a *new* console with the `restart` argument, so the batch waits a few seconds
- * for this process to release the port. This process then stops its engine and
- * exits with code 2, which tells the old window's batch not to pause — the new
- * window is the app now. One window, one engine, one process.
+ * Under the desktop app (`SYNAPSE_SUPERVISED=1`) this process does not relaunch
+ * itself: it exits with **code 2**, which is the app's signal to start a new one.
+ * The app is what holds the window and the tray icon across the restart, and it is
+ * the only launcher — there is no script to fall back to. Started by hand instead,
+ * the honest answer is that a second start is the operator's to do.
  */
 function restartSelf() {
-  const bat = path.join(ROOT, 'start.bat');
-  if (!fs.existsSync(bat)) {
-    bootLog.error(`cannot restart: ${bat} is missing`);
-    return { ok: false, error: `Restart needs ${bat}, which is missing.` };
+  if (process.env.SYNAPSE_SUPERVISED !== '1') {
+    bootLog.warn('restart refused: this process was not started by Synapse.exe');
+    return { ok: false, error: 'Restarting is the app\'s job. Close this and start Synapse.exe again.' };
   }
-  bootLog.info('restart requested from the UI - opening a new console');
-  try {
-    // `cmd /c start` gives the batch file a console of its own. A *detached* child
-    // of this process was measured not to survive here, and a plain child dies
-    // with the parent — `start` is the one form that outlives both.
-    const child = spawn('cmd.exe', ['/c', 'start', '', '/D', ROOT, bat, 'restart'], {
-      cwd: ROOT,
-      stdio: 'ignore',
-      windowsHide: false,
-    });
-    child.unref();
-  } catch (err) {
-    bootLog.error(`could not open the new console: ${err.message}`);
-    return { ok: false, error: err.message };
-  }
+  bootLog.info('restart requested from the UI - exiting so the app can start a new one');
   // Let the HTTP response reach the browser before this process goes down.
   setTimeout(() => shutdown('restart', 2), 600);
+  return { ok: true };
+}
+
+/**
+ * Stop because the app asked (tray > Stop Server). Exit code 0 is read as
+ * "stopped on purpose", so the app does not treat it as a crash.
+ */
+function requestShutdown() {
+  bootLog.info('stop requested from the app');
+  setTimeout(() => shutdown('app stop', 0), 400);
   return { ok: true };
 }
 
