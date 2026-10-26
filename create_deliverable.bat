@@ -17,7 +17,6 @@ cd /d "%~dp0"
 set "ROOT=%CD%"
 set "ZIP=%ROOT%\Synapse.zip"
 set "STAGE=%TEMP%\SynapseDeliverable"
-set "MARKER=%STAGE%\.synapse-deliverable"
 set "NO_PAUSE="
 if /I "%~1"=="--no-pause" set "NO_PAUSE=1"
 if /I "%~2"=="--no-pause" set "NO_PAUSE=1"
@@ -54,7 +53,7 @@ if /I "%STAGE%"=="%ROOT%" goto badstage
 if /I "%STAGE%"=="%TEMP%" goto badstage
 if /I "%STAGE%"=="%USERPROFILE%" goto badstage
 if /I "%STAGE%"=="%SystemDrive%\" goto badstage
-if exist "%STAGE%" if not exist "%MARKER%" goto badstage
+if exist "%STAGE%" if not exist "%STAGE%\.synapse-deliverable" goto badstage
 goto check
 
 :badstage
@@ -89,7 +88,7 @@ if errorlevel 1 (
   echo Could not create the staging folder: %STAGE%
   goto fail
 )
-> "%MARKER" echo deliverable staging folder
+> "%STAGE%\.synapse-deliverable" echo deliverable staging folder
 mkdir "%STAGE%\Synapse"
 if errorlevel 1 goto fail
 
@@ -180,3 +179,5 @@ echo DELIVERABLE FAILED - nothing else was attempted.
 echo.
 pause
 exit /b 1
+
+
