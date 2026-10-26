@@ -267,8 +267,7 @@
   },
   "roles": {
     "designer": {
-      "ref": "strata/qwen3.8-flash-next-iq2_xs",
-      "variant": "medium",
+      "ref": "opencode/deepseek-v4.1-flash-free",
       "skills": [
         "aesthetic-foundations",
         "app-check",
@@ -282,8 +281,7 @@
       ]
     },
     "qc": {
-      "ref": "strata/qwen3.8-flash-next-iq2_xs",
-      "variant": "medium",
+      "ref": "opencode/deepseek-v4.1-flash-free",
       "skills": [
         "web-guidelines",
         "aesthetic-foundations",
@@ -296,15 +294,14 @@
       "focus": "app"
     },
     "architect": {
-      "ref": "opencode-go/deepseek-v4.1-flash",
+      "ref": "opencode/deepseek-v4.1-flash-free",
       "variant": "high",
       "skills": [
         "visual-review"
       ]
     },
     "coder-1": {
-      "ref": "strata/qwen3.8-flash-next-iq2_xs",
-      "variant": "medium",
+      "ref": "opencode/deepseek-v4.1-flash-free",
       "skills": [
         "code-craft",
         "visual-review"
@@ -314,7 +311,7 @@
       ]
     },
     "coder-2": {
-      "ref": "opencode-go/beam-free",
+      "ref": "opencode/deepseek-v4.1-flash-free",
       "skills": [
         "code-craft",
         "visual-review"
@@ -324,8 +321,7 @@
       ]
     },
     "coder-3": {
-      "ref": "strata/qwen3.8-flash-next-iq2_xs",
-      "variant": "medium",
+      "ref": "opencode/deepseek-v4.1-flash-free",
       "skills": [
         "code-craft",
         "visual-review"
@@ -335,8 +331,7 @@
       ]
     },
     "inventor": {
-      "ref": "strata/qwen3.8-flash-next-iq2_xs",
-      "variant": "medium",
+      "ref": "opencode/deepseek-v4.1-flash-free",
       "skills": [
         "frontend-design"
       ]
