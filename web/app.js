@@ -5800,17 +5800,6 @@ function connectStream() {
       return;
     }
 
-    // A session's model was switched in another view (or by the API): the card
-    // must agree with the session, not with whatever was there when it opened.
-    if (ev.kind === 'session' && ev.type === 'session.model' && ev.sessionId === state.sessionId) {
-      const ref = ev.model ? `${ev.model.providerID}/${ev.model.id}` : '';
-      const select = document.querySelector('.role-card[data-role="architect"] .role-model');
-      if (select && ref) select.value = ref;
-      if (state.session) state.session.model = ref;
-      renderRoleCards();
-      return;
-    }
-
     // Settings were saved on another view. The open form is a draft and is not
     // rebuilt under the operator's hands; they are told, and a reopen loads it.
     if (ev.kind === 'config') {
@@ -5818,6 +5807,10 @@ function connectStream() {
       if (!$('settingsModal').hidden) {
         toast('Settings Changed', 'Saved on another computer. Close and reopen Settings to load it.');
       } else if (state.status) {
+        // A role's model lives in the config, so saving it on one view must
+        // repaint the other view's cards — otherwise the two windows disagree
+        // about which model the Architect is using.
+        renderRoleCards();
         renderStatus();
       }
       return;
