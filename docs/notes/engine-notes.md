@@ -353,6 +353,17 @@ Non-obvious, all verified on 2.0.30:
   loud and the Architect is told to ask for Multi.
 - **One worker per project at a time** (`busy` set keyed by directory) — two
   Architects editing one plan file is the one thing that can actually corrupt it.
+- **`runs.jsonl` is the project's, so a session's view of it is a ledger, not a
+  sum.** Delegation records carry `architect` — the session that asked — and
+  results now carry it too; older results are joined to their delegation by
+  `callId`. `runLedger(records, sessionId)` in `src/plans.js` answers both
+  questions the plan pane asks: `spent` (the two stopwatches on a row) and
+  `reported` (the dashed "handed back, waiting for review" mark). Both used to be
+  summed by task id alone. On 27 Oct a new session opened a rewritten three-row
+  plan with t2 and t3 already dashed and over an hour on them, and the QC card
+  showed a clock while dimmed as unused: the ids had run in the previous session.
+  Task ids repeat between sessions and between plans, so nothing keyed by id alone
+  may cross a session boundary.
 - **"Keep building" is a session switch, not a setting.** `metadata.synapse.auto`
   (normalizeSession exposes it as `auto`) is toggled by the finish-line flag
   between Stop and Send, and read in three places: the brief tells the Architect

@@ -600,6 +600,45 @@ export function readRuns(dir) {
 }
 
 /**
+ * What one session's own work cost, from the project's run log.
+ *
+ * The log is the project's, so a sum over all of it answers "what has anyone ever
+ * spent on this task" — and that is not what a session's plan pane or a role card
+ * may say. On 27 Oct a fresh session's plan had three rows, two of which had run
+ * in an earlier session under the same ids; they opened already dashed (handed
+ * back, waiting for review) and already carrying an hour of somebody else's time.
+ * The same sum gave the QC card a clock while it stayed dimmed as unused, which
+ * the operator read as two claims about one role.
+ *
+ * A result belongs to the session that asked for it. Newer records say so
+ * themselves (`architect`); older ones are matched to their delegation by callId,
+ * which every delegate record has carried since the log began — so this is a
+ * lookup, not a migration.
+ */
+export function runLedger(records, sessionId) {
+  const list = Array.isArray(records) ? records : [];
+  const asker = new Map();
+  for (const r of list) {
+    if (r && r.kind === 'delegate' && r.callId && r.architect) asker.set(r.callId, r.architect);
+  }
+  const spent = Object.create(null);
+  const reported = new Set();
+  for (const r of list) {
+    if (!r || r.kind !== 'result' || !r.task) continue;
+    const owner = r.architect || asker.get(r.callId) || null;
+    // No session, no claim: an unattributed result belongs to nobody's view.
+    if (!sessionId || owner !== sessionId) continue;
+    const ms = Number(r.ms);
+    if (Number.isFinite(ms) && ms > 0) spent[r.task] = (spent[r.task] || 0) + ms;
+    if (r.outcome === 'completed') reported.add(r.task);
+  }
+  // Copied into a plain object at the end: the accumulator has no prototype (a
+  // task id is content from a plan file, and `__proto__` is a legal-looking id),
+  // while the payload the UI receives should behave like ordinary JSON.
+  return { spent: { ...spent }, reported: [...reported] };
+}
+
+/**
  * Delegations a previous process left open.
  *
  * A `delegate` record is closed by a `result` with the same callId. A process

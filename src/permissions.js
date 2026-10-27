@@ -256,20 +256,26 @@ const deny = (reason, outside = false, scope = 'project') => ({ effect: 'deny', 
  * request, forbids the obvious workaround, and names the one place to escalate.
  * A worker cannot reach the Architect mid-run, so its escalation is its report;
  * the Architect's is the operator in the chat.
+ *
+ * `reason` is the operator's own sentence, when they typed one. It comes first in
+ * their words — a rule about workarounds is useful, but "that file is generated"
+ * is what stops the worker guessing again.
  */
-export function refusalNote({ role, scope } = {}) {
+export function refusalNote({ role, scope, reason } = {}) {
   const worker = Boolean(role) && role !== 'architect';
+  const why = String(reason || '').replace(/\s+/g, ' ').trim().slice(0, 300);
+  const said = why ? ` They said: "${why}".` : '';
   if (scope === 'harness' || scope === 'secret') {
     return (
       'The harness refused this permanently: Synapse\'s own files and saved-password folders are never ' +
       'writable. Do not try another tool or another path to reach the same place. If the task depends on ' +
       'it, stop and explain why in your report.'
-    );
+    ) + said;
   }
   return worker
-    ? 'The operator declined this exact request. Do not try another path or tool to reach the same place. ' +
+    ? 'The operator declined this exact request.' + said + ' Do not try another path or tool to reach the same place. ' +
         'If you are certain it is needed, stop and say why in your report; the Architect decides what happens next.'
-    : 'The operator declined this exact request. Do not try another path or tool to reach the same place. ' +
+    : 'The operator declined this exact request.' + said + ' Do not try another path or tool to reach the same place. ' +
         'If you are certain it is needed, ask them why in this chat before trying again.';
 }
 

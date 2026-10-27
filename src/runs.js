@@ -215,50 +215,17 @@ export function contextStats(messages) {
 }
 
 /**
- * How fast the model was actually writing, from the last turn big enough to say.
+ * There is deliberately no tokens-per-second figure here.
  *
- * The engine stamps a turn with the moment it started and the moment its last
- * piece was streamed, so the difference is the time the model spent writing. The
- * rate between two step reports is not that: it divides by the whole step, which
- * includes the tool that ran and the seconds the engine took to ask again, so it
- * reads low by that share. Measured on one turn: 882 tokens in 7.9 s here, where
- * the model's own server clocked the same work at 95-110 tok/s.
- *
- * A short turn cannot be measured this way, because the fixed cost of a turn — the
- * first token, the round trip, the tool coming back — is a fixed second sitting
- * inside a one-second window. Measured on one session, same model, same minute:
- * 48 tokens in 1.59 s read 30 tok/s, 94 in 2.5 s read 38, 4,243 in 29.4 s read 145.
- * Only the long turn is the model's speed; the short ones are the overhead. So the
- * newest turn that wrote enough wins, and a retried turn is never used: its window
- * is the wait for the provider plus the writing, which is not a rate at all.
+ * The obvious one — the last turn's written tokens over `time.created` to
+ * `time.streamed` — was wrong, and measurably so: on 27 Oct a turn the model
+ * server clocked at 72.8 tok/s read 6.1 s for 169 tokens (28 tok/s) because the
+ * window starts when the engine stamps the message, before it assembles a 97k
+ * token prompt. The overhead is proportional to the transcript, so the number
+ * drifted as a run grew. The only honest measurement is the stream's own first
+ * and last piece, which the page sees and this file does not; it lives in
+ * `web/app.js`. Do not reintroduce one from timestamps here.
  */
-const RATE_MIN_TOKENS = 200;
-
-export function writingSpeed(messages) {
-  const turns = [...(messages || [])]
-    .reverse()
-    .filter((m) => m.type === 'assistant' && m.raw?.tokens && !m.raw?.retry);
-  const rateOf = (m) => {
-    const t = m.raw.tokens;
-    const time = m.raw.time || {};
-    const start = Number(time.created) || 0;
-    const end = Number(time.streamed) || Number(time.completed) || 0;
-    const written = (Number(t.output) || 0) + (Number(t.reasoning) || 0);
-    const ms = end - start;
-    return start && ms >= 400 && written ? { written, speed: Math.round((written / ms) * 1000) } : null;
-  };
-  for (const m of turns) {
-    const r = rateOf(m);
-    if (r?.speed && r.written >= RATE_MIN_TOKENS) return r.speed;
-  }
-  // Nothing that big yet (the first turn of a run, or a model that only answers in
-  // short steps): say what the newest measurable turn says rather than nothing.
-  for (const m of turns) {
-    const r = rateOf(m);
-    if (r?.speed) return r.speed;
-  }
-  return 0;
-}
 
 /** "23% thinking", or the truth when the provider did not separate it. */
 export const thinkNote = (context) =>
@@ -708,6 +675,9 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
           title: entry.title || null,
           role: entry.role || null,
           plannedRole: entry.plannedRole || null,
+          // Whose delegation this closes: the plan pane counts a session's own
+          // work only, and a restart must not orphan the record from its asker.
+          architect: entry.architect || null,
           worker: null,
           outcome: 'interrupted',
           ms: Date.now() - (Number(entry.at) || Date.now()),
@@ -1266,11 +1236,10 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
             {
               window: contextWindow(modelRef),
               steer: true,
-              onContext: (used, room, context, speed) => {
+              onContext: (used, room, context) => {
                 live.ctx = used;
                 live.ctxRoom = room;
                 live.ctxLimit = context;
-                if (speed) live.tps = speed;
                 emit('run.progress', { ...live });
               },
               onCompact: (times, used, context) => {
@@ -1575,6 +1544,10 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
       title: task.title,
       role,
       plannedRole: task.role,
+      // The session that asked for this run. The plan pane and the role cards
+      // answer "what did *this* session spend" from it, so an old run under the
+      // same task id can never be read as this session's work.
+      architect: architectId || null,
       worker: worker?.id || null,
       outcome,
       ms: Date.now() - startedAt,
@@ -2023,7 +1996,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
         const used = promptSize(messages);
         if (used && used !== lastCtx) {
           lastCtx = used;
-          onContext?.(used, window?.room || 0, window?.context || 0, writingSpeed(messages));
+          onContext?.(used, window?.room || 0, window?.context || 0);
         }
         const events = compactionEvents(messages);
         if (events.length > compactions) {

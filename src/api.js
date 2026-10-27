@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { TBD_TITLE } from './titles.js';
-import { ensurePlan, readPlan, readRuns, briefSession, logPlanState, BRIEF_KEY, appendRequirement, appendAnswers } from './plans.js';
+import { ensurePlan, readPlan, readRuns, runLedger, briefSession, logPlanState, BRIEF_KEY, appendRequirement, appendAnswers } from './plans.js';
 import { skillRules, describeSkills } from './skills.js';
 import { rulesFor, decide, resolvePath, refusalNote } from './permissions.js';
 import { stopTargets } from './stop.js';
@@ -1198,25 +1198,15 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
       // The pane polls this, so the logger is told once per distinct problem
       // rather than once per poll (see logPlanState).
       logPlanState(state, app);
-      // How long each step has actually taken: the sum of every completed run for
-      // that task, which is the only honest source (the pane's own clock only sees
-      // the time this browser has been open). A step in flight adds its own
-      // elapsed time on top — the UI already has the live run and its start.
-      const spent = {};
-      const reported = new Set();
-      if (directory) {
-        for (const record of readRuns(directory)) {
-          if (record.kind !== 'result' || !record.task) continue;
-          const ms = Number(record.ms);
-          if (ms > 0) spent[record.task] = (spent[record.task] || 0) + ms;
-          if (record.outcome === 'completed') reported.add(record.task);
-        }
-      }
-      // `reported` is the middle state: the worker has handed its result back and
-      // the Architect has not judged it yet, so the plan file still says `todo`.
-      // Without it the step loses its highlight the moment the run ends and looks
-      // like it was never done - the operator read that as a revert.
-      return { ...state, used: usedRoles(directory, sessionId), spent, reported: [...reported] };
+      // How long each step has actually taken, and which steps this session's
+      // workers have handed back. Both are read from the project's run log, so
+      // both survive a reload — but scoped to *this* session: a task id means
+      // nothing across sessions, and an old run under the same id was showing its
+      // time and its "waiting for review" on a plan it never touched.
+      const { spent, reported } = directory
+        ? runLedger(readRuns(directory), sessionId)
+        : { spent: {}, reported: [] };
+      return { ...state, used: usedRoles(directory, sessionId), spent, reported };
     },
 
     sendMessage: async (sessionId, body, actor = null) => {
@@ -1347,6 +1337,10 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
     permission: async (sessionId, body, actor = null) => {
       requireReady();
       const wanted = body?.decision || 'once';
+      // The operator's own sentence, when a rejection carried one. Bounded and
+      // flattened: it travels in a message to a model, and a 3,000-word essay
+      // would become the next turn's prompt.
+      const reason = String(body?.reason || '').replace(/\s+/g, ' ').trim().slice(0, 300);
       // "Always" is ours, not the engine's. The engine's `always` saves the
       // request's `save` patterns for the whole project; for an edit those are
       // `*`, so one click would let the AI edit anything, including Synapse. We
@@ -1373,7 +1367,7 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
         // with an empty message instead of its closing report (26 Oct).
         if (entry?.role && entry.role !== 'architect') {
           Promise.resolve(
-            engine.synthetic?.(sessionId, refusalNote({ role: entry.role, scope: entry.scope }), {
+            engine.synthetic?.(sessionId, refusalNote({ role: entry.role, scope: entry.scope, reason }), {
               description: 'permission refused',
             }),
           ).catch((err) => app.warn(`could not explain the refusal to ${sessionId}: ${err.message}`));
@@ -1383,8 +1377,14 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
         permissionGate?.remember?.(entry.sessionId || sessionId, entry.action, entry.resources);
       }
       // The chip on the tool call: this is the moment an ask becomes a decision,
-      // and the only one the policy did not already record.
-      const answered = permissionLog?.answer?.(body?.requestId, decision, actor?.name || null);
+      // and the only one the policy did not already record. The operator's reason
+      // rides it, so the transcript can say what they told the role.
+      const answered = permissionLog?.answer?.(
+        body?.requestId,
+        decision,
+        actor?.name || null,
+        decision === 'reject' ? reason || null : null,
+      );
       const by = actor?.name || null;
       if (answered) {
         notify?.({

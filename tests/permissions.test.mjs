@@ -208,6 +208,23 @@ test('a refusal tells the model why and where to escalate', () => {
   assert.match(architect, /chat/);
 });
 
+test('the operator\'s own reason travels with the refusal', () => {
+  // A rule about workarounds is useful; "that file is generated" is what stops
+  // the worker guessing again.
+  const note = refusalNote({ role: 'coder-1', scope: 'outside', reason: '  That file is\n generated.  ' });
+  assert.match(note, /They said: "That file is generated\."/);
+  assert.match(note, /Do not try another/);
+  // No reason, no empty sentence.
+  assert.doesNotMatch(refusalNote({ role: 'coder-1', scope: 'outside' }), /They said/);
+  // Bounded, and flattened to one line: it is a sentence inside a message. The
+  // reason is capped at 300 characters, so the note stays a paragraph.
+  const long = refusalNote({ role: 'coder-1', scope: 'outside', reason: `x${'y'.repeat(500)}` });
+  assert.ok(long.length < 620, `${long.length} characters`);
+  assert.match(long, new RegExp(`y{299}`));
+  assert.doesNotMatch(long, new RegExp(`y{300}`));
+  assert.doesNotMatch(long, /\n/);
+});
+
 test('a decision says whether the call reached outside the project', () => {
   assert.equal(call('edit', 'src/a.js').outside, false);
   assert.equal(call('edit', 'D:/x.txt').outside, true);

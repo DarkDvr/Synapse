@@ -27,8 +27,9 @@ export function createPermissionLog({ limit = 300 } = {}) {
   }
 
   /** The operator's answer to a request the policy left to them. `by` is the
-   *  computer it was answered from — two people can be looking at one card. */
-  function answer(requestId, decision, by = null) {
+   *  computer it was answered from — two people can be looking at one card — and
+   *  `note` is the sentence they typed when they rejected it, if any. */
+  function answer(requestId, decision, by = null, note = null) {
     const entry = byRequest.get(requestId);
     if (!entry) return null;
     const allowed = decision === 'once' || decision === 'always';
@@ -40,6 +41,7 @@ export function createPermissionLog({ limit = 300 } = {}) {
       decidedBy: 'operator',
       answeredBy: by || null,
       answeredAt: Date.now(),
+      ...(note ? { note } : {}),
     });
   }
 

@@ -34,6 +34,14 @@ it as a panel **painted over the chat, anchored just above the composer**.
   Submit disabled itself again). `state.askSig` is the form's id plus its fields
   and option values — nothing about the answers — and an unchanged signature only
   re-places the panel. Same lesson as `renderSig` for the transcript.
+- **The poll must not repaint the session at all when it learned nothing.** 27 Oct:
+  on a laptop, typing in the chat moved it up and down by about a line every
+  several seconds. The eight-second poll called `renderTranscript()` every time;
+  the transcript's own signature guard returns early, but `fitChatHeight()` runs
+  *before* that guard and re-settles the dock's height and the chat's scroll
+  offset. `paneSig()` — the permission ids, the form ids, busy, canStop and the
+  busy reason — is compared before and after, and an unchanged poll now paints
+  nothing. A rebuild is not free just because its output is identical.
 - **The action row is the panel's last column row, not a sticky one.** A six-field
   form is taller than the chat, so Submit is pinned to the panel's bottom edge
   rather than something to scroll to. It was `position: sticky; bottom: 0` first,
@@ -584,9 +592,10 @@ clear it: a test is not work.
   the **green border**: yellow border means a delegation is in flight, green means
   nothing of ours is and the move is the operator's. Because a chip is the size of
   a line of text it still cannot change a card's height.
-  **Because it is all derived, "a new plan resets participation" needs no code:**
-  a rewritten plan is all `todo` again, so every card goes back to 80% on its own,
-  and a reload or a restart shows the same picture.
+  **Because it is derived from `used`, a plan rewrite does not reset
+  participation** — the role did work in this session, whatever the plan now
+  says — and a new session starts with every card dim, because a new session's
+  id has no delegate lines yet. A reload or a restart shows the same picture.
   Two consequences worth keeping. The chip replaces the subtitle *text in the same
   slot*, so it cannot change a card's height (measured: all seven cards 106.28px
   with and without it, at 1680 and at 1200). And `state.roleSig` must include the
@@ -594,12 +603,13 @@ clear it: a test is not work.
   returns early and the dot never repaints — which is also why `loadPlan()` calls
   `renderRoleActivity()`: the plan poll (30s, plus every message event) is the
   only thing that learns a task changed.
-  **The known gap:** participation is "a task of that role is not `todo`". A
-  worker that ran and was interrupted, whose task the Architect left `todo`, dims
-  again — its card is solid while it runs and loses that afterwards. Closing it
-  needs `runs.jsonl` as a second source *and* a marker for which plan those runs
-  belong to (task ids repeat between plans), which is real machinery for a small
-  visual; the honest reading of the file we have was preferred.
+  **A clock and a dim are two claims about one card, so they must come from one
+  ledger.** 27 Oct: the QC card showed a time and stayed faded. The time was
+  `spent`, summed over every run of that task id in the project; the fade was
+  `used`, scoped to this session. `runLedger` (see `engine-notes.md`) now scopes
+  both: a role's total is the time *this session's* runs of its tasks took, so a
+  timer cannot appear on a card that never worked here. `dim` also refuses to
+  fade a card whose tasks have session time, belt and braces.
 - **A chip inside a text slot inherits its line-height, and that is what
   de-centres it.** The `Done` chip sits in the card's subtitle slot, whose
   `line-height` is 1.45 — so the chip's box was the *line box* (13.775px) plus its
@@ -909,6 +919,23 @@ bold, italic, strikethrough and links: the range these models actually produce.
 - **The STATUS label is yellow**, like every other section heading in the rail,
   and its block lost 2px of the air above it (13 → 11): the divider and its label
   were reading as two groups.
+- **Views: the count sits with its label, the computer names take the rest.** The
+  row reads `Views: 2` on the left and `Andrew-PC, LAPTOP-7G2` across the right.
+  Names come from the server, not from the browser: `presence.js` uses the host's
+  own name for loopback and a reverse DNS lookup for a LAN address, and the address
+  itself only when the lookup has nothing to say. The count is views; the names are
+  de-duplicated, because one machine with two tabs is one name. `.status-state`
+  needs `min-width: 0` for its ellipsis to be able to apply at all — a flex child
+  does not shrink below its content without it — and the row never wraps, so three
+  or four clients shorten the names instead of adding a line. A row that grows a
+  line on connect is a chat that moves.
+- **Two things the operator removed, and why they are not to come back.** The
+  rail's `working` chip beside a session name (27 Oct: the rail is a list of names
+  and the chip took the width one needed — the yellow dot and the project rule
+  already say "working"), and the composer's busy sentence above the controls
+  ("this project is working — started from 192.168.50.115", which cost a line of
+  chat to repeat what the cards say; a held Send with no caption was accepted in
+  exchange, and the server still refuses with a toast if one is pressed).
 - **The left panel is yellow now, not violet.** The current project is the
   loudest row in the rail — a **2px** yellow border (a 1px border plus an inset
   ring of the same colour, so selecting a project does not move the tree by a
@@ -951,11 +978,24 @@ bold, italic, strikethrough and links: the range these models actually produce.
 - **A plan step carries its own stopwatch, and that is what makes a row two lines.**
   The badge and the clock stack in one right-hand column (`plan-side`), so the row
   is as tall as the stack whatever the title does — no `min-height` guessing. The
-  time is the sum of that task's completed runs from `runs.jsonl` (served as
-  `spent` on the plan payload, because a client clock only knows about the time
-  this browser has been open) plus the live run's start while it is in hand.
-  A step nobody has run keeps the line and hides its zeros: the height must not
-  jump from row to row, but ten `00:00:00` under ten badges is noise.
+  time is the sum of that task's runs that *this session* asked for, from
+  `runs.jsonl` (served as `spent` on the plan payload, because a client clock only
+  knows about the time this browser has been open) plus the live run's start while
+  it is in hand. A step nobody has run keeps the line and hides its zeros: the
+  height must not jump from row to row, but ten `00:00:00` under ten badges is
+  noise. **The same `spent` drives the plan row's review mark** (`reported`): a
+  task marked `done` by an earlier session must not open this one already dashed,
+  which is what happened on 27 Oct when the log was summed by task id alone.
+- **Tokens per second comes from the stream, not from a turn's timestamps.** The
+  card used to divide a turn's written tokens by `time.streamed − time.created`.
+  That window starts before the engine assembles the request, so it grows with the
+  transcript: a turn the model server clocked at 72.8 tok/s read 28 once the
+  prompt was 97k tokens, and the number drifted through a run — "completely wrong
+  and random", and it was. The honest interval is the first streamed piece to the
+  last, which only the page sees; `paintRates` now keeps the run's running average
+  (`tokens / streaming-ms`, accumulated per step), so the card settles within a
+  few steps and stops jumping. There is deliberately no server-side estimate: the
+  server does not see the pieces.
 - **The tools panel never met the chat's bottom because the grid had one row too
   many.** `.inspector` declared `auto auto minmax(0,1fr)` and had two children —
   the plan and the tools — so the tools sat in an `auto` row and the slack row
