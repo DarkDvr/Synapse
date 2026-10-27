@@ -509,6 +509,66 @@ export function readRuns(dir) {
   }
 }
 
+// ── rounds, and the caps that belong to them ────────────────────
+//
+// A round ends when the Architect says the plan is done: every task `done` and
+// the customer-facing summary written. That close is a `round` line in
+// runs.jsonl, and the QC loop's three rounds and every task's three attempts are
+// counted only after it. Without the boundary a long-lived project spent its
+// whole QC quota on its first rounds, and a task id reused by every new plan
+// reached the attempt cap although every attempt had succeeded.
+
+export const QC_ROUNDS = 3;
+
+/** The last "round closed" line in a project's run log, if any. */
+function lastRoundClosed(history) {
+  const list = history || [];
+  for (let i = list.length - 1; i >= 0; i -= 1) {
+    if (list[i].kind === 'round' && list[i].event === 'closed') return list[i];
+  }
+  return null;
+}
+
+/** The run log since that boundary: what this round has spent. */
+export function sinceRoundClosed(history) {
+  const list = history || [];
+  let from = 0;
+  for (let i = 0; i < list.length; i += 1) {
+    if (list[i].kind === 'round' && list[i].event === 'closed') from = i + 1;
+  }
+  return list.slice(from);
+}
+
+/** Completed QC rounds since the last finished plan. `hacker` is the role's old
+ *  id, and rounds spent under it still count. */
+export function qcRoundsUsed(dir) {
+  return sinceRoundClosed(readRuns(dir)).filter(
+    (r) => r.kind === 'result' && (r.role === 'qc' || r.role === 'hacker') && r.outcome === 'completed',
+  ).length;
+}
+
+/**
+ * Close the round the Architect has finished. One `round` line per finished
+ * plan: if the plan has not changed since the last one, there is nothing to
+ * close. A plan with tasks done but no summary is not closed — the summary is
+ * how the Architect says "done".
+ *
+ * `readPlan().stat.mtime` is when the plan file last changed. The earlier
+ * `mtimeMs` did not exist, so every close after the first returned false, and
+ * the caps of a mature project never reset again.
+ */
+export function closeRound(dir) {
+  if (!dir) return false;
+  const read = readPlan(dir);
+  const tasks = read?.plan?.tasks || [];
+  if (!tasks.length || !tasks.every((t) => t.status === 'done')) return false;
+  if (!String(read?.plan?.summary || '').trim()) return false;
+  const last = lastRoundClosed(readRuns(dir));
+  const mtime = Number(read?.stat?.mtime) || 0;
+  if (last && Number(last.at) >= mtime) return false;
+  return appendRun(dir, { kind: 'round', event: 'closed', tasks: tasks.length });
+}
+
 /**
  * What one session's own work cost, from the project's run log.
  *
@@ -817,6 +877,20 @@ export function briefSession({ dir, role = 'architect', auto = false, single = f
   lines.push(
     `Scratch folder: ${scratch}. Probe scripts, screenshots and temporary data go there — never the machine's temp folder. It is yours to write, and it is outside the project.`,
   );
+
+  // The QC allowance belongs to the round, and the Architect is the one who plans
+  // its checks. Without this line it carried the previous round's "three rounds
+  // spent" from the handover into a round whose quota had reset, refused to
+  // delegate QC, and wrote "the delegation was refused" into the plan — a refusal
+  // that never happened (27 Oct, t7).
+  if (isArchitect) {
+    const qcSpent = qcRoundsUsed(dir);
+    lines.push(
+      qcSpent >= QC_ROUNDS
+        ? `QC: all ${QC_ROUNDS} independent QC rounds for this plan are spent. Do not plan another QC task — settle any check yourself and say in the plan that you did.`
+        : `QC: ${qcSpent} of ${QC_ROUNDS} independent QC rounds spent for this plan. A QC task will run if you delegate it; a finished plan starts a new allowance.`,
+    );
+  }
 
   // Single mode is not this harness at all: it is a chat that can use tools. No
   // roles, no work list, no delegation - the operator answers everything in one

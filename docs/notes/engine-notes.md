@@ -307,6 +307,14 @@ Non-obvious, all verified on 2.0.30:
   a restart does not move the task down the ladder (`attemptFailed`): t3 dropped
   from coder-2 to coder-3 because a restart interrupted it, and no change to
   coder-2's model could bring it back.
+- **A free-plan usage cap gets ten minutes, not for ever.** "Free usage limit
+  reached. Connect a provider or subscribe … switch models" classified as
+  `unknown` and was retried indefinitely: on 27 Oct t9 sat on it for 13 retries
+  and 51 minutes before the operator stopped it, while t8 recovered after about
+  five. It is `usage-limit` now (transient, not terminal), and both the worker's
+  rescue loop and the Architect's wake stop after `USAGE_LIMIT_MS` (10 minutes)
+  with a message naming the model to switch. A hard model mark is still only for
+  `deprecated`; a capped account says nothing about the model.
 - **Caps are per round, not per project.** A round ends when the Architect says
   the plan is done: every task `done` **and** the customer-facing summary written.
   That close is one `round` line in `runs.jsonl` (`closeRound`), written after a
@@ -318,6 +326,14 @@ Non-obvious, all verified on 2.0.30:
   only `qc-1` and `qc-2` on disk), and a task id reused by every new plan (t1,
   t2, …) reached the attempt cap although every one of its attempts had
   succeeded.
+  Two failures kept the reset from working: the dedupe compared against
+  `stat.mtimeMs`, which `readPlan` does not return (it is `stat.mtime`), so after
+  the first marker every later close returned false; and the runner did not
+  expose `closeRound`, so the send-time path was a no-op. Both fixed 27 Oct.
+  The brief also states the round's allowance now ("QC: 0 of 3 …"): the Architect
+  had read the previous handover's "three rounds spent", refused to delegate t7
+  at all, and wrote "the delegation was refused" into the plan — a refusal that
+  never happened, so the round was self-verified for no reason.
 - **A coder that cannot do the job hands it down the line.** The three coder roles
   are peers (`worker.ladder`, default `coder-1 → coder-2 → coder-3`), and the
   harness moves the *same task* between them — the Architect cannot, because the

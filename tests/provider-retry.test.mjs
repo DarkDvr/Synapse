@@ -16,6 +16,8 @@ import { classifyFailure, PROVIDER_LOG } from '../src/provider-errors.js';
 
 const ROOT = path.join(os.tmpdir(), 'synapse-provider-test');
 const RATE = 'Rate limit exceeded. Please try again later.';
+const FREE_LIMIT =
+  'Free usage limit reached. Connect a provider or subscribe to OpenCode Go to keep going, or switch models.';
 const DEPRECATED = 'Model muse-spark-1.3-contributor-free has been deprecated.';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const quiet = { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} };
@@ -175,6 +177,8 @@ expect('rate limit is transient', classifyFailure(RATE).kind === 'transient');
 expect('rate limit is named', classifyFailure(RATE).reason === 'rate-limit');
 expect('connection is transient', classifyFailure('read ECONNRESET').kind === 'transient');
 expect('deprecated is terminal', classifyFailure(DEPRECATED).kind === 'terminal');
+expect('a free usage cap is transient, not a rate limit', classifyFailure(FREE_LIMIT).kind === 'transient', JSON.stringify(classifyFailure(FREE_LIMIT)));
+expect('and it is named', classifyFailure(FREE_LIMIT).reason === 'usage-limit');
 expect('invalid key is terminal', classifyFailure('Invalid API key').kind === 'terminal');
 expect('bad request is terminal', classifyFailure('Invalid request: text is required').kind === 'terminal');
 // A session the operator deleted answers 404. It is terminal, and the runner

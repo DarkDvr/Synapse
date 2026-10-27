@@ -13,7 +13,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { appendRun, readRuns } from '../src/plans.js';
+import { appendRun, briefSession, readRuns } from '../src/plans.js';
 import { closeRound, countedAttempts, qcRoundsUsed } from '../src/runs.js';
 
 const project = () => fs.mkdtempSync(path.join(os.tmpdir(), 'synapse-round-'));
@@ -73,4 +73,31 @@ test('an unfinished plan after a close does not spend the new round on the old o
   appendRun(dir, { kind: 'delegate', task: 't1', attempt: 1, callId: 'a' });
   assert.equal(countedAttempts(readRuns(dir), 't1'), 1);
   assert.equal(closeRound(dir), false);
+});
+
+// The bug that made the whole reset inert after the first close: the marker's
+// comparison read `stat.mtimeMs`, which readPlan does not return, so it compared
+// against 0 and every later close returned false.
+test('a plan rewritten after a close closes a new round', () => {
+  const dir = project();
+  writePlan(dir, { tasks: [task('t1', 'done')], summary: 'One.' });
+  assert.equal(closeRound(dir), true);
+  writePlan(dir, { tasks: [task('t1', 'done')], summary: 'Two.' });
+  const file = path.join(dir, '.synapse', 'plan.json');
+  const future = new Date(Date.now() + 5000);
+  fs.utimesSync(file, future, future);
+  assert.equal(closeRound(dir), true, 'a newer finished plan is a new round');
+  assert.equal(readRuns(dir).filter((r) => r.kind === 'round').length, 2);
+});
+
+test('the brief tells the Architect how many QC rounds this plan has left', () => {
+  const dir = project();
+  writePlan(dir, { tasks: [task('t1', 'todo')], summary: '' });
+  assert.match(briefSession({ dir, role: 'architect' }), /QC: 0 of 3 independent QC rounds spent for this plan/);
+  for (const callId of ['q1', 'q2', 'q3']) {
+    appendRun(dir, { kind: 'result', role: 'qc', task: 't1', callId, outcome: 'completed' });
+  }
+  const spent = briefSession({ dir, role: 'architect' });
+  assert.match(spent, /QC: all 3 independent QC rounds for this plan are spent/);
+  assert.match(spent, /Do not plan another QC task/);
 });

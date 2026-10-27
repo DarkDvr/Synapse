@@ -75,6 +75,16 @@ const RULES = [
     re: /invalid request|bad request|\b400\b|unprocessable|\b422\b|validation (error|failed)/i,
   },
   {
+    // A free plan's usage cap, not a pace limit. It can clear on its own — t8
+    // recovered after about five minutes of retries on 27 Oct — so it is retried,
+    // but the runner gives it a bounded grace (USAGE_LIMIT_MS) and then stops
+    // with "switch models": t9 retried the same sentence 13 times over 51 minutes
+    // before the operator stopped it, because it classified as `unknown`.
+    reason: 'usage-limit',
+    kind: 'transient',
+    re: /free usage limit|usage limit reached|out of (?:credits|quota)|subscribe to .*keep going|switch models/i,
+  },
+  {
     reason: 'rate-limit',
     kind: 'transient',
     re: /rate.?limit|rate limited|\b429\b|too many requests|quota|capacity|overloaded|free tier/i,

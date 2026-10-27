@@ -27,6 +27,10 @@ import {
   briefSession,
   appendRun,
   readRuns,
+  qcRoundsUsed,
+  closeRound,
+  sinceRoundClosed,
+  QC_ROUNDS,
   planFingerprint,
   BRIEF_KEY,
   PLAN_DIR,
@@ -49,23 +53,21 @@ import { providerLoadedWindow, providerType } from './providers.js';
 const POLL_MS = 1500;
 const RESULT_MAX = 4000;
 const NOTE_MAX = 1000;
-// A task that keeps coming back gets escalated instead of retried forever. The
+
+// The ledger owns the round boundary (plans.js); callers and tests still reach
+// the counters through the runner module.
+export { qcRoundsUsed, closeRound };// A task that keeps coming back gets escalated instead of retried forever. The
 // Architect is told, and it is the Architect that marks the task blocked — the
 // harness never writes the plan, and never decides a task is hopeless.
 const MAX_ATTEMPTS = 3;
-// How many QC rounds a round gets before the harness closes the loop. A model
-// will keep finding "one more issue" until the quota runs out; three rounds is
-// the deal, then the remainder is the operator's to judge. Per ROUND, not per
-// project: a finished plan closes the round and the next one starts with all
-// three again (see closeRound).
-const QC_ROUNDS = 3;
-/** Completed QC rounds since the last finished plan. The loop is bounded by
- *  them, not by the model's appetite for one more issue. `hacker` is the role's
- *  old id, and rounds spent under it still count. */
-export const qcRoundsUsed = (dir) =>
-  sinceRoundClosed(readRuns(dir)).filter(
-    (r) => r.kind === 'result' && (r.role === 'qc' || r.role === 'hacker') && r.outcome === 'completed',
-  ).length;
+// A provider's free-plan usage cap can clear on its own, so it is retried — but
+// not for ever. Ten minutes is long enough for the rolling window that let t8
+// recover (~5 minutes) and short enough that a dead cap does not hold the
+// project busy for an hour (t9 retried 13 times over 51 minutes).
+const USAGE_LIMIT_MS = 10 * 60 * 1000;
+// The QC loop's three rounds and the round boundary live with the ledger, in
+// plans.js: `qcRoundsUsed`, `closeRound` and `sinceRoundClosed`. What is left
+// here is the runner's use of them.
 // Written by Synapse itself on every run, so a change to one of these is never a
 // worker's doing. plan.json is reported separately (planTouched), which is why it
 // is ignored here rather than alarming twice.
@@ -252,26 +254,6 @@ export function outsideProject(file, dir) {
   return Boolean(root) && !target.startsWith(`${root}/`);
 }
 
-/** The last "round closed" line in a project's run log, if any. A finished plan
- *  writes one, and it is the boundary every cap is counted from. */
-function lastRoundClosed(history) {
-  const list = history || [];
-  for (let i = list.length - 1; i >= 0; i -= 1) {
-    if (list[i].kind === 'round' && list[i].event === 'closed') return list[i];
-  }
-  return null;
-}
-
-/** The run log since that boundary: what this round has spent. */
-function sinceRoundClosed(history) {
-  const list = history || [];
-  let from = 0;
-  for (let i = 0; i < list.length; i += 1) {
-    if (list[i].kind === 'round' && list[i].event === 'closed') from = i + 1;
-  }
-  return list.slice(from);
-}
-
 /**
  * Attempts a task has really spent.
  *
@@ -295,32 +277,6 @@ export function countedAttempts(history, taskId) {
   return spent.filter(
     (r) => r.kind === 'delegate' && r.task === taskId && typeof r.attempt === 'number' && !unspent.has(r.callId),
   ).length;
-}
-
-/**
- * The Architect has finished the plan — every task done and the customer-facing
- * `summary` written — so the round is over and the next one starts with its caps
- * back: three QC rounds and three attempts per task, per round rather than per
- * project.
- *
- * `runs.jsonl` is append-only, so the boundary is a `round` line; `qcRoundsUsed`
- * and `countedAttempts` count only what comes after it. One marker per finished
- * plan: if the plan has not changed since the last one, there is nothing to close.
- *
- * Called after a successful Architect turn, and when the operator sends into a
- * finished plan. A plan with tasks done but no summary is not closed: the summary
- * is how the Architect says "done".
- */
-export function closeRound(dir) {
-  if (!dir) return false;
-  const read = readPlan(dir);
-  const tasks = read?.plan?.tasks || [];
-  if (!tasks.length || !tasks.every((t) => t.status === 'done')) return false;
-  if (!String(read?.plan?.summary || '').trim()) return false;
-  const last = lastRoundClosed(readRuns(dir));
-  const mtime = Number(read?.stat?.mtimeMs) || 0;
-  if (last && Number(last.at) >= mtime) return false;
-  return appendRun(dir, { kind: 'round', event: 'closed', tasks: tasks.length });
 }
 
 /** Did this finished run count as a failed attempt for the role?
@@ -1274,6 +1230,9 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
         // in the transcript is the starting point of the next attempt.
         let rungRetries = 0;
         let rungResumes = 0;
+        // When the usage cap was first seen in this attempt. Reset by any other
+        // kind of turn; a cap that clears and returns starts a new grace.
+        let usageSince = 0;
         for (;;) {
           const finished = await waitForIdle(
             worker.id,
@@ -1415,6 +1374,24 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
             if (cls.reason === 'deprecated') refuseModel(modelRef, turnError);
             alert({ dir, role, message: turnError, final: true });
             break;
+          }
+
+          // A usage cap that has not cleared in ten minutes is not a pause: the
+          // operator has to change the model, and retrying only keeps the project
+          // busy (t9, 27 Oct: 13 retries, 51 minutes, stopped by hand).
+          if (cls.reason === 'usage-limit') {
+            if (!usageSince) usageSince = Date.now();
+            if (Date.now() - usageSince > USAGE_LIMIT_MS) {
+              outcome = 'error';
+              turnError =
+                `${turnError} Synapse stopped retrying this usage cap after ` +
+                `${Math.round(USAGE_LIMIT_MS / 60000)} minutes — switch this role to another model.`;
+              alert({ dir, role, message: turnError, final: true });
+              out.warn(`worker ${request.task} (${role}) stopped: the usage cap did not clear`);
+              break;
+            }
+          } else {
+            usageSince = 0;
           }
 
           // The prompt is bigger than the window. Waiting changes nothing and
@@ -2348,6 +2325,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
   async function wake(architectId, dir, { description, text }, signal) {
     const settings = workerSettings(getConfig() || {});
     let tries = 0;
+    let usageSince = 0;
     for (;;) {
       if (signal?.aborted) return { ok: false, stopped: true };
       let before = '';
@@ -2438,6 +2416,23 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
         log.error(`the Architect could not process the report: ${err}`);
         notify?.({ kind: 'role-error', dir, role: 'architect', message: err, final: true });
         return { ok: false, error: err };
+      }
+
+      // The Architect's model hit a usage cap. Give it the same grace a worker
+      // gets, then stop and say so: a capped Architect cannot read any report,
+      // and the loop would otherwise retry it all evening.
+      if (cls.reason === 'usage-limit') {
+        if (!usageSince) usageSince = Date.now();
+        if (Date.now() - usageSince > USAGE_LIMIT_MS) {
+          const message =
+            `${err} Synapse stopped retrying the Architect's usage cap after ` +
+            `${Math.round(USAGE_LIMIT_MS / 60000)} minutes — switch the Architect to another model.`;
+          log.error(`the Architect's usage cap did not clear: ${err}`);
+          notify?.({ kind: 'role-error', dir, role: 'architect', message, final: true });
+          return { ok: false, error: message };
+        }
+      } else {
+        usageSince = 0;
       }
 
       // The Architect's own transcript outgrew the window. Compact it, then let
@@ -2545,6 +2540,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     resume,
     hold,
     stopWithReason,
+    closeRound,
   };
 }
 
