@@ -271,6 +271,58 @@ why it can disagree with what the operator meant when they clicked twice.
 
 ---
 
+### The QC pass after phase 5 — 27 Oct, live
+
+Three tests, run one after another against the running app, fixing what each found
+before starting the next. All five bugs below are fixed and committed (`936a84c`,
+`ce85a35`); the suite went from 184 to 187.
+
+**1. A new project's first chat (`qc-life`).** New Project → the folder is
+suggested, the empty chat opens, the chip is hidden. A Single message was logged
+as `### chat` while the head kept it as the fallback request (the chat-only
+rule); the toggle then went to Multi with **no** engine call — the session still
+said `single: true` — and the send applied it once ("mode single -> multi …
+applied at send"). Reload reopened the same chat in Multi with four messages.
+Found: every write doubled `## Handover` and `## Notes`, because an empty
+section's heading is the last thing before the end marker and the reader only
+stripped a heading followed by a newline. Fixed in `project-doc.js`; a document
+written by the old code is repaired by its next write.
+
+**2. Compact from two views.** Two tabs of the same app on `qc-life`. The chip
+confirmed "Discard 7 messages?" over a four-message chat (the engine's list also
+holds two idle markers and one system note), then compacted in about four
+seconds to an 810-character handover. The second view followed the broadcast and
+showed the post without a reload. The compacting view, however, landed on the
+empty state: its 8-second poll was still asking for the old chat, got the 404
+the compact itself had caused, and closed the new chat. A second compact after
+the fixes kept both views on the new chat, with the new post and the new id.
+
+Found: the stale-404 race (and the same race in the plan pane, where a late
+answer for the previous project painted "No plan yet" over Fever Tracker's three
+tasks); the message count; the post having no mark that it opens; and the post
+closing itself at the next poll because the toggle handler only remembered
+Reasoning blocks. All fixed: `loadMessages`/`loadPlan` capture the chat they
+asked about, `loadProjects({ keepOpen })` is used by the compact path and the
+broadcast, the count comes from the transcript, the summary wears a chevron, and
+`state.open` remembers `compact-post`.
+
+**3. Fever Tracker, read-only, then the delete.** Opened the operator's project:
+the 17:14 compact's post ("78 messages"), the handover behind it, the plan's
+three tasks (visible after the `loadPlan` fix) and Multi mode, with the chip
+correctly hidden because the new chat has nothing to discard. Settings shows
+**Server**, Runtime, Providers, Workers, Tools, Windows, Logging — no General, no
+session words anywhere in the page text. Then `qc-life` was deleted through the
+`⋯` menu: the Delete Project dialog appeared (no "Sessions Still Inside"), the
+folder went to the Recycle Bin, the registry has only Fever Tracker, and the
+open Fever Tracker stayed open. The `## Notes` duplicate in Fever Tracker's own
+document is left for its next write to repair, by design.
+
+Evidence: `data/qc/test1-doc-and-chat.png`, `test2-handover-open3.png` (the post
+open), `test3-settings-server.png` (the Settings tabs, caught when an occluded
+window returned a stale frame — see `docs/notes/ui-lessons.md`).
+
+---
+
 ## Invariants
 
 - One conversation per project, and the server enforces it (the busy guard
@@ -301,11 +353,14 @@ why it can disagree with what the operator meant when they clicked twice.
 
 ## How this is tested
 
-- `node --test tests\*.test.mjs` after every phase (156 today, and the new
-  files: project document, mode-at-send, compaction).
+- `node --test tests\*.test.mjs` after every phase (187 today, and the new
+  files: project document, mode-at-send, compaction, ui-words).
 - One live QC pass per phase in the QC Edge profile: the rail, the menu, the
   dot states, the chip, the confirm, a compact with a second view open, a
   reload after a compact, and a fresh profile with no projects.
+- A compact is the one flow that swaps the open chat under the page, so it is
+  tested from **two tabs** with the post open, not one: the second tab is the
+  only witness to whether the broadcast re-points a view.
 - `docs.test.mjs` keeps this file linked from `AGENTS.md`.
 
 ## Rollback

@@ -1424,3 +1424,33 @@ spine sits, how wide the band is, how big the cards are. The numbers that matter
 are measured live in the page and asserted against, so the mockup is read for
 intent and the layout is proved by measurement.
 
+## A late answer belongs to the chat that asked
+
+Any loader that writes state after an `await` must capture the id it asked about
+and compare it before writing. The open chat can be replaced while the request is
+in flight — a compact deletes it and opens its replacement in the same second.
+Measured 27 Oct: the 8-second message poll was still asking for the old chat, got
+the 404 the compact itself had caused, and closed the *new* chat, leaving the
+landing page a second after a successful compact; and a plan answer for the
+previous project painted "No plan yet" over a project that has three tasks.
+`loadMessages` and `loadPlan` now do this; the same pattern applies to any
+fetcher keyed by `state.sessionId`.
+
+Two corollaries. A load that is part of a replacement must not read the old id
+leaving the list as "the open chat was removed" (`loadProjects({ keepOpen })`).
+And a block with content behind it (`<details>`) needs its open state keyed in
+`state.open`, or the next render shuts it — the compact post was rebuilt closed
+by every poll because only Reasoning blocks were remembered.
+
+## Screenshots from an occluded window are stale
+
+`Page.captureScreenshot` hands back the last composed frame when the QC Edge
+window sits behind another window: the DOM said the compact post was open with
+565 px of body, the picture showed it closed, and two shots seconds apart were
+byte-identical. Front the window (`SetForegroundWindow`, after `ShowWindow`) and
+shoot then — `Page.bringToFront` alone does not make it compose. CDP input is
+unreliable in the same state (a click landed on the button in `elementFromPoint`
+and the handler never ran); when the picture matters, verify the DOM before and
+after and fall back to `element.click()` and a value plus an `input` event.
+
+
