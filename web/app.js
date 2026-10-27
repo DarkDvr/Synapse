@@ -7625,6 +7625,24 @@ document.addEventListener('keydown', (e) => {
       });
     }).observe($('topology'));
   }
+  // The composer grows as the operator types or attaches a file, and the dock's
+  // height is measured from the composer's (see fitChatHeight: on a narrow window
+  // the chat is given whatever room is left under the cards). Measured 27 Oct at
+  // 1076px wide: with the note gone and the eight-second poll no longer repainting,
+  // a long draft left the transcript's bottom 112px behind the composer — the dock
+  // kept the height it had before the box grew. Watching the composer is the event
+  // that actually means "the floor moved"; a poll was only ever an approximation
+  // of it, eight seconds late and once per run for no reason.
+  if (window.ResizeObserver) {
+    let composerRaf = 0;
+    new ResizeObserver(() => {
+      if (composerRaf) return;
+      composerRaf = requestAnimationFrame(() => {
+        composerRaf = 0;
+        if (state.view === 'session') fitChatHeight();
+      });
+    }).observe($('composer'));
+  }
   // Fonts settle a tick after first paint; measure once more when they do.
   if (document.fonts?.ready) {
     document.fonts.ready.then(() => {

@@ -42,6 +42,12 @@ it as a panel **painted over the chat, anchored just above the composer**.
   offset. `paneSig()` — the permission ids, the form ids, busy, canStop and the
   busy reason — is compared before and after, and an unchanged poll now paints
   nothing. A rebuild is not free just because its output is identical.
+  **The dock's floor follows the composer, not the clock.** That poll was also the
+  only thing re-measuring the dock after the composer grew, so a long draft left
+  the transcript's bottom 112px behind the composer (measured at 1076px wide). A
+  `ResizeObserver` on `#composer` now calls `fitChatHeight()` when its box changes
+  — typing, attaching a file — which is the event that actually means the floor
+  moved. Re-measured: dock 404px, transcript bottom 576, composer top 575.
 - **The action row is the panel's last column row, not a sticky one.** A six-field
   form is taller than the chat, so Submit is pinned to the panel's bottom edge
   rather than something to scroll to. It was `position: sticky; bottom: 0` first,
