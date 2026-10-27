@@ -945,10 +945,21 @@ bold, italic, strikethrough and links: the range these models actually produce.
 - **The left panel is yellow now, not violet.** The current project is the
   loudest row in the rail — a **2px** yellow border (a 1px border plus an inset
   ring of the same colour, so selecting a project does not move the tree by a
-  pixel) over a `rgba(237,194,90,0.10)` wash; the current session is one step
-  quieter, a 1px inset ring at 0.6 alpha over `0.07`. Browse/Cmd use the same
-  yellow on hover and press. Violet fills belong to the composer.
-- **A session title is generated to fit its row: 22 characters, measured.** The
+  pixel) over a `rgba(237,194,90,0.10)` wash. Browse/Cmd use the same yellow on
+  hover and press. Violet fills belong to the composer.
+- **The rail is a list of projects, one row each (27 Oct).** Clicking a row opens
+  the project's one conversation (its newest session, by creation). The row keeps
+  a state dot — grey never used, green idle with a conversation, amber breathing
+  while it works — a `?` when it is waiting on the operator, and a `⋯` that opens
+  Browse, Cmd, Rename and Delete. Right-click and Shift+F10 open the same menu;
+  the `⋯` is the visible door, because a menu nobody can see is not a menu. The
+  sessions list, its label, the per-row pencil/✕/Browse/Cmd and the collapse
+  caret are gone: the name gets the width back, and the row is one click to open.
+  An empty registry is a real first run now — "A project is a folder. Make one
+  and its conversation opens here." with one New Project button, no General.
+- **A session title is generated to fit its row: 22 characters, measured.** (History:
+  the rail no longer shows session titles at all — one project is one row — but the
+  measurement is why the row's name survives a long project name.) The
   title box is 145px at DM Sans 12.5px and `Ambient Second Monitor` is 145px. It
   got there from 125px by taking the rename pencil **out of the flow** (it now
   overlays the name's end on hover) and tightening the project indent — a control

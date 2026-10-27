@@ -3,15 +3,13 @@
 // The engine scopes every session to a working directory, so a project is
 // simply a directory that owns sessions — there is no parallel concept to keep
 // in sync. This store only remembers the ones the operator has added, in
-// data/projects.json. "General" is its own folder (GENERAL_DIR), synthesised at
-// boot, and is always present, first, and undeletable.
+// data/projects.json. There is no built-in project: an empty registry is an
+// empty app, and the projects root is created when it is missing.
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 
 const idFor = (dir) => crypto.createHash('sha1').update(dir.toLowerCase()).digest('hex').slice(0, 12);
-
-export const GENERAL_ID = 'general';
 
 export function normalizeDir(dir) {
   const resolved = path.resolve(String(dir ?? '').trim());
@@ -56,8 +54,17 @@ export function mayRecycleFolder(dir, { projectsRoot = '', harness = '' } = {}) 
   return { ok: true, reason: '' };
 }
 
-export function createProjectStore({ file, generalDir, logger }) {
+export function createProjectStore({ file, rootDir, legacyGeneralDir = null, logger }) {
   const log = logger.channel('app');
+
+  // The projects root is ours and lives inside the harness's sibling folder; a
+  // first run has no projects and no folder, and creating it here means "New
+  // Project" works before anything else has.
+  try {
+    if (rootDir) fs.mkdirSync(rootDir, { recursive: true });
+  } catch (err) {
+    log.warn(`could not create the projects folder (${err.message})`);
+  }
 
   const readRaw = () => {
     try {
@@ -78,28 +85,48 @@ export function createProjectStore({ file, generalDir, logger }) {
     fs.renameSync(tmp, file);
   };
 
-  const shape = (p, general = false) => ({
+  const shape = (p) => ({
     id: p.id || idFor(p.directory),
     name: p.name || path.basename(p.directory) || p.directory,
     directory: normalizeDir(p.directory),
-    general,
     created: p.created ?? null,
     exists: fs.existsSync(normalizeDir(p.directory)),
   });
 
-  const general = () => shape({ id: GENERAL_ID, name: 'General', directory: generalDir, created: null }, true);
+  /**
+   * The old built-in "General" folder becomes an ordinary project, once.
+   *
+   * It used to be synthesised at boot and could not be deleted. Removing the
+   * concept must not remove the work that lives in that folder, so the first
+   * boot after the change adopts it: same name, same directory, now deletable
+   * like any other project. A registry that already names it is left alone.
+   */
+  function adoptLegacyGeneral() {
+    if (!legacyGeneralDir) return;
+    const dir = normalizeDir(legacyGeneralDir);
+    if (!fs.existsSync(dir)) return;
+    const raw = readRaw();
+    if (raw.some((p) => key(p.directory) === key(dir))) return;
+    writeRaw([...raw, { id: idFor(dir), name: 'General', directory: dir, created: Date.now() }]);
+    log.info(`adopted the old General folder as an ordinary project: ${dir}`);
+  }
+  try {
+    adoptLegacyGeneral();
+  } catch (err) {
+    log.warn(`could not adopt the old General folder (${err.message})`);
+  }
 
-  /** All projects, General first, then the order they were added in. Stored
-   *  duplicates of the General directory are hidden.
+  /**
+   * All projects, in the order they were added. No synthetic entry: an empty
+   * registry is an empty rail.
    *
    * No sort: the registry file is a ledger, and the operator reads it as one - a new
    * project appears at the bottom, where they just added it, instead of jumping into
    * the middle of an alphabetical list. Sorting by name also moved every row when a
    * project was renamed, which is the one moment you are looking for it. */
   function list() {
-    const g = general();
-    const seen = new Set([key(g.directory)]);
-    const rest = [];
+    const seen = new Set();
+    const out = [];
     for (const p of readRaw()) {
       const k = key(p.directory);
       if (seen.has(k)) continue;
@@ -109,9 +136,9 @@ export function createProjectStore({ file, generalDir, logger }) {
       // still names the machine it came from, and a row nobody can open is noise —
       // the operator's rule is that a missing folder fails silently.
       if (!shaped.exists) continue;
-      rest.push(shaped);
+      out.push(shaped);
     }
-    return [g, ...rest];
+    return out;
   }
 
   /**
@@ -155,15 +182,10 @@ export function createProjectStore({ file, generalDir, logger }) {
         .toLowerCase()
         .replace(/[^a-z0-9._-]+/g, '-')
         .replace(/^-+|-+$/g, '') || `project-${Date.now()}`;
-    const dir = asked ? normalizeDir(asked) : path.join(path.dirname(generalDir), slug);
+    const dir = asked ? normalizeDir(asked) : path.join(rootDir, slug);
     if (!dir) {
       const err = new Error('a project needs a directory');
       err.status = 400;
-      throw err;
-    }
-    if (key(dir) === key(general().directory)) {
-      const err = new Error('that directory is the General project');
-      err.status = 409;
       throw err;
     }
     const all = list();
@@ -197,11 +219,6 @@ export function createProjectStore({ file, generalDir, logger }) {
   }
 
   function update(id, { name } = {}) {
-    if (id === GENERAL_ID) {
-      const err = new Error('General cannot be renamed');
-      err.status = 400;
-      throw err;
-    }
     const raw = readRaw();
     const current = raw.find((p) => (p.id || idFor(p.directory)) === id);
     if (!current) {
@@ -216,11 +233,6 @@ export function createProjectStore({ file, generalDir, logger }) {
   }
 
   function remove(id) {
-    if (id === GENERAL_ID) {
-      const err = new Error('General cannot be removed');
-      err.status = 400;
-      throw err;
-    }
     const raw = readRaw();
     const next = raw.filter((p) => (p.id || idFor(p.directory)) !== id);
     if (next.length === raw.length) {
@@ -234,5 +246,5 @@ export function createProjectStore({ file, generalDir, logger }) {
     return true;
   }
 
-  return { list, find, create, update, remove, general, idFor, normalizeDir, pruneMissing };
+  return { list, find, create, update, remove, idFor, normalizeDir, pruneMissing };
 }

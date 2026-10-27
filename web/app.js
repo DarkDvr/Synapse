@@ -2269,14 +2269,8 @@ async function loadProjects() {
     renderTree();
     return;
   }
-  // On a fresh page, every project starts closed except General. It is done once
-  // per load, not on every refresh of the list: `loadProjects` also runs after
-  // creating a session or adding a project, and re-collapsing then would shut the
-  // project the operator is working in.
-  if (!state.collapsedInit) {
-    state.collapsedInit = true;
-    for (const p of state.projects) if (!p.general) state.collapsed.add(p.id);
-  }
+  // The rail has no expand/collapse any more: a project is one row that opens
+  // its conversation. The old per-load collapse state is not needed.
   renderTree();
   // The open session can be deleted from another tab, or by Synapse's own
   // scaffolding sweep. Left alone, the UI keeps a dead session open and every
@@ -2299,14 +2293,6 @@ const findSession = (id) => {
 };
 
 const projectOf = (sessionId) => state.projects.find((p) => p.sessions.some((s) => s.id === sessionId)) || null;
-
-// Every project starts with the same slot; projects are all real now.
-function newSessionRow(projectId) {
-  return `<div class="tree-row new" data-new="${esc(projectId)}">
-    <button class="tree-open"><span class="tree-name">New Session</span></button>
-    <button class="tree-add-row" title="New Session" aria-label="New Session">＋</button>
-  </div>`;
-}
 
 const isBusy = (sessionId) => state.busySessions.has(sessionId);
 /**
@@ -2343,13 +2329,15 @@ const isStalled = (sessionId) =>
   !state.toolsInFlight.has(sessionId) &&
   Date.now() - lastProgress(sessionId) > STALL_MS;
 
-function liveDot(sessionId, { clickable = true, on = sessionWorking(sessionId) } = {}) {
+function liveDot(sessionId, { clickable = true, on = sessionWorking(sessionId), ok = false, idle = false } = {}) {
   const stalled = isStalled(sessionId);
   if (stalled && clickable) {
     return `<button class="tree-live on stalled" data-interrupt="${esc(sessionId)}" title="No response for over ${Math.round(STALL_MS / 1000)}s — click to interrupt"></button>`;
   }
   if (stalled) return '<span class="tree-live on stalled" title="Stalled"></span>';
-  return `<span class="tree-live${on ? ' on' : ''}" title="${on ? 'Working' : ''}"></span>`;
+  const cls = `${on ? ' on' : ''}${ok ? ' ok' : ''}${idle ? ' idle' : ''}`;
+  const title = on ? 'Working' : ok ? 'Idle — this project has a conversation' : idle ? 'Never used' : '';
+  return `<span class="tree-live${cls}" title="${title}"></span>`;
 }
 
 /**
@@ -2367,83 +2355,82 @@ function waitingFor(sessionId) {
   return null;
 }
 
-function sessionRow(s) {
-  if (state.renaming === s.id) {
-    return `<div class="tree-row session" data-session="${esc(s.id)}">
-      <input class="tree-rename" id="renameInput" value="${esc(s.title || TBD_TITLE)}" aria-label="Session Name" />
-    </div>`;
-  }
-  const current = state.view === 'session' && s.id === state.sessionId;
-  const title = s.title || TBD_TITLE;
-  // Recency lives in the tooltip: the name needs the width more than "8m ago" does,
-  // and the list is already newest-first.
-  const when = relTime(s.updated || s.created);
-  const busy = sessionWorking(s.id);
-  const waiting = waitingFor(s.id);
-  const waitNote = waiting === 'answer' ? ' · waiting on your answer' : waiting === 'decision' ? ' · waiting for your decision' : '';
-  return `<div class="tree-row session${current ? ' is-current' : ''}${busy ? ' has-work' : ''}${waiting ? ' has-question' : ''}" data-session="${esc(s.id)}">
-    <button class="tree-open" title="${esc(title)}${when ? ` · ${esc(when)}` : ''}${busy ? ' · working' : ''}${waitNote}">
-      <span class="tree-name">${esc(title)}</span>
-    </button>
-    <span class="tree-actions">
-      ${waiting ? `<span class="tree-wait" title="${waiting === 'answer' ? 'Waiting on your answer' : 'Waiting for your decision'}" aria-label="${waiting === 'answer' ? 'Waiting on your answer' : 'Waiting for your decision'}">?</span>` : ''}
-      <button class="tree-edit ic-edit" data-rename="${esc(s.id)}" title="Rename Session" aria-label="Rename Session">✎</button>
-      ${liveDot(s.id)}
-      <button class="tree-x" data-del-session="${esc(s.id)}" title="Delete Session" aria-label="Delete Session">✕</button>
-    </span>
-  </div>`;
+// Every project is one conversation: there is no session list and no "New
+// Session" row. Clicking a project opens its chat, and the chat is the newest
+// session in that folder (a compact replaces it).
+function newestSession(project) {
+  // By creation, not by update: the engine touches `updated` for reasons that
+  // have nothing to do with the conversation (a policy write at boot), and the
+  // chat is the one made last — a compact makes a newer one.
+  return (
+    [...(project?.sessions || [])].sort(
+      (a, b) => (b.created || b.updated || 0) - (a.created || a.updated || 0),
+    )[0] || null
+  );
+}
+
+/** Has this project's conversation been used at all (as opposed to just opened)? */
+function projectUsed(project) {
+  const chat = newestSession(project);
+  if (!chat) return false;
+  const t = chat.raw?.tokens;
+  const tokens = (Number(t?.input) || 0) + (Number(t?.output) || 0) + (Number(t?.reasoning) || 0);
+  return tokens > 0 || Number(chat.updated || 0) > Number(chat.created || 0) + 1000;
 }
 
 function renderTree() {
   const el = $('projectTree');
   if (!el) return;
-  const html = [];
-
-  for (const p of state.projects) {
-    const open = !state.collapsed.has(p.id);
-    const current = state.view === 'session' && p.sessions.some((s) => s.id === state.sessionId);
-    // The rule down the left of a project carries its state: yellow while one of
-    // its sessions is working, green when a session is chosen and waiting.
-    const working = p.sessions.some((s) => sessionWorking(s.id));
-    html.push(`<div class="tree-project">
-      <div class="tree-row project${current ? ' is-current' : ''}${working ? ' has-work' : ''}">
-        <button class="tree-open" data-project="${esc(p.id)}" aria-expanded="${open}" title="${esc(p.name)}">
-          <span class="tree-caret" aria-hidden="true"></span>
-          <span class="tree-name">${esc(p.name)}</span>
-        </button>
-        <span class="tree-actions">
-          ${p.general ? '' : `<button class="tree-edit ic-edit" data-rename-project="${esc(p.id)}" title="Rename Project" aria-label="Rename Project">✎</button>`}
-          ${liveDot('', { clickable: false, on: p.sessions.some((s) => sessionWorking(s.id)) })}
-          ${p.general ? '' : `<button class="tree-x" data-del-project="${esc(p.id)}" title="Delete Project" aria-label="Delete Project">✕</button>`}
-        </span>
-      </div>
-      ${
-        open
-          ? `<div class="tree-project-body${working ? ' has-work' : ''}">
-        <div class="tree-project-actions">
-          <button class="btn-thin" data-browse-project="${esc(p.id)}" title="Open this project's folder in Explorer">Browse</button>
-          <button class="btn-thin" data-cmd-project="${esc(p.id)}" title="Open a command prompt in this project's folder">Cmd</button>
+  el.innerHTML = state.projects
+    .map((p) => {
+      const chat = newestSession(p);
+      const current = Boolean(chat) && state.view === 'session' && chat.id === state.sessionId;
+      const working = Boolean(chat) && sessionWorking(chat.id);
+      const waiting = chat ? waitingFor(chat.id) : null;
+      const used = projectUsed(p);
+      const waitNote =
+        waiting === 'answer' ? ' · waiting on your answer' : waiting === 'decision' ? ' · waiting for your decision' : '';
+      const title = `${p.name}${working ? ' · working' : ''}${waitNote}${p.exists === false ? ' · folder missing' : ''}`;
+      return `<div class="tree-project">
+        <div class="tree-row project${current ? ' is-current' : ''}${working ? ' has-work' : ''}${waiting ? ' has-question' : ''}" data-project-row="${esc(p.id)}">
+          <button class="tree-open" data-project="${esc(p.id)}" title="${esc(title)}">
+            <span class="tree-name">${esc(p.name)}</span>
+          </button>
+          <span class="tree-actions">
+            ${waiting ? `<span class="tree-wait" title="${waiting === 'answer' ? 'Waiting on your answer' : 'Waiting for your decision'}" aria-label="${waiting === 'answer' ? 'Waiting on your answer' : 'Waiting for your decision'}">?</span>` : ''}
+            ${liveDot('', { clickable: false, on: working, ok: used && !working, idle: !used && !working })}
+            <button class="tree-menu" data-menu-project="${esc(p.id)}" title="Project menu" aria-label="Project menu" aria-haspopup="menu">⋯</button>
+          </span>
         </div>
-        <div class="tree-sessions-label">Sessions:</div>
-        <div class="tree-sessions">${p.sessions.map(sessionRow).join('')}${newSessionRow(p.id)}</div>
-      </div>`
-          : ''
-      }`);
-    html.push('</div>');
-  }
-
-  el.innerHTML = html.join('');
-
-  if (state.renaming) {
-    const input = $('renameInput');
-    if (input) { input.focus(); input.select(); }
-  }
+      </div>`;
+    })
+    .join('');
+  renderEmpty();
 }
 
-function toggleProject(id) {
-  if (state.collapsed.has(id)) state.collapsed.delete(id);
-  else state.collapsed.add(id);
-  renderTree();
+/** The landing panel: it says what to do depending on whether any project exists. */
+function renderEmpty() {
+  const note = $('emptyNote');
+  if (!note) return;
+  note.textContent = state.projects.length
+    ? 'Pick a project in the left rail to open its conversation.'
+    : 'A project is a folder. Make one and its conversation opens here.';
+}
+
+/** A project's one conversation. With no chat yet, the first open makes one. */
+async function openProjectChat(id) {
+  const p = state.projects.find((x) => x.id === id);
+  if (!p) return;
+  if (p.exists === false) {
+    toast('Folder Missing', `${p.directory} does not exist, so no conversation can run there.`);
+    return;
+  }
+  const chat = newestSession(p);
+  if (chat) {
+    await openSession(chat.id);
+    return;
+  }
+  await createSession(p.id);
 }
 
 /**
@@ -2459,8 +2446,48 @@ async function openProjectFolder(id, what) {
   }
 }
 
+// ── the project menu ────────────────────────────────────────────
+// One menu, opened from the row's "⋯", a right-click, or Shift+F10. The rail
+// keeps only a name and a state dot; Browse, Cmd, Rename and Delete live here so
+// they stop competing with the name for width.
+let menuProjectId = null;
+
+function closeProjectMenu() {
+  menuProjectId = null;
+  const el = $('projectMenu');
+  if (el) el.hidden = true;
+}
+
+function openProjectMenu(id, x, y) {
+  const p = state.projects.find((q) => q.id === id);
+  const el = $('projectMenu');
+  if (!p || !el) return;
+  menuProjectId = id;
+  el.innerHTML = `
+    <button type="button" class="project-menu-item" data-menu-action="browse" role="menuitem">Browse</button>
+    <button type="button" class="project-menu-item" data-menu-action="cmd" role="menuitem">Cmd</button>
+    <span class="project-menu-sep" aria-hidden="true"></span>
+    <button type="button" class="project-menu-item" data-menu-action="rename" role="menuitem">Rename</button>
+    <button type="button" class="project-menu-item is-danger" data-menu-action="delete" role="menuitem">Delete…</button>`;
+  el.hidden = false;
+  el.style.left = '0px';
+  el.style.top = '0px';
+  const box = el.getBoundingClientRect();
+  el.style.left = `${Math.min(Math.max(8, x), window.innerWidth - box.width - 8)}px`;
+  el.style.top = `${Math.min(Math.max(8, y), window.innerHeight - box.height - 8)}px`;
+  el.querySelector('button')?.focus();
+}
+
+function projectMenuAction(id, action) {
+  if (!id) return;
+  if (action === 'browse') openProjectFolder(id, 'browse');
+  else if (action === 'cmd') openProjectFolder(id, 'cmd');
+  else if (action === 'rename') renameProject(id);
+  else if (action === 'delete') removeProject(id);
+}
+
 async function createSession(projectId) {
-  const project = state.projects.find((p) => p.id === projectId) || state.projects.find((p) => p.general);
+  const project = state.projects.find((p) => p.id === projectId);
   if (!project) return;
   if (project.exists === false) {
     toast('Folder missing', `${project.directory} does not exist, so no session can run there.`);
@@ -2738,9 +2765,13 @@ async function addProject() {
         toast('Folder Wiped', `"${directory}" is empty — starting fresh.`);
       }
     }
-    await api('POST', '/api/projects', { name: name || undefined, directory });
+    const made = await api('POST', '/api/projects', { name: name || undefined, directory });
     await loadProjects();
     toast('Project added', directory);
+    // A project is one conversation: adding it opens it, and the first open makes
+    // the chat. There is no separate "start a session" step to remember.
+    const created = made?.project || state.projects.find((p) => p.directory.toLowerCase() === directory.toLowerCase());
+    if (created) await openProjectChat(created.id);
   } catch (err) {
     toast('Could not add the project', err.message);
   }
@@ -5831,19 +5862,11 @@ function scrollChatToEnd(smooth = true) {
   else window.scrollTo(0, to);
 }
 
-// A session always starts in Single mode; Multi is switched live.
+// A conversation is the project's. With nothing open there is nothing to send
+// to: the landing panel asks for a project instead.
 async function ensureSession() {
   if (state.sessionId) return state.sessionId;
-  const general = state.projects.find((p) => p.general);
-  if (!general) throw new Error('no General project');
-  const { session } = await api('POST', '/api/sessions', sessionBody(general.id));
-  state.sessionId = session.id;
-  state.view = 'session';
-  state.mode = sessionMode(session);
-  renderMode();
-  setView();
-  await loadProjects();
-  return state.sessionId;
+  throw new Error('open a project first');
 }
 
 async function interrupt() {
@@ -7404,8 +7427,18 @@ document.addEventListener('keydown', (e) => {
   $('remoteToken').addEventListener('click', copyRemoteToken);
   $('keepBtn').addEventListener('click', toggleKeep);
   $('menuBtn').addEventListener('click', () => $('sidebar').classList.toggle('open'));
-  $('emptyNewSession').addEventListener('click', () => createSession(state.projects.find((p) => p.general)?.id));
+  $('emptyNewProject').addEventListener('click', addProject);
   $('addProjectBtn').addEventListener('click', addProject);
+  // A click anywhere but the menu (or the ⋯ that opened it) closes it.
+  document.addEventListener(
+    'click',
+    (e) => {
+      if (!menuProjectId) return;
+      if (e.target.closest('#projectMenu') || e.target.closest('[data-menu-project]')) return;
+      closeProjectMenu();
+    },
+    true,
+  );
 
   // conversation navigation + collapsible tool calls. Four buttons on one row:
   // the pair in the middle steps one message, the outer pair goes all the way.
@@ -7565,6 +7598,7 @@ document.addEventListener('keydown', (e) => {
   }
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
+    if (menuProjectId) { e.preventDefault(); closeProjectMenu(); return; }
     if ($('consoleModal')?.hidden === false) { e.preventDefault(); closeConsole(); return; }
     for (const id of ['toolsModal', 'probeModal']) {
       if ($(id)?.hidden === false) { e.preventDefault(); closeRailModal(id); return; }
@@ -7599,26 +7633,43 @@ document.addEventListener('keydown', (e) => {
 
   $('projectTree').addEventListener('click', (e) => {
     if (e.target.closest('[data-soon]')) return;
+    const menu = e.target.closest('[data-menu-project]');
+    if (menu) {
+      e.preventDefault();
+      e.stopPropagation();
+      const box = menu.getBoundingClientRect();
+      openProjectMenu(menu.dataset.menuProject, box.left, box.bottom + 4);
+      return;
+    }
     const stop = e.target.closest('[data-interrupt]');
     if (stop) { interruptSession(stop.dataset.interrupt); return; }
-    const renameProjectBtn = e.target.closest('[data-rename-project]');
-    if (renameProjectBtn) { renameProject(renameProjectBtn.dataset.renameProject); return; }
-    const delProject = e.target.closest('[data-del-project]');
-    if (delProject) { removeProject(delProject.dataset.delProject); return; }
-    const browse = e.target.closest('[data-browse-project]');
-    if (browse) { openProjectFolder(browse.dataset.browseProject, 'browse'); return; }
-    const cmd = e.target.closest('[data-cmd-project]');
-    if (cmd) { openProjectFolder(cmd.dataset.cmdProject, 'cmd'); return; }
-    const delSession = e.target.closest('[data-del-session]');
-    if (delSession) { removeSession(delSession.dataset.delSession); return; }
-    const rename = e.target.closest('[data-rename]');
-    if (rename) { state.renaming = rename.dataset.rename; renderTree(); return; }
-    const fresh = e.target.closest('[data-new]');
-    if (fresh) { createSession(fresh.dataset.new); return; }
     const project = e.target.closest('[data-project]');
-    if (project) { toggleProject(project.dataset.project); return; }
-    const row = e.target.closest('[data-session]');
-    if (row && !e.target.closest('.tree-edit, .tree-x')) openSession(row.dataset.session);
+    if (project) { openProjectChat(project.dataset.project); return; }
+  });
+
+  // Right-click and Shift+F10 open the same menu; the ⋯ is the visible door.
+  $('projectTree').addEventListener('contextmenu', (e) => {
+    const row = e.target.closest('.tree-row.project');
+    if (!row) return;
+    e.preventDefault();
+    openProjectMenu(row.dataset.projectRow, e.clientX, e.clientY);
+  });
+  $('projectTree').addEventListener('keydown', (e) => {
+    if (e.key !== 'F10' || !e.shiftKey) return;
+    const row = e.target.closest('.tree-row.project');
+    if (!row) return;
+    e.preventDefault();
+    const btn = row.querySelector('[data-menu-project]');
+    const box = btn?.getBoundingClientRect();
+    openProjectMenu(row.dataset.projectRow, box?.left || 8, (box?.bottom || 8) + 4);
+  });
+  // A menu item, then the click that follows it, then anything outside.
+  $('projectMenu').addEventListener('click', (e) => {
+    const item = e.target.closest('[data-menu-action]');
+    if (!item) return;
+    const id = menuProjectId;
+    closeProjectMenu();
+    projectMenuAction(id, item.dataset.menuAction);
   });
 
   $('projectTree').addEventListener('keydown', (e) => {
@@ -7826,16 +7877,18 @@ async function boot() {
 
 /** Where the operator was when they last had this page open.
  *
- * Nothing used to be opened on load, and every project was collapsed except
- * General — so a reload in the middle of a run left an empty screen with the
- * work one click away. A session that has a question waiting, or a turn in
- * flight, is the one they left whatever the last page thought; otherwise it is
- * the session they last opened.
+ * A question waiting or a turn in flight is the session they left whatever the
+ * last page thought; otherwise it is the session they last opened. With one chat
+ * per project, a session that a compact replaced is gone — so the last *project*
+ * is remembered too, and its current chat is opened instead.
  */
 const LAST_SESSION_KEY = 'synapse.lastSession';
+const LAST_PROJECT_KEY = 'synapse.lastProject';
 function rememberSession(id) {
   try {
     if (id) localStorage.setItem(LAST_SESSION_KEY, id);
+    const project = projectOf(id);
+    if (project) localStorage.setItem(LAST_PROJECT_KEY, project.id);
   } catch { /* full or blocked storage must not break a turn */ }
 }
 async function restoreOpenSession() {
@@ -7851,11 +7904,16 @@ async function restoreOpenSession() {
     try { saved = localStorage.getItem(LAST_SESSION_KEY); } catch { /* blocked storage */ }
     if (saved && findSession(saved)) target = saved;
   }
+  if (!target) {
+    // The session was replaced by a compact, or deleted: open the project's
+    // current chat rather than an empty screen.
+    let savedProject = null;
+    try { savedProject = localStorage.getItem(LAST_PROJECT_KEY); } catch { /* blocked storage */ }
+    const project = savedProject ? state.projects.find((p) => p.id === savedProject) : null;
+    const chat = project ? newestSession(project) : null;
+    if (chat) target = chat.id;
+  }
   if (!target) return;
-  // The auto-collapse above put every project away; the one holding this session
-  // has to be open or the selection is invisible.
-  const project = projectOf(target);
-  if (project) state.collapsed.delete(project.id);
   await openSession(target);
 }
 

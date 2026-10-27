@@ -39,9 +39,7 @@ test('a project whose folder is gone is not listed, and the registry forgets it'
   const { dir, done } = scratch();
   try {
     const file = path.join(dir, 'projects.json');
-    const generalDir = path.join(dir, 'general');
     const real = path.join(dir, 'real-project');
-    fs.mkdirSync(generalDir, { recursive: true });
     fs.mkdirSync(real, { recursive: true });
     const wrote = (projects) => fs.writeFileSync(file, JSON.stringify({ projects }, null, 2), 'utf8');
     wrote([
@@ -49,10 +47,28 @@ test('a project whose folder is gone is not listed, and the registry forgets it'
       { id: 'ghost', name: 'Ghost Project', directory: 'Q:\\nowhere\\Synapse.Projects\\ghost', created: 2 },
     ]);
 
-    const store = createProjectStore({ file, generalDir, logger: quiet });
-    assert.deepEqual(store.list().map((p) => p.name), ['General', 'Real Project'], 'the ghost is not shown');
+    const store = createProjectStore({ file, rootDir: dir, logger: quiet });
+    assert.deepEqual(store.list().map((p) => p.name), ['Real Project'], 'the ghost is not shown, and there is no built-in project');
     assert.deepEqual(store.pruneMissing(), ['Ghost Project'], 'it is reported once');
     assert.deepEqual(JSON.parse(fs.readFileSync(file, 'utf8')).projects.map((p) => p.name), ['Real Project'], 'and removed from the file');
+  } finally {
+    done();
+  }
+});
+
+test('an old General folder is adopted as an ordinary, deletable project', () => {
+  const { dir, done } = scratch();
+  try {
+    const file = path.join(dir, 'projects.json');
+    const generalDir = path.join(dir, 'general');
+    fs.mkdirSync(generalDir, { recursive: true });
+    const store = createProjectStore({ file, rootDir: dir, legacyGeneralDir: generalDir, logger: quiet });
+    const names = store.list().map((p) => p.name);
+    assert.deepEqual(names, ['General'], 'the work in the old folder is not lost');
+    const general = store.list()[0];
+    // It used to be undeletable; now it is a project like any other.
+    assert.equal(store.remove(general.id), true);
+    assert.deepEqual(store.list(), []);
   } finally {
     done();
   }

@@ -9,7 +9,7 @@ import { ensureProjectDoc, appendRequest as appendProjectRequest, appendChat, ap
 import { skillRules, describeSkills } from './skills.js';
 import { rulesFor, decide, resolvePath, refusalNote, SINGLE_RULES } from './permissions.js';
 import { stopTargets } from './stop.js';
-import { PROJECTS_ROOT, SKILLS_DIR, GENERAL_DIR, ROOT } from './paths.js';
+import { PROJECTS_ROOT, SKILLS_DIR, ROOT } from './paths.js';
 import { mayRecycleFolder } from './projects.js';
 import { fetchProviderModels } from './providers.js';
 import { providerId } from './providers.js';
@@ -334,15 +334,15 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
 
   /**
    * Projects with their sessions attached. A session belongs to the project
-   * whose directory it runs in; anything unrecognised lands in General, which
-   * is always first.
+   * whose directory it runs in. A session that matches no project is not shown:
+   * there is no built-in project to fall back to, and a row that cannot be
+   * opened is noise. (Scaffolding is filtered separately.)
    */
   async function projectsWithSessions() {
     const list = projects.list().map((p) => ({ ...p, sessions: [] }));
     if (!engine.status().ready) return list;
 
     const byDir = new Map(list.map((p) => [dirKey(p.directory), p]));
-    const general = list[0];
     let sessions = [];
     try {
       sessions = await engine.listSessions();
@@ -351,7 +351,8 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
     }
     for (const s of sessions) {
       if (isScratchSession(s)) continue; // probe/model-check scaffolding
-      const owner = byDir.get(dirKey(s.directory)) || general;
+      const owner = byDir.get(dirKey(s.directory));
+      if (!owner) continue;
       owner.sessions.push(s);
     }
     for (const p of list) {
@@ -362,18 +363,6 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
     }
     return list;
   }
-
-  /**
-   * A General session's workspace is that conversation's folder. Deleting the
-   * session must take it; a project session's folder is the project and is never
-   * touched. The name check is the guard: only a folder Synapse itself created
-   * for a session qualifies.
-   */
-  const isGeneralSessionDir = (dir) => {
-    const d = path.resolve(String(dir || ''));
-    const root = path.resolve(GENERAL_DIR);
-    return d !== root && d.startsWith(`${root}${path.sep}`) && /^session-[a-z0-9-]+$/i.test(path.basename(d));
-  };
 
   const toClientConfig = (cfg) => {
     const c = structuredClone(cfg);
@@ -995,13 +984,14 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
     },
 
     /**
-     * Delete a project — and its folder, to the Recycle Bin.
+     * Delete a project — its conversation, its folder and its memory.
      *
-     * A project with no sessions is a folder nobody is using, and leaving it on disk
-     * was what made a reused name open onto a finished plan: the next project
-     * inherited the last one's work. So the folder goes with the project. It goes to
-     * the bin rather than out of existence, and `bin\` — the built app, which is a
-     * deliverable rather than working state — has to be agreed to on its own.
+     * The project is one chat, so deleting the project ends that chat too; there
+     * is no separate "delete the session first" step any more. The folder goes to
+     * the Recycle Bin (the undo), and `bin\` — the built app, a deliverable rather
+     * than working state — has to be agreed to on its own. A project that is
+     * working, or waiting on a card, is refused: stopping the work is the
+     * operator's call, not a side effect of a menu item.
      */
     deleteProject: async (id, body) => {
       const current = projects.find(id);
@@ -1010,20 +1000,11 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
         err.status = 404;
         throw err;
       }
-      if (current.general) {
-        const err = new Error('General is always present and cannot be removed.');
-        err.status = 400;
-        throw err;
-      }
-      // A project owns its sessions; refuse to orphan them.
       const withSessions = (await projectsWithSessions()).find((p) => p.id === id);
-      if (withSessions?.sessions?.length) {
-        const n = withSessions.sessions.length;
-        const err = new Error(
-          `"${current.name}" still has ${n} session${n === 1 ? '' : 's'}. Delete ${n === 1 ? 'it' : 'them'} first — Synapse will not leave sessions without a project.`,
-        );
-        err.status = 409;
-        throw err;
+      const sessions = withSessions?.sessions || [];
+      if (sessions.length) {
+        const busy = await busyFor(sessions[sessions.length - 1].id);
+        if (busy.busy) throw refuseBusy(busy);
       }
       const bin = binContents(current.directory);
       // Enforced here as well as in the dialog: the checkbox is the operator's
@@ -1037,19 +1018,19 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
       }
       let recycled = false;
       if (fs.existsSync(current.directory)) {
+        // The engine holds a location "loaded" once it has served a turn there,
+        // and that handle is what made a finished project's folder undeletable
+        // until Synapse was stopped. Release it before the folder moves.
+        try {
+          await engine.evictLocation?.(current.directory);
+        } catch (err) {
+          app.warn(`could not release ${current.directory} from the engine: ${err.message}`);
+        }
         const allowed = mayRecycleFolder(current.directory, { projectsRoot: PROJECTS_ROOT, harness: ROOT });
         if (!allowed.ok) {
           const err = new Error(`refusing to delete the folder: ${allowed.reason}`);
           err.status = 400;
           throw err;
-        }
-        // The engine keeps a location "loaded" once it has served a turn there, and
-        // that handle is what made a finished project's folder undeletable until
-        // Synapse was stopped. Release it first; the folder is then ours to move.
-        try {
-          await engine.evictLocation?.(current.directory);
-        } catch (err) {
-          app.warn(`could not release ${current.directory} from the engine: ${err.message}`);
         }
         try {
           await recycleFolder(current.directory);
@@ -1064,39 +1045,33 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
         }
         app.info(`deleted project folder to the Recycle Bin: ${current.directory}`);
       }
+      // The folder is gone first, so a failed conversation delete cannot leave a
+      // working project pointing at nothing; a session that fails to delete here
+      // is invisible anyway (its directory is not a project any more).
+      for (const s of sessions) {
+        try {
+          await engine.deleteSession(s.id);
+          briefed.delete(s.id);
+          permissionMemory?.forgetSession?.(s.id);
+        } catch (err) {
+          app.warn(`could not delete the conversation ${s.id} of a deleted project: ${err.message}`);
+        }
+      }
       projects.remove(id);
       return { ok: true, recycled, directory: current.directory, binFiles: bin.files };
     },
 
     createSession: async (body) => {
       requireReady();
-      const project = body?.projectId ? projects.find(body.projectId) : projects.general();
+      // A conversation is the project's. There is no built-in project to open a
+      // chat in, so a create without one is a caller bug, not a default.
+      const project = body?.projectId ? projects.find(body.projectId) : null;
       if (!project) {
-        const err = new Error('project not found');
-        err.status = 404;
+        const err = new Error('choose a project first');
+        err.status = 400;
         throw err;
       }
-      // General is a scratch project, and a conversation there is its own piece of
-      // work: each session gets a folder inside General, so its plan and files are
-      // not the previous chat's. Every other project is one workspace, where the
-      // plan is the project's — the whole design. Measured 26 Oct: a new General
-      // session showed the plan from the last one because both ran in the same
-      // folder.
-      let location = project.directory;
-      if (project.general) {
-        const folder = path.join(
-          project.directory,
-          `session-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
-        );
-        try {
-          fs.mkdirSync(folder, { recursive: true });
-          ensurePlan(folder);
-          location = folder;
-          app.info(`General session workspace: ${folder}`);
-        } catch (err) {
-          app.warn(`could not create a workspace for this General session (${err.message}); using General's folder`);
-        }
-      }
+      const location = project.directory;
       const session = await engine.createSession({
         title: TBD_TITLE,
         model: body?.model,
@@ -1194,9 +1169,8 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
       // busy. Deleting the session is the operator ending that run, so it ends
       // here, as stopped.
       try { runs?.stopWithReason?.(sessionId, 'the session was deleted'); } catch { /* nothing running */ }
-      // Where it lived, read before the session goes. A General session's folder
-      // belongs to that conversation and is deleted with it; a project session's
-      // folder is the project, and is never touched.
+      // Where it lived, read before the session goes. The folder is the project's
+      // and is never touched here — deleting a conversation leaves the work.
       let directory = null;
       try { directory = (await engine.getSession(sessionId))?.directory || null; } catch { /* gone already */ }
       // Whether anything else lives there, for the optional plan forget: a plan is
@@ -1210,17 +1184,6 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
       briefed.delete(sessionId);
       // A deleted session's "Always Allow" grants are meaningless now.
       try { permissionMemory?.forgetSession?.(sessionId); } catch { /* the memory is a convenience */ }
-      // The whole session, not just its record: engine session, folder, plan and
-      // files. A General session's workspace exists only for that conversation.
-      if (directory && isGeneralSessionDir(directory)) {
-        try { await engine.evictLocation?.(directory); } catch { /* the engine may be gone */ }
-        try {
-          fs.rmSync(directory, { recursive: true, force: true });
-          app.info(`deleted the General session folder: ${directory}`);
-        } catch (err) {
-          app.warn(`could not delete the General session folder (${err.message}): ${directory}`);
-        }
-      }
       // Tell every open UI. Another tab can have it on screen, and a UI left
       // holding a deleted session answers 404 on every control it offers —
       // which is how a mode switch ended up reporting "Session not found".

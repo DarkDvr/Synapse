@@ -596,6 +596,42 @@ body.dark .sidebar .nav-link.active > span:first-child { color: #fff; }
   animation: dot-breathe 1s ease-in-out infinite; cursor: pointer;
 }
 .tree-live.stalled:hover { box-shadow: 0 0 0 5px rgba(240, 86, 63, 0.3); }
+/* The project row's dot: three states, one shape. Grey never used, green idle
+   with a conversation, amber breathing while it works. The amber is the live
+   path's colour family; green is the same green the cards use for "has taken
+   part". */
+.tree-live.ok { opacity: 1; background: var(--green); box-shadow: 0 0 0 2px rgba(53, 192, 138, 0.16); }
+.tree-live.idle { opacity: 1; background: #4a4e56; box-shadow: none; }
+/* The ⋯ door to the project menu. Visible on every row (a hidden door is not a
+   door); it brightens under the pointer and on the open row. */
+.tree-menu {
+  width: 18px; height: 18px; padding: 0; border: 0; border-radius: 4px;
+  background: transparent; color: #8a8e96;
+  font-size: 13px; line-height: 1; cursor: pointer;
+  opacity: 0.6;
+}
+.tree-row.project:hover .tree-menu,
+.tree-row.project.is-current .tree-menu { opacity: 1; }
+.tree-menu:hover, .tree-menu:focus-visible {
+  background: #2b2e33; color: var(--yellow); outline: none;
+}
+/* One menu, positioned at the click that opened it. */
+.project-menu {
+  position: fixed; z-index: 60; min-width: 150px;
+  padding: 4px; border-radius: 9px;
+  border: 1px solid #3a3d43; background: #1c1e23;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55);
+}
+.project-menu[hidden] { display: none; }
+.project-menu-item {
+  display: block; width: 100%; text-align: left;
+  padding: 6px 9px; border: 0; border-radius: 6px;
+  background: transparent; color: var(--text);
+  font-family: inherit; font-size: 12px; cursor: pointer;
+}
+.project-menu-item:hover, .project-menu-item:focus-visible { background: #2b2e33; outline: none; }
+.project-menu-item.is-danger { color: var(--red); }
+.project-menu-sep { display: block; height: 1px; margin: 4px 6px; background: var(--line); }
 
 /* A session stopped on a question or a decision. The dot alone could not carry
    this: a blocked session and an idle one both emit nothing, so after a reload

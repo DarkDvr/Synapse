@@ -111,15 +111,11 @@ ordinary file tools; there is no tool and no store for it.
 - **It belongs to the project, not the conversation**, so a new session
   continues the same plan. It is created empty (`{"version":1,"goal":"","tasks":[]}`)
   when a project is added and at boot for any project missing one.
-- **General is the exception: one workspace per session.** Every other project is
-  one workspace, so the plan is the project's and a new session continues it.
-  General is a scratch area and its conversations are separate pieces of work, so
-  a session created there runs in `<General>\session-<stamp>-<rand>\` with its own
-  `.synapse`; a new chat cannot inherit the previous chat's plan or files.
-  Sessions created before 26 Oct still live in General's root and share its plan.
-  **Deleting the session deletes that folder, its plan and its files** — the
-  workspace exists only for that conversation. General's root .synapse is not
-  created at boot: a project-level plan there is what leaked between sessions.
+- **There is no built-in project.** The old General project (one workspace per
+  session, undeletable) is gone: every project is one workspace and one chat, and
+  an existing General folder is adopted as an ordinary project on the first boot
+  after the change. A project with no plan still gets one at boot; a project the
+  operator deletes takes its chat, its folder and its `.synapse` with it.
 - **`id` is required.** Delegation refers to tasks by id, and the Architect may
   rewrite the file at any time; a task without one is flagged and skipped.
 - **Titles over 80 characters are a `problem`, not a silent trim.** The pane
@@ -204,12 +200,11 @@ ordinary file tools; there is no tool and no store for it.
   operator's flow is now: delete the project in Synapse → take what you want out of
   `bin/` → delete the folder. Nothing to stop first.
 - **There is no Project panel, and no path label anywhere.** The rail is Project
-  plan + Tools in use; each project in the sidebar owns a `.tree-project-body`
-  with one vertical yellow rule on its left, and the two shortcuts, the
-  **Sessions:** label and the sessions all line up to the right of it (verified
-  aligned at the same left edge). `POST /api/projects/{id}/open` spawns a
-  detached GUI process (array args, never a shell string), and both branches are
-  validated before anything is spawned.
+  plan + Tools in use; a project is one row (a state dot and its name), and its
+  Browse/Cmd/Rename/Delete live in a `⋯` menu (right-click and Shift+F10 open the
+  same one). `POST /api/projects/{id}/open` spawns a detached GUI process (array
+  args, never a shell string), and both branches are validated before anything is
+  spawned.
 - **A command prompt needs `start`.** `spawn('cmd.exe', ['/K', 'cd', '/d', dir])`
   exits with code 0 within a second and no window ever appears: a console
   spawned directly by a process that has none has no console to inherit. The

@@ -84,7 +84,7 @@ async function ensureNpm() {
 
 async function main() {
   // ── directories ──────────────────────────────────────────────
-  for (const dir of [DATA_DIR, LOGS_DIR, WORKSPACE_DIR, GENERAL_DIR, ENGINE_HOME, PROBE_DIR]) {
+  for (const dir of [DATA_DIR, LOGS_DIR, WORKSPACE_DIR, ENGINE_HOME, PROBE_DIR]) {
     fs.mkdirSync(dir, { recursive: true });
   }
 
@@ -122,31 +122,25 @@ async function main() {
   try { fs.writeFileSync(PID_FILE, String(process.pid), 'utf8'); } catch { /* ignore */ }
 
   // ── projects ─────────────────────────────────────────────────
-  // General is its own folder, created fresh if it is missing (a new folder has
-  // no sessions). It is never the workspace root: that is where project folders
-  // live, and sharing it makes "sessions belonging to General" indistinguishable
-  // from "sessions in a folder nobody registered".
-  const generalExisted = fs.existsSync(GENERAL_DIR);
-  fs.mkdirSync(GENERAL_DIR, { recursive: true });
-  if (!generalExisted) app.info(`created the General project folder: ${GENERAL_DIR}`);
+  // There is no built-in project. The projects root is created if it is missing
+  // (the store does that), and an old "General" folder — from before there was
+  // one chat per project — is adopted as an ordinary project on the first boot,
+  // so the work that lives in it is not lost.
   const projects = createProjectStore({
     file: PROJECTS_FILE,
-    generalDir: GENERAL_DIR,
+    rootDir: WORKSPACE_DIR,
+    legacyGeneralDir: GENERAL_DIR,
     logger,
   });
   // A registry copied from another machine still names that machine's folders. Silent
   // by the operator's rule: a project whose directory is gone is not a project here.
   projects.pruneMissing();
-  app.info(`projects: ${projects.list().length} (General + ${projects.list().length - 1})`);
+  app.info(`projects: ${projects.list().length}`);
   // Every project owns a plan file. Create the ones that are missing rather than
   // waiting for the first session: an empty, valid file is a better starting
   // point than a missing one, and it makes the file discoverable.
   for (const project of projects.list()) {
     if (!project.exists) continue;
-    // General has no project-level plan: every session there gets its own folder
-    // and plan. Creating one at the root is what made a new session inherit the
-    // previous session's plan.
-    if (project.general) continue;
     const made = ensurePlan(project.directory);
     if (made.created) app.info(`plan file created: ${made.path}`);
   }

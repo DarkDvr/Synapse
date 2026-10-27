@@ -97,9 +97,9 @@
           <!-- nothing open -->
           <div class="stage-empty" id="stageEmpty">
             <img class="stage-empty-mark" src="/icon-180.png" alt="" width="44" height="44" />
-            <h2>Nothing open</h2>
-            <p>Pick a session in the left rail, or start a new one.</p>
-            <button class="btn btn-primary" id="emptyNewSession">New Session</button>
+            <h2>No project open</h2>
+            <p id="emptyNote">A project is a folder. Make one and its conversation opens here.</p>
+            <button class="btn btn-primary" id="emptyNewProject">New Project</button>
           </div>
 
           <!-- ── role cards: revealed in Multi mode ─────────────────────── -->
@@ -455,6 +455,9 @@
     <button class="btn btn-primary" id="disconnectClose" type="button">Close</button>
   </div>
 </div>
+
+<!-- The project menu: one menu for the ⋯ button, right-click and Shift+F10. -->
+<div class="project-menu" id="projectMenu" hidden role="menu" aria-label="Project menu"></div>
 
 <script type="module" src="/app.js"></script>
 </body>

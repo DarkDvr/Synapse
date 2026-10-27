@@ -1,8 +1,8 @@
 # One chat per project — the scope
 
-Status: **Phase 1 built; phases 2–5 pending.** This is the record of what we
-decided, what we verified, and the order we'll build it in. Each phase is one
-commit chain and a checkpoint; nothing here is a rule until it is built and
+Status: **Phases 1–4 built; phase 5 pending (cleanup only).** This is the record of
+what we decided, what we verified, and the order we'll build it in. Each phase is
+one commit chain and a checkpoint; nothing here is a rule until it is built and
 tested.
 
 The goal: a project is one conversation. No session list, no General, no choice
@@ -216,16 +216,26 @@ why it can disagree with what the operator meant when they clicked twice.
 - Still open for phase 4/5: the conversation the operator sees is a session in
   the projects payload; the rail still lists sessions until phase 5.
 
-### Phase 4 — the project list
-- One row per project; `⋯` menu with Browse, Cmd, Rename, Delete; the three dot
-  states plus the `?` waiting mark; delete = its chat + folder + plan, with the
-  `bin\` consent it already has.
-- Rip out General: auto-create, default project, default directory, the
-  undeletable rule, per-session folders; create the projects root if absent;
-  the first-run empty state.
-- Tests: no projects at boot; create/open/rename/delete; delete while busy is
-  refused; a menu that works with the keyboard; the dot states.
-- Done when a fresh install has no General and one project is one row.
+### Phase 4 — the project list — **built 27 Oct**
+- One row per project: a state dot (grey never used, green idle with a
+  conversation, amber breathing working), a `?` when it waits on the operator,
+  and a `⋯` menu with Browse, Cmd, Rename, Delete. Right-click and Shift+F10 open
+  the same menu; the empty state is a real first run with one New Project button.
+- General is gone: no auto-create, no default project, no default session
+  directory, no undeletable rule, no per-session folders. The old `general`
+  folder is adopted as an ordinary project on the first boot after the change
+  (verified live: `projects: 3`, one of them General). `deleteProject` now takes
+  the chat, the folder and the plan together, refuses while the project is
+  working, and no longer has a "delete the sessions first" step.
+- The chat opened from a project is its newest session **by creation** (update
+  time is touched by unrelated engine writes).
+- The client no longer creates a fallback session when none is open: the landing
+  asks for a project.
+- Tests: the portable-paths suite covers the empty registry and the General
+  adoption; `181/181` on the suite. The rail, menu, dots and project open were
+  checked live in the QC browser.
+- Not yet done (phase 5): the session create/rename/delete routes, titles and the
+  titler are still in the code, though the UI no longer shows them.
 
 ### Phase 5 — remove the session UI
 - Delete the session list, New Session, rename/delete-session, titles,
