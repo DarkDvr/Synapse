@@ -53,3 +53,17 @@ test('the project menu’s Delete is wired to a client path that exists', () => 
   assert.match(js, /function recycleReason\(/);
   assert.match(js, /api\('DELETE', `\/api\/projects\//);
 });
+
+// "Views: 2" counted the window you were looking at as well as the laptop, and
+// sat in the rail whether or not Remote Access was on. The LAN clients are what
+// the address is for; they are named under it, and they hide with it.
+test('the rail names LAN clients under the address, not a Views row', () => {
+  const html = read('web/index.html');
+  assert.doesNotMatch(html, /Views:/);
+  assert.doesNotMatch(html, /id="viewsRow"/);
+  assert.match(html, /id="remoteClients"/);
+  const js = read('web/app.js');
+  assert.match(js, /function renderClients\(/);
+  assert.match(js, /clients: \$\{names\.length\}/);
+  assert.doesNotMatch(js, /function renderViews\(/);
+});

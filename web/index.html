@@ -41,9 +41,15 @@
         <span class="status-dot idle" id="remoteDot"></span>Remote Access
         <button class="switch" id="remoteToggle" type="button" role="switch" aria-checked="false" aria-label="Remote access" title="Off — this PC only; click to allow the LAN"></button>
       </div>
-      <div class="status-remote" id="remoteInfo" hidden>
-        <span id="remoteUrl"></span>
-        <button class="token-chip" id="remoteToken" type="button" title="Copy the access token" hidden>TOKEN</button>
+      <div class="status-remote-block" id="remoteInfo" hidden>
+        <div class="status-remote">
+          <span id="remoteUrl"></span>
+          <button class="token-chip" id="remoteToken" type="button" title="Copy the access token" hidden>TOKEN</button>
+        </div>
+        <!-- Who is on the LAN, in one line under the address they would open.
+             This is not a count of views: the window on this PC is not a client
+             of the address the other PC needs. -->
+        <div class="status-clients" id="remoteClients"></div>
       </div>
       <div class="status-row" title="Runtime process state">
         <span class="status-dot idle" id="engineDot"></span>Runtime
@@ -61,14 +67,9 @@
         <span class="status-dot idle" id="eventDot"></span><span id="lastEventLabel">Last event</span>
         <span class="status-state" id="lastEvent">idle</span>
       </div>
-      <!-- Who else is looking. Two people can drive the same server, so the rail
-           has to be able to say whose window is whose. The count is on the left
-           with its label; the computer names run across the rest of the row and
-           ellipsis rather than wrap, so the row never changes height. -->
-      <div class="status-row views-row" id="viewsRow" title="Connected views, by computer name">
-        <span class="status-dot idle" id="viewsDot"></span><span class="views-label">Views: <span id="viewsCount">1</span></span>
-        <span class="status-state views-names" id="viewsState"></span>
-      </div>
+      <!-- Who else is looking is not a row of its own any more: the LAN clients
+           are named under the address they would open, and only while Remote
+           Access is on. -->
       <div class="status-row" id="llmRow" title="A local, OpenAI-compatible model server registered in the config file">
         <span class="status-dot idle"></span>Local LLM
         <span class="status-state" id="llmState">not set</span>

@@ -609,27 +609,22 @@ function renderRemote() {
   if (box) box.hidden = !on;
   const token = $('remoteToken');
   if (token) token.hidden = !on || !info.token;
+  // The clients line lives inside the box: off hides it with the address, on
+  // shows it with the number it has right now.
+  renderClients();
 }
 
-// Who is connected. The names are what the lock and the refusal sentences use;
-// this is where they can be read without being refused something first.
-//
-// "Views: 2" on the left, the computers across the rest of the row. The server
-// resolves a LAN address to its own name (a reverse lookup; the address when the
-// lookup has nothing to say), so the row reads as people, not as IPs. Names are
-// de-duplicated — one machine with two tabs is one name — but the count is views,
-// because that is what is connected.
-function renderViews() {
-  const views = state.views || [];
-  const count = $('viewsCount');
-  const el = $('viewsState');
+// Who is on the LAN. The address is what the other PC opens; the count and the
+// computers sit under it in one line, because the rail has no room for a second
+// row and a view on this PC is not a client of the address it already has.
+// Names are de-duplicated — one machine with two tabs is one client — and the
+// line ellipses rather than wrap, so the rail never changes height.
+function renderClients() {
+  const el = $('remoteClients');
   if (!el) return;
-  const names = [...new Set(views.map((v) => v.name).filter(Boolean))];
-  if (count) count.textContent = String(views.length);
-  el.textContent = names.join(', ');
-  el.title = names.length ? `${names.join(', ')}` : '';
-  const dot = $('viewsDot');
-  if (dot) dot.className = 'status-dot ' + (views.length > 1 ? 'ok' : 'idle');
+  const names = [...new Set((state.views || []).filter((v) => !v.local).map((v) => v.name).filter(Boolean))];
+  el.textContent = names.length ? `clients: ${names.length} (${names.join(', ')})` : 'clients: 0';
+  el.title = names.length ? names.join(', ') : 'No other device is connected.';
 }
 
 // The page was cut off. Everything behind the panel is stale, so it is covered
@@ -5877,7 +5872,7 @@ function connectStream() {
         state.settingsLock = ev.presence.lock || null;
       }
       clearDisconnected();
-      renderViews();
+      renderClients();
       renderStatus();
       return;
     }
@@ -5886,7 +5881,7 @@ function connectStream() {
     if (ev.kind === 'presence') {
       state.views = ev.views || [];
       state.settingsLock = ev.lock || null;
-      renderViews();
+      renderClients();
       if (ev.lock && !ev.lock.yours && !$('settingsModal').hidden) {
         closeSettings();
         toast('Settings Closed', `The settings are now being edited on ${ev.lock.name}.`);
@@ -5896,7 +5891,7 @@ function connectStream() {
 
     if (ev.kind === 'settings-lock') {
       state.settingsLock = ev.holder || null;
-      renderViews();
+      // The clients line does not depend on who holds Settings; leave it alone.
       if (ev.holder && !$('settingsModal').hidden && state.clientId && !state.views.some((v) => v.id === state.clientId && v.name === ev.holder.name)) {
         closeSettings();
         toast('Settings Closed', `The settings are now being edited on ${ev.holder.name}.`);

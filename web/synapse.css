@@ -424,7 +424,14 @@ body.dark .sidebar .nav-link.active > span:first-child { color: #fff; }
   /* a scrollbar must never change the width of what it scrolls */
   scrollbar-gutter: stable;
 }
-.tree-block .sidebar-label { display: flex; align-items: center; }
+/* A hairline under PROJECTS, so the list starts as a list rather than as a
+   continuation of the heading. The label keeps its own 8px inset, so the rule
+   runs the full width of the rail and the text stays where it was. */
+.tree-block .sidebar-label {
+  display: flex; align-items: center;
+  margin-bottom: 9px;
+  border-bottom: 1px solid var(--line);
+}
 
 /* ── 6. sidebar: two-tier project tree ─────────────────────────────────── */
 
@@ -598,14 +605,10 @@ body.dark .sidebar-bottom,
    ellipsis is a rule that can never apply, and a long computer name pushes the row
    wider instead of truncating. */
 .status-row .status-state { min-width: 0; }
-/* Views: the count sits with its label on the left; the computer names take the
-   rest of the row and truncate there, so three or four clients never wrap. */
-.views-label { white-space: nowrap; }
-.views-names { text-align: right; }
 /* Remote Access: a two-state switch, not a button that says "On". The label is
    the row; the switch is the state. Green only when the LAN can reach us. Only
-   while it is on does a second line appear: the address and the TOKEN chip. Off
-   has one line and no address at all. */
+   while it is on does a second line appear: the address, the TOKEN chip, and the
+   clients on that address. Off has one line and no address at all. */
 .remote-row { align-items: center; }
 .remote-row .switch { margin-left: auto; }
 .switch {
@@ -624,15 +627,23 @@ body.dark .sidebar-bottom,
 .switch[aria-checked="true"]::after { transform: translateX(14px); background: var(--green); }
 .switch:disabled { opacity: .55; cursor: wait; }
 .switch:focus-visible { outline: 2px solid var(--violet); outline-offset: 2px; }
+/* The LAN block is one box with two lines: the address (and its TOKEN chip) on
+   the first, the clients on the second. The box, not the address line, is what
+   `renderRemote` hides, so the clients go with it. */
 .status-remote {
   display: flex; align-items: center; gap: 7px; min-width: 0;
   margin: 1px 0 3px 17px; font: 9.5px/1.6 var(--mono); color: #9aa0a8;
 }
-.status-remote[hidden] { display: none; }
 /* The address fills the row; the chip sits hard right so its edge lines up
    with the switch's edge above it. */
 .status-remote #remoteUrl { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .status-remote .token-chip { margin-left: auto; }
+/* One line, ellipsed, aligned under the address: "clients: 1 (LAPTOP)". */
+.status-clients {
+  margin: 0 0 3px 17px; min-width: 0;
+  font: 9.5px/1.6 var(--mono); color: #9aa0a8;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 /* The token is the one thing the other PC needs; a chip says "click me", not a
    button that competes with the switch. Yellow because it is a secret. */
 .token-chip {
