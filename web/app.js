@@ -1878,6 +1878,17 @@ function compactPostHtml(post) {
     `<div class="chat-post-body">${renderMarkdown(post.summary)}</div></details>`;
 }
 
+/**
+ * How many messages the chat is actually showing. The engine's list also holds
+ * idle markers and system notes, so counting it said "Discard 7 messages?" over
+ * a four-message conversation — a number the operator could not find anywhere.
+ */
+function chatMessageCount() {
+  return (state.messages || []).filter(
+    (m) => m.error || m.type === 'user' || m.type === 'assistant' || m.type === 'synthetic',
+  ).length;
+}
+
 function renderCompactChip() {
   const btn = $('compactChip');
   if (!btn) return;
@@ -1893,7 +1904,7 @@ function renderCompactChip() {
     state.view === 'session' &&
     Boolean(state.sessionId) &&
     !state.busyInfo?.busy &&
-    (state.messages || []).length > 0;
+    chatMessageCount() > 0;
   if (!ready) {
     btn.hidden = true;
     btn.classList.remove('is-confirm');
@@ -1905,7 +1916,7 @@ function renderCompactChip() {
   btn.classList.toggle('is-confirm', confirming);
   if (confirming) {
     const open = (state.planState?.plan?.tasks || []).filter((t) => t.status !== 'done').length;
-    const total = state.messages.length;
+    const total = chatMessageCount();
     const tasks = open ? ` · ${open} task${open === 1 ? '' : 's'} unfinished` : '';
     btn.textContent = `Discard ${total} message${total === 1 ? '' : 's'}? The files stay${tasks}`;
     btn.title = 'Click again to discard this conversation. The plan, the project document and every file stay.';
@@ -1942,7 +1953,9 @@ async function runCompact() {
     const out = await api('POST', `/api/sessions/${encodeURIComponent(sessionId)}/compact`);
     state.compacting = false;
     state.messages = [];
-    await loadProjects();
+    // The old chat has just left the list on purpose; do not read that as "the
+    // open chat was removed" and close the view before opening its replacement.
+    await loadProjects({ keepOpen: true });
     if (out?.sessionId && state.sessionId !== out.sessionId) await openSession(out.sessionId);
   } catch (err) {
     state.compacting = false;
@@ -2252,7 +2265,7 @@ async function cycleEffort(roleId) {
 }
 
 // ── projects + sessions ─────────────────────────────────────────
-async function loadProjects() {
+async function loadProjects({ keepOpen = false } = {}) {
   try {
     state.projects = (await api('GET', '/api/projects')).projects;
   } catch (err) {
@@ -2270,7 +2283,19 @@ async function loadProjects() {
   // "Session not found". The list is only trusted while the engine is up: with
   // the engine down it is empty for a reason that has nothing to do with this
   // session, and closing the view would be wrong.
-  if (state.sessionId && state.status?.engine?.ready === true && !findSession(state.sessionId)) {
+  //
+  // `keepOpen` is for a load that is part of a replacement: a compact deletes
+  // the old chat on purpose and opens a new one, so the moment the old id leaves
+  // the list is not a moment to close the view. `state.compacting` is the same
+  // rule one step earlier — the engine announces the old chat's deletion while the
+  // compact is still running, and that announcement must not blank the page.
+  if (
+    !keepOpen &&
+    !state.compacting &&
+    state.sessionId &&
+    state.status?.engine?.ready === true &&
+    !findSession(state.sessionId)
+  ) {
     toast('Chat Closed', 'It was replaced or removed, so it is no longer open.');
     showNothing();
   }
@@ -2476,6 +2501,82 @@ function projectMenuAction(id, action) {
   else if (action === 'cmd') openProjectFolder(id, 'cmd');
   else if (action === 'rename') renameProject(id);
   else if (action === 'delete') removeProject(id);
+}
+
+/**
+ * Delete a project: its folder, its plan and its chat, together.
+ *
+ * There used to be a pre-check here that refused while the project held
+ * sessions, and that was the product's last lie: the server deletes the chat
+ * with the project, so the dialog protected nothing and made a delete
+ * impossible. The one consent that remains is real — the built app in `bin\`
+ * is a deliverable, so deleting it is a separate tick.
+ */
+async function removeProject(id) {
+  const p = state.projects.find((x) => x.id === id);
+  if (!p) return;
+  // The folder goes with the project, so the dialog has to say what is in it. The
+  // server answers from the disk rather than from the list's memory of it.
+  let info = null;
+  try {
+    info = await api('GET', `/api/projects/${encodeURIComponent(id)}/delete-info`);
+  } catch (err) {
+    toast('Could Not Look At The Project', err.message);
+    return;
+  }
+  const bin = info?.bin || { files: 0, bytes: 0 };
+  const deliverables = bin.files > 0;
+  const ok = await openDialog({
+    title: 'Delete Project',
+    message:
+      info?.exists === false
+        ? `"${p.name}" is no longer a folder on disk. Remove the project from Synapse?`
+        : `"${p.name}", its conversation and everything in its folder are deleted. The folder goes to the Recycle Bin, so it can be restored from there.`,
+    confirmLabel: 'Delete',
+    danger: true,
+    fields: deliverables
+      ? [
+          {
+            name: 'deliverables',
+            type: 'check',
+            value: false,
+            label: `Delete the ${bin.files === 1 ? 'file' : `${bin.files} files`} in bin\\ as well`,
+            hint:
+              `${fmtBytes(bin.bytes)} of deliverables — the built app — in ${info.directory}\\bin. ` +
+              'They go to the Recycle Bin with the rest of the folder; nothing is deleted for good.',
+          },
+        ]
+      : [],
+    afterRender: deliverables
+      ? () => {
+          const box = $('dialogBody').querySelector('input[data-flag="deliverables"]');
+          const btn = $('dialogOk');
+          const gate = () => { btn.disabled = !box?.checked; };
+          box?.addEventListener('change', gate);
+          gate();
+        }
+      : undefined,
+  });
+  if (!ok) return;
+  try {
+    const res = await api('DELETE', `/api/projects/${encodeURIComponent(id)}`, {
+      binConfirmed: Boolean(ok.deliverables),
+    });
+    await loadProjects();
+    if (res?.recycled) toast('Project Deleted', `"${p.name}" and its folder are in the Recycle Bin.`);
+    else toast('Project Removed', `"${p.name}" was no longer a folder on disk.`);
+  } catch (err) {
+    toast('Could Not Delete The Project', recycleReason(err.message));
+  }
+}
+
+/** The server's words for a folder that would not go to the bin, in the operator's terms. */
+function recycleReason(message) {
+  const text = String(message || 'the server did not say why');
+  if (/denied/i.test(text)) return 'Windows would not let go of that folder — a file inside it may be open in another program. Close it and try again.';
+  if (/in use|being used by another process/i.test(text)) return 'A file in that folder is open in another program. Close it and try again.';
+  if (/not found|cannot find/i.test(text)) return 'The folder had already been moved or deleted.';
+  return text;
 }
 
 async function createChat(projectId) {
@@ -3160,15 +3261,24 @@ function drawActivePath() {
 
 // ── messages ────────────────────────────────────────────────────
 async function loadMessages() {
-  if (!state.sessionId) return;
+  // The chat this request is for. It can be replaced while the request is in
+  // flight — a compact deletes the old chat as the new one opens — and a late
+  // answer must not land in the chat that is open now. The poll did exactly
+  // that: its 404 for the chat a compact had just deleted closed the new one,
+  // leaving the landing page a second after a successful compact.
+  const id = state.sessionId;
+  if (!id) return;
   try {
-    state.messages = (await api('GET', `/api/sessions/${encodeURIComponent(state.sessionId)}/messages`)).messages;
+    const loaded = (await api('GET', `/api/sessions/${encodeURIComponent(id)}/messages`)).messages;
+    if (state.sessionId !== id) return;
+    state.messages = loaded;
     // The chips on tool calls are a record that outlives the request, so a
     // transcript opened after the fact asks once. While the session is open they
     // arrive on the stream; this is only the catch-up.
-    if (state.decisionsFor !== state.sessionId) {
+    if (state.decisionsFor !== id) {
       try {
-        const d = await api('GET', `/api/permissions?session=${encodeURIComponent(state.sessionId)}`);
+        const d = await api('GET', `/api/permissions?session=${encodeURIComponent(id)}`);
+        if (state.sessionId !== id) return;
         state.permissionDecisions = new Map(
           (d.decisions || []).filter((x) => x.toolCallId).map((x) => [x.toolCallId, x]),
         );
@@ -3183,6 +3293,9 @@ async function loadMessages() {
     updateBusyFromMessages();
   } catch (err) {
     if (/not found|404/i.test(err.message)) {
+      // Only this chat's death closes the view. A 404 for a chat that is no
+      // longer open is the old one being deleted, not news about this one.
+      if (state.sessionId !== id) return;
       // The session is gone — deleted here, or by another client. Stop polling.
       state.busySessions.delete(state.sessionId);
       showNothing();
@@ -3191,6 +3304,7 @@ async function loadMessages() {
     }
     setEventChip('message load failed');
   }
+  if (state.sessionId !== id) return;
   renderTranscript();
   // The plan is a file the Architect writes during the turn, so a message
   // refresh is exactly when it is most likely to have changed.
@@ -5079,15 +5193,22 @@ function ago(ms) {
 }
 
 async function loadPlan() {
-  if (!state.sessionId) {
+  // Same rule as loadMessages: the chat can change while this is in flight, and
+  // the plan belongs to the chat. A late answer for the previous chat used to
+  // paint "No plan yet" over a project that has a plan.
+  const id = state.sessionId;
+  if (!id) {
     state.planState = null;
     renderPlan();
     renderRoleActivity();
     return;
   }
   try {
-    state.planState = await api('GET', `/api/sessions/${encodeURIComponent(state.sessionId)}/plan`);
+    const loaded = await api('GET', `/api/sessions/${encodeURIComponent(id)}/plan`);
+    if (state.sessionId !== id) return;
+    state.planState = loaded;
   } catch {
+    if (state.sessionId !== id) return;
     state.planState = null;
   }
   renderPlan();
@@ -5854,7 +5975,9 @@ function connectStream() {
     // other window just refreshes the rail (the old session has left it).
     if (ev.kind === 'project' && ev.type === 'project.compacted') {
       if (ev.oldSessionId === state.sessionId) {
-        loadProjects()
+        // The old chat is gone because its replacement exists: keep the view open
+        // while the list catches up, then follow the new chat.
+        loadProjects({ keepOpen: true })
           .then(() => {
             if (state.sessionId === ev.oldSessionId) return openSession(ev.sessionId);
             return null;
@@ -7338,11 +7461,13 @@ document.addEventListener('keydown', (e) => {
     if (head) { e.preventDefault(); toggleTool(head.dataset.toolToggle); }
   });
   // <details> fires `toggle` (no bubbling), so capture it to remember which
-  // Reasoning blocks the operator opened.
+  // Reasoning blocks and which compact post the operator opened. The post is a
+  // single block with a fixed key; without this branch a poll re-render shut it
+  // again a few seconds after it was opened.
   $('transcript').addEventListener('toggle', (e) => {
     const d = e.target;
-    if (!d || d.tagName !== 'DETAILS' || !d.classList.contains('reasoning')) return;
-    const k = d.dataset.k;
+    if (!d || d.tagName !== 'DETAILS') return;
+    const k = d.classList.contains('chat-post') ? 'compact-post' : d.dataset.k;
     if (!k) return;
     if (d.open) state.open.add(k); else state.open.delete(k);
   }, true);

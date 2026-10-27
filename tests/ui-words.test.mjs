@@ -43,3 +43,13 @@ test('the dead session-row styles are gone from the stylesheet', () => {
     assert.equal(css.includes(needle), false, `synapse.css still contains: ${needle}`);
   }
 });
+
+// Phase 5 removed the function but left the project menu calling it, so Delete…
+// threw instead of asking. The menu is only as good as the handler behind it.
+test('the project menu’s Delete is wired to a client path that exists', () => {
+  const js = read('web/app.js');
+  assert.match(js, /data-menu-action="delete"/);
+  assert.match(js, /async function removeProject\(id\)/);
+  assert.match(js, /function recycleReason\(/);
+  assert.match(js, /api\('DELETE', `\/api\/projects\//);
+});

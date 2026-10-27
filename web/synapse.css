@@ -1145,6 +1145,14 @@ body[data-view="session"] .chat-dock.has-ask { overflow: visible; }
   list-style: none; cursor: pointer;
 }
 .chat-post > summary::-webkit-details-marker { display: none; }
+/* The post opens to the handover, so it has to look openable. */
+.chat-post > summary::after {
+  content: '▸';
+  color: #82868e;
+  font-size: 10px;
+  transition: transform 120ms ease;
+}
+.chat-post[open] > summary::after { transform: rotate(90deg); }
 .chat-post-mark { font-family: var(--mono); font-size: 10px; letter-spacing: 0.04em; color: var(--yellow); }
 .chat-post-note { font-size: 10.5px; color: #82868e; }
 .chat-post-body { margin: 8px 0 0; font-size: 12px; line-height: 1.5; color: #b6bac1; }
