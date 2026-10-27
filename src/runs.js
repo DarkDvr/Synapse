@@ -53,15 +53,17 @@ const NOTE_MAX = 1000;
 // Architect is told, and it is the Architect that marks the task blocked — the
 // harness never writes the plan, and never decides a task is hopeless.
 const MAX_ATTEMPTS = 3;
-// How many QC rounds a project gets before the harness closes the loop. A model
+// How many QC rounds a round gets before the harness closes the loop. A model
 // will keep finding "one more issue" until the quota runs out; three rounds is
-// the deal, then the remainder is the operator's to judge.
+// the deal, then the remainder is the operator's to judge. Per ROUND, not per
+// project: a finished plan closes the round and the next one starts with all
+// three again (see closeRound).
 const QC_ROUNDS = 3;
-/** Completed QC rounds on a project: the loop is bounded by them, not by the
- *  model's appetite for one more issue. `hacker` is the role's old id, and rounds
- *  spent under it still count. */
-const qcRoundsUsed = (dir) =>
-  readRuns(dir).filter(
+/** Completed QC rounds since the last finished plan. The loop is bounded by
+ *  them, not by the model's appetite for one more issue. `hacker` is the role's
+ *  old id, and rounds spent under it still count. */
+export const qcRoundsUsed = (dir) =>
+  sinceRoundClosed(readRuns(dir)).filter(
     (r) => r.kind === 'result' && (r.role === 'qc' || r.role === 'hacker') && r.outcome === 'completed',
   ).length;
 // Written by Synapse itself on every run, so a change to one of these is never a
@@ -250,6 +252,26 @@ export function outsideProject(file, dir) {
   return Boolean(root) && !target.startsWith(`${root}/`);
 }
 
+/** The last "round closed" line in a project's run log, if any. A finished plan
+ *  writes one, and it is the boundary every cap is counted from. */
+function lastRoundClosed(history) {
+  const list = history || [];
+  for (let i = list.length - 1; i >= 0; i -= 1) {
+    if (list[i].kind === 'round' && list[i].event === 'closed') return list[i];
+  }
+  return null;
+}
+
+/** The run log since that boundary: what this round has spent. */
+function sinceRoundClosed(history) {
+  const list = history || [];
+  let from = 0;
+  for (let i = 0; i < list.length; i += 1) {
+    if (list[i].kind === 'round' && list[i].event === 'closed') from = i + 1;
+  }
+  return list.slice(from);
+}
+
 /**
  * Attempts a task has really spent.
  *
@@ -258,16 +280,47 @@ export function outsideProject(file, dir) {
  * restarted under it. Counting those spent t1's whole budget on two stops and one
  * real run, and it is what pushed t3 off coder-2 after a restart — the ladder
  * stepped down for an interruption the role never caused.
+ *
+ * Only this round counts. Task ids are reused by every new plan (t1, t2, …), and
+ * without the round boundary a project that ran four bugfix rounds reached the cap
+ * on a task whose every attempt succeeded.
  */
 export function countedAttempts(history, taskId) {
+  const spent = sinceRoundClosed(history);
   const unspent = new Set(
-    (history || [])
+    spent
       .filter((r) => r.kind === 'result' && (r.outcome === 'stopped' || r.outcome === 'interrupted'))
       .map((r) => r.callId),
   );
-  return (history || []).filter(
+  return spent.filter(
     (r) => r.kind === 'delegate' && r.task === taskId && typeof r.attempt === 'number' && !unspent.has(r.callId),
   ).length;
+}
+
+/**
+ * The Architect has finished the plan — every task done and the customer-facing
+ * `summary` written — so the round is over and the next one starts with its caps
+ * back: three QC rounds and three attempts per task, per round rather than per
+ * project.
+ *
+ * `runs.jsonl` is append-only, so the boundary is a `round` line; `qcRoundsUsed`
+ * and `countedAttempts` count only what comes after it. One marker per finished
+ * plan: if the plan has not changed since the last one, there is nothing to close.
+ *
+ * Called after a successful Architect turn, and when the operator sends into a
+ * finished plan. A plan with tasks done but no summary is not closed: the summary
+ * is how the Architect says "done".
+ */
+export function closeRound(dir) {
+  if (!dir) return false;
+  const read = readPlan(dir);
+  const tasks = read?.plan?.tasks || [];
+  if (!tasks.length || !tasks.every((t) => t.status === 'done')) return false;
+  if (!String(read?.plan?.summary || '').trim()) return false;
+  const last = lastRoundClosed(readRuns(dir));
+  const mtime = Number(read?.stat?.mtimeMs) || 0;
+  if (last && Number(last.at) >= mtime) return false;
+  return appendRun(dir, { kind: 'round', event: 'closed', tasks: tasks.length });
 }
 
 /** Did this finished run count as a failed attempt for the role?
@@ -2364,6 +2417,13 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
       const err = finished.stalled ? `nothing happened for ${Math.round(settings.stallSec / 60)} minutes` : turnErrorOf(messages, before);
       if (!err) {
         notify?.({ kind: 'role-error', dir, role: 'architect', clear: true });
+        // The Architect may have just written the closing summary. If so the
+        // round is over, and the next one starts with its caps back.
+        try {
+          if (closeRound(dir)) log.info(`round closed: ${dir} - caps reset for the next plan`);
+        } catch (e) {
+          log.warn(`could not close the round: ${e.message}`);
+        }
         return { ok: true };
       }
 

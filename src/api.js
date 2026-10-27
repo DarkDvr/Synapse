@@ -1147,6 +1147,16 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
         const written = single ? appendChat(directory, body) : appendProjectRequest(directory, body);
         if (written && written.ok === false) app.warn(`could not write to the project document: ${written.error}`);
       }
+      // A send into a finished plan starts a new round: close the old one here as
+      // well, so a plan the Architect closed in a turn the runner never saw still
+      // gives the next round its caps back before anything is briefed.
+      if (directory) {
+        try {
+          if (runs?.closeRound?.(directory)) app.info(`round closed: ${directory} - caps reset`);
+        } catch (err) {
+          app.warn(`could not close the round: ${err.message}`);
+        }
+      }
       // Speaking is the answer to "what now" after a stop: whatever they stopped
       // may run again from here.
       if (directory) runs?.resume?.(directory);

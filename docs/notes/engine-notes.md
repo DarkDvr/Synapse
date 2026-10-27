@@ -300,6 +300,17 @@ Non-obvious, all verified on 2.0.30:
   a restart does not move the task down the ladder (`attemptFailed`): t3 dropped
   from coder-2 to coder-3 because a restart interrupted it, and no change to
   coder-2's model could bring it back.
+- **Caps are per round, not per project.** A round ends when the Architect says
+  the plan is done: every task `done` **and** the customer-facing summary written.
+  That close is one `round` line in `runs.jsonl` (`closeRound`), written after a
+  successful Architect turn or when the operator sends into a finished plan, once
+  per finished plan (the plan file's mtime guards it). The QC loop's three rounds
+  and every task's three attempts count only after it. Without the boundary a
+  mature project spent its whole QC quota in its first three rounds and
+  self-verified every bugfix round after (27 Oct: three `qc-cap` refusals, and
+  only `qc-1` and `qc-2` on disk), and a task id reused by every new plan (t1,
+  t2, …) reached the attempt cap although every one of its attempts had
+  succeeded.
 - **A coder that cannot do the job hands it down the line.** The three coder roles
   are peers (`worker.ladder`, default `coder-1 → coder-2 → coder-3`), and the
   harness moves the *same task* between them — the Architect cannot, because the
