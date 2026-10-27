@@ -8,11 +8,11 @@
   "engine": {
     "type": "opencode",
     "opencode": {
-      "binary": "",
+      "binary": "F:\\dev\\Synapse\\bin\\opencode\\opencode.exe",
       "port": 8720,
       "host": "127.0.0.1",
       "password": "",
-      "home": "",
+      "home": "F:\\dev\\Synapse\\data\\engine\\opencode",
       "startTimeoutMs": 60000,
       "args": [],
       "modelLimits": {
@@ -264,7 +264,7 @@
   },
   "roles": {
     "designer": {
-      "ref": "strata/qwen3.8-flash-next-iq2_xs",
+      "ref": "opencode/deepseek-v4.1-flash-free",
       "skills": [
         "aesthetic-foundations",
         "app-check",
@@ -278,7 +278,7 @@
       ]
     },
     "qc": {
-      "ref": "strata/qwen3.8-flash-next-iq2_xs",
+      "ref": "opencode/deepseek-v4.1-flash-free",
       "skills": [
         "web-guidelines",
         "aesthetic-foundations",
@@ -291,14 +291,14 @@
       "focus": "app"
     },
     "architect": {
-      "ref": "strata/qwen3.8-flash-next-iq2_xs",
+      "ref": "opencode/deepseek-v4.1-flash-free",
       "variant": "high",
       "skills": [
         "visual-review"
       ]
     },
     "coder-1": {
-      "ref": "strata/qwen3.8-flash-next-iq2_xs",
+      "ref": "opencode/deepseek-v4.1-flash-free",
       "skills": [
         "code-craft",
         "visual-review"
@@ -308,7 +308,7 @@
       ]
     },
     "coder-2": {
-      "ref": "strata/qwen3.8-flash-next-iq2_xs",
+      "ref": "opencode/deepseek-v4.1-flash-free",
       "skills": [
         "code-craft",
         "visual-review"
@@ -318,7 +318,7 @@
       ]
     },
     "coder-3": {
-      "ref": "strata/qwen3.8-flash-next-iq2_xs",
+      "ref": "opencode/deepseek-v4.1-flash-free",
       "skills": [
         "code-craft",
         "visual-review"
@@ -328,7 +328,7 @@
       ]
     },
     "inventor": {
-      "ref": "strata/qwen3.8-flash-next-iq2_xs",
+      "ref": "deepseek/deepseek-flash",
       "skills": [
         "frontend-design"
       ]
