@@ -227,6 +227,7 @@ web/
   app.js              all UI logic (ES module)
   md.js               the markdown renderer (escape-first, no dependencies;
                         fenced code, GFM tables, task lists)
+  rate.js             tokens per second, measured from the stream (not per turn)
   synapse.css         theme + shell (Summit baseline stays locked)
   vendor/summit.css   LOCKED baseline — one deliberate edit, see below
   vendor/fonts.css    vendored DM Sans + Manrope (offline)

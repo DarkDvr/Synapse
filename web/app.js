@@ -10,6 +10,7 @@
 
 import { renderMarkdown } from './md.js';
 import { newStream, pushStream, slideTarget, nextOffset, takePending, freezeStream, STREAM_BUFFER } from './stream-view.js';
+import { addSample, rateOf } from './rate.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -3797,7 +3798,6 @@ function endStream() {
 const deltaWindow = new Map(); // sessionId -> { first, last }
 const usageTotals = new Map(); // dirKey -> tokens written so far in this run
 const RATE_FRESH_MS = 45000;
-const RATE_MIN_MS = 1000;
 
 function noteDelta(ev) {
   if (!ev.sessionId) return;
@@ -3868,9 +3868,10 @@ function noteWorkerUsage(ev) {
   const ms = w ? w.last - w.first : 0;
   if (!ms || ms < 400) return;
   const rec = state.rates.get(key) || { role: run.role, tokens: 0, ms: 0, at: 0 };
+  const tally = addSample({ tokens: rec.tokens, ms: rec.ms }, { written, ms });
   rec.role = run.role;
-  rec.tokens += written;
-  rec.ms += ms;
+  rec.tokens = tally.tokens;
+  rec.ms = tally.ms;
   rec.at = Date.now();
   state.rates.set(key, rec);
   paintRates();
@@ -3891,9 +3892,8 @@ function paintRates(now = Date.now()) {
     const bits = [];
     // The run's own measured average. Shown only while it has something behind it:
     // a step or two of evidence is a number, one short step is a guess.
-    if (mine && rate.ms >= RATE_MIN_MS && rate.tokens >= 40) {
-      bits.push(`${Math.round((rate.tokens / rate.ms) * 1000)} tok/s`);
-    }
+    const tps = mine ? rateOf(rate) : 0;
+    if (tps) bits.push(`${tps} tok/s`);
     // The window, in the corner the operator already looks at: "27k/60k ctx". It
     // is the pair that explains a slowdown (a full window is re-read every turn)
     // and the compaction that follows. Shown even when the rate has gone stale —
