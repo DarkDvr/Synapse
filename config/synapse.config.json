@@ -264,7 +264,7 @@
   },
   "roles": {
     "designer": {
-      "ref": "opencode/deepseek-v4.1-flash-free",
+      "ref": "deepseek/deepseek-flash",
       "skills": [
         "aesthetic-foundations",
         "app-check",
@@ -278,7 +278,7 @@
       ]
     },
     "qc": {
-      "ref": "opencode/deepseek-v4.1-flash-free",
+      "ref": "deepseek/deepseek-flash",
       "skills": [
         "web-guidelines",
         "aesthetic-foundations",
@@ -291,14 +291,14 @@
       "focus": "app"
     },
     "architect": {
-      "ref": "opencode/deepseek-v4.1-flash-free",
+      "ref": "deepseek/deepseek-flash",
       "variant": "high",
       "skills": [
         "visual-review"
       ]
     },
     "coder-1": {
-      "ref": "opencode/deepseek-v4.1-flash-free",
+      "ref": "deepseek/deepseek-flash",
       "skills": [
         "code-craft",
         "visual-review"
@@ -308,7 +308,7 @@
       ]
     },
     "coder-2": {
-      "ref": "opencode/deepseek-v4.1-flash-free",
+      "ref": "deepseek/deepseek-flash",
       "skills": [
         "code-craft",
         "visual-review"
@@ -318,7 +318,7 @@
       ]
     },
     "coder-3": {
-      "ref": "opencode/deepseek-v4.1-flash-free",
+      "ref": "deepseek/deepseek-flash",
       "skills": [
         "code-craft",
         "visual-review"
