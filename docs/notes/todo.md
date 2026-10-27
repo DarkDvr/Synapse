@@ -36,6 +36,21 @@ Decide first: who hides them (an automatic rule from `planState.used`, or a
 control the operator flips), where the hidden ones go (a count and a "show all"
 line, or a fold), and whether the Architect can ever be hidden (it should not).
 
+## A server-requested restart should reload the page
+
+Found during the 27 Oct QC, not asked for. `/api/restart` (what Settings' save and
+the console's Restart use) exits with code 2 and the shell starts the replacement
+directly, without reporting Stopped; the window therefore keeps the page and the
+JavaScript it loaded. The tray's Stop then Start does reload, because it passes
+through Stopped (`MainWindow._needsReload`). A client change made in `web/` is
+consequently not live after a server restart — the operator has to press Ctrl+R,
+which is exactly the thing you forget after fixing a UI bug.
+
+The fix is one line in `ServerHost.OnExited`, in the `ExitRestart` branch: report
+Stopped before `Start()`, the way `RestartAsync` already does. It was not made in
+the QC pass because it needs a rebuilt `Synapse.exe` to test and the running app
+holds the current one; the doc (desktop-app.md §4) now states the limit instead.
+
 ## Overnight mode
 
 The operator asked for an overnight mode built on Keep Building: work continues

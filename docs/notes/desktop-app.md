@@ -130,6 +130,14 @@ panel is for a server that never arrived, which is the only case where there is 
 page worth keeping. When the server comes back the shell reloads the page, because
 everything on it was fetched from a server that no longer exists.
 
+Except after a restart the *server* asks for (`/api/restart`, which Settings' save
+uses): that path starts the replacement directly, without passing through Stopped,
+so the shell does not reload and the window keeps the JavaScript it loaded. The
+practical rule is that a client change made in `web/` is live after the app is
+relaunched, or after Ctrl+R in the window — not after a server restart. The
+one-line fix (let that path report Stopped first, as the tray's restart does) is
+in `todo.md` because it needs a rebuilt `Synapse.exe` to test.
+
 **The console is behind `...` on the Runtime row.** A boxed ellipsis, not a label: it
 is an affordance, not a fourth row in a block that already has three. The panel is
 wide and tall on purpose — `min(1180px, 100%)` by `76vh` — because it is a log to
