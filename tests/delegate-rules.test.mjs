@@ -53,14 +53,14 @@ writePlan(plan(['build', 'qc'], [
 }
 
 // ── the refusal, through handleTurn ─────────────────────────────
-const makeRunner = ({ auto = true, stallSec = 5, workerMessages = null } = {}) => {
+const makeRunner = ({ auto = true, stallSec = 5, workerMessages = null, single = false } = {}) => {
   const woke = [];
   const ran = [];
   const nudged = [];
   const arch = [{ id: 'm0', type: 'user', parts: [] }];
   const engine = {
     async getSession(id) {
-      if (id === 'ses_arch') return { id, directory: DIR, internal: false, single: false, auto };
+      if (id === 'ses_arch') return { id, directory: DIR, internal: false, single, auto };
       return { id, directory: DIR, internal: true };
     },
     async getMessages(id) {
@@ -175,6 +175,32 @@ try {
     expect('a QC task past the cap does not run', !ran.includes('prompt'), ran.join(','));
     expect('and the Architect is told, not left waiting', woke.length === 1 && /will not start however many times/.test(woke[0]), woke[0]?.slice(0, 110));
     expect('the refusal is journalled as qc-cap', fs.readFileSync(journal, 'utf8').includes('"qc-cap"'));
+  }
+  // 5b. a delegation in Single: refused, journalled, and the Architect told.
+  // The refusal path once carried a stray redemption call whose variables do not
+  // exist there, so every Single-mode delegation threw before the Architect was
+  // told anything.
+  writePlan(plan(['build'], [task('t1', 'coder-1')]));
+  {
+    const journal = path.join(DIR, '.synapse', 'runs.jsonl');
+    const { runner, woke, ran } = makeRunner({ single: true });
+    await runner.handleTurn('ses_arch', delegate('t1', 'call_single_mode'));
+    await settle();
+    const lines = fs
+      .readFileSync(journal, 'utf8')
+      .trim()
+      .split('\n')
+      .map((l) => JSON.parse(l));
+    expect('Single refuses the delegation', !ran.includes('prompt'), ran.join(','));
+    expect(
+      'and journals it as single-mode',
+      lines.some((r) => r.callId === 'call_single_mode' && r.outcome === 'single-mode'),
+    );
+    expect(
+      'and tells the Architect to do the work itself',
+      woke.some((t) => /Single conversation/.test(t)),
+      woke.join(' | ').slice(0, 120),
+    );
   }
   // 6. a plan step nobody asked for: reminded once, then left alone
   // t16 and t19 were both planned, never delegated, and left the project one task

@@ -31,6 +31,13 @@ test('a delegate that carries its own outcome is already settled', () => {
   assert.deepEqual(openDelegations([delegate('a', { outcome: 'single-mode' })]), []);
 });
 
+test('a deferred delegation is settled, so a boot cannot replay it', () => {
+  // Measured 27 Oct: t5/t6/t9 were deferred because a worker was running, nothing
+  // was journalled, and the next boot started t5 again from a round the operator
+  // had stopped.
+  assert.deepEqual(openDelegations([delegate('a', { outcome: 'deferred' })]), []);
+});
+
 test('a result without a delegate is not an open run', () => {
   assert.deepEqual(openDelegations([result('a')]), []);
 });

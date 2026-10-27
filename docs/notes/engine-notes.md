@@ -282,6 +282,13 @@ Non-obvious, all verified on 2.0.30:
   now makes one pass at boot (5 s in) over each project's newest conversation and
   runs anything `requestsIn` still reports — safe because a call id is journalled
   before the worker starts, so a re-scan can never run one twice.
+  **A refusal or a deferral is also a journalled decision.** A delegate refused
+  because a worker was already running used to be answered and forgotten, so the
+  boot scan found it "unread" and started it: on 27 Oct a restart started t5 from a
+  round the operator had stopped because of permission friction. The busy branch now
+  records `outcome: 'deferred'`, and every refusal path (`single-mode`,
+  `unknown-task`, `qc-cap`, `keep-building-off`, `stopped-by-operator`, `deferred`)
+  is a line in `runs.jsonl`, which is what makes "unread" mean unread.
   The lesson for the UI: a form reply that answers `Form not found` means the
   question is gone, so clear the panel and say so — never leave a dead form up.
   rather than omitting the line, and why the harness never moves a task.

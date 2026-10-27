@@ -834,11 +834,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
             task: request.task,
             outcome: 'single-mode',
           });
-          // Redemption: a role that finished its work on a marked model has proved the
-    // mark wrong. Only a completed run counts — a clean probe is a test, not work.
-    redeemModel({ outcome, modelRef, modelCache, notify, log });
-
-    log.info(`delegation refused: ${request.task} asked in Single mode`);
+          log.info(`delegation refused: ${request.task} asked in Single mode`);
           await wake(sessionId, session.directory, {
             description: `delegate ${request.task} refused`,
             text:
@@ -1046,6 +1042,12 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     }
 
     if (busy.has(dir)) {
+      // Recorded, not only answered. `requestsIn` treats a journalled call as
+      // read, and without a line here the request is replayed by the next boot
+      // scan or turn as if nobody had ever seen it: measured 27 Oct, a restart
+      // started t5 again from a round the operator had stopped, because its
+      // deferral had left no record.
+      appendRun(dir, { kind: 'delegate', callId: request.callId, task: request.task, outcome: 'deferred' });
       log.warn(`delegation deferred: a worker is already running in ${project}`);
       await wake(architectId, dir, {
         description: `delegate ${request.task} deferred`,
