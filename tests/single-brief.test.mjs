@@ -50,8 +50,8 @@ try {
   // ── Single, in a project that carries the earlier task's paperwork ──
   writePlan();
   const single = briefSession({ dir: DIR, role: 'architect', single: true });
-  expect('Single does not quote the stored requirement', !single.includes('Your work got interrupted'), single.slice(0, 200));
-  expect('Single does not re-tell the operator its old request', !single.includes('The operator\'s request'));
+  expect('Single does not quote the stored request', !single.includes('Continue work'), single.slice(0, 200));
+  expect('Single does not re-tell the operator its old request', !single.includes('Where this project stands'));
   expect('Single names the plan only to refuse it', single.includes('plan.json') && single.includes('ignore it'));
   expect('and says the plan is not this conversation', single.includes('not for this conversation'));
   expect('Single says there is nothing to hand work to', single.includes('do not delegate'));
@@ -66,9 +66,10 @@ try {
   expect('no plan file, no plan line', !singleBare.includes('plan.json'), singleBare);
   expect('no plan file, still a single conversation', singleBare.includes('do not delegate'));
 
-  // ── Multi is untouched by any of it ──
+  // ── Multi quotes the project's *latest* request, not its first ──
   const multi = briefSession({ dir: DIR, role: 'architect', single: false });
-  expect('Multi still quotes the requirement', multi.includes('Your work got interrupted'));
+  expect('Multi quotes the latest request', multi.includes('Continue work'));
+  expect('Multi does not quote the original one', !multi.includes('Build a Windows app with a graph'));
   expect('Multi still points at the plan it owns', multi.includes('you own this file'));
   expect('Multi still has the judge, not build rule', multi.includes('You judge; you do not build'));
   expect('Multi does not carry the Single refusal', !multi.includes('do not delegate'));
@@ -81,8 +82,7 @@ try {
   expect('the Single skills line says neither', !/judge/.test(chatSkills) && !/your report/.test(chatSkills), chatSkills);
   expect('the Single skills line still names the skill', chatSkills.includes('visual-review'));
 
-  // ── a Single turn does not write into the earlier task's requirement ──
-  const before = fs.readFileSync(path.join(DIR, '.synapse', 'requirement.md'), 'utf8');
+  // ── a Single turn is recorded as a chat, never as the project's request ──
   const makeApi = (singleMode) => {
     const engine = {
       status: () => ({ ready: true, kind: 'stub' }),
@@ -113,16 +113,19 @@ try {
       guard: null,
     });
   };
-
+  const docPath = path.join(DIR, '.synapse', 'project.md');
+  const legacyPath = path.join(DIR, '.synapse', 'requirement.md');
   await makeApi(true).sendMessage('ses_chat', { text: 'Copy the exe to E:/Portable Software/Fever Tracker' });
-  expect(
-    'a Single message is not appended to the requirement',
-    fs.readFileSync(path.join(DIR, '.synapse', 'requirement.md'), 'utf8') === before,
-  );
+  const afterSingle = fs.existsSync(docPath) ? fs.readFileSync(docPath, 'utf8') : '';
+  expect('a Single message creates the project document', Boolean(afterSingle), afterSingle.slice(0, 120));
+  expect('the Single message is in the log', afterSingle.includes('Copy the exe to E:/Portable Software/Fever Tracker'));
+  expect('it does not become the project request', /Request: Continue work/.test(afterSingle), afterSingle.slice(0, 240));
+  expect('the old requirement file is archived rather than read beside it', !fs.existsSync(legacyPath));
 
   await makeApi(false).sendMessage('ses_multi', { text: 'Now build the settings screen' });
-  const after = fs.readFileSync(path.join(DIR, '.synapse', 'requirement.md'), 'utf8');
-  expect('a Multi message still is', after.includes('Now build the settings screen') && after.startsWith(before));
+  const after = fs.readFileSync(docPath, 'utf8');
+  expect('a Multi message becomes the project request', /Request: Now build the settings screen/.test(after), after.slice(0, 260));
+  expect('the Single message still keeps its place in the log', after.includes('Copy the exe to E:/Portable Software/Fever Tracker'));
 } finally {
   fs.rmSync(ROOT, { recursive: true, force: true });
 }

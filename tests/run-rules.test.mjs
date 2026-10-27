@@ -14,7 +14,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { readPlan, briefSession, appendAnswers } from '../src/plans.js';
+import { readPlan, briefSession } from '../src/plans.js';
+import { appendDecision as appendAnswers } from '../src/project-doc.js';
 import { contextStats, windowRoom, windowAction, steerDue, nextRung, countedAttempts, attemptFailed, modelChangedSinceAttempt, redeemModel, promptSize, compactionEvents, compactionMessages, resolveWindow, engineCompactAt, watchdogRoom } from '../src/runs.js';
 import { createHarnessGuard } from '../src/harness.js';
 
@@ -184,21 +185,22 @@ try {
     fields,
     answer: { ot: 'Allow amber for warnings', bad: 'Ink + glyph, no hue' },
   });
-  const file = path.join(dir, '.synapse', 'decisions.md');
+  const file = path.join(dir, '.synapse', 'project.md');
   const first = fs.readFileSync(file, 'utf8');
   expect('the answer is written as a line a model can read', /\*\*Overtime flag style\*\* -> Allow amber/.test(first), first.slice(-80));
-  expect('the file says an answered question is settled', /settled/.test(first));
+  expect('the document says an answered question is settled', /Decisions in force/.test(first), first.slice(0, 300));
   appendAnswers(dir, { fields: [fields[0]], answer: { ot: 'Green + text only' } });
   const both = fs.readFileSync(file, 'utf8');
   expect('answers append, they never overwrite', both.includes('Allow amber') && both.includes('Green + text only'));
+  expect('the head carries the newest answer to a question', /Overtime flag style -> Green \+ text only/.test(both), both.slice(0, 400));
   appendAnswers(dir, { fields: [fields[0]], answer: { ot: '' } });
   expect('a blank answer is recorded as blank', fs.readFileSync(file, 'utf8').includes('(left blank)'));
 
   const brief = briefSession({ dir, role: 'designer' });
-  expect('the brief points at the answers file', brief.includes('.synapse/decisions.md'));
+  expect('the brief points at the project document', brief.includes('.synapse/project.md'));
   expect('the brief says not to re-ask', /never ask a question it already answers/.test(brief));
   const before = briefSession({ dir: path.join(ROOT, 'still-none'), role: 'designer' });
-  expect('no answers file, no line about one', !before.includes('decisions.md'));
+  expect('no document, no line about one', !before.includes('project.md'));
 }
 
 // ── the coder ladder moves only when a coder failed ──────────────

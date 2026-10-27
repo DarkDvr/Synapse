@@ -100,17 +100,18 @@ function harness({ listFormsThrows = false, directory = null } = {}) {
   check('and the failure is written down', warnings.some((w) => w.includes('engine said no')), warnings.join(' | '));
 }
 
-// ── the answer is written where a compaction cannot reach it ─────
+// ── the answer is written where a deleted conversation cannot reach it ─
 {
   const dir = path.join(os.tmpdir(), `synapse-reply-${process.pid}`, 'project');
   fs.rmSync(dir, { recursive: true, force: true });
   fs.mkdirSync(dir, { recursive: true });
   const { api, warnings } = harness({ directory: dir });
   await api.replyForm('ses_x', 'frm_1', { answer: { 0: 'Minimal pass/fail only' } });
-  const file = path.join(dir, '.synapse', 'decisions.md');
+  const file = path.join(dir, '.synapse', 'project.md');
   const text = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '';
-  check('the answer is written to .synapse/decisions.md', text.includes('Minimal pass/fail only'), text.slice(0, 120));
+  check('the answer is written to .synapse/project.md', text.includes('Minimal pass/fail only'), text.slice(0, 120));
   check('the question is written with it, so the answer means something', text.includes('How should the report be structured?'), text.slice(0, 160));
+  check('and the head carries the decision for the brief', /Decisions in force:[\s\S]*Minimal pass\/fail only/.test(text), text.slice(0, 400));
   check('writing it logs nothing', warnings.length === 0, warnings.join(' | '));
   fs.rmSync(path.dirname(dir), { recursive: true, force: true });
 }

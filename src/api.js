@@ -4,7 +4,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { TBD_TITLE } from './titles.js';
-import { ensurePlan, readPlan, readRuns, runLedger, briefSession, logPlanState, BRIEF_KEY, appendRequirement, appendAnswers } from './plans.js';
+import { ensurePlan, readPlan, readRuns, runLedger, briefSession, logPlanState, BRIEF_KEY } from './plans.js';
+import { ensureProjectDoc, appendRequest as appendProjectRequest, appendChat, appendDecision as appendProjectDecision } from './project-doc.js';
 import { skillRules, describeSkills } from './skills.js';
 import { rulesFor, decide, resolvePath, refusalNote } from './permissions.js';
 import { stopTargets } from './stop.js';
@@ -241,6 +242,14 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
    */
   async function brief(sessionId, directory, role, auto = false) {
     try {
+      // The project's document is created (and the two old files imported) the
+      // first time a project is briefed, so the brief can name one file. It is
+      // idempotent and cheap; a failure costs the name, not the turn.
+      try {
+        ensureProjectDoc(directory);
+      } catch (err) {
+        app.warn(`could not prepare the project document in ${directory}: ${err.message}`);
+      }
       // Which mode the session is in decides what the brief says: Single is a chat
       // with tools, Multi is the harness. The rule set is the only place the mode is
       // recorded, so it is read here rather than passed down by every caller.
@@ -1242,12 +1251,15 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
       } catch (err) {
         app.warn(`brief skipped for ${sessionId}: ${err.message}`);
       }
-      // The operator's own words, written down before any model can restate
-      // them. This file is the requirement every role is judged against — which is
-      // why a Single conversation does not write to it: there are no roles and no
-      // plan to judge against, and appending a chat would put words into the
-      // earlier task's record that were never asked of it.
-      if (directory && !single) appendRequirement(directory, text || `(attached ${attachments.length} file(s))`);
+      // The operator's own words, written down before any model can restate them.
+      // A Multi message is the project's request; a Single one is a side ask, so it
+      // is logged as a chat and never becomes the head's Request. Both are in the
+      // same file, so nothing the operator said is lost when a conversation ends.
+      if (directory) {
+        const body = text || `(attached ${attachments.length} file(s))`;
+        const written = single ? appendChat(directory, body) : appendProjectRequest(directory, body);
+        if (written && written.ok === false) app.warn(`could not write to the project document: ${written.error}`);
+      }
       // Speaking is the answer to "what now" after a stop: whatever they stopped
       // may run again from here.
       if (directory) runs?.resume?.(directory);
@@ -1584,17 +1596,18 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
         per.set(signature, { answer, asks: 1 });
         questionHistory.set(sessionId, per);
       }
-      // Written where the model can find it after a compaction, which is the one
-      // thing the transcript cannot survive. Best-effort: a session outside a
-      // project has no .synapse, and an answer already given is not worth failing
-      // the reply over.
+      // Written where the model can find it after a compact, which is the one
+      // thing a deleted conversation cannot survive. Best-effort: a session
+      // outside a project has no .synapse, and an answer already given is not
+      // worth failing the reply over.
       try {
         const session = await safe(() => engine.getSession(sessionId), null);
         if (session?.directory && Array.isArray(form?.fields) && form.fields.length) {
-          appendAnswers(session.directory, { signature, fields: form.fields, answer });
+          const written = appendProjectDecision(session.directory, { fields: form.fields, answer });
+          if (written && written.ok === false) app.warn(`could not write the operator's answer: ${written.error}`);
         }
       } catch (err) {
-        app.warn(`could not write the operator's answer to decisions.md: ${err.message}`);
+        app.warn(`could not write the operator's answer to the project document: ${err.message}`);
       }
       return { ok: true };
     },

@@ -112,6 +112,7 @@ test('the scratch sweep takes scripts and the doubled .synapse, and nothing else
       path.join(syn, 'features.json'),
       path.join(syn, 'requirement.md'),
       path.join(syn, 'decisions.md'),
+      path.join(syn, 'project.md'),
       path.join(syn, 'design', 'design.md'),
       path.join(syn, 'design', 'mock-1.html'),
       path.join(syn, 'qc_findings', 'qc-1.md'),
@@ -134,7 +135,7 @@ test('the scratch sweep takes scripts and the doubled .synapse, and nothing else
     assert.ok(found.includes('.synapse/design/contrast.mjs'), 'contrast.mjs is scratch');
     assert.ok(found.includes('.synapse/design/serve.mjs'), 'serve.mjs is scratch');
     assert.ok(found.some((f) => f.startsWith('.synapse/design/.synapse')), 'the doubled .synapse is scratch');
-    for (const f of ['plan.json', 'runs.jsonl', 'features.json', 'requirement.md', 'decisions.md']) {
+    for (const f of ['plan.json', 'runs.jsonl', 'features.json', 'requirement.md', 'decisions.md', 'project.md']) {
       assert.ok(!found.some((g) => g.endsWith(`/${f}`)), `${f} must be kept`);
     }
     assert.ok(!found.some((g) => g.endsWith('design.md')), 'design.md is a deliverable');

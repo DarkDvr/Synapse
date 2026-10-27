@@ -491,14 +491,25 @@ list" below). Roles are identities plus one mandate each (`ROLE_MANDATES` in
 | qc | `.synapse/qc_findings/` | `qc-N.md`: ids `Q1…`, severity, exact repro |
 | coders | the project | `bin/` |
 
-**The file contract is the point.** `.synapse/` holds `requirement.md` (written by
-the harness from the operator's own message, append-only — never a model's
-paraphrase), `decisions.md` (the operator's answers to every question asked, same
-rule), `plan.json`, `features.json` (confirmed + rejected, every confirmed
-item naming the task that delivers it), `ideas/`, `design/`, `qc_findings/` and
-`runs.jsonl`. Each brief is assembled from those files, so a worker receives the
-operator's words and the confirmed features verbatim, and the rejected ones are
-never passed on.
+**The file contract is the point.** `.synapse/` holds `project.md` — the project's
+living document, written by the harness, never by a model: a `## Current` head
+(the latest request and the decisions still in force), the `## Handover` from the
+last compact, the operator's own `## Notes`, and an append-only `## Log` of every
+request and every answer. It replaced `requirement.md` and `decisions.md`; those
+are imported into the Log on first use and archived. It also holds `plan.json`,
+`features.json` (confirmed + rejected, every confirmed item naming the task that
+delivers it), `ideas/`, `design/`, `qc_findings/` and `runs.jsonl`. Each brief is
+assembled from those files, so a worker receives the operator's words and the
+confirmed features verbatim, and the rejected ones are never passed on.
+
+**The head is why the document exists.** The brief used to quote the first 1,600
+characters of `requirement.md` — the project's *original* request — so on a long
+project the model opened standing in its first day (see the Single-mode incident
+below). The head is rebuilt from the Log on every write, so "the request" is
+always the last one the operator sent, and the full history is one file away.
+Single-mode messages are logged as `### chat` and never become the head's
+request; the head falls back to the newest chat only when a project never had a
+Multi request at all.
 
 **An example in a brief is a template, not an illustration.** The Inventor's first
 mandate said "build me a clock, go" and offered an alarm, a theme and a second time
@@ -926,9 +937,9 @@ brief is not enough; the brief has to overrule what the model can see.
 
 Measured 26 Oct: asked to copy one exe into a folder, the model read
 `.synapse/plan.json`, decided from `t21` whether the build was current, and
-reported on `t18` and `t20`. The brief had also quoted
-`.synapse/requirement.md` verbatim — the old campaign, "Continue work" and all —
-because Single used to present it as "the operator's request".
+reported on `t18` and `t20`. The brief had also quoted the stored requirement
+verbatim — the old campaign, "Continue work" and all — because Single used to
+present it as "the operator's request".
 
 What the Single brief says now, and nothing else:
 
@@ -937,12 +948,16 @@ What the Single brief says now, and nothing else:
 - **Only when a plan file exists**: it was written for a different task, it is to
   be ignored, its tasks are not this conversation's, and it is not to be followed
   or updated.
+- **The operator's standing Notes from `project.md`, when there are any** — those
+  are about the project, not the old campaign, and they apply to a one-off ask too.
 
-It does not quote the requirement, does not mention `decisions.md`, and does not
-call the session a role — the skills line drops "this role", "judge the next piece
-of work" and "your report" (`describeSkills(..., { chat: true })`). A Single
-message is no longer appended to the requirement file either; that file is the
-earlier task's record. A delegation attempted anyway is still refused in the
+It does not quote the project's request or its handover, does not point at the
+plan as a work list, and does not call the session a role — the skills line drops
+"this role", "judge the next piece of work" and "your report"
+(`describeSkills(..., { chat: true })`). A Single message is logged in
+`project.md` as a `### chat` entry, but it never becomes the head's request: that
+is a Multi message, and letting a side ask overwrite it is how the earlier task's
+record got polluted. A delegation attempted anyway is still refused in the
 runner, but the refusal now says "do it yourself" rather than "ask the operator to
 switch to Multi" — the second reads as an errand, and the operator did not ask for
 one.
@@ -976,7 +991,7 @@ unnamed.
 
 ## A session's memory is the project's, so deleting sessions leaves it behind
 
-`.synapse` — the plan, the requirement, the answers, the ideas, the design, the
+`.synapse` — the plan, the project document, the ideas, the design, the
 findings and the run log — belongs to the **directory**, not to a session. Two
 sessions in one project share one plan by design: the Architect owns the file, and
 a second session continues the work. The consequence the operator met: delete every
@@ -1033,13 +1048,14 @@ question-loop guard is what stops it.
 
 What is ours is that the answer had no life beyond that transcript. A compaction
 replaces older turns with a summary, and a summary is a model's account of an
-answer; the requirement file exists for exactly this reason and the answer needed
-the same treatment. So `replyForm` now appends to **`.synapse/decisions.md`** — the
-question titles and the operator's values, verbatim, append-only, written by
-Synapse and never by a model, with a header saying an answered question is settled.
-Every brief that finds the file says so: *"read it before you ask anything, and
-never ask a question it already answers"*. The Architect's features multiselect
-lands there too, which is what makes a rejected idea stay rejected.
+answer; the project's document exists for exactly this reason and the answer needed
+the same treatment. So `replyForm` appends to **`.synapse/project.md`**, under the
+Log, as a `### decision` entry — the question titles and the operator's values,
+verbatim, written by Synapse and never by a model. The head then lists the
+decisions still in force, and every brief that sees the file says so: *"the
+operator's answers so far are in `.synapse/project.md` … read it before you ask
+anything, and never ask a question it already answers"*. The Architect's features
+multiselect lands there too, which is what makes a rejected idea stay rejected.
 
 Two edges worth knowing. The guard's own memory (`questionHistory`) is in-process:
 a restart forgets which questions were already asked, so the file is the only

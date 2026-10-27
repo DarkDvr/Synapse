@@ -232,12 +232,21 @@ export async function sweepProject(dir, { log = null, keep = [], dryRun = false 
  *
  * Deliberately narrow, because this deletes: only scripts, logs and temp files;
  * only inside `.synapse/`; never a file the plan names in `reads`, and never one of
- * the files Synapse itself reads (plan, runs, features, requirement, decisions).
+ * the files Synapse itself reads (plan, runs, features, the project document, and
+ * the two files it was made from for projects written before it).
  * A nested `.synapse` under `.synapse` is always scratch. Anything it removes is
  * logged by path, and `dryRun` lists instead of deleting.
  */
 const SCRATCH = /\.(mjs|js|cjs|ts|ps1|sh|bat|cmd|py|tmp|log|bak)$/i;
-const KEEP = new Set(['plan.json', 'runs.jsonl', 'features.json', 'requirement.md', 'decisions.md']);
+const KEEP = new Set([
+  'plan.json',
+  'runs.jsonl',
+  'features.json',
+  'project.md',
+  // The old pair: imported into project.md on first use, and still read until then.
+  'requirement.md',
+  'decisions.md',
+]);
 
 export function findScratch(dir, { named = [] } = {}) {
   const root = path.join(dir, '.synapse');

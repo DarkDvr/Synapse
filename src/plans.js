@@ -18,6 +18,7 @@
 // the two never have to be written by the same party.
 import fs from 'node:fs';
 import path from 'node:path';
+import { digest as projectDigest, DOC_RELATIVE } from './project-doc.js';
 
 // The roles the topology has cards for, in card order. The `auditor` and the
 // `critic` were retired: the Architect verifies its own delegations against the
@@ -54,9 +55,7 @@ export const ORIGINS = ['plan', 'found', 'operator'];
 export const PLAN_DIR = '.synapse';
 export const PLAN_NAME = 'plan.json';
 export const RUNS_NAME = 'runs.jsonl';
-export const REQUIREMENT_NAME = 'requirement.md';
 export const FEATURES_NAME = 'features.json';
-export const DECISIONS_NAME = 'decisions.md';
 
 /** The instruction-entry key the brief is attached to, per session. */
 export const BRIEF_KEY = 'synapse.plan';
@@ -122,95 +121,6 @@ export function setTaskStatus(dir, taskId, status) {
     task.status = status;
     fs.writeFileSync(file, `${JSON.stringify(plan, null, 2)}\n`, 'utf8');
     return true;
-  } catch {
-    return false;
-  }
-}
-
-/** The operator's words, verbatim, append-only.
- *
- * Synapse writes this, never a model: a requirement that a model restates is a
- * requirement that can drift, and every role downstream is judged against the
- * operator's own sentences rather than the Architect's summary of them. */
-export function appendRequirement(dir, text) {
-  const body = String(text || '').trim();
-  if (!body || !dir) return false;
-  const target = path.join(String(dir), PLAN_DIR, REQUIREMENT_NAME);
-  try {
-    fs.mkdirSync(path.dirname(target), { recursive: true });
-    const exists = fs.existsSync(target);
-    const header = exists ? '' : `# The operator's request\n\n`;
-    const separator = exists ? '\n---\n\n' : '';
-    fs.appendFileSync(target, `${header}${separator}${body}\n`, 'utf8');
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-export function readRequirement(dir) {
-  try {
-    // The header is for a human opening the file; a brief does not need it.
-    return fs
-      .readFileSync(path.join(String(dir || ''), PLAN_DIR, REQUIREMENT_NAME), 'utf8')
-      .replace(/^# The operator's request\s*\n+/, '')
-      .trim();
-  } catch {
-    return '';
-  }
-}
-
-/** The operator's answers to the questions the roles asked, verbatim, append-only.
- *
- * An answer is delivered to a model as the tool's result, which lives in the
- * transcript — and a transcript is exactly what a compaction replaces with a
- * summary. A designer was given the same two decisions three times and asked
- * again 90 seconds later; a file on disk is the one form of memory a compaction
- * cannot touch. So the answer goes where the plan and the requirement go: into
- * .synapse, written by Synapse, never restated by a model.
- *
- * It also makes an answered question *settled* in a place every later turn reads,
- * which is the only way to stop the next worker asking it again. */
-export function appendAnswers(dir, { at = Date.now(), signature = '', fields = [], answer = {} } = {}) {
-  if (!dir) return false;
-  const rows = (Array.isArray(fields) ? fields : [])
-    .map((f) => {
-      const key = String(f?.key || f?.name || '').trim();
-      const title = String(f?.title || key).trim();
-      const said = answer?.[key];
-      const raw = Array.isArray(said) ? said.join(', ') : said == null ? '' : String(said);
-      // "(Recommended)" is the Architect nudging the operator, not part of what
-      // they decided. Recording it would make a later reader think the operator
-      // weighed the options when in fact they took the one marked for them.
-      const value = raw.replace(/\s*\(recommended\)/gi, '').trim();
-      return value ? `- **${title}** -> ${value}` : `- **${title}** -> (left blank)`;
-    })
-    .filter(Boolean);
-  if (!rows.length) return false;
-  const when = new Date(at);
-  const stamp = `${when.getDate()} ${when.toLocaleString('en-GB', { month: 'short' })} ${when.getFullYear()}, ${String(
-    when.getHours(),
-  ).padStart(2, '0')}:${String(when.getMinutes()).padStart(2, '0')}`;
-  const target = path.join(String(dir), PLAN_DIR, DECISIONS_NAME);
-  try {
-    fs.mkdirSync(path.dirname(target), { recursive: true });
-    const exists = fs.existsSync(target);
-    const header =
-      '# The operator\'s answers\n\n' +
-      'Written by Synapse from the operator\'s own replies, append-only. A question answered here is settled: ' +
-      'read this file before you ask one, and never ask it again.\n';
-    const block = `\n## ${stamp}${signature ? ` - ${signature}` : ''}\n\n${rows.join('\n')}\n`;
-    fs.appendFileSync(target, exists ? block : `${header}${block}`, 'utf8');
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-/** How many answers are on file, and the file's own path for the brief. */
-export function decisionsExist(dir) {
-  try {
-    return fs.readFileSync(path.join(String(dir || ''), PLAN_DIR, DECISIONS_NAME), 'utf8').includes('\n## ');
   } catch {
     return false;
   }
@@ -545,7 +455,6 @@ export function readPlan(dir) {
     stat: { size: stat.size, mtime: stat.mtimeMs },
     problems,
     features,
-    requirement: readRequirement(dir),
     plan: { version: Number(parsed.version) || 1, goal, summary: asText(parsed.summary), tasks },
   };}
 
@@ -884,8 +793,18 @@ export function fingerprintDiff(before = {}, after = {}, allowFolder = '') {
  */
 export function briefSession({ dir, role = 'architect', auto = false, single = false, skills = '', focus = '', instructions = '' } = {}) {
   const state = readPlan(dir);
+  // The project's own document: what was asked, what was decided, the operator's
+  // standing notes and the last compact's handover. This is what makes a long
+  // project survivable — a fresh conversation reads it instead of the transcript
+  // it no longer has.
+  const doc = projectDigest(dir);
   const lines = [];
   const isArchitect = role === 'architect';
+
+  const capped = (text, n) => {
+    const s = String(text || '').trim();
+    return s.length > n ? `${s.slice(0, n).trimEnd()} […]` : s;
+  };
 
   lines.push(`Synapse project: ${path.basename(String(dir || '')) || 'unknown'}`);
 
@@ -919,6 +838,9 @@ export function briefSession({ dir, role = 'architect', auto = false, single = f
       );
     }
     if (instructions) lines.push(`The operator adds: ${instructions}`);
+    // The operator's own standing rules are about this project, not about the old
+    // campaign: they apply to a one-off request too. The stored requests do not.
+    if (doc.notes) lines.push(`The operator's standing notes for this project:\n${capped(doc.notes, 800)}`);
     if (skills) lines.push(skills);
     lines.push(
       `If you need a decision from the operator, ask with the question tool: give the question a short human ` +
@@ -928,16 +850,17 @@ export function briefSession({ dir, role = 'architect', auto = false, single = f
   }
 
 
-  // The operator's own words, verbatim. Capped: the brief is re-read on every
-  // step, and a long conversation is not the brief's job — the file keeps all
-  // of it, and this is the ask itself.
-  if (state.requirement) {
-    const text =
-      state.requirement.length > 1600
-        ? `${state.requirement.slice(0, 1600).trimEnd()} [...]`
-        : state.requirement;
-    lines.push(`The operator's request (verbatim, also in ${PLAN_DIR}/${REQUIREMENT_NAME}):\n${text}`);
+  // The project's document, in the three parts the brief needs: where it stands
+  // (the latest request and the decisions still in force), the operator's own
+  // standing notes, and the handover from the last compact. Each is capped: the
+  // brief is re-read on every step, and the Log is what holds the whole history —
+  // the model reads that file when it needs the detail.
+  if (doc.current) {
+    const origin = doc.exists ? ` (from ${DOC_RELATIVE}; the Log holds every request and answer)` : '';
+    lines.push(`Where this project stands${origin}:\n${capped(doc.current, 1800)}`);
   }
+  if (doc.notes) lines.push(`The operator's standing notes for this project:\n${capped(doc.notes, 900)}`);
+  if (doc.handover) lines.push(`The handover from the last compact:\n${capped(doc.handover, 2000)}`);
   lines.push(
     isArchitect
       ? `Project plan: ${planRelPathPlain()} - you own this file and you are the only role that may write it. ` +
@@ -1023,13 +946,13 @@ export function briefSession({ dir, role = 'architect', auto = false, single = f
     );
   }
 
-  // The operator's answers to everything asked so far. It is on disk because a
-  // compaction replaces the transcript that carried the answer, and a worker that
-  // lost it asks the same settled question again - which is a loop the guard has
-  // to stop, at the cost of the run. Reading the file is cheaper than that.
-  if (decisionsExist(dir)) {
+  // Everything the operator has settled is in the project document's Log, and
+  // the decisions still in force are quoted above. A worker that lost the
+  // transcript in a compaction asks the same question again unless it knows the
+  // file is there — so it is named, and the rule is stated.
+  if (doc.exists && doc.log) {
     lines.push(
-      `The operator's answers so far are in ${PLAN_DIR}/${DECISIONS_NAME}. Read it before you ask ` +
+      `The operator's answers so far are in ${DOC_RELATIVE}, under the Log. Read it before you ask ` +
         `anything, and never ask a question it already answers - those decisions are settled.`,
     );
   }
