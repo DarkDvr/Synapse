@@ -187,13 +187,17 @@ why it can disagree with what the operator meant when they clicked twice.
 - Risk taken: the file holds the operator's words, so the write is temp+rename
   and the old files are archived before they are removed.
 
-### Phase 2 — mode at send
-- Toggle becomes pending-only; `sendMessage` applies the mode once; the toggle
-  is disabled while busy; the applied mode is readable by other views.
-- Tests: toggling sends no PATCH; a send applies exactly one; Single and Multi
-  both take effect on the first message; a compact carries the mode.
-- Done when clicking back and forth ten times and sending once behaves like
-  clicking once and sending.
+### Phase 2 — mode at send — **built 27 Oct**
+- The toggle changes only the page's pending choice. No PATCH, no toast, no
+  busy-guarded request.
+- `sendMessage` carries `mode`; the server applies the ruleset (only if it
+  differs), announces `session.mode` for other windows, briefs with that same
+  mode and prompts. One message, one mode.
+- Tests: 6 in `mode-at-send.test.mjs` (apply once and before the prompt, no
+  patch when unchanged, two sends are one apply, Multi clears the ruleset, no
+  mode means the applied one, the announcement). 173/173 on the suite.
+- Still open for phase 3: the ruleset is a session property, so a compact must
+  carry the applied mode into the new session.
 
 ### Phase 3 — compaction
 - The chip (hidden unless available), the 3-second red confirm, "Compacting…",

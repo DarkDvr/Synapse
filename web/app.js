@@ -1816,77 +1816,31 @@ function applyRoleCardsLayout({ animate = true, from = null, remeasure = false }
   }, 320);
 }
 
-// Which mode switch is the current one, and the queue its engine patch travels in
-// (see switchMode: a toggle clicked twice must not leave the engine on the mode the
-// operator left).
-let modeSeq = 0;
-let modePatch = Promise.resolve();
-
-async function switchMode() {
-  if (state.view !== 'session' || !state.sessionId) {
-    toast('No Session Open', 'Open or start a session to switch modes.');
-    return;
-  }
-  if (state.busyInfo?.busy) {
-    toast('Project Busy', 'Switch modes when the project is idle — work is happening now.');
-    return;
-  }
-  const previous = state.mode;
-  const next = previous === 'single' ? 'multi' : 'single';
-  // Whose switch is this. The mode is flipped on screen at once and the engine is
-  // told afterwards, so a second click inside that request used to leave the
-  // engine's ruleset holding whichever answer arrived last — which can be the mode
-  // the operator has already left, and then delegation is refused while the cards
-  // say Multi. The patch is chained so they apply in the order they were asked
-  // for, and only the newest switch is allowed to report or revert.
-  const seq = ++modeSeq;
-  // The reader's place, read now rather than carried from whenever it was last
-  // touched, and settled once before anything moves: a chat that was a line short of
-  // the end is put at the end here, where it is a small nudge, instead of being held
-  // a line short through the switch and looking scrolled up afterwards.
+// Which mode the composer is set to. It is a choice about the *next message*,
+// not engine state: the toggle used to PATCH the session's ruleset on every
+// click, so a click and a send could disagree and a busy check had to guard it.
+// Now a click only changes what the send will say, and `sendMessage` applies the
+// mode once, before the prompt.
+function applyMode(mode) {
+  if (mode !== 'single' && mode !== 'multi') return;
+  if (state.mode === mode) return;
+  // The reader's place, settled once before anything moves: a chat that was a
+  // line short of the end is put at the end here, where it is a small nudge,
+  // instead of being held a line short through the switch.
   captureChatSlack();
   restoreChatSlack();
-  state.mode = next;
+  state.mode = mode;
   renderMode();
-  // The plan panel is different in Single (a summary, no task list). Repaint it
-  // before the cards animate, not 340ms later on the fit timer: while it still
-  // held the Multi rendering it sized the row, and the chat was squeezed shut for
-  // the length of the transition — the conversation seemed to vanish.
   renderPlan();
   setView();
-  // Pinned before the await: the session can be closed from the rail while this is
-  // in flight, and the patch belongs to the session that was switched.
-  const sessionId = state.sessionId;
-  try {
-    // Single denies only the delegation tool; Multi clears the ruleset. The
-    // engine applies this to later turns of the same session.
-    const permissions = next === 'single' ? SINGLE_PERMISSIONS : [];
-    modePatch = modePatch
-      .catch(() => {})
-      .then(() => api('PATCH', `/api/sessions/${encodeURIComponent(sessionId)}`, { permissions }));
-    await modePatch;
-    if (seq !== modeSeq) return;
-    const s = findSession(sessionId);
-    if (s) s.single = next === 'single';
-  } catch (err) {
-    // A newer click owns the screen now: it has already decided what to show and
-    // sent its own patch, so this failure is not ours to report.
-    if (seq !== modeSeq) return;
-    state.mode = previous;
-    renderMode();
-    // The panel was painted for the mode we are falling back out of: repaint it, or
-    // Single sits beside Multi's task list when the switch fails.
-    renderPlan();
-    setView();
-    // The session may simply not exist any more (deleted in another tab, or by
-    // a scaffolding sweep). Re-reading the projects closes the dead view instead
-    // of complaining about a session that is gone.
-    if (/not found|404/i.test(String(err.message || ''))) {
-      await loadProjects();
-      return;
-    }
-    toast('Could Not Switch Mode', err.message);
-  }
+}
+
+function switchMode() {
+  if (state.view !== 'session' || !state.sessionId) return;
+  // Disabled while a run is live (renderMode); the click is a no-op if it slips
+  // through, because the pending choice cannot apply to a turn already running.
+  if (state.busyInfo?.busy) return;
+  applyMode(state.mode === 'single' ? 'multi' : 'single');
 }
 
 // One model picker and one thinking-effort button per role card. The model
@@ -5598,6 +5552,10 @@ async function send() {
     scrollChatToEnd();
     await api('POST', `/api/sessions/${encodeURIComponent(state.sessionId)}/messages`, {
       text,
+      // The mode is this message's, applied by the server before the prompt, so
+      // clicking the toggle and then sending is one decision rather than two
+      // requests that can disagree.
+      mode: state.mode,
       // The bytes go with the message, in the engine's own shape, so the file is
       // the operator's message rather than something the harness put on disk.
       files: files.map((f) => ({ name: f.name, mime: f.mime, data: f.data })),
@@ -5910,8 +5868,14 @@ function connectStream() {
       return;
     }
 
-    // Synapse's own notification: the session was just auto-named.
+    // Synapse's own notification: the session was just auto-named, or a send
+    // applied a mode. The mode is the applied one, so another window's toggle
+    // and plan pane follow it — a pending choice on this page is not overwritten
+    // if it is the one that sent, because the event carries the same value.
     if (ev.kind === 'sessions') {
+      if (ev.type === 'session.mode' && ev.sessionId === state.sessionId && !state.busy) {
+        applyMode(ev.mode);
+      }
       reloadProjects();
       return;
     }

@@ -7,7 +7,7 @@ import { TBD_TITLE } from './titles.js';
 import { ensurePlan, readPlan, readRuns, runLedger, briefSession, logPlanState, BRIEF_KEY } from './plans.js';
 import { ensureProjectDoc, appendRequest as appendProjectRequest, appendChat, appendDecision as appendProjectDecision } from './project-doc.js';
 import { skillRules, describeSkills } from './skills.js';
-import { rulesFor, decide, resolvePath, refusalNote } from './permissions.js';
+import { rulesFor, decide, resolvePath, refusalNote, SINGLE_RULES } from './permissions.js';
 import { stopTargets } from './stop.js';
 import { PROJECTS_ROOT, SKILLS_DIR, GENERAL_DIR, ROOT } from './paths.js';
 import { mayRecycleFolder } from './projects.js';
@@ -240,7 +240,7 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
    * typed it. Failure is logged once and never blocks the turn — an engine
    * without the concept still works, it just gets no brief.
    */
-  async function brief(sessionId, directory, role, auto = false) {
+  async function brief(sessionId, directory, role, auto = false, { single: forcedSingle = null } = {}) {
     try {
       // The project's document is created (and the two old files imported) the
       // first time a project is briefed, so the brief can name one file. It is
@@ -251,12 +251,18 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
         app.warn(`could not prepare the project document in ${directory}: ${err.message}`);
       }
       // Which mode the session is in decides what the brief says: Single is a chat
-      // with tools, Multi is the harness. The rule set is the only place the mode is
-      // recorded, so it is read here rather than passed down by every caller.
-      let single = false;
-      try {
-        single = (await engine.getSession(sessionId))?.single === true;
-      } catch { /* the brief still works without it */ }
+      // with tools, Multi is the harness. A send passes the mode it is about to
+      // apply, because the engine's own record may be a moment behind it.
+      let single;
+      if (forcedSingle === null) {
+        try {
+          single = (await engine.getSession(sessionId))?.single === true;
+        } catch {
+          single = false; /* the brief still works without it */
+        }
+      } else {
+        single = forcedSingle === true;
+      }
       const text = briefSession({
         dir: directory,
         role,
@@ -1239,15 +1245,25 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
         drivers.set(sessionId, { name: actor.name, id: actor.id || null, at: Date.now() });
         if (busy.directory) drivers.set(normDir(busy.directory), { name: actor.name, id: actor.id || null, at: Date.now() });
       }
-      // Re-brief before the turn: the plan may have changed since the last one,
-      // and an unchanged plan is not sent twice.
+      // The mode is a choice about *this message*. It is applied here, once, so a
+      // toggle clicked ten times and then sent applies exactly one — and the mode
+      // the engine enforces is always the one this turn was briefed with.
+      const asked = body?.mode === 'single' ? 'single' : body?.mode === 'multi' ? 'multi' : null;
       let directory = '';
       let single = false;
       try {
         const session = await engine.getSession(sessionId);
         directory = session?.directory || '';
-        single = session?.single === true;
-        await brief(sessionId, directory, 'architect', session?.auto === true);
+        const applied = session?.single === true ? 'single' : 'multi';
+        single = asked ? asked === 'single' : applied === 'single';
+        if (asked && asked !== applied) {
+          // Single denies the delegation tool; Multi clears the ruleset. Applied to
+          // later turns of this session, which is exactly this one.
+          await engine.updateSessionPermissions(sessionId, single ? SINGLE_RULES : []);
+          app.info(`mode ${applied} -> ${asked} for ${sessionId} (applied at send)`);
+          notify?.({ kind: 'sessions', type: 'session.mode', sessionId, mode: asked });
+        }
+        await brief(sessionId, directory, 'architect', session?.auto === true, { single });
       } catch (err) {
         app.warn(`brief skipped for ${sessionId}: ${err.message}`);
       }

@@ -921,12 +921,16 @@ Single. Both modes have the full toolset — that is the whole point.
 
 The mode is a per-session property read from `isSingleSession()`
 (`engines/base.js`); nothing is stored in config — `defaults.mode` was removed
-once the toggle became live. **A dedicated `chat` agent (tools denied, `steps: 1`)
-is the obvious design and it does not work**: the free tier rejected every request
-from a custom agent with a provider auth error (measured side by side — the
-custom-agent session failed at 20:45:37 while a default-agent session succeeded at
-20:45:40). Denying everything also defeats the purpose, because Single is meant to
-have tools. `POST /api/session` accepts `permissions`; `PATCH` replaces them.
+once the toggle became live. **It is applied at send, not on toggle** (27 Oct):
+`sendMessage` carries the mode, PATCHes the ruleset once if it differs from the
+session's, then briefs and prompts in that mode. A click that is never sent
+changes nothing, which is what "it doesn't matter until I send" means. **A
+dedicated `chat` agent (tools denied, `steps: 1`) is the obvious design and it
+does not work**: the free tier rejected every request from a custom agent with a
+provider auth error (measured side by side — the custom-agent session failed at
+20:45:37 while a default-agent session succeeded at 20:45:40). Denying everything
+also defeats the purpose, because Single is meant to have tools.
+`POST /api/session` accepts `permissions`; `PATCH` replaces them.
 
 ### A Single session is not told it is an Architect
 

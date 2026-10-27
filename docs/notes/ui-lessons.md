@@ -1349,13 +1349,22 @@ the wide layout was on screen — and JS wrote an inline height over the CSS `he
 1400px: no inline height, the plan holds column 2, the page does not scroll, the dock's
 bottom and the composer sit at 888/887 of a 900px window — and at 1600px, identically.
 
-**A toggle that tells the engine afterwards must send its patches in order.** The mode is
-flipped on screen at once and the permission `PATCH` follows, so two clicks inside one
+**A toggle that tells the engine afterwards must send its patches in order.** The mode was
+flipped on screen at once and the permission `PATCH` followed, so two clicks inside one
 request left the engine holding whichever answer arrived last — possibly the mode the
 operator had already left, which refuses delegation while the cards say Multi. The patches
-are chained and only the newest switch may report or revert a failure. Verified by
-double-clicking the toggle: the screen and the engine both end on Multi, the dock back at
+were chained and only the newest switch could report or revert a failure. Verified by
+double-clicking the toggle: the screen and the engine both ended on Multi, the dock back at
 348.875px.
+
+**27 Oct — the patch was the problem, so it is gone.** The toggle is now only the page's
+pending choice: a click changes the label, the plan pane and the cards, and touches nothing
+on the engine. `send` carries `mode`, and the server applies the ruleset once (only if it
+differs), then briefs with the same value and prompts. Clicking ten times and sending once
+is one apply; clicking and not sending is none. The toggle stays disabled while a run is
+live because the running turn's mode is already fixed — not because the engine cares about
+the click. A `session.mode` event tells another window the applied mode, so two views do
+not show different modes for the same chat.
 
 Two ways to measure this, both worth keeping. The layout tells you *where* boxes are; the
 pixels tell you whether anything was repainted: screenshot a fixed clip during the
