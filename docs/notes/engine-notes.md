@@ -511,6 +511,29 @@ Single-mode messages are logged as `### chat` and never become the head's
 request; the head falls back to the newest chat only when a project never had a
 Multi request at all.
 
+**Compacting a conversation is the one reset.** `POST /api/session/{id}/compact`
+is queued at the next step boundary, so from an idle chat it runs now. It does
+**not** delete the transcript: the engine's summary replaces what the model is
+sent, and the messages stay. So the reset is a sequence, and the order matters:
+
+1. `engine.compact(session)`; wait for a **new** `compaction` message with
+   `status: completed` and a `summary` (a completed row is `{status, reason,
+   model, summary}`, and the summary is the engine's own, written by the
+   project's model, shaped Objective / Requirements / Decisions / Work State).
+2. Write the summary into `project.md`'s `## Handover`, and a `### compact` line
+   into the Log. **Nothing is deleted before this succeeds.**
+3. Create a new session in the same folder with the project's mode,
+   Keep Building, model and the "Always Allow" grants; its metadata carries
+   `synapse.compacted {at, summary, messages}` — the post the new chat shows.
+4. Delete the old session and broadcast `project.compacted`, so a window looking
+   at it follows without a reload.
+
+A compaction the engine refuses, or one that never lands within the timeout,
+leaves the conversation exactly as it was: the handover is the point, so there is
+no silent discard. The chip that starts it is only shown when a compact can run
+(a project is open, nothing is working, there is something to discard), and a
+second click within three seconds is the confirmation.
+
 **An example in a brief is a template, not an illustration.** The Inventor's first
 mandate said "build me a clock, go" and offered an alarm, a theme and a second time
 zone as the shape of a good answer. It was written for the clock project and would

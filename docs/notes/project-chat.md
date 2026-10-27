@@ -199,17 +199,22 @@ why it can disagree with what the operator meant when they clicked twice.
 - Still open for phase 3: the ruleset is a session property, so a compact must
   carry the applied mode into the new session.
 
-### Phase 3 — compaction
-- The chip (hidden unless available), the 3-second red confirm, "Compacting…",
-  the server action, the summary, the project document, the new session, the
-  delete, the broadcast, the post.
-- Carry mode, Keep Building, model; carry the "Always Allow" grants too
-  (recommended: compaction is about context, not consent).
-- Tests: summary extraction; new session created with the project's settings;
-  old deleted; post rendered from the file; a second view re-points without a
-  reload; a failed compact leaves the chat intact; a timeout does not delete.
-- Done when a compact from the UI produces a handover the next message can
-  rely on, and the other window follows.
+### Phase 3 — compaction — **built 27 Oct**
+- The chip (hidden unless a compact can run), the 3-second red confirm, the
+  "Compacting…" state, the server action, the summary, the project document, the
+  new session, the delete, the broadcast, the post.
+- Carries mode, Keep Building and model into the new session; carries the
+  "Always Allow" grants (`permissionMemory.carry`).
+- The post lives in the new session's metadata (`synapse.compacted`), so it
+  survives a reload; the Handover lives in `project.md` for the brief.
+- Failure rules: no handover → nothing created or deleted (504); the engine
+  refusing to compact → 502; a working project → 409; nothing to compact → 400.
+  A handover that is written but whose new session fails to create leaves the
+  handover in place and the old chat alive — the next attempt overwrites it.
+- Tests: 6 in `compact.test.mjs` plus the grants test in
+  `permission-memory.test.mjs`. 180/180 on the suite.
+- Still open for phase 4/5: the conversation the operator sees is a session in
+  the projects payload; the rail still lists sessions until phase 5.
 
 ### Phase 4 — the project list
 - One row per project; `⋯` menu with Browse, Cmd, Rename, Delete; the three dot

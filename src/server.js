@@ -359,6 +359,12 @@ export function createServer({ api, engine, logger, config, remote, onRemote }) 
         return sendJson(res, 200, await api.sendMessage(sessionId, await readBody(req, MESSAGE_BODY_LIMIT), actorOf(req)));
       }
       if (seg[2] === 'interrupt' && method === 'POST') return sendJson(res, 200, await api.interrupt(sessionId));
+      // POST /api/sessions/{id}/compact — discard the conversation, leave a
+      // handover, start a fresh one. Slow by nature (the engine summarises), so
+      // the client shows "Compacting…" and this answer arrives when it is done.
+      if (seg[2] === 'compact' && method === 'POST') {
+        return sendJson(res, 200, await api.compactSession(sessionId));
+      }
       if (seg[2] === 'permission' && method === 'POST') {
         return sendJson(res, 200, await api.permission(sessionId, await readBody(req), actorOf(req)));
       }

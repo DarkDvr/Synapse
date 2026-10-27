@@ -1366,6 +1366,24 @@ live because the running turn's mode is already fixed — not because the engine
 the click. A `session.mode` event tells another window the applied mode, so two views do
 not show different modes for the same chat.
 
+**The compact chip is only there when it can run.** It is a pill in the chat's top-left,
+floating like the scroll buttons, with no padding reserved for it — the operator's call:
+text may pass under it, and a chat that loses 30px of every line to chrome is worse. It is
+*hidden*, not greyed, when there is nothing to discard, when the project is working, or
+while a compact is in flight (when it says "Compacting…"). The first click turns it red and
+names what is lost ("Discard 42 messages? The files stay · 2 tasks unfinished"); a second
+click within three seconds does it, anything else cancels. Red because that is this
+palette's destructive colour and this is the third control that throws work away, after
+Stop and Revert.
+
+**The post is a `<details>`, not a message, and its open state is kept.** It renders from
+the new session's metadata (`synapse.compacted`), so a reload still shows it; the summary is
+behind the summary line. The transcript re-renders on every streamed delta, so its open
+state goes through `state.open` like a reasoning block's — otherwise reading the handover
+while a run streamed would snap it shut. It is not in `state.messages`: it is not part of
+the conversation, no model ever saw it, and it disappears when the next compact replaces the
+chat.
+
 Two ways to measure this, both worth keeping. The layout tells you *where* boxes are; the
 pixels tell you whether anything was repainted: screenshot a fixed clip during the
 animation and compare frames byte-wise (they came back **identical** for `c3..c7`), which

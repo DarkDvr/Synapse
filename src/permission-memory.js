@@ -91,5 +91,27 @@ export function createPermissionMemory({ file, limit = 500, logger } = {}) {
     return removed;
   }
 
-  return { remember, has, forgetSession, list: () => [...entries.values()], flush };
+  /**
+   * A conversation was replaced by a fresh one: its grants move with it.
+   *
+   * Compaction is about context, not consent. The operator said "always allow
+   * this exact request" and a new session id is an implementation detail of how
+   * the conversation was discarded — asking again after every compact is
+   * friction, and the grant is about a file, not about a transcript.
+   */
+  function carry(from, to) {
+    if (!from || !to || String(from) === String(to)) return 0;
+    let moved = 0;
+    for (const entry of [...entries.values()]) {
+      if (entry.sessionId !== String(from)) continue;
+      const next = { ...entry, sessionId: String(to), at: Date.now() };
+      entries.delete(key(entry.sessionId, entry.action, entry.resources));
+      entries.set(key(next.sessionId, next.action, next.resources), next);
+      moved += 1;
+    }
+    if (moved) flush();
+    return moved;
+  }
+
+  return { remember, has, forgetSession, carry, list: () => [...entries.values()], flush };
 }

@@ -5,7 +5,7 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { TBD_TITLE } from './titles.js';
 import { ensurePlan, readPlan, readRuns, runLedger, briefSession, logPlanState, BRIEF_KEY } from './plans.js';
-import { ensureProjectDoc, appendRequest as appendProjectRequest, appendChat, appendDecision as appendProjectDecision } from './project-doc.js';
+import { ensureProjectDoc, appendRequest as appendProjectRequest, appendChat, appendDecision as appendProjectDecision, appendEntry, setHandover } from './project-doc.js';
 import { skillRules, describeSkills } from './skills.js';
 import { rulesFor, decide, resolvePath, refusalNote, SINGLE_RULES } from './permissions.js';
 import { stopTargets } from './stop.js';
@@ -148,6 +148,11 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
   // the same text again on every message.
   const briefed = new Map();
 
+  // Conversations with a compact in flight. The operator can only start one from
+  // one window, but the route is open to any client, and a second compact while
+  // the engine is summarising would create two chats from one.
+  const compacting = new Set();
+
   // Is each local model server answering, and when did we last ask. Four seconds:
   // the sidebar polls, and a dead port must not be retried on every tick.
   const healthCache = new Map();
@@ -282,6 +287,37 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
         app.warn(`could not brief ${sessionId}: ${err.message}`);
         briefed.set(sessionId, 'failed');
       }
+    }
+  }
+
+  /**
+   * Wait for the engine's handover after asking it to compact.
+   *
+   * The call is a queue entry, not a blocking one: it runs at the next step
+   * boundary, and from an idle chat that is now. The summary lands in the
+   * transcript as a `compaction` message with `status: completed` and a
+   * `summary`; this polls the newest page until a new one with text appears.
+   * Returns null on timeout or on a compaction that failed — the caller must
+   * delete nothing in that case.
+   */
+  async function waitForHandover(sessionId, before, timeoutMs) {
+    const seen = new Set((before || []).filter((m) => m.type === 'compaction').map((m) => m.id));
+    const deadline = Date.now() + timeoutMs;
+    for (;;) {
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      const messages = await engine.getMessages(sessionId).catch(() => null);
+      if (messages) {
+        const fresh = messages
+          .filter((m) => m.type === 'compaction' && !seen.has(m.id) && String(m.raw?.summary || '').trim())
+          .filter((m) => m.raw?.status !== 'running')
+          .sort((a, b) => (Number(a.created) || 0) - (Number(b.created) || 0));
+        if (fresh.length) {
+          const last = fresh[fresh.length - 1];
+          const counted = messages.filter((m) => m.type === 'user' || m.type === 'assistant').length;
+          return { text: String(last.raw.summary).trim(), messages: counted, at: Number(last.created) || Date.now() };
+        }
+      }
+      if (Date.now() >= deadline) return null;
     }
   }
 
@@ -1281,6 +1317,127 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
       if (directory) runs?.resume?.(directory);
       await engine.prompt(sessionId, text, { files: attachments });
       return { ok: true };
+    },
+
+    /**
+     * Compact: the engine writes a handover, the conversation is discarded, a
+     * fresh one starts in the same folder.
+     *
+     * This is the only reset. It is refused while anything is running (a chapter
+     * cannot close mid-turn) and while another compact on the same chat is in
+     * flight. Nothing is deleted until the handover is safely in the project
+     * document: a compaction that fails leaves the conversation exactly as it was.
+     *
+     * The new session keeps what belongs to the project rather than the chat —
+     * folder, mode, Keep Building, model — and carries the "Always Allow" grants,
+     * because compaction is about context, not consent. Its metadata carries the
+     * post the chat shows (`synapse.compacted`), and the project document's
+     * `## Handover` carries the brief.
+     */
+    compactSession: async (sessionId, { timeoutMs = 180000 } = {}) => {
+      requireReady();
+      if (compacting.has(sessionId)) {
+        const err = new Error('this conversation is already being compacted');
+        err.status = 409;
+        throw err;
+      }
+      const busy = await busyFor(sessionId);
+      if (busy.busy) throw refuseBusy(busy);
+      const session = await engine.getSession(sessionId);
+      if (!session?.directory) {
+        const err = new Error('this conversation is not in a project folder');
+        err.status = 400;
+        throw err;
+      }
+      const before = await engine.getMessages(sessionId).catch(() => []);
+      if (!before.length) {
+        const err = new Error('there is nothing to compact yet');
+        err.status = 400;
+        throw err;
+      }
+      compacting.add(sessionId);
+      try {
+        try {
+          await engine.compact(sessionId);
+        } catch (err) {
+          const wrapped = new Error(`the engine could not compact: ${err.message}`);
+          wrapped.status = 502;
+          throw wrapped;
+        }
+        const handover = await waitForHandover(sessionId, before, timeoutMs);
+        if (!handover) {
+          const err = new Error('the engine did not write a handover in time; nothing was deleted');
+          err.status = 504;
+          throw err;
+        }
+        const at = handover.at || Date.now();
+        if (!setHandover(session.directory, handover.text, { at })) {
+          const err = new Error('the handover could not be written to the project document; nothing was deleted');
+          err.status = 500;
+          throw err;
+        }
+        const marker = appendEntry(
+          session.directory,
+          'compact',
+          `The conversation was discarded after ${handover.messages} messages; the handover is in this document.`,
+          { at },
+        );
+        if (marker && marker.ok === false) app.warn(`could not mark the compact in the project document: ${marker.error}`);
+
+        const meta = session.metadata && typeof session.metadata === 'object' ? { ...session.metadata } : {};
+        const synapse = { ...(meta.synapse && typeof meta.synapse === 'object' ? meta.synapse : {}) };
+        synapse.auto = session.auto === true;
+        synapse.compacted = { at, summary: handover.text, messages: handover.messages };
+        const created = await engine.createSession({
+          title: TBD_TITLE,
+          model: session.model ? { ref: session.model, variant: session.variant || undefined } : undefined,
+          directory: session.directory,
+          permissions: session.single ? SINGLE_RULES : [],
+          metadata: { ...meta, synapse },
+        });
+        if (!created?.id) {
+          const err = new Error('the engine did not return a new conversation; nothing was deleted');
+          err.status = 502;
+          throw err;
+        }
+        try {
+          permissionMemory?.carry?.(sessionId, created.id);
+        } catch (err) {
+          app.warn(`the Always Allow grants could not be carried to the new conversation: ${err.message}`);
+        }
+        try {
+          await engine.deleteSession(sessionId);
+        } catch (err) {
+          // The new chat is live and the old one is now an orphan; the app shows
+          // the new one, and the failure is in the log for a later sweep.
+          app.warn(`the old conversation could not be deleted after a compact: ${err.message}`);
+        }
+        briefed.delete(sessionId);
+        await brief(created.id, session.directory, 'architect', session.auto === true, {
+          single: session.single === true,
+        });
+        app.info(
+          `compacted ${sessionId} -> ${created.id}: ${handover.messages} messages, handover ${handover.text.length} chars`,
+        );
+        notify?.({
+          kind: 'project',
+          type: 'project.compacted',
+          oldSessionId: sessionId,
+          sessionId: created.id,
+          directory: session.directory,
+          at,
+        });
+        return {
+          ok: true,
+          sessionId: created.id,
+          oldSessionId: sessionId,
+          at,
+          messages: handover.messages,
+          summary: handover.text,
+        };
+      } finally {
+        compacting.delete(sessionId);
+      }
     },
 
     /**

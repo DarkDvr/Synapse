@@ -60,3 +60,21 @@ test('deleting a session forgets only its grants', () => {
   assert.equal(memory.has('ses_1', 'edit', ['D:/x.txt']), false);
   assert.equal(memory.has('ses_2', 'edit', ['D:/x.txt']), true);
 });
+
+test('a compact carries the grants to the new conversation', () => {
+  // The operator allowed this file for this project; a new session id is how the
+  // conversation was discarded, not a new decision about the file.
+  const file = tempFile();
+  const memory = createPermissionMemory({ file });
+  memory.remember('ses_old', 'edit', ['D:/x.txt']);
+  memory.remember('ses_old', 'shell', ['git status']);
+  memory.remember('ses_other', 'edit', ['D:/y.txt']);
+  assert.equal(memory.carry('ses_old', 'ses_new'), 2);
+  assert.equal(memory.has('ses_new', 'edit', ['D:/x.txt']), true);
+  assert.equal(memory.has('ses_new', 'shell', ['git status']), true);
+  assert.equal(memory.has('ses_old', 'edit', ['D:/x.txt']), false, 'moved, not copied');
+  assert.equal(memory.has('ses_other', 'edit', ['D:/y.txt']), true, 'another chat is untouched');
+  // It is on disk, so a restart does not ask again either.
+  const after = createPermissionMemory({ file });
+  assert.equal(after.has('ses_new', 'edit', ['D:/x.txt']), true);
+});

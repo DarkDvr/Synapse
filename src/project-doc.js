@@ -75,6 +75,10 @@ function sectionOf(raw, [start, end]) {
  * Read the document. `ok` is false when the file exists but cannot be read as
  * one of ours; nothing may overwrite that, because the operator may have opened
  * it and typed.
+ *
+ * Section headings live in the file for a human, and are stripped here: the
+ * values this module passes around are the content, and the renderer puts the
+ * headings back. Otherwise every write would add another `## Notes`.
  */
 export function readDoc(dir) {
   const target = docPath(dir);
@@ -86,8 +90,13 @@ export function readDoc(dir) {
     if (err.code === 'ENOENT') return empty;
     return { ...empty, ok: false, error: `could not read it: ${err.message}` };
   }
+  const headings = { current: 'Current', handover: 'Handover', notes: 'Notes', log: 'Log' };
   const parts = {};
-  for (const [name, pair] of Object.entries(MARK)) parts[name] = sectionOf(raw, pair);
+  for (const [name, pair] of Object.entries(MARK)) {
+    const body = sectionOf(raw, pair);
+    parts[name] =
+      body === null ? null : body.replace(new RegExp(`^## ${headings[name]}\\s*\\n+`), '').replace(/\n+$/, '');
+  }
   if (Object.values(parts).every((v) => v === null)) {
     return { ...empty, exists: true, ok: false, error: 'it has no section markers' };
   }
@@ -105,7 +114,11 @@ export function readDoc(dir) {
 function renderDoc({ dir, current, handover, notes, log }) {
   const title = path.basename(String(dir || '')) || 'project';
   const bodies = { current, handover, notes, log };
-  const block = (name) => `${MARK[name][0]}\n${bodies[name]}\n${MARK[name][1]}`;
+  const headings = { current: 'Current', handover: 'Handover', notes: 'Notes', log: 'Log' };
+  const block = (name) => {
+    const body = String(bodies[name] || '').trim();
+    return `${MARK[name][0]}\n## ${headings[name]}\n${body ? `\n${body}\n` : ''}${MARK[name][1]}`;
+  };
   return [
     `# ${title} — project document`,
     '',
@@ -148,7 +161,7 @@ export function writeDoc(dir, { current = '', handover = '', notes = '', log = '
 
 // ── the log and the head ────────────────────────────────────────
 
-const ENTRY = /^### (request|chat|decision) · (.+)$/;
+const ENTRY = /^### (request|chat|decision|compact) · (.+)$/;
 
 /** Split the Log into entries: a heading line plus the body under it. */
 export function parseLog(log) {
@@ -192,8 +205,7 @@ export function buildCurrent(log, { at = Date.now() } = {}) {
   const latest = requests.length ? requests[requests.length - 1] : chats[chats.length - 1] || null;
   const decisions = decisionsInForce(entries);
 
-  const lines = ['## Current'];
-  lines.push(`Request: ${latest ? clip(latest.body, MAX_REQUEST) : 'none yet.'}`);
+  const lines = ['Request: ' + (latest ? clip(latest.body, MAX_REQUEST) : 'none yet.')];
   if (!decisions.length) {
     lines.push('Decisions in force: none yet.');
   } else {

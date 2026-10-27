@@ -233,6 +233,11 @@ const state = {
   // allowed, role cards revealed). New sessions start single; the toggle
   // switches the open session live.
   mode: 'single',
+  // A compact in flight: the chip says "Compacting…" and refuses a second click.
+  // The chat is about to be replaced, so nothing else may be sent meanwhile.
+  compacting: false,
+  // Until when a first click on the chip is still a confirmation (three seconds).
+  compactUntil: 0,
   streaming: false,
   streamLive: false,
   // What this PC can build with, for Settings → Windows (src/toolchain.js).
@@ -1659,7 +1664,7 @@ function renderMode() {
   label.textContent = single ? 'Single' : 'Multi';
   btn.classList.toggle('is-single', single);
   btn.setAttribute('aria-pressed', String(single));
-  const busy = Boolean(state.busyInfo?.busy);
+  const busy = Boolean(state.busyInfo?.busy) || state.compacting;
   btn.disabled = busy;
   btn.title = busy
     ? 'Switch modes when the project is idle — work is happening now.'
@@ -1841,6 +1846,115 @@ function switchMode() {
   // through, because the pending choice cannot apply to a turn already running.
   if (state.busyInfo?.busy) return;
   applyMode(state.mode === 'single' ? 'multi' : 'single');
+}
+
+// ── compact: discard this conversation, leave a handover ─────────
+//
+// The only reset. The engine writes the handover from the whole conversation,
+// the server puts it in the project document and starts a fresh chat, and the
+// new chat shows one post where the old conversation was. The chip is hidden
+// unless a compact can actually run — a project is open, nothing is working, and
+// there is something to discard — so it never sits there greyed out.
+const COMPACT_CONFIRM_MS = 3000;
+let compactTimer = 0;
+
+/** The post the chat was started with, from the new session's own metadata. */
+function compactPostOf() {
+  const meta = findSession(state.sessionId)?.metadata?.synapse?.compacted;
+  if (!meta?.summary) return null;
+  return {
+    at: Number(meta.at) || 0,
+    summary: String(meta.summary),
+    messages: Number(meta.messages) || 0,
+  };
+}
+
+function compactPostHtml(post) {
+  const when = post.at
+    ? new Date(post.at).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+    : '';
+  const open = state.open.has('compact-post') ? ' open' : '';
+  const count = post.messages ? `${post.messages} messages — ` : '';
+  return `<details class="chat-post"${open}><summary><span class="chat-post-mark">Compacted ${esc(
+    when,
+  )}</span><span class="chat-post-note">${esc(count)}the handover is in the project document</span></summary>` +
+    `<div class="chat-post-body">${renderMarkdown(post.summary)}</div></details>`;
+}
+
+function renderCompactChip() {
+  const btn = $('compactChip');
+  if (!btn) return;
+  if (state.compacting) {
+    btn.hidden = false;
+    btn.disabled = true;
+    btn.classList.remove('is-confirm');
+    btn.textContent = 'Compacting…';
+    btn.title = 'The engine is writing the handover. The chat is replaced when it is done.';
+    return;
+  }
+  const ready =
+    state.view === 'session' &&
+    Boolean(state.sessionId) &&
+    !state.busyInfo?.busy &&
+    (state.messages || []).length > 0;
+  if (!ready) {
+    btn.hidden = true;
+    btn.classList.remove('is-confirm');
+    return;
+  }
+  const confirming = Date.now() < state.compactUntil;
+  btn.hidden = false;
+  btn.disabled = false;
+  btn.classList.toggle('is-confirm', confirming);
+  if (confirming) {
+    const open = (state.planState?.plan?.tasks || []).filter((t) => t.status !== 'done').length;
+    const total = state.messages.length;
+    const tasks = open ? ` · ${open} task${open === 1 ? '' : 's'} unfinished` : '';
+    btn.textContent = `Discard ${total} message${total === 1 ? '' : 's'}? The files stay${tasks}`;
+    btn.title = 'Click again to discard this conversation. The plan, the project document and every file stay.';
+  } else {
+    btn.textContent = 'Compact';
+    btn.title = 'Discard this conversation and start fresh. The plan, the project document and every file stay.';
+  }
+}
+
+function compactClick() {
+  if (state.compacting || !state.sessionId) return;
+  if (Date.now() < state.compactUntil) {
+    runCompact();
+    return;
+  }
+  state.compactUntil = Date.now() + COMPACT_CONFIRM_MS;
+  renderCompactChip();
+  clearTimeout(compactTimer);
+  compactTimer = setTimeout(() => {
+    state.compactUntil = 0;
+    renderCompactChip();
+  }, COMPACT_CONFIRM_MS + 50);
+}
+
+async function runCompact() {
+  const sessionId = state.sessionId;
+  if (!sessionId) return;
+  state.compactUntil = 0;
+  clearTimeout(compactTimer);
+  state.compacting = true;
+  renderCompactChip();
+  renderComposer();
+  try {
+    const out = await api('POST', `/api/sessions/${encodeURIComponent(sessionId)}/compact`);
+    state.compacting = false;
+    state.messages = [];
+    await loadProjects();
+    if (out?.sessionId && state.sessionId !== out.sessionId) await openSession(out.sessionId);
+  } catch (err) {
+    state.compacting = false;
+    renderCompactChip();
+    renderComposer();
+    toast('Could Not Compact', err.message);
+    return;
+  }
+  renderCompactChip();
 }
 
 // One model picker and one thinking-effort button per role card. The model
@@ -2702,6 +2816,7 @@ async function openSession(id) {
   $('sidebar').classList.remove('open');
   setView();
   renderTree();
+  renderCompactChip();
   await loadMessages();
   // A session is opened to read where it got to, not where it started: put the
   // transcript at its end once, without touching the page (the role cards above it
@@ -3310,11 +3425,17 @@ function renderTranscript() {
   // over the chat, and a card here would both duplicate it and change the
   // transcript's height the moment it appeared.
   const pending = renderPermissions();
+  // The post a compact left: the only thing the new chat starts with. It is not
+  // a message — no speaker — and it comes from this chat's own metadata, so it
+  // survives a reload and is gone when the next compact replaces the chat.
+  const compactPost = compactPostOf();
+  const postHtml = compactPost ? compactPostHtml(compactPost) : '';
   // A question needs room even when the conversation is empty: the panel is the
   // dock's own child and takes its height from the dock, so a freshly opened
   // session (a strip of composer) would show a 64px form with its buttons
   // hanging outside it. A form is something to read, so the dock opens for it.
-  const hasHistory = showable.length > 0 || Boolean(pending) || Boolean(currentForm()) || alarmsHere().length > 0;
+  const hasHistory =
+    showable.length > 0 || Boolean(postHtml) || Boolean(pending) || Boolean(currentForm()) || alarmsHere().length > 0;
   // The dock is a bare composer while empty and fills the stage once there is
   // anything to show; the CSS keys off this class, so set it on every render.
   $('chatDock')?.classList.toggle('has-history', hasHistory);
@@ -3325,7 +3446,9 @@ function renderTranscript() {
   // Nothing in the conversation changed since the last render: leave the DOM —
   // and whatever the operator has open — exactly as it is.
   const sig = hasHistory
-    ? `${showable.map((m) => `${m.id}:${m.completed || 0}:${(m.parts || []).length}`).join(',')}|${pending.length}|${state.streaming}|${traceSig()}|${alarmsHere().length}|${state.decisionSeq}`
+    ? `${showable.map((m) => `${m.id}:${m.completed || 0}:${(m.parts || []).length}`).join(',')}|${pending.length}|${state.streaming}|${traceSig()}|${alarmsHere().length}|${state.decisionSeq}|${
+        compactPost ? `${compactPost.at}:${compactPost.summary.length}` : ''
+      }`
     : '';
   if (sig && sig === state.renderSig) {
     renderChatNav();
@@ -3353,7 +3476,7 @@ function renderTranscript() {
     ...alarmsHere().map((a) => ({ at: Number(a.at) || 0, html: renderAlarm(a) })),
     ...chatErrorsHere().map((e) => ({ at: Number(e.at) || 0, html: renderChatError(e) })),
   ].sort((x, y) => x.at - y.at);
-  let html = '';
+  let html = postHtml;
   let next = 0;
   for (const m of showable) {
     const at = Number(m.created) || 0;
@@ -5485,7 +5608,7 @@ function renderComposer() {
   // working — started from 192.168.50.115"), and the operator asked for it to go:
   // it took a line off the chat to say what the rail's dot and the role cards
   // already say. A dead Send with no explanation was accepted in exchange.
-  $('sendBtn').disabled = (state.busy && !hasSession) || asking || held;
+  $('sendBtn').disabled = (state.busy && !hasSession) || asking || held || state.compacting;
   // Stop has to work while a worker is running or waiting out a retry, when the
   // open session is idle — that is exactly when it is the only way out. `canStop`
   // is the engine's answer for this project, so a hidden worker enables it even
@@ -5500,6 +5623,7 @@ function renderComposer() {
         ? 'Message'
         : 'Message the Architect…';
   }
+  renderCompactChip();
 }
 
 async function send() {
@@ -5884,6 +6008,23 @@ function connectStream() {
     // so the picker shows it now rather than after the next reload.
     if (ev.kind === 'model') {
       refreshModels();
+      return;
+    }
+
+    // A conversation was compacted: its chat is gone and a fresh one exists. The
+    // window that was looking at the old one follows without a reload; every
+    // other window just refreshes the rail (the old session has left it).
+    if (ev.kind === 'project' && ev.type === 'project.compacted') {
+      if (ev.oldSessionId === state.sessionId) {
+        loadProjects()
+          .then(() => {
+            if (state.sessionId === ev.oldSessionId) return openSession(ev.sessionId);
+            return null;
+          })
+          .catch(() => {});
+      } else {
+        reloadProjects();
+      }
       return;
     }
 
@@ -7228,6 +7369,19 @@ function wire() {
   });
   $('stopBtn').addEventListener('click', interrupt);
   $('modeToggle').addEventListener('click', switchMode);
+  $('compactChip').addEventListener('click', compactClick);
+  // The compact post is a <details>; its open state is kept like a reasoning
+  // block's, so a stream that re-renders the chat does not snap it shut.
+  $('transcript')?.addEventListener(
+    'toggle',
+    (e) => {
+      const post = e.target.closest?.('.chat-post');
+      if (!post) return;
+      if (post.open) state.open.add('compact-post');
+      else state.open.delete('compact-post');
+    },
+    true,
+  );
   $('remoteToggle').addEventListener('click', toggleRemote);
 
 // The disconnected panel: Close ends the page. A browser refuses window.close()

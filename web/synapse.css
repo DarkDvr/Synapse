@@ -1182,6 +1182,53 @@ body[data-view="session"] .chat-dock.has-ask { overflow: visible; }
 .fab:hover { background: var(--violet-soft); border-color: var(--violet-bright); color: #fff; }
 .fab:disabled { opacity: 0.35; cursor: default; }
 .fab:disabled:hover { background: #23262c; border-color: var(--violet-line); color: var(--violet-bright); }
+
+/* ── compact: the one reset ────────────────────────────────────────────────
+   A pill in the chat's top-left, floating like the scroll buttons and for the
+   same reason: it is not part of the conversation, so it takes no line of it.
+   Yellow while it is an offer; red when it is a confirmation, because red is
+   this palette's destructive colour (Stop, Revert). It is hidden unless a
+   compact can run — the operator asked for a control that appears when it is
+   available rather than one that sits greyed out. */
+.compact-chip {
+  position: absolute; top: 7px; left: 10px; z-index: 31;
+  display: inline-flex; align-items: center; gap: 6px;
+  max-width: calc(100% - 210px);
+  padding: 5px 10px; border-radius: 999px;
+  border: 1px solid rgba(237, 194, 90, 0.55);
+  background: rgba(20, 22, 27, 0.88);
+  color: var(--yellow);
+  font-family: var(--mono); font-size: 10px; line-height: 1.2;
+  letter-spacing: 0.04em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  cursor: pointer; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(3px);
+}
+.compact-chip:hover { border-color: var(--yellow); background: rgba(30, 32, 38, 0.95); }
+.compact-chip.is-confirm {
+  border-color: var(--red); color: var(--red);
+  background: rgba(34, 20, 20, 0.92);
+}
+.compact-chip[disabled] { opacity: 0.7; cursor: default; }
+.compact-chip[hidden] { display: none; }
+
+/* The post a compact leaves at the top of the fresh chat. It is not a message:
+   no avatar, no speaker, an amber rule down the left — the same "news" colour a
+   compaction line uses. Collapsed to one line; the summary is behind it. */
+.chat-post {
+  margin: 0 0 16px; padding: 1px 0 1px 10px;
+  border-left: 2px solid rgba(237, 194, 90, 0.45);
+}
+.chat-post > summary {
+  display: flex; align-items: baseline; gap: 9px;
+  list-style: none; cursor: pointer;
+}
+.chat-post > summary::-webkit-details-marker { display: none; }
+.chat-post-mark { font-family: var(--mono); font-size: 10px; letter-spacing: 0.04em; color: var(--yellow); }
+.chat-post-note { font-size: 10.5px; color: #82868e; }
+.chat-post-body { margin: 8px 0 0; font-size: 12px; line-height: 1.5; color: #b6bac1; }
+.chat-post-body h2 { font-size: 12px; margin: 10px 0 4px; color: #d7dae0; }
+.chat-post-body ul { margin: 3px 0 8px; padding-left: 18px; }
+.chat-post-body code { font-family: var(--mono); font-size: 11px; }
 /* The two "all the way" buttons wear the same arrow as their neighbours, one
    weight heavier. The symbol font has no bold face — `font-weight` alone changes
    nothing — so the ink is thickened with a hairline stroke in the current colour.
