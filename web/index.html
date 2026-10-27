@@ -62,10 +62,12 @@
         <span class="status-state" id="lastEvent">idle</span>
       </div>
       <!-- Who else is looking. Two people can drive the same server, so the rail
-           has to be able to say whose window is whose. -->
-      <div class="status-row" id="viewsRow" title="Connected views, by computer name">
-        <span class="status-dot idle" id="viewsDot"></span>Views
-        <span class="status-state" id="viewsState">1</span>
+           has to be able to say whose window is whose. The count is on the left
+           with its label; the computer names run across the rest of the row and
+           ellipsis rather than wrap, so the row never changes height. -->
+      <div class="status-row views-row" id="viewsRow" title="Connected views, by computer name">
+        <span class="status-dot idle" id="viewsDot"></span><span class="views-label">Views: <span id="viewsCount">1</span></span>
+        <span class="status-state views-names" id="viewsState"></span>
       </div>
       <div class="status-row" id="llmRow" title="A local, OpenAI-compatible model server registered in the config file">
         <span class="status-dot idle"></span>Local LLM
@@ -229,9 +231,6 @@
               <!-- Attached files, one little panel each, above the row. Outside the
                    row so the toggle can never wrap away from the text box. -->
               <div class="attach-strip" id="attachStrip" hidden></div>
-              <!-- Why Send and the mode switch are held: the project is working,
-                   and who started it. One line, above the controls it explains. -->
-              <div class="composer-note" id="composerNote" hidden></div>
               <div class="composer-row">
                 <button type="button" class="mode-toggle" id="modeToggle" aria-pressed="false" title="Switch between Multi and Single">
                   <span class="mode-dot" aria-hidden="true"></span><span id="modeLabel">Single</span>

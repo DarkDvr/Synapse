@@ -671,6 +671,14 @@ body.dark .sidebar-bottom,
   margin-left: auto; font-family: var(--mono); font-size: 10.5px;
   color: #9aa0a8; overflow: hidden; text-overflow: ellipsis;
 }
+/* A flex child will not shrink below its content unless told to: without this the
+   ellipsis is a rule that can never apply, and a long computer name pushes the row
+   wider instead of truncating. */
+.status-row .status-state { min-width: 0; }
+/* Views: the count sits with its label on the left; the computer names take the
+   rest of the row and truncate there, so three or four clients never wrap. */
+.views-label { white-space: nowrap; }
+.views-names { text-align: right; }
 /* Remote Access: a two-state switch, not a button that says "On". The label is
    the row; the switch is the state. Green only when the LAN can reach us. Only
    while it is on does a second line appear: the address and the TOKEN chip. Off
@@ -1518,6 +1526,15 @@ body[data-mode="single"] .keep-toggle { display: none; }
   white-space: pre-wrap; overflow-wrap: anywhere; max-height: 130px; overflow: auto;
 }
 .perm-actions { display: flex; gap: 7px; margin-top: 10px; flex-wrap: wrap; justify-content: flex-start; }
+/* The optional sentence a rejection carries to the role. An input, not a box of
+   instructions: one line, quiet, directly above the four buttons it belongs to. */
+.perm-reason {
+  width: 100%; margin-top: 9px; padding: 6px 9px; border-radius: 7px;
+  border: 1px solid #3a3d43; background: #191b1f; color: var(--text);
+  font-family: inherit; font-size: 11.5px; line-height: 1.4;
+}
+.perm-reason::placeholder { color: #6f747c; }
+.perm-reason:focus { outline: none; border-color: var(--violet); }
 /* Four narrow buttons in one row at the left. The background is the same neutral
    as every other button; colour lives in the border and the label, so the row
    reads as four actions rather than four alarm levels. */
@@ -2677,21 +2694,11 @@ body { overflow-anchor: none; }
 
 /* ── two views: working, held, disconnected ─────────────────────────────── */
 
-/* The rail has to say a session is working without being clicked: a word beside
-   the name, not only a dot the eye skips. Amber is the "in flight" colour here,
-   the same one the project rule uses. */
-.tree-working {
-  margin-left: 6px; padding: 0 5px; border: 1px solid rgba(237, 194, 90, 0.55);
-  border-radius: 4px; color: #edc25a; font-size: 10px; letter-spacing: 0.04em;
-}
+/* A working session is the dot and the yellow project rule, nothing else. The
+   word "working" used to sit beside the name as a chip; the operator asked for it
+   to go on 27 Oct — the rail is a list of names, and the chip cost the width one
+   of them needed. */
 .tree-live.on { box-shadow: 0 0 0 2px rgba(237, 194, 90, 0.18); }
-
-/* Why Send and the mode switch are held. One line, above the row it explains. */
-.composer-note {
-  margin: 0 0 8px; padding: 6px 10px; border: 1px solid rgba(237, 194, 90, 0.35);
-  border-radius: 6px; background: rgba(237, 194, 90, 0.06);
-  color: #edc25a; font-size: 12px; line-height: 1.4;
-}
 
 .mode-toggle[disabled] { opacity: 0.45; cursor: not-allowed; }
 .btn[disabled], #sendBtn[disabled] { opacity: 0.45; cursor: not-allowed; }

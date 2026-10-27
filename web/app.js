@@ -610,13 +610,21 @@ function renderRemote() {
 
 // Who is connected. The names are what the lock and the refusal sentences use;
 // this is where they can be read without being refused something first.
+//
+// "Views: 2" on the left, the computers across the rest of the row. The server
+// resolves a LAN address to its own name (a reverse lookup; the address when the
+// lookup has nothing to say), so the row reads as people, not as IPs. Names are
+// de-duplicated — one machine with two tabs is one name — but the count is views,
+// because that is what is connected.
 function renderViews() {
   const views = state.views || [];
+  const count = $('viewsCount');
   const el = $('viewsState');
   if (!el) return;
-  const names = [...new Set(views.map((v) => v.name))];
-  el.textContent = views.length <= 1 ? '1' : `${views.length} — ${names.join(', ')}`;
-  el.title = names.join(', ');
+  const names = [...new Set(views.map((v) => v.name).filter(Boolean))];
+  if (count) count.textContent = String(views.length);
+  el.textContent = names.join(', ');
+  el.title = names.length ? `${names.join(', ')}` : '';
   const dot = $('viewsDot');
   if (dot) dot.className = 'status-dot ' + (views.length > 1 ? 'ok' : 'idle');
 }
@@ -2307,7 +2315,6 @@ function sessionRow(s) {
   return `<div class="tree-row session${current ? ' is-current' : ''}${busy ? ' has-work' : ''}${waiting ? ' has-question' : ''}" data-session="${esc(s.id)}">
     <button class="tree-open" title="${esc(title)}${when ? ` · ${esc(when)}` : ''}${busy ? ' · working' : ''}${waitNote}">
       <span class="tree-name">${esc(title)}</span>
-      ${busy ? '<span class="tree-working">working</span>' : ''}
     </button>
     <span class="tree-actions">
       ${waiting ? `<span class="tree-wait" title="${waiting === 'answer' ? 'Waiting on your answer' : 'Waiting for your decision'}" aria-label="${waiting === 'answer' ? 'Waiting on your answer' : 'Waiting for your decision'}">?</span>` : ''}
@@ -2970,11 +2977,17 @@ function renderRoleActivity() {
       text = cardErr.retrying !== false && at ? `Retrying at ${hhmm(at)} — ${head}` : head;
     }
 
-    // Dimmed cards are the ones that have never been in this project at all. A
+    // Dimmed cards are the ones that have never been in this session at all. A
     // card that is taking part is solid by definition, and the Architect is never
     // dimmed: it is the role that exists before any of this. A skipped card is
     // solid too — it is news, not absence.
-    const dim = role !== 'architect' && !participated && !part && !skipped;
+    //
+    // A card carrying a clock is never dimmed either: the clock is this session's
+    // own time for that role's tasks, so it is proof the role worked. The two
+    // together (a timer on a faded card) was the operator's 27 Oct complaint, and
+    // it was the run log being summed across sessions that produced it.
+    const workedHere = mine.some((t) => Number(state.planState?.spent?.[t.id]) > 0);
+    const dim = role !== 'architect' && !participated && !part && !skipped && !workedHere;
     rows.push({ card, text, part, dot, dim, chip, settled, skipped, err: Boolean(cardErr) });
     sig += `${role}\u0001${part}\u0001${dot}\u0001${dim ? 1 : 0}\u0001${settled ? 1 : 0}\u0001${skipped ? 1 : 0}\u0001${chip ? chip.text : ''}\u0001${cardErr ? 1 : 0}\u0001${text}\u0002`;
   }
@@ -3077,6 +3090,10 @@ function handleRunEvent(ev) {
     // longer the news. `run.progress` cannot clear it: the runner sends one right
     // after a retry notice, which would erase the notice it just sent.
     if (ev.type === 'run.started' && ev.role) state.roleErrors.delete(`${key}|${ev.role}`);
+    // A new run measures its own speed: the previous one's windows and token
+    // totals are not this model's, and carrying them over made the first number
+    // on a new card belong to a run that had already finished.
+    if (ev.type === 'run.started') resetRate(ev);
     state.runs.set(key, { ...(state.runs.get(key) || {}), ...ev });
     const run = state.runs.get(key);
     const trace = traceOf(run);
@@ -3584,6 +3601,9 @@ function tracesFor(dir) {
 let streamRaf = 0;
 let streamEl = null; // { mask, view, body, node, scrolling } once the panel is on screen
 let streamFrameAt = 0; // performance.now() of the last frame, for the real dt
+// How much of the newest line the damped slide may hide while the chat follows.
+// Under a line's height, so nothing readable is ever behind the edge.
+const STREAM_MAX_LAG = 8;
 const reducedMotion = Boolean(window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches);
 
 // Is the chat still being carried along by the writing?
@@ -3761,30 +3781,24 @@ function endStream() {
   renderTranscript();
 }
 
-// Tokens per second, from the engine's own meter.
+// Tokens per second, from the stream itself.
 //
-// `session.usage.updated` carries the running token counts for the session
-// (measured: `{input, output, reasoning, cache}`), so the rate is the change in
-// written tokens over the time between two of them. It is the rate of the last
-// step, not of the last three seconds — the engine reports per step, so there is
-// nothing finer to average — and it is shown only while the step is recent.
-const usageSamples = new Map(); // dirKey -> { at, tokens }
-const RATE_FRESH_MS = 45000;
-// How much of the newest line the damped slide may hide while the chat follows.
-// Under a line's height, so nothing readable is ever behind the edge.
-const STREAM_MAX_LAG = 8;
-
-/**
- * When a step's first and last piece were streamed, per session.
- *
- * This is the only place a speed can honestly be measured. The engine stamps a
- * turn with when it started and when its last piece left, and that difference
- * contains reading the prompt: on the turn the provider's own log recorded as
- * `60 tokens in 8 s (93.4 tok/s)`, 4 s of the 8 were a 28,700-token prompt being
- * read, so the card said 8. Counting from the first piece leaves the prompt, the
- * round trip and the tool out of it — which is what "tokens per second" means.
- */
+// The only interval that excludes everything that is not writing is the one
+// between the first piece of a step and its last. The engine's own timestamps do
+// not give that: `time.created` is stamped before the engine assembles the
+// request, so a turn the model server clocked at 72.8 tok/s reads 28 here once
+// the transcript is 97k tokens, and the error grows as the run does. Measured
+// 27 Oct against the provider's own log.
+//
+// One step is still a noisy sample — a small tool-call step is mostly overhead —
+// so the card shows the run's average: every measured step's written tokens over
+// the sum of those steps' streaming windows. It settles within a few steps and
+// then barely moves, which is what a rate on a card is for.
 const deltaWindow = new Map(); // sessionId -> { first, last }
+const usageTotals = new Map(); // dirKey -> tokens written so far in this run
+const RATE_FRESH_MS = 45000;
+const RATE_MIN_MS = 1000;
+
 function noteDelta(ev) {
   if (!ev.sessionId) return;
   const w = deltaWindow.get(ev.sessionId) || { first: 0, last: 0 };
@@ -3792,6 +3806,14 @@ function noteDelta(ev) {
   if (!w.first) w.first = now;
   w.last = now;
   deltaWindow.set(ev.sessionId, w);
+}
+
+/** A finished run's rate is history: the next run starts its own. */
+function resetRate(run) {
+  if (!run) return;
+  const key = dirKey(run.dir);
+  state.rates.delete(key);
+  usageTotals.delete(key);
 }
 
 /**
@@ -3832,19 +3854,25 @@ function noteWorkerUsage(ev) {
   if (!tokens) return;
   const total = (Number(tokens.output) || 0) + (Number(tokens.reasoning) || 0);
   const key = dirKey(run.dir);
-  const prev = usageSamples.get(key);
-  const at = Number(ev.ts) || Date.now();
-  usageSamples.set(key, { at, total });
   // The window belongs to the step this usage figure is about, so it is taken
   // whatever the outcome: a step that wrote nothing must not leave its timings
   // behind to be paired with the next step's tokens.
   const w = deltaWindow.get(ev.sessionId);
   deltaWindow.delete(ev.sessionId);
-  if (!prev || total <= prev.total) return;
-  const written = total - prev.total;
-  const streamed = w && w.last - w.first >= 250 ? (w.last - w.first) / 1000 : 0;
-  const tps = streamed ? written / streamed : written / Math.max(0.25, (at - prev.at) / 1000);
-  state.rates.set(key, { role: run.role, tps, at });
+  const prev = usageTotals.get(key);
+  usageTotals.set(key, total);
+  // The first step of a run has no earlier total to subtract, and a page opened
+  // mid-run starts here; the next step is the first one it can measure.
+  if (prev === undefined || total <= prev) return;
+  const written = total - prev;
+  const ms = w ? w.last - w.first : 0;
+  if (!ms || ms < 400) return;
+  const rec = state.rates.get(key) || { role: run.role, tokens: 0, ms: 0, at: 0 };
+  rec.role = run.role;
+  rec.tokens += written;
+  rec.ms += ms;
+  rec.at = Date.now();
+  state.rates.set(key, rec);
   paintRates();
 }
 
@@ -3861,14 +3889,11 @@ function paintRates(now = Date.now()) {
     if (!el) continue;
     const mine = run && rate && rate.role === card.dataset.role && now - rate.at < RATE_FRESH_MS;
     const bits = [];
-    // The live rate first: it is measured between the first and the last piece the
-    // model streamed, which is the number the model's own log prints. The runner's
-    // figure (`run.tps`) is the same idea from the transcript, and it carries the
-    // prompt read inside it — so it is the fallback for a page that opened mid-run
-    // and has not seen a stream yet.
-    const measured = run && run.role === card.dataset.role ? Number(run.tps) || 0 : 0;
-    if (mine) bits.push(`${Math.round(rate.tps)} tok/s`);
-    else if (measured) bits.push(`${measured} tok/s`);
+    // The run's own measured average. Shown only while it has something behind it:
+    // a step or two of evidence is a number, one short step is a guess.
+    if (mine && rate.ms >= RATE_MIN_MS && rate.tokens >= 40) {
+      bits.push(`${Math.round((rate.tokens / rate.ms) * 1000)} tok/s`);
+    }
     // The window, in the corner the operator already looks at: "27k/60k ctx". It
     // is the pair that explains a slowdown (a full window is re-read every turn)
     // and the compaction that follows. Shown even when the rate has gone stale —
@@ -4135,9 +4160,12 @@ function permissionTip(d) {
           ? 'You allowed this exact request earlier.'
           : 'The harness allowed it without asking.';
   // The policy sentence explains a refusal; on an allow it is usually just
-  // "Reading is allowed", which says nothing the decision line does not.
+  // "Reading is allowed", which says nothing the decision line does not. The
+  // operator's own words, when they gave a reason, come before both — they are
+  // the thing a reader is looking for after "you rejected it".
   const reason = d.effect === 'deny' && d.reason ? d.reason : '';
-  return [sentence, reason, decision].filter(Boolean).join('\n');
+  const told = d.effect === 'deny' && d.note ? `You told ${actor}: ${d.note}` : '';
+  return [sentence, reason, told, decision].filter(Boolean).join('\n');
 }
 
 function toggleTool(id) {
@@ -4352,7 +4380,19 @@ function renderPermissions() {
         ${paths.length ? `<pre class="perm-res">${esc(paths.join('\n'))}</pre>` : ''}
         ${p.reason ? `<p class="perm-why">${esc(p.reason)}</p>` : ''}
         ${diff}
-        <p class="perm-note">Nothing has happened yet. You can still say no.</p>
+        <p class="perm-note">${p.role && p.role !== 'architect'
+          ? 'Nothing has happened yet. You can still say no.'
+          : 'Nothing has happened yet. You can still say no — say why in the chat; the Architect is reading it.'}</p>
+        <!-- Only a rejection carries this, and only to a worker: the reply route
+             drops a message (measured), so Synapse sends the refusal as a
+             synthetic note beside the tool result instead. The Architect needs no
+             field — the operator is in its chat, and an extra synthetic turn
+             ended one of its reports empty. Optional on purpose: a reason is a
+             sentence you have, not a form to fill in. -->
+        ${p.role && p.role !== 'architect'
+          ? `<input class="perm-reason" data-perm-reason="${esc(p.requestId)}" maxlength="300"
+               placeholder="If you reject, say why — ${esc(actor)} reads it" autocomplete="off" />`
+          : ''}
         <div class="perm-actions">
           <button class="btn btn-allow btn-sm" data-perm="once" data-perm-id="${esc(
             p.requestId,
@@ -4963,6 +5003,29 @@ function schedulePermissionRender() {
   }, 120);
 }
 
+/**
+ * What the session pane paints from state the pending poll can change.
+ *
+ * One string, compared before and after the poll, so an unchanged poll costs a
+ * comparison and nothing else. The transcript's own guard is not enough: the dock
+ * is re-measured before that guard is reached.
+ */
+function paneSig() {
+  const perms = (state.permissions || []).map((p) => `${p.requestId}:${p.scope}`).join(',');
+  const forms = (state.forms || []).map((f) => `${f.id}:${f.sessionId}`).join(',');
+  const info = state.busyInfo || {};
+  return [
+    perms,
+    forms,
+    state.busy ? 1 : 0,
+    state.canStop ? 1 : 0,
+    info.busy ? 1 : 0,
+    info.state || '',
+    info.project || '',
+    info.driver?.name || '',
+  ].join('|');
+}
+
 async function refreshPending() {
   let p;
   try {
@@ -4970,6 +5033,9 @@ async function refreshPending() {
   } catch {
     return;
   }
+  // What the session pane looks like before this poll's answers land. Compared at
+  // the end: the poll runs every eight seconds whether or not anything happened.
+  const before = paneSig();
 
   // The engine is the authority on what is running; SSE keeps us snappy
   // between polls and this corrects any drift.
@@ -5047,9 +5113,17 @@ async function refreshPending() {
 
   renderTree();
   if (state.view === 'session') {
-    renderAskPanel();
-    renderComposer();
-    renderTranscript();
+    // Only what this poll can actually have changed is repainted. The transcript
+    // used to be rebuilt every eight seconds whatever had happened, and the
+    // operator watched the chat move up and down by about a line on a laptop while
+    // typing: a rebuild re-measures the dock and settles the scroll offset even
+    // when not one message changed. Its own signature guard did not help, because
+    // `fitChatHeight` runs before it.
+    if (paneSig() !== before) {
+      renderAskPanel();
+      renderComposer();
+      renderTranscript();
+    }
   }
 }
 
@@ -5395,10 +5469,22 @@ async function replyPermission(requestId, decision) {
   // it on the open session would fail with a request id the engine never saw.
   const permission = (state.permissions || []).find((p) => p.requestId === requestId);
   const sessionId = permission?.sessionId || state.sessionId;
+  // Read the reason before the card is gone: the input is inside the card this
+  // call removes. Only a refusal sends one — an allow has nothing to explain.
+  const reason = decision === 'reject'
+    ? String(document.querySelector(`[data-perm-reason="${CSS.escape(requestId)}"]`)?.value || '')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .slice(0, 300)
+    : '';
   state.permissions = state.permissions.filter((p) => p.requestId !== requestId);
   renderTranscript();
   try {
-    await api('POST', `/api/sessions/${encodeURIComponent(sessionId)}/permission`, { requestId, decision });
+    await api('POST', `/api/sessions/${encodeURIComponent(sessionId)}/permission`, {
+      requestId,
+      decision,
+      ...(reason ? { reason } : {}),
+    });
   } catch (err) {
     toast('Could not answer the request', err.message);
   }
@@ -5440,21 +5526,12 @@ function renderComposer() {
   // Any pending question blocks this composer, whoever asked it: the operator's
   // attention is the thing the run is waiting on, and a worker's question is no
   // different from the Architect's in that respect.
+  //
+  // No sentence explains it. One used to sit above the controls ("fever-tracker is
+  // working — started from 192.168.50.115"), and the operator asked for it to go:
+  // it took a line off the chat to say what the rail's dot and the role cards
+  // already say. A dead Send with no explanation was accepted in exchange.
   $('sendBtn').disabled = (state.busy && !hasSession) || asking || held;
-  // The reason, in one line above the controls, so a dead Send is not a mystery.
-  const note = $('composerNote');
-  if (note) {
-    if (held) {
-      const who = state.busyInfo.driver?.name ? ` — started from ${state.busyInfo.driver.name}` : '';
-      note.textContent = state.busyInfo.state === 'waiting'
-        ? `${state.busyInfo.project} is waiting for an answer${who}. Send and mode are held until it is answered or stopped.`
-        : `${state.busyInfo.project} is working${who}. Send and mode are held until it finishes or is stopped.`;
-      note.hidden = false;
-    } else {
-      note.hidden = true;
-      note.textContent = '';
-    }
-  }
   // Stop has to work while a worker is running or waiting out a retry, when the
   // open session is idle — that is exactly when it is the only way out. `canStop`
   // is the engine's answer for this project, so a hidden worker enables it even
