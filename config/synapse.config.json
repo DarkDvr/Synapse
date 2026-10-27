@@ -265,7 +265,6 @@
   "roles": {
     "designer": {
       "ref": "strata/qwen3.8-flash-next-iq2_xs",
-      "variant": "medium",
       "skills": [
         "aesthetic-foundations",
         "app-check",
@@ -280,7 +279,6 @@
     },
     "qc": {
       "ref": "strata/qwen3.8-flash-next-iq2_xs",
-      "variant": "medium",
       "skills": [
         "web-guidelines",
         "aesthetic-foundations",
@@ -301,7 +299,6 @@
     },
     "coder-1": {
       "ref": "strata/qwen3.8-flash-next-iq2_xs",
-      "variant": "medium",
       "skills": [
         "code-craft",
         "visual-review"
@@ -312,7 +309,6 @@
     },
     "coder-2": {
       "ref": "strata/qwen3.8-flash-next-iq2_xs",
-      "variant": "medium",
       "skills": [
         "code-craft",
         "visual-review"
@@ -323,7 +319,6 @@
     },
     "coder-3": {
       "ref": "strata/qwen3.8-flash-next-iq2_xs",
-      "variant": "medium",
       "skills": [
         "code-craft",
         "visual-review"
@@ -334,7 +329,6 @@
     },
     "inventor": {
       "ref": "strata/qwen3.8-flash-next-iq2_xs",
-      "variant": "medium",
       "skills": [
         "frontend-design"
       ]
