@@ -58,7 +58,11 @@ try {
   expect('Single never calls it an Architect', !/architect/i.test(single));
   expect('Single does not describe a work list or a team', !/task list you own|worker|Delegate the/i.test(single));
   expect('Single keeps the question tool convention', single.includes('(Recommended)'));
-
+  expect(
+    'Single names a scratch folder and refuses the machine temp',
+    /Scratch folder: .*_scratch/.test(single) && /never the machine's temp folder/.test(single),
+    single.slice(0, 260),
+  );
   // ── Single in a project nobody has planned in: the plan is not mentioned ──
   const bare = path.join(ROOT, 'bare-project');
   fs.mkdirSync(bare, { recursive: true });

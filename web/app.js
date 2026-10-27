@@ -919,6 +919,9 @@ function tickClocks() {
   // driven by the harness's run records (data-ms) plus this run's start, so they
   // do not depend on the card clocks existing yet.
   for (const el of document.querySelectorAll('.plan-spent')) {
+    // A settled step has no stopwatch: "not run" is the fact, and ticking it back
+    // to 00:00:00 (and re-hiding it) undid the sentence a second after it appeared.
+    if (el.dataset.settled) continue;
     const base = Number(el.dataset.ms) || 0;
     const since = Number(el.dataset.since) || 0;
     const ms = base + (since ? now - since : 0);
@@ -5325,6 +5328,15 @@ function paintPlan(body) {
         const base = Number(spent[t.id]) || 0;
         const since = liveRun && liveRun.task === t.id ? Number(liveRun.startedAt) || 0 : 0;
         const total = base + (since ? Date.now() - since : 0);
+        // A finished row with no time was settled, not run: the QC cap, a task the
+        // Architect marked done itself. The zero-time rule hid the clock, which read
+        // as a timer that failed to appear; "not run" is the fact.
+        const settled = total === 0 && (shown === 'done' || shown === 'blocked' || shown === 'failed');
+        const spentText = settled ? 'not run' : hhmmss(total);
+        const spentClass = settled ? ' is-none' : total ? '' : ' is-zero';
+        const spentTitle = settled
+          ? 'No worker ran this step — the Architect settled it itself.'
+          : 'Time spent on this step so far';
         return `<li class="plan-task" data-status="${shown}">
           <span class="plan-node">
             <span class="plan-dot" role="img" aria-label="${esc(PLAN_STATUS[shown])}"></span>
@@ -5340,9 +5352,9 @@ function paintPlan(body) {
           </span>
           <span class="plan-side">
             <span class="plan-role">${esc(t.role)}</span>
-            <span class="plan-spent${total ? '' : ' is-zero'}" data-ms="${base}"${
+            <span class="plan-spent${spentClass}" data-ms="${base}"${
               since ? ` data-since="${since}"` : ''
-            } title="Time spent on this step so far">${hhmmss(total)}</span>
+            }${settled ? ' data-settled="1"' : ''} title="${esc(spentTitle)}">${spentText}</span>
           </span>
         </li>`;
       })

@@ -1045,6 +1045,12 @@ bold, italic, strikethrough and links: the range these models actually produce.
   24px; bottom: auto` (an override in `synapse.css` — `summit.css` is locked), so
   the stack grows downward from the corner and no chat control is ever under it.
   It does overlap the plan panel's head, which is the corner the operator chose.
+- **A finished plan row with no clock was a lie of omission (27 Oct).** The
+  per-step stopwatch hides at zero, which is right for a task nobody has run yet —
+  but the QC row the Architect settled itself is `done` with no worker run, and an
+  absent clock read as a timer that failed to appear. Such a row now says "not run"
+  in grey, with the reason in its tooltip, and the clock tick skips it instead of
+  overwriting it with 00:00:00 a second later.
 - **The PHASES line is gone.** It was the Architect's menu choice, not something
   the operator acts on, and it was not always true — a phase can be declared and
   then dropped.

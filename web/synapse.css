@@ -2033,6 +2033,8 @@ body[data-mode="single"] .keep-toggle { display: none; }
   color: #6c7079; font-variant-numeric: tabular-nums;
 }
 .plan-spent.is-zero { visibility: hidden; }
+/* A finished step that never ran says so instead of hiding its clock. */
+.plan-spent.is-none { visibility: visible; color: #82868e; }
 .plan-task[data-status="doing"] .plan-spent { color: var(--yellow); }
 .plan-meta { margin-top: 10px; font-family: var(--mono); font-size: 11px;
   display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }

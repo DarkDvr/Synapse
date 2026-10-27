@@ -79,8 +79,9 @@ export function inside(child, parent) {
 }
 
 /** Which of the three zones a resolved path belongs to. */
-export function zoneOf(target, { projectRoot, harnessRoot }) {
+export function zoneOf(target, { projectRoot, harnessRoot, scratchRoot }) {
   if (inside(target, projectRoot)) return 'project';
+  if (scratchRoot && inside(target, scratchRoot)) return 'scratch';
   if (inside(target, harnessRoot)) return 'harness';
   return 'outside';
 }
@@ -303,6 +304,9 @@ function decideWrite(resources, ctx) {
   if (zones.includes('outside')) {
     return ask('Only the project may be changed without asking. This is not in it.', true, 'outside');
   }
+  if (zones.length && zones.every((z) => z === 'scratch')) {
+    return allow('This is the scratch folder the harness gave you.', false, 'scratch');
+  }
   return allow('This is in the project folder.', false, 'project');
 }
 
@@ -322,7 +326,10 @@ function decideShell(resources, ctx) {
 
   const zones = info.paths.map((p) => zoneOf(p, ctx));
   const redirectZones = info.redirects.map((p) => zoneOf(p, ctx));
-  const outside = [...zones, ...redirectZones].some((z) => z !== 'project');
+  // The scratch zone is ours and is meant to be written: it counts as "inside"
+  // for the decision, and the sentence at the end says which zone it was.
+  const insideZones = (z) => z === 'project' || z === 'scratch';
+  const outside = [...zones, ...redirectZones].some((z) => !insideZones(z));
   const scope = zones.includes('harness') || redirectZones.includes('harness')
     ? 'harness'
     : outside
@@ -355,6 +362,9 @@ function decideShell(resources, ctx) {
   if (zones.length === 0 && redirectZones.length === 0) {
     return allow('This runs in the project folder.', false, 'project');
   }
+  if (zones.length && zones.every((z) => z === 'scratch') && redirectZones.every((z) => z === 'scratch')) {
+    return allow('This runs in the scratch folder.', false, 'scratch');
+  }
   return allow(
     outside
       ? 'Reading is allowed. This one is outside the project.'
@@ -382,7 +392,7 @@ function decideRead(resources, ctx) {
     const target = resolvePath(first(value), ctx.cwd, { home: ctx.home });
     if (!target || target.unknown) return ask('The harness cannot tell which folder this is.', true, 'unknown');
     const zone = zoneOf(target.path, ctx);
-    if (zone !== 'project') outside = true;
+    if (zone !== 'project' && zone !== 'scratch') outside = true;
     if (zone === 'harness') scope = 'harness';
     else if (zone === 'outside' && scope !== 'harness') scope = 'outside';
     if (isSecret(target.path, ctx)) return deny('The harness never opens saved-password folders.', outside, 'secret');
@@ -439,9 +449,9 @@ export function grantKey({ action, resources, cwd, projectRoot, harnessRoot, hom
   return [`${head}|${mode}|${paths.join('|')}`];
 }
 
-export function decide({ action, resources, cwd, projectRoot, harnessRoot, home = os.homedir() }) {
+export function decide({ action, resources, cwd, projectRoot, harnessRoot, scratchRoot, home = os.homedir() }) {
   const a = String(action || '').toLowerCase();
-  const ctx = { cwd, projectRoot, harnessRoot, home };
+  const ctx = { cwd, projectRoot, harnessRoot, scratchRoot, home };
   if (WRITE_ACTIONS.has(a)) return decideWrite(resources, ctx);
   if (SHELL_ACTIONS.has(a)) return decideShell(resources, ctx);
   if (EXECUTE_ACTIONS.has(a)) return ask('This is code the harness cannot inspect.', false, 'unknown');

@@ -10,7 +10,7 @@ import path from 'node:path';
 import { repairMachinePaths } from '../src/config.js';
 import { createProjectStore } from '../src/projects.js';
 import { OpenCodeEngine } from '../src/engines/opencode.js';
-import { VENDOR_ENGINE } from '../src/paths.js';
+import { VENDOR_ENGINE, PROJECTS_ROOT, SCRATCH_ROOT, scratchDir } from '../src/paths.js';
 
 const quiet = { channel: () => ({ info() {}, warn() {}, error() {}, debug() {} }) };
 
@@ -33,6 +33,16 @@ test('a runtime path that is on this machine is left alone', () => {
   assert.equal(repairMachinePaths(cfg), false, 'nothing to repair');
   assert.equal(cfg.engine.opencode.binary, here);
   assert.equal(cfg.engine.opencode.home, path.dirname(here));
+});
+
+test('the scratch root is a sibling of the projects, and each project has its own folder', () => {
+  assert.equal(path.dirname(SCRATCH_ROOT), PROJECTS_ROOT, 'the scratch root travels with the projects root');
+  const a = scratchDir('F:/dev/Synapse.Projects/demo');
+  const b = scratchDir('F:/dev/Synapse.Projects/demo');
+  const c = scratchDir('D:/work/demo');
+  assert.equal(a, b, 'the same project always gets the same folder');
+  assert.notEqual(a, c, 'two projects with the same name do not share scratch space');
+  assert.ok(a.startsWith(SCRATCH_ROOT));
 });
 
 test('a project whose folder is gone is not listed, and the registry forgets it', () => {

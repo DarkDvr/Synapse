@@ -675,6 +675,11 @@ Three zones, one policy file, and the engine's `ask` as the hook:
 | shell | allow while it stays inside | toolbox scripts and read verbs; else denied | the operator is asked |
 | execute | asked | asked | asked |
 
+The scratch root is a fourth, narrow zone: read, write and shell are allowed
+there without asking, because it exists precisely so a probe script has somewhere
+to go that is neither the project nor the machine's temp. It is not inside the
+harness, so the harness deny is untouched.
+
 The ruleset is four broad asks (`edit`, `shell`, `execute`, `read`) plus the
 credential denies; `src/permission-gate.js` answers each `permission.asked` from
 `src/permissions.js` and replies `once` or `reject`. **`always` is never used
@@ -695,12 +700,16 @@ the same scratch script with `-ExecutionPolicy Bypass` or a pipe, and every
 variant asked again until this. A different file, executable or kind of command
 still asks. The card's tooltip says which of the two it is.
 
-**The engine's temp is the user's temp on Windows.** `TMPDIR` is set to the
-engine home, but Windows' Node reads `TEMP`/`TMP`, so the engine and its shells
-use `%LOCALAPPDATA%\Temp\opencode` — which is why a model's scratch script lands
-there. Not changed in the 27 Oct pass: pointing `TEMP` at the harness home would
-make the model's own scratch file a *denied harness write*, and a writable
-scratch zone outside the project is a policy decision of its own.
+**The models' temp is the harness's, not the machine's.** `TMPDIR` alone did
+nothing on Windows: Node reads `TEMP`/`TMP`, so the engine and its shells wrote
+`%LOCALAPPDATA%\Temp\opencode`. The server now sets `TEMP`/`TMP` to
+`Projects\_scratch` — a sibling of the projects and outside the harness — before
+it spawns the engine, and the permission analyser expands `$env:TEMP` from the
+same process env, so the writer and the judge see one folder. Each project gets
+`_scratch\<name>-<hash>` (created at boot and in `createProject`, named in its
+brief); the policy treats that root as a **scratch zone**: read, write and shell
+are allowed there without asking, while the harness stays denied. The machine's
+temp folder is no longer used.
 
 **A refusal explains itself, through a synthetic note.** The reply body has a
 `message` field, but 2.1.2 drops it on the reject path: the tool error is always

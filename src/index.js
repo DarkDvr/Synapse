@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn, execFile } from 'node:child_process';
-import { DATA_DIR, LOGS_DIR, WORKSPACE_DIR, GENERAL_DIR, ENGINE_HOME, PID_FILE, PROJECTS_FILE, TOOL_STATS_FILE, PROBE_DIR, PROBE_FILE, MODEL_CACHE_FILE, NPM_ATTEMPT_FILE, PERMISSION_MEMORY_FILE, REMOTE_TOKEN_FILE, ROOT } from './paths.js';
+import { DATA_DIR, LOGS_DIR, WORKSPACE_DIR, GENERAL_DIR, ENGINE_HOME, PID_FILE, PROJECTS_FILE, TOOL_STATS_FILE, PROBE_DIR, PROBE_FILE, MODEL_CACHE_FILE, NPM_ATTEMPT_FILE, PERMISSION_MEMORY_FILE, REMOTE_TOKEN_FILE, ROOT, SCRATCH_ROOT, scratchDir } from './paths.js';
 import { loadConfig, saveConfig, repairMachinePaths } from './config.js';
 import { logger } from './logger.js';
 import { createEngine } from './engines/index.js';
@@ -83,9 +83,17 @@ async function ensureNpm() {
 
 async function main() {
   // ── directories ──────────────────────────────────────────────
-  for (const dir of [DATA_DIR, LOGS_DIR, WORKSPACE_DIR, ENGINE_HOME, PROBE_DIR]) {
+  for (const dir of [DATA_DIR, LOGS_DIR, WORKSPACE_DIR, ENGINE_HOME, PROBE_DIR, SCRATCH_ROOT]) {
     fs.mkdirSync(dir, { recursive: true });
   }
+  // The models' scratch root is the process temp as well. The engine inherits
+  // TEMP/TMP when it is spawned, and every shell it starts inherits them; the
+  // permission analyser expands `$env:TEMP` from this same process env, so the
+  // child that writes and the judge that approves see one folder. On Windows
+  // Node reads TEMP, not TMPDIR — which is why the engine used the machine's
+  // %LOCALAPPDATA%\Temp\opencode before this, another app's space.
+  process.env.TEMP = SCRATCH_ROOT;
+  process.env.TMP = SCRATCH_ROOT;
 
   // ── config ───────────────────────────────────────────────────
   const { config, created, error } = loadConfig();
@@ -135,6 +143,7 @@ async function main() {
   // by the operator's rule: a project whose directory is gone is not a project here.
   projects.pruneMissing();
   app.info(`projects: ${projects.list().length}`);
+  app.info(`scratch: ${SCRATCH_ROOT}`);
   // Every project owns a plan file. Create the ones that are missing rather than
   // waiting for the first session: an empty, valid file is a better starting
   // point than a missing one, and it makes the file discoverable.
@@ -142,6 +151,9 @@ async function main() {
     if (!project.exists) continue;
     const made = ensurePlan(project.directory);
     if (made.created) app.info(`plan file created: ${made.path}`);
+    // Every project gets its scratch folder, so the brief can name a folder that
+    // already exists instead of telling a model to create its own.
+    try { fs.mkdirSync(scratchDir(project.directory), { recursive: true }); } catch { /* the model can make it */ }
   }
 
   // ── what the local runtimes have loaded ──────────────────────
@@ -223,6 +235,7 @@ async function main() {
     engine,
     logger,
     root: ROOT,
+    scratchRoot: SCRATCH_ROOT,
     memory: permissionMemory,
     onDecision: (entry) => {
       permissionLog.record(entry);

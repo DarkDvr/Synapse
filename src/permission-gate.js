@@ -16,7 +16,7 @@
 import os from 'node:os';
 import { decide, grantKey, resolvePath, refusalNote } from './permissions.js';
 
-export function createPermissionGate({ engine, logger, root, home = os.homedir(), onDecision, memory }) {
+export function createPermissionGate({ engine, logger, root, home = os.homedir(), scratchRoot = null, onDecision, memory }) {
   const log = logger.channel('app');
   // sessionId -> { directory, role, task, title }. The directory never changes
   // for a session's life; the role and task make the console line readable.
@@ -105,6 +105,7 @@ export function createPermissionGate({ engine, logger, root, home = os.homedir()
       cwd: info.directory,
       projectRoot: info.directory,
       harnessRoot: root,
+      scratchRoot,
       home,
     });
     const who = [info.role, info.task].filter(Boolean).join(' ');

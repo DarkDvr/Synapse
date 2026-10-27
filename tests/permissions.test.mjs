@@ -11,6 +11,7 @@ import { decide, grantKey, rulesFor, zoneOf, inside, isSecret, analyzeCommand, r
 const HOME = 'C:/Users/tester';
 const PROJECT = 'F:/dev/Synapse.Projects/demo';
 const HARNESS = 'F:/dev/Synapse';
+const SCRATCH = 'F:/dev/Synapse.Projects/_scratch';
 const CWD = 'F:\\dev\\Synapse.Projects\\demo';
 
 const call = (action, resource, extra = {}) =>
@@ -56,6 +57,24 @@ test('a write anywhere else asks the operator', () => {
 
 test('a write into a credential store is denied', () => {
   assert.equal(call('edit', 'C:/Users/tester/.ssh/authorized_keys').effect, 'deny');
+});
+
+// The scratch folder is the one place outside the project a model may write: it
+// exists so a probe script never has to go into the machine's temp folder or the
+// project's own git tree.
+test('the scratch folder is writable without asking, and is not the harness', () => {
+  const base = { cwd: CWD, projectRoot: PROJECT, harnessRoot: HARNESS, scratchRoot: SCRATCH, home: HOME };
+  const file = `${SCRATCH}/demo-1234/probe.ps1`;
+  assert.equal(zoneOf(file, { projectRoot: PROJECT, harnessRoot: HARNESS, scratchRoot: SCRATCH }), 'scratch');
+  const write = decide({ ...base, action: 'edit', resources: [file] });
+  assert.equal(write.effect, 'allow');
+  assert.equal(write.outside, false);
+  assert.equal(write.scope, 'scratch');
+  assert.match(write.reason, /scratch folder/);
+  const shell = decide({ ...base, action: 'shell', resources: [`Set-Content "${file}" hi`] });
+  assert.equal(shell.effect, 'allow');
+  // The harness is still denied, though it is not far away.
+  assert.equal(decide({ ...base, action: 'edit', resources: [`${HARNESS}/src/api.js`] }).effect, 'deny');
 });
 
 // ── shell ───────────────────────────────────────────────────────

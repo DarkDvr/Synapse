@@ -19,6 +19,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { digest as projectDigest, DOC_RELATIVE } from './project-doc.js';
+import { scratchDir } from './paths.js';
 
 // The roles the topology has cards for, in card order. The `auditor` and the
 // `critic` were retired: the Architect verifies its own delegations against the
@@ -807,6 +808,15 @@ export function briefSession({ dir, role = 'architect', auto = false, single = f
   };
 
   lines.push(`Synapse project: ${path.basename(String(dir || '')) || 'unknown'}`);
+
+  // The scratch folder this project's models may write. It is outside the project
+  // and outside the harness, so a probe script or a screenshot goes there instead
+  // of into either — and instead of the machine's temp folder, which is another
+  // app's space. Boot and `createProject` make it; the path is the brief's.
+  const scratch = scratchDir(dir);
+  lines.push(
+    `Scratch folder: ${scratch}. Probe scripts, screenshots and temporary data go there — never the machine's temp folder. It is yours to write, and it is outside the project.`,
+  );
 
   // Single mode is not this harness at all: it is a chat that can use tools. No
   // roles, no work list, no delegation - the operator answers everything in one

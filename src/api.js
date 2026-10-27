@@ -8,7 +8,7 @@ import { ensureProjectDoc, appendRequest as appendProjectRequest, appendChat, ap
 import { skillRules, describeSkills } from './skills.js';
 import { rulesFor, decide, resolvePath, refusalNote, SINGLE_RULES } from './permissions.js';
 import { stopTargets } from './stop.js';
-import { PROJECTS_ROOT, SKILLS_DIR, ROOT } from './paths.js';
+import { PROJECTS_ROOT, SKILLS_DIR, ROOT, SCRATCH_ROOT, scratchDir } from './paths.js';
 import { mayRecycleFolder } from './projects.js';
 import { fetchProviderModels } from './providers.js';
 import { providerId } from './providers.js';
@@ -780,6 +780,9 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
       // it has something concrete to fill in rather than a blank page. This never
       // touches an existing plan.
       ensurePlan(project.directory);
+      // The scratch folder the brief names: give it now, so a model does not have
+      // to create its own on the first turn.
+      try { fs.mkdirSync(scratchDir(project.directory), { recursive: true }); } catch { /* the model can make it */ }
       return {
         project: (await projectsWithSessions()).find((p) => p.id === project.id) || project,
         existingPlan,
@@ -1551,7 +1554,7 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
           const resolved =
             isPath && directory ? resources.map((r) => resolvePath(r, directory)?.path || String(r)) : [];
           const verdict = directory
-            ? decide({ action, resources, cwd: directory, projectRoot: directory, harnessRoot: ROOT })
+            ? decide({ action, resources, cwd: directory, projectRoot: directory, harnessRoot: ROOT, scratchRoot: SCRATCH_ROOT })
             : null;
           return {
             requestId: p.id || p.requestID || null,

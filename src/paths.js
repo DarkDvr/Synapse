@@ -2,6 +2,7 @@
 // Everything lives under F:\dev\Synapse; nothing is written outside it
 // except the recycled engine binary we locate (node_modules) and the browser.
 import path from 'node:path';
+import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -47,6 +48,23 @@ export const GENERAL_DIR = path.join(PROJECTS_ROOT, 'general');
 // Default working directory for sessions until a project is chosen. The engine
 // needs a location that exists, and this is the one place all projects live.
 export const WORKSPACE_DIR = PROJECTS_ROOT;
+
+// Scratch space the harness gives the models, a sibling of the projects. It is
+// deliberately NOT inside the harness: a model may write here (the policy treats
+// it as a scratch zone), and nothing a model writes belongs beside the product's
+// code or config. It is also not inside a project, so a probe script or a
+// screenshot never pollutes a project's own git status. Each project gets a
+// folder by name, and the engine's own temp (TEMP/TMP) points at the root, so the
+// machine's %TEMP% — another app's space — is never touched.
+export const SCRATCH_ROOT = path.join(PROJECTS_ROOT, '_scratch');
+
+/** One project's scratch folder: its name plus a hash of its path, so two
+ *  projects that share a folder name cannot share scratch space. */
+export function scratchDir(dir) {
+  const base = path.basename(String(dir || '')) || 'project';
+  const hash = createHash('sha1').update(path.resolve(String(dir || '')).toLowerCase()).digest('hex').slice(0, 8);
+  return path.join(SCRATCH_ROOT, `${base}-${hash}`);
+}
 
 // Isolated engine home (config/data/state/tmp) so the engine never touches
 // the machine-wide ~/.config/opencode or ~/.local/share/opencode.
