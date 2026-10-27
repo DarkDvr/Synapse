@@ -3426,12 +3426,17 @@ function renderTranscript() {
   el.classList.remove('is-empty');
   // The conversation, with each worker's trace where it happened: a run that
   // started at 19:45 belongs above the report that arrives at 19:54, not under
-  // it. Traces are merged by start time and fall off the end when they outlast
-  // the newest message. An alarm is merged the same way for the same reason: it is
-  // a line *in* the conversation, so it scrolls up and away with the rest of it
-  // instead of standing at the bottom for ever.
+  // it. A *live* trace is the exception: it is the newest thing happening, and
+  // the operator watching the end of the chat must see it there. It used to stay
+  // at its start, so a deferral or an acknowledgement that arrived mid-run pushed
+  // the live thinking up to third-from-last. When it reports, it settles back to
+  // its start. Alarms are merged by time for the same reason: a line *in* the
+  // conversation scrolls up with the rest of it instead of standing at the bottom.
   const items = [
-    ...tracesFor(currentProject()?.directory).map((t) => ({ at: Number(t.startedAt) || 0, html: renderTrace(t) })),
+    ...tracesFor(currentProject()?.directory).map((t) => ({
+      at: t.finishedAt ? Number(t.startedAt) || 0 : Number.MAX_SAFE_INTEGER,
+      html: renderTrace(t),
+    })),
     ...alarmsHere().map((a) => ({ at: Number(a.at) || 0, html: renderAlarm(a) })),
     ...chatErrorsHere().map((e) => ({ at: Number(e.at) || 0, html: renderChatError(e) })),
   ].sort((x, y) => x.at - y.at);
@@ -4435,7 +4440,11 @@ function renderPermissions() {
           )}" title="Do it this time only.">Allow Once</button>
           <button class="btn btn-warn btn-sm" data-perm="always" data-perm-id="${esc(
             p.requestId,
-          )}" title="Do it, and stop asking for this exact request in this chat.">Always Allow</button>
+          )}" title="${
+            p.action === 'shell' || p.action === 'bash'
+              ? 'Do it, and stop asking for this command and the files it names in this chat — extra arguments do not ask again.'
+              : 'Do it, and stop asking for this exact request in this chat.'
+          }">Always Allow</button>
           <button class="btn btn-warn btn-sm" data-perm="reject" data-perm-id="${esc(
             p.requestId,
           )}" title="Say no. The role is told and carries on.">Reject</button>

@@ -1027,6 +1027,18 @@ bold, italic, strikethrough and links: the range these models actually produce.
   stacked. The 22px they started at put them under the plan panel's right edge and
   close to the window's own corner; the operator asked for them about 90px further
   left, which is the 112 that `right` now carries.
+- **The compact chip joined that corner (27 Oct).** It used to float at the chat's
+  top-left and covered the first line of whatever was being read. It is now the
+  first item of the same right-anchored row (`.chat-tools`, `right: 112px`), 25px
+  tall like a FAB, growing leftward and ellipsing. The row is the only thing at
+  that offset; the FAB group is not absolutely positioned any more.
+- **A live trace sits at the end of the transcript (27 Oct).** A finished trace
+  keeps its start time — a run that began at 19:45 belongs above the report that
+  arrives at 19:54. A *running* trace is the newest thing in the chat, so it is
+  sorted after every message; otherwise a deferral or an acknowledgement that
+  arrives mid-run pushes the live thinking up, and the operator saw the active
+  reasoning as "the 3rd chat entry from the bottom". It settles back to its start
+  when it reports.
 - **Popups go to the window's top-right, not the bottom-right.** The baseline's
   `.toast-region` is `fixed; right: 24px; bottom: 24px`, which parked a toast about
   the run on top of the composer's Send and Stop. It is now `top: 16px; right:

@@ -273,6 +273,23 @@ test('a remembered request does not widen to a different path', async () => {
   assert.deepEqual(replies, []);
 });
 
+test('a remembered shell command covers the same script with a different tail', async () => {
+  const { gate, replies } = setup();
+  const script = 'D:/scratch/probe.ps1';
+  gate.remember('ses_1', 'shell', [`powershell -NoProfile -File "${script}"`]);
+  await gate.handle(
+    event('shell', [`powershell -NoProfile -ExecutionPolicy Bypass -File "${script}" 2>&1 | Select-Object -First 30`]),
+  );
+  assert.deepEqual(replies, [{ sessionId: 'ses_1', requestId: 'req_1', decision: 'once' }]);
+});
+
+test('a remembered shell command does not cover another script', async () => {
+  const { gate, replies } = setup();
+  gate.remember('ses_1', 'shell', ['powershell -NoProfile -File "D:/scratch/probe.ps1"']);
+  await gate.handle(event('shell', ['powershell -NoProfile -File "D:/scratch/other.ps1"']));
+  assert.deepEqual(replies, [], 'a different file still asks');
+});
+
 test('a remembered request never overrides a refusal', async () => {
   const seen = [];
   const replies = [];

@@ -402,6 +402,43 @@ function decideRead(resources, ctx) {
  * for a shell tool. `cwd` is the session's directory: relative paths resolve
  * there, which is what makes the three zones work for both forms.
  */
+/**
+ * What one "Always Allow" stands for.
+ *
+ * A file action is a path: the operator judged *that file*, and a relative and an
+ * absolute name for it are the same consent, so the name is resolved.
+ *
+ * A shell command is not its argument string. The model re-runs the same script
+ * with a different tail (`2>&1 | Select-Object …`) and every variant asked again
+ * — measured 27 Oct against a scratch script in the engine's temp folder. The
+ * grant is the executable and the files the command names, plus whether it reads,
+ * writes or runs them: `-ExecutionPolicy Bypass` and a pipe do not change it; a
+ * different file, executable or kind of command still asks.
+ *
+ * Falls back to the raw resources when the command cannot be analysed: a grant
+ * that covers less is the safe failure.
+ */
+export function grantKey({ action, resources, cwd, projectRoot, harnessRoot, home = os.homedir() }) {
+  const a = String(action || '').toLowerCase();
+  const list = (Array.isArray(resources) ? resources : [resources]).map((r) => String(r || ''));
+  if (WRITE_ACTIONS.has(a) || READ_ACTIONS.has(a)) {
+    return list
+      .map((r) => resolvePath(r, cwd, { home })?.path || r)
+      .map((p) => key(p))
+      .sort();
+  }
+  if (!SHELL_ACTIONS.has(a)) return list;
+  const command = list.join('\n').trim();
+  if (!command) return list;
+  const info = analyzeCommand(command, cwd, { home });
+  if (info.unknown || !info.paths.length) return list;
+  const head = (wordsOf(segmentsOf(command)[0] || '')[0] || '').toLowerCase();
+  if (!head) return list;
+  const mode = info.redirects.length ? 'write' : info.readsOnly ? 'read' : 'run';
+  const paths = [...new Set(info.paths.map((p) => key(p)))].sort();
+  return [`${head}|${mode}|${paths.join('|')}`];
+}
+
 export function decide({ action, resources, cwd, projectRoot, harnessRoot, home = os.homedir() }) {
   const a = String(action || '').toLowerCase();
   const ctx = { cwd, projectRoot, harnessRoot, home };

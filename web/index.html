@@ -222,15 +222,19 @@
           <!-- ── conversation (live · no header) ─────────────────────── -->
           <section class="chat-dock" id="chatDock" aria-label="Conversation">
             <div class="chat-scroll" id="transcript"></div>
-            <!-- The only reset: discards this conversation and leaves a handover.
-                 Hidden unless the project is idle with something to discard, and
-                 a second click within three seconds is the confirmation. -->
-            <button class="compact-chip" id="compactChip" type="button" hidden></button>
-            <div class="chat-nav" id="chatNav" hidden>
-              <button class="fab" id="navTop" title="Scroll to the top of the chat" aria-label="Scroll to the top of the chat">↑</button>
-              <button class="fab" id="navPrev" title="Jump to the previous message" aria-label="Previous message">↑</button>
-              <button class="fab" id="navNext" title="Jump to the next message" aria-label="Next message">↓</button>
-              <button class="fab" id="navBottom" title="Scroll to the bottom of the chat" aria-label="Scroll to the bottom of the chat">↓</button>
+            <div class="chat-tools">
+              <!-- The only reset: discards this conversation and leaves a handover.
+                   Hidden unless the project is idle with something to discard, and
+                   a second click within three seconds is the confirmation. It sits
+                   left of the jump buttons, same height, so the corner is one row
+                   of chat tools rather than a pill over the first line of text. -->
+              <button class="compact-chip" id="compactChip" type="button" hidden></button>
+              <div class="chat-nav" id="chatNav" hidden>
+                <button class="fab" id="navTop" title="Scroll to the top of the chat" aria-label="Scroll to the top of the chat">↑</button>
+                <button class="fab" id="navPrev" title="Jump to the previous message" aria-label="Previous message">↑</button>
+                <button class="fab" id="navNext" title="Jump to the next message" aria-label="Next message">↓</button>
+                <button class="fab" id="navBottom" title="Scroll to the bottom of the chat" aria-label="Scroll to the bottom of the chat">↓</button>
+              </div>
             </div>
             <form class="composer" id="composer">
               <!-- Attached files, one little panel each, above the row. Outside the

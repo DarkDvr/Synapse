@@ -6,7 +6,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { decide, rulesFor, zoneOf, inside, isSecret, analyzeCommand, refusalNote } from '../src/permissions.js';
+import { decide, grantKey, rulesFor, zoneOf, inside, isSecret, analyzeCommand, refusalNote } from '../src/permissions.js';
 
 const HOME = 'C:/Users/tester';
 const PROJECT = 'F:/dev/Synapse.Projects/demo';
@@ -67,6 +67,36 @@ test('a command that touches nothing is allowed', () => {
 test('a command that stays in the workspace is allowed', () => {
   assert.equal(shell('Get-Content .\\package.json').effect, 'allow');
   assert.equal(shell('node src\\index.js').effect, 'allow');
+});
+
+// "Always Allow" on a shell card is about the command and the files it names,
+// not the exact argument string: the model re-runs the same script with a pipe
+// or another flag, and every variant used to ask again.
+test('an always-allow covers the same script with a different tail, not another file', () => {
+  const base = { cwd: CWD, projectRoot: PROJECT, harnessRoot: HARNESS, home: HOME };
+  const script = 'C:/Users/tester/AppData/Local/Temp/opencode/probe.ps1';
+  const one = grantKey({ ...base, action: 'shell', resources: [`powershell -NoProfile -File "${script}"`] });
+  const two = grantKey({
+    ...base,
+    action: 'shell',
+    resources: [`powershell -NoProfile -ExecutionPolicy Bypass -File "${script}" 2>&1 | Select-Object -First 30`],
+  });
+  assert.deepEqual(one, two);
+  const other = grantKey({
+    ...base,
+    action: 'shell',
+    resources: [`powershell -NoProfile -File "C:/Users/tester/AppData/Local/Temp/opencode/other.ps1"`],
+  });
+  assert.notDeepEqual(one, other, 'another file is another consent');
+  const read = grantKey({ ...base, action: 'shell', resources: [`Get-Content "${script}"`] });
+  assert.notDeepEqual(one, read, 'reading a file is not running it');
+});
+
+test('the same file under two names is one grant', () => {
+  const base = { projectRoot: PROJECT, harnessRoot: HARNESS, home: HOME };
+  const rel = grantKey({ ...base, action: 'edit', resources: ['bin/app.js'], cwd: CWD });
+  const abs = grantKey({ ...base, action: 'edit', resources: [`${PROJECT}/bin/app.js`], cwd: CWD });
+  assert.deepEqual(rel, abs);
 });
 
 // The sentence is what the log and the card say. A read of the project itself

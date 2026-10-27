@@ -14,7 +14,7 @@
 // working directory would judge the request against the wrong zone, and a wrong
 // allow is worse than a prompt.
 import os from 'node:os';
-import { decide, resolvePath, refusalNote } from './permissions.js';
+import { decide, grantKey, resolvePath, refusalNote } from './permissions.js';
 
 export function createPermissionGate({ engine, logger, root, home = os.homedir(), onDecision, memory }) {
   const log = logger.channel('app');
@@ -34,12 +34,17 @@ export function createPermissionGate({ engine, logger, root, home = os.homedir()
       .map(String)
       .join('\u0001')}`;
 
-  /** Remember one exact request for this session. Only the operator's answer
-   *  reaches here; the gate itself never widens what it may do. */
+  /** Remember one request for this session. Only the operator's answer reaches
+   *  here; the gate itself never widens what it may do. What "the request" is
+   *  comes from `grantKey`: a path for a file action, the executable and the
+   *  files it names for a shell command — so the same script with a different
+   *  tail does not ask again, and a different file still does. */
   function remember(sessionId, action, resources) {
     if (!sessionId) return false;
-    if (memory) return Boolean(memory.remember(sessionId, action, resources));
-    fallback.add(memoryKey(sessionId, action, resources));
+    const dir = sessions.get(sessionId)?.directory || root;
+    const grant = grantKey({ action, resources, cwd: dir, projectRoot: dir, harnessRoot: root, home });
+    if (memory) return Boolean(memory.remember(sessionId, action, grant));
+    fallback.add(memoryKey(sessionId, action, grant));
     return true;
   }
 
@@ -122,7 +127,20 @@ export function createPermissionGate({ engine, logger, root, home = os.homedir()
       title: info.title,
       at: Date.now(),
     };
-    const forgiven = verdict.effect === 'ask' && wasRemembered(request.sessionId, request.action, request.resources);
+    const forgiven =
+      verdict.effect === 'ask' &&
+      wasRemembered(
+        request.sessionId,
+        request.action,
+        grantKey({
+          action: request.action,
+          resources: request.resources,
+          cwd: info.directory,
+          projectRoot: info.directory,
+          harnessRoot: root,
+          home,
+        }),
+      );
     if (verdict.effect === 'ask' && !forgiven) {
       // Pending: the chip is not drawn yet, but the operator's answer needs the
       // request on record to become one.
@@ -157,13 +175,13 @@ export function createPermissionGate({ engine, logger, root, home = os.homedir()
         asked: false,
         decided: true,
         decidedBy: forgiven ? 'operator' : 'harness',
-        ...(forgiven ? { reason: 'You allowed this exact request earlier in the session.' } : {}),
+        ...(forgiven ? { reason: 'You allowed this earlier in the session.' } : {}),
       });
       log.info(
         `permission ${forgiven ? 'allow' : verdict.effect}${forgiven ? ' (remembered)' : ''}${
           who ? ` (${who})` : ''
         }: ${request.action || 'tool call'} ${what} — ${
-          forgiven ? 'you allowed this exact request earlier' : verdict.reason
+          forgiven ? 'you allowed this earlier' : verdict.reason
         }`,
       );
     } catch (err) {

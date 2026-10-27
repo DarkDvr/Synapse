@@ -1094,9 +1094,16 @@ body[data-view="session"] .chat-dock.has-ask { overflow: visible; }
    middle of the pane (where they were) they covered two lines of whatever the
    operator was reading, and a pair in the corner covers a sliver of one. Smaller
    for the same reason — they are a convenience, not a control surface. */
+/* The chat's top-right corner is one row: the compact chip, then the jump
+   buttons. The row is right-anchored at 112px (the operator's distance from the
+   window corner), so the FABs keep the same place and the chip grows leftward. */
+.chat-tools {
+  position: absolute; top: 7px; right: 112px;
+  display: flex; align-items: center; gap: 8px;
+  max-width: calc(100% - 124px); z-index: 31;
+}
 .chat-nav {
-  position: absolute; right: 112px; top: 7px;
-  display: flex; gap: 4px; z-index: 30;
+  display: flex; gap: 4px;
 }
 /* Four buttons on one row, right-aligned in the transcript's top corner: two to
    step one message, then the two that go all the way to either end. Purple is the
@@ -1117,17 +1124,19 @@ body[data-view="session"] .chat-dock.has-ask { overflow: visible; }
 .fab:disabled:hover { background: #23262c; border-color: var(--violet-line); color: var(--violet-bright); }
 
 /* ── compact: the one reset ────────────────────────────────────────────────
-   A pill in the chat's top-left, floating like the scroll buttons and for the
-   same reason: it is not part of the conversation, so it takes no line of it.
-   Yellow while it is an offer; red when it is a confirmation, because red is
-   this palette's destructive colour (Stop, Revert). It is hidden unless a
-   compact can run — the operator asked for a control that appears when it is
-   available rather than one that sits greyed out. */
+   A pill beside the jump buttons, the same 25px tall, so it is not part of the
+   conversation and takes no line of it. It used to float at the chat's top-left
+   and cover the first line of whatever the operator was reading; the corner is
+   where the chat's controls already are. Yellow while it is an offer; red when
+   it is a confirmation, because red is this palette's destructive colour (Stop,
+   Revert). It is hidden unless a compact can run — the operator asked for a
+   control that appears when it is available rather than one that sits greyed
+   out. */
 .compact-chip {
-  position: absolute; top: 7px; left: 10px; z-index: 31;
+  flex: 0 1 auto; min-width: 0; height: 25px; box-sizing: border-box;
   display: inline-flex; align-items: center; gap: 6px;
-  max-width: calc(100% - 210px);
-  padding: 5px 10px; border-radius: 999px;
+  max-width: 420px;
+  padding: 0 10px; border-radius: 999px;
   border: 1px solid rgba(237, 194, 90, 0.55);
   background: rgba(20, 22, 27, 0.88);
   color: var(--yellow);

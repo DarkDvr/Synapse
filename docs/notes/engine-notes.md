@@ -675,10 +675,25 @@ automatically** — a saved allow would outlive the policy that granted it, and 
 next identical call must be judged again.
 
 **Always Allow is the operator's decision, so it survives a restart.** The narrow
-memory (same session, same action, same exact resources) is written through to
-`data/permission-memory.json` on every grant, capped at 500 entries, and a
-session's grants are dropped when that session is deleted. The process is not
-allowed to be the only copy of something the operator had to answer.
+memory is written through to `data/permission-memory.json` on every grant, capped
+at 500 entries, and a session's grants are dropped when that session is deleted.
+The process is not allowed to be the only copy of something the operator had to
+answer.
+
+What "the request" is comes from `grantKey` (27 Oct). A file action remembers the
+resolved path — a relative and an absolute name for the same file are one
+consent. A shell command remembers the executable, the files it names and whether
+it reads, writes or runs them, not the exact argument string: the model re-runs
+the same scratch script with `-ExecutionPolicy Bypass` or a pipe, and every
+variant asked again until this. A different file, executable or kind of command
+still asks. The card's tooltip says which of the two it is.
+
+**The engine's temp is the user's temp on Windows.** `TMPDIR` is set to the
+engine home, but Windows' Node reads `TEMP`/`TMP`, so the engine and its shells
+use `%LOCALAPPDATA%\Temp\opencode` — which is why a model's scratch script lands
+there. Not changed in the 27 Oct pass: pointing `TEMP` at the harness home would
+make the model's own scratch file a *denied harness write*, and a writable
+scratch zone outside the project is a policy decision of its own.
 
 **A refusal explains itself, through a synthetic note.** The reply body has a
 `message` field, but 2.1.2 drops it on the reject path: the tool error is always
