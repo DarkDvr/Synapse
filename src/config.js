@@ -61,12 +61,8 @@ export const DEFAULTS = {
       compactionKeepTokens: 0,
     },
   },
-  defaults: {
-    // The only global default left: where a new session runs when no project
-    // is picked. Model and thinking effort belong to roles — the Architect
-    // included — not to the app.
-    directory: '',
-  },
+  // No global default directory: a conversation always belongs to a project, and
+  // a project IS its folder. The old `defaults.directory` key is dropped below.
   // Per-role selections made on the role cards, the Architect included:
   // { ref, variant }. There is no "default model" concept: if a role has no
   // entry, nothing was chosen yet. Persisted so choices survive a restart.
@@ -187,6 +183,9 @@ export function normalize(raw) {
   const rawWorker = isPlainObject(raw?.worker) ? raw.worker : {};
   const carriedStall = rawWorker.stallSec !== undefined ? rawWorker.stallSec : rawWorker.timeoutSec;
   const cfg = merge(DEFAULTS, raw || {});
+  // `defaults` is a legacy block (model and directory from before roles and
+  // projects). Kept object-shaped while the old keys are folded, then dropped.
+  cfg.defaults = isPlainObject(cfg.defaults) ? cfg.defaults : {};
   cfg.server.host = String(cfg.server.host || '127.0.0.1');
   cfg.server.port = clampInt(cfg.server.port, 1, 65535, 8700);
   cfg.server.openBrowser = cfg.server.openBrowser !== false;
@@ -303,10 +302,10 @@ export function normalize(raw) {
       return { ...p, id };
     })([]));
 
-  cfg.defaults.directory = String(cfg.defaults.directory || '');
-  // The mode is per session now (Single at creation, switched live), so the old
-  // defaults.mode key is dropped rather than left to mislead.
+  // The mode is applied at send now, and a conversation belongs to a project, so
+  // the old defaults block has nothing left to say.
   delete cfg.defaults.mode;
+  delete cfg.defaults.directory;
 
   // Role selections are objects ({ ref, variant }); accept the older bare
   // "provider/id" strings so existing config files keep working. The Architect
@@ -382,6 +381,8 @@ export function normalize(raw) {
   delete cfg.defaults.model;
   delete cfg.defaults.variant;
   delete cfg.defaults.agent;
+  // Nothing is left in the legacy block: the file no longer carries it.
+  delete cfg.defaults;
   cfg.roles = roles;
 
   cfg.modelChecks = cfg.modelChecks || {};

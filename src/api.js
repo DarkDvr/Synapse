@@ -3,7 +3,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
-import { TBD_TITLE } from './titles.js';
 import { ensurePlan, readPlan, readRuns, runLedger, briefSession, logPlanState, BRIEF_KEY } from './plans.js';
 import { ensureProjectDoc, appendRequest as appendProjectRequest, appendChat, appendDecision as appendProjectDecision, appendEntry, setHandover } from './project-doc.js';
 import { skillRules, describeSkills } from './skills.js';
@@ -459,50 +458,6 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
   const formSignature = questionSignature;
   const readableAnswerOf = readableAnswer;
 
-  /**
-   * Remove a project's `.synapse` — its plan, requirement, answers, ideas, design,
-   * findings and run log.
-   *
-   * It is the *project's* memory, not a session's, which is why deleting a session
-   * never touched it: a new session in the same folder opens the same plan, and
-   * after the last session was deleted that looks exactly like a fresh session
-   * inheriting a dead one. The operator may ask for it to go, and the asking is
-   * guarded: only inside the projects root, only when no other session uses the
-   * folder, and never while a run is in flight there.
-   */
-  async function forgetProjectPlan(directory) {
-    const dir = path.resolve(String(directory || ''));
-    const rel = path.relative(PROJECTS_ROOT, dir);
-    if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) {
-      return { ok: false, reason: `${dir} is not inside the projects root` };
-    }
-    const target = path.join(dir, '.synapse');
-    if (!fs.existsSync(target)) return { ok: false, reason: 'this project has no .synapse to forget' };
-    if ((runs?.active?.() || []).some((r) => path.resolve(r.dir || '') === dir)) {
-      return { ok: false, reason: 'a run is still working in this project' };
-    }
-    let others = [];
-    try {
-      others = (await engine.listSessions()).filter(
-        (s) => !s.internal && path.resolve(s.directory || '') === dir,
-      );
-    } catch {
-      return { ok: false, reason: 'could not list the sessions in this project' };
-    }
-    // The session being deleted is still in the list, so more than one means the
-    // plan belongs to somebody else too.
-    if (others.length > 1) {
-      return { ok: false, reason: `${others.length} sessions still use this project` };
-    }
-    try {
-      fs.rmSync(target, { recursive: true, force: true });
-      app.info(`forgot the plan and scratch of ${dir}`);
-      return { ok: true, directory: dir };
-    } catch (err) {
-      return { ok: false, reason: err.message };
-    }
-  }
-
   /** Returns the forms that should still be shown; answers or stops the rest. */
   async function guardQuestions(forms) {
     const open = [];
@@ -762,12 +717,6 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
         }
       }
       return { skills, missing, paths, bundled: SKILLS_DIR };
-    },
-
-    sessions: async () => {
-      if (!engine.status().ready) return { sessions: [] };
-      const sessions = await engine.listSessions();
-      return { sessions: sessions.filter((s) => !isScratchSession(s)) };
     },
 
     /** Delegated work in flight, one entry per project. The live path and the
@@ -1073,7 +1022,9 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
       }
       const location = project.directory;
       const session = await engine.createSession({
-        title: TBD_TITLE,
+        // The engine's own title is never shown: the rail names the project. It is
+        // set to the project's name so the engine's list is readable in an audit.
+        title: project.name,
         model: body?.model,
         agent: body?.agent,
         // The permission ladder comes first: every write, shell, read and code
@@ -1099,55 +1050,6 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
       return { session, projectId: project.id };
     },
 
-    /**
-     * PATCH a session. `title` renames it; `permissions` replaces its ruleset —
-     * which is how Single↔Multi flips an open session without recreating it.
-     */
-    updateSession: async (sessionId, body) => {
-      requireReady();
-      const hasPermissions = body !== null && typeof body === 'object' && 'permissions' in body;
-      const hasTitle = body !== null && typeof body === 'object' && body.title !== undefined;
-      if (!hasPermissions && !hasTitle) {
-        const err = new Error('nothing to update');
-        err.status = 400;
-        throw err;
-      }
-      if (hasPermissions) {
-        const p = body.permissions;
-        if (p !== null && !Array.isArray(p)) {
-          const err = new Error('permissions must be an array or null');
-          err.status = 400;
-          throw err;
-        }
-        // Single/Multi decides who may act and what the brief says. Changing it
-        // under a working project changes the rules mid-run, so it waits for idle.
-        const busy = await busyFor(sessionId);
-        if (busy.busy) {
-          const err = new Error(
-            `${busyMessage(busy)} Switch modes when it is idle.`,
-          );
-          err.status = 409;
-          err.busy = busy;
-          throw err;
-        }
-        await engine.updateSessionPermissions(sessionId, [
-          ...rulesFor(),
-          ...(Array.isArray(p) ? p : []),
-          ...skillRules(getConfig(), 'architect'),
-        ]);
-      }
-      if (hasTitle) {
-        const title = String(body.title ?? '').trim();
-        if (!title) {
-          const err = new Error('a session needs a title');
-          err.status = 400;
-          throw err;
-        }
-        await engine.updateSessionTitle(sessionId, title);
-      }
-      return { ok: true };
-    },
-
     /** Switch the model and/or thinking effort used by an existing session. */
     switchModel: async (sessionId, body) => {
       requireReady();
@@ -1159,36 +1061,6 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
       }
       await engine.switchModel(sessionId, model);
       return { ok: true };
-    },
-
-    deleteSession: async (sessionId, { forget = false } = {}) => {
-      requireReady();
-      // A run that still holds this session stops first. A worker finishing into a
-      // deleted session, or a wake aimed at one, used to surface as "404 Session
-      // not found" on the Architect card and was retried as if the server were
-      // busy. Deleting the session is the operator ending that run, so it ends
-      // here, as stopped.
-      try { runs?.stopWithReason?.(sessionId, 'the session was deleted'); } catch { /* nothing running */ }
-      // Where it lived, read before the session goes. The folder is the project's
-      // and is never touched here — deleting a conversation leaves the work.
-      let directory = null;
-      try { directory = (await engine.getSession(sessionId))?.directory || null; } catch { /* gone already */ }
-      // Whether anything else lives there, for the optional plan forget: a plan is
-      // the project's, not the session's, and it is only the operator's to throw
-      // away when no other session can lose it.
-      let forgetResult = null;
-      if (forget) {
-        forgetResult = directory ? await forgetProjectPlan(directory) : { ok: false, reason: 'the session has no directory' };
-      }
-      await engine.deleteSession(sessionId);
-      briefed.delete(sessionId);
-      // A deleted session's "Always Allow" grants are meaningless now.
-      try { permissionMemory?.forgetSession?.(sessionId); } catch { /* the memory is a convenience */ }
-      // Tell every open UI. Another tab can have it on screen, and a UI left
-      // holding a deleted session answers 404 on every control it offers —
-      // which is how a mode switch ended up reporting "Session not found".
-      notify?.({ kind: 'sessions', type: 'session.deleted', sessionId });
-      return { ok: true, forgotten: forgetResult };
     },
 
     messages: async (sessionId) => {
@@ -1352,7 +1224,7 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
         synapse.auto = session.auto === true;
         synapse.compacted = { at, summary: handover.text, messages: handover.messages };
         const created = await engine.createSession({
-          title: TBD_TITLE,
+          title: path.basename(session.directory) || 'chat',
           model: session.model ? { ref: session.model, variant: session.variant || undefined } : undefined,
           directory: session.directory,
           permissions: session.single ? SINGLE_RULES : [],

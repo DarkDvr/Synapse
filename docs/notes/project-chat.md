@@ -1,9 +1,8 @@
 # One chat per project — the scope
 
-Status: **Phases 1–4 built; phase 5 pending (cleanup only).** This is the record of
-what we decided, what we verified, and the order we'll build it in. Each phase is
-one commit chain and a checkpoint; nothing here is a rule until it is built and
-tested.
+Status: **all five phases built 27 Oct.** This is the record of what we decided,
+what we verified, and the order we built it in. Phase 5 was cleanup; the product
+is one chat per project.
 
 The goal: a project is one conversation. No session list, no General, no choice
 between "new" and "continue". The only reset is **Compact**, which throws the
@@ -237,15 +236,34 @@ why it can disagree with what the operator meant when they clicked twice.
 - Not yet done (phase 5): the session create/rename/delete routes, titles and the
   titler are still in the code, though the UI no longer shows them.
 
-### Phase 5 — remove the session UI
-- Delete the session list, New Session, rename/delete-session, titles,
-  `TBD_TITLE`, the titler (one less model call per chat).
-- The client follows "the project's chat" instead of a session choice; a compact
-  swaps the id underneath it; localStorage clocks key by project + chat.
+### Phase 5 — remove the session UI — **built 27 Oct**
+- Deleted: the session list route (`GET /api/sessions`), rename (`PATCH
+  /api/sessions/{id}`), delete (`DELETE /api/sessions/{id}`), the `forget the
+  plan` path that only session deletion used, `titles.js` and `titler.js` (one
+  `generate` call per chat), `TBD_TITLE`, the dead session-row functions, the
+  inline rename handlers, the old dead CSS (`.tree-row.session`, `.tree-caret`,
+  `.tree-project-body`, `.tree-sessions`, `.tree-add-row`, `.tree-rename`,
+  `.tree-edit`, `.tree-x`), and the `defaults.directory` config block and
+  Settings field ("Where new sessions run").
+- The client's helpers were renamed to the product's word: `createChat`,
+  `chatBody`; the Settings tab called "General" is "Server" (it is the server
+  settings, not the old project).
+- **The audit.** Grep over `web/` for `session`/`General` now finds only internal
+  identifiers (`state.sessionId`, `view: 'session'`, localStorage keys) and
+  comments — the engine's word for the thing Synapse shows as a chat. No
+  user-facing string, button, tooltip, tab or dialog mentions sessions or
+  General; `Sessions Still Inside` is gone. In `src/`, the word remains where it
+  is the engine's: the adapter, the runner's worker sessions, the engine's own
+  routes and logs. That boundary is deliberate — the engine has sessions; the
+  product has one chat per project.
 - Migration: existing projects adopt their newest session as the chat; older
-  ones stay in the engine, invisible, and can be deleted later (never
-  automatically — that would be a destructive upgrade).
-- Done when the word session appears nowhere in the UI, and the suite is green.
+  ones stay in the engine, invisible (never deleted automatically). On this
+  machine the older Fever Tracker sessions and the General and recovery-check
+  projects were removed by the operator's instruction after the check.
+- Tests: `184/184` (three of them the new UI-words guard), docs `39/39`. The rail,
+  the menu, the compact confirm and the General adoption were checked live; the
+  General project deleted to the Recycle Bin after a restart released its folder
+  handle (first attempt: 423 locked).
 
 ---
 

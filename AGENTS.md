@@ -207,14 +207,14 @@ Gotchas:
 Synapse.exe           the app — window, tray, server supervisor (build output)
 shell/                the WPF frame behind it: App, MainWindow, ServerHost, ConsoleStore
 src/
-  index.js            boot wiring: config → projects → engine → titler → probe → server
+  index.js            boot wiring: config → projects → engine → probe → server
   paths.js            every filesystem path, derived from the project root
   config.js           DEFAULTS, merge, normalize, load/save
   logger.js           per-channel logs, rotation, cleanup
   server.js           HTTP routes + SSE broadcast
   api.js              engine-agnostic operations the routes call
   projects.js         the project registry (a project IS a directory)
-  titler.js           names a session after its first answer
+  project-doc.js      the project's living document (current, handover, log)
   toolstats.js        the tool-call census (data\tool-stats.json)
   probe.js            the tool probe: one turn per tool
   providers.js        provider types, ids, and "ask a server what it serves"

@@ -7,7 +7,6 @@ import { loadConfig, saveConfig, repairMachinePaths } from './config.js';
 import { logger } from './logger.js';
 import { createEngine } from './engines/index.js';
 import { createProjectStore } from './projects.js';
-import { createTitler } from './titler.js';
 import { createToolStats } from './toolstats.js';
 import { ensurePlan, readPlan, logPlanState } from './plans.js';
 import { createRunner } from './runs.js';
@@ -162,7 +161,7 @@ async function main() {
   // ── engine ───────────────────────────────────────────────────
   engine = createEngine(currentConfig, {
     logger,
-    workspaceDir: config.defaults.directory || WORKSPACE_DIR,
+    workspaceDir: WORKSPACE_DIR,
     dataDir: DATA_DIR,
   });
   app.info(`engine: ${config.engine.type}`);
@@ -186,16 +185,10 @@ async function main() {
   }
 
 
-  // ── session naming + tool census ─────────────────────────────
-  const titler = createTitler({
-    engine,
-    logger,
-    notify: (sessionId, title) => {
-      // Let every open UI know the name changed without waiting for a poll.
-      http?.broadcast({ kind: 'sessions', type: 'session.named', sessionId, title, ts: Date.now() });
-    },
-  });
-
+  // ── tool census ──────────────────────────────────────────────
+  // There is no session naming any more: a project is one chat, the rail shows
+  // the project's name, and an engine session's own title is never read. That
+  // removed a `generate` call after the first answer of every conversation.
   const toolStats = createToolStats({ file: TOOL_STATS_FILE, logger });
   const toolStatsLog = logger.channel('tools');
   // Automated clearing: the census describes the current environment, so it
@@ -488,14 +481,8 @@ async function main() {
     // is holding a tool until someone answers.
     permissionGate.handle(ev);
     watchFirstToken(ev);
-    if (type === 'session.execution.succeeded') titler.maybeTitle(ev.sessionId);
     if (/^session\.execution\.(succeeded|failed|interrupted)$/.test(type)) afterTurn(ev.sessionId, type);
   });
-  // Anything left unnamed from a previous run gets named shortly after boot.
-  {
-    const t = setTimeout(() => titler.sweep(), 6000);
-    t.unref?.();
-  }
 
   // Two kinds of unfinished delegation survive a restart, and they need opposite
   // treatment. A request no turn ever read is still in the transcript, answered

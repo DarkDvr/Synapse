@@ -1,6 +1,6 @@
 // Synapse UI. Talks only to the Synapse API; knows nothing about the engine.
 //
-// LIVE: engine/stream status, projects and their sessions (create, rename,
+// LIVE: engine/stream status, projects and their chats (open, switch model,
 // delete), the conversation with streamed tool calls, tool permissions,
 // per-role model + thinking-effort choices, the Single↔Multi switch, and the
 // settings form over config/synapse.config.json.
@@ -159,8 +159,6 @@ const ROLES = [
   { id: 'qc', name: 'QC' },
 ];
 
-const TBD_TITLE = 'TBD';
-
 const state = {
   status: null,
   // What we know about the engine's own version: current, latest, where the
@@ -270,13 +268,12 @@ const state = {
   // Which question of the form is on screen. A five-question form is five pages,
   // because the ones below the fold were being missed entirely.
   askPage: 0,
-  renaming: null,
   view: 'none', // none | session
   // Settings is a draft, not the file: `setDraft` is a copy of the config that
   // the panes edit, `settingsTab` is the open pane, and the provider editor's
   // own state (which row is selected, whether the key is revealed, what the last
   // Refresh List said) lives here because the pane is re-rendered, not patched.
-  settingsTab: 'general',
+  settingsTab: 'server',
   setDraft: null,
   settingsSnapshot: null,
   setProvSelected: null,
@@ -1645,11 +1642,11 @@ async function toggleKeep() {
 }
 
 /**
- * A new session is always born in Single mode: one Architect, every tool,
- * delegation denied. Multi is a live switch on the open session — a permission
- * PATCH — so nothing about the mode has to be decided at creation time.
+ * A chat is born in Single mode: one Architect, every tool, delegation denied.
+ * The mode is applied to each message at send, so nothing about it has to be
+ * decided at creation time.
  */
-function sessionBody(projectId) {
+function chatBody(projectId) {
   const body = { projectId, permissions: SINGLE_PERMISSIONS };
   const model = architectSelection();
   if (model) body.model = model;
@@ -2172,13 +2169,8 @@ async function editRoleSettings(roleId) {
       'Role Saved',
       `${role?.name || roleId}${roleId === 'qc' ? ` · ${next.focus === 'security' ? 'security' : 'real use'}` : ''}.`,
     );
-    // The Architect's own session runs under a ruleset, so the change reaches it
-    // now rather than at the next restart - the same PATCH the mode switch uses.
-    if (roleId === 'architect' && state.sessionId) {
-      await api('PATCH', `/api/sessions/${encodeURIComponent(state.sessionId)}`, {
-        permissions: state.mode === 'single' ? SINGLE_PERMISSIONS : [],
-      });
-    }
+    // The ruleset follows the mode at the next send, so a changed skill list
+    // reaches the chat then — no separate PATCH, and nothing to go stale.
   } catch (err) {
     toast('Could Not Save the Role', err.message);
   }
@@ -2191,7 +2183,7 @@ async function applyArchitectModel() {
   try {
     await api('POST', `/api/sessions/${encodeURIComponent(state.sessionId)}/model`, { model });
   } catch (err) {
-    toast('Could Not Switch the Session Model', err.message);
+    toast('Could Not Switch the Chat Model', err.message);
   }
 }
 
@@ -2223,7 +2215,7 @@ async function setRoleModel(roleId, ref) {
     api('POST', '/api/models/inspect', { ref }).catch(() => {});
     if (roleId === 'architect') {
       await applyArchitectModel();
-      toast('Model for Architect', state.sessionId ? 'Saved and applied to the open session.' : 'Saved for new sessions.');
+      toast('Model for Architect', state.sessionId ? 'Saved and applied to this chat.' : 'Saved for new chats.');
     } else {
       // Honest about the one case where changing the model is not a fix: the new
       // model carries a provider or tools mark of its own.
@@ -2279,7 +2271,7 @@ async function loadProjects() {
   // the engine down it is empty for a reason that has nothing to do with this
   // session, and closing the view would be wrong.
   if (state.sessionId && state.status?.engine?.ready === true && !findSession(state.sessionId)) {
-    toast('Session Closed', 'It was deleted, so it is no longer open.');
+    toast('Chat Closed', 'It was replaced or removed, so it is no longer open.');
     showNothing();
   }
 }
@@ -2430,7 +2422,7 @@ async function openProjectChat(id) {
     await openSession(chat.id);
     return;
   }
-  await createSession(p.id);
+  await createChat(p.id);
 }
 
 /**
@@ -2486,177 +2478,20 @@ function projectMenuAction(id, action) {
   else if (action === 'delete') removeProject(id);
 }
 
-async function createSession(projectId) {
+async function createChat(projectId) {
   const project = state.projects.find((p) => p.id === projectId);
   if (!project) return;
   if (project.exists === false) {
-    toast('Folder missing', `${project.directory} does not exist, so no session can run there.`);
+    toast('Folder missing', `${project.directory} does not exist, so no chat can run there.`);
     return;
   }
   try {
-    const { session } = await api('POST', '/api/sessions', sessionBody(project.id));
+    const { session } = await api('POST', '/api/sessions', chatBody(project.id));
     await loadProjects();
     await openSession(session.id);
   } catch (err) {
-    toast('Could not create a session', err.message);
+    toast('Could not open the chat', err.message);
   }
-}
-
-async function removeSession(id) {
-  const s = findSession(id);
-  const project = projectOf(id);
-  // The plan, the requirement, the answers and the findings live in the project's
-  // folder, not in the session, so deleting the *last* session leaves them behind
-  // and the next one opens onto the previous session's work. That is not a bug in
-  // itself — a new session continuing a plan is a normal thing to want — but the
-  // operator has to be able to say which they mean, and to see what is at stake.
-  const last = Boolean(project && project.sessions.filter((x) => x.id !== id).length === 0);
-  let plan = null;
-  if (last) {
-    try {
-      const state = await api('GET', `/api/sessions/${encodeURIComponent(id)}/plan`);
-      if (state?.exists !== false && state?.plan?.tasks?.length) plan = state.plan;
-    } catch { /* the question is still worth asking without the count */ }
-  }
-  const ok = await openDialog({
-    title: 'Delete Session',
-    message: `"${s?.title || TBD_TITLE}" and its whole transcript are removed from the engine. This cannot be undone.`,
-    confirmLabel: 'Delete',
-    danger: true,
-    // No plan, no question: offering to delete something that is not there is how
-    // a dialog teaches the operator to stop reading it.
-    ...(plan
-      ? {
-          fields: [
-            {
-              name: 'forget',
-              type: 'check',
-              value: false,
-              label: `Forget ${project.name}'s plan too`,
-              hint:
-                `${plan.tasks.length} task${plan.tasks.length === 1 ? '' : 's'} on file, with the request, the answers, ` +
-                `the design, the ideas, the findings and the run log in .synapse. Leave it unticked to let the next ` +
-                `session here carry on with them.`,
-            },
-          ],
-          // The button says what it will do, and changes when the answer does.
-          afterRender: () => {
-            const box = $('dialogBody').querySelector('input[data-flag="forget"]');
-            const btn = $('dialogOk');
-            const label = () => {
-              btn.textContent = box?.checked ? 'Delete and Forget Plan' : 'Delete';
-            };
-            box?.addEventListener('change', label);
-            label();
-          },
-        }
-      : {}),
-  });
-  if (!ok) return;
-  try {
-    const q = ok.forget ? '?forget=1' : '';
-    const res = await api('DELETE', `/api/sessions/${encodeURIComponent(id)}${q}`);
-    state.busySessions.delete(id);
-    // The sidebar's last-event clock was reading that session's traffic. With the
-    // session gone, an age beside its name is a leftover, not news.
-    if (state.lastEventSessionId === id) setEventChip(null, null);
-    if (state.sessionId === id) showNothing();
-    await loadProjects();
-    const forgotten = res?.forgotten;
-    if (ok.forget && forgotten && !forgotten.ok) {
-      toast('The Plan Was Kept', forgetReason(forgotten.reason));
-    } else if (forgotten?.ok) {
-      toast('Plan Forgotten', `${project.name}'s plan and scratch files are gone.`);
-    }
-  } catch (err) {
-    toast('Could not delete the session', err.message);
-  }
-}
-
-/** The server's own words for why a plan was not removed, in the operator's terms. */
-function forgetReason(reason) {
-  const text = String(reason || 'the server did not say why');
-  if (/run is still working/i.test(text)) return 'A run was still working in that project. Try again when it has stopped.';
-  if (/sessions still use/i.test(text)) return 'Another session in this project still uses that plan.';
-  if (/no \.synapse/i.test(text)) return 'There was nothing to delete.';
-  return text;
-}
-
-async function removeProject(id) {
-  const p = state.projects.find((x) => x.id === id);
-  if (!p) return;
-  if (p.sessions.length) {
-    await openDialog({
-      title: 'Sessions Still Inside',
-      message: `"${p.name}" holds ${p.sessions.length} session${p.sessions.length === 1 ? '' : 's'}. Delete or move ${p.sessions.length === 1 ? 'it' : 'them'} first — Synapse will not leave a session without a project.`,
-      confirmLabel: 'OK',
-    });
-    return;
-  }
-  // The folder goes with the project, so the dialog has to say what is in it. The
-  // server answers from the disk rather than from the list's memory of it.
-  let info = null;
-  try {
-    info = await api('GET', `/api/projects/${encodeURIComponent(id)}/delete-info`);
-  } catch (err) {
-    toast('Could Not Look At The Project', err.message);
-    return;
-  }
-  const bin = info?.bin || { files: 0, bytes: 0 };
-  // The built app in `bin\` is a deliverable, not working state: deleting it is a
-  // separate consent, and Delete stays disabled until the box is ticked.
-  const deliverables = bin.files > 0;
-  const ok = await openDialog({
-    title: 'Delete Project',
-    message:
-      info?.exists === false
-        ? `"${p.name}" is no longer a folder on disk. Remove the project from Synapse?`
-        : `"${p.name}" and everything in it are deleted. The folder goes to the Recycle Bin, so it can be restored from there.`,
-    confirmLabel: 'Delete',
-    danger: true,
-    fields: deliverables
-      ? [
-          {
-            name: 'deliverables',
-            type: 'check',
-            value: false,
-            label: `Delete the ${bin.files === 1 ? 'file' : `${bin.files} files`} in bin\\ as well`,
-            hint:
-              `${fmtBytes(bin.bytes)} of deliverables — the built app — in ${info.directory}\\bin. ` +
-              'They go to the Recycle Bin with the rest of the folder; nothing is deleted for good.',
-          },
-        ]
-      : [],
-    afterRender: deliverables
-      ? () => {
-          const box = $('dialogBody').querySelector('input[data-flag="deliverables"]');
-          const btn = $('dialogOk');
-          const gate = () => { btn.disabled = !box?.checked; };
-          box?.addEventListener('change', gate);
-          gate();
-        }
-      : undefined,
-  });
-  if (!ok) return;
-  try {
-    const res = await api('DELETE', `/api/projects/${encodeURIComponent(id)}`, {
-      binConfirmed: Boolean(ok.deliverables),
-    });
-    await loadProjects();
-    if (res?.recycled) toast('Project Deleted', `"${p.name}" and its folder are in the Recycle Bin.`);
-    else toast('Project Removed', `"${p.name}" was no longer a folder on disk.`);
-  } catch (err) {
-    toast('Could Not Delete The Project', recycleReason(err.message));
-  }
-}
-
-/** The server's words for a folder that would not go to the bin, in the operator's terms. */
-function recycleReason(message) {
-  const text = String(message || 'the server did not say why');
-  if (/denied/i.test(text)) return 'Windows would not let go of that folder — a file inside it may be open in another program. Close it and try again.';
-  if (/in use|being used by another process/i.test(text)) return 'A file in that folder is open in another program. Close it and try again.';
-  if (/not found|cannot find/i.test(text)) return 'The folder had already been moved or deleted.';
-  return text;
 }
 
 async function renameProject(id) {
@@ -2716,7 +2551,7 @@ async function addProject() {
   const base = state.workspace || '';
   const res = await openDialog({
     title: 'Add a project',
-    message: 'A project is a folder. Sessions you start inside it run in that folder. Synapse creates the folder when it does not exist yet.',
+    message: 'A project is a folder. Its one conversation runs there, and Synapse creates the folder when it does not exist yet.',
     fields: [
       { name: 'name', label: 'Project name', placeholder: 'calendar' },
       { name: 'directory', label: 'Folder', placeholder: base ? `${base}\\calendar` : 'C:\\path\\to\\project' },
@@ -2777,22 +2612,6 @@ async function addProject() {
   }
 }
 
-async function commitRename() {
-  const id = state.renaming;
-  if (!id) return;
-  const input = $('renameInput');
-  const title = input ? input.value.trim() : '';
-  state.renaming = null;
-  const current = findSession(id);
-  if (!title || (current && current.title === title)) { renderTree(); return; }
-  try {
-    await api('PATCH', `/api/sessions/${encodeURIComponent(id)}`, { title });
-    await loadProjects();
-  } catch (err) {
-    toast('Could not rename the session', err.message);
-    renderTree();
-  }
-}
 
 // ── view state ──────────────────────────────────────────────────
 
@@ -4507,7 +4326,7 @@ function renderPermissions() {
           )}" title="Do it this time only.">Allow Once</button>
           <button class="btn btn-warn btn-sm" data-perm="always" data-perm-id="${esc(
             p.requestId,
-          )}" title="Do it, and stop asking for this exact request in this session.">Always Allow</button>
+          )}" title="Do it, and stop asking for this exact request in this chat.">Always Allow</button>
           <button class="btn btn-warn btn-sm" data-perm="reject" data-perm-id="${esc(
             p.requestId,
           )}" title="Say no. The role is told and carries on.">Reject</button>
@@ -4849,8 +4668,8 @@ function renderAskPanel() {
       <span class="ask-head-title">${esc(form.title || 'Input Needed')}</span>
       <span class="ask-head-note">${
         form.sessionId === state.sessionId
-          ? 'the session is waiting on you'
-          : 'another session is waiting on you'
+          ? 'this chat is waiting on you'
+          : 'another chat is waiting on you'
       }</span>
     </div>
     <div class="ask-fields">${(form.fields || []).map(askField).join('')}</div>
@@ -5060,7 +4879,7 @@ async function replyForm(formId) {
     renderTree();
     renderComposer();
     renderTranscript();
-    toast('Answer Sent', 'The session will carry on from it.');
+    toast('Answer Sent', 'The chat will carry on from it.');
   } catch (err) {
     // A question can be cancelled under us: the engine rebuilds its locations when
     // it restarts, and every pending form goes with them. Answering one that no
@@ -5071,7 +4890,7 @@ async function replyForm(formId) {
       renderAskPanel();
       renderComposer();
       renderTranscript();
-      toast('That Question Is Gone', 'The session was restarted and the engine cancelled it. Message the session to carry on.');
+      toast('That Question Is Gone', 'The chat was restarted and the engine cancelled it. Message it to carry on.');
       return;
     }
     toast('Could Not Send The Answer', err.message);
@@ -5199,7 +5018,7 @@ async function refreshPending() {
     if (previousPermissions.has(perm.requestId) || state.announcedPermissions.has(perm.requestId)) continue;
     state.announcedPermissions.add(perm.requestId);
     if (state.view === 'session' && perm.sessionId === state.sessionId) continue;
-    const who = [perm.role, perm.task].filter(Boolean).join(' · ') || perm.title || 'A session';
+    const who = [perm.role, perm.task].filter(Boolean).join(' · ') || perm.title || 'A chat';
     toast('Permission Needed', `${who} is waiting on ${perm.action}. Open it in the rail to answer.`);
   }
 
@@ -5211,7 +5030,7 @@ async function refreshPending() {
     if (state.announcedForms.has(form.id)) continue;
     state.announcedForms.add(form.id);
     if (state.view === 'session') continue; // the panel is on screen already
-    const who = findSession(form.sessionId)?.title || TBD_TITLE;
+    const who = findSession(form.sessionId)?.title || 'this conversation';
     toast('Answer Needed', `${who} is waiting on a question. Open it in the rail to answer.`);
   }
 
@@ -5419,7 +5238,7 @@ function planClockMarkup() {
   const c = state.clocks;
   if (!c) return '';
   const ms = c.session.ms + (c.session.since ? Date.now() - c.session.since : 0);
-  return `<span class="plan-clock" id="planClock" title="Time this session has spent working — it pauses whenever no card is working, and whenever you are being waited on.">${hhmmss(ms)}</span>`;
+  return `<span class="plan-clock" id="planClock" title="Time this chat has spent working — it pauses whenever no card is working, and whenever you are being waited on.">${hhmmss(ms)}</span>`;
 }
 
 /**
@@ -5456,7 +5275,7 @@ async function renderToolUsage() {
 
   if (!stats || !stats.total) {
     note.hidden = false;
-    note.textContent = `No tool calls yet. The census is cleared when a new session starts.`;
+    note.textContent = `No tool calls yet. The census is cleared when a new chat starts.`;
     table.hidden = true;
     if (meta) meta.textContent = '';
     return;
@@ -5615,7 +5434,7 @@ async function stopFromPermission(requestId) {
       }
     }
     await api('POST', `/api/sessions/${encodeURIComponent(permission.sessionId)}/interrupt`);
-    toast('Stopping', 'The session was interrupted.');
+    toast('Stopping', 'The chat was interrupted.');
   } catch (err) {
     toast('Could not stop', err.message);
   }
@@ -5678,7 +5497,7 @@ async function send() {
   }
 
   if (!state.sessionId) {
-    toast('No session open', 'Pick a session on the left, or start a new one.');
+    toast('No project open', 'Pick a project on the left.');
     return;
   }
 
@@ -5871,16 +5690,12 @@ async function ensureSession() {
 
 async function interrupt() {
   // One request stops the project: the server cancels the run and interrupts
-  // every active session in the directory, including hidden workers the operator
-  // cannot see and workers whose run record is already gone.
+  // every active engine session in the directory, including hidden workers the
+  // operator cannot see and workers whose run record is already gone.
   if (!state.sessionId) return;
   try {
-    const r = await api('POST', `/api/sessions/${encodeURIComponent(state.sessionId)}/interrupt`);
-    const n = Array.isArray(r.stopped) ? r.stopped.length : 0;
-    toast(
-      'Stopping',
-      n > 1 ? `${n} sessions in this project are being stopped.` : 'The work is being stopped.',
-    );
+    await api('POST', `/api/sessions/${encodeURIComponent(state.sessionId)}/interrupt`);
+    toast('Stopping', 'The work is being stopped.');
     // The engine takes a moment to close the turns; refresh once now and again
     // after it has had time, so a stop that did not take does not hide the button.
     refreshPending();
@@ -6318,7 +6133,7 @@ const setIcon = (name) =>
   `stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">${ICONS[name] || ''}</svg>`;
 
 const SETTINGS_TABS = [
-  { id: 'general', label: 'General', icon: 'sliders' },
+  { id: 'server', label: 'Server', icon: 'sliders' },
   { id: 'engine', label: 'Runtime', icon: 'engine' },
   { id: 'providers', label: 'Providers', icon: 'plug' },
   { id: 'workers', label: 'Workers', icon: 'nodes' },
@@ -6365,7 +6180,7 @@ const setGroup = (title, body, cols) =>
 
 // ── panes ───────────────────────────────────────────────────────
 
-function settingsGeneral(c) {
+function settingsServer(c) {
   return [
     setGroup(
       'Server',
@@ -6384,13 +6199,6 @@ function settingsGeneral(c) {
           'server.openBrowser',
           'Open a browser tab on Synapse when it starts. Off means you open it yourself.',
         ),
-    ),
-    setGroup(
-      'Working Directory',
-      setField(c, 'Where new sessions run (blank = workspace)', 'defaults.directory', {
-        wide: true,
-        hint: 'The folder new sessions start in when no project is chosen. Blank uses the projects folder.',
-      }),
     ),
   ].join('');
 }
@@ -6452,7 +6260,7 @@ function settingsEngine(c) {
       'Model Checks',
       setField(c, 'Max asks per model (1–20)', 'modelChecks.maxAsks', {
         type: 'number',
-        hint: 'How many times Synapse may ask one model which tools it has before it stops asking. Between 1 and 20, counted across sessions and restarts.',
+        hint: 'How many times Synapse may ask one model which tools it has before it stops asking. Between 1 and 20, counted across chats and restarts.',
       }) +
         `<div class="set-field" title="Set every model's ask count back to zero. Answers already learned are kept."><span>Ask counters</span>` +
         `<button type="button" class="btn btn-warn btn-sm" data-reset-asks>Reset Ask Counters</button></div>`,
@@ -6840,7 +6648,7 @@ function settingsProviders(c) {
 }
 
 const SETTINGS_PANES = {
-  general: settingsGeneral,
+  server: settingsServer,
   engine: settingsEngine,
   providers: settingsProviders,
   workers: settingsWorkers,
@@ -6866,7 +6674,7 @@ function renderSettings({ scrollTop } = {}) {
     $('settingsTabs').innerHTML = '';
     return;
   }
-  if (!SETTINGS_PANES[state.settingsTab]) state.settingsTab = 'general';
+  if (!SETTINGS_PANES[state.settingsTab]) state.settingsTab = 'server';
   const body = $('settingsBody');
   // Keep the pane where it was. Every edit re-renders this markup — a Refresh
   // List, an eye toggle, a provider picked — and jumping to the top after each
@@ -7301,7 +7109,7 @@ async function openSettings() {
   // And this copy is what "Revert All Changes" puts back if the save was a
   // mistake — the file as it was when the window opened, not the form.
   state.settingsSnapshot = JSON.parse(JSON.stringify(state.config));
-  state.settingsTab = state.settingsTab || 'general';
+  state.settingsTab = state.settingsTab || 'server';
   state.setProvSelected = null;
   state.setKeyRevealed = false;
   state.setProvFetch = null;
@@ -7670,15 +7478,6 @@ document.addEventListener('keydown', (e) => {
     const id = menuProjectId;
     closeProjectMenu();
     projectMenuAction(id, item.dataset.menuAction);
-  });
-
-  $('projectTree').addEventListener('keydown', (e) => {
-    if (!e.target.classList.contains('tree-rename')) return;
-    if (e.key === 'Enter') { e.preventDefault(); commitRename(); }
-    if (e.key === 'Escape') { e.preventDefault(); state.renaming = null; renderTree(); }
-  });
-  $('projectTree').addEventListener('focusout', (e) => {
-    if (e.target.classList.contains('tree-rename') && state.renaming) commitRename();
   });
 
   document.querySelectorAll('.role-model').forEach((sel) =>

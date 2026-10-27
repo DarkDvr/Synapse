@@ -999,36 +999,24 @@ before "restarting", or the first run never reaches disk. The fix is small
 (persist the ids, or a per-session high-water mark); do it before trusting the
 census for anything.
 
-## Session naming, and never being stuck with "TBD"
+## There is no session naming any more (27 Oct)
 
-A session is created as **TBD**. When its first turn succeeds, Synapse asks the
-model for a short title through the engine's one-shot `generate` route — which
-adds nothing to the transcript — and renames the session. One attempt per
-session, never for a session the operator named, and never for a session with no
-user message yet.
+A session used to be created as **TBD** and named by a `generate` call after its
+first turn. With one chat per project the rail shows the project's name, and an
+engine session's title is never read — so the titler is gone, along with the
+`generate` call it made for every conversation. A chat is created with the
+project's name as its engine title, for an audit read of the engine's own list.
 
-Naming is **self-healing**: a name that failed on a transient 503 keeps its
-attempt and retries with backoff, and a sweep at boot names anything still
-unnamed.
-
-## A session's memory is the project's, so deleting sessions leaves it behind
+## A project's memory is its folder, so deleting the project takes it
 
 `.synapse` — the plan, the project document, the ideas, the design, the
-findings and the run log — belongs to the **directory**, not to a session. Two
-sessions in one project share one plan by design: the Architect owns the file, and
-a second session continues the work. The consequence the operator met: delete every
-session in a project, start a new one, and it opens onto the previous session's plan
-and looks as if it inherited a dead conversation. Nothing was broken; the state had
-never been the session's to delete.
-
-Deleting the **last** session in a project now offers a checkbox for it, off by
-default — continuing a plan is a normal thing to want, and the operator may have
-deleted the session precisely to start a fresh one on the same plan. The server
-removes `dir\.synapse` only when all of these hold: the path is inside the projects
-root, no other session lists that directory, no run is active there, and the folder
-actually has one. A refusal comes back with a reason and the UI says it in the
-operator's words. `wipeProjectDir` (deleting a project) was already the bigger
-hammer; this is the small one, and it is the only place the harness deletes a plan.
+findings and the run log — belongs to the **directory**, not to a conversation.
+That is why a project is one chat: a second conversation in the same folder would
+inherit the first one's plan and look as if it had opened onto a dead campaign.
+Deleting a project takes its chat, its folder and its `.synapse` together, after
+the `bin\` consent; there is no separate "delete the plan" step left. The old
+General override (one workspace per session) is gone with the project, and the
+old `forget` checkbox went with the session delete.
 
 ## A question lives in the engine's memory, so a restart loses it
 

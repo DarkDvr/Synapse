@@ -482,93 +482,12 @@ body.dark .sidebar .nav-link.active > span:first-child { color: #fff; }
 .tree-row.project.is-current .tree-open { color: #fff; }
 .tree-open .tree-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 
-/* chevron drawn in CSS so it stays crisp and consistent */
-.tree-caret { position: relative; width: 12px; height: 12px; flex: none; }
-.tree-caret::before {
-  content: ""; position: absolute; left: 2px; top: 3px;
-  width: 5px; height: 5px;
-  border-right: 1.6px solid #6d717a;
-  border-bottom: 1.6px solid #6d717a;
-  transform: rotate(-45deg);
-  transition: transform 0.15s ease;
-}
-.tree-row.project .tree-caret::before { border-color: #b6bac1; }
-[aria-expanded="true"] .tree-caret::before { transform: rotate(45deg); top: 2px; }
-
-/* tier 2 — projects' contents: everything under a project header sits to the
-   right of one vertical yellow rule — the shortcuts, the label, the sessions. */
-.tree-project-body {
-  margin: 3px 0 4px 6px; padding: 4px 0 4px 6px;
-  border-left: 2px solid #2f323a;
-}
-/* Only the project you are in gets the yellow rule: it is a "you are here" mark,
-   not decoration, and every project wearing one made them all look active. The
-   rule then carries the state: green for a session chosen and waiting, yellow
-   while work is running — the same three colours the rest of the app uses. */
-.tree-project:has(> .tree-row.project.is-current) > .tree-project-body {
-  border-left-color: var(--green);
-}
-.tree-project:has(> .tree-row.project.is-current) > .tree-project-body.has-work {
-  border-left-color: var(--yellow);
-}
-/* the sessions list draws no guide line or indent of its own: the rule does it */
-.tree-sessions { position: relative; padding-left: 0; margin: 2px 0 0; display: grid; gap: 1px; }
-.tree-row.session { padding: 0 2px 0 0; }
-.tree-row.session .tree-open {
-  font-size: 12.5px; color: #a8acb3; padding: 5px 3px 5px 7px; font-weight: 400; gap: 4px;
-}
-.tree-row.session:hover .tree-open { color: var(--text); }
-/* One step quieter than the project: a single 1px ring, drawn inside the row so
-   the list does not reflow when you switch session. Green means "chosen, ready",
-   yellow means "chosen, working" — grey is every session that is neither. */
-.tree-row.session.is-current {
-  background: rgba(53, 192, 138, 0.07);
-  border-radius: 8px;
-  box-shadow: inset 0 0 0 1px rgba(53, 192, 138, 0.55);
-}
-.tree-row.session.is-current .tree-open { color: #fff; font-weight: 600; }
-.tree-row.session.is-current.has-work {
-  background: rgba(237, 194, 90, 0.08);
-  box-shadow: inset 0 0 0 1px rgba(237, 194, 90, 0.65);
-}
-.tree-row.session.is-current.has-work .tree-open { color: #fff; }
-.tree-x {
-  border: 0; background: transparent; color: var(--red); opacity: 0.65;
-  font-size: 12px; line-height: 1; padding: 3px 4px; border-radius: 5px;
-  cursor: pointer; flex: none;
-}
-.tree-x:hover { background: var(--red-soft); opacity: 1; }
-
-/* row actions: edit appears on hover, delete is always present */
-.tree-actions { display: flex; align-items: center; gap: 1px; flex: none; }
-/* The rename pencil overlays the end of the name instead of reserving 21px of
-   it. In a 256px rail that reservation cost three characters of every session
-   title, permanently, for a control only visible on hover. It is the same trade
-   a file tree makes. */
-.tree-edit {
-  position: absolute; right: 33px; top: 50%; transform: translateY(-50%);
-  width: 18px; height: 18px; padding: 0;
-  display: inline-flex; align-items: center; justify-content: center;
-  border: 0; background: transparent; color: var(--yellow); opacity: 0;
-  pointer-events: none;
-  font-size: 12px; line-height: 1; border-radius: 5px; cursor: pointer;
-}
-.tree-row:hover .tree-edit, .tree-edit:focus-visible { opacity: 0.85; pointer-events: auto; }
-.tree-edit:hover { background: var(--amber-soft); opacity: 1; }
+/* row actions: the waiting badge, the state dot and the ⋯ menu */
+.tree-actions { display: flex; align-items: center; gap: 2px; flex: none; }
 
 /* There was a red "!" here for a project whose directory was gone. It is gone with
    it: the server no longer lists such a project at all (see `pruneMissing`), so the
    marker had nothing left to describe. */
-
-/* The project's own two shortcuts, its label and its sessions all sit to the
-   right of ONE vertical yellow rule (`.tree-project-body`): the shortcuts open
-   the folder or a prompt at it, and the rule is what makes the block read as
-   "inside this project". The rail's Project panel is gone — the path was never
-   what you looked at. */
-/* Everything inside a project hangs off one vertical yellow rule, and the two
-   shortcuts, the label and the sessions all line up on it. */
-.tree-project-actions { display: flex; gap: 6px; padding: 0 2px 4px 0; }
-.tree-sessions-label { padding: 2px 0; font-size: 11px; color: #6d717a; }
 
 .btn-thin {
   flex: 1 1 0; min-width: 0; height: 22px; padding: 0 6px;
@@ -633,17 +552,11 @@ body.dark .sidebar .nav-link.active > span:first-child { color: #fff; }
 .project-menu-item.is-danger { color: var(--red); }
 .project-menu-sep { display: block; height: 1px; margin: 4px 6px; background: var(--line); }
 
-/* A session stopped on a question or a decision. The dot alone could not carry
-   this: a blocked session and an idle one both emit nothing, so after a reload
-   the rail had to say it in words. Amber because waiting is a state, not a
-   failure. */
+/* A project stopped on a question or a decision. The dot alone could not carry
+   this: a blocked chat and an idle one both emit nothing, so after a reload the
+   rail had to say it in words. Amber because waiting is a state, not a failure. */
 .tree-wait {
-  /* 23px of margin is the pencil's 18px plus a gap: the pencil is an overlay at
-     the end of the name, and on a row with a badge it must sit to the RIGHT of
-     the badge. Reserving the space here keeps the order name -> badge -> pencil
-     -> dot -> delete, and the title just ellipsizes earlier (its tooltip has the
-     whole name). */
-  flex: none; margin-right: 25px; padding: 0;
+  flex: none; margin-right: 2px; padding: 0;
   width: 15px; height: 15px; border-radius: 50%;
   display: inline-flex; align-items: center; justify-content: center;
   font-size: 10px; font-weight: 700; line-height: 1;
@@ -652,32 +565,6 @@ body.dark .sidebar .nav-link.active > span:first-child { color: #fff; }
   color: var(--amber); background: transparent;
   border: 1px solid rgba(232, 163, 61, 0.75);
 }
-/* The pencil overlays the end of the name at a fixed 33px, clear of the live dot
-   and the delete. A row with a question needs no override: the badge reserves
-   the pencil's own width in its margin, so the pencil keeps one place everywhere. */
-
-/* inline rename */
-.tree-rename {
-  flex: 1; min-width: 0; background: #17181b; border: 1px solid var(--violet-line);
-  border-radius: 8px; color: var(--text); font: inherit; font-size: 12.5px;
-  padding: 4px 7px; margin: 1px 0;
-}
-.tree-rename:focus-visible { outline: 2px solid var(--orange); outline-offset: 1px; }
-
-/* the always-available "New Session" slot at the top of every project */
-.tree-row.new {
-  border: 1px dashed #3a3e46; border-radius: 8px;
-  background: transparent;
-}
-.tree-row.new .tree-open { color: #8a8e96; font-size: 12.5px; padding: 5px 7px; }
-.tree-row.new:hover { border-color: #4a4f58; background: rgba(53, 192, 138, 0.05); }
-.tree-row.new:hover .tree-open { color: #cfd2d8; }
-.tree-add-row {
-  border: 0; background: transparent; color: var(--green);
-  font-size: 13px; font-weight: 700; line-height: 1;
-  padding: 3px 6px; border-radius: 5px; cursor: pointer; flex: none;
-}
-.tree-add-row:hover { background: var(--green-soft); }
 
 .tree-add {
   margin-left: auto; border: 0; background: transparent; color: var(--green);
@@ -771,12 +658,11 @@ body.dark .sidebar-bottom,
 .sidebar .sidebar-label,
 .sidebar .tree-open,
 .sidebar .tree-row.project .tree-open,
-.sidebar .tree-row.session.is-current .tree-open,
+.sidebar .tree-menu,
 .sidebar .btn-thin,
 .sidebar .engine-update,
 .sidebar .tree-wait,
 .sidebar .tree-add,
-.sidebar .tree-add-row,
 .sidebar .nav-link,
 .sidebar .nav-link.active { font-weight: 400; }
 

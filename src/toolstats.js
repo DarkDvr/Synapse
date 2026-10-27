@@ -53,7 +53,7 @@ export function createToolStats({ file, logger }) {
         if (state.total && !seen.size) {
           log.warn(
             'this census predates id tracking, so a session it has already counted will be counted once more; ' +
-              'start a new session to clear it',
+              'start a new chat to clear it',
           );
         }
       }
