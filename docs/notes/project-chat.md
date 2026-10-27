@@ -212,8 +212,12 @@ why it can disagree with what the operator meant when they clicked twice.
   handover in place and the old chat alive — the next attempt overwrites it.
 - Tests: 6 in `compact.test.mjs` plus the grants test in
   `permission-memory.test.mjs`. 180/180 on the suite.
-- Still open for phase 4/5: the conversation the operator sees is a session in
-  the projects payload; the rail still lists sessions until phase 5.
+- **Exercised end to end on a scratch project** once the local model came up:
+  a two-message chat compacted in 4.2 s → a 630-character handover in
+  `project.md`, a new chat with `metadata.compacted`, the old one gone, and the
+  post rendered at the top of the empty chat (screenshot in the QC folder). The
+  scratch project was then deleted with its chat, which also proved the new
+  delete path.
 
 ### Phase 4 — the project list — **built 27 Oct**
 - One row per project: a state dot (grey never used, green idle with a
