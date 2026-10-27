@@ -355,7 +355,13 @@ function decideShell(resources, ctx) {
   if (zones.length === 0 && redirectZones.length === 0) {
     return allow('This runs in the project folder.', false, 'project');
   }
-  return allow('Reading is allowed. This one is outside the project.', outside, scope);
+  return allow(
+    outside
+      ? 'Reading is allowed. This one is outside the project.'
+      : 'Reading is allowed. This is in the project folder.',
+    outside,
+    scope,
+  );
 }
 
 /** The harness paths a model may read: documents and logs, not state or keys. */

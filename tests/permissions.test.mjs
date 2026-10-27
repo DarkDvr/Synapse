@@ -69,6 +69,22 @@ test('a command that stays in the workspace is allowed', () => {
   assert.equal(shell('node src\\index.js').effect, 'allow');
 });
 
+// The sentence is what the log and the card say. A read of the project itself
+// used to be logged as "outside the project" because the allow branch had one
+// string for both sides of the boundary, which is exactly the kind of sentence
+// that makes a later reader trust the wrong thing.
+test('the reason says which side of the boundary a read is on', () => {
+  const inside = shell('Get-Item bin/FeverTracker.exe');
+  assert.equal(inside.effect, 'allow');
+  assert.equal(inside.outside, false);
+  assert.match(inside.reason, /in the project folder/);
+
+  const beyond = shell('Get-Content F:\\dev\\Synapse\\logs\\app.log -Tail 5');
+  assert.equal(beyond.effect, 'allow');
+  assert.equal(beyond.outside, true);
+  assert.match(beyond.reason, /outside the project/);
+});
+
 test('reading the harness is allowed; writing it is denied', () => {
   assert.equal(shell('Get-Content F:\\dev\\Synapse\\logs\\app.log -Tail 5').effect, 'allow');
   assert.equal(shell('Set-Content F:\\dev\\Synapse\\AGENTS.md hi').effect, 'deny');
