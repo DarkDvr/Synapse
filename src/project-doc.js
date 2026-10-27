@@ -94,8 +94,14 @@ export function readDoc(dir) {
   const parts = {};
   for (const [name, pair] of Object.entries(MARK)) {
     const body = sectionOf(raw, pair);
-    parts[name] =
-      body === null ? null : body.replace(new RegExp(`^## ${headings[name]}\\s*\\n+`), '').replace(/\n+$/, '');
+    // The heading may sit alone in its section — an empty Notes block ends right
+    // after it — so a pattern that requires a newline after the heading misses it
+    // and the next write puts the heading back beside it. That is how every
+    // document acquired a second `## Handover` and `## Notes`. Match the heading
+    // with or without a newline, and match a run of them so a file written by the
+    // old code is cleaned by its next write instead of keeping the duplicate.
+    const heading = new RegExp(`^(?:## ${headings[name]}[ \\t]*(?:\\n+|$))+`);
+    parts[name] = body === null ? null : body.replace(heading, '').replace(/\n+$/, '');
   }
   if (Object.values(parts).every((v) => v === null)) {
     return { ...empty, exists: true, ok: false, error: 'it has no section markers' };

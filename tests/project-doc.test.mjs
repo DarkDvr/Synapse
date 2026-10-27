@@ -159,3 +159,32 @@ test('a legacy project briefs from the old files before any write', () => {
   // Reading does not create the file: only a write (or the brief's ensure) does.
   assert.equal(fs.existsSync(docFile(dir)), false);
 });
+
+// An empty section is written as a heading with nothing under it, so the heading
+// is the last thing before the end marker. The reader used to require a newline
+// after the heading, missed it, and handed the heading back as the section's
+// content — so every write added another `## Handover` and `## Notes`.
+test('empty sections keep one heading across writes', () => {
+  const dir = project();
+  appendChat(dir, 'first message');
+  appendChat(dir, 'second message');
+  const raw = fs.readFileSync(docFile(dir), 'utf8');
+  assert.equal((raw.match(/^## Handover$/gm) || []).length, 1);
+  assert.equal((raw.match(/^## Notes$/gm) || []).length, 1);
+  assert.equal(readDoc(dir).handover, '');
+  assert.equal(readDoc(dir).notes, '');
+});
+
+test('a section that already carries two headings is repaired by the next write', () => {
+  const dir = project();
+  writeDoc(dir, { current: '', handover: '', notes: '', log: '' });
+  const doubled = fs
+    .readFileSync(docFile(dir), 'utf8')
+    .replace('## Handover', '## Handover\n\n## Handover')
+    .replace('## Notes', '## Notes\n\n## Notes');
+  fs.writeFileSync(docFile(dir), doubled, 'utf8');
+  appendChat(dir, 'a message');
+  const raw = fs.readFileSync(docFile(dir), 'utf8');
+  assert.equal((raw.match(/^## Handover$/gm) || []).length, 1);
+  assert.equal((raw.match(/^## Notes$/gm) || []).length, 1);
+});
