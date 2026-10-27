@@ -163,6 +163,7 @@ an agent does not know to open is a document that does not exist:
 | `docs/notes/remote-access.md` | the LAN switch, the token or the login page, or changing what the HTTP listener binds |
 | `docs/notes/multi-user.md` | two views at once — what "busy" means, who may send, Stop as the takeover, and the Settings lock |
 | `docs/notes/todo.md` | picking up work the operator deferred — the changes that need a decision first, and why they are not small |
+| `docs/notes/project-chat.md` | before changing how a project, a chat or a compaction works — the one-chat-per-project scope, its phases and what is still open |
 
 Two rules for this file. **A new lesson goes in `docs/notes/`, not here** — this
 file changes when a rule changes, not when something is learned. And if you move
@@ -244,8 +245,7 @@ logs/                 one file per channel: app, engine, session, tools
 bin/opencode/         a copy of the runtime that travels with the app (not in git;
                       vendor-engine.ps1 puts it there, ~210 MB, with its licence)
 docs/                 the detail behind this file
-  notes/              engine-notes, models-and-tools, runtime-scope, ui-lessons,
-                      runbook, desktop-app, remote-access, multi-user, todo
+  notes/              one per topic; the index is in "Where the rest lives"
 ```
 
 **`web/vendor/summit.css` is a locked baseline.** The only edit ever made to it
