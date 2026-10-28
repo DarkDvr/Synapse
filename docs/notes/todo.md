@@ -21,20 +21,6 @@ Decide first: what moves (a wash behind the row, the project's rule, the dot's
 glow), how slow (anything faster than about 3 s reads as an alarm), and whether
 `prefers-reduced-motion` gets a still version or nothing.
 
-## Decide what the permission timeout answers
-
-Built 28 Oct: the composer's cog holds two switches, and "Permission timeout"
-allows an unanswered permission card **once** after 60 seconds. It records
-`decidedBy: 'timeout'`, and an operator answer cancels the timer. It can only
-answer `ask` verdicts — a harness write or a credential store is denied before a
-card exists, so it cannot widen those walls. A session that was saved with the
-flag on honours it at the next ask.
-
-Still to decide: whether the default for an **outside write** should be Allow Once
-(what it does now) or Reject, and whether the timeout should also answer questions
-and forms — today a worker that asks a question still stops the run overnight.
-Until that is decided, the timeout covers permission cards only, with Allow Once.
-
 ## Replace a worker's session when its compaction no longer fits
 
 The engine's compaction prompt is the whole message log, not the model's current

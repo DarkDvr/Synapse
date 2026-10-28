@@ -758,13 +758,17 @@ brief); the policy treats that root as a **scratch zone**: read, write and shell
 are allowed there without asking, while the harness stays denied. The machine's
 temp folder is no longer used.
 
-**A permission timeout can answer for the operator (28 Oct).** With the session's
-`synapse.permissionTimeout` on — the cog's second switch — a card the policy left
-to the operator is **allowed once after 60 seconds**, and the decision records
-`decidedBy: 'timeout'`. An operator answer cancels the timer; turning the switch
-off disarms a card already on screen. It can only answer `ask` verdicts: a harness
-write or a credential store is denied before a card exists, so the timeout cannot
-widen those walls. Questions and forms are not covered yet — see `todo.md`.
+**Full auto can answer for the operator (28 Oct).** With the session's
+`synapse.fullAuto` on — the cog's second switch — a request left to the operator
+takes the default after 60 seconds. A permission card is **allowed once**
+(`decidedBy: 'timeout'`). A question is answered with the **Recommended** option,
+or the top one when none is marked (`src/auto-answer.js`); a server-side sweep
+every five seconds answers it (`src/form-auto.js`), so a closed browser cannot
+stop the work. An operator answer cancels either timer, turning the switch off
+disarms a card already on screen, and it can only answer `ask` verdicts: a harness
+write or a credential store is denied before a card exists. Free-text fields take
+their default (or empty), and hidden/external fields are skipped. A full-auto
+question is recorded in the project document exactly like an operator's answer.
 
 **A refusal explains itself, through a synthetic note.** The reply body has a
 `message` field, but 2.1.2 drops it on the reject path: the tool error is always

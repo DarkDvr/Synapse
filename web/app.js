@@ -179,8 +179,8 @@ const state = {
   skillsInfo: null,
   // "Keep building": the open session's switch for running the plan to the end.
   auto: false,
-  // "Permission timeout": unanswered permission cards allow once after a minute.
-  permissionTimeout: false,
+  // "Full auto": unanswered permission cards allow once after a minute.
+  fullAuto: false,
   permissions: [],
   busy: false,
   busySessions: new Set(),
@@ -1607,7 +1607,7 @@ const sessionMode = (s) => (s?.single ? 'single' : 'multi');
  * The run options, behind the cog between Stop and Send.
  *
  * It replaced the finish-line flag: one menu now holds "keep running" (the old
- * flag) and "permission timeout" (an unanswered ask is allowed once after a
+ * flag) and "full auto" (an unanswered ask is allowed once after a
  * minute). The cog is quiet gray; yellow on hover or while the menu is open, and
  * yellow while either switch is on, so the composer says a standing decision is
  * in force without a second control on the row.
@@ -1620,15 +1620,15 @@ function renderKeep() {
   btn.hidden = state.view !== 'session' || !state.sessionId;
   const auto = $('runAuto');
   if (auto) auto.setAttribute('aria-checked', String(state.auto === true));
-  const timeout = $('runTimeout');
-  if (timeout) timeout.setAttribute('aria-checked', String(state.permissionTimeout === true));
+  const timeout = $('runFullAuto');
+  if (timeout) timeout.setAttribute('aria-checked', String(state.fullAuto === true));
   btn.title =
     [
       state.auto ? 'Keep running: on' : null,
-      state.permissionTimeout ? 'Permission timeout: on' : null,
+      state.fullAuto ? 'Full auto: on' : null,
     ]
       .filter(Boolean)
-      .join(' · ') || 'Run options — keep running, permission timeout';
+      .join(' · ') || 'Run options — keep running, full auto';
 }
 
 function closeRunMenu() {
@@ -1665,23 +1665,23 @@ async function setKeep(next) {
   }
 }
 
-async function setPermissionTimeout(next) {
+async function setFullAuto(next) {
   if (!state.sessionId) return;
   try {
-    const r = await api('POST', `/api/sessions/${encodeURIComponent(state.sessionId)}/permission-timeout`, {
+    const r = await api('POST', `/api/sessions/${encodeURIComponent(state.sessionId)}/full-auto`, {
       enabled: next,
     });
-    state.permissionTimeout = r.enabled === true;
+    state.fullAuto = r.enabled === true;
     renderKeep();
     renderTranscript();
     toast(
-      state.permissionTimeout ? 'Permission Timeout On' : 'Permission Timeout Off',
-      state.permissionTimeout
-        ? 'A permission request nobody answers is allowed once after 60 seconds.'
-        : 'Every permission request waits for you again.',
+      state.fullAuto ? 'Full Auto On' : 'Full Auto Off',
+      state.fullAuto
+        ? 'Unanswered requests take the default after 60 seconds: permission cards allow once, questions take the recommended (or top) option.'
+        : 'Every request waits for you again.',
     );
   } catch (err) {
-    toast('Could Not Change Permission Timeout', err.message);
+    toast('Could Not Change Full Auto', err.message);
   }
 }
 
@@ -2810,7 +2810,7 @@ async function openSession(id) {
   // the mode is a property of the session, not of the app
   state.mode = sessionMode(findSession(id));
   state.auto = findSession(id)?.auto === true;
-  state.permissionTimeout = findSession(id)?.permissionTimeout === true;
+  state.fullAuto = findSession(id)?.fullAuto === true;
   renderMode();
   renderKeep();
   $('sidebar').classList.remove('open');
@@ -2837,7 +2837,7 @@ function showNothing() {
   state.planState = null;
   state.clocks = null;
   state.auto = false;
-  state.permissionTimeout = false;
+  state.fullAuto = false;
   state.mode = 'single';
   renderMode();
   setView();
@@ -4509,7 +4509,7 @@ function renderPermissions() {
         ${paths.length ? `<pre class="perm-res">${esc(paths.join('\n'))}</pre>` : ''}
         ${p.reason ? `<p class="perm-why">${esc(p.reason)}</p>` : ''}
         ${diff}
-        <p class="perm-note">${state.permissionTimeout
+        <p class="perm-note">${state.fullAuto
           ? 'If nobody answers within 60 seconds, this is allowed once. '
           : ''}${p.role && p.role !== 'architect'
           ? 'Nothing has happened yet. You can still say no.'
@@ -4878,7 +4878,7 @@ function renderAskPanel() {
         form.sessionId === state.sessionId
           ? 'this chat is waiting on you'
           : 'another chat is waiting on you'
-      }</span>
+      }${state.fullAuto ? ' · full auto answers in 60s' : ''}</span>
     </div>
     <div class="ask-fields">${(form.fields || []).map(askField).join('')}</div>
     <div class="ask-actions">
@@ -6062,10 +6062,10 @@ function connectStream() {
       if (ev.type === 'session.mode' && ev.sessionId === state.sessionId && !state.busy) {
         applyMode(ev.mode);
       }
-      // The permission timeout is also per session: another view flipping it must
+      // The full auto is also per session: another view flipping it must
       // move this one's switch and the note on any open card.
-      if (ev.type === 'session.permissionTimeout' && ev.sessionId === state.sessionId) {
-        state.permissionTimeout = ev.enabled === true;
+      if (ev.type === 'session.fullAuto' && ev.sessionId === state.sessionId) {
+        state.fullAuto = ev.enabled === true;
         renderKeep();
         renderTranscript();
       }
@@ -7471,7 +7471,7 @@ document.addEventListener('keydown', (e) => {
     toggleRunMenu();
   });
   $('runAuto').addEventListener('click', () => setKeep(!state.auto));
-  $('runTimeout').addEventListener('click', () => setPermissionTimeout(!state.permissionTimeout));
+  $('runFullAuto').addEventListener('click', () => setFullAuto(!state.fullAuto));
   // A click anywhere outside the cog or its menu closes it; Escape too.
   document.addEventListener('click', (e) => {
     if (!e.target.closest?.('.run-control')) closeRunMenu();

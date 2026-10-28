@@ -36,7 +36,7 @@ export function createPermissionGate({
   // automatically. Every ask is held here, not only the ones whose switch is on,
   // so flipping the switch arms a card that is already on screen.
   const pendingAsks = new Map(); // requestId -> { request, info, entry, timer }
-  const timeoutOn = new Set();
+  const fullAutoOn = new Set();
 
   // "Always Allow" means this exact request again in this session, decided by the
   // operator. It is deliberately not the engine's own `always`: that saves the
@@ -101,17 +101,19 @@ export function createPermissionGate({
       title: raw?.title || null,
       // Set on the session, so it survives a restart: an ask that arrives before
       // the operator's window has said anything about the switch still honours it.
-      permissionTimeout: raw?.metadata?.synapse?.permissionTimeout === true,
+      // `permissionTimeout` is the old name.
+      fullAuto:
+        raw?.metadata?.synapse?.fullAuto === true || raw?.metadata?.synapse?.permissionTimeout === true,
     };
     if (info.directory) sessions.set(sessionId, info);
     return info;
   }
 
-  const timeoutEnabled = (sessionId, info) => timeoutOn.has(sessionId) || info?.permissionTimeout === true;
+  const fullAutoEnabled = (sessionId, info) => fullAutoOn.has(sessionId) || info?.fullAuto === true;
 
   /** Arm a pending ask, if its session wants the timeout. */
   function arm(p) {
-    if (p.timer || !timeoutEnabled(p.request.sessionId, p.info)) return;
+    if (p.timer || !fullAutoEnabled(p.request.sessionId, p.info)) return;
     p.timer = setTimeout(() => fire(p), permissionTimeoutMs);
     p.timer.unref?.();
   }
@@ -121,7 +123,7 @@ export function createPermissionGate({
     pendingAsks.delete(p.request.requestId);
     // The switch may have been turned off during the wait: then the card is the
     // operator's again, and nothing is answered behind their back.
-    if (!timeoutEnabled(p.request.sessionId, p.info)) return;
+    if (!fullAutoEnabled(p.request.sessionId, p.info)) return;
     try {
       await engine.replyPermission(p.request.sessionId, p.request.requestId, 'once');
       const where = [p.info.role, p.info.task].filter(Boolean).join(' ');
@@ -146,10 +148,10 @@ export function createPermissionGate({
    * on arms it, off disarms it. Called by the API when the menu is toggled; a
    * session's saved metadata is honoured on its own at the first ask.
    */
-  function setPermissionTimeout(sessionId, on) {
+  function setFullAuto(sessionId, on) {
     if (!sessionId) return false;
-    if (on) timeoutOn.add(sessionId);
-    else timeoutOn.delete(sessionId);
+    if (on) fullAutoOn.add(sessionId);
+    else fullAutoOn.delete(sessionId);
     for (const p of pendingAsks.values()) {
       if (p.request.sessionId !== sessionId) continue;
       if (on) arm(p);
@@ -295,5 +297,5 @@ export function createPermissionGate({
     });
   }
 
-  return { handle, requestOf, remember, setPermissionTimeout, answered };
+  return { handle, requestOf, remember, setFullAuto, answered };
 }

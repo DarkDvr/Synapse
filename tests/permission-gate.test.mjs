@@ -330,7 +330,7 @@ test('an unanswered ask is allowed once after the timeout', async () => {
     engine, logger: quiet, root: ROOT, home: HOME, permissionTimeoutMs: 30,
     onDecision: (entry) => seen.push(entry),
   });
-  gate.setPermissionTimeout('ses_1', true);
+  gate.setFullAuto('ses_1', true);
   await gate.handle(event('shell', ['Set-Content D:/scratch/timeout.txt hi']));
   assert.deepEqual(replies, [], 'nothing is answered while the card is up');
   await new Promise((r) => setTimeout(r, 80));
@@ -347,7 +347,7 @@ test('an operator answer cancels the timeout', async () => {
     async replyPermission(sessionId, requestId, decision) { replies.push(decision); },
   };
   const gate = createPermissionGate({ engine, logger: quiet, root: ROOT, home: HOME, permissionTimeoutMs: 30 });
-  gate.setPermissionTimeout('ses_1', true);
+  gate.setFullAuto('ses_1', true);
   await gate.handle(event('shell', ['Set-Content D:/scratch/timeout2.txt hi']));
   gate.answered('req_1');
   await new Promise((r) => setTimeout(r, 80));
@@ -380,7 +380,7 @@ test('a session saved with the timeout on honours it without a fresh toggle', as
 
 test('the session payload carries the permission timeout flag', () => {
   const on = normalizeSession({ id: 's1', metadata: { synapse: { permissionTimeout: true, auto: true } } });
-  assert.equal(on.permissionTimeout, true);
+  assert.equal(on.fullAuto, true);
   assert.equal(on.auto, true);
-  assert.equal(normalizeSession({ id: 's2' }).permissionTimeout, false);
+  assert.equal(normalizeSession({ id: 's2' }).fullAuto, false);
 });

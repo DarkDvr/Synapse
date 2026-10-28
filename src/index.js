@@ -597,6 +597,18 @@ async function main() {
     permissionGate,
     permissionMemory,
   });
+
+  // Full auto's questions half. Forms have no event Synapse sees, so one sweep
+  // every five seconds asks the engine what is waiting; a closed browser cannot
+  // stop it. The timer is unref'd so it never keeps the process alive, and the
+  // tick is cheap when nothing is pending (one local list call).
+  const fullAutoTimer = setInterval(() => {
+    Promise.resolve(api.autoAnswerTick?.()).catch((err) => {
+      bootLog.warn(`full auto tick failed: ${err.message}`);
+    });
+  }, 5000);
+  fullAutoTimer.unref?.();
+
   http = createServer({
     api,
     engine,

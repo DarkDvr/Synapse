@@ -255,7 +255,7 @@
                 <button type="button" class="icon-button" id="stopBtn" title="Stop the current run" aria-label="Stop the current run" disabled>■</button>
                 <span class="run-control">
                   <button type="button" class="run-btn" id="runBtn" aria-haspopup="menu" aria-expanded="false" hidden
-                    title="Run options — keep running, permission timeout" aria-label="Run options">
+                    title="Run options — keep running, full auto" aria-label="Run options">
                     <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="none"
                          stroke="currentColor" stroke-width="1.2" stroke-linejoin="round">
                       <path d="M8 1.6l1 1.3 1.6-.5.6 1.6 1.6.6-.5 1.6 1.3 1-1.3 1 .5 1.6-1.6.6-.6 1.6-1.6-.5-1 1.3-1-1.3-1.6.5-.6-1.6-1.6-.6.5-1.6-1.3-1 1.3-1-.5-1.6 1.6-.6.6-1.6 1.6.5 1-1.3Z"/>
@@ -268,8 +268,8 @@
                       <span class="run-menu-text"><span>Keep running</span><small>Work through the plan until it is done or blocked</small></span>
                       <span class="run-switch" aria-hidden="true"></span>
                     </button>
-                    <button type="button" class="run-menu-row" id="runTimeout" role="menuitemcheckbox" aria-checked="false">
-                      <span class="run-menu-text"><span>Permission timeout</span><small>Unanswered requests allow once after 60 seconds</small></span>
+                    <button type="button" class="run-menu-row" id="runFullAuto" role="menuitemcheckbox" aria-checked="false">
+                      <span class="run-menu-text"><span>Full auto</span><small>Allow once, or answer questions with the recommended option, after 60 seconds</small></span>
                       <span class="run-switch" aria-hidden="true"></span>
                     </button>
                   </div>

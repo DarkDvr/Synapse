@@ -5,6 +5,7 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { ensurePlan, readPlan, readRuns, runLedger, briefSession, logPlanState, BRIEF_KEY } from './plans.js';
 import { ensureProjectDoc, appendRequest as appendProjectRequest, appendChat, appendDecision as appendProjectDecision, appendEntry, setHandover } from './project-doc.js';
+import { createFormAuto } from './form-auto.js';
 import { skillRules, describeSkills } from './skills.js';
 import { rulesFor, decide, resolvePath, refusalNote, SINGLE_RULES } from './permissions.js';
 import { stopTargets } from './stop.js';
@@ -506,8 +507,35 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
     return open;
   }
 
-  const requireReady = () => {    const st = engine.status();
-    if (!st.ready) {
+  // Full auto for questions. The permission gate handles permission cards; this
+  // handles forms, on the same switch and the same minute. It records the answer
+  // exactly as an operator reply would: the question-loop history, the form
+  // broadcast, and the project document.
+  const formAuto = createFormAuto({
+    engine,
+    logger,
+    onAnswered: async ({ form, sessionId, answer }) => {
+      const signature = formSignature(form);
+      if (signature) {
+        const per = questionHistory.get(sessionId) || new Map();
+        per.set(signature, { answer, asks: 1 });
+        questionHistory.set(sessionId, per);
+      }
+      notify?.({ kind: 'form', type: 'form.answered', formId: form.id, sessionId, by: 'Full auto' });
+      try {
+        const session = await safe(() => engine.getSession(sessionId), null);
+        if (session?.directory && Array.isArray(form.fields) && form.fields.length) {
+          const written = appendProjectDecision(session.directory, { fields: form.fields, answer });
+          if (written && written.ok === false) app.warn(`could not write the full-auto answer: ${written.error}`);
+        }
+      } catch (err) {
+        app.warn(`could not write the full-auto answer to the project document: ${err.message}`);
+      }
+      app.info(`full auto answered a question in ${sessionId}`);
+    },
+  });
+
+  const requireReady = () => {    const st = engine.status();    if (!st.ready) {
       const err = new Error(getBootError() || `${st.kind} engine is not ready`);
       err.status = 503;
       throw err;
@@ -1319,19 +1347,34 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
      * answers `ask` verdicts — a harness write or a credential store is denied by
      * the policy before a card exists, so the timeout cannot widen those.
      */
-    setPermissionTimeout: async (sessionId, body) => {
+    /**
+     * "Full auto": while it is on, a request left to the operator takes the
+     * default after a minute — a permission card is allowed once, a question gets
+     * the Recommended option (or the top one). It only ever answers `ask`
+     * verdicts: a harness write or a credential store is denied before a card
+     * exists, so it cannot widen those walls.
+     */
+    setFullAuto: async (sessionId, body) => {
       requireReady();
       const session = await engine.getSession(sessionId);
       const meta = session?.metadata && typeof session.metadata === 'object' ? session.metadata : {};
       const synapse = meta.synapse && typeof meta.synapse === 'object' ? meta.synapse : {};
       const enabled = body?.enabled === true;
-      await engine.updateSessionMetadata(sessionId, { ...meta, synapse: { ...synapse, permissionTimeout: enabled } });
-      // A card already on screen follows the switch at once.
-      permissionGate?.setPermissionTimeout?.(sessionId, enabled);
-      app.info(`permission timeout ${enabled ? 'on' : 'off'} for ${sessionId}`);
-      notify?.({ kind: 'sessions', type: 'session.permissionTimeout', sessionId, enabled });
+      // One name from now on. The old key is dropped so a stale `permissionTimeout`
+      // cannot disagree with `fullAuto` after a rename.
+      const next = { ...synapse, fullAuto: enabled };
+      delete next.permissionTimeout;
+      await engine.updateSessionMetadata(sessionId, { ...meta, synapse: next });
+      // Open cards and forms follow the switch at once.
+      permissionGate?.setFullAuto?.(sessionId, enabled);
+      formAuto.setFullAuto(sessionId, enabled);
+      app.info(`full auto ${enabled ? 'on' : 'off'} for ${sessionId}`);
+      notify?.({ kind: 'sessions', type: 'session.fullAuto', sessionId, enabled });
       return { ok: true, enabled };
     },
+
+    /** One form sweep, called on a timer by the server. Exposed for tests. */
+    autoAnswerTick: async () => formAuto.tick(),
 
     interrupt: async (sessionId) => {
       requireReady();

@@ -346,9 +346,9 @@ export function createServer({ api, engine, logger, config, remote, onRemote }) 
       if (seg[2] === 'messages' && method === 'GET') return sendJson(res, 200, await api.messages(sessionId));
       if (seg[2] === 'plan' && method === 'GET') return sendJson(res, 200, await api.plan(sessionId));
       if (seg[2] === 'auto' && method === 'POST') return sendJson(res, 200, await api.setAuto(sessionId, await readBody(req)));
-      // "Permission timeout": unanswered asks allow once after a minute.
-      if (seg[2] === 'permission-timeout' && method === 'POST') {
-        return sendJson(res, 200, await api.setPermissionTimeout(sessionId, await readBody(req)));
+      // "Full auto": unanswered asks and questions take the default after a minute.
+      if (seg[2] === 'full-auto' && method === 'POST') {
+        return sendJson(res, 200, await api.setFullAuto(sessionId, await readBody(req)));
       }
       // A message can carry attachments, which travel as base64 — 8 MB of file is
       // 11 MB of JSON. Measured 25 Oct: an ordinary screenshot was refused with
