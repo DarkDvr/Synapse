@@ -563,10 +563,15 @@ export function closeRound(dir) {
   const tasks = read?.plan?.tasks || [];
   if (!tasks.length || !tasks.every((t) => t.status === 'done')) return false;
   if (!String(read?.plan?.summary || '').trim()) return false;
-  const last = lastRoundClosed(readRuns(dir));
   const mtime = Number(read?.stat?.mtime) || 0;
-  if (last && Number(last.at) >= mtime) return false;
-  return appendRun(dir, { kind: 'round', event: 'closed', tasks: tasks.length });
+  const last = lastRoundClosed(readRuns(dir));
+  // The marker carries the plan's exact mtime. Comparing the marker's wall-clock
+  // `at` to the file's mtime raced by a millisecond (a plan written just before
+  // the close could look newer), which made the "closed once" test flake and
+  // could write a second marker for the same plan. Older markers carry no
+  // `planMtime`; they fall back to the time comparison.
+  if (last && (last.planMtime ? Number(last.planMtime) === mtime : Number(last.at) >= mtime)) return false;
+  return appendRun(dir, { kind: 'round', event: 'closed', tasks: tasks.length, planMtime: mtime });
 }
 
 /**
@@ -1183,6 +1188,14 @@ export function briefSession({ dir, role = 'architect', auto = false, single = f
         `defect that blocks the goal — at most one or two, set "origin": "found", and say in one line what ` +
         `it is and why it is here. Do not add tasks for things you noticed but are not doing this round; ` +
         `write those in your reply. A row you planned is "plan"; one the operator asked for is "operator".`,
+    );
+    // The plan is the record of the work, so a worker does the work. On 28 Oct a
+    // one-file request ("create hello.txt") was written by the Architect itself,
+    // in Multi, and the plan pane stayed "No plan yet" — the operator's list did
+    // not mention the work that had just happened.
+    lines.push(
+      `In Multi, every piece of work goes through the plan - even a single file: write the row, delegate it, ` +
+        `and judge the report. Do not write the product yourself; Single is the mode where you answer and act alone.`,
     );
     lines.push(
       `invent: when the operator wants something built but the features are open, delegate to inventor, which ` +

@@ -2964,9 +2964,15 @@ function renderRoleActivity() {
             t.status === 'todo' &&
             (Array.isArray(t.dependsOn) ? t.dependsOn : []).every((d) => doneIds.has(d)),
         );
+        // Nothing ready but something blocked: the move is still the operator's,
+        // and naming the blocked task is the difference between "waiting on you"
+        // and a list they can act on.
+        const stuck = ready ? null : tasks.find((t) => t.status === 'blocked' || t.status === 'failed');
         text = ready
           ? `Waiting on you — ${ready.id} is ready${state.auto ? '' : ' and Keep Building is off'}`
-          : 'Waiting on you';
+          : stuck
+            ? `Waiting on you — ${stuck.id} is ${stuck.status}`
+            : 'Waiting on you';
         chip = { cls: 'role-waiting', text: 'Waiting on you' };
         dot = 'ok';
         settled = true;

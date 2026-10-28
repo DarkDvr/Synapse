@@ -109,6 +109,7 @@ test('the brief keeps the plan a checklist, and a blocked note short', () => {
   assert.match(brief, /this request's checklist, not a diary/);
   assert.match(brief, /A new request from the operator starts a new plan/);
   assert.match(brief, /Keep it to 2-6 rows/);
+  assert.match(brief, /every piece of work goes through the plan/);
   assert.match(brief, /one or two sentences/);
   assert.match(brief, /No reasoning, no line numbers, no code, no essay/);
 });
