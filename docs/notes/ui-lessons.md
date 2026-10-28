@@ -1011,6 +1011,15 @@ bold, italic, strikethrough and links: the range these models actually produce.
   above the button or below it if there is no room, and closes on resize or
   scroll. The empty-chat case was the proof: menu top 662, dock top 736, still
   hit-testable.
+- **Paste is the second door to attachments (28 Oct).** Files and images on the
+  clipboard become attachments; text over **10 lines or 1,200 characters** becomes
+  a `pasted-text-*.txt` attachment instead of a wall in the box; an image copied
+  only as HTML (`data:` URI, no File) is decoded too. Everything is read into
+  memory and travels as base64 with the message — **no temp file is written**, so
+  there is nothing to clean up. The six-file / 8 MB rule is shared with the
+  paperclip picker. Tested with synthetic clipboard events: 13 lines produced the
+  text-file chip, a 1×1 PNG produced an image chip, a `notes.txt` File produced a
+  file chip, and a small paste was left to the browser.
 - **The finish-line flag became a cog with two switches (28 Oct).** "Keep running"
   and the new "Full auto" live in a small menu above the button. The icon is the
   familiar settings gear, not a sun-like path: it has to read as a cog at 18px.

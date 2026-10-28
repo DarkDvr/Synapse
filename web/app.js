@@ -5842,8 +5842,7 @@ function shortName(name) {
   return s.length <= 14 ? s : `${s.slice(0, 13)}…`;
 }
 
-/** Read a picked file into the shape the message needs. */
-function readFileAsAttachment(file) {
+/** Read a picked file into the shape the message needs. */function readFileAsAttachment(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onerror = () => reject(new Error(`could not read ${file.name}`));
@@ -5860,6 +5859,120 @@ function readFileAsAttachment(file) {
     };
     reader.readAsDataURL(file);
   });
+}
+
+// One message may carry six files of up to 8 MB; pasted data follows the same
+// rules. A paste longer than ten lines (or 1,200 characters) becomes a text file
+// instead of a wall in the box — the operator's DeepSeek-style cutoff.
+const ATTACH_MAX = 6;
+const ATTACH_MAX_BYTES = 8 * 1024 * 1024;
+const PASTE_TEXT_MAX_LINES = 10;
+const PASTE_TEXT_MAX_CHARS = 1200;
+
+/** Is this paste better as a file than as text in the box? */
+function pasteIsLarge(text) {
+  if (!text) return false;
+  const lines = text.split(/\r\n|\r|\n/).length;
+  return lines > PASTE_TEXT_MAX_LINES || text.length > PASTE_TEXT_MAX_CHARS;
+}
+
+/** The in-memory text file a large paste becomes. No disk, so nothing to clean. */
+function pastedTextFile(text) {
+  const stamp = new Date().toTimeString().slice(0, 8).replace(/:/g, '-');
+  const taken = new Set((state.attachments || []).map((a) => a.name));
+  let name = `pasted-text-${stamp}.txt`;
+  let n = 2;
+  while (taken.has(name)) name = `pasted-text-${stamp}-${n++}.txt`;
+  return new File([text], name, { type: 'text/plain' });
+}
+
+/** Add files to the composer, with the one size and count rule the picker uses. */
+async function addAttachmentFiles(files) {
+  let added = 0;
+  for (const file of files || []) {
+    if (!file) continue;
+    if (file.size > ATTACH_MAX_BYTES) {
+      toast('File Too Large', `${file.name || 'That file'} is ${fmtBytes(file.size)}; the limit is 8 MB.`);
+      continue;
+    }
+    if (state.attachments.length >= ATTACH_MAX) {
+      toast('Too Many Files', 'Six attachments is the limit for one message.');
+      break;
+    }
+    try {
+      state.attachments.push(await readFileAsAttachment(file));
+      added += 1;
+    } catch (err) {
+      toast('Could Not Read That File', err.message);
+    }
+  }
+  if (added) renderAttachments();
+  return added;
+}
+
+/** The files in a clipboard event, whichever way the browser spells them. */
+function clipboardFiles(dt) {
+  const files = [...(dt.files || [])];
+  if (files.length) return files;
+  for (const item of [...(dt.items || [])]) {
+    if (item.kind !== 'file') continue;
+    const file = item.getAsFile?.();
+    if (file) files.push(file);
+  }
+  return files;
+}
+
+/**
+ * Paste anything into the composer.
+ *
+ * Files and images become attachments; long text becomes a .txt attachment; short
+ * text is left to the browser at the caret. Everything is read into memory and
+ * travels as base64 with the message — no temp file is written, so there is
+ * nothing left to clean up.
+ */
+async function onComposerPaste(e) {
+  const dt = e.clipboardData;
+  if (!dt) return;
+
+  const files = clipboardFiles(dt);
+  if (files.length) {
+    e.preventDefault();
+    await addAttachmentFiles(files);
+    return;
+  }
+
+  const text = dt.getData('text/plain');
+  if (text && pasteIsLarge(text)) {
+    if (state.attachments.length >= ATTACH_MAX) {
+      // Do not swallow the paste when full: losing the operator's text would be
+      // worse than a long box. The toast says why it stayed text.
+      toast('Too Many Files', 'Six attachments is the limit; the text was pasted instead.');
+      return;
+    }
+    e.preventDefault();
+    const size = new Blob([text]).size;
+    if (size > ATTACH_MAX_BYTES) {
+      toast('Paste Too Large', `That text is ${fmtBytes(size)}; the limit is 8 MB.`);
+      return;
+    }
+    await addAttachmentFiles([pastedTextFile(text)]);
+    toast('Text Attached', 'Long text was attached as a file instead of pasted into the box.');
+    return;
+  }
+
+  // Some apps copy an image as HTML with the bytes in a data: URI and no File.
+  if (text) return;
+  const html = dt.getData('text/html');
+  const match = /<img[^>]+src=["'](data:image\/[a-z0-9.+-]+;base64,[^"']+)["']/i.exec(html || '');
+  if (!match) return;
+  e.preventDefault();
+  try {
+    const blob = await (await fetch(match[1])).blob();
+    const ext = (blob.type.split('/')[1] || 'png').replace(/[^a-z0-9]/gi, '') || 'png';
+    await addAttachmentFiles([new File([blob], `pasted-image.${ext}`, { type: blob.type })]);
+  } catch (err) {
+    toast('Could Not Read The Pasted Image', err.message);
+  }
 }
 
 /**
@@ -7443,23 +7556,11 @@ function wire() {
   $('attachInput').addEventListener('change', async (e) => {
     const picked = [...(e.target.files || [])];
     e.target.value = '';
-    for (const file of picked) {
-      if (file.size > 8 * 1024 * 1024) {
-        toast('File Too Large', `${file.name} is ${fmtBytes(file.size)}; the limit is 8 MB.`);
-        continue;
-      }
-      if (state.attachments.length >= 6) {
-        toast('Too Many Files', 'Six attachments is the limit for one message.');
-        break;
-      }
-      try {
-        state.attachments.push(await readFileAsAttachment(file));
-      } catch (err) {
-        toast('Could Not Read That File', err.message);
-      }
-    }
-    renderAttachments();
+    await addAttachmentFiles(picked);
   });
+  // Paste is a second door to the same place: files and images from the clipboard,
+  // and long text as a .txt attachment rather than a wall in the box.
+  $('promptInput').addEventListener('paste', onComposerPaste);
   $('attachStrip').addEventListener('click', (e) => {
     const x = e.target.closest('[data-detach]');
     if (!x) return;
