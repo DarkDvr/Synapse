@@ -585,6 +585,24 @@ no silent discard. The chip that starts it is only shown when a compact can run
 (a project is open, nothing is working, there is something to discard), and a
 second click within three seconds is the confirmation.
 
+**A worker's transcript is replaced when its compaction no longer fits (28 Oct).**
+The engine's compaction prompt is the whole *retained* transcript, not the current
+context. A long task therefore asks the model to summarise more than its window
+holds — measured at 225k on a 131k model, which failed with "Compaction produced
+no summary" — while the active prompt was only 111k. When that failure, or the
+provider's context-limit error, reaches a worker run, the runner does **not** retry
+the same session. It creates a fresh worker with the same role, model, rules and
+briefing, then prompts it with a **Synapse-written handover**: the task and its
+detail, the last thing the worker said, and "the project's files are the work —
+inspect git status/diff, keep what is done, continue, do not repeat". The old
+session is deleted; the run's clock, attempt and budget continue. Up to three
+replacements per task, after which the old retry path applies.
+
+The engine's summary is not used here because the failed compaction is exactly the
+case where it does not exist. The project compact (above) still uses the engine's
+summary when it has one. A grant remembered for the old worker session does not
+travel to the new one, so a rare request may be asked again.
+
 **An example in a brief is a template, not an illustration.** The Inventor's first
 mandate said "build me a clock, go" and offered an alarm, a theme and a second time
 zone as the shape of a good answer. It was written for the clock project and would

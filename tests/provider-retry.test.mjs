@@ -50,6 +50,9 @@ function makeEngine({ dir, script, wakeScript }) {
   const woke = [];
   const descriptions = [];
   const interrupts = [];
+  const created = [];
+  const deleted = [];
+  const prompts = [];
   let seq = 0;
 
   const startTurn = (id) => {
@@ -78,11 +81,21 @@ function makeEngine({ dir, script, wakeScript }) {
     },
     async createSession({ model, metadata }) {
       const id = `ses_w${(seq += 1)}`;
-      sessions.set(id, { role: metadata?.synapse?.role || null, model: model?.ref || null, messages: [], script: [...script] });
+      created.push(id);
+      // The first session gets the case's script. A replacement (a session after
+      // a compaction reset) gets a clean turn, which is what the real reset is
+      // for: the new transcript is short, so the same turn no longer fails.
+      sessions.set(id, {
+        role: metadata?.synapse?.role || null,
+        model: model?.ref || null,
+        messages: [],
+        script: created.length === 1 ? [...script] : [{}],
+      });
       return { id };
     },
     async setInstruction() {},
     async prompt(id, text) {
+      prompts.push({ id, text });
       push(id, { id: `${id}-u`, type: 'user', parts: [{ type: 'text', text }] });
     },
     async synthetic(id, text, opts) {
@@ -97,14 +110,18 @@ function makeEngine({ dir, script, wakeScript }) {
     },
     async interrupt(id) { interrupts.push(id); },
     async updateSessionPermissions() {},
+    async deleteSession(id) {
+      deleted.push(id);
+      sessions.delete(id);
+    },
   };
-  return { engine, sessions, woke, descriptions, interrupts };
+  return { engine, sessions, woke, descriptions, interrupts, created, deleted, prompts };
 }
 
 async function runCase({ name, script, wakeScript = [{}], ladder = ['coder-1'], roleRef = 'opencode/deepseek-v4.1-flash-free', cancelAfter = 0, untilWoke = 1, harnessStopAfter = 0, harnessReason = '' }) {
   const dir = project(name);
   const runsFile = path.join(dir, '.synapse', 'runs.jsonl');
-  const { engine, sessions, woke, descriptions, interrupts } = makeEngine({ dir, script, wakeScript });
+  const { engine, sessions, woke, descriptions, interrupts, created, deleted, prompts } = makeEngine({ dir, script, wakeScript });
   const events = [];
   const noted = [];
   const logged = [];
@@ -166,7 +183,7 @@ async function runCase({ name, script, wakeScript = [{}], ladder = ['coder-1'], 
   const lines = fs.existsSync(runsFile)
     ? fs.readFileSync(runsFile, 'utf8').trim().split('\n').filter(Boolean).map((l) => JSON.parse(l))
     : [];
-  return { dir, result, runs: lines, woke, descriptions, interrupts, events, noted, logged, sessions: [...sessions.values()] };
+  return { dir, result, runs: lines, woke, descriptions, interrupts, events, noted, logged, created, deleted, prompts, sessions: [...sessions.values()] };
 }
 
 const checks = [];
@@ -303,6 +320,19 @@ expect(
   'wake: retry announced',
   woken.events.some((e) => e.kind === 'role-error' && e.role === 'architect' && e.retrying),
 );
+
+// 7. a failed compaction replaces the worker session with a handover
+const reset = await runCase({
+  name: 'compaction-reset',
+  script: [{ error: 'Compaction produced no summary' }, {}],
+});
+expect('compaction reset: the run completed', reset.result?.outcome === 'completed', reset.result?.outcome);
+expect('compaction reset: a second session was created', reset.created.length === 2, String(reset.created.length));
+expect('compaction reset: the old session was deleted', reset.deleted.length === 1, String(reset.deleted.length));
+const handover = reset.prompts.at(-1)?.text || '';
+expect('compaction reset: the handover names the replacement', /replaced because/.test(handover), handover.slice(0, 100));
+expect('compaction reset: the files are the state', /files are the work/.test(handover));
+expect('compaction reset: it says not to repeat work', /Do not repeat finished work/.test(handover));
 
 // restore the operator's diary — a test must not write into a month of evidence
 if (logBefore === null) fs.rmSync(PROVIDER_LOG, { force: true });

@@ -417,6 +417,26 @@ export function compactionMessages(messages) {
 }
 
 /**
+ * The last substantive thing a worker said, for a handover after its session is
+ * replaced. Only text parts count; a tool call's output is already on disk.
+ * Bounded: the handover must stay small enough to fit the fresh window.
+ */
+export function lastAssistantText(messages) {
+  for (let i = (messages || []).length - 1; i >= 0; i -= 1) {
+    const m = messages[i];
+    if (!m || m.type !== 'assistant') continue;
+    const text = (m.parts || [])
+      .filter((p) => p?.type === 'text' && p.text)
+      .map((p) => String(p.text))
+      .join(' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (text) return text.slice(0, 1200);
+  }
+  return '';
+}
+
+/**
  * How much of a model's window a prompt may use before it is full.
  *
  * The next turn needs room for its own output and for the tool results it will
@@ -1068,6 +1088,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     const synapseBefore = synapseFingerprint(dir);
     const startedAt = Date.now();
     let worker = null;
+    let before = null;
     let outcome = 'failed';
     let text = '';
     let files = [];
@@ -1082,6 +1103,11 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     // on the result line so the morning's log explains a long night.
     let retries = 0;
     let resumes = 0;
+    // How many times this task's worker session has been replaced because its
+    // transcript outgrew the model window. A fresh session starts with a short
+    // handover, so this is a rescue, not a loop; after a few the run reports.
+    let resets = 0;
+    const RESET_MAX = 3;
     // Stop: the operator's way out of a retry loop that is going nowhere — and
     // the question-loop guard's way out of a worker that keeps asking the same
     // thing. A plain abort leaves the run "stopped"; a stop with a reason says
@@ -1151,6 +1177,86 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     await (guard?.snapshot?.(`before ${task.id} (${role})`) || Promise.resolve()).catch(() => {});
     const harnessBefore = await (guard?.state?.() || Promise.resolve(null)).catch(() => null);
 
+    /**
+     * Build the worker session for the current role and model. Used at the start
+     * of a rung and again when a transcript has to be replaced; keeping it one
+     * function is what makes the replacement carry the same rules and briefing.
+     */
+    async function spawnWorker() {
+      const w = await engine.createSession({
+        title: `${request.task} - ${role}`,
+        model: modelRef ? { ref: modelRef, variant } : undefined,
+        directory: dir,
+        // Workers carry the same permission ladder as the Architect: their run
+        // directory is the workspace, the harness is read-only, and anything
+        // outside asks. Role rules come after the ladder so a role's deny wins
+        // by being last; skills live last of all.
+        permissions: [
+          ...rulesFor(),
+          ...roleWriteRules(dir, role),
+          ...roleReadRules(dir, role),
+          ...skillRules(config, role),
+        ],
+        // Hidden from the rail: it runs in the project directory, so only this
+        // mark tells Synapse it is scaffolding and not the operator's session.
+        metadata: { synapse: { internal: true, role, task: request.task, architect: architectId } },
+      });
+      live.workerId = w.id;
+      // Its context: where it is, what the plan says, and that the plan is not
+      // its to touch. The task itself goes in the message that prompts it.
+      try {
+        await engine.setInstruction(
+          w.id,
+          BRIEF_KEY,
+          briefSession({
+            dir,
+            role,
+            skills: describeSkills(config, role),
+            focus: roleConfig.focus,
+            instructions: roleConfig.instructions,
+          }),
+        );
+      } catch (err) {
+        log.warn(`worker brief failed for ${request.task}: ${err.message}`);
+      }
+      return w;
+    }
+
+    /**
+     * Replace a worker's transcript because it no longer fits the model window.
+     *
+     * The engine's compaction prompt is the whole retained transcript, not the
+     * current context, so a long task can reach a summarise call larger than the
+     * window (28 Oct: 225k on a 131k model). The engine's summary is not available
+     * when that call failed, so the handover is Synapse's: the task, the last thing
+     * the worker said, and the project's files as they now stand. Same role, same
+     * model, same attempt and clock; the new session starts with a short log.
+     */
+    async function replaceWorker(reason, previous) {
+      const old = worker;
+      const lastSaid = lastAssistantText(previous || []);
+      worker = await spawnWorker();
+      resets += 1;
+      retries += 1;
+      if (old?.id) {
+        windows.delete(old.id);
+        try {
+          await engine.deleteSession?.(old.id);
+        } catch (err) {
+          log.warn(`could not delete the replaced worker session ${old.id}: ${err.message}`);
+        }
+      }
+      before = markOf(await engine.getMessages(worker.id));
+      live.retry = { attempt: resets, at: Date.now(), message: reason, reason: 'compaction' };
+      emit('run.progress', { ...live });
+      await engine.prompt(worker.id, workerHandover({ task, note: request.note, goal: plan.plan?.goal, reason, lastSaid }));
+      live.retry = null;
+      emit('run.progress', { ...live });
+      log.warn(
+        `worker ${request.task} (${role}) replaced its session: ${reason} - continuing with a handover`,
+      );
+    }
+
     try {
       // One worker run per rung. The loop exists for one case: the provider
       // refusing the model outright (a retired model answers 410 in about two
@@ -1188,45 +1294,9 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
         // What the server really has loaded, before anything is sent to it.
         await noteLoadedWindow(modelRef).catch(() => {});
 
-        worker = await engine.createSession({
-          title: `${request.task} - ${role}`,
-          model: modelRef ? { ref: modelRef, variant } : undefined,
-          directory: dir,
-          // Workers carry the same permission ladder as the Architect: their run
-          // directory is the workspace, the harness is read-only, and anything
-          // outside asks. Role rules come after the ladder so a role's deny wins
-          // by being last; skills live last of all.
-          permissions: [
-            ...rulesFor(),
-            ...roleWriteRules(dir, role),
-            ...roleReadRules(dir, role),
-            ...skillRules(config, role),
-          ],
-          // Hidden from the rail: it runs in the project directory, so only this
-          // mark tells Synapse it is scaffolding and not the operator's session.
-          metadata: { synapse: { internal: true, role, task: request.task, architect: architectId } },
-        });
-        live.workerId = worker.id;
+        worker = await spawnWorker();
 
-        // Its context: where it is, what the plan says, and that the plan is not
-        // its to touch. The task itself goes in the message below.
-        try {
-          await engine.setInstruction(
-            worker.id,
-            BRIEF_KEY,
-            briefSession({
-              dir,
-              role,
-              skills: describeSkills(config, role),
-              focus: roleConfig.focus,
-              instructions: roleConfig.instructions,
-            }),
-          );
-        } catch (err) {
-          log.warn(`worker brief failed for ${request.task}: ${err.message}`);
-        }
-
-        let before = markOf(await engine.getMessages(worker.id));
+        before = markOf(await engine.getMessages(worker.id));
         await engine.prompt(worker.id, workerPrompt({ task, note: request.note, goal: plan.plan?.goal }));
 
         // Rescue loop: one turn at a time, with the whole session kept between
@@ -1398,16 +1468,29 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
             usageSince = 0;
           }
 
+          // A failed compaction is the engine's own summary call being larger than
+          // the window: it summarises the whole retained transcript, not the current
+          // prompt. Retrying in the same session asks for the same oversized call;
+          // a fresh session with a handover is the way out. (28 Oct, t2: 225k on a
+          // 131k model.)
+          if (cls.reason === 'compaction' && resets < RESET_MAX) {
+            alert({
+              dir,
+              role,
+              message: 'Summarising the conversation failed — starting a fresh worker session',
+              attempt: resets + 1,
+              retrying: true,
+            });
+            await replaceWorker('the conversation no longer fits the model window', now);
+            if (signal?.aborted) { outcome = 'stopped'; break; }
+            continue;
+          }
+
           // The prompt is bigger than the window. Waiting changes nothing and
           // repeating the request fails identically, so the answer is the one the
           // engine already has: summarise, then carry on. A local server set to
           // "Stop at Limit" reports it this way instead of truncating silently.
           if (cls.kind === 'context') {
-            rungRetries += 1;
-            retries += 1;
-            out.warn(
-              `context limit hit in ${request.task} (${role}); asking the engine to compact and carrying on`,
-            );
             // The provider just refused a prompt this big. For a cloud model that
             // refusal is the only measurement there is — there is no endpoint that
             // reports a loaded window — so it is recorded and the next turn budgets
@@ -1420,6 +1503,28 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
                 );
               }
             } catch { /* the run matters more than the bookkeeping */ }
+
+            // A fresh session is the better answer for a worker: the engine's
+            // compaction of this transcript is exactly the call that may be too
+            // large, and a new session with the task and the files continues.
+            if (resets < RESET_MAX) {
+              alert({
+                dir,
+                role,
+                message: 'The prompt is too large — starting a fresh worker session',
+                attempt: resets + 1,
+                retrying: true,
+              });
+              await replaceWorker('the prompt was larger than the model window', now);
+              if (signal?.aborted) { outcome = 'stopped'; break; }
+              continue;
+            }
+
+            rungRetries += 1;
+            retries += 1;
+            out.warn(
+              `context limit hit in ${request.task} (${role}); asking the engine to compact and carrying on`,
+            );
             live.retry = { attempt: rungRetries, at: Date.now(), message: turnError, reason: 'context' };
             emit('run.progress', { ...live });
             try {
@@ -2124,6 +2229,26 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
         `wrote, and anything the Architect needs to know to judge it.`,
     );
     return lines.join('\n');
+  }
+
+  /**
+   * The prompt a replacement worker gets. The task and its detail are the same
+   * brief it had; the rest says why the transcript is gone and that the project
+   * is the state. Deliberately short: this message is the new session's first
+   * and must not recreate the problem it is solving.
+   */
+  function workerHandover({ task, note, goal, reason, lastSaid }) {
+    return [
+      workerPrompt({ task, note, goal }),
+      '',
+      '---',
+      `Your earlier session was replaced because ${reason}. Its conversation is gone; the project's files are the work.`,
+      lastSaid ? `What you last said before the reset: "${lastSaid}"` : '',
+      'Look at the project as it stands now (git status, git diff, the files and bin/), keep whatever is already done, and continue this task from there. Do not repeat finished work.',
+      'When you are finished, give the usual short report.',
+    ]
+      .filter(Boolean)
+      .join('\n');
   }
 
   /** The provider's own words for a turn that ended in an error, or null.
