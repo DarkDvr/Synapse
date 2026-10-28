@@ -66,7 +66,7 @@
             {
               "id": "qwen3.8-4b-distill-heretic-abliterated",
               "name": "qwen3.8-4b-distill-heretic-abliterated",
-              "context": 4096
+              "context": 8448
             },
             {
               "id": "qwen3.8-9b-distill",
