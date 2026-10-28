@@ -2999,7 +2999,11 @@ function renderRoleActivity() {
       null;
     if (cardErr) {
       const at = Number(cardErr.at) || 0;
-      const head = shortErr(cardErr.message);
+      // The engine's own sentence is jargon ("Compaction produced no summary").
+      // The card says what happened; the log keeps the exact words.
+      const head = /compaction produced no summary|compaction\.failed/i.test(String(cardErr.message || ''))
+        ? 'Summarising the conversation failed'
+        : shortErr(cardErr.message);
       text = cardErr.retrying !== false && at ? `Retrying at ${hhmm(at)} — ${head}` : head;
     }
 
