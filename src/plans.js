@@ -586,7 +586,11 @@ export function closeRound(dir) {
  * lookup, not a migration.
  */
 export function runLedger(records, sessionId) {
-  const list = Array.isArray(records) ? records : [];
+  // Only this round. Task ids are reused by every new plan (t1, t2, …), so a
+  // t1 in the current plan must not carry the minutes of the previous plan's
+  // t1 — the row showed 41s for a 12s run on 28 Oct. The round marker is the
+  // boundary the caps already use.
+  const list = sinceRoundClosed(Array.isArray(records) ? records : []);
   const asker = new Map();
   for (const r of list) {
     if (r && r.kind === 'delegate' && r.callId && r.architect) asker.set(r.callId, r.architect);

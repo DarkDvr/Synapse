@@ -2953,8 +2953,24 @@ function renderRoleActivity() {
         settled = true;
       }
       // Nothing in flight and work outstanding: the move is the operator's, so
-      // the card says it in the same place a worker's task line would be.
-      else if (unfinished) { text = 'Waiting on you'; chip = { cls: 'role-waiting', text: 'Waiting on you' }; dot = 'ok'; settled = true; }
+      // the card says it in the same place a worker's task line would be, and
+      // names the task that is ready. Without that, a plan stalled by the
+      // Keep Building rule read as "waiting on you" for no stated reason — and
+      // the Architect's own last line said it had queued the task (28 Oct).
+      else if (unfinished) {
+        const doneIds = new Set(tasks.filter((t) => t.status === 'done').map((t) => t.id));
+        const ready = tasks.find(
+          (t) =>
+            t.status === 'todo' &&
+            (Array.isArray(t.dependsOn) ? t.dependsOn : []).every((d) => doneIds.has(d)),
+        );
+        text = ready
+          ? `Waiting on you — ${ready.id} is ready${state.auto ? '' : ' and Keep Building is off'}`
+          : 'Waiting on you';
+        chip = { cls: 'role-waiting', text: 'Waiting on you' };
+        dot = 'ok';
+        settled = true;
+      }
       // A chat with no plan has nothing outstanding once its turn has ended. The
       // card says Done, green, rather than sitting blank — the same chip a
       // finished plan gets, so "done" means the same thing in both.
