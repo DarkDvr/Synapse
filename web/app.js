@@ -2560,6 +2560,10 @@ async function removeProject(id) {
     const res = await api('DELETE', `/api/projects/${encodeURIComponent(id)}`, {
       binConfirmed: Boolean(ok.deliverables),
     });
+    // The chat belongs to the project just deleted: closing it is the point of
+    // the action, not a second piece of news. Empty the view first, so
+    // loadProjects does not add "Chat Closed" on top of "Project Deleted".
+    if (projectOf(state.sessionId)?.id === id) showNothing();
     await loadProjects();
     if (res?.recycled) toast('Project Deleted', `"${p.name}" and its folder are in the Recycle Bin.`);
     else toast('Project Removed', `"${p.name}" was no longer a folder on disk.`);
