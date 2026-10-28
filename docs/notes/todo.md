@@ -5,22 +5,6 @@ what was asked, why it is not a small change, and what has to be decided before
 anyone builds it. None of these is a rule; the rules are in `AGENTS.md` and the
 other notes.
 
-## A better "working" background effect
-
-The operator asked for a better background "working" effect on a project and a
-session. Today "working" is carried by the yellow dot and the yellow rule on a
-project row; there is no motion in the background at all.
-
-Why it is not a small change: the rail is the one part of the UI that is always
-on screen, and the palette rule says amber is semantic. A background effect has
-to be quiet enough to read a name through, cheap enough to run while a model
-streams, and it must stop dead when the work does — a pulse that keeps going
-because a stale boolean says "working" is worse than none.
-
-Decide first: what moves (a wash behind the row, the project's rule, the dot's
-glow), how slow (anything faster than about 3 s reads as an alarm), and whether
-`prefers-reduced-motion` gets a still version or nothing.
-
 ## Replace a worker's session when its compaction no longer fits
 
 The engine's compaction prompt is the whole message log, not the model's current
