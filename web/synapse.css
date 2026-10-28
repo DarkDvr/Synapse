@@ -1220,19 +1220,17 @@ body[data-view="session"] .chat-dock.has-ask { overflow: visible; }
   display: inline-flex; align-items: center; justify-content: center;
   background: transparent; border: 1px solid #3a3d43; color: #82868e;
 }
+/* Any switch on: green at rest — the cog is a status light as well as a button.
+   Hover and an open menu are always yellow, even while it is green. */
+.run-btn.is-on {
+  border-color: rgba(53, 192, 138, 0.62); color: var(--green);
+  background: rgba(53, 192, 138, 0.07);
+}
 .run-btn:hover, .run-btn[aria-expanded="true"] {
   border-color: rgba(237, 194, 90, 0.65); color: var(--yellow);
   background: rgba(237, 194, 90, 0.06);
 }
 .run-btn:focus-visible { outline: none; border-color: var(--yellow); box-shadow: 0 0 0 3px rgba(237, 194, 90, 0.22); }
-/* Any switch on: green, always — the cog is a status light as well as a button.
-   Both switches off: gray at rest, yellow only on hover or while the menu is up. */
-.run-btn.is-on,
-.run-btn.is-on:hover,
-.run-btn.is-on[aria-expanded="true"] {
-  border-color: rgba(53, 192, 138, 0.62); color: var(--green);
-  background: rgba(53, 192, 138, 0.07);
-}
 .run-btn.is-on:focus-visible { border-color: var(--green); box-shadow: 0 0 0 3px rgba(53, 192, 138, 0.25); }
 #runBtn[hidden] { display: none; }
 .run-menu {
