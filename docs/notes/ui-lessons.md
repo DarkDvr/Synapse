@@ -994,15 +994,23 @@ bold, italic, strikethrough and links: the range these models actually produce.
   show a red border and no words at all, which the operator read as "the Designer
   errored"; it says "Blocked — <task>" now and the row carries the reason.
 - **The working wash and border light (28 Oct).** The finish the operator chose:
-  a soft amber wash entering from **both** edges, breathing every 4 s, 17.6% at
-  the edges (20% lighter than the demo's 22%), plus a 2 px conic light lapping the
-  whole perimeter in 4.2 s. It marks the project row with `has-work` and the role
-  card with `is-working` — and the card only while its turn is actually running,
-  not while it waits on a question and not the Architect while a worker holds the
-  floor. The wash is a pseudo behind the content (negative z-index inside an
-  isolated stacking context); the ring is the same 2 px masked pseudo the demo
-  proved. The card's `overflow: hidden` clips the ring inside its edge, which is
-  deliberate. Reduced motion keeps the still tint and a fixed arc.
+  a soft amber wash entering from **both** edges, breathing every 2.7 s (50%
+  faster than the 4 s version), 12.3% at the edges (30% lighter again), plus a
+  2 px conic light lapping the whole perimeter in 4.2 s. It marks the project row
+  with `has-work` and the role card with `is-working` — and the card only while
+  its turn is actually running, not while it waits on a question and not the
+  Architect while a worker holds the floor. The wash is a pseudo behind the
+  content (negative z-index inside an isolated stacking context); the ring is the
+  same 2 px masked pseudo the demo proved. The card's `overflow: hidden` clips the
+  ring inside its edge, which is deliberate. Reduced motion keeps the still tint
+  and a fixed arc.
+- **The run menu is fixed, not absolute (28 Oct).** The chat dock clips its
+  children, and an empty chat's dock is only as tall as the composer: the menu
+  opened 146 px above the cog and was cut off by the dock's top edge, leaving just
+  a yellow cog. It is now positioned `fixed` against the viewport when it opens,
+  above the button or below it if there is no room, and closes on resize or
+  scroll. The empty-chat case was the proof: menu top 662, dock top 736, still
+  hit-testable.
 - **The finish-line flag became a cog with two switches (28 Oct).** "Keep running"
   and the new "Full auto" live in a small menu above the button. The icon is the
   familiar settings gear, not a sun-like path: it has to read as a cog at 18px.

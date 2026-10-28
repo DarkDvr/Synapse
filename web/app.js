@@ -1637,8 +1637,38 @@ function renderKeep() {
 function closeRunMenu() {
   const menu = $('runMenu');
   const btn = $('runBtn');
-  if (menu) menu.hidden = true;
+  if (menu) {
+    menu.hidden = true;
+    // The menu is positioned fixed while open (so the dock's `overflow: hidden`
+    // cannot clip it); the next open measures afresh.
+    menu.style.position = '';
+    menu.style.left = '';
+    menu.style.top = '';
+    menu.style.right = '';
+    menu.style.bottom = '';
+  }
   if (btn) btn.setAttribute('aria-expanded', 'false');
+}
+
+/** Place the open menu above the cog, in viewport coordinates. Fixed, not
+ *  absolute: the chat dock clips its children, and a short window put the menu
+ *  above the dock's top edge and out of sight (28 Oct). If there is no room
+ *  above, it opens below instead of past the top of the window. */
+function positionRunMenu() {
+  const menu = $('runMenu');
+  const btn = $('runBtn');
+  if (!menu || !btn || menu.hidden) return;
+  const b = btn.getBoundingClientRect();
+  const w = menu.offsetWidth;
+  const h = menu.offsetHeight;
+  const left = Math.min(Math.max(8, b.right - w), window.innerWidth - w - 8);
+  const above = b.top - h - 8;
+  const top = above >= 8 ? above : Math.min(b.bottom + 8, window.innerHeight - h - 8);
+  menu.style.position = 'fixed';
+  menu.style.left = `${Math.round(left)}px`;
+  menu.style.top = `${Math.round(Math.max(8, top))}px`;
+  menu.style.right = 'auto';
+  menu.style.bottom = 'auto';
 }
 
 function toggleRunMenu() {
@@ -1648,7 +1678,10 @@ function toggleRunMenu() {
   const open = menu.hidden;
   menu.hidden = !open;
   btn.setAttribute('aria-expanded', String(open));
-  if (open) $('runAuto')?.focus();
+  if (open) {
+    positionRunMenu();
+    $('runAuto')?.focus();
+  }
 }
 
 async function setKeep(next) {
@@ -7490,6 +7523,9 @@ document.addEventListener('keydown', (e) => {
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') closeRunMenu();
   });
+  // A fixed menu does not travel with the button: close it when the page moves.
+  window.addEventListener('resize', () => closeRunMenu());
+  window.addEventListener('scroll', () => closeRunMenu(), true);
   $('menuBtn').addEventListener('click', () => $('sidebar').classList.toggle('open'));
   $('emptyNewProject').addEventListener('click', addProject);
   $('addProjectBtn').addEventListener('click', addProject);

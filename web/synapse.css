@@ -793,10 +793,10 @@ body.dark .sidebar-bottom,
   pointer-events: none;
   background:
     radial-gradient(120% 240% at 0% 50%,
-      rgba(237, 194, 90, 0.176) 0%, rgba(237, 194, 90, 0.04) 46%, transparent 68%),
+      rgba(237, 194, 90, 0.123) 0%, rgba(237, 194, 90, 0.028) 46%, transparent 68%),
     radial-gradient(120% 240% at 100% 50%,
-      rgba(237, 194, 90, 0.176) 0%, rgba(237, 194, 90, 0.04) 46%, transparent 68%);
-  animation: work-wash 4s ease-in-out infinite;
+      rgba(237, 194, 90, 0.123) 0%, rgba(237, 194, 90, 0.028) 46%, transparent 68%);
+  animation: work-wash 2.7s ease-in-out infinite;
 }
 .tree-row.project.has-work::after,
 .role-card.is-working::after {
