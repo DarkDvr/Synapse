@@ -12,6 +12,10 @@
    Status colours (green / amber / red) are semantic and never decorative.
    ══════════════════════════════════════════════════════════════════════════ */
 
+/* The working border light turns a conic-gradient angle; a plain custom
+   property cannot be interpolated without this registration. */
+@property --work-spin { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
+
 /* ── 0. scrollbar stability ────────────────────────────────────────────── */
 /* The chat panel must never reflow because a scrollbar appeared, so the panes
    that scroll *inside* the page reserve their gutter (see `.transcript` and the
@@ -772,6 +776,51 @@ body.dark .sidebar-bottom,
   transition: border-color 0.18s ease, background-color 0.18s ease, opacity 0.2s ease;
 }
 .role-card:hover { border-color: #454950; }
+
+/* ── the working wash and border light (28 Oct) ─────────────────────────────
+   The operator's choice from the demo: a soft amber wash entering from both
+   edges, breathing every 4 s, plus a 2 px light lapping the whole perimeter.
+   It marks the project row whose run is live and the role card whose turn is
+   running — the two places the operator looks to see "this is happening now".
+   The wash sits behind the content (negative z-index inside an isolated
+   stacking context); the ring sits above it, but is only 2 px of edge.
+   `--work-spin` is registered above so the conic gradient can animate. */
+.tree-row.project.has-work,
+.role-card.is-working { isolation: isolate; }
+.tree-row.project.has-work::before,
+.role-card.is-working::before {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(120% 240% at 0% 50%,
+      rgba(237, 194, 90, 0.176) 0%, rgba(237, 194, 90, 0.04) 46%, transparent 68%),
+    radial-gradient(120% 240% at 100% 50%,
+      rgba(237, 194, 90, 0.176) 0%, rgba(237, 194, 90, 0.04) 46%, transparent 68%);
+  animation: work-wash 4s ease-in-out infinite;
+}
+.tree-row.project.has-work::after,
+.role-card.is-working::after {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; padding: 2px; z-index: 2;
+  pointer-events: none;
+  background: conic-gradient(from var(--work-spin),
+    rgba(237, 194, 90, 0) 0deg, rgba(237, 194, 90, 0) 246deg,
+    rgba(237, 194, 90, 0.9) 284deg, rgba(237, 194, 90, 1) 304deg,
+    rgba(237, 194, 90, 0.2) 330deg, rgba(237, 194, 90, 0) 350deg);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  animation: work-spin 4.2s linear infinite;
+}
+@keyframes work-wash { 0%, 100% { opacity: 0.35; } 50% { opacity: 1; } }
+@keyframes work-spin { to { --work-spin: 360deg; } }
+@media (prefers-reduced-motion: reduce) {
+  .tree-row.project.has-work::before,
+  .role-card.is-working::before { animation: none; opacity: 0.55; }
+  .tree-row.project.has-work::after,
+  .role-card.is-working::after { animation: none; opacity: 0.4; }
+}
+
 
 /* The card's subtitle: the task this role is on, and what it is doing to it.
    The slot is always three lines tall, empty or not. A card that grows when a

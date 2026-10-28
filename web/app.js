@@ -3095,8 +3095,12 @@ function renderRoleActivity() {
     // it was the run log being summed across sessions that produced it.
     const workedHere = mine.some((t) => Number(state.planState?.spent?.[t.id]) > 0);
     const dim = role !== 'architect' && !participated && !part && !skipped && !workedHere;
-    rows.push({ card, text, part, dot, dim, chip, settled, skipped, err: Boolean(cardErr) });
-    sig += `${role}\u0001${part}\u0001${dot}\u0001${dim ? 1 : 0}\u0001${settled ? 1 : 0}\u0001${skipped ? 1 : 0}\u0001${chip ? chip.text : ''}\u0001${cardErr ? 1 : 0}\u0001${text}\u0002`;
+    const working =
+      role === 'architect'
+        ? archBusy && !run && !(form && form.sessionId === state.sessionId)
+        : Boolean(run && run.role === role && !(form && form.sessionId !== state.sessionId));
+    rows.push({ card, text, part, dot, dim, chip, settled, skipped, working, err: Boolean(cardErr) });
+    sig += `${role}\u0001${part}\u0001${dot}\u0001${working ? 1 : 0}\u0001${dim ? 1 : 0}\u0001${settled ? 1 : 0}\u0001${skipped ? 1 : 0}\u0001${chip ? chip.text : ''}\u0001${cardErr ? 1 : 0}\u0001${text}\u0002`;
   }
 
   if (sig === state.roleSig) return;
@@ -3108,7 +3112,7 @@ function renderRoleActivity() {
   // definite height, so anything that did grow would take room from the
   // transcript's top edge.
   const fromH = Math.ceil($('topologyWrap')?.getBoundingClientRect().height || 0);
-  for (const { card, text, part, dot, dim, chip, settled, skipped, err } of rows) {
+  for (const { card, text, part, dot, dim, chip, settled, skipped, working, err } of rows) {
     const slot = card.querySelector('.role-task');
     // The status dot is the markup's own — it ships as `idle` and is only ever
     // changed here. Yellow breathes because it means "taking part right now",
@@ -3125,6 +3129,10 @@ function renderRoleActivity() {
     card.classList.toggle('is-initiator', part === 'initiator');
     card.classList.toggle('is-worker', part === 'worker');
     card.classList.toggle('is-settled', settled);
+    // The working wash and the border light: only a role whose turn is actually
+    // running, not one waiting on a question and not the Architect while a worker
+    // holds the floor.
+    card.classList.toggle('is-working', working);
     // A skipped role looks like a blocked one, and its picker says where the
     // problem is: the model, not the role.
     card.classList.toggle('is-skipped', skipped);
