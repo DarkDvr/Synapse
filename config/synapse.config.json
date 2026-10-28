@@ -3,7 +3,7 @@
     "host": "127.0.0.1",
     "port": 8700,
     "openBrowser": false,
-    "remote": true
+    "remote": false
   },
   "engine": {
     "type": "opencode",
@@ -264,7 +264,7 @@
   },
   "roles": {
     "designer": {
-      "ref": "deepseek/deepseek-flash",
+      "ref": "strata/qwen3.8-flash-next-iq2_xs",
       "skills": [
         "aesthetic-foundations",
         "app-check",
@@ -278,7 +278,7 @@
       ]
     },
     "qc": {
-      "ref": "deepseek/deepseek-flash",
+      "ref": "strata/qwen3.8-flash-next-iq2_xs",
       "skills": [
         "web-guidelines",
         "aesthetic-foundations",
@@ -291,14 +291,14 @@
       "focus": "app"
     },
     "architect": {
-      "ref": "deepseek/deepseek-flash",
+      "ref": "strata/qwen3.8-flash-next-iq2_xs",
       "variant": "high",
       "skills": [
         "visual-review"
       ]
     },
     "coder-1": {
-      "ref": "deepseek/deepseek-flash",
+      "ref": "strata/qwen3.8-flash-next-iq2_xs",
       "skills": [
         "code-craft",
         "visual-review"
@@ -308,7 +308,7 @@
       ]
     },
     "coder-2": {
-      "ref": "deepseek/deepseek-flash",
+      "ref": "strata/qwen3.8-flash-next-iq2_xs",
       "skills": [
         "code-craft",
         "visual-review"
@@ -318,7 +318,7 @@
       ]
     },
     "coder-3": {
-      "ref": "deepseek/deepseek-flash",
+      "ref": "strata/qwen3.8-flash-next-iq2_xs",
       "skills": [
         "code-craft",
         "visual-review"
@@ -328,7 +328,7 @@
       ]
     },
     "inventor": {
-      "ref": "deepseek/deepseek-flash",
+      "ref": "strata/qwen3.8-flash-next-iq2_xs",
       "skills": [
         "frontend-design"
       ]
