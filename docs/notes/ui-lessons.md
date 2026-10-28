@@ -993,6 +993,12 @@ bold, italic, strikethrough and links: the range these models actually produce.
   row's tooltip (`-webkit-line-clamp`). The role card for a blocked task used to
   show a red border and no words at all, which the operator read as "the Designer
   errored"; it says "Blocked — <task>" now and the row carries the reason.
+- **A plan can stall on the Keep Building rule, and the card has to say why
+  (28 Oct).** A two-task request ran t1, then the harness refused t2 because Keep
+  Building was off — while the Architect's own last line said it had queued t2.
+  The card said only "Waiting on you". It now says "Waiting on you — t2 is ready
+  and Keep Building is off", or names the blocked task when nothing is ready, so
+  the stall has a visible reason and a next step.
 - **The step node is the state's dot with the id under it, both on one axis.** The
   id used to ride inline in front of the title, so a two-line title wrapped around
   a mark that had nothing to do with it. Now `plan-node` stacks the dot and the id

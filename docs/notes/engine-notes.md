@@ -122,9 +122,14 @@ ordinary file tools; there is no tool and no store for it.
   starts a new plan: new goal, new rows; done rows from the last round are not
   carried over (the run log is the history). Two to six rows, each a deliverable.
   A `found` row is allowed only when the round cannot finish without it, one or
-  two at most. On 27–28 Oct the pane showed two rounds at once — seven rows, NEW
-  badges, a QC "verify" row from an earlier round — and the operator could not
-  read it as a list.
+  two at most. Every piece of work in Multi goes through the plan, even a single
+  file: write the row, delegate it, judge the report — the Architect does not
+  write the product itself (Single is the mode where it acts alone; on 28 Oct a
+  one-file request was written by the Architect and the plan pane still said "No
+  plan yet"). Row times are scoped to the round, so a t1 in a new plan starts at
+  0, not with the previous plan's t1. On 27–28 Oct the pane showed two rounds at
+  once — seven rows, NEW badges, a QC "verify" row from an earlier round — and the
+  operator could not read it as a list.
 - **A blocked note is two sentences.** What is stuck and what the operator must
   decide. The pane clamps it to two lines (the rest is in the row's tooltip); a
   wall of the Architect's reasoning turned the whole pane red on 28 Oct. Status
@@ -328,10 +333,13 @@ Non-obvious, all verified on 2.0.30:
   `deprecated`; a capped account says nothing about the model.
 - **Caps are per round, not per project.** A round ends when the Architect says
   the plan is done: every task `done` **and** the customer-facing summary written.
-  That close is one `round` line in `runs.jsonl` (`closeRound`), written after a
-  successful Architect turn or when the operator sends into a finished plan, once
-  per finished plan (the plan file's mtime guards it). The QC loop's three rounds
-  and every task's three attempts count only after it. Without the boundary a
+  That close is one `round` line in `runs.jsonl` (`closeRound`), written when the
+  operator **sends the next request**, before the brief — so the brief's QC
+  allowance is the new round's, and the finished plan keeps its row times until
+  that moment (a close at the end of the plan made its own rows read "not run").
+  The marker carries the plan file's exact `mtime`; the QC loop's three rounds
+  and every task's three attempts count only after it, and the plan's row times
+  do too. Without the boundary a
   mature project spent its whole QC quota in its first three rounds and
   self-verified every bugfix round after (27 Oct: three `qc-cap` refusals, and
   only `qc-1` and `qc-2` on disk), and a task id reused by every new plan (t1,
@@ -341,6 +349,9 @@ Non-obvious, all verified on 2.0.30:
   `stat.mtimeMs`, which `readPlan` does not return (it is `stat.mtime`), so after
   the first marker every later close returned false; and the runner did not
   expose `closeRound`, so the send-time path was a no-op. Both fixed 27 Oct.
+  The marker is now bound to the plan's exact `mtime` (`planMtime`), not to the
+  wall clock: a plan written a millisecond after the close used to look newer and
+  produce a second marker.
   The brief also states the round's allowance now ("QC: 0 of 3 …"): the Architect
   had read the previous handover's "three rounds spent", refused to delegate t7
   at all, and wrote "the delegation was refused" into the plan — a refusal that
