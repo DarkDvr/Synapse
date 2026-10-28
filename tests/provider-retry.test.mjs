@@ -63,7 +63,8 @@ function makeEngine({ dir, script, wakeScript }) {
     setTimeout(() => {
       if (!sessions.has(id)) return;
       const err = step.error || null;
-      s.messages.push({ id: `${id}-a${n}`, type: 'assistant', parts: [{ type: 'text', text: err ? '' : 'done' }], completed: Date.now(), error: err });
+      const text = err ? (step.text || '') : 'done';
+      s.messages.push({ id: `${id}-a${n}`, type: 'assistant', parts: [{ type: 'text', text }], completed: Date.now(), error: err });
       s.messages.push({ id: `${id}-i${n}`, type: 'idle', parts: [], error: err });
     }, 15);
   };
@@ -324,7 +325,7 @@ expect(
 // 7. a failed compaction replaces the worker session with a handover
 const reset = await runCase({
   name: 'compaction-reset',
-  script: [{ error: 'Compaction produced no summary' }, {}],
+  script: [{ error: 'Compaction produced no summary', text: 'The frame is half built.' }, {}],
 });
 expect('compaction reset: the run completed', reset.result?.outcome === 'completed', reset.result?.outcome);
 expect('compaction reset: a second session was created', reset.created.length === 2, String(reset.created.length));
@@ -332,7 +333,23 @@ expect('compaction reset: the old session was deleted', reset.deleted.length ===
 const handover = reset.prompts.at(-1)?.text || '';
 expect('compaction reset: the handover names the replacement', /replaced because/.test(handover), handover.slice(0, 100));
 expect('compaction reset: the files are the state', /files are the work/.test(handover));
+expect("compaction reset: the worker's last words carry over", /The frame is half built/.test(handover));
 expect('compaction reset: it says not to repeat work', /Do not repeat finished work/.test(handover));
+
+// 8. a provider context-limit error takes the same road: a fresh worker with the
+// handover, not the engine's compaction of the transcript that was just refused.
+const ctxReset = await runCase({
+  name: 'context-reset',
+  script: [{ error: "This model's maximum context length is 4096 tokens. However, your messages resulted in 6000 tokens." }, {}],
+});
+expect('context reset: the run completed', ctxReset.result?.outcome === 'completed', ctxReset.result?.outcome);
+expect('context reset: a second session was created', ctxReset.created.length === 2, String(ctxReset.created.length));
+expect('context reset: the old session was deleted', ctxReset.deleted.length === 1, String(ctxReset.deleted.length));
+expect(
+  'context reset: the handover says the prompt was too large',
+  /larger than the model window/.test(ctxReset.prompts.at(-1)?.text || ''),
+  (ctxReset.prompts.at(-1)?.text || '').slice(0, 120),
+);
 
 // restore the operator's diary — a test must not write into a month of evidence
 if (logBefore === null) fs.rmSync(PROVIDER_LOG, { force: true });

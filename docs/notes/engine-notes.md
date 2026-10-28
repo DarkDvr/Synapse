@@ -601,7 +601,10 @@ replacements per task, after which the old retry path applies.
 The engine's summary is not used here because the failed compaction is exactly the
 case where it does not exist. The project compact (above) still uses the engine's
 summary when it has one. A grant remembered for the old worker session does not
-travel to the new one, so a rare request may be asked again.
+travel to the new one, so a rare request may be asked again. The delegation
+harness covers both roads — a compaction failure and a provider context-limit
+error: a second session is created, the first deleted, and the handover carries
+the task, the worker's last words and the "do not repeat" instruction.
 
 **An example in a brief is a template, not an illustration.** The Inventor's first
 mandate said "build me a clock, go" and offered an alarm, a theme and a second time
