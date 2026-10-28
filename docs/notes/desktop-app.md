@@ -128,15 +128,12 @@ page-drawn confirmation would be invisible in both. Consent then `POST`s
 the boot panel. The Runtime row goes red, and the console is one click away. The
 panel is for a server that never arrived, which is the only case where there is no
 page worth keeping. When the server comes back the shell reloads the page, because
-everything on it was fetched from a server that no longer exists.
-
-Except after a restart the *server* asks for (`/api/restart`, which Settings' save
-uses): that path starts the replacement directly, without passing through Stopped,
-so the shell does not reload and the window keeps the JavaScript it loaded. The
-practical rule is that a client change made in `web/` is live after the app is
-relaunched, or after Ctrl+R in the window — not after a server restart. The
-one-line fix (let that path report Stopped first, as the tray's restart does) is
-in `todo.md` because it needs a rebuilt `Synapse.exe` to test.
+everything on it was fetched from a server that no longer exists. That includes a
+restart the *server* asks for (`/api/restart`, which Settings' save uses): the
+`ExitRestart` branch reports Stopped before starting the replacement, as the tray's
+restart does, so the window reloads too. Verified 28 Oct: `[app] reloading
+http://127.0.0.1:8700` followed the restart in `logs\console.log`, and a client
+change in `web/` is live after a server restart without Ctrl+R.
 
 **The console is behind `...` on the Runtime row.** A boxed ellipsis, not a label: it
 is an affordance, not a fourth row in a block that already has three. The panel is

@@ -1313,6 +1313,26 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
       return { ok: true, auto };
     },
 
+    /**
+     * "Permission timeout": while it is on, a permission request left to the
+     * operator is allowed once if nobody answers within a minute. It only ever
+     * answers `ask` verdicts — a harness write or a credential store is denied by
+     * the policy before a card exists, so the timeout cannot widen those.
+     */
+    setPermissionTimeout: async (sessionId, body) => {
+      requireReady();
+      const session = await engine.getSession(sessionId);
+      const meta = session?.metadata && typeof session.metadata === 'object' ? session.metadata : {};
+      const synapse = meta.synapse && typeof meta.synapse === 'object' ? meta.synapse : {};
+      const enabled = body?.enabled === true;
+      await engine.updateSessionMetadata(sessionId, { ...meta, synapse: { ...synapse, permissionTimeout: enabled } });
+      // A card already on screen follows the switch at once.
+      permissionGate?.setPermissionTimeout?.(sessionId, enabled);
+      app.info(`permission timeout ${enabled ? 'on' : 'off'} for ${sessionId}`);
+      notify?.({ kind: 'sessions', type: 'session.permissionTimeout', sessionId, enabled });
+      return { ok: true, enabled };
+    },
+
     interrupt: async (sessionId) => {
       requireReady();
       // Stop means stop, for the whole project. A delegated task runs in its own
@@ -1395,8 +1415,10 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
           throw err;
         }
       }
-      if (!already && decision === 'reject') {
-        // The reply's `message` is dropped on this route (measured), so the note
+      // Answered here (or by another view): a pending permission-timeout must not
+      // fire on a card that is already settled.
+      permissionGate?.answered?.(body?.requestId);
+      if (!already && decision === 'reject') {        // The reply's `message` is dropped on this route (measured), so the note
         // is a synthetic message: the only channel that reaches a worker. Not to
         // the Architect: the operator is in its chat, and the extra turn ended
         // with an empty message instead of its closing report (26 Oct).

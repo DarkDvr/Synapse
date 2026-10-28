@@ -299,6 +299,11 @@ public sealed class ServerHost : IDisposable
         if (code == ExitRestart)
         {
             _console.Append($"[app] restarting, as the server asked{Environment.NewLine}");
+            // The page was served by the process that just left: report Stopped
+            // first, as RestartAsync does, so MainWindow reloads it when the
+            // replacement is up. Without this the window keeps the JavaScript it
+            // loaded and a UI fix is not live until Ctrl+R.
+            Set(ServerState.Stopped);
             Start();
             return;
         }

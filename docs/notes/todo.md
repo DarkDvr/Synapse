@@ -21,54 +21,19 @@ Decide first: what moves (a wash behind the row, the project's rule, the dot's
 glow), how slow (anything faster than about 3 s reads as an alarm), and whether
 `prefers-reduced-motion` gets a still version or nothing.
 
-## Hide role cards that are not in use
+## Decide what the permission timeout answers
 
-On a full plan the role cards take a large share of the top of the session
-view, and most of them are not doing anything. The operator asked for a way to
-hide the cards of roles this session has not used.
+Built 28 Oct: the composer's cog holds two switches, and "Permission timeout"
+allows an unanswered permission card **once** after 60 seconds. It records
+`decidedBy: 'timeout'`, and an operator answer cancels the timer. It can only
+answer `ask` verdicts — a harness write or a credential store is denied before a
+card exists, so it cannot widen those walls. A session that was saved with the
+flag on honours it at the next ask.
 
-Why it is not a small change: a card's presence is how the operator picks a
-model for a role *before* the role has ever run, and `is-dim` already says "this
-role has not taken part". Hiding is a stronger statement than dimming, and a
-hidden card must not be the only way back to the picker.
-
-Decide first: who hides them (an automatic rule from `planState.used`, or a
-control the operator flips), where the hidden ones go (a count and a "show all"
-line, or a fold), and whether the Architect can ever be hidden (it should not).
-
-## A server-requested restart should reload the page
-
-Found during the 27 Oct QC, not asked for. `/api/restart` (what Settings' save and
-the console's Restart use) exits with code 2 and the shell starts the replacement
-directly, without reporting Stopped; the window therefore keeps the page and the
-JavaScript it loaded. The tray's Stop then Start does reload, because it passes
-through Stopped (`MainWindow._needsReload`). A client change made in `web/` is
-consequently not live after a server restart — the operator has to press Ctrl+R,
-which is exactly the thing you forget after fixing a UI bug.
-
-The fix is one line in `ServerHost.OnExited`, in the `ExitRestart` branch: report
-Stopped before `Start()`, the way `RestartAsync` already does. It was not made in
-the QC pass because it needs a rebuilt `Synapse.exe` to test and the running app
-holds the current one; the doc (desktop-app.md §4) now states the limit instead.
-
-## Overnight mode
-
-The operator asked for an overnight mode built on Keep Building: work continues
-without them, and either the Architect decides on its own what it would
-otherwise ask, or a "Full Trust" override answers every permission request.
-
-Why it is not a small change: this is the one feature that deliberately widens
-`src/permissions.js`, and that file is the boundary between a model and the
-machine. "Allow everything" for eight hours is a different product from "allow
-everything for one request". The walls that must not move are in `AGENTS.md`
-hard rule 8: writes inside the harness and credential stores stay refused, and a
-policy change is where a zone changes, never a brief or a config flag.
-
-Decide first: what the override covers (only `ask` verdicts in the project, or
-the harness zone too — it must not), who can turn it on (the operator, never a
-model), whether it lapses on time or on a run end, and what the UI says while it
-is on. A button labelled "Full Trust" that quietly answers a credential read
-would be the worst possible version of this.
+Still to decide: whether the default for an **outside write** should be Allow Once
+(what it does now) or Reject, and whether the timeout should also answer questions
+and forms — today a worker that asks a question still stops the run overnight.
+Until that is decided, the timeout covers permission cards only, with Allow Once.
 
 ## Replace a worker's session when its compaction no longer fits
 

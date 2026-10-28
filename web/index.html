@@ -253,15 +253,27 @@
                   </svg>
                 </button>
                 <button type="button" class="icon-button" id="stopBtn" title="Stop the current run" aria-label="Stop the current run" disabled>■</button>
-                <button type="button" class="keep-toggle" id="keepBtn" aria-pressed="false" hidden
-                  title="Ask the Architect to keep building until it's done, unless a hard blocker stops it"
-                  aria-label="Keep building until done">
-                  <svg width="16" height="17" viewBox="0 0 16 16" aria-hidden="true">
-                    <path d="M3.2 1.9v12.6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" fill="none"/>
-                    <path d="M5.1 2.6h8.4v5.8H5.1z" fill="none" stroke="currentColor" stroke-width="1.2"/>
-                    <path d="M5.1 2.6h4.2v2.9H5.1z M9.3 5.5h4.2v2.9H9.3z" fill="currentColor"/>
-                  </svg>
-                </button>
+                <span class="run-control">
+                  <button type="button" class="run-btn" id="runBtn" aria-haspopup="menu" aria-expanded="false" hidden
+                    title="Run options — keep running, permission timeout" aria-label="Run options">
+                    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="none"
+                         stroke="currentColor" stroke-width="1.2" stroke-linejoin="round">
+                      <path d="M8 1.6l1 1.3 1.6-.5.6 1.6 1.6.6-.5 1.6 1.3 1-1.3 1 .5 1.6-1.6.6-.6 1.6-1.6-.5-1 1.3-1-1.3-1.6.5-.6-1.6-1.6-.6.5-1.6-1.3-1 1.3-1-.5-1.6 1.6-.6.6-1.6 1.6.5 1-1.3Z"/>
+                      <circle cx="8" cy="8" r="2.1"/>
+                    </svg>
+                  </button>
+                  <!-- The two run switches, in one small menu that opens upward. -->
+                  <div class="run-menu" id="runMenu" hidden role="menu" aria-label="Run options">
+                    <button type="button" class="run-menu-row" id="runAuto" role="menuitemcheckbox" aria-checked="false">
+                      <span class="run-menu-text"><span>Keep running</span><small>Work through the plan until it is done or blocked</small></span>
+                      <span class="run-switch" aria-hidden="true"></span>
+                    </button>
+                    <button type="button" class="run-menu-row" id="runTimeout" role="menuitemcheckbox" aria-checked="false">
+                      <span class="run-menu-text"><span>Permission timeout</span><small>Unanswered requests allow once after 60 seconds</small></span>
+                      <span class="run-switch" aria-hidden="true"></span>
+                    </button>
+                  </div>
+                </span>
                 <button type="submit" class="btn btn-primary" id="sendBtn">Send</button>
               </div>
             </form>

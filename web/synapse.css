@@ -1208,24 +1208,56 @@ body[data-view="session"] .chat-dock.has-ask { overflow: visible; }
 .mode-toggle.is-single .mode-dot { background: #fff; box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.22); }
 .mode-toggle:focus-visible { outline: none; border-color: #fff; box-shadow: 0 0 0 3px rgba(255, 125, 26, 0.35); }
 
-/* ── keep-building switch: a finish-line flag between Stop and Send ────────
-   Green when the Architect is asked to run the plan to the end; muted like the
-   stop button when it must do one task and then stop. Hidden in Single, where
-   delegation is refused — the switch would be a lie there. */
-.keep-toggle {
-  flex: none; display: inline-flex; align-items: center; justify-content: center;
+/* ── run options: a quiet cog between Stop and Send ─────────────────────────
+   Gray at rest; yellow border and symbol on hover or while its menu is open.
+   It opens the two switches that decide how the run behaves — "keep running"
+   (the old finish-line flag) and "permission timeout" (unanswered asks allow
+   once after a minute, the overnight mode). The menu opens upward, into the
+   chat, because the composer sits at the bottom edge. */
+.run-control { position: relative; display: inline-flex; flex: none; }
+.run-btn {
   width: 36px; height: 36px; padding: 0; border-radius: 8px; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
   background: transparent; border: 1px solid #3a3d43; color: #82868e;
 }
-.keep-toggle:hover { border-color: #4a4e56; color: #c3c6cc; }
-.keep-toggle.is-on { background: var(--green-soft); border-color: #2c6a4f; color: var(--green); }
-.keep-toggle.is-on:hover { border-color: var(--green); }
-.keep-toggle:focus-visible {
-  outline: none; border-color: var(--green); box-shadow: 0 0 0 3px rgba(53, 192, 138, 0.28);
+.run-btn:hover, .run-btn[aria-expanded="true"] {
+  border-color: rgba(237, 194, 90, 0.65); color: var(--yellow);
+  background: rgba(237, 194, 90, 0.06);
 }
-/* the [hidden] attribute must win over the display above */
-#keepBtn[hidden] { display: none; }
-body[data-mode="single"] .keep-toggle { display: none; }
+.run-btn:focus-visible { outline: none; border-color: var(--yellow); box-shadow: 0 0 0 3px rgba(237, 194, 90, 0.22); }
+#runBtn[hidden] { display: none; }
+.run-menu {
+  position: absolute; right: 0; bottom: calc(100% + 8px); width: 272px; padding: 6px;
+  display: flex; flex-direction: column; gap: 2px;
+  background: #1b1d21; border: 1px solid var(--line); border-radius: 10px;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45); z-index: 45;
+}
+.run-menu[hidden] { display: none; }
+.run-menu-row {
+  display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 9px;
+  border: 0; border-radius: 8px; background: transparent; color: var(--text);
+  text-align: left; cursor: pointer;
+}
+.run-menu-row:hover { background: rgba(255, 255, 255, 0.045); }
+.run-menu-row:focus-visible { outline: none; background: rgba(255, 255, 255, 0.06); }
+.run-menu-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.run-menu-text > span { font-size: 12px; font-weight: 600; }
+.run-menu-text small { font-size: 10.5px; color: #82868e; line-height: 1.35; }
+.run-switch {
+  margin-left: auto; flex: none; position: relative; width: 26px; height: 14px;
+  border-radius: 999px; border: 1px solid var(--line); background: #24262b;
+  transition: background .15s, border-color .15s;
+}
+.run-switch::after {
+  content: ''; position: absolute; top: 2px; left: 2px; width: 8px; height: 8px;
+  border-radius: 50%; background: #7d828b; transition: transform .15s, background .15s;
+}
+.run-menu-row[aria-checked="true"] .run-switch {
+  background: rgba(237, 194, 90, 0.18); border-color: rgba(237, 194, 90, 0.6);
+}
+.run-menu-row[aria-checked="true"] .run-switch::after { transform: translateX(12px); background: var(--yellow); }
+/* Single has no team to keep building; the switch would be a lie there. */
+body[data-mode="single"] #runAuto { display: none; }
 /* min-height 0: the dock fills a definite stage height, so the transcript
    scrolls internally rather than stretching the page. */
 .chat-scroll {

@@ -9,6 +9,7 @@ import assert from 'node:assert/strict';
 
 import { createPermissionGate } from '../src/permission-gate.js';
 import { ROOT } from '../src/paths.js';
+import { normalizeSession } from '../src/engines/base.js';
 
 const HOME = 'C:/Users/tester';
 const PROJECT = 'F:/dev/Synapse.Projects/demo';
@@ -312,4 +313,74 @@ test('a remembered request never overrides a refusal', async () => {
   await gate.handle(event('edit', [`${ROOT}/src/api.js`]));
   assert.deepEqual(replies, ['reject']);
   assert.equal(seen[0].effect, 'deny');
+});
+
+// A permission that nobody answers, when the operator has turned the timeout on:
+// it is allowed once after the wait, so an unattended project keeps moving. The
+// gate is the only thing that may answer it, and only for `ask` verdicts — a
+// harness write or a credential store is denied before a card exists.
+test('an unanswered ask is allowed once after the timeout', async () => {
+  const seen = [];
+  const replies = [];
+  const engine = {
+    async getSession() { return { directory: PROJECT, metadata: {} }; },
+    async replyPermission(sessionId, requestId, decision) { replies.push(decision); },
+  };
+  const gate = createPermissionGate({
+    engine, logger: quiet, root: ROOT, home: HOME, permissionTimeoutMs: 30,
+    onDecision: (entry) => seen.push(entry),
+  });
+  gate.setPermissionTimeout('ses_1', true);
+  await gate.handle(event('shell', ['Set-Content D:/scratch/timeout.txt hi']));
+  assert.deepEqual(replies, [], 'nothing is answered while the card is up');
+  await new Promise((r) => setTimeout(r, 80));
+  assert.deepEqual(replies, ['once'], 'the timeout answers once');
+  const decided = seen.find((entry) => entry.decided);
+  assert.equal(decided?.decidedBy, 'timeout');
+  assert.equal(decided?.effect, 'allow');
+});
+
+test('an operator answer cancels the timeout', async () => {
+  const replies = [];
+  const engine = {
+    async getSession() { return { directory: PROJECT, metadata: {} }; },
+    async replyPermission(sessionId, requestId, decision) { replies.push(decision); },
+  };
+  const gate = createPermissionGate({ engine, logger: quiet, root: ROOT, home: HOME, permissionTimeoutMs: 30 });
+  gate.setPermissionTimeout('ses_1', true);
+  await gate.handle(event('shell', ['Set-Content D:/scratch/timeout2.txt hi']));
+  gate.answered('req_1');
+  await new Promise((r) => setTimeout(r, 80));
+  assert.deepEqual(replies, [], 'the card was answered, so the timer must not fire');
+});
+
+test('the timeout is off unless the session says so', async () => {
+  const replies = [];
+  const engine = {
+    async getSession() { return { directory: PROJECT, metadata: {} }; },
+    async replyPermission(sessionId, requestId, decision) { replies.push(decision); },
+  };
+  const gate = createPermissionGate({ engine, logger: quiet, root: ROOT, home: HOME, permissionTimeoutMs: 30 });
+  await gate.handle(event('shell', ['Set-Content D:/scratch/timeout3.txt hi']));
+  await new Promise((r) => setTimeout(r, 80));
+  assert.deepEqual(replies, [], 'the card still waits for the operator');
+});
+
+test('a session saved with the timeout on honours it without a fresh toggle', async () => {
+  const replies = [];
+  const engine = {
+    async getSession() { return { directory: PROJECT, metadata: { synapse: { permissionTimeout: true } } }; },
+    async replyPermission(sessionId, requestId, decision) { replies.push(decision); },
+  };
+  const gate = createPermissionGate({ engine, logger: quiet, root: ROOT, home: HOME, permissionTimeoutMs: 30 });
+  await gate.handle(event('shell', ['Set-Content D:/scratch/timeout4.txt hi']));
+  await new Promise((r) => setTimeout(r, 80));
+  assert.deepEqual(replies, ['once']);
+});
+
+test('the session payload carries the permission timeout flag', () => {
+  const on = normalizeSession({ id: 's1', metadata: { synapse: { permissionTimeout: true, auto: true } } });
+  assert.equal(on.permissionTimeout, true);
+  assert.equal(on.auto, true);
+  assert.equal(normalizeSession({ id: 's2' }).permissionTimeout, false);
 });

@@ -179,6 +179,8 @@ const state = {
   skillsInfo: null,
   // "Keep building": the open session's switch for running the plan to the end.
   auto: false,
+  // "Permission timeout": unanswered permission cards allow once after a minute.
+  permissionTimeout: false,
   permissions: [],
   busy: false,
   busySessions: new Set(),
@@ -1602,40 +1604,84 @@ const SINGLE_PERMISSIONS = [{ action: 'subagent', resource: '*', effect: 'deny' 
 const sessionMode = (s) => (s?.single ? 'single' : 'multi');
 
 /**
- * The "keep building" switch, shown between Stop and Send.
+ * The run options, behind the cog between Stop and Send.
  *
- * It is only meaningful where delegation is possible, so it is hidden with no
- * session open and hidden entirely in Single mode — the runner refuses
- * delegation there, and a switch that does nothing is worse than no switch.
+ * It replaced the finish-line flag: one menu now holds "keep running" (the old
+ * flag) and "permission timeout" (an unanswered ask is allowed once after a
+ * minute). The cog is quiet gray; yellow on hover or while the menu is open, and
+ * yellow while either switch is on, so the composer says a standing decision is
+ * in force without a second control on the row.
  */
 function renderKeep() {
-  const btn = $('keepBtn');
+  const btn = $('runBtn');
   if (!btn) return;
-  const usable = state.view === 'session' && state.mode === 'multi' && Boolean(state.sessionId);
-  btn.hidden = !usable;
-  btn.classList.toggle('is-on', state.auto);
-  btn.setAttribute('aria-pressed', String(state.auto));
-  btn.title = state.auto
-    ? 'Keep building: on. The Architect works through the plan, one task at a time, until it is ' +
-      'done or a hard blocker stops it. Click to make it stop after each task.'
-    : "Ask the Architect to keep building until it's done, unless a hard blocker stops it";
+  // The timeout works in Single too (tools still ask); keep running does not, and
+  // its row is hidden by CSS there.
+  btn.hidden = state.view !== 'session' || !state.sessionId;
+  const auto = $('runAuto');
+  if (auto) auto.setAttribute('aria-checked', String(state.auto === true));
+  const timeout = $('runTimeout');
+  if (timeout) timeout.setAttribute('aria-checked', String(state.permissionTimeout === true));
+  btn.title =
+    [
+      state.auto ? 'Keep running: on' : null,
+      state.permissionTimeout ? 'Permission timeout: on' : null,
+    ]
+      .filter(Boolean)
+      .join(' · ') || 'Run options — keep running, permission timeout';
 }
 
-async function toggleKeep() {
+function closeRunMenu() {
+  const menu = $('runMenu');
+  const btn = $('runBtn');
+  if (menu) menu.hidden = true;
+  if (btn) btn.setAttribute('aria-expanded', 'false');
+}
+
+function toggleRunMenu() {
+  const menu = $('runMenu');
+  const btn = $('runBtn');
+  if (!menu || !btn) return;
+  const open = menu.hidden;
+  menu.hidden = !open;
+  btn.setAttribute('aria-expanded', String(open));
+  if (open) $('runAuto')?.focus();
+}
+
+async function setKeep(next) {
   if (!state.sessionId) return;
-  const next = !state.auto;
   try {
     const r = await api('POST', `/api/sessions/${encodeURIComponent(state.sessionId)}/auto`, { auto: next });
     state.auto = r.auto === true;
     renderKeep();
     toast(
-      state.auto ? 'Keep Building On' : 'Keep Building Off',
+      state.auto ? 'Keep Running On' : 'Keep Running Off',
       state.auto
         ? 'The Architect will run the plan through to the end, unless a task is blocked.'
         : 'The Architect does one task, then stops for you.',
     );
   } catch (err) {
-    toast('Could Not Change Keep Building', err.message);
+    toast('Could Not Change Keep Running', err.message);
+  }
+}
+
+async function setPermissionTimeout(next) {
+  if (!state.sessionId) return;
+  try {
+    const r = await api('POST', `/api/sessions/${encodeURIComponent(state.sessionId)}/permission-timeout`, {
+      enabled: next,
+    });
+    state.permissionTimeout = r.enabled === true;
+    renderKeep();
+    renderTranscript();
+    toast(
+      state.permissionTimeout ? 'Permission Timeout On' : 'Permission Timeout Off',
+      state.permissionTimeout
+        ? 'A permission request nobody answers is allowed once after 60 seconds.'
+        : 'Every permission request waits for you again.',
+    );
+  } catch (err) {
+    toast('Could Not Change Permission Timeout', err.message);
   }
 }
 
@@ -2764,6 +2810,7 @@ async function openSession(id) {
   // the mode is a property of the session, not of the app
   state.mode = sessionMode(findSession(id));
   state.auto = findSession(id)?.auto === true;
+  state.permissionTimeout = findSession(id)?.permissionTimeout === true;
   renderMode();
   renderKeep();
   $('sidebar').classList.remove('open');
@@ -2790,6 +2837,7 @@ function showNothing() {
   state.planState = null;
   state.clocks = null;
   state.auto = false;
+  state.permissionTimeout = false;
   state.mode = 'single';
   renderMode();
   setView();
@@ -4461,7 +4509,9 @@ function renderPermissions() {
         ${paths.length ? `<pre class="perm-res">${esc(paths.join('\n'))}</pre>` : ''}
         ${p.reason ? `<p class="perm-why">${esc(p.reason)}</p>` : ''}
         ${diff}
-        <p class="perm-note">${p.role && p.role !== 'architect'
+        <p class="perm-note">${state.permissionTimeout
+          ? 'If nobody answers within 60 seconds, this is allowed once. '
+          : ''}${p.role && p.role !== 'architect'
           ? 'Nothing has happened yet. You can still say no.'
           : 'Nothing has happened yet. You can still say no — say why in the chat; the Architect is reading it.'}</p>
         <!-- Only a rejection carries this, and only to a worker: the reply route
@@ -6012,6 +6062,13 @@ function connectStream() {
       if (ev.type === 'session.mode' && ev.sessionId === state.sessionId && !state.busy) {
         applyMode(ev.mode);
       }
+      // The permission timeout is also per session: another view flipping it must
+      // move this one's switch and the note on any open card.
+      if (ev.type === 'session.permissionTimeout' && ev.sessionId === state.sessionId) {
+        state.permissionTimeout = ev.enabled === true;
+        renderKeep();
+        renderTranscript();
+      }
       reloadProjects();
       return;
     }
@@ -7409,7 +7466,19 @@ document.addEventListener('keydown', (e) => {
   e.stopPropagation();
 }, true);
   $('remoteToken').addEventListener('click', copyRemoteToken);
-  $('keepBtn').addEventListener('click', toggleKeep);
+  $('runBtn').addEventListener('click', (e) => {
+    e.stopPropagation();
+    toggleRunMenu();
+  });
+  $('runAuto').addEventListener('click', () => setKeep(!state.auto));
+  $('runTimeout').addEventListener('click', () => setPermissionTimeout(!state.permissionTimeout));
+  // A click anywhere outside the cog or its menu closes it; Escape too.
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest?.('.run-control')) closeRunMenu();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeRunMenu();
+  });
   $('menuBtn').addEventListener('click', () => $('sidebar').classList.toggle('open'));
   $('emptyNewProject').addEventListener('click', addProject);
   $('addProjectBtn').addEventListener('click', addProject);

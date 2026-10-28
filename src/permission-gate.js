@@ -16,11 +16,27 @@
 import os from 'node:os';
 import { decide, grantKey, resolvePath, refusalNote } from './permissions.js';
 
-export function createPermissionGate({ engine, logger, root, home = os.homedir(), scratchRoot = null, onDecision, memory }) {
+export function createPermissionGate({
+  engine,
+  logger,
+  root,
+  home = os.homedir(),
+  scratchRoot = null,
+  onDecision,
+  memory,
+  // How long an unanswered card waits before it is allowed once. Tests pass a
+  // few milliseconds; the product uses a minute.
+  permissionTimeoutMs = 60_000,
+}) {
   const log = logger.channel('app');
   // sessionId -> { directory, role, task, title }. The directory never changes
   // for a session's life; the role and task make the console line readable.
   const sessions = new Map();
+  // Requests left to the operator, and whether their session wants them answered
+  // automatically. Every ask is held here, not only the ones whose switch is on,
+  // so flipping the switch arms a card that is already on screen.
+  const pendingAsks = new Map(); // requestId -> { request, info, entry, timer }
+  const timeoutOn = new Set();
 
   // "Always Allow" means this exact request again in this session, decided by the
   // operator. It is deliberately not the engine's own `always`: that saves the
@@ -83,9 +99,75 @@ export function createPermissionGate({ engine, logger, root, home = os.homedir()
       role: raw?.metadata?.synapse?.role || null,
       task: raw?.metadata?.synapse?.task || null,
       title: raw?.title || null,
+      // Set on the session, so it survives a restart: an ask that arrives before
+      // the operator's window has said anything about the switch still honours it.
+      permissionTimeout: raw?.metadata?.synapse?.permissionTimeout === true,
     };
     if (info.directory) sessions.set(sessionId, info);
     return info;
+  }
+
+  const timeoutEnabled = (sessionId, info) => timeoutOn.has(sessionId) || info?.permissionTimeout === true;
+
+  /** Arm a pending ask, if its session wants the timeout. */
+  function arm(p) {
+    if (p.timer || !timeoutEnabled(p.request.sessionId, p.info)) return;
+    p.timer = setTimeout(() => fire(p), permissionTimeoutMs);
+    p.timer.unref?.();
+  }
+
+  async function fire(p) {
+    if (!pendingAsks.has(p.request.requestId)) return;
+    pendingAsks.delete(p.request.requestId);
+    // The switch may have been turned off during the wait: then the card is the
+    // operator's again, and nothing is answered behind their back.
+    if (!timeoutEnabled(p.request.sessionId, p.info)) return;
+    try {
+      await engine.replyPermission(p.request.sessionId, p.request.requestId, 'once');
+      const where = [p.info.role, p.info.task].filter(Boolean).join(' ');
+      onDecision?.({
+        ...p.entry,
+        effect: 'allow',
+        asked: true,
+        decided: true,
+        decidedBy: 'timeout',
+        reason: `No answer within ${Math.round(permissionTimeoutMs / 1000)} seconds — allowed once.`,
+      });
+      log.info(
+        `permission timed out${where ? ` (${where})` : ''}: ${p.request.action || 'tool call'} — no answer, allowed once`,
+      );
+    } catch (err) {
+      log.warn(`could not answer a timed-out ${p.request.action || 'tool'} request: ${err.message}`);
+    }
+  }
+
+  /**
+   * Turn the timeout on or off for a session. An open card follows immediately:
+   * on arms it, off disarms it. Called by the API when the menu is toggled; a
+   * session's saved metadata is honoured on its own at the first ask.
+   */
+  function setPermissionTimeout(sessionId, on) {
+    if (!sessionId) return false;
+    if (on) timeoutOn.add(sessionId);
+    else timeoutOn.delete(sessionId);
+    for (const p of pendingAsks.values()) {
+      if (p.request.sessionId !== sessionId) continue;
+      if (on) arm(p);
+      else if (p.timer) {
+        clearTimeout(p.timer);
+        p.timer = null;
+      }
+    }
+    return true;
+  }
+
+  /** The operator (or another view) answered a card: the timer must not fire. */
+  function answered(requestId) {
+    const p = pendingAsks.get(requestId);
+    if (!p) return false;
+    if (p.timer) clearTimeout(p.timer);
+    pendingAsks.delete(requestId);
+    return true;
   }
 
   const shown = (request) => {
@@ -147,6 +229,9 @@ export function createPermissionGate({ engine, logger, root, home = os.homedir()
       // request on record to become one.
       onDecision?.({ ...entry, effect: 'ask', asked: true, decided: false, decidedBy: null });
       log.info(`permission asked${who ? ` (${who})` : ''}: ${request.action || 'tool call'} ${what} — ${verdict.reason}`);
+      const pending = { request, info, entry, timer: null };
+      pendingAsks.set(request.requestId, pending);
+      arm(pending);
       return verdict;
     }
     const decision = verdict.effect === 'deny' ? 'reject' : 'once';
@@ -210,5 +295,5 @@ export function createPermissionGate({ engine, logger, root, home = os.homedir()
     });
   }
 
-  return { handle, requestOf, remember };
+  return { handle, requestOf, remember, setPermissionTimeout, answered };
 }

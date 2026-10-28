@@ -758,6 +758,14 @@ brief); the policy treats that root as a **scratch zone**: read, write and shell
 are allowed there without asking, while the harness stays denied. The machine's
 temp folder is no longer used.
 
+**A permission timeout can answer for the operator (28 Oct).** With the session's
+`synapse.permissionTimeout` on — the cog's second switch — a card the policy left
+to the operator is **allowed once after 60 seconds**, and the decision records
+`decidedBy: 'timeout'`. An operator answer cancels the timer; turning the switch
+off disarms a card already on screen. It can only answer `ask` verdicts: a harness
+write or a credential store is denied before a card exists, so the timeout cannot
+widen those walls. Questions and forms are not covered yet — see `todo.md`.
+
 **A refusal explains itself, through a synthetic note.** The reply body has a
 `message` field, but 2.1.2 drops it on the reject path: the tool error is always
 "The user declined this tool call". The gate follows the rejection with a

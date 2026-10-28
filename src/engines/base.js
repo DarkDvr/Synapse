@@ -192,6 +192,9 @@ export function normalizeSession(raw) {
     // Synapse's own per-session switch: "keep building until done". It lives in
     // the session metadata so it survives a restart and travels with the session.
     auto: raw?.metadata?.synapse?.auto === true,
+    // "Permission timeout": an unanswered ask is allowed once after a minute.
+    // Same store, same reason: it is the session's, and it survives a restart.
+    permissionTimeout: raw?.metadata?.synapse?.permissionTimeout === true,
     // Synapse marks its own scaffolding sessions here (worker sessions, which
     // run in the project directory but must not appear as the operator's work).
     internal: raw?.metadata?.synapse?.internal === true,
