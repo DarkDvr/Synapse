@@ -6,6 +6,7 @@ import { spawn } from 'node:child_process';
 import { ensurePlan, readPlan, readRuns, runLedger, briefSession, logPlanState, BRIEF_KEY } from './plans.js';
 import { ensureProjectDoc, appendRequest as appendProjectRequest, appendChat, appendDecision as appendProjectDecision, appendEntry, setHandover } from './project-doc.js';
 import { createFormAuto } from './form-auto.js';
+import { keepAttachments } from './keep-attachments.js';
 import { skillRules, describeSkills } from './skills.js';
 import { rulesFor, decide, resolvePath, refusalNote, SINGLE_RULES } from './permissions.js';
 import { stopTargets } from './stop.js';
@@ -134,6 +135,7 @@ export function normalizeAttachments(list) {
     out.push({
       name: String(item.name || 'attachment').slice(0, 120),
       mime: String(item.mime || 'application/octet-stream').slice(0, 120),
+      keep: item.keep === true,
       data,
     });
     if (out.length >= ATTACH_MAX_COUNT) break;
@@ -1193,8 +1195,30 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
       // Speaking is the answer to "what now" after a stop: whatever they stopped
       // may run again from here.
       if (directory) runs?.resume?.(directory);
+      // "Keep" is a deliberate project file, written before the message goes. The
+      // inline copy is still what the model reads now; this copy is what survives a
+      // compact and what a later Architect or a worker can open. Not a temp file:
+      // it lives under the project and is deleted with the project.
+      let kept = [];
+      if (directory && attachments.some((f) => f.keep)) {
+        try {
+          kept = keepAttachments(directory, attachments);
+          for (const file of kept) {
+            const written = appendEntry(
+              directory,
+              'attachment',
+              `Kept ${file.path} — ${file.name} (${file.mime}, ${file.bytes} bytes).`,
+            );
+            if (written && written.ok === false) {
+              app.warn(`could not record the kept attachment: ${written.error}`);
+            }
+          }
+        } catch (err) {
+          app.warn(`could not keep the attachments: ${err.message}`);
+        }
+      }
       await engine.prompt(sessionId, text, { files: attachments });
-      return { ok: true };
+      return { ok: true, kept };
     },
 
     /**
