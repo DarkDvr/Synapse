@@ -617,6 +617,17 @@ is a project file, not a temp file: unchecking before sending writes nothing, an
 deleting the project deletes it. The name is sanitised and the stored copy is
 timestamped so a second keep of the same name cannot overwrite the first.
 
+**App data is portable by rule (28 Oct).** Every brief says an app's data lives in
+a `data` folder beside its executable (`bin/data`, or `data` next to the published
+exe), never `%APPDATA%`, `%LOCALAPPDATA%`, `ProgramData`, the registry or any
+user-profile folder. Scratch is temporary and never shipped; app data is part of
+the project. The permission gate still **asks** for a profile write rather than
+denying it — the operator did not want an outright prohibition — but the card now
+says where the data belongs. An app that already keeps data in AppData must move
+it and import the old copy once; the current Fever Tracker uses
+`%APPDATA%\FeverTracker\data.json` and extracts its web assets under
+`%LOCALAPPDATA%\FeverTracker\web`, so it still needs that migration.
+
 **An example in a brief is a template, not an illustration.** The Inventor's first
 mandate said "build me a clock, go" and offered an alarm, a theme and a second time
 zone as the shape of a good answer. It was written for the clock project and would

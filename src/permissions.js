@@ -74,7 +74,6 @@ const isEnvFile = (p) => /(^|\/)\.env(\.[^/]+)?$/i.test(String(p || '')) && !/\.
 
 /** Forward slashes, no trailing slash. The form the engine's rules use. */
 export const slash = (value) => String(value || '').replace(/\\/g, '/').replace(/\/+$/, '');
-
 const key = (value) => slash(value).toLowerCase();
 
 /** Is `child` the same as, or under, `parent`? Case-insensitive on Windows. */
@@ -84,6 +83,9 @@ export function inside(child, parent) {
   if (!c || !p) return false;
   return c === p || c.startsWith(`${p}/`);
 }
+
+/** The user-profile stores an app's data must not use: AppData and ProgramData. */
+const isUserDataPath = (value) => /(?:^|\/)(?:appdata|programdata)(?:\/|$)/i.test(slash(value));
 
 /** Which of the three zones a resolved path belongs to. */
 export function zoneOf(target, { projectRoot, harnessRoot, scratchRoot }) {
@@ -307,17 +309,25 @@ function decideWrite(resources, ctx) {
   const list = (Array.isArray(resources) ? resources : [resources]).filter(Boolean);
   if (!list.length) return ask('The harness cannot tell what this would write.', true, 'unknown');
   const zones = [];
+  const paths = [];
   for (const value of list) {
     const target = resolvePath(first(value), ctx.cwd, { home: ctx.home });
     if (!target || target.unknown) return ask('The harness cannot tell which folder this is.', true, 'unknown');
     if (isSecret(target.path, ctx)) return deny('The harness never opens saved-password folders.', true, 'secret');
+    paths.push(target.path);
     zones.push(zoneOf(target.path, ctx));
   }
   if (zones.includes('harness')) {
     return deny('Synapse is the app itself; it may be read, not changed.', true, 'harness');
   }
   if (zones.includes('outside')) {
-    return ask('Only the project may be changed without asking. This is not in it.', true, 'outside');
+    return ask(
+      paths.some(isUserDataPath)
+        ? 'App data belongs in a data folder beside the executable, not the user profile. This is outside the project.'
+        : 'Only the project may be changed without asking. This is not in it.',
+      true,
+      'outside',
+    );
   }
   if (zones.length && zones.every((z) => z === 'scratch')) {
     return allow('This is the scratch folder the harness gave you.', false, 'scratch');
@@ -371,7 +381,13 @@ function decideShell(resources, ctx) {
   const outsidePaths = info.paths.filter((p) => zoneOf(p, ctx) === 'outside');
   const outsideWrite = redirectZones.includes('outside');
   if ((outsidePaths.length || outsideWrite) && (outsideWrite || !info.readsOnly)) {
-    return ask('Commands may run in the project without asking. This one reaches further.', true, 'outside');
+    return ask(
+      [...info.paths, ...info.redirects].some(isUserDataPath)
+        ? 'App data belongs in a data folder beside the executable, not the user profile. This is outside the project.'
+        : 'Commands may run in the project without asking. This one reaches further.',
+      true,
+      'outside',
+    );
   }
 
   if (zones.length === 0 && redirectZones.length === 0) {

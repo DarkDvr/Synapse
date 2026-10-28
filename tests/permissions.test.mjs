@@ -248,6 +248,29 @@ test('a shell command split into resources keeps its line boundaries', () => {
   assert.equal(answer.effect, 'ask', 'the write on line two must not be excused by the read on line one');
 });
 
+test('an app-data write gets the portable hint', () => {
+  const answer = decide({
+    action: 'edit',
+    resources: [`${HOME}/AppData/Roaming/FeverTracker/data.json`],
+    cwd: CWD,
+    projectRoot: PROJECT,
+    harnessRoot: HARNESS,
+    home: HOME,
+  });
+  assert.equal(answer.effect, 'ask');
+  assert.match(answer.reason, /data folder beside the executable/);
+  const other = decide({
+    action: 'edit',
+    resources: ['D:/x.txt'],
+    cwd: CWD,
+    projectRoot: PROJECT,
+    harnessRoot: HARNESS,
+    home: HOME,
+  });
+  assert.equal(other.effect, 'ask');
+  assert.doesNotMatch(other.reason, /data folder beside the executable/);
+});
+
 test('a shell command is split without breaking a quoted separator', () => {
   const info = analyzeCommand('Get-Content "F:\\dev\\Synapse\\logs\\a;b.log"', CWD, { home: HOME });
   assert.deepEqual(info.paths, ['F:/dev/Synapse/logs/a;b.log']);

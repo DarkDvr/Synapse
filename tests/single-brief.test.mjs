@@ -63,6 +63,10 @@ try {
     /Scratch folder: .*_scratch/.test(single) && /never the machine's temp folder/.test(single),
     single.slice(0, 260),
   );
+  expect(
+    'the brief keeps app data beside the exe',
+    /App data lives with the app/.test(single) && /Never %APPDATA%/.test(single),
+  );
   // ── Single in a project nobody has planned in: the plan is not mentioned ──
   const bare = path.join(ROOT, 'bare-project');
   fs.mkdirSync(bare, { recursive: true });

@@ -892,6 +892,12 @@ export function briefSession({ dir, role = 'architect', auto = false, single = f
   lines.push(
     `Attachments the operator chose to keep are in .synapse/attachments/ — list that folder when a task may need one.`,
   );
+  // The app's own data is part of the project, not the machine. This is one rule
+  // for every project this harness will ever build; the operator does not keep
+  // anything in AppData, and scratch is temporary by definition.
+  lines.push(
+    `App data lives with the app: a "data" folder beside the executable (for example bin/data, or data next to the published exe). Never %APPDATA%, %LOCALAPPDATA%, ProgramData, the registry or any user-profile folder. Scratch is temporary and never shipped; app data is part of the project. If an app already keeps data in AppData, move it to its own data folder and import the old copy once.`,
+  );
 
   // The QC allowance belongs to the round, and the Architect is the one who plans
   // its checks. Without this line it carried the previous round's "three rounds
