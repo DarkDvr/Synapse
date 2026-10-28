@@ -994,12 +994,15 @@ bold, italic, strikethrough and links: the range these models actually produce.
   show a red border and no words at all, which the operator read as "the Designer
   errored"; it says "Blocked — <task>" now and the row carries the reason.
 - **The finish-line flag became a cog with two switches (28 Oct).** "Keep running"
-  and the new "Full auto" live in a small menu above the button; the cog is gray,
-  yellow on hover or while the menu is open. The menu
-  opens upward because the composer is at the bottom edge, and a click outside or
-  Escape closes it. The old green flag and its green CSS are gone. Full auto
-  answers permission cards with Allow Once and questions with the Recommended (or
-  top) option after a minute, so an unattended project keeps moving.
+  and the new "Full auto" live in a small menu above the button. The icon is the
+  familiar settings gear, not a sun-like path: it has to read as a cog at 18px.
+  With both switches off it is gray, yellow on hover or while the menu is open;
+  with either switch on it is **green**, border and icon, so a standing decision
+  is visible without opening the menu. It opens upward because the composer is at
+  the bottom edge, and a click outside or Escape closes it. The old green flag and
+  its green CSS are gone. Full auto answers permission cards with Allow Once and
+  questions with the Recommended (or top) option after a minute, so an unattended
+  project keeps moving.
 - **A plan can stall on the Keep Building rule, and the card has to say why
   (28 Oct).** A two-task request ran t1, then the harness refused t2 because Keep
   Building was off — while the Architect's own last line said it had queued t2.

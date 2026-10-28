@@ -1607,10 +1607,10 @@ const sessionMode = (s) => (s?.single ? 'single' : 'multi');
  * The run options, behind the cog between Stop and Send.
  *
  * It replaced the finish-line flag: one menu now holds "keep running" (the old
- * flag) and "full auto" (an unanswered ask is allowed once after a
- * minute). The cog is quiet gray; yellow on hover or while the menu is open, and
- * yellow while either switch is on, so the composer says a standing decision is
- * in force without a second control on the row.
+ * flag) and "full auto" (an unanswered ask or question takes the default after
+ * a minute). The cog is quiet gray with a clear gear, yellow on hover or while
+ * the menu is open, and green while either switch is on, so the composer says a
+ * standing decision is in force without a second control on the row.
  */
 function renderKeep() {
   const btn = $('runBtn');
@@ -1618,6 +1618,9 @@ function renderKeep() {
   // The timeout works in Single too (tools still ask); keep running does not, and
   // its row is hidden by CSS there.
   btn.hidden = state.view !== 'session' || !state.sessionId;
+  // Green while either switch is on — a standing decision the operator can see
+  // without opening the menu. All off: gray.
+  btn.classList.toggle('is-on', state.auto === true || state.fullAuto === true);
   const auto = $('runAuto');
   if (auto) auto.setAttribute('aria-checked', String(state.auto === true));
   const timeout = $('runFullAuto');

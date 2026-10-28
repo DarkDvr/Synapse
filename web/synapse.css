@@ -1225,6 +1225,15 @@ body[data-view="session"] .chat-dock.has-ask { overflow: visible; }
   background: rgba(237, 194, 90, 0.06);
 }
 .run-btn:focus-visible { outline: none; border-color: var(--yellow); box-shadow: 0 0 0 3px rgba(237, 194, 90, 0.22); }
+/* Any switch on: green, always — the cog is a status light as well as a button.
+   Both switches off: gray at rest, yellow only on hover or while the menu is up. */
+.run-btn.is-on,
+.run-btn.is-on:hover,
+.run-btn.is-on[aria-expanded="true"] {
+  border-color: rgba(53, 192, 138, 0.62); color: var(--green);
+  background: rgba(53, 192, 138, 0.07);
+}
+.run-btn.is-on:focus-visible { border-color: var(--green); box-shadow: 0 0 0 3px rgba(53, 192, 138, 0.25); }
 #runBtn[hidden] { display: none; }
 .run-menu {
   position: absolute; right: 0; bottom: calc(100% + 8px); width: 272px; padding: 6px;
