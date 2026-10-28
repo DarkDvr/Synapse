@@ -1137,6 +1137,18 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
           app.info(`mode ${applied} -> ${asked} for ${sessionId} (applied at send)`);
           notify?.({ kind: 'sessions', type: 'session.mode', sessionId, mode: asked });
         }
+        // A send into a finished plan starts a new round. Close it before the
+        // brief, so the brief's QC allowance is this round's — and so the finished
+        // plan keeps its row times until this moment. Closing at the end of the
+        // plan (in the wake) hid them: the marker is the ledger's boundary, and a
+        // just-closed plan's own results sit before it ("not run", 28 Oct).
+        if (directory) {
+          try {
+            if (runs?.closeRound?.(directory)) app.info(`round closed: ${directory} - caps reset`);
+          } catch (err) {
+            app.warn(`could not close the round: ${err.message}`);
+          }
+        }
         await brief(sessionId, directory, 'architect', session?.auto === true, { single });
       } catch (err) {
         app.warn(`brief skipped for ${sessionId}: ${err.message}`);
@@ -1149,16 +1161,6 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
         const body = text || `(attached ${attachments.length} file(s))`;
         const written = single ? appendChat(directory, body) : appendProjectRequest(directory, body);
         if (written && written.ok === false) app.warn(`could not write to the project document: ${written.error}`);
-      }
-      // A send into a finished plan starts a new round: close the old one here as
-      // well, so a plan the Architect closed in a turn the runner never saw still
-      // gives the next round its caps back before anything is briefed.
-      if (directory) {
-        try {
-          if (runs?.closeRound?.(directory)) app.info(`round closed: ${directory} - caps reset`);
-        } catch (err) {
-          app.warn(`could not close the round: ${err.message}`);
-        }
       }
       // Speaking is the answer to "what now" after a stop: whatever they stopped
       // may run again from here.

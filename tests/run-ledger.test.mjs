@@ -43,6 +43,21 @@ test('a session counts only the runs it asked for', () => {
   assert.deepEqual(reported, ['t2']);
 });
 
+test('a task id from the last round does not carry its time into this one', () => {
+  // Task ids are reused (t1, t2, ...). The round marker is written when the next
+  // request starts, before the new plan, so the previous round's results are
+  // before it and the new round's are after. Without this a t1 in a fresh plan
+  // opened with the previous plan's minutes (28 Oct: 41s for a 12s run).
+  const records = [
+    delegate('a', MINE),
+    result('a', { ms: 480_000 }),
+    { kind: 'round', event: 'closed', at: 1000 },
+    delegate('b', MINE),
+    result('b', { ms: 12_000 }),
+  ];
+  assert.deepEqual(runLedger(records, MINE).spent, { t2: 12_000 });
+});
+
 test('the other session sees its own, not ours', () => {
   const records = [
     delegate('a', MINE),

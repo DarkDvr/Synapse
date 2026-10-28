@@ -2401,13 +2401,6 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
       const err = finished.stalled ? `nothing happened for ${Math.round(settings.stallSec / 60)} minutes` : turnErrorOf(messages, before);
       if (!err) {
         notify?.({ kind: 'role-error', dir, role: 'architect', clear: true });
-        // The Architect may have just written the closing summary. If so the
-        // round is over, and the next one starts with its caps back.
-        try {
-          if (closeRound(dir)) log.info(`round closed: ${dir} - caps reset for the next plan`);
-        } catch (e) {
-          log.warn(`could not close the round: ${e.message}`);
-        }
         return { ok: true };
       }
 
