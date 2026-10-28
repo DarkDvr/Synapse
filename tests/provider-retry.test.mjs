@@ -179,6 +179,11 @@ expect('connection is transient', classifyFailure('read ECONNRESET').kind === 't
 expect('deprecated is terminal', classifyFailure(DEPRECATED).kind === 'terminal');
 expect('a free usage cap is transient, not a rate limit', classifyFailure(FREE_LIMIT).kind === 'transient', JSON.stringify(classifyFailure(FREE_LIMIT)));
 expect('and it is named', classifyFailure(FREE_LIMIT).reason === 'usage-limit');
+expect(
+  'a compaction that produced no summary is named',
+  classifyFailure('Compaction produced no summary').kind === 'transient' &&
+    classifyFailure('Compaction produced no summary').reason === 'compaction',
+);
 expect('invalid key is terminal', classifyFailure('Invalid API key').kind === 'terminal');
 expect('bad request is terminal', classifyFailure('Invalid request: text is required').kind === 'terminal');
 // A session the operator deleted answers 404. It is terminal, and the runner

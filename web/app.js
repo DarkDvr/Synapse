@@ -2979,7 +2979,14 @@ function renderRoleActivity() {
       // still selected after the report.
       skipped = true;
       text = `Skipped — ${skipReason}`;
-    } else if (blocked) dot = 'err';
+    } else if (blocked) {
+      // A blocked task is not a crashed card: red is the blocker's colour, and
+      // an unexplained red card read as "the Designer errored" (28 Oct). Name
+      // the task; the reason is on its plan row.
+      dot = 'err';
+      const stuck = mine.find((t) => t.status === 'blocked' || t.status === 'failed');
+      text = stuck ? `Blocked — ${stuck.title}` : 'Blocked';
+    }
     else if (participated) dot = 'ok';
 
     // A provider failure is *news*, shown as red text while it lasts. The border

@@ -397,7 +397,11 @@ export function compactionEvents(messages) {
       const t = m.raw.tokens;
       used = (t.input || 0) + (t.cache?.read || 0);
     } else if (m.type === 'compaction') {
-      if (m.raw?.status === 'running') continue;
+      // A failed compaction is not a compaction: the engine tried to summarize,
+      // the prompt was too large and it produced nothing. Counting it inflated
+      // "Compacted ×4" to a fourth that never happened and labelled the run with
+      // the failed prompt's 225K on a 131K window (28 Oct, t2).
+      if (m.raw?.status === 'running' || m.raw?.status === 'failed') continue;
       const t = m.raw?.tokens;
       const sent = t ? (t.input || 0) + (t.cache?.read || 0) : 0;
       out.push({ used: sent || used });

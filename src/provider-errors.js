@@ -70,6 +70,15 @@ const RULES = [
     re: /context (length|window|limit|size)|maximum context|context_length_exceeded|prompt is too (long|large)|too many tokens|exceeds? (the )?(model'?s )?(maximum|context)|exceeds the available context|input is too long/i,
   },
   {
+    // The engine's compactor could not write a summary: the history it sent was
+    // larger than the model's window. The turn is retried and the engine's next
+    // compaction often fits (t2 recovered on 28 Oct); named so the diary and the
+    // card say what happened instead of "unknown".
+    reason: 'compaction',
+    kind: 'transient',
+    re: /compaction produced no summary|compaction failed|compaction\.failed/i,
+  },
+  {
     reason: 'bad-request',
     kind: 'terminal',
     re: /invalid request|bad request|\b400\b|unprocessable|\b422\b|validation (error|failed)/i,

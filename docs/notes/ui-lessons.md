@@ -986,6 +986,13 @@ bold, italic, strikethrough and links: the range these models actually produce.
   is gone from the UI and stays in `logs\app.log` (`logPlanState`). A plan that
   cannot be read is still shown: that one the operator does need, because the pane
   would otherwise look empty for no reason.
+- **A blocked row is not a page of red text, and a red card is not a crash.** The
+  note under a blocked task is the reason, and on 28 Oct it was the Architect's
+  whole deliberation — line numbers, contradictions, a verdict — which filled the
+  pane and hid the list. It is clamped to two lines now, with the full text in the
+  row's tooltip (`-webkit-line-clamp`). The role card for a blocked task used to
+  show a red border and no words at all, which the operator read as "the Designer
+  errored"; it says "Blocked — <task>" now and the row carries the reason.
 - **The step node is the state's dot with the id under it, both on one axis.** The
   id used to ride inline in front of the title, so a two-line title wrapped around
   a mark that had nothing to do with it. Now `plan-node` stacks the dot and the id

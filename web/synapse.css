@@ -2002,7 +2002,15 @@ body[data-mode="single"] .keep-toggle { display: none; }
 .plan-task[data-status="doing"] .plan-title { color: #fff; font-weight: 700; }
 /* Under the dot, centred, and quiet: it is an address, not a title. */
 .plan-id { font-family: var(--mono); font-size: 9.5px; color: #7b8089; letter-spacing: 0.02em; line-height: 1; }
-.plan-note { font-size: 11px; line-height: 1.4; color: var(--red); overflow-wrap: anywhere; }
+/* The reason a task is blocked. Two lines: the row is an index, and a wall of
+   the Architect's reasoning here turned the plan pane into a page of red text
+   with the list nowhere in sight (27 Oct). The full note is in the row's
+   tooltip, which already carries it. */
+.plan-note {
+  font-size: 11px; line-height: 1.4; color: var(--red); overflow-wrap: anywhere;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  overflow: hidden;
+}
 /* A row the Architect added after the list was made - something it noticed while
    the work was happening. It sits under the id in the node column, centred on the
    same axis as the dot: in the title column it cost a whole extra line of height on

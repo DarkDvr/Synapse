@@ -101,3 +101,14 @@ test('the brief tells the Architect how many QC rounds this plan has left', () =
   assert.match(spent, /QC: all 3 independent QC rounds for this plan are spent/);
   assert.match(spent, /Do not plan another QC task/);
 });
+
+test('the brief keeps the plan a checklist, and a blocked note short', () => {
+  const dir = project();
+  writePlan(dir, { tasks: [task('t1', 'todo')], summary: '' });
+  const brief = briefSession({ dir, role: 'architect' });
+  assert.match(brief, /this request's checklist, not a diary/);
+  assert.match(brief, /A new request from the operator starts a new plan/);
+  assert.match(brief, /Keep it to 2-6 rows/);
+  assert.match(brief, /one or two sentences/);
+  assert.match(brief, /No reasoning, no line numbers, no code, no essay/);
+});

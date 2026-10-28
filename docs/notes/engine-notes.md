@@ -118,6 +118,17 @@ ordinary file tools; there is no tool and no store for it.
   operator deletes takes its chat, its folder and its `.synapse` with it.
 - **`id` is required.** Delegation refers to tasks by id, and the Architect may
   rewrite the file at any time; a task without one is flagged and skipped.
+- **It is the current request's checklist, not a diary.** A new operator request
+  starts a new plan: new goal, new rows; done rows from the last round are not
+  carried over (the run log is the history). Two to six rows, each a deliverable.
+  A `found` row is allowed only when the round cannot finish without it, one or
+  two at most. On 27–28 Oct the pane showed two rounds at once — seven rows, NEW
+  badges, a QC "verify" row from an earlier round — and the operator could not
+  read it as a list.
+- **A blocked note is two sentences.** What is stuck and what the operator must
+  decide. The pane clamps it to two lines (the rest is in the row's tooltip); a
+  wall of the Architect's reasoning turned the whole pane red on 28 Oct. Status
+  and note must agree: `done` has no note, `blocked` says what is needed.
 - **Titles over 80 characters are a `problem`, not a silent trim.** The pane
   clamps a title to two lines with the full text on hover, and the brief carries
   the complaint so the Architect shortens its own title. Clamping the grid item
@@ -609,6 +620,15 @@ thinking**; 13% of the time in tools, the rest in generation.
   and the suites and stamped SHIP. The cheap round is the model: the brief now
   says a second pass re-runs the listed repros *and nothing else*, and anything
   new goes in an "observed, not fixed" list.
+- **A compaction can fail because its own summarise call is too big.** The
+  engine's compaction prompt is the whole message log, not the model's current
+  prompt: t2 on 28 Oct had a 111k turn prompt while the compactor sent **225k to a
+  131k model**, and the engine wrote `status: 'failed'` ("Compaction produced no
+  summary"). The turn was retried and the next compaction (at 112k) succeeded. A
+  failed message is not a compaction and must not be counted as one — the trace
+  said "Compacted ×4 · context at 225K/131K" for three real compactions, and the
+  225K was the failed prompt. `compactionKeepTokens` changes the tail carried
+  *after* a summary, not the history the compactor reads, so it does not fix this.
 - **A task that runs long gets slower per turn.** Throughput by prompt size, same
   model: **157 tok/s under 50k, 145 at 50–100k, 117 at 100–150k, 68 at 150–200k**.
   Every long task here finished at 212–290k, and its second half ran at half the

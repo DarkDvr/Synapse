@@ -410,6 +410,10 @@ try {
   expect('a compaction in flight is not yet counted', compactionEvents(running).length === 1, String(compactionEvents(running).length));
   expect('the finished one keeps its own size', compactionEvents(running)[0].used === 46000);
   expect('the watchdog still sees both', compactionMessages(running).length === 2, String(compactionMessages(running).length));
+  // A compaction that failed is not one: the engine sent a 225k prompt to a
+  // 131k model and wrote nothing, and counting it labelled the run "×4" at 225K.
+  const failed = [...running, { type: 'compaction', raw: { status: 'failed', tokens: { input: 225000 } } }];
+  expect('a failed compaction is not counted', compactionEvents(failed).length === 1, String(compactionEvents(failed).length));
 }
 
 // ── the two compaction guards must not race ──────────────────

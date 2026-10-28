@@ -1142,6 +1142,15 @@ export function briefSession({ dir, role = 'architect', auto = false, single = f
         `"Wire the buttons", "Audit the output", "Quality Control". No file paths and no code identifiers ` +
         `in a title: put them in detail.`,
     );
+    // A blocked note is the one line of prose the operator sees in the plan pane.
+    // It became an essay on 27 Oct ("they still contradict: line 105/106 says ..."),
+    // which filled the pane with red text and hid the list.
+    lines.push(
+      `A blocked task carries a short "note": the reason in one or two sentences — what is stuck and what ` +
+        `you need the operator to decide. No reasoning, no line numbers, no code, no essay. The pane shows ` +
+        `two lines of it and the rest only on hover, so a wall of text there hides the list. A row's note ` +
+        `and status must agree: "done" needs no note, "blocked" says what you need.`,
+    );
     // The card has to tell the operator, in one line, what they actually got.
     lines.push(
       `When every task is done, also write "summary" in the plan: ONE sentence a customer would ` +
@@ -1157,18 +1166,19 @@ export function briefSession({ dir, role = 'architect', auto = false, single = f
         `coding work for one of them; if that coder cannot do it, Synapse moves the task down the line ` +
         `itself and the report tells you which role actually ran it.`,
     );
-    // The list is live: this file is a work list, not a plan signed off once. The
-    // record says so - on one project the Architect invented t3b and t3c to insert
-    // work between existing items, reopened a finished task after judging it, and
-    // added two more the next day. A schema that calls that drift fights the thing
-    // that makes the harness good, so the rule is now: add freely, say so.
+    // The list is live within the round, but it is the operator's checklist, not
+    // a diary. Two rounds of rows on 27 Oct — seven rows deep, NEW badges, one
+    // blocked essay, a QC "verify" row from an earlier round — was unusable even
+    // though every row was true.
     lines.push(
-      `This file is a work list, not a plan you sign off once. Start with the work you can see, and add items as ` +
-        `you find them - a defect a worker reported, a decision the build exposed, a gap between the design and ` +
-        `the screen. Put each new item where it belongs in the order, not at the end of the list, and set its ` +
-        `"origin": a row you planned is "plan", one you noticed while the work was happening is "found", one ` +
-        `the operator asked for is "operator". Say in one line what you added and why: the list may grow, the ` +
-        `operator may not be surprised by it.`,
+      `This file is this request's checklist, not a diary. A new request from the operator starts a new ` +
+        `plan: write a new "goal" and replace the task list with the rows this request needs. Do not carry ` +
+        `rows from the last round — a row that was "done" there says nothing about this one, and the runs ` +
+        `file keeps the history. Keep it to 2-6 rows: each is a deliverable the operator can see, not a ` +
+        `discovery. While the work happens, add a row only when the round cannot finish without it — a ` +
+        `defect that blocks the goal — at most one or two, set "origin": "found", and say in one line what ` +
+        `it is and why it is here. Do not add tasks for things you noticed but are not doing this round; ` +
+        `write those in your reply. A row you planned is "plan"; one the operator asked for is "operator".`,
     );
     lines.push(
       `invent: when the operator wants something built but the features are open, delegate to inventor, which ` +
