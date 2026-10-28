@@ -606,6 +606,17 @@ harness covers both roads — a compaction failure and a provider context-limit
 error: a second session is created, the first deleted, and the handover carries
 the task, the worker's last words and the "do not repeat" instruction.
 
+**"Keep" writes a deliberate project copy (28 Oct).** An attachment is normally
+inline in the operator's message and exists only in the engine's transcript: a
+compaction may summarise it and a project compact deletes it. Checking **Keep** on
+the attic chip writes the bytes to `.synapse/attachments/<stamp>-<name>` before the
+prompt, appends a `### attachment` line to the project Log, and every brief says
+the folder exists — so a later Architect or a worker can list and read it. The
+inline copy is still what the model reads that turn; the file is what survives. It
+is a project file, not a temp file: unchecking before sending writes nothing, and
+deleting the project deletes it. The name is sanitised and the stored copy is
+timestamped so a second keep of the same name cannot overwrite the first.
+
 **An example in a brief is a template, not an illustration.** The Inventor's first
 mandate said "build me a clock, go" and offered an alarm, a theme and a second time
 zone as the shape of a good answer. It was written for the clock project and would

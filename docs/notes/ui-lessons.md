@@ -1020,6 +1020,13 @@ bold, italic, strikethrough and links: the range these models actually produce.
   paperclip picker. Tested with synthetic clipboard events: 13 lines produced the
   text-file chip, a 1×1 PNG produced an image chip, a `notes.txt` File produced a
   file chip, and a small paste was left to the browser.
+- **"Keep" is a deliberate project copy, not a temp file (28 Oct).** Each attachment
+  chip carries a small boxed checkbox and the word **Keep**; the tooltip says it
+  saves a copy in `.synapse/attachments/` that survives compaction and workers can
+  read. A kept file is written at send (timestamped, name-sanitised), the project
+  Log gets a `### attachment` line, and every brief names the folder. The inline
+  attachment is still what the model reads that turn. Tested live: after a compact,
+  the new session listed `.synapse/attachments/` and quoted the kept file.
 - **The finish-line flag became a cog with two switches (28 Oct).** "Keep running"
   and the new "Full auto" live in a small menu above the button. The icon is the
   familiar settings gear, not a sun-like path: it has to read as a cog at 18px.

@@ -1207,7 +1207,7 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
             const written = appendEntry(
               directory,
               'attachment',
-              `Kept ${file.path} — ${file.name} (${file.mime}, ${file.bytes} bytes).`,
+              `Kept ${file.path} (${file.mime}, ${file.bytes} bytes).`,
             );
             if (written && written.ok === false) {
               app.warn(`could not record the kept attachment: ${written.error}`);

@@ -1812,12 +1812,39 @@ body[data-mode="single"] #runAuto { display: none; }
 .attach-strip[hidden] { display: none; }
 .attach-chip {
   display: inline-flex; align-items: center; gap: 5px;
-  max-width: 190px; padding: 3px 4px 3px 8px;
+  max-width: 240px; padding: 3px 4px 3px 8px;
   background: var(--violet-faint); border: 1px solid var(--violet-line);
   border-radius: 8px; color: var(--text);
   font-family: var(--mono); font-size: 10.5px; line-height: 1.2;
 }
 .attach-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Keep: a small, always-visible box with its word, so the choice does not need a
+   hover to be discovered; the tooltip explains what survives and where. */
+.attach-keep {
+  flex: none; display: inline-flex; align-items: center; gap: 4px;
+  color: #82868e; font-size: 9px; letter-spacing: 0.02em; cursor: pointer;
+  user-select: none;
+}
+.attach-keep:hover { color: #c3c6cc; }
+.attach-keep input {
+  position: absolute; width: 1px; height: 1px; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+.attach-keep .keep-box {
+  width: 11px; height: 11px; flex: none; border: 1px solid #3c4048; border-radius: 3px;
+  background: #15171b; display: grid; place-items: center; transition: background-color .12s, border-color .12s;
+}
+.attach-keep .keep-box::after {
+  content: ""; width: 5px; height: 3px; opacity: 0;
+  border-left: 1.5px solid var(--green); border-bottom: 1.5px solid var(--green);
+  transform: rotate(-45deg) translateY(-1px);
+}
+.attach-keep input:checked + .keep-box {
+  background: rgba(53, 192, 138, 0.14); border-color: rgba(53, 192, 138, 0.75);
+}
+.attach-keep input:checked + .keep-box::after { opacity: 1; }
+.attach-keep input:checked ~ .keep-label { color: var(--green); }
+.attach-keep input:focus-visible + .keep-box { outline: 1px solid var(--yellow); outline-offset: 1px; }
 .attach-x {
   flex: none; width: 15px; height: 15px; padding: 0; border: 0; border-radius: 4px;
   display: inline-flex; align-items: center; justify-content: center;

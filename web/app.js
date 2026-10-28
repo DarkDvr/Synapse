@@ -5792,7 +5792,7 @@ async function send() {
     // Sending is a statement of intent to read the answer: put the newest message
     // in view, and again after the turn's messages land.
     scrollChatToEnd();
-    await api('POST', `/api/sessions/${encodeURIComponent(state.sessionId)}/messages`, {
+    const sent = await api('POST', `/api/sessions/${encodeURIComponent(state.sessionId)}/messages`, {
       text,
       // The mode is this message's, applied by the server before the prompt, so
       // clicking the toggle and then sending is one decision rather than two
@@ -5800,8 +5800,14 @@ async function send() {
       mode: state.mode,
       // The bytes go with the message, in the engine's own shape, so the file is
       // the operator's message rather than something the harness put on disk.
-      files: files.map((f) => ({ name: f.name, mime: f.mime, data: f.data })),
+      files: files.map((f) => ({ name: f.name, mime: f.mime, data: f.data, keep: f.keep === true })),
     });
+    if (sent?.kept?.length) {
+      toast(
+        'Kept In The Project',
+        `${sent.kept.length === 1 ? 'The file is' : 'The files are'} in .synapse/attachments/ — it survives compaction and workers can read it.`,
+      );
+    }
     // The server has accepted it, so the project is busy now: read that state at
     // once and hold Send and the mode switch, rather than waiting for the poll.
     refreshPending();
@@ -5992,10 +5998,18 @@ function renderAttachments() {
     .map(
       (f) => {
         const image = /^image\//i.test(f.mime);
+        const keepTitle = f.keep
+          ? 'Kept — a copy will be saved in .synapse/attachments when you send. It survives compaction and workers can read it. Click to stop keeping it.'
+          : 'Keep a copy in this project when you send. It survives compaction and workers can read it.';
         // A picture says more than its name, so the chip carries the bytes for a
         // preview; anything else keeps the tooltip that already showed its name.
         return `<span class="attach-chip" data-attach="${esc(f.id)}"${image ? ' data-image="1"' : ''} title="${image ? '' : `${esc(f.name)} · ${fmtBytes(f.size)}`}">
         <span class="attach-name">${esc(shortName(f.name))}</span>
+        <label class="attach-keep" title="${esc(keepTitle)}">
+          <input type="checkbox" data-keep="${esc(f.id)}"${f.keep ? ' checked' : ''} aria-label="Keep a copy of ${esc(f.name)} in the project" />
+          <span class="keep-box" aria-hidden="true"></span>
+          <span class="keep-label">Keep</span>
+        </label>
         <button type="button" class="attach-x" data-detach="${esc(f.id)}" title="Remove ${esc(f.name)}" aria-label="Remove ${esc(f.name)}">✕</button>
       </span>`;
       },
@@ -7567,6 +7581,21 @@ function wire() {
     state.attachments = state.attachments.filter((f) => f.id !== x.dataset.detach);
     hideAttachPreview();
     renderAttachments();
+  });
+  // Keep is a per-attachment choice, not a mode. It is read at send; unchecking
+  // before sending leaves nothing behind.
+  $('attachStrip').addEventListener('change', (e) => {
+    const box = e.target.closest('input[data-keep]');
+    if (!box) return;
+    const file = (state.attachments || []).find((f) => f.id === box.dataset.keep);
+    if (!file) return;
+    file.keep = box.checked;
+    const label = box.closest('.attach-keep');
+    if (label) {
+      label.title = file.keep
+        ? 'Kept — a copy will be saved in .synapse/attachments when you send. It survives compaction and workers can read it. Click to stop keeping it.'
+        : 'Keep a copy in this project when you send. It survives compaction and workers can read it.';
+    }
   });
   $('attachStrip').addEventListener('mouseover', (e) => {
     const chip = e.target.closest('.attach-chip[data-image]');

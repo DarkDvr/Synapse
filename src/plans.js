@@ -886,6 +886,12 @@ export function briefSession({ dir, role = 'architect', auto = false, single = f
   lines.push(
     `Scratch folder: ${scratch}. Probe scripts, screenshots and temporary data go there — never the machine's temp folder. It is yours to write, and it is outside the project.`,
   );
+  // "Keep" on an attachment writes a deliberate copy under the project. It is
+  // not in the transcript, so the next session can only find it by being told
+  // where to look; one line here is the whole rule.
+  lines.push(
+    `Attachments the operator chose to keep are in .synapse/attachments/ — list that folder when a task may need one.`,
+  );
 
   // The QC allowance belongs to the round, and the Architect is the one who plans
   // its checks. Without this line it carried the previous round's "three rounds
