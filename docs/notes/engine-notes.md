@@ -617,6 +617,14 @@ is a project file, not a temp file: unchecking before sending writes nothing, an
 deleting the project deletes it. The name is sanitised and the stored copy is
 timestamped so a second keep of the same name cannot overwrite the first.
 
+**A shell command is judged per statement (28 Oct).** A QC migration read
+`%APPDATA%` and wrote its report in scratch; judging the whole command as one
+outside write asked for a card three times in the last run. `analyzeCommand` now
+keeps a read/write answer per statement: an outside **read** is allowed, an
+outside **write** asks, and a write with no path after `cd D:\...` is still an
+outside write. The AppData hint is chosen from the statement that actually writes,
+so a command that only read AppData no longer gets it.
+
 **App data is portable by rule (28 Oct).** Every brief says an app's data lives in
 a `data` folder beside its executable (`bin/data`, or `data` next to the published
 exe), never `%APPDATA%`, `%LOCALAPPDATA%`, `ProgramData`, the registry or any

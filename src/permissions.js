@@ -207,12 +207,24 @@ function wordsOf(segment) {
  * command that looks at another folder and one that changes it.
  */
 export function analyzeCommand(command, cwd, { home = os.homedir() } = {}) {
-  const result = { paths: [], redirects: [], unknown: false, readsOnly: true };
+  const result = { paths: [], redirects: [], unknown: false, readsOnly: true, segments: [] };
   let dir = cwd;
   for (const segment of segmentsOf(command)) {
     const words = wordsOf(segment);
     if (!words.length) continue;
     const head = words[0].toLowerCase();
+    // Each statement keeps its own read/write answer. A QC command that reads
+    // AppData and writes its report in scratch is two statements, not one
+    // outside write; judging the whole command by `readsOnly` asked for a card
+    // in the last run (28 Oct).
+    const part = { paths: [], redirects: [], readsOnly: true, verbRead: true, dir };
+    const finish = () => {
+      part.dir = dir;
+      result.segments.push(part);
+      result.paths.push(...part.paths);
+      result.redirects.push(...part.redirects);
+      if (!part.readsOnly) result.readsOnly = false;
+    };
 
     // A directory change decides where the rest of the command runs, so it is
     // resolved first and carried forward. `Set-Location -Path X` writes the
@@ -222,14 +234,18 @@ export function analyzeCommand(command, cwd, { home = os.homedir() } = {}) {
       if (/^-\w/.test(targetWord) || /^\/[a-z]$/i.test(targetWord)) targetWord = words[2];
       if (!targetWord) continue;
       const target = resolvePath(targetWord, dir, { home });
-      if (!target) continue;
-      if (target.unknown) { result.unknown = true; continue; }
-      result.paths.push(target.path);
+      if (!target) { finish(); continue; }
+      if (target.unknown) { result.unknown = true; finish(); continue; }
+      part.paths.push(target.path);
       dir = target.path;
+      finish();
       continue;
     }
 
-    if (!READ_VERBS.test(words[0])) result.readsOnly = false;
+    if (!READ_VERBS.test(words[0])) {
+      part.readsOnly = false;
+      part.verbRead = false;
+    }
 
     let skip = 0;
     for (let w = 1; w < words.length; w += 1) {
@@ -245,16 +261,17 @@ export function analyzeCommand(command, cwd, { home = os.homedir() } = {}) {
       const target = resolvePath(candidate, dir, { home });
       if (!target) continue;
       if (target.unknown) { result.unknown = true; continue; }
-      result.paths.push(target.path);
+      part.paths.push(target.path);
     }
 
     for (const match of segment.matchAll(REDIRECT)) {
       const target = resolvePath(match[1], dir, { home });
       if (!target) continue;
       if (target.unknown) { result.unknown = true; continue; }
-      result.redirects.push(target.path);
-      result.readsOnly = false;
+      part.redirects.push(target.path);
+      part.readsOnly = false;
     }
+    finish();
   }
   return result;
 }
@@ -378,11 +395,29 @@ function decideShell(resources, ctx) {
     return deny("These are Synapse's private files.", true, 'harness');
   }
 
-  const outsidePaths = info.paths.filter((p) => zoneOf(p, ctx) === 'outside');
-  const outsideWrite = redirectZones.includes('outside');
-  if ((outsidePaths.length || outsideWrite) && (outsideWrite || !info.readsOnly)) {
+  const parts = Array.isArray(info.segments) && info.segments.length
+    ? info.segments
+    : [{ paths: info.paths, redirects: info.redirects, readsOnly: info.readsOnly, verbRead: info.readsOnly }];
+  const outsideWrites = [];
+  for (const part of parts) {
+    const outsidePartPaths = part.paths.filter((p) => zoneOf(p, ctx) === 'outside');
+    const outsidePartRedirects = part.redirects.filter((p) => zoneOf(p, ctx) === 'outside');
+    // A write with no explicit path runs in the statement's directory: `del x`
+    // after `cd D:\projects` is an outside write, though it names nothing.
+    const dirOutside = part.dir && zoneOf(part.dir, ctx) === 'outside';
+    if (!outsidePartPaths.length && !outsidePartRedirects.length) {
+      if (!part.verbRead && dirOutside) outsideWrites.push(part.dir);
+      continue;
+    }
+    // A read verb with its redirects inside is reading that outside path: the
+    // read is allowed, whatever the other statements write. `part.readsOnly` also
+    // goes false for an inside redirect, which is why `verbRead` is separate.
+    if (part.verbRead && !outsidePartRedirects.length) continue;
+    outsideWrites.push(...outsidePartPaths, ...outsidePartRedirects);
+  }
+  if (outsideWrites.length) {
     return ask(
-      [...info.paths, ...info.redirects].some(isUserDataPath)
+      outsideWrites.some(isUserDataPath)
         ? 'App data belongs in a data folder beside the executable, not the user profile. This is outside the project.'
         : 'Commands may run in the project without asking. This one reaches further.',
       true,

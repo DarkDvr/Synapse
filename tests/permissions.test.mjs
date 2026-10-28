@@ -271,6 +271,46 @@ test('an app-data write gets the portable hint', () => {
   assert.doesNotMatch(other.reason, /data folder beside the executable/);
 });
 
+test('reading AppData while writing in the project does not ask', () => {
+  // The QC migration read the old AppData file and wrote its report in scratch;
+  // the whole command was judged an outside write because it contained both.
+  const command = `Get-Content "${HOME}/AppData/Roaming/FeverTracker/data.json"\nSet-Content "${PROJECT}/after.txt" hi`;
+  assert.equal(shell(command).effect, 'allow');
+});
+
+test('an outside read beside a scratch delete does not ask', () => {
+  const command =
+    `Get-ChildItem "D:\\temp\\fever tracker" -File\n` +
+    `Remove-Item "${SCRATCH}/fever-tracker-3f38e7d2/q2.png" -Force`;
+  const answer = decide({
+    action: 'shell',
+    resources: [command],
+    cwd: CWD,
+    projectRoot: PROJECT,
+    harnessRoot: HARNESS,
+    scratchRoot: SCRATCH,
+    home: HOME,
+  });
+  assert.equal(answer.effect, 'allow');
+});
+
+test('an outside write next to an AppData read still asks, with the right reason', () => {
+  const command =
+    `Get-Content "${HOME}/AppData/Roaming/FeverTracker/data.json"\n` +
+    `Remove-Item "D:\\temp\\fever tracker\\data\\webview2" -Recurse -Force`;
+  const answer = decide({
+    action: 'shell',
+    resources: [command],
+    cwd: CWD,
+    projectRoot: PROJECT,
+    harnessRoot: HARNESS,
+    scratchRoot: SCRATCH,
+    home: HOME,
+  });
+  assert.equal(answer.effect, 'ask');
+  assert.doesNotMatch(answer.reason, /data folder beside the executable/);
+});
+
 test('a shell command is split without breaking a quoted separator', () => {
   const info = analyzeCommand('Get-Content "F:\\dev\\Synapse\\logs\\a;b.log"', CWD, { home: HOME });
   assert.deepEqual(info.paths, ['F:/dev/Synapse/logs/a;b.log']);
