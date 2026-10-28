@@ -253,6 +253,26 @@ test('a shell command is split without breaking a quoted separator', () => {
   assert.deepEqual(info.paths, ['F:/dev/Synapse/logs/a;b.log']);
 });
 
+test('a PowerShell pattern is not a path', () => {
+  // The regex in -notmatch resolved to the drive root and made this read-only
+  // verification ask; the flag now skips its pattern argument.
+  const command = `Get-ChildItem bin\\publish\\FeverTracker.exe,bin\\FeverTracker.exe
+Select-Object FullName,LastWriteTime
+echo ---
+Get-ChildItem bin -Recurse -File -Include *.cs,*.xaml,*.csproj,*.html,*.css,*.js,*.ico
+Where-Object { $_.FullName -notmatch '\\\\(obj|publish|tests)\\\\' }
+Sort-Object LastWriteTime -Descending
+Select-Object -First 1
+node --test bin/tests/*.test.mjs 2>&1
+Select-String "tests |pass |fail "`;
+  const info = analyzeCommand(command, CWD, { home: HOME });
+  assert.equal(info.paths.some((p) => p.startsWith('/(obj')), false);
+  assert.equal(shell(command).effect, 'allow');
+  // A pattern's replacement is skipped too, and a real outside write still asks.
+  assert.equal(shell("Get-Content x.log -replace '\\\\', '/'").effect, 'allow');
+  assert.equal(shell('Set-Content D:\\x.txt hi').effect, 'ask');
+});
+
 test('every decision carries a reason the operator can read', () => {
   for (const answer of [call('edit', 'src/a.js'), call('edit', 'D:/x'), call('edit', `${HARNESS}/x`)]) {
     assert.equal(typeof answer.reason, 'string');

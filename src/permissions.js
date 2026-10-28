@@ -62,6 +62,13 @@ const REDIRECT = /(?:^|[^0-9&>])>>?\s*("[^"]*"|'[^']*'|[^\s;&|]+)/g;
 // command, not just a path under `skills/`.
 const INTERPRETERS = new Set(['node', 'nodejs', 'python', 'python3', 'py', 'pwsh', 'powershell', 'deno', 'bun', 'cmd', 'sh', 'bash']);
 
+// Arguments that are patterns, not paths. `Where-Object { $_.FullName -notmatch
+// '\\(obj|publish|tests)\\' }` resolved that regex to the drive root and made a
+// completely read-only verification ask the operator (28 Oct). The flag names
+// the pattern; the word after it is not a file.
+const PATTERN_ARG =
+  /^-(?:i|c)?(?:not)?match$|^-(?:i|c)?(?:not)?like$|^-(?:i|c)?replace$|^-(?:i|c)?split$|^-(?:i|c)?join$|^-pattern$/i;
+
 /** A secrets file the model should ask about: .env, but not .env.example. */
 const isEnvFile = (p) => /(^|\/)\.env(\.[^/]+)?$/i.test(String(p || '')) && !/\.env\.example$/i.test(String(p || ''));
 
@@ -222,7 +229,15 @@ export function analyzeCommand(command, cwd, { home = os.homedir() } = {}) {
 
     if (!READ_VERBS.test(words[0])) result.readsOnly = false;
 
-    for (const word of words.slice(1)) {
+    let skip = 0;
+    for (let w = 1; w < words.length; w += 1) {
+      const word = words[w];
+      if (skip > 0) { skip -= 1; continue; }
+      if (PATTERN_ARG.test(word)) {
+        // `-replace` takes a pattern and a replacement; the others one argument.
+        skip = /replace$/i.test(word) ? 2 : 1;
+        continue;
+      }
       const candidate = word.includes('=') ? word.slice(word.indexOf('=') + 1) : word;
       if (!looksLikePath(candidate)) continue;
       const target = resolvePath(candidate, dir, { home });
