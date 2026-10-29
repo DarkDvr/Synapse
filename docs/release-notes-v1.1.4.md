@@ -37,3 +37,10 @@ PowerShell helper stopped; `data\update\started` is missing when it never ran.
 
 - Full suite: 252 tests.
 - Asset: `Synapse-1.1.4-win-x64.zip` with `SHA256SUMS`.
+
+## Which zip
+
+- `Synapse-1.1.4-win-x64.zip` (5 MB) is an **update**: program files only. It has no `bin\`, so it is not a standalone install. The updater applies it over an existing folder.
+- `Synapse-1.1.4-win-x64-full.zip` (196 MB, with `SHA256SUMS-FULL`) is a **fresh install**: the same program files plus `bin\node` and `bin\opencode`. Use this one when starting from an empty folder or after deleting the old Synapse directory.
+
+The full zip still does not contain `data\` or provider keys; the app creates a default config, and the models/keys are added in Settings.
