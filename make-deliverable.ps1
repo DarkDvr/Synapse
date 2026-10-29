@@ -141,6 +141,18 @@ try {
   Say 'copying bin\opencode\...'
   Copy-Tree -From (Join-Path $root 'bin\opencode') -To (Join-Path $stage 'bin\opencode')
 
+  # The source note names the machine this copy came from. A delivered folder should
+  # not carry someone's profile path, and the size in the old note can be stale after
+  # an in-place update, so write the facts this copy actually has.
+  $engineExe = Join-Path $stage 'bin\opencode\opencode.exe'
+  $engineNote = @(
+    "opencode.exe $((Get-Item -LiteralPath $engineExe).Length) bytes",
+    $engineVersion,
+    "vendored with Synapse on $((Get-Date).ToString('yyyy-MM-dd'))",
+    'This copy is what Synapse runs. Delete bin\opencode and it falls back to a global install.'
+  )
+  Set-Content -LiteralPath (Join-Path $stage 'bin\opencode\VERSION.txt') -Value $engineNote -Encoding utf8
+
   # ── config: keep the choices, drop this machine's addresses and any secret ─
   Say 'sanitizing config\synapse.config.json...'
   $cfgSource = Join-Path $root 'config\synapse.config.json'
@@ -175,7 +187,7 @@ Synapse — travel copy
 Built $builtAt from commit $commit$dirty.
 Node $nodeVersion     $engineVersion
 
-Requirements (already on this PC, per the brief):
+Requirements (already installed on this PC):
   - Windows 10 or 11, 64-bit
   - .NET 10 Desktop Runtime
   - Microsoft Edge WebView2 Runtime
