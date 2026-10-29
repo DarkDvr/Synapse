@@ -4364,13 +4364,15 @@ function permissionTip(d) {
       ? d.decidedBy === 'operator'
         ? 'You rejected it.'
         : 'The harness refused it.'
-      : d.asked
-        ? 'You allowed it.'
-        : d.decidedBy === 'operator'
-          ? 'You allowed this exact request earlier.'
-          : d.decidedBy === 'full-auto'
-            ? 'Full auto allowed it without asking.'
-            : 'The harness allowed it without asking.';
+      : d.decidedBy === 'timeout'
+        ? 'Full auto allowed it after the wait.'
+        : d.decidedBy === 'full-auto'
+          ? 'Full auto allowed it without asking.'
+          : d.asked
+            ? 'You allowed it.'
+            : d.decidedBy === 'operator'
+              ? 'You allowed this exact request earlier.'
+              : 'The harness allowed it without asking.';
   // The policy sentence explains a refusal; on an allow it is usually just
   // "Reading is allowed", which says nothing the decision line does not. The
   // operator's own words, when they gave a reason, come before both — they are
