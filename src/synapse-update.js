@@ -103,7 +103,7 @@ export function createSynapseUpdate({ logger, engine, runs, getConfig, notify, q
         feed: feed(),
       };
     }
-    if (maxAgeMs && cached?.checkedAt && Date.now() - Date.parse(cached.checkedAt) < maxAgeMs) {
+    if (maxAgeMs && !cached?.error && cached?.checkedAt && Date.now() - Date.parse(cached.checkedAt) < maxAgeMs) {
       return check({ online: false });
     }
     try {
@@ -196,7 +196,9 @@ export function createSynapseUpdate({ logger, engine, runs, getConfig, notify, q
         return { ok: false, error: state.error || 'there is no newer release with a downloadable zip' };
       }
       fs.mkdirSync(UPDATE_DIR, { recursive: true });
-      const zip = path.join(UPDATE_DIR, `${state.latest}.zip`);
+      // Keep the release's own file name: SHA256SUMS lists that name, and a
+      // checksum that cannot be matched is worse than none.
+      const zip = path.join(UPDATE_DIR, path.basename(state.asset.name || `${state.latest}.zip`));
       onLog(`Downloading Synapse ${state.latest}…`);
       const res = await fetch(state.asset.url, {
         headers: { 'user-agent': 'Synapse', accept: 'application/octet-stream' },

@@ -23,7 +23,7 @@
     <ImplicitUsings>disable</ImplicitUsings>
     <AssemblyName>Synapse</AssemblyName>
     <RootNamespace>Synapse</RootNamespace>
-    <Version>1.1.0</Version>
+    <Version>1.1.1</Version>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <!-- The mark the page already uses, so the exe, the taskbar, the tray and the
          favicon cannot drift apart. -->
