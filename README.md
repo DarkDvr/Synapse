@@ -9,7 +9,7 @@ genuine **OpenCode** engine over its HTTP + SSE API and rebuilds the interface
 from scratch — today that engine, tomorrow anything that implements the contract
 in `src\engines\base.js`.
 
-**Version 1.0.1** — Windows 10/11, x64. The release zip carries Node, the engine
+**Version 1.0.2** — Windows 10/11, x64. The release zip carries Node, the engine
 and the fonts, so a copied folder runs on a PC with nothing installed. This
 repository is the source that builds it; the zip is the runnable folder.
 

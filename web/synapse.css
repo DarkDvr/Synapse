@@ -2309,6 +2309,37 @@ body[data-mode="single"] #runAuto { display: none; }
   border-top: 1px solid var(--line);
 }
 .set-foot #revertSettings { margin-right: auto; }
+/* About: a short centred page, the shape a small app's About window has. The
+   settings body is a scroll container, so it is given its own centred column
+   rather than being stretched into a form. */
+.about {
+  max-width: 430px; margin: 10px auto 6px; padding: 4px 8px;
+  text-align: center;
+}
+.about-mark { width: 56px; height: 56px; border-radius: 13px; }
+.about h2 {
+  margin: 12px 0 1px; font: 600 20px var(--display); letter-spacing: -0.2px; color: var(--text);
+}
+.about-version {
+  margin: 0; font-family: var(--mono); font-size: 11px; color: var(--muted);
+  letter-spacing: 0.02em;
+}
+.about-lede {
+  margin: 13px 0 18px; font-size: 12.5px; line-height: 1.55; color: #b9bcc2;
+}
+.about-facts {
+  display: grid; grid-template-columns: auto auto; gap: 7px 16px;
+  justify-content: center; align-items: baseline; margin: 0 0 18px;
+  font-size: 12px; text-align: left;
+}
+.about-facts dt { color: var(--muted); }
+.about-facts dd { margin: 0; color: var(--text); }
+.about-facts a { color: var(--orange); text-decoration: none; }
+.about-facts a:hover { text-decoration: underline; }
+.about-free {
+  margin: 0; padding-top: 12px; border-top: 1px solid var(--line);
+  font-size: 11.5px; color: var(--muted);
+}
 /* focus rings must never be clipped by the scroll container, so leave room */
 .settings-body {
   flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 2px 6px 2px 2px;

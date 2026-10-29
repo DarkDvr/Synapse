@@ -91,7 +91,7 @@
                    Foreground="#ECEEF1" VerticalAlignment="Center" />
         <Border Grid.Column="2" Margin="8,0,0,0" Padding="6,1" CornerRadius="9"
                 BorderBrush="#32353B" BorderThickness="1" VerticalAlignment="Center">
-          <TextBlock Text="v0.1" FontSize="10" Foreground="#94979E" />
+          <TextBlock x:Name="BarVersion" FontSize="10" Foreground="#94979E" />
         </Border>
 
         <!-- The server is down. Said here as well as in the Runtime row, because

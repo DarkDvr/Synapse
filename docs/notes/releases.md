@@ -17,7 +17,7 @@ tag on GitHub is what a bug report points at.
 ## Where the number lives
 
 `package.json` `version` is the single source. `src/version.js` reads it,
-`/api/status` returns it, and the status rail shows `Synapse 1.0.1`. The boot
+`/api/status` returns it, and the status rail shows `Synapse 1.0.2`. The boot
 line in `logs/app.log` carries the same number, so a stale server is visible
 before any behaviour is blamed.
 
@@ -38,7 +38,7 @@ Two things mirror it and are bumped in the same commit:
 4. Run the suite: `bin\node\node.exe --test "tests\*.test.mjs"`.
 5. Commit, tag, push — all three:
    ```
-   git tag v1.0.1
+   git tag v1.0.2
    git push origin main --tags
    ```
 6. The tag is the release. A commit without one is a draft that the operator
@@ -49,4 +49,4 @@ Two things mirror it and are bumped in the same commit:
 If a behaviour does not match the code in this checkout, the first question is
 "which Synapse is running?" — the rail answers it. A server started before the
 change is a stale build; restart it before blaming the rule. The console's boot
-line says `Synapse 1.0.1 starting`, and `/api/status` reports the same string.
+line says `Synapse 1.0.2 starting`, and `/api/status` reports the same string.

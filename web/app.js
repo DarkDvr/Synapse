@@ -6711,6 +6711,7 @@ const ICONS = {
   eye: '<path d="M1.7 8S4 3.9 8 3.9 14.3 8 14.3 8 12 12.1 8 12.1 1.7 8 1.7 8z"/><circle cx="8" cy="8" r="1.9"/>',
   eyeOff:
     '<path d="M2.3 9.3C3.6 6.4 5.6 5 8 5s4.4 1.4 5.7 4.3"/><path d="M4 11.2 2.7 12.9M8 10.3v2.3M12 11.2 13.3 12.9"/>',
+  info: '<circle cx="8" cy="8" r="6.1"/><path d="M8 7.4v4.1"/><path d="M8 4.9h.01"/>',
 };
 
 const setIcon = (name) =>
@@ -6725,6 +6726,7 @@ const SETTINGS_TABS = [
   { id: 'tools', label: 'Tools', icon: 'tools' },
   { id: 'windows', label: 'Windows', icon: 'engine' },
   { id: 'logging', label: 'Logging', icon: 'lines' },
+  { id: 'about', label: 'About', icon: 'info' },
 ];
 
 // Every control carries a plain-English tooltip: the config file is the source
@@ -7031,6 +7033,27 @@ function settingsLogging(c) {
   ].join('');
 }
 
+// ── about ───────────────────────────────────────────────────────
+
+/** A short, standard about page: mark, name, version, one line, credits. */
+function settingsAbout() {
+  const version = String(state.status?.version || '').trim() || 'unknown';
+  return `
+    <div class="about">
+      <img class="about-mark" src="/icon-64.png" alt="" width="56" height="56" />
+      <h2>Synapse</h2>
+      <p class="about-version">Version ${esc(version)}</p>
+      <p class="about-lede">A self-contained harness for building software with agent models:
+        plan it, delegate it, and watch the work happen.</p>
+      <dl class="about-facts">
+        <dt>Created by</dt><dd>DarkDvr</dd>
+        <dt>Contact</dt><dd><a href="mailto:darkdvr1@yandex.ru">darkdvr1@yandex.ru</a></dd>
+        <dt>Licence</dt><dd>Free software</dd>
+      </dl>
+      <p class="about-free">Free to use, copy and share. No account, no subscription, no telemetry.</p>
+    </div>`;
+}
+
 // ── providers: the only editable list in this window ────────────
 
 /** `sk-efn1***f7df`: enough to tell two keys apart, never enough to use one. */
@@ -7251,6 +7274,7 @@ const SETTINGS_PANES = {
   tools: settingsTools,
   windows: settingsWindows,
   logging: settingsLogging,
+  about: settingsAbout,
 };
 
 function renderSettingsTabs() {
@@ -7278,6 +7302,10 @@ function renderSettings({ scrollTop } = {}) {
   // pressed. Only a tab switch or opening the window starts at the top.
   const keep = scrollTop === undefined ? body.scrollTop : scrollTop;
   renderSettingsTabs();
+  // About is read-only: Save and Revert there would be two buttons with nothing
+  // to save. The footer comes back on the next editable tab.
+  const foot = document.querySelector('.set-foot');
+  if (foot) foot.hidden = state.settingsTab === 'about';
   body.innerHTML = SETTINGS_PANES[state.settingsTab](c);
   body.scrollTop = keep;
 }

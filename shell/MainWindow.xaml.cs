@@ -37,6 +37,9 @@ public partial class MainWindow : Window
         _server = server;
         _console = console;
         _statePath = Path.Combine(root, "data", "window.json");
+        var version = AppVersion(root);
+        BarVersion.Text = "v" + version;
+        Title = $"Synapse {version}";
         RestoreWindowState();
         try
         {
@@ -51,6 +54,39 @@ public partial class MainWindow : Window
         Closed += (_, _) => _server.Changed -= OnServerChanged;
         // Saved before the close is cancelled: hiding to the tray is a close.
         Closing += (_, _) => SaveWindowState();
+    }
+
+    // ── which Synapse this is ───────────────────────────────────────────
+
+    /// <summary>
+    /// The version in the title bar, read from `package.json` beside the exe.
+    ///
+    /// One source with the server (`src/version.js` reads the same file), so a
+    /// release cannot show one number in the bar and another in Settings → About.
+    /// The assembly version is only a fallback for a folder that lost its
+    /// package.json.
+    /// </summary>
+    static string AppVersion(string root)
+    {
+        try
+        {
+            var file = Path.Combine(root, "package.json");
+            if (File.Exists(file))
+            {
+                using var doc = JsonDocument.Parse(File.ReadAllText(file));
+                if (doc.RootElement.TryGetProperty("version", out var v) && v.ValueKind == JsonValueKind.String)
+                {
+                    var s = v.GetString();
+                    if (!string.IsNullOrWhiteSpace(s)) return s.Trim();
+                }
+            }
+        }
+        catch
+        {
+            // A bar without a version is still a bar.
+        }
+        var a = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version;
+        return a is null ? "0.0.0" : $"{a.Major}.{a.Minor}.{a.Build}";
     }
 
     // ── remembered geometry ─────────────────────────────────────────────
