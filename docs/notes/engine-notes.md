@@ -811,15 +811,25 @@ temp folder is no longer used.
 
 **Full auto can answer for the operator (28 Oct).** With the session's
 `synapse.fullAuto` on — the cog's second switch — a request left to the operator
-takes the default after 60 seconds. A permission card is **allowed once**
-(`decidedBy: 'timeout'`). A question is answered with the **Recommended** option,
-or the top one when none is marked (`src/auto-answer.js`); a server-side sweep
-every five seconds answers it (`src/form-auto.js`), so a closed browser cannot
-stop the work. An operator answer cancels either timer, turning the switch off
-disarms a card already on screen, and it can only answer `ask` verdicts: a harness
-write or a credential store is denied before a card exists. Free-text fields take
-their default (or empty), and hidden/external fields are skipped. A full-auto
-question is recorded in the project document exactly like an operator's answer.
+takes the default after `fullAuto.timeoutSec` (60 seconds by default, Settings →
+Workers). A permission card is **allowed once** (`decidedBy: 'timeout'`). A
+question is answered with the **Recommended** option, or the top one when none is
+marked (`src/auto-answer.js`); a server-side sweep every five seconds answers it
+(`src/form-auto.js`), so a closed browser cannot stop the work. An operator answer
+cancels either timer, turning the switch off disarms a card already on screen, and
+it can only answer `ask` verdicts: a harness write or a credential store is denied
+before a card exists. Free-text fields take their default (or empty), and
+hidden/external fields are skipped. A full-auto question is recorded in the project
+document exactly like an operator's answer.
+
+**Zero is a real Full auto wait (29 Oct).** `fullAuto.timeoutSec: 0` means no
+permission card is ever drawn: the gate answers `once` on the next microtask,
+records the decision with `decidedBy: 'full-auto'` and `asked: false`, so the tool
+chip is green rather than amber. Questions still go through the five-second form
+sweep, which answers on its first tick. The setting is read on every ask and
+`retime()` re-arms cards that are already open, so a Settings change does not need
+a restart. The policy walls are untouched: a zero wait can only answer `ask`
+verdicts, never a harness write or a credential store.
 
 **A refusal explains itself, through a synthetic note.** The reply body has a
 `message` field, but 2.1.2 drops it on the reject path: the tool error is always
@@ -860,9 +870,22 @@ the resolved path, and why the policy left it to the operator. A worker's reques
 must be visible even though its session is hidden from the rail — filtered to the
 open session it would block the worker until its timeout with nothing on screen.
 
-Every decision is also written against the tool call id the request came from
-(`source.id`), which is what draws the chip on that call. The log is memory only
+Every decision is also written against the tool call id the request came from,
+which draws the chip on that call. The engine puts it in `source.id` on an edit or
+read ask, but **2.1.2 omits `source` on every shell ask** (measured 28 Oct: the
+event has only id, sessionID, action, resources and save). So the gate also watches
+`session.tool.input.started`, `input.ended` and `called`, remembers the session's
+recent calls, and pairs an ask that has no source with the newest unclaimed call of
+the same family — preferring one whose command or path contains the ask's
+resources. A decision stored without a tool-call id cannot draw a chip, and that is
+exactly what happened to shell calls before this fallback. The log is memory only
 (`src/permission-log.js`): a restart clears the chips, not the work.
+
+The live event has the same key rule: `permission.decided` must be stored under
+`decision.toolCallId`, not the request id. A multi-view handler that keyed it by
+`requestId` and returned early made the chip disappear while every other part of
+the card still worked; the request id belongs to the card, the tool-call id belongs
+to the chip.
 
 **Skills are per role, and enforced.** `roles.<id>.skills` is an allowlist; the
 session gets `{action:'skill', resource:'*', deny}` plus one allow per name (the

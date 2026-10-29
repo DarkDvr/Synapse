@@ -6,6 +6,7 @@ import { spawn } from 'node:child_process';
 import { ensurePlan, readPlan, readRuns, runLedger, briefSession, logPlanState, BRIEF_KEY } from './plans.js';
 import { ensureProjectDoc, appendRequest as appendProjectRequest, appendChat, appendDecision as appendProjectDecision, appendEntry, setHandover } from './project-doc.js';
 import { createFormAuto } from './form-auto.js';
+import { fullAutoTimeoutMs } from './auto-answer.js';
 import { keepAttachments } from './keep-attachments.js';
 import { skillRules, describeSkills } from './skills.js';
 import { rulesFor, decide, resolvePath, refusalNote, SINGLE_RULES } from './permissions.js';
@@ -516,6 +517,7 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
   const formAuto = createFormAuto({
     engine,
     logger,
+    getTimeoutMs: () => fullAutoTimeoutMs(getConfig()),
     onAnswered: async ({ form, sessionId, answer }) => {
       const signature = formSignature(form);
       if (signature) {
@@ -627,6 +629,9 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
 
     saveConfig: async (body) => {
       const saved = applyConfig(reconcile(body));
+      // A changed Full auto wait applies to cards already on screen, not only to
+      // the next ask.
+      permissionGate?.retime?.();
       app.info('config saved via UI');
       const shown = toClientConfig(saved);
       // The other view must not keep showing the old file until somebody

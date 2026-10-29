@@ -59,6 +59,16 @@ test('full auto answers a form after the minute, with the recommended option', a
   assert.equal(replies.length, 1, 'a settled form is not answered twice');
 });
 
+test('a zero wait answers on the next sweep', async () => {
+  let now = 1000;
+  const { engine, replies } = fake();
+  const auto = createFormAuto({ engine, logger: quiet, getTimeoutMs: () => 0, now: () => now });
+  auto.setFullAuto('ses_1', true);
+  await auto.tick();
+  assert.equal(replies.length, 1, 'no wait when the setting is zero');
+  assert.deepEqual(replies[0], { sessionId: 'ses_1', formId: 'f1', answer: { q: 'a' } });
+});
+
 test('full auto is off unless the session says so', async () => {
   let now = 1000;
   const { engine, replies } = fake();

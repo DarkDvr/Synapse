@@ -848,6 +848,12 @@ clear it: a test is not work.
   scaffolding and context dumps from the engine are not chat — rendering them
   once leaked AGENTS.md prose and diff hunks into the transcript above the
   user's own message. Errors still show, whatever type carries them.
+- **A sent message can be reused.** The small **Reuse** button beside a `You`
+  message (29 Oct) copies its words and the attachment bytes the engine kept on
+  the message back into the composer. It is a copy, not a resend: the operator can
+  edit first, and clicking it must never throw away a draft — an empty box is
+  replaced, a draft is appended, and attachments stop at the six-file limit. It is
+  quiet (55% opacity) because the transcript is for reading, not a toolbar.
 - **One assistant block per turn, not per step.** The engine emits an assistant
   message per step (reasoning, tool call, reasoning…), so rendering them raw gave
   a three-question chat fourteen "Architect" headers. `groupTurns()` merges
@@ -1035,8 +1041,9 @@ bold, italic, strikethrough and links: the range these models actually produce.
   is visible without opening the menu. It opens upward because the composer is at
   the bottom edge, and a click outside or Escape closes it. The old green flag and
   its green CSS are gone. Full auto answers permission cards with Allow Once and
-  questions with the Recommended (or top) option after a minute, so an unattended
-  project keeps moving.
+  questions with the Recommended (or top) option after `fullAuto.timeoutSec`
+  (Settings → Workers), so an unattended project keeps moving. At zero it answers
+  a permission at once and draws no card.
 - **A plan can stall on the Keep Building rule, and the card has to say why
   (28 Oct).** A two-task request ran t1, then the harness refused t2 because Keep
   Building was off — while the Architect's own last line said it had queued t2.

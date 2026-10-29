@@ -2,21 +2,39 @@
 //
 // The engine raises a form and waits for a reply; the page shows the panel. When
 // the operator is away and "Full auto" is on, this answers the form after the
-// same minute the permission gate waits: the recommended option, or the top one.
-// It polls rather than listens because forms have no event Synapse sees; the
-// server calls `tick()` every few seconds, so a closed browser cannot stop it.
+// wait in Settings → Workers (`fullAuto.timeoutSec`): the recommended option, or
+// the top one. Zero means answer on the next sweep, with no wait. It polls rather
+// than listens because forms have no event Synapse sees; the server calls
+// `tick()` every few seconds, so a closed browser cannot stop it.
 //
 // The flag lives in the session metadata (`synapse.fullAuto`). It is read once
 // per session and kept current by `setFullAuto`; a session saved with the old
 // `permissionTimeout` name is still honoured.
 import { autoAnswerFor, FULL_AUTO_MS } from './auto-answer.js';
 
-export function createFormAuto({ engine, logger, onAnswered, timeoutMs = FULL_AUTO_MS, now = Date.now } = {}) {
+export function createFormAuto({
+  engine,
+  logger,
+  onAnswered,
+  timeoutMs = FULL_AUTO_MS,
+  getTimeoutMs = null,
+  now = Date.now,
+} = {}) {
   const log = logger?.channel?.('app');
   const fullAuto = new Set();
   const checked = new Set();
   const seen = new Map(); // formId -> { at, sessionId }
   const settled = new Set(); // answered here, or failed once; cleared when the form goes
+
+  /** The current wait, read on every sweep so a Settings change applies without
+   *  a restart. Zero is valid and means "answer at once". */
+  const waitMs = () => {
+    const fallback = Number.isFinite(Number(timeoutMs)) ? Math.max(0, Number(timeoutMs)) : FULL_AUTO_MS;
+    if (!getTimeoutMs) return fallback;
+    const ms = Number(getTimeoutMs());
+    // A broken setting must not silently answer every question at once.
+    return Number.isFinite(ms) ? Math.max(0, ms) : fallback;
+  };
 
   function setFullAuto(sessionId, on) {
     if (!sessionId) return false;
@@ -47,10 +65,10 @@ export function createFormAuto({ engine, logger, onAnswered, timeoutMs = FULL_AU
 
   /**
    * One sweep. A form is remembered from the first time it is seen and answered
-   * when it has been waiting `timeoutMs`. A failed reply is not retried every
-   * few seconds: the card is still the operator's, and the form disappearing
-   * clears the mark. A second sweep is skipped while one is in flight, so a slow
-   * engine cannot have the same form answered twice.
+   * when it has been waiting the configured wait. A failed reply is not retried
+   * every few seconds: the card is still the operator's, and the form
+   * disappearing clears the mark. A second sweep is skipped while one is in
+   * flight, so a slow engine cannot have the same form answered twice.
    */
   async function tick() {
     if (busy) return { answered: 0, waiting: 0, busy: true };
@@ -79,7 +97,8 @@ export function createFormAuto({ engine, logger, onAnswered, timeoutMs = FULL_AU
       if (!seen.has(id)) seen.set(id, { at: now(), sessionId });
       if (settled.has(id)) continue;
       if (!(await enabledFor(sessionId))) continue;
-      if (now() - seen.get(id).at < timeoutMs) {
+      const wait = waitMs();
+      if (wait > 0 && now() - seen.get(id).at < wait) {
         waiting += 1;
         continue;
       }
@@ -92,7 +111,11 @@ export function createFormAuto({ engine, logger, onAnswered, timeoutMs = FULL_AU
         await engine.replyForm(sessionId, id, answer);
         settled.add(id);
         answered += 1;
-        log?.info(`full auto answered ${sessionId}/${id} after ${Math.round(timeoutMs / 1000)}s`);
+        log?.info(
+          wait > 0
+            ? `full auto answered ${sessionId}/${id} after ${Math.round(wait / 1000)}s`
+            : `full auto answered ${sessionId}/${id} immediately`,
+        );
         try {
           await onAnswered?.({ form, sessionId, answer });
         } catch (err) {

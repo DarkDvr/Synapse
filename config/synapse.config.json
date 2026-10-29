@@ -340,6 +340,9 @@
   "tools": {
     "resetOnBoot": false
   },
+  "fullAuto": {
+    "timeoutSec": 60
+  },
   "cleanup": {
     "onFinish": true,
     "onBoot": true

@@ -179,7 +179,8 @@ const state = {
   skillsInfo: null,
   // "Keep building": the open session's switch for running the plan to the end.
   auto: false,
-  // "Full auto": unanswered permission cards allow once after a minute.
+  // "Full auto": unanswered permission cards allow once after the wait set in
+// Settings → Workers (60 seconds by default; 0 answers at once, no card).
   fullAuto: false,
   permissions: [],
   busy: false,
@@ -1604,13 +1605,25 @@ const SINGLE_PERMISSIONS = [{ action: 'subagent', resource: '*', effect: 'deny' 
 const sessionMode = (s) => (s?.single ? 'single' : 'multi');
 
 /**
+ * The Full auto wait, in seconds, from the saved config. 0 is real: permission
+ * cards are answered without ever being drawn. The menu and the cards say the
+ * number that is actually set rather than a stale "60".
+ */
+function fullAutoWaitSec() {
+  const raw = state.config?.fullAuto?.timeoutSec;
+  const n = raw === undefined || raw === null || raw === '' ? 60 : Number(raw);
+  return Number.isFinite(n) && n >= 0 ? Math.floor(n) : 60;
+}
+
+/**
  * The run options, behind the cog between Stop and Send.
  *
  * It replaced the finish-line flag: one menu now holds "keep running" (the old
  * flag) and "full auto" (an unanswered ask or question takes the default after
- * a minute). The cog is quiet gray with a clear gear, yellow on hover or while
- * the menu is open, and green while either switch is on, so the composer says a
- * standing decision is in force without a second control on the row.
+ * the wait in Settings → Workers). The cog is quiet gray with a clear gear,
+ * yellow on hover or while the menu is open, and green while either switch is
+ * on, so the composer says a standing decision is in force without a second
+ * control on the row.
  */
 function renderKeep() {
   const btn = $('runBtn');
@@ -1625,6 +1638,14 @@ function renderKeep() {
   if (auto) auto.setAttribute('aria-checked', String(state.auto === true));
   const timeout = $('runFullAuto');
   if (timeout) timeout.setAttribute('aria-checked', String(state.fullAuto === true));
+  const hint = $('runFullAutoHint');
+  if (hint) {
+    const wait = fullAutoWaitSec();
+    hint.textContent =
+      wait === 0
+        ? 'Allow at once and answer questions with the recommended option — no card is shown'
+        : `Allow once, or answer questions with the recommended option, after ${wait} seconds`;
+  }
   btn.title =
     [
       state.auto ? 'Keep running: on' : null,
@@ -1710,10 +1731,13 @@ async function setFullAuto(next) {
     state.fullAuto = r.enabled === true;
     renderKeep();
     renderTranscript();
+    const wait = fullAutoWaitSec();
     toast(
       state.fullAuto ? 'Full Auto On' : 'Full Auto Off',
       state.fullAuto
-        ? 'Unanswered requests take the default after 60 seconds: permission cards allow once, questions take the recommended (or top) option.'
+        ? wait === 0
+          ? 'Permissions are allowed at once and questions take the recommended (or top) option. No permission card is shown.'
+          : `Unanswered requests take the default after ${wait} seconds: permission cards allow once, questions take the recommended (or top) option.`
         : 'Every request waits for you again.',
     );
   } catch (err) {
@@ -4193,8 +4217,21 @@ function renderMessage(m) {
           .map((f) => `<span class="msg-file" title="${esc(f.name)}">${esc(shortName(f.name))}</span>`)
           .join('')}</span>`
       : '';
+    // A sent message can become a new one: this puts its words and attachments
+    // back in the composer, where it can be edited before it is sent again. The
+    // bytes are on the raw message the engine kept; a local echo carries them on
+    // `_files` until the reload replaces it.
+    const reuse = m.id
+      ? `<button type="button" class="msg-reuse" data-reuse-msg="${esc(m.id)}"
+           title="Copy this message and its attachments into the composer"
+           aria-label="Copy this message into the composer">
+           <svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor"
+                stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+             <path d="M3 5.4A5.2 5.2 0 1 1 3 10.6"/><path d="M3 2.6v3.2h3.2"/>
+           </svg><span>Reuse</span></button>`
+      : '';
     return `<div class="msg user" data-msg="user"><div class="msg-body">
-      ${stamp}<span class="msg-role">You</span><span class="msg-text">${esc(m.text)}</span>${chips}
+      ${stamp}<span class="msg-role">You</span><span class="msg-text">${esc(m.text)}</span>${chips}${reuse}
     </div></div>`;
   }
   if (m.type === 'synthetic') {
@@ -4331,7 +4368,9 @@ function permissionTip(d) {
         ? 'You allowed it.'
         : d.decidedBy === 'operator'
           ? 'You allowed this exact request earlier.'
-          : 'The harness allowed it without asking.';
+          : d.decidedBy === 'full-auto'
+            ? 'Full auto allowed it without asking.'
+            : 'The harness allowed it without asking.';
   // The policy sentence explains a refusal; on an allow it is usually just
   // "Reading is allowed", which says nothing the decision line does not. The
   // operator's own words, when they gave a reason, come before both — they are
@@ -4554,7 +4593,9 @@ function renderPermissions() {
         ${p.reason ? `<p class="perm-why">${esc(p.reason)}</p>` : ''}
         ${diff}
         <p class="perm-note">${state.fullAuto
-          ? 'If nobody answers within 60 seconds, this is allowed once. '
+          ? fullAutoWaitSec() === 0
+            ? 'Full auto is set to answer immediately, so this card should not stay up. '
+            : `If nobody answers within ${fullAutoWaitSec()} seconds, this is allowed once. `
           : ''}${p.role && p.role !== 'architect'
           ? 'Nothing has happened yet. You can still say no.'
           : 'Nothing has happened yet. You can still say no — say why in the chat; the Architect is reading it.'}</p>
@@ -4922,7 +4963,11 @@ function renderAskPanel() {
         form.sessionId === state.sessionId
           ? 'this chat is waiting on you'
           : 'another chat is waiting on you'
-      }${state.fullAuto ? ' · full auto answers in 60s' : ''}</span>
+      }${state.fullAuto
+        ? fullAutoWaitSec() === 0
+          ? ' · full auto answers at once'
+          : ` · full auto answers in ${fullAutoWaitSec()}s`
+        : ''}</span>
     </div>
     <div class="ask-fields">${(form.fields || []).map(askField).join('')}</div>
     <div class="ask-actions">
@@ -5787,6 +5832,9 @@ async function send() {
       text,
       created: Date.now(),
       files: files.map((f) => ({ name: f.name, mime: f.mime })),
+      // Until the reload brings the engine's own message back, Reuse needs the
+      // bytes too; the raw shape would carry them, so keep the same here.
+      _files: files.map((f) => ({ name: f.name, mime: f.mime, data: f.data })),
     });
     renderTranscript();
     // Sending is a statement of intent to read the answer: put the newest message
@@ -5840,6 +5888,83 @@ async function send() {
     state.streaming = false;
     renderComposer();
   }
+}
+
+/**
+ * The attachments of a sent message, in the composer's own shape.
+ *
+ * The engine keeps the bytes on the operator's message (`raw.files[].data`), not
+ * just the name the transcript shows. A message echoed locally before the
+ * reload has them on `_files`. A file that somehow has no bytes is skipped
+ * rather than attached empty — an empty attachment would be worse than none.
+ */
+function messageAttachments(message) {
+  const raw = Array.isArray(message?.raw?.files) ? message.raw.files : [];
+  const local = Array.isArray(message?._files) ? message._files : [];
+  const files = raw.length ? raw : local;
+  const out = [];
+  for (const [index, file] of files.entries()) {
+    let data = String(file?.data || '');
+    let mime = String(file?.mime || 'application/octet-stream');
+    // A `data:` URI is the other shape the engine may carry.
+    if (!data && typeof file?.uri === 'string' && file.uri.startsWith('data:')) {
+      const comma = file.uri.indexOf(',');
+      if (comma >= 0) {
+        mime = file.uri.slice(5, comma).split(';')[0] || mime;
+        data = file.uri.slice(comma + 1);
+      }
+    }
+    if (!data) continue;
+    out.push({
+      id: `reuse-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 6)}`,
+      name: String(file?.name || `attachment-${index + 1}`),
+      mime,
+      size: Math.floor((data.length * 3) / 4),
+      data,
+      keep: false,
+    });
+  }
+  return out;
+}
+
+/**
+ * Put a sent message back in the composer.
+ *
+ * The text replaces an empty box and is appended to a draft, so clicking Reuse
+ * cannot silently throw away something the operator was already writing. The
+ * attachments follow the same rule and stop at the six-file limit.
+ */
+function reuseMessage(messageId) {
+  const message = state.messages.find((m) => m.id === messageId && m.type === 'user');
+  if (!message) return;
+  const input = $('promptInput');
+  if (!input) return;
+
+  const text = String(message.text || '');
+  const files = messageAttachments(message);
+  const draft = input.value;
+  if (!draft.trim()) input.value = text;
+  else if (!draft.endsWith(text)) input.value = `${draft.replace(/\s+$/, '')}\n\n${text}`;
+  autoGrow(input);
+
+  const room = Math.max(0, ATTACH_MAX - state.attachments.length);
+  const taken = new Set(state.attachments.map((f) => `${f.name}\u0000${f.size}`));
+  const accepted = files.filter((f) => !taken.has(`${f.name}\u0000${f.size}`)).slice(0, room);
+  if (accepted.length) state.attachments = [...state.attachments, ...accepted];
+  renderAttachments();
+
+  input.focus();
+  input.setSelectionRange(input.value.length, input.value.length);
+  const missing = Math.max(0, files.length - accepted.length);
+  const what = accepted.length
+    ? ` and ${accepted.length} attachment${accepted.length === 1 ? '' : 's'}`
+    : '';
+  toast(
+    'Copied To Composer',
+    missing
+      ? `The message is ready to send again${what}; ${missing} file${missing === 1 ? '' : 's'} could not be restored.`
+      : `The message${what} ${accepted.length ? 'are' : 'is'} ready to send again.`,
+  );
 }
 
 /** A file name that fits a chip: the last 14 characters, with an ellipsis. */
@@ -6207,16 +6332,23 @@ function connectStream() {
         fillRoleModels();
         renderRoleActivity();
         renderStatus();
+        renderKeep();
+        schedulePermissionRender();
       }
       return;
     }
 
-    // A card was answered somewhere else: the panel is rebuilt from pending.
+    // A card was answered somewhere else: the panel is rebuilt from pending, and
+    // the chip on the tool call it belonged to is keyed by that call's id — not
+    // by the request id, or the tool card would never find it.
     if (ev.kind === 'permission' && ev.type === 'permission.decided') {
       const decided = ev.decision || {};
-      if (decided.requestId) state.permissionDecisions?.set(decided.requestId, decided);
+      if (decided.toolCallId) {
+        state.permissionDecisions?.set(decided.toolCallId, decided);
+        state.decisionSeq += 1;
+        if (state.view === 'session' && decided.sessionId === state.sessionId) schedulePermissionRender();
+      }
       refreshPending();
-      renderTranscript();
       return;
     }
 
@@ -6417,15 +6549,6 @@ function connectStream() {
     }
 
     if (ev.kind === 'permission') {
-      if (ev.type === 'permission.decided') {
-        const d = ev.decision;
-        if (d?.toolCallId) {
-          state.permissionDecisions.set(d.toolCallId, d);
-          state.decisionSeq += 1;
-          if (state.view === 'session' && d.sessionId === state.sessionId) schedulePermissionRender();
-        }
-        return;
-      }
       if (ev.type === 'permission.asked') {
         // Any session: a hidden worker blocks exactly like the open one.
         schedulePendingRefresh();
@@ -6686,6 +6809,17 @@ function settingsEngine(c) {
 
 function settingsWorkers(c) {
   return [
+    setGroup(
+      'Full Auto',
+      setField(c, 'Permission timeout (seconds)', 'fullAuto.timeoutSec', {
+        type: 'number',
+        attr: 'min="0" max="3600"',
+        hint: 'How long Full auto waits before it answers an unanswered permission card or question. 0 means answer at once and never show a permission card. Seconds.',
+      }) +
+        `<p class="set-note">Full auto is switched on per chat, in the cog beside Send. This sets how long it waits once it is on. ` +
+        `A permission is still allowed only once, and the policy still refuses a write inside Synapse or a credential store before a card exists. ` +
+        `At 0, a permission is answered immediately and no card is drawn.</p>`,
+    ),
     setGroup(
       'Timers',
       setField(c, 'Restart after silence (minutes)', 'worker.stallSec', {
@@ -7108,6 +7242,12 @@ function collectSettings() {
       writePath(c, path, String(value).split(';').map((p) => p.trim()).filter(Boolean));
       continue;
     }
+    // An empty wait is not zero: clearing the box restores the minute default,
+    // rather than silently making Full auto answer every card at once.
+    if (path === 'fullAuto.timeoutSec' && String(el.value).trim() === '') {
+      writePath(c, path, 60);
+      continue;
+    }
     // The ladder is a comma list in the form and an array in the config.
     if (path === 'worker.ladder') {
       writePath(c, path, String(value).split(',').map((r) => r.trim()).filter(Boolean));
@@ -7346,6 +7486,8 @@ async function saveSettings() {
     state.setDraft = JSON.parse(JSON.stringify(state.config));
     state.setProvSelected = null;
     renderLlmStatus();
+    renderKeep();
+    schedulePermissionRender();
     await loadModels();
     // A new skills folder is worth reading before the operator closes the panel.
     await checkSkills({ quiet: true });
@@ -7685,6 +7827,11 @@ document.addEventListener('keydown', (e) => {
     else scrollChatToBottom();
   });
   $('transcript').addEventListener('click', async (e) => {
+    const reuse = e.target.closest('[data-reuse-msg]');
+    if (reuse) {
+      reuseMessage(reuse.dataset.reuseMsg);
+      return;
+    }
     const btn = e.target.closest('[data-copy-error]');
     if (!btn) return;
     const at = Number(btn.dataset.copyError);

@@ -54,6 +54,20 @@ test('the project menu’s Delete is wired to a client path that exists', () => 
   assert.match(js, /api\('DELETE', `\/api\/projects\//);
 });
 
+test('a permission chip is keyed by the tool call, never the request', () => {
+  const js = read('web/app.js');
+  assert.match(js, /permissionDecisions\?\.set\(decided\.toolCallId/);
+  assert.doesNotMatch(js, /permissionDecisions\?\.set\(decided\.requestId/);
+});
+
+test('a sent message can be put back in the composer', () => {
+  const js = read('web/app.js');
+  assert.match(js, /data-reuse-msg/);
+  assert.match(js, /function reuseMessage\(messageId\)/);
+  assert.match(js, /function messageAttachments\(message\)/);
+  assert.match(read('web/synapse.css'), /\.msg-reuse\s*\{/);
+});
+
 // "Views: 2" counted the window you were looking at as well as the laptop, and
 // sat in the rail whether or not Remote Access was on. The LAN clients are what
 // the address is for; they are named under it, and they hide with it.

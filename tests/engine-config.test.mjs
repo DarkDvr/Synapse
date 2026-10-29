@@ -147,6 +147,20 @@ const written = (dirs) => JSON.parse(fs.readFileSync(path.join(dirs.config, 'ope
   check('a negative number is refused', c4.engine.opencode.compactionKeepTokens === 0, String(c4.engine.opencode.compactionKeepTokens));
 }
 
+// ── Full auto's wait ─────────────────────────────────────────────
+{
+  const c1 = normalize({ fullAuto: { timeoutSec: 30 } });
+  check('a wait in seconds is kept', c1.fullAuto.timeoutSec === 30, String(c1.fullAuto.timeoutSec));
+  const c2 = normalize({ fullAuto: { timeoutSec: 0 } });
+  check('zero is accepted: answer at once', c2.fullAuto.timeoutSec === 0, String(c2.fullAuto.timeoutSec));
+  const c3 = normalize({});
+  check('a config that never mentions it defaults to a minute', c3.fullAuto.timeoutSec === 60, String(c3.fullAuto.timeoutSec));
+  const c4 = normalize({ fullAuto: { timeoutSec: -5 } });
+  check('a negative wait is clamped to zero', c4.fullAuto.timeoutSec === 0, String(c4.fullAuto.timeoutSec));
+  const c5 = normalize({ fullAuto: { timeoutSec: 'soon' } });
+  check('nonsense falls back to a minute', c5.fullAuto.timeoutSec === 60, String(c5.fullAuto.timeoutSec));
+}
+
 const failed = checks.filter((c) => !c.ok);
 console.log(`\n${checks.length - failed.length}/${checks.length} passed`);
 process.exit(failed.length ? 1 : 0);

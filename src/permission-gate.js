@@ -25,8 +25,11 @@ export function createPermissionGate({
   onDecision,
   memory,
   // How long an unanswered card waits before it is allowed once. Tests pass a
-  // few milliseconds; the product uses a minute.
+  // few milliseconds; the product reads `fullAuto.timeoutSec` (60 seconds by
+  // default). `getTimeoutMs` wins when present so a Settings change applies to
+  // the next ask without a restart. Zero is valid: no card is shown at all.
   permissionTimeoutMs = 60_000,
+  getTimeoutMs = null,
 }) {
   const log = logger.channel('app');
   // sessionId -> { directory, role, task, title }. The directory never changes
@@ -37,6 +40,27 @@ export function createPermissionGate({
   // so flipping the switch arms a card that is already on screen.
   const pendingAsks = new Map(); // requestId -> { request, info, entry, timer }
   const fullAutoOn = new Set();
+
+  /** The wait, read each time so a Settings change applies to the next ask.
+   *  Zero is a real value: answer at once, with no card. */
+  const waitMs = () => {
+    const fallback = Number.isFinite(Number(permissionTimeoutMs)) ? Math.max(0, Number(permissionTimeoutMs)) : 60_000;
+    if (!getTimeoutMs) return fallback;
+    const ms = Number(getTimeoutMs());
+    // A missing or broken setting must not silently become "allow at once".
+    return Number.isFinite(ms) ? Math.max(0, ms) : fallback;
+  };
+  // Tool calls this session announced, newest last. The engine sends
+  // `source:{id}` on some permission asks (edit, read) but not on shell asks —
+  // measured 28 Oct on 2.1.2: the shell event has id, sessionID, action,
+  // resources and save, and no source at all. The chip is keyed by the tool
+  // call's own id, so a shell ask without this fallback could never draw one.
+  // The ask always follows the call it belongs to, and a call blocks until it is
+  // answered, so the newest unclaimed call of the same family is the right one.
+  const recentTools = new Map(); // sessionId -> [{ id, name, input, at }]
+  const claimedTools = new Set(); // `${sessionId}\0${toolCallId}`
+  const TOOL_MEMORY_MS = 120_000;
+  const TOOL_MEMORY_MAX = 24;
 
   // "Always Allow" means this exact request again in this session, decided by the
   // operator. It is deliberately not the engine's own `always`: that saves the
@@ -79,9 +103,100 @@ export function createPermissionGate({
       sessionId: req.sessionID || data.sessionID || ev?.sessionId || null,
       action: String(req.action || req.title || '').trim(),
       resources: Array.isArray(req.resources) ? req.resources : [],
-      // The tool call this request belongs to, for the chip on its card.
+      // The tool call this request belongs to, for the chip on its card. Some
+      // asks carry it; a shell ask on 2.1.2 does not, which is why `observe`
+      // keeps the calls and `inferToolCall` fills it in.
       toolCallId: req.source?.id || null,
     };
+  }
+
+  const same = (a) => String(a || '').replace(/\\/g, '/').replace(/\s+/g, ' ').trim().toLowerCase();
+  const toolFamily = (name) => {
+    const n = String(name || '').toLowerCase();
+    if (/^(edit|write|patch|create|multiedit|apply_patch)$/.test(n)) return 'write';
+    if (/^(shell|bash|execute|run|terminal)$/.test(n)) return 'shell';
+    if (n === 'read') return 'read';
+    return n;
+  };
+  const actionFamily = (action) => {
+    const a = String(action || '').toLowerCase();
+    if (/^(edit|write|patch|create|multiedit)$/.test(a)) return 'write';
+    if (/^(shell|bash|execute|run)$/.test(a)) return 'shell';
+    if (a === 'read') return 'read';
+    return a;
+  };
+
+  /** Remember the tool calls the session announces, so an ask without a source
+   *  can still be pinned to the call it is blocking. */
+  function observe(ev) {
+    const type = String(ev?.type || '');
+    if (!/^session\.tool\.(input\.started|input\.ended|called)$/.test(type)) return;
+    const data = ev?.raw?.data || {};
+    const sessionId = data.sessionID || ev?.sessionId || null;
+    const id = data.id || data.callID || null;
+    if (!sessionId || !id) return;
+    let list = recentTools.get(sessionId);
+    if (!list) {
+      list = [];
+      recentTools.set(sessionId, list);
+    }
+    let entry = list.find((x) => x.id === id);
+    if (!entry) {
+      entry = { id, name: '', input: null, at: Date.now() };
+      list.push(entry);
+    }
+    if (data.name) entry.name = data.name;
+    if (data.input && typeof data.input === 'object') entry.input = data.input;
+    // `input.ended` carries the model's JSON as text; parsing it here means a
+    // call is matchable even if `session.tool.called` never arrives.
+    if (typeof data.text === 'string' && !entry.input) {
+      try {
+        const parsed = JSON.parse(data.text);
+        if (parsed && typeof parsed === 'object') entry.input = parsed;
+      } catch { /* a fragment, not a complete input; `called` will carry it */ }
+    }
+    entry.at = Date.now();
+    if (list.length > TOOL_MEMORY_MAX) list.splice(0, list.length - TOOL_MEMORY_MAX);
+  }
+
+  /** How strongly a remembered tool call matches the ask's resources. */
+  function matchScore(tool, resources) {
+    const input = tool?.input && typeof tool.input === 'object' ? tool.input : {};
+    const command = same(input.command || input.cmd || input.script || input.code || '');
+    const path = same(input.filePath || input.path || input.file || input.file_path || '');
+    let score = 0;
+    for (const raw of resources || []) {
+      const value = same(raw);
+      if (!value) continue;
+      if (command && command.includes(value)) score += 3;
+      else if (command && value.includes(command)) score += 1;
+      if (path && (path.endsWith(value) || value.endsWith(path))) score += 3;
+    }
+    return score;
+  }
+
+  /** The call an ask belongs to when the engine omitted `source`. */
+  function inferToolCall(request) {
+    const list = (recentTools.get(request.sessionId) || []).filter(
+      (tool) => Date.now() - tool.at <= TOOL_MEMORY_MS,
+    );
+    if (!list.length) return null;
+    const family = actionFamily(request.action);
+    const candidates = list.filter(
+      (tool) => !claimedTools.has(`${request.sessionId}\u0000${tool.id}`) && toolFamily(tool.name) === family,
+    );
+    if (!candidates.length) return null;
+    let best = candidates[0];
+    let bestScore = matchScore(best, request.resources);
+    for (const tool of candidates.slice(1)) {
+      const score = matchScore(tool, request.resources);
+      // A resource match outranks recency; with none, the newest call wins.
+      if (score > bestScore || (score === bestScore && tool.at >= best.at)) {
+        best = tool;
+        bestScore = score;
+      }
+    }
+    return best.id;
   }
 
   async function sessionOf(sessionId, directory) {
@@ -111,35 +226,63 @@ export function createPermissionGate({
 
   const fullAutoEnabled = (sessionId, info) => fullAutoOn.has(sessionId) || info?.fullAuto === true;
 
-  /** Arm a pending ask, if its session wants the timeout. */
+  /** Arm a pending ask, if its session wants the timeout. A zero wait is not a
+   *  timeout at all: the ask is answered on the next microtask, before a card can
+   *  be painted. */
   function arm(p) {
-    if (p.timer || !fullAutoEnabled(p.request.sessionId, p.info)) return;
-    p.timer = setTimeout(() => fire(p), permissionTimeoutMs);
+    if (p.timer || p.queued || !fullAutoEnabled(p.request.sessionId, p.info)) return;
+    const wait = waitMs();
+    p.wait = wait;
+    if (!wait) {
+      p.queued = true;
+      queueMicrotask(() => {
+        p.queued = false;
+        fire(p);
+      });
+      return;
+    }
+    p.timer = setTimeout(() => fire(p), wait);
     p.timer.unref?.();
   }
 
   async function fire(p) {
     if (!pendingAsks.has(p.request.requestId)) return;
-    pendingAsks.delete(p.request.requestId);
     // The switch may have been turned off during the wait: then the card is the
     // operator's again, and nothing is answered behind their back.
-    if (!fullAutoEnabled(p.request.sessionId, p.info)) return;
+    if (!fullAutoEnabled(p.request.sessionId, p.info)) {
+      if (p.timer) clearTimeout(p.timer);
+      p.timer = null;
+      return;
+    }
+    const wait = waitMs();
+    pendingAsks.delete(p.request.requestId);
     try {
       await engine.replyPermission(p.request.sessionId, p.request.requestId, 'once');
       const where = [p.info.role, p.info.task].filter(Boolean).join(' ');
       onDecision?.({
         ...p.entry,
         effect: 'allow',
-        asked: true,
+        // A zero wait never put a card in front of the operator; a timed-out
+        // one did. The chip is green for the first and amber for the second.
+        asked: wait > 0,
         decided: true,
-        decidedBy: 'timeout',
-        reason: `No answer within ${Math.round(permissionTimeoutMs / 1000)} seconds — allowed once.`,
+        decidedBy: wait > 0 ? 'timeout' : 'full-auto',
+        reason:
+          wait > 0
+            ? `No answer within ${Math.round(wait / 1000)} seconds — allowed once.`
+            : 'Full auto answers immediately — allowed once.',
       });
       log.info(
-        `permission timed out${where ? ` (${where})` : ''}: ${p.request.action || 'tool call'} — no answer, allowed once`,
+        wait > 0
+          ? `permission timed out${where ? ` (${where})` : ''}: ${p.request.action || 'tool call'} — no answer, allowed once`
+          : `permission allowed immediately${where ? ` (${where})` : ''}: ${p.request.action || 'tool call'} — full auto, no card`,
       );
     } catch (err) {
-      log.warn(`could not answer a timed-out ${p.request.action || 'tool'} request: ${err.message}`);
+      // The request stays pending when the reply fails, so the operator still
+      // sees the card. That is the safe way for this to break.
+      pendingAsks.set(p.request.requestId, p);
+      p.timer = null;
+      log.warn(`could not answer a ${wait > 0 ? 'timed-out' : 'full-auto'} ${p.request.action || 'tool'} request: ${err.message}`);
     }
   }
 
@@ -170,6 +313,22 @@ export function createPermissionGate({
     if (p.timer) clearTimeout(p.timer);
     pendingAsks.delete(requestId);
     return true;
+  }
+
+  /** Settings changed the wait while cards were open: re-arm them on the new
+   *  number, including a new zero, which answers them at once. */
+  function retime() {
+    const next = waitMs();
+    for (const p of pendingAsks.values()) {
+      // An unrelated Settings save must not give a card that has already waited
+      // another full minute; only a changed wait moves it.
+      if (p.wait === next && (p.timer || p.queued)) continue;
+      if (p.timer) clearTimeout(p.timer);
+      p.timer = null;
+      p.queued = false;
+      arm(p);
+    }
+    return pendingAsks.size;
   }
 
   const shown = (request) => {
@@ -231,7 +390,7 @@ export function createPermissionGate({
       // request on record to become one.
       onDecision?.({ ...entry, effect: 'ask', asked: true, decided: false, decidedBy: null });
       log.info(`permission asked${who ? ` (${who})` : ''}: ${request.action || 'tool call'} ${what} — ${verdict.reason}`);
-      const pending = { request, info, entry, timer: null };
+      const pending = { request, info, entry, timer: null, queued: false };
       pendingAsks.set(request.requestId, pending);
       arm(pending);
       return verdict;
@@ -289,6 +448,11 @@ export function createPermissionGate({
       log.warn('permission.asked without a request or session id — left to the operator');
       return null;
     }
+    // The engine sometimes omits `source` (all shell asks measured on 2.1.2).
+    // Pair the ask with the call this session just announced; otherwise the
+    // decision would be stored without a tool-call id and no chip could be drawn.
+    if (!request.toolCallId) request.toolCallId = inferToolCall(request);
+    if (request.toolCallId) claimedTools.add(`${request.sessionId}\u0000${request.toolCallId}`);
     return answer(request, ev.directory).catch((err) => {
       // A policy that throws must not take the server down with it; the request
       // stays pending, which puts it in front of the operator.
@@ -297,5 +461,5 @@ export function createPermissionGate({
     });
   }
 
-  return { handle, requestOf, remember, setFullAuto, answered };
+  return { handle, observe, requestOf, remember, setFullAuto, answered, retime };
 }

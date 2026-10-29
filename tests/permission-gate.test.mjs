@@ -147,6 +147,67 @@ test('a decision is recorded against the tool call that asked', async () => {
   assert.equal(seen[0].asked, false, 'an auto-answer did not ask the operator');
 });
 
+test('a shell ask with no source is pinned to the call it blocks', async () => {
+  // Measured on 2.1.2: permission.asked for a shell has no `source`, so the
+  // request id alone could never name the chip's tool call.
+  const seen = [];
+  const engine = {
+    async getSession() { return { directory: PROJECT, metadata: {} }; },
+    async replyPermission() {},
+  };
+  const gate = createPermissionGate({
+    engine,
+    logger: quiet,
+    root: ROOT,
+    home: HOME,
+    onDecision: (entry) => seen.push(entry),
+  });
+  gate.observe({
+    type: 'session.tool.input.started',
+    sessionId: 'ses_1',
+    raw: { data: { sessionID: 'ses_1', id: 'call_shell', name: 'shell' } },
+  });
+  gate.observe({
+    type: 'session.tool.called',
+    sessionId: 'ses_1',
+    raw: {
+      data: {
+        sessionID: 'ses_1',
+        id: 'call_shell',
+        name: 'shell',
+        input: { command: 'Set-Content D:/scratch/out.txt hi' },
+      },
+    },
+  });
+  const ask = event('shell', ['Set-Content D:/scratch/out.txt hi']);
+  delete ask.raw.data.source;
+  await gate.handle(ask);
+  assert.equal(seen.length, 1);
+  assert.equal(seen[0].toolCallId, 'call_shell');
+});
+
+test('a source id still wins over the remembered calls', async () => {
+  const seen = [];
+  const engine = {
+    async getSession() { return { directory: PROJECT, metadata: {} }; },
+    async replyPermission() {},
+  };
+  const gate = createPermissionGate({
+    engine,
+    logger: quiet,
+    root: ROOT,
+    home: HOME,
+    onDecision: (entry) => seen.push(entry),
+  });
+  gate.observe({
+    type: 'session.tool.called',
+    sessionId: 'ses_1',
+    raw: { data: { sessionID: 'ses_1', id: 'call_other', name: 'edit', input: { filePath: 'src/app.js' } } },
+  });
+  await gate.handle(event('edit', ['src/app.js']));
+  assert.equal(seen[0].toolCallId, 'call_1');
+});
+
 test('an outside ask is recorded as pending, not as a decided chip', async () => {
   const seen = [];
   const engine = {
@@ -338,6 +399,49 @@ test('an unanswered ask is allowed once after the timeout', async () => {
   const decided = seen.find((entry) => entry.decided);
   assert.equal(decided?.decidedBy, 'timeout');
   assert.equal(decided?.effect, 'allow');
+});
+
+test('a zero wait answers at once and never leaves a card', async () => {
+  const seen = [];
+  const replies = [];
+  const engine = {
+    async getSession() { return { directory: PROJECT, metadata: {} }; },
+    async replyPermission(sessionId, requestId, decision) { replies.push(decision); },
+  };
+  const gate = createPermissionGate({
+    engine, logger: quiet, root: ROOT, home: HOME, getTimeoutMs: () => 0,
+    onDecision: (entry) => seen.push(entry),
+  });
+  gate.setFullAuto('ses_1', true);
+  await gate.handle(event('shell', ['Set-Content D:/scratch/zero.txt hi']));
+  await new Promise((r) => setImmediate(r));
+  assert.deepEqual(replies, ['once'], 'answered immediately, not after a timer');
+  assert.equal(gate.answered('req_1'), false, 'no pending card is left behind');
+  const decided = seen.find((entry) => entry.decided);
+  assert.equal(decided?.decidedBy, 'full-auto');
+  assert.equal(decided?.asked, false, 'the operator was never shown a card');
+});
+
+test('changing the wait re-arms a card that is already open', async () => {
+  const replies = [];
+  const seen = [];
+  let wait = 60_000;
+  const engine = {
+    async getSession() { return { directory: PROJECT, metadata: {} }; },
+    async replyPermission(sessionId, requestId, decision) { replies.push(decision); },
+  };
+  const gate = createPermissionGate({
+    engine, logger: quiet, root: ROOT, home: HOME, getTimeoutMs: () => wait,
+    onDecision: (entry) => seen.push(entry),
+  });
+  gate.setFullAuto('ses_1', true);
+  await gate.handle(event('shell', ['Set-Content D:/scratch/retime.txt hi']));
+  assert.deepEqual(replies, [], 'the card is waiting on the old number');
+  wait = 0;
+  gate.retime();
+  await new Promise((r) => setImmediate(r));
+  assert.deepEqual(replies, ['once'], 'the new zero answers it at once');
+  assert.equal(seen.find((entry) => entry.decided)?.decidedBy, 'full-auto');
 });
 
 test('an operator answer cancels the timeout', async () => {

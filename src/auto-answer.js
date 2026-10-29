@@ -11,6 +11,21 @@
 // always has options, so that fallback is for the rare free-text question.
 export const FULL_AUTO_MS = 60_000;
 
+/**
+ * How long Full auto waits before it answers for the operator, in milliseconds.
+ *
+ * The setting is `fullAuto.timeoutSec` in the config file, in seconds. Zero is
+ * deliberate and means "do not show the card at all": a permission is allowed
+ * the moment the policy asks, because a full-auto operator has already said yes.
+ * A missing or unreadable value falls back to the old minute.
+ */
+export function fullAutoTimeoutMs(config) {
+  const value = config?.fullAuto?.timeoutSec;
+  if (value === undefined || value === null || value === '') return FULL_AUTO_MS;
+  const seconds = Number(value);
+  return Number.isFinite(seconds) && seconds >= 0 ? seconds * 1000 : FULL_AUTO_MS;
+}
+
 const isRecommended = (option) =>
   /\(recommended\)/i.test(String(option?.label || '')) || /\(recommended\)/i.test(String(option?.value || ''));
 

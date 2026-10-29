@@ -16,6 +16,7 @@ import { createPermissionGate } from './permission-gate.js';
 import { createPermissionMemory } from './permission-memory.js';
 import { createRemoteToken, lanAddresses } from './remote.js';
 import { createPermissionLog } from './permission-log.js';
+import { fullAutoTimeoutMs } from './auto-answer.js';
 import { rulesFor, SINGLE_RULES } from './permissions.js';
 import { skillRules } from './skills.js';
 import { createProbe, discoverToolsetForModel } from './probe.js';
@@ -237,6 +238,7 @@ async function main() {
     root: ROOT,
     scratchRoot: SCRATCH_ROOT,
     memory: permissionMemory,
+    getTimeoutMs: () => fullAutoTimeoutMs(currentConfig),
     onDecision: (entry) => {
       permissionLog.record(entry);
       if (entry.decided) {
@@ -491,7 +493,10 @@ async function main() {
     const type = ev?.type;
     if (!ev?.sessionId) return;
     // A blocking permission request is judged before anything else: the engine
-    // is holding a tool until someone answers.
+    // is holding a tool until someone answers. The gate also sees the tool
+    // events, because a shell ask carries no `source.id` and needs the call it
+    // blocks to name the chip.
+    permissionGate.observe(ev);
     permissionGate.handle(ev);
     watchFirstToken(ev);
     if (/^session\.execution\.(succeeded|failed|interrupted)$/.test(type)) afterTurn(ev.sessionId, type);
