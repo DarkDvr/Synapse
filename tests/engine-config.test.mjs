@@ -154,11 +154,11 @@ const written = (dirs) => JSON.parse(fs.readFileSync(path.join(dirs.config, 'ope
   const c2 = normalize({ fullAuto: { timeoutSec: 0 } });
   check('zero is accepted: answer at once', c2.fullAuto.timeoutSec === 0, String(c2.fullAuto.timeoutSec));
   const c3 = normalize({});
-  check('a config that never mentions it defaults to a minute', c3.fullAuto.timeoutSec === 60, String(c3.fullAuto.timeoutSec));
+  check('a config that never mentions it defaults to 20 seconds', c3.fullAuto.timeoutSec === 20, String(c3.fullAuto.timeoutSec));
   const c4 = normalize({ fullAuto: { timeoutSec: -5 } });
   check('a negative wait is clamped to zero', c4.fullAuto.timeoutSec === 0, String(c4.fullAuto.timeoutSec));
   const c5 = normalize({ fullAuto: { timeoutSec: 'soon' } });
-  check('nonsense falls back to a minute', c5.fullAuto.timeoutSec === 60, String(c5.fullAuto.timeoutSec));
+  check('nonsense falls back to 20 seconds', c5.fullAuto.timeoutSec === 20, String(c5.fullAuto.timeoutSec));
 }
 
 const failed = checks.filter((c) => !c.ok);

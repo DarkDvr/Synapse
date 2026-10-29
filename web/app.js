@@ -180,7 +180,7 @@ const state = {
   // "Keep building": the open session's switch for running the plan to the end.
   auto: false,
   // "Full auto": unanswered permission cards allow once after the wait set in
-// Settings → Workers (60 seconds by default; 0 answers at once, no card).
+// Settings → Workers (20 seconds by default; 0 answers at once, no card).
   fullAuto: false,
   permissions: [],
   busy: false,
@@ -1607,12 +1607,12 @@ const sessionMode = (s) => (s?.single ? 'single' : 'multi');
 /**
  * The Full auto wait, in seconds, from the saved config. 0 is real: permission
  * cards are answered without ever being drawn. The menu and the cards say the
- * number that is actually set rather than a stale "60".
+ * number that is actually set rather than a stale "20".
  */
 function fullAutoWaitSec() {
   const raw = state.config?.fullAuto?.timeoutSec;
-  const n = raw === undefined || raw === null || raw === '' ? 60 : Number(raw);
-  return Number.isFinite(n) && n >= 0 ? Math.floor(n) : 60;
+  const n = raw === undefined || raw === null || raw === '' ? 20 : Number(raw);
+  return Number.isFinite(n) && n >= 0 ? Math.floor(n) : 20;
 }
 
 /**
@@ -7287,10 +7287,10 @@ function collectSettings() {
       writePath(c, path, String(value).split(';').map((p) => p.trim()).filter(Boolean));
       continue;
     }
-    // An empty wait is not zero: clearing the box restores the minute default,
+    // An empty wait is not zero: clearing the box restores the 20-second default,
     // rather than silently making Full auto answer every card at once.
     if (path === 'fullAuto.timeoutSec' && String(el.value).trim() === '') {
-      writePath(c, path, 60);
+      writePath(c, path, 20);
       continue;
     }
     // The ladder is a comma list in the form and an array in the config.

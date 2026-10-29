@@ -25,10 +25,10 @@ export function createPermissionGate({
   onDecision,
   memory,
   // How long an unanswered card waits before it is allowed once. Tests pass a
-  // few milliseconds; the product reads `fullAuto.timeoutSec` (60 seconds by
+  // few milliseconds; the product reads `fullAuto.timeoutSec` (20 seconds by
   // default). `getTimeoutMs` wins when present so a Settings change applies to
   // the next ask without a restart. Zero is valid: no card is shown at all.
-  permissionTimeoutMs = 60_000,
+  permissionTimeoutMs = 20_000,
   getTimeoutMs = null,
 }) {
   const log = logger.channel('app');
@@ -44,7 +44,7 @@ export function createPermissionGate({
   /** The wait, read each time so a Settings change applies to the next ask.
    *  Zero is a real value: answer at once, with no card. */
   const waitMs = () => {
-    const fallback = Number.isFinite(Number(permissionTimeoutMs)) ? Math.max(0, Number(permissionTimeoutMs)) : 60_000;
+    const fallback = Number.isFinite(Number(permissionTimeoutMs)) ? Math.max(0, Number(permissionTimeoutMs)) : 20_000;
     if (!getTimeoutMs) return fallback;
     const ms = Number(getTimeoutMs());
     // A missing or broken setting must not silently become "allow at once".
@@ -321,7 +321,7 @@ export function createPermissionGate({
     const next = waitMs();
     for (const p of pendingAsks.values()) {
       // An unrelated Settings save must not give a card that has already waited
-      // another full minute; only a changed wait moves it.
+      // another full wait; only a changed wait moves it.
       if (p.wait === next && (p.timer || p.queued)) continue;
       if (p.timer) clearTimeout(p.timer);
       p.timer = null;

@@ -9,7 +9,7 @@
 // Free text and numbers have no option to recommend: the field's own default is
 // used, and an empty string or null otherwise. A dropdown or a radio question
 // always has options, so that fallback is for the rare free-text question.
-export const FULL_AUTO_MS = 60_000;
+export const FULL_AUTO_MS = 20_000;
 
 /**
  * How long Full auto waits before it answers for the operator, in milliseconds.
@@ -17,7 +17,7 @@ export const FULL_AUTO_MS = 60_000;
  * The setting is `fullAuto.timeoutSec` in the config file, in seconds. Zero is
  * deliberate and means "do not show the card at all": a permission is allowed
  * the moment the policy asks, because a full-auto operator has already said yes.
- * A missing or unreadable value falls back to the old minute.
+ * A missing or unreadable value falls back to 20 seconds.
  */
 export function fullAutoTimeoutMs(config) {
   const value = config?.fullAuto?.timeoutSec;

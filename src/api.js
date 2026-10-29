@@ -1380,17 +1380,11 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
     },
 
     /**
-     * "Permission timeout": while it is on, a permission request left to the
-     * operator is allowed once if nobody answers within a minute. It only ever
-     * answers `ask` verdicts — a harness write or a credential store is denied by
-     * the policy before a card exists, so the timeout cannot widen those.
-     */
-    /**
      * "Full auto": while it is on, a request left to the operator takes the
-     * default after a minute — a permission card is allowed once, a question gets
-     * the Recommended option (or the top one). It only ever answers `ask`
-     * verdicts: a harness write or a credential store is denied before a card
-     * exists, so it cannot widen those walls.
+     * default after `fullAuto.timeoutSec` (20 seconds by default) — a permission
+     * card is allowed once, a question gets the Recommended option (or the top
+     * one). It only ever answers `ask` verdicts: a harness write or a credential
+     * store is denied before a card exists, so it cannot widen those walls.
      */
     setFullAuto: async (sessionId, body) => {
       requireReady();

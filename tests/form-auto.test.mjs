@@ -1,6 +1,7 @@
-// The forms half of Full auto: a form nobody answers is answered after a minute
-// with the recommended (or top) option. It runs on the server, so a closed
-// browser cannot stop it; it must answer once and never retry a failure in a loop.
+// The forms half of Full auto: a form nobody answers is answered after the
+// configured wait (20 seconds by default) with the recommended (or top) option.
+// It runs on the server, so a closed browser cannot stop it; it must answer once
+// and never retry a failure in a loop.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
@@ -31,7 +32,7 @@ function fake({ forms = [form()], meta = {}, fail = false } = {}) {
   return { engine, replies };
 }
 
-test('full auto answers a form after the minute, with the recommended option', async () => {
+test('full auto answers a form after its wait, with the recommended option', async () => {
   let now = 1000;
   const { engine, replies } = fake();
   const seenAnswers = [];
@@ -67,6 +68,20 @@ test('a zero wait answers on the next sweep', async () => {
   await auto.tick();
   assert.equal(replies.length, 1, 'no wait when the setting is zero');
   assert.deepEqual(replies[0], { sessionId: 'ses_1', formId: 'f1', answer: { q: 'a' } });
+});
+
+test('the default wait is 20 seconds', async () => {
+  let now = 1000;
+  const { engine, replies } = fake();
+  const auto = createFormAuto({ engine, logger: quiet, now: () => now });
+  auto.setFullAuto('ses_1', true);
+  await auto.tick();
+  now += 19_000;
+  await auto.tick();
+  assert.equal(replies.length, 0, 'not before 20 seconds');
+  now += 2_000;
+  await auto.tick();
+  assert.equal(replies.length, 1, 'answered after 20 seconds');
 });
 
 test('full auto is off unless the session says so', async () => {

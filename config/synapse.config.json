@@ -341,7 +341,7 @@
     "resetOnBoot": false
   },
   "fullAuto": {
-    "timeoutSec": 60
+    "timeoutSec": 20
   },
   "cleanup": {
     "onFinish": true,

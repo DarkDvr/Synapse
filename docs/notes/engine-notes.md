@@ -811,7 +811,7 @@ temp folder is no longer used.
 
 **Full auto can answer for the operator (28 Oct).** With the session's
 `synapse.fullAuto` on — the cog's second switch — a request left to the operator
-takes the default after `fullAuto.timeoutSec` (60 seconds by default, Settings →
+takes the default after `fullAuto.timeoutSec` (20 seconds by default, Settings →
 Workers). A permission card is **allowed once** (`decidedBy: 'timeout'`). A
 question is answered with the **Recommended** option, or the top one when none is
 marked (`src/auto-answer.js`); a server-side sweep every five seconds answers it

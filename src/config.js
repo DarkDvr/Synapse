@@ -83,7 +83,7 @@ export const DEFAULTS = {
     // How long Full auto waits before it answers an unanswered permission card
     // or question, in seconds. 0 is deliberate: a permission is answered at
     // once and no card is drawn. See docs/notes/engine-notes.md.
-    timeoutSec: 60,
+    timeoutSec: 20,
   },
   cleanup: {
     // What a project left running, stopped when the project finishes and again
@@ -200,7 +200,7 @@ export function normalize(raw) {
   cfg.tools = cfg.tools || {};
   cfg.tools.resetOnBoot = cfg.tools.resetOnBoot !== false;
   // Full auto's wait. 0 is accepted and means "answer at once, no card"; a
-  // negative or unreadable value falls back to the old minute.
+  // negative or unreadable value falls back to the 20-second default.
   cfg.fullAuto = isPlainObject(cfg.fullAuto) ? cfg.fullAuto : {};
   {
     const raw = cfg.fullAuto.timeoutSec;
