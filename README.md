@@ -9,8 +9,11 @@ genuine **OpenCode** engine over its HTTP + SSE API and rebuilds the interface
 from scratch — today that engine, tomorrow anything that implements the contract
 in `src\engines\base.js`.
 
-Everything lives in this folder. Node, the engine and the fonts travel with it, so
-a copied folder runs on a PC with nothing installed.
+**Version 1.0.0** — Windows 10/11, x64.
+
+The release zip carries Node, the engine and the fonts, so a copied folder runs
+on a PC with nothing installed. This repository is the source that builds it;
+the zip is the runnable folder.
 
 ## Requirements
 
@@ -60,7 +63,7 @@ holds a handle to.
   the last event.
 - **Stage** — the role cards, then the chat. The Architect is always on screen;
   **Multi** reveals the six workers.
-- **Rail** — the project's plan on the left, the live tool census on the right.
+- **Rail** — the Project Plan on the left, the live tool census on the right.
 
 A card is a control as well as a status: its model and thinking effort are chosen
 there, its dot says whether that role has been used in this session, and while a
@@ -71,8 +74,8 @@ part.
 
 A project **is** a directory — `..\Synapse.Projects\<name>`, beside the harness
 rather than inside it, because a model with file tools must never be one absolute
-path from editing Synapse itself. **General** is always present and cannot be
-deleted.
+path from editing Synapse itself. There is no built-in project: an empty registry
+is an empty rail, and adding one creates its folder.
 
 ```
 <project>\
@@ -84,32 +87,32 @@ deleted.
   .synapse\runs.jsonl       ← append-only record of every delegation
 ```
 
-Adding a project creates the folder. Removing one only forgets it — nothing on
-disk is deleted — and releases the folder so you can delete it straight after.
-Re-adding a folder that already holds a plan asks first, showing what is at stake.
+Removing a project only forgets it — nothing on disk is deleted — and releases the
+folder so you can delete it straight after. Re-adding a folder that already holds
+a plan asks first, showing what is at stake.
 
-## The work list and the pipeline
+## The Project Plan and the pipeline
 
-The Architect keeps its list of work as a file, with its ordinary file tools.
+The Architect keeps the Project Plan as a file, with its ordinary file tools.
 Synapse only reads and renders it and **never repairs it**: a malformed file is
 named, in the pane and in the Architect's own brief, so the model fixes its own
 document.
 
-The list is live. It starts with the work the Architect can see and grows while the
-work happens — a defect a worker reported, a decision the build exposed — and every
-row added that way is marked `found` in the pane, so a list that changed after you
-looked says so. What stays fixed is the scope: `features.json` is the agreed
-contract, and a new feature still comes back to you as a question.
+The Project Plan is live. It starts with the work the Architect can see and grows
+while the work happens — a defect a worker reported, a decision the build exposed —
+and every row added that way is marked `found` in the pane, so a Project Plan that
+changed after you looked says so. What stays fixed is the scope: `features.json`
+is the agreed contract, and a new feature still comes back to you as a question.
 
-The pipeline behind it is a **menu, not a checklist** — a clock pays for invent,
-design, build and review, a one-file script pays for two tasks:
+The pipeline behind the plan is a **menu, not a checklist** — a clock pays for
+invent, design, build and review, a one-file script pays for two tasks:
 
 | Role | Produces |
 |---|---|
 | Inventor | ranked ideas, each with a one-line why and an effort |
 | Architect | the plan, the decisions, the judgement after every worker |
 | Designer | a design spec, and mock pages to choose from |
-| Coders 1–3 | the code, in `bin\` |
+| Coders 1–3 | the code |
 | QC | what a real person would break or misread, then a fix round |
 
 Two decisions are yours, and the Architect asks for them with a form: **which of

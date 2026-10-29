@@ -18,8 +18,8 @@ A **project** is busy when any of these is true:
 An idle project is free. A project waiting for a card is busy but **answerable** —
 that is the case the laptop exists for.
 
-**General is per session.** Every General conversation gets its own folder, so
-General sessions lock only themselves; one General chat must never block another.
+**A project is one conversation.** Every project has its own folder and chat, so a
+busy project locks only itself; one project's chat must never block another.
 
 Busy is derived from work, never from a click. A tab that closes, crashes or
 sleeps therefore cannot hold a project. Nothing to expire, nothing to leak.

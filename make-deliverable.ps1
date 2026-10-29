@@ -68,6 +68,7 @@ try {
 
   $nodeVersion = (& (Join-Path $root 'bin\node\node.exe') --version).Trim()
   $engineVersion = (& (Join-Path $root 'bin\opencode\opencode.exe') --version).Trim()
+  $appVersion = (Get-Content -LiteralPath (Join-Path $root 'package.json') -Raw | ConvertFrom-Json).version
   $commit = 'unknown'
   $dirty = ''
   try {
@@ -181,7 +182,7 @@ try {
   # ── the note for whoever plugs it in ─────────────────────────────────────
   $builtAt = Get-Date -Format 'yyyy-MM-dd HH:mm'
   $readme = @"
-Synapse — travel copy
+Synapse $appVersion — travel copy
 =====================
 
 Built $builtAt from commit $commit$dirty.

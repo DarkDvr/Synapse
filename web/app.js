@@ -5723,7 +5723,7 @@ function renderComposer() {
   // different from the Architect's in that respect.
   //
   // No sentence explains it. One used to sit above the controls ("fever-tracker is
-  // working — started from 192.168.50.115"), and the operator asked for it to go:
+  // working — started from 192.0.2.115"), and the operator asked for it to go:
   // it took a line off the chat to say what the rail's dot and the role cards
   // already say. A dead Send with no explanation was accepted in exchange.
   $('sendBtn').disabled = (state.busy && !hasSession) || asking || held || state.compacting;

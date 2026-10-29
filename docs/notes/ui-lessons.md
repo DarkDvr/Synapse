@@ -278,8 +278,8 @@ clear it: a test is not work.
   `tests/stream-view.test.mjs` holds the numbers, including that no frame jumps the
   whole way and that a 60Hz and a 144Hz run land within a pixel of each other.
   Reduced motion skips the spring entirely.
-- **The app icon is generated, not drawn.** `references\synapse_icon_full.png`
-  (471×472) is the source; `web\icon-{16,32,48,64,180,256}.png` and `favicon.ico`
+- **The app icon is generated, not drawn.** `web\icon-256.png` is the largest
+  rendered copy; `web\icon-{16,32,48,64,180,256}.png` and `favicon.ico`
   are rendered from it, and the sidebar mark and the welcome screen use the same
   files rather than a glyph. There is no image tool on this machine, so the
   rasterizer is the browser: one headless Edge launch draws every size onto a
@@ -939,7 +939,7 @@ bold, italic, strikethrough and links: the range these models actually produce.
   rail's `working` chip beside a session name (27 Oct: the rail is a list of names
   and the chip took the width one needed — the yellow dot and the project rule
   already say "working"), and the composer's busy sentence above the controls
-  ("this project is working — started from 192.168.50.115", which cost a line of
+  ("this project is working — started from 192.0.2.115", which cost a line of
   chat to repeat what the cards say; a held Send with no caption was accepted in
   exchange, and the server still refuses with a toast if one is pressed).
 - **The left panel is yellow now, not violet.** The current project is the

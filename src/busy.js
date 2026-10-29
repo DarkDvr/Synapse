@@ -4,8 +4,8 @@
 // engine reports as active, or a card waiting to be answered. That is what makes
 // the guard safe across a crashed tab — there is nothing to expire.
 //
-// General is per session because every General conversation gets its own folder;
-// its directory is the session's, so the same comparison locks only itself.
+// A project is one conversation in one folder, so a project's busy state is its
+// own; two projects never block each other.
 const norm = (value) =>
   String(value || '')
     .replace(/\\/g, '/')

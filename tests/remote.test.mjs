@@ -20,7 +20,7 @@ test('loopback is only this machine', () => {
 });
 
 test('private addresses are the RFC1918 ranges, not the internet', () => {
-  for (const address of ['192.168.0.1', '192.168.50.10', '10.0.0.5', '172.16.4.2', '172.31.255.254']) {
+  for (const address of ['192.168.50.1', '192.168.50.10', '10.0.0.5', '172.16.4.2', '172.31.255.254']) {
     assert.equal(isPrivateAddress(address), true, address);
   }
   for (const address of ['8.8.8.8', '172.32.0.1', '11.0.0.1', '192.169.1.1', '127.0.0.1', 'not-an-ip']) {

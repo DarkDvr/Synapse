@@ -1,7 +1,11 @@
 # Runtime state - regenerated on start
 data/
 logs/
+.synapse/
 # (the projects root is a sibling of this folder, so it needs no entry here)
+
+# Local design references - kept on the machine, not in the repository
+references/
 
 # The app. shell\build.ps1 makes it, it travels with the folder, and one exe at the
 # root is the whole launcher - not something to carry in history.
@@ -9,7 +13,7 @@ Synapse.exe
 Synapse.pdb
 Synapse.exe.WebView2/
 shell/dist/
-# the deliverable zip create_deliverable.bat writes at the root
+# the local deliverable zip
 Synapse.zip
 
 # Node
@@ -27,7 +31,7 @@ bin/
 # .NET build output (a project or the template)
 obj/
 
-# create_deliverable.bat output
+# local build output
 dist/
 
 # Vendored build caches (vendor-node.ps1, vendor-nuget.ps1) - they travel with the folder

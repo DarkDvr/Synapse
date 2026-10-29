@@ -89,7 +89,7 @@ the cards and the commits, not the code. One reason per sentence, not a chain.
   while a delegation is in flight, and **red means blocked and nothing else** (it
   carried two meanings for one day: requester green / worker red borders, which
   collided with the blocked dot).
-- **All button labels are Title Case** (see `references\UI UX\DESIGN.md` §8).
+- **All button labels are Title Case.**
   This applies to buttons only — not headings, body text, labels or tooltips.
 
 ### Working style rules
