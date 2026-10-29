@@ -1643,7 +1643,7 @@ function renderKeep() {
     const wait = fullAutoWaitSec();
     hint.textContent =
       wait === 0
-        ? 'Allow at once and answer questions with the recommended option — no card is shown'
+        ? 'Allow at once, no card; questions take the recommended option on the next check'
         : `Allow once, or answer questions with the recommended option, after ${wait} seconds`;
   }
   btn.title =
@@ -1736,7 +1736,7 @@ async function setFullAuto(next) {
       state.fullAuto ? 'Full Auto On' : 'Full Auto Off',
       state.fullAuto
         ? wait === 0
-          ? 'Permissions are allowed at once and questions take the recommended (or top) option. No permission card is shown.'
+          ? 'Permissions are allowed at once and no permission card is shown. Questions take the recommended (or top) option on the next check.'
           : `Unanswered requests take the default after ${wait} seconds: permission cards allow once, questions take the recommended (or top) option.`
         : 'Every request waits for you again.',
     );
@@ -4967,7 +4967,7 @@ function renderAskPanel() {
           : 'another chat is waiting on you'
       }${state.fullAuto
         ? fullAutoWaitSec() === 0
-          ? ' · full auto answers at once'
+          ? ' · full auto answers on its next check'
           : ` · full auto answers in ${fullAutoWaitSec()}s`
         : ''}</span>
     </div>
@@ -6820,7 +6820,7 @@ function settingsWorkers(c) {
       }) +
         `<p class="set-note">Full auto is switched on per chat, in the cog beside Send. This sets how long it waits once it is on. ` +
         `A permission is still allowed only once, and the policy still refuses a write inside Synapse or a credential store before a card exists. ` +
-        `At 0, a permission is answered immediately and no card is drawn.</p>`,
+        `At 0, a permission is answered immediately and no card is drawn; a question is answered on the next five-second check.</p>`,
     ),
     setGroup(
       'Timers',
