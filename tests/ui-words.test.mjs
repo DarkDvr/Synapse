@@ -107,4 +107,5 @@ test('the final answer has its own rule, and work does not', () => {
   const js = read('web/app.js');
   assert.match(js, /is-answer/);
   assert.match(js, /hasTool/);
+  assert.match(js, /turnWork \|\| hasWork/);
 });

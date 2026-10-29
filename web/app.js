@@ -3669,10 +3669,18 @@ function renderTranscript() {
   ].sort((x, y) => x.at - y.at);
   let html = postHtml;
   let next = 0;
+  // Whether this turn has done any work before the message being drawn. The
+  // answer rule is a separator from reasoning/tool calls; a plain reply with
+  // neither is one block and should not grow a gap for work that never happened.
+  let turnWork = false;
   for (const m of showable) {
+    if (m.type === 'user' || m.type === 'synthetic' || m.type === 'system') turnWork = false;
     const at = Number(m.created) || 0;
     while (next < items.length && at && items[next].at < at) html += items[next++].html;
-    html += renderMessage(m);
+    html += renderMessage(m, { turnWork });
+    const parts = m.parts || [];
+    if (m.type === 'assistant' && parts.some((p) => p.type === 'reasoning' || p.type === 'tool')) turnWork = true;
+    if (m.type === 'idle') turnWork = false;
   }
   while (next < items.length) html += items[next++].html;
   el.innerHTML = html + pending;
@@ -4274,7 +4282,7 @@ function traceSig() {
 }
 
 // The role label shares the first line with the text; the time rides the right.
-function renderMessage(m) {
+function renderMessage(m, { turnWork = false } = {}) {
   const t = hhmm(m.created);
   const stamp = t ? `<span class="msg-time">${t}</span>` : '';
 
@@ -4328,12 +4336,14 @@ function renderMessage(m) {
     // reasoning and tool cards above it. Narration in a step that also calls a
     // tool stays plain — that is work, not the answer.
     const hasTool = parts.some((p) => p.type === 'tool');
+    const hasWork = parts.some((p) => p.type === 'reasoning' || p.type === 'tool');
     const lastText = parts.map((p, i) => (p.type === 'text' ? i : -1)).filter((i) => i >= 0).pop();
     for (const [i, part] of parts.entries()) {
       // The model's actual answer goes in its own panel, rendered as markdown,
-      // so it is visually separate from reasoning and tool noise.
+      // so it is visually separate from reasoning and tool noise. The separator
+      // only exists when there was work in this turn to separate it from.
       if (part.type === 'text') {
-        const answer = !hasTool && i === lastText ? ' is-answer' : '';
+        const answer = !hasTool && i === lastText && (turnWork || hasWork) ? ' is-answer' : '';
         body.push(`<div class="msg-answer${answer}">${renderMarkdown(part.text)}</div>`);
       }
       else if (part.type === 'reasoning')
@@ -7136,7 +7146,10 @@ function settingsAbout() {
         <dt>Licence</dt><dd>AGPL-3.0-only</dd>
       </dl>
       <p class="about-free">Free software: use it, share it, change it. Keep the copyright notices; a modified version must say so. No account, no subscription, no telemetry.</p>
-      <p class="about-free"><button class="btn btn-secondary btn-sm" type="button" data-check-updates>Check for Updates</button></p>
+      <div class="about-actions">
+        <button class="btn btn-primary btn-sm" type="button" data-check-updates>Check for Updates</button>
+        <button class="btn btn-secondary btn-sm" type="button" data-close-about>Close</button>
+      </div>
     </div>`;
 }
 
@@ -8092,6 +8105,7 @@ document.addEventListener('keydown', (e) => {
   $('settingsBtn').addEventListener('click', openSettings);
   $('closeSettings').addEventListener('click', closeSettings);
   $('settingsBody').addEventListener('click', (e) => {
+    if (e.target.closest('[data-close-about]')) { closeSettings(); return; }
     if (!e.target.closest('[data-check-updates]')) return;
     closeSettings();
     openUpdateDialog();
