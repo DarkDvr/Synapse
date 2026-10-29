@@ -102,7 +102,8 @@ test('the rail names LAN clients under the address, not a Views row', () => {
 // the green rule; narration in a step that also calls a tool stays plain.
 test('the final answer has its own rule, and work does not', () => {
   const css = read('web/synapse.css');
-  assert.match(css, /\.msg\.assistant \.msg-answer\.is-answer\s*\{[^}]*border-left/);
+  assert.match(css, /\.msg\.assistant \.msg-answer\.is-answer\s*\{[^}]*margin-top: 20px/);
+  assert.match(css, /\.msg\.assistant \.msg-answer\.is-answer::before\s*\{[^}]*background: var\(--surface\)/);
   const js = read('web/app.js');
   assert.match(js, /is-answer/);
   assert.match(js, /hasTool/);

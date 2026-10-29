@@ -1564,12 +1564,15 @@ body[data-mode="single"] #runAuto { display: none; }
   margin: 5px 0 0;
   font-size: 12.5px; line-height: 1.55; color: #d3d6db;
 }
-/* The answer, not the work: a quiet green rule separates the prose from the
-   reasoning and tool cards above it. It starts at the answer's first line, so a
-   long reply reads as one column instead of another grey block. */
+/* The answer, not the work: the speaker's rule is broken for one line above the
+   prose, then continues beside the answer. A second rule would have read as two
+   lines; the gap is what separates the reply from the reasoning and tool cards. */
 .msg.assistant .msg-answer.is-answer {
-  margin-top: 20px; padding: 1px 0 1px 12px;
-  border-left: 2px solid rgba(53, 192, 138, 0.55);
+  position: relative; margin-top: 20px;
+}
+.msg.assistant .msg-answer.is-answer::before {
+  content: ""; position: absolute; left: -12px; top: -20px;
+  width: 2px; height: 20px; background: var(--surface);
 }
 .msg-answer > :first-child { margin-top: 0; }
 .msg-answer > :last-child { margin-bottom: 0; }
