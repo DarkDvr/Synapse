@@ -848,12 +848,20 @@ clear it: a test is not work.
   scaffolding and context dumps from the engine are not chat — rendering them
   once leaked AGENTS.md prose and diff hunks into the transcript above the
   user's own message. Errors still show, whatever type carries them.
+- **A You message is a centred block, not a full-width row (29 Oct).** The
+  operator's screenshot showed a short message stretched across the transcript
+  with the timestamp floating at the far edge, which read as a left-aligned strip
+  rather than a message. `.msg.user .msg-body` is `width: fit-content` with an
+  86% ceiling and `margin: 0 auto`; the timestamp is absolute inside that block,
+  so it travels with the message. Long messages still use the column, short ones
+  are only as wide as they need, and the 2px speaker rule moves with the block.
 - **A sent message can be reused.** The small **Reuse** button beside a `You`
   message (29 Oct) copies its words and the attachment bytes the engine kept on
   the message back into the composer. It is a copy, not a resend: the operator can
   edit first, and clicking it must never throw away a draft — an empty box is
-  replaced, a draft is appended, and attachments stop at the six-file limit. It is
-  quiet (55% opacity) because the transcript is for reading, not a toolbar.
+  replaced, a draft is appended, and attachments stop at the message's 48 MB
+  total (24 files is only a sanity cap). It is quiet (55% opacity) because the
+  transcript is for reading, not a toolbar.
 - **One assistant block per turn, not per step.** The engine emits an assistant
   message per step (reasoning, tool call, reasoning…), so rendering them raw gave
   a three-question chat fourteen "Architect" headers. `groupTurns()` merges
@@ -1022,10 +1030,11 @@ bold, italic, strikethrough and links: the range these models actually produce.
   a `pasted-text-*.txt` attachment instead of a wall in the box; an image copied
   only as HTML (`data:` URI, no File) is decoded too. Everything is read into
   memory and travels as base64 with the message — **no temp file is written**, so
-  there is nothing to clean up. The six-file / 8 MB rule is shared with the
-  paperclip picker. Tested with synthetic clipboard events: 13 lines produced the
-  text-file chip, a 1×1 PNG produced an image chip, a `notes.txt` File produced a
-  file chip, and a small paste was left to the browser.
+  there is nothing to clean up. The 48 MB total / 8 MB per-file rule is shared with
+  the paperclip picker; 24 files is only a sanity cap. Tested with synthetic
+  clipboard events: 13 lines produced the text-file chip, a 1×1 PNG produced an
+  image chip, a `notes.txt` File produced a file chip, and a small paste was left
+  to the browser.
 - **"Keep" is a deliberate project copy, not a temp file (28 Oct).** Each attachment
   chip carries a small boxed checkbox and the word **Keep**; the tooltip says it
   saves a copy in `.synapse/attachments/` that survives compaction and workers can

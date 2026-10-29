@@ -48,11 +48,22 @@ const b64 = (bytes) => Buffer.alloc(bytes, 0x41).toString('base64');
 }
 
 {
-  const many = Array.from({ length: 9 }, (_, i) => ({ name: `f${i}`, data: b64(10) }));
+  const many = Array.from({ length: 30 }, (_, i) => ({ name: `f${i}`, data: b64(10) }));
   const out = normalizeAttachments(many);
-  check('six is the ceiling for one message', out.length === 6, String(out.length));
+  check('24 is the count cap for one message', out.length === 24, String(out.length));
+  const twelve = Array.from({ length: 12 }, (_, i) => ({ name: `small${i}.png`, data: b64(1024) }));
+  check('twelve small files travel together', normalizeAttachments(twelve).length === 12);
   const longName = normalizeAttachments([{ name: 'a'.repeat(400), data: b64(4) }]);
   check('a huge name is cut to 120', longName[0].name.length === 120, String(longName[0].name.length));
+}
+
+{
+  // The total is the real limit: the old six-file ceiling was also 48 MB, so a
+  // message may carry six full-size files or many small ones, not both.
+  const full = Array.from({ length: 6 }, (_, i) => ({ name: `big${i}`, data: b64(8 * 1024 * 1024) }));
+  check('six full-size files are allowed', normalizeAttachments(full).length === 6);
+  const over = normalizeAttachments([...full, { name: 'one-more', data: b64(2) }]);
+  check('a file past the 48 MB total is dropped', over.length === 6, String(over.length));
 }
 
 const failed = checks.filter((c) => !c.ok);

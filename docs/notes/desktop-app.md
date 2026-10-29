@@ -235,6 +235,16 @@ with the **.NET 10 Desktop Runtime**, which is the one thing it does not install
 itself. The exe is a small framework-dependent app on purpose; when the runtime is
 missing, Windows says so before Synapse has run a line.
 
+For a copy that can leave this machine — no `data\`, `logs\`, projects, provider
+keys, tests, docs, references, shell sources or git history — run
+`create_deliverable.bat`. It prompts for a destination (or takes one as its first
+argument). It refuses the Synapse folder, anything inside it, any folder that
+contains it, and the projects root. The PowerShell worker stages the copy beside
+the destination and replaces an existing folder only when that folder carries its
+own `.synapse-deliverable` marker and the operator confirms; it has no `rmdir` for
+anything else. The destination is the only thing it writes, and the staging folder
+is removed only on success.
+
 The rule that makes the rest true: **a path that names a place on this machine is a
 hint, never an instruction.** The config and the runtime state travel with the folder,
 so they still name the machine the copy came from. Measured on a second PC:

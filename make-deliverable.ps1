@@ -1,4 +1,4 @@
-# make-deliverable.ps1 — a copy that runs on another PC.
+﻿# make-deliverable.ps1 — a copy that runs on another PC.
 #
 #   .\make-deliverable.ps1                       # -> E:\shared\Synapse
 #   .\make-deliverable.ps1 -Destination D:\Apps\Synapse
@@ -91,6 +91,21 @@ try {
   if ($destTrim.StartsWith($rootFull + '\', [StringComparison]::OrdinalIgnoreCase)) {
     throw 'the destination is inside the Synapse folder'
   }
+  # A destination that *contains* Synapse is worse than one inside it: replacing
+  # it would take the source with it. F:\dev is not a deliverable.
+  if ($rootFull.StartsWith($destTrim + '\', [StringComparison]::OrdinalIgnoreCase)) {
+    throw "the destination contains the Synapse folder: $destFull — pick a folder beside it, not above it"
+  }
+  # The projects root is the operator's own work. A deliverable must not contain
+  # it, sit inside it, or be it; a typo there is not recoverable from this script.
+  $projectsFull = [IO.Path]::GetFullPath((Join-Path $root '..\Synapse.Projects')).TrimEnd('\')
+  $insideProjects =
+    $destTrim -ieq $projectsFull -or
+    $destTrim.StartsWith($projectsFull + '\', [StringComparison]::OrdinalIgnoreCase)
+  $containsProjects = $projectsFull.StartsWith($destTrim + '\', [StringComparison]::OrdinalIgnoreCase)
+  if ($insideProjects -or $containsProjects) {
+    throw "the destination overlaps the projects folder ($projectsFull) — pick a separate folder"
+  }
   $forbidden = @(
     [IO.Path]::GetPathRoot($destFull),
     $destParent,
@@ -111,6 +126,10 @@ try {
   if (Test-Path -LiteralPath $destFull) {
     if (-not (Test-Path -LiteralPath $destFull -PathType Container)) {
       throw "destination exists and is not a folder: $destFull"
+    }
+    $destItem = Get-Item -LiteralPath $destFull -Force
+    if ($destItem.Attributes -band [IO.FileAttributes]::ReparsePoint) {
+      throw "destination is a junction or symbolic link: $destFull — refusing to follow it"
     }
     if (-not $Force) { throw "destination already exists: $destFull (use -Force to replace a previous deliverable)" }
     if (-not (Test-Path -LiteralPath $marker)) {

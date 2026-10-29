@@ -22,11 +22,14 @@ import { setProviderKey, providerKeyState, maskKey } from './secrets.js';
 import { probeToolchain } from './toolchain.js';
 import { busyInfo, busyMessage } from './busy.js';
 
-// What an attachment may be, in bytes before base64. One message carrying eight
-// megabytes is already a large prompt; a hundred is a request the provider will
-// refuse after we have paid to send it.
+// What an attachment may be. The old rule was six files of up to 8 MB each, which
+// made twelve small screenshots impossible for no reason: the real cost is the
+// bytes the provider is asked to read, not the number of names. The total is the
+// same 48 MB the old six-file ceiling allowed; the count stays only as a sanity
+// cap so one message cannot become an unreadable wall of chips.
 const ATTACH_MAX_BYTES = 8 * 1024 * 1024;
-const ATTACH_MAX_COUNT = 6;
+const ATTACH_TOTAL_BYTES = 48 * 1024 * 1024;
+const ATTACH_MAX_COUNT = 24;
 
 /**
  * The files on an outgoing message, as the engine wants them.
@@ -125,21 +128,27 @@ function recycleFolder(dir) {
 export function normalizeAttachments(list) {
   if (!Array.isArray(list)) return [];
   const out = [];
+  let total = 0;
   for (const item of list) {
     if (!item || typeof item !== 'object') continue;
+    if (out.length >= ATTACH_MAX_COUNT) break;
     const data = String(item.data || '').replace(/^data:[^;]*;base64,/, '');
     if (!data || !/^[A-Za-z0-9+/]+={0,2}$/.test(data)) continue;
     // Base64 length to bytes, minus the padding: len*3/4 alone over-counts by the
     // two '=' of a single-byte tail, which refused a file of exactly the limit.
     const pad = data.endsWith('==') ? 2 : data.endsWith('=') ? 1 : 0;
-    if (Math.floor((data.length * 3) / 4) - pad > ATTACH_MAX_BYTES) continue;
+    const size = Math.floor((data.length * 3) / 4) - pad;
+    if (size > ATTACH_MAX_BYTES) continue;
+    // One file over the message budget is dropped; a later, smaller one may still
+    // fit, so this does not abandon the rest.
+    if (total + size > ATTACH_TOTAL_BYTES) continue;
+    total += size;
     out.push({
       name: String(item.name || 'attachment').slice(0, 120),
       mime: String(item.mime || 'application/octet-stream').slice(0, 120),
       keep: item.keep === true,
       data,
     });
-    if (out.length >= ATTACH_MAX_COUNT) break;
   }
   return out;
 }

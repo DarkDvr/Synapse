@@ -5934,7 +5934,7 @@ function messageAttachments(message) {
  *
  * The text replaces an empty box and is appended to a draft, so clicking Reuse
  * cannot silently throw away something the operator was already writing. The
- * attachments follow the same rule and stop at the six-file limit.
+ * attachments follow the same rule and stop at the message's total-size budget.
  */
 function reuseMessage(messageId) {
   const message = state.messages.find((m) => m.id === messageId && m.type === 'user');
@@ -5949,9 +5949,18 @@ function reuseMessage(messageId) {
   else if (!draft.endsWith(text)) input.value = `${draft.replace(/\s+$/, '')}\n\n${text}`;
   autoGrow(input);
 
-  const room = Math.max(0, ATTACH_MAX - state.attachments.length);
+  const room = Math.max(0, ATTACH_MAX_COUNT - state.attachments.length);
   const taken = new Set(state.attachments.map((f) => `${f.name}\u0000${f.size}`));
-  const accepted = files.filter((f) => !taken.has(`${f.name}\u0000${f.size}`)).slice(0, room);
+  let used = attachmentBytes();
+  const accepted = [];
+  for (const file of files) {
+    if (accepted.length >= room) break;
+    if (taken.has(`${file.name}\u0000${file.size}`)) continue;
+    if (file.size > ATTACH_MAX_BYTES) continue;
+    if (used + file.size > ATTACH_TOTAL_BYTES) break;
+    accepted.push(file);
+    used += file.size;
+  }
   if (accepted.length) state.attachments = [...state.attachments, ...accepted];
   renderAttachments();
 
@@ -5994,13 +6003,20 @@ function shortName(name) {
   });
 }
 
-// One message may carry six files of up to 8 MB; pasted data follows the same
-// rules. A paste longer than ten lines (or 1,200 characters) becomes a text file
-// instead of a wall in the box — the operator's DeepSeek-style cutoff.
-const ATTACH_MAX = 6;
+// One message may carry up to 48 MB in total (8 MB per file); the 24-file count
+// is only a sanity cap so the strip cannot become a wall. Pasted data follows the
+// same rules. A paste longer than ten lines (or 1,200 characters) becomes a text
+// file instead of a wall in the box — the operator's DeepSeek-style cutoff.
 const ATTACH_MAX_BYTES = 8 * 1024 * 1024;
+const ATTACH_TOTAL_BYTES = 48 * 1024 * 1024;
+const ATTACH_MAX_COUNT = 24;
 const PASTE_TEXT_MAX_LINES = 10;
 const PASTE_TEXT_MAX_CHARS = 1200;
+
+/** What the waiting attachments already weigh, in bytes. */
+function attachmentBytes(list = state.attachments) {
+  return (list || []).reduce((total, file) => total + (Number(file?.size) || 0), 0);
+}
 
 /** Is this paste better as a file than as text in the box? */
 function pasteIsLarge(text) {
@@ -6019,21 +6035,34 @@ function pastedTextFile(text) {
   return new File([text], name, { type: 'text/plain' });
 }
 
-/** Add files to the composer, with the one size and count rule the picker uses. */
+/** Add files to the composer, with the size and count rules the picker uses. */
 async function addAttachmentFiles(files) {
   let added = 0;
+  let used = attachmentBytes();
   for (const file of files || []) {
     if (!file) continue;
     if (file.size > ATTACH_MAX_BYTES) {
-      toast('File Too Large', `${file.name || 'That file'} is ${fmtBytes(file.size)}; the limit is 8 MB.`);
+      toast('File Too Large', `${file.name || 'That file'} is ${fmtBytes(file.size)}; the limit is 8 MB per file.`);
       continue;
     }
-    if (state.attachments.length >= ATTACH_MAX) {
-      toast('Too Many Files', 'Six attachments is the limit for one message.');
+    if (state.attachments.length >= ATTACH_MAX_COUNT) {
+      toast(
+        'Too Many Files',
+        `${ATTACH_MAX_COUNT} attachments is the limit for one message. The total size is the real limit; this is only the count cap.`,
+      );
+      break;
+    }
+    if (used + file.size > ATTACH_TOTAL_BYTES) {
+      toast(
+        'Attachments Too Large',
+        `One message can carry ${fmtBytes(ATTACH_TOTAL_BYTES)} in total. This file would take it to ${fmtBytes(used + file.size)}; remove one or send it separately.`,
+      );
       break;
     }
     try {
-      state.attachments.push(await readFileAsAttachment(file));
+      const attachment = await readFileAsAttachment(file);
+      state.attachments.push(attachment);
+      used += attachment.size;
       added += 1;
     } catch (err) {
       toast('Could Not Read That File', err.message);
@@ -6076,16 +6105,23 @@ async function onComposerPaste(e) {
 
   const text = dt.getData('text/plain');
   if (text && pasteIsLarge(text)) {
-    if (state.attachments.length >= ATTACH_MAX) {
+    if (state.attachments.length >= ATTACH_MAX_COUNT) {
       // Do not swallow the paste when full: losing the operator's text would be
       // worse than a long box. The toast says why it stayed text.
-      toast('Too Many Files', 'Six attachments is the limit; the text was pasted instead.');
+      toast('Too Many Files', `${ATTACH_MAX_COUNT} attachments is the limit; the text was pasted instead.`);
       return;
     }
     e.preventDefault();
     const size = new Blob([text]).size;
     if (size > ATTACH_MAX_BYTES) {
-      toast('Paste Too Large', `That text is ${fmtBytes(size)}; the limit is 8 MB.`);
+      toast('Paste Too Large', `That text is ${fmtBytes(size)}; the limit is 8 MB per file.`);
+      return;
+    }
+    if (attachmentBytes() + size > ATTACH_TOTAL_BYTES) {
+      toast(
+        'Attachments Too Large',
+        `One message can carry ${fmtBytes(ATTACH_TOTAL_BYTES)} in total; the text was pasted instead.`,
+      );
       return;
     }
     await addAttachmentFiles([pastedTextFile(text)]);
@@ -6121,7 +6157,7 @@ function renderAttachments() {
   if (!strip) return;
   const list = state.attachments || [];
   strip.hidden = list.length === 0;
-  strip.innerHTML = list
+  const chips = list
     .map(
       (f) => {
         const image = /^image\//i.test(f.mime);
@@ -6142,6 +6178,13 @@ function renderAttachments() {
       },
     )
     .join('');
+  // The total is the number that matters now that the count is only a sanity
+  // cap; it sits under the chips rather than beside them so it never competes
+  // with a filename.
+  const total = `<span class="attach-total">${list.length} file${list.length === 1 ? '' : 's'} · ${fmtBytes(
+    attachmentBytes(list),
+  )} of ${fmtBytes(ATTACH_TOTAL_BYTES)}</span>`;
+  strip.innerHTML = `${chips}${total}`;
 }
 
 /**

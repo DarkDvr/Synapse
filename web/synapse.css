@@ -1338,6 +1338,24 @@ body[data-mode="single"] #runAuto { display: none; }
   border-left: 2px solid var(--speaker); padding-left: 10px;
 }
 .msg.user { --speaker: var(--violet-bright); }
+/* A You message is its own block, centred in the transcript rather than stretched
+   to the full width. The timestamp is positioned inside that block, so it travels
+   with the message instead of floating at the chat's far edge. A long message
+   still gets 86% of the column; a short one is only as wide as it needs. */
+.msg.user .msg-body {
+  width: fit-content;
+  max-width: 86%;
+  margin: 0 auto;
+  position: relative;
+  padding-right: 44px;
+  box-sizing: border-box;
+}
+.msg.user .msg-time {
+  position: absolute;
+  top: 0;
+  right: 0;
+  float: none;
+}
 .msg.assistant { --speaker: var(--green); }
 .msg.harness { --speaker: var(--yellow); }
 
@@ -1836,6 +1854,13 @@ body[data-mode="single"] #runAuto { display: none; }
   font-family: var(--mono); font-size: 10.5px; line-height: 1.2;
 }
 .attach-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* The total is what matters once the count is only a sanity cap. It takes its
+   own line so a long filename can never push it out of view. */
+.attach-total {
+  flex-basis: 100%; text-align: right;
+  font-family: var(--mono); font-size: 9.5px; line-height: 1.2;
+  color: #6d717a;
+}
 /* Keep: a small, always-visible box with its word, so the choice does not need a
    hover to be discovered; the tooltip explains what survives and where. */
 .attach-keep {

@@ -1410,5 +1410,7 @@ sentence, and nothing appears in the project folder because of it.
 
 And the file stays on the message. The engine records its `data` on the user
 message, so a big attachment is re-read on every later turn of that session —
-the same bill as quoting a report back. The composer caps one file at 8 MB and six
-files per message, and the cap is about the window as much as the network.
+the same bill as quoting a report back. The composer caps one file at 8 MB and one
+message at 48 MB in total (24 files is only a sanity cap), and the cap is about
+the window as much as the network. Twelve small screenshots fit; six 8 MB files
+do, and a forty-ninth megabyte does not.

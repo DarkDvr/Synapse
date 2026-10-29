@@ -68,6 +68,20 @@ test('a sent message can be put back in the composer', () => {
   assert.match(read('web/synapse.css'), /\.msg-reuse\s*\{/);
 });
 
+test('a You message is a centred block, not a full-width strip', () => {
+  const css = read('web/synapse.css');
+  assert.match(css, /\.msg\.user \.msg-body\s*\{[^}]*width: fit-content/);
+  assert.match(css, /\.msg\.user \.msg-body\s*\{[^}]*max-width: 86%/);
+  assert.match(css, /\.msg\.user \.msg-time\s*\{[^}]*position: absolute/);
+});
+
+test('the attachment budget is total size, with a count sanity cap', () => {
+  const js = read('web/app.js');
+  assert.match(js, /ATTACH_TOTAL_BYTES = 48 \* 1024 \* 1024/);
+  assert.match(js, /ATTACH_MAX_COUNT = 24/);
+  assert.match(js, /\.attach-total|attach-total/);
+});
+
 // "Views: 2" counted the window you were looking at as well as the laptop, and
 // sat in the rail whether or not Remote Access was on. The LAN clients are what
 // the address is for; they are named under it, and they hide with it.

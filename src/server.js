@@ -25,8 +25,8 @@ const MIME = {
   '.woff2': 'font/woff2',
 };
 
-// A message carries attachments as base64: six files of up to 8 MB is about 66 MB
-// of JSON, so the message route gets its own ceiling and every other route keeps
+// A message carries attachments as base64: 48 MB of files is about 64 MB of
+// JSON, so the message route gets its own ceiling and every other route keeps
 // the 2 MB the rest of the API was written against.
 const MESSAGE_BODY_LIMIT = 70 * 1024 * 1024;
 
