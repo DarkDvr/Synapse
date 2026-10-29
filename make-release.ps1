@@ -1,16 +1,13 @@
-# make-release.ps1 - the update zip for an existing Synapse install.
+# make-release.ps1 - the one zip a release publishes.
 #
-# This is NOT the travel copy: it carries program files only, no data\, no
-# config\, no logs\ and no bin\. The in-app updater stages it, the helper waits
-# for Synapse to close and overlays these paths. Settings, provider keys, chats
-# and projects stay where they are.
+# It is a complete folder: program files, the seed config, and bin\node +
+# bin\opencode, so a new PC can run it. It contains no config\, data\, logs\ or
+# projects, so extracting it over an existing Synapse folder leaves the
+# operator's settings and work where they are. Synapse copies the seed into
+# config\ only when that file does not exist.
 #
 #   .\make-release.ps1
 #   .\make-release.ps1 -Out D:\releases
-#
-# Attach the zip and SHA256SUMS to the GitHub release for this version. The
-# updater downloads the zip named in the release, so the tag and the file must
-# agree.
 [CmdletBinding()]
 param(
     [string]$Out = (Join-Path $PSScriptRoot 'dist')
@@ -22,10 +19,13 @@ $pkg = Get-Content -LiteralPath (Join-Path $root 'package.json') -Raw | ConvertF
 $version = [string]$pkg.version
 if (-not $version) { throw 'package.json has no version' }
 
-$exe = Join-Path $root 'Synapse.exe'
-if (-not (Test-Path -LiteralPath $exe)) { throw 'Synapse.exe is missing - build it first (.\shell\build.ps1)' }
-foreach ($rel in @('src', 'web', 'skills', 'templates', 'update-apply.ps1', 'update-apply.mjs', 'package.json', 'LICENSE', 'NOTICE', 'THIRD-PARTY.md')) {
-    if (-not (Test-Path -LiteralPath (Join-Path $root $rel))) { throw "missing $rel" }
+$required = @(
+    'Synapse.exe', 'package.json', 'update-apply.ps1', 'update-apply.mjs',
+    'config.default.json', 'LICENSE', 'NOTICE', 'THIRD-PARTY.md',
+    'src', 'web', 'skills', 'templates', 'bin\node', 'bin\opencode'
+)
+foreach ($rel in $required) {
+    if (-not (Test-Path -LiteralPath (Join-Path $root $rel))) { throw "missing $rel - build it first (.\shell\build.ps1)" }
 }
 
 $name = "Synapse-$version-win-x64"
@@ -34,23 +34,70 @@ if (Test-Path -LiteralPath $stage) { Remove-Item -LiteralPath $stage -Recurse -F
 New-Item -ItemType Directory -Force -Path $stage | Out-Null
 
 Write-Host "staging $name..."
-foreach ($file in @('Synapse.exe', 'package.json', 'update-apply.ps1', 'update-apply.mjs', 'LICENSE', 'NOTICE', 'THIRD-PARTY.md')) {
-    Copy-Item -LiteralPath (Join-Path $root $file) -Destination $stage
-}
+$files = @(
+    'Synapse.exe', 'package.json', 'update-apply.ps1', 'update-apply.mjs',
+    'config.default.json', 'LICENSE', 'NOTICE', 'THIRD-PARTY.md'
+)
+foreach ($file in $files) { Copy-Item -LiteralPath (Join-Path $root $file) -Destination $stage }
 foreach ($dir in @('src', 'web', 'skills', 'templates')) {
     Copy-Item -LiteralPath (Join-Path $root $dir) -Destination $stage -Recurse
 }
 
+# Node and npm travel; the npm-installed copy of the engine does not. It is
+# 729 MB of duplicate runtime, and the engine itself is bin\opencode.
+$nodeExclude = Join-Path $root 'bin\node\node_modules\@opencode'
+robocopy (Join-Path $root 'bin\node') (Join-Path $stage 'bin\node') /E `
+    /XD $nodeExclude /NFL /NDL /NJH /NJS /NP | Out-Null
+if ($LASTEXITCODE -ge 8) { throw "robocopy failed copying bin\node ($LASTEXITCODE)" }
+
+# The engine, without the previous binary the update left behind.
+robocopy (Join-Path $root 'bin\opencode') (Join-Path $stage 'bin\opencode') /E `
+    /XF '*.bak' /NFL /NDL /NJH /NJS /NP | Out-Null
+if ($LASTEXITCODE -ge 8) { throw "robocopy failed copying bin\opencode ($LASTEXITCODE)" }
+
+$readme = @"
+Synapse $version — one folder
+============================
+
+Extract this folder anywhere writable - not under Program Files - and
+double-click Synapse.exe. It starts its own server and opens at
+http://127.0.0.1:8700.
+
+Updating an existing install
+----------------------------
+Extract over the old Synapse folder and replace files. This zip does not contain
+config\, data\, logs\ or the projects folder, so it cannot overwrite your
+settings, provider keys, chats or work. Synapse copies config.default.json into
+config\ only when config\synapse.config.json does not exist.
+
+First run
+---------
+data\ and logs\ are created beside the exe, and the projects folder as
+..\Synapse.Projects. Add provider keys in Settings -> Providers: the seed has
+provider definitions, never keys.
+
+Requirements
+------------
+Windows 10/11, x64; .NET 10 Desktop Runtime; Microsoft Edge WebView2 Runtime.
+Node and the engine are in bin\ and need no install.
+
+Licence
+-------
+AGPL-3.0-only. Copyright (C) 2026 DarkDvr. See LICENSE, NOTICE, THIRD-PARTY.md.
+"@
+Set-Content -LiteralPath (Join-Path $stage 'README.txt') -Value $readme -Encoding utf8
+
 $zip = Join-Path $Out "$name.zip"
 if (Test-Path -LiteralPath $zip) { Remove-Item -LiteralPath $zip -Force }
 Write-Host "compressing $zip..."
-Compress-Archive -Path (Join-Path $stage '*') -DestinationPath $zip -CompressionLevel Optimal
+Compress-Archive -Path (Join-Path $stage '*') -DestinationPath $zip -CompressionLevel Fastest
 
 $hash = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant()
 $sums = Join-Path $Out 'SHA256SUMS'
 Set-Content -LiteralPath $sums -Value "$hash  $name.zip" -Encoding ascii
 
 Remove-Item -LiteralPath $stage -Recurse -Force
+
 Write-Host ''
 Write-Host "release asset: $zip"
 Write-Host "checksum:     $sums"

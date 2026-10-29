@@ -34,7 +34,7 @@ const say = (line) => {
 };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-const files = ['Synapse.exe', 'package.json', 'update-apply.ps1', 'update-apply.mjs', 'LICENSE', 'NOTICE', 'THIRD-PARTY.md'];
+const files = ['Synapse.exe', 'package.json', 'update-apply.ps1', 'update-apply.mjs', 'config.default.json', 'LICENSE', 'NOTICE', 'THIRD-PARTY.md'];
 const dirs = ['src', 'web', 'skills', 'templates'];
 
 function alive(pid) {

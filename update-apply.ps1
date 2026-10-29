@@ -42,7 +42,7 @@ function Wait-Gone([int]$id, [int]$milliseconds, [string]$what) {
 
 function Backup-Programs([string]$to) {
     New-Item -ItemType Directory -Force -Path $to | Out-Null
-    foreach ($rel in @('Synapse.exe', 'package.json', 'update-apply.ps1', 'update-apply.mjs', 'LICENSE', 'NOTICE', 'THIRD-PARTY.md', 'src', 'web', 'skills', 'templates')) {
+    foreach ($rel in @('Synapse.exe', 'package.json', 'update-apply.ps1', 'update-apply.mjs', 'config.default.json', 'LICENSE', 'NOTICE', 'THIRD-PARTY.md', 'src', 'web', 'skills', 'templates')) {
         $from = Join-Path $Root $rel
         if (-not (Test-Path -LiteralPath $from)) { continue }
         Copy-Item -LiteralPath $from -Destination $to -Recurse -Force
@@ -51,7 +51,7 @@ function Backup-Programs([string]$to) {
 
 function Restore-Programs([string]$from) {
     if (-not (Test-Path -LiteralPath $from)) { return }
-    foreach ($rel in @('Synapse.exe', 'package.json', 'update-apply.ps1', 'update-apply.mjs', 'LICENSE', 'NOTICE', 'THIRD-PARTY.md', 'src', 'web', 'skills', 'templates')) {
+    foreach ($rel in @('Synapse.exe', 'package.json', 'update-apply.ps1', 'update-apply.mjs', 'config.default.json', 'LICENSE', 'NOTICE', 'THIRD-PARTY.md', 'src', 'web', 'skills', 'templates')) {
         $src = Join-Path $from $rel
         if (-not (Test-Path -LiteralPath $src)) { continue }
         Copy-Item -LiteralPath $src -Destination $Root -Recurse -Force

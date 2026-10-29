@@ -2,7 +2,7 @@
 // The in-app Settings screen is only a GUI over this file.
 import fs from 'node:fs';
 import path from 'node:path';
-import { CONFIG_FILE, CONFIG_DIR } from './paths.js';
+import { CONFIG_FILE, CONFIG_DIR, SEED_CONFIG_FILE } from './paths.js';
 import { providerType, providerId, declaredProviderType } from './providers.js';
 import { getProviderKey } from './secrets.js';
 
@@ -463,8 +463,16 @@ export function loadConfig() {
   try {
     fs.mkdirSync(CONFIG_DIR, { recursive: true });
     if (!fs.existsSync(CONFIG_FILE)) {
-      fs.writeFileSync(CONFIG_FILE, JSON.stringify(DEFAULTS, null, 2) + '\n', 'utf8');
-      return { config: normalize(DEFAULTS), created: true, error: null };
+      // A fresh install gets the seed that travelled with the release: provider
+      // definitions and role choices, no keys. An existing config is never
+      // touched, so the same zip can be extracted over a used folder.
+      let seed = DEFAULTS;
+      try {
+        if (fs.existsSync(SEED_CONFIG_FILE)) seed = JSON.parse(fs.readFileSync(SEED_CONFIG_FILE, 'utf8'));
+      } catch { /* a broken seed falls back to the built-in defaults */ }
+      const config = normalize(seed);
+      fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2) + '\n', 'utf8');
+      return { config, created: true, error: null };
     }
     const text = fs.readFileSync(CONFIG_FILE, 'utf8');
     const parsed = text.trim() ? JSON.parse(text) : {};

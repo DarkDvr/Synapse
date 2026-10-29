@@ -10,6 +10,10 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 export const ROOT = path.resolve(here, '..');
 export const CONFIG_DIR = path.join(ROOT, 'config');
 export const CONFIG_FILE = path.join(CONFIG_DIR, 'synapse.config.json');
+// The seed a fresh install copies into config\. It travels in the release but is
+// never written over an existing config, so extracting a release over a used
+// folder cannot take the operator's settings.
+export const SEED_CONFIG_FILE = path.join(ROOT, 'config.default.json');
 export const WEB_DIR = path.join(ROOT, 'web');
 // Skills that ship WITH Synapse, so the pipeline does not depend on what happens
 // to be installed on this machine. The operator's own folders are extra paths on

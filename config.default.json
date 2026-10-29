@@ -1,0 +1,372 @@
+{
+  "server": {
+    "host": "127.0.0.1",
+    "port": 8700,
+    "openBrowser": false,
+    "remote": false
+  },
+  "engine": {
+    "type": "opencode",
+    "opencode": {
+      "binary": "",
+      "port": 8720,
+      "host": "127.0.0.1",
+      "password": "",
+      "home": "",
+      "startTimeoutMs": 60000,
+      "args": [],
+      "modelLimits": {
+        "deepseek-v4.1-flash-free": {
+          "context": 1048576
+        }
+      },
+      "skillPaths": [],
+      "providers": [
+        {
+          "id": "strata",
+          "type": "llamacpp",
+          "format": "openai",
+          "name": "Strata",
+          "baseURL": "http://127.0.0.1:8080/v1",
+          "apiKey": "",
+          "models": [
+            {
+              "id": "qwen3.8-flash-next-iq2_xs",
+              "name": "Qwen 3.8 Flash Next (IQ2_XS)",
+              "context": 131072
+            }
+          ]
+        },
+        {
+          "id": "local",
+          "type": "local",
+          "format": "openai",
+          "name": "Local LLM",
+          "baseURL": "http://localhost:1235/v1",
+          "apiKey": "",
+          "models": [
+            {
+              "id": "dirty-muse-writer-v01",
+              "name": "dirty-muse-writer-v01"
+            },
+            {
+              "id": "gemma-2-ataraxy-9b",
+              "name": "gemma-2-ataraxy-9b"
+            },
+            {
+              "id": "gemma-4-e4b-it",
+              "name": "gemma-4-e4b-it"
+            },
+            {
+              "id": "qwen3.8-27b-ud",
+              "name": "Qwen 3.8 27B UD",
+              "context": 60160,
+              "output": 8192
+            },
+            {
+              "id": "qwen3.8-4b-distill-heretic-abliterated",
+              "name": "qwen3.8-4b-distill-heretic-abliterated",
+              "context": 16128
+            },
+            {
+              "id": "qwen3.8-9b-distill",
+              "name": "qwen3.8-9b-distill"
+            },
+            {
+              "id": "qwen3.8-9b-distill-slerp-f451-pro-writer-uncensored",
+              "name": "qwen3.8-9b-distill-slerp-f451-pro-writer-uncensored"
+            },
+            {
+              "id": "text-embedding-nomic-embed-text-v1.5",
+              "name": "text-embedding-nomic-embed-text-v1.5"
+            }
+          ]
+        },
+        {
+          "id": "deepseek",
+          "type": "openai",
+          "format": "openai",
+          "name": "DeepSeek",
+          "baseURL": "https://api.deepseek.com/v1",
+          "apiKey": "",
+          "models": [
+            {
+              "id": "deepseek-flash",
+              "name": "DeepSeek Flash",
+              "context": 1048576,
+              "output": 65536
+            },
+            {
+              "id": "deepseek-v4-pro",
+              "name": "DeepSeek Pro",
+              "context": 1048576,
+              "output": 65536
+            }
+          ]
+        },
+        {
+          "id": "opencode-go",
+          "type": "openai",
+          "format": "openai",
+          "name": "OpenCode Go",
+          "baseURL": "https://opencode.ai/zen/go/v1",
+          "apiKey": "",
+          "models": [
+            {
+              "id": "beam-free",
+              "name": "beam-free"
+            },
+            {
+              "id": "claude-haiku-5-5",
+              "name": "claude-haiku-5-5"
+            },
+            {
+              "id": "deepseek-v4-pro",
+              "name": "deepseek-v4-pro"
+            },
+            {
+              "id": "deepseek-v4.1-flash",
+              "name": "deepseek-v4.1-flash"
+            },
+            {
+              "id": "gemini-4-argon-contributor",
+              "name": "gemini-4-argon-contributor"
+            },
+            {
+              "id": "glm-5.1",
+              "name": "glm-5.1"
+            },
+            {
+              "id": "glm-5.2",
+              "name": "glm-5.2"
+            },
+            {
+              "id": "glm-5.3",
+              "name": "glm-5.3"
+            },
+            {
+              "id": "glm-5.3-flash",
+              "name": "glm-5.3-flash"
+            },
+            {
+              "id": "gpt-5.6-luna",
+              "name": "gpt-5.6-luna"
+            },
+            {
+              "id": "gpt-6-luna",
+              "name": "gpt-6-luna"
+            },
+            {
+              "id": "grok-4.6",
+              "name": "grok-4.6"
+            },
+            {
+              "id": "grok-4.7",
+              "name": "grok-4.7"
+            },
+            {
+              "id": "hy3",
+              "name": "hy3"
+            },
+            {
+              "id": "hy4-preview",
+              "name": "hy4-preview"
+            },
+            {
+              "id": "kimi-k2.6",
+              "name": "kimi-k2.6"
+            },
+            {
+              "id": "kimi-k2.7-code",
+              "name": "kimi-k2.7-code"
+            },
+            {
+              "id": "kimi-k3",
+              "name": "kimi-k3"
+            },
+            {
+              "id": "longcat-2.0",
+              "name": "longcat-2.0"
+            },
+            {
+              "id": "mimo-v2.5",
+              "name": "mimo-v2.5"
+            },
+            {
+              "id": "mimo-v2.5-pro",
+              "name": "mimo-v2.5-pro"
+            },
+            {
+              "id": "mimo-v2.6-flash",
+              "name": "mimo-v2.6-flash"
+            },
+            {
+              "id": "mimo-v2.6-pro",
+              "name": "mimo-v2.6-pro"
+            },
+            {
+              "id": "minimax-m2.5",
+              "name": "minimax-m2.5"
+            },
+            {
+              "id": "minimax-m2.7",
+              "name": "minimax-m2.7"
+            },
+            {
+              "id": "minimax-m3",
+              "name": "minimax-m3"
+            },
+            {
+              "id": "minimax-m3.1-flash-free",
+              "name": "minimax-m3.1-flash-free"
+            },
+            {
+              "id": "muse-spark-1.2-contributor",
+              "name": "muse-spark-1.2-contributor"
+            },
+            {
+              "id": "muse-spark-1.3-contributor",
+              "name": "muse-spark-1.3-contributor"
+            },
+            {
+              "id": "omen-alpha",
+              "name": "omen-alpha"
+            },
+            {
+              "id": "qwen3.6-plus",
+              "name": "qwen3.6-plus"
+            },
+            {
+              "id": "qwen3.7-max",
+              "name": "qwen3.7-max"
+            },
+            {
+              "id": "qwen3.7-plus",
+              "name": "qwen3.7-plus"
+            },
+            {
+              "id": "qwen3.8-flash",
+              "name": "qwen3.8-flash"
+            },
+            {
+              "id": "qwen3.8-max",
+              "name": "qwen3.8-max"
+            },
+            {
+              "id": "step-5-preview",
+              "name": "step-5-preview"
+            }
+          ]
+        }
+      ],
+      "compactionKeepTokens": 0
+    }
+  },
+  "roles": {
+    "designer": {
+      "ref": "opencode-go/deepseek-v4.1-flash",
+      "skills": [
+        "aesthetic-foundations",
+        "app-check",
+        "frontend-design",
+        "ui-design",
+        "visual-review"
+      ],
+      "mustLoad": [
+        "aesthetic-foundations",
+        "frontend-design"
+      ]
+    },
+    "qc": {
+      "ref": "opencode-go/deepseek-v4.1-flash",
+      "skills": [
+        "web-guidelines",
+        "aesthetic-foundations",
+        "visual-review"
+      ],
+      "mustLoad": [
+        "web-guidelines",
+        "aesthetic-foundations"
+      ],
+      "focus": "app"
+    },
+    "architect": {
+      "ref": "opencode-go/deepseek-v4.1-flash",
+      "variant": "high",
+      "skills": [
+        "visual-review"
+      ]
+    },
+    "coder-1": {
+      "ref": "opencode-go/deepseek-v4.1-flash",
+      "skills": [
+        "code-craft",
+        "visual-review"
+      ],
+      "mustLoad": [
+        "code-craft"
+      ]
+    },
+    "coder-2": {
+      "ref": "opencode-go/deepseek-v4.1-flash",
+      "skills": [
+        "code-craft",
+        "visual-review"
+      ],
+      "mustLoad": [
+        "code-craft"
+      ]
+    },
+    "coder-3": {
+      "ref": "opencode-go/deepseek-v4.1-flash",
+      "skills": [
+        "code-craft",
+        "visual-review"
+      ],
+      "mustLoad": [
+        "code-craft"
+      ]
+    },
+    "inventor": {
+      "ref": "opencode-go/deepseek-v4.1-flash",
+      "skills": [
+        "frontend-design"
+      ]
+    }
+  },
+  "modelChecks": {
+    "maxAsks": 3
+  },
+  "tools": {
+    "resetOnBoot": false
+  },
+  "fullAuto": {
+    "timeoutSec": 20
+  },
+  "cleanup": {
+    "onFinish": true,
+    "onBoot": true
+  },
+  "worker": {
+    "stallSec": 900,
+    "resumeMax": 4,
+    "retryBaseSec": 10,
+    "retryCapSec": 300,
+    "ladder": [
+      "coder-1",
+      "coder-2",
+      "coder-3"
+    ]
+  },
+  "logging": {
+    "level": "info",
+    "retentionDays": 1,
+    "maxFileMb": 5,
+    "channels": {
+      "app": true,
+      "engine": true,
+      "session": true,
+      "tools": true
+    }
+  }
+}
