@@ -848,13 +848,15 @@ clear it: a test is not work.
   scaffolding and context dumps from the engine are not chat — rendering them
   once leaked AGENTS.md prose and diff hunks into the transcript above the
   user's own message. Errors still show, whatever type carries them.
-- **A You message is a centred block, not a full-width row (29 Oct).** The
-  operator's screenshot showed a short message stretched across the transcript
-  with the timestamp floating at the far edge, which read as a left-aligned strip
-  rather than a message. `.msg.user .msg-body` is `width: fit-content` with an
-  86% ceiling and `margin: 0 auto`; the timestamp is absolute inside that block,
-  so it travels with the message. Long messages still use the column, short ones
-  are only as wide as they need, and the 2px speaker rule moves with the block.
+- **A You message is left-aligned, with its parts on one vertical line (29 Oct).**
+  The operator meant vertical alignment, not a centred block: `YOU` sat high, the
+  text low, and `REUSE`/the clock higher again, because inline `vertical-align`
+  values and a float did not agree. `.msg.user .msg-body` is now a flex row with
+  `align-items: flex-start`; the role and clock are 18.75px boxes (12.5px × 1.5)
+  with their contents centred, so their glyphs share the text's centre line.
+  `order: 99` puts the clock after `REUSE` even though it is first in the markup.
+  Long messages keep the role on the first line instead of centring it down the
+  block; the message stays left-aligned and the 2px rule stays at the left edge.
 - **A sent message can be reused.** The small **Reuse** button beside a `You`
   message (29 Oct) copies its words and the attachment bytes the engine kept on
   the message back into the composer. It is a copy, not a resend: the operator can
@@ -1477,6 +1479,13 @@ names what is lost ("Discard 42 messages? The files stay · 2 tasks unfinished")
 click within three seconds does it, anything else cancels. Red because that is this
 palette's destructive colour and this is the third control that throws work away, after
 Stop and Revert.
+
+**Stop is live while Compacting (29 Oct).** The engine can take its time writing the
+handover, so leaving Stop disabled kept the whole chat locked on a compact the operator
+had already decided against. Stop is enabled by `state.compacting`, the request is
+cancelled server-side, and the catch says "Compaction Cancelled" and restores the
+composer instead of "Could Not Compact". A failed compaction message is read from the
+engine's own transcript at once, not after the three-minute timeout.
 
 **The post is a `<details>`, not a message, and its open state is kept.** It renders from
 the new session's metadata (`synapse.compacted`), so a reload still shows it; the summary is

@@ -485,6 +485,14 @@ Non-obvious, all verified on 2.0.30:
   classification, retry, resume, stop and the wake — because this is the code that
   decides whether an overnight run survives, and every one of those behaviours was
   invisible in review the first time.
+- **A declined permission is not a provider failure (29 Oct).** The engine ends a
+  step whose tool was declined with the generic error "Step interrupted". The gate
+  has already sent the worker a refusal note, and the worker often answers it with
+  its report; the runner used to read the *first* assistant error after the mark,
+  ignore that later report, retry, and tell the worker "the provider cut the turn",
+  which invited the same tool again. `turnErrorOf` now reads the **last** assistant
+  message, and `toolDeclined` stops a retry when a tool part says the permission was
+  declined. A refusal is a report, not a network retry.
 - **The wake is watched, not fire-and-forget.** `wake()` used to admit the report
   and move on. On the clock run the Architect's own turn then failed on a rate limit
   two seconds later: the report sat in a transcript nobody read, no delegation
@@ -584,6 +592,16 @@ leaves the conversation exactly as it was: the handover is the point, so there i
 no silent discard. The chip that starts it is only shown when a compact can run
 (a project is open, nothing is working, there is something to discard), and a
 second click within three seconds is the confirmation.
+
+**A failed compaction is not waited out, and Stop cancels the wait (29 Oct).**
+The engine writes a fresh `compaction` message with `status: 'failed'` the moment
+it gives up, so `waitForHandover` reads that and returns an error immediately
+instead of polling for three minutes. Stop during a compact marks the wait
+cancelled (`cancelCompact`) and the request rejects with 409; the client clears
+`state.compacting`, so the chip and composer come back without waiting for the
+timeout. A cancelled compaction writes no handover and deletes nothing. The
+engine's own "Compaction cancelled" message is not painted as a red COMPACTION
+block when the operator stopped it.
 
 **A worker's transcript is replaced when its compaction no longer fits (28 Oct).**
 The engine's compaction prompt is the whole *retained* transcript, not the current

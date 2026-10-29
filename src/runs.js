@@ -1096,6 +1096,9 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     let filesOutside = [];
     let context = null;
     let turnError = null;
+    // Set when the operator (or the gate) refused a tool: the refusal note is the
+    // turn's last word, not a provider failure to retry.
+    let declined = false;
     // Skills the brief required and the worker never loaded; see workerSkills.
     let skillsMissing = [];
     let skillsRequired = [];
@@ -1418,6 +1421,19 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
             break;
           }
 
+          if (toolDeclined(now, before)) {
+            // A refusal is not a network failure. The gate has already explained
+            // it to the worker; retrying would tell it the provider cut the turn
+            // and invite the same tool call again. Report what the worker has and
+            // let the Architect judge.
+            declined = true;
+            outcome = 'completed';
+            turnError = null;
+            alert({ dir, role, clear: true });
+            out.info(`run ${request.task} (${role}): a tool permission was declined; reporting without a retry`);
+            break;
+          }
+
           const cls = classifyFailure(turnError);
           // The session is gone: the operator stopped the run and deleted the
           // session (or the project folder) while this turn was in flight. No
@@ -1575,6 +1591,9 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
         // with an empty string, so the Architect was told "It reported nothing"
         // and the run log recorded no reason at all.
         if (!stopReason) text = workerText(messages);
+        if (!text && declined) {
+          text = 'The tool call was declined and the worker stopped without a report. Nothing else was attempted.';
+        }
         files = workerFiles(messages);
         // A file written outside the project is odd enough to say out loud: a coder
         // ran a scratch script out of %TEMP% through `shell`, where no path rule can
@@ -2275,11 +2294,34 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     return at >= 0 ? messages.slice(at + 1) : messages || [];
   }
 
+  /**
+   * Did the turn end in an error? The *last* assistant message is the answer, not
+   * the first error anywhere after the mark. A permission decline ends one step
+   * with "Step interrupted", but the gate writes a refusal note and the worker can
+   * answer it with its report; reading the first error made the runner retry a
+   * turn that had already recovered, and told the worker the provider cut it.
+   */
   function turnErrorOf(messages, mark = '') {
+    let last = null;
     for (const message of afterMark(messages, mark)) {
-      if (message?.error) return String(message.error);
+      if (message?.type === 'assistant') last = message;
     }
-    return null;
+    return last?.error ? String(last.error) : null;
+  }
+
+  /** Did a tool in this turn end because its permission was declined? The gate
+   *  already sent the refusal note; retrying the turn as a provider failure would
+   *  tell the worker the wrong story and invite it to run the same tool again. */
+  function toolDeclined(messages, mark = '') {
+    for (const message of afterMark(messages, mark)) {
+      for (const part of message?.parts || []) {
+        if (part?.type !== 'tool') continue;
+        if (/declined this tool call|permission (?:was )?denied|permission refused/i.test(String(part.error || ''))) {
+          return true;
+        }
+      }
+    }
+    return false;
   }
 
   const textOf = (m) => (m.parts || []).filter((p) => p.type === 'text' && p.text).map((p) => p.text).join('\n\n').trim();

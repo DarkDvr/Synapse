@@ -1338,23 +1338,42 @@ body[data-mode="single"] #runAuto { display: none; }
   border-left: 2px solid var(--speaker); padding-left: 10px;
 }
 .msg.user { --speaker: var(--violet-bright); }
-/* A You message is its own block, centred in the transcript rather than stretched
-   to the full width. The timestamp is positioned inside that block, so it travels
-   with the message instead of floating at the chat's far edge. A long message
-   still gets 86% of the column; a short one is only as wide as it needs. */
+/* A You message is a left-aligned row, but its parts share one vertical line.
+   The old inline layout left the role high, the text low and the clock higher
+   again because they used three different `vertical-align` values and a float.
+   The role and clock are now 18.75px boxes (12.5px × 1.5) centred on their own
+   line, so their glyphs sit on the same centre as the message text. Flex keeps
+   them on the first line of a long message instead of centring them down its
+   height. `order` moves the clock after the reuse button even though it is
+   first in the markup. */
 .msg.user .msg-body {
-  width: fit-content;
-  max-width: 86%;
-  margin: 0 auto;
-  position: relative;
-  padding-right: 44px;
-  box-sizing: border-box;
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  width: auto;
+  max-width: none;
+  margin: 0;
+  position: static;
+  padding-right: 0;
 }
+.msg.user .msg-role {
+  display: inline-flex;
+  align-items: center;
+  height: 18.75px;
+  line-height: 18.75px;
+  margin-right: 0;
+}
+.msg.user .msg-text { flex: 0 1 auto; min-width: 0; }
+.msg.user .msg-files, .msg.user .msg-reuse { flex: 0 0 auto; }
 .msg.user .msg-time {
-  position: absolute;
-  top: 0;
-  right: 0;
+  display: inline-flex;
+  align-items: center;
+  height: 18.75px;
+  line-height: 18.75px;
   float: none;
+  position: static;
+  margin-left: auto;
+  order: 99;
 }
 .msg.assistant { --speaker: var(--green); }
 .msg.harness { --speaker: var(--yellow); }

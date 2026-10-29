@@ -164,6 +164,14 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
   // one window, but the route is open to any client, and a second compact while
   // the engine is summarising would create two chats from one.
   const compacting = new Set();
+  // A compact is a request plus a wait for the engine's summary. Stop must end
+  // the wait, not leave the page disabled until the three-minute timeout.
+  const compactCancels = new Set();
+  function cancelCompact(sessionId) {
+    if (!compacting.has(sessionId)) return false;
+    compactCancels.add(sessionId);
+    return true;
+  }
 
   // Is each local model server answering, and when did we last ask. Four seconds:
   // the sidebar polls, and a dead port must not be retried on every tick.
@@ -309,24 +317,42 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
    * boundary, and from an idle chat that is now. The summary lands in the
    * transcript as a `compaction` message with `status: completed` and a
    * `summary`; this polls the newest page until a new one with text appears.
-   * Returns null on timeout or on a compaction that failed — the caller must
-   * delete nothing in that case.
+   * Returns `{text, messages, at}` for a handover, `{failed: true, reason}`
+   * when the engine reports that the compaction failed or was cancelled, and
+   * null on timeout. The caller must delete nothing in either non-success case.
    */
-  async function waitForHandover(sessionId, before, timeoutMs) {
+  async function waitForHandover(sessionId, before, timeoutMs, cancelled = null) {
     const seen = new Set((before || []).filter((m) => m.type === 'compaction').map((m) => m.id));
     const deadline = Date.now() + timeoutMs;
     for (;;) {
+      if (cancelled?.has(sessionId)) {
+        return { failed: true, cancelled: true, reason: 'the compaction was cancelled' };
+      }
       await new Promise((resolve) => setTimeout(resolve, 1000));
       const messages = await engine.getMessages(sessionId).catch(() => null);
       if (messages) {
         const fresh = messages
-          .filter((m) => m.type === 'compaction' && !seen.has(m.id) && String(m.raw?.summary || '').trim())
-          .filter((m) => m.raw?.status !== 'running')
+          .filter((m) => m.type === 'compaction' && !seen.has(m.id))
           .sort((a, b) => (Number(a.created) || 0) - (Number(b.created) || 0));
-        if (fresh.length) {
-          const last = fresh[fresh.length - 1];
+        const last = fresh[fresh.length - 1];
+        // A failed compaction is news the moment its message lands. Waiting the
+        // full three minutes for a summary that will never come left the page
+        // saying "Compacting…" long after the engine had given up.
+        if (last && (last.raw?.status === 'failed' || last.error)) {
+          const reason = String(last.raw?.error?.message || last.error || 'the compaction failed');
+          return { failed: true, cancelled: /cancelled|canceled/i.test(reason), reason };
+        }
+        const done = fresh
+          .filter((m) => String(m.raw?.summary || '').trim())
+          .filter((m) => m.raw?.status !== 'running');
+        if (done.length) {
+          const handover = done[done.length - 1];
           const counted = messages.filter((m) => m.type === 'user' || m.type === 'assistant').length;
-          return { text: String(last.raw.summary).trim(), messages: counted, at: Number(last.created) || Date.now() };
+          return {
+            text: String(handover.raw.summary).trim(),
+            messages: counted,
+            at: Number(handover.created) || Date.now(),
+          };
         }
       }
       if (Date.now() >= deadline) return null;
@@ -1272,6 +1298,12 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
         throw err;
       }
       compacting.add(sessionId);
+      compactCancels.delete(sessionId);
+      const cancelled = () => {
+        const err = new Error('the compaction was cancelled; nothing was deleted');
+        err.status = 409;
+        return err;
+      };
       try {
         try {
           await engine.compact(sessionId);
@@ -1280,10 +1312,16 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
           wrapped.status = 502;
           throw wrapped;
         }
-        const handover = await waitForHandover(sessionId, before, timeoutMs);
+        const handover = await waitForHandover(sessionId, before, timeoutMs, compactCancels);
+        if (compactCancels.has(sessionId)) throw cancelled();
         if (!handover) {
           const err = new Error('the engine did not write a handover in time; nothing was deleted');
           err.status = 504;
+          throw err;
+        }
+        if (handover.failed) {
+          const err = new Error(`${handover.reason || 'the compaction failed'}; nothing was deleted`);
+          err.status = handover.cancelled ? 409 : 502;
           throw err;
         }
         const at = handover.at || Date.now();
@@ -1292,6 +1330,7 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
           err.status = 500;
           throw err;
         }
+        if (compactCancels.has(sessionId)) throw cancelled();
         const marker = appendEntry(
           session.directory,
           'compact',
@@ -1304,6 +1343,7 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
         const synapse = { ...(meta.synapse && typeof meta.synapse === 'object' ? meta.synapse : {}) };
         synapse.auto = session.auto === true;
         synapse.compacted = { at, summary: handover.text, messages: handover.messages };
+        if (compactCancels.has(sessionId)) throw cancelled();
         const created = await engine.createSession({
           title: path.basename(session.directory) || 'chat',
           model: session.model ? { ref: session.model, variant: session.variant || undefined } : undefined,
@@ -1315,6 +1355,12 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
           const err = new Error('the engine did not return a new conversation; nothing was deleted');
           err.status = 502;
           throw err;
+        }
+        if (compactCancels.has(sessionId)) {
+          // Stop landed while the replacement was being made: remove the orphan
+          // and leave the conversation the operator still has open untouched.
+          try { await engine.deleteSession(created.id); } catch { /* left for the sweep */ }
+          throw cancelled();
         }
         try {
           permissionMemory?.carry?.(sessionId, created.id);
@@ -1353,6 +1399,7 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
         };
       } finally {
         compacting.delete(sessionId);
+        compactCancels.delete(sessionId);
       }
     },
 
@@ -1410,6 +1457,9 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
 
     interrupt: async (sessionId) => {
       requireReady();
+      // A compact is a request plus a wait; Stop must end that wait, or the page
+      // sits on "Compacting…" until the three-minute timeout.
+      if (cancelCompact(sessionId)) app.info(`compact cancelled for ${sessionId}`);
       // Stop means stop, for the whole project. A delegated task runs in its own
       // hidden session, and the session on screen (the Architect) is usually idle
       // while a worker works — interrupting it did nothing, and the run's report

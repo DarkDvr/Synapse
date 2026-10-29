@@ -2065,7 +2065,11 @@ async function runCompact() {
     state.compacting = false;
     renderCompactChip();
     renderComposer();
-    toast('Could Not Compact', err.message);
+    const cancelled = err.status === 409 && /cancel/i.test(String(err.message || ''));
+    toast(
+      cancelled ? 'Compaction Cancelled' : 'Could Not Compact',
+      cancelled ? 'The conversation was left exactly as it was.' : err.message,
+    );
     return;
   }
   renderCompactChip();
@@ -3533,7 +3537,13 @@ function renderTranscript() {
   // Reasoning block or tool card can be restored after a rebuild — a poll
   // landing mid-read used to snap them shut.
   const tagged = state.messages
-    .filter((m) => m.error || m.type === 'user' || m.type === 'assistant' || m.type === 'synthetic')
+    .filter((m) => {
+      // A compaction the operator stopped is not a failure to read: the chip and
+      // the toast already said "cancelled", and the engine's own message would
+      // otherwise appear as a red "COMPACTION" block in the chat.
+      if (m.type === 'compaction' && /cancell?ed/i.test(String(m.error || ''))) return false;
+      return m.error || m.type === 'user' || m.type === 'assistant' || m.type === 'synthetic';
+    })
     .map((m) => (m.parts ? { ...m, parts: m.parts.map((p, i) => ({ ...p, _k: `${m.id}:${i}` })) } : m));
   const showable = groupTurns(tagged);
   // Only permissions stay in the transcript: a form is answered in the panel
@@ -5778,7 +5788,7 @@ function renderComposer() {
   // open session is idle — that is exactly when it is the only way out. `canStop`
   // is the engine's answer for this project, so a hidden worker enables it even
   // when no run record is left.
-  $('stopBtn').disabled = !hasSession || !(state.busy || currentRun() || state.canStop);
+  $('stopBtn').disabled = !hasSession || !(state.busy || currentRun() || state.canStop || state.compacting);
   const input = $('promptInput');
   if (input) {
     input.disabled = asking;

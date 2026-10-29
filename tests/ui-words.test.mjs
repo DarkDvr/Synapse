@@ -68,11 +68,13 @@ test('a sent message can be put back in the composer', () => {
   assert.match(read('web/synapse.css'), /\.msg-reuse\s*\{/);
 });
 
-test('a You message is a centred block, not a full-width strip', () => {
+test('a You message keeps its parts on one vertical centre', () => {
   const css = read('web/synapse.css');
-  assert.match(css, /\.msg\.user \.msg-body\s*\{[^}]*width: fit-content/);
-  assert.match(css, /\.msg\.user \.msg-body\s*\{[^}]*max-width: 86%/);
-  assert.match(css, /\.msg\.user \.msg-time\s*\{[^}]*position: absolute/);
+  assert.match(css, /\.msg\.user \.msg-body\s*\{[^}]*display: flex/);
+  assert.match(css, /\.msg\.user \.msg-body\s*\{[^}]*align-items: flex-start/);
+  assert.match(css, /\.msg\.user \.msg-role\s*\{[^}]*height: 18\.75px/);
+  assert.match(css, /\.msg\.user \.msg-time\s*\{[^}]*height: 18\.75px/);
+  assert.match(css, /\.msg\.user \.msg-time\s*\{[^}]*order: 99/);
 });
 
 test('the attachment budget is total size, with a count sanity cap', () => {

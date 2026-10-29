@@ -17,6 +17,7 @@ function harness({
   before = [{ id: 'm1', type: 'user', created: 1 }, { id: 'm2', type: 'assistant', created: 2 }],
   summary = '## Objective\n- Finish the thing',
   compactFails = null,
+  compactionFails = false,
   neverSummaries = false,
   active = [],
   single = false,
@@ -31,6 +32,13 @@ function harness({
     created: Date.now(),
     raw: { status: 'completed', summary, time: { created: Date.now() } },
   };
+  const failedCompaction = {
+    id: 'cmp_failed',
+    type: 'compaction',
+    created: Date.now(),
+    error: 'Compaction cancelled',
+    raw: { status: 'failed', error: { type: 'aborted', message: 'Compaction cancelled' } },
+  };
   const engine = {
     status: () => ({ ready: true, kind: 'stub' }),
     getSession: async (id) => ({
@@ -42,11 +50,13 @@ function harness({
       variant: 'high',
       metadata: { synapse: { auto, role: 'architect' } },
     }),
-    getMessages: async () => (compactRequested && !neverSummaries ? [...before, compaction] : before),
+    getMessages: async () =>
+      compactRequested && !neverSummaries ? [...before, compactionFails ? failedCompaction : compaction] : before,
     listActiveSessions: async () => active,
     listSessions: async () => [{ id: 'ses_old', directory: dir, title: 'Old', single, auto }],
     listPendingPermissions: async () => [],
     listForms: async () => [],
+    interrupt: async () => {},
     compact: async (sessionId) => {
       calls.push({ at: 'compact', sessionId });
       if (compactFails) throw new Error(compactFails);
@@ -140,6 +150,27 @@ test('a compact the engine refuses deletes nothing', async () => {
   await assert.rejects(() => h.api.compactSession('ses_old', { timeoutMs: 3000 }), (err) => err.status === 502);
   assert.equal(h.calls.some((c) => c.at === 'delete'), false);
   assert.equal(h.calls.some((c) => c.at === 'create'), false);
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('a compact the engine cancels deletes nothing', async () => {
+  const dir = project();
+  const h = harness({ dir, compactionFails: true });
+  await assert.rejects(() => h.api.compactSession('ses_old', { timeoutMs: 3000 }), (err) => err.status === 409);
+  assert.equal(h.calls.some((c) => c.at === 'create'), false);
+  assert.equal(h.calls.some((c) => c.at === 'delete'), false);
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('Stop cancels an in-flight compact instead of waiting out the timeout', async () => {
+  const dir = project();
+  const h = harness({ dir, neverSummaries: true });
+  const pending = h.api.compactSession('ses_old', { timeoutMs: 10000 });
+  await new Promise((r) => setTimeout(r, 150));
+  await h.api.interrupt('ses_old');
+  await assert.rejects(pending, (err) => err.status === 409 && /cancel/i.test(err.message));
+  assert.equal(h.calls.some((c) => c.at === 'create'), false);
+  assert.equal(h.calls.some((c) => c.at === 'delete'), false);
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
