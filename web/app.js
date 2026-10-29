@@ -4322,10 +4322,20 @@ function renderMessage(m) {
   }
   if (m.type === 'assistant') {
     const body = [`${stamp}<span class="msg-role">Architect</span>`];
-    for (const part of m.parts || []) {
+    const parts = m.parts || [];
+    // The last text of a message that has no tool calls is the answer: it gets
+    // the green rule down its left, so prose is one glance away from the
+    // reasoning and tool cards above it. Narration in a step that also calls a
+    // tool stays plain — that is work, not the answer.
+    const hasTool = parts.some((p) => p.type === 'tool');
+    const lastText = parts.map((p, i) => (p.type === 'text' ? i : -1)).filter((i) => i >= 0).pop();
+    for (const [i, part] of parts.entries()) {
       // The model's actual answer goes in its own panel, rendered as markdown,
       // so it is visually separate from reasoning and tool noise.
-      if (part.type === 'text') body.push(`<div class="msg-answer">${renderMarkdown(part.text)}</div>`);
+      if (part.type === 'text') {
+        const answer = !hasTool && i === lastText ? ' is-answer' : '';
+        body.push(`<div class="msg-answer${answer}">${renderMarkdown(part.text)}</div>`);
+      }
       else if (part.type === 'reasoning')
         body.push(
           `<details class="reasoning" data-k="${esc(part._k)}"${state.open.has(part._k) ? ' open' : ''}>` +
@@ -4333,7 +4343,7 @@ function renderMessage(m) {
         );
       else if (part.type === 'tool') body.push(renderTool(part));
     }
-    if ((m.parts || []).length === 0 && !m.error) body.push('<span class="msg-text">…</span>');
+    if (parts.length === 0 && !m.error) body.push('<span class="msg-text">…</span>');
     if (m.error) body.push(`<div class="msg-error">${esc(m.error)}</div>`);
     return `<div class="msg assistant" data-msg="assistant"><div class="msg-body">${body.join('')}</div></div>`;
   }
@@ -7122,9 +7132,10 @@ function settingsAbout() {
       <dl class="about-facts">
         <dt>Created by</dt><dd>DarkDvr</dd>
         <dt>Contact</dt><dd><a href="mailto:darkdvr1@yandex.ru">darkdvr1@yandex.ru</a></dd>
-        <dt>Licence</dt><dd>Free software</dd>
+        <dt>Source</dt><dd><a href="https://github.com/DarkDvr/Synapse" target="_blank" rel="noreferrer">github.com/DarkDvr/Synapse</a></dd>
+        <dt>Licence</dt><dd>AGPL-3.0-only</dd>
       </dl>
-      <p class="about-free">Free to use, copy and share. No account, no subscription, no telemetry.</p>
+      <p class="about-free">Free software: use it, share it, change it. Keep the copyright notices; a modified version must say so. No account, no subscription, no telemetry.</p>
       <p class="about-free"><button class="btn btn-secondary btn-sm" type="button" data-check-updates>Check for Updates</button></p>
     </div>`;
 }

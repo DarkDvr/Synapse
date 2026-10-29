@@ -24,7 +24,7 @@ if (-not $version) { throw 'package.json has no version' }
 
 $exe = Join-Path $root 'Synapse.exe'
 if (-not (Test-Path -LiteralPath $exe)) { throw 'Synapse.exe is missing - build it first (.\shell\build.ps1)' }
-foreach ($rel in @('src', 'web', 'skills', 'templates', 'update-apply.ps1', 'package.json')) {
+foreach ($rel in @('src', 'web', 'skills', 'templates', 'update-apply.ps1', 'package.json', 'LICENSE', 'NOTICE', 'THIRD-PARTY.md')) {
     if (-not (Test-Path -LiteralPath (Join-Path $root $rel))) { throw "missing $rel" }
 }
 
@@ -34,7 +34,7 @@ if (Test-Path -LiteralPath $stage) { Remove-Item -LiteralPath $stage -Recurse -F
 New-Item -ItemType Directory -Force -Path $stage | Out-Null
 
 Write-Host "staging $name..."
-foreach ($file in @('Synapse.exe', 'package.json', 'update-apply.ps1')) {
+foreach ($file in @('Synapse.exe', 'package.json', 'update-apply.ps1', 'LICENSE', 'NOTICE', 'THIRD-PARTY.md')) {
     Copy-Item -LiteralPath (Join-Path $root $file) -Destination $stage
 }
 foreach ($dir in @('src', 'web', 'skills', 'templates')) {

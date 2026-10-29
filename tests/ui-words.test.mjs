@@ -97,3 +97,13 @@ test('the rail names LAN clients under the address, not a Views row', () => {
   assert.match(js, /clients: \$\{names\.length\}/);
   assert.doesNotMatch(js, /function renderViews\(/);
 });
+
+// The answer, not the work: the last text of a tool-free assistant message gets
+// the green rule; narration in a step that also calls a tool stays plain.
+test('the final answer has its own rule, and work does not', () => {
+  const css = read('web/synapse.css');
+  assert.match(css, /\.msg\.assistant \.msg-answer\.is-answer\s*\{[^}]*border-left/);
+  const js = read('web/app.js');
+  assert.match(js, /is-answer/);
+  assert.match(js, /hasTool/);
+});

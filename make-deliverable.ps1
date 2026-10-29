@@ -57,7 +57,10 @@ try {
     'web\index.html',
     'config\synapse.config.json',
     'bin\node\node.exe',
-    'bin\opencode\opencode.exe'
+    'bin\opencode\opencode.exe',
+    'LICENSE',
+    'NOTICE',
+    'THIRD-PARTY.md'
   )
   foreach ($rel in $required) {
     $full = Join-Path $root $rel
@@ -150,6 +153,9 @@ try {
   Copy-Item -LiteralPath (Join-Path $root 'Synapse.exe') -Destination $stage
   Copy-Item -LiteralPath (Join-Path $root 'package.json') -Destination $stage
   Copy-Item -LiteralPath (Join-Path $root 'update-apply.ps1') -Destination $stage
+  foreach ($rel in @('LICENSE', 'NOTICE', 'THIRD-PARTY.md')) {
+    Copy-Item -LiteralPath (Join-Path $root $rel) -Destination $stage
+  }
 
   foreach ($dir in @('src', 'web', 'skills')) {
     Say "copying $dir\..."

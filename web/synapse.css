@@ -1564,6 +1564,13 @@ body[data-mode="single"] #runAuto { display: none; }
   margin: 5px 0 0;
   font-size: 12.5px; line-height: 1.55; color: #d3d6db;
 }
+/* The answer, not the work: a quiet green rule separates the prose from the
+   reasoning and tool cards above it. It starts at the answer's first line, so a
+   long reply reads as one column instead of another grey block. */
+.msg.assistant .msg-answer.is-answer {
+  margin-top: 9px; padding: 1px 0 1px 12px;
+  border-left: 2px solid rgba(53, 192, 138, 0.55);
+}
 .msg-answer > :first-child { margin-top: 0; }
 .msg-answer > :last-child { margin-bottom: 0; }
 /* A GFM table has to wrap. The baseline sets `white-space: nowrap` on every
