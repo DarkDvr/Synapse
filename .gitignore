@@ -5,7 +5,7 @@ logs/
 # (the projects root is a sibling of this folder, so it needs no entry here)
 
 # Local design references and mockups - kept on the machine, not in the repository
-references/
+/references/
 docs/*.pdf
 
 # The app. shell\build.ps1 makes it, it travels with the folder, and one exe at the
