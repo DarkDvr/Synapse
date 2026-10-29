@@ -1404,6 +1404,10 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
             {
               window: contextWindow(modelRef),
               steer: true,
+              // The first sign of life clears whatever the card was still saying
+              // about the last failure or stall. It is not only the retry path:
+              // any new turn means the worker is working.
+              onActivity: () => alert({ dir, role, clear: true }),
               onContext: (used, room, context) => {
                 live.ctx = used;
                 live.ctxRoom = room;
@@ -1485,6 +1489,10 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
             });
             await sleep(1500, signal);
             if (signal?.aborted) { outcome = 'stopped'; break; }
+            // The worker is being woken: the red "nothing happened" line has done
+            // its job. Leaving it up while the worker is visibly working is the
+            // card lying (29 Oct: 306 tok/s under "retrying").
+            alert({ dir, role, clear: true });
             await nudge(worker.id, STALL_NUDGE, signal);
             before = markOf(await engine.getMessages(worker.id));
             continue;
@@ -1577,6 +1585,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
             });
             await replaceWorker('the conversation no longer fits the model window', now);
             if (signal?.aborted) { outcome = 'stopped'; break; }
+            alert({ dir, role, clear: true });
             continue;
           }
 
@@ -1611,6 +1620,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
               });
               await replaceWorker('the prompt was larger than the model window', now);
               if (signal?.aborted) { outcome = 'stopped'; break; }
+              alert({ dir, role, clear: true });
               continue;
             }
 
@@ -1658,6 +1668,10 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
           if (signal?.aborted) { outcome = 'stopped'; break; }
           live.retry = null;
           emit('run.progress', { ...live });
+          // The retry is starting now: the card's red "retrying at 20:53" line
+          // must go before the worker resumes, or it sits there while the worker
+          // is working. A fresh failure raises a fresh line.
+          alert({ dir, role, clear: true });
           await nudge(worker.id, RETRY_NUDGE, signal);
           before = markOf(await engine.getMessages(worker.id));
         }
@@ -2216,12 +2230,16 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
    * A pending question also pauses the clock: the operator may take hours, and
    * the transcript itself says so.
    */
-  async function waitForIdle(sessionId, before, stallMs, onTool, signal, { window = null, steer = false, onContext = null, onCompact = null } = {}) {
+  async function waitForIdle(sessionId, before, stallMs, onTool, signal, { window = null, steer = false, onContext = null, onCompact = null, onActivity = null } = {}) {
     let lastActivity = Date.now();
     let lastKey = '';
     let lastCtx = 0;
     let compactions = 0;
     let sig = '';
+    // One "it is doing something again" per turn: the first change of any kind is
+    // enough to take a stale retry or stall line off the card, and repeating it on
+    // every streamed token would only be traffic.
+    let announced = false;
     let asking = false;
     for (;;) {
       if (signal?.aborted) return { stopped: true };
@@ -2241,6 +2259,10 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
       if (nextSig !== sig) {
         sig = nextSig;
         lastActivity = Date.now();
+        if (!announced) {
+          announced = true;
+          onActivity?.();
+        }
       }
 
       if (onTool) {

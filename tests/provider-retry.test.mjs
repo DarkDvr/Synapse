@@ -267,6 +267,11 @@ expect('silence: run completes after resume', stalled.result?.outcome === 'compl
 expect('silence: one resume recorded', stalled.result?.resumes === 1, String(stalled.result?.resumes));
 expect('silence: the worker was interrupted', stalled.interrupts.length >= 1);
 expect('silence: logged as stalled', fs.readFileSync(PROVIDER_LOG, 'utf8').includes('stalled'));
+// The red "nothing happened — restarting" line must go when the worker starts
+// doing something, not when the whole turn ends. One clear is the resume, one is
+// the clean turn; before 30 Oct there was only the second.
+const stallClears = stalled.events.filter((e) => e.kind === 'role-error' && e.clear).length;
+expect('silence: the restart line clears when the worker resumes', stallClears >= 2, `clears=${stallClears}`);
 
 // 5. Stop cuts a backoff short and does not wake the Architect
 const stopped = await runCase({ name: 'stopped', script: [{ error: RATE }], cancelAfter: 900, untilWoke: 0 });
