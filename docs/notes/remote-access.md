@@ -18,6 +18,13 @@ The listener moves in place (`http.relisten`), without restarting the engine. Th
 API answers the toggle before the sockets close; SSE clients reconnect a moment
 later — that is why the page flickers and comes back.
 
+**It is off at every start.** A restart resets `server.remote` to false and the
+listener comes up on loopback, whatever the file said before. Measured 29 Oct: a
+listener restored as "on" at boot showed on while the LAN still could not reach
+it, and only toggling off and on actually opened it. The door is also a token-
+protected service, so it should not open itself. Turn it on from the desktop
+after the server is up; the token is unchanged.
+
 ## Who may connect
 
 Three gates, checked on every request from a non-loopback address:
@@ -41,7 +48,7 @@ the network.
 
 ## Using it
 
-1. On the desktop: STATUS → Remote Access → on.
+1. On the desktop, with the server up: STATUS → Remote Access → on.
 2. A second line appears under the switch with `http://<lan-ip>:8700/`. Open it on
    the laptop.
 3. The **TOKEN** chip on that line copies the token; paste it into the login

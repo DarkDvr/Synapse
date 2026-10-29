@@ -130,3 +130,42 @@ test('flipping full auto on while a form is already waiting gives it the minute'
   await auto.tick();
   assert.equal(replies.length, 1, 'a minute after it was seen');
 });
+
+// The worker's question belongs to the chat the operator switched Full auto on;
+// the worker session itself carries no such flag. Before 30 Oct this form sat
+// under a card that promised an answer and never got one.
+const workerForm = () => ({
+  id: 'fw',
+  sessionID: 'ses_worker',
+  title: 'Which one?',
+  fields: [{ key: 'q', type: 'string', options: [{ label: 'A (Recommended)', value: 'a' }] }],
+});
+
+test('full auto on the chat answers a worker form in the same project', async () => {
+  const replies = [];
+  const engine = {
+    async listForms() { return [workerForm()]; },
+    async getSession(id) { return { id, directory: 'F:/dev/Synapse.Projects/demo', metadata: { synapse: {} } }; },
+    async replyForm(sessionId, formId, answer) { replies.push({ sessionId, formId, answer }); },
+  };
+  const auto = createFormAuto({ engine, logger: quiet, getTimeoutMs: () => 0 });
+  auto.setFullAuto('ses_arch', true, 'F:/dev/Synapse.Projects/demo');
+  await auto.tick();
+  assert.equal(replies.length, 1);
+  assert.deepEqual(replies[0], { sessionId: 'ses_worker', formId: 'fw', answer: { q: 'a' } });
+});
+
+test('turning full auto off on the chat overrides a worker saved with it on', async () => {
+  const replies = [];
+  const engine = {
+    async listForms() { return [workerForm()]; },
+    async getSession(id) {
+      return { id, directory: 'F:/dev/Synapse.Projects/demo', metadata: { synapse: { fullAuto: true } } };
+    },
+    async replyForm(sessionId, formId, answer) { replies.push(answer); },
+  };
+  const auto = createFormAuto({ engine, logger: quiet, getTimeoutMs: () => 0 });
+  auto.setFullAuto('ses_arch', false, 'F:/dev/Synapse.Projects/demo');
+  await auto.tick();
+  assert.equal(replies.length, 0, 'the project switch says off');
+});

@@ -22,6 +22,11 @@ export function createFormAuto({
 } = {}) {
   const log = logger?.channel?.('app');
   const fullAuto = new Set();
+  // The project's explicit answer, from the chat the operator flipped. A worker's
+  // form is in the same directory, and its own session metadata does not carry
+  // the switch; `true`/`false` here decides before that metadata is consulted.
+  const fullAutoDirs = new Map();
+  const dirOf = new Map();
   const checked = new Set();
   const seen = new Map(); // formId -> { at, sessionId }
   const settled = new Set(); // answered here, or failed once; cleared when the form goes
@@ -36,20 +41,43 @@ export function createFormAuto({
     return Number.isFinite(ms) ? Math.max(0, ms) : fallback;
   };
 
-  function setFullAuto(sessionId, on) {
-    if (!sessionId) return false;
-    if (on) fullAuto.add(sessionId);
-    else fullAuto.delete(sessionId);
+  const dirKey = (value) => String(value || '').replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
+
+  function setFullAuto(sessionId, on, directory = '') {
+    if (!sessionId && !directory) return false;
+    if (sessionId) {
+      if (on) fullAuto.add(sessionId);
+      else fullAuto.delete(sessionId);
+    }
+    const known = directory || dirOf.get(sessionId) || '';
+    if (known) fullAutoDirs.set(dirKey(known), Boolean(on));
+    // A worker that already read the switch on must not keep answering after the
+    // operator turns it off: the project's answer is the later word.
+    if (!on && known) {
+      for (const [id, dir] of dirOf) if (dirKey(dir) === dirKey(known)) fullAuto.delete(id);
+    }
     return true;
   }
 
-  /** Is full auto on for this session? Asked once per session, then remembered. */
+  /** Is full auto on for this session? The project's explicit switch first, then
+   *  the session's own saved metadata, asked once and remembered. */
   async function enabledFor(sessionId) {
+    const known = dirOf.get(sessionId);
+    if (known) {
+      const chosen = fullAutoDirs.get(dirKey(known));
+      if (chosen !== undefined) return chosen;
+    }
     if (fullAuto.has(sessionId)) return true;
     if (checked.has(sessionId)) return false;
     checked.add(sessionId);
     try {
       const session = await engine.getSession(sessionId);
+      const directory = session?.directory || '';
+      if (directory) {
+        dirOf.set(sessionId, directory);
+        const chosen = fullAutoDirs.get(dirKey(directory));
+        if (chosen !== undefined) return chosen;
+      }
       const synapse = session?.metadata?.synapse || {};
       if (synapse.fullAuto === true || synapse.permissionTimeout === true) {
         fullAuto.add(sessionId);

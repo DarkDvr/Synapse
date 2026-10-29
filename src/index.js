@@ -552,6 +552,22 @@ async function main() {
   }
 
   // ── remote access (LAN) ──────────────────────────────────────
+  // Off at every start, whatever the file said. It used to be restored from the
+  // config: the listener came up bound to 0.0.0.0, the switch showed on, and the
+  // LAN still could not reach it — toggling off and on was what actually opened
+  // the door (29 Oct). A token-protected door should not open itself either, so
+  // the operator switches it on after the server is up.
+  if (currentConfig.server.remote) {
+    try {
+      currentConfig = applyConfig({ ...currentConfig, server: { ...currentConfig.server, remote: false } });
+      app.info('remote access reset to off at start — switch it on when the LAN needs it');
+    } catch (err) {
+      // A read-only config still starts: the listener stays on loopback, which is
+      // the safe half of this, and the operator is told the file did not change.
+      currentConfig = { ...currentConfig, server: { ...currentConfig.server, remote: false } };
+      app.warn(`remote access reset in memory; the config could not be written: ${err.message}`);
+    }
+  }
   // The token is a password for this PC, so it lives in data\, not the config.
   // The listener stays on loopback until STATUS > Remote Access is switched on.
   const remoteToken = createRemoteToken({ file: REMOTE_TOKEN_FILE, logger });

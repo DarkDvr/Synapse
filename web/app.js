@@ -6876,7 +6876,7 @@ function settingsWorkers(c) {
         attr: 'min="0" max="3600"',
         hint: 'How long Full auto waits before it answers an unanswered permission card or question. 0 means answer at once and never show a permission card. Seconds.',
       }) +
-        `<p class="set-note">Full auto is switched on per chat, in the cog beside Send. This sets how long it waits once it is on. ` +
+        `<p class="set-note">Full auto is switched on per chat, in the cog beside Send. This sets how long it waits once it is on, and a change applies at once — including to a card already open. ` +
         `A permission is still allowed only once, and the policy still refuses a write inside Synapse or a credential store before a card exists. ` +
         `At 0, a permission is answered immediately and no card is drawn; a question is answered on the next five-second check.</p>`,
     ),

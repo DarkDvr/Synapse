@@ -488,3 +488,57 @@ test('the session payload carries the permission timeout flag', () => {
   assert.equal(on.auto, true);
   assert.equal(normalizeSession({ id: 's2' }).fullAuto, false);
 });
+
+// Full auto is the chat's switch. A worker asking for a shell command belongs to
+// the same project, and its session metadata does not carry the switch; before
+// 30 Oct the card sat under a note that promised "answer immediately" and was
+// never armed.
+const askFor = (sessionId, requestId, resource) => ({
+  type: 'permission.asked',
+  sessionId,
+  raw: {
+    id: `evt_${requestId}`,
+    type: 'permission.asked',
+    data: {
+      id: requestId,
+      sessionID: sessionId,
+      action: 'shell',
+      resources: [resource],
+      source: { type: 'tool', messageID: 'msg_w', id: `call_${requestId}` },
+    },
+  },
+});
+
+test('full auto on the chat answers a worker ask in the same project', async () => {
+  const replies = [];
+  const engine = {
+    async getSession(id) {
+      return { id, directory: PROJECT, metadata: { synapse: { role: 'coder-1' } } };
+    },
+    async replyPermission(sessionId, requestId, decision) { replies.push({ sessionId, requestId, decision }); },
+  };
+  const gate = createPermissionGate({
+    engine, logger: quiet, root: ROOT, home: HOME, permissionTimeoutMs: 30,
+  });
+  gate.setFullAuto('ses_arch', true, PROJECT);
+  await gate.handle(askFor('ses_worker', 'req_w', 'Set-Content D:/scratch/worker.txt hi'));
+  await new Promise((r) => setTimeout(r, 80));
+  assert.deepEqual(replies, [{ sessionId: 'ses_worker', requestId: 'req_w', decision: 'once' }]);
+});
+
+test('turning full auto off on the chat overrides a worker saved with it on', async () => {
+  const replies = [];
+  const engine = {
+    async getSession(id) {
+      return { id, directory: PROJECT, metadata: { synapse: { role: 'coder-1', fullAuto: true } } };
+    },
+    async replyPermission(sessionId, requestId, decision) { replies.push(decision); },
+  };
+  const gate = createPermissionGate({
+    engine, logger: quiet, root: ROOT, home: HOME, permissionTimeoutMs: 30,
+  });
+  gate.setFullAuto('ses_arch', false, PROJECT);
+  await gate.handle(askFor('ses_worker', 'req_w2', 'Set-Content D:/scratch/worker2.txt hi'));
+  await new Promise((r) => setTimeout(r, 80));
+  assert.deepEqual(replies, [], 'the operator turned it off; the worker metadata is older news');
+});

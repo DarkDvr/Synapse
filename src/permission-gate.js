@@ -40,6 +40,11 @@ export function createPermissionGate({
   // so flipping the switch arms a card that is already on screen.
   const pendingAsks = new Map(); // requestId -> { request, info, entry, timer }
   const fullAutoOn = new Set();
+  // Full auto is the chat's standing decision, not the session's: a worker asking
+  // for a shell command belongs to the same project as the Architect whose switch
+  // the operator turned on. `true`/`false` here is the explicit answer for that
+  // project and beats a worker's saved metadata; no entry means "ask the session".
+  const fullAutoDirs = new Map();
 
   /** The wait, read each time so a Settings change applies to the next ask.
    *  Zero is a real value: answer at once, with no card. */
@@ -224,7 +229,15 @@ export function createPermissionGate({
     return info;
   }
 
-  const fullAutoEnabled = (sessionId, info) => fullAutoOn.has(sessionId) || info?.fullAuto === true;
+  const dirKey = (value) => String(value || '').replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
+  const fullAutoEnabled = (sessionId, info) => {
+    if (fullAutoOn.has(sessionId)) return true;
+    if (info?.directory) {
+      const chosen = fullAutoDirs.get(dirKey(info.directory));
+      if (chosen !== undefined) return chosen;
+    }
+    return info?.fullAuto === true;
+  };
 
   /** Arm a pending ask, if its session wants the timeout. A zero wait is not a
    *  timeout at all: the ask is answered on the next microtask, before a card can
@@ -291,12 +304,19 @@ export function createPermissionGate({
    * on arms it, off disarms it. Called by the API when the menu is toggled; a
    * session's saved metadata is honoured on its own at the first ask.
    */
-  function setFullAuto(sessionId, on) {
-    if (!sessionId) return false;
-    if (on) fullAutoOn.add(sessionId);
-    else fullAutoOn.delete(sessionId);
+  function setFullAuto(sessionId, on, directory = '') {
+    if (!sessionId && !directory) return false;
+    const key = dirKey(directory || sessions.get(sessionId)?.directory || '');
+    if (on) {
+      if (sessionId) fullAutoOn.add(sessionId);
+      if (key) fullAutoDirs.set(key, true);
+    } else {
+      if (sessionId) fullAutoOn.delete(sessionId);
+      if (key) fullAutoDirs.set(key, false);
+    }
     for (const p of pendingAsks.values()) {
-      if (p.request.sessionId !== sessionId) continue;
+      const sameProject = key && dirKey(p.info?.directory) === key;
+      if (p.request.sessionId !== sessionId && !sameProject) continue;
       if (on) arm(p);
       else if (p.timer) {
         clearTimeout(p.timer);

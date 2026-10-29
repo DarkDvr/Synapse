@@ -1446,9 +1446,10 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
       const next = { ...synapse, fullAuto: enabled };
       delete next.permissionTimeout;
       await engine.updateSessionMetadata(sessionId, { ...meta, synapse: next });
-      // Open cards and forms follow the switch at once.
-      permissionGate?.setFullAuto?.(sessionId, enabled);
-      formAuto.setFullAuto(sessionId, enabled);
+      // Open cards and forms follow the switch at once — and it is the project's
+      // switch, not this session's: a worker's card is in the same directory.
+      permissionGate?.setFullAuto?.(sessionId, enabled, session?.directory || '');
+      formAuto.setFullAuto(sessionId, enabled, session?.directory || '');
       app.info(`full auto ${enabled ? 'on' : 'off'} for ${sessionId}`);
       notify?.({ kind: 'sessions', type: 'session.fullAuto', sessionId, enabled });
       return { ok: true, enabled };

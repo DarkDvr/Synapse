@@ -1247,6 +1247,14 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
      * function is what makes the replacement carry the same rules and briefing.
      */
     async function spawnWorker() {
+      // Full auto belongs to the project, and the worker is the one that will ask
+      // most of the questions. Carry the Architect's switch into the worker's
+      // metadata: the gate reads it when a card is raised, and a worker created
+      // while it is on must answer its own asks after a restart too.
+      let architectFullAuto = false;
+      try {
+        architectFullAuto = (await engine.getSession(architectId))?.metadata?.synapse?.fullAuto === true;
+      } catch { /* a worker with the switch off is the safe default */ }
       const w = await engine.createSession({
         title: `${request.task} - ${role}`,
         model: modelRef ? { ref: modelRef, variant } : undefined,
@@ -1263,7 +1271,15 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
         ],
         // Hidden from the rail: it runs in the project directory, so only this
         // mark tells Synapse it is scaffolding and not the operator's session.
-        metadata: { synapse: { internal: true, role, task: request.task, architect: architectId } },
+        metadata: {
+          synapse: {
+            internal: true,
+            role,
+            task: request.task,
+            architect: architectId,
+            ...(architectFullAuto ? { fullAuto: true } : {}),
+          },
+        },
       });
       live.workerId = w.id;
       // Its context: where it is, what the plan says, and that the plan is not
