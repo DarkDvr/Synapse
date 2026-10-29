@@ -758,6 +758,59 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     return closed.length;
   }
 
+  /**
+   * Replay a report whose wake never landed.
+   *
+   * The result line is written before the Architect is woken, so a crash between
+   * the two leaves a finished run that nobody was told about: the plan says
+   * `todo`, no message follows the result, and the screen sits on "Waiting on
+   * you" (the emulator project on 29 Oct, t2). The record itself is the tell:
+   * a result newer than every message in the Architect's transcript.
+   *
+   * Only the newest few results of the open round are considered, and only
+   * within two days, so an old project does not replay its history at every
+   * boot.
+   */
+  async function recoverLostReports(dirs = []) {
+    let replayed = 0;
+    for (const dir of dirs || []) {
+      if (!dir || running.has(dirKey(dir))) continue;
+      const history = readRuns(dir);
+      const recent = sinceRoundClosed(history);
+      const done = new Set(
+        recent.filter((r) => r.kind === 'wake' && r.status === 'done' && r.callId).map((r) => r.callId),
+      );
+      const results = recent.filter((r) => r.kind === 'result' && r.architect && !done.has(r.callId)).slice(-3);
+      for (const result of results) {
+        const at = Number(result.at) || 0;
+        if (!at || Date.now() - at > 48 * 60 * 60 * 1000) continue;
+        let messages = [];
+        try {
+          messages = await engine.getMessages(result.architect);
+        } catch {
+          continue;
+        }
+        if ((messages || []).some((m) => (Number(m.created) || 0) >= at)) continue;
+        try {
+          await wake(result.architect, dir, {
+            description: `run ${result.task} finished but its report was never read`,
+            text:
+              `A run finished before Synapse restarted, and the report may not have reached you: ` +
+              `${result.task} (${result.role || 'worker'}) ${result.outcome || 'finished'}` +
+              `${result.error ? ` - ${result.error}` : ''}. Read .synapse/runs.jsonl and judge it; ` +
+              `do not assume it succeeded.`,
+          });
+          appendRun(dir, { kind: 'wake', callId: result.callId, at: Date.now(), status: 'done' });
+          replayed += 1;
+          out.warn(`replayed the report for ${result.task} (${result.role || 'worker'}) - its wake was never delivered`);
+        } catch (err) {
+          out.warn(`could not replay the report for ${result.task}: ${err.message}`);
+        }
+      }
+    }
+    return replayed;
+  }
+
   async function recoverDelegations(dirs) {
     let picked = 0;
     let sessions = [];
@@ -1096,6 +1149,14 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     let filesOutside = [];
     let context = null;
     let turnError = null;
+    // Who ended a stopped run: the operator's Stop, or a harness guard. Kept
+    // apart from `turnError` because a Stop is not a provider failure — the
+    // previous attempt's error used to survive into the result line, and the
+    // Architect read it as the cause of the stop (29 Oct).
+    let stoppedBy = null;
+    // The last turn's own error at the moment of the stop, recorded separately so
+    // the record can still answer "what was the worker doing".
+    let lastTurnError = null;
     // Set when the operator (or the gate) refused a tool: the refusal note is the
     // turn's last word, not a provider failure to retry.
     let declined = false;
@@ -1360,6 +1421,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
               // not a quiet "stopped": the worker was looping on a question it
               // already had the answer to.
               outcome = 'failed';
+              stoppedBy = 'harness';
               text = stopReason;
               log.warn(`${request.task} (${role}) stopped by the harness: ${stopReason}`);
             } else {
@@ -1623,6 +1685,21 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
         }
         break;
       }
+
+      // A Stop can land in any of the waits above (a turn, a backoff, a session
+      // replacement). Whatever path it took, the record must say the operator
+      // stopped it and must not carry the previous attempt's provider error as
+      // the reason. The last finished turn's own error is kept beside it, not
+      // instead of it.
+      if (outcome === 'stopped' && !stoppedBy) {
+        stoppedBy = 'operator';
+        try {
+          lastTurnError = worker?.id ? turnErrorOf(await engine.getMessages(worker.id)) : turnError;
+        } catch {
+          lastTurnError = turnError;
+        }
+        turnError = null;
+      }
     } catch (err) {
       outcome = 'failed';
       text = `the worker could not run: ${err.message}`;
@@ -1716,6 +1793,11 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
       retries,
       resumes,
       error: turnError,
+      // Why a stopped run stopped, and what its last finished turn had said. The
+      // two must not be one field: a provider sentence from an earlier attempt is
+      // not the reason an operator pressed Stop.
+      stoppedBy,
+      lastTurnError,
       files,
       text: text.slice(0, RESULT_MAX),
       // What the run cost in context, so the audit after a project reads the run
@@ -1841,7 +1923,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
       });
     }
 
-    await wake(architectId, dir, {
+    const told = await wake(architectId, dir, {
       // The header of the yellow Synopsis line in the chat. "failed" says nothing
       // about who ended the run; a harness stop is the one the operator cannot
       // work out for themselves, so the line names it.
@@ -1866,12 +1948,17 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
         skillsRequired,
         skillsMissing,
         error: turnError,
+        stoppedBy,
+        lastTurnError,
         auto,
         stallSec,
         retries,
         resumes,
       }),
     }, stopReason ? undefined : signal);
+    // The report was delivered. The marker is what lets the next boot tell a
+    // delivered report from one the crash interrupted (see recoverLostReports).
+    if (told?.ok) appendRun(dir, { kind: 'wake', callId: request.callId, at: Date.now(), status: 'done' });
   }
 
   /** Tell a session to carry on after a failure. `synthetic`, so it reads as the
@@ -2376,7 +2463,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     return at === -1 ? t : t.slice(0, at + 1);
   }
 
-  function report({ task, role, insteadOf, skipped, outcome, harnessStop, ms, text, files, context, workerId, planTouched, synapseTouched, qcRound, skillsRequired, skillsMissing, auto, stallSec, retries, resumes, error }) {
+  function report({ task, role, insteadOf, skipped, outcome, harnessStop, ms, text, files, context, workerId, planTouched, synapseTouched, qcRound, skillsRequired, skillsMissing, auto, stallSec, retries, resumes, error, stoppedBy, lastTurnError }) {
     const head =
       outcome === 'completed'
         ? `${task.id} (${role}) finished in ${Math.round(ms / 1000)}s.`
@@ -2385,9 +2472,12 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
             `${resumes ? ` after ${resumes} restart${resumes === 1 ? '' : 's'}` : ''}.`
           : harnessStop
             ? `${task.id} (${role}) ran for ${Math.round(ms / 1000)}s and was stopped by the harness, not by the operator.`
-            : outcome === 'error'
-              ? `${task.id} (${role}) could not run - the provider refused the turn, so no further work was attempted.`
-              : `${task.id} (${role}) could not run.`;
+            : stoppedBy === 'operator'
+              ? `${task.id} (${role}) was stopped by the operator after ${Math.round(ms / 1000)}s. ` +
+                `A stop is not a verdict on the task or the model.`
+              : outcome === 'error'
+                ? `${task.id} (${role}) could not run - the provider refused the turn, so no further work was attempted.`
+                : `${task.id} (${role}) could not run.`;
     const lines = [head];
     if (insteadOf) {
       const why = (skipped || []).find((s) => s.role === insteadOf);
@@ -2402,6 +2492,9 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     // is a real failure mode (it happened on the first run: the report named
     // bin/calendar_design.md and no such file existed). "Files written: none"
     // is what made the claim obvious to the Architect.
+    if (lastTurnError && !/step interrupted/i.test(lastTurnError)) {
+      lines.push(`Before the stop, the last turn had ended with: ${lastTurnError}`);
+    }
     lines.push(files.length ? `Files written: ${files.join(', ')}` : `Files written: none.`);
     if (skillsMissing?.length) {
       lines.push(
@@ -2698,6 +2791,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     handleTurn,
     recoverDelegations,
     recoverInterrupted,
+    recoverLostReports,
     requestsIn,
     active,
     cancel,

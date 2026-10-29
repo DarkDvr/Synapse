@@ -27,6 +27,7 @@ import { pruneProviderLog } from './provider-errors.js';
 import { measureLocalWindows } from './providers.js';
 import { sweepOrphans } from './cleanup.js';
 import { hasNpm, installLocalNpm } from './npm-check.js';
+import { APP_VERSION } from './version.js';
 
 const bootLog = logger.channel('app');
 let bootError = null;
@@ -106,7 +107,7 @@ async function main() {
   await ensureNpm();
 
   app.info('----------------------------------------------');
-  app.info(`Synapse starting (pid ${process.pid})`);
+  app.info(`Synapse ${APP_VERSION} starting (pid ${process.pid})`);
   if (created) app.info('created default config: config/synapse.config.json');
   if (error) app.warn(`config could not be read (${error}); using defaults`);
 
@@ -523,6 +524,12 @@ async function main() {
         if (n) app.warn(`picked up ${n} delegation${n === 1 ? '' : 's'} no turn had read`);
       } catch (err) {
         app.warn(`could not check for unread delegations: ${err.message}`);
+      }
+      try {
+        const n = await runner.recoverLostReports(dirs);
+        if (n) app.warn(`replayed ${n} report${n === 1 ? '' : 's'} whose wake was lost`);
+      } catch (err) {
+        app.warn(`could not replay unread reports: ${err.message}`);
       }
     }, 5000);
     t.unref?.();

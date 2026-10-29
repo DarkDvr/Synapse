@@ -74,6 +74,9 @@
         <span class="status-dot idle"></span>Local LLM
         <span class="status-state" id="llmState">not set</span>
       </div>
+      <!-- Which Synapse this is. The version is bumped on every pushed update;
+           the rail is where the operator reads it without opening Settings. -->
+      <div class="status-version" id="appVersion" title="Synapse version">Synapse</div>
     </div>
 
     <!-- The two reference tables used to sit under the conversation, taking a

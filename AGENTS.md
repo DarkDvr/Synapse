@@ -97,23 +97,23 @@ the cards and the commits, not the code. One reason per sentence, not a chain.
 - **Never open the OpenCode review pane** (`browser.preview`, and the whole
   `browser.*` namespace). It is broken and the operator does not use it. To show
   something, write a file and give the **full path**.
-- **Use the browser, but surgically.** `browser-control` is registered again so
-  you can look at the UI and check your own work before handing it over. One
-  session, reused; few screenshots. See "Browsers" below.
+- **Use the browser, but surgically** — one session, reused; few screenshots.
 - **Stage the delivery.** Each stage is reviewed before the next starts.
 
 ### Version control
 
-- **Commit before every important change** — before starting a stage, a refactor,
-  or a risky fix, and again when it works. Small scoped commits, message says
-  what changed and why.
-- **`data/`, `logs/` and the projects root stay out of git** (already in
-  `.gitignore`): they hold PIDs, probe output, session logs and scratch projects,
-  all local and regenerable.
-- **Check `git status` before and after.** Do not commit build junk or secrets;
-  `config/synapse.config.json` is source of truth and safe (its password field is
-  empty by default), but never commit a filled-in one.
-- **No remote.** This is a local repository; never force-push or rewrite history.
+- **Commit before every important change** — a stage, a refactor, a risky fix, and
+  again when it works. Small commits; the message says what changed and why.
+- **`data/`, `logs/` and the projects root stay out of git** — PIDs, probe output,
+  session logs and scratch projects, all local and regenerable.
+- **Check `git status` before and after**; no build junk, no filled-in config.
+- **Remote: `origin` → `github.com/DarkDvr/Synapse` (private).** Push `main`; never force-push or rewrite history.
+
+### Versioning
+
+`package.json` holds `major.minor.patch`: a fix is a patch (`1.0.1`), a feature is
+minor (`1.1`), a break is major (`2.0`). Every pushed update bumps it and tags
+`vX.Y.Z`; the checklist is in `docs/notes/releases.md`.
 
 ### Destructive commands — verify before you act
 

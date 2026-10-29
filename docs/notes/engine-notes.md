@@ -383,6 +383,14 @@ Non-obvious, all verified on 2.0.30:
   Verified through the real runner with a stubbed engine (19/19): a refusal moves,
   attempt 2 starts a rung down, a marked model is skipped, a clean turn stays on
   coder-1, and a role outside the ladder still reports a plain `error`.
+  **Re-verified 29 Oct** (`tests/ladder.test.mjs`): a terminal refusal really does
+  walk coder-1 → coder-2 → coder-3 inside one delegation (three sessions, the
+  result names coder-3), a re-delegation starts on coder-2, and an operator Stop
+  stays on coder-1. The one failure that does **not** move at once is a usage cap:
+  it is retried in place for up to ten minutes because it can clear (it did on 27
+  and 29 Oct), and only an `outcome=error` after that grace hands the work to the
+  next rung. The emulator project's "the ladder didn't advance?" was a Stop *after*
+  the cap had cleared — not a broken ladder.
   **The reason is visible in three places**, because "why is Coder 1 idle?" is the
   question a card invites: the report carries the provider's own sentence
   (`coder-1's model was refused: Model space-bunny-free has been deprecated…`), the
@@ -1303,6 +1311,18 @@ when nothing looks busy. Measured live on 26 Oct: an idle Architect and a runnin
 worker in one project — `canStop=true`, one press stopped both, and the engine's
 active list was empty afterwards.
 
+**A stop used to be filed as the previous provider failure.** Measured 29 Oct on
+the emulator project: a free model's cap was retried seven times, cleared, the
+worker ran for five minutes, and the operator pressed Stop. The result line kept
+the old `Free usage limit reached…` because the runner breaks on `stopped` before
+recomputing the turn's error — so the Architect relayed the cap as the cause, and
+the operator went looking for a limit on a model that never had one. A result now
+carries `stoppedBy` (`operator` or `harness`) and `lastTurnError` separately, and
+`error` is null for a plain operator stop. The report's head says who stopped it;
+the old provider sentence, if any, is quoted as "before the stop, the last turn
+had ended with…". The two questions the record must answer are *why did it end*
+and *what was the last thing it heard* — they are not the same field.
+
 ## A restart is not a pause
 
 Measured 26 Oct: a worker was running t3 and waiting on a permission request when
@@ -1323,6 +1343,20 @@ or that pass mistakes an interrupted run for a queued one.
 The invariant: **a `delegate` record is always closed by a `result`.** The runner
 writes it normally; a boot writes the interrupted one. `openDelegations()` in
 `src/plans.js` is the single definition of "open", and it is tested.
+
+**The result can be written and the wake still lost.** Measured 29 Oct on the
+emulator project: t2 finished at 17:01:30 and the result was on disk, but the
+process restarted between `appendRun(result)` and the Architect's turn — the plan
+said `todo`, no message followed the result, and the page sat on a running clock
+that had stopped 36 minutes earlier. `recoverInterrupted` does not catch it (the
+record is closed) and `recoverDelegations` does not either (the call was read).
+So a boot now also looks for the *other* orphan: a result newer than every message
+in its Architect's transcript, with no `wake` marker. It re-sends a short report —
+"a run finished before Synapse restarted… read `runs.jsonl` and judge it" — and
+writes `{kind:"wake", callId, status:"done"}` so it is replayed once. Only the
+newest three results of the open round, and only within two days: history is not
+replayed at every boot. A successful ordinary wake writes the same marker, which
+is what makes the two states distinguishable (`recoverLostReports`).
 
 A stop with *no* run in flight still holds the project: interrupting the Architect
 mid-turn is the same request, and otherwise its next turn delegates the work that

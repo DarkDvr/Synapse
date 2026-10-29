@@ -609,6 +609,13 @@ body.dark .sidebar-bottom,
    ellipsis is a rule that can never apply, and a long computer name pushes the row
    wider instead of truncating. */
 .status-row .status-state { min-width: 0; }
+/* Which Synapse is running: one quiet line at the foot of the status block, not a
+   row of its own. The operator asked to be able to read it at a glance. */
+.status-version {
+  margin-top: 1px; padding-left: 2px;
+  font-family: var(--mono); font-size: 10.5px; color: #7f858d;
+  letter-spacing: .01em; user-select: text;
+}
 /* Remote Access: a two-state switch, not a button that says "On". The label is
    the row; the switch is the state. Green only when the LAN can reach us. Only
    while it is on does a second line appear: the address, the TOKEN chip, and the

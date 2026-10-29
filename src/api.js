@@ -21,6 +21,7 @@ import { questionSignature, guardDecision, readableAnswer } from './question-loo
 import { setProviderKey, providerKeyState, maskKey } from './secrets.js';
 import { probeToolchain } from './toolchain.js';
 import { busyInfo, busyMessage } from './busy.js';
+import { APP_VERSION } from './version.js';
 
 // What an attachment may be. The old rule was six files of up to 8 MB each, which
 // made twelve small screenshots impossible for no reason: the real cost is the
@@ -583,6 +584,7 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
 
   return {
     status: async () => ({
+      version: APP_VERSION,
       engine: engine.status(),
       bootError: getBootError(),
       config: toClientConfig(getConfig()),
