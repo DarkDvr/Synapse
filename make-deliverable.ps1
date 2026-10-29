@@ -192,6 +192,9 @@ Requirements (already installed on this PC):
   - .NET 10 Desktop Runtime
   - Microsoft Edge WebView2 Runtime
 
+Git is optional: if it is installed, Synapse uses it for restore points and
+project history; if not, those steps are skipped and everything else runs.
+
 Run
 ---
 Double-click Synapse.exe. The window opens, starts its own server, and shows the
