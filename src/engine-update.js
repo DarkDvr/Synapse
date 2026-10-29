@@ -293,7 +293,7 @@ export function createEngineUpdate({ engine, logger, runs, notify }) {
 
   /** Stop, install, start. Always restarts, even when npm fails: an engine that
    *  is down because an update went wrong is a worse state than an old engine. */
-  async function update() {
+  async function update({ onLog = () => {} } = {}) {
     const before = installed();
     if (!before.managedByNpm && !before.vendored) {
       return {
@@ -321,21 +321,31 @@ export function createEngineUpdate({ engine, logger, runs, notify }) {
     }
 
     log.info(`engine update: ${before.version || 'unknown'} -> npm latest`);
+    onLog(`Stopping opencode ${before.version || ''}…`);
     let installError = null;
     let startError = null;
     try {
       await engine.stop();
+      onLog('Installing @opencode/cli@latest…');
       await runNpmInstall(log);
-      if (before.vendored) copyOverVendored(log);
+      onLog('The package is installed.');
+      if (before.vendored) {
+        onLog('Copying the new runtime over bin\\opencode…');
+        copyOverVendored(log);
+      }
     } catch (err) {
       installError = err.message;
       log.error(`engine update failed: ${err.message}`);
+      onLog(`Install failed: ${err.message}`);
     }
     try {
+      onLog('Starting opencode…');
       await engine.start();
+      onLog('opencode is running.');
     } catch (err) {
       startError = err.message;
       log.error(`engine did not restart after the update: ${err.message}`);
+      onLog(`Could not restart: ${err.message}`);
     }
 
     const after = installed();
@@ -350,6 +360,9 @@ export function createEngineUpdate({ engine, logger, runs, notify }) {
     };
     if (result.ok) {
       log.info(`engine updated: ${result.from || '?'} -> ${result.to || '?'}`);
+      onLog(`Updated ${result.from || '?'} → ${result.to || '?'}.`);
+    } else {
+      onLog(`Update failed: ${result.error || 'unknown error'}`);
     }
     notify?.({ kind: 'engine-update', update: state || result });
     return result;

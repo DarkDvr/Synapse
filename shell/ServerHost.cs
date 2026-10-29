@@ -29,12 +29,14 @@ public enum ServerState
 /// Exit codes are the contract with the server (see <c>src/index.js</c>):
 ///
 ///   2          "restart me"      -> start a new one
+///   3          "close the app"   -> an update helper is waiting to replace files
 ///   0          stopped on purpose -> stay stopped
 ///   anything   it died           -> report, and do NOT respawn in a loop
 /// </summary>
 public sealed class ServerHost : IDisposable
 {
     public const int ExitRestart = 2;
+    public const int ExitQuit = 3;
 
     readonly string _root;
     readonly ConsoleStore _console;
@@ -51,6 +53,10 @@ public sealed class ServerHost : IDisposable
 
     /// <summary>(state, plain-English reason). May be raised off the UI thread.</summary>
     public event Action<ServerState, string>? Changed;
+
+    /// <summary>The server asked the whole app to close for an update. UI thread
+    ///  should shut down; the helper outside is waiting for this process.</summary>
+    public event Action? QuitRequested;
 
     public ServerState State { get; private set; } = ServerState.Stopped;
 
@@ -305,6 +311,14 @@ public sealed class ServerHost : IDisposable
             // loaded and a UI fix is not live until Ctrl+R.
             Set(ServerState.Stopped);
             Start();
+            return;
+        }
+
+        if (code == ExitQuit)
+        {
+            _console.Append($"[app] closing for an update, as the server asked{Environment.NewLine}");
+            Set(ServerState.Stopped);
+            try { QuitRequested?.Invoke(); } catch { /* the app is already closing */ }
             return;
         }
 

@@ -92,8 +92,16 @@ eight seconds, which is the handle-safe version of `taskkill /T`.
 | Code | Means | Shell does |
 |---|---|---|
 | 2 | "restart me" — Settings → Restart Now | respawns |
+| 3 | "close the whole app" — a staged Synapse update is waiting | raises `QuitRequested`; the app exits, and `update-apply.ps1` replaces the files and starts it again |
 | 0 | stopped on purpose | stays stopped |
 | anything else | it died | shows the failure with the tail, does **not** respawn in a loop |
+
+**Updates use code 3.** The server downloads and stages a release, starts
+`update-apply.ps1` detached, and exits 3. The shell closes; the helper waits for
+both pids, backs up the program files under `data\backups\`, overlays the stage
+and starts `Synapse.exe` again. The stage never contains `data\`, `config\` or the
+projects folder, so an update cannot take the operator's settings with it. A
+failed copy restores the backup and still starts the old version.
 
 **A crash leaves things running, so the next start cleans up after it.** Measured:
 killing the app from Task Manager left the server, the engine and its four MCP children

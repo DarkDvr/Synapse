@@ -28,6 +28,7 @@ import { measureLocalWindows } from './providers.js';
 import { sweepOrphans } from './cleanup.js';
 import { hasNpm, installLocalNpm } from './npm-check.js';
 import { APP_VERSION } from './version.js';
+import { createSynapseUpdate } from './synapse-update.js';
 
 const bootLog = logger.channel('app');
 let bootError = null;
@@ -298,6 +299,21 @@ async function main() {
       model.context = Number(loaded) || model.context;
       currentConfig = applyConfig(currentConfig);
     },
+  });
+
+  // Synapse's own release feed. It is a separate concern from the engine: the
+  // program files and the runtime update on different clocks, and the dialog
+  // shows both.
+  const quitForUpdate = () => {
+    app.info('closing Synapse so the update helper can replace the program files');
+    setTimeout(() => process.exit(3), 150);
+  };
+  const synapseUpdate = createSynapseUpdate({
+    logger,
+    engine,
+    runs: runner,
+    getConfig,
+    quit: quitForUpdate,
   });
 
   // The engine is a separate program and it updates often, and the model catalog
@@ -612,6 +628,7 @@ async function main() {
     inspectModel,
     probeDir: PROBE_DIR,
     runs: runner,
+    synapseUpdate,
     engineUpdate,
     // Settings > Save Changes offers a restart, so the server can hand its own
     // relaunch to the app that supervises it — one restart path, one set of exit
@@ -646,6 +663,13 @@ async function main() {
     onRemote,
   });
   await http.listen(remote.bindHost());
+
+  // One release check at boot, cached for six hours: the chip has to know before
+  // the operator opens anything. It never downloads on its own.
+  synapseUpdate
+    .check({ online: true, maxAgeMs: 6 * 60 * 60 * 1000 })
+    .then((update) => http?.broadcast({ kind: 'synapse-update', update, ts: Date.now() }))
+    .catch((err) => app.warn(`synapse update check failed: ${err.message}`));
 
   const url = `http://${currentConfig.server.host}:${currentConfig.server.port}`;
   app.info(`UI ready at ${url}`);

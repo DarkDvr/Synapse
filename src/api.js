@@ -154,7 +154,7 @@ export function normalizeAttachments(list) {
   return out;
 }
 
-export function createApi({ getConfig, applyConfig, engine, logger, getBootError, projects, toolStats, probe, modelCache, inspectModel: inspectRef, probeDir, runs, engineUpdate, restart, stopSelf, notify, permissionLog, permissionGate, permissionMemory }) {
+export function createApi({ getConfig, applyConfig, engine, logger, getBootError, projects, toolStats, probe, modelCache, inspectModel: inspectRef, probeDir, runs, engineUpdate, synapseUpdate, restart, stopSelf, notify, permissionLog, permissionGate, permissionMemory }) {
   const app = logger.channel('app');
 
   // The last brief we handed each session, so an unchanged plan does not PUT
@@ -658,7 +658,20 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
     // free: it reads the engine, the desktop's own version file and the cache.
     engineUpdate: async () => engineUpdate.check({ online: false }),
     checkEngineUpdate: async () => engineUpdate.check({ online: true }),
-    updateEngine: async () => engineUpdate.update(),
+    updateEngine: async () =>
+      engineUpdate.update({
+        onLog: (line) => notify?.({ kind: 'update', type: 'update.log', target: 'engine', line }),
+      }),
+
+    // Synapse's own release, from the public feed. `check` is cached; `checkNow`
+    // is the operator asking. The update downloads, stages and closes the app —
+    // the helper finishes outside it.
+    synapseUpdate: async () => synapseUpdate.check({ online: false }),
+    checkSynapseUpdate: async () => synapseUpdate.check({ online: true }),
+    updateSynapse: async () =>
+      synapseUpdate.update({
+        onLog: (line) => notify?.({ kind: 'update', type: 'update.log', target: 'synapse', line }),
+      }),
 
     // What this machine can build with, for Settings → Windows. Cheap and cached:
     // one PowerShell call, no builds, so the tab opens instantly.

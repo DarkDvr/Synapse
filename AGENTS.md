@@ -48,10 +48,10 @@ the cards and the commits, not the code. One reason per sentence, not a chain.
    looks like it needs a package, solve it in the standard library instead —
    web search, MCP, markdown rendering and the UI are all hand-rolled here.
 2. **Self-contained and offline.** Nothing may be fetched at runtime except the
-   model provider. Fonts are vendored locally. No CDN links, ever. The one
-   exception is the engine update check (`src/engine-update.js`), and only because
-   the operator asks for it: npm is contacted when the update dialog opens, never
-   at boot, and the answer is cached in `data\engine-update.json`.
+   model provider. Fonts are vendored locally. No CDN links, ever. The exceptions
+   are the two update feeds (`src/engine-update.js`, `src/synapse-update.js`):
+   they answer the operator's update chip, cache their answers, and download only
+   when Update is pressed.
 3. **A good tenant.** Whatever Synapse needs, it installs itself and silently,
    inside this folder — `bin\node`, `bin\opencode`, `vendor\`. Never `winget`, a
    global install, a PATH edit, the registry or `%APPDATA%`. The machine is

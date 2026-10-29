@@ -52,6 +52,7 @@ try {
   $required = @(
     'Synapse.exe',
     'package.json',
+    'update-apply.ps1',
     'src\index.js',
     'web\index.html',
     'config\synapse.config.json',
@@ -148,6 +149,7 @@ try {
   Say "copying Synapse.exe and package.json..."
   Copy-Item -LiteralPath (Join-Path $root 'Synapse.exe') -Destination $stage
   Copy-Item -LiteralPath (Join-Path $root 'package.json') -Destination $stage
+  Copy-Item -LiteralPath (Join-Path $root 'update-apply.ps1') -Destination $stage
 
   foreach ($dir in @('src', 'web', 'skills')) {
     Say "copying $dir\..."

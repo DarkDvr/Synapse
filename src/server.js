@@ -255,6 +255,14 @@ export function createServer({ api, engine, logger, config, remote, onRemote }) 
       if (seg.length === 2 && method === 'POST') return sendJson(res, 200, await api.updateEngine());
     }
 
+    // Synapse's own release. Same shape as the engine's: a cached status, an
+    // on-demand check, and an update that stages the zip and closes the app.
+    if (seg[0] === 'synapse' && seg[1] === 'update') {
+      if (seg.length === 2 && method === 'GET') return sendJson(res, 200, await api.synapseUpdate());
+      if (seg[2] === 'check' && method === 'POST') return sendJson(res, 200, await api.checkSynapseUpdate());
+      if (seg.length === 2 && method === 'POST') return sendJson(res, 200, await api.updateSynapse());
+    }
+
     // GET /api/models  /api/agents  /api/skills
     // GET /api/providers/health — which local servers are answering right now
     // (the sidebar's Local LLM row), and no cached claim is given when none is up.

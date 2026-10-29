@@ -996,6 +996,39 @@ body.dark .sidebar-bottom,
 }
 .upd-note { font-size: 11.5px; line-height: 1.5; color: #8f939b; margin: 0; }
 .upd-note.is-warn { color: var(--amber); }
+/* One card per updater, then the console both write into. The changelog is part
+   of the card so "what is new" sits above the process, not behind a second click. */
+.upd-list { display: grid; gap: 10px; }
+.upd-card {
+  display: grid; gap: 8px; padding: 12px;
+  border: 1px solid var(--line); border-radius: 10px;
+  background: rgba(255, 255, 255, 0.018);
+}
+.upd-card-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.upd-name { font-size: 13px; font-weight: 600; color: var(--text); }
+.upd-vers { font-size: 12px; color: #a8acb3; text-align: right; }
+.upd-vers b { color: var(--text); }
+.upd-card-foot { display: flex; justify-content: flex-end; }
+.upd-notes summary { cursor: pointer; font-size: 11.5px; color: var(--yellow); }
+.upd-md {
+  max-height: 190px; overflow: auto; margin-top: 6px; padding-left: 10px;
+  border-left: 2px solid var(--violet-line);
+  font-size: 12px; line-height: 1.5; color: #b9bcc2;
+}
+.upd-md h1, .upd-md h2, .upd-md h3 { margin: 8px 0 4px; font-size: 13px; color: var(--text); }
+.upd-md ul { margin: 4px 0; padding-left: 18px; }
+.upd-md code { font-family: var(--mono); font-size: 10.5px; }
+.upd-console-wrap { display: grid; gap: 6px; }
+.upd-console-head {
+  font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: #82868e;
+}
+.upd-console {
+  margin: 0; min-height: 96px; max-height: 180px; overflow: auto;
+  padding: 9px 11px; border: 1px solid var(--line); border-radius: 8px;
+  background: #111317; color: #b9bcc2;
+  font-family: var(--mono); font-size: 10.5px; line-height: 1.5;
+  white-space: pre-wrap;
+}
 .upd-busy {
   display: flex; align-items: center; gap: 9px;
   font-size: 11.5px; color: var(--yellow);

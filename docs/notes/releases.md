@@ -36,12 +36,19 @@ Two things mirror it and are bumped in the same commit:
 3. A minor or major release gets `docs/release-notes-vX.Y.Z.md`; a patch gets
    its note in the commit message and the GitHub release page.
 4. Run the suite: `bin\node\node.exe --test "tests\*.test.mjs"`.
-5. Commit, tag, push — all three:
+5. Build the app and the update asset:
+   ```
+   .\shell\build.ps1
+   .\make-release.ps1
+   ```
+   `dist\Synapse-<version>-win-x64.zip` carries program files only and
+   `dist\SHA256SUMS` is its checksum. Attach both to the GitHub release.
+6. Commit, tag, push — all three:
    ```
    git tag v1.0.2
    git push origin main --tags
    ```
-6. The tag is the release. A commit without one is a draft that the operator
+7. The tag is the release. A commit without one is a draft that the operator
    cannot point at later.
 
 ## Reading a version before debugging

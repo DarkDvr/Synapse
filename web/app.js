@@ -166,6 +166,11 @@ const state = {
   // stops the engine, so it is a state of the app, not of a button.
   update: null,
   updating: false,
+  // Synapse's own release, and the unified update dialog: which target is busy,
+  // and the console lines both updaters append to.
+  synapseUpdate: null,
+  updateBusy: null, // 'engine' | 'synapse' | null
+  updateLog: [],
   config: null,
   models: [],
   workspace: '',
@@ -1037,140 +1042,168 @@ function paintClocks(now) {
 // it says nothing at all when there is nothing to do.
 let updateChecking = false;
 
-async function refreshUpdate() {
+async function refreshUpdates() {
   try { state.update = await api('GET', '/api/engine/update'); } catch { state.update = null; }
+  try { state.synapseUpdate = await api('GET', '/api/synapse/update'); } catch { state.synapseUpdate = null; }
   renderUpdateChip();
 }
 
 function renderUpdateChip() {
   const chip = $('updateChip');
   if (!chip) return;
-  const u = state.update;
-  const show = Boolean(u?.newer) && !state.updating;
+  const engine = state.update;
+  const synapse = state.synapseUpdate;
+  const show = Boolean(engine?.newer || synapse?.newer) && !state.updateBusy;
   chip.hidden = !show;
   if (show) {
-    chip.title =
-      `The runtime is ${u.current || 'unknown'}; ${u.latest} is available (${u.source}). ` +
-      'The runtime carries the model catalog, so updating it is how the list gets current.';
+    const parts = [];
+    if (synapse?.newer) parts.push(`Synapse ${synapse.current || ''} → ${synapse.latest}`);
+    if (engine?.newer) parts.push(`runtime ${engine.current || '?'} → ${engine.latest}`);
+    chip.title = `Update available: ${parts.join('; ')}. Click to review.`;
   }
 }
 
 function openUpdateDialog() {
   $('updateModal').hidden = false;
+  state.updateLog = [];
   renderUpdateDialog();
-  // Ask npm once, here: opening the dialog is the operator asking. Boot never
-  // does, because the app is offline by rule.
-  checkEngineUpdate();
+  // Opening the dialog is the operator asking: both feeds may be checked now,
+  // the GitHub release and npm. Boot checks only the release, cached.
+  checkUpdates();
 }
 
 function closeUpdateDialog() {
-  // A click-away must not hide the one operation that restarts the engine.
-  if (state.updating) return;
+  // A click-away must not hide the one operation that restarts the engine, and
+  // Escape must not either: an update in flight keeps the dialog.
+  if (state.updateBusy) return;
   $('updateModal').hidden = true;
 }
 
 function renderUpdateDialog() {
-  const u = state.update || {};
+  const e = state.update || {};
+  const s = state.synapseUpdate || {};
+  const busy = state.updateBusy;
   const sub = $('updateSub');
   const body = $('updateBody');
   if (!body) return;
 
   if (sub) {
-    sub.textContent = state.updating
-      ? 'Updating. The runtime is stopped, replaced and started again - this takes about a minute.'
-      : u.newer
-        ? 'A newer runtime is available. The model catalog ships inside it, so this is also how the model list gets current.'
-        : 'The runtime carries the model catalog, the tools and the API. Nothing to do right now.';
+    sub.textContent = busy
+      ? busy === 'synapse'
+        ? 'Updating Synapse. It will close, replace its program files and reopen. Your projects and settings are not touched.'
+        : 'Updating the runtime. It is stopped, replaced and started again — about a minute.'
+      : e.newer || s.newer
+        ? 'The two update separately: Synapse is the harness, the runtime is the engine and its model catalog.'
+        : 'Synapse and the runtime are both up to date, or nothing could be checked.';
   }
 
-  const checked = u.checkedAt ? `checked ${ago(Date.parse(u.checkedAt))}` : 'not checked with npm yet';
-  const source =
-    u.source === 'OpenCode Desktop' ? 'OpenCode Desktop' : u.source === 'npm' ? 'npm' : u.source || '';
-  const published = u.publishedAt ? ` · published ${ago(Date.parse(u.publishedAt))}` : '';
-  const rows = [
-    ['Installed', `<b>opencode ${esc(u.current || 'unknown')}</b>`],
-    [
-      'Known newest',
-      `${u.latest ? `<b>${esc(u.latest)}</b>` : 'unknown'}` +
-        (source ? ` <small>${esc(source)}${esc(published)} · ${esc(checked)}</small>` : ''),
-    ],
-    ['Runtime file', `<code title="${esc(u.binary || '')}">${esc(u.binary || 'auto-detected')}</code>`],
-  ];
+  const synVersion = s.newer
+    ? `<b>${esc(s.current || '?')}</b> → <b>${esc(s.latest || '?')}</b>`
+    : s.latest
+      ? `<b>${esc(s.current || '?')}</b> — up to date`
+      : `<b>${esc(s.current || '?')}</b>`;
+  const synNote = s.error
+    ? `<p class="upd-note is-warn">${esc(s.error)}</p>`
+    : s.checkedAt
+      ? `<p class="upd-note">Checked ${esc(ago(Date.parse(s.checkedAt)))}${s.url ? ` · <a href="${esc(s.url)}" target="_blank" rel="noreferrer">release page</a>` : ''}</p>`
+      : '<p class="upd-note">Not checked yet.</p>';
+  const synNotes = s.notes
+    ? `<details class="upd-notes" open><summary>What is new</summary><div class="upd-md">${renderMarkdown(s.notes)}</div></details>`
+    : '';
+  const synCan = Boolean(s.newer && s.asset && !s.private && !busy && !updateChecking);
 
-  const notes = [];
-  if (u.onlineError) {
-    notes.push(`<p class="upd-note is-warn">npm could not be asked: ${esc(u.onlineError)}</p>`);
-  }
-  if (!u.managedByNpm) {
-    notes.push(
-      '<p class="upd-note is-warn">This runtime was not installed with npm, so Synapse will not replace it. ' +
-        'Update it where it came from, or point Settings → Engine at an npm install.</p>',
-    );
-  }
-  if (u.blocked) notes.push(`<p class="upd-note is-warn">${esc(u.blocked)}</p>`);
-  if (u.newer) {
-    notes.push(
-      '<p class="upd-note">The npm package publishes no release notes — the version number is all it tells us. ' +
-        'The runtime brings its own model catalog, tools and API, and updating restarts it; any turn in flight ' +
-        'would be lost, which is why Synapse refuses while one is running.</p>',
-    );
-  }
+  const engVersion = e.newer
+    ? `<b>opencode ${esc(e.current || '?')}</b> → <b>${esc(e.latest || '?')}</b>`
+    : e.latest
+      ? `<b>opencode ${esc(e.current || '?')}</b> — up to date`
+      : `<b>opencode ${esc(e.current || '?')}</b>`;
+  const engNote = e.onlineError
+    ? `<p class="upd-note is-warn">npm could not be asked: ${esc(e.onlineError)}</p>`
+    : !e.managedByNpm && !e.vendored
+      ? '<p class="upd-note is-warn">This runtime was not installed with npm, so Synapse will not replace it.</p>'
+      : e.blocked
+        ? `<p class="upd-note is-warn">${esc(e.blocked)}</p>`
+        : '<p class="upd-note">The runtime carries the model catalog, tools and API. npm publishes no release notes — the version number is all it tells us.</p>';
+  const engCan = Boolean(e.newer && e.canUpdate && !busy && !updateChecking);
 
   body.innerHTML =
-    `<div class="upd-grid">` +
-    rows
-      .map(
-        ([k, v]) =>
-          `<span class="upd-k">${esc(k)}</span><span class="upd-v">${v}</span>`,
-      )
-      .join('') +
-    `</div>` +
-    (state.updating
-      ? '<div class="upd-busy"><span class="upd-bar"></span>' +
-        'Stopping the runtime, installing, starting it again…</div>'
-      : '') +
-    notes.join('');
+    '<div class="upd-list">' +
+    `<section class="upd-card">` +
+    `<div class="upd-card-head"><span class="upd-name">Synapse</span><span class="upd-vers">${synVersion}</span></div>` +
+    synNote +
+    synNotes +
+    `<div class="upd-card-foot"><button class="btn btn-primary btn-sm" type="button" data-update="synapse" ${synCan ? '' : 'disabled'}>` +
+    `${busy === 'synapse' ? 'Updating…' : s.newer && s.asset ? 'Update Synapse' : s.error ? 'Unavailable' : 'Up to Date'}</button></div>` +
+    `</section>` +
+    `<section class="upd-card">` +
+    `<div class="upd-card-head"><span class="upd-name">Runtime</span><span class="upd-vers">${engVersion}</span></div>` +
+    engNote +
+    `<div class="upd-card-foot"><button class="btn btn-primary btn-sm" type="button" data-update="engine" ${engCan ? '' : 'disabled'}>` +
+    `${busy === 'engine' ? 'Updating…' : e.newer ? 'Update Runtime' : 'Up to Date'}</button></div>` +
+    `</section>` +
+    '</div>' +
+    '<div class="upd-console-wrap"><div class="upd-console-head">Update console</div>' +
+    `<pre class="upd-console" id="updateConsole">${esc(state.updateLog.join('\n') || 'Nothing yet.')}</pre></div>`;
 
   const check = $('checkUpdate');
-  const apply = $('applyUpdate');
   if (check) {
-    check.disabled = state.updating || updateChecking;
+    check.disabled = Boolean(busy) || updateChecking;
     check.textContent = updateChecking ? 'Checking…' : 'Check Again';
   }
-  if (apply) {
-    apply.disabled = state.updating || updateChecking || !u.newer || !u.canUpdate;
-    apply.textContent = state.updating ? 'Updating…' : 'Update Now';
-  }
+  const close = $('closeUpdate');
+  const closeFoot = $('closeUpdateFoot');
+  for (const el of [close, closeFoot]) if (el) el.disabled = Boolean(busy);
+  renderUpdateConsole();
 }
 
-async function checkEngineUpdate() {
-  if (updateChecking || state.updating) return;
+function renderUpdateConsole() {
+  const el = $('updateConsole');
+  if (!el) return;
+  el.textContent = state.updateLog.join('\n') || 'Nothing yet.';
+  el.scrollTop = el.scrollHeight;
+}
+
+function pushUpdateLog(line) {
+  if (!line) return;
+  state.updateLog.push(String(line));
+  if (state.updateLog.length > 400) state.updateLog.splice(0, state.updateLog.length - 400);
+  renderUpdateConsole();
+}
+
+async function checkUpdates() {
+  if (updateChecking || state.updateBusy) return;
   updateChecking = true;
   renderUpdateDialog();
-  try {
-    state.update = await api('POST', '/api/engine/update/check');
-  } catch (err) {
-    toast('Could Not Check for Updates', err.message);
-  } finally {
-    updateChecking = false;
-    renderUpdateChip();
-    if (!$('updateModal').hidden) renderUpdateDialog();
+  const [eng, syn] = await Promise.allSettled([
+    api('POST', '/api/engine/update/check'),
+    api('POST', '/api/synapse/update/check'),
+  ]);
+  if (eng.status === 'fulfilled') state.update = eng.value;
+  if (syn.status === 'fulfilled') state.synapseUpdate = syn.value;
+  updateChecking = false;
+  renderUpdateChip();
+  if (!$('updateModal').hidden) renderUpdateDialog();
+  if (eng.status === 'rejected' && syn.status === 'rejected') {
+    toast('Could Not Check for Updates', eng.reason?.message || syn.reason?.message || 'Both feeds refused.');
   }
 }
 
 async function applyEngineUpdate() {
   const u = state.update || {};
-  if (state.updating || !u.newer) return;
-  state.updating = true;
+  if (state.updateBusy || !u.newer) return;
+  state.updateBusy = 'engine';
+  state.updateLog = [];
   renderUpdateChip();
   renderUpdateDialog();
+  pushUpdateLog(`Updating the runtime ${u.current || ''} → ${u.latest || ''}…`);
   let r;
   try {
     r = await api('POST', '/api/engine/update');
   } catch (err) {
     r = { ok: false, error: err.message };
   }
-  state.updating = false;
+  state.updateBusy = null;
+  pushUpdateLog(r.ok ? `Runtime updated to ${r.to || 'the new version'}.` : `Update failed: ${r.error || 'unknown error'}`);
   if (r.ok) {
     toast('Runtime Updated', `${r.from || 'previous'} → ${r.to || 'new'}. The model list has been re-read.`);
   } else {
@@ -1178,7 +1211,7 @@ async function applyEngineUpdate() {
   }
   await refreshStatus();
   await refreshRemote();
-  await refreshUpdate();
+  await refreshUpdates();
   await loadModels();
   // A model that left the catalog leaves a role pointing at nothing. Say it once
   // here, rather than letting the next turn be the first thing to notice.
@@ -1194,6 +1227,31 @@ async function applyEngineUpdate() {
     );
   }
   if (!$('updateModal').hidden) renderUpdateDialog();
+}
+
+async function applySynapseUpdate() {
+  const s = state.synapseUpdate || {};
+  if (state.updateBusy || !s.newer) return;
+  state.updateBusy = 'synapse';
+  state.updateLog = [];
+  renderUpdateChip();
+  renderUpdateDialog();
+  pushUpdateLog(`Updating Synapse ${s.current || ''} → ${s.latest || ''}…`);
+  let r;
+  try {
+    r = await api('POST', '/api/synapse/update');
+  } catch (err) {
+    r = { ok: false, error: err.message };
+  }
+  if (r.ok && r.closing) {
+    pushUpdateLog(`Synapse ${r.version || s.latest} is ready. Closing to replace its files; it will reopen by itself.`);
+    return;
+  }
+  state.updateBusy = null;
+  pushUpdateLog(`Update failed: ${r.error || 'unknown error'}`);
+  renderUpdateChip();
+  renderUpdateDialog();
+  toast('Update Failed', r.error || 'Synapse could not be updated.');
 }
 
 /**
@@ -6460,6 +6518,22 @@ function connectStream() {
       return;
     }
 
+    // Synapse's release check finished at boot (or after a click): the chip and
+    // the dialog both read from this.
+    if (ev.kind === 'synapse-update') {
+      if (ev.update) state.synapseUpdate = ev.update;
+      renderUpdateChip();
+      if (!$('updateModal').hidden) renderUpdateDialog();
+      return;
+    }
+
+    // A line from either updater. The console is shared; the target is in the
+    // line only for the log, not for routing.
+    if (ev.kind === 'update' && ev.type === 'update.log') {
+      pushUpdateLog(ev.line);
+      return;
+    }
+
     // The engine's version moved (an update finished): the chip and the dialog
     // both read from this, and the catalog may have changed with it.
     if (ev.kind === 'engine-update') {
@@ -7051,6 +7125,7 @@ function settingsAbout() {
         <dt>Licence</dt><dd>Free software</dd>
       </dl>
       <p class="about-free">Free to use, copy and share. No account, no subscription, no telemetry.</p>
+      <p class="about-free"><button class="btn btn-secondary btn-sm" type="button" data-check-updates>Check for Updates</button></p>
     </div>`;
 }
 
@@ -8005,6 +8080,11 @@ document.addEventListener('keydown', (e) => {
   }, true);
   $('settingsBtn').addEventListener('click', openSettings);
   $('closeSettings').addEventListener('click', closeSettings);
+  $('settingsBody').addEventListener('click', (e) => {
+    if (!e.target.closest('[data-check-updates]')) return;
+    closeSettings();
+    openUpdateDialog();
+  });
   $('revertSettings').addEventListener('click', revertSettings);
   $('saveSettings').addEventListener('click', saveSettings);
   $('settingsTabs').addEventListener('click', (e) => {
@@ -8037,8 +8117,13 @@ document.addEventListener('keydown', (e) => {
   $('updateChip').addEventListener('click', openUpdateDialog);
   $('closeUpdate').addEventListener('click', closeUpdateDialog);
   $('closeUpdateFoot').addEventListener('click', closeUpdateDialog);
-  $('checkUpdate').addEventListener('click', checkEngineUpdate);
-  $('applyUpdate').addEventListener('click', applyEngineUpdate);
+  $('checkUpdate').addEventListener('click', checkUpdates);
+  $('updateBody').addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-update]');
+    if (!btn || btn.disabled) return;
+    if (btn.dataset.update === 'engine') applyEngineUpdate();
+    if (btn.dataset.update === 'synapse') applySynapseUpdate();
+  });
 
   // The two reference tables open from the rail's foot. They are rendered on
   // open rather than only on the 30-second poll, so what the operator sees is
@@ -8049,7 +8134,6 @@ document.addEventListener('keydown', (e) => {
   // the same second way out every other popup here has.
   $('consoleBtn')?.addEventListener('click', openConsole);
   $('consoleClose')?.addEventListener('click', closeConsole);
-  $('consoleModal')?.addEventListener('click', (e) => { if (e.target === $('consoleModal')) closeConsole(); });
   // The same three actions the tray offers. Stopping asks first — the shell owns
   // that question, so both routes ask it in the same place, once.
   for (const [id, action] of [['consoleStart', 'start'], ['consoleRestart', 'restart'], ['consoleStop', 'stop']]) {
@@ -8193,14 +8277,10 @@ document.addEventListener('keydown', (e) => {
   $('dialogExtra').addEventListener('click', () => closeDialog($('dialogExtra').dataset.result || 'extra'));
   $('dialogCancel').addEventListener('click', () => closeDialog(null));
   $('dialogClose').addEventListener('click', () => closeDialog(null));
-  $('dialogModal').addEventListener('click', (e) => {
-    if (e.target === $('dialogModal') && dialogDismissable) closeDialog(null);
-  });
   $('dialogModal').addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target.tagName === 'INPUT') { e.preventDefault(); $('dialogOk').click(); } });
 
   $('closeError').addEventListener('click', closeError);
   $('closeErrorTop').addEventListener('click', closeError);
-  $('errorModal').addEventListener('click', (e) => { if (e.target === $('errorModal')) closeError(); });
   $('copyError').addEventListener('click', async () => {
     try {
       await navigator.clipboard.writeText($('errorText').textContent);
@@ -8209,8 +8289,6 @@ document.addEventListener('keydown', (e) => {
       toast('Copy failed', 'Clipboard access was blocked.');
     }
   });
-  $('settingsModal').addEventListener('click', (e) => { if (e.target === $('settingsModal')) closeSettings(); });
-  $('updateModal').addEventListener('click', (e) => { if (e.target === $('updateModal')) closeUpdateDialog(); });
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
     // A non-dismissable dialog (the folder-already-exists question) ignores Escape:
@@ -8319,7 +8397,7 @@ async function boot() {
   setView();
   await refreshStatus();
   await refreshRemote();
-  await refreshUpdate();
+  await refreshUpdates();
   await loadModels();
   await loadProjects();
   await restoreOpenSession();

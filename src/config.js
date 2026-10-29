@@ -121,6 +121,14 @@ export const DEFAULTS = {
     maxFileMb: 5,
     channels: { app: true, engine: true, session: true, tools: true },
   },
+  // Where Synapse asks about its own releases. A private repository answers 404;
+  // point this at a public release feed (or make the repository public) and the
+  // UPDATE chip starts working.
+  update: {
+    synapse: {
+      feed: 'https://api.github.com/repos/DarkDvr/Synapse/releases/latest',
+    },
+  },
 };
 
 function isPlainObject(v) {
@@ -407,6 +415,11 @@ export function normalize(raw) {
   lg.retentionDays = clampInt(lg.retentionDays, 1, 365, 7);
   lg.maxFileMb = clampInt(lg.maxFileMb, 1, 200, 5);
   lg.channels = merge(DEFAULTS.logging.channels, lg.channels || {});
+
+  cfg.update = isPlainObject(cfg.update) ? cfg.update : {};
+  cfg.update.synapse = isPlainObject(cfg.update.synapse) ? cfg.update.synapse : {};
+  const feed = String(cfg.update.synapse.feed || '').trim();
+  cfg.update.synapse.feed = feed || DEFAULTS.update.synapse.feed;
 
   return cfg;
 }
