@@ -1568,7 +1568,7 @@ body[data-mode="single"] #runAuto { display: none; }
    reasoning and tool cards above it. It starts at the answer's first line, so a
    long reply reads as one column instead of another grey block. */
 .msg.assistant .msg-answer.is-answer {
-  margin-top: 9px; padding: 1px 0 1px 12px;
+  margin-top: 20px; padding: 1px 0 1px 12px;
   border-left: 2px solid rgba(53, 192, 138, 0.55);
 }
 .msg-answer > :first-child { margin-top: 0; }

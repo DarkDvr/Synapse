@@ -53,6 +53,7 @@ try {
     'Synapse.exe',
     'package.json',
     'update-apply.ps1',
+    'update-apply.mjs',
     'src\index.js',
     'web\index.html',
     'config\synapse.config.json',
@@ -153,6 +154,7 @@ try {
   Copy-Item -LiteralPath (Join-Path $root 'Synapse.exe') -Destination $stage
   Copy-Item -LiteralPath (Join-Path $root 'package.json') -Destination $stage
   Copy-Item -LiteralPath (Join-Path $root 'update-apply.ps1') -Destination $stage
+  Copy-Item -LiteralPath (Join-Path $root 'update-apply.mjs') -Destination $stage
   foreach ($rel in @('LICENSE', 'NOTICE', 'THIRD-PARTY.md')) {
     Copy-Item -LiteralPath (Join-Path $root $rel) -Destination $stage
   }

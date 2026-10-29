@@ -249,20 +249,57 @@ export function createSynapseUpdate({ logger, engine, runs, getConfig, notify, q
         if (!fs.existsSync(path.join(stage, need))) throw new Error(`the zip is missing ${need}`);
       }
 
-      const helper = path.join(UPDATE_DIR, `apply-${state.latest}.ps1`);
-      fs.copyFileSync(path.join(ROOT, 'update-apply.ps1'), helper);
-      onLog('Ready. Synapse will close, replace its program files and reopen.');
-      const child = spawn(
-        'powershell.exe',
-        [
-          '-NoProfile', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden', '-File', helper,
-          '-Root', ROOT, '-Stage', stage, '-ServerPid', String(process.pid),
-          '-ShellPid', String(process.ppid), '-Version', state.latest,
-        ],
-        { detached: true, stdio: 'ignore', windowsHide: true },
-      );
+      const startedFile = path.join(UPDATE_DIR, 'started');
+      try { fs.rmSync(startedFile, { force: true }); } catch { /* no stale marker */ }
+      let child = null;
+      const mjs = path.join(ROOT, 'update-apply.mjs');
+      if (fs.existsSync(mjs)) {
+        // The Node helper: the runtime that travels with the app is guaranteed,
+        // and it has none of PowerShell's execution-policy or .ps1-blocking
+        // problems. The server waits for its "started" file before it closes.
+        const helper = path.join(UPDATE_DIR, `apply-${state.latest}.mjs`);
+        fs.copyFileSync(mjs, helper);
+        const node = fs.existsSync(path.join(ROOT, 'bin', 'node', 'node.exe'))
+          ? path.join(ROOT, 'bin', 'node', 'node.exe')
+          : process.execPath;
+        child = spawn(
+          node,
+          [
+            helper, '--root', ROOT, '--stage', stage, '--server', String(process.pid),
+            '--shell', String(process.ppid), '--version', state.latest,
+          ],
+          { detached: true, stdio: 'ignore', windowsHide: true },
+        );
+      } else {
+        // An install from before the Node helper: keep the PowerShell path.
+        const helper = path.join(UPDATE_DIR, `apply-${state.latest}.ps1`);
+        fs.copyFileSync(path.join(ROOT, 'update-apply.ps1'), helper);
+        child = spawn(
+          'powershell.exe',
+          [
+            '-NoProfile', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden', '-File', helper,
+            '-Root', ROOT, '-Stage', stage, '-ServerPid', String(process.pid),
+            '-ShellPid', String(process.ppid), '-Version', state.latest,
+          ],
+          { detached: true, stdio: 'ignore', windowsHide: true },
+        );
+      }
       child.unref();
 
+      // If the helper cannot even start, do not close the app: the operator
+      // keeps a working Synapse and a message, instead of a dark window.
+      let started = false;
+      for (let i = 0; i < 30; i += 1) {
+        if (fs.existsSync(startedFile)) { started = true; break; }
+        await new Promise((r) => setTimeout(r, 100));
+      }
+      if (!started) {
+        const message =
+          'The update helper did not start, so the app was left open. The download is staged in data\\update; check apply.log there, or extract the release zip over the folder.';
+        onLog(message);
+        return { ok: false, error: message };
+      }
+      onLog('Ready. Synapse will close, replace its program files and reopen.');
       setTimeout(() => {
         try { quit?.(); } catch { /* the helper is already waiting */ }
       }, 900);
