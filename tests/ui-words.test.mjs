@@ -106,6 +106,6 @@ test('the final answer has its own rule, and work does not', () => {
   assert.match(css, /\.msg\.assistant \.msg-answer\.is-answer::before\s*\{[^}]*background: var\(--surface\)/);
   const js = read('web/app.js');
   assert.match(js, /is-answer/);
-  assert.match(js, /hasTool/);
-  assert.match(js, /turnWork \|\| hasWork/);
+  assert.match(js, /workBefore/);
+  assert.match(js, /toolAfter/);
 });

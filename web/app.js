@@ -3669,18 +3669,10 @@ function renderTranscript() {
   ].sort((x, y) => x.at - y.at);
   let html = postHtml;
   let next = 0;
-  // Whether this turn has done any work before the message being drawn. The
-  // answer rule is a separator from reasoning/tool calls; a plain reply with
-  // neither is one block and should not grow a gap for work that never happened.
-  let turnWork = false;
   for (const m of showable) {
-    if (m.type === 'user' || m.type === 'synthetic' || m.type === 'system') turnWork = false;
     const at = Number(m.created) || 0;
     while (next < items.length && at && items[next].at < at) html += items[next++].html;
-    html += renderMessage(m, { turnWork });
-    const parts = m.parts || [];
-    if (m.type === 'assistant' && parts.some((p) => p.type === 'reasoning' || p.type === 'tool')) turnWork = true;
-    if (m.type === 'idle') turnWork = false;
+    html += renderMessage(m);
   }
   while (next < items.length) html += items[next++].html;
   el.innerHTML = html + pending;
@@ -4282,7 +4274,7 @@ function traceSig() {
 }
 
 // The role label shares the first line with the text; the time rides the right.
-function renderMessage(m, { turnWork = false } = {}) {
+function renderMessage(m) {
   const t = hhmm(m.created);
   const stamp = t ? `<span class="msg-time">${t}</span>` : '';
 
@@ -4335,15 +4327,20 @@ function renderMessage(m, { turnWork = false } = {}) {
     // the green rule down its left, so prose is one glance away from the
     // reasoning and tool cards above it. Narration in a step that also calls a
     // tool stays plain — that is work, not the answer.
-    const hasTool = parts.some((p) => p.type === 'tool');
-    const hasWork = parts.some((p) => p.type === 'reasoning' || p.type === 'tool');
     const lastText = parts.map((p, i) => (p.type === 'text' ? i : -1)).filter((i) => i >= 0).pop();
+    // A turn is grouped into one message, so "was there work?" is a question
+    // about the parts before the last text, not about a separate message. Text
+    // followed by a tool is narration; text after the work is the answer.
+    const workBefore =
+      lastText !== undefined &&
+      parts.slice(0, lastText).some((p) => p.type === 'reasoning' || p.type === 'tool');
+    const toolAfter = lastText !== undefined && parts.slice(lastText + 1).some((p) => p.type === 'tool');
     for (const [i, part] of parts.entries()) {
       // The model's actual answer goes in its own panel, rendered as markdown,
       // so it is visually separate from reasoning and tool noise. The separator
       // only exists when there was work in this turn to separate it from.
       if (part.type === 'text') {
-        const answer = !hasTool && i === lastText && (turnWork || hasWork) ? ' is-answer' : '';
+        const answer = i === lastText && workBefore && !toolAfter ? ' is-answer' : '';
         body.push(`<div class="msg-answer${answer}">${renderMarkdown(part.text)}</div>`);
       }
       else if (part.type === 'reasoning')
