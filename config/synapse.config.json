@@ -265,6 +265,7 @@
   "roles": {
     "designer": {
       "ref": "opencode-go/deepseek-v4.1-flash",
+      "variant": "low",
       "skills": [
         "aesthetic-foundations",
         "app-check",
@@ -298,7 +299,7 @@
       ]
     },
     "coder-1": {
-      "ref": "opencode-go/deepseek-v4.1-flash",
+      "ref": "opencode/beam-free",
       "skills": [
         "code-craft",
         "visual-review"
@@ -308,7 +309,7 @@
       ]
     },
     "coder-2": {
-      "ref": "opencode-go/deepseek-v4.1-flash",
+      "ref": "opencode/beam-free",
       "skills": [
         "code-craft",
         "visual-review"
@@ -318,7 +319,7 @@
       ]
     },
     "coder-3": {
-      "ref": "opencode-go/deepseek-v4.1-flash",
+      "ref": "opencode/beam-free",
       "skills": [
         "code-craft",
         "visual-review"
