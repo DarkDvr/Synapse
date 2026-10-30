@@ -371,6 +371,9 @@ export function createServer({ api, engine, logger, config, remote, onRemote }) 
         return sendJson(res, 200, await api.steer(sessionId, await readBody(req, MESSAGE_BODY_LIMIT), actorOf(req)));
       }
       if (seg[2] === 'interrupt' && method === 'POST') return sendJson(res, 200, await api.interrupt(sessionId));
+      // POST /api/sessions/{id}/stop — the first Stop: finish the step, then end.
+      // The second Stop is still /interrupt.
+      if (seg[2] === 'stop' && method === 'POST') return sendJson(res, 200, await api.stop(sessionId));
       // POST /api/sessions/{id}/compact — discard the conversation, leave a
       // handover, start a fresh one. Slow by nature (the engine summarises), so
       // the client shows "Compacting…" and this answer arrives when it is done.

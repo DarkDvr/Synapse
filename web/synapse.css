@@ -2061,6 +2061,45 @@ body[data-mode="single"] #runAuto { display: none; }
   border-color: var(--red); color: #fff; background: var(--red);
 }
 #stopBtn:not(:disabled):active { border-color: var(--red); color: var(--red); background: var(--red-soft); }
+/* The first Stop is graceful: this fast red pulse says "stopping, wait" on the
+   button and around the chat, where the work is. A second press cuts it now. */
+#stopBtn.is-stopping {
+  border-color: var(--red); color: var(--red); background: var(--red-soft);
+  animation: stop-btn-pulse 0.7s ease-in-out infinite;
+}
+body.is-stopping .chat-dock { animation: stop-glow 0.7s ease-in-out infinite; }
+@keyframes stop-btn-pulse { 50% { box-shadow: 0 0 0 5px rgba(240, 86, 63, 0.22); } }
+@keyframes stop-glow {
+  0%, 100% { box-shadow: inset 0 0 0 2px rgba(240, 86, 63, 0.45), 0 0 18px rgba(240, 86, 63, 0.16); }
+  50% { box-shadow: inset 0 0 0 2px rgba(240, 86, 63, 0.95), 0 0 28px rgba(240, 86, 63, 0.42); }
+}
+@media (prefers-reduced-motion: reduce) {
+  body.is-stopping .chat-dock, #stopBtn.is-stopping {
+    animation: none; box-shadow: inset 0 0 0 2px var(--red);
+  }
+}
+
+/* The first Stop is graceful; this is the sentence that says so, in the corner
+   the operator is looking at, with a red edge that matches the glow. */
+.stop-notice {
+  position: fixed; top: 18px; right: 18px; z-index: 95;
+  display: flex; align-items: flex-start; gap: 10px;
+  max-width: 340px; padding: 11px 13px;
+  background: #1a1c21; border: 1px solid var(--red); border-radius: 11px;
+  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.5);
+}
+.stop-notice[hidden] { display: none; }
+.stop-notice-mark {
+  width: 8px; height: 8px; margin-top: 5px; flex: none; border-radius: 50%;
+  background: var(--red); box-shadow: 0 0 0 4px rgba(240, 86, 63, 0.16);
+  animation: stop-dot 0.7s ease-in-out infinite;
+}
+.stop-notice strong {
+  display: block; font-size: 11.5px; font-weight: 700; color: var(--red);
+  letter-spacing: 0.02em;
+}
+.stop-notice span { display: block; margin-top: 2px; font-size: 10.5px; line-height: 1.45; color: #c7c9cf; }
+@keyframes stop-dot { 50% { opacity: 0.4; } }
 
 /* A failure, in the conversation and in red: the same rule-down-the-left as an
    alarm, because they are the same kind of line — something the harness noticed

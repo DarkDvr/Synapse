@@ -966,6 +966,22 @@ export function briefSession({ dir, role = 'architect', auto = false, single = f
   }
   if (doc.notes) lines.push(`The operator's standing notes for this project:\n${capped(doc.notes, 900)}`);
   if (doc.handover) lines.push(`The handover from the last compact:\n${capped(doc.handover, 2000)}`);
+  // A stop is a fact the next turn needs. Without it the Architect read the cut
+  // transcript as a provider failure and guessed at the cause when the operator
+  // next spoke (the emulator project, 29 Oct).
+  try {
+    const last = readRuns(dir).filter((r) => r.kind === 'result').pop();
+    if (last?.stoppedBy === 'operator') {
+      const when = last.at
+        ? new Date(last.at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
+        : '';
+      lines.push(
+        `The last run (${last.task || 'a task'}, ${last.role || 'a worker'}) was stopped by the operator` +
+          `${when ? ` at ${when}` : ''}, after it finished the step it was in. That was their decision, not a ` +
+          `failure: do not retry it unless they ask, and judge what is on disk.`,
+      );
+    }
+  } catch { /* a run log we cannot read is not a reason to fail the brief */ }
   lines.push(
     isArchitect
       ? `Project plan: ${planRelPathPlain()} - you own this file and you are the only role that may write it. ` +

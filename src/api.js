@@ -22,6 +22,7 @@ import { setProviderKey, providerKeyState, maskKey } from './secrets.js';
 import { probeToolchain } from './toolchain.js';
 import { busyInfo, busyMessage } from './busy.js';
 import { APP_VERSION } from './version.js';
+import { STOP_NUDGE } from './runs.js';
 
 // What an attachment may be. The old rule was six files of up to 8 MB each, which
 // made twelve small screenshots impossible for no reason: the real cost is the
@@ -1639,6 +1640,49 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
         }`,
       );
       return { ok: true, stoppedRun, stopped };
+    },
+
+    /**
+     * The first Stop: ask the work to finish the step it is in and end.
+     *
+     * A delegated run gets the note through the runner, which sends it as a
+     * synthetic message and cuts the turn if it is ignored after 45 seconds. An
+     * Architect turn gets the same note directly. The second Stop is
+     * `interrupt()` — immediate, and it is the one that leaves nothing running.
+     */
+    stop: async (sessionId) => {
+      requireReady();
+      const busy = await busyFor(sessionId);
+      if (!busy.busy) {
+        const err = new Error('Nothing is running now.');
+        err.status = 409;
+        throw err;
+      }
+      if (busy.state === 'waiting') {
+        const err = new Error('A question or permission card is waiting; stopping now is immediate.');
+        err.status = 409;
+        err.body = { waiting: true };
+        throw err;
+      }
+      const directory = busy.directory;
+      const live = (runs?.active?.() || []).find((r) => normDir(r.dir || r.directory) === normDir(directory));
+      if (live) {
+        const r = runs?.requestStop?.(directory);
+        if (r?.ok) {
+          app.info(`graceful stop: ${live.task} (${live.role}) will finish its step`);
+          return { ok: true, stopping: true, target: 'worker', task: live.task, role: live.role };
+        }
+      }
+      const targetId = busy.sessionId || sessionId;
+      try {
+        await engine.synthetic(targetId, STOP_NUDGE, { description: 'operator stop' });
+      } catch (e) {
+        const err = new Error(`could not ask the session to stop gracefully: ${e.message}`);
+        err.status = 502;
+        throw err;
+      }
+      app.info(`graceful stop: ${targetId} will finish its step`);
+      return { ok: true, stopping: true, target: 'architect' };
     },
 
     permission: async (sessionId, body, actor = null) => {

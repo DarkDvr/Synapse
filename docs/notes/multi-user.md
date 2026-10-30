@@ -34,10 +34,12 @@ sleeps therefore cannot hold a project. Nothing to expire, nothing to leak.
 2. **Cards are answerable from any view, busy or not.** The first answer wins and
    is broadcast: every other view closes the panel and repaints the chip. A
    second answer is a no-op, not an error.
-3. **Stop is available everywhere, always, and that is the takeover.** It is a
-   deliberate "I know what I am doing, I am taking over from here". If another
-   view is driving the run the confirmation says so. After a stop, change the
-   model, type Continue, send. There is no separate takeover button.
+3. **Stop is available everywhere, always, and it is two-stage.** The first press
+   asks the work to finish the step it is in and end; the second cuts it off
+   immediately. The notice and the red glow are broadcast, so every view knows a
+   stop is in progress and a second press anywhere is the hard one. Stop wakes
+   nobody: the next brief carries what happened. After a stop, change the model,
+   type Continue, send. There is no separate takeover button.
 4. **Single/Multi follows the same rule** as a prompt: switchable only while the
    project is idle. The button is greyed with the reason, and the server refuses
    the change even if a stale page asks.

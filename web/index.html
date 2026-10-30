@@ -13,6 +13,15 @@
   <link rel="stylesheet" href="/synapse.css" />
 </head>
 <body class="dark" data-view="none">
+<!-- The first Stop is graceful: the AI finishes the step, then ends. This says so
+     in the corner, and the red glow on the chat says "wait". A second Stop cuts it. -->
+<div class="stop-notice" id="stopNotice" hidden role="status" aria-live="polite">
+  <span class="stop-notice-mark" aria-hidden="true"></span>
+  <div>
+    <strong>Stopping…</strong>
+    <span>The AI will finish this step, then stop. Click Stop again to stop now.</span>
+  </div>
+</div>
 <div class="app-shell control-room">
 
   <!-- ── left rail ────────────────────────────────────────────────────── -->

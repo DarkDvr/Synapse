@@ -12,6 +12,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { createRunner } from '../src/runs.js';
+import { briefSession } from '../src/plans.js';
 import { classifyFailure, PROVIDER_LOG } from '../src/provider-errors.js';
 
 const ROOT = path.join(os.tmpdir(), 'synapse-provider-test');
@@ -273,20 +274,21 @@ expect('silence: logged as stalled', fs.readFileSync(PROVIDER_LOG, 'utf8').inclu
 const stallClears = stalled.events.filter((e) => e.kind === 'role-error' && e.clear).length;
 expect('silence: the restart line clears when the worker resumes', stallClears >= 2, `clears=${stallClears}`);
 
-// 5. Stop cuts a backoff short, and tells the Architect it was the operator's
-// decision. It used to wake nobody, which left the Architect waiting for a report
-// that was already on disk (the emulator project, 29 Oct).
-const stopped = await runCase({ name: 'stopped', script: [{ error: RATE }], cancelAfter: 900, untilWoke: 1 });
+// 5. Stop cuts a backoff short and wakes nobody: Stop means the system is idle.
+// The next Architect brief carries what happened, so the next turn does not have
+// to guess (the emulator project, 29 Oct).
+const stopped = await runCase({ name: 'stopped', script: [{ error: RATE }], cancelAfter: 900, untilWoke: 0 });
 expect('stop: outcome stopped', stopped.result?.outcome === 'stopped', stopped.result?.outcome);
-expect('stop: the Architect was told', stopped.woke.length === 1, String(stopped.woke.length));
+expect('stop: the Architect was not woken', stopped.woke.length === 0, String(stopped.woke.length));
+const stoppedBrief = briefSession({ dir: stopped.dir, role: 'architect' });
 expect(
-  'stop: the report says who stopped it',
-  /stopped by the operator/.test(stopped.woke[0] || ''),
-  stopped.woke[0]?.slice(0, 120),
+  'stop: the next brief says who stopped it',
+  /stopped by the operator/.test(stoppedBrief),
+  stoppedBrief.match(/The last run[^\n]*/)?.[0] || '',
 );
 expect(
-  'stop: it says not to delegate it again',
-  /do not delegate this task again unless they say so/.test(stopped.woke[0] || ''),
+  'stop: it says not to retry it',
+  /do not retry it unless they ask/.test(stoppedBrief),
 );
 
 // 5b. A harness stop with a reason still reports. It used to be handed the run's

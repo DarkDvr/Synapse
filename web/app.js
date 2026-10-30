@@ -189,6 +189,9 @@ const state = {
   fullAuto: false,
   permissions: [],
   busy: false,
+  // The first Stop was pressed: the AI is finishing the step, then it ends. A
+  // second press is the hard interrupt (see interrupt()).
+  stopping: false,
   busySessions: new Set(),
   busySince: new Map(),
   toolsInFlight: new Set(),
@@ -3363,6 +3366,13 @@ function handleRunEvent(ev) {
     }
     return;
   }
+  // Another view pressed Stop first: the run is finishing its step. The notice
+  // and the glow are shared so nobody presses again thinking nothing happened.
+  if (ev.type === 'run.stopping') {
+    state.stopping = true;
+    renderComposer();
+    return;
+  }
   if (ev.type === 'run.started' || ev.type === 'run.progress') {
     // A run reaching a role is that role working again, so its last error is no
     // longer the news. `run.progress` cannot clear it: the runner sends one right
@@ -3424,6 +3434,7 @@ function handleRunEvent(ev) {
     // A finished, successful run is the role working again; a run that failed is
     // the one case where the red line stays until the next attempt.
     if (ev.role && ev.outcome === 'completed') state.roleErrors.delete(`${key}|${ev.role}`);
+    state.stopping = false;
     const done = state.runs.get(key);
     const trace = done ? traceOf(done) : null;
     if (trace) {
@@ -5923,6 +5934,8 @@ function renderComposer() {
   const hasSession = Boolean(state.sessionId);
   const asking = Boolean(currentForm());
   const held = Boolean(state.busyInfo?.busy);
+  // The graceful stop has landed: the notice and the glow go when the work does.
+  if (state.stopping && !held && !currentRun() && !state.busy) state.stopping = false;
   const target = steerTarget();
   // Any pending question blocks this composer, whoever asked it: the operator's
   // attention is the thing the run is waiting on, and a worker's question is no
@@ -5960,6 +5973,7 @@ function renderComposer() {
                 ? 'Message'
                 : 'Message the Architect…';
   }
+  renderStopState();
   renderCompactChip();
 }
 
@@ -6471,19 +6485,51 @@ async function ensureSession() {
 }
 
 async function interrupt() {
-  // One request stops the project: the server cancels the run and interrupts
-  // every active engine session in the directory, including hidden workers the
-  // operator cannot see and workers whose run record is already gone.
+  // One request stops the project. The first press is graceful: the AI finishes
+  // the step it is in and ends. The second press — or a press while a card is
+  // waiting, where there is no step to finish — is the old immediate cut.
   if (!state.sessionId) return;
+  const hard = state.stopping || state.busyInfo?.state === 'waiting';
   try {
-    await api('POST', `/api/sessions/${encodeURIComponent(state.sessionId)}/interrupt`);
-    toast('Stopping', 'The work is being stopped.');
+    if (hard) {
+      await api('POST', `/api/sessions/${encodeURIComponent(state.sessionId)}/interrupt`);
+      state.stopping = false;
+      toast('Stopped', 'The work was stopped immediately.');
+    } else {
+      const r = await api('POST', `/api/sessions/${encodeURIComponent(state.sessionId)}/stop`);
+      state.stopping = Boolean(r?.stopping);
+    }
+    renderComposer();
     // The engine takes a moment to close the turns; refresh once now and again
     // after it has had time, so a stop that did not take does not hide the button.
     refreshPending();
     setTimeout(refreshPending, 1500);
   } catch (err) {
+    if (!hard && err.status === 409 && err.body?.waiting) {
+      // A card is waiting: there is no step to finish. Stop it now.
+      try {
+        await api('POST', `/api/sessions/${encodeURIComponent(state.sessionId)}/interrupt`);
+        state.stopping = false;
+        renderComposer();
+        refreshPending();
+        return;
+      } catch { /* fall through to the toast below */ }
+    }
     toast('Stop failed', err.message);
+  }
+}
+
+/** The upper-right notice and the red glow while a graceful stop is running. */
+function renderStopState() {
+  const notice = $('stopNotice');
+  if (notice) notice.hidden = !state.stopping;
+  document.body.classList.toggle('is-stopping', state.stopping);
+  const btn = $('stopBtn');
+  if (btn) {
+    btn.classList.toggle('is-stopping', state.stopping);
+    btn.title = state.stopping
+      ? 'Stopping — the AI is finishing this step. Click again to stop immediately.'
+      : 'Stop the current run';
   }
 }
 

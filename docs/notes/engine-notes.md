@@ -1323,15 +1323,24 @@ the old provider sentence, if any, is quoted as "before the stop, the last turn
 had ended with…". The two questions the record must answer are *why did it end*
 and *what was the last thing it heard* — they are not the same field.
 
-**A stop now wakes the Architect.** It used to return before the wake, on the
-argument that the operator was about to say what they wanted and a wake could
-re-delegate the task. The result was an Architect waiting for a report that was
-already on disk: on 29 Oct it only learned the run had stopped when the operator
-typed "продолжай", then went looking through `runs.jsonl`. A stopped run now sends
-the same report as any other, with two guard rails: the project is held
-(`stoppedByOperator`), so a delegation from that wake is refused, and the report
-says in as many words *do not delegate this task again unless they say so*. A
-harness stop already reported; its wake was the one handed no signal.
+**A stop wakes nobody, and it is two-stage.** The first Stop is graceful: the
+runner sends a `[stop]` synthetic, the model reads it at the next step boundary,
+finishes the tool call in flight, writes a short report and ends the turn. The
+runner waits up to `STOP_GRACE_MS` (45 seconds) for that, then aborts. The UI says
+so in the top-right notice and rings the chat in a fast red glow; a second Stop
+calls `/interrupt` and cuts the turn immediately, in the middle of a token if that
+is where it is.
+
+No Architect turn follows. The stop is on disk — the result, the task back in
+`todo`, the project held — and the **next** brief carries it: *“The last run (t1,
+coder-1) was stopped by the operator at 15:44, after it finished the step it was
+in. That was their decision, not a failure: do not retry it unless they ask.”*
+The next operator message also carries the `[after a stop]` note. That is the
+whole point: Stop leaves the system idle, and the truth is read on the next turn
+instead of guessed.
+
+A harness stop (the question-loop guard) still reports immediately: it is a
+failure the operator must see, not an operator decision.
 
 ## Talking to work in flight: steer, not stop
 

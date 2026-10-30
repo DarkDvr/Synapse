@@ -39,6 +39,7 @@ function makeEngine(dir) {
   const sessions = new Map();
   const arch = [];
   const prompts = [];
+  const synthetics = [];
   const interrupts = [];
   const woke = [];
   let seq = 0;
@@ -60,8 +61,9 @@ function makeEngine(dir) {
       if (s) s.messages.push({ id: `${id}-u${s.messages.length}`, type: 'user', parts: [{ type: 'text', text }] });
     },
     async synthetic(id, text) {
-      woke.push(text);
+      synthetics.push({ id, text });
       if (id === 'ses_arch') {
+        woke.push(text);
         arch.push({ id: `s${woke.length}`, type: 'synthetic', parts: [{ type: 'text', text }] });
         setTimeout(() => {
           arch.push({ id: `a${arch.length}`, type: 'assistant', parts: [{ type: 'text', text: 'noted' }] });
@@ -85,7 +87,7 @@ function makeEngine(dir) {
     s.messages.push({ id: `${id}-i`, type: 'idle', parts: [] });
   };
 
-  return { engine, sessions, arch, prompts, interrupts, woke, finish };
+  return { engine, sessions, arch, prompts, synthetics, interrupts, woke, finish };
 }
 
 function runnerFor(engine, dir) {
@@ -194,7 +196,7 @@ test('a steer is refused when nothing is running', async () => {
   assert.match(result.reason, /Nothing is running/);
 });
 
-test('an operator stop tells the Architect not to delegate it again', async () => {
+test('an operator stop wakes nobody, and the next brief carries it', async () => {
   const dir = project('stopped');
   const stub = makeEngine(dir);
   const runner = runnerFor(stub.engine, dir);
@@ -205,9 +207,57 @@ test('an operator stop tells the Architect not to delegate it again', async () =
   const done = await waitFor(() => runs(dir).find((r) => r.kind === 'result'));
   assert.ok(done);
   assert.equal(done.stoppedBy, 'operator');
-  const report = await waitFor(() => stub.woke.find((t) => /stopped by the operator/.test(t)));
-  assert.ok(report);
-  assert.match(report, /do not delegate this task again unless they say so/);
+  assert.equal(stub.woke.length, 0, 'Stop must leave the system idle');
+  const brief = briefSession({ dir, role: 'architect' });
+  assert.match(brief, /stopped by the operator/);
+  assert.match(brief, /do not retry it unless they ask/);
+});
+
+test('the first stop is graceful: the worker is asked, then the run ends', async () => {
+  const dir = project('graceful');
+  const stub = makeEngine(dir);
+  const runner = runnerFor(stub.engine, dir);
+  await runner.handleTurn('ses_arch', archMessages('call_grace'));
+  const live = await waitFor(() => runner.active().find((r) => r.workerId));
+  assert.ok(live);
+
+  const asked = runner.requestStop(dir);
+  assert.equal(asked.ok, true);
+  assert.equal(runner.active()[0].stopping, true, 'the run says it is stopping');
+  const note = stub.synthetics.find((s) => s.id === live.workerId && /\[stop\]/.test(s.text));
+  assert.ok(note, 'the worker is asked to finish the step and stop');
+
+  stub.finish(live.workerId);
+  const done = await waitFor(() => runs(dir).find((r) => r.kind === 'result'));
+  assert.ok(done);
+  assert.equal(done.outcome, 'stopped');
+  assert.equal(done.stoppedBy, 'operator');
+  assert.equal(stub.woke.length, 0, 'a graceful stop still wakes nobody');
+  const brief = briefSession({ dir, role: 'architect' });
+  assert.match(brief, /stopped by the operator/);
+});
+
+test('the second stop is immediate', async () => {
+  const dir = project('hard');
+  const stub = makeEngine(dir);
+  const runner = runnerFor(stub.engine, dir);
+  await runner.handleTurn('ses_arch', archMessages('call_hard'));
+  const live = await waitFor(() => runner.active().find((r) => r.workerId));
+  assert.ok(live);
+  runner.requestStop(dir);
+  assert.equal(runner.cancel(dir), true);
+  const done = await waitFor(() => runs(dir).find((r) => r.kind === 'result'));
+  assert.ok(done);
+  assert.equal(done.outcome, 'stopped');
+  assert.equal(done.stoppedBy, 'operator');
+  assert.equal(stub.woke.length, 0);
+});
+
+test('a stop request with nothing running is refused', () => {
+  const dir = project('nothing');
+  const stub = makeEngine(dir);
+  const runner = runnerFor(stub.engine, dir);
+  assert.equal(runner.requestStop(dir).ok, false);
 });
 
 test('the briefs explain a steer and an interrupted turn', () => {
@@ -219,6 +269,17 @@ test('the briefs explain a steer and an interrupted turn', () => {
   assert.match(arch, /guidance for the turn you are in/);
   assert.match(worker, /\[steer\]/);
   assert.match(worker, /guidance while you work/);
+});
+
+test('the first Stop says it is finishing the step', () => {
+  const html = fs.readFileSync(path.join(process.cwd(), 'web', 'index.html'), 'utf8');
+  const css = fs.readFileSync(path.join(process.cwd(), 'web', 'synapse.css'), 'utf8');
+  const app = fs.readFileSync(path.join(process.cwd(), 'web', 'app.js'), 'utf8');
+  assert.match(html, /finish this step, then stop/);
+  assert.match(html, /id="stopNotice"/);
+  assert.match(css, /#stopBtn\.is-stopping/);
+  assert.match(css, /body\.is-stopping \.chat-dock/);
+  assert.match(app, /\/stop`/);
 });
 
 test('the composer says what a steer will do', () => {

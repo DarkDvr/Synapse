@@ -126,6 +126,18 @@ const CONTEXT_NUDGE =
   'and you are continuing from that summary. Carry on with the task from where it stands - do not start over - ' +
   'and keep each turn small: read only what you need and write in short pieces.';
 
+// The first Stop is graceful: finish the tool call in flight, write the report,
+// end the turn. The second is the old hard abort. This text is the whole graceful
+// mechanism on the engine side — the model sees it at the next step boundary.
+export const STOP_NUDGE =
+  '[stop] The operator pressed Stop. Finish the tool call in flight, write a short report, and end this turn. ' +
+  'Do not start another step or call another tool.';
+
+// How long the graceful stop may take before the runner cuts the turn. Long
+// enough for a build or a file write, short enough that a model which ignores
+// the instruction cannot hold the project for minutes.
+export const STOP_GRACE_MS = 45_000;
+
 /** Sleep, but let Stop cut it short: a five-minute backoff must not be five
  *  minutes of the operator pressing a button that does nothing. */
 const sleep = (ms, signal) =>
@@ -1178,11 +1190,42 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     // why, and the report carries it to the Architect and the operator.
     const controller = new AbortController();
     let stopReason = null;
+    // The first Stop asks the worker to finish the step it is in and end the
+    // turn; the second (or the grace running out) aborts it. See requestStop().
+    let gracefulStop = false;
+    let stopRequestedAt = 0;
+    let stopTimer = null;
     controls.set(dirKey(dir), {
       abort: () => controller.abort(),
       stop: (why) => {
         stopReason = String(why || '').trim() || null;
         controller.abort();
+      },
+      requestStop: () => {
+        if (gracefulStop) return false;
+        gracefulStop = true;
+        stopRequestedAt = Date.now();
+        // Nothing new may be delegated from here, even while the last step runs.
+        stoppedByOperator.add(dirKey(dir));
+        const liveNow = running.get(dirKey(dir));
+        if (liveNow) {
+          liveNow.stopping = true;
+          liveNow.stopRequestedAt = stopRequestedAt;
+          emit('run.stopping', { dir, task: request.task, role, startedAt });
+        }
+        if (worker?.id) {
+          engine
+            .synthetic(worker.id, STOP_NUDGE, { description: 'operator stop' })
+            .catch((err) => log.warn(`could not ask the worker to stop gracefully: ${err.message}`));
+        }
+        stopTimer = setTimeout(() => {
+          if (!running.has(dirKey(dir))) return;
+          out.warn(`graceful stop for ${request.task} took too long; cutting the turn`);
+          try { controller.abort(); } catch { /* already gone */ }
+          if (worker?.id) engine.interrupt(worker.id).catch(() => { /* already gone */ });
+        }, STOP_GRACE_MS);
+        stopTimer.unref?.();
+        return true;
       },
     });
     const signal = controller.signal;
@@ -1234,6 +1277,8 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
       retry: null,
       tool: null,
       skipped,
+      stopping: false,
+      stopRequestedAt: 0,
       // The operator's guidance for this run, newest last. Shared with the local
       // `steers` array so the report and the result line read the same record.
       steers,
@@ -1508,6 +1553,15 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
           }
 
           turnError = turnErrorOf(now, before);
+          // The worker read the stop note and ended its turn: that is the
+          // graceful stop. The report it wrote is the text, and nothing failed.
+          if (gracefulStop) {
+            outcome = 'stopped';
+            stoppedBy = 'operator';
+            turnError = null;
+            alert({ dir, role, clear: true });
+            break;
+          }
           if (!turnError) {
             outcome = 'completed';
             // The role is working again: whatever the card was saying about a
@@ -1755,6 +1809,15 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
       if (steers.length && worker?.id) {
         try { await engine.interrupt(worker.id); } catch { /* already gone */ }
       }
+      if (stopTimer) {
+        clearTimeout(stopTimer);
+        stopTimer = null;
+      }
+      // A graceful stop's note can start a turn of its own if the turn ended
+      // before reading it; the run is over, so cut that turn.
+      if (gracefulStop && worker?.id) {
+        try { await engine.interrupt(worker.id); } catch { /* already gone */ }
+      }
       emit('run.finished', {
         dir,
         role,
@@ -1818,6 +1881,10 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
         note: `${request.task} (${role})`,
       });
     }
+
+    // A stop puts the task back in todo: nothing is running, and a task left
+    // `doing` reports "1 running" on the plan for the rest of the day.
+    if (outcome === 'stopped' && stoppedBy === 'operator') setTaskStatus(dir, task.id, 'todo');
 
     appendRun(dir, {
       kind: 'result',
@@ -1893,20 +1960,17 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
           : ''),
     );
 
-    // A stopped run used to report nothing and wake nobody: the operator was
-    // about to say what they wanted instead, and a wake could re-delegate the
-    // task that had just been stopped. That left the Architect waiting for a
-    // report that was already on disk (the emulator project, 29 Oct) and made it
-    // guess at the reason when the operator next spoke. It is told now, with the
-    // project held so the wake cannot start the work again; the report says, in
-    // as many words, not to delegate it again.
-    if (outcome === 'stopped') {
+    // A stop wakes nobody: Stop means the whole system is idle. The stop is on
+    // disk (runs.jsonl, the task back in todo) and the next Architect brief says
+    // what happened, so the next turn starts with the fact instead of a guess.
+    if (outcome === 'stopped' && stoppedBy === 'operator') {
       out.warn(`run ${request.task} (${role}) stopped by the operator`);
       notify?.({
         kind: 'note',
         title: 'Run Stopped',
-        body: `${request.task} was stopped. The Architect is being told.`,
+        body: `${request.task} was stopped. Nothing is running.`,
       });
+      return;
     }
 
     // A finished plan is the end of the project, and the end of everything its
@@ -2858,6 +2922,17 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     return { ok: true, target: 'worker', task: live.task, role: live.role, at };
   }
 
+  /** Ask the live run to stop at the end of the step it is in. The second Stop
+   *  is `cancel()` below; this one only sets the intention. */
+  function requestStop(dir) {
+    const key = dirKey(dir);
+    const control = controls.get(key);
+    const live = running.get(key);
+    if (!control?.requestStop || !live) return { ok: false };
+    const fresh = control.requestStop();
+    return { ok: true, stopping: true, already: !fresh, task: live.task, role: live.role };
+  }
+
   /** Stop the run in a project, whichever part of it is running. Returns whether
    *  there was anything to stop. The wait loops see the abort on their next poll
    *  (and a backoff sleep is cut short), so this is immediate even mid-retry. */
@@ -2926,6 +3001,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     requestsIn,
     active,
     steer,
+    requestStop,
     cancel,
     resume,
     hold,
