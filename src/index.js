@@ -540,6 +540,12 @@ async function main() {
         app.warn(`could not close interrupted runs: ${err.message}`);
       }
       try {
+        const n = await runner.recoverStops(dirs);
+        if (n) app.warn(`held ${n} project${n === 1 ? '' : 's'} whose last run was stopped by the operator`);
+      } catch (err) {
+        app.warn(`could not restore stopped projects: ${err.message}`);
+      }
+      try {
         const n = await runner.recoverDelegations(dirs);
         if (n) app.warn(`picked up ${n} delegation${n === 1 ? '' : 's'} no turn had read`);
       } catch (err) {

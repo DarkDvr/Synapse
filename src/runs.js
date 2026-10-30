@@ -785,7 +785,17 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
       const done = new Set(
         recent.filter((r) => r.kind === 'wake' && r.status === 'done' && r.callId).map((r) => r.callId),
       );
-      const results = recent.filter((r) => r.kind === 'result' && r.architect && !done.has(r.callId)).slice(-3);
+      const results = recent
+        .filter(
+          (r) =>
+            r.kind === 'result' &&
+            r.architect &&
+            !done.has(r.callId) &&
+            r.stoppedBy !== 'operator' &&
+            r.outcome !== 'stopped' &&
+            r.outcome !== 'interrupted',
+        )
+        .slice(-3);
       for (const result of results) {
         const at = Number(result.at) || 0;
         if (!at || Date.now() - at > 48 * 60 * 60 * 1000) continue;
@@ -814,6 +824,33 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
       }
     }
     return replayed;
+  }
+
+  /**
+   * A stop is durable across a restart.
+   *
+   * `stoppedByOperator` lives in memory, so a restart erased it: a report replay
+   * or a plan reminder could start the work the operator had stopped. The run log
+   * says who stopped the last run; hold the project unless a user message has
+   * arrived since. The operator's next message lifts the hold.
+   */
+  async function recoverStops(dirs = []) {
+    let held = 0;
+    for (const dir of dirs || []) {
+      if (!dir) continue;
+      const last = readRuns(dir).filter((r) => r.kind === 'result').pop();
+      if (last?.stoppedBy !== 'operator') continue;
+      let messages = [];
+      try {
+        messages = await engine.getMessages(last.architect);
+      } catch { /* no transcript is not a reason to resume the work */ }
+      const spoke = (messages || []).some(
+        (m) => m.type === 'user' && (Number(m.created) || 0) > (Number(last.at) || 0),
+      );
+      if (spoke) continue;
+      if (hold(dir, 'the last run was stopped by the operator')) held += 1;
+    }
+    return held;
   }
 
   async function recoverDelegations(dirs) {
@@ -3019,6 +3056,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     recoverDelegations,
     recoverInterrupted,
     recoverLostReports,
+    recoverStops,
     requestsIn,
     active,
     steer,

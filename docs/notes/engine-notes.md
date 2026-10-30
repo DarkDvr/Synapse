@@ -1339,6 +1339,12 @@ project is held. If the operator wants the work resumed, changed or avoided, the
 say so in their next message — that message is an ordinary message, not a
 permission request dressed up as one.
 
+The hold survives a restart: `recoverStops` reads the latest result's
+`stoppedBy: operator` and holds the project unless a user message has arrived
+since. `recoverLostReports` skips stopped and interrupted results entirely, so a
+boot cannot replay a stopped run as a report and invite the Architect to judge —
+and therefore re-delegate — work the operator had stopped.
+
 A harness stop (the question-loop guard) still reports immediately: it is a
 failure the operator must see, not an operator decision.
 

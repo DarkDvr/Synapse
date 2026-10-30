@@ -6874,6 +6874,17 @@ function connectStream() {
         }
       }
       if (mine) {
+        // The Architect is working: whatever red line its card carried about a
+        // provider failure is no longer the news. `role-error` clears this at the
+        // end of a successful wake, but the card sat red through the whole turn
+        // that proved the retry had worked.
+        if (ev.type === 'session.execution.started' && ev.sessionId === state.sessionId) {
+          const archKey = `${dirKey(currentProject()?.directory)}|architect`;
+          if (state.roleErrors.delete(archKey)) {
+            state.roleSig = '';
+            renderRoleActivity();
+          }
+        }
         if (ev.type === 'session.execution.started') state.busy = true;
         else if (/^session\.execution\.(succeeded|failed|interrupted)$/.test(ev.type) || ev.type === 'session.idle') state.busy = false;
         renderComposer();

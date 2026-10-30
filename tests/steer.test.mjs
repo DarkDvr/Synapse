@@ -217,6 +217,10 @@ test('an operator stop wakes nobody and explains nothing', async () => {
   assert.equal(stub.woke.length, 0, 'Stop must leave the system idle');
   const brief = briefSession({ dir, role: 'architect' });
   assert.doesNotMatch(brief, /stopped by the operator|do not retry/, 'the brief explains nothing');
+  // A restart must not replay a stopped run or let the plan reminder start it.
+  const boot = runnerFor(stub.engine, dir);
+  assert.equal(await boot.recoverLostReports([dir]), 0, 'a stopped result is not replayed');
+  assert.equal(await boot.recoverStops([dir]), 1, 'the stop is restored at boot');
 });
 
 test('a stopped run still carries its steer into the next brief', async () => {
