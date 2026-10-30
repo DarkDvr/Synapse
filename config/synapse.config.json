@@ -264,8 +264,7 @@
   },
   "roles": {
     "designer": {
-      "ref": "opencode-go/deepseek-v4.1-flash",
-      "variant": "low",
+      "ref": "opencode/beam-free",
       "skills": [
         "aesthetic-foundations",
         "app-check",
@@ -279,7 +278,7 @@
       ]
     },
     "qc": {
-      "ref": "opencode-go/deepseek-v4.1-flash",
+      "ref": "opencode/beam-free",
       "skills": [
         "web-guidelines",
         "aesthetic-foundations",
@@ -329,7 +328,7 @@
       ]
     },
     "inventor": {
-      "ref": "opencode-go/deepseek-v4.1-flash",
+      "ref": "opencode/beam-free",
       "skills": [
         "frontend-design"
       ]
