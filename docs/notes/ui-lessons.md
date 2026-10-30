@@ -268,7 +268,9 @@ made irrelevant. Saving a new model for that role wakes the run at once, moves t
 session to the new model (the ref *and* its variant), and nudges it to carry on;
 the backoff starts short again because the model is a different one. The operator
 watched a run sit out a ten-minute cap after they had already fixed its model
-(30 Oct). It is a wake, not a stop: the turn is not interrupted.
+(30 Oct). It is a wake, not a stop: the turn is not interrupted. The Architect's
+own retry loop is woken the same way — its chat's model is switched and the report
+send is tried again immediately.
 
 **The ISSUES badge is not part of that.** It is the model's record, not the
 role's, and a model change does not clear it. It clears when the model delivers:

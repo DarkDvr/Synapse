@@ -710,8 +710,12 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
         if (!ref || ref === beforeRefs.get(role)) continue;
         try {
           // The variant travels with the ref: a role set to a high thinking
-          // effort must not come back as the default one mid-run.
-          runs?.wakeRole?.(role, { ref, variant: entry?.variant || '' });
+          // effort must not come back as the default one mid-run. The runner may
+          // switch a session before it wakes it, so the call is awaited by it and
+          // any failure is logged there, never thrown back here.
+          Promise.resolve(runs?.wakeRole?.(role, { ref, variant: entry?.variant || '' })).catch((err) =>
+            app.warn(`could not wake ${role} after its model change: ${err.message}`),
+          );
         } catch (err) {
           app.warn(`could not wake ${role} after its model change: ${err.message}`);
         }

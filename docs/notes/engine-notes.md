@@ -393,7 +393,9 @@ Non-obvious, all verified on 2.0.30:
   switches that session to the new model and lets the retry happen at once; the
   backoff counter resets because the failing model is gone. Only a run whose
   `retry` is set is woken — a working turn is the engine's to switch at its next
-  prompt.
+  prompt. The Architect's own retry loop is the same idea in `wake()`: a wake
+  entry per project, fired only while that loop is asleep, which switches the
+  chat's session and retries the report send immediately.
   Verified through the real runner with a stubbed engine (19/19): a refusal moves,
   attempt 2 starts a rung down, a marked model is skipped, a clean turn stays on
   coder-1, and a role outside the ladder still reports a plain `error`.

@@ -543,6 +543,10 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
   // Projects whose leftovers have already been swept, so a finished plan that is
   // opened again does not go hunting every time a note is added.
   const cleaned = new Set();
+  // The Architect's own retry loop, one per project: the operator changing that
+  // chat's model ends its wait too (see wakeRole). The entry stays after the wake
+  // returns; `waiting()` is false then, so a later model change does not count it.
+  const archWakes = new Map();
   // Steps the Architect has already been reminded about, keyed `${dir}|${task}`.
   // One reminder each: the point is to break a silence, not to nag a model that
   // has read the message and decided otherwise.
@@ -2842,6 +2846,15 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
    */
   async function wake(architectId, dir, { description, text }, signal) {
     const settings = workerSettings(getConfig() || {});
+    // A model change for the Architect's own chat ends a backoff here too: the
+    // same wake a worker gets, on the loop that sends the report.
+    let chatWake = newWake();
+    let chatWaiting = false;
+    archWakes.set(dirKey(dir), {
+      architectId,
+      waiting: () => chatWaiting,
+      fire: () => chatWake.fire(),
+    });
     let tries = 0;
     let usageSince = 0;
     for (;;) {
@@ -2886,7 +2899,17 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
           at: Date.now() + delay,
         });
         log.warn(`wake ${architectId} failed (${cls.reason}); retrying in ${Math.round(delay / 1000)}s`);
-        await sleep(delay, signal);
+        chatWaiting = true;
+        await sleep(delay, signal, chatWake.signal);
+        chatWaiting = false;
+        if (chatWake.signal.aborted) {
+          // The operator changed this chat's model: the send that failed is worth
+          // trying again now, on the model that replaced it.
+          chatWake = newWake();
+          usageSince = 0;
+          notify?.({ kind: 'role-error', dir, role: 'architect', clear: true });
+          log.info('the Architect woke early: its model was changed');
+        }
         continue;
       }
 
@@ -2973,7 +2996,15 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
       log.warn(
         `the Architect's turn failed (${cls.reason}: ${err}); waking it again in ${Math.round(delay / 1000)}s`,
       );
-      await sleep(delay, signal);
+      chatWaiting = true;
+      await sleep(delay, signal, chatWake.signal);
+      chatWaiting = false;
+      if (chatWake.signal.aborted) {
+        chatWake = newWake();
+        usageSince = 0;
+        notify?.({ kind: 'role-error', dir, role: 'architect', clear: true });
+        log.info('the Architect woke early: its model was changed');
+      }
     }
   }
 
@@ -3103,8 +3134,26 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
    * the new model by the run itself, and the worker is asked to carry on.
    * Returns how many runs were woken.
    */
-  function wakeRole(role, model) {
+  async function wakeRole(role, model) {
     let woken = 0;
+    // The Architect's own loop: it has no delegation controls, so it is woken by
+    // its own entry (one per project), and its session moves with it.
+    if (role === 'architect') {
+      for (const entry of archWakes.values()) {
+        if (!entry.waiting()) continue;
+        if (model && entry.architectId) {
+          try {
+            await engine.switchModel(entry.architectId, model);
+          } catch (err) {
+            log.warn(`could not switch the Architect to the new model: ${err.message}`);
+          }
+        }
+        entry.fire();
+        woken += 1;
+      }
+      if (woken) log.info(`model change for the Architect: waking ${woken} chat(s)`);
+      return woken;
+    }
     for (const [key, control] of controls) {
       if (control.role !== role || typeof control.wake !== 'function') continue;
       // Only a run that is actually waiting: a working turn is switched by the

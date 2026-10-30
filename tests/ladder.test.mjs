@@ -215,7 +215,7 @@ const expect = (label, ok, detail) => checks.push({ label, ok, detail });
   const live = await waitFor(() => runner.active().find((r) => r.workerId && r.retry));
   expect('the run is asleep in a provider backoff', Boolean(live), JSON.stringify(runner.active()));
 
-  const woke = runner.wakeRole('coder-1', 'opencode/two');
+  const woke = await runner.wakeRole('coder-1', 'opencode/two');
   expect('the model change wakes the role', woke === 1, String(woke));
   expect(
     'the running session is moved to the new model',
