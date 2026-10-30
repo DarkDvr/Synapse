@@ -3326,7 +3326,7 @@ async function loadRuns() {
           title: run.title,
           startedAt: Number(run.startedAt) || Date.now(),
           finishedAt: 0,
-          notes: [],
+          notes: steerNotes(run),
           stream: null,
           // Runs already compacted before this page was opened. Without it the
           // count starts at nothing and the chat says nothing about a run that is
@@ -3360,7 +3360,7 @@ function handleRunEvent(ev) {
     const trace = traceFor(ev);
     if (trace) {
       const said = String(ev.text || '').replace(/\s+/g, ' ').trim();
-      trace.notes.push(`Operator: ${said.length > 300 ? `${said.slice(0, 299)}…` : said}`);
+      trace.notes.push({ steer: true, text: said.length > 300 ? `${said.slice(0, 299)}…` : said });
       if (trace.notes.length > 60) trace.notes.splice(0, trace.notes.length - 60);
       renderTranscript();
     }
@@ -3394,7 +3394,7 @@ function handleRunEvent(ev) {
         title: run.title,
         startedAt: Number(run.startedAt) || Date.now(),
         finishedAt: 0,
-        notes: [],
+        notes: steerNotes(run),
         stream: null,
       });
     } else if (trace && run.tool) {
@@ -3404,8 +3404,9 @@ function handleRunEvent(ev) {
       // engine reports the target a moment after the call starts.
       const said = runPhrase(run.tool);
       const last = trace.notes[trace.notes.length - 1];
+      const lastText = typeof last === 'string' ? last : '';
       const generic = !String(run.tool.target || '').trim();
-      const repeated = generic && last && last.split(' ')[0] === said.split(' ')[0];
+      const repeated = generic && lastText && lastText.split(' ')[0] === said.split(' ')[0];
       // A shell note carries the whole command, quotes and all. One line of the
       // trace is not the place to read it; the card's tooltip and the report are.
       const line = said.length > 300 ? `${said.slice(0, 299)}…` : said;
@@ -3838,7 +3839,13 @@ function renderChatError(e) {
 function renderTrace(t) {
   const name = roleLabel(t.role);
   const head = [name, t.task, t.title].filter(Boolean);
-  const note = (text) => `<div class="trace-line">${esc(text)}</div>`;
+  const note = (n) => {
+    const text = typeof n === 'string' ? n : String(n?.text || '');
+    const steer = typeof n === 'object' && n?.steer === true;
+    return `<div class="trace-line${steer ? ' is-steer' : ''}">${
+      steer ? '<span class="msg-steer">STEER:</span> ' : ''
+    }${esc(text)}</div>`;
+  };
   const notes = t.notes || [];
   // Only the last few steps stay open. Everything before is one line that opens:
   // a worker ten minutes in has done forty things, and forty lines of it is the
@@ -4239,6 +4246,10 @@ function paintRates(now = Date.now()) {
 }
 
 const traceKeyOf = (run) => `${dirKey(run.dir)}|${run.task}|${Number(run.startedAt) || 0}`;
+// A steer is a note on the run, and it must survive a reload: `/api/runs` carries
+// the list, so a page opened mid-run can rebuild the yellow STEER lines.
+const steerNotes = (run) =>
+  (Array.isArray(run?.steers) ? run.steers : []).map((s) => ({ steer: true, text: s.text }));
 function traceOf(run) {
   return run ? state.traces.get(traceKeyOf(run)) || null : null;
 }

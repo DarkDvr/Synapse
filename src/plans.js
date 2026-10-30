@@ -966,6 +966,22 @@ export function briefSession({ dir, role = 'architect', auto = false, single = f
   }
   if (doc.notes) lines.push(`The operator's standing notes for this project:\n${capped(doc.notes, 900)}`);
   if (doc.handover) lines.push(`The handover from the last compact:\n${capped(doc.handover, 2000)}`);
+  // A stopped run has no report, so a steer sent during it would otherwise be
+  // invisible to the Architect. The result line kept it; the brief carries it
+  // forward without waking anyone or explaining the stop.
+  try {
+    const last = readRuns(dir).filter((r) => r.kind === 'result').pop();
+    const steers = last?.stoppedBy === 'operator' && Array.isArray(last.steers) ? last.steers : [];
+    if (steers.length) {
+      const said = steers
+        .slice(-3)
+        .map((s) => `"${String(s.text || '').replace(/\s+/g, ' ').trim()}"`)
+        .join('; ');
+      lines.push(
+        `The operator's steer to the last run still stands: ${said}. Put it in the task note and the plan.`,
+      );
+    }
+  } catch { /* a run log we cannot read is not a reason to fail the brief */ }
   lines.push(
     isArchitect
       ? `Project plan: ${planRelPathPlain()} - you own this file and you are the only role that may write it. ` +

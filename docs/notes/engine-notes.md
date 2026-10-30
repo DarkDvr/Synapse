@@ -1395,6 +1395,13 @@ steered with "put `STEERED` at the top"; the file came back 401 lines with
 same day an Architect mid-essay was steered to answer one sentence instead, and
 did, in the same turn. `tests/steer.test.mjs` pins the runner side and the briefs.
 
+**Where a steer is seen.** A steer to a worker is on that worker's run trace with
+the yellow `STEER:` marker — not a “You” message, because the worker has its own
+session. It survives a reload through `/api/runs`. The Architect is not woken; it
+reads the steer in the worker's report. If the run is stopped before that report,
+the next brief carries “the operator's steer to the last run still stands” so it
+can put the change in the plan on its next turn.
+
 ## A restart is not a pause
 
 Measured 26 Oct: a worker was running t3 and waiting on a permission request when

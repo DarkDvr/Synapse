@@ -1452,6 +1452,10 @@ body[data-mode="single"] #runAuto { display: none; }
   font-size: 11.5px; line-height: 1.45; color: #8b8f97;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
+/* A steer is the operator speaking into the run, not another tool call: it keeps
+   the yellow marker and is slightly warmer than the step lines. */
+.trace-line.is-steer { color: #d8d2c0; }
+.trace-line .msg-steer { font-size: 9px; margin-right: 4px; }
 /* A compaction is the one line in a worker's trace that is not a step: it explains
    why the next step is slower and why the window is empty again, so it is amber,
    pinned above the four-line tail, and never trimmed away with the steps. */

@@ -219,6 +219,24 @@ test('an operator stop wakes nobody and explains nothing', async () => {
   assert.doesNotMatch(brief, /stopped by the operator|do not retry/, 'the brief explains nothing');
 });
 
+test('a stopped run still carries its steer into the next brief', async () => {
+  const dir = project('stopped-steer');
+  const stub = makeEngine(dir);
+  const runner = runnerFor(stub.engine, dir);
+  await runner.handleTurn('ses_arch', archMessages('call_stop_steer'));
+  const live = await waitFor(() => runner.active().find((r) => r.workerId));
+  assert.ok(live);
+  await runner.steer(dir, { text: 'Use the US, not Canada', actor: { name: 'PC-A' } });
+  runner.cancel(dir);
+  const done = await waitFor(() => runs(dir).find((r) => r.kind === 'result'));
+  assert.ok(done);
+  assert.equal(done.stoppedBy, 'operator');
+  const brief = briefSession({ dir, role: 'architect' });
+  assert.match(brief, /Use the US, not Canada/, 'the steer survives the stop');
+  assert.match(brief, /still stands/);
+  assert.doesNotMatch(brief, /stopped by the operator/, 'the stop itself is not explained');
+});
+
 test('the first stop cuts at the step boundary, with no note to the model', async () => {
   const dir = project('graceful');
   const stub = makeEngine(dir);
@@ -305,5 +323,7 @@ test('the composer says what a steer will do', () => {
   assert.match(app, /msg-steer/);
   assert.match(app, /'Steer' : 'Send'/);
   assert.match(css, /#sendBtn\.is-steer/);
+  assert.match(app, /steerNotes/);
+  assert.match(css, /\.trace-line\.is-steer/);
   assert.match(app, /\/steer`/);
 });
