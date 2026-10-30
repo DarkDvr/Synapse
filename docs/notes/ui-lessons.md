@@ -233,9 +233,13 @@ with the first line instead of a 9.5px word sitting above a 13.5px sentence).
 
 In a worker's trace it is its own line shape: a flex row, so the small tag sits on
 the sentence's centre line rather than a baseline nudge; the sentence wraps instead
-of being cut with an ellipsis. And it is **pinned**: the trace keeps the last four
-steps open and folds the rest into "N earlier steps", and a steer used to fold with
-them — the operator's own instruction disappeared while the run went on (30 Oct).
+of being cut with an ellipsis. It carries the same **2px bright yellow rule** the
+permission log uses in the chat, drawn over the run trace's own grey rule (the line
+reaches back 12px over the trace's border and padding), so there is one rule that
+turns yellow where the operator spoke, not two side by side. And it is **pinned**:
+the trace keeps the last four steps open and folds the rest into "N earlier steps",
+and a steer used to fold with them — the operator's own instruction disappeared
+while the run went on (30 Oct).
 Every steer stays in the open tail, and a finished trace says `· steered` on its
 folded line so the text can never become invisible.
 

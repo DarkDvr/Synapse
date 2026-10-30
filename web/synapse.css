@@ -1455,11 +1455,16 @@ body[data-mode="single"] #runAuto { display: none; }
 /* A steer is the operator speaking into the run, not another tool call: it keeps
    the yellow marker and is slightly warmer than the step lines. It is a flex row
    so the tag sits on the sentence's centre line rather than a baseline nudge, and
-   it wraps: the operator's sentence is never cut short or folded away. */
+   it wraps: the operator's sentence is never cut short or folded away.
+   The bright yellow rule is the same mark the permission log carries in the chat:
+   a steer turns the run's own grey rule yellow for its line, by reaching back over
+   the trace's 2px border and 10px padding (-12px), so there is one rule, not two. */
 .trace-line.is-steer {
   color: #e6e0cc;
   display: flex; align-items: center; gap: 6px;
   white-space: normal; overflow: visible;
+  border-left: 2px solid #ffd60a;
+  margin-left: -12px; padding-left: 10px;
 }
 .trace-line.is-steer .msg-steer { flex: none; margin-right: 0; }
 .trace-steer-text { min-width: 0; overflow-wrap: anywhere; }

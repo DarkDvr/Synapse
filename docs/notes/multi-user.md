@@ -41,7 +41,11 @@ sleeps therefore cannot hold a project. Nothing to expire, nothing to leak.
    nobody and explains nothing to the model: it sees a cut, like a dropped
    connection. If you want the work resumed or changed, say so in your next
    message. After a stop, change the model, type Continue, send. There is no
-   separate takeover button.
+   separate takeover button. Your next message is also the first thing that can
+   say the run ended: the brief adds one state line — the last run has no report
+   and nothing has started since, so do not wait for it — without saying why it
+   stopped. Without it the Architect sat on "the resend hasn't reported back yet"
+   beside a plan with three todo rows (30 Oct, test5).
 4. **Single/Multi follows the same rule** as a prompt: switchable only while the
    project is idle. The button is greyed with the reason, and the server refuses
    the change even if a stale page asks.

@@ -969,8 +969,16 @@ export function briefSession({ dir, role = 'architect', auto = false, single = f
   // A stopped run has no report, so a steer sent during it would otherwise be
   // invisible to the Architect. The result line kept it; the brief carries it
   // forward without waking anyone or explaining the stop.
+  //
+  // The same ledger answers the other half, and it cost a turn on 30 Oct: after a
+  // stop the Architect's conversation still ends on its delegate call, so it read
+  // "waiting for the report" where the work had ended — told "continue work" beside
+  // a plan with three todo rows, it answered "t4's resend hasn't reported back
+  // yet". A stop, with no delegation after it, means nothing is running. This is
+  // the state, not an explanation of the stop: it never says why the run ended.
   try {
-    const last = readRuns(dir).filter((r) => r.kind === 'result').pop();
+    const ledger = readRuns(dir);
+    const last = ledger.filter((r) => r.kind === 'result').pop();
     const steers = last?.stoppedBy === 'operator' && Array.isArray(last.steers) ? last.steers : [];
     if (steers.length) {
       const said = steers
@@ -979,6 +987,20 @@ export function briefSession({ dir, role = 'architect', auto = false, single = f
         .join('; ');
       lines.push(
         `The operator's steer to the last run still stands: ${said}. Put it in the task note and the plan.`,
+      );
+    }
+    const startedSince = last
+      ? ledger.some((r) => r.kind === 'delegate' && Number(r.at) > Number(last.at))
+      : false;
+    if (isArchitect && last?.stoppedBy === 'operator' && !startedSince) {
+      const open = (state.plan?.tasks || []).find(
+        (t) => t.id === last.task && t.status !== 'done' && t.status !== 'failed',
+      );
+      const what = [last.task, last.role].filter(Boolean).join(', ');
+      lines.push(
+        `The last run${what ? ` (${what})` : ''} ended without a report and nothing has started since` +
+          `${open ? `; ${last.task} is back in todo` : ''}. Do not wait for a report from it - read the plan ` +
+          `and carry on with the rows that are still open.`,
       );
     }
   } catch { /* a run log we cannot read is not a reason to fail the brief */ }

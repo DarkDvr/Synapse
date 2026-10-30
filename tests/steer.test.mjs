@@ -10,7 +10,7 @@ import os from 'node:os';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createRunner } from '../src/runs.js';
-import { briefSession } from '../src/plans.js';
+import { briefSession, appendRun } from '../src/plans.js';
 import { OpenCodeEngine } from '../src/engines/opencode.js';
 
 const ROOT = path.join(os.tmpdir(), 'synapse-steer-test');
@@ -223,8 +223,7 @@ test('an operator stop wakes nobody and explains nothing', async () => {
   assert.equal(await boot.recoverStops([dir]), 1, 'the stop is restored at boot');
 });
 
-test('a stopped run still carries its steer into the next brief', async () => {
-  const dir = project('stopped-steer');
+test('a stopped run still carries its steer into the next brief', async () => {  const dir = project('stopped-steer');
   const stub = makeEngine(dir);
   const runner = runnerFor(stub.engine, dir);
   await runner.handleTurn('ses_arch', archMessages('call_stop_steer'));
@@ -239,6 +238,32 @@ test('a stopped run still carries its steer into the next brief', async () => {
   assert.match(brief, /Use the US, not Canada/, 'the steer survives the stop');
   assert.match(brief, /still stands/);
   assert.doesNotMatch(brief, /stopped by the operator/, 'the stop itself is not explained');
+});
+
+// 30 Oct, test5: after a stop the operator said "continue work" and the Architect
+// answered "t4's resend hasn't reported back yet" beside a plan with three todo
+// rows — its own conversation still ended on the delegate call. The ledger knows
+// the run ended; the brief has to say so, without explaining the stop.
+test('the brief says a stopped run ended and nothing started since', async () => {
+  const dir = project('stopped-brief');
+  const stub = makeEngine(dir);
+  const runner = runnerFor(stub.engine, dir);
+  await runner.handleTurn('ses_arch', archMessages('call_stop'));
+  const live = await waitFor(() => runner.active().find((r) => r.workerId));
+  assert.ok(live);
+  runner.cancel(dir);
+  const done = await waitFor(() => runs(dir).find((r) => r.kind === 'result'));
+  assert.ok(done);
+
+  const brief = briefSession({ dir, role: 'architect' });
+  assert.match(brief, /ended without a report/, 'the Architect must not wait for one');
+  assert.match(brief, /nothing has started since/);
+  assert.match(brief, /back in todo/, 'the row the stop reopened is named');
+  assert.doesNotMatch(brief, /stopped by the operator/, 'the brief states the end, not the reason');
+
+  // A delegation after the result is a real run in flight: the line goes.
+  appendRun(dir, { at: Date.now() + 1000, kind: 'delegate', callId: 'call_next', task: done.task, role: done.role });
+  assert.doesNotMatch(briefSession({ dir, role: 'architect' }), /ended without a report/);
 });
 
 test('the first stop cuts at the step boundary, with no note to the model', async () => {
@@ -342,6 +367,7 @@ test('a steer is pinned in the trace, centred and bright', () => {
   assert.match(app, /trace-steer-text/);
   assert.match(css, /\.trace-line\.is-steer \{[^}]*align-items: center/);
   assert.match(css, /\.trace-line\.is-steer \{[^}]*white-space: normal/);
+  assert.match(css, /\.trace-line\.is-steer \{[^}]*border-left: 2px solid #ffd60a/, 'the steer carries the permission log’s rule');
   assert.match(css, /\.msg-steer \{[^}]*#ffd60a/);
   assert.match(css, /\.msg-steer \{[^}]*vertical-align: middle/);
 });

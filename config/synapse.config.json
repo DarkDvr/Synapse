@@ -264,7 +264,7 @@
   },
   "roles": {
     "designer": {
-      "ref": "opencode/beam-free",
+      "ref": "strata/qwen3.8-flash-next-iq2_xs",
       "skills": [
         "aesthetic-foundations",
         "app-check",
@@ -278,7 +278,7 @@
       ]
     },
     "qc": {
-      "ref": "opencode/beam-free",
+      "ref": "strata/qwen3.8-flash-next-iq2_xs",
       "skills": [
         "web-guidelines",
         "aesthetic-foundations",
@@ -298,7 +298,7 @@
       ]
     },
     "coder-1": {
-      "ref": "opencode/beam-free",
+      "ref": "strata/qwen3.8-flash-next-iq2_xs",
       "skills": [
         "code-craft",
         "visual-review"
@@ -308,7 +308,7 @@
       ]
     },
     "coder-2": {
-      "ref": "opencode/beam-free",
+      "ref": "strata/qwen3.8-flash-next-iq2_xs",
       "skills": [
         "code-craft",
         "visual-review"
@@ -318,7 +318,7 @@
       ]
     },
     "coder-3": {
-      "ref": "opencode/beam-free",
+      "ref": "strata/qwen3.8-flash-next-iq2_xs",
       "skills": [
         "code-craft",
         "visual-review"
@@ -328,7 +328,7 @@
       ]
     },
     "inventor": {
-      "ref": "opencode/beam-free",
+      "ref": "strata/qwen3.8-flash-next-iq2_xs",
       "skills": [
         "frontend-design"
       ]
