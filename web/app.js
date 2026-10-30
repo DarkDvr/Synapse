@@ -1079,23 +1079,28 @@ function closeUpdateDialog() {
   $('updateModal').hidden = true;
 }
 
-function renderUpdateDialog() {
+/** The sentence above the two update cards. Shared by the chip's popup and the
+ *  Settings page so the two cannot describe the same state differently. */
+function updateSubText() {
   const e = state.update || {};
   const s = state.synapseUpdate || {};
   const busy = state.updateBusy;
-  const sub = $('updateSub');
-  const body = $('updateBody');
-  if (!body) return;
-
-  if (sub) {
-    sub.textContent = busy
-      ? busy === 'synapse'
-        ? 'Updating Synapse. It will close, replace its program files and reopen. Your projects and settings are not touched.'
-        : 'Updating the runtime. It is stopped, replaced and started again — about a minute.'
-      : e.newer || s.newer
-        ? 'The two update separately: Synapse is the harness, the runtime is the engine and its model catalog.'
-        : 'Synapse and the runtime are both up to date, or nothing could be checked.';
+  if (busy) {
+    return busy === 'synapse'
+      ? 'Updating Synapse. It will close, replace its program files and reopen. Your projects and settings are not touched.'
+      : 'Updating the runtime. It is stopped, replaced and started again — about a minute.';
   }
+  return e.newer || s.newer
+    ? 'The two update separately: Synapse is the harness, the runtime is the engine and its model catalog.'
+    : 'Synapse and the runtime are both up to date, or nothing could be checked.';
+}
+
+/** The two cards and the console. One builder for the popup and the Settings
+ *  page: the operator should not have to learn two slightly different screens. */
+function updateBodyHtml() {
+  const e = state.update || {};
+  const s = state.synapseUpdate || {};
+  const busy = state.updateBusy;
 
   const synVersion = s.newer
     ? `<b>${esc(s.current || '?')}</b> → <b>${esc(s.latest || '?')}</b>`
@@ -1126,7 +1131,7 @@ function renderUpdateDialog() {
         : '<p class="upd-note">The runtime carries the model catalog, tools and API. npm publishes no release notes — the version number is all it tells us.</p>';
   const engCan = Boolean(e.newer && e.canUpdate && !busy && !updateChecking);
 
-  body.innerHTML =
+  return (
     '<div class="upd-list">' +
     `<section class="upd-card">` +
     `<div class="upd-card-head"><span class="upd-name">Synapse</span><span class="upd-vers">${synVersion}</span></div>` +
@@ -1143,24 +1148,47 @@ function renderUpdateDialog() {
     `</section>` +
     '</div>' +
     '<div class="upd-console-wrap"><div class="upd-console-head">Update console</div>' +
-    `<pre class="upd-console" id="updateConsole">${esc(state.updateLog.join('\n') || 'Nothing yet.')}</pre></div>`;
+    `<pre class="upd-console">${esc(state.updateLog.join('\n') || 'Nothing yet.')}</pre></div>`
+  );
+}
+
+/** The chip's popup. The Settings page reuses updateBodyHtml and adds its own
+ *  Check Again; only this surface has a footer. */
+function renderUpdateDialog() {
+  const body = $('updateBody');
+  if (!body) return;
+  const sub = $('updateSub');
+  if (sub) sub.textContent = updateSubText();
+  body.innerHTML = updateBodyHtml();
 
   const check = $('checkUpdate');
   if (check) {
-    check.disabled = Boolean(busy) || updateChecking;
+    check.disabled = Boolean(state.updateBusy) || updateChecking;
     check.textContent = updateChecking ? 'Checking…' : 'Check Again';
   }
   const close = $('closeUpdate');
   const closeFoot = $('closeUpdateFoot');
-  for (const el of [close, closeFoot]) if (el) el.disabled = Boolean(busy);
+  for (const el of [close, closeFoot]) if (el) el.disabled = Boolean(state.updateBusy);
   renderUpdateConsole();
 }
 
+/** Repaint every surface that shows update state: the popup when it is open,
+ *  and the Settings Updates page when that is the visible tab. */
+function renderUpdateViews() {
+  if (!$('updateModal').hidden) renderUpdateDialog();
+  if (!$('settingsModal').hidden && state.settingsTab === 'updates') {
+    renderSettings({ scrollTop: $('settingsBody')?.scrollTop || 0 });
+  }
+}
+
 function renderUpdateConsole() {
-  const el = $('updateConsole');
-  if (!el) return;
-  el.textContent = state.updateLog.join('\n') || 'Nothing yet.';
-  el.scrollTop = el.scrollHeight;
+  // The popup and the Settings page can both be in the DOM, and only one is
+  // visible at a time; writing all of them keeps whichever is open current.
+  const text = state.updateLog.join('\n') || 'Nothing yet.';
+  for (const el of document.querySelectorAll('.upd-console')) {
+    el.textContent = text;
+    el.scrollTop = el.scrollHeight;
+  }
 }
 
 function pushUpdateLog(line) {
@@ -1173,7 +1201,7 @@ function pushUpdateLog(line) {
 async function checkUpdates() {
   if (updateChecking || state.updateBusy) return;
   updateChecking = true;
-  renderUpdateDialog();
+  renderUpdateViews();
   const [eng, syn] = await Promise.allSettled([
     api('POST', '/api/engine/update/check'),
     api('POST', '/api/synapse/update/check'),
@@ -1182,7 +1210,7 @@ async function checkUpdates() {
   if (syn.status === 'fulfilled') state.synapseUpdate = syn.value;
   updateChecking = false;
   renderUpdateChip();
-  if (!$('updateModal').hidden) renderUpdateDialog();
+  renderUpdateViews();
   if (eng.status === 'rejected' && syn.status === 'rejected') {
     toast('Could Not Check for Updates', eng.reason?.message || syn.reason?.message || 'Both feeds refused.');
   }
@@ -1194,7 +1222,7 @@ async function applyEngineUpdate() {
   state.updateBusy = 'engine';
   state.updateLog = [];
   renderUpdateChip();
-  renderUpdateDialog();
+  renderUpdateViews();
   pushUpdateLog(`Updating the runtime ${u.current || ''} → ${u.latest || ''}…`);
   let r;
   try {
@@ -1226,7 +1254,7 @@ async function applyEngineUpdate() {
       7000,
     );
   }
-  if (!$('updateModal').hidden) renderUpdateDialog();
+  renderUpdateViews();
 }
 
 async function applySynapseUpdate() {
@@ -1235,7 +1263,7 @@ async function applySynapseUpdate() {
   state.updateBusy = 'synapse';
   state.updateLog = [];
   renderUpdateChip();
-  renderUpdateDialog();
+  renderUpdateViews();
   pushUpdateLog(`Updating Synapse ${s.current || ''} → ${s.latest || ''}…`);
   let r;
   try {
@@ -1250,7 +1278,7 @@ async function applySynapseUpdate() {
   state.updateBusy = null;
   pushUpdateLog(`Update failed: ${r.error || 'unknown error'}`);
   renderUpdateChip();
-  renderUpdateDialog();
+  renderUpdateViews();
   toast('Update Failed', r.error || 'Synapse could not be updated.');
 }
 
@@ -6420,7 +6448,7 @@ function connectStream() {
       state.settingsLock = ev.lock || null;
       renderClients();
       if (ev.lock && !ev.lock.yours && !$('settingsModal').hidden) {
-        closeSettings();
+        closeSettings({ force: true });
         toast('Settings Closed', `The settings are now being edited on ${ev.lock.name}.`);
       }
       return;
@@ -6430,7 +6458,7 @@ function connectStream() {
       state.settingsLock = ev.holder || null;
       // The clients line does not depend on who holds Settings; leave it alone.
       if (ev.holder && !$('settingsModal').hidden && state.clientId && !state.views.some((v) => v.id === state.clientId && v.name === ev.holder.name)) {
-        closeSettings();
+        closeSettings({ force: true });
         toast('Settings Closed', `The settings are now being edited on ${ev.holder.name}.`);
       }
       return;
@@ -6540,7 +6568,7 @@ function connectStream() {
     if (ev.kind === 'synapse-update') {
       if (ev.update) state.synapseUpdate = ev.update;
       renderUpdateChip();
-      if (!$('updateModal').hidden) renderUpdateDialog();
+      renderUpdateViews();
       return;
     }
 
@@ -6556,7 +6584,7 @@ function connectStream() {
     if (ev.kind === 'engine-update') {
       if (ev.update) state.update = ev.update;
       renderUpdateChip();
-      if (!$('updateModal').hidden) renderUpdateDialog();
+      renderUpdateViews();
       return;
     }
 
@@ -6802,6 +6830,8 @@ const ICONS = {
   eye: '<path d="M1.7 8S4 3.9 8 3.9 14.3 8 14.3 8 12 12.1 8 12.1 1.7 8 1.7 8z"/><circle cx="8" cy="8" r="1.9"/>',
   eyeOff:
     '<path d="M2.3 9.3C3.6 6.4 5.6 5 8 5s4.4 1.4 5.7 4.3"/><path d="M4 11.2 2.7 12.9M8 10.3v2.3M12 11.2 13.3 12.9"/>',
+  refresh:
+    '<path d="M13.2 8a5.2 5.2 0 1 1-1.6-3.7"/><path d="M13.2 2.6V5.4h-2.8"/>',
   info: '<circle cx="8" cy="8" r="6.1"/><path d="M8 7.4v4.1"/><path d="M8 4.9h.01"/>',
 };
 
@@ -6817,6 +6847,7 @@ const SETTINGS_TABS = [
   { id: 'tools', label: 'Tools', icon: 'tools' },
   { id: 'windows', label: 'Windows', icon: 'engine' },
   { id: 'logging', label: 'Logging', icon: 'lines' },
+  { id: 'updates', label: 'Check for Updates', icon: 'refresh' },
   { id: 'about', label: 'About', icon: 'info' },
 ];
 
@@ -7126,7 +7157,7 @@ function settingsLogging(c) {
 
 // ── about ───────────────────────────────────────────────────────
 
-/** A short, standard about page: mark, name, version, one line, credits. */
+/** A short, standard about page: mark, name, version, two empty lines, credits. */
 function settingsAbout() {
   const version = String(state.status?.version || '').trim() || 'unknown';
   return `
@@ -7134,8 +7165,7 @@ function settingsAbout() {
       <img class="about-mark" src="/icon-64.png" alt="" width="56" height="56" />
       <h2>Synapse</h2>
       <p class="about-version">Version ${esc(version)}</p>
-      <p class="about-lede">A self-contained harness for building software with agent models:
-        plan it, delegate it, and watch the work happen.</p>
+      <div class="about-gap" aria-hidden="true"></div>
       <dl class="about-facts">
         <dt>Created by</dt><dd>DarkDvr</dd>
         <dt>Contact</dt><dd><a href="mailto:darkdvr1@yandex.ru">darkdvr1@yandex.ru</a></dd>
@@ -7144,10 +7174,25 @@ function settingsAbout() {
       </dl>
       <p class="about-free">Free software: use it, share it, change it. Keep the copyright notices; a modified version must say so. No account, no subscription, no telemetry.</p>
       <div class="about-actions">
-        <button class="btn btn-primary btn-sm" type="button" data-check-updates>Check for Updates</button>
         <button class="btn btn-secondary btn-sm" type="button" data-close-about>Close</button>
       </div>
     </div>`;
+}
+
+/** Updates as a Settings page: the chip's two cards and console, with a Check
+ *  Again button because the Settings footer has nothing to save here. */
+function settingsUpdates() {
+  const busy = state.updateBusy;
+  return `
+    <section class="set-group upd-pane">
+      <h4>Updates</h4>
+      <p class="set-note">${esc(updateSubText())}</p>
+      <div class="upd-pane-bar">
+        <button class="btn btn-secondary btn-sm" type="button" data-check-updates ${busy || updateChecking ? 'disabled' : ''}>${updateChecking ? 'Checking…' : 'Check Again'}</button>
+        ${busy ? '<span class="upd-note">An update is running. Settings stays open until it finishes.</span>' : ''}
+      </div>
+      ${updateBodyHtml()}
+    </section>`;
 }
 
 // ── providers: the only editable list in this window ────────────
@@ -7370,6 +7415,7 @@ const SETTINGS_PANES = {
   tools: settingsTools,
   windows: settingsWindows,
   logging: settingsLogging,
+  updates: settingsUpdates,
   about: settingsAbout,
 };
 
@@ -7398,10 +7444,12 @@ function renderSettings({ scrollTop } = {}) {
   // pressed. Only a tab switch or opening the window starts at the top.
   const keep = scrollTop === undefined ? body.scrollTop : scrollTop;
   renderSettingsTabs();
-  // About is read-only: Save and Revert there would be two buttons with nothing
-  // to save. The footer comes back on the next editable tab.
+  // About and Updates are read-only: Save and Revert there would be two buttons
+  // with nothing to save. The footer comes back on the next editable tab.
   const foot = document.querySelector('.set-foot');
-  if (foot) foot.hidden = state.settingsTab === 'about';
+  if (foot) foot.hidden = state.settingsTab === 'about' || state.settingsTab === 'updates';
+  const closeX = $('closeSettings');
+  if (closeX) closeX.disabled = Boolean(state.updateBusy);
   body.innerHTML = SETTINGS_PANES[state.settingsTab](c);
   body.scrollTop = keep;
 }
@@ -7441,12 +7489,18 @@ function collectSettings() {
 }
 
 function switchSettingsTab(id) {
-  if (id === state.settingsTab) return;
+  if (id === state.settingsTab) {
+    if (id === 'updates') checkUpdates();
+    return;
+  }
   collectSettings();
   state.settingsTab = id;
   state.setKeyRevealed = false;
   state.setProvFetch = null;
   renderSettings({ scrollTop: 0 });
+  // Opening the Updates page is the operator asking, like opening the chip's
+  // popup: check both feeds now rather than showing a stale answer.
+  if (id === 'updates') checkUpdates();
 }
 
 // ── providers: the editor's own small state machine ─────────────
@@ -7598,6 +7652,18 @@ function onSettingsInput(e) {
 }
 
 async function onSettingsClick(e) {
+  if (e.target.closest('[data-close-about]')) { closeSettings(); return; }
+  if (e.target.closest('[data-check-updates]')) { checkUpdates(); return; }
+  const upd = e.target.closest('[data-update]');
+  if (upd) {
+    if (upd.disabled || state.updateBusy) return;
+    if (upd.dataset.update === 'engine') applyEngineUpdate();
+    if (upd.dataset.update === 'synapse') applySynapseUpdate();
+    return;
+  }
+  // The Runtime pane's own button now lands on the Updates page instead of
+  // opening the chip's popup over the settings window.
+  if (e.target.closest('[data-check-update]')) { switchSettingsTab('updates'); return; }
   const add = e.target.closest('[data-prov-add]');
   if (add) {
     const menu = $('provAddMenu');
@@ -7843,11 +7909,17 @@ async function openSettings() {
   state.setProvFetch = null;
   renderSettings({ scrollTop: 0 });
   $('settingsModal').hidden = false;
+  // The tab is remembered across openings; if it is Updates, opening the window
+  // is also a request for a fresh answer.
+  if (state.settingsTab === 'updates') checkUpdates();
   // Settings → Windows answers "what can this PC build", which is a machine probe
   // and not config: read it once when the window opens, and again on demand.
   loadToolchain();
 }
-function closeSettings() {
+function closeSettings({ force = false } = {}) {
+  // An update started from this window is visible only here; the chip's popup
+  // has the same rule. Locking the window is the safe half of "in flight".
+  if (state.updateBusy && !force) return;
   $('settingsModal').hidden = true;
   state.setDraft = null;
   api('POST', '/api/settings/lock', { action: 'release' }).catch(() => {});
@@ -8101,12 +8173,6 @@ document.addEventListener('keydown', (e) => {
   }, true);
   $('settingsBtn').addEventListener('click', openSettings);
   $('closeSettings').addEventListener('click', closeSettings);
-  $('settingsBody').addEventListener('click', (e) => {
-    if (e.target.closest('[data-close-about]')) { closeSettings(); return; }
-    if (!e.target.closest('[data-check-updates]')) return;
-    closeSettings();
-    openUpdateDialog();
-  });
   $('revertSettings').addEventListener('click', revertSettings);
   $('saveSettings').addEventListener('click', saveSettings);
   $('settingsTabs').addEventListener('click', (e) => {
@@ -8264,15 +8330,6 @@ document.addEventListener('keydown', (e) => {
 
     const resetAsks = e.target.closest('[data-reset-asks]');
     if (resetAsks) { e.preventDefault(); resetModelAsks(); return; }
-
-    // Settings has the engine's version in it, so the check lives there too -
-    // otherwise the offer would only exist when an update is already known.
-    if (e.target.closest('[data-check-update]')) {
-      e.preventDefault();
-      closeSettings();
-      openUpdateDialog();
-      return;
-    }
 
     const clearTools = e.target.closest('[data-clear-tools]');
     if (clearTools) { e.preventDefault(); clearToolCensus(); return; }

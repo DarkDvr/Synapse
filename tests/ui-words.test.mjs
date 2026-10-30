@@ -109,3 +109,41 @@ test('the final answer has its own rule, and work does not', () => {
   assert.match(js, /workBefore/);
   assert.match(js, /toolAfter/);
 });
+
+// 30 Oct UI pass: the operator moved the update check into the Settings rail,
+// stopped the About page selling itself, and made notices easier to notice.
+test('Updates is a Settings page above About, and About is just the facts', () => {
+  const js = read('web/app.js');
+  assert.match(js, /\{ id: 'updates', label: 'Check for Updates', icon: 'refresh' \}/);
+  assert.ok(
+    js.indexOf("{ id: 'updates'") < js.indexOf("{ id: 'about', label: 'About'"),
+    'the Updates tab sits above About',
+  );
+  assert.match(js, /function settingsUpdates\(/);
+  assert.match(js, /updates: settingsUpdates/);
+  assert.match(js, /class="about-gap"/);
+  assert.doesNotMatch(js, /about-lede|A self-contained harness for building software/);
+  assert.match(read('web/synapse.css'), /\.about-gap\s*\{\s*height: 39px/);
+});
+
+test('every textual Close is the grey secondary button', () => {
+  const html = read('web/index.html');
+  const classes = [...html.matchAll(/<button class="([^"]+)"[^>]*>Close<\/button>/g)].map((m) => m[1]);
+  assert.ok(classes.length >= 6, `expected the six Close buttons, found ${classes.length}`);
+  for (const cls of classes) assert.match(cls, /\bbtn-secondary\b/, `Close is not secondary: ${cls}`);
+  const js = read('web/app.js');
+  assert.match(js, /data-close-about>Close<\/button>/);
+  assert.match(js, /btn btn-secondary btn-sm[^>]*data-close-about/);
+});
+
+test('notices carry the yellow border and yellow text, and the work ring is twice as quick', () => {
+  const css = read('web/synapse.css');
+  assert.match(css, /\.toast\s*\{[^}]*border: 1px solid var\(--yellow\)/);
+  assert.match(css, /\.toast\s*\{[^}]*color: var\(--yellow\)/);
+  assert.match(css, /work-spin 2\.1s linear infinite/);
+});
+
+test('the provider Name control starts on the Type control’s line', () => {
+  assert.match(read('web/synapse.css'), /\.prov-edit \.set-grid\s*\{[^}]*align-items: start/);
+});
+

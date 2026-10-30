@@ -786,9 +786,10 @@ body.dark .sidebar-bottom,
 
 /* ── the working wash and border light (28 Oct) ─────────────────────────────
    The operator's choice from the demo: a soft amber wash entering from both
-   edges, breathing every 4 s, plus a 2 px light lapping the whole perimeter.
+   edges, breathing every 2.7 s, plus a 2 px light lapping the whole perimeter.
    It marks the project row whose run is live and the role card whose turn is
    running — the two places the operator looks to see "this is happening now".
+   The ring turns in 2.1 s; the first version took 4.2 s and read as too slow.
    The wash sits behind the content (negative z-index inside an isolated
    stacking context); the ring sits above it, but is only 2 px of edge.
    `--work-spin` is registered above so the conic gradient can animate. */
@@ -817,7 +818,7 @@ body.dark .sidebar-bottom,
   -webkit-mask-composite: xor;
   mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
   mask-composite: exclude;
-  animation: work-spin 4.2s linear infinite;
+  animation: work-spin 2.1s linear infinite;
 }
 @keyframes work-wash { 0%, 100% { opacity: 0.35; } 50% { opacity: 1; } }
 @keyframes work-spin { to { --work-spin: 360deg; } }
@@ -2367,9 +2368,9 @@ body[data-mode="single"] #runAuto { display: none; }
   margin: 0; font-family: var(--mono); font-size: 11px; color: var(--muted);
   letter-spacing: 0.02em;
 }
-.about-lede {
-  margin: 13px 0 18px; font-size: 12.5px; line-height: 1.55; color: #b9bcc2;
-}
+/* The operator asked for two empty lines where the old description was, not a
+   tighter page. 2 × 1.55 × 12.5px, the two lines the paragraph used. */
+.about-gap { height: 39px; }
 .about-facts {
   display: grid; grid-template-columns: auto auto; gap: 7px 16px;
   justify-content: center; align-items: baseline; margin: 0 0 18px;
@@ -2384,6 +2385,11 @@ body[data-mode="single"] #runAuto { display: none; }
   font-size: 11.5px; color: var(--muted);
 }
 .about-actions { display: flex; justify-content: center; gap: 8px; margin-top: 14px; }
+/* Updates is a Settings page, not a second popup. Two cards abreast when the
+   pane is wide enough keeps the page shorter than the window; the body still
+   scrolls for the release notes and the console. */
+.upd-pane .upd-list { grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+.upd-pane-bar { display: flex; align-items: center; gap: 10px; }
 /* focus rings must never be clipped by the scroll container, so leave room */
 .settings-body {
   flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 2px 6px 2px 2px;
@@ -2585,7 +2591,10 @@ body[data-mode="single"] #runAuto { display: none; }
   border: 1px solid var(--line); border-radius: 8px;
   background: rgba(255, 255, 255, 0.02);
 }
-.prov-edit .set-grid { gap: 10px 12px; }
+/* A field with no hint must not stretch to the height of the field beside it.
+   That is what put Name's input lower and taller than Type's select; both now
+   start at the same label line and keep the control's own 28px height. */
+.prov-edit .set-grid { gap: 10px 12px; align-items: start; }
 .prov-hint { font-size: 10.5px; color: #7c808a; line-height: 1.5; }
 /* A placeholder is a hint, not content: in the models box it looked like a model
    the provider already had. */
@@ -2645,6 +2654,23 @@ body[data-mode="single"] #runAuto { display: none; }
    the jump buttons and the conversation. (`summit.css` is a locked baseline, so
    this is an override, not an edit.) */
 .toast-region { top: 16px; right: 24px; bottom: auto; }
+/* Notices are the one thing that arrives unasked, so they carry the accent:
+   a yellow border and yellow text, not another dark panel that reads as part of
+   the page. The icon's green was semantic for a success that most toasts are
+   not, so it is yellow too. */
+.toast {
+  border: 1px solid var(--yellow);
+  background: #1d1f23;
+  color: var(--yellow);
+  box-shadow: 0 15px 40px rgba(0, 0, 0, 0.55), 0 0 18px rgba(237, 194, 90, 0.14);
+}
+.toast strong { color: var(--yellow); }
+.toast p { color: rgba(237, 194, 90, 0.82); }
+.toast-icon {
+  background: rgba(237, 194, 90, 0.12);
+  border: 1px solid rgba(237, 194, 90, 0.45);
+  color: var(--yellow);
+}
 
 .modal-backdrop {
   position: fixed; inset: 0; z-index: 60;
