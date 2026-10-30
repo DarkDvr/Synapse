@@ -273,10 +273,21 @@ expect('silence: logged as stalled', fs.readFileSync(PROVIDER_LOG, 'utf8').inclu
 const stallClears = stalled.events.filter((e) => e.kind === 'role-error' && e.clear).length;
 expect('silence: the restart line clears when the worker resumes', stallClears >= 2, `clears=${stallClears}`);
 
-// 5. Stop cuts a backoff short and does not wake the Architect
-const stopped = await runCase({ name: 'stopped', script: [{ error: RATE }], cancelAfter: 900, untilWoke: 0 });
+// 5. Stop cuts a backoff short, and tells the Architect it was the operator's
+// decision. It used to wake nobody, which left the Architect waiting for a report
+// that was already on disk (the emulator project, 29 Oct).
+const stopped = await runCase({ name: 'stopped', script: [{ error: RATE }], cancelAfter: 900, untilWoke: 1 });
 expect('stop: outcome stopped', stopped.result?.outcome === 'stopped', stopped.result?.outcome);
-expect('stop: the Architect was not woken', stopped.woke.length === 0, String(stopped.woke.length));
+expect('stop: the Architect was told', stopped.woke.length === 1, String(stopped.woke.length));
+expect(
+  'stop: the report says who stopped it',
+  /stopped by the operator/.test(stopped.woke[0] || ''),
+  stopped.woke[0]?.slice(0, 120),
+);
+expect(
+  'stop: it says not to delegate it again',
+  /do not delegate this task again unless they say so/.test(stopped.woke[0] || ''),
+);
 
 // 5b. A harness stop with a reason still reports. It used to be handed the run's
 // own aborted signal, which wake() reads as "the operator said stop, say

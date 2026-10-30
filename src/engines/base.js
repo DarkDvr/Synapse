@@ -36,6 +36,10 @@ export class Engine extends EventEmitter {
   // applied to an open session: deny `subagent`, or clear the deny.
   async updateSessionPermissions() { throw new Error(`${this.kind}: updateSessionPermissions() not implemented`); }
   async getMessages() { return []; }
+  // `delivery: 'steer'` joins the turn already running and is read at its next
+  // step boundary; `'queue'` waits for the turn to end. The engine's default is
+  // `steer`, so a prompt sent while the session is busy is guidance, not a
+  // second conversation. An engine without a turn concept may ignore it.
   async prompt() { throw new Error(`${this.kind}: prompt() not implemented`); }
   async interrupt() {}
   async replyPermission() {}

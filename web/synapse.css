@@ -1537,6 +1537,13 @@ body[data-mode="single"] #runAuto { display: none; }
   letter-spacing: 0.08em; text-transform: uppercase;
   color: var(--speaker); margin-right: 7px; vertical-align: 1.5px;
 }
+/* The operator's mid-run guidance, same line as the purple You: the yellow word
+   is the only thing that distinguishes it, which is what was asked for. */
+.msg-steer {
+  display: inline-block; margin-right: 5px;
+  font-size: 9.5px; font-weight: 800; letter-spacing: 0.08em;
+  color: var(--yellow); vertical-align: 1.5px;
+}
 /* the rule between speakers, with room to breathe above and below it */
 .msg + .msg { border-top: 1px solid #2b2e35; padding-top: 15px; }
 .msg-time {
@@ -3001,6 +3008,17 @@ body { overflow-anchor: none; }
 
 .mode-toggle[disabled] { opacity: 0.45; cursor: not-allowed; }
 .btn[disabled], #sendBtn[disabled] { opacity: 0.45; cursor: not-allowed; }
+/* While work is running the same button is Steer. Yellow is the live path's
+   colour: a border, not a fill, so it is still the primary action and the label
+   stays white. The operator asked for exactly this on 30 Oct. */
+#sendBtn.is-steer {
+  border-color: var(--yellow);
+  box-shadow: 0 0 0 1px rgba(237, 194, 90, 0.28), 0 4px 10px rgba(237, 194, 90, 0.10);
+}
+#sendBtn.is-steer:hover:not(:disabled) {
+  background: var(--primary-dark);
+  border-color: var(--yellow);
+}
 
 /* A page that lost its server is a snapshot. It is covered, dimmed, and inert —
    there is no Escape and no backdrop click, only Close. */

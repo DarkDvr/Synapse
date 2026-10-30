@@ -653,9 +653,14 @@ export class OpenCodeEngine extends Engine {
     return messages;
   }
 
-  async prompt(sessionId, text, { files } = {}) {
+  async prompt(sessionId, text, { files, delivery } = {}) {
     this.sessionLog.info(`prompt -> ${sessionId}: ${String(text).replace(/\s+/g, ' ').slice(0, 300)}`);
     const body = { text };
+    // Measured on 2.1.2: the engine's inbox defaults to `steer` — the message
+    // joins the running turn and is read at its next step — and `queue` holds it
+    // until the turn ends. Only send the field when the caller chose one, so the
+    // engine's own default stays the default.
+    if (delivery) body.delivery = delivery;
     // An attachment is a `uri`, measured on 2.1.2 (the OpenAPI dump is older and
     // describes a `{data, mime, source}` shape the server now refuses with
     // `Missing key at ["files"][0]["uri"]`). A `data:` URI is accepted and keeps

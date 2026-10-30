@@ -26,10 +26,11 @@ sleeps therefore cannot hold a project. Nothing to expire, nothing to leak.
 
 ## The rules
 
-1. **Send is blocked while the project is busy**, from every view — including the
-   one that pressed it. Drafting, opening transcripts and creating a session stay
-   free; only the send is refused. The message names the project, the session and
-   the view driving it, and, when a card is open, offers it.
+1. **Any view may steer while the project is busy.** The message joins the running
+   turn at its next step: it is guidance for the work in flight, not a second
+   conversation. The composer says **Steer** with a yellow border, whoever is
+   typing. Cards and questions still block the composer — answer those first.
+   Stop is unchanged, and always available.
 2. **Cards are answerable from any view, busy or not.** The first answer wins and
    is broadcast: every other view closes the panel and repaints the chip. A
    second answer is a no-op, not an error.
@@ -62,6 +63,9 @@ sleeps therefore cannot hold a project. Nothing to expire, nothing to leak.
   restricted.
 - **Two answers at once.** The first decision is recorded and broadcast; the
   second gets `already answered` and the panel closes anyway (rule 2).
+- **A steer sent as the work ends.** The server refuses it and the composer keeps
+  the text, so pressing Send again sends it as a normal message. The run's report
+  is the record either way.
 - **A reload while busy.** The page rebuilds from `/api/status`, `/api/pending`
   and the stream; it does not need the previous page to have been kind.
 

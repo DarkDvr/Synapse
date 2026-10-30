@@ -368,5 +368,10 @@
       "session": true,
       "tools": true
     }
+  },
+  "update": {
+    "synapse": {
+      "feed": "https://api.github.com/repos/DarkDvr/Synapse/releases/latest"
+    }
   }
 }

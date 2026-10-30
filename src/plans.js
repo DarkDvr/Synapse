@@ -1000,6 +1000,16 @@ export function briefSession({ dir, role = 'architect', auto = false, single = f
         'work yourself and never wait on it. Record the task as blocked, or as done if you verified it ' +
         'yourself, put the reason in its note, say it in your reply, and carry on with the rest of the plan.',
     );
+    // Two operator actions used to read as failures to the model: a steer arriving
+    // mid-turn looked like a new request, and a Stop looked like an error to retry.
+    // Both are the operator speaking, and the Architect must not undo either.
+    lines.push(
+      'The operator may send you a message while you are working. It is marked "[steer]" and is guidance for ' +
+        'the turn you are in, not a new request: apply it and continue, or stop and say why. If it changes the ' +
+        'task materially, ask the operator a question to confirm before reshaping the plan. A turn that ends ' +
+        'with "Step interrupted" was stopped by the operator - not a provider failure, and not a judgement on ' +
+        'your work; do not retry it on your own. Their next message is the instruction.',
+    );
     lines.push(
       'Your own turns are the dearest in the harness: every one re-sends this whole conversation. Delegation is ' +
         'how the work gets done without that bill - it is what the roles and the plan are for. Anything that ' +
@@ -1075,6 +1085,15 @@ export function briefSession({ dir, role = 'architect', auto = false, single = f
       'Stop when the deliverable exists and the checks the task names pass: write your report and finish. A ' +
         'longer run is not a better one - the Architect judges the files, and polish past what was asked for is ' +
         'work nobody asked for.',
+    );
+    // The operator can talk to a worker mid-run now. Without this line a steer
+    // reads as a second task, and the worker either restarts or answers it instead
+    // of finishing the one it was given.
+    lines.push(
+      'The operator may send guidance while you work. It is marked "[steer]": treat it as their instruction for ' +
+        'this task, apply it, say in your report what changed because of it, and do not restart the task unless ' +
+        'it says so. If it changes the task materially and the intent is unclear, ask the operator a question ' +
+        'before acting. A stop from them is their decision, not a failure of yours.',
     );
     // What a turn costs, said plainly, because the model is the only thing that
     // decides how many of them there are. Every turn re-sends this whole

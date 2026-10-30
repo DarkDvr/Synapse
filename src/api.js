@@ -3,7 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
-import { readPlan, readRuns, runLedger, briefSession, logPlanState, BRIEF_KEY } from './plans.js';
+import { appendRun, readPlan, readRuns, runLedger, briefSession, logPlanState, BRIEF_KEY } from './plans.js';
 import { ensureProjectDoc, appendRequest as appendProjectRequest, appendChat, appendDecision as appendProjectDecision, appendEntry, setHandover } from './project-doc.js';
 import { createFormAuto } from './form-auto.js';
 import { fullAutoTimeoutMs } from './auto-answer.js';
@@ -31,6 +31,10 @@ import { APP_VERSION } from './version.js';
 const ATTACH_MAX_BYTES = 8 * 1024 * 1024;
 const ATTACH_TOTAL_BYTES = 48 * 1024 * 1024;
 const ATTACH_MAX_COUNT = 24;
+// A steer is one instruction to a worker that is working, not a second brief.
+// Long enough for a paragraph and a pasted error; short enough that it is read
+// at the next step instead of displacing the task.
+const STEER_MAX_CHARS = 4000;
 
 /**
  * The files on an outgoing message, as the engine wants them.
@@ -1268,8 +1272,119 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
           app.warn(`could not keep the attachments: ${err.message}`);
         }
       }
-      await engine.prompt(sessionId, text, { files: attachments });
+      // A message after the operator pressed Stop carries the context the engine
+      // cannot add: the cut was a decision, not a provider failure. Measured
+      // 30 Oct: an Architect whose essay was stopped described it as "cut off
+      // mid-sentence" and did not know the operator had done it, even with the
+      // rule in its brief. The marker is stripped by the UI, so the operator sees
+      // their own words and the model sees why the last turn is short.
+      let outgoing = text;
+      try {
+        const transcript = await engine.getMessages(sessionId);
+        const last = [...(transcript || [])].reverse().find((m) => m.type === 'assistant');
+        const said = JSON.stringify(last?.error || '');
+        if (/step interrupted|"type"\s*:\s*"aborted"/i.test(said)) {
+          outgoing =
+            '[after a stop] The operator stopped your previous turn on purpose. ' +
+            'This is their next instruction; do not retry the interrupted turn, and do not treat it as a provider failure.\n\n' +
+            text;
+        }
+      } catch { /* a transcript we cannot read is not a reason to withhold the message */ }
+      await engine.prompt(sessionId, outgoing, { files: attachments });
       return { ok: true, kept };
+    },
+
+    /**
+     * Send guidance into work that is already happening.
+     *
+     * The engine's prompt is an inbox entry: with `delivery: "steer"` it joins
+     * the running turn and is read at its next step boundary. It cannot preempt
+     * a tool call in flight or a token being generated; Stop is the hard
+     * interrupt.
+     *
+     * Only the view that started the work may steer — "whoever started work (that
+     * PC)" — because a second voice changing the task under the first is the
+     * accident the busy rule existed to prevent. The driver is the computer name
+     * recorded when the operator last sent into this project, so a reload on the
+     * same PC still counts.
+     */
+    steer: async (sessionId, body, actor = null) => {
+      requireReady();
+      const text = String(body?.text ?? '').trim();
+      const attachments = normalizeAttachments(body?.files);
+      if (!text && !attachments.length) {
+        const err = new Error('a steer needs at least a sentence');
+        err.status = 400;
+        throw err;
+      }
+      if (text.length > STEER_MAX_CHARS) {
+        const err = new Error(
+          `a steer is one instruction (${STEER_MAX_CHARS} characters at most) — split it, or stop the run and send a message`,
+        );
+        err.status = 400;
+        throw err;
+      }
+      const busy = await busyFor(sessionId);
+      if (!busy.busy) {
+        const err = new Error('Nothing is running now — send it as a message.');
+        err.status = 409;
+        err.body = { notBusy: true };
+        throw err;
+      }
+      if (busy.state === 'waiting') {
+        const err = new Error(`${busy.project || 'This project'} is waiting for an answer. Answer the card first.`);
+        err.status = 409;
+        err.busy = busy;
+        throw err;
+      }
+      const directory = busy.directory;
+      if (!directory) {
+        const err = new Error('could not find the project for this session');
+        err.status = 409;
+        throw err;
+      }
+      // A delegated worker is the thing working; the Architect is idle and would
+      // only start a competing turn. `runs.steer` is the one place that knows the
+      // live worker session.
+      if (busy.kind === 'run') {
+        const result = await runs?.steer?.(directory, { text, files: attachments, actor });
+        if (!result?.ok) {
+          const err = new Error(result?.reason || 'the worker could not be reached');
+          err.status = 409;
+          err.busy = busy;
+          throw err;
+        }
+        app.info(`steer: ${actor?.name || 'operator'} -> ${result.task || 'worker'} (${result.role || '?'})`);
+        return { ok: true, ...result };
+      }
+      // The open session's own turn (usually the Architect planning), or a
+      // worker whose run record is gone. The engine's active list is the truth.
+      const targetId = busy.sessionId || sessionId;
+      const active = await engine.listActiveSessions().catch(() => []);
+      if (!active.includes(targetId)) {
+        const err = new Error('The turn just ended — send it as a message.');
+        err.status = 409;
+        err.body = { notBusy: true };
+        throw err;
+      }
+      try {
+        await engine.prompt(targetId, `[steer] ${text}`, { files: attachments, delivery: 'steer' });
+      } catch (err) {
+        const wrapped = new Error(`could not reach the session: ${err.message}`);
+        wrapped.status = 502;
+        throw wrapped;
+      }
+      const at = Date.now();
+      appendRun(directory, {
+        kind: 'steer',
+        scope: 'session',
+        session: targetId,
+        at,
+        by: actor?.name || null,
+        text: text.slice(0, 1200),
+      });
+      app.info(`steer: ${actor?.name || 'operator'} -> ${targetId} (mid-turn)`);
+      return { ok: true, target: targetId === sessionId ? 'architect' : 'session', at };
     },
 
     /**

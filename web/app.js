@@ -3350,6 +3350,19 @@ function handleRunEvent(ev) {
     renderTranscript();
     return;
   }
+  // The operator's guidance, on the run's own trace. It is not in the Architect's
+  // transcript — it went to the worker's session — so without this line the chat
+  // would show nothing at the moment the operator changed the task.
+  if (ev.type === 'run.steer') {
+    const trace = traceFor(ev);
+    if (trace) {
+      const said = String(ev.text || '').replace(/\s+/g, ' ').trim();
+      trace.notes.push(`Operator: ${said.length > 300 ? `${said.slice(0, 299)}…` : said}`);
+      if (trace.notes.length > 60) trace.notes.splice(0, trace.notes.length - 60);
+      renderTranscript();
+    }
+    return;
+  }
   if (ev.type === 'run.started' || ev.type === 'run.progress') {
     // A run reaching a role is that role working again, so its last error is no
     // longer the news. `run.progress` cannot clear it: the runner sends one right
@@ -4329,8 +4342,17 @@ function renderMessage(m) {
              <path d="M3 5.4A5.2 5.2 0 1 1 3 10.6"/><path d="M3 2.6v3.2h3.2"/>
            </svg><span>Reuse</span></button>`
       : '';
-    return `<div class="msg user" data-msg="user"><div class="msg-body">
-      ${stamp}<span class="msg-role">You</span><span class="msg-text">${esc(m.text)}</span>${chips}${reuse}
+    // A steer is the operator speaking while the turn runs. The engine keeps the
+    // marker so the model knows what it is; the operator sees the same purple
+    // "You" with a yellow STEER: prefix, so the difference is visible at a glance.
+    const steer = String(m.text || '').match(/^\[steer\]\s*([\s\S]*)$/);
+    // A message sent after a Stop carries a harness paragraph explaining the cut
+    // to the model. The operator typed the part after the blank line.
+    const afterStop = String(m.text || '').match(/^\[after a stop\][\s\S]*?\n\n([\s\S]*)$/);
+    const said = afterStop ? afterStop[1] : steer ? steer[1] : m.text;
+    const lead = steer ? '<span class="msg-steer">STEER:</span> ' : '';
+    return `<div class="msg user${steer ? ' is-steer' : ''}" data-msg="user"><div class="msg-body">
+      ${stamp}<span class="msg-role">You</span>${lead}<span class="msg-text">${esc(said)}</span>${chips}${reuse}
     </div></div>`;
   }
   if (m.type === 'synthetic') {
@@ -5873,6 +5895,26 @@ async function stopFromPermission(requestId) {
 
 // ── composer ────────────────────────────────────────────────────
 /**
+ * Where a message would go while the project is busy.
+ *
+ * A steer is not a second conversation: it joins the turn already running and is
+ * read at the next step. Only the computer that started the work may send one —
+ * the server records the driver and enforces the same rule, so this is the
+ * honest face of it rather than the guard.
+ */
+function steerTarget() {
+  const busy = state.busyInfo;
+  if (!busy?.busy || busy.state !== 'running' || state.compacting) return null;
+  const live = currentRun();
+  if (live?.retry) return null;
+  if (live?.role && live?.workerId) return { kind: 'worker', role: live.role, task: live.task };
+  if (busy.kind === 'turn') return { kind: 'architect' };
+  // A run that exists but has no worker session yet is still starting; a steer
+  // then would race the prompt.
+  return null;
+}
+
+/**
  * The composer. While a question is waiting the session genuinely cannot read a
  * message — the engine's turn is blocked on the answer — so the box says so
  * rather than letting a message be typed into nothing.
@@ -5881,6 +5923,7 @@ function renderComposer() {
   const hasSession = Boolean(state.sessionId);
   const asking = Boolean(currentForm());
   const held = Boolean(state.busyInfo?.busy);
+  const target = steerTarget();
   // Any pending question blocks this composer, whoever asked it: the operator's
   // attention is the thing the run is waiting on, and a worker's question is no
   // different from the Architect's in that respect.
@@ -5889,7 +5932,12 @@ function renderComposer() {
   // working — started from 192.0.2.115"), and the operator asked for it to go:
   // it took a line off the chat to say what the rail's dot and the role cards
   // already say. A dead Send with no explanation was accepted in exchange.
-  $('sendBtn').disabled = (state.busy && !hasSession) || asking || held || state.compacting;
+  $('sendBtn').disabled = (state.busy && !hasSession) || asking || state.compacting || (held && !target);
+  // The same click, a different promise: while work is running the button says
+  // Steer and wears the live path's yellow border. Anyone may press it.
+  const sendBtn = $('sendBtn');
+  sendBtn.textContent = target ? 'Steer' : 'Send';
+  sendBtn.classList.toggle('is-steer', Boolean(target));
   // Stop has to work while a worker is running or waiting out a retry, when the
   // open session is idle — that is exactly when it is the only way out. `canStop`
   // is the engine's answer for this project, so a hidden worker enables it even
@@ -5900,9 +5948,17 @@ function renderComposer() {
     input.disabled = asking;
     input.placeholder = asking
       ? 'Answer the question above'
-      : state.mode === 'single'
-        ? 'Message'
-        : 'Message the Architect…';
+      : target?.kind === 'worker'
+        ? `Message ${roleLabel(target.role)} — seen at its next step`
+        : target?.kind === 'architect'
+          ? 'Message the Architect — seen mid-turn'
+          : held && currentRun()?.retry
+            ? 'Waiting on the provider — Stop or wait'
+            : held
+              ? 'Working — Stop to take over'
+              : state.mode === 'single'
+                ? 'Message'
+                : 'Message the Architect…';
   }
   renderCompactChip();
 }
@@ -5914,8 +5970,12 @@ async function send() {
   if (!text && !files.length) return;
 
   // One project, one conversation. The server refuses too; this keeps the draft
-  // in the box instead of losing it to a round trip.
+  // in the box instead of losing it to a round trip. The exception is the
+  // operator who started the work: a message sent while it runs is guidance for
+  // the turn, not a second conversation.
   const busy = state.busyInfo;
+  const target = steerTarget();
+  if (busy?.busy && target) return sendSteer(text, files, target);
   if (busy?.busy) {
     const who = busy.driver?.name ? ` (started from ${busy.driver.name})` : '';
     toast(
@@ -6004,6 +6064,47 @@ async function send() {
     toast('Send failed', err.message);
   } finally {
     state.streaming = false;
+    renderComposer();
+  }
+}
+
+/**
+ * Send the operator's guidance into the work that is already happening.
+ *
+ * A worker steer is invisible in the Architect's transcript — the worker has its
+ * own session — so the run trace carries the line (see `run.steer`). An Architect
+ * steer is a real user message in the conversation it is working in, and comes
+ * back through `loadMessages` with the `[steer]` marker stripped by the renderer.
+ */
+async function sendSteer(text, files, target) {
+  const input = $('promptInput');
+  try {
+    const sent = await api('POST', `/api/sessions/${encodeURIComponent(state.sessionId)}/steer`, {
+      text,
+      files: files.map((f) => ({ name: f.name, mime: f.mime, data: f.data, keep: f.keep === true })),
+    });
+    input.value = '';
+    autoGrow(input);
+    // Only after the server took them: a failed steer must not eat the files.
+    state.attachments = [];
+    renderAttachments();
+    toast(
+      'Steer Sent',
+      sent?.target === 'worker'
+        ? `${roleLabel(sent.role)} will see it at its next step.`
+        : 'The Architect will see it mid-turn.',
+    );
+    if (sent?.target !== 'worker') {
+      await loadMessages();
+      scrollChatToEnd();
+    }
+  } catch (err) {
+    if (err.status === 409 && err.body?.notBusy) {
+      toast('Nothing Is Running', 'Press Send again to send it as a message.');
+      return;
+    }
+    toast('Steer Not Sent', err.message || 'The message did not reach the work.');
+  } finally {
     renderComposer();
   }
 }

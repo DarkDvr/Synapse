@@ -1189,6 +1189,11 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     // Roles that were tried for this task and refused by their model. The report
     // carries the reason and the cards show it while the run is live.
     const skipped = [];
+    // Guidance the operator sent while the worker was working. Each entry is in
+    // runs.jsonl as it happens, and the report quotes them: the Architect judges
+    // the work against the instruction that was actually in force, not the brief
+    // the task started with.
+    const steers = [];
 
     // Written before the worker starts: this is what makes the request answered
     // exactly once, whatever happens next.
@@ -1229,6 +1234,10 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
       retry: null,
       tool: null,
       skipped,
+      // The operator's guidance for this run, newest last. Shared with the local
+      // `steers` array so the report and the result line read the same record.
+      steers,
+      steered: 0,
     };
     running.set(dirKey(dir), live);
     emit('run.started', live);
@@ -1740,6 +1749,12 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
       // The card goes back to idle and the path is erased as soon as the worker
       // stops — before the Architect is woken, so the two never disagree.
       running.delete(dirKey(dir));
+      // A steer admitted just as the turn ended can start a turn of its own with
+      // nobody polling it. The run is over, so cut that turn; a steer delivered
+      // inside the run kept the worker busy, and we would not be here yet.
+      if (steers.length && worker?.id) {
+        try { await engine.interrupt(worker.id); } catch { /* already gone */ }
+      }
       emit('run.finished', {
         dir,
         role,
@@ -1828,6 +1843,10 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
       // not the reason an operator pressed Stop.
       stoppedBy,
       lastTurnError,
+      // The guidance the operator sent while it worked, in order. A report that
+      // judged the original brief and ignored these would be judging the wrong
+      // task.
+      steers: steers.slice(-20),
       files,
       text: text.slice(0, RESULT_MAX),
       // What the run cost in context, so the audit after a project reads the run
@@ -1874,17 +1893,20 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
           : ''),
     );
 
-    // A stopped run is the operator's decision: no report and no wake. Waking the
-    // Architect here would start a turn that could re-delegate the very task that
-    // was just stopped, and the operator is about to say what they want instead.
+    // A stopped run used to report nothing and wake nobody: the operator was
+    // about to say what they wanted instead, and a wake could re-delegate the
+    // task that had just been stopped. That left the Architect waiting for a
+    // report that was already on disk (the emulator project, 29 Oct) and made it
+    // guess at the reason when the operator next spoke. It is told now, with the
+    // project held so the wake cannot start the work again; the report says, in
+    // as many words, not to delegate it again.
     if (outcome === 'stopped') {
       out.warn(`run ${request.task} (${role}) stopped by the operator`);
       notify?.({
         kind: 'note',
         title: 'Run Stopped',
-        body: `${request.task} was stopped. Nothing was reported to the Architect.`,
+        body: `${request.task} was stopped. The Architect is being told.`,
       });
-      return;
     }
 
     // A finished plan is the end of the project, and the end of everything its
@@ -1980,12 +2002,18 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
         error: turnError,
         stoppedBy,
         lastTurnError,
+        steers,
         auto,
         stallSec,
         retries,
         resumes,
       }),
-    }, stopReason ? undefined : signal);
+    }, signal?.aborted ? undefined : signal);
+    // A stop aborts the run's signal, and passing that to the wake made the wake
+    // return before the Architect heard anything: the operator stopped a worker
+    // and the Architect kept waiting for a report that was already on disk (the
+    // emulator project, 29 Oct). A stopped run owes the Architect the same
+    // report as any other; the project is held, so it cannot delegate from it.
     // The report was delivered. The marker is what lets the next boot tell a
     // delivered report from one the crash interrupted (see recoverLostReports).
     if (told?.ok) appendRun(dir, { kind: 'wake', callId: request.callId, at: Date.now(), status: 'done' });
@@ -2501,7 +2529,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     return at === -1 ? t : t.slice(0, at + 1);
   }
 
-  function report({ task, role, insteadOf, skipped, outcome, harnessStop, ms, text, files, context, workerId, planTouched, synapseTouched, qcRound, skillsRequired, skillsMissing, auto, stallSec, retries, resumes, error, stoppedBy, lastTurnError }) {
+  function report({ task, role, insteadOf, skipped, outcome, harnessStop, ms, text, files, context, workerId, planTouched, synapseTouched, qcRound, skillsRequired, skillsMissing, auto, stallSec, retries, resumes, error, stoppedBy, lastTurnError, steers }) {
     const head =
       outcome === 'completed'
         ? `${task.id} (${role}) finished in ${Math.round(ms / 1000)}s.`
@@ -2525,6 +2553,27 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
           `the work on its merits.` +
           (why?.message ? `\n${insteadOf}'s model was refused: ${why.message}` : ''),
       );
+    }
+    // The operator may have changed the task while it ran. The Architect must
+    // judge the work against what was actually asked for at the end, not the
+    // brief the worker started with.
+    if (steers?.length) {
+      lines.push('The operator steered this run while it worked:');
+      for (const s of steers.slice(-3)) {
+        const said = String(s.text || '').replace(/\s+/g, ' ').trim();
+        lines.push(`- ${s.by ? `${s.by}: ` : ''}"${said}"`);
+      }
+      lines.push(
+        'Judge the work against those instructions, and put the change in the task note and the plan so the ' +
+          'plan matches the work. If a steer changes the task materially, ask the operator with the question ' +
+          'tool before locking it in.',
+      );
+    }
+    // A stop is the operator's decision, not a coder's failure. Without this the
+    // Architect's first move was to delegate the same task again; the project is
+    // held, so that delegation is refused - better not to ask.
+    if (stoppedBy === 'operator') {
+      lines.push('The operator stopped it on purpose: do not delegate this task again unless they say so.');
     }
     // The evidence, never omitted: a worker that claims a file it did not write
     // is a real failure mode (it happened on the first run: the report named
@@ -2765,6 +2814,50 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
    *  the same picture the cards had before it. */
   const active = () => [...running.values()];
 
+  /**
+   * Put the operator's words into the live worker's turn.
+   *
+   * Measured on engine 2.1.2: a prompt with `delivery: "steer"` joins the turn
+   * already running and is read at its next step boundary — after the tool call
+   * in flight, not in the middle of a token. That is the only kind of "during
+   * work" the engine offers; Stop remains the hard interrupt.
+   *
+   * Refused while the worker is between attempts: a steer admitted during a
+   * provider backoff would start a turn of its own and race the retry.
+   */
+  async function steer(dir, { text, files, actor } = {}) {
+    const key = dirKey(dir);
+    const live = running.get(key);
+    if (!live) return { ok: false, reason: 'Nothing is running in this project.' };
+    if (!live.workerId) return { ok: false, reason: 'The worker is starting; try again in a moment.' };
+    if (live.retry) {
+      return { ok: false, reason: 'The worker is waiting out a provider limit; Stop it or wait.' };
+    }
+    const said = String(text || '').trim();
+    if (!said) return { ok: false, reason: 'The steer is empty.' };
+    try {
+      // `[steer]` is what tells the model this is guidance for the current task
+      // and not a new request; the role briefs say how to treat it.
+      await engine.prompt(live.workerId, `[steer] ${said}`, { files, delivery: 'steer' });
+    } catch (err) {
+      return { ok: false, reason: `Could not reach the worker: ${err.message}` };
+    }
+    const at = Date.now();
+    const entry = { at, by: actor?.name || null, text: said.slice(0, 1200) };
+    live.steers.push(entry);
+    live.steered = live.steers.length;
+    appendRun(dir, { kind: 'steer', scope: 'worker', task: live.task, role: live.role, ...entry });
+    emit('run.steer', {
+      dir,
+      task: live.task,
+      role: live.role,
+      startedAt: live.startedAt,
+      ...entry,
+    });
+    out.info(`steer -> ${live.task} (${live.role}) from ${entry.by || 'operator'}: ${said.slice(0, 120)}`);
+    return { ok: true, target: 'worker', task: live.task, role: live.role, at };
+  }
+
   /** Stop the run in a project, whichever part of it is running. Returns whether
    *  there was anything to stop. The wait loops see the abort on their next poll
    *  (and a backoff sleep is cut short), so this is immediate even mid-retry. */
@@ -2832,6 +2925,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     recoverLostReports,
     requestsIn,
     active,
+    steer,
     cancel,
     resume,
     hold,

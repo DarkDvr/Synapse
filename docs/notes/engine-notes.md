@@ -1323,6 +1323,61 @@ the old provider sentence, if any, is quoted as "before the stop, the last turn
 had ended with…". The two questions the record must answer are *why did it end*
 and *what was the last thing it heard* — they are not the same field.
 
+**A stop now wakes the Architect.** It used to return before the wake, on the
+argument that the operator was about to say what they wanted and a wake could
+re-delegate the task. The result was an Architect waiting for a report that was
+already on disk: on 29 Oct it only learned the run had stopped when the operator
+typed "продолжай", then went looking through `runs.jsonl`. A stopped run now sends
+the same report as any other, with two guard rails: the project is held
+(`stoppedByOperator`), so a delegation from that wake is refused, and the report
+says in as many words *do not delegate this task again unless they say so*. A
+harness stop already reported; its wake was the one handed no signal.
+
+## Talking to work in flight: steer, not stop
+
+The engine's `POST /api/session/{id}/prompt` is an inbox entry, not a blocking
+call: it returns in about 100 ms while a turn is running and takes `delivery`.
+`steer` is the default and `queue` is the alternative. Measured on 2.1.2 and
+again on 2.2.3:
+
+- `steer` **joins the running turn** and is read at the **next step boundary** —
+  after the tool call in flight, not in the middle of a token. A worker doing tool
+  calls sees it in seconds; a model streaming a 900-word answer saw it when that
+  answer ended (34 s), and the next assistant message obeyed it in the same turn.
+- `queue` waits for the turn to end, which makes it a normal follow-up message
+  with extra ceremony.
+- Neither can preempt a tool call or a generation. **Stop is the hard interrupt.**
+
+Synapse sends a steer with the marker `[steer] ` in front of the operator's
+words. The briefs define it: guidance for the task in flight, not a new task;
+apply it, say in the report what changed, do not restart. The worker's report
+quotes every steer and the Architect judges against the latest instruction, not
+the brief the task started with.
+
+**Who may steer.** Anyone looking at the project. The first cut allowed only the
+computer that started the work, to stop a second voice changing the task under the
+first; the operator removed that check on 30 Oct and chose reach over ownership.
+The computer name is still written on the steer line, but it is an audit fact, not
+a gate. The composer becomes **Steer** with a yellow border in every view while
+the work runs.
+
+**The plan follows the steer.** The worker applies it and its report quotes it;
+the Architect is told, in the report, to put the change in the task note and the
+plan, and to ask the operator a question when a steer changes the task materially
+rather than quietly reshaping the work. A small steer is a note; a big one is a
+decision, and the operator owns it.
+
+**Two guards the engine does not give us.** A steer admitted just as the turn
+ends can start a turn nobody is polling, so the runner interrupts the worker once
+after a run that carried steers; and a steer during a provider backoff is refused,
+because the session is idle then and the message would race the retry.
+
+Measured live on 30 Oct (2.2.3): a delegated coder writing 400 numbered lines was
+steered with "put `STEERED` at the top"; the file came back 401 lines with
+`STEERED` first, and the Architect's verdict said "the steer is satisfied". The
+same day an Architect mid-essay was steered to answer one sentence instead, and
+did, in the same turn. `tests/steer.test.mjs` pins the runner side and the briefs.
+
 ## A restart is not a pause
 
 Measured 26 Oct: a worker was running t3 and waiting on a permission request when

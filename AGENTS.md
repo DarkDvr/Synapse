@@ -264,8 +264,8 @@ refuses outright (`Missing key at ["files"][0]["uri"]` — it wants `{uri}`, not
 engine once before building on it**: send the body you expect and read the 400.
 Minutes spent probing beat a feature that only fails when the operator uses it.
 
-**The engine is 2.1.2.** The table below was measured on 2.0.30
-unless it says otherwise, and the upgrade was re-verified on the routes Synapse
+**The engine is 2.2.3.** The table below was measured on 2.0.30
+unless it says otherwise, and each upgrade was re-verified on the routes Synapse
 depends on. **The model catalog ships inside the engine binary, not in Synapse** —
 so a stale model list means a stale *binary*, never a stale cache. The console
 prints `catalog: N model(s) from engine X` at every boot, which is the check; the
@@ -277,7 +277,7 @@ update dialog (see `docs/notes/models-and-tools.md`) is the fix.
 | `PATCH /api/session/{id}` | accepts only `title`, `metadata`, `permissions`. **Not `agent`.** Returns **204 with an empty body** — do not try to parse it. `permissions: []` clears the ruleset; that is how Single→Multi is applied to an open session. |
 | `POST /api/session/{id}/model` | switches model and thinking effort for later turns. Body `{model:{providerID,id,variant?}}`; **204, empty body**. Omitting `variant` makes the engine store `"default"` — see "Context windows and thinking effort". |
 | `POST /api/session/{id}/generate` | one-shot completion in the session's context. Returns `{data:{text}}`. **Adds nothing to the transcript** — this is how sessions get named. |
-| `POST /api/session/{id}/prompt` | accepts `text`, `files`, `agents`, `skills`, `metadata`, `delivery`, `resume`. An `agents:[{name}]` attachment does **not** change the acting agent. **A file is `{uri, name}`, and a `data:` URI is accepted** — measured on 2.1.2, see the dump warning above. |
+| `POST /api/session/{id}/prompt` | accepts `text`, `files`, `agents`, `skills`, `metadata`, `delivery`, `resume`. **`delivery: "steer"` is the default and joins the running turn at its next step; `"queue"` waits for it to end.** An `agents:[{name}]` attachment does **not** change the acting agent. **A file is `{uri, name}`, and a `data:` URI is accepted** — measured on 2.1.2, see the dump warning above. |
 | Turn boundaries | every turn ends with an **`idle` message** appended. That is the reliable end-of-turn signal — do not invent a timer. |
 | Shell exit codes | a shell command exiting non-zero is reported by the engine as `status=completed`. Synapse derives `failed` from the output. Never trust the raw status for shell. |
 | `GET /api/session/active` | the authority on what is running; survives a restart. `GET /api/project` returns a bare array, not `{data:…}`. |

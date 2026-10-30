@@ -365,6 +365,11 @@ export function createServer({ api, engine, logger, config, remote, onRemote }) 
       if (seg[2] === 'messages' && method === 'POST') {
         return sendJson(res, 200, await api.sendMessage(sessionId, await readBody(req, MESSAGE_BODY_LIMIT), actorOf(req)));
       }
+      // POST /api/sessions/{id}/steer — guidance into work already running. The
+      // engine reads it at the next step boundary; Stop is still the hard stop.
+      if (seg[2] === 'steer' && method === 'POST') {
+        return sendJson(res, 200, await api.steer(sessionId, await readBody(req, MESSAGE_BODY_LIMIT), actorOf(req)));
+      }
       if (seg[2] === 'interrupt' && method === 'POST') return sendJson(res, 200, await api.interrupt(sessionId));
       // POST /api/sessions/{id}/compact — discard the conversation, leave a
       // handover, start a fresh one. Slow by nature (the engine summarises), so
