@@ -147,12 +147,18 @@ test('the provider Name control starts on the Type control’s line', () => {
   assert.match(read('web/synapse.css'), /\.prov-edit \.set-grid\s*\{[^}]*align-items: start/);
 });
 
-test('the Updates page fills the window, and its footer button cannot stretch', () => {
+test('the Updates page is content-sized, and its footer button cannot stretch', () => {
   const css = read('web/synapse.css');
   assert.match(css, /\.upd-card\s*\{[^}]*align-content: start/);
   assert.match(css, /\.upd-card-foot\s*\{[^}]*align-items: center/);
-  assert.match(css, /#settingsModal \.modal\.is-updates\s*\{\s*height: calc\(100vh - 48px\)/);
   assert.match(css, /\.upd-md\s*\{[^}]*max-height: min\(42vh, 420px\)/);
-  assert.match(read('web/app.js'), /classList\.toggle\('is-updates'/);
+  assert.doesNotMatch(css, /#settingsModal \.modal\.is-updates/);
+  assert.doesNotMatch(read('web/app.js'), /classList\.toggle\('is-updates'/);
+});
+
+test('the Settings subtitle is an empty line, not the config sentence', () => {
+  const html = read('web/index.html');
+  assert.doesNotMatch(html, /Writes config\/synapse\.config\.json/);
+  assert.match(html, /<p class="modal-sub" aria-hidden="true">&nbsp;<\/p>/);
 });
 
