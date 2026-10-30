@@ -249,16 +249,34 @@ public partial class MainWindow : Window
             // make "one file" untrue.
             var profile = Path.Combine(root, "data", "webview2");
             Directory.CreateDirectory(profile);
-            var environment = await CoreWebView2Environment.CreateAsync(null, profile);
-            await View.EnsureCoreWebView2Async(environment);
+            try
+            {
+                var environment = await CreateEnvironmentAsync(profile);
+                await EnsureEnvironmentAsync(environment);
+            }
+            catch (COMException busy) when (busy.HResult == ResourceInUse)
+            {
+                // The profile can stay locked for a few seconds after the previous
+                // Synapse closes for an update. The retries above cover the normal
+                // case; a fresh profile is the fallback that still launches the app
+                // rather than showing a dead window. The old profile is left alone.
+                var fresh = Path.Combine(root, "data", $"webview2-{Environment.ProcessId}");
+                Directory.CreateDirectory(fresh);
+                _console.Append($"[app] the WebView2 profile was in use; using {fresh}{Environment.NewLine}");
+                var environment = await CreateEnvironmentAsync(fresh);
+                await EnsureEnvironmentAsync(environment);
+            }
         }
         catch (Exception err)
         {
             // WebView2 missing is the one failure worth naming: it is a runtime the
-            // target machine must have, and a stack trace would hide that.
-            Fatal("Synapse draws its interface with the WebView2 runtime, which is not installed on this machine.\n\n" +
-                  "Windows 11 has it. On Windows 10 it arrives with Microsoft Edge; if neither is present, " +
-                  "install the Evergreen WebView2 runtime from Microsoft.\n\n" + err.Message);
+            // target machine must have, and a stack trace would hide that. A busy
+            // profile is the other: the operator can retry after closing the old
+            // window instead of looking for an installer.
+            Fatal("Synapse could not start its WebView2 window.\n\n" +
+                  "The runtime may be missing, or another Synapse window may still be using its browser " +
+                  "profile. Close every Synapse window and try again; on a new PC, install the Evergreen " +
+                  "WebView2 runtime from Microsoft.\n\n" + err.Message);
             return;
         }
 
@@ -281,6 +299,44 @@ public partial class MainWindow : Window
         View.CoreWebView2.Navigate(OfflineUrl);
         _at = OfflineUrl;
         _server.Start();
+    }
+
+    /// <summary>
+    /// The profile is briefly held by the previous run's WebView2 processes after
+    /// an update. Both calls can return it, so both wait and retry a few times
+    /// before the fresh-profile fallback in BootAsync.
+    /// </summary>
+    const int ResourceInUse = unchecked((int)0x800700AA);
+
+    static async Task<CoreWebView2Environment> CreateEnvironmentAsync(string profile)
+    {
+        for (var attempt = 0; ; attempt++)
+        {
+            try
+            {
+                return await CoreWebView2Environment.CreateAsync(null, profile);
+            }
+            catch (COMException err) when (err.HResult == ResourceInUse && attempt < 5)
+            {
+                await Task.Delay(750);
+            }
+        }
+    }
+
+    async Task EnsureEnvironmentAsync(CoreWebView2Environment environment)
+    {
+        for (var attempt = 0; ; attempt++)
+        {
+            try
+            {
+                await View.EnsureCoreWebView2Async(environment);
+                return;
+            }
+            catch (COMException err) when (err.HResult == ResourceInUse && attempt < 5)
+            {
+                await Task.Delay(750);
+            }
+        }
     }
 
     void Fatal(string message)
