@@ -96,6 +96,15 @@ $hash = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant
 $sums = Join-Path $Out 'SHA256SUMS'
 Set-Content -LiteralPath $sums -Value "$hash  $name.zip" -Encoding ascii
 
+# One release is enough: the zip just built. Older zips are builds of code git
+# and GitHub already hold, and each is ~196 MB. The boot housekeeping pass does
+# the same for a folder that already has a backlog (src\housekeeping.js).
+Get-ChildItem -LiteralPath $Out -Filter 'Synapse-*-win-x64*.zip' -File |
+    Where-Object { $_.FullName -ne $zip } |
+    ForEach-Object { Write-Host "removing old release $($_.Name)"; Remove-Item -LiteralPath $_.FullName -Force }
+$sumsFull = Join-Path $Out 'SHA256SUMS-FULL'
+if (Test-Path -LiteralPath $sumsFull) { Remove-Item -LiteralPath $sumsFull -Force }
+
 Remove-Item -LiteralPath $stage -Recurse -Force
 
 Write-Host ''

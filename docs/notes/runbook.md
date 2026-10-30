@@ -267,3 +267,34 @@ What it will never do:
 
 If a server you *wanted* is gone, the log says which pid went and why. Start it
 again — nothing on disk was touched.
+
+## Housekeeping: the disk, not the processes
+
+`src/housekeeping.js` runs once at boot, after the page is up, and by hand:
+
+```
+bin\node\node.exe src\housekeeping.js --dry-run
+```
+
+It removes only what it can prove is dead:
+
+| what | when | why it is safe |
+|---|---|---|
+| an applied update's staging: the zip, the extracted tree, the helper copies | `data\update\last.json` says `ok`, and it is more than a minute old | the update has copied the files out and Synapse is running; the helper starts Synapse *before* it writes that record, which is why the minute matters. A failed update is left alone — its staging is the diagnosis. The newest `data\backups` folder is kept; older ones go. |
+| old release zips in `dist` | more than one exists | one release is enough; the code is in git and the asset is on GitHub. `SHA256SUMS` is rewritten for the one that stayed. `make-release.ps1` does the same when it builds. |
+
+The first run of this freed 3.03 GB by hand (30 Oct): 16 release zips, the
+staging of two updates, a pre-migration `webview2` profile, five build/test
+folders and my own probe screenshots.
+
+**Deliberately not touched:**
+
+- **`..\Synapse.Projects\_scratch`** — the per-project scratch folder is where a
+  model may leave work it is told to keep, and the operator may resume a project
+  days later. The `visual-review-*` folders inside it are browser profiles, not
+  work (each about 12 MB, and Windows often keeps a file locked so the renderer
+  cannot remove its own), but the rule is the same either way: no age-based
+  deletion in a folder a run was told it may write.
+- **The engine's `snapshot` store** (`data\engine\opencode\data\opencode\snapshot`,
+  347 MB and growing) — it is the engine's own undo history. Deleting it needs the
+  engine stopped and is a separate, explicit action, not a boot sweep.

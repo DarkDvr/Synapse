@@ -26,6 +26,7 @@ import { createServer } from './server.js';
 import { pruneProviderLog } from './provider-errors.js';
 import { measureLocalWindows } from './providers.js';
 import { sweepOrphans } from './cleanup.js';
+import { createHousekeeping } from './housekeeping.js';
 import { hasNpm, installLocalNpm } from './npm-check.js';
 import { APP_VERSION } from './version.js';
 import { createSynapseUpdate } from './synapse-update.js';
@@ -103,6 +104,9 @@ async function main() {
   logger.configure(config.logging);
   logger.startCleanupLoop();
   const app = logger.channel('app');
+  // Disk housekeeping: the files an update and a release leave behind. Cheap and
+  // independent of anything running; it runs once the page is up (see below).
+  const housekeeping = createHousekeeping({ root: ROOT, log: app });
 
   // npm: offered, explained, and only refused when there is nothing to run.
   await ensureNpm();
@@ -688,6 +692,20 @@ async function main() {
     app.info(`remote access: on${state.url ? ` — ${state.url}` : ' (no private LAN address found)'}`);
   }
   app.info('----------------------------------------------');
+
+  // Disk housekeeping, once the page is up so it never delays a boot: an applied
+  // update leaves ~1.1 GB of staging behind, and `dist` keeps every release zip
+  // (196 MB each). See housekeeping.js for exactly what it may and may not touch.
+  setTimeout(() => {
+    try {
+      const report = housekeeping.run();
+      if (report.removed) {
+        app.info(`housekeeping: ${report.removed} item(s), ${Math.round(report.bytes / (1024 * 1024))} MB freed`);
+      }
+    } catch (err) {
+      app.warn(`housekeeping failed: ${err.message}`);
+    }
+  }, 2000).unref?.();
 
   if (currentConfig.server.openBrowser && process.env.SYNAPSE_SUPERVISED !== '1') openBrowser(url);
 }
