@@ -39,6 +39,13 @@ export function createPermissionGate({
   // automatically. Every ask is held here, not only the ones whose switch is on,
   // so flipping the switch arms a card that is already on screen.
   const pendingAsks = new Map(); // requestId -> { request, info, entry, timer }
+  // Requests the gate is judging right now. The engine lists a request as pending
+  // the moment it raises it, and the page polls that list — so a request the
+  // policy is about to answer itself (a write inside the project) would reach the
+  // page as a card for one poll and vanish on the next. That flash is what "a
+  // bunch of permissions appear and disappear" looked like in a run where every
+  // call was allowed (30 Oct); `GET /api/pending` skips these ids.
+  const answering = new Set();
   const fullAutoOn = new Set();
   // Full auto is the chat's standing decision, not the session's: a worker asking
   // for a shell command belongs to the same project as the Architect whose switch
@@ -357,6 +364,8 @@ export function createPermissionGate({
   };
 
   async function answer(request, directory) {
+    answering.add(request.requestId);
+    try {
     const info = await sessionOf(request.sessionId, directory);
     if (!info.directory) {
       log.info(`permission left to the operator (${request.action || 'tool call'}) — the session directory is not known yet`);
@@ -458,6 +467,9 @@ export function createPermissionGate({
       log.warn(`could not answer a ${request.action || 'tool'} request for ${request.sessionId}: ${err.message}`);
     }
     return verdict;
+    } finally {
+      answering.delete(request.requestId);
+    }
   }
 
   /** Handle one engine event. Returns a promise for tests; the caller ignores it. */
@@ -481,5 +493,5 @@ export function createPermissionGate({
     });
   }
 
-  return { handle, observe, requestOf, remember, setFullAuto, answered, retime };
+  return { handle, observe, requestOf, remember, setFullAuto, answered, retime, answering: (id) => answering.has(id) };
 }

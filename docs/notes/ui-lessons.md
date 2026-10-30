@@ -206,7 +206,13 @@ Two invariants:
 - **An auto-answered request must not flash.** The gate answers in the same second,
   so the card is drawn after a 200ms refresh rather than painted straight from the
   event. A request the policy allows never appears; a real ask appears without a
-  perceptible delay.
+  perceptible delay. The delay alone was not enough: the engine lists a request as
+  pending from the moment it raises it, so a poll could still catch one the gate
+  was mid-answer and paint a card for a second — a run with every call allowed
+  looked like a stream of permissions appearing and disappearing (30 Oct). The gate
+  now marks the requests it is judging (`answering`), `GET /api/pending` skips
+  those and anything already decided, and only a request really waiting on the
+  operator reaches the page.
 
 **The chip on a tool call** is the same record after the fact: it appears only
 when the call reached outside the project, green when the policy allowed it
@@ -215,6 +221,23 @@ asked, what was asked, the policy's reason, and who decided. Four states have to
 stay distinct or the chip is decoration: inside the project → no chip; outside and
 auto-allowed → green; outside and answered by you → amber; refused by anyone →
 red. The record is memory only, so a restart clears the chips and nothing else.
+
+---
+
+## A steer is the operator talking, so it never folds away
+
+The operator's mid-run instruction is drawn twice: the engine keeps the `[steer]`
+marker in the message, and the transcript shows a purple **You** with a bright
+yellow **STEER:** in front (the tag inside the text span, so the browser aligns it
+with the first line instead of a 9.5px word sitting above a 13.5px sentence).
+
+In a worker's trace it is its own line shape: a flex row, so the small tag sits on
+the sentence's centre line rather than a baseline nudge; the sentence wraps instead
+of being cut with an ellipsis. And it is **pinned**: the trace keeps the last four
+steps open and folds the rest into "N earlier steps", and a steer used to fold with
+them — the operator's own instruction disappeared while the run went on (30 Oct).
+Every steer stays in the open tail, and a finished trace says `· steered` on its
+folded line so the text can never become invisible.
 
 ---
 

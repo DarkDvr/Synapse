@@ -1453,9 +1453,16 @@ body[data-mode="single"] #runAuto { display: none; }
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 /* A steer is the operator speaking into the run, not another tool call: it keeps
-   the yellow marker and is slightly warmer than the step lines. */
-.trace-line.is-steer { color: #d8d2c0; }
-.trace-line .msg-steer { font-size: 9px; margin-right: 4px; }
+   the yellow marker and is slightly warmer than the step lines. It is a flex row
+   so the tag sits on the sentence's centre line rather than a baseline nudge, and
+   it wraps: the operator's sentence is never cut short or folded away. */
+.trace-line.is-steer {
+  color: #e6e0cc;
+  display: flex; align-items: center; gap: 6px;
+  white-space: normal; overflow: visible;
+}
+.trace-line.is-steer .msg-steer { flex: none; margin-right: 0; }
+.trace-steer-text { min-width: 0; overflow-wrap: anywhere; }
 /* A compaction is the one line in a worker's trace that is not a step: it explains
    why the next step is slower and why the window is empty again, so it is amber,
    pinned above the four-line tail, and never trimmed away with the steps. */
@@ -1542,11 +1549,13 @@ body[data-mode="single"] #runAuto { display: none; }
   color: var(--speaker); margin-right: 7px; vertical-align: 1.5px;
 }
 /* The operator's mid-run guidance, same line as the purple You: the yellow word
-   is the only thing that distinguishes it, which is what was asked for. */
+   is the only thing that distinguishes it, which is what was asked for. Bright
+   yellow on purpose — the operator asked for it to be unmistakable, and it is the
+   one label in the transcript that is a standing instruction. */
 .msg-steer {
   display: inline-block; margin-right: 5px;
-  font-size: 9.5px; font-weight: 800; letter-spacing: 0.08em;
-  color: var(--yellow); vertical-align: 1.5px;
+  font-size: 9.5px; font-weight: 800; letter-spacing: 0.08em; line-height: 1;
+  color: #ffd60a; vertical-align: middle;
 }
 /* the rule between speakers, with room to breathe above and below it */
 .msg + .msg { border-top: 1px solid #2b2e35; padding-top: 15px; }

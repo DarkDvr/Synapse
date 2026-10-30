@@ -52,6 +52,37 @@ test('a write inside the workspace is allowed with "once"', async () => {
   assert.deepEqual(replies, [{ sessionId: 'ses_1', requestId: 'req_1', decision: 'once' }]);
 });
 
+// The engine lists a request as pending from the moment it raises it, so the page
+// could paint a card for a request the policy was already answering — the flash
+// that looked like "permissions appearing and disappearing" in a run where every
+// call was allowed (30 Oct). The gate says which ones it is holding, and the list
+// endpoint skips them.
+test('the gate marks a request as answering only until its reply lands', async () => {
+  let release;
+  const engine = {
+    async getSession(id) {
+      return { id, directory: PROJECT, metadata: { synapse: { role: 'coder-1' } } };
+    },
+    async replyPermission() {
+      await new Promise((resolve) => { release = resolve; });
+    },
+  };
+  const gate = createPermissionGate({ engine, logger: quiet, root: ROOT, home: HOME });
+  const running = gate.handle(event('edit', ['src/app.js']));
+  for (let i = 0; i < 50 && !release; i += 1) await new Promise((r) => setTimeout(r, 5));
+  assert.equal(typeof release, 'function', 'the reply should be in flight');
+  assert.equal(gate.answering('req_1'), true);
+  release();
+  await running;
+  assert.equal(gate.answering('req_1'), false);
+});
+
+test('a request left to the operator is not marked as answering', async () => {
+  const { gate } = setup();
+  await gate.handle(event('edit', ['C:/Projects/other/main.js']));
+  assert.equal(gate.answering('req_1'), false, 'the card is the operator’s, not the gate’s');
+});
+
 test('a write into the harness is rejected', async () => {
   const { gate, replies } = setup();
   await gate.handle(event('edit', [`${ROOT}/src/api.js`]));

@@ -1856,6 +1856,14 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
         for (const p of list || []) {
           const id = p?.id || p?.requestID;
           if (!id || seenRequests.has(id)) continue;
+          // A request the policy is judging right now, or has already answered,
+          // is not the operator's to see. The engine lists it as pending from the
+          // moment it raises it, so without this a write inside the project — which
+          // the policy always allows — could paint a card for one poll and take it
+          // away on the next. That flash is what a run looked like with every call
+          // allowed (30 Oct).
+          if (permissionGate?.answering?.(id)) continue;
+          if (permissionLog?.get?.(id)?.decided) continue;
           seenRequests.add(id);
           allPermissions.push(p);
         }

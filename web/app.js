@@ -3846,16 +3846,26 @@ function renderTrace(t) {
   const note = (n) => {
     const text = typeof n === 'string' ? n : String(n?.text || '');
     const steer = typeof n === 'object' && n?.steer === true;
-    return `<div class="trace-line${steer ? ' is-steer' : ''}">${
-      steer ? '<span class="msg-steer">STEER:</span> ' : ''
-    }${esc(text)}</div>`;
+    // A steer is the operator's own instruction: its own line shape, so the tag
+    // and the sentence can be centred against each other and the sentence wraps
+    // instead of being cut with the steps.
+    if (steer) {
+      return `<div class="trace-line is-steer"><span class="msg-steer">STEER:</span><span class="trace-steer-text">${esc(text)}</span></div>`;
+    }
+    return `<div class="trace-line">${esc(text)}</div>`;
   };
   const notes = t.notes || [];
   // Only the last few steps stay open. Everything before is one line that opens:
   // a worker ten minutes in has done forty things, and forty lines of it is the
   // whole chat. This is the shape an editor's agent uses, for the same reason.
-  const tail = notes.slice(-4);
-  const older = notes.slice(0, Math.max(0, notes.length - 4));
+  //
+  // A steer is not a step. The four-line tail is for steps, and folding the
+  // operator's own instruction into "N earlier steps" hid it while the run went
+  // on (30 Oct), so every steer stays in the open tail whatever has happened since.
+  const isSteer = (n) => typeof n === 'object' && n?.steer === true;
+  const cut = Math.max(0, notes.length - 4);
+  const tail = notes.filter((n, i) => i >= cut || isSteer(n));
+  const older = notes.filter((n, i) => i < cut && !isSteer(n));
   const archive = older.length
     ? `<details class="trace-archive"><summary>${older.length} earlier step${older.length === 1 ? '' : 's'}</summary>${older
         .map(note)
@@ -3899,11 +3909,14 @@ function renderTrace(t) {
   // A compaction is not a step of the work, and it is the one thing the operator
   // needs to still see an hour later, so it rides the folded line too.
   const packedNote = Number(t.compactions) ? ` · compacted ×${t.compactions}` : '';
+  // A steer is the operator's own instruction, so a folded trace says it is in
+  // there — the text itself is one click away, but it cannot become invisible.
+  const steeredNote = notes.some(isSteer) ? ' · steered' : '';
   // The task's own title belongs on the folded line: "Coder 1 · t8" says where,
   // not what. It ellipsizes when the column is short, and the tooltip has the lot.
   const foldHead = [name, t.task, t.title].filter(Boolean).join(' · ');
   return `<details class="trace is-fold" data-trace="${esc(t.key)}">
-    <summary title="${esc(foldHead)}">${esc(foldHead)}${took}${written}${packedNote}</summary>
+    <summary title="${esc(foldHead)}">${esc(foldHead)}${took}${written}${packedNote}${steeredNote}</summary>
     <div class="trace-lines">${body}</div>
   </details>`;
 }
@@ -4377,9 +4390,12 @@ function renderMessage(m) {
     // "You" with a yellow STEER: prefix, so the difference is visible at a glance.
     const steer = String(m.text || '').match(/^\[steer\]\s*([\s\S]*)$/);
     const said = steer ? steer[1] : m.text;
+    // The tag lives inside the text span, not beside it: it is a prefix to the
+    // sentence, so the browser aligns it with the first line by itself instead of
+    // a flex row's top edge lifting a 9.5px word above a 13.5px one (30 Oct).
     const lead = steer ? '<span class="msg-steer">STEER:</span> ' : '';
     return `<div class="msg user${steer ? ' is-steer' : ''}" data-msg="user"><div class="msg-body">
-      ${stamp}<span class="msg-role">You</span>${lead}<span class="msg-text">${esc(said)}</span>${chips}${reuse}
+      ${stamp}<span class="msg-role">You</span><span class="msg-text">${lead}${esc(said)}</span>${chips}${reuse}
     </div></div>`;
   }
   if (m.type === 'synthetic') {
