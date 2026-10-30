@@ -275,20 +275,15 @@ const stallClears = stalled.events.filter((e) => e.kind === 'role-error' && e.cl
 expect('silence: the restart line clears when the worker resumes', stallClears >= 2, `clears=${stallClears}`);
 
 // 5. Stop cuts a backoff short and wakes nobody: Stop means the system is idle.
-// The next Architect brief carries what happened, so the next turn does not have
-// to guess (the emulator project, 29 Oct).
+// It explains nothing to the model either — a stop is a cut, not a story.
 const stopped = await runCase({ name: 'stopped', script: [{ error: RATE }], cancelAfter: 900, untilWoke: 0 });
 expect('stop: outcome stopped', stopped.result?.outcome === 'stopped', stopped.result?.outcome);
 expect('stop: the Architect was not woken', stopped.woke.length === 0, String(stopped.woke.length));
 const stoppedBrief = briefSession({ dir: stopped.dir, role: 'architect' });
 expect(
-  'stop: the next brief says who stopped it',
-  /stopped by the operator/.test(stoppedBrief),
+  'stop: the brief explains nothing',
+  !/stopped by the operator|do not retry/.test(stoppedBrief),
   stoppedBrief.match(/The last run[^\n]*/)?.[0] || '',
-);
-expect(
-  'stop: it says not to retry it',
-  /do not retry it unless they ask/.test(stoppedBrief),
 );
 
 // 5b. A harness stop with a reason still reports. It used to be handed the run's

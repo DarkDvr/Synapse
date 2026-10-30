@@ -1323,21 +1323,21 @@ the old provider sentence, if any, is quoted as "before the stop, the last turn
 had ended with…". The two questions the record must answer are *why did it end*
 and *what was the last thing it heard* — they are not the same field.
 
-**A stop wakes nobody, and it is two-stage.** The first Stop is graceful: the
-runner sends a `[stop]` synthetic, the model reads it at the next step boundary,
-finishes the tool call in flight, writes a short report and ends the turn. The
-runner waits up to `STOP_GRACE_MS` (45 seconds) for that, then aborts. The UI says
-so in the top-right notice and rings the chat in a fast red glow; a second Stop
-calls `/interrupt` and cuts the turn immediately, in the middle of a token if that
-is where it is.
+**A stop wakes nobody, says nothing, and is two-stage.** The first Stop is
+graceful: the assistant message that is open at that moment is allowed to finish,
+and when a different assistant message begins — the next step — the runner cuts
+the turn there. No message is sent to the model, no report is requested, and
+nothing says "the operator stopped you". The model sees a turn cut at a boundary,
+which is exactly what a dropped connection looks like. The 45-second
+`STOP_GRACE_MS` cap catches a step that takes too long. The UI says what is
+happening in the top-right notice and rings the chat in a fast red glow; a second
+Stop calls `/interrupt` and cuts immediately, mid-token if that is where it is.
 
-No Architect turn follows. The stop is on disk — the result, the task back in
-`todo`, the project held — and the **next** brief carries it: *“The last run (t1,
-coder-1) was stopped by the operator at 15:44, after it finished the step it was
-in. That was their decision, not a failure: do not retry it unless they ask.”*
-The next operator message also carries the `[after a stop]` note. That is the
-whole point: Stop leaves the system idle, and the truth is read on the next turn
-instead of guessed.
+No Architect turn follows, and no explanation is planted for one. The stop is
+recorded on disk for the audit and the UI, the task goes back to `todo`, and the
+project is held. If the operator wants the work resumed, changed or avoided, they
+say so in their next message — that message is an ordinary message, not a
+permission request dressed up as one.
 
 A harness stop (the question-loop guard) still reports immediately: it is a
 failure the operator must see, not an operator decision.

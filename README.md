@@ -9,7 +9,7 @@ genuine **OpenCode** engine over its HTTP + SSE API and rebuilds the interface
 from scratch — today that engine, tomorrow anything that implements the contract
 in `src\engines\base.js`.
 
-**Version 1.3.1** — Windows 10/11, x64. The zip carries Node, the engine and the fonts.
+**Version 1.3.2** — Windows 10/11, x64. The zip carries Node, the engine and the fonts.
 
 **Licence:** AGPL-3.0-only, Copyright (C) 2026 DarkDvr — see `LICENSE`, `NOTICE`, `THIRD-PARTY.md`.
 

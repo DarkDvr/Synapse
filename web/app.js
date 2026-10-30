@@ -4357,10 +4357,7 @@ function renderMessage(m) {
     // marker so the model knows what it is; the operator sees the same purple
     // "You" with a yellow STEER: prefix, so the difference is visible at a glance.
     const steer = String(m.text || '').match(/^\[steer\]\s*([\s\S]*)$/);
-    // A message sent after a Stop carries a harness paragraph explaining the cut
-    // to the model. The operator typed the part after the blank line.
-    const afterStop = String(m.text || '').match(/^\[after a stop\][\s\S]*?\n\n([\s\S]*)$/);
-    const said = afterStop ? afterStop[1] : steer ? steer[1] : m.text;
+    const said = steer ? steer[1] : m.text;
     const lead = steer ? '<span class="msg-steer">STEER:</span> ' : '';
     return `<div class="msg user${steer ? ' is-steer' : ''}" data-msg="user"><div class="msg-body">
       ${stamp}<span class="msg-role">You</span>${lead}<span class="msg-text">${esc(said)}</span>${chips}${reuse}

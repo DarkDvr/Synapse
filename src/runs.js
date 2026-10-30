@@ -126,16 +126,9 @@ const CONTEXT_NUDGE =
   'and you are continuing from that summary. Carry on with the task from where it stands - do not start over - ' +
   'and keep each turn small: read only what you need and write in short pieces.';
 
-// The first Stop is graceful: finish the tool call in flight, write the report,
-// end the turn. The second is the old hard abort. This text is the whole graceful
-// mechanism on the engine side — the model sees it at the next step boundary.
-export const STOP_NUDGE =
-  '[stop] The operator pressed Stop. Finish the tool call in flight, write a short report, and end this turn. ' +
-  'Do not start another step or call another tool.';
-
-// How long the graceful stop may take before the runner cuts the turn. Long
-// enough for a build or a file write, short enough that a model which ignores
-// the instruction cannot hold the project for minutes.
+// The first Stop is graceful: finish the step in flight, then cut the turn at
+// the boundary — like a dropped connection, with nothing said to the model. The
+// second Stop is the old hard abort. This is a cap, not the mechanism.
 export const STOP_GRACE_MS = 45_000;
 
 /** Sleep, but let Stop cut it short: a five-minute backoff must not be five
@@ -1201,7 +1194,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
         stopReason = String(why || '').trim() || null;
         controller.abort();
       },
-      requestStop: () => {
+      requestStop: async () => {
         if (gracefulStop) return false;
         gracefulStop = true;
         stopRequestedAt = Date.now();
@@ -1213,10 +1206,15 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
           liveNow.stopRequestedAt = stopRequestedAt;
           emit('run.stopping', { dir, task: request.task, role, startedAt });
         }
+        // The step in flight is the assistant message that is open now. When a
+        // different one begins, that step is over: cut the turn there, exactly as
+        // a dropped connection would. Nothing is said to the model.
         if (worker?.id) {
-          engine
-            .synthetic(worker.id, STOP_NUDGE, { description: 'operator stop' })
-            .catch((err) => log.warn(`could not ask the worker to stop gracefully: ${err.message}`));
+          try {
+            const messages = await engine.getMessages(worker.id);
+            const last = [...messages].reverse().find((m) => m.type === 'assistant');
+            if (liveNow) liveNow.stopAssistant = last?.id || null;
+          } catch { /* the boundary check falls back to the grace timer */ }
         }
         stopTimer = setTimeout(() => {
           if (!running.has(dirKey(dir))) return;
@@ -1279,6 +1277,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
       skipped,
       stopping: false,
       stopRequestedAt: 0,
+      stopAssistant: null,
       // The operator's guidance for this run, newest last. Shared with the local
       // `steers` array so the report and the result line read the same record.
       steers,
@@ -1458,6 +1457,16 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
             {
               window: contextWindow(modelRef),
               steer: true,
+              // The graceful stop cuts at the step boundary, not mid-token.
+              stopCheck: (messages) => {
+                if (!gracefulStop) return false;
+                const last = [...messages].reverse().find((m) => m.type === 'assistant');
+                if (!live.stopAssistant) {
+                  if (last) live.stopAssistant = last.id;
+                  return false;
+                }
+                return Boolean(last && last.id !== live.stopAssistant);
+              },
               // The first sign of life clears whatever the card was still saying
               // about the last failure or stall. It is not only the retry path:
               // any new turn means the worker is working.
@@ -2322,7 +2331,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
    * A pending question also pauses the clock: the operator may take hours, and
    * the transcript itself says so.
    */
-  async function waitForIdle(sessionId, before, stallMs, onTool, signal, { window = null, steer = false, onContext = null, onCompact = null, onActivity = null } = {}) {
+  async function waitForIdle(sessionId, before, stallMs, onTool, signal, { window = null, steer = false, onContext = null, onCompact = null, onActivity = null, stopCheck = null } = {}) {
     let lastActivity = Date.now();
     let lastKey = '';
     let lastCtx = 0;
@@ -2345,6 +2354,14 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
         // A poll that failed is not silence: the engine may be restarting. The
         // stall clock is left where it is and the next poll decides.
         continue;
+      }
+
+      // The graceful stop's boundary: the assistant message that was open when
+      // Stop was pressed has finished, and another has begun. Cut here, with
+      // nothing said to the model.
+      if (stopCheck?.(messages)) {
+        try { await engine.interrupt(sessionId); } catch { /* already gone */ }
+        return { stopped: true };
       }
 
       const nextSig = activityKey(messages);
@@ -2924,12 +2941,12 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
 
   /** Ask the live run to stop at the end of the step it is in. The second Stop
    *  is `cancel()` below; this one only sets the intention. */
-  function requestStop(dir) {
+  async function requestStop(dir) {
     const key = dirKey(dir);
     const control = controls.get(key);
     const live = running.get(key);
     if (!control?.requestStop || !live) return { ok: false };
-    const fresh = control.requestStop();
+    const fresh = await control.requestStop();
     return { ok: true, stopping: true, already: !fresh, task: live.task, role: live.role };
   }
 

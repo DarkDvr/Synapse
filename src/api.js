@@ -22,7 +22,7 @@ import { setProviderKey, providerKeyState, maskKey } from './secrets.js';
 import { probeToolchain } from './toolchain.js';
 import { busyInfo, busyMessage } from './busy.js';
 import { APP_VERSION } from './version.js';
-import { STOP_NUDGE } from './runs.js';
+import { STOP_GRACE_MS } from './runs.js';
 
 // What an attachment may be. The old rule was six files of up to 8 MB each, which
 // made twelve small screenshots impossible for no reason: the real cost is the
@@ -186,6 +186,17 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
   // Who started the work in each directory. Used only for the sentence a refused
   // sender reads — "started from laptop" — never to decide anything.
   const drivers = new Map();
+  // Graceful stops of a session that is not a delegated run (the Architect's own
+  // turn): the poll watches for the next assistant message — the step boundary —
+  // and cuts there, saying nothing to the model.
+  const gracefulStops = new Map();
+  const clearGracefulStop = (sessionId) => {
+    const entry = gracefulStops.get(sessionId);
+    if (!entry) return;
+    clearInterval(entry.poll);
+    clearTimeout(entry.hard);
+    gracefulStops.delete(sessionId);
+  };
   const normDir = (value) => String(value || '').replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
 
   /**
@@ -1273,25 +1284,10 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
           app.warn(`could not keep the attachments: ${err.message}`);
         }
       }
-      // A message after the operator pressed Stop carries the context the engine
-      // cannot add: the cut was a decision, not a provider failure. Measured
-      // 30 Oct: an Architect whose essay was stopped described it as "cut off
-      // mid-sentence" and did not know the operator had done it, even with the
-      // rule in its brief. The marker is stripped by the UI, so the operator sees
-      // their own words and the model sees why the last turn is short.
-      let outgoing = text;
-      try {
-        const transcript = await engine.getMessages(sessionId);
-        const last = [...(transcript || [])].reverse().find((m) => m.type === 'assistant');
-        const said = JSON.stringify(last?.error || '');
-        if (/step interrupted|"type"\s*:\s*"aborted"/i.test(said)) {
-          outgoing =
-            '[after a stop] The operator stopped your previous turn on purpose. ' +
-            'This is their next instruction; do not retry the interrupted turn, and do not treat it as a provider failure.\n\n' +
-            text;
-        }
-      } catch { /* a transcript we cannot read is not a reason to withhold the message */ }
-      await engine.prompt(sessionId, outgoing, { files: attachments });
+      // The operator's words are the message. A stop before this one is just a cut:
+      // no note explains it, the same way a dropped connection is not explained. If
+      // they want the work resumed or changed, they say so here.
+      await engine.prompt(sessionId, text, { files: attachments });
       return { ok: true, kept };
     },
 
@@ -1585,6 +1581,7 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
 
     interrupt: async (sessionId) => {
       requireReady();
+      clearGracefulStop(sessionId);
       // A compact is a request plus a wait; Stop must end that wait, or the page
       // sits on "Compacting…" until the three-minute timeout.
       if (cancelCompact(sessionId)) app.info(`compact cancelled for ${sessionId}`);
@@ -1667,21 +1664,40 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
       const directory = busy.directory;
       const live = (runs?.active?.() || []).find((r) => normDir(r.dir || r.directory) === normDir(directory));
       if (live) {
-        const r = runs?.requestStop?.(directory);
+        const r = await runs?.requestStop?.(directory);
         if (r?.ok) {
           app.info(`graceful stop: ${live.task} (${live.role}) will finish its step`);
           return { ok: true, stopping: true, target: 'worker', task: live.task, role: live.role };
         }
       }
       const targetId = busy.sessionId || sessionId;
-      try {
-        await engine.synthetic(targetId, STOP_NUDGE, { description: 'operator stop' });
-      } catch (e) {
-        const err = new Error(`could not ask the session to stop gracefully: ${e.message}`);
-        err.status = 502;
-        throw err;
-      }
-      app.info(`graceful stop: ${targetId} will finish its step`);
+      // No note to the model: watch for the next assistant message, which is the
+      // step boundary, and cut there. If the turn ends first, the idle marker is
+      // the boundary and nothing needs cutting.
+      const before = await engine.getMessages(targetId).catch(() => []);
+      const stopAssistant = [...before].reverse().find((m) => m.type === 'assistant')?.id || null;
+      clearGracefulStop(targetId);
+      const poll = setInterval(async () => {
+        const now = await engine.getMessages(targetId).catch(() => null);
+        if (!now) return;
+        if (now[now.length - 1]?.type === 'idle') {
+          clearGracefulStop(targetId);
+          return;
+        }
+        const last = [...now].reverse().find((m) => m.type === 'assistant');
+        if (stopAssistant && last && last.id !== stopAssistant) {
+          clearGracefulStop(targetId);
+          try { await engine.interrupt(targetId); } catch { /* already gone */ }
+        }
+      }, 1000);
+      poll.unref?.();
+      const hard = setTimeout(async () => {
+        clearGracefulStop(targetId);
+        try { await engine.interrupt(targetId); } catch { /* already gone */ }
+      }, STOP_GRACE_MS);
+      hard.unref?.();
+      gracefulStops.set(targetId, { poll, hard, at: Date.now() });
+      app.info(`graceful stop: ${targetId} will cut at the next step boundary`);
       return { ok: true, stopping: true, target: 'architect' };
     },
 

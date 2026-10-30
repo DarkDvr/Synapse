@@ -966,22 +966,6 @@ export function briefSession({ dir, role = 'architect', auto = false, single = f
   }
   if (doc.notes) lines.push(`The operator's standing notes for this project:\n${capped(doc.notes, 900)}`);
   if (doc.handover) lines.push(`The handover from the last compact:\n${capped(doc.handover, 2000)}`);
-  // A stop is a fact the next turn needs. Without it the Architect read the cut
-  // transcript as a provider failure and guessed at the cause when the operator
-  // next spoke (the emulator project, 29 Oct).
-  try {
-    const last = readRuns(dir).filter((r) => r.kind === 'result').pop();
-    if (last?.stoppedBy === 'operator') {
-      const when = last.at
-        ? new Date(last.at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
-        : '';
-      lines.push(
-        `The last run (${last.task || 'a task'}, ${last.role || 'a worker'}) was stopped by the operator` +
-          `${when ? ` at ${when}` : ''}, after it finished the step it was in. That was their decision, not a ` +
-          `failure: do not retry it unless they ask, and judge what is on disk.`,
-      );
-    }
-  } catch { /* a run log we cannot read is not a reason to fail the brief */ }
   lines.push(
     isArchitect
       ? `Project plan: ${planRelPathPlain()} - you own this file and you are the only role that may write it. ` +
@@ -1022,9 +1006,7 @@ export function briefSession({ dir, role = 'architect', auto = false, single = f
     lines.push(
       'The operator may send you a message while you are working. It is marked "[steer]" and is guidance for ' +
         'the turn you are in, not a new request: apply it and continue, or stop and say why. If it changes the ' +
-        'task materially, ask the operator a question to confirm before reshaping the plan. A turn that ends ' +
-        'with "Step interrupted" was stopped by the operator - not a provider failure, and not a judgement on ' +
-        'your work; do not retry it on your own. Their next message is the instruction.',
+        'task materially, ask the operator a question to confirm before reshaping the plan.',
     );
     lines.push(
       'Your own turns are the dearest in the harness: every one re-sends this whole conversation. Delegation is ' +
@@ -1109,7 +1091,7 @@ export function briefSession({ dir, role = 'architect', auto = false, single = f
       'The operator may send guidance while you work. It is marked "[steer]": treat it as their instruction for ' +
         'this task, apply it, say in your report what changed because of it, and do not restart the task unless ' +
         'it says so. If it changes the task materially and the intent is unclear, ask the operator a question ' +
-        'before acting. A stop from them is their decision, not a failure of yours.',
+        'before acting.',
     );
     // What a turn costs, said plainly, because the model is the only thing that
     // decides how many of them there are. Every turn re-sends this whole

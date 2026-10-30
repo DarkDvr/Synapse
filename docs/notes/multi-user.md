@@ -38,8 +38,10 @@ sleeps therefore cannot hold a project. Nothing to expire, nothing to leak.
    asks the work to finish the step it is in and end; the second cuts it off
    immediately. The notice and the red glow are broadcast, so every view knows a
    stop is in progress and a second press anywhere is the hard one. Stop wakes
-   nobody: the next brief carries what happened. After a stop, change the model,
-   type Continue, send. There is no separate takeover button.
+   nobody and explains nothing to the model: it sees a cut, like a dropped
+   connection. If you want the work resumed or changed, say so in your next
+   message. After a stop, change the model, type Continue, send. There is no
+   separate takeover button.
 4. **Single/Multi follows the same rule** as a prompt: switchable only while the
    project is idle. The button is greyed with the reason, and the server refuses
    the change even if a stale page asks.
