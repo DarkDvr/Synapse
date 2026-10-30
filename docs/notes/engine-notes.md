@@ -380,6 +380,20 @@ Non-obvious, all verified on 2.0.30:
   The plan's `role` is never rewritten (the Architect owns the file); the report says
   *"this attempt ran on coder-2, not coder-1 — the plan still says coder-1, judge the
   work on its merits"*, and `runs.jsonl` records `role`, `plannedRole` and `ladder`.
+  **The operator's own choice overrides the "write it for coder-1" rule** (30 Oct:
+  "tell coder 2 to create…" was silently rewritten to coder-1): a row they asked
+  for carries `origin: "operator"`, the plan check accepts `coder-2`/`coder-3` on
+  that row, and the brief tells the Architect to use the named coder, mark the row
+  and say so in its reply. The invariant is unchanged — the task's role is its
+  *first rung*, and the ladder only ever moves down from there (`nextRung` slices
+  from the role's own index), so a coder-2 task runs on coder-2 and falls to
+  coder-3, never back to coder-1.
+  **Changing a role's model mid-run also ends its backoff.** `wakeRole(role,
+  {ref, variant})` fires the run's wake signal (separate from Stop's controller),
+  switches that session to the new model and lets the retry happen at once; the
+  backoff counter resets because the failing model is gone. Only a run whose
+  `retry` is set is woken — a working turn is the engine's to switch at its next
+  prompt.
   Verified through the real runner with a stubbed engine (19/19): a refusal moves,
   attempt 2 starts a rung down, a marked model is skipped, a clean turn stays on
   coder-1, and a role outside the ladder still reports a plain `error`.

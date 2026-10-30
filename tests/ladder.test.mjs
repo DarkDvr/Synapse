@@ -21,7 +21,7 @@ const FREE_LIMIT =
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const quiet = { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} };
 
-function project(name) {
+function project(name, role = 'coder-1') {
   const dir = path.join(ROOT, name);
   fs.rmSync(dir, { recursive: true, force: true });
   fs.mkdirSync(path.join(dir, '.synapse'), { recursive: true });
@@ -32,7 +32,7 @@ function project(name) {
       goal: 'test',
       summary: '',
       tasks: [
-        { id: 't1', title: 'Do the thing', role: 'coder-1', status: 'todo', detail: 'd', dependsOn: [], result: null, note: null },
+        { id: 't1', title: 'Do the thing', role, status: 'todo', detail: 'd', dependsOn: [], result: null, note: null },
       ],
     }),
   );
@@ -46,6 +46,7 @@ function makeEngine({ dir, script, turnDelay = 15 }) {
   const arch = [];
   const created = [];
   const interrupts = [];
+  const switched = [];
   let seq = 0;
 
   const startTurn = (id) => {
@@ -101,13 +102,14 @@ function makeEngine({ dir, script, turnDelay = 15 }) {
       return id === 'ses_arch' ? [...arch] : [...(sessions.get(id)?.messages || [])];
     },
     async interrupt(id) { interrupts.push(id); },
+    async switchModel(id, model) { switched.push({ id, model }); },
     async updateSessionPermissions() {},
     async deleteSession(id) { sessions.delete(id); },
   };
-  return { engine, sessions, created, arch, interrupts };
+  return { engine, sessions, created, arch, interrupts, switched };
 }
 
-function runnerFor({ engine, ladder }) {
+function runnerFor({ engine, ladder, retryBaseSec = 1, retryCapSec = 2 }) {
   return createRunner({
     engine,
     logger: { channel: () => quiet },
@@ -117,7 +119,7 @@ function runnerFor({ engine, ladder }) {
         'coder-2': { ref: 'opencode/two' },
         'coder-3': { ref: 'opencode/three' },
       },
-      worker: { ladder, stallSec: 30, resumeMax: 0, retryBaseSec: 1, retryCapSec: 2 },
+      worker: { ladder, stallSec: 30, resumeMax: 0, retryBaseSec, retryCapSec },
     }),
     modelCache: { get: () => null, noteIssue: () => true },
     notify: () => {},
@@ -199,7 +201,45 @@ const expect = (label, ok, detail) => checks.push({ label, ok, detail });
   expect('a stop does not push the task down the ladder', second?.role === 'coder-1', second?.role);
 }
 
-// 4. a result whose wake never landed is replayed at boot
+// 4. changing a role's model ends its provider wait and continues at once
+{
+  const dir = project('model-wake');
+  const stub = makeEngine({ dir, script: [{ error: FREE_LIMIT }, {}] });
+  const runner = runnerFor({
+    engine: stub.engine,
+    ladder: ['coder-1', 'coder-2', 'coder-3'],
+    retryBaseSec: 60,
+    retryCapSec: 3600,
+  });
+  await delegate(runner, stub.arch, 'call_model-wake_a');
+  const live = await waitFor(() => runner.active().find((r) => r.workerId && r.retry));
+  expect('the run is asleep in a provider backoff', Boolean(live), JSON.stringify(runner.active()));
+
+  const woke = runner.wakeRole('coder-1', 'opencode/two');
+  expect('the model change wakes the role', woke === 1, String(woke));
+  expect(
+    'the running session is moved to the new model',
+    stub.switched.some((s) => s.model === 'opencode/two'),
+    JSON.stringify(stub.switched),
+  );
+  const done = await waitFor(() => readRuns(dir).find((r) => r.kind === 'result'), 3000);
+  expect('and the run continues without waiting out the backoff', Boolean(done), 'no result within 3s');
+  expect('the run finishes on the new model', done?.outcome === 'completed', done?.outcome);
+}
+
+// 5. a task the operator asked to run on coder-2 starts there
+{
+  const dir = project('operator-coder', 'coder-2');
+  const stub = makeEngine({ dir, script: [{}] });
+  const runner = runnerFor({ engine: stub.engine, ladder: ['coder-1', 'coder-2', 'coder-3'] });
+  await delegate(runner, stub.arch, 'call_operator-coder_a');
+  const first = await waitFor(() => readRuns(dir).find((r) => r.kind === 'result'));
+  const row = readRuns(dir).find((r) => r.kind === 'delegate');
+  expect('a task written for coder-2 starts on coder-2', row?.role === 'coder-2', row?.role);
+  expect('and the work still completes', first?.outcome === 'completed', first?.outcome);
+}
+
+// 6. a result whose wake never landed is replayed at boot
 {
   const dir = project('lost-wake');
   const now = Date.now();

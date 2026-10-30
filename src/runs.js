@@ -132,18 +132,29 @@ const CONTEXT_NUDGE =
 export const STOP_GRACE_MS = 45_000;
 
 /** Sleep, but let Stop cut it short: a five-minute backoff must not be five
- *  minutes of the operator pressing a button that does nothing. */
-const sleep = (ms, signal) =>
+ *  minutes of the operator pressing a button that does nothing. `wake` is the
+ *  other caller: a model change ends the wait early and the run carries on. */
+const sleep = (ms, signal, wake) =>
   new Promise((resolve) => {
-    if (signal?.aborted) return resolve();
+    if (signal?.aborted || wake?.aborted) return resolve();
     const done = () => {
       clearTimeout(timer);
       signal?.removeEventListener?.('abort', done);
+      wake?.removeEventListener?.('abort', done);
       resolve();
     };
     const timer = setTimeout(done, Math.max(0, ms));
     signal?.addEventListener?.('abort', done, { once: true });
+    wake?.addEventListener?.('abort', done, { once: true });
   });
+
+/** A one-shot wake-up for a run that is asleep between provider retries. An
+ *  AbortSignal cannot be reused, so every wait that survives a wake gets a fresh
+ *  one — see the retry branch of run(). */
+const newWake = () => {
+  const controller = new AbortController();
+  return { signal: controller.signal, fire: () => controller.abort() };
+};
 
 // MCP tools arrive namespaced (`synapse-delegate_delegate`): match by suffix.
 const isDelegate = (name) => {
@@ -1219,6 +1230,14 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     // thing. A plain abort leaves the run "stopped"; a stop with a reason says
     // why, and the report carries it to the Architect and the operator.
     const controller = new AbortController();
+    // The wake-up for a wait between provider retries: the operator changing
+    // this role's model is a repair, and it must not have to outlast a backoff
+    // (their words, 30 Oct: "stop that timeout and tell that role to continue").
+    // Separate from `controller`, because a wake is not a stop. Deliberately not
+    // called `wake`: that is the Architect's wake function in this file, and a
+    // local of the same name silently hid it — the report was still written and
+    // the Architect was never told it (caught by the steer test, 30 Oct).
+    let wakeUp = newWake();
     let stopReason = null;
     // The first Stop asks the worker to finish the step it is in and end the
     // turn; the second (or the grace running out) aborts it. See requestStop().
@@ -1226,7 +1245,24 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     let stopRequestedAt = 0;
     let stopTimer = null;
     controls.set(dirKey(dir), {
+      role,
       abort: () => controller.abort(),
+      // The operator changed this role's model while its run was asleep in a
+      // provider backoff. The session is still bound to the model it was created
+      // with, so the wait is ended, the session moves to the new model, and the
+      // retry happens at once instead of on a clock that no longer matters.
+      wake: async (model) => {
+        const label = typeof model === 'string' ? model : model?.ref || (model?.id ? `${model.providerID}/${model.id}` : '');
+        if (model && worker?.id) {
+          try {
+            await engine.switchModel(worker.id, model);
+            out.info(`run ${request.task} (${role}) switched to ${label || 'the new model'} mid-run`);
+          } catch (err) {
+            out.warn(`could not switch ${request.task} (${role}) to ${label || 'the new model'}: ${err.message}`);
+          }
+        }
+        wakeUp.fire();
+      },
       stop: (why) => {
         stopReason = String(why || '').trim() || null;
         controller.abort();
@@ -1777,8 +1813,17 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
             `worker ${request.task} (${role}) ${cls.reason}: retrying in ${Math.round(delay / 1000)}s ` +
               `(try ${rungRetries}); a recoverable failure is not an attempt`,
           );
-          await sleep(delay, signal);
+          await sleep(delay, signal, wakeUp.signal);
           if (signal?.aborted) { outcome = 'stopped'; break; }
+          // A model change ended the wait: the session has already been switched,
+          // so the retry is worth making now rather than after a clock that no
+          // longer matters. A fresh wake-up is made for the next wait, and the
+          // backoff starts short again because the model is a different one.
+          if (wakeUp.signal.aborted) {
+            wakeUp = newWake();
+            rungRetries = 0;
+            out.info(`run ${request.task} (${role}) woke early: the role's model changed`);
+          }
           live.retry = null;
           emit('run.progress', { ...live });
           // The retry is starting now: the card's red "retrying at 20:53" line
@@ -3051,6 +3096,30 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     return true;
   }
 
+  /**
+   * The operator changed a role's model. Any run of that role asleep in a
+   * provider backoff — a usage cap, a rate limit, a refused model — is waiting
+   * for a clock that no longer matters: the wait ends, the session is moved to
+   * the new model by the run itself, and the worker is asked to carry on.
+   * Returns how many runs were woken.
+   */
+  function wakeRole(role, model) {
+    let woken = 0;
+    for (const [key, control] of controls) {
+      if (control.role !== role || typeof control.wake !== 'function') continue;
+      // Only a run that is actually waiting: a working turn is switched by the
+      // engine on its next prompt, and interrupting it would be a different act.
+      if (!running.get(key)?.retry) continue;
+      control.wake(model);
+      woken += 1;
+    }
+    if (woken) {
+      const label = typeof model === 'string' ? model : model?.ref || '';
+      log.info(`model change for ${role}: waking ${woken} run(s) to continue${label ? ` on ${label}` : ''}`);
+    }
+    return woken;
+  }
+
   return {
     handleTurn,
     recoverDelegations,
@@ -3065,6 +3134,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     resume,
     hold,
     stopWithReason,
+    wakeRole,
     closeRound,
   };
 }

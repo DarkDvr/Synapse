@@ -694,10 +694,28 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
     toolchain: async ({ force = false } = {}) => probeToolchain({ force }),
 
     saveConfig: async (body) => {
+      // Which roles had a different model before this save. A run of that role
+      // asleep in a provider backoff (a usage cap, a rate limit) is waiting on a
+      // clock that the operator has just made irrelevant: the runner wakes it and
+      // moves its session to the new model (see runs.wakeRole).
+      const beforeRefs = new Map(
+        Object.entries(getConfig()?.roles || {}).map(([role, entry]) => [role, String(entry?.ref || '')]),
+      );
       const saved = applyConfig(reconcile(body));
       // A changed Full auto wait applies to cards already on screen, not only to
       // the next ask.
       permissionGate?.retime?.();
+      for (const [role, entry] of Object.entries(saved.roles || {})) {
+        const ref = String(entry?.ref || '');
+        if (!ref || ref === beforeRefs.get(role)) continue;
+        try {
+          // The variant travels with the ref: a role set to a high thinking
+          // effort must not come back as the default one mid-run.
+          runs?.wakeRole?.(role, { ref, variant: entry?.variant || '' });
+        } catch (err) {
+          app.warn(`could not wake ${role} after its model change: ${err.message}`);
+        }
+      }
       app.info('config saved via UI');
       const shown = toClientConfig(saved);
       // The other view must not keep showing the old file until somebody

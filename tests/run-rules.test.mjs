@@ -102,6 +102,18 @@ try {
     expect('clock-test-2 trips no rule but the coder ladder', other.length === 0, other.join(' | '));
     expect('and it does trip that one, as the old Architect did', ladder.length === 2, ladder.join(' | '));
   }
+
+  // 30 Oct: "use coder 2" is the operator's request, and the ladder rule must not
+  // quietly overrule it. A row they asked for carries origin "operator"; a coder
+  // the Architect picked itself is still a fault.
+  s = write({
+    version: 1,
+    goal: 'A clock.',
+    tasks: [task('t1', 'coder-2', 'todo', { origin: 'operator' })],
+  });
+  expect('an operator-named coder is not a plan fault', !has(s, 'is written for coder-2'), (s.problems || []).join(' | '));
+  s = write({ version: 1, goal: 'A clock.', tasks: [task('t1', 'coder-2')] });
+  expect('a coder the Architect picked itself is still a fault', has(s, 'is written for coder-2'));
 } finally {
   fs.rmSync(ROOT, { recursive: true, force: true });
 }

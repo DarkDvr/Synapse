@@ -262,6 +262,14 @@ The ladder has the matching rule on the server: a stop or a restart is not a
 failed attempt, and a task planned for a role whose model changed starts over on
 that role instead of being stepped down to the next coder.
 
+**A model change also ends a wait.** A role asleep in a provider backoff — a usage
+cap, a rate limit, a refused model — is waiting on a clock the operator has just
+made irrelevant. Saving a new model for that role wakes the run at once, moves the
+session to the new model (the ref *and* its variant), and nudges it to carry on;
+the backoff starts short again because the model is a different one. The operator
+watched a run sit out a ten-minute cap after they had already fixed its model
+(30 Oct). It is a wake, not a stop: the turn is not interrupted.
+
 **The ISSUES badge is not part of that.** It is the model's record, not the
 role's, and a model change does not clear it. It clears when the model delivers:
 a run that completes — the role finished its work — clears its mark, and the
