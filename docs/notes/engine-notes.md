@@ -1424,6 +1424,25 @@ reads the steer in the worker's report. If the run is stopped before that report
 the next brief carries “the operator's steer to the last run still stands” so it
 can put the change in the plan on its next turn.
 
+## A model that writes its tool call instead of making it
+
+Measured 30 Oct (test6, coder-2, a local model): the worker's turn ended with a
+`<tool_call><function=websearch>…</function></tool_call>` block *inside the
+message*. The engine saw text, the turn closed, and the harness reported
+"completed" with that XML as the report. Nothing was called and no file existed.
+
+The run is honestly over — the same model finished the task on the next attempt,
+which is why the outcome stays `completed` and the ladder does not move on the
+strength of one bad turn. What changed is the report: when the last assistant text
+is nothing but a tool-call block (`wroteToolCall`) and no file was written, the
+report says so in a sentence and quotes what the model wrote, instead of handing
+the Architect raw XML to interpret.
+
+The test suite also stays out of `data\provider-errors.log` now
+(`NODE_TEST_CONTEXT`): the ladder tests' stub models had added fake
+"opencode/one … Invalid request: text is required" lines beside a real usage cap,
+and that file is supposed to be evidence.
+
 ## A restart is not a pause
 
 Measured 26 Oct: a worker was running t3 and waiting on a permission request when

@@ -156,6 +156,18 @@ const newWake = () => {
   return { signal: controller.signal, fire: () => controller.abort() };
 };
 
+/** A tool call the model wrote into its message instead of making.
+ *
+ *  Some models (measured on a local one, 30 Oct, test6) emit the call as text:
+ *  the engine sees a message and ends the turn, so the "report" is
+ *  `<tool_call><function=websearch>…`. The run is honestly over — the model can
+ *  recover on the next attempt, as it did — but the Architect should not have to
+ *  read XML to learn that nothing ran. */
+export function wroteToolCall(text) {
+  const s = String(text || '').trim();
+  return /^<tool_call>[\s\S]*<\/tool_call>$/i.test(s) || /^<function=[\s\S]*<\/function>$/i.test(s);
+}
+
 // MCP tools arrive namespaced (`synapse-delegate_delegate`): match by suffix.
 const isDelegate = (name) => {
   const n = String(name || '');
@@ -1849,6 +1861,16 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
           text = 'The tool call was declined and the worker stopped without a report. Nothing else was attempted.';
         }
         files = workerFiles(messages);
+        // A model that writes its tool call into the message has not reported:
+        // nothing was called after it, and no file exists. The outcome stays
+        // "completed" — a second attempt can succeed, and did — but the report
+        // says what the text is instead of handing the Architect raw XML.
+        if (!stopReason && !files.length && wroteToolCall(text)) {
+          out.warn(`worker ${request.task} (${role}) wrote a tool call instead of making one`);
+          text =
+            'The worker ended its turn by writing a tool call into its message instead of making it, so ' +
+            'nothing ran after that point and no file was written. What it wrote:\n' + text;
+        }
         // A file written outside the project is odd enough to say out loud: a coder
         // ran a scratch script out of %TEMP% through `shell`, where no path rule can
         // reach it. It is a note and not a refusal - a scratch script is not an act

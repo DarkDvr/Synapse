@@ -137,6 +137,11 @@ const oneLine = (s) =>
  * the provider's own words. `role` / `model` / `task` may be empty for a wake.
  */
 export function recordProviderError({ message, classification, role, model, task, attempt, note } = {}) {
+  // Under `node --test` the harness runs on stubs: their fake models and fake
+  // failures are not the provider's. The ladder tests wrote "opencode/one …
+  // Invalid request: text is required" into the real diary, beside a genuine
+  // usage cap (found 30 Oct). The diary is evidence, so a test run stays out of it.
+  if (process.env.NODE_TEST_CONTEXT) return null;
   const cls = classification || classifyFailure(message);
   const at = new Date().toISOString();
   const fields = [

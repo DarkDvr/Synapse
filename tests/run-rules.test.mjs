@@ -16,7 +16,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { readPlan, briefSession } from '../src/plans.js';
 import { appendDecision as appendAnswers } from '../src/project-doc.js';
-import { contextStats, windowRoom, windowAction, steerDue, nextRung, countedAttempts, attemptFailed, modelChangedSinceAttempt, redeemModel, promptSize, compactionEvents, compactionMessages, resolveWindow, engineCompactAt, watchdogRoom } from '../src/runs.js';
+import { contextStats, windowRoom, windowAction, steerDue, nextRung, countedAttempts, attemptFailed, modelChangedSinceAttempt, redeemModel, promptSize, compactionEvents, compactionMessages, resolveWindow, engineCompactAt, watchdogRoom, wroteToolCall } from '../src/runs.js';
 import { createHarnessGuard } from '../src/harness.js';
 
 const checks = [];
@@ -576,6 +576,20 @@ try {
     'a variable holding a read is still a read',
     alarmCount(turn('$a = Get-Content F:\\dev\\Synapse\\logs\\app.log; $a | Select-String error')) === 0,
   );
+}
+
+// ── a tool call written as text ─────────────────────────────────
+// test6, coder-2 (30 Oct): the run's whole "report" was a tool-call block the
+// model typed instead of making the call. The run was over, but the Architect
+// should not have to read XML to learn that nothing ran.
+{
+  const block =
+    '<tool_call>\n<function=websearch>\n<parameter=query>\nCensus API Los Angeles 2024\n</parameter>\n</function>\n</tool_call>';
+  expect('a tool call written as text is recognised', wroteToolCall(block));
+  expect('and so is the bare function form', wroteToolCall('<function=shell><parameter=command>dir</parameter></function>'));
+  expect('prose about one is not', !wroteToolCall('I could not call <tool_call> here, so I wrote the table instead.'));
+  expect('a report that mentions it is not', !wroteToolCall('Done: the page is at bin/x.html.\n\n<tool_call>example</tool_call>'));
+  expect('an empty report is not', !wroteToolCall(''));
 }
 
 console.log(checks.join('\n'));
