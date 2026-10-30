@@ -60,6 +60,16 @@ test('a permission chip is keyed by the tool call, never the request', () => {
   assert.doesNotMatch(js, /permissionDecisions\?\.set\(decided\.requestId/);
 });
 
+// 30 Oct: a card "disappeared before I could answer". The one click that can
+// answer a card by accident is the one that also wakes the window, so both of
+// the card's actions must go through the wake guard.
+test('the click that wakes the window cannot answer a permission', () => {
+  const js = read('web/app.js');
+  assert.match(js, /function wakeClick\(\)/);
+  assert.equal((js.match(/if \(wakeClick\(\)\)/g) || []).length, 2, 'Allow/Reject and Stop Run both guard');
+  assert.match(js, /addEventListener\('focus', \(\) => \{ state\.focusAt = Date\.now\(\); \}\)/);
+});
+
 test('a sent message can be put back in the composer', () => {
   const js = read('web/app.js');
   assert.match(js, /data-reuse-msg/);

@@ -28,6 +28,7 @@ function harness({ entry = REQUEST, replyThrows = null } = {}) {
   const replied = [];
   const synthetic = [];
   const answered = [];
+  const logs = [];
   const engine = {
     status: () => ({ ready: true, kind: 'stub' }),
     getSession: async (id) => ({ id, directory: null }),
@@ -41,7 +42,12 @@ function harness({ entry = REQUEST, replyThrows = null } = {}) {
     synthetic: async (sessionId, text, meta) => { synthetic.push({ sessionId, text, meta }); },
   };
   const logger = {
-    channel: () => ({ info() {}, debug() {}, warn() {}, error() {} }),
+    channel: (name) => ({
+      info: (message) => { if (name === 'app') logs.push(String(message)); },
+      debug() {},
+      warn() {},
+      error() {},
+    }),
   };
   const permissionLog = {
     get: (id) => (entry && id === entry.requestId ? { ...entry } : null),
@@ -70,7 +76,7 @@ function harness({ entry = REQUEST, replyThrows = null } = {}) {
     permissionLog,
     permissionGate: { remember() {} },
   });
-  return { api, replied, synthetic, answered };
+  return { api, replied, synthetic, answered, logs };
 }
 
 // Let the fire-and-forget synthetic land before reading it.
@@ -131,6 +137,29 @@ const settle = () => new Promise((r) => setTimeout(r, 10));
   await settle();
   const text = synthetic[0]?.text || '';
   check('an over-long reason is cut to 300 characters', (text.match(/z/g) || []).length === 300, `${(text.match(/z/g) || []).length}`);
+}
+
+{
+  // A card that leaves the screen must say who removed it (30 Oct). The gate's
+  // own decisions are logged; the operator's were not, so an answered card and a
+  // vanished one looked the same in the log.
+  const { api, logs } = harness();
+  await api.permission('ses_worker', { requestId: 'per_1', decision: 'always' }, { name: 'ANDREWS' });
+  await settle();
+  const line = logs.find((l) => l.startsWith('permission allowed in the page')) || '';
+  check('an operator answer is logged', Boolean(line), JSON.stringify(logs));
+  check('the log names the page that answered', /by ANDREWS/.test(line), line);
+  check('and the button that was pressed', /— Always Allow$/.test(line), line);
+  check('and the role and what it asked for', /coder-1/.test(line) && /edit D:\/notes\.txt/.test(line), line);
+}
+
+{
+  // A second view answering a settled card is not a normal answer: the line says
+  // so, or a log reader would count two decisions for one request.
+  const { api, logs } = harness({ replyThrows: new Error('404 permission not found') });
+  await api.permission('ses_worker', { requestId: 'per_1', decision: 'once' });
+  await settle();
+  check('a late answer says it was already answered elsewhere', logs.some((l) => /already answered elsewhere/.test(l)), JSON.stringify(logs));
 }
 
 const failed = checks.filter((c) => !c.ok);

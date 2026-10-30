@@ -1730,6 +1730,23 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
       // Answered here (or by another view): a pending permission-timeout must not
       // fire on a card that is already settled.
       permissionGate?.answered?.(body?.requestId);
+      // The gate logs what the policy decided; the operator's own answer had no
+      // line at all, so a card that left the screen had no record of who removed
+      // it, from which page, or with which button. One line per decision, in the
+      // same shape as the gate's (30 Oct: a card "disappeared before I could
+      // answer", and the log could only say a reply had been sent).
+      {
+        const what = entry
+          ? `${entry.action || 'tool call'} ${(entry.resources || []).join(' ')}`.replace(/\s+/g, ' ').trim().slice(0, 140)
+          : `request ${body?.requestId || '?'}`;
+        const who = entry?.role ? ` (${[entry.role, entry.task].filter(Boolean).join(' ')})` : '';
+        const label = wanted === 'always' ? 'Always Allow' : decision === 'reject' ? 'Reject' : 'Allow Once';
+        app.info(
+          `permission ${decision === 'reject' ? 'refused' : 'allowed'} in the page${
+            actor?.name ? ` by ${actor.name}` : ''
+          }${who}: ${what} — ${label}${already ? ' (already answered elsewhere)' : ''}`,
+        );
+      }
       if (!already && decision === 'reject') {        // The reply's `message` is dropped on this route (measured), so the note
         // is a synthetic message: the only channel that reaches a worker. Not to
         // the Architect: the operator is in its chat, and the extra turn ended

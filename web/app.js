@@ -188,6 +188,10 @@ const state = {
 // Settings → Workers (20 seconds by default; 0 answers at once, no card).
   fullAuto: false,
   permissions: [],
+  // When this window last gained focus. A click that brings an unfocused window
+  // forward lands on the page too, and an answer must be a click on a window the
+  // operator was already using — see the permission handler (30 Oct).
+  focusAt: 0,
   busy: false,
   // The first Stop was pressed: the AI is finishing the step, then it ends. A
   // second press is the hard interrupt (see interrupt()).
@@ -8498,6 +8502,18 @@ document.addEventListener('keydown', (e) => {
     }),
   );
 
+  // A click on an unfocused window is two things at once on Windows: it brings
+  // the window forward *and* it arrives at the page under the pointer. If a card
+  // is where the operator clicked to get back to Synapse, that one press must not
+  // be read as an answer — the card stays, and the click after it decides.
+  window.addEventListener('focus', () => { state.focusAt = Date.now(); });
+  /** Was this click only the wake-up? Within 400ms of the window gaining focus,
+   *  which is longer than a button press (down to up) and shorter than reaching
+   *  for the mouse after an alt-tab. */
+  function wakeClick() {
+    return Date.now() - (state.focusAt || 0) < 400;
+  }
+
   // mockup affordances: clearly announce what is not wired yet
   document.addEventListener('click', (e) => {
     // a click anywhere outside the open model menu closes it
@@ -8513,10 +8529,20 @@ document.addEventListener('keydown', (e) => {
     if (checkTools) { e.preventDefault(); loadToolchain(true); return; }
 
     const perm = e.target.closest('[data-perm]');
-    if (perm) { e.preventDefault(); replyPermission(perm.dataset.permId, perm.dataset.perm); return; }
+    if (perm) {
+      e.preventDefault();
+      if (wakeClick()) { toast('Click Again', 'That click only brought the window forward. The request is still waiting.'); return; }
+      replyPermission(perm.dataset.permId, perm.dataset.perm);
+      return;
+    }
 
     const permStop = e.target.closest('[data-perm-stop]');
-    if (permStop) { e.preventDefault(); stopFromPermission(permStop.dataset.permStop); return; }
+    if (permStop) {
+      e.preventDefault();
+      if (wakeClick()) { toast('Click Again', 'That click only brought the window forward. The request is still waiting.'); return; }
+      stopFromPermission(permStop.dataset.permStop);
+      return;
+    }
 
     const soon = e.target.closest('[data-soon]');
     if (soon) { e.preventDefault(); e.stopPropagation(); toast('Not wired yet', soon.dataset.soon); return; }

@@ -186,6 +186,18 @@ answers `once` and keeps its own narrow memory instead: same action, same exact
 resource, this session, and it can only turn an `ask` into an allow — never a
 `deny`.
 
+**A click that wakes the window is not an answer.** On Windows, clicking an
+unfocused window brings it forward and still delivers the click to the page. If a
+card is under the pointer, one press could answer a request nobody had read yet:
+on 30 Oct a card "disappeared before I could answer", and the log then showed an
+Always Allow had been sent a second before the Stop — the only path that sends one
+is the card's own button. The permission and Stop Run buttons now ignore a click
+that arrives within 400 ms of the window gaining focus, and toast "Click Again";
+the card stays up, and the next click decides. Every operator answer is also
+logged with the page, the button, the role and the request (`permission allowed in
+the page by ANDREWS (coder-1): … — Always Allow`), so an answered card never looks
+like one that vanished.
+
 Two invariants:
 
 - **A worker's request is shown too.** Hidden from the rail is not hidden from the
