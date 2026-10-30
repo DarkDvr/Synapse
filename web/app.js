@@ -708,9 +708,6 @@ function renderStatus() {
   const engine = state.status?.engine || {};
   const ready = Boolean(engine.ready);
   const failed = Boolean(state.status?.bootError);
-  const version = String(state.status?.version || '').trim();
-  const versionEl = $('appVersion');
-  if (versionEl) versionEl.textContent = version ? `Synapse ${version}` : 'Synapse';
   // The app knows one thing the server cannot tell it: that it is not running.
   // That answer wins — a stopped server is not "starting", and saying so is the
   // whole point of the red dot.

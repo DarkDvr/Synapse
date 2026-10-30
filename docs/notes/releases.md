@@ -1,7 +1,7 @@
 # Releases and versioning
 
 Synapse is versioned `major.minor.patch`, and the number is not decoration: the
-operator reads it in the status rail to know which build is answering, and the
+operator reads it in the title bar to know which build is answering, and the
 tag on GitHub is what a bug report points at.
 
 ## The three numbers
@@ -17,9 +17,10 @@ tag on GitHub is what a bug report points at.
 ## Where the number lives
 
 `package.json` `version` is the single source. `src/version.js` reads it,
-`/api/status` returns it, and the status rail shows `Synapse 1.0.2`. The boot
-line in `logs/app.log` carries the same number, so a stale server is visible
-before any behaviour is blamed.
+`/api/status` returns it, and the title bar shows `1.0.2` beside the name — one
+place, not a copy at the foot of the status rail as well. The boot line in
+`logs/app.log` carries the same number, so a stale server is visible before any
+behaviour is blamed.
 
 Two things mirror it and are bumped in the same commit:
 
@@ -54,6 +55,6 @@ Two things mirror it and are bumped in the same commit:
 ## Reading a version before debugging
 
 If a behaviour does not match the code in this checkout, the first question is
-"which Synapse is running?" — the rail answers it. A server started before the
+"which Synapse is running?" — the title bar answers it. A server started before the
 change is a stale build; restart it before blaming the rule. The console's boot
 line says `Synapse 1.0.2 starting`, and `/api/status` reports the same string.
