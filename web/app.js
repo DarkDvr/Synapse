@@ -7444,6 +7444,10 @@ function renderSettings({ scrollTop } = {}) {
   // pressed. Only a tab switch or opening the window starts at the top.
   const keep = scrollTop === undefined ? body.scrollTop : scrollTop;
   renderSettingsTabs();
+  // Only Updates wants the full window height; the other pages stay as tall as
+  // their form needs. The class moves with the tab, so switching back shrinks it.
+  const modal = document.querySelector('#settingsModal .modal');
+  if (modal) modal.classList.toggle('is-updates', state.settingsTab === 'updates');
   // About and Updates are read-only: Save and Revert there would be two buttons
   // with nothing to save. The footer comes back on the next editable tab.
   const foot = document.querySelector('.set-foot');
