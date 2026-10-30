@@ -1428,6 +1428,10 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
         await noteLoadedWindow(modelRef).catch(() => {});
 
         worker = await spawnWorker();
+        // The session exists now. Broadcast it at once: a UI that only ever saw
+        // `run.started` (workerId null) could not offer Steer until the first tool
+        // call, which is exactly when a model that is only thinking shows nothing.
+        emit('run.progress', { ...live });
 
         before = markOf(await engine.getMessages(worker.id));
         await engine.prompt(worker.id, workerPrompt({ task, note: request.note, goal: plan.plan?.goal }));

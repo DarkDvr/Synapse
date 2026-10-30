@@ -90,7 +90,7 @@ function makeEngine(dir) {
   return { engine, sessions, arch, prompts, synthetics, interrupts, woke, finish };
 }
 
-function runnerFor(engine, dir) {
+function runnerFor(engine, dir, events = null) {
   return createRunner({
     engine,
     logger: { channel: () => quiet },
@@ -99,7 +99,7 @@ function runnerFor(engine, dir) {
       worker: { ladder: ['coder-1'], stallSec: 30, resumeMax: 0, retryBaseSec: 1, retryCapSec: 2 },
     }),
     modelCache: { get: () => null, noteIssue: () => true },
-    notify: () => {},
+    notify: (ev) => events?.push(ev),
   });
 }
 
@@ -152,10 +152,17 @@ test('the adapter sends delivery: steer', async () => {
 test('a steer goes into the live worker, marked as guidance', async () => {
   const dir = project('live');
   const stub = makeEngine(dir);
-  const runner = runnerFor(stub.engine, dir);
+  const events = [];
+  const runner = runnerFor(stub.engine, dir, events);
   await runner.handleTurn('ses_arch', archMessages('call_steer'));
   const live = await waitFor(() => runner.active().find((r) => r.workerId));
   assert.ok(live, 'the run should have a worker session');
+  // The UI only knows the worker exists from this event; the first `run.started`
+  // fires before the session is created and carries `workerId: null`.
+  assert.ok(
+    events.some((e) => e.type === 'run.progress' && e.workerId === live.workerId),
+    'the worker session is broadcast after it is created',
+  );
 
   const result = await runner.steer(dir, { text: 'Use the other file, not main.cpp', actor: { name: 'PC-A' } });
   assert.equal(result.ok, true);

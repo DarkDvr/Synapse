@@ -1381,6 +1381,14 @@ ends can start a turn nobody is polling, so the runner interrupts the worker onc
 after a run that carried steers; and a steer during a provider backoff is refused,
 because the session is idle then and the message would race the retry.
 
+**The worker id is not in `run.started`.** That event is emitted before the worker
+session exists, so its `workerId` is null; the first progress event carrying the
+id used to wait for a tool or context change. Measured 30 Oct: a coder that was
+only thinking showed no worker to the page, and Send stayed disabled instead of
+becoming Steer. The runner now emits `run.progress` immediately after
+`spawnWorker()`, and the composer targets the live run rather than requiring the
+id — the server holds the worker session and refuses only while it is starting.
+
 Measured live on 30 Oct (2.2.3): a delegated coder writing 400 numbered lines was
 steered with "put `STEERED` at the top"; the file came back 401 lines with
 `STEERED` first, and the Architect's verdict said "the steer is satisfied". The

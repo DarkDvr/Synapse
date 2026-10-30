@@ -3460,6 +3460,10 @@ function handleRunEvent(ev) {
   // not on every tool call: that would rebuild the rail for nothing.
   if (ev.type !== 'run.progress') renderPlan();
   else renderTranscript();
+  // The composer's Send/Steer face follows the run, not just the engine's busy
+  // state: a worker is invisible to the engine's active list while the Architect
+  // is idle. `run.started` can arrive before `busyInfo` does.
+  renderComposer();
 }
 
 // The live path: one solid arrow from the requester down the spine and across
@@ -5911,14 +5915,19 @@ async function stopFromPermission(requestId) {
  * honest face of it rather than the guard.
  */
 function steerTarget() {
+  if (state.compacting) return null;
   const busy = state.busyInfo;
-  if (!busy?.busy || busy.state !== 'running' || state.compacting) return null;
   const live = currentRun();
+  if (!live && !busy?.busy) return null;
+  // A card is not something to steer; answer it first.
+  if (busy?.state === 'waiting') return null;
   if (live?.retry) return null;
-  if (live?.role && live?.workerId) return { kind: 'worker', role: live.role, task: live.task };
-  if (busy.kind === 'turn') return { kind: 'architect' };
-  // A run that exists but has no worker session yet is still starting; a steer
-  // then would race the prompt.
+  // The run itself is the target. `workerId` need not have reached this page:
+  // the server holds it, and `runs.steer` refuses only while the worker is
+  // starting.
+  if (live?.role) return { kind: 'worker', role: live.role, task: live.task };
+  if (busy?.kind === 'run' && busy.role) return { kind: 'worker', role: busy.role };
+  if (busy?.kind === 'turn') return { kind: 'architect' };
   return null;
 }
 
@@ -5930,7 +5939,7 @@ function steerTarget() {
 function renderComposer() {
   const hasSession = Boolean(state.sessionId);
   const asking = Boolean(currentForm());
-  const held = Boolean(state.busyInfo?.busy);
+  const held = Boolean(state.busyInfo?.busy) || Boolean(currentRun());
   // The graceful stop has landed: the notice and the glow go when the work does.
   if (state.stopping && !held && !currentRun() && !state.busy) state.stopping = false;
   const target = steerTarget();
