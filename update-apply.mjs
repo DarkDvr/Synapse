@@ -70,11 +70,30 @@ function backup(to) {
 
 function restore(from) {
   if (!fs.existsSync(from)) return;
-  for (const rel of [...files, ...dirs]) copyTree(path.join(from, rel), path.join(root, rel));
+  const exe = path.join(from, 'Synapse.exe');
+  if (fs.existsSync(exe)) moveIntoPlace(exe, path.join(root, 'Synapse.exe'));
+  for (const rel of files.filter((f) => f !== 'Synapse.exe')) copyTree(path.join(from, rel), path.join(root, rel));
+  for (const rel of dirs) copyTree(path.join(from, rel), path.join(root, rel));
+}
+
+/**
+ * Put the exe in place without inheriting the destination folder's integrity
+ * label. A plain copy into the root of a sandboxed workspace creates a Low
+ * file, and the next launch then fails to create data\webview2; a move from
+ * data\ keeps the Medium label the temp copy already has.
+ */
+function moveIntoPlace(from, to) {
+  const tmp = path.join(root, 'data', `stage-${process.pid}-${path.basename(to)}`);
+  fs.copyFileSync(from, tmp);
+  try { if (fs.existsSync(to)) fs.rmSync(to, { force: true }); } catch { /* locked by the old app */ }
+  fs.renameSync(tmp, to);
 }
 
 function apply() {
-  for (const rel of [...files, ...dirs]) copyTree(path.join(stage, rel), path.join(root, rel));
+  const exe = path.join(stage, 'Synapse.exe');
+  if (fs.existsSync(exe)) moveIntoPlace(exe, path.join(root, 'Synapse.exe'));
+  for (const rel of files.filter((f) => f !== 'Synapse.exe')) copyTree(path.join(stage, rel), path.join(root, rel));
+  for (const rel of dirs) copyTree(path.join(stage, rel), path.join(root, rel));
 }
 
 function start() {
