@@ -18,6 +18,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { createHousekeeping } from '../src/housekeeping.js';
+import { reclaimSnapshotStore } from '../src/engines/opencode.js';
 
 function root() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'synapse-house-'));
@@ -44,7 +45,8 @@ function stagedUpdate(dir, { ok = true, at = new Date(Date.now() - 10 * 60 * 100
   write(path.join(dir, 'data', 'backups', 'Synapse.Projects', '_scratch', 'x.txt'), 'projects');
 }
 
-const house = (dir, extra = {}) => createHousekeeping({ root: dir, log: { info() {}, warn() {} }, ...extra });
+const house = (dir, extra = {}) =>
+  createHousekeeping({ root: dir, scratchRoot: path.join(dir, 'scratch'), log: { info() {}, warn() {} }, ...extra });
 
 test('a settled successful update drops its staging and older backups', () => {
   const dir = root();
@@ -131,6 +133,52 @@ test('a dry run reports what it would free and deletes nothing', () => {
     assert.ok(report.removed >= 4);
     assert.ok(report.bytes > 0);
     assert.equal(fs.readdirSync(path.join(dir, 'data', 'update')).length, before);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// 3: the renderer's browser profiles are not work; a project's own scratch is.
+test('spent render profiles go, a live one stays, and a project’s scratch is never touched', () => {
+  const dir = root();
+  try {
+    const scratch = path.join(dir, 'scratch');
+    const oldProfile = path.join(scratch, 'visual-review-111-390-1700000000000');
+    const liveProfile = path.join(scratch, 'visual-review-222-390-1790000000000');
+    const projectScratch = path.join(scratch, 'test6-1234abcd');
+    const nuget = path.join(scratch, 'NuGetScratch');
+    write(path.join(oldProfile, 'Default', 'Cache', 'data_0'), 'x'.repeat(4096));
+    write(path.join(liveProfile, 'Default', 'Cache', 'data_0'), 'x');
+    write(path.join(projectScratch, 'probe.mjs'), 'the model kept this');
+    write(path.join(nuget, 'packages', 'a.nupkg'), 'cache');
+    const longAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
+    for (const p of [oldProfile, projectScratch, nuget]) fs.utimesSync(p, longAgo, longAgo);
+
+    const report = house(dir).sweepScratchProfiles();
+    assert.equal(report.removed, 1);
+    assert.ok(report.bytes >= 4096);
+    assert.equal(fs.existsSync(oldProfile), false);
+    assert.equal(fs.existsSync(liveProfile), true, 'a profile a render may still be using stays');
+    assert.equal(fs.existsSync(path.join(projectScratch, 'probe.mjs')), true, 'a project’s own scratch is work');
+    assert.equal(fs.existsSync(nuget), true, 'only visual-review-* is this pass’s business');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// 5: the engine's undo store is dropped before the engine starts.
+test('the engine snapshot store is emptied before start and its folder kept', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'synapse-snap-'));
+  try {
+    const dataHome = path.join(dir, 'data');
+    const globalDir = path.join(dataHome, 'opencode', 'snapshot', 'global');
+    write(path.join(globalDir, 'ad11920401e0', 'objects', 'aa', 'bb'), 'x'.repeat(8192));
+    write(path.join(dataHome, 'opencode', 'opencode.db'), 'the chats');
+    const freed = reclaimSnapshotStore(dataHome);
+    assert.ok(freed >= 8192, `freed ${freed}`);
+    assert.deepEqual(fs.readdirSync(globalDir), [], 'the global folder stays for the engine to rebuild in');
+    assert.equal(fs.existsSync(path.join(dataHome, 'opencode', 'opencode.db')), true, 'the database is never touched');
+    assert.equal(reclaimSnapshotStore(path.join(dir, 'missing')), 0, 'a missing store is not an error');
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }

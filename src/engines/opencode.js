@@ -36,6 +36,43 @@ function rootExists(p) {
   } catch { return false; }
 }
 
+/** Bytes under a file or folder; 0 when it cannot be read. */
+function dirSize(target) {
+  try {
+    const stat = fs.statSync(target);
+    if (!stat.isDirectory()) return stat.size;
+    return fs.readdirSync(target, { withFileTypes: true }).reduce((n, e) => n + dirSize(path.join(target, e.name)), 0);
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * Delete the engine's snapshot store, given its XDG data home.
+ *
+ * `data/opencode/snapshot/global` is the engine's git-like copy of the files it
+ * has touched: what its own "revert" uses. Nothing in Synapse reads it. Only the
+ * children of `global` go — the folder itself stays, so the engine finds the
+ * shape it expects and rebuilds on the next edit. Returns the bytes freed, and
+ * never throws: a cleanup must not be able to stop an engine.
+ */
+export function reclaimSnapshotStore(dataHome, log = null) {
+  const globalDir = path.join(String(dataHome || ''), 'opencode', 'snapshot', 'global');
+  let freed = 0;
+  try {
+    if (!fs.existsSync(globalDir)) return 0;
+    for (const entry of fs.readdirSync(globalDir, { withFileTypes: true })) {
+      const target = path.join(globalDir, entry.name);
+      freed += dirSize(target);
+      fs.rmSync(target, { recursive: true, force: true });
+    }
+    if (freed > 0) log?.info?.(`engine snapshots: ${(freed / 1048576).toFixed(1)} MB reclaimed before start`);
+  } catch (err) {
+    log?.warn?.(`engine snapshots could not be reclaimed: ${err.message}`);
+  }
+  return freed;
+}
+
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 export class OpenCodeEngine extends Engine {
@@ -351,6 +388,15 @@ export class OpenCodeEngine extends Engine {
     this.log.info(`engine home:   ${home.base}`);
     this.log.info(`workspace:     ${this.workspaceDir}`);
 
+    // The engine's own undo history: a copy of every file a model edits, under
+    // XDG_DATA_HOME/opencode/snapshot. Synapse never uses the engine's revert —
+    // the project's files and the harness git are the record — and the store only
+    // grows (347 MB by 30 Oct, the largest single thing under data). It is safe to
+    // drop while the engine is down, so it goes just before every start; the cost
+    // is the engine's undo across restarts, which nothing here depends on. Never
+    // allowed to block the start.
+    this.reclaimSnapshots(home);
+
     this.proc = spawn(binary, args, {
       cwd: this.workspaceDir,
       env,
@@ -371,6 +417,17 @@ export class OpenCodeEngine extends Engine {
     await this.waitReady(this.cfg.startTimeoutMs);
     this.connectStream();
     return this.status();
+  }
+
+  /**
+   * Delete the engine's snapshot store, before it starts.
+   *
+   * See reclaimSnapshotStore above for what it is and why only `global`'s
+   * children go. Returns the bytes freed, and never throws: a cleanup must not
+   * be able to stop an engine.
+   */
+  reclaimSnapshots(home) {
+    return reclaimSnapshotStore(home.data, this.log);
   }
 
   async waitReady(timeoutMs) {

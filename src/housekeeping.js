@@ -25,9 +25,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
-import { ROOT } from './paths.js';
+import { ROOT, SCRATCH_ROOT } from './paths.js';
 
 const MINUTE = 60 * 1000;
+const DAY = 24 * 60 * 60 * 1000;
 const KEEP_BACKUPS = 1;
 const KEEP_RELEASES = 1;
 // The update helper writes `last.json` after it has started the app, so a record
@@ -46,7 +47,7 @@ const sizeOf = (target) => {
   }
 };
 
-export function createHousekeeping({ root = ROOT, log = null, now = Date.now, dryRun = false } = {}) {
+export function createHousekeeping({ root = ROOT, scratchRoot = SCRATCH_ROOT, log = null, now = Date.now, dryRun = false } = {}) {
   const dataDir = path.join(root, 'data');
   const updateDir = path.join(dataDir, 'update');
   const backupsDir = path.join(dataDir, 'backups');
@@ -146,9 +147,47 @@ export function createHousekeeping({ root = ROOT, log = null, now = Date.now, dr
     return report;
   }
 
+  /**
+   * Browser profiles the renderer left in the shared scratch.
+   *
+   * Every render starts Chrome with a throwaway profile (`visual-review-<pid>-
+   * <width>-<time>`) under TEMP, which for every model is the projects' scratch
+   * root. The renderer deletes it when the render ends, but on Windows Chrome
+   * often still holds a file, so the folder survives — about 12 MB each, 108 of
+   * them by 30 Oct. They are not work: no file in one is a project's.
+   *
+   * A **project's** scratch folder (`<project>-<hash>`) is never touched, however
+   * old: the brief tells a model it may write there, and a project can be resumed
+   * days later.
+   */
+  function sweepScratchProfiles({ olderThanMs = DAY } = {}) {
+    const report = { removed: 0, bytes: 0, skipped: null };
+    if (!scratchRoot || !fs.existsSync(scratchRoot)) return { ...report, skipped: 'no scratch root' };
+    const cutoff = now() - olderThanMs;
+    let entries = [];
+    try {
+      entries = fs.readdirSync(scratchRoot, { withFileTypes: true });
+    } catch {
+      return { ...report, skipped: 'the scratch root cannot be read' };
+    }
+    for (const entry of entries) {
+      if (!/^visual-review-/i.test(entry.name)) continue;
+      const target = path.join(scratchRoot, entry.name);
+      let at = 0;
+      try {
+        at = fs.statSync(target).mtimeMs;
+      } catch {
+        continue;
+      }
+      if (at > cutoff) continue; // a render may still be running
+      drop(target, report);
+    }
+    return report;
+  }
+
   /** Everything, in the order that keeps the record of an update. */
-  function run({ update = true, releases = true } = {}) {
-    const result = { removed: 0, bytes: 0, update: null, releases: null };
+  function run({ update = true, releases = true, scratch = true } = {}) {
+    const result = { removed: 0, bytes: 0, update: null, releases: null, scratch: null };
     if (update) {
       const r = sweepUpdate();
       result.update = r;
@@ -170,10 +209,19 @@ export function createHousekeeping({ root = ROOT, log = null, now = Date.now, dr
         );
       }
     }
+    if (scratch) {
+      const r = sweepScratchProfiles();
+      result.scratch = r;
+      result.removed += r.removed;
+      result.bytes += r.bytes;
+      if (r.removed) {
+        say(`housekeeping: ${dryRun ? 'would remove' : 'removed'} ${r.removed} spent render profile(s), ${mb(r.bytes)}`);
+      }
+    }
     return result;
   }
 
-  return { run, sweepUpdate, pruneReleases };
+  return { run, sweepUpdate, pruneReleases, sweepScratchProfiles };
 }
 
 const mb = (bytes) => `${(bytes / (1024 * 1024)).toFixed(1)} MB`;

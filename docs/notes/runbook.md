@@ -282,6 +282,19 @@ It removes only what it can prove is dead:
 |---|---|---|
 | an applied update's staging: the zip, the extracted tree, the helper copies | `data\update\last.json` says `ok`, and it is more than a minute old | the update has copied the files out and Synapse is running; the helper starts Synapse *before* it writes that record, which is why the minute matters. A failed update is left alone — its staging is the diagnosis. The newest `data\backups` folder is kept; older ones go. |
 | old release zips in `dist` | more than one exists | one release is enough; the code is in git and the asset is on GitHub. `SHA256SUMS` is rewritten for the one that stayed. `make-release.ps1` does the same when it builds. |
+| spent render profiles in `..\Synapse.Projects\_scratch` | a `visual-review-*` folder is more than a day old | each is Chrome's throwaway profile for one render (~12 MB), not work. The renderer deletes its own, but Windows often keeps a file locked, so they pile up. A **project's** own scratch folder (`<project>-<hash>`) is never touched, however old: the brief tells a model it may write there, and a project can be resumed days later. |
+
+The engine's own store is not in this pass, because it must be deleted while the
+engine is down:
+
+- **`data\engine\opencode\data\opencode\snapshot\global`** (347 MB by 30 Oct) is
+  the engine's undo history — its copy of every file a model has edited. Synapse
+  never uses the engine's revert, so `reclaimSnapshotStore()` empties `global`'s
+  children **just before every engine start**, in the OpenCode adapter
+  (`src/engines/opencode.js`). The `global` folder itself stays so the engine finds
+  the shape it expects; chats, the database and the project files are untouched.
+  The cost is the engine's undo across restarts, which nothing here depends on. It
+  is best-effort: a failed reclaim never blocks a start.
 
 The first run of this freed 3.03 GB by hand (30 Oct): 16 release zips, the
 staging of two updates, a pre-migration `webview2` profile, five build/test
