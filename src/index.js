@@ -2,13 +2,13 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn, execFile } from 'node:child_process';
-import { DATA_DIR, LOGS_DIR, WORKSPACE_DIR, GENERAL_DIR, ENGINE_HOME, PID_FILE, PROJECTS_FILE, TOOL_STATS_FILE, PROBE_DIR, PROBE_FILE, MODEL_CACHE_FILE, NPM_ATTEMPT_FILE, PERMISSION_MEMORY_FILE, REMOTE_TOKEN_FILE, ROOT, SCRATCH_ROOT, scratchDir } from './paths.js';
+import { DATA_DIR, LOGS_DIR, WORKSPACE_DIR, GENERAL_DIR, ENGINE_HOME, PID_FILE, PROJECTS_FILE, TOOL_STATS_FILE, PROBE_DIR, PROBE_FILE, MODEL_CACHE_FILE, NPM_ATTEMPT_FILE, PERMISSION_MEMORY_FILE, REMOTE_TOKEN_FILE, ROOT, SCRATCH_ROOT } from './paths.js';
 import { loadConfig, saveConfig, repairMachinePaths } from './config.js';
 import { logger } from './logger.js';
 import { createEngine } from './engines/index.js';
-import { createProjectStore } from './projects.js';
+import { createProjectStore, ensureProjectFolders } from './projects.js';
 import { createToolStats } from './toolstats.js';
-import { ensurePlan, readPlan, logPlanState } from './plans.js';
+import { readPlan, logPlanState } from './plans.js';
 import { createRunner } from './runs.js';
 import { createEngineUpdate } from './engine-update.js';
 import { createHarnessGuard } from './harness.js';
@@ -140,23 +140,27 @@ async function main() {
     file: PROJECTS_FILE,
     rootDir: WORKSPACE_DIR,
     legacyGeneralDir: GENERAL_DIR,
+    harnessDir: ROOT,
+    scratchRoot: SCRATCH_ROOT,
     logger,
   });
+  // The projects folder is the registry's source too: a folder the operator put
+  // there is a project already, so it is adopted before the missing ones are
+  // dropped. This is what makes "copy a project in, restart" enough.
+  const discovered = projects.discover();
   // A registry copied from another machine still names that machine's folders. Silent
   // by the operator's rule: a project whose directory is gone is not a project here.
   projects.pruneMissing();
-  app.info(`projects: ${projects.list().length}`);
+  app.info(`projects: ${projects.list().length}${discovered.length ? ` (${discovered.length} found in the folder)` : ''}`);
   app.info(`scratch: ${SCRATCH_ROOT}`);
   // Every project owns a plan file. Create the ones that are missing rather than
   // waiting for the first session: an empty, valid file is a better starting
   // point than a missing one, and it makes the file discoverable.
   for (const project of projects.list()) {
     if (!project.exists) continue;
-    const made = ensurePlan(project.directory);
-    if (made.created) app.info(`plan file created: ${made.path}`);
-    // Every project gets its scratch folder, so the brief can name a folder that
-    // already exists instead of telling a model to create its own.
-    try { fs.mkdirSync(scratchDir(project.directory), { recursive: true }); } catch { /* the model can make it */ }
+    const folders = ensureProjectFolders(project.directory);
+    if (folders.plan.created) app.info(`plan file created: ${folders.plan.path}`);
+    if (folders.error) app.warn(`could not give ${project.name} its folders (${folders.error})`);
   }
 
   // ── what the local runtimes have loaded ──────────────────────

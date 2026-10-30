@@ -271,6 +271,32 @@ why it can disagree with what the operator meant when they clicked twice.
 
 ---
 
+### The projects folder is the registry's source — built 30 Oct
+
+A folder copied into `..\Synapse.Projects` used to be invisible until the operator
+used Add Project, even though a project **is** its directory. At boot
+`projects.discover()` now scans the immediate children and registers the ones the
+registry does not name:
+
+- A leading underscore is the harness's namespace: `_scratch`, `_probe` and any
+  future harness folder are never adopted. Dot folders, `$` folders and drive
+  metadata are skipped, and a junction back to the harness (or to a folder
+  containing it) is refused and logged.
+- A discovered project gets the same two things Add Project gives one:
+  `.synapse\plan.json` when it is missing, and its scratch folder under
+  `_scratch`. An existing plan, name and created stamp are never touched.
+- Discovery runs before `pruneMissing()`, so a folder that came back keeps its
+  registry name instead of being pruned and re-added as the folder name.
+- The boot line reports the count: `projects: 4 (2 found in the folder)`.
+- Add Project and the boot pass now share `ensureProjectFolders()`, so there is
+  one definition of what a project owns.
+
+Tests: `tests/project-discovery.test.mjs` (adoption, scaffolding, reserved
+folders, an existing plan and name, idempotence, a direct `ensureProjectFolders`
+check). Suite 257/257.
+
+---
+
 ### The QC pass after phase 5 — 27 Oct, live
 
 Three tests, run one after another against the running app, fixing what each found

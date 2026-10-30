@@ -63,11 +63,12 @@ export const WORKSPACE_DIR = PROJECTS_ROOT;
 export const SCRATCH_ROOT = path.join(PROJECTS_ROOT, '_scratch');
 
 /** One project's scratch folder: its name plus a hash of its path, so two
- *  projects that share a folder name cannot share scratch space. */
-export function scratchDir(dir) {
+ *  projects that share a folder name cannot share scratch space. The root can be
+ *  passed for a store built somewhere else (tests), and defaults to the real one. */
+export function scratchDir(dir, root = SCRATCH_ROOT) {
   const base = path.basename(String(dir || '')) || 'project';
   const hash = createHash('sha1').update(path.resolve(String(dir || '')).toLowerCase()).digest('hex').slice(0, 8);
-  return path.join(SCRATCH_ROOT, `${base}-${hash}`);
+  return path.join(root, `${base}-${hash}`);
 }
 
 // Isolated engine home (config/data/state/tmp) so the engine never touches

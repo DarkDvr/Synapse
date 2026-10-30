@@ -9,7 +9,7 @@ genuine **OpenCode** engine over its HTTP + SSE API and rebuilds the interface
 from scratch — today that engine, tomorrow anything that implements the contract
 in `src\engines\base.js`.
 
-**Version 1.1.7** — Windows 10/11, x64. The zip carries Node, the engine and the fonts.
+**Version 1.2.0** — Windows 10/11, x64. The zip carries Node, the engine and the fonts.
 
 **Licence:** AGPL-3.0-only, Copyright (C) 2026 DarkDvr — see `LICENSE`, `NOTICE`, `THIRD-PARTY.md`.
 
@@ -75,19 +75,20 @@ rather than inside it, because a model with file tools must never be one absolut
 path from editing Synapse itself. There is no built-in project: an empty registry
 is an empty rail, and adding one creates its folder.
 
+At every start, any folder in the projects folder that the registry does not name is
+adopted; its plan and scratch folder are created if missing. Folders starting with
+`_` are the harness's own, and an empty folder is still a project.
+
 ```
 <project>\
   bin\                      ← deliverables; everything else is scratch
   .synapse\plan.json        ← the plan, owned by the Architect
-  .synapse\requirement.md   ← your own words, append-only
   .synapse\features.json    ← what you confirmed, and what you rejected
   .synapse\ideas\ design\ reports\    ← one folder per role
   .synapse\runs.jsonl       ← append-only record of every delegation
 ```
 
-Removing a project only forgets it — nothing on disk is deleted — and releases the
-folder so you can delete it straight after. Re-adding a folder that already holds
-a plan asks first, showing what is at stake.
+Deleting a project sends its folder to the Recycle Bin; re-adding a folder that already holds a plan asks first.
 
 ## The Project Plan and the pipeline
 

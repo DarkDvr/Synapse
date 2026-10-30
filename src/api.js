@@ -3,7 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
-import { ensurePlan, readPlan, readRuns, runLedger, briefSession, logPlanState, BRIEF_KEY } from './plans.js';
+import { readPlan, readRuns, runLedger, briefSession, logPlanState, BRIEF_KEY } from './plans.js';
 import { ensureProjectDoc, appendRequest as appendProjectRequest, appendChat, appendDecision as appendProjectDecision, appendEntry, setHandover } from './project-doc.js';
 import { createFormAuto } from './form-auto.js';
 import { fullAutoTimeoutMs } from './auto-answer.js';
@@ -11,7 +11,7 @@ import { keepAttachments } from './keep-attachments.js';
 import { skillRules, describeSkills } from './skills.js';
 import { rulesFor, decide, resolvePath, refusalNote, SINGLE_RULES } from './permissions.js';
 import { stopTargets } from './stop.js';
-import { PROJECTS_ROOT, SKILLS_DIR, ROOT, SCRATCH_ROOT, scratchDir } from './paths.js';
+import { PROJECTS_ROOT, SKILLS_DIR, ROOT, SCRATCH_ROOT } from './paths.js';
 import { mayRecycleFolder } from './projects.js';
 import { fetchProviderModels } from './providers.js';
 import { providerId } from './providers.js';
@@ -861,13 +861,9 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
         } catch { /* a directory we cannot read is the project's problem, not this call's */ }
       }
       const project = projects.create({ name: body?.name, directory: body?.directory });
-      // A project starts with an empty, valid plan file, so the first session in
-      // it has something concrete to fill in rather than a blank page. This never
-      // touches an existing plan.
-      ensurePlan(project.directory);
-      // The scratch folder the brief names: give it now, so a model does not have
-      // to create its own on the first turn.
-      try { fs.mkdirSync(scratchDir(project.directory), { recursive: true }); } catch { /* the model can make it */ }
+      // The store gives it `.synapse\plan.json` and its scratch folder, whether
+      // the folder was new or already there. Re-adding a project continues its
+      // plan; this never touches an existing one.
       return {
         project: (await projectsWithSessions()).find((p) => p.id === project.id) || project,
         existingPlan,

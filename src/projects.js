@@ -8,6 +8,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { ensurePlan } from './plans.js';
+import { SCRATCH_ROOT, scratchDir } from './paths.js';
 
 const idFor = (dir) => crypto.createHash('sha1').update(dir.toLowerCase()).digest('hex').slice(0, 12);
 
@@ -22,6 +24,56 @@ const key = (dir) => normalizeDir(dir).toLowerCase();
 /** One spelling for comparing two paths on this machine: folded case, one
  *  separator, no trailing slash. */
 const fold = (dir) => normalizeDir(dir).replace(/\//g, '\\').toLowerCase();
+
+// A leading underscore is the harness's namespace. `_scratch` and `_probe` are
+// the two it uses today; treating the whole prefix as reserved means a folder it
+// adds later cannot turn into a project in the rail.
+const RESERVED_PROJECT_PREFIX = '_';
+
+/** Dot folders, drive metadata and the harness's underscore namespace are not projects. */
+const isReservedFolderName = (name) => {
+  const lower = name.toLowerCase();
+  return (
+    name.startsWith(RESERVED_PROJECT_PREFIX) ||
+    name.startsWith('.') ||
+    name.startsWith('$') ||
+    lower === 'system volume information'
+  );
+};
+
+/** A real folder, or a junction/symlink that points at one. */
+const isFolderEntry = (entry, root) => {
+  if (entry.isDirectory()) return true;
+  if (!entry.isSymbolicLink()) return false;
+  try {
+    return fs.statSync(path.join(root, entry.name)).isDirectory();
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * The folders every project owns, created when they are missing.
+ *
+ * A project is usable the moment it is registered, so discovery and Add Project
+ * both call this: `.synapse\plan.json` is the file the Architect starts from, and
+ * the scratch folder is outside the project but named in every brief. An
+ * existing plan is never touched; a failure is reported, not thrown, so a
+ * read-only folder still becomes a project the operator can see and fix.
+ */
+export function ensureProjectFolders(dir, { scratchRoot = SCRATCH_ROOT } = {}) {
+  const target = normalizeDir(dir);
+  const plan = ensurePlan(target);
+  let scratch = '';
+  let error = plan.error || '';
+  try {
+    scratch = scratchDir(target, scratchRoot);
+    fs.mkdirSync(scratch, { recursive: true });
+  } catch (err) {
+    error ||= `could not create ${scratch || 'the scratch folder'}: ${err.message}`;
+  }
+  return { directory: target, plan, scratch, error };
+}
 
 /**
  * May this folder be sent to the Recycle Bin as a deleted project?
@@ -54,7 +106,7 @@ export function mayRecycleFolder(dir, { projectsRoot = '', harness = '' } = {}) 
   return { ok: true, reason: '' };
 }
 
-export function createProjectStore({ file, rootDir, legacyGeneralDir = null, logger }) {
+export function createProjectStore({ file, rootDir, legacyGeneralDir = null, harnessDir = null, scratchRoot = SCRATCH_ROOT, logger }) {
   const log = logger.channel('app');
 
   // The projects root is ours and lives inside the harness's sibling folder; a
@@ -114,6 +166,63 @@ export function createProjectStore({ file, rootDir, legacyGeneralDir = null, log
     adoptLegacyGeneral();
   } catch (err) {
     log.warn(`could not adopt the old General folder (${err.message})`);
+  }
+
+  /**
+   * Adopt the folders already sitting in the projects root.
+   *
+   * A project is a directory, so a folder that is already there is a project
+   * already — it only lacks a registry entry. Waiting for the operator to add it
+   * by hand would leave the folder and the rail disagreeing about what exists.
+   * Folders in the harness's `_` namespace are the exceptions, as are dot folders
+   * and drive metadata; none of those is a project.
+   *
+   * Existing entries keep their name and created stamp. A newly adopted folder
+   * gets the plan and scratch folder a project needs, and nothing on disk is
+   * overwritten.
+   */
+  function discover() {
+    if (!rootDir) return [];
+    let entries;
+    try {
+      entries = fs.readdirSync(rootDir, { withFileTypes: true });
+    } catch (err) {
+      log.warn(`could not read the projects folder (${err.message})`);
+      return [];
+    }
+    const raw = readRaw();
+    const known = new Set(raw.map((p) => key(p.directory)));
+    const adopted = [];
+    for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
+      if (!isFolderEntry(entry, rootDir)) continue;
+      if (isReservedFolderName(entry.name)) continue;
+      const dir = normalizeDir(path.join(rootDir, entry.name));
+      if (known.has(key(dir))) continue;
+      // Follow a junction once to judge what it really is: a link back to the
+      // harness (or to a folder that contains it) is not a project.
+      let real = dir;
+      try { real = fs.realpathSync.native(dir); } catch { /* keep the path we have */ }
+      const verdict = mayRecycleFolder(real, { projectsRoot: rootDir, harness: harnessDir });
+      if (!verdict.ok) {
+        log.warn(`not adopted as a project: ${verdict.reason}`);
+        continue;
+      }
+      const project = { id: idFor(dir), name: entry.name, directory: dir, created: Date.now() };
+      raw.push(project);
+      known.add(key(dir));
+      adopted.push(project);
+      const folders = ensureProjectFolders(dir, { scratchRoot });
+      if (folders.error) log.warn(`could not give ${entry.name} its folders (${folders.error})`);
+    }
+    if (!adopted.length) return [];
+    try {
+      writeRaw(raw);
+    } catch (err) {
+      log.warn(`could not save the projects found in ${rootDir} (${err.message})`);
+      return [];
+    }
+    for (const p of adopted) log.info(`project found: ${p.name} -> ${p.directory}`);
+    return adopted.map(shape);
   }
 
   /**
@@ -213,6 +322,8 @@ export function createProjectStore({ file, rootDir, legacyGeneralDir = null, log
       directory: dir,
       created: Date.now(),
     };
+    const folders = ensureProjectFolders(dir, { scratchRoot });
+    if (folders.error) log.warn(`could not give ${project.name} its folders (${folders.error})`);
     writeRaw([...readRaw(), project]);
     log.info(`project added: ${project.name} -> ${dir}${created ? ' (directory created)' : ''}`);
     return shape(project);
@@ -246,5 +357,5 @@ export function createProjectStore({ file, rootDir, legacyGeneralDir = null, log
     return true;
   }
 
-  return { list, find, create, update, remove, idFor, normalizeDir, pruneMissing };
+  return { list, find, create, update, remove, idFor, normalizeDir, pruneMissing, discover };
 }
