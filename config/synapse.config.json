@@ -264,7 +264,7 @@
   },
   "roles": {
     "designer": {
-      "ref": "opencode/beam-free",
+      "ref": "strata/qwen3.8-flash-next-iq2_xs",
       "skills": [
         "aesthetic-foundations",
         "app-check",
