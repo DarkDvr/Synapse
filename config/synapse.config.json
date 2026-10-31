@@ -381,5 +381,8 @@
     "synapse": {
       "feed": "https://api.github.com/repos/DarkDvr/Synapse/releases/latest"
     }
+  },
+  "notify": {
+    "doneSound": "ripple"
   }
 }
