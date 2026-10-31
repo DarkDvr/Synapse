@@ -58,3 +58,11 @@ If a behaviour does not match the code in this checkout, the first question is
 "which Synapse is running?" — the title bar answers it. A server started before the
 change is a stale build; restart it before blaming the rule. The console's boot
 line says `Synapse 1.0.2 starting`, and `/api/status` reports the same string.
+
+**An old number in the title bar is not a forgotten bump.** The window reads the
+version once, when it starts, and it is the number of the *exe that is running* —
+so after an update the panel still shows the previous version until the app
+restarts, while the folder on disk already holds the new one (31 Oct: 1.4.4 in the
+folder, v1.4.2 in the bar, two releases behind because the window had been open
+since morning). The suite's `tests/version.test.mjs` is what catches a bump that
+really was forgotten: the three places that carry the number must agree.

@@ -693,7 +693,7 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
     // one PowerShell call, no builds, so the tab opens instantly.
     toolchain: async ({ force = false } = {}) => probeToolchain({ force }),
 
-    saveConfig: async (body) => {
+    saveConfig: async (body, actor = null) => {
       // Which roles had a different model before this save. A run of that role
       // asleep in a provider backoff (a usage cap, a rate limit) is waiting on a
       // clock that the operator has just made irrelevant: the runner wakes it and
@@ -723,8 +723,10 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
       app.info('config saved via UI');
       const shown = toClientConfig(saved);
       // The other view must not keep showing the old file until somebody
-      // refreshes. The switcher above is the same rule for the LAN toggle.
-      notify?.({ kind: 'config', type: 'config.saved', config: shown });
+      // refreshes. The switcher above is the same rule for the LAN toggle. `byId`
+      // is what keeps the save from being announced to the view that saved it as
+      // "Saved on another computer" — a lie it told itself (measured 31 Oct).
+      notify?.({ kind: 'config', type: 'config.saved', config: shown, by: actor?.name || null, byId: actor?.id || null });
       return shown;
     },
 

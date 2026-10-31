@@ -61,12 +61,27 @@ sleeps therefore cannot hold a project. Nothing to expire, nothing to leak.
 8. **The server is the authority.** Every rule above is enforced where the action
    is accepted; the greyed button and the message are the honest face of it. A
    stale tab or `curl` must meet the same refusal.
+9. **Every broadcast says which view caused it.** A stream frame is written once and
+   handed to every view, so it cannot carry a per-client flag like `yours`: the page
+   compares the sender's id with its own instead. Without that, a view read its own
+   action as somebody else's and said so — opening Settings and letting any view join
+   (a second tab, a reload) closed the panel with "The settings are now being edited
+   on ANDREWS", which is the machine you are sitting at (measured 31 Oct, twice: the
+   same shape showed up as "Saved on another computer" after a save, and as a second
+   "Changed on ANDREWS" after the LAN switch). Anything the UI words as *another
+   computer* must be provably another view, or say nothing.
 
 ## Failure modes, and what handles them
 
 - **A view disappears with Settings open.** Its stream closes, the lock is
   released, and the next view may open it. A lock also carries a heartbeat: a
   holder that stops answering for fifteen minutes loses it.
+- **Your own action, reported back as somebody else's.** Anything a view causes —
+  a settings save, the LAN switch, taking the Settings lock — comes back on the
+  stream like every other event, and the page must recognise its own id and stay
+  quiet (rule 9). The events carry `byId` for exactly this; the client-side test is
+  `tests/own-events.test.mjs`, and a broadcast frame that gains a *consequence*
+  without an origin is the bug that grows back.
 - **A stuck turn.** Stop is the escape hatch (rule 3), which is why it is not
   restricted.
 - **Two answers at once.** The first decision is recorded and broadcast; the

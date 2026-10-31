@@ -68,7 +68,14 @@ export function createPresence({ logger, hostname = os.hostname(), reverse = (ip
       .map((v) => ({ id: v.id, name: v.name, local: v.local, since: v.since }))
       .sort((a, b) => a.since - b.since);
 
-  const holder = () => (lock ? { name: lock.name, since: lock.since } : null);
+  /** The lock, with the view that holds it.
+   *
+   *  The id travels on purpose: every view receives the same broadcast frame, so
+   *  "is this mine?" can only be answered by comparing ids — a frame cannot carry a
+   *  per-client `yours`. Without it a page closed its own Settings panel and said the
+   *  settings were "now being edited on ANDREWS": itself, on this PC, with no other
+   *  view holding anything. Measured 31 Oct. */
+  const holder = () => (lock ? { id: lock.id, name: lock.name, since: lock.since } : null);
 
   function status(clientId) {
     return {

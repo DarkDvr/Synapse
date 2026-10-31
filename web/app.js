@@ -6655,12 +6655,16 @@ function connectStream() {
       return;
     }
 
-    // A view joined or left, or the Settings lock moved.
+    // A view joined or left, or the Settings lock moved. Every view gets the same
+    // frame, so the only way to tell "someone else has it" is the holder's id —
+    // `yours` cannot be in a broadcast, and reading it as false meant this page
+    // closed its own panel the moment any view joined, saying the settings were
+    // being edited on this very PC (measured 31 Oct, on a page with the lock).
     if (ev.kind === 'presence') {
       state.views = ev.views || [];
       state.settingsLock = ev.lock || null;
       renderClients();
-      if (ev.lock && !ev.lock.yours && !$('settingsModal').hidden) {
+      if (ev.lock && ev.lock.id && ev.lock.id !== state.clientId && !$('settingsModal').hidden) {
         closeSettings({ force: true });
         toast('Settings Closed', `The settings are now being edited on ${ev.lock.name}.`);
       }
@@ -6670,21 +6674,26 @@ function connectStream() {
     if (ev.kind === 'settings-lock') {
       state.settingsLock = ev.holder || null;
       // The clients line does not depend on who holds Settings; leave it alone.
-      if (ev.holder && !$('settingsModal').hidden && state.clientId && !state.views.some((v) => v.id === state.clientId && v.name === ev.holder.name)) {
+      // Same rule as the presence frame: the holder's id decides, not a name (two
+      // windows on this PC share the host's name, so a name test is a guess).
+      if (ev.holder && ev.holder.id !== state.clientId && !$('settingsModal').hidden) {
         closeSettings({ force: true });
         toast('Settings Closed', `The settings are now being edited on ${ev.holder.name}.`);
       }
       return;
     }
 
-    // The LAN switch moved on another view.
+    // The LAN switch moved. The view that moved it already said so in its own words
+    // (the switch's own toast), so it is told again only if somebody else did it —
+    // otherwise one click produced two notifications, the second claiming a change
+    // "on another computer" that never happened.
     if (ev.kind === 'remote') {
       state.remote = ev.remote || state.remote;
       renderRemote();
       // A remote page whose access was just switched off is about to be cut off.
       // Say so before the socket dies, not after a failed reconnect.
       if (state.you?.local === false && ev.remote?.enabled === false) showDisconnected(0);
-      else toast(
+      else if (ev.byId !== state.clientId) toast(
         ev.remote?.enabled ? 'Remote Access On' : 'Remote Access Off',
         ev.by ? `Changed on ${ev.by}.` : 'Changed on another computer.',
       );
@@ -6692,10 +6701,14 @@ function connectStream() {
     }
 
     // Settings were saved on another view. The open form is a draft and is not
-    // rebuilt under the operator's hands; they are told, and a reopen loads it.
+    // rebuilt under the operator's hands; they are told, and a reopen loads it. A
+    // view that saved them itself is not told anything: it has the saved copy in
+    // hand, and "Saved on another computer" for your own click is a lie the page
+    // told itself (measured 31 Oct, from the role pickers).
     if (ev.kind === 'config') {
       state.config = ev.config || state.config;
-      if (!$('settingsModal').hidden) {
+      const mine = Boolean(ev.byId) && ev.byId === state.clientId;
+      if (!$('settingsModal').hidden && !mine) {
         toast('Settings Changed', 'Saved on another computer. Close and reopen Settings to load it.');
       } else if (state.status) {
         // A role's model lives in the config, so saving it on one view must

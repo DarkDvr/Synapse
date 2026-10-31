@@ -111,9 +111,9 @@ the cards and the commits, not the code. One reason per sentence, not a chain.
 
 ### Versioning
 
-`package.json` holds `major.minor.patch`: a fix is a patch (`1.0.1`), a feature is
-minor (`1.1`), a break is major (`2.0`). Every pushed update bumps it and tags
-`vX.Y.Z`; the checklist is in `docs/notes/releases.md`.
+`package.json` holds `major.minor.patch` (fix = patch, feature = minor, break = major).
+Every pushed update bumps it and tags `vX.Y.Z` — checklist: `docs/notes/releases.md`;
+`tests/version.test.mjs` fails if the exe's `<Version>` or the README disagrees.
 
 ### Destructive commands — verify before you act
 

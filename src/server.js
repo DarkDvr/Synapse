@@ -219,8 +219,10 @@ export function createServer({ api, engine, logger, config, remote, onRemote }) 
         const body = await readBody(req);
         const status = await onRemote(body?.enabled === true);
         // Before the listener moves and before this response: every other view
-        // must learn the switch changed, including the one that clicked it.
-        broadcast({ kind: 'remote', remote: status, by: actorOf(req).name, ts: Date.now() });
+        // must learn the switch changed. `byId` is there so the view that clicked
+        // does not announce its own click back to itself as someone else's.
+        const actor = actorOf(req);
+        broadcast({ kind: 'remote', remote: status, by: actor.name, byId: actor.id, ts: Date.now() });
         // Answer first: the listener has to close the sockets before it can move
         // to the other interface, and this response must be on the wire by then.
         sendJson(res, 200, status);
@@ -242,7 +244,7 @@ export function createServer({ api, engine, logger, config, remote, onRemote }) 
     // GET|PUT /api/config
     if (seg[0] === 'config') {
       if (method === 'GET') return sendJson(res, 200, await api.getConfig());
-      if (method === 'PUT') return sendJson(res, 200, await api.saveConfig(await readBody(req)));
+      if (method === 'PUT') return sendJson(res, 200, await api.saveConfig(await readBody(req), actorOf(req)));
     }
 
     // The engine: is there a newer one, and do it.
