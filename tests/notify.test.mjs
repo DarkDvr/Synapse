@@ -1,10 +1,12 @@
-// The finished-work chime: four files, one name each, and the settings that pick one.
+// The finished-work chime: four files, one name each, and the rule that decides when
+// a silence in the chat is a *finish* and when it is just the gap between two pieces of
+// work.
 //
-// The page cannot list what the server accepts (the config only carries the chosen
-// name), so the two lists live where they are used: `DONE_SOUNDS` in src/config.js and
-// `DONE_SOUNDS` in web/app.js. This test is what keeps them the same list — a name in
-// one and not the other is either a setting that cannot be saved or a file that is
-// never played.
+// The gap was the bug (31 Oct): a coder's run ended at 14:11:35, the Architect read its
+// report, marked the task done and started the next one at 14:12:09 — and the chime
+// fired in between, telling the operator the job was done when the plan still had two
+// tasks to do. The rule lives in `web/notify.js` so it can be tested like this, without
+// a browser.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -12,9 +14,11 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { DEFAULTS, DONE_SOUNDS, normalize } from '../src/config.js';
+import { DONE_SOUNDS as PAGE_SOUNDS, doneSoundName, workWillContinue } from '../web/notify.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
+const tasks = (...statuses) => statuses.map((status, i) => ({ id: `t${i + 1}`, status }));
 
 test('the config takes the four sounds and off, and refuses a name it does not have', () => {
   for (const name of DONE_SOUNDS) {
@@ -27,13 +31,37 @@ test('the config takes the four sounds and off, and refuses a name it does not h
 });
 
 test('the page offers exactly the sounds the server accepts', () => {
+  assert.deepEqual(PAGE_SOUNDS.map((s) => s.v), DONE_SOUNDS, 'the two lists are one list');
+  assert.equal(PAGE_SOUNDS[0].v, 'off', 'Off is first, so the default answer is silence');
+  assert.equal(doneSoundName('nonsense'), DEFAULTS.notify.doneSound, 'an unknown name falls back');
+  assert.equal(doneSoundName('off'), 'off');
   const js = read('web/app.js');
-  const block = /const DONE_SOUNDS = \[([\s\S]*?)\];/.exec(js);
-  assert.ok(block, 'web/app.js declares DONE_SOUNDS');
-  const page = [...block[1].matchAll(/v:\s*'([^']+)'/g)].map((m) => m[1]);
-  assert.deepEqual(page, DONE_SOUNDS, 'the two lists are one list');
+  assert.match(js, /from '\.\/notify\.js'/, 'the page imports the rule instead of repeating it');
   assert.match(js, /\{ id: 'notices', label: 'Notices'/, 'the pane is in Settings');
   assert.match(js, /notices: settingsNotices/);
+});
+
+test('a gap between two pieces of work is not a finish', () => {
+  // The bug: a coder's run ends, the Architect is between turns, the plan is unfinished.
+  assert.equal(workWillContinue({ mode: 'multi', auto: true, tasks: tasks('done', 'todo', 'todo') }), true);
+  assert.equal(workWillContinue({ mode: 'multi', auto: true, tasks: tasks('done', 'doing') }), true);
+
+  // The job really is over, or it stopped for the operator: the chime is due.
+  assert.equal(workWillContinue({ mode: 'multi', auto: true, tasks: tasks('done', 'done', 'done') }), false);
+  assert.equal(workWillContinue({ mode: 'multi', auto: true, tasks: tasks('done', 'blocked') }), false);
+  assert.equal(workWillContinue({ mode: 'multi', auto: true, tasks: [] }), false);
+
+  // Keep running off: the Architect stops after each task and waits, so every end is
+  // the operator's move and it is worth a sound.
+  assert.equal(workWillContinue({ mode: 'multi', auto: false, tasks: tasks('todo') }), false);
+
+  // Single mode has no delegation and no plan to continue: the turn ending is the end.
+  assert.equal(workWillContinue({ mode: 'single', auto: true, tasks: tasks('todo') }), false);
+
+  // Defensive: no plan loaded, or a malformed entry, must not throw or suppress.
+  assert.equal(workWillContinue({ mode: 'multi', auto: true, tasks: null }), false);
+  assert.equal(workWillContinue({ mode: 'multi', auto: true, tasks: [null, { status: 'done' }] }), false);
+  assert.equal(workWillContinue(), false);
 });
 
 test('every sound is a real, short, quiet WAV', () => {

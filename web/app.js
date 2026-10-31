@@ -11,6 +11,7 @@
 import { renderMarkdown } from './md.js';
 import { newStream, pushStream, slideTarget, nextOffset, takePending, freezeStream, STREAM_BUFFER } from './stream-view.js';
 import { addSample, rateOf } from './rate.js';
+import { DONE_SOUNDS, doneSoundName, workWillContinue } from './notify.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -384,20 +385,8 @@ function toast(title, body, ms = 4200) {
 // ── the finished-work chime ─────────────────────────────────────
 // The Architect has said its piece and nothing else is running: one quiet sound, so
 // the operator can look away while a long turn runs. The files are in web/sounds and
-// are ours (scripts/make-sounds.mjs); this list and the one `src/config.js` accepts
-// are the same list, which tests/notify.test.mjs pins.
-const DONE_SOUNDS = [
-  { v: 'off', l: 'Off' },
-  { v: 'chime', l: 'Chime — two soft notes' },
-  { v: 'bell', l: 'Bell — one struck note' },
-  { v: 'wood', l: 'Wood — a quiet knock' },
-  { v: 'ripple', l: 'Ripple — three light plips' },
-];
-const doneSoundName = (value) => (DONE_SOUNDS.some((s) => s.v === value) ? value : 'chime');
-// What the config would choose if the key is missing entirely (a config written by an
-// older build). Mirrors DEFAULTS.notify.doneSound in src/config.js.
-const DONE_SOUND_DEFAULT = 'chime';
-
+// are ours (scripts/make-sounds.mjs); the names, and the rule for when a *gap* is not a
+// finish, live in ./notify.js so they can be tested without a browser.
 const doneAudio = new Map();
 /** Play the chosen sound once. Any failure is silence: a missing audio device or a
  *  browser that wants a gesture first must never surface as an error in the chat. */
@@ -431,6 +420,12 @@ let workEndQuiet = false;
  * `sessionWorking` — the same predicate as the rail's breathing dot — so the sound is
  * exactly the moment the work the operator was waiting on stops, and not one of the
  * idle gaps inside a Multi run (a run in flight keeps it live).
+ *
+ * A gap between two pieces of work is not a finish: with Keep running on, the Architect
+ * reads a worker's report and starts the next task, and that turn takes seconds. In
+ * that gap nothing is working, but the job is not over — `workWillContinue` says so, and
+ * the page stays armed, so the chime comes when the *last* task is really done (or as
+ * soon as the plan catches up and says it is).
  */
 function noteWorking() {
   const live = state.view === 'session' && Boolean(state.sessionId) && sessionWorking(state.sessionId);
@@ -444,6 +439,7 @@ function noteWorking() {
     return;
   }
   if (!workWasLive) return;
+  if (workWillContinue({ mode: state.mode, auto: state.auto === true, tasks: state.planState?.plan?.tasks || [] })) return;
   workWasLive = false;
   if (workEndQuiet) {
     workEndQuiet = false;
@@ -5660,6 +5656,9 @@ async function loadPlan() {
   // and whether the whole thing is finished. Without this a status change would
   // only reach the dots on the next run or session event.
   renderRoleActivity();
+  // The plan is half the answer to "is this chat done?": while it still had a task to
+  // do, the chime was held back. The moment it catches up, the sound is due.
+  noteWorking();
 }
 
 function renderPlan() {

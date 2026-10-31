@@ -1670,6 +1670,19 @@ has read the last report and said its piece. A turn that failed or was interrupt
 "done", so it is silent (`workEndQuiet`), and opening a chat mid-run arms the flag from
 where it is rather than firing for the work already done.
 
+**A gap between two pieces of work is not a finish.** That was the second bug, and it only
+shows in Multi. Measured from `logs/app.log`: a coder's run **completed at 14:11:35**; the
+Architect then read the report, marked the task done (plan change at 14:11:54) and started
+the next task at **14:12:09**. For that gap nothing was working — so the chime fired, telling
+the operator the job was over with two tasks still to do. The fix is `workWillContinue()` in
+`web/notify.js`: *only in Multi, only with Keep running on, and only when the plan still has
+a row to do* is a silence a pause rather than an end. A blocked or failed row is not "to do" —
+that is the run stopping for the operator, which is exactly when the sound earns its keep.
+The page stays armed through a pause, so the cue still comes when the *last* task ends; the
+plan is re-read on every change and asks again, which is what releases it when the plan
+update lags the turn. The trade is deliberate: a plan the Architect forgets to finish means
+a quiet finish, and a sound during the run was worse.
+
 **Autoplay is not guaranteed, so failure is silent.** `new Audio(url).play()` can be refused
 before the page has had a gesture. The promise's rejection is swallowed, because a refused
 sound must never surface as an error in a chat — the operator will have clicked Send long
