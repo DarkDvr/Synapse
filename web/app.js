@@ -435,8 +435,12 @@ let workEndQuiet = false;
 function noteWorking() {
   const live = state.view === 'session' && Boolean(state.sessionId) && sessionWorking(state.sessionId);
   if (live) {
+    // A *new* piece of work is what clears the last verdict. Clearing it on every
+    // evaluation would undo it here: after a failed turn the project lock is still
+    // held for a moment, so the page reads "still working" once more and would then
+    // chime when the lock goes — for a turn that failed.
+    if (!workWasLive) workEndQuiet = false;
     workWasLive = true;
-    workEndQuiet = false;
     return;
   }
   if (!workWasLive) return;
