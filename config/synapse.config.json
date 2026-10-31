@@ -3,7 +3,7 @@
     "host": "127.0.0.1",
     "port": 8700,
     "openBrowser": false,
-    "remote": false
+    "remote": true
   },
   "engine": {
     "type": "opencode",
@@ -351,6 +351,9 @@
   "fullAuto": {
     "timeoutSec": 0
   },
+  "notify": {
+    "doneSound": "ripple"
+  },
   "cleanup": {
     "onFinish": true,
     "onBoot": true
@@ -381,8 +384,5 @@
     "synapse": {
       "feed": "https://api.github.com/repos/DarkDvr/Synapse/releases/latest"
     }
-  },
-  "notify": {
-    "doneSound": "ripple"
   }
 }
