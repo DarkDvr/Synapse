@@ -349,7 +349,7 @@
     "resetOnBoot": false
   },
   "fullAuto": {
-    "timeoutSec": 3
+    "timeoutSec": 0
   },
   "cleanup": {
     "onFinish": true,
