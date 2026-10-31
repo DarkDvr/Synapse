@@ -969,6 +969,27 @@ It covers fenced code, headings, GFM tables (alignment included — a pipe insid
 (including `- [ ]` task lists), images, rules and paragraphs, plus inline code,
 bold, italic, strikethrough and links: the range these models actually produce.
 
+## Speech and work, separated
+
+A single-mode turn arrives as one assistant message whose parts alternate:
+`reasoning`, `text`, `tool`, `reasoning`, `text`… all drawn inside the same green rule.
+Only the *last* text of a turn was treated as the answer (`.is-answer`): 20px above it,
+with the speaker's rule broken for exactly those 20px, so the reply read as a block of
+its own.
+
+The operator's report (31 Oct, two pictures): a reply to a completed stretch of work had
+**no break above it** when a tool call followed it in the same turn, and **no break
+below it** before that tool call. Both boundaries were flat — prose 5px under the
+reasoning row above, the `question` card 2px under the last line.
+
+So the break is positional rather than semantic now: wherever prose meets a card,
+either way round, the rule is broken for one line and 20px of gap sits between them
+(`.msg-body > :is(.reasoning, .tool-card) + .msg-answer` and
+`.msg-answer + :is(.reasoning, .tool-card)`). A turn reads as two kinds of thing: what
+the Architect said, and what it did. CSS only, no class — the adjacency is the whole
+fact, and the same rule covers the last text of a turn, so nothing has to decide
+whether a given paragraph is "the answer".
+
 ## Sidebar, clocks and tables (the round after the first real run)
 
 - **The sidebar's status says how long ago, not that it is connected.** There is no

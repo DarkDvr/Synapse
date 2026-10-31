@@ -1602,6 +1602,23 @@ body[data-mode="single"] #runAuto { display: none; }
   content: ""; position: absolute; left: -12px; top: -20px;
   width: 2px; height: 20px; background: var(--surface);
 }
+/* Speech against work — in both directions, and not only at the end of a turn.
+   A turn is one long alternation (reasoning, speech, tool, reasoning, speech…)
+   drawn inside one rule, so the prose ran into the cards above and below it and
+   read as one more line of the run. The rule now breaks for one line wherever
+   prose meets a card, either way round: above the prose when work precedes it,
+   above the card when the prose does. That is the same measure the final answer
+   already had (`.is-answer`), so a run reads as two kinds of thing — what the
+   Architect said, and what it did — instead of one flat list. */
+.msg.assistant .msg-body > :is(.reasoning, .tool-card) + .msg-answer,
+.msg.assistant .msg-body > .msg-answer + :is(.reasoning, .tool-card) {
+  position: relative; margin-top: 20px;
+}
+.msg.assistant .msg-body > :is(.reasoning, .tool-card) + .msg-answer::before,
+.msg.assistant .msg-body > .msg-answer + :is(.reasoning, .tool-card)::before {
+  content: ""; position: absolute; left: -12px; top: -20px;
+  width: 2px; height: 20px; background: var(--surface);
+}
 .msg-answer > :first-child { margin-top: 0; }
 .msg-answer > :last-child { margin-bottom: 0; }
 /* A GFM table has to wrap. The baseline sets `white-space: nowrap` on every

@@ -120,6 +120,38 @@ test('the final answer has its own rule, and work does not', () => {
   assert.match(js, /toolAfter/);
 });
 
+// 31 Oct: the break is on both sides of the prose, not just above a turn's last text.
+// A single-mode turn is one rule with cards and speech alternating inside it, so the
+// prose ran into the cards above and below it and read as one more line of the run.
+test('prose and cards are separated wherever they meet, either way round', () => {
+  const css = read('web/synapse.css');
+  const region = (sel) => {
+    const at = css.indexOf(sel);
+    assert.notEqual(at, -1, `${sel} is gone from the stylesheet`);
+    return css.slice(at, at + 340);
+  };
+  assert.match(
+    region('.msg.assistant .msg-body > :is(.reasoning, .tool-card) + .msg-answer'),
+    /margin-top: 20px/,
+    'prose after a card gets the gap above it',
+  );
+  assert.match(
+    region('.msg.assistant .msg-body > .msg-answer + :is(.reasoning, .tool-card)'),
+    /margin-top: 20px/,
+    'a card after prose gets the gap above it, which is the gap under that prose',
+  );
+  assert.match(
+    region('.msg.assistant .msg-body > :is(.reasoning, .tool-card) + .msg-answer::before'),
+    /background: var\(--surface\)/,
+    'the rule must be painted out for the height of the gap',
+  );
+  assert.match(
+    region('.msg.assistant .msg-body > .msg-answer + :is(.reasoning, .tool-card)::before'),
+    /background: var\(--surface\)/,
+    'both directions break the rule',
+  );
+});
+
 // 30 Oct UI pass: the operator moved the update check into the Settings rail,
 // stopped the About page selling itself, and made notices easier to notice.
 test('Updates is a Settings page above About, and About is just the facts', () => {
