@@ -1565,6 +1565,21 @@ while a run streamed would snap it shut. It is not in `state.messages`: it is no
 the conversation, no model ever saw it, and it disappears when the next compact replaces the
 chat.
 
+**A compact leaves the post — and nothing else above it.** The fold lines (one per finished
+run) and the amber alarm lines are page state kept per project, not messages, so they
+outlived the conversation they described: 1 Nov showed the "Compacted" post with eleven folds
+and an alarm stacked under it. A compact now calls `forgetConversation(dir, oldSessionId)`
+before the new chat opens — those lines were that chat's evidence, and the run log still has
+them. What is left is the post, then the new conversation.
+
+**The engine's own "loaded a file" messages are collapsed.** After a compact the engine
+announces every instruction file it reads and posts the whole text — `android\AGENTS.md` is
+about 10,800 characters, and it landed in the chat as prose the operator had to scroll past.
+The text is in the model's context either way, so the chat keeps one line ("Instructions from
+android\AGENTS.md", full path on hover) and the text behind it, in the same `<details>` the
+compact post uses. Each one carries its own `data-k`, because the post's open state was keyed
+`compact-post` in two places and a second collapsible post would have opened the wrong one.
+
 Two ways to measure this, both worth keeping. The layout tells you *where* boxes are; the
 pixels tell you whether anything was repainted: screenshot a fixed clip during the
 animation and compare frames byte-wise (they came back **identical** for `c3..c7`), which

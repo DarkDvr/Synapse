@@ -3825,6 +3825,27 @@ function alarmsHere() {
 }
 
 /**
+ * After a compact, the chat is meant to be one post and the new conversation.
+ *
+ * The fold lines (one per finished run) and the amber alarm lines are page state kept
+ * per project, not messages, so they outlived the conversation they described and
+ * reappeared above the fresh chat (1 Nov: eleven folds and an alarm under the
+ * "Compacted" post). They are that chat's evidence — the run log still has them — so
+ * they go with it. The new chat starts with its post and nothing above it.
+ */
+function forgetConversation(dir, oldSessionId) {
+  const key = dir ? dirKey(dir) : '';
+  if (key) {
+    for (const [k, t] of [...state.traces]) if (dirKey(t.dir) === key) state.traces.delete(k);
+  }
+  state.alarms = state.alarms.filter((a) => {
+    if (oldSessionId && a.sessionId === oldSessionId) return false;
+    if (key && a.dir && dirKey(a.dir) === key) return false;
+    return true;
+  });
+}
+
+/**
  * A model touched Synapse itself, said in the chat.
  *
  * Amber, like a compaction, because it is the same kind of news: something the
@@ -4478,6 +4499,28 @@ function renderMessage(m) {
     // so this is done here rather than only at the source.
     const label = m.description ? esc(m.description) : 'report';
     const body = String(m.text || '').replace(/^\s*\[harness\]\s*/i, '');
+    // The engine announces every file it loads as an instruction and posts the whole
+    // text with it — `android\AGENTS.md` ran to a hundred lines and buried the new
+    // chat the moment it was compacted. The content is in the model's context either
+    // way, so the chat keeps one line and the text behind it (1 Nov).
+    if (/^loaded\s/i.test(String(m.description || '')) && /^instructions from:/i.test(body)) {
+      const nl = body.indexOf('\n');
+      const head = nl === -1 ? body : body.slice(0, nl);
+      const rest = nl === -1 ? '' : body.slice(nl + 1).replace(/^\s+/, '');
+      // "Instructions from: F:\dev\...\android\AGENTS.md" is a path, and a path at the
+      // head of a line pushes the chevron off the edge. The file's last two parts name
+      // it, and the full path is one hover away.
+      const full = String(/^instructions from:\s*(.*)$/i.exec(head)?.[1] || '').trim();
+      const short = full.split(/[\\/]/).filter(Boolean).slice(-2).join('\\') || full;
+      const key = `loaded:${m.id}`;
+      return `<div class="msg harness" data-msg="synapse"><div class="msg-body">
+        ${stamp}<span class="msg-role">Synapse · ${label}</span>
+        <details class="chat-post" data-k="${esc(key)}"${state.open.has(key) ? ' open' : ''}>
+          <summary><span class="chat-post-note" title="${esc(full)}">Instructions from ${esc(short)}</span></summary>
+          <div class="chat-post-body">${renderMarkdown(rest)}</div>
+        </details>
+      </div></div>`;
+    }
     return `<div class="msg harness" data-msg="synapse"><div class="msg-body">
       ${stamp}<span class="msg-role">Synapse · ${label}</span>
       <div class="msg-answer">${renderMarkdown(body)}</div>
@@ -6854,6 +6897,9 @@ function connectStream() {
     // window that was looking at the old one follows without a reload; every
     // other window just refreshes the rail (the old session has left it).
     if (ev.kind === 'project' && ev.type === 'project.compacted') {
+      // The discarded chat's folds and alarms go with it, before the new chat is
+      // opened: a compact leaves one post, not a list of the old runs.
+      forgetConversation(ev.directory || currentProject()?.directory || '', ev.oldSessionId);
       if (ev.oldSessionId === state.sessionId) {
         // The old chat is gone because its replacement exists: keep the view open
         // while the list catches up, then follow the new chat.
@@ -8367,8 +8413,11 @@ function wire() {
     (e) => {
       const post = e.target.closest?.('.chat-post');
       if (!post) return;
-      if (post.open) state.open.add('compact-post');
-      else state.open.delete('compact-post');
+      // The compact post is the one with no key of its own; a loaded-instructions
+      // post carries its message id, so opening one does not open the other.
+      const key = post.dataset.k || 'compact-post';
+      if (post.open) state.open.add(key);
+      else state.open.delete(key);
     },
     true,
   );
@@ -8523,7 +8572,7 @@ document.addEventListener('keydown', (e) => {
   $('transcript').addEventListener('toggle', (e) => {
     const d = e.target;
     if (!d || d.tagName !== 'DETAILS') return;
-    const k = d.classList.contains('chat-post') ? 'compact-post' : d.dataset.k;
+    const k = d.dataset.k || (d.classList.contains('chat-post') ? 'compact-post' : '');
     if (!k) return;
     if (d.open) state.open.add(k); else state.open.delete(k);
   }, true);

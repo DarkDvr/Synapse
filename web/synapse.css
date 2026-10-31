@@ -1266,7 +1266,9 @@ body[data-view="session"] .chat-dock.has-ask { overflow: visible; }
 }
 .chat-post[open] > summary::after { transform: rotate(90deg); }
 .chat-post-mark { font-family: var(--mono); font-size: 10px; letter-spacing: 0.04em; color: var(--yellow); }
-.chat-post-note { font-size: 10.5px; color: #82868e; }
+/* One line, whatever is in it: a loaded file's path is long, and a summary that wraps
+   to three lines is not a summary. The full path is in the title. */
+.chat-post-note { font-size: 10.5px; color: #82868e; flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .chat-post-body { margin: 8px 0 0; font-size: 12px; line-height: 1.5; color: #b6bac1; }
 .chat-post-body h2 { font-size: 12px; margin: 10px 0 4px; color: #d7dae0; }
 .chat-post-body ul { margin: 3px 0 8px; padding-left: 18px; }

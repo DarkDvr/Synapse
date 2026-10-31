@@ -108,6 +108,32 @@ test('the rail names LAN clients under the address, not a Views row', () => {
   assert.doesNotMatch(js, /function renderViews\(/);
 });
 
+// 1 Nov: a compact is meant to leave one post, not a list of the runs that came
+// before it. The folds and the amber alarm lines are page state per project, so they
+// outlived the conversation they described and reappeared above the fresh chat.
+test('a compact takes the discarded chat’s folds and alarms with it', () => {
+  const js = read('web/app.js');
+  const at = js.indexOf("ev.type === 'project.compacted'");
+  assert.notEqual(at, -1, 'the compacted event is still handled');
+  const branch = js.slice(at, at + 1200);
+  assert.match(branch, /forgetConversation\(/, 'the handler clears them before opening the new chat');
+  assert.match(js, /function forgetConversation\(dir, oldSessionId\)/);
+  assert.match(js, /state\.traces\.delete\(k\)/, 'the folds go');
+  assert.match(js, /state\.alarms = state\.alarms\.filter/, 'the alarm lines go');
+});
+
+// 1 Nov: the engine announces every instruction file it loads and posts the whole text,
+// so android\AGENTS.md (a hundred lines) landed in the chat the moment it was compacted.
+// It stays in the model's context; the chat shows one line.
+test('a file the engine loads is one collapsed line, not its whole text', () => {
+  const js = read('web/app.js');
+  assert.match(js, /\^loaded\\s\/i\.test/, 'the loaded-instructions message is recognised');
+  assert.match(js, /Instructions from \$\{esc\(short\)\}/, 'the line names the file, not the whole path');
+  assert.match(js, /data-k="\$\{esc\(key\)\}"/, 'each one keeps its own open state');
+  const css = read('web/synapse.css');
+  assert.match(css, /\.chat-post-note \{[^}]*text-overflow: ellipsis/, 'and it stays one line');
+});
+
 // The answer, not the work: the last text of a tool-free assistant message gets
 // the green rule; narration in a step that also calls a tool stays plain.
 test('the final answer has its own rule, and work does not', () => {
