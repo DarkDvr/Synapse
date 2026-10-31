@@ -1644,6 +1644,39 @@ And a block with content behind it (`<details>`) needs its open state keyed in
 `state.open`, or the next render shuts it — the compact post was rebuilt closed
 by every poll because only Reasoning blocks were remembered.
 
+## The finished-work chime
+
+The operator asked for "a small sound effect when the Architect has finished work and says
+he is done", with a few to choose between. Three decisions carried it.
+
+**The sounds are generated, not borrowed.** Windows' own chimes are Microsoft's files, and
+reading `C:\Windows\Media` at runtime would put the app's behaviour in someone else's
+folder — the one thing this harness does not do (AGENTS.md, rule 2). Four short WAVs are
+written by `scripts/make-sounds.mjs` into `web/sounds/`, which means they travel with the
+folder, play on a fresh PC, and carry no licence but ours. All are mono 16-bit, 0.3–1.2s,
+peaking between −14 and −18 dBFS: loud enough to notice, quiet enough to talk over.
+
+The generator had one bug worth its note: the envelope is `(1 − e^(−t/attack)) · e^(−t/tau)`,
+which is **exactly zero at t = 0**, so a loop that stops when the envelope falls below 1e-4
+stopped on the first sample and wrote three completely silent files. The check is
+`t > 0.001 && env < 1e-4`. Measure the file you produced — the peak read `-Infinity dBFS`,
+which is how it was caught.
+
+**When it plays is "the chat went quiet", not "a message arrived".** `noteWorking()` asks
+`sessionWorking()` — the same predicate the rail's breathing dot uses — so the sound is the
+moment the work the operator was waiting on stops. A Multi run keeps it live while a worker
+builds, so the gaps between delegated tasks do not chirp; the chime comes when the Architect
+has read the last report and said its piece. A turn that failed or was interrupted is not
+"done", so it is silent (`workEndQuiet`), and opening a chat mid-run arms the flag from
+where it is rather than firing for the work already done.
+
+**Autoplay is not guaranteed, so failure is silent.** `new Audio(url).play()` can be refused
+before the page has had a gesture. The promise's rejection is swallowed, because a refused
+sound must never surface as an error in a chat — the operator will have clicked Send long
+before any turn ends, so in practice it plays. Chrome also needs the URL served as
+`audio/wav`; an octet-stream is the same silent failure, so the MIME table in
+`src/server.js` has an entry and `tests/notify.test.mjs` asserts it.
+
 ## Screenshots from an occluded window are stale
 
 `Page.captureScreenshot` hands back the last composed frame when the QC Edge

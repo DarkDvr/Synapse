@@ -9,7 +9,7 @@ genuine **OpenCode** engine over its HTTP + SSE API and rebuilds the interface
 from scratch — today that engine, tomorrow anything that implements the contract
 in `src\engines\base.js`.
 
-**Version 1.4.5** — Windows 10/11, x64. The zip carries Node, the engine and the fonts.
+**Version 1.5.0** — Windows 10/11, x64. The zip carries Node, the engine and the fonts.
 
 **Licence:** AGPL-3.0-only, Copyright (C) 2026 DarkDvr — see `LICENSE`, `NOTICE`, `THIRD-PARTY.md`.
 
@@ -55,10 +55,9 @@ holds a handle to.
 
 ## What you see
 
-- **Sidebar** — projects, each with its sessions, plus **Browse** (Explorer) and
-  **Cmd** (a prompt in that folder). **Settings**, an engine-update chip when one
-  is available, and a STATUS block naming the engine version, the event stream and
-  the last event.
+- **Sidebar** — projects, each with its sessions, plus **Browse** (Explorer),
+  **Cmd** (a prompt in that folder), Settings, and a STATUS block: remote access,
+  the runtime, the last event, the local LLM.
 - **Stage** — the role cards, then the chat. The Architect is always on screen;
   **Multi** reveals the six workers.
 - **Rail** — the Project Plan on the left, the live tool census on the right.
@@ -66,7 +65,8 @@ holds a handle to.
 A card is a control as well as a status: its model and thinking effort are chosen
 there, its dot says whether that role has been used in this session, and while a
 delegation runs a yellow arrow with travelling beads joins the two cards taking
-part.
+part. The chat can chime when the Architect finishes — four sounds, or off, in
+**Settings → Notices**.
 
 ## Projects
 

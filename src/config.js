@@ -6,6 +6,10 @@ import { CONFIG_FILE, CONFIG_DIR, SEED_CONFIG_FILE } from './paths.js';
 import { providerType, providerId, declaredProviderType } from './providers.js';
 import { getProviderKey } from './secrets.js';
 
+/** The finished-work sounds that exist in `web\sounds`, plus "off". The list is here
+ *  so the config can refuse an unknown name instead of silently playing nothing. */
+export const DONE_SOUNDS = ['off', 'chime', 'bell', 'wood', 'ripple'];
+
 export const DEFAULTS = {
   server: {
     host: '127.0.0.1',
@@ -84,6 +88,11 @@ export const DEFAULTS = {
     // or question, in seconds. 0 is deliberate: a permission is answered at
     // once and no card is drawn. See docs/notes/engine-notes.md.
     timeoutSec: 20,
+  },
+  // The sound when the Architect has finished and said so. The files live in
+  // web\sounds (see scripts\make-sounds.mjs); 'off' is a choice, not an absence.
+  notify: {
+    doneSound: 'chime',
   },
   cleanup: {
     // What a project left running, stopped when the project finishes and again
@@ -214,6 +223,14 @@ export function normalize(raw) {
     const raw = cfg.fullAuto.timeoutSec;
     const n = raw === undefined || raw === null || raw === '' ? NaN : Number(raw);
     cfg.fullAuto.timeoutSec = Number.isFinite(n) ? Math.min(3600, Math.max(0, Math.floor(n))) : DEFAULTS.fullAuto.timeoutSec;
+  }
+  // The finished-work sound: a named file in web\sounds, or 'off'. An unknown name
+  // would be a page asking the server for a file that is not there, so it becomes
+  // the default instead of a silent typo.
+  cfg.notify = isPlainObject(cfg.notify) ? cfg.notify : {};
+  {
+    const picked = String(cfg.notify.doneSound ?? '').trim();
+    cfg.notify.doneSound = DONE_SOUNDS.includes(picked) ? picked : DEFAULTS.notify.doneSound;
   }
   // Panel colours were an experiment and are gone: every speaker now gets the
   // same block with only a colour difference, so there is nothing to configure.

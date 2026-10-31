@@ -343,6 +343,9 @@
   "fullAuto": {
     "timeoutSec": 20
   },
+  "notify": {
+    "doneSound": "chime"
+  },
   "cleanup": {
     "onFinish": true,
     "onBoot": true

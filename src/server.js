@@ -21,6 +21,9 @@ const MIME = {
   '.jpg': 'image/jpeg',
   '.jpeg': 'image/jpeg',
   '.webp': 'image/webp',
+  // The finished-work chimes. Chrome plays a URL only when the type says it is audio,
+  // and a wrong type is a silent failure that looks like a broken sound.
+  '.wav': 'audio/wav',
   '.ico': 'image/x-icon',
   '.woff2': 'font/woff2',
 };

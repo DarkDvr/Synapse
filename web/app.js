@@ -381,6 +381,73 @@ function toast(title, body, ms = 4200) {
   setTimeout(() => el.remove(), ms);
 }
 
+// ── the finished-work chime ─────────────────────────────────────
+// The Architect has said its piece and nothing else is running: one quiet sound, so
+// the operator can look away while a long turn runs. The files are in web/sounds and
+// are ours (scripts/make-sounds.mjs); this list and the one `src/config.js` accepts
+// are the same list, which tests/notify.test.mjs pins.
+const DONE_SOUNDS = [
+  { v: 'off', l: 'Off' },
+  { v: 'chime', l: 'Chime — two soft notes' },
+  { v: 'bell', l: 'Bell — one struck note' },
+  { v: 'wood', l: 'Wood — a quiet knock' },
+  { v: 'ripple', l: 'Ripple — three light plips' },
+];
+const doneSoundName = (value) => (DONE_SOUNDS.some((s) => s.v === value) ? value : 'chime');
+// What the config would choose if the key is missing entirely (a config written by an
+// older build). Mirrors DEFAULTS.notify.doneSound in src/config.js.
+const DONE_SOUND_DEFAULT = 'chime';
+
+const doneAudio = new Map();
+/** Play the chosen sound once. Any failure is silence: a missing audio device or a
+ *  browser that wants a gesture first must never surface as an error in the chat. */
+function playDoneSound(value = state.config?.notify?.doneSound) {
+  const name = doneSoundName(String(value ?? 'off'));
+  if (String(value ?? 'off') === 'off' || name === 'off') return;
+  try {
+    let el = doneAudio.get(name);
+    if (!el) {
+      el = new Audio(`/sounds/${name}.wav`);
+      el.preload = 'auto';
+      doneAudio.set(name, el);
+    }
+    // Rewind: two turns can end a few seconds apart, and a rewind before play is what
+    // makes the second one audible instead of a no-op.
+    el.currentTime = 0;
+    const played = el.play();
+    if (played?.catch) played.catch(() => {});
+  } catch {
+    /* silence */
+  }
+}
+
+// One chime per finished piece of work, and none for a stop or a failure: the sound
+// means "the Architect is done", so it must not say that when the work was cut short.
+let workWasLive = false;
+let workEndQuiet = false;
+
+/**
+ * Called whenever "is this chat working?" could have changed. The answer comes from
+ * `sessionWorking` — the same predicate as the rail's breathing dot — so the sound is
+ * exactly the moment the work the operator was waiting on stops, and not one of the
+ * idle gaps inside a Multi run (a run in flight keeps it live).
+ */
+function noteWorking() {
+  const live = state.view === 'session' && Boolean(state.sessionId) && sessionWorking(state.sessionId);
+  if (live) {
+    workWasLive = true;
+    workEndQuiet = false;
+    return;
+  }
+  if (!workWasLive) return;
+  workWasLive = false;
+  if (workEndQuiet) {
+    workEndQuiet = false;
+    return;
+  }
+  playDoneSound();
+}
+
 // ── error popup ─────────────────────────────────────────────────
 function openError(title, text, opts = {}) {
   $('errorHeading').textContent = title;
@@ -2968,6 +3035,10 @@ async function openSession(id) {
   state.mode = sessionMode(findSession(id));
   state.auto = findSession(id)?.auto === true;
   state.fullAuto = findSession(id)?.fullAuto === true;
+  // Arriving mid-run is not "it just finished": arm the chime from where the chat
+  // actually is, or switching to a busy chat and back would chirp for old work.
+  workWasLive = sessionWorking(id);
+  workEndQuiet = false;
   renderMode();
   renderKeep();
   $('sidebar').classList.remove('open');
@@ -3371,6 +3442,8 @@ function handleRunEvent(ev) {
   // and the glow are shared so nobody presses again thinking nothing happened.
   if (ev.type === 'run.stopping') {
     state.stopping = true;
+    // A stop is not a finish: no sound for work the operator ended on purpose.
+    workEndQuiet = true;
     renderComposer();
     return;
   }
@@ -5469,6 +5542,10 @@ async function refreshPending() {
     state.busy = true;
     renderComposer();
   }
+  // The project lock is part of "is this chat working?", and a poll is the only
+  // thing that sees it let go: without this, a turn that ends while the lock is
+  // still held would go quiet with no chime, and nothing later would notice.
+  noteWorking();
 
   const previousPermissions = new Set((state.permissions || []).map((p) => p.requestId));
   state.permissions = (p.permissions || []).map((x) => ({
@@ -6879,6 +6956,10 @@ function connectStream() {
     // live path and the cards' state. Nothing here is a session event.
     if (ev.kind === 'run') {
       handleRunEvent(ev);
+      // A run ending can leave the chat idle without a session event (the Architect's
+      // turn was already over), so the answer to "is anything still happening?" is
+      // asked again after every run event, not only after the engine's.
+      noteWorking();
       return;
     }
 
@@ -6949,6 +7030,9 @@ function connectStream() {
         }
         if (ev.type === 'session.execution.started') state.busy = true;
         else if (/^session\.execution\.(succeeded|failed|interrupted)$/.test(ev.type) || ev.type === 'session.idle') state.busy = false;
+        // A turn that failed or was interrupted is not "done": the chime stays quiet
+        // for it, so the sound always means the work finished.
+        if (/^session\.execution\.(failed|interrupted)$/.test(ev.type)) workEndQuiet = true;
         renderComposer();
       }
       if (changed) {
@@ -6959,6 +7043,7 @@ function connectStream() {
       }
       reloadProjects();
       if (mine) reloadMessages();
+      noteWorking();
       return;
     }
 
@@ -7063,6 +7148,8 @@ const ICONS = {
     '<circle cx="8" cy="3.1" r="1.6"/><circle cx="3.5" cy="12.3" r="1.6"/><circle cx="12.5" cy="12.3" r="1.6"/><path d="M8 4.7v3M8 7.7 4.6 11M8 7.7 11.4 11"/>',
   tools:
     '<path d="M2.5 9.5h2.8l1 1.9h3.4l1-1.9h2.8"/><rect x="2.5" y="2.9" width="11" height="10.3" rx="2"/>',
+  bell:
+    '<path d="M8 2.1a3.7 3.7 0 0 0-3.7 3.7c0 3-1.2 4.1-1.2 4.1h9.8s-1.2-1.1-1.2-4.1A3.7 3.7 0 0 0 8 2.1z"/><path d="M6.6 12.4a1.5 1.5 0 0 0 2.8 0"/>',
   lines: '<path d="M2.7 4.1h10.6M2.7 8h10.6M2.7 11.9h6.2"/>',
   eye: '<path d="M1.7 8S4 3.9 8 3.9 14.3 8 14.3 8 12 12.1 8 12.1 1.7 8 1.7 8z"/><circle cx="8" cy="8" r="1.9"/>',
   eyeOff:
@@ -7082,6 +7169,7 @@ const SETTINGS_TABS = [
   { id: 'providers', label: 'Providers', icon: 'plug' },
   { id: 'workers', label: 'Workers', icon: 'nodes' },
   { id: 'tools', label: 'Tools', icon: 'tools' },
+  { id: 'notices', label: 'Notices', icon: 'bell' },
   { id: 'windows', label: 'Windows', icon: 'engine' },
   { id: 'logging', label: 'Logging', icon: 'lines' },
   { id: 'updates', label: 'Check for Updates', icon: 'refresh' },
@@ -7106,11 +7194,15 @@ function setField(c, label, path, opts = {}) {
 
 function setSelect(c, label, path, options, opts = {}) {
   const badge = opts.restart ? ' <em class="set-restart">Restart</em>' : '';
+  // `opts.value` is for a setting the saved config may not hold yet (a key added in a
+  // later version): the form then shows the default it would get, instead of the
+  // first option, which would be saved as a choice nobody made.
+  const current = opts.value !== undefined ? opts.value : readPath(c, path);
   return `
     <label class="set-field${opts.wide ? ' wide' : ''}" title="${esc(opts.hint || '')}">
       <span>${esc(label)}${badge}</span>
       <select data-path="${path}">
-        ${options.map((o) => `<option value="${esc(o.v)}"${o.v === readPath(c, path) ? ' selected' : ''}>${esc(o.l)}</option>`).join('')}
+        ${options.map((o) => `<option value="${esc(o.v)}"${o.v === current ? ' selected' : ''}>${esc(o.l)}</option>`).join('')}
       </select>
     </label>`;
 }
@@ -7313,6 +7405,23 @@ function settingsTools(c) {
  * of the pane is a *copied* Synapse: on a new PC it says what that PC is missing,
  * rather than a build dying three turns into a project.
  */
+function settingsNotices(c) {
+  return [
+    setGroup(
+      'Finished Work',
+      setSelect(c, 'Sound', 'notify.doneSound', DONE_SOUNDS, {
+        value: doneSoundName(String(readPath(c, 'notify.doneSound') ?? DONE_SOUND_DEFAULT)),
+        hint: 'Played when the chat you are looking at goes quiet after the Architect worked — its last words already on screen and nothing else running. Not on Stop, and not when the turn failed.',
+      }) +
+        `<div class="set-field" title="Hear the sound before you save it."><span>Preview</span>` +
+        `<button type="button" class="btn btn-secondary btn-sm" data-test-sound>Play It</button></div>` +
+        `<p class="set-note">Four short ones, all built to be noticed and talked over: a two-note <strong>Chime</strong>, a single <strong>Bell</strong>, a wooden <strong>knock</strong>, and a <strong>Ripple</strong> of three light plips. Off silences it. ` +
+        `They are Synapse's own files in <code>web\\sounds</code>, generated by <code>scripts\\make-sounds.mjs</code>, so they travel with the folder and nothing is downloaded.</p>` +
+        `<p class="set-note">The sound is for this window's open chat. A run in a project you are not looking at does not chime — the rail's dot is what tells you it is alive.</p>`,
+    ),
+  ].join('');
+}
+
 function settingsWindows(c) {
   const t = state.toolchain;
   const row = (label, item, extra) => {
@@ -7650,6 +7759,7 @@ const SETTINGS_PANES = {
   providers: settingsProviders,
   workers: settingsWorkers,
   tools: settingsTools,
+  notices: settingsNotices,
   windows: settingsWindows,
   logging: settingsLogging,
   updates: settingsUpdates,
@@ -7891,6 +8001,12 @@ function onSettingsInput(e) {
 async function onSettingsClick(e) {
   if (e.target.closest('[data-close-about]')) { closeSettings(); return; }
   if (e.target.closest('[data-check-updates]')) { checkUpdates(); return; }
+  if (e.target.closest('[data-test-sound]')) {
+    // The pane renders from a draft; the select itself is the live choice.
+    const sel = $('settingsBody')?.querySelector('select[data-path="notify.doneSound"]');
+    playDoneSound(sel ? sel.value : state.config?.notify?.doneSound);
+    return;
+  }
   const upd = e.target.closest('[data-update]');
   if (upd) {
     if (upd.disabled || state.updateBusy) return;
@@ -8421,6 +8537,12 @@ document.addEventListener('keydown', (e) => {
   // per-element listeners would have to be re-attached each time.
   $('settingsBody').addEventListener('click', onSettingsClick);
   $('settingsBody').addEventListener('input', onSettingsInput);
+  // Hearing it is the whole point of a sound setting: choose one and it plays.
+  $('settingsBody').addEventListener('change', (e) => {
+    if (e.target instanceof HTMLSelectElement && e.target.dataset.path === 'notify.doneSound') {
+      playDoneSound(e.target.value);
+    }
+  });
   // A masked key is far shorter than the real one; selecting it on focus means
   // typing replaces it instead of appending to the mask.
   $('settingsBody').addEventListener('focusin', (e) => {
