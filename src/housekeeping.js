@@ -107,7 +107,11 @@ export function createHousekeeping({ root = ROOT, scratchRoot = SCRATCH_ROOT, lo
         .readdirSync(backupsDir, { withFileTypes: true })
         .filter((e) => e.isDirectory() && /^\d+(?:\.\d+)+-/.test(e.name))
         .map((e) => ({ name: e.name, at: fs.statSync(path.join(backupsDir, e.name)).mtimeMs }))
-        .sort((a, b) => b.at - a.at);
+        // Newest first, and the name breaks a tie: a folder's timestamp can land on
+        // the same millisecond as the one beside it (two backups written in one
+        // breath), and "the newest" must not be whichever the directory happened to
+        // list first — the name carries the version and the clock of the update.
+        .sort((a, b) => b.at - a.at || (a.name < b.name ? 1 : -1));
       for (const old of backups.slice(KEEP_BACKUPS)) drop(path.join(backupsDir, old.name), report);
     } catch {
       /* no backups folder is normal */
@@ -124,7 +128,7 @@ export function createHousekeeping({ root = ROOT, scratchRoot = SCRATCH_ROOT, lo
         .readdirSync(distDir, { withFileTypes: true })
         .filter((e) => e.isFile() && /^Synapse-.*-win-x64.*\.zip$/i.test(e.name))
         .map((e) => ({ name: e.name, at: fs.statSync(path.join(distDir, e.name)).mtimeMs }))
-        .sort((a, b) => b.at - a.at);
+        .sort((a, b) => b.at - a.at || (a.name < b.name ? 1 : -1));
     } catch {
       return { ...report, skipped: 'no dist folder' };
     }

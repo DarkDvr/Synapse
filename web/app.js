@@ -6581,9 +6581,41 @@ async function interruptSession(sessionId) {
   }
 }
 
+/** Can the browser size the composer from its text? Chrome 123 and later do, which
+ *  is every WebView2 this app runs in. */
+const fieldSized = typeof CSS !== 'undefined' && CSS.supports('field-sizing', 'content');
+
+/**
+ * The composer grows with what is typed in it, up to the ceiling the stylesheet
+ * sets. Where the browser can do that itself (`field-sizing: content`) this clears
+ * any inline height and stops — an inline height wins over the browser's own.
+ *
+ * The old way of measuring, `height:auto` → read `scrollHeight` → write it back,
+ * looked harmless and was not. Between the two writes the composer is one line
+ * tall, so the transcript above it is a line taller; the browser clamps the chat's
+ * scroll offset to the shorter distance that taller box can now scroll, and the
+ * clamp is *not* undone when the composer gets its height back. Measured on a
+ * 131-message transcript: offset 3143 (the end) → 3110 while the box was 33px
+ * short → still 3110 after it was restored, and still 3110 half a second later.
+ * So typing past the first wrap left the conversation one line short of the end,
+ * and the next thing that pinned the end (a render, a stream frame) put it back:
+ * the small up-and-down the operator saw while typing, once per wrap and again
+ * whenever something re-settled the chat.
+ *
+ * Engines without `field-sizing` go through that measurement still, with the
+ * chat's offset held across it so the transient cannot clamp it.
+ */
 function autoGrow(el) {
+  if (!el) return;
+  if (fieldSized) {
+    if (el.style.height) el.style.height = '';
+    return;
+  }
+  const chat = $('transcript');
+  const top = chat ? chat.scrollTop : null;
   el.style.height = 'auto';
   el.style.height = Math.min(el.scrollHeight, 150) + 'px';
+  if (chat && top !== null && chat.scrollTop !== top) chat.scrollTop = top;
 }
 
 // ── live event stream ───────────────────────────────────────────

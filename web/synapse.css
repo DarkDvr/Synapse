@@ -2042,6 +2042,13 @@ body[data-mode="single"] #runAuto { display: none; }
   background: #17181b; border: 1px solid #3a3d43; border-radius: 8px;
   color: var(--text); font: inherit; font-size: 12.5px; padding: 10px 11px;
   line-height: 1.3; overflow-y: auto;
+  /* The height is the browser's to compute, in the same layout pass as the text.
+     Measured in JS instead (the usual `height:auto` → `scrollHeight` → write), the
+     box is one line short for the instant the layout is read, the transcript above
+     it is that much taller, and the browser clamps the chat's offset to the
+     shorter distance — then never puts it back. The comment on autoGrow in app.js
+     has the measurement. */
+  field-sizing: content;
 }
 .composer textarea:focus-visible { outline: 2px solid var(--orange); outline-offset: 1px; }
 .composer textarea::placeholder { color: #6d717a; }

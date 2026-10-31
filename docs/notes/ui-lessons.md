@@ -1573,6 +1573,38 @@ spine sits, how wide the band is, how big the cards are. The numbers that matter
 are measured live in the page and asserted against, so the mockup is read for
 intent and the layout is proved by measurement.
 
+### The composer's height must not be measured by shrinking it
+
+The operator's report (31 Oct): **"when I am typing a message in chat, my chat scrolls
+up and down by about half a line of text, seemingly randomly as I type."** Single mode,
+and it was the composer, not the chat.
+
+The auto-growing textarea used the idiom everybody uses: `height: auto`, read
+`scrollHeight`, write it back. For the instant between those two writes the composer is
+**one line tall**, so the transcript above it is one line taller — and the browser, seeing
+that the scroller can now travel less far, **clamps the chat's scroll offset** to the new
+maximum. The clamp is not undone when the height is restored: the offset stays where the
+browser put it. Measured on a 42-message transcript at 1280px: offset **3143** (exactly
+the end) → **3110** while the box was 33px short → still **3110** after the height went
+back, and still 3110 half a second later — the geometry watcher never saw the transient,
+so nothing put it right. The conversation was left one line short of its end. The next
+thing that pinned the end (a render, a stream frame, a mode redraw) wrote the bottom
+back, and the next keystroke clamped it again: up and down, about half a line, at random
+intervals. That is the whole bug, and the trigger is the *measurement*, not the growth.
+
+The fix is to stop measuring: `.composer textarea` carries `field-sizing: content`, so the
+browser sizes the box from its text in the same layout pass. There is no transient box, so
+there is nothing to clamp, and the inline height is cleared wherever an older build left
+one (`autoGrow`). Engines without `field-sizing` still measure the old way, with the
+chat's offset saved and put back across the measurement.
+
+Verified by typing 1521 characters at 30ms a keystroke in a live page, at 1280px and at
+500px: the box grew 38.3 → 54.5 → … → 150px (its ceiling) and stopped there with the text
+scrolling inside it, the transcript followed the end exactly (`top == max`), and the
+scroll offset changed on **8** frames out of ~1200 — one per wrap, **all of them
+downward**, **none backward**. Before the fix the same probe produced a +14/−14 pair per
+wrap.
+
 ## A late answer belongs to the chat that asked
 
 Any loader that writes state after an `await` must capture the id it asked about

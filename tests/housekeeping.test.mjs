@@ -65,6 +65,29 @@ test('a settled successful update drops its staging and older backups', () => {
   }
 });
 
+test('two backups written in the same breath: the newer name is the one kept', () => {
+  const dir = root();
+  try {
+    // Same millisecond on the clock, different versions in the name — the state a fast
+    // update leaves behind. "Newest by mtime" then has nothing to order them by, and
+    // the first one the folder listed would win: a 50/50 between the new backup and
+    // the one it was meant to replace (seen once in the suite, 31 Oct).
+    stagedUpdate(dir);
+    const when = new Date('2026-10-30T12:00:00Z');
+    for (const name of ['1.2.1-20261030T092850', '1.2.5-20261030T105954']) {
+      fs.utimesSync(path.join(dir, 'data', 'backups', name), when, when);
+    }
+    house(dir).run({ releases: false, scratch: false });
+    assert.deepEqual(
+      fs.readdirSync(path.join(dir, 'data', 'backups')).sort(),
+      ['1.2.5-20261030T105954', 'Synapse.Projects'],
+      'the newer backup stays and the older one goes',
+    );
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('a failed update is left alone: its staging is the diagnosis', () => {
   const dir = root();
   try {
