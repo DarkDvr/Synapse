@@ -955,6 +955,45 @@ clear it: a test is not work.
 
 ---
 
+## The layout audit: four numbers a picture cannot give you
+
+The operator kept getting UI with "text not quite centred, buttons not the same size, something
+indented for no reason". They were right that this is a class of defect, not three accidents: a
+model looks at its render and *reads* "centred", "the same size", "one column", and it is wrong
+confidently, because those are judgements and they are cheap to make instead of measuring.
+
+The renderer already returns numbers (`overflow`, `contrast`, `small`), but none of them is an
+alignment. So `shot.mjs` now measures four, on every run, and `--audit` prints them and exits 1:
+
+| check | compares | defect |
+|---|---|---|
+| `controls-row` | controls sharing a row | heights or tops differ by ≥2px |
+| `control-label` | a control's text box with its own box | off centre by >1px in x or y |
+| `baseline` | two same-size runs on one line | baselines ≥0.6px apart |
+| `column` | rows that start with a short label, in one block | one row 2–40px right of the rest |
+
+Measured on the operator's own mock (`f4-modlist/.synapse/design/mock-1.html`, 876px): **three
+findings, and they are the three things they photographed.** `button#p2.btn` was 26px against
+`#p1`'s 30px; `span.sz` and its `a` sat 1px apart on one line; `div.h1` started its content at
+145px while every row under it started at 133px (a header built from flex with a 12px gap, over
+rows built from a 96px grid column). The picture had said "fine" to all three.
+
+Four decisions keep it from crying wolf, and each was earned by a false positive on that page:
+
+- **The baseline is measured, not assumed.** The line box does not tell you where the text sits;
+  an empty inline-block inserted after the first text node does, because its bottom edge is on
+  the baseline. Removed immediately, so nothing is left in the page.
+- **Only same-size runs are compared.** The 1px step was mono-12 against sans-12 — same line box,
+  different baseline. A small unit beside a big number is a deliberate pair, and comparing across
+  sizes flagged every "17.9" + "GB" on the page.
+- **A control's own label is not a baseline candidate.** A 24px button centred in a 30px row has
+  its text 4px off the row's baseline by design; `controls-row` owns that row instead.
+- **One finding per defect, six per kind, 24 in total.** An archive list has the same 1px step in
+  every row; five hundred findings is a report nobody reads.
+
+The fix belongs in two places: the tool measures, and the briefs (designer, coder, QC) say that a
+non-empty audit is not a style opinion. A check nobody runs is a check that does not exist.
+
 ## The transcript's markdown renderer (`web/md.js`)
 
 A worker's report is prose with headings, lists and code in it, so it is rendered

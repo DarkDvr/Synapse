@@ -27,6 +27,7 @@ node "<the shot.mjs path from your brief>" <file|url> --widths 1280,390 [options
   --out DIR             where the PNGs go (default .synapse/design/shots)
   --do "steps"          drive the page before the capture, per width:
                           click:#start   wait:600   key:s   eval:<js>
+  --audit               print the layout findings; exit 1 if there are any
   --file                keep the page on file:// (default: it serves the folder)
   --no-sheet            do not build the contact sheet
   --eval "<js>"         answer one expression instead of taking a picture
@@ -67,6 +68,28 @@ One JSON line per width, then one line for the contact sheet:
   **fails** rather than returning a picture when a page painted nothing, or when
   the server answered 4xx/5xx. A blank PNG is the most dangerous thing this tool
   could give you, because it looks like success.
+- **`layout`** — the alignment audit, below. Non-empty findings are defects, not
+  opinions.
+
+## The layout audit: four things a picture cannot prove
+
+"Centred", "the same size", "one column", "one line" are numbers. This tool measures
+them on every run, whether or not you asked:
+
+| check | what it compares | what a defect looks like |
+|---|---|---|
+| `controls-row` | controls that share a row | one is 26px tall and its neighbour 30px — the tops or the heights differ by 2px or more |
+| `control-label` | a control's text box against its own box | the label sits more than 1px left/right or high/low of the middle |
+| `baseline` | two same-size text runs on one line | one run's baseline is more than 0.6px off the other — the "182.0 MB / Open page" step |
+| `column` | rows that begin with a short label, in one block | one row's content starts 2–40px right of the rest — the header with an extra margin |
+
+`--audit` prints the findings and **exits 1**, so it can gate a report. Fix every
+finding: a row of controls with two heights, a label 2px off centre, two labels a
+pixel apart and a block indented from its own rows are the four things a person
+notices instantly and cannot name.
+
+Findings arrive as `{"check","el","vs","px","detail"}` — `el` is the element, `vs`
+the one it was compared with, `detail` the sentence to quote in your report.
 
 Read the sheet first, then the numbers, then the full-size PNG if something in the
 sheet needs a closer look.

@@ -65,6 +65,8 @@ const USAGE = `Usage: shot.mjs <file|url> [options]
   --do "steps"          before the capture, per width:
                           click:#start   wait:600   key:s   eval:<js>
   --expect "sel|regex"   fail unless that element's RENDERED text matches
+  --audit               print the layout findings and exit 1 if there are any
+                          (every run reports them in "layout" either way)
   --file                keep the page on file:// (default: serve it over http)
   --no-sheet            do not build the contact sheet
   --eval "<js>"         answer one expression instead of taking a picture
@@ -78,6 +80,7 @@ function parseArgs(argv) {
     height: 900,
     evalExpr: '',
     expect: [],
+    audit: false,
     steps: [],
     serve: true,
     sheet: true,
@@ -104,6 +107,7 @@ function parseArgs(argv) {
         .map((w) => Number.parseInt(w, 10))
         .filter((w) => Number.isFinite(w) && w > 0);
     } else if (a === '--height') out.height = Number.parseInt(argv[++i], 10) || 900;
+    else if (a === '--audit') out.audit = true;
     else if (a === '--file') out.serve = false;
     else if (a === '--no-sheet') out.sheet = false;
     else if (a === '--help' || a === '-h') out.help = true;
@@ -362,6 +366,222 @@ const REPORT_JS = `(() => {
       });
     }
   }
+  // ── layout: the things a picture cannot prove ──────────────────────────
+  // A designer looks at the render and reads "centred", "the same size", "one
+  // column", "one line". Those are numbers, not opinions, and three of them are the
+  // defects the operator had to point at by hand (1 Nov): Stop 4px shorter than
+  // Pause, two labels on one line with different baselines, and a header block
+  // indented 12px from every row under it. Measure them instead of looking.
+  const findings = [];
+  const seen = new Set();
+  // One line per defect, not one per element it happens to repeat on: an archive
+  // list of 500 rows has the same 1px step in every row, and 500 findings is a
+  // report nobody reads. Six of each kind is enough to see the pattern.
+  const add = (f) => {
+    const key = f.check + '|' + f.el + '|' + (f.vs || '');
+    if (seen.has(key)) return;
+    if (findings.filter((x) => x.check === f.check).length >= 6) return;
+    if (findings.length >= 24) return;
+    seen.add(key);
+    findings.push(f);
+  };
+  const r1 = (n) => Math.round(n * 10) / 10;
+  const num = (v) => Number.parseFloat(v) || 0;
+  const textRects = (el) => {
+    const rects = [];
+    for (const n of el.childNodes) {
+      if (n.nodeType !== 3 || !String(n.textContent || '').trim()) continue;
+      const range = document.createRange();
+      range.selectNodeContents(n);
+      for (const rect of range.getClientRects()) if (rect.width > 0.5 && rect.height > 0.5) rects.push(rect);
+    }
+    return rects;
+  };
+  const union = (rects) => {
+    if (!rects.length) return null;
+    return rects.reduce((a, r) => ({
+      left: Math.min(a.left, r.left), right: Math.max(a.right, r.right),
+      top: Math.min(a.top, r.top), bottom: Math.max(a.bottom, r.bottom),
+    }), { left: Infinity, right: -Infinity, top: Infinity, bottom: -Infinity });
+  };
+  // The baseline, in the only way a browser will tell you: an empty inline-block is
+  // placed so its bottom edge sits on the baseline of the line it is in.
+  const baselineOf = (el) => {
+    const first = Array.from(el.childNodes).find((n) => n.nodeType === 3 && String(n.textContent || '').trim());
+    if (!first) return null;
+    const probe = document.createElement('span');
+    probe.setAttribute('style', 'display:inline-block;width:0;height:0;vertical-align:baseline');
+    first.parentNode.insertBefore(probe, first.nextSibling);
+    const b = probe.getBoundingClientRect().bottom;
+    probe.remove();
+    return b;
+  };
+
+  const controlSel = 'button,a[href],input[type=button],input[type=submit],[role="button"]';
+  const controls = all.filter((el) => visible(el) && el.matches(controlSel));
+
+  // 1. Controls in one row: one height, one top. A row is a set of controls that
+  //    overlap vertically *and* sit within a button-gap of each other — the sidebar's
+  //    project button and the main pane's New Project share a y by accident, and two
+  //    panes are not a toolbar. An icon button half the height of the text button
+  //    beside it is a different control, not a mis-sized one: heights within 40% of
+  //    each other are the ones that read as "should match".
+  const rows = [];
+  for (const el of controls) {
+    const r = el.getBoundingClientRect();
+    const row = rows.find((x) => {
+      const o = x.box;
+      const overlap = Math.min(o.bottom, r.bottom) - Math.max(o.top, r.top);
+      if (overlap <= Math.min(o.height, r.height) * 0.5) return false;
+      const gap = Math.max(0, Math.max(o.left, r.left) - Math.min(o.right, r.right));
+      return gap <= 24;
+    });
+    if (row) row.items.push(el);
+    else rows.push({ box: { top: r.top, bottom: r.bottom, height: r.height, left: r.left, right: r.right }, items: [el] });
+  }
+  for (const row of rows) {
+    if (row.items.length < 2) continue;
+    const first = row.items[0].getBoundingClientRect();
+    for (const el of row.items.slice(1)) {
+      const r = el.getBoundingClientRect();
+      const dh = r1(Math.abs(r.height - first.height));
+      const dt = r1(Math.abs(r.top - first.top));
+      const ratio = Math.max(r.height, first.height) / Math.max(1, Math.min(r.height, first.height));
+      const sameFamily = ratio <= 1.4;
+      if ((sameFamily && dh >= 2) || (dh < 2 && dt >= 2)) {
+        add({
+          check: 'controls-row',
+          el: desc(el),
+          vs: desc(row.items[0]),
+          px: { dHeight: dh, dTop: dt },
+          detail: 'height ' + r1(r.height) + ' vs ' + r1(first.height) + ', tops ' + dt + 'px apart',
+        });
+      }
+    }
+  }
+
+  // 2. A control's label sits in the middle of the box it draws. Half a pixel is
+  //    padding; more than one is a visible lean, which is what "not quite centred"
+  //    is when you look at it.
+  for (const el of controls) {
+    // An icon beside the label is a group, not one centred word: skip those.
+    if (el.children.length) continue;
+    const t = union(textRects(el));
+    if (!t) continue;
+    const b = el.getBoundingClientRect();
+    const cs = style(el);
+    const inner = {
+      left: b.left + num(cs.paddingLeft) + num(cs.borderLeftWidth),
+      right: b.right - num(cs.paddingRight) - num(cs.borderRightWidth),
+      top: b.top + num(cs.paddingTop) + num(cs.borderTopWidth),
+      bottom: b.bottom - num(cs.paddingBottom) - num(cs.borderBottomWidth),
+    };
+    const dx = r1((t.left + t.right) / 2 - (inner.left + inner.right) / 2);
+    const dy = r1((t.top + t.bottom) / 2 - (inner.top + inner.bottom) / 2);
+    if (Math.abs(dx) > 1 || Math.abs(dy) > 1) {
+      add({
+        check: 'control-label',
+        el: desc(el),
+        text: String(el.textContent || '').trim().slice(0, 24),
+        px: { dx, dy },
+        detail: 'label ' + Math.abs(dx) + 'px ' + (dx < 0 ? 'left' : 'right') + ' of centre, ' +
+          Math.abs(dy) + 'px ' + (dy < 0 ? 'high' : 'low'),
+      });
+    }
+  }
+
+  // 3. Text on one line shares one baseline — not one box. Two 12px runs, one in a
+  //    mono and one in a sans, have line boxes that agree and baselines that do not;
+  //    that 1px step under "182.0 MB / Open page" is this check. Only runs of the
+  //    same size are compared: a small unit beside a big number is a deliberate pair,
+  //    and a control's own label is centred by rule, not by baseline.
+  const leaves = all.filter((el) => visible(el) && el.children.length === 0 && String(el.textContent || '').trim());
+  const byParent = new Map();
+  for (const el of leaves) {
+    if (!el.parentElement) continue;
+    const list = byParent.get(el.parentElement) || [];
+    list.push(el);
+    byParent.set(el.parentElement, list);
+  }
+  for (const list of byParent.values()) {
+    if (list.length < 2 || list.length > 8) continue;
+    const metas = [];
+    for (const el of list) {
+      if (el.matches(controlSel)) continue; // a button's label is a different rule
+      const rect = union(textRects(el));
+      if (!rect) continue;
+      const base = baselineOf(el);
+      if (base === null || !Number.isFinite(base)) continue;
+      metas.push({ el, rect, base, size: r1(num(style(el).fontSize)) });
+    }
+    for (let i = 0; i < metas.length; i += 1) {
+      for (let j = i + 1; j < metas.length; j += 1) {
+        const a = metas[i];
+        const b = metas[j];
+        if (Math.abs(a.size - b.size) > 0.25) continue; // not the same run of type
+        const overlap = Math.min(a.rect.bottom, b.rect.bottom) - Math.max(a.rect.top, b.rect.top);
+        const smaller = Math.min(a.rect.bottom - a.rect.top, b.rect.bottom - b.rect.top);
+        if (overlap <= smaller * 0.4) continue; // different lines, nothing to compare
+        const d = r1(Math.abs(a.base - b.base));
+        if (d > 0.6) {
+          add({
+            check: 'baseline',
+            el: desc(a.el),
+            vs: desc(b.el),
+            px: { apart: d },
+            detail: d + 'px apart on one line',
+          });
+        }
+      }
+    }
+  }
+
+  // 4. Rows that begin with a label put their content in one column. This is the
+  //    "extra margin on the left" the operator saw: the header used flex with a
+  //    12px gap where every row under it used a 96px grid column.
+  const isLabel = (el) => {
+    const t = String(el.textContent || '').trim();
+    if (!t || t.length > 16) return false;
+    if (style(el).textTransform === 'uppercase') return true;
+    return t === t.toUpperCase() && /[A-Z]/.test(t) && /^[A-Z0-9][A-Z0-9 ._-]*$/.test(t);
+  };
+  const blocks = all.filter((el) => {
+    if (!visible(el)) return false;
+    const rows2 = Array.from(el.children).filter((k) => k.children.length >= 2 && isLabel(k.children[0]));
+    return rows2.length >= 2;
+  });
+  for (const box of blocks) {
+    const rows2 = Array.from(box.children)
+      .filter((k) => k.children.length >= 2 && isLabel(k.children[0]))
+      .map((k) => ({ el: k, x: r1(k.children[1].getBoundingClientRect().left) }));
+    const xs = rows2.map((s) => s.x);
+    const spread = Math.max(...xs) - Math.min(...xs);
+    if (spread < 2 || spread > 40) continue; // one column, or an indent by design
+    // The column is the value most rows agree on. On a tie the leftmost wins: the
+    // left edge is the column, and an indent is the row that moved right (measured
+    // on mock-1: a header using flex + a 12px gap sat 12px right of every grid row).
+    const counts = new Map();
+    for (const x of xs) counts.set(x, (counts.get(x) || 0) + 1);
+    let common = xs[0];
+    for (const [x, n] of counts) {
+      const best = counts.get(common) || 0;
+      if (n > best || (n === best && x < common)) common = x;
+    }
+    for (const s of rows2) {
+      if (Math.abs(s.x - common) < 2) continue;
+      add({
+        check: 'column',
+        el: desc(s.el),
+        px: { x: s.x, rest: common },
+        detail: 'content starts at ' + s.x + 'px; the other rows in this block start at ' + common + 'px',
+      });
+    }
+  }
+
+  out.layout = {
+    checked: { controls: controls.length, textRuns: leaves.length, blocks: blocks.length },
+    findings,
+  };
   return out;
 })()`;
 
@@ -581,6 +801,26 @@ async function shoot(width) {
   };
 }
 
+/** The findings, in the words a person would use. stderr, so stdout stays the JSON. */
+function printAudit(shot) {
+  const layout = shot.report?.layout;
+  if (!layout) return 0;
+  const list = layout.findings || [];
+  if (!list.length) {
+    const c = layout.checked || {};
+    process.stderr.write(
+      `layout: nothing to fix at ${shot.width}px (${c.controls || 0} control(s), ${c.textRuns || 0} text run(s), ${c.blocks || 0} block(s))\n`,
+    );
+    return 0;
+  }
+  process.stderr.write(`layout: ${list.length} finding(s) at ${shot.width}px\n`);
+  for (const f of list) {
+    const vs = f.vs ? ` (vs ${f.vs})` : '';
+    process.stderr.write(`  ${String(f.check).padEnd(13)} ${f.el}${vs}: ${f.detail}\n`);
+  }
+  return list.length;
+}
+
 /**
  * Both widths in one picture.
  *
@@ -673,6 +913,7 @@ try {
       const shot = await shoot(width);
       shots.push(shot);
       process.stdout.write(`${JSON.stringify(shot)}\n`);
+      if (args.audit && printAudit(shot)) process.exitCode = 1;
     }
     if (args.sheet && shots.length > 1) {
       const sheet = await buildSheet(shots);
