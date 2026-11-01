@@ -122,6 +122,9 @@ test('a page that is aligned reports nothing and exits 0', () => {
         body { margin:0; font:400 12px/16px sans-serif; background:#fff; color:#111; }
         .row { display:flex; gap:8px; align-items:center; padding:8px 12px; }
         .far { display:flex; gap:220px; padding:8px 12px; }
+        .acct { display:flex; justify-content:space-between; padding:8px 12px; }
+        .tier { font:400 12px/16px sans-serif; }
+        .out { font:400 12px/16px sans-serif; display:flex; align-items:center; }
         button { height:30px; padding:0 14px; font:400 13px/1 sans-serif; border:1px solid #000; background:#fff; }
         .short { height:26px; padding:0 10px; }
         .block { padding:0 12px; }
@@ -129,6 +132,7 @@ test('a page that is aligned reports nothing and exits 0', () => {
       </style>
       <div class="row"><button>Pause</button><button>Stop</button></div>
       <div class="far"><button>Sidebar</button><button class="short">Main pane</button></div>
+      <div class="acct"><span class="tier">· Free tier</span><a class="out">Sign out</a></div>
       <div class="block">
         <div class="grid"><span>LIST</span><span>FUSION</span></div>
         <div class="grid"><span>STATE</span><span>Downloading</span></div>

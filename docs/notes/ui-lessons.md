@@ -988,6 +988,11 @@ Four decisions keep it from crying wolf, and each was earned by a false positive
   sizes flagged every "17.9" + "GB" on the page.
 - **A control's own label is not a baseline candidate.** A 24px button centred in a 30px row has
   its text 4px off the row's baseline by design; `controls-row` owns that row instead.
+- **A flex or grid box is not measured at all.** The probe is an inline-block, and inside a flex
+  container it becomes a flex item: on the operator's mock-2 the Designer got "5px apart" between
+  `span.tier` and `a.link` whose text rects were identical (`y=536, h=16` both), because the
+  anchor was `display:flex` and the probe landed on the container's edge. It reported that as a
+  false positive instead of "fixing" a page that was right — and the check now skips those boxes.
 - **One finding per defect, six per kind, 24 in total.** An archive list has the same 1px step in
   every row; five hundred findings is a report nobody reads.
 
