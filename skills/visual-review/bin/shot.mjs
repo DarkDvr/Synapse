@@ -508,6 +508,12 @@ const REPORT_JS = `(() => {
     const metas = [];
     for (const el of list) {
       if (el.matches(controlSel)) continue; // a button's label is a different rule
+      // A flex or grid box lays its children out as items, so an inline-block
+      // inserted after the text becomes an item of its own and reports the container's
+      // edge instead of the baseline (measured: a flex anchor beside a block span on
+      // one line read 5px apart while their text rects were identical). Those are
+      // skipped rather than mis-measured.
+      if (/^(inline-)?(flex|grid)$/.test(style(el).display)) continue;
       const rect = union(textRects(el));
       if (!rect) continue;
       const base = baselineOf(el);
