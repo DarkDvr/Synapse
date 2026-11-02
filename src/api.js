@@ -20,6 +20,7 @@ import { providerApiKey } from './config.js';
 import { questionSignature, guardDecision, readableAnswer } from './question-loop.js';
 import { setProviderKey, providerKeyState, maskKey } from './secrets.js';
 import { probeToolchain } from './toolchain.js';
+import { describeSessions, parseSessions, writeSessions } from './site-sessions.js';
 import { busyInfo, busyMessage } from './busy.js';
 import { APP_VERSION } from './version.js';
 import { STOP_GRACE_MS } from './runs.js';
@@ -767,6 +768,17 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
       const refused = powerRefusal(body?.confirm === true);
       if (refused) return { ok: false, error: refused };
       return pcShutdown();
+    },
+
+    // The operator's saved sign-ins for sites that hide content from guests. The
+    // values are returned only to a loopback caller (see src/server.js); a LAN view
+    // gets the host names and nothing else.
+    siteSessions: async ({ raw = false } = {}) => describeSessions({ raw }),
+    saveSiteSessions: async (body, { raw = false } = {}) => {
+      const { sessions, rejected } = parseSessions(body?.text);
+      writeSessions(sessions);
+      app.info(`site sessions saved: ${Object.keys(sessions).length} site(s)${rejected.length ? `, ${rejected.length} line(s) ignored` : ''}`);
+      return { ok: true, ...describeSessions({ raw }), rejected };
     },
 
     // The engine updates often and the model catalog ships inside it, so this is

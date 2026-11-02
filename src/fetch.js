@@ -19,6 +19,11 @@
 // get past it, because a model that is told "blocked, needs a logged-in session"
 // can ask the operator, and a model handed an empty page cannot.
 
+// The saved session, when the operator has one for this site. `cookieFor` is
+// one-way on purpose: a cookie saved for a domain goes to it or its subdomains and
+// nowhere else (src/site-sessions.js).
+import { cookieFor } from './site-sessions.js';
+
 const UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
 
@@ -314,14 +319,49 @@ async function xPost(url, { fetchImpl, timeoutMs }) {
   };
 }
 
+const REDIRECTS = new Set([301, 302, 303, 307, 308]);
+
+/**
+ * Follow redirects by hand while a cookie is attached, so the cookie never travels
+ * to a host it was not saved for. Without this, `redirect: 'follow'` would carry the
+ * header to whatever site the first hop names — a credential leak dressed as a
+ * convenience.
+ */
+async function fetchGuarded(startUrl, { fetchImpl, timeoutMs, headers, allowedHost, cookie }) {
+  let url = startUrl;
+  for (let hop = 0; hop <= 5; hop += 1) {
+    const here = new URL(url).hostname;
+    const res = await fetchImpl(url, {
+      headers: { ...headers, cookie },
+      redirect: 'manual',
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    if (!REDIRECTS.has(res.status)) return res;
+    const location = res.headers.get('location');
+    if (!location) return res;
+    const next = new URL(location, url).href;
+    const nextHost = new URL(next).hostname;
+    if (!(nextHost === allowedHost || nextHost.endsWith(`.${allowedHost}`))) {
+      throw new FetchError(
+        `${startUrl} redirected to ${nextHost}, which is not the site the saved session belongs to (${allowedHost}), so the session was not sent there.`,
+        { blocked: true },
+      );
+    }
+    url = next;
+    void here;
+  }
+  throw new FetchError(`${startUrl} redirected too many times.`);
+}
+
 /**
  * Fetch a URL as text.
  *
  * @param {string} url
- * @param {{timeoutMs?: number, maxChars?: number, fetchImpl?: typeof fetch}} opts
- *   `fetchImpl` exists so the tests can serve fixtures instead of the network.
+ * @param {{timeoutMs?: number, maxChars?: number, fetchImpl?: typeof fetch, sessions?: object}} opts
+ *   `fetchImpl` exists so the tests can serve fixtures instead of the network;
+ *   `sessions` is the saved cookie map, and only the entry for this host is used.
  */
-export async function webFetch(url, { timeoutMs = 20000, maxChars = DEFAULT_MAX_CHARS, fetchImpl = fetch } = {}) {
+export async function webFetch(url, { timeoutMs = 20000, maxChars = DEFAULT_MAX_CHARS, fetchImpl = fetch, sessions = {} } = {}) {
   const target = String(url || '').trim();
   if (!target) throw new FetchError('empty URL');
   const withScheme = /^https?:\/\//i.test(target) ? target : `https://${target}`;
@@ -335,23 +375,31 @@ export async function webFetch(url, { timeoutMs = 20000, maxChars = DEFAULT_MAX_
   const viaX = await withRetry(() => xPost(withScheme, { fetchImpl, timeoutMs }));
   if (viaX) return finish(withScheme, viaX, maxChars);
 
-  const res = await withRetry(() => fetchImpl(withScheme, {
-    headers: {
-      'user-agent': UA,
-      accept: 'text/html,application/xhtml+xml,application/json;q=0.9,text/plain;q=0.8',
-      'accept-language': 'en-US,en;q=0.9',
-    },
-    redirect: 'follow',
-    signal: AbortSignal.timeout(timeoutMs),
-  }));
+  const headers = {
+    'user-agent': UA,
+    accept: 'text/html,application/xhtml+xml,application/json;q=0.9,text/plain;q=0.8',
+    'accept-language': 'en-US,en;q=0.9',
+  };
+  // Only this host's own session, never a neighbour's.
+  let saved = null;
+  try { saved = cookieFor(new URL(withScheme).hostname, sessions); } catch { saved = null; }
+
+  const res = saved
+    ? await withRetry(() => fetchGuarded(withScheme, { fetchImpl, timeoutMs, headers, allowedHost: saved.host, cookie: saved.cookie }))
+    : await withRetry(() => fetchImpl(withScheme, {
+      headers,
+      redirect: 'follow',
+      signal: AbortSignal.timeout(timeoutMs),
+    }));
   const type = String(res.headers.get('content-type') || '').toLowerCase();
   const body = await res.text();
 
   if (!res.ok) {
     const why = wallFor(body, res.status) || hostWall(withScheme);
+    const withSession = saved ? ` Your saved session for ${saved.host} was sent and the site still refused it — it may have expired, or be tied to a different browser.` : '';
     throw new FetchError(
       why
-        ? `${withScheme} is behind ${why}. A signed-in browser session would be needed; this fetch has none.`
+        ? `${withScheme} is behind ${why}.${withSession || ' A signed-in browser session would be needed; this fetch has none.'}`
         : `${withScheme} answered HTTP ${res.status}`,
       { status: res.status, blocked: Boolean(why) },
     );
@@ -365,8 +413,9 @@ export async function webFetch(url, { timeoutMs = 20000, maxChars = DEFAULT_MAX_
 
   const wall = wallFor(body, res.status);
   if (wall) {
+    const withSession = saved ? ` Your saved session for ${saved.host} was sent and the site still refused it.` : '';
     throw new FetchError(
-      `${withScheme} is behind ${wall}. A signed-in browser session would be needed; this fetch has none.`,
+      `${withScheme} is behind ${wall}.${withSession || ' A signed-in browser session would be needed; this fetch has none.'}`,
       { status: res.status, blocked: true },
     );
   }
@@ -376,12 +425,12 @@ export async function webFetch(url, { timeoutMs = 20000, maxChars = DEFAULT_MAX_
     const host = hostWall(withScheme);
     throw new FetchError(
       host
-        ? `${withScheme} renders to nothing for a signed-out reader: ${host}. This needs a browser session that is signed in; Synapse has none yet.`
+        ? `${withScheme} renders to nothing for a signed-out reader: ${host}.${saved ? ' Your saved session was sent, so it has probably expired.' : ' This needs a browser session that is signed in; Synapse has none for this site.'}`
         : `${withScheme} returned a page with almost no readable text (${text.length} characters) — it is probably built by JavaScript.`,
       { blocked: Boolean(host) },
     );
   }
-  return finish(withScheme, { title: title || withScheme, text, source: 'readability' }, maxChars);
+  return finish(withScheme, { title: title || withScheme, text, source: saved ? 'readability+session' : 'readability' }, maxChars);
 }
 
 function prettyJson(body) {

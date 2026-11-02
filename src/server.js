@@ -259,6 +259,14 @@ export function createServer({ api, engine, logger, config, remote, onRemote }) 
     if (seg[0] === 'power-off' && seg[1] === 'cancel' && method === 'POST') {
       return sendJson(res, 200, await api.cancelPowerOff());
     }
+    // GET|PUT /api/site-sessions — the cookies for sites that need a sign-in.
+    // The values are a credential, so they go to a loopback caller only: this page,
+    // in this window. A LAN view sees host names and sizes, never the cookies.
+    if (seg[0] === 'site-sessions' && (method === 'GET' || method === 'PUT')) {
+      const local = ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(req.socket.remoteAddress);
+      if (method === 'GET') return sendJson(res, 200, await api.siteSessions({ raw: local }));
+      return sendJson(res, 200, await api.saveSiteSessions({ text: (await readBody(req))?.text }, { raw: local }));
+    }
     // GET|PUT /api/config
     if (seg[0] === 'config') {
       if (method === 'GET') return sendJson(res, 200, await api.getConfig());

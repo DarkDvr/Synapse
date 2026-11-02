@@ -10,6 +10,7 @@
 // stdout carries JSON-RPC and nothing else. All logging goes to stderr.
 import { webSearch, formatResults } from '../search.js';
 import { webFetch, formatPage } from '../fetch.js';
+import { readSessions } from '../site-sessions.js';
 
 const PROTOCOL_VERSION = '2024-11-05';
 
@@ -99,7 +100,9 @@ async function handle(msg) {
       if (name === FETCH_TOOL.name) {
         const maxChars = Math.min(60000, Math.max(2000, Number(args.maxChars) || 14000));
         try {
-          const page = await webFetch(args.url, { maxChars });
+          // The operator's saved sessions: only the entry for this host is sent, and
+          // it is never logged (src/site-sessions.js owns both rules).
+          const page = await webFetch(args.url, { maxChars, sessions: readSessions() });
           process.stderr.write(`fetch ${String(args.url).slice(0, 100)} -> ${page.source}, ${page.chars} chars\n`);
           return toolText(id, formatPage(page));
         } catch (err) {

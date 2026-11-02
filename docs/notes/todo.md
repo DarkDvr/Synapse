@@ -42,21 +42,24 @@ and the worker-session replacement — are built and recorded in
 
 ## Signed-in web reading (cookies)
 
-Asked on 2 Nov: a 4pda thread is readable only when signed in, and Synapse could not
-read it. The fetch side now says so plainly ("behind the site's bot check
-(Cloudflare) … a signed-in browser session would be needed"), so the model can ask
-instead of inventing. Making it *work* needs a decision, and the options were
-measured on this machine rather than assumed:
+**Shipped in 1.11.0: the light option.** Settings → General → *Sites That Need a
+Sign-In* takes one line per site, `host = the Cookie header from DevTools`. It is
+stored in `data\site-sessions.json` (gitignored, never logged), sent only to that
+host or its subdomains, and hand-followed across redirects so it cannot travel to a
+different site; a LAN view sees the host names but never the values. Measured end to
+end on `httpbin.org/cookies`, which echoed the saved cookie back through
+`synapse-search_webfetch`.
+
+**Still deferred: the full solution**, which would not need a paste. Asked 2 Nov: a
+4pda thread is readable only when signed in. The options were measured on this
+machine rather than assumed:
 
 | option | status |
 |---|---|
-| Decrypt the browser's own cookies from Node | **Not possible here.** Edge is the only browser installed (Chrome is not). All 87 cookies in its store are `v20` — Chrome's app-bound encryption — and `app_bound_encrypted_key` will not unwrap for a normal user process (`Key not valid for use in specified state`). The DPAPI path that would work for `v10` blobs is proven in pieces (node:sqlite reads a copy, PowerShell unwraps the key, AES-GCM decrypts a synthetic v10 cookie) but no v10 cookie exists to prove it on. |
-| Launch a browser on a copied profile, read cookies over CDP | **Fails.** CDP works with zero dependencies, but Edge launched on three copied profiles returned 0 cookies each time and deleted the copied rows at launch — Chromium drops what it cannot decrypt. |
-| A sign-in window inside Synapse (WebView2) | **Viable, not built.** Synapse's own WebView2 profile (`data\webview2\EBWebView`) exists, runs the same Edge 156 engine, and has no app-bound key — so cookies would land in a jar Synapse owns and can reuse *in process* through `CoreWebView2.CookieManager`. The profile is exclusively locked while Synapse runs, so reuse must be in-process; reading the DB from Node will not work. |
+| Decrypt the browser's own cookies from Node | **Not possible here.** Edge is the only browser besides Brave; all 87 Edge cookies are `v20` (app-bound) and `app_bound_encrypted_key` will not unwrap for a normal process. Brave's store is locked while Brave runs — a copy fails outright. The DPAPI path that would work for `v10` blobs is proven in pieces but there is no `v10` cookie to prove it on. |
+| Launch a browser on a copied profile, read cookies over CDP | **Fails.** Edge launched on three copied profiles returned 0 cookies and deleted the copied rows — Chromium drops what it cannot decrypt. |
+| A sign-in window inside Synapse (WebView2) | **The real fix, ~a day.** Synapse's own WebView2 profile has no app-bound key, so cookies would land in a jar Synapse owns and can reuse *in process* via `CoreWebView2.CookieManager`. It needs a window, IPC, a server route and a "use my session" flag. |
 
-The work for the third option: a small WPF sign-in window sharing the app's WebView2
-environment, an IPC message that answers "the cookies for this host" (names and
-values, never printed to a log), a server route that hands them to `src/fetch.js`,
-and a `webfetch` flag that says "use my session". Decision needed: whether that
-window is worth it, and whether a cookie is ever sent to a host other than the one it
-came from (it must not be — that is a credential leak, not a feature).
+Two limits of the shipped option, both stated in the pane: a session expires and must
+be re-pasted, and Cloudflare may tie the cookie to your browser's User-Agent, which
+Synapse cannot match exactly.
