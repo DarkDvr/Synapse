@@ -46,8 +46,16 @@ answering meant guessing what had been said. As a post, the answer is one scroll
 - **Dense, not boxed.** Every answer used to be its own orange-bordered box inside an
   orange-bordered panel — too much orange, and three options took a screenful. The panel
   keeps its orange border (that is what marks it as a question), the fill is neutral, and
-  the answers are a plain list: radio or checkbox, 12.5px label, 10.5px description,
-  about half a line between rows, no borders.
+  the answers are a plain list divided by hairlines: one above every row, the first
+  included, with a radio/checkbox, a 12.5px label and a 10.5px description.
+- **The question is a jump target.** The chat's next/previous buttons step through
+  messages, and the question is one of them — it was not, so "next" walked past it and
+  the only way to read a question was to drag the chat (reported 2 Nov). It is also
+  landed 46px down rather than 10px: the floating jump buttons sit over the chat's top
+  right, and landing the post's header underneath them hid it.
+- **One question, one title.** The engine often sends the same sentence as both the
+  field's title and its description, which printed the question twice. The title is now
+  skipped when it is the description.
 - **A question takes the whole composer.** The text box is disabled and says "Answer
   the question to continue"; Send, Attach, the mode switch and the run menu are
   disabled too — a half-dead composer invites a click that goes nowhere. **Stop stays

@@ -4857,7 +4857,20 @@ function scrollChatToBottom(behavior = 'auto') {
   // render.
 }
 
-const navMessages = () => [...document.querySelectorAll('#transcript .msg[data-msg]')];
+/**
+ * What the jump buttons step through.
+ *
+ * Every turn, and the question post — the question is the last thing in the chat
+ * and the operator must be able to land on it. It was not a jump target at all, so
+ * "next message" stepped past it and the only way to read it was to drag the chat
+ * (reported 2 Nov).
+ */
+const navMessages = () => {
+  const list = [...document.querySelectorAll('#transcript .msg[data-msg]')];
+  const ask = askHost();
+  if (ask && !ask.hidden && ask.parentElement && ask.parentElement.id === 'transcript') list.push(ask);
+  return list;
+};
 
 function myMessageTops() {
   const el = chatScroller();
@@ -4947,7 +4960,11 @@ function jumpMessage(dir) {
   // the first message (its top is not at 0), which is why DOWN did nothing.
   const next = dir < 0 ? cur - 1 : cur + 1;
   if (next < 0 || next >= tops.length) return;
-  const top = Math.max(0, tops[next] - 10);
+  // The question stops clear of the floating jump buttons: they sit over the top
+  // right of the chat, and landing the post's header underneath them hid it.
+  const target = navMessages()[next];
+  const offset = target && target.id === 'askHost' ? 46 : 10;
+  const top = Math.max(0, tops[next] - offset);
   animateScroll(chatScroller(), top);
 }
 
@@ -5307,7 +5324,13 @@ function askField(field, index, all) {
   // and models often write a slug there ("--reverse meaning"), which reads like a
   // broken title. Show it only when it separates questions, or when there is no
   // question text to show instead.
-  const showTitle = field.title && ((all?.length || 1) > 1 || !field.description);
+  const showTitle =
+    field.title &&
+    ((all?.length || 1) > 1 || !field.description) &&
+    // The engine often sends the same sentence as both title and description
+    // ("Which layout?" twice on screen). One line is the question; a second copy
+    // above it is noise.
+    String(field.title).trim() !== String(field.description || '').trim();
   const title = showTitle ? `<p class="ask-q-title">${esc(field.title)}</p>` : '';
   const text = field.description ? `<p class="ask-q-text">${esc(field.description)}</p>` : '';
   const req = field.required ? '<span class="ask-req" title="Required">required</span>' : '';
@@ -5388,7 +5411,7 @@ function renderAskPanel() {
     <div class="ask-actions">
       <span class="ask-state" data-ask-state></span>
       <span class="ask-progress" data-ask-progress hidden></span>
-      <button class="btn btn-ghost btn-sm" data-ask-back hidden>Back</button>
+      <button class="btn btn-back btn-sm" data-ask-back hidden>Back</button>
       <button class="btn btn-ask btn-sm" data-ask-next hidden>Next</button>
       <button class="btn btn-ask btn-sm" data-form-reply="${esc(form.id)}" hidden>Submit Answer</button>
     </div>
@@ -5408,7 +5431,9 @@ function renderAskPanel() {
     const host = askHost();
     if (!el || !host) return;
     const top = host.getBoundingClientRect().top - el.getBoundingClientRect().top;
-    if (Math.abs(top) > 2) el.scrollTop += top - 6;
+    // 46px, not 6: the jump buttons float over the chat's top right, and a question
+    // placed under them lost its header behind them.
+    if (Math.abs(top - 46) > 2) el.scrollTop += top - 46;
   });
 }
 

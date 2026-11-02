@@ -1858,11 +1858,11 @@ body[data-mode="single"] #runAuto { display: none; }
 /* A dense list: no box per answer. The radio is the control, the label is the
    answer and the description is a quiet second line — 0.5 lines apart, which is
    about 7px at this size. An answer is picked by the radio, not by a border. */
-.ask-opts { margin-top: 5px; display: grid; gap: 2px; }
+.ask-opts { margin-top: 4px; display: grid; gap: 0; }
 .ask-opt {
   display: flex; align-items: flex-start; gap: 7px;
-  padding: 2px 4px; border-radius: 5px; cursor: pointer;
-  border: 0; background: transparent;
+  padding: 6px 4px; border-radius: 0; cursor: pointer;
+  border: 0; border-top: 1px solid #2b2e35; background: transparent;
 }
 .ask-opt:hover { background: rgba(255, 255, 255, 0.04); }
 .ask-opt:has(input:checked) { background: rgba(255, 255, 255, 0.05); }
@@ -1924,6 +1924,16 @@ body[data-mode="single"] #runAuto { display: none; }
 .ask-progress {
   font-size: 10.5px; font-weight: 700; letter-spacing: 0.08em;
   text-transform: uppercase; color: #b9bec6; white-space: nowrap;
+}
+/* Back is the quiet half of the pair: the accent's text and border, no fill, so it
+   reads as a sibling of Submit Answer instead of a second primary. The operator asked
+   for it to carry a border like the other accent buttons (2 Nov). */
+.ask-actions .btn-back {
+  background: transparent; color: var(--violet-bright);
+  border: 1px solid var(--violet-line);
+}
+.ask-actions .btn-back:hover:not(:disabled) {
+  border-color: var(--violet-bright); background: rgba(255, 255, 255, 0.03);
 }
 .ask-actions .btn { margin-left: 0; }
 /* Back and Next are one cluster: only the first button takes the free space. */
