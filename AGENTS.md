@@ -94,9 +94,9 @@ the cards and the commits, not the code. One reason per sentence, not a chain.
 
 ### Working style rules
 
-- **Never open the OpenCode review pane** (`browser.preview`, and the whole
-  `browser.*` namespace). It is broken and the operator does not use it. To show
-  something, write a file and give the **full path**.
+- **The review pane works — the operator cannot see it.** `browser.preview` and
+  the whole `browser.*` namespace are yours to inspect a page with (measured 2 Nov
+  2026). To show the operator something, send a **screenshot**; never "look here".
 - **Use the browser, but surgically** — one session, reused; few screenshots.
 - **Stage the delivery.** Each stage is reviewed before the next starts.
 

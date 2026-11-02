@@ -115,8 +115,12 @@ look at the result rather than only asserting against the DOM.
 - **One navigation per round where you can**, then drive the page from that
   session. Changing viewport width needs a new session; batch those deliberately
   instead of looping over widths.
-- **Never use the `browser.*` namespace** — that is the desktop browser, and it
-  opens the review pane.
+- **`browser.*` is the desktop browser and its review pane.** It works — measured
+  2 Nov 2026: it loaded the Synapse UI and previewed png, html and md. The
+  operator cannot see the pane through their window set-up, so a pane-only result
+  is not evidence to them: screenshot the page and put the image in the chat.
+  `browser.screenshot` needs the desktop window visible; when it refuses, use this
+  `browser-control` session instead and read the PNG.
 - **Look at the deliverable, and assert geometry.** Reading code is not testing:
   I shipped a layout twice where the role cards were clipped behind the chat
   because I only measured widths I had chosen to measure. The habit that catches
