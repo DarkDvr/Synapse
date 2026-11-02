@@ -46,6 +46,8 @@ import {
 import { skillRules, describeSkills, roleMustLoad } from './skills.js';
 import { rulesFor } from './permissions.js';
 import { configSavedAt } from './config.js';
+import { AUTOMATION_DEFAULTS, readAutomation } from './automation.js';
+import { keepBuildingDelayMs } from './auto-answer.js';
 import { sweepProject, sweepScratch } from './cleanup.js';
 import { classifyFailure, recordProviderError, pruneProviderLog } from './provider-errors.js';
 import { providerLoadedWindow, providerType } from './providers.js';
@@ -1389,14 +1391,14 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
      * function is what makes the replacement carry the same rules and briefing.
      */
     async function spawnWorker() {
-      // Full auto belongs to the project, and the worker is the one that will ask
-      // most of the questions. Carry the Architect's switch into the worker's
-      // metadata: the gate reads it when a card is raised, and a worker created
-      // while it is on must answer its own asks after a restart too.
-      let architectFullAuto = false;
+      // Auto-Permissions belongs to the project, and the worker is the one that
+      // will ask most of the questions. Carry the Architect's switch into the
+      // worker's metadata: the gate reads it when a card is raised, and a worker
+      // created while it is on must answer its own asks after a restart too.
+      let architectAutomation = { ...AUTOMATION_DEFAULTS };
       try {
-        architectFullAuto = (await engine.getSession(architectId))?.metadata?.synapse?.fullAuto === true;
-      } catch { /* a worker with the switch off is the safe default */ }
+        architectAutomation = readAutomation(await engine.getSession(architectId));
+      } catch { /* a worker with the switches off is the safe default */ }
       const w = await engine.createSession({
         title: `${request.task} - ${role}`,
         model: modelRef ? { ref: modelRef, variant } : undefined,
@@ -1419,7 +1421,11 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
             role,
             task: request.task,
             architect: architectId,
-            ...(architectFullAuto ? { fullAuto: true } : {}),
+            // The worker answers its own asks only if the project does; the other
+            // three switches are the Architect's business, not a worker's.
+            ...(architectAutomation.autoPermissions
+              ? { automation: { ...architectAutomation, keepBuilding: false, autoShutdown: false } }
+              : {}),
           },
         },
       });
@@ -2138,10 +2144,20 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
 
     // The "keep building" switch is read at report time, so flipping it while a
     // worker runs takes effect on the very next judgement.
-    let auto = false;
+    let automation = { ...AUTOMATION_DEFAULTS };
     try {
-      auto = (await engine.getSession(architectId))?.auto === true;
-    } catch { /* session gone; treat as off */ }
+      automation = readAutomation(await engine.getSession(architectId));
+    } catch { /* session gone; treat every switch as off */ }
+    const auto = automation.keepBuilding;
+    // The pause between a worker's report and the Architect being told to carry
+    // on. It exists because the next task starts the moment the report lands, and
+    // a five-second breath keeps a fast plan from feeling like a runaway — the
+    // number is Settings → Automation.
+    if (auto && keepBuildingDelayMs(config) > 0) {
+      try {
+        await sleep(keepBuildingDelayMs(config), signal?.aborted ? undefined : signal);
+      } catch { /* a stop during the pause is a stop */ }
+    }
 
     // A harness stop still owes the Architect the report: the reason *is* the
     // report, and the guard that stopped the run said so. Two things had to be

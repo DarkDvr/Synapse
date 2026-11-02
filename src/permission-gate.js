@@ -15,6 +15,7 @@
 // allow is worse than a prompt.
 import os from 'node:os';
 import { decide, grantKey, resolvePath, refusalNote } from './permissions.js';
+import { readAutomation } from './automation.js';
 
 export function createPermissionGate({
   engine,
@@ -46,12 +47,13 @@ export function createPermissionGate({
   // bunch of permissions appear and disappear" looked like in a run where every
   // call was allowed (30 Oct); `GET /api/pending` skips these ids.
   const answering = new Set();
-  const fullAutoOn = new Set();
-  // Full auto is the chat's standing decision, not the session's: a worker asking
-  // for a shell command belongs to the same project as the Architect whose switch
-  // the operator turned on. `true`/`false` here is the explicit answer for that
-  // project and beats a worker's saved metadata; no entry means "ask the session".
-  const fullAutoDirs = new Map();
+  const autoPermissionsOn = new Set();
+  // Auto-Permissions is the chat's standing decision, not the session's: a worker
+  // asking for a shell command belongs to the same project as the Architect whose
+  // switch the operator turned on. `true`/`false` here is the explicit answer for
+  // that project and beats a worker's saved metadata; no entry means "ask the
+  // session".
+  const autoPermissionsDirs = new Map();
 
   /** The wait, read each time so a Settings change applies to the next ask.
    *  Zero is a real value: answer at once, with no card. */
@@ -228,29 +230,28 @@ export function createPermissionGate({
       title: raw?.title || null,
       // Set on the session, so it survives a restart: an ask that arrives before
       // the operator's window has said anything about the switch still honours it.
-      // `permissionTimeout` is the old name.
-      fullAuto:
-        raw?.metadata?.synapse?.fullAuto === true || raw?.metadata?.synapse?.permissionTimeout === true,
+      // `automation` is the record; the old `fullAuto` name is the fallback.
+      autoPermissions: readAutomation(raw).autoPermissions,
     };
     if (info.directory) sessions.set(sessionId, info);
     return info;
   }
 
   const dirKey = (value) => String(value || '').replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
-  const fullAutoEnabled = (sessionId, info) => {
-    if (fullAutoOn.has(sessionId)) return true;
+  const autoPermissionsEnabled = (sessionId, info) => {
+    if (autoPermissionsOn.has(sessionId)) return true;
     if (info?.directory) {
-      const chosen = fullAutoDirs.get(dirKey(info.directory));
+      const chosen = autoPermissionsDirs.get(dirKey(info.directory));
       if (chosen !== undefined) return chosen;
     }
-    return info?.fullAuto === true;
+    return info?.autoPermissions === true;
   };
 
   /** Arm a pending ask, if its session wants the timeout. A zero wait is not a
    *  timeout at all: the ask is answered on the next microtask, before a card can
    *  be painted. */
   function arm(p) {
-    if (p.timer || p.queued || !fullAutoEnabled(p.request.sessionId, p.info)) return;
+    if (p.timer || p.queued || !autoPermissionsEnabled(p.request.sessionId, p.info)) return;
     const wait = waitMs();
     p.wait = wait;
     if (!wait) {
@@ -269,7 +270,7 @@ export function createPermissionGate({
     if (!pendingAsks.has(p.request.requestId)) return;
     // The switch may have been turned off during the wait: then the card is the
     // operator's again, and nothing is answered behind their back.
-    if (!fullAutoEnabled(p.request.sessionId, p.info)) {
+    if (!autoPermissionsEnabled(p.request.sessionId, p.info)) {
       if (p.timer) clearTimeout(p.timer);
       p.timer = null;
       return;
@@ -307,19 +308,19 @@ export function createPermissionGate({
   }
 
   /**
-   * Turn the timeout on or off for a session. An open card follows immediately:
-   * on arms it, off disarms it. Called by the API when the menu is toggled; a
-   * session's saved metadata is honoured on its own at the first ask.
+   * Turn Auto-Permissions on or off for a session. An open card follows
+   * immediately: on arms it, off disarms it. Called by the API when the menu is
+   * toggled; a session's saved metadata is honoured on its own at the first ask.
    */
-  function setFullAuto(sessionId, on, directory = '') {
+  function setAutoPermissions(sessionId, on, directory = '') {
     if (!sessionId && !directory) return false;
     const key = dirKey(directory || sessions.get(sessionId)?.directory || '');
     if (on) {
-      if (sessionId) fullAutoOn.add(sessionId);
-      if (key) fullAutoDirs.set(key, true);
+      if (sessionId) autoPermissionsOn.add(sessionId);
+      if (key) autoPermissionsDirs.set(key, true);
     } else {
-      if (sessionId) fullAutoOn.delete(sessionId);
-      if (key) fullAutoDirs.set(key, false);
+      if (sessionId) autoPermissionsOn.delete(sessionId);
+      if (key) autoPermissionsDirs.set(key, false);
     }
     for (const p of pendingAsks.values()) {
       const sameProject = key && dirKey(p.info?.directory) === key;
@@ -332,6 +333,15 @@ export function createPermissionGate({
     }
     return true;
   }
+
+  /** The four switches, from the API. Only Auto-Permissions matters here. */
+  function setAutomation(sessionId, automation, directory = '') {
+    return setAutoPermissions(sessionId, automation?.autoPermissions === true, directory);
+  }
+
+  /** The old name, kept for callers and tests written before the four switches:
+   *  "Full auto" allowed permission cards, so it is Auto-Permissions. */
+  const setFullAuto = (sessionId, on, directory = '') => setAutoPermissions(sessionId, on, directory);
 
   /** The operator (or another view) answered a card: the timer must not fire. */
   function answered(requestId) {
@@ -493,5 +503,5 @@ export function createPermissionGate({
     });
   }
 
-  return { handle, observe, requestOf, remember, setFullAuto, answered, retime, answering: (id) => answering.has(id) };
+  return { handle, observe, requestOf, remember, setFullAuto, setAutoPermissions, setAutomation, answered, retime, answering: (id) => answering.has(id) };
 }

@@ -268,21 +268,31 @@
                 <button type="button" class="icon-button" id="stopBtn" title="Stop the current run" aria-label="Stop the current run" disabled>■</button>
                 <span class="run-control">
                   <button type="button" class="run-btn" id="runBtn" aria-haspopup="menu" aria-expanded="false" hidden
-                    title="Run options — keep running, full auto" aria-label="Run options">
+                    title="Automation — Keep Building, Auto-Permissions, Auto-Answer, Auto-Shutdown" aria-label="Automation">
                     <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" fill="none"
                          stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                       <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/>
                       <circle cx="12" cy="12" r="3"/>
                     </svg>
                   </button>
-                  <!-- The two run switches, in one small menu that opens upward. -->
-                  <div class="run-menu" id="runMenu" hidden role="menu" aria-label="Run options">
-                    <button type="button" class="run-menu-row" id="runAuto" role="menuitemcheckbox" aria-checked="false">
-                      <span class="run-menu-text"><span>Keep running</span><small>Work through the plan until it is done or blocked</small></span>
+                  <!-- The four automation switches, in one small menu that opens
+                       upward. They are the project's, not the app's: each chat keeps
+                       its own set. The waits are one global set in Settings. -->
+                  <div class="run-menu" id="runMenu" hidden role="menu" aria-label="Automation">
+                    <button type="button" class="run-menu-row" id="run_keepBuilding" data-automation="keepBuilding" role="menuitemcheckbox" aria-checked="true">
+                      <span class="run-menu-text"><span>Keep Building</span><small>Carry the plan through until it is done or blocked</small></span>
                       <span class="run-switch" aria-hidden="true"></span>
                     </button>
-                    <button type="button" class="run-menu-row" id="runFullAuto" role="menuitemcheckbox" aria-checked="false">
-                      <span class="run-menu-text"><span>Full auto</span><small id="runFullAutoHint">Allow once, or answer questions with the recommended option, after the wait in Settings → Workers</small></span>
+                    <button type="button" class="run-menu-row" id="run_autoPermissions" data-automation="autoPermissions" role="menuitemcheckbox" aria-checked="false">
+                      <span class="run-menu-text"><span>Auto-Permissions</span><small>Allow once, by itself, after the wait in Settings → Automation</small></span>
+                      <span class="run-switch" aria-hidden="true"></span>
+                    </button>
+                    <button type="button" class="run-menu-row" id="run_autoAnswer" data-automation="autoAnswer" role="menuitemcheckbox" aria-checked="false">
+                      <span class="run-menu-text"><span>Auto-Answer</span><small>Take the Recommended option, after the wait in Settings → Automation</small></span>
+                      <span class="run-switch" aria-hidden="true"></span>
+                    </button>
+                    <button type="button" class="run-menu-row" id="run_autoShutdown" data-automation="autoShutdown" role="menuitemcheckbox" aria-checked="false">
+                      <span class="run-menu-text"><span>Auto-Shutdown</span><small>Turn the PC off when nothing is left to do</small></span>
                       <span class="run-switch" aria-hidden="true"></span>
                     </button>
                   </div>

@@ -2,6 +2,7 @@
 // anything later) implements this interface, so the rest of Synapse never
 // knows which backend is in use.
 import { EventEmitter } from 'node:events';
+import { readAutomation } from '../automation.js';
 
 export class Engine extends EventEmitter {
   constructor(config = {}, ctx = {}) {
@@ -182,6 +183,8 @@ export function isSingleSession(raw) {
 }
 
 export function normalizeSession(raw) {
+  // Read once: the legacy names below are mirrors of this, not a second source.
+  const automation = readAutomation(raw);
   return {
     id: raw?.id || '',
     title: raw?.title || null,
@@ -193,15 +196,12 @@ export function normalizeSession(raw) {
     variant: raw?.model?.variant || null,
     agent: raw?.agent || null,
     single: isSingleSession(raw),
-    // Synapse's own per-session switch: "keep building until done". It lives in
-    // the session metadata so it survives a restart and travels with the session.
-    auto: raw?.metadata?.synapse?.auto === true,
-    // "Full auto": unanswered permission cards and questions take the default
-    // after a minute. Same store, same reason: it is the session's, and it
-    // survives a restart. `permissionTimeout` is the old name; a session saved
-    // under it is still on.
-    fullAuto:
-      raw?.metadata?.synapse?.fullAuto === true || raw?.metadata?.synapse?.permissionTimeout === true,
+    // Synapse's own per-session switches. `automation` is the record; `auto` and
+    // `fullAuto` are read as the legacy names so a chat saved before the four
+    // switches existed keeps its behaviour (src/automation.js).
+    automation,
+    auto: automation.keepBuilding,
+    fullAuto: automation.autoPermissions && automation.autoAnswer,
     // Synapse marks its own scaffolding sessions here (worker sessions, which
     // run in the project directory but must not appear as the operator's work).
     internal: raw?.metadata?.synapse?.internal === true,

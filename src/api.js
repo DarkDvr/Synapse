@@ -6,7 +6,8 @@ import { spawn } from 'node:child_process';
 import { appendRun, readPlan, readRuns, runLedger, briefSession, logPlanState, BRIEF_KEY } from './plans.js';
 import { ensureProjectDoc, appendRequest as appendProjectRequest, appendChat, appendDecision as appendProjectDecision, appendEntry, setHandover } from './project-doc.js';
 import { createFormAuto } from './form-auto.js';
-import { fullAutoTimeoutMs } from './auto-answer.js';
+import { fullAutoTimeoutMs, answerTimeoutMs } from './auto-answer.js';
+import { AUTOMATION_DEFAULTS, AUTOMATION_KEYS, cleanAutomation, nextSynapse, readAutomation } from './automation.js';
 import { keepAttachments } from './keep-attachments.js';
 import { skillRules, describeSkills } from './skills.js';
 import { rulesFor, decide, resolvePath, refusalNote, SINGLE_RULES } from './permissions.js';
@@ -170,11 +171,16 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
   const POWER_COUNTDOWN_SEC = 20;
   let powerGrace = 0;
   let powerTick = 0;
+  // Set while the countdown was armed by Auto-Shutdown rather than by the old
+  // "turn the PC off when the Architect finishes" setting. Everything else in
+  // powerRefusal still guards the final second.
+  let powerByAutomation = false;
 
   function clearPower() {
     let was = false;
     if (powerGrace) { clearTimeout(powerGrace); powerGrace = 0; was = true; }
     if (powerTick) { clearInterval(powerTick); powerTick = 0; was = true; }
+    powerByAutomation = false;
     return was;
   }
 
@@ -182,7 +188,9 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
    *  the countdown so the last second is guarded as hard as the request. */
   function powerRefusal(confirmed) {
     const c = getConfig();
-    if (c?.shutdown?.whenDone !== true) return 'Turning the PC off when the Architect finishes is off in Settings.';
+    if (!powerByAutomation && c?.shutdown?.whenDone !== true) {
+      return 'Turning the PC off when the Architect finishes is off in Settings.';
+    }
     if (!confirmed) return 'The countdown has to be confirmed before the PC is turned off.';
     if ((runs?.active?.() || []).length) return 'A run is still going, so the PC was left on.';
     if (!pcShutdown) return 'This build cannot turn the PC off.';
@@ -620,14 +628,14 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
     return open;
   }
 
-  // Full auto for questions. The permission gate handles permission cards; this
+  // Auto-Answer for questions. The permission gate handles permission cards; this
   // handles forms, on the same switch and the same minute. It records the answer
   // exactly as an operator reply would: the question-loop history, the form
   // broadcast, and the project document.
   const formAuto = createFormAuto({
     engine,
     logger,
-    getTimeoutMs: () => fullAutoTimeoutMs(getConfig()),
+    getTimeoutMs: () => answerTimeoutMs(getConfig()),
     onAnswered: async ({ form, sessionId, answer }) => {
       const signature = formSignature(form);
       if (signature) {
@@ -635,7 +643,7 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
         per.set(signature, { answer, asks: 1 });
         questionHistory.set(sessionId, per);
       }
-      notify?.({ kind: 'form', type: 'form.answered', formId: form.id, sessionId, by: 'Full auto' });
+      notify?.({ kind: 'form', type: 'form.answered', formId: form.id, sessionId, by: 'Auto-Answer' });
       try {
         const session = await safe(() => engine.getSession(sessionId), null);
         if (session?.directory && Array.isArray(form.fields) && form.fields.length) {
@@ -645,7 +653,7 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
       } catch (err) {
         app.warn(`could not write the full-auto answer to the project document: ${err.message}`);
       }
-      app.info(`full auto answered a question in ${sessionId}`);
+      app.info(`auto-answer answered a question in ${sessionId}`);
     },
   });
 
@@ -655,6 +663,37 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
       throw err;
     }
   };
+
+  /**
+   * Write the four automation switches for a session, and tell everything that
+   * acts on them. Read through src/automation.js, which also carries a chat saved
+   * under the older names (`synapse.auto`, `synapse.fullAuto`) into the new shape
+   * without resetting it — and writes those two as mirrors so any older reader
+   * cannot disagree with the switch the operator just set.
+   */
+  async function applyAutomation(sessionId, patch) {
+    requireReady();
+    const session = await engine.getSession(sessionId);
+    const meta = session?.metadata && typeof session.metadata === 'object' ? session.metadata : {};
+    const next = nextSynapse(meta.synapse, patch && typeof patch === 'object' ? patch : {});
+    await engine.updateSessionMetadata(sessionId, { ...meta, synapse: next });
+    const automation = cleanAutomation(next.automation);
+    // The brief carries Keep Building, so the Architect hears about it on the very
+    // next message rather than discovering it mid-run.
+    await brief(sessionId, session?.directory, 'architect', automation.keepBuilding);
+    // Open cards and forms follow their two switches at once — and it is the
+    // project's switch, not this session's: a worker's card is in the same
+    // directory.
+    permissionGate?.setAutomation?.(sessionId, automation, session?.directory || '');
+    formAuto.setAutomation(sessionId, automation, session?.directory || '');
+    // Turning Keep Building on is the operator saying "carry on", so a project they
+    // stopped may run again.
+    if (automation.keepBuilding && session?.directory) runs?.resume?.(session.directory);
+    const on = AUTOMATION_KEYS.filter((key) => automation[key]);
+    app.info(`automation ${on.length ? on.join(', ') : 'all off'} for ${sessionId}`);
+    notify?.({ kind: 'sessions', type: 'session.automation', sessionId, automation });
+    return { ok: true, automation };
+  }
 
   return {
     status: async () => ({
@@ -737,7 +776,11 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
      */
     armPowerOff: async (body) => {
       const c = getConfig();
-      if (c?.shutdown?.whenDone !== true) {
+      // `force` is the Auto-Shutdown watcher: it has already waited its idle
+      // delay and read the project's own switch, so the old global setting is not
+      // its gate. Everything below the gate is shared — one clock, one countdown,
+      // one Cancel.
+      if (body?.force !== true && c?.shutdown?.whenDone !== true) {
         return { ok: false, error: 'Turning the PC off when the Architect finishes is off in Settings.' };
       }
       clearPower();
@@ -757,6 +800,26 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
       }
       return { ok: true, cancelled: was };
     },
+
+    /**
+     * The Auto-Shutdown watcher's arm. The idle wait has already passed, so this
+     * starts the countdown itself — same clock, same 20 seconds, same Cancel, and
+     * the same refusal if a run started in the meantime.
+     */
+    armPowerCountdown: async () => {
+      if (!pcShutdown) return { ok: false, error: 'This build cannot turn the PC off.' };
+      clearPower();
+      powerByAutomation = true;
+      startPowerCountdown();
+      return { ok: true, seconds: POWER_COUNTDOWN_SEC };
+    },
+
+    /** Is a shutdown waiting or counting down? The watcher needs the answer so a
+     *  Cancel is a decision, not a speed bump it immediately undoes. */
+    powerOffState: async () => ({
+      armed: Boolean(powerGrace || powerTick),
+      countdown: Boolean(powerTick),
+    }),
 
     /**
      * Turn the PC off *now*, confirmed. Kept as its own route because it is the
@@ -803,7 +866,7 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
         Object.entries(getConfig()?.roles || {}).map(([role, entry]) => [role, String(entry?.ref || '')]),
       );
       const saved = applyConfig(reconcile(body));
-      // A changed Full auto wait applies to cards already on screen, not only to
+      // A changed Auto-Answer wait applies to cards already on screen, not only to
       // the next ask.
       permissionGate?.retime?.();
       for (const [role, entry] of Object.entries(saved.roles || {})) {
@@ -1267,6 +1330,17 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
       // From the first turn, the Architect knows where it is and that the plan
       // file is its own to keep.
       await brief(session.id, location, 'architect', false);
+      // A new project starts with the four automation switches written down, not
+      // left to be inferred: Keep Building on, the other three off. Writing them
+      // here means the cog has real values to show before anything is toggled, and
+      // a later change to the defaults cannot move a project that already exists.
+      try {
+        await engine.updateSessionMetadata(session.id, {
+          synapse: { automation: { ...AUTOMATION_DEFAULTS }, auto: AUTOMATION_DEFAULTS.keepBuilding, fullAuto: false },
+        });
+      } catch (err) {
+        app.warn(`could not write the automation defaults for ${session.id}: ${err.message}`);
+      }
       // A new session is a new piece of work, and the census is a picture of what
       // the models are doing *now*: left to accumulate it describes a machine that
       // no longer exists. The operator opens the popup to answer "what is being
@@ -1371,7 +1445,7 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
             app.warn(`could not close the round: ${err.message}`);
           }
         }
-        await brief(sessionId, directory, 'architect', session?.auto === true, { single });
+        await brief(sessionId, directory, 'architect', session?.automation?.keepBuilding === true, { single });
       } catch (err) {
         app.warn(`brief skipped for ${sessionId}: ${err.message}`);
       }
@@ -1589,7 +1663,10 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
 
         const meta = session.metadata && typeof session.metadata === 'object' ? { ...session.metadata } : {};
         const synapse = { ...(meta.synapse && typeof meta.synapse === 'object' ? meta.synapse : {}) };
-        synapse.auto = session.auto === true;
+        // The new conversation keeps the four switches (and the legacy mirrors
+        // `nextSynapse` writes), or a compaction would quietly reset the project's
+        // automation.
+        Object.assign(synapse, nextSynapse(synapse, readAutomation(session)));
         synapse.compacted = { at, summary: handover.text, messages: handover.messages };
         if (compactCancels.has(sessionId)) throw cancelled();
         const created = await engine.createSession({
@@ -1623,7 +1700,7 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
           app.warn(`the old conversation could not be deleted after a compact: ${err.message}`);
         }
         briefed.delete(sessionId);
-        await brief(created.id, session.directory, 'architect', session.auto === true, {
+        await brief(created.id, session.directory, 'architect', session?.automation?.keepBuilding === true, {
           single: session.single === true,
         });
         app.info(
@@ -1652,54 +1729,19 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
     },
 
     /**
-     * The "keep building" switch: when on, the Architect is expected to keep
-     * delegating the next ready task until the plan is done or a task is
-     * blocked. It lives in the session metadata, so it is per session and it
-     * survives a restart.
+     * The four automation switches, per project. The body carries a `patch`, so the
+     * page sends only what moved and the answer is always the whole set.
      */
-    setAuto: async (sessionId, body) => {
-      requireReady();
-      const session = await engine.getSession(sessionId);
-      const meta = session?.metadata && typeof session.metadata === 'object' ? session.metadata : {};
-      const synapse = meta.synapse && typeof meta.synapse === 'object' ? meta.synapse : {};
-      const auto = body?.auto === true;
-      await engine.updateSessionMetadata(sessionId, { ...meta, synapse: { ...synapse, auto } });
-      // The brief carries the mode, so the Architect hears about it on the very
-      // next message rather than discovering it mid-run.
-      await brief(sessionId, session?.directory, 'architect', auto);
-      // Turning keep-building on is the operator saying "carry on", so a project
-      // they stopped may run again.
-      if (auto && session?.directory) runs?.resume?.(session.directory);
-      app.info(`keep-building ${auto ? 'on' : 'off'} for ${sessionId}`);
-      return { ok: true, auto };
-    },
+    setAutomation: async (sessionId, body) => applyAutomation(sessionId, body?.patch),
 
-    /**
-     * "Full auto": while it is on, a request left to the operator takes the
-     * default after `fullAuto.timeoutSec` (20 seconds by default) — a permission
-     * card is allowed once, a question gets the Recommended option (or the top
-     * one). It only ever answers `ask` verdicts: a harness write or a credential
-     * store is denied before a card exists, so it cannot widen those walls.
-     */
-    setFullAuto: async (sessionId, body) => {
-      requireReady();
-      const session = await engine.getSession(sessionId);
-      const meta = session?.metadata && typeof session.metadata === 'object' ? session.metadata : {};
-      const synapse = meta.synapse && typeof meta.synapse === 'object' ? meta.synapse : {};
-      const enabled = body?.enabled === true;
-      // One name from now on. The old key is dropped so a stale `permissionTimeout`
-      // cannot disagree with `fullAuto` after a rename.
-      const next = { ...synapse, fullAuto: enabled };
-      delete next.permissionTimeout;
-      await engine.updateSessionMetadata(sessionId, { ...meta, synapse: next });
-      // Open cards and forms follow the switch at once — and it is the project's
-      // switch, not this session's: a worker's card is in the same directory.
-      permissionGate?.setFullAuto?.(sessionId, enabled, session?.directory || '');
-      formAuto.setFullAuto(sessionId, enabled, session?.directory || '');
-      app.info(`full auto ${enabled ? 'on' : 'off'} for ${sessionId}`);
-      notify?.({ kind: 'sessions', type: 'session.fullAuto', sessionId, enabled });
-      return { ok: true, enabled };
-    },
+    /** The old two switches, still callable: each maps onto the one it became. */
+    setAuto: async (sessionId, body) => applyAutomation(sessionId, { keepBuilding: body?.auto === true }),
+
+    setFullAuto: async (sessionId, body) =>
+      applyAutomation(sessionId, {
+        autoPermissions: body?.enabled === true,
+        autoAnswer: body?.enabled === true,
+      }),
 
     /** One form sweep, called on a timer by the server. Exposed for tests. */
     autoAnswerTick: async () => formAuto.tick(),
@@ -2075,10 +2117,10 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
             sessionId: f.sessionID,
             title: f.title || 'Input needed',
             fields: Array.isArray(f.fields) ? f.fields : [],
-            // Whether *this chat* answers its own questions under Full auto. It is
-            // that chat's switch, not the one on screen: a worker asking from
-            // another chat must not be labelled with the open chat's setting.
-            fullAuto: await formAuto.enabledFor(f.sessionID),
+            // Whether *this chat* answers its own questions (Auto-Answer is on for
+            // it). It is that chat's switch, not the one on screen: a worker asking
+            // from another chat must not be labelled with the open chat's setting.
+            autoAnswer: await formAuto.enabledFor(f.sessionID),
           })),
         ),
         active,

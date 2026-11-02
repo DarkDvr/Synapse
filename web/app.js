@@ -13,6 +13,7 @@ import { newStream, pushStream, slideTarget, nextOffset, takePending, freezeStre
 import { addSample, rateOf } from './rate.js';
 import { DONE_SOUNDS, doneSoundName, workWillContinue } from './notify.js';
 import { askHeadNote } from './ask-note.js';
+import { AUTOMATION_DEFAULTS, AUTOMATION_ROWS, anyAutomationOn } from './automation.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -184,11 +185,10 @@ const state = {
   planState: null,
   // What the engine can load and what the role settings expect (GET /api/skills).
   skillsInfo: null,
-  // "Keep building": the open session's switch for running the plan to the end.
-  auto: false,
-  // "Full auto": unanswered permission cards allow once after the wait set in
-// Settings → Workers (20 seconds by default; 0 answers at once, no card).
-  fullAuto: false,
+  // The four automation switches for the open project — Keep Building,
+  // Auto-Permissions, Auto-Answer, Auto-Shutdown. They live in the session's
+  // metadata (src/automation.js); this is the copy the cog draws.
+  automation: { keepBuilding: true, autoPermissions: false, autoAnswer: false, autoShutdown: false },
   permissions: [],
   // When this window last gained focus. A click that brings an unfocused window
   // forward lands on the page too, and an answer must be a click on a window the
@@ -448,30 +448,23 @@ function noteWorking() {
     return;
   }
   if (!workWasLive) return;
-  if (workWillContinue({ mode: state.mode, auto: state.auto === true, tasks: state.planState?.plan?.tasks || [] })) return;
+  if (workWillContinue({ mode: state.mode, auto: state.automation?.keepBuilding === true, tasks: state.planState?.plan?.tasks || [] })) return;
   workWasLive = false;
   if (workEndQuiet) {
     workEndQuiet = false;
     return;
   }
   playDoneSound();
-  // Same signal as the chime, on purpose: the sound means "nothing is running and
-  // the Architect has said its piece", and that is exactly when the operator asked
-  // the machine to go off. A stop or a failure never reaches here.
-  armShutdown();
 }
 
 // ── the timed shutdown ──────────────────────────────────────────────────
-// "Turn the PC off when the Architect finishes" is three waits, and every one of
-// them is a chance to change your mind: the minutes the operator typed, then a
-// 20-second countdown with a Cancel button, then the machine.
-//
-// Both clocks live in the *server* (see armPowerOff in src/api.js): a hidden
-// window's timers are throttled by the browser, and Synapse in the tray is exactly
-// when this feature is wanted. The page arms the wait, draws the countdown the
-// server sends, and asks it to cancel — nothing here decides when the machine goes.
+// Auto-Shutdown is armed by the *server* (src/auto-shutdown.js): it decides when
+// nothing is left to do, waits the idle minutes from Settings → Automation, and
+// then starts the same 20-second countdown with a Cancel button. Both clocks live
+// there because a hidden window's timers are throttled by the browser, and Synapse
+// in the tray is exactly when this feature is wanted. The page only draws the
+// countdown the server sends, and asks it to cancel.
 let shutdownWarned = false;
-let shutdownArmed = false;
 
 /** Stop waiting, in the server and on screen. Quiet when work resumed, spoken when
  *  the operator cancelled. */
@@ -481,21 +474,11 @@ function cancelShutdown({ quiet = false } = {}) {
   shutdownWarned = false;
   // Nothing armed and nothing on screen: this is the common case (it runs whenever
   // work starts), and posting a cancel for it would be a request per stream event.
-  if (!shutdownArmed && !wasShown) return;
-  shutdownArmed = false;
+  if (!wasShown) return;
   // The server may have nothing armed, and it answers that honestly, so a failure
   // here is not worth a toast.
   api('POST', '/api/power-off/cancel').catch(() => {});
   if (wasShown && !quiet) toast('Shutdown Cancelled', 'The PC stays on.');
-}
-
-/** Arm the wait, or disarm it. Called only when the Architect really finished. */
-function armShutdown() {
-  const cfg = state.config?.shutdown;
-  if (!cfg?.whenDone) return;
-  const minutes = Math.min(180, Math.max(1, Math.round(Number(cfg.minutes) || DEFAULT_SHUTDOWN_MINUTES)));
-  shutdownArmed = true;
-  api('POST', '/api/power-off/arm', { minutes }).catch(() => { shutdownArmed = false; });
 }
 
 /** The server's countdown, painted. `seconds` comes from the event, so the number on
@@ -1840,54 +1823,46 @@ const SINGLE_PERMISSIONS = [{ action: 'subagent', resource: '*', effect: 'deny' 
 const sessionMode = (s) => (s?.single ? 'single' : 'multi');
 
 /**
- * The Full auto wait, in seconds, from the saved config. 0 is real: permission
- * cards are answered without ever being drawn. The menu and the cards say the
- * number that is actually set rather than a stale "20".
+ * A wait from Settings → Automation, in seconds. 0 is real: the harness acts at
+ * once. The menu, the cards and the shutdown note say the number that is
+ * actually set rather than a stale "20".
  */
-function fullAutoWaitSec() {
-  const raw = state.config?.fullAuto?.timeoutSec;
-  const n = raw === undefined || raw === null || raw === '' ? 20 : Number(raw);
-  return Number.isFinite(n) && n >= 0 ? Math.floor(n) : 20;
+function automationWaitSec(key, fallback) {
+  const raw = state.config?.automation?.[key];
+  const n = raw === undefined || raw === null || raw === '' ? fallback : Number(raw);
+  return Number.isFinite(n) && n >= 0 ? Math.floor(n) : fallback;
 }
 
+const answerWaitSec = () => automationWaitSec('answerSec', 30);
+
 /**
- * The run options, behind the cog between Stop and Send.
+ * The automation switches, behind the cog between Stop and Send.
  *
- * It replaced the finish-line flag: one menu now holds "keep running" (the old
- * flag) and "full auto" (an unanswered ask or question takes the default after
- * the wait in Settings → Workers). The cog is quiet gray with a clear gear,
- * yellow on hover or while the menu is open, and green while either switch is
- * on, so the composer says a standing decision is in force without a second
- * control on the row.
+ * Four rows now, one switch each, because the two they replaced had to be moved
+ * together: an operator who wanted questions answered also got every permission
+ * allowed. The cog is quiet gray with a clear gear, yellow on hover or while the
+ * menu is open, and green while any switch is on, so the composer says a standing
+ * decision is in force without a second control on the row.
+ *
+ * The waits are not here: they are one global set in Settings → Automation, and
+ * the rows only name the one they obey.
  */
 function renderKeep() {
   const btn = $('runBtn');
   if (!btn) return;
-  // The timeout works in Single too (tools still ask); keep running does not, and
-  // its row is hidden by CSS there.
   btn.hidden = state.view !== 'session' || !state.sessionId;
-  // Green while either switch is on — a standing decision the operator can see
+  // Green while any switch is on — a standing decision the operator can see
   // without opening the menu. All off: gray.
-  btn.classList.toggle('is-on', state.auto === true || state.fullAuto === true);
-  const auto = $('runAuto');
-  if (auto) auto.setAttribute('aria-checked', String(state.auto === true));
-  const timeout = $('runFullAuto');
-  if (timeout) timeout.setAttribute('aria-checked', String(state.fullAuto === true));
-  const hint = $('runFullAutoHint');
-  if (hint) {
-    const wait = fullAutoWaitSec();
-    hint.textContent =
-      wait === 0
-        ? 'Allow at once, no card; questions take the recommended option at once'
-        : `Allow once, or answer questions with the recommended option, after ${wait} seconds`;
+  btn.classList.toggle('is-on', anyAutomationOn(state.automation));
+  const on = AUTOMATION_ROWS.filter((row) => state.automation?.[row.key] === true).map((row) => row.label);
+  btn.title = on.length ? `Automation: ${on.join(', ')}` : 'Automation — four switches, all off';
+  for (const row of AUTOMATION_ROWS) {
+    const el = $(row.id || `run_${row.key}`);
+    if (!el) continue;
+    el.setAttribute('aria-checked', String(state.automation?.[row.key] === true));
+    const hint = el.querySelector('small');
+    if (hint) hint.textContent = row.hint;
   }
-  btn.title =
-    [
-      state.auto ? 'Keep running: on' : null,
-      state.fullAuto ? 'Full auto: on' : null,
-    ]
-      .filter(Boolean)
-      .join(' · ') || 'Run options — keep running, full auto';
 }
 
 function closeRunMenu() {
@@ -1936,47 +1911,33 @@ function toggleRunMenu() {
   btn.setAttribute('aria-expanded', String(open));
   if (open) {
     positionRunMenu();
-    $('runAuto')?.focus();
+    $('run_keepBuilding')?.focus();
   }
 }
 
-async function setKeep(next) {
-  if (!state.sessionId) return;
+/**
+ * Toggle one of the four switches for the open project.
+ *
+ * The server answers with the whole set, so the page never guesses what moved —
+ * and the answer is written back onto the session in the rail, so opening another
+ * project and coming back shows the same four.
+ */
+async function setAutomationSwitch(key, next) {
+  const row = AUTOMATION_ROWS.find((r) => r.key === key);
+  if (!state.sessionId || !row) return;
   try {
-    const r = await api('POST', `/api/sessions/${encodeURIComponent(state.sessionId)}/auto`, { auto: next });
-    state.auto = r.auto === true;
-    renderKeep();
-    toast(
-      state.auto ? 'Keep Running On' : 'Keep Running Off',
-      state.auto
-        ? 'The Architect will run the plan through to the end, unless a task is blocked.'
-        : 'The Architect does one task, then stops for you.',
-    );
-  } catch (err) {
-    toast('Could Not Change Keep Running', err.message);
-  }
-}
-
-async function setFullAuto(next) {
-  if (!state.sessionId) return;
-  try {
-    const r = await api('POST', `/api/sessions/${encodeURIComponent(state.sessionId)}/full-auto`, {
-      enabled: next,
+    const r = await api('POST', `/api/sessions/${encodeURIComponent(state.sessionId)}/automation`, {
+      patch: { [key]: next === true },
     });
-    state.fullAuto = r.enabled === true;
+    state.automation = { ...AUTOMATION_DEFAULTS, ...(r.automation || {}) };
+    const session = findSession(state.sessionId);
+    if (session) session.automation = state.automation;
     renderKeep();
     renderTranscript();
-    const wait = fullAutoWaitSec();
-    toast(
-      state.fullAuto ? 'Full Auto On' : 'Full Auto Off',
-      state.fullAuto
-        ? wait === 0
-          ? 'Permissions are allowed at once and no permission card is shown. Questions take the recommended (or top) option at once.'
-          : `Unanswered requests take the default after ${wait} seconds: permission cards allow once, questions take the recommended (or top) option.`
-        : 'Every request waits for you again.',
-    );
+    const on = state.automation[key] === true;
+    toast(`${row.label} ${on ? 'On' : 'Off'}`, on ? row.on : row.off);
   } catch (err) {
-    toast('Could Not Change Full Auto', err.message);
+    toast(`Could Not Change ${row.label}`, err.message);
   }
 }
 
@@ -3108,8 +3069,7 @@ async function openSession(id) {
   state.clocks = loadClocks(id);
   // the mode is a property of the session, not of the app
   state.mode = sessionMode(findSession(id));
-  state.auto = findSession(id)?.auto === true;
-  state.fullAuto = findSession(id)?.fullAuto === true;
+  state.automation = { ...AUTOMATION_DEFAULTS, ...(findSession(id)?.automation || {}) };
   // Arriving mid-run is not "it just finished": arm the chime from where the chat
   // actually is, or switching to a busy chat and back would chirp for old work.
   workWasLive = sessionWorking(id);
@@ -3139,8 +3099,7 @@ function showNothing() {
   state.messages = [];
   state.planState = null;
   state.clocks = null;
-  state.auto = false;
-  state.fullAuto = false;
+  state.automation = { ...AUTOMATION_DEFAULTS };
   state.mode = 'single';
   renderMode();
   setView();
@@ -3324,7 +3283,7 @@ function renderRoleActivity() {
         // and a list they can act on.
         const stuck = ready ? null : tasks.find((t) => t.status === 'blocked' || t.status === 'failed');
         text = ready
-          ? `Waiting on you — ${ready.id} is ready${state.auto ? '' : ' and Keep Building is off'}`
+          ? `Waiting on you — ${ready.id} is ready${state.automation?.keepBuilding ? '' : ' and Keep Building is off'}`
           : stuck
             ? `Waiting on you — ${stuck.id} is ${stuck.status}`
             : 'Waiting on you';
@@ -5029,10 +4988,10 @@ function renderPermissions() {
         ${paths.length ? `<pre class="perm-res">${esc(paths.join('\n'))}</pre>` : ''}
         ${p.reason ? `<p class="perm-why">${esc(p.reason)}</p>` : ''}
         ${diff}
-        <p class="perm-note">${state.fullAuto
-          ? fullAutoWaitSec() === 0
-            ? 'Full auto is set to answer immediately, so this card should not stay up. '
-            : `If nobody answers within ${fullAutoWaitSec()} seconds, this is allowed once. `
+        <p class="perm-note">${state.automation?.autoPermissions
+          ? automationWaitSec('permissionsSec', 10) === 0
+            ? 'Auto-Permissions answers immediately, so this card should not stay up. '
+            : `If nobody answers within ${automationWaitSec('permissionsSec', 10)} seconds, Auto-Permissions allows it once. `
           : ''}${p.role && p.role !== 'architect'
           ? 'Nothing has happened yet. You can still say no.'
           : 'Nothing has happened yet. You can still say no — say why in the chat; the Architect is reading it.'}</p>
@@ -5404,10 +5363,10 @@ function renderAskPanel() {
       <span class="ask-head-note">${esc(
         askHeadNote({
           here: form.sessionId === state.sessionId,
-          // The chat's own switch when the server said so; the open chat's when it
-          // did not (an older snapshot).
-          fullAuto: (form.fullAuto ?? state.fullAuto) === true,
-          wait: fullAutoWaitSec(),
+          // The asking chat's own switch when the server said so; the open chat's
+          // when it did not (an older snapshot).
+          autoAnswer: (form.autoAnswer ?? state.automation?.autoAnswer) === true,
+          wait: answerWaitSec(),
         }),
       )}</span>
     </div>
@@ -7070,7 +7029,6 @@ function connectStream() {
     // so the page never decides when the machine goes — it only shows the count and
     // offers the way out.
     if (ev.kind === 'shutdown-warning') {
-      shutdownArmed = true;
       showShutdownWarning(ev.seconds);
       return;
     }
@@ -7084,7 +7042,6 @@ function connectStream() {
     }
     if (ev.kind === 'shutdown-cancelled') {
       const shown = !$('shutdownModal').hidden;
-      shutdownArmed = false;
       shutdownWarned = false;
       $('shutdownModal').hidden = true;
       if (shown) toast('PC Left On', ev.reason || 'The timed shutdown was cancelled.');
@@ -7099,10 +7056,12 @@ function connectStream() {
       if (ev.type === 'session.mode' && ev.sessionId === state.sessionId && !state.busy) {
         applyMode(ev.mode);
       }
-      // The full auto is also per session: another view flipping it must
-      // move this one's switch and the note on any open card.
-      if (ev.type === 'session.fullAuto' && ev.sessionId === state.sessionId) {
-        state.fullAuto = ev.enabled === true;
+      // The four switches are per project: another view flipping one must move
+      // this one's cog and the note on any open card.
+      if (ev.type === 'session.automation' && ev.sessionId === state.sessionId) {
+        state.automation = { ...AUTOMATION_DEFAULTS, ...(ev.automation || {}) };
+        const session = findSession(state.sessionId);
+        if (session) session.automation = state.automation;
         renderKeep();
         renderTranscript();
       }
@@ -7444,6 +7403,7 @@ const ICONS = {
   info: '<circle cx="8" cy="8" r="6.1"/><path d="M8 7.4v4.1"/><path d="M8 4.9h.01"/>',
   general:
     '<rect x="2.4" y="2.9" width="11.2" height="10.2" rx="2"/><path d="M2.4 6.2h11.2"/><path d="M5 4.6h.01M6.6 4.6h.01"/>',
+  automation: '<path d="M8.6 1.6 3.2 9h3.4l-.8 5.4L11.2 7H7.8z"/>',
 };
 
 const setIcon = (name) =>
@@ -7457,7 +7417,7 @@ const SETTINGS_TABS = [
   { id: 'providers', label: 'Providers', icon: 'plug' },
   { id: 'workers', label: 'Workers', icon: 'nodes' },
   { id: 'tools', label: 'Tools', icon: 'tools' },
-  { id: 'notices', label: 'Notices', icon: 'bell' },
+  { id: 'automation', label: 'Automation', icon: 'automation' },
   { id: 'logging', label: 'Logging', icon: 'lines' },
   { id: 'updates', label: 'Check for Updates', icon: 'refresh' },
   { id: 'about', label: 'About', icon: 'info' },
@@ -7683,22 +7643,6 @@ function settingsTools(c) {
   ].join('');
 }
 
-function settingsNotices(c) {
-  return [
-    setGroup(
-      'Finished Work',
-      setSelect(c, 'Sound', 'notify.doneSound', DONE_SOUNDS, {
-        value: doneSoundName(String(readPath(c, 'notify.doneSound') ?? DONE_SOUND_DEFAULT)),
-        hint: 'Played when the chat you are looking at goes quiet after the Architect worked — its last words already on screen and nothing else running. Not on Stop, and not when the turn failed.',
-      }) +
-        `<div class="set-field" title="Hear the sound before you save it."><span>Preview</span>` +
-        `<button type="button" class="btn btn-secondary btn-sm" data-test-sound>Play It</button></div>` +
-        `<p class="set-note">Four short ones, all built to be noticed and talked over: a two-note <strong>Chime</strong>, a single <strong>Bell</strong>, a wooden <strong>knock</strong>, and a <strong>Ripple</strong> of three light plips. Off silences it. ` +
-        `They are Synapse's own files in <code>web\\sounds</code>, generated by <code>scripts\\make-sounds.mjs</code>, so they travel with the folder and nothing is downloaded.</p>` +
-        `<p class="set-note">The sound is for this window's open chat. A run in a project you are not looking at does not chime — the rail's dot is what tells you it is alive.</p>`,
-    ),
-  ].join('');
-}
 
 // The chat's text size, in pixels. The same bounds live in src/config.js and both
 // are enforced: the form is a convenience, the config file is the truth.
@@ -7711,11 +7655,6 @@ const CHAT_TEXT_MAX = 16.5;
 // strings behind it would be a switch that does nothing.
 const LANGUAGES = [{ v: 'en', l: 'English' }];
 
-// Minutes between "the Architect finished" and the warning, when the saved config
-// has nothing usable. The same default lives in src/config.js.
-const DEFAULT_SHUTDOWN_MINUTES = 5;
-
-/** A size from the config or the form, made legal. */
 function chatTextPx(value) {
   const n = Number(value);
   if (!Number.isFinite(n)) return CHAT_TEXT_DEFAULT;
@@ -7771,7 +7710,6 @@ function applyLanguage(value = state.config?.ui?.language) {
  */
 function settingsGeneral(c) {
   const px = chatTextPx(readPath(c, 'ui.chatTextPx'));
-  const minutes = Number(readPath(c, 'shutdown.minutes')) || DEFAULT_SHUTDOWN_MINUTES;
   return [
     setGroup(
       'Interface',
@@ -7800,25 +7738,67 @@ function settingsGeneral(c) {
         `<p class="set-note">One language for now. A Russian translation is on the deferred list; ` +
         `the selector is here so it has somewhere to go, not to switch something that does not exist yet.</p>`,
     ),
+    // Notices lived in their own tab until 2 Nov. One setting does not need a
+    // tab, and a tab that holds one setting is a place the operator forgets to
+    // look. Same fields, same words.
     setGroup(
-      'When the Architect Finishes',
-      setCheck(
-        c,
-        'Turn the PC off when it finishes',
-        'shutdown.whenDone',
-        'Off by default. When on, Synapse waits the minutes below after the Architect says it is done, ' +
-          'then shows a 20-second countdown with a Cancel button. Only the machine goes off; the work is already on disk.',
-      ) +
-        setField(c, 'Wait Before Shutting Down (minutes)', 'shutdown.minutes', {
+      'Finished Work',
+      setSelect(c, 'Sound', 'notify.doneSound', DONE_SOUNDS, {
+        value: doneSoundName(String(readPath(c, 'notify.doneSound') ?? DONE_SOUND_DEFAULT)),
+        hint: 'Played when the chat you are looking at goes quiet after the Architect worked — its last words already on screen and nothing else running. Not on Stop, and not when the turn failed.',
+      }) +
+        `<div class="set-field" title="Hear the sound before you save it."><span>Preview</span>` +
+        `<button type="button" class="btn btn-secondary btn-sm" data-test-sound>Play It</button></div>` +
+        `<p class="set-note">Four short ones, all built to be noticed and talked over: a two-note <strong>Chime</strong>, a single <strong>Bell</strong>, a wooden <strong>knock</strong>, and a <strong>Ripple</strong> of three light plips. Off silences it. ` +
+        `They are Synapse's own files in <code>web\\sounds</code>, generated by <code>scripts\\make-sounds.mjs</code>, so they travel with the folder and nothing is downloaded.</p>` +
+        `<p class="set-note">The sound is for this window's open chat. A run in a project you are not looking at does not chime — the rail's dot is what tells you it is alive.</p>`,
+    ),
+  ].join('');
+}
+
+/**
+ * Settings → Automation: how patient the harness is.
+ *
+ * Four waits, one per switch, global — they describe the harness's patience, not
+ * a project, so changing one applies to every project past and future. Which
+ * switches are ON is per project: the cog in the chat, and the note here says so.
+ * A new project starts with Keep Building on and the other three off.
+ */
+function settingsAutomation(c) {
+  const sec = (key, fallback) => automationWaitSec(key, fallback);
+  return [
+    setGroup(
+      'Delays',
+      setField(c, 'Keep Building — Wait Before the Next Task (seconds)', 'automation.keepBuildingSec', {
+        type: 'number',
+        value: sec('keepBuildingSec', 5),
+        attr: 'min="0" max="600" step="1"',
+        hint: 'The pause between a worker’s report and the Architect starting the next task. Seconds, 0 to 600. Long enough to read the report if you are watching.',
+      }) +
+        setField(c, 'Auto-Permissions — Wait Before Allowing (seconds)', 'automation.permissionsSec', {
           type: 'number',
-          value: minutes,
-          attr: 'min="1" max="180" step="1"',
-          hint: 'Minutes between the finish and the 20-second warning. 1 to 180. A new run cancels the wait.',
+          value: sec('permissionsSec', 10),
+          attr: 'min="0" max="3600" step="1"',
+          hint: 'How long a permission card waits before Auto-Permissions allows it once. Seconds, 0 to 3600. 0 allows at once, without drawing a card.',
         }) +
-        `<p class="set-note">The countdown is the last chance to change your mind, so it is the biggest thing on ` +
-        `screen: <strong>20 seconds</strong>, a <strong>Cancel</strong> button, and Escape or a click outside does the same. ` +
-        `A turn that failed or was stopped never arms it — that is not the Architect finishing. ` +
-        `Nothing here closes Synapse or stops the server: it turns the machine off.</p>`,
+        setField(c, 'Auto-Answer — Wait Before Answering (seconds)', 'automation.answerSec', {
+          type: 'number',
+          value: sec('answerSec', 30),
+          attr: 'min="0" max="3600" step="1"',
+          hint: 'How long a question waits before Auto-Answer takes the Recommended option (or the top one). Seconds, 0 to 3600.',
+        }) +
+        setField(c, 'Auto-Shutdown — Idle Time Before Turning Off (minutes)', 'automation.shutdownMin', {
+          type: 'number',
+          value: Number(readPath(c, 'automation.shutdownMin')) || 5,
+          attr: 'min="1" max="180" step="1"',
+          hint: 'How long Synapse waits with nothing running and nothing left to start before it shows the 20-second shutdown countdown. Minutes, 1 to 180.',
+        }) +
+        `<p class="set-note">These are the waits <em>all four switches</em> obey, in every project. ` +
+        `Which of the four is on belongs to the project: open its chat and use the <strong>cog</strong> between Stop and Send. ` +
+        `A new project starts with <strong>Keep Building</strong> on and the other three off.</p>` +
+        `<p class="set-note">Auto-Shutdown turns the machine off only when nothing is running, nothing is waiting for a question ` +
+        `or a permission, and no task can start on its own. It is the same countdown as before — 20 seconds, with a Cancel — ` +
+        `and a new run cancels it.</p>`,
     ),
   ].join('');
 }
@@ -8116,7 +8096,7 @@ const SETTINGS_PANES = {
   providers: settingsProviders,
   workers: settingsWorkers,
   tools: settingsTools,
-  notices: settingsNotices,
+  automation: settingsAutomation,
   logging: settingsLogging,
   updates: settingsUpdates,
   about: settingsAbout,
@@ -8451,10 +8431,9 @@ async function saveSettings() {
     // for changes: this is the one place the file becomes the page's truth.
     applyChatText();
     applyLanguage();
-    // A saved shutdown setting takes effect now: off disarms a wait, and new
-    // minutes restart one that is already waiting on the same finish.
-    if (state.config?.shutdown?.whenDone !== true) cancelShutdown();
-    else if (shutdownGrace) armShutdown();
+    // The Auto-Shutdown delays are read by the server on its next sweep, so a
+    // saved change needs nothing here. A save is also the moment to re-draw the
+    // cog: the waits it names may have moved.
     state.setDraft = JSON.parse(JSON.stringify(state.config));
     state.setProvSelected = null;
     renderLlmStatus();
@@ -8770,8 +8749,12 @@ document.addEventListener('keydown', (e) => {
     e.stopPropagation();
     toggleRunMenu();
   });
-  $('runAuto').addEventListener('click', () => setKeep(!state.auto));
-  $('runFullAuto').addEventListener('click', () => setFullAuto(!state.fullAuto));
+  $('runMenu').addEventListener('click', (e) => {
+    const row = e.target.closest?.('[data-automation]');
+    if (!row) return;
+    const key = row.dataset.automation;
+    setAutomationSwitch(key, state.automation?.[key] !== true);
+  });
   // A click anywhere outside the cog or its menu closes it; Escape too.
   document.addEventListener('click', (e) => {
     if (!e.target.closest?.('.run-control')) closeRunMenu();

@@ -1,16 +1,17 @@
-// Full auto for questions: the forms half of the switch.
+// Auto-Answer: the forms half of the automation switches.
 //
 // The engine raises a form and waits for a reply; the page shows the panel. When
-// the operator is away and "Full auto" is on, this answers the form after the
-// wait in Settings → Workers (`fullAuto.timeoutSec`): the recommended option, or
-// the top one. Zero means answer on the next sweep, with no wait. It polls rather
-// than listens because forms have no event Synapse sees; the server calls
-// `tick()` every few seconds, so a closed browser cannot stop it.
+// the project has Auto-Answer on and the operator is away, this answers the form
+// after the wait in Settings → Automation (`automation.answerSec`): the
+// recommended option, or the top one. Zero means answer on the next sweep, with
+// no wait. It polls rather than listens because forms have no event Synapse sees;
+// the server calls `tick()` every few seconds, so a closed browser cannot stop it.
 //
-// The flag lives in the session metadata (`synapse.fullAuto`). It is read once
-// per session and kept current by `setFullAuto`; a session saved with the old
-// `permissionTimeout` name is still honoured.
+// The switch lives in the session metadata (`synapse.automation.autoAnswer`), read
+// through src/automation.js so a chat saved under the older `fullAuto` name keeps
+// its behaviour.
 import { autoAnswerFor, FULL_AUTO_MS } from './auto-answer.js';
+import { readAutomation } from './automation.js';
 
 export function createFormAuto({
   engine,
@@ -43,7 +44,7 @@ export function createFormAuto({
 
   const dirKey = (value) => String(value || '').replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
 
-  function setFullAuto(sessionId, on, directory = '') {
+  function setAutoAnswer(sessionId, on, directory = '') {
     if (!sessionId && !directory) return false;
     if (sessionId) {
       if (on) fullAuto.add(sessionId);
@@ -59,7 +60,17 @@ export function createFormAuto({
     return true;
   }
 
-  /** Is full auto on for this session? The project's explicit switch first, then
+  /** The four switches, from the API. Only Auto-Answer matters to this module; the
+   *  other three are ignored so one call site can carry all four. */
+  function setAutomation(sessionId, automation, directory = '') {
+    return setAutoAnswer(sessionId, automation?.autoAnswer === true, directory);
+  }
+
+  /** The old name, kept for callers and tests written before the four switches:
+   *  "Full auto" answered questions, so it is Auto-Answer. */
+  const setFullAuto = (sessionId, on, directory = '') => setAutoAnswer(sessionId, on, directory);
+
+  /** Is Auto-Answer on for this session? The project's explicit switch first, then
    *  the session's own saved metadata, asked once and remembered. */
   async function enabledFor(sessionId) {
     const known = dirOf.get(sessionId);
@@ -82,13 +93,14 @@ export function createFormAuto({
         const chosen = fullAutoDirs.get(dirKey(directory));
         if (chosen !== undefined) return chosen;
       }
-      const synapse = session?.metadata?.synapse || {};
-      if (synapse.fullAuto === true || synapse.permissionTimeout === true) {
+      // The session's own automation first, with the old `fullAuto` name as the
+      // fallback for a chat saved before the four switches (src/automation.js).
+      if (readAutomation(session).autoAnswer === true) {
         fullAuto.add(sessionId);
         return true;
       }
     } catch (err) {
-      log?.warn(`full auto could not read ${sessionId}: ${err.message}`);
+      log?.warn(`auto-answer could not read ${sessionId}: ${err.message}`);
     }
     return false;
   }
@@ -145,17 +157,17 @@ export function createFormAuto({
         answered += 1;
         log?.info(
           wait > 0
-            ? `full auto answered ${sessionId}/${id} after ${Math.round(wait / 1000)}s`
-            : `full auto answered ${sessionId}/${id} immediately`,
+            ? `auto-answer answered ${sessionId}/${id} after ${Math.round(wait / 1000)}s`
+            : `auto-answer answered ${sessionId}/${id} immediately`,
         );
         try {
           await onAnswered?.({ form, sessionId, answer });
         } catch (err) {
-          log?.warn(`full auto answered, but the record failed: ${err.message}`);
+          log?.warn(`auto-answer answered, but the record failed: ${err.message}`);
         }
       } catch (err) {
         settled.add(id);
-        log?.warn(`full auto could not answer ${sessionId}/${id}: ${err.message}`);
+        log?.warn(`auto-answer could not answer ${sessionId}/${id}: ${err.message}`);
       }
     }
     return { answered, waiting };
@@ -164,5 +176,5 @@ export function createFormAuto({
     }
   }
 
-  return { tick, setFullAuto, enabledFor };
+  return { tick, setFullAuto, setAutoAnswer, setAutomation, enabledFor };
 }

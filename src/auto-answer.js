@@ -26,6 +26,32 @@ export function fullAutoTimeoutMs(config) {
   return Number.isFinite(seconds) && seconds >= 0 ? seconds * 1000 : FULL_AUTO_MS;
 }
 
+/**
+ * The wait from Settings → Automation, in milliseconds.
+ *
+ * The four switches each have one: how long the harness waits before it acts for
+ * the operator. They are global because they describe patience, not a project;
+ * which switch is ON is per project (src/automation.js).
+ */
+export function automationMs(config, key, fallbackMs) {
+  const value = config?.automation?.[key];
+  if (value === undefined || value === null || value === '') return fallbackMs;
+  const seconds = Number(value);
+  return Number.isFinite(seconds) && seconds >= 0 ? seconds * 1000 : fallbackMs;
+}
+
+/** Auto-Permissions waits this long before it clicks Allow Once. */
+export const permissionsTimeoutMs = (config) => automationMs(config, 'permissionsSec', 10_000);
+/** Auto-Answer waits this long before it takes the Recommended option. */
+export const answerTimeoutMs = (config) => automationMs(config, 'answerSec', 30_000);
+/** Keep Building waits this long between a worker's report and the next task. */
+export const keepBuildingDelayMs = (config) => automationMs(config, 'keepBuildingSec', 5_000);
+/** Auto-Shutdown waits this long with nothing to do before the countdown. */
+export function shutdownIdleMs(config) {
+  const minutes = Number(config?.automation?.shutdownMin);
+  return (Number.isFinite(minutes) && minutes >= 1 ? minutes : 5) * 60_000;
+}
+
 const isRecommended = (option) =>
   /\(recommended\)/i.test(String(option?.label || '')) || /\(recommended\)/i.test(String(option?.value || ''));
 

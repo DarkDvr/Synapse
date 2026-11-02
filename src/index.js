@@ -16,7 +16,8 @@ import { createPermissionGate } from './permission-gate.js';
 import { createPermissionMemory } from './permission-memory.js';
 import { createRemoteToken, lanAddresses } from './remote.js';
 import { createPermissionLog } from './permission-log.js';
-import { fullAutoTimeoutMs } from './auto-answer.js';
+import { fullAutoTimeoutMs, permissionsTimeoutMs } from './auto-answer.js';
+import { createAutoShutdown } from './auto-shutdown.js';
 import { rulesFor, SINGLE_RULES } from './permissions.js';
 import { skillRules } from './skills.js';
 import { createProbe, discoverToolsetForModel } from './probe.js';
@@ -248,7 +249,7 @@ async function main() {
     root: ROOT,
     scratchRoot: SCRATCH_ROOT,
     memory: permissionMemory,
-    getTimeoutMs: () => fullAutoTimeoutMs(currentConfig),
+    getTimeoutMs: () => permissionsTimeoutMs(currentConfig),
     onDecision: (entry) => {
       permissionLog.record(entry);
       if (entry.decided) {
@@ -675,16 +676,32 @@ async function main() {
     permissionMemory,
   });
 
-  // Full auto's questions half. Forms have no event Synapse sees, so one sweep
+  // Auto-Answer's questions half. Forms have no event Synapse sees, so one sweep
   // every five seconds asks the engine what is waiting; a closed browser cannot
   // stop it. The timer is unref'd so it never keeps the process alive, and the
   // tick is cheap when nothing is pending (one local list call).
-  const fullAutoTimer = setInterval(() => {
+  const answerTimer = setInterval(() => {
     Promise.resolve(api.autoAnswerTick?.()).catch((err) => {
-      bootLog.warn(`full auto tick failed: ${err.message}`);
+      bootLog.warn(`auto-answer tick failed: ${err.message}`);
     });
   }, 5000);
-  fullAutoTimer.unref?.();
+  answerTimer.unref?.();
+
+  // Auto-Shutdown: one sweep every ten seconds. The idle delay inside it is in
+  // minutes, so ten seconds is fine enough to notice the machine going quiet —
+  // and it keeps the check off the request path.
+  const autoShutdown = createAutoShutdown({
+    engine,
+    api,
+    logger,
+    getConfig,
+  });
+  const shutdownTimer = setInterval(() => {
+    Promise.resolve(autoShutdown.tick()).catch((err) => {
+      bootLog.warn(`auto-shutdown tick failed: ${err.message}`);
+    });
+  }, 10_000);
+  shutdownTimer.unref?.();
 
   http = createServer({
     api,

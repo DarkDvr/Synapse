@@ -374,8 +374,13 @@ export function createServer({ api, engine, logger, config, remote, onRemote }) 
       if (seg[2] === 'messages' && method === 'GET') return sendJson(res, 200, await api.messages(sessionId));
       if (seg[2] === 'plan' && method === 'GET') return sendJson(res, 200, await api.plan(sessionId));
       if (seg[2] === 'auto' && method === 'POST') return sendJson(res, 200, await api.setAuto(sessionId, await readBody(req)));
-      // "Full auto": unanswered asks and questions take the default after the
-      // wait in Settings → Workers (20 seconds by default).
+      // The four automation switches: Keep Building, Auto-Permissions,
+      // Auto-Answer and Auto-Shutdown. One body carries a `patch`, so the page
+      // sends only what moved and always gets the whole set back.
+      if (seg[2] === 'automation' && method === 'POST') {
+        return sendJson(res, 200, await api.setAutomation(sessionId, await readBody(req)));
+      }
+      // The old single switch, still served: it maps onto the two it became.
       if (seg[2] === 'full-auto' && method === 'POST') {
         return sendJson(res, 200, await api.setFullAuto(sessionId, await readBody(req)));
       }

@@ -93,10 +93,19 @@ export const DEFAULTS = {
     // boot unless the operator turns that off. Settings also clears it by hand.
     resetOnBoot: true,
   },
+  automation: {
+    // The four switches in Settings → Automation, in seconds (and minutes for the
+    // shutdown). They are global: how patient the harness is does not change from
+    // one project to the next. Which of the four is ON is per project, in the
+    // session metadata — see src/automation.js.
+    keepBuildingSec: 5,
+    permissionsSec: 10,
+    answerSec: 30,
+    shutdownMin: 5,
+  },
   fullAuto: {
-    // How long Full auto waits before it answers an unanswered permission card
-    // or question, in seconds. 0 is deliberate: a permission is answered at
-    // once and no card is drawn. See docs/notes/engine-notes.md.
+    // The old single wait, kept so an existing config still loads. `automation`
+    // above is what the product reads now.
     timeoutSec: 20,
   },
   // The sound when the Architect has finished and said so. The files live in
@@ -250,8 +259,17 @@ export function normalize(raw) {
     const n = raw === undefined || raw === null || raw === '' ? NaN : Number(raw);
     cfg.fullAuto.timeoutSec = Number.isFinite(n) ? Math.min(3600, Math.max(0, Math.floor(n))) : DEFAULTS.fullAuto.timeoutSec;
   }
-  // The finished-work sound: a named file in web\sounds, or 'off'. An unknown name
-  // would be a page asking the server for a file that is not there, so it becomes
+  // The four automation delays. Each is a number the operator types, and each is
+  // clamped to a range where it still means something: a permission answered after
+  // an hour is a wall, and a shutdown nobody waited for is a surprise. 0 is legal
+  // for the three seconds fields — "do it at once" — and a shutdown waits at least
+  // a minute, because the countdown it starts is 20 seconds long already.
+  cfg.automation = isPlainObject(cfg.automation) ? cfg.automation : {};
+  cfg.automation.keepBuildingSec = clampInt(cfg.automation.keepBuildingSec, 0, 600, DEFAULTS.automation.keepBuildingSec);
+  cfg.automation.permissionsSec = clampInt(cfg.automation.permissionsSec, 0, 3600, DEFAULTS.automation.permissionsSec);
+  cfg.automation.answerSec = clampInt(cfg.automation.answerSec, 0, 3600, DEFAULTS.automation.answerSec);
+  cfg.automation.shutdownMin = clampInt(cfg.automation.shutdownMin, 1, 180, DEFAULTS.automation.shutdownMin);
+  // The finished-work sound: a named file in web\sounds, or 'off'. An unknown name  // would be a page asking the server for a file that is not there, so it becomes
   // the default instead of a silent typo.
   cfg.notify = isPlainObject(cfg.notify) ? cfg.notify : {};
   {
