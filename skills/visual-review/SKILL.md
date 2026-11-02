@@ -28,6 +28,10 @@ node "<the shot.mjs path from your brief>" <file|url> --widths 1280,390 [options
   --do "steps"          drive the page before the capture, per width:
                           click:#start   wait:600   key:s   eval:<js>
   --audit               print the layout findings; exit 1 if there are any
+  --diff MOCK.png       compare the render with a saved mock, at the mock's size;
+                          write a picture of where they differ
+  --diff-threshold N    per-pixel difference that counts as a change (default 16)
+  --fail-over PCT       exit 1 when more than PCT percent of the picture differs
   --file                keep the page on file:// (default: it serves the folder)
   --no-sheet            do not build the contact sheet
   --eval "<js>"         answer one expression instead of taking a picture
@@ -93,6 +97,42 @@ the one it was compared with, `detail` the sentence to quote in your report.
 
 Read the sheet first, then the numbers, then the full-size PNG if something in the
 sheet needs a closer look.
+
+## Mock or build: the diff
+
+When a mock was approved, the build has to match it, and "it looks like the mock" is
+not a measurement. Give `--diff` the mock's PNG — the one you rendered with this
+same script, at the size that was approved — and it renders the build at exactly
+the mock's size and compares the two pixel by pixel:
+
+```
+node "<shot.mjs path>" bin/index.html --diff .synapse/design/mock-1-880.png --out .synapse/shots
+diff: 1.08% of 880x900 differs at 880px (2 region(s)) -> …/index-880-diff.png
+```
+
+- **The mock is the reference and is never written to.** The build's own render
+  lands in `<name>-<width>-build.png` and the comparison in `<name>-<width>-diff.png`
+  — the build as a ghost with the pixels that changed in red, at the mock's exact
+  size, so you can flip between the two pictures.
+- **The number and the regions are in the JSON line:** `diff.different`,
+  `diff.percent`, `diff.threshold`, and `diff.boxes` — the rectangles where the
+  pictures disagree, largest first. Quote the percentage and name the regions;
+  "close enough" is not in the report.
+- **Two widths compare two layouts.** The mock's size wins and `--widths` has to
+  agree with it, or the run is refused rather than silently compared at the wrong
+  size.
+- **`--diff-threshold N`** (default 16) is how far a channel may move before a
+  pixel counts. Antialiasing moves a little; a different colour moves a lot.
+- **`--fail-over PCT`** turns the number into a gate: exit 1 when more differs
+  than that. It is for the same screen across builds, where any drift is a
+  regression. Against a first build the percentage is information, not a verdict —
+  a build legitimately shows data the mock invented, and an empty state is not a
+  drifted one.
+
+A diff can show you *where* the build and the mock disagree. It cannot tell you
+which one is right: whether the wording is as good, whether a control belongs
+there, or whether a difference is drift or an improvement. Judge that yourself and
+say which is which.
 
 ## One look, one picture
 

@@ -67,6 +67,10 @@ const USAGE = `Usage: shot.mjs <file|url> [options]
   --expect "sel|regex"   fail unless that element's RENDERED text matches
   --audit               print the layout findings and exit 1 if there are any
                           (every run reports them in "layout" either way)
+  --diff MOCK.png       compare the render against a saved mock, at the mock's own
+                          size; reports the percentage and the regions that differ
+  --diff-threshold N    per-pixel difference that counts as a change (default 16)
+  --fail-over PCT       exit 1 when more than PCT percent of the picture differs
   --file                keep the page on file:// (default: serve it over http)
   --no-sheet            do not build the contact sheet
   --eval "<js>"         answer one expression instead of taking a picture
@@ -84,6 +88,10 @@ function parseArgs(argv) {
     steps: [],
     serve: true,
     sheet: true,
+    diff: '',
+    diffThreshold: 16,
+    failOver: null,
+    widthsGiven: false,
     help: false,
     unknown: '',
     extra: [],
@@ -106,8 +114,12 @@ function parseArgs(argv) {
         .split(',')
         .map((w) => Number.parseInt(w, 10))
         .filter((w) => Number.isFinite(w) && w > 0);
+      out.widthsGiven = true;
     } else if (a === '--height') out.height = Number.parseInt(argv[++i], 10) || 900;
     else if (a === '--audit') out.audit = true;
+    else if (a === '--diff') out.diff = String(argv[++i] || '');
+    else if (a === '--diff-threshold') out.diffThreshold = Number.parseInt(argv[++i], 10);
+    else if (a === '--fail-over') out.failOver = Number.parseFloat(argv[++i]);
     else if (a === '--file') out.serve = false;
     else if (a === '--no-sheet') out.sheet = false;
     else if (a === '--help' || a === '-h') out.help = true;
@@ -143,6 +155,35 @@ const localFile = isUrl ? '' : path.resolve(args.target);
 // A file that is not there cannot be rendered. Saying so is the whole point: the
 // browser would happily render its own error page and call that a screenshot.
 if (!isUrl && !fs.existsSync(localFile)) fail(1, `shot.mjs: no such file: ${localFile}`);
+
+// --diff compares a render against a saved mock. The mock is read before a browser
+// starts, because a wrong path is a typo and not a page: the same rule as an
+// unknown option. Its pixel size is the size the build must be rendered at —
+// two pictures taken at different widths compare two layouts, not one design.
+let mock = null;
+if (args.diff) {
+  if (args.evalExpr) fail(1, 'shot.mjs: --diff compares a render, so it cannot be combined with --eval');
+  const mockPath = path.resolve(args.diff);
+  if (!fs.existsSync(mockPath)) fail(1, `shot.mjs: no such file: ${mockPath}`);
+  try {
+    mock = pngSize(mockPath);
+  } catch (err) {
+    fail(1, `shot.mjs: --diff needs a PNG: ${err.message}`);
+  }
+  mock.path = mockPath;
+  mock.threshold = Number.isFinite(args.diffThreshold) && args.diffThreshold >= 0 ? args.diffThreshold : 16;
+  if (args.widthsGiven && args.widths.some((w) => w !== mock.width)) {
+    fail(
+      1,
+      `shot.mjs: --diff compares at the mock's size (${mock.width}px); --widths asked for ${args.widths.join(',')}`,
+    );
+  }
+  args.widths = [mock.width];
+  args.height = mock.height;
+}
+if (args.failOver !== null && !(args.failOver >= 0)) {
+  fail(1, 'shot.mjs: --fail-over needs a percentage, e.g. --fail-over 2');
+}
 
 const browser = BROWSERS.find((p) => {
   try {
@@ -748,7 +789,9 @@ async function runSteps(send, steps) {
 
 /** A full-page PNG at exactly `width`, however tall the page turned out to be. */
 async function shoot(width) {
-  const out = path.join(args.outDir, `${base}-${width}.png`);
+  // A diff's own render must never land on the mock's name: shot.mjs writes
+  // `<base>-<width>.png`, which is exactly what a mock shot by this tool is called.
+  const out = path.join(args.outDir, mock ? `${base}-${width}-build.png` : `${base}-${width}.png`);
   try { fs.rmSync(out, { force: true }); } catch { /* nothing to remove */ }
   const result = await withPage(width, async (send) => {
     await runSteps(send, args.steps);
@@ -777,7 +820,9 @@ async function shoot(width) {
     }
     const metrics = await send('Page.getLayoutMetrics');
     const content = metrics.cssContentSize || metrics.contentSize || { width, height: args.height };
-    const height = Math.max(args.height, Math.ceil(content.height || 0));
+    // A diff compares like with like: the mock's frame is the height, not the
+    // page's own height, or the two pictures would not line up by a pixel.
+    const height = mock ? mock.height : Math.max(args.height, Math.ceil(content.height || 0));
     const shot = await send('Page.captureScreenshot', {
       format: 'png',
       captureBeyondViewport: true,
@@ -878,6 +923,155 @@ async function buildSheet(shots) {
   }
 }
 
+/**
+ * A PNG's pixel size, from its header alone: 24 bytes, no decoder. The colour
+ * handling is the browser's job — this only has to know the frame to render at.
+ */
+function pngSize(file) {
+  const buf = fs.readFileSync(file);
+  if (buf.length < 24 || buf.readUInt32BE(0) !== 0x89504e47 || buf.readUInt32BE(4) !== 0x0d0a1a0a) {
+    throw new Error(`${file} is not a PNG`);
+  }
+  const width = buf.readUInt32BE(16);
+  const height = buf.readUInt32BE(20);
+  if (!width || !height) throw new Error(`${file} has no pixel size`);
+  return { width, height };
+}
+
+// The comparison runs inside the page, for the same reason the contact sheet does:
+// the browser already decodes PNGs, and a canvas gives us the pixels without a
+// dependency. `A` is the mock, `B` the build, `T` the per-channel difference that
+// counts. An unchanged pixel is the build dimmed to a ghost; a changed one is red.
+// Regions are found on a 16px grid and merged into rectangles, because "42% differs"
+// without saying where is a number nobody can act on.
+const DIFF_BODY = `
+  const load = (src) => new Promise((res, rej) => {
+    const img = new Image();
+    img.onload = () => res(img);
+    img.onerror = () => rej(new Error('an image would not load'));
+    img.src = src;
+  });
+  const grab = (img) => {
+    const c = document.createElement('canvas');
+    c.width = W; c.height = H;
+    const x = c.getContext('2d', { willReadFrequently: true });
+    x.drawImage(img, 0, 0, W, H);
+    return x.getImageData(0, 0, W, H).data;
+  };
+  window.__diff = (async () => {
+    const [a, b] = await Promise.all([load(A), load(B)]);
+    const A0 = grab(a), B0 = grab(b);
+    const hot = new Uint8Array(W * H);
+    let different = 0;
+    for (let p = 0, i = 0; p < W * H; p += 1, i += 4) {
+      const d = Math.max(
+        Math.abs(A0[i] - B0[i]), Math.abs(A0[i + 1] - B0[i + 1]),
+        Math.abs(A0[i + 2] - B0[i + 2]), Math.abs(A0[i + 3] - B0[i + 3]),
+      );
+      if (d > T) { hot[p] = 1; different += 1; }
+    }
+    const out = new Uint8ClampedArray(B0.length);
+    for (let p = 0, i = 0; p < W * H; p += 1, i += 4) {
+      if (hot[p]) { out[i] = 255; out[i + 1] = 62; out[i + 2] = 48; out[i + 3] = 255; }
+      else {
+        out[i] = Math.round(B0[i] * 0.28 + 9 * 0.72);
+        out[i + 1] = Math.round(B0[i + 1] * 0.28 + 10 * 0.72);
+        out[i + 2] = Math.round(B0[i + 2] * 0.28 + 13 * 0.72);
+        out[i + 3] = 255;
+      }
+    }
+    document.getElementById('c').getContext('2d').putImageData(new ImageData(out, W, H), 0, 0);
+    const C = 16;
+    const cols = Math.ceil(W / C), rows = Math.ceil(H / C);
+    const cells = new Uint8Array(cols * rows);
+    for (let p = 0; p < W * H; p += 1) {
+      if (!hot[p]) continue;
+      const k = Math.floor(Math.floor(p / W) / C) * cols + Math.floor((p % W) / C);
+      cells[k] = 1;
+    }
+    const free = (y, x1, x2) => {
+      for (let x = x1; x <= x2; x += 1) { const k = y * cols + x; if (!cells[k] || seen[k]) return false; }
+      return true;
+    };
+    const seen = new Uint8Array(cols * rows);
+    const boxes = [];
+    for (let y = 0; y < rows; y += 1) {
+      for (let x = 0; x < cols; x += 1) {
+        if (!cells[y * cols + x] || seen[y * cols + x]) continue;
+        let x2 = x;
+        while (x2 + 1 < cols && cells[y * cols + x2 + 1] && !seen[y * cols + x2 + 1]) x2 += 1;
+        let y2 = y;
+        while (y2 + 1 < rows && free(y2 + 1, x, x2)) y2 += 1;
+        for (let yy = y; yy <= y2; yy += 1) for (let xx = x; xx <= x2; xx += 1) seen[yy * cols + xx] = 1;
+        boxes.push({
+          x: x * C, y: y * C,
+          w: Math.min(W, (x2 + 1) * C) - x * C,
+          h: Math.min(H, (y2 + 1) * C) - y * C,
+        });
+      }
+    }
+    boxes.sort((m, n) => n.w * n.h - m.w * m.h);
+    return {
+      different,
+      percent: Math.round((different / (W * H)) * 10000) / 100,
+      threshold: T,
+      regions: boxes.length,
+      boxes: boxes.slice(0, 12),
+    };
+  })();
+`;
+
+/**
+ * One picture of where the build left the mock.
+ *
+ * The mock is a saved PNG and the build is a page; both are compared at the
+ * mock's own width and height, because two pictures of different sizes compare
+ * two layouts. The output is the build as a ghost with the differing pixels in
+ * red, the mock's size, so the two can be flipped between. The number and the
+ * regions are on stdout, because "looks close" is not a measurement.
+ */
+async function diffAgainst(shot, mockFile) {
+  const W = mockFile.width;
+  const H = mockFile.height;
+  const dataUrl = (file) => `data:image/png;base64,${fs.readFileSync(file).toString('base64')}`;
+  const script = [
+    `const W = ${W}, H = ${H}, T = ${mockFile.threshold};`,
+    `const A = ${JSON.stringify(dataUrl(mockFile.path))}, B = ${JSON.stringify(dataUrl(shot.path))};`,
+    DIFF_BODY,
+  ].join('\n');
+  const html = `<!doctype html><meta charset="utf-8"><style>
+html,body{margin:0;background:#0b0c0f;overflow:hidden}
+canvas{display:block}
+</style><canvas id="c" width="${W}" height="${H}"></canvas><script>${script}</script>`;
+  const tmp = path.join(os.tmpdir(), `visual-review-diff-${process.pid}-${Date.now()}.html`);
+  fs.writeFileSync(tmp, html, 'utf8');
+  const out = path.join(args.outDir, `${base}-${shot.width}-diff.png`);
+  try {
+    const result = await withPage(
+      W,
+      async (send) => {
+        const stats = await evalIn(send, 'window.__diff');
+        const png = await send('Page.captureScreenshot', {
+          format: 'png',
+          captureBeyondViewport: true,
+          clip: { x: 0, y: 0, width: W, height: H, scale: 1 },
+        });
+        return { stats, png: Buffer.from(png.data, 'base64') };
+      },
+      pathToFileURL(tmp).href,
+    );
+    fs.writeFileSync(out, result.png);
+    return {
+      ...result.stats,
+      reference: mockFile.path.replace(/\\/g, '/'),
+      path: out.replace(/\\/g, '/'),
+      bytes: fs.statSync(out).size,
+    };
+  } finally {
+    try { fs.rmSync(tmp, { force: true }); } catch { /* temp */ }
+  }
+}
+
 /** Load the page at `width` and answer `expr` from inside it. */
 async function evaluate(width, expr) {
   return withPage(width, async (send) => {
@@ -920,6 +1114,19 @@ try {
       shots.push(shot);
       process.stdout.write(`${JSON.stringify(shot)}\n`);
       if (args.audit && printAudit(shot)) process.exitCode = 1;
+    }
+    if (mock) {
+      for (const shot of shots) {
+        const d = await diffAgainst(shot, mock);
+        process.stdout.write(`${JSON.stringify({ target, width: shot.width, height: shot.height, diff: d })}\n`);
+        process.stderr.write(
+          `diff: ${d.percent}% of ${mock.width}x${mock.height} differs at ${shot.width}px (${d.regions} region(s)) -> ${d.path}\n`,
+        );
+        if (args.failOver !== null && d.percent > args.failOver) {
+          process.stderr.write(`diff: ${d.percent}% is over the ${args.failOver}% limit\n`);
+          process.exitCode = 1;
+        }
+      }
     }
     if (args.sheet && shots.length > 1) {
       const sheet = await buildSheet(shots);

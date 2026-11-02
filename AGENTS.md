@@ -264,9 +264,9 @@ refuses outright (`Missing key at ["files"][0]["uri"]` — it wants `{uri}`, not
 engine once before building on it**: send the body you expect and read the 400.
 Minutes spent probing beat a feature that only fails when the operator uses it.
 
-**The engine is 2.2.3.** The table below was measured on 2.0.30
-unless it says otherwise, and each upgrade was re-verified on the routes Synapse
-depends on. **The model catalog ships inside the engine binary, not in Synapse** —
+**The engine is 2.2.5.** The table below was measured on 2.0.30
+unless it says otherwise, and each upgrade is re-verified on the routes Synapse
+depends on: 2.2.5 carried a full 148-turn run on 2 Nov with no route refused. **The model catalog ships inside the engine binary, not in Synapse** —
 so a stale model list means a stale *binary*, never a stale cache. The console
 prints `catalog: N model(s) from engine X` at every boot, which is the check; the
 update dialog (see `docs/notes/models-and-tools.md`) is the fix.

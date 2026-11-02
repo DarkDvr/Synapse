@@ -148,3 +148,100 @@ test('a page that is aligned reports nothing and exits 0', () => {
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+// --diff compares a build against an approved mock at the mock's own size. The
+// first attempt at this was wrong in a way only a test would catch: the build's
+// render was written to `<base>-<width>.png`, the same name a mock shot by this
+// tool has, so it overwrote the reference and compared the page with itself —
+// 0% every time, on any change. The name is now `-build.png`, and the mock's
+// bytes are asserted unchanged below.
+const DIFF_PAGE = (css = '', words = 'Two of five files are on disk.') => `<!doctype html><meta charset="utf-8"><style>
+  body { margin:0; width:400px; height:300px; background:#fff; color:#111; font:400 14px/20px sans-serif; }
+  .card { margin:20px; padding:16px; border:1px solid #ccc; border-radius:6px; }
+  h1 { margin:0 0 8px; font:700 16px/20px sans-serif; }
+  button { margin-top:8px; height:30px; padding:0 14px; ${css} }
+</style><div class="card"><h1>Download</h1><p>${words}</p><button>Start</button></div>`;
+
+test('--diff on an unchanged build reports nothing and exits 0', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'synapse-diff-same-'));
+  try {
+    const page = path.join(dir, 'page.html');
+    fs.writeFileSync(page, DIFF_PAGE(), 'utf8');
+    const shot = run(page, '--widths', '400', '--height', '300', '--no-sheet', '--out', dir);
+    assert.equal(shot.status, 0, shot.stderr || shot.stdout);
+    fs.copyFileSync(path.join(dir, 'page-400.png'), path.join(dir, 'mock.png'));
+
+    const r = run(page, '--diff', path.join(dir, 'mock.png'), '--out', dir);
+    assert.equal(r.status, 0, r.stderr || r.stdout);
+    const line = r.stdout.split('\n').find((l) => l.includes('"diff"'));
+    const { diff } = JSON.parse(line);
+    assert.equal(diff.different, 0, 'the same page must not differ from itself');
+    assert.equal(diff.percent, 0);
+    assert.deepEqual(diff.boxes, []);
+    assert.ok(fs.statSync(diff.path).size > 0, 'a diff picture is still written');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('--diff finds a moved control, keeps the mock intact, and can gate on it', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'synapse-diff-moved-'));
+  try {
+    const page = path.join(dir, 'page.html');
+    fs.writeFileSync(page, DIFF_PAGE(), 'utf8');
+    assert.equal(run(page, '--widths', '400', '--height', '300', '--no-sheet', '--out', dir).status, 0);
+    const mock = path.join(dir, 'mock.png');
+    fs.copyFileSync(path.join(dir, 'page-400.png'), mock);
+    const mockBytes = fs.readFileSync(mock);
+
+    // The build: the button nudged 10px and a word changed. One run both measures
+    // it and gates on it, so QC can block on drift without paying for two renders.
+    fs.writeFileSync(page, DIFF_PAGE('margin-left:10px;', 'Two of six files are on disk.'), 'utf8');
+    const r = run(page, '--diff', mock, '--fail-over', '0', '--out', dir);
+    assert.equal(r.status, 1, 'any difference over 0% is a failed gate');
+    assert.match(r.stderr, /is over the 0% limit/);
+    const { diff } = JSON.parse(r.stdout.split('\n').find((l) => l.includes('"diff"')));
+    assert.ok(diff.percent > 0, 'a changed page differs from the mock');
+    assert.ok(diff.regions >= 1, 'the change has to be somewhere, and the region names it');
+    for (const b of diff.boxes) {
+      assert.ok(b.x >= 0 && b.y >= 0 && b.w > 0 && b.h > 0, 'a region is a positive rectangle');
+      assert.ok(b.x + b.w <= 400 && b.y + b.h <= 320, 'a region stays inside the picture');
+    }
+    assert.deepEqual(fs.readFileSync(mock), mockBytes, 'the mock is the reference and is never rewritten');
+    assert.ok(fs.existsSync(path.join(dir, 'page-400-build.png')), 'the build render has its own name');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('--diff refuses a bad argument before any browser starts', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'synapse-diff-bad-'));
+  try {
+    const page = path.join(dir, 'page.html');
+    fs.writeFileSync(page, DIFF_PAGE(), 'utf8');
+    const missing = run(page, '--diff', path.join(dir, 'nope.png'));
+    assert.equal(missing.status, 1);
+    assert.match(missing.stderr, /no such file/);
+
+    const notPng = run(page, '--diff', page);
+    assert.equal(notPng.status, 1);
+    assert.match(notPng.stderr, /--diff needs a PNG/);
+
+    // A mock is a size, so asking for another width is a measurement of two
+    // layouts rather than one: refused, not silently overridden. The size is read
+    // from the header alone, which is all this check needs — no browser, no decode.
+    const header = Buffer.alloc(24);
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).copy(header, 0);
+    header.writeUInt32BE(13, 8);
+    header.write('IHDR', 12, 'ascii');
+    header.writeUInt32BE(400, 16);
+    header.writeUInt32BE(800, 20);
+    const png = path.join(dir, 'header.png');
+    fs.writeFileSync(png, header);
+    const wrongSize = run(page, '--diff', png, '--widths', '800');
+    assert.equal(wrongSize.status, 1);
+    assert.match(wrongSize.stderr, /compares at the mock's size \(400px\)/);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
