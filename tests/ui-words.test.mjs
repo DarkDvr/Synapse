@@ -280,3 +280,19 @@ test('the open session has a trace, so its reasoning streams instead of dumping'
   assert.match(js, /function renderSessionStream\(\)/, 'and a panel to draw it in');
   assert.match(js, /state\.sessionTrace\.stream = null;/, 'the stream is cleared when the turn ends');
 });
+// The panel used to vanish for a whole turn: the transcript's innerHTML replaced its
+// children (the panel among them), and the code that re-appends it looked it up with
+// getElementById — which cannot find a node that is no longer in the document. The
+// composer said "Answer the question to continue" and there was no question on
+// screen until a reload rebuilt the page (reported and reproduced 2 Nov).
+test('the question panel survives a transcript rebuild because the node is held', () => {
+  const js = read('web/app.js');
+  assert.match(js, /let askHostEl = null;/, 'the node is kept in a variable');
+  assert.match(js, /function askHost\(\) \{/, 'and looked up through one accessor');
+  for (const fn of ['renderAskPanel', 'mountAskPost', 'fitAskPanel']) {
+    const block = new RegExp(`function ${fn}\\(\\) \\{([\\s\\S]*?)\\n\\}`).exec(js);
+    assert.ok(block, `${fn} exists`);
+    assert.match(block[1], /const host = askHost\(\)/, `${fn} uses the held node, not getElementById`);
+    assert.doesNotMatch(block[1], /\$\('askHost'\)/, `${fn} must not look the node up by id again`);
+  }
+});

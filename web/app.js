@@ -5345,7 +5345,7 @@ function askField(field, index, all) {
 }
 
 function renderAskPanel() {
-  const host = $('askHost');
+  const host = askHost();
   if (!host) return;
   const form = state.view === 'session' ? currentForm() : null;
   if (!form) {
@@ -5405,8 +5405,24 @@ function renderAskPanel() {
 }
 
 /**
- * Put the question where the conversation can be read above it.
+ * The question panel's node, captured once.
  *
+ * The transcript's `innerHTML` is replaced on every change, and the panel lives
+ * inside it — so a rebuild *detaches* it. Looking it up again with `getElementById`
+ * cannot work at that moment: a detached node is not in the document, the lookup
+ * returns null, and the code that was supposed to re-append it gives up. That is
+ * exactly how the panel vanished for a whole turn on 2 Nov: the composer said a
+ * question was waiting, and there was no question on screen until a reload rebuilt
+ * the page. Holding the node makes "moved, never rebuilt" true in the case that
+ * matters.
+ */
+let askHostEl = null;
+
+function askHost() {
+  return askHostEl || (askHostEl = $('askHost'));
+}
+
+/**
  * The node is *moved*, never rebuilt: the transcript's markup is replaced on every
  * change, so a panel that lived inside it would lose whatever had been answered the
  * first time a poll rebuilt the chat. Appending the same element again keeps its
@@ -5414,7 +5430,7 @@ function renderAskPanel() {
  * which is the whole point of moving it out of the overlay.
  */
 function mountAskPost() {
-  const host = $('askHost');
+  const host = askHost();
   const el = $('transcript');
   if (!host || !el) return;
   if (host.hidden || !currentForm()) return;
@@ -5429,7 +5445,7 @@ function mountAskPost() {
  * fields scroll; its action row stays at its bottom edge.
  */
 function fitAskPanel() {
-  const host = $('askHost');
+  const host = askHost();
   const el = $('transcript');
   const panel = host?.querySelector('.ask-panel');
   if (!panel || !el) return;
