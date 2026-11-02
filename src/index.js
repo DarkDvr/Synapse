@@ -16,7 +16,7 @@ import { createPermissionGate } from './permission-gate.js';
 import { createPermissionMemory } from './permission-memory.js';
 import { createRemoteToken, lanAddresses } from './remote.js';
 import { createPermissionLog } from './permission-log.js';
-import { fullAutoTimeoutMs, permissionsTimeoutMs } from './auto-answer.js';
+import { permissionsTimeoutMs } from './auto-answer.js';
 import { createAutoShutdown } from './auto-shutdown.js';
 import { rulesFor, SINGLE_RULES } from './permissions.js';
 import { skillRules } from './skills.js';

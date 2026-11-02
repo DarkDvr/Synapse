@@ -1339,10 +1339,22 @@ whether a given paragraph is "the answer".
   (`Bionic · 1 model`) and its tooltip lists the base URL and the models. The dot
   stays grey: registering a server is not evidence it is running, and only a turn
   is. Placeholder copy is a claim; it ages badly.
-- **Settings is six tabs, and the tabs are the app's own nouns.** One column of
+- **Settings is nine tabs, and a tab that holds one field is a place nobody looks.**
+  Notices held a single selector — the finished-work sound — and it moved into
+  General on 3 Nov; the tab that replaced it is **Automation**, which holds the
+  four waits the switches obey. Keep a tab for a *subject*, not for a field.
+- **The cog is four switches, and each one says what it will do.** It held two —
+  "Keep running" and "Full auto" — which had to be moved together, so an operator
+  who wanted questions answered also got every permission allowed. The four rows
+  are the project's (Keep Building, Auto-Permissions, Auto-Answer, Auto-Shutdown),
+  each with a one-line hint naming the wait in Settings → Automation; the cog is
+  green while any of them is on. A toast after a toggle repeats the hint, so the
+  switch explains itself where it is flipped rather than in a manual.
+- **The tabs are the app's own nouns.** One column of
   fourteen sections gave the server port and the log retention the same weight,
   and the Providers list needed a wider window than 640px. The rail is
-  `General · Engine · Providers · Workers · Tools · Logging`, 176px, with
+  `General · Server · Runtime · Providers · Workers · Tools · Automation · Logging`,
+  176px, with
   inline-SVG icons at 15px; the active tab is a violet fill with white text and a
   white icon (violet is this palette's fill, and orange text on violet is still
   forbidden — it is the accent, not a surface colour). The window is 980px wide

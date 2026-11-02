@@ -6,7 +6,7 @@ import { spawn } from 'node:child_process';
 import { appendRun, readPlan, readRuns, runLedger, briefSession, logPlanState, BRIEF_KEY } from './plans.js';
 import { ensureProjectDoc, appendRequest as appendProjectRequest, appendChat, appendDecision as appendProjectDecision, appendEntry, setHandover } from './project-doc.js';
 import { createFormAuto } from './form-auto.js';
-import { fullAutoTimeoutMs, answerTimeoutMs } from './auto-answer.js';
+import { answerTimeoutMs } from './auto-answer.js';
 import { AUTOMATION_DEFAULTS, AUTOMATION_KEYS, cleanAutomation, nextSynapse, readAutomation } from './automation.js';
 import { keepAttachments } from './keep-attachments.js';
 import { skillRules, describeSkills } from './skills.js';

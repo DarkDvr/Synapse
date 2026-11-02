@@ -1607,3 +1607,44 @@ the same bill as quoting a report back. The composer caps one file at 8 MB and o
 message at 48 MB in total (24 files is only a sanity cap), and the cap is about
 the window as much as the network. Twelve small screenshots fit; six 8 MB files
 do, and a forty-ninth megabyte does not.
+
+---
+
+## Four automation switches, one of them on by default (3 Nov)
+
+"Keep running" and "Full auto" were two switches doing four jobs between them: one
+wanted the plan carried through, the other answered *everything* for the operator,
+so a person who only wanted questions answered also had every permission allowed.
+They are four now, each independent and each per project:
+
+| switch | what it does | starts |
+|---|---|---|
+| Keep Building | the Architect carries the plan to the end, or to a blocked task | **on** |
+| Auto-Permissions | a permission card is allowed once after its wait | off |
+| Auto-Answer | a question takes the Recommended option (or the top row) after its wait | off |
+| Auto-Shutdown | the PC goes off when nothing is running and nothing can start | off |
+
+**The switches are the session's, the waits are the config's.** Which four are on
+lives in the session metadata (`synapse.automation`), so it travels with the chat
+and survives a restart; the waits live in `config.automation` (`keepBuildingSec` 5,
+`permissionsSec` 10, `answerSec` 30, `shutdownMin` 5) because patience is a
+property of the harness, not of a project. `src/automation.js` is the one reader,
+and it carries a chat saved under the old names into the new shape: `synapse.auto`
+becomes Keep Building, `synapse.fullAuto` becomes both of the answering switches,
+and it writes those two back as mirrors so an older reader cannot disagree.
+
+**A new project is seeded at creation, not left to inference.** `api.createSession`
+writes the four values down, so the cog has real answers to show before anything is
+toggled, and a later change to the defaults cannot move a project that already
+exists. A chat from before the four keeps what it had — Keep Building stays off
+there, because `synapse.auto` was off unless the operator turned it on.
+
+**Auto-Shutdown is the server's clock** (`src/auto-shutdown.js`), for the same
+reason the timed shutdown always was: a hidden window throttles its timers, and the
+operator who needs this is asleep with Synapse in the tray. Its condition is the
+whole machine, not one project — no turn, no form, no pending permission anywhere,
+plus at least one project with the switch on — then the idle minutes, then the
+existing 20-second countdown with Cancel. A cancel starts the whole wait again
+rather than re-arming on the next sweep; a run that starts cancels it outright.
+The countdown is still armed by `armPowerCountdown` in `src/api.js`, which shares
+`clearPower`, the guards and the Cancel with the old path.
