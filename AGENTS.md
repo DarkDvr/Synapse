@@ -94,9 +94,9 @@ the cards and the commits, not the code. One reason per sentence, not a chain.
 
 ### Working style rules
 
-- **The review pane works — the operator cannot see it.** `browser.preview` and
-  the whole `browser.*` namespace are yours to inspect a page with (measured 2 Nov
-  2026). To show the operator something, send a **screenshot**; never "look here".
+- **The review pane is how the operator is shown anything.** A screenshot returned
+  to the chat reaches only you (measured 2 Nov 2026); `browser.preview` puts the
+  file on their screen. Screenshot the page, then preview the PNG.
 - **Use the browser, but surgically** — one session, reused; few screenshots.
 - **Stage the delivery.** Each stage is reviewed before the next starts.
 
