@@ -37,8 +37,12 @@ test('the page offers exactly the sounds the server accepts', () => {
   assert.equal(doneSoundName('off'), 'off');
   const js = read('web/app.js');
   assert.match(js, /from '\.\/notify\.js'/, 'the page imports the rule instead of repeating it');
-  assert.match(js, /\{ id: 'notices', label: 'Notices'/, 'the pane is in Settings');
-  assert.match(js, /notices: settingsNotices/);
+  // Notices' one setting moved into General on 2 Nov: a tab that holds a single
+  // field is a place the operator forgets to look.
+  assert.match(js, /{ id: 'automation', label: 'Automation'/, 'Automation took the Notices tab');
+  assert.doesNotMatch(js, /id: 'notices'/, 'and the Notices tab is gone');
+  assert.match(js, /'notify\.doneSound'/, 'the sound is still in Settings');
+  assert.match(read('web/app.js'), /function settingsGeneral\(c\)[\s\S]*?'notify\.doneSound'/, 'in General');
 });
 
 test('a gap between two pieces of work is not a finish', () => {

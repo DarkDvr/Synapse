@@ -173,7 +173,7 @@ test('the routes exist and are not the server stop', () => {
 
 test('the page draws the countdown the server sends, and every way out cancels', () => {
   const app = read('web/app.js');
-  assert.match(app, /api\('POST', '\/api\/power-off\/arm', \{ minutes \}\)/);
+  // The page no longer arms: Auto-Shutdown's clock is the server's (src/auto-shutdown.js).
   assert.match(app, /api\('POST', '\/api\/power-off\/cancel'\)/);
   assert.match(app, /ev\.kind === 'shutdown-warning'/);
   assert.match(app, /ev\.kind === 'shutdown-tick'/);
@@ -189,18 +189,30 @@ test('the page draws the countdown the server sends, and every way out cancels',
 });
 
 test('a stop or a failure never arms the shutdown', () => {
+  // Auto-Shutdown is armed by the server (src/auto-shutdown.js), which only counts
+  // after the whole machine is quiet — no turn, no question, no permission. The
+  // page can no longer arm it at all, which is the strongest form of "a stop never
+  // does": there is nothing on the page to forget.
   const app = read('web/app.js');
-  // armShutdown() sits *after* the workEndQuiet return, in the same branch as the
-  // chime: the two must agree on when the Architect has actually finished.
-  const flow = /playDoneSound\(\);\s*\/\/ Same signal as the chime[^]*?armShutdown\(\);/.exec(app);
-  assert.ok(flow, 'arming happens where the chime does, not before the quiet check');
-  assert.match(app, /if \(live\) \{[^]*?cancelShutdown\(\);/, 'new work cancels the wait');
+  assert.doesNotMatch(app, /power-off\/arm/, 'the page does not arm the wait any more');
+  assert.match(app, /if \(live\) \{[^]*?cancelShutdown\(\);/, 'new work still cancels the countdown');
+  assert.match(read('src/auto-shutdown.js'), /live === 0 && \(forms \|\| \[\]\)\.length === 0/);
 });
 
-test('General offers the shutdown settings and the language selector', () => {
+test('Automation holds the four delays, and the old shutdown switch is gone', () => {
   const app = read('web/app.js');
-  assert.match(app, /'shutdown\.whenDone'/);
-  assert.match(app, /'shutdown\.minutes'/);
+  for (const path of [
+    'automation.keepBuildingSec',
+    'automation.permissionsSec',
+    'automation.answerSec',
+    'automation.shutdownMin',
+  ]) {
+    assert.ok(app.includes(`'${path}'`), `${path} is in Settings`);
+  }
+  // The old global switch and its minutes are replaced by the per-project
+  // Auto-Shutdown, which reads the delay above.
+  assert.doesNotMatch(app, /'shutdown\.whenDone'/);
+  assert.doesNotMatch(app, /'shutdown\.minutes'/);
   assert.match(app, /'ui\.language'/);
   // One option, and it is English: a selector with an entry that does nothing would
   // be the kind of mock this project forbids.

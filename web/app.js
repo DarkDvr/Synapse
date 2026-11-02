@@ -7765,31 +7765,34 @@ function settingsGeneral(c) {
  * A new project starts with Keep Building on and the other three off.
  */
 function settingsAutomation(c) {
-  const sec = (key, fallback) => automationWaitSec(key, fallback);
+  const num = (key, fallback) => {
+    const n = Number(readPath(c, `automation.${key}`));
+    return Number.isFinite(n) ? n : fallback;
+  };
   return [
     setGroup(
       'Delays',
       setField(c, 'Keep Building — Wait Before the Next Task (seconds)', 'automation.keepBuildingSec', {
         type: 'number',
-        value: sec('keepBuildingSec', 5),
+        value: num('keepBuildingSec', 5),
         attr: 'min="0" max="600" step="1"',
         hint: 'The pause between a worker’s report and the Architect starting the next task. Seconds, 0 to 600. Long enough to read the report if you are watching.',
       }) +
         setField(c, 'Auto-Permissions — Wait Before Allowing (seconds)', 'automation.permissionsSec', {
           type: 'number',
-          value: sec('permissionsSec', 10),
+          value: num('permissionsSec', 10),
           attr: 'min="0" max="3600" step="1"',
           hint: 'How long a permission card waits before Auto-Permissions allows it once. Seconds, 0 to 3600. 0 allows at once, without drawing a card.',
         }) +
         setField(c, 'Auto-Answer — Wait Before Answering (seconds)', 'automation.answerSec', {
           type: 'number',
-          value: sec('answerSec', 30),
+          value: num('answerSec', 30),
           attr: 'min="0" max="3600" step="1"',
           hint: 'How long a question waits before Auto-Answer takes the Recommended option (or the top one). Seconds, 0 to 3600.',
         }) +
         setField(c, 'Auto-Shutdown — Idle Time Before Turning Off (minutes)', 'automation.shutdownMin', {
           type: 'number',
-          value: Number(readPath(c, 'automation.shutdownMin')) || 5,
+          value: num('shutdownMin', 5),
           attr: 'min="1" max="180" step="1"',
           hint: 'How long Synapse waits with nothing running and nothing left to start before it shows the 20-second shutdown countdown. Minutes, 1 to 180.',
         }) +
