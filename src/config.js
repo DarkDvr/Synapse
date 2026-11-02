@@ -16,6 +16,10 @@ export const DONE_SOUNDS = ['off', 'chime', 'bell', 'wood', 'ripple'];
 export const CHAT_TEXT_MIN = 10.5;
 export const CHAT_TEXT_MAX = 16.5;
 
+/** The interface languages Synapse actually has strings for. English only until the
+ *  Russian translation lands; `web/app.js` builds its selector from the same list. */
+export const UI_LANGUAGES = ['en'];
+
 export const DEFAULTS = {
   server: {
     host: '127.0.0.1',
@@ -106,6 +110,15 @@ export const DEFAULTS = {
   // language and the fallback for any string that has no translation.
   ui: {
     chatTextPx: 12.5,
+    language: 'en',
+  },
+  // Turning the machine off when the Architect has finished and said so. Off by
+  // default, because a PC going down is the one action Synapse must never take on
+  // a misread state: when on, it waits `minutes` after the finish, then shows a
+  // 20-second countdown with a Cancel button, and a new run cancels the wait.
+  shutdown: {
+    whenDone: false,
+    minutes: 5,
   },
   cleanup: {
     // What a project left running, stopped when the project finishes and again
@@ -257,6 +270,19 @@ export function normalize(raw) {
       ? Math.min(CHAT_TEXT_MAX, Math.max(CHAT_TEXT_MIN, Math.round(n * 2) / 2))
       : DEFAULTS.ui.chatTextPx;
   }
+  // The language list holds English only until the Russian translation lands (see
+  // docs/notes/todo.md). An unknown value falls back rather than leaving the page
+  // asking for strings that do not exist.
+  {
+    const picked = String(cfg.ui.language ?? '').trim().toLowerCase();
+    cfg.ui.language = UI_LANGUAGES.includes(picked) ? picked : DEFAULTS.ui.language;
+  }
+  // The timed shutdown. A value in minutes, kept inside a range where the operator
+  // can still act: under a minute the countdown is the warning, and over three
+  // hours it is a setting nobody remembers choosing.
+  cfg.shutdown = isPlainObject(cfg.shutdown) ? cfg.shutdown : {};
+  cfg.shutdown.whenDone = cfg.shutdown.whenDone === true;
+  cfg.shutdown.minutes = clampInt(cfg.shutdown.minutes, 1, 180, DEFAULTS.shutdown.minutes);
 
   cfg.worker = cfg.worker || {};
   delete cfg.worker.timeoutSec;

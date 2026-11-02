@@ -260,6 +260,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
  */
 const REPORT_JS = `(() => {
   const vw = window.innerWidth;
+  const vh = window.innerHeight;
   const out = {
     status: (performance.getEntriesByType('navigation')[0] || {}).responseStatus ?? null,
     viewport: { w: vw, h: window.innerHeight },
@@ -461,6 +462,22 @@ const REPORT_JS = `(() => {
   const controlSel = 'button,a[href],input[type=button],input[type=submit],[role="button"]';
   const controls = all.filter((el) => visible(el) && el.matches(controlSel));
 
+  // What is on top at an element's centre. Inside a dialog that is the element (or a
+  // child of it); behind a dialog it is the backdrop, which makes it a different
+  // "layer". Two controls either side of an overlay share a y and are not a row —
+  // measured on Synapse's own Settings, whose footer button lined up with the
+  // sidebar's when the pane grew. It is the browser's own hit test, so no page has
+  // to name its overlay anything in particular.
+  const layerOf = (el) => {
+    const r = el.getBoundingClientRect();
+    const x = Math.max(0, Math.min(vw - 1, r.left + r.width / 2));
+    const y = Math.max(0, Math.min(vh - 1, r.top + r.height / 2));
+    let top = null;
+    try { top = document.elementFromPoint(x, y); } catch { return null; }
+    if (!top || top === el || el.contains(top)) return null;
+    return top;
+  };
+
   // 1. Controls in one row: one height, one top. A row is a set of controls that
   //    overlap vertically *and* sit within a button-gap of each other — the sidebar's
   //    project button and the main pane's New Project share a y by accident, and two
@@ -470,7 +487,9 @@ const REPORT_JS = `(() => {
   const rows = [];
   for (const el of controls) {
     const r = el.getBoundingClientRect();
+    const layer = layerOf(el);
     const row = rows.find((x) => {
+      if (x.layer !== layer) return false;
       const o = x.box;
       const overlap = Math.min(o.bottom, r.bottom) - Math.max(o.top, r.top);
       if (overlap <= Math.min(o.height, r.height) * 0.5) return false;
@@ -478,7 +497,7 @@ const REPORT_JS = `(() => {
       return gap <= 24;
     });
     if (row) row.items.push(el);
-    else rows.push({ box: { top: r.top, bottom: r.bottom, height: r.height, left: r.left, right: r.right }, items: [el] });
+    else rows.push({ layer, box: { top: r.top, bottom: r.bottom, height: r.height, left: r.left, right: r.right }, items: [el] });
   }
   for (const row of rows) {
     if (row.items.length < 2) continue;

@@ -159,8 +159,66 @@ export function normalizeAttachments(list) {
   return out;
 }
 
-export function createApi({ getConfig, applyConfig, engine, logger, getBootError, projects, toolStats, probe, modelCache, inspectModel: inspectRef, probeDir, runs, engineUpdate, synapseUpdate, restart, stopSelf, notify, permissionLog, permissionGate, permissionMemory }) {
+export function createApi({ getConfig, applyConfig, engine, logger, getBootError, projects, toolStats, probe, modelCache, inspectModel: inspectRef, probeDir, runs, engineUpdate, synapseUpdate, restart, stopSelf, pcShutdown, notify, permissionLog, permissionGate, permissionMemory }) {
   const app = logger.channel('app');
+
+  // ── the timed shutdown's clock ──────────────────────────────────────
+  // Twenty seconds of warning, and both waits owned by the server. A hidden window's
+  // timers are throttled by the browser — the tray is exactly when this feature is
+  // wanted, and a 20-second countdown in a hidden page can take twenty minutes or
+  // never come. The page draws the countdown; it does not keep it.
+  const POWER_COUNTDOWN_SEC = 20;
+  let powerGrace = 0;
+  let powerTick = 0;
+
+  function clearPower() {
+    let was = false;
+    if (powerGrace) { clearTimeout(powerGrace); powerGrace = 0; was = true; }
+    if (powerTick) { clearInterval(powerTick); powerTick = 0; was = true; }
+    return was;
+  }
+
+  /** Why the machine must stay on, or null when it may go. Shared by the route and
+   *  the countdown so the last second is guarded as hard as the request. */
+  function powerRefusal(confirmed) {
+    const c = getConfig();
+    if (c?.shutdown?.whenDone !== true) return 'Turning the PC off when the Architect finishes is off in Settings.';
+    if (!confirmed) return 'The countdown has to be confirmed before the PC is turned off.';
+    if ((runs?.active?.() || []).length) return 'A run is still going, so the PC was left on.';
+    if (!pcShutdown) return 'This build cannot turn the PC off.';
+    return null;
+  }
+
+  function startPowerCountdown() {
+    powerGrace = 0;
+    let left = POWER_COUNTDOWN_SEC;
+    notify?.({ kind: 'shutdown-warning', seconds: left });
+    powerTick = setInterval(() => {
+      // A run that started during the countdown means the operator is back at work.
+      if ((runs?.active?.() || []).length) {
+        clearPower();
+        app.info('timed shutdown cancelled: a run started');
+        notify?.({ kind: 'shutdown-cancelled', reason: 'A run started.' });
+        return;
+      }
+      left -= 1;
+      if (left > 0) {
+        notify?.({ kind: 'shutdown-tick', seconds: left });
+        return;
+      }
+      clearPower();
+      const refused = powerRefusal(true);
+      if (refused) {
+        app.warn(`timed shutdown did not run: ${refused}`);
+        notify?.({ kind: 'shutdown-cancelled', reason: refused });
+        return;
+      }
+      app.info('timed shutdown: turning the PC off');
+      notify?.({ kind: 'shutdown-done' });
+      pcShutdown();
+    }, 1000);
+    powerTick.unref?.();
+  }
 
   // The last brief we handed each session, so an unchanged plan does not PUT
   // the same text again on every message.
@@ -666,6 +724,49 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
     shutdown: async () => {
       if (!stopSelf) return { ok: false, error: 'This build cannot stop itself.' };
       return stopSelf();
+    },
+
+    /**
+     * Arm the timed shutdown for this finish.
+     *
+     * The wait and the countdown live *here*, not in the page, for one measured
+     * reason: a hidden window's timers are throttled by the browser. Synapse in the
+     * tray is exactly the case this feature exists for, and a 20-second countdown in
+     * a hidden page can take twenty minutes — or never come. The server's clock is
+     * not throttled, so it owns the deadline and the page only draws it.
+     */
+    armPowerOff: async (body) => {
+      const c = getConfig();
+      if (c?.shutdown?.whenDone !== true) {
+        return { ok: false, error: 'Turning the PC off when the Architect finishes is off in Settings.' };
+      }
+      clearPower();
+      const minutes = Math.min(180, Math.max(1, Math.round(Number(body?.minutes ?? c.shutdown.minutes) || 5)));
+      powerGrace = setTimeout(() => startPowerCountdown(), minutes * 60_000);
+      powerGrace.unref?.();
+      app.info(`timed shutdown armed: ${minutes} minute(s) after this finish`);
+      return { ok: true, minutes, deadline: Date.now() + minutes * 60_000 };
+    },
+
+    /** The operator changed their mind, in the wait or in the countdown. */
+    cancelPowerOff: async () => {
+      const was = clearPower();
+      if (was) {
+        app.info('timed shutdown cancelled');
+        notify?.({ kind: 'shutdown-cancelled' });
+      }
+      return { ok: true, cancelled: was };
+    },
+
+    /**
+     * Turn the PC off *now*, confirmed. Kept as its own route because it is the
+     * countdown's final act and must stay callable without a timer — and because
+     * the guards below are the ones the countdown reuses.
+     */
+    powerOff: async (body) => {
+      const refused = powerRefusal(body?.confirm === true);
+      if (refused) return { ok: false, error: refused };
+      return pcShutdown();
     },
 
     // The engine updates often and the model catalog ships inside it, so this is

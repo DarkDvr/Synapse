@@ -434,6 +434,10 @@ function noteWorking() {
     // chime when the lock goes — for a turn that failed.
     if (!workWasLive) workEndQuiet = false;
     workWasLive = true;
+    // Work has resumed, so the Architect is not finished after all: a shutdown
+    // waiting on silence is waiting on nothing. (The first evaluation, before any
+    // work has run, also lands here — and disarms nothing that was not armed.)
+    cancelShutdown();
     return;
   }
   if (!workWasLive) return;
@@ -444,6 +448,72 @@ function noteWorking() {
     return;
   }
   playDoneSound();
+  // Same signal as the chime, on purpose: the sound means "nothing is running and
+  // the Architect has said its piece", and that is exactly when the operator asked
+  // the machine to go off. A stop or a failure never reaches here.
+  armShutdown();
+}
+
+// ── the timed shutdown ──────────────────────────────────────────────────
+// "Turn the PC off when the Architect finishes" is three waits, and every one of
+// them is a chance to change your mind: the minutes the operator typed, then a
+// 20-second countdown with a Cancel button, then the machine.
+//
+// Both clocks live in the *server* (see armPowerOff in src/api.js): a hidden
+// window's timers are throttled by the browser, and Synapse in the tray is exactly
+// when this feature is wanted. The page arms the wait, draws the countdown the
+// server sends, and asks it to cancel — nothing here decides when the machine goes.
+let shutdownWarned = false;
+let shutdownArmed = false;
+
+/** Stop waiting, in the server and on screen. Quiet when work resumed, spoken when
+ *  the operator cancelled. */
+function cancelShutdown({ quiet = false } = {}) {
+  const wasShown = !$('shutdownModal').hidden;
+  $('shutdownModal').hidden = true;
+  shutdownWarned = false;
+  // Nothing armed and nothing on screen: this is the common case (it runs whenever
+  // work starts), and posting a cancel for it would be a request per stream event.
+  if (!shutdownArmed && !wasShown) return;
+  shutdownArmed = false;
+  // The server may have nothing armed, and it answers that honestly, so a failure
+  // here is not worth a toast.
+  api('POST', '/api/power-off/cancel').catch(() => {});
+  if (wasShown && !quiet) toast('Shutdown Cancelled', 'The PC stays on.');
+}
+
+/** Arm the wait, or disarm it. Called only when the Architect really finished. */
+function armShutdown() {
+  const cfg = state.config?.shutdown;
+  if (!cfg?.whenDone) return;
+  const minutes = Math.min(180, Math.max(1, Math.round(Number(cfg.minutes) || DEFAULT_SHUTDOWN_MINUTES)));
+  shutdownArmed = true;
+  api('POST', '/api/power-off/arm', { minutes }).catch(() => { shutdownArmed = false; });
+}
+
+/** The server's countdown, painted. `seconds` comes from the event, so the number on
+ *  screen and the number in the server cannot drift. */
+function showShutdownWarning(seconds) {
+  const modal = $('shutdownModal');
+  if (!modal) return;
+  $('shutdownCount').textContent = String(Math.max(0, Number(seconds) || 0));
+  if (!shutdownWarned) {
+    shutdownWarned = true;
+    $('shutdownLead').textContent =
+      'The Architect finished and the timer you set ran out. Nothing is running, so the PC will go off.';
+    const cancel = $('cancelShutdown');
+    if (cancel) { cancel.disabled = false; cancel.textContent = 'Cancel'; }
+    modal.hidden = false;
+    cancel?.focus();
+  }
+}
+
+/** The last second has passed: the machine is going. No button can stop it now. */
+function noteShutdownDone() {
+  $('shutdownCount').textContent = '0';
+  $('shutdownLead').textContent = 'Turning the PC off now.';
+  const cancel = $('cancelShutdown');
+  if (cancel) { cancel.disabled = true; cancel.textContent = 'Shutting Down'; }
 }
 
 // ── error popup ─────────────────────────────────────────────────
@@ -6865,6 +6935,31 @@ function connectStream() {
       return;
     }
 
+    // The timed shutdown, as the server counts it. The numbers come from the server
+    // so the page never decides when the machine goes — it only shows the count and
+    // offers the way out.
+    if (ev.kind === 'shutdown-warning') {
+      shutdownArmed = true;
+      showShutdownWarning(ev.seconds);
+      return;
+    }
+    if (ev.kind === 'shutdown-tick') {
+      showShutdownWarning(ev.seconds);
+      return;
+    }
+    if (ev.kind === 'shutdown-done') {
+      noteShutdownDone();
+      return;
+    }
+    if (ev.kind === 'shutdown-cancelled') {
+      const shown = !$('shutdownModal').hidden;
+      shutdownArmed = false;
+      shutdownWarned = false;
+      $('shutdownModal').hidden = true;
+      if (shown) toast('PC Left On', ev.reason || 'The timed shutdown was cancelled.');
+      return;
+    }
+
     // Synapse's own notification: the session was just auto-named, or a send
     // applied a mode. The mode is the applied one, so another window's toggle
     // and plan pane follow it — a pending choice on this page is not overwritten
@@ -7468,6 +7563,15 @@ const CHAT_TEXT_DEFAULT = 12.5;
 const CHAT_TEXT_MIN = 10.5;
 const CHAT_TEXT_MAX = 16.5;
 
+// The languages the interface has strings for. English only for now: the Russian
+// translation is on the deferred list (docs/notes/todo.md), and an entry with no
+// strings behind it would be a switch that does nothing.
+const LANGUAGES = [{ v: 'en', l: 'English' }];
+
+// Minutes between "the Architect finished" and the warning, when the saved config
+// has nothing usable. The same default lives in src/config.js.
+const DEFAULT_SHUTDOWN_MINUTES = 5;
+
 /** A size from the config or the form, made legal. */
 function chatTextPx(value) {
   const n = Number(value);
@@ -7501,18 +7605,30 @@ function applyChatText(value = state.config?.ui?.chatTextPx) {
 }
 
 /**
+ * The interface language. English is the only one with strings behind it today, so
+ * this records the choice on the page (`lang`, which a screen reader also reads)
+ * and nothing else. When a translation lands, this is where it would take effect.
+ */
+function applyLanguage(value = state.config?.ui?.language) {
+  const lang = LANGUAGES.some((l) => l.v === value) ? value : 'en';
+  document.documentElement.lang = lang;
+}
+
+/**
  * Settings → General: the interface's own choices, and the first tab because it is
  * where a person goes when they want Synapse to behave differently rather than the
  * engine to work differently. Everything here is read the moment it is saved: none
  * of it needs a restart.
  *
- * The chat's text size is the only one today. It is one number, and the transcript
- * is drawn from it (web/synapse.css multiplies every size in the chat by
- * `--chat-fs`); the bounds are enforced here and again in the config, because a
- * number typed into a box is not a promise.
+ * Two settings today. The chat's text size is one number, and the transcript is
+ * drawn from it (web/synapse.css multiplies every size in the chat by `--chat-fs`);
+ * the bounds are enforced here and again in the config, because a number typed into
+ * a box is not a promise. The language list holds English alone until the Russian
+ * translation lands — see docs/notes/todo.md.
  */
 function settingsGeneral(c) {
   const px = chatTextPx(readPath(c, 'ui.chatTextPx'));
+  const minutes = Number(readPath(c, 'shutdown.minutes')) || DEFAULT_SHUTDOWN_MINUTES;
   return [
     setGroup(
       'Interface',
@@ -7524,10 +7640,42 @@ function settingsGeneral(c) {
           'The size of the conversation — nothing else, not the rail, the cards or the composer. ' +
           `${CHAT_TEXT_MIN} to ${CHAT_TEXT_MAX} px, in half steps; ${CHAT_TEXT_DEFAULT} is the size the interface was designed around.`,
       }) +
+        setSelect(
+          c,
+          'Language',
+          'ui.language',
+          LANGUAGES,
+          {
+            value: String(readPath(c, 'ui.language') || 'en'),
+            hint: 'The language of Synapse’s own controls. English is the default. Model output is never translated — it answers in the language you write to it.',
+          },
+        ) +
         `<p class="set-note">The whole transcript scales with this one number, and keeps its proportions: ` +
         `the role label, the clock, headings, code and tables all move together. ` +
         `<strong>${CHAT_TEXT_MIN}</strong> is the smallest that still reads; <strong>${CHAT_TEXT_MAX}</strong> is the largest ` +
-        `that keeps a full answer above the composer on a 900px-tall window.</p>`,
+        `that keeps a full answer above the composer on a 900px-tall window.</p>` +
+        `<p class="set-note">One language for now. A Russian translation is on the deferred list; ` +
+        `the selector is here so it has somewhere to go, not to switch something that does not exist yet.</p>`,
+    ),
+    setGroup(
+      'When the Architect Finishes',
+      setCheck(
+        c,
+        'Turn the PC off when it finishes',
+        'shutdown.whenDone',
+        'Off by default. When on, Synapse waits the minutes below after the Architect says it is done, ' +
+          'then shows a 20-second countdown with a Cancel button. Only the machine goes off; the work is already on disk.',
+      ) +
+        setField(c, 'Wait Before Shutting Down (minutes)', 'shutdown.minutes', {
+          type: 'number',
+          value: minutes,
+          attr: 'min="1" max="180" step="1"',
+          hint: 'Minutes between the finish and the 20-second warning. 1 to 180. A new run cancels the wait.',
+        }) +
+        `<p class="set-note">The countdown is the last chance to change your mind, so it is the biggest thing on ` +
+        `screen: <strong>20 seconds</strong>, a <strong>Cancel</strong> button, and Escape or a click outside does the same. ` +
+        `A turn that failed or was stopped never arms it — that is not the Architect finishing. ` +
+        `Nothing here closes Synapse or stops the server: it turns the machine off.</p>`,
     ),
   ].join('');
 }
@@ -8159,6 +8307,11 @@ async function saveSettings() {
     // The chat's size is read from the config here, once, rather than by watching
     // for changes: this is the one place the file becomes the page's truth.
     applyChatText();
+    applyLanguage();
+    // A saved shutdown setting takes effect now: off disarms a wait, and new
+    // minutes restart one that is already waiting on the same finish.
+    if (state.config?.shutdown?.whenDone !== true) cancelShutdown();
+    else if (shutdownGrace) armShutdown();
     state.setDraft = JSON.parse(JSON.stringify(state.config));
     state.setProvSelected = null;
     renderLlmStatus();
@@ -8814,6 +8967,20 @@ document.addEventListener('keydown', (e) => {
   );
   $('dialogExtra').addEventListener('click', () => closeDialog($('dialogExtra').dataset.result || 'extra'));
   $('dialogCancel').addEventListener('click', () => closeDialog(null));
+
+  // The shutdown warning has one meaning for every way out of it: stay on. The
+  // button, a click on the backdrop, and Escape all cancel; nothing else closes it,
+  // because a dialog that dismisses itself is a shutdown nobody agreed to.
+  $('cancelShutdown').addEventListener('click', () => cancelShutdown());
+  $('shutdownModal').addEventListener('click', (e) => {
+    if (e.target === $('shutdownModal')) cancelShutdown();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !$('shutdownModal').hidden) {
+      e.preventDefault();
+      cancelShutdown();
+    }
+  });
   $('dialogClose').addEventListener('click', () => closeDialog(null));
   $('dialogModal').addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target.tagName === 'INPUT') { e.preventDefault(); $('dialogOk').click(); } });
 
@@ -8929,6 +9096,7 @@ async function boot() {
   window.addEventListener('resize', fitStageHeight);
   state.config = await api('GET', '/api/config').catch(() => null);
   applyChatText();
+  applyLanguage();
   renderLlmStatus();
   // every new session starts Single; an opened session sets its own mode
   state.mode = 'single';

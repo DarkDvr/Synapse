@@ -651,6 +651,24 @@ async function main() {
     // Tray > Stop Server. Graceful: the engine is stopped by shutdown(), never
     // left behind for a kill to orphan.
     stopSelf: requestShutdown,
+    // The timed shutdown's final act. `shutdown /s` is Windows' own, needs no
+    // administrator, and gives the session the usual warning the OS prints — the
+    // 20-second countdown the operator sees is Synapse's, not the system's.
+    pcShutdown: () => {
+      if (process.platform !== 'win32') {
+        return { ok: false, error: 'Only a Windows PC can be turned off from here.' };
+      }
+      try {
+        // Detached and ignored: the machine is going away, so nothing here waits
+        // for an answer that will never arrive.
+        const child = spawn('shutdown', ['/s', '/t', '0'], { windowsHide: true, stdio: 'ignore', detached: true });
+        child.unref();
+        app.info('powering the PC off: the Architect finished and the timer ran out');
+        return { ok: true };
+      } catch (err) {
+        return { ok: false, error: `Could not ask Windows to shut down: ${err.message}` };
+      }
+    },
     notify: (ev) => http?.broadcast({ ...ev, ts: Date.now() }),
     permissionLog,
     permissionGate,

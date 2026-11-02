@@ -149,6 +149,53 @@ test('a page that is aligned reports nothing and exits 0', () => {
   }
 });
 
+// A dialog covers the page, so what is behind it is not on screen: a control there
+// and one inside the dialog can share a y without being a row. Synapse's own Settings
+// hit exactly this once the General pane made the dialog taller — its footer button
+// lined up with the sidebar's behind the backdrop. The layer comes from the browser's
+// hit test, so no page has to name its overlay. Two buttons *inside* the dialog still
+// compare with each other, which is the half that must not be lost.
+test('controls either side of a dialog are not a row, but controls inside it are', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'synapse-audit-modal-'));
+  try {
+    const page = path.join(dir, 'modal.html');
+    fs.writeFileSync(
+      page,
+      `<!doctype html><meta charset="utf-8"><style>
+        body { margin:0; width:700px; height:800px; font:400 12px/16px sans-serif; background:#fff; }
+        button { font:400 13px/1 sans-serif; border:1px solid #000; background:#fff; }
+        /* behind the dialog, and at the same y as the button in it */
+        .page-btn { position:absolute; left:40px; top:400px; height:30px; padding:0 14px; }
+        .backdrop { position:fixed; inset:0; background:rgba(0,0,0,.6); }
+        .panel { position:absolute; left:20px; top:300px; width:360px; height:260px; background:#fff; }
+        /* same row, same layer as .page-btn's y — must not be compared across the backdrop */
+        .dialog-btn { position:absolute; left:20px; top:400px; height:34px; padding:0 16px; }
+        /* a genuine pair inside the dialog: one is 4px shorter, and that is a finding */
+        .tall { position:absolute; left:20px; top:470px; height:30px; padding:0 14px; }
+        .short { position:absolute; left:96px; top:470px; height:26px; padding:0 10px; }
+      </style>
+      <button class="page-btn">Behind</button>
+      <div class="backdrop">
+        <div class="panel">
+          <button class="dialog-btn">Inside</button>
+          <button class="tall">Pause</button><button class="short">Stop</button>
+        </div>
+      </div>`,
+      'utf8',
+    );
+    const r = run(page, '--widths', '700', '--height', '800', '--no-sheet', '--audit', '--out', dir);
+    assert.equal(r.status, 1, r.stderr || r.stdout);
+    const { findings } = JSON.parse(r.stdout.split('\n').find((l) => l.includes('"layout"'))).report.layout;
+    const rows = findings.filter((f) => f.check === 'controls-row');
+    assert.equal(rows.length, 1, 'only the pair inside the dialog is a row');
+    const names = [rows[0].el, rows[0].vs].join(' ');
+    assert.match(names, /tall|short/, 'the pair inside the dialog is named');
+    assert.doesNotMatch(names, /page-btn|dialog-btn/, 'nothing is compared across the backdrop');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 // --diff compares a build against an approved mock at the mock's own size. The
 // first attempt at this was wrong in a way only a test would catch: the build's
 // render was written to `<base>-<width>.png`, the same name a mock shot by this

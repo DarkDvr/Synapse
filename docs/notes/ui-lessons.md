@@ -1800,4 +1800,34 @@ the vertical rules and the scrolling. The implementation is one custom property,
   in different line boxes; those are there at the default size too, and none is
   about the setting. Read them as chat-content findings, not as a size regression.
 
+## A dialog is a layer, and a hidden window has no clock
+
+Two lessons from the timed shutdown (2 Nov). Both were measured on Synapse's own
+window, and both would have shipped as "works on my machine".
+
+- **Controls either side of a backdrop are not a row.** The General pane made the
+  Settings dialog taller, and its footer button came within a row of the sidebar's
+  Settings link *behind* the backdrop — a `controls-row` finding on a screen that is
+  perfectly aligned. The audit now asks the browser what is on top at a control's
+  centre (`document.elementFromPoint`) and only groups controls in the same layer; a
+  modal is a different layer from the page under it. No page has to name its overlay
+  anything, and two buttons inside the dialog still compare with each other (the
+  test asserts both halves). A dialog that covers the page also means the page is not
+  on screen, which is the rule the fix encodes.
+
+- **A hidden window's timers are throttled, so the clock cannot live in the page.**
+  The first implementation counted the 20 seconds in the browser. Chromium throttles
+  timers in a hidden page — after a few minutes it is about once a minute — and
+  Synapse in the tray is *exactly* when "turn the PC off when it finishes" is wanted.
+  A 20-second countdown could have taken twenty minutes, or never come. The server
+  now owns both waits (`armPowerOff` in `src/api.js`): the page asks it to arm, draws
+  the numbers it broadcasts (`shutdown-warning`, `shutdown-tick`), and asks it to
+  cancel. The countdown is tested with node's mock clock, so the whole minute-plus-
+  twenty-seconds runs in a millisecond.
+- **The last second re-checks the config and the runs.** A cancel that raced the
+  timer, or a run that started during the countdown, must still leave the machine on:
+  `powerRefusal()` is asked again at zero, and a live run cancels the count just as
+  an explicit Cancel does. Turning the setting off while a countdown is up therefore
+  saves the machine, which is also the safety net if the Cancel click never lands.
+
 

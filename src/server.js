@@ -244,6 +244,21 @@ export function createServer({ api, engine, logger, config, remote, onRemote }) 
     // POST /api/shutdown — stop the server (tray > Stop Server). The app reads
     // exit code 0 as "stopped on purpose" and leaves the window open.
     if (seg[0] === 'shutdown' && method === 'POST') return sendJson(res, 200, await api.shutdown());
+    // POST /api/power-off — the timed shutdown's last second, which turns the PC
+    // off. Deliberately *not* `/api/shutdown`: that one stops the server and leaves
+    // the machine running, and the two must never be confused.
+    if (seg[0] === 'power-off' && seg.length === 1 && method === 'POST') {
+      return sendJson(res, 200, await api.powerOff(await readBody(req)));
+    }
+    // The countdown itself: arm it when the Architect finishes, cancel it while it
+    // is waiting or counting. The server owns both clocks, so a window in the tray
+    // still turns the machine off on time.
+    if (seg[0] === 'power-off' && seg[1] === 'arm' && method === 'POST') {
+      return sendJson(res, 200, await api.armPowerOff(await readBody(req)));
+    }
+    if (seg[0] === 'power-off' && seg[1] === 'cancel' && method === 'POST') {
+      return sendJson(res, 200, await api.cancelPowerOff());
+    }
     // GET|PUT /api/config
     if (seg[0] === 'config') {
       if (method === 'GET') return sendJson(res, 200, await api.getConfig());
