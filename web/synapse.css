@@ -2849,7 +2849,18 @@ body:has(.modal-backdrop:not([hidden])) { overflow: hidden; }
   font-family: var(--display); font-size: 46px; line-height: 0.9;
   font-variant-numeric: tabular-nums; color: var(--red);
 }
-.shutdown-lead { margin: 0 auto 18px; max-width: 46ch; font-size: 13px; line-height: 1.55; color: #b9bdc4; }
+/* The subtitle is scoped to the dialog on purpose: the locked baseline ships
+   `.modal p { margin:0; font-size:12px; line-height:1.7 }`, which outranks a plain
+   `.shutdown-lead` (0,1,1 beats 0,1,0) and silently took away its centring margins
+   and its size — the paragraph sat left-aligned in its own box while its text was
+   centred, and read off-centre. Measured: box 365..735 in a content area of
+   364..916. */
+.shutdown-modal .shutdown-lead {
+  align-self: center; max-width: 52ch; margin: 16px auto 22px;
+  font-size: 13px; line-height: 1.55; color: #b9bdc4; text-align: center;
+  /* Two short lines, balanced rather than one long and one orphan. */
+  text-wrap: balance;
+}
 .shutdown-modal .modal-actions { justify-content: center; margin-top: 4px; }
 .shutdown-modal .modal-actions > .btn { min-height: 38px; padding: 0 22px; }
 

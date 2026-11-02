@@ -206,3 +206,19 @@ test('General offers the shutdown settings and the language selector', () => {
   // be the kind of mock this project forbids.
   assert.match(app, /const LANGUAGES = \[\{ v: 'en', l: 'English' \}\]/);
 });
+
+// The warning's subtitle lost its centring to the locked baseline: summit.css ships
+// `.modal p { margin:0; font-size:12px; line-height:1.7 }`, which outranks a plain
+// `.shutdown-lead` and left the paragraph at the left of its box with its text
+// centred inside it — the operator saw it and called it off-centre. Measured before:
+// box 365..735 in a content area of 364..916. The rule has to be scoped to the
+// dialog, and the spacing has to be stated there too.
+test('the shutdown subtitle is scoped past the baseline modal rule, and centred', () => {
+  const css = read('web/synapse.css');
+  const rule = /\.shutdown-modal \.shutdown-lead\s*\{([^}]*)\}/.exec(css);
+  assert.ok(rule, 'the subtitle rule is scoped to the dialog');
+  assert.match(rule[1], /align-self:\s*center/, 'centred as a flex item, not by its margins alone');
+  assert.match(rule[1], /text-align:\s*center/);
+  assert.match(rule[1], /margin:\s*16px auto 22px/, 'breathing room above and below');
+  assert.doesNotMatch(css, /^\.shutdown-lead\s*\{/m, 'an unscoped rule loses to `.modal p` and reads off-centre');
+});
