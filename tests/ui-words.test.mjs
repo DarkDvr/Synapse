@@ -254,10 +254,18 @@ test('the question is a moved post in the transcript, not an overlay', () => {
   assert.match(js, /function mountAskPost\(\)/, 'the panel has one place that places it');
   assert.match(js, /el\.appendChild\(host\)/, 'it is appended to the transcript');
   assert.match(js, /el\.lastElementChild !== host/, 'and kept as the last post');
-  assert.match(js, /function fitAskPanel\(\)/, 'it is capped to the chat height');
-  // Measured: 319px panel in a 294px chat put Submit below the fold.
-  assert.match(js, /el\.clientHeight - 12/, 'the cap is the chat, not the content');
-  assert.match(js, /fitAskPanel\(\);/, 'and it is applied when the panel is placed');
+  // The question posts in its entirety: no cap and no inner scroll. A box you have
+  // to scroll *inside* a chat is a question with two scrollbars.
+  const panel = /\.ask-panel\s*\{([^}]*)\}/.exec(css);
+  assert.doesNotMatch(panel[1], /max-height\s*:/, 'the panel is not capped');
+  const fields = /\.ask-fields\s*\{([^}]*)\}/.exec(css);
+  assert.doesNotMatch(fields[1], /overflow:\s*auto/, 'and nothing scrolls inside it');
+  // Dense answers: a list, not a stack of boxes.
+  const opt = /\.ask-opt\s*\{([^}]*)\}/.exec(css);
+  assert.match(opt[1], /border:\s*0/, 'an answer is not a bordered box any more');
+  assert.match(panel[1], /border:\s*1px solid var\(--orange\)/, 'the edge stays orange: it is what makes the post a question');
+  assert.doesNotMatch(panel[1], /background:\s*#241a12/, 'the fill is neutral — the orange is the border, not a wash');
+  assert.doesNotMatch(js, /fitAskPanel/, 'no height fitting is left behind');
 });
 
 test('a pending question takes the composer, and leaves Stop as the way out', () => {
@@ -289,7 +297,7 @@ test('the question panel survives a transcript rebuild because the node is held'
   const js = read('web/app.js');
   assert.match(js, /let askHostEl = null;/, 'the node is kept in a variable');
   assert.match(js, /function askHost\(\) \{/, 'and looked up through one accessor');
-  for (const fn of ['renderAskPanel', 'mountAskPost', 'fitAskPanel']) {
+  for (const fn of ['renderAskPanel', 'mountAskPost']) {
     const block = new RegExp(`function ${fn}\\(\\) \\{([\\s\\S]*?)\\n\\}`).exec(js);
     assert.ok(block, `${fn} exists`);
     assert.match(block[1], /const host = askHost\(\)/, `${fn} uses the held node, not getElementById`);

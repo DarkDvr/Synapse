@@ -31,12 +31,23 @@ answering meant guessing what had been said. As a post, the answer is one scroll
   destroyed — and its radios, its page and its focus with it. `#askHost` is created
   in the shell, and `mountAskPost()` appends the *same node* as the transcript's last
   child after each render. That is what lets the polling rule below keep working.
-- **It is sized to the chat, not to its content.** Measured on the first live
-  question: the panel was 319px inside a 294px chat, which put **Submit Answer below
-  the fold** — a question you cannot answer without scrolling a box that looks
-  finished. `fitAskPanel()` caps it at the transcript's height (minus 12px) and runs
-  on render and on resize; the panel's fields scroll inside it and its action row
-  stays at its bottom edge.
+- **It posts whole — no cap, no inner scroll.** An earlier version capped the panel to
+  the chat's height so Submit could not fall below the fold (measured: a 319px panel in
+  a 294px chat). The operator overruled it: a question you scroll *inside* a box inside
+  a chat is a question with two scrollbars. The panel has no `max-height` and
+  `.ask-fields` does not scroll; if it is taller than the chat, the chat scrolls, as for
+  any long message. The padding came down so a typical four-option question (287px) fits
+  a 294px chat without clipping its own header — measured after: header 5px inside the
+  chat, Submit visible, zero inner overflow.
+- **It opens at its start, not its end.** Scrolling to the bottom of a chat shorter than
+  the question hid the question's own header and title. On a new form the transcript is
+  positioned so the panel's top sits a few pixels below the chat's top, and the chat's
+  follow is released so streaming text cannot yank it back.
+- **Dense, not boxed.** Every answer used to be its own orange-bordered box inside an
+  orange-bordered panel — too much orange, and three options took a screenful. The panel
+  keeps its orange border (that is what marks it as a question), the fill is neutral, and
+  the answers are a plain list: radio or checkbox, 12.5px label, 10.5px description,
+  about half a line between rows, no borders.
 - **A question takes the whole composer.** The text box is disabled and says "Answer
   the question to continue"; Send, Attach, the mode switch and the run menu are
   disabled too — a half-dead composer invites a click that goes nowhere. **Stop stays

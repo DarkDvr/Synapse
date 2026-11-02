@@ -1809,20 +1809,22 @@ body[data-mode="single"] #runAuto { display: none; }
    answer the operator needed in order to answer. It is a *moved* element, never
    rebuilt by the transcript — its answers live in the DOM, and a poll that rebuilt
    it would throw them away. */
-.ask-host { display: block; margin: 0 0 14px; }
+.ask-host { display: block; margin: 0; }
 .ask-host[hidden] { display: none; }
+/* One border, and it is not orange: the panel used to be orange-edged with every
+   answer orange-edged inside it, which the operator called too much orange. The
+   accent now lives in the small header mark alone; the panel is a plain box and the
+   answers are a dense list. */
 .ask-panel {
-  /* A column: the fields take the room and scroll inside it, the action row is
-     pinned at the panel's bottom. A sticky row instead would sit wherever the
-     content happens to end, leaving a strip of empty panel under it that reads
-     as the chat showing through. */
+  /* A column in plain flow: no max-height and no inner scrolling. The operator asked
+     for the question to post in its entirety — a question you have to scroll *inside*
+     a box inside a chat is a question with two scrollbars. If it is taller than the
+     chat, the chat scrolls, as it does for any long message. */
   display: flex; flex-direction: column;
-  background: #241a12; border: 1px solid var(--orange);
-  border-radius: 8px; padding: 12px 14px 0;
-  /* Clipped, or the action row's square background paints over the bottom corners
-     and hides the border's curve there. */
+  background: #1a1c20; border: 1px solid var(--orange);
+  border-radius: 8px; padding: 8px 11px 0;
   overflow: hidden;
-  width: 100%; max-height: 66vh;
+  width: 100%;
 }
 .ask-head { display: flex; align-items: center; gap: 8px; flex: none; }
 .ask-dot {
@@ -1835,7 +1837,8 @@ body[data-mode="single"] #runAuto { display: none; }
 }
 .ask-head-note { margin-left: auto; font-size: 11px; color: #82868e; }
 
-.ask-fields { margin-top: 8px; display: grid; gap: 12px; flex: 1 1 auto; min-height: 0; overflow: auto; }
+/* Half a line between answers, and one between questions. */
+.ask-fields { margin-top: 8px; display: grid; gap: 8px; flex: 1 1 auto; }
 .ask-field[hidden] { display: none; }
 /* Paging hides a question by class, never by `hidden`: `hidden` belongs to the
    engine's `when` rules, and collectAskAnswer skips a `hidden` field — an answer
@@ -1843,7 +1846,7 @@ body[data-mode="single"] #runAuto { display: none; }
 .ask-field.ask-page-off { display: none; }
 .ask-q-title { margin: 0; font-size: 12.5px; font-weight: 700; color: #fff; }
 .ask-q-text {
-  margin: 3px 0 0; font-size: 16px; line-height: 1.5; font-weight: 700; color: var(--text);
+  margin: 3px 0 0; font-size: 15px; line-height: 1.4; font-weight: 700; color: var(--text);
   overflow-wrap: anywhere;
 }
 .ask-req {
@@ -1852,25 +1855,25 @@ body[data-mode="single"] #runAuto { display: none; }
   color: var(--orange);
 }
 
-.ask-opts { margin-top: 7px; display: grid; gap: 5px; }
-/* Every option is an answer, and an answer is bordered in the accent colour —
-   the row's own background stays neutral, and the picked one is marked by a
-   lifted background and a white label. */
+/* A dense list: no box per answer. The radio is the control, the label is the
+   answer and the description is a quiet second line — 0.5 lines apart, which is
+   about 7px at this size. An answer is picked by the radio, not by a border. */
+.ask-opts { margin-top: 5px; display: grid; gap: 2px; }
 .ask-opt {
-  display: flex; align-items: flex-start; gap: 8px;
-  padding: 6px 8px; border-radius: 8px; cursor: pointer;
-  border: 1px solid var(--orange); background: rgba(255, 255, 255, 0.015);
+  display: flex; align-items: flex-start; gap: 7px;
+  padding: 2px 4px; border-radius: 5px; cursor: pointer;
+  border: 0; background: transparent;
 }
-.ask-opt:hover { background: rgba(255, 255, 255, 0.045); }
-.ask-opt:has(input:checked) { border-color: var(--orange); background: rgba(255, 255, 255, 0.05); }
+.ask-opt:hover { background: rgba(255, 255, 255, 0.04); }
+.ask-opt:has(input:checked) { background: rgba(255, 255, 255, 0.05); }
 .ask-opt input[type="radio"],
 .ask-opt input[type="checkbox"] {
-  flex: none; margin: 3px 0 0; width: 13px; height: 13px; accent-color: var(--orange);
+  flex: none; margin: 2.5px 0 0; width: 13px; height: 13px; accent-color: var(--orange);
 }
-.ask-opt-text { min-width: 0; display: grid; gap: 2px; }
-.ask-opt-label { font-size: 12.5px; font-weight: 700; color: var(--text); }
+.ask-opt-text { min-width: 0; display: grid; gap: 1px; margin-top: -1px; }
+.ask-opt-label { font-size: 12.5px; font-weight: 600; color: var(--text); line-height: 1.35; }
 .ask-opt:has(input:checked) .ask-opt-label { color: #fff; }
-.ask-opt-desc { font-size: 11px; line-height: 1.45; color: #8f939b; overflow-wrap: anywhere; }
+.ask-opt-desc { font-size: 10.5px; line-height: 1.4; color: #85898f; overflow-wrap: anywhere; }
 
 /* The model's own recommendation, in the label as "(Recommended)" — the same
    convention the question tool documents — shown as a chip instead of a shout
@@ -1912,7 +1915,7 @@ body[data-mode="single"] #runAuto { display: none; }
   flex: none;
   display: flex; align-items: center; gap: 10px; flex-wrap: wrap; row-gap: 6px;
   justify-content: flex-end;
-  margin: 11px -14px 0; padding: 9px 14px 11px;
+  margin: 7px -11px 0; padding: 6px 11px 7px;
   background: #1a1c20; border-top: 1px solid #2b2e35;
 }
 .ask-state { font-size: 11px; color: var(--orange); margin-right: auto; }

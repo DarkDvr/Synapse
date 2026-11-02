@@ -5399,9 +5399,17 @@ function renderAskPanel() {
   mountAskPost();
   refreshAskPanel();
   // A question is the thing the run is waiting on: show it, even if the operator
-  // had scrolled up to read. It is the one arrival that may take the chat's place.
-  chatFollowArmed = true;
-  scrollChatToBottom();
+  // had scrolled up to read. It is shown from its *start* — a panel taller than the
+  // chat that is scrolled to its bottom hides the question and its header, which is
+  // exactly what it must not do.
+  chatFollowArmed = false;
+  requestAnimationFrame(() => {
+    const el = $('transcript');
+    const host = askHost();
+    if (!el || !host) return;
+    const top = host.getBoundingClientRect().top - el.getBoundingClientRect().top;
+    if (Math.abs(top) > 2) el.scrollTop += top - 6;
+  });
 }
 
 /**
@@ -5435,22 +5443,6 @@ function mountAskPost() {
   if (!host || !el) return;
   if (host.hidden || !currentForm()) return;
   if (host.parentElement !== el || el.lastElementChild !== host) el.appendChild(host);
-  fitAskPanel();
-}
-
-/**
- * The question has to fit the chat window, or its Submit sits below the fold and the
- * question cannot be answered without scrolling a box that looks finished. Measured
- * on the first live question: the panel was 319px in a 294px chat. The panel's own
- * fields scroll; its action row stays at its bottom edge.
- */
-function fitAskPanel() {
-  const host = askHost();
-  const el = $('transcript');
-  const panel = host?.querySelector('.ask-panel');
-  if (!panel || !el) return;
-  const room = Math.max(200, el.clientHeight - 12);
-  panel.style.maxHeight = `${room}px`;
 }
 
 /** The panel's answers, in the shape the engine's form reply wants. */
@@ -9135,7 +9127,6 @@ document.addEventListener('keydown', (e) => {
     fitStageHeight();
     if (state.view === 'session') applyRoleCardsLayout({ animate: false });
     fitChatHeight();
-    fitAskPanel();
     updatePlanOverflow();
     drawActivePath();
     renderChatNav();
