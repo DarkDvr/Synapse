@@ -29,47 +29,6 @@ export function validHost(host) {
   return h;
 }
 
-/**
- * "host = cookie" lines → a map. The split is on the *first* `=`, because a Cookie
- * header is full of them (`bb_session=abc; bb_userid=1`).
- */
-export function parseSessions(text) {
-  const out = {};
-  const rejected = [];
-  for (const raw of String(text || '').split(/\r?\n/)) {
-    const line = raw.trim();
-    if (!line || line.startsWith('#')) continue;
-    const at = line.indexOf('=');
-    if (at < 1) {
-      rejected.push(`"${line.slice(0, 40)}" has no "host = cookie" shape`);
-      continue;
-    }
-    const host = validHost(line.slice(0, at));
-    const cookie = line.slice(at + 1).trim();
-    if (!host) {
-      rejected.push(`"${line.slice(0, at).trim().slice(0, 40)}" is not a host name`);
-      continue;
-    }
-    if (!cookie) {
-      rejected.push(`${host} has no cookie value`);
-      continue;
-    }
-    if (cookie.length > MAX_COOKIE) {
-      rejected.push(`${host} is over ${MAX_COOKIE} characters`);
-      continue;
-    }
-    out[host] = cookie;
-  }
-  return { sessions: out, rejected };
-}
-
-/** The file as one block of text, which is what the operator edits. */
-export function sessionsText(sessions) {
-  return Object.entries(sessions || {})
-    .map(([host, entry]) => `${host} = ${entry.cookie}`)
-    .join('\n');
-}
-
 function readRaw(file = FILE) {
   try {
     const data = JSON.parse(fs.readFileSync(file, 'utf8'));
@@ -121,14 +80,3 @@ export function cookieFor(host, sessions = readSessions()) {
   return null;
 }
 
-/** What the API may tell a caller: hosts and sizes, never the values — unless the
- *  caller is this machine, which is the operator editing their own settings. */
-export function describeSessions({ raw = false, file = FILE } = {}) {
-  const sessions = readSessions(file);
-  const list = Object.entries(sessions).map(([host, entry]) => ({
-    host,
-    chars: entry.cookie.length,
-    addedAt: entry.addedAt,
-  }));
-  return { list, text: raw ? sessionsText(sessions) : '' };
-}

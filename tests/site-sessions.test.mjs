@@ -1,19 +1,16 @@
-// Saved sign-ins: what may be stored, what may be sent, and to whom.
+// Site cookies: what may be stored, what may be sent, and to whom.
 //
-// The light option the operator chose — paste a site's Cookie header once — is only
-// safe if three things are true, and each has a test here: the host must be a host
-// (not a URL, not a path), a cookie saved for one domain must never travel to
-// another (including across a redirect), and the values must not be handed to a LAN
-// viewer of the settings page. The fetch tests use a fake network, so nothing here
-// needs a cookie to exist.
+// The manual editor is gone — the operator will not paste cookie headers, and that is
+// the right call: it was work for them and value for nobody. The storage and the
+// sending rules stay, because the browser-session grab (ask the operator, close the
+// browser, read its cookies) will write through the same file, and these are the
+// rules that must hold whatever fills it.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import {
-  validHost, parseSessions, sessionsText, readSessions, writeSessions, cookieFor, describeSessions,
-} from '../src/site-sessions.js';
+import { validHost, readSessions, writeSessions, cookieFor } from '../src/site-sessions.js';
 import { webFetch, FetchError } from '../src/fetch.js';
 
 test('a host is a host, not a URL and not a path', () => {
@@ -26,23 +23,6 @@ test('a host is a host, not a URL and not a path', () => {
   assert.equal(validHost(''), '');
 });
 
-test('a pasted line keeps its cookie whole, and a bad line is reported', () => {
-  const { sessions, rejected } = parseSessions([
-    '# my logins',
-    '4pda.to = bb_session=abc; bb_userid=42',
-    'news.ycombinator.com=user=someone&password=secret',
-    '',
-    'not a host = x=1',
-    'noequals',
-  ].join('\n'));
-  assert.deepEqual(sessions, {
-    '4pda.to': 'bb_session=abc; bb_userid=42',
-    'news.ycombinator.com': 'user=someone&password=secret',
-  }, 'the split is on the first "=", because a Cookie header is full of them');
-  assert.equal(rejected.length, 2);
-  assert.match(rejected[0], /not a host/);
-});
-
 test('a cookie goes to its host and its subdomains, never to a lookalike', () => {
   const sessions = { '4pda.to': { cookie: 'bb_session=1' } };
   assert.equal(cookieFor('4pda.to', sessions).cookie, 'bb_session=1');
@@ -52,7 +32,7 @@ test('a cookie goes to its host and its subdomains, never to a lookalike', () =>
   assert.equal(cookieFor('other.to', sessions), null);
 });
 
-test('sessions round-trip through the file, and the description hides values', () => {
+test('sessions round-trip through the file, and an invalid host is dropped', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'synapse-sessions-'));
   try {
     const file = path.join(dir, 'site-sessions.json');
@@ -60,15 +40,6 @@ test('sessions round-trip through the file, and the description hides values', (
     const back = readSessions(file);
     assert.deepEqual(Object.keys(back), ['4pda.to'], 'an invalid host is not stored');
     assert.equal(back['4pda.to'].cookie, 'bb_session=secret');
-
-    const forLan = describeSessions({ raw: false, file });
-    assert.equal(forLan.text, '', 'a LAN caller gets no values');
-    assert.deepEqual(forLan.list.map((s) => s.host), ['4pda.to']);
-    assert.equal(JSON.stringify(forLan).includes('secret'), false, 'not even in the summary');
-
-    const forLocal = describeSessions({ raw: true, file });
-    assert.equal(forLocal.text, '4pda.to = bb_session=secret');
-    assert.equal(sessionsText(back), forLocal.text);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }

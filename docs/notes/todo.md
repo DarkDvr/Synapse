@@ -42,24 +42,27 @@ and the worker-session replacement — are built and recorded in
 
 ## Signed-in web reading (cookies)
 
-**Shipped in 1.11.0: the light option.** Settings → General → *Sites That Need a
-Sign-In* takes one line per site, `host = the Cookie header from DevTools`. It is
-stored in `data\site-sessions.json` (gitignored, never logged), sent only to that
-host or its subdomains, and hand-followed across redirects so it cannot travel to a
-different site; a LAN view sees the host names but never the values. Measured end to
-end on `httpbin.org/cookies`, which echoed the saved cookie back through
-`synapse-search_webfetch`.
+**The paste editor was removed in 1.12.0.** The operator was right: it was work for
+them and value for nobody — copy a header, format a string, re-paste when it expires.
+Gone, with the API and the textarea. What stayed is the storage and the sending rules
+(`src/site-sessions.js`, `tests/site-sessions.test.mjs`), because whatever fills that
+file must still obey them.
 
-**Still deferred: the full solution**, which would not need a paste. Asked 2 Nov: a
-4pda thread is readable only when signed in. The options were measured on this
-machine rather than assumed:
+**The better idea — ask, then take the session from the browser — does not work.**
+Measured 2 Nov, and the measurement cost the operator their Edge cookies (see the
+warning below):
 
-| option | status |
+| attempt | result |
 |---|---|
-| Decrypt the browser's own cookies from Node | **Not possible here.** Edge is the only browser besides Brave; all 87 Edge cookies are `v20` (app-bound) and `app_bound_encrypted_key` will not unwrap for a normal process. Brave's store is locked while Brave runs — a copy fails outright. The DPAPI path that would work for `v10` blobs is proven in pieces but there is no `v10` cookie to prove it on. |
-| Launch a browser on a copied profile, read cookies over CDP | **Fails.** Edge launched on three copied profiles returned 0 cookies and deleted the copied rows — Chromium drops what it cannot decrypt. |
-| A sign-in window inside Synapse (WebView2) | **The real fix, ~a day.** Synapse's own WebView2 profile has no app-bound key, so cookies would land in a jar Synapse owns and can reuse *in process* via `CoreWebView2.CookieManager`. It needs a window, IPC, a server route and a "use my session" flag. |
+| Launch the browser with `--remote-debugging-port` on the real profile and read cookies over CDP | **Refused by Chromium.** "DevTools remote debugging requires a non-default data directory." |
+| Same, via a directory junction so the path is not the default one | The debugger opened, read **0 cookies**, and **emptied the real profile's cookie store** on the way in — Edge drops rows it cannot decrypt when the profile is opened under a path its key is not bound to. |
+| A sign-in window inside Synapse (WebView2) | **The only route left, ~a day.** Synapse's WebView2 profile has no app-bound key, so cookies would land in a jar Synapse owns and can reuse *in process* via `CoreWebView2.CookieManager`. |
 
-Two limits of the shipped option, both stated in the pane: a session expires and must
-be re-pasted, and Cloudflare may tie the cookie to your browser's User-Agent, which
-Synapse cannot match exactly.
+**Warning for anyone tempted to try the junction trick again:** it does not merely
+fail, it destroys. Edge's `Default\Network\Cookies` went from 87 rows to 0 at the
+moment the junction-launched browser started, with no WAL to recover from. Do not
+launch a browser on the operator's real profile to "just read" something.
+
+**Where that leaves 4pda and similar:** `webfetch` refuses honestly ("behind the site's
+bot check (Cloudflare)… a signed-in browser session would be needed"), and the only
+implementation that would change that is the WebView2 window above.

@@ -293,10 +293,6 @@ const state = {
   setProvSelected: null,
   setKeyRevealed: false,
   setProvFetch: null,
-  // The saved sign-ins for sites that hide pages from guests. `text` is only filled
-  // for a loopback caller — the machine running Synapse — because the values are
-  // cookies; a LAN view gets `list` (hosts and sizes) and an empty `text`.
-  siteSessions: null,
 };
 
 // ── helpers ─────────────────────────────────────────────────────
@@ -7681,57 +7677,7 @@ function settingsGeneral(c) {
         `A turn that failed or was stopped never arms it — that is not the Architect finishing. ` +
         `Nothing here closes Synapse or stops the server: it turns the machine off.</p>`,
     ),
-    setGroup('Sites That Need a Sign-In', siteSessionsField()),
   ].join('');
-}
-
-/**
- * The saved-cookie editor.
- *
- * A textarea rather than a table of rows on purpose: this is a paste-and-forget
- * setting used once per site, and a row editor is a screen of state to keep in step
- * with a file. The values are cookies, so the box is only editable on the machine
- * running Synapse — a LAN view is told so rather than silently wiping them by
- * saving an empty box.
- */
-function siteSessionsField() {
-  const info = state.siteSessions;
-  const hosts = info?.list || [];
-  const canEdit = Boolean(info?.text) || hosts.length === 0;
-  if (!canEdit) {
-    return `<div class="set-field wide"><span>Cookies</span>
-      <span class="set-note" style="margin:0">${hosts.length} site(s) are set up: ${hosts.map((h) => esc(h.host)).join(', ')}</span></div>` +
-      `<p class="set-note">The values are only shown on the machine running Synapse. Open this page on that machine to change them.</p>`;
-  }
-  return (
-    `<label class="set-field wide" title="One site per line: host = the Cookie header from your browser.">` +
-    `<span>Cookies, one site per line</span>` +
-    `<textarea id="siteSessionsText" rows="4" spellcheck="false" placeholder="4pda.to = bb_session=…; bb_userid=…">${esc(info?.text || '')}</textarea>` +
-    `</label>` +
-    `<div class="set-field wide"><span>Saved for</span>` +
-    `<span class="set-note" style="margin:0">${hosts.length ? hosts.map((h) => `${esc(h.host)} (${h.chars} chars)`).join(' · ') : 'nothing yet'}</span></div>` +
-    `<div class="set-field wide"><span>&nbsp;</span>` +
-    `<button type="button" class="btn btn-sm" data-save-sessions>Save Sessions</button></div>` +
-    `<p class="set-note">For a site that hides pages from guests: open the page in your browser while signed in, ` +
-    `copy the <strong>Cookie</strong> request header from DevTools (Network → the page request → Request Headers), and add it here as ` +
-    `<code>host = the whole header</code>. Synapse sends it only to that host (or its subdomains) and never to anything else. ` +
-    `It is stored in <code>data\\site-sessions.json</code>, which is not in git; delete the line to revoke it. ` +
-    `A site behind Cloudflare may also tie the cookie to your browser's User-Agent, so if it still refuses, that is why.</p>`
-  );
-}
-
-/** Save the pasted cookies, then re-read what the server accepted. */
-async function saveSiteSessions() {
-  const text = $('siteSessionsText')?.value || '';
-  try {
-    const res = await api('PUT', '/api/site-sessions', { text });
-    state.siteSessions = { text: res.text, list: res.list };
-    renderSettings();
-    const ignored = res.rejected?.length ? ` ${res.rejected.length} line(s) ignored: ${res.rejected[0]}.` : '';
-    toast('Site Sessions Saved', `${res.list.length} site(s) ready.${ignored}`);
-  } catch (err) {
-    toast('Could not Save Site Sessions', err.message);
-  }
 }
 
 function settingsLogging(c) {
@@ -8275,7 +8221,6 @@ function onSettingsInput(e) {
 async function onSettingsClick(e) {
   if (e.target.closest('[data-close-about]')) { closeSettings(); return; }
   if (e.target.closest('[data-check-updates]')) { checkUpdates(); return; }
-  if (e.target.closest('[data-save-sessions]')) { await saveSiteSessions(); return; }
   if (e.target.closest('[data-test-sound]')) {
     // The pane renders from a draft; the select itself is the live choice.
     const sel = $('settingsBody')?.querySelector('select[data-path="notify.doneSound"]');
@@ -8537,8 +8482,6 @@ async function openSettings() {
   }
   // Every edit in this window happens to a copy; the file only changes on Save.
   state.setDraft = JSON.parse(JSON.stringify(state.config));
-  // The saved sign-ins show what is on disk now, not what it was at boot.
-  state.siteSessions = await api('GET', '/api/site-sessions').catch(() => state.siteSessions);
   // And this copy is what "Revert All Changes" puts back if the save was a
   // mistake — the file as it was when the window opened, not the form.
   state.settingsSnapshot = JSON.parse(JSON.stringify(state.config));
@@ -9154,9 +9097,6 @@ async function boot() {
   state.config = await api('GET', '/api/config').catch(() => null);
   applyChatText();
   applyLanguage();
-  // The saved sign-ins are not config: they are cookies, in data/. Read once here
-  // and again when Settings opens, so the box shows what is really stored.
-  state.siteSessions = await api('GET', '/api/site-sessions').catch(() => null);
   renderLlmStatus();
   // every new session starts Single; an opened session sets its own mode
   state.mode = 'single';
