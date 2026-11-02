@@ -30,11 +30,15 @@ test('the old session controls and wording are gone from app.js', () => {
     'Could not create a session',
     'Where new sessions run',
     'delete the session',
-    'settingsGeneral',
-    "'general', label: 'General'",
   ]) {
     assert.equal(js.includes(needle), false, `app.js still contains: ${needle}`);
   }
+  // A General tab is allowed again as of 2 Nov — the operator asked for one to hold
+  // the interface's own settings — but it must be a *pane with a job*, not the old
+  // placeholder that was retired. A tab that names itself and shows nothing is the
+  // thing this file used to guard against.
+  assert.match(js, /function settingsGeneral\(c\)\s*\{/);
+  assert.match(js, /setField\(c, 'Chat Text Size', 'ui\.chatTextPx'/);
 });
 
 test('the dead session-row styles are gone from the stylesheet', () => {
@@ -82,8 +86,12 @@ test('a You message keeps its parts on one vertical centre', () => {
   const css = read('web/synapse.css');
   assert.match(css, /\.msg\.user \.msg-body\s*\{[^}]*display: flex/);
   assert.match(css, /\.msg\.user \.msg-body\s*\{[^}]*align-items: flex-start/);
-  assert.match(css, /\.msg\.user \.msg-role\s*\{[^}]*height: 18\.75px/);
-  assert.match(css, /\.msg\.user \.msg-time\s*\{[^}]*height: 18\.75px/);
+  // One line of chat text is 1.5 × its size, and the role and the clock are boxes
+  // that height so their glyphs centre on it. Both must follow --chat-fs: the size
+  // setting would otherwise put the label and the clock off the message's centre
+  // line at every size but the default.
+  assert.match(css, /\.msg\.user \.msg-role\s*\{[^}]*height: calc\(var\(--chat-fs\) \* 1\.5\)/);
+  assert.match(css, /\.msg\.user \.msg-time\s*\{[^}]*height: calc\(var\(--chat-fs\) \* 1\.5\)/);
   assert.match(css, /\.msg\.user \.msg-time\s*\{[^}]*order: 99/);
 });
 

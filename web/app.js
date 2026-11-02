@@ -254,8 +254,6 @@ const state = {
   compactUntil: 0,
   streaming: false,
   streamLive: false,
-  // What this PC can build with, for Settings → Windows (src/toolchain.js).
-  toolchain: null,
   // When the last engine event arrived, so the sidebar can say "10s" instead of
   // just naming it, and which session it came from: a clock that ages beside an
   // event from a session the operator has deleted is describing something that
@@ -289,7 +287,7 @@ const state = {
   // the panes edit, `settingsTab` is the open pane, and the provider editor's
   // own state (which row is selected, whether the key is revealed, what the last
   // Refresh List said) lives here because the pane is re-rendered, not patched.
-  settingsTab: 'server',
+  settingsTab: 'general',
   setDraft: null,
   settingsSnapshot: null,
   setProvSelected: null,
@@ -7206,6 +7204,8 @@ const ICONS = {
   refresh:
     '<path d="M13.2 8a5.2 5.2 0 1 1-1.6-3.7"/><path d="M13.2 2.6V5.4h-2.8"/>',
   info: '<circle cx="8" cy="8" r="6.1"/><path d="M8 7.4v4.1"/><path d="M8 4.9h.01"/>',
+  general:
+    '<rect x="2.4" y="2.9" width="11.2" height="10.2" rx="2"/><path d="M2.4 6.2h11.2"/><path d="M5 4.6h.01M6.6 4.6h.01"/>',
 };
 
 const setIcon = (name) =>
@@ -7213,13 +7213,13 @@ const setIcon = (name) =>
   `stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">${ICONS[name] || ''}</svg>`;
 
 const SETTINGS_TABS = [
+  { id: 'general', label: 'General', icon: 'general' },
   { id: 'server', label: 'Server', icon: 'sliders' },
   { id: 'engine', label: 'Runtime', icon: 'engine' },
   { id: 'providers', label: 'Providers', icon: 'plug' },
   { id: 'workers', label: 'Workers', icon: 'nodes' },
   { id: 'tools', label: 'Tools', icon: 'tools' },
   { id: 'notices', label: 'Notices', icon: 'bell' },
-  { id: 'windows', label: 'Windows', icon: 'engine' },
   { id: 'logging', label: 'Logging', icon: 'lines' },
   { id: 'updates', label: 'Check for Updates', icon: 'refresh' },
   { id: 'about', label: 'About', icon: 'info' },
@@ -7445,15 +7445,6 @@ function settingsTools(c) {
   ].join('');
 }
 
-/**
- * Settings → Windows: what this machine can build with.
- *
- * A Windows app is a WPF window hosting a WebView2 page, so it needs two things
- * here — the .NET SDK to build it, the WebView2 runtime to run it — plus the
- * template it is copied from and the checker that photographs its window. The point
- * of the pane is a *copied* Synapse: on a new PC it says what that PC is missing,
- * rather than a build dying three turns into a project.
- */
 function settingsNotices(c) {
   return [
     setGroup(
@@ -7471,49 +7462,74 @@ function settingsNotices(c) {
   ].join('');
 }
 
-function settingsWindows(c) {
-  const t = state.toolchain;
-  const row = (label, item, extra) => {
-    const ok = Boolean(item?.ok);
-    const state = ok ? (item.version || 'ready') : 'missing';
-    return `
-      <div class="set-field wide" title="${esc(item?.note || '')}">
-        <span>${esc(label)} <b class="${ok ? 'tool-ok' : 'tool-bad'}">${esc(state)}</b></span>
-        <span class="set-note" style="margin:0">${esc(extra || item?.note || '')}</span>
-      </div>`;
-  };
-  if (!t) {
-    return setGroup(
-      'Building Windows Apps',
-      '<p class="set-note">Checking this machine…</p>',
-    );
-  }
-  return [
-    setGroup(
-      `Building Windows Apps ${t.ready ? '— ready' : '— something is missing'}`,
-      row('The window shell (.NET SDK)', t.dotnet, 'Builds the WPF window and the exe. Not needed to run one.') +
-        row('The page engine (WebView2 runtime)', t.webview2, 'What draws the interface inside the window.') +
-        row('The app template', t.template, t.template?.path || '') +
-        row('The window checker', t.appCheck, 'Launches a built app, photographs its window, says whether it survived.') +
-        row('Rust (optional)', t.rust, 'Only for the smaller Tauri shell — not needed for the C# one.') +
-        `<div class="set-field wide"><span>&nbsp;</span>` +
-        `<button type="button" class="btn btn-sm" data-check-toolchain>Check Again</button></div>` +
-        `<p class="set-note">A new app is copied from <code>templates\\win-app</code>: a window, a <code>ui\\</code> ` +
-        `folder holding the interface, and a <code>build.ps1</code> that publishes one folder you can copy to ` +
-        `another PC and run. The interface inside is a web page, so the Designer mocks it and QC measures it with ` +
-        `the visual-review tool; the window around it is checked with <code>skills\\app-check</code>.</p>`,
-    ),
-  ].join('');
+// The chat's text size, in pixels. The same bounds live in src/config.js and both
+// are enforced: the form is a convenience, the config file is the truth.
+const CHAT_TEXT_DEFAULT = 12.5;
+const CHAT_TEXT_MIN = 10.5;
+const CHAT_TEXT_MAX = 16.5;
+
+/** A size from the config or the form, made legal. */
+function chatTextPx(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return CHAT_TEXT_DEFAULT;
+  return Math.min(CHAT_TEXT_MAX, Math.max(CHAT_TEXT_MIN, Math.round(n * 2) / 2));
 }
 
-async function loadToolchain(force = false) {
-  try {
-    state.toolchain = await api('GET', `/api/toolchain${force ? '?force=1' : ''}`);
-  } catch (err) {
-    state.toolchain = null;
-    if (force) toast('Could not check', err.message);
+/**
+ * Apply the chat's text size, and nothing else's.
+ *
+ * The transcript is drawn from one custom property (`--chat-fs`), so this moves the
+ * conversation — prose, headings, code, tables, the clock, the role label — and
+ * leaves the rail, the cards, the composer and the dialogs alone. Called at boot,
+ * after Save, and on every keystroke in the field, so the size can be judged before
+ * it is saved.
+ */
+function applyChatText(value = state.config?.ui?.chatTextPx) {
+  const scroller = document.getElementById('transcript');
+  // The browser keeps the scroll *offset* when text grows, not the place in the
+  // conversation: measured at 1280px on a 32-message transcript, changing 16.5px to
+  // 10.5px and back left the view 6,895px above the newest line. Pin it to the
+  // bottom again if that is where it was — and leave it alone if the operator had
+  // scrolled up to read something, because moving their page is the same bug.
+  const pinned = scroller ? scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop < 4 : false;
+  document.documentElement.style.setProperty('--chat-fs', `${chatTextPx(value)}px`);
+  if (pinned && scroller) {
+    // After layout: the scroll height is only final once the new size has been laid
+    // out, so setting it now would pin to the old height.
+    requestAnimationFrame(() => { scroller.scrollTop = scroller.scrollHeight; });
   }
-  if (state.settingsTab === 'windows' && state.setDraft) renderSettings({ scrollTop: 0 });
+}
+
+/**
+ * Settings → General: the interface's own choices, and the first tab because it is
+ * where a person goes when they want Synapse to behave differently rather than the
+ * engine to work differently. Everything here is read the moment it is saved: none
+ * of it needs a restart.
+ *
+ * The chat's text size is the only one today. It is one number, and the transcript
+ * is drawn from it (web/synapse.css multiplies every size in the chat by
+ * `--chat-fs`); the bounds are enforced here and again in the config, because a
+ * number typed into a box is not a promise.
+ */
+function settingsGeneral(c) {
+  const px = chatTextPx(readPath(c, 'ui.chatTextPx'));
+  return [
+    setGroup(
+      'Interface',
+      setField(c, 'Chat Text Size', 'ui.chatTextPx', {
+        type: 'number',
+        value: px,
+        attr: `min="${CHAT_TEXT_MIN}" max="${CHAT_TEXT_MAX}" step="0.5"`,
+        hint:
+          'The size of the conversation — nothing else, not the rail, the cards or the composer. ' +
+          `${CHAT_TEXT_MIN} to ${CHAT_TEXT_MAX} px, in half steps; ${CHAT_TEXT_DEFAULT} is the size the interface was designed around.`,
+      }) +
+        `<p class="set-note">The whole transcript scales with this one number, and keeps its proportions: ` +
+        `the role label, the clock, headings, code and tables all move together. ` +
+        `<strong>${CHAT_TEXT_MIN}</strong> is the smallest that still reads; <strong>${CHAT_TEXT_MAX}</strong> is the largest ` +
+        `that keeps a full answer above the composer on a 900px-tall window.</p>`,
+    ),
+  ].join('');
 }
 
 function settingsLogging(c) {
@@ -7803,13 +7819,13 @@ function settingsProviders(c) {
 }
 
 const SETTINGS_PANES = {
+  general: settingsGeneral,
   server: settingsServer,
   engine: settingsEngine,
   providers: settingsProviders,
   workers: settingsWorkers,
   tools: settingsTools,
   notices: settingsNotices,
-  windows: settingsWindows,
   logging: settingsLogging,
   updates: settingsUpdates,
   about: settingsAbout,
@@ -7832,7 +7848,7 @@ function renderSettings({ scrollTop } = {}) {
     $('settingsTabs').innerHTML = '';
     return;
   }
-  if (!SETTINGS_PANES[state.settingsTab]) state.settingsTab = 'server';
+  if (!SETTINGS_PANES[state.settingsTab]) state.settingsTab = 'general';
   const body = $('settingsBody');
   // Keep the pane where it was. Every edit re-renders this markup — a Refresh
   // List, an eye toggle, a provider picked — and jumping to the top after each
@@ -8014,6 +8030,13 @@ function selectProvider(index) {
 // The editor's fields write straight into the selected draft provider: there is
 // no data-path for them because a provider is an object in a list, not a path.
 function onSettingsInput(e) {
+  // The chat's size is the one setting whose effect is worth seeing while it is
+  // being chosen: a number in a box says nothing about whether a full answer still
+  // fits above the composer. The draft is not touched — Save is still the write.
+  if (e.target?.dataset?.path === 'ui.chatTextPx') {
+    applyChatText(e.target.value);
+    return;
+  }
   const el = e.target.closest('[data-prov]');
   if (!el) return;
   const p = providerAt(state.setProvSelected);
@@ -8133,6 +8156,9 @@ async function saveSettings() {
   try {
     const restart = restartNeeded(state.settingsSnapshot || state.config, draft);
     state.config = await api('PUT', '/api/config', draft);
+    // The chat's size is read from the config here, once, rather than by watching
+    // for changes: this is the one place the file becomes the page's truth.
+    applyChatText();
     state.setDraft = JSON.parse(JSON.stringify(state.config));
     state.setProvSelected = null;
     renderLlmStatus();
@@ -8257,6 +8283,7 @@ async function revertSavedSettings() {
   if (!state.settingsSnapshot) return;
   try {
     state.config = await api('PUT', '/api/config', state.settingsSnapshot);
+    applyChatText();
     state.setDraft = JSON.parse(JSON.stringify(state.config));
     state.setProvSelected = null;
     state.setKeyRevealed = false;
@@ -8305,7 +8332,7 @@ async function openSettings() {
   // And this copy is what "Revert All Changes" puts back if the save was a
   // mistake — the file as it was when the window opened, not the form.
   state.settingsSnapshot = JSON.parse(JSON.stringify(state.config));
-  state.settingsTab = state.settingsTab || 'server';
+  state.settingsTab = state.settingsTab || 'general';
   state.setProvSelected = null;
   state.setKeyRevealed = false;
   state.setProvFetch = null;
@@ -8314,9 +8341,6 @@ async function openSettings() {
   // The tab is remembered across openings; if it is Updates, opening the window
   // is also a request for a fresh answer.
   if (state.settingsTab === 'updates') checkUpdates();
-  // Settings → Windows answers "what can this PC build", which is a machine probe
-  // and not config: read it once when the window opens, and again on demand.
-  loadToolchain();
 }
 function closeSettings({ force = false } = {}) {
   // An update started from this window is visible only here; the chip's popup
@@ -8324,6 +8348,8 @@ function closeSettings({ force = false } = {}) {
   if (state.updateBusy && !force) return;
   $('settingsModal').hidden = true;
   state.setDraft = null;
+  // An unsaved chat size was a preview; closing the window puts back the saved one.
+  applyChatText();
   api('POST', '/api/settings/lock', { action: 'release' }).catch(() => {});
   state.settingsLock = null;
 }
@@ -8335,6 +8361,9 @@ function revertSettings() {
   state.setKeyRevealed = false;
   state.setProvFetch = null;
   renderSettings();
+  // A size that was typed but not saved must go back too: the preview is the only
+  // part of this form that changes the page before Save.
+  applyChatText();
   toast('Changes Discarded', 'The form shows what is saved in the config file.');
 }
 
@@ -8757,9 +8786,6 @@ document.addEventListener('keydown', (e) => {
     const clearTools = e.target.closest('[data-clear-tools]');
     if (clearTools) { e.preventDefault(); clearToolCensus(); return; }
 
-    const checkTools = e.target.closest('[data-check-toolchain]');
-    if (checkTools) { e.preventDefault(); loadToolchain(true); return; }
-
     const perm = e.target.closest('[data-perm]');
     if (perm) {
       e.preventDefault();
@@ -8902,6 +8928,7 @@ async function boot() {
   // this a resize left the old height in place and the page grew a scrollbar.
   window.addEventListener('resize', fitStageHeight);
   state.config = await api('GET', '/api/config').catch(() => null);
+  applyChatText();
   renderLlmStatus();
   // every new session starts Single; an opened session sets its own mode
   state.mode = 'single';

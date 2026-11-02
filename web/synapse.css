@@ -54,6 +54,13 @@
   /* the capped working area: cards+chat + rail. Left-anchored, so on a wide
      window the leftover space sits at the right edge. */
   --work-w: 1240px;
+
+  /* The chat's text size, and the only thing that sets it. Every size inside the
+     transcript is a multiple of this one number, so the role label, the clock, a
+     code span and a table stay in proportion at every size the operator can pick.
+     `ui.chatTextPx` in the config owns it (10.5–16px); the page applies it as an
+     inline custom property, which is why nothing outside the chat moves. */
+  --chat-fs: 12.5px;
 }
 
 body.dark {
@@ -1261,18 +1268,18 @@ body[data-view="session"] .chat-dock.has-ask { overflow: visible; }
 .chat-post > summary::after {
   content: '▸';
   color: #82868e;
-  font-size: 10px;
+  font-size: calc(var(--chat-fs) * 0.8);
   transition: transform 120ms ease;
 }
 .chat-post[open] > summary::after { transform: rotate(90deg); }
-.chat-post-mark { font-family: var(--mono); font-size: 10px; letter-spacing: 0.04em; color: var(--yellow); }
+.chat-post-mark { font-family: var(--mono); font-size: calc(var(--chat-fs) * 0.8); letter-spacing: 0.04em; color: var(--yellow); }
 /* One line, whatever is in it: a loaded file's path is long, and a summary that wraps
    to three lines is not a summary. The full path is in the title. */
-.chat-post-note { font-size: 10.5px; color: #82868e; flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.chat-post-body { margin: 8px 0 0; font-size: 12px; line-height: 1.5; color: #b6bac1; }
-.chat-post-body h2 { font-size: 12px; margin: 10px 0 4px; color: #d7dae0; }
+.chat-post-note { font-size: calc(var(--chat-fs) * 0.84); color: #82868e; flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chat-post-body { margin: 8px 0 0; font-size: calc(var(--chat-fs) * 0.96); line-height: 1.5; color: #b6bac1; }
+.chat-post-body h2 { font-size: calc(var(--chat-fs) * 0.96); margin: 10px 0 4px; color: #d7dae0; }
 .chat-post-body ul { margin: 3px 0 8px; padding-left: 18px; }
-.chat-post-body code { font-family: var(--mono); font-size: 11px; }
+.chat-post-body code { font-family: var(--mono); font-size: calc(var(--chat-fs) * 0.88); }
 /* The two "all the way" buttons wear the same arrow as their neighbours, one
    weight heavier. The symbol font has no bold face — `font-weight` alone changes
    nothing — so the ink is thickened with a hairline stroke in the current colour.
@@ -1379,7 +1386,7 @@ body[data-mode="single"] #runAuto { display: none; }
    the Architect green, Synapse yellow — so the format never has to be learned
    twice, and nothing needs a filled panel to be told apart. */
 .msg-body {
-  font-size: 12.5px; line-height: 1.5;
+  font-size: var(--chat-fs); line-height: 1.5;
   border-left: 2px solid var(--speaker); padding-left: 10px;
 }
 .msg.user { --speaker: var(--violet-bright); }
@@ -1404,8 +1411,8 @@ body[data-mode="single"] #runAuto { display: none; }
 .msg.user .msg-role {
   display: inline-flex;
   align-items: center;
-  height: 18.75px;
-  line-height: 18.75px;
+  height: calc(var(--chat-fs) * 1.5);
+  line-height: calc(var(--chat-fs) * 1.5);
   margin-right: 0;
 }
 .msg.user .msg-text { flex: 0 1 auto; min-width: 0; }
@@ -1413,8 +1420,8 @@ body[data-mode="single"] #runAuto { display: none; }
 .msg.user .msg-time {
   display: inline-flex;
   align-items: center;
-  height: 18.75px;
-  line-height: 18.75px;
+  height: calc(var(--chat-fs) * 1.5);
+  line-height: calc(var(--chat-fs) * 1.5);
   float: none;
   position: static;
   margin-left: auto;
@@ -1434,19 +1441,19 @@ body[data-mode="single"] #runAuto { display: none; }
   border-left: 2px solid #3a3d43; padding-left: 10px;
 }
 .trace-head, .trace summary {
-  font-size: 9.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+  font-size: calc(var(--chat-fs) * 0.76); font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
   color: #6f747c;
 }
 /* One line, cut where the column ends: the fold's whole job is to be small. */
 .trace-head, .trace summary { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .trace summary { cursor: pointer; list-style: none; }
 .trace summary::-webkit-details-marker { display: none; }
-.trace summary::before { content: '▸ '; font-size: 9px; }
+.trace summary::before { content: '▸ '; font-size: calc(var(--chat-fs) * 0.72); }
 .trace[open] summary::before { content: '▾ '; }
 .trace summary:hover { color: var(--muted); }
 .trace-lines { margin-top: 3px; display: flex; flex-direction: column; gap: 1px; }
 .trace-line {
-  font-size: 11.5px; line-height: 1.45; color: #8b8f97;
+  font-size: calc(var(--chat-fs) * 0.92); line-height: 1.45; color: #8b8f97;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 /* A steer is the operator speaking into the run, not another tool call: it keeps
@@ -1479,9 +1486,9 @@ body[data-mode="single"] #runAuto { display: none; }
   display: flex; gap: 7px; align-items: baseline;
   margin: 15px 0 0; padding-left: 13px;
   border-left: 2px solid var(--amber);
-  font-size: 11.5px; line-height: 1.45; color: var(--amber);
+  font-size: calc(var(--chat-fs) * 0.92); line-height: 1.45; color: var(--amber);
 }
-.chat-alarm-mark { font-size: 11px; }
+.chat-alarm-mark { font-size: calc(var(--chat-fs) * 0.88); }
 .chat-alarm-text {
   min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
@@ -1498,7 +1505,7 @@ body[data-mode="single"] #runAuto { display: none; }
   border: 1px solid rgba(255, 255, 255, 0.07);
   border-radius: 8px;
   padding: 3px 10px;
-  font-size: 11.5px;
+  font-size: calc(var(--chat-fs) * 0.92);
   line-height: 1.45;
 }
 .trace-flow-view {
@@ -1529,10 +1536,10 @@ body[data-mode="single"] #runAuto { display: none; }
 .trace-archive { margin-bottom: 3px; }
 .trace-archive > summary {
   cursor: pointer; list-style: none;
-  font-size: 10px; color: #6a6f77; letter-spacing: 0.04em;
+  font-size: calc(var(--chat-fs) * 0.8); color: #6a6f77; letter-spacing: 0.04em;
 }
 .trace-archive > summary::-webkit-details-marker { display: none; }
-.trace-archive > summary::before { content: '▸ '; font-size: 9px; }
+.trace-archive > summary::before { content: '▸ '; font-size: calc(var(--chat-fs) * 0.72); }
 .trace-archive[open] > summary::before { content: '▾ '; }
 .trace-archive > summary:hover { color: var(--muted); }
 /* The live rule breathes, the way the sidebar's live dot does: something is
@@ -1546,7 +1553,7 @@ body[data-mode="single"] #runAuto { display: none; }
 
 /* role label shares the first line with the text; the time rides the right */
 .msg-role {
-  display: inline-block; font-size: 9.5px; font-weight: 700;
+  display: inline-block; font-size: calc(var(--chat-fs) * 0.76); font-weight: 700;
   letter-spacing: 0.08em; text-transform: uppercase;
   color: var(--speaker); margin-right: 7px; vertical-align: 1.5px;
 }
@@ -1556,14 +1563,14 @@ body[data-mode="single"] #runAuto { display: none; }
    one label in the transcript that is a standing instruction. */
 .msg-steer {
   display: inline-block; margin-right: 5px;
-  font-size: 9.5px; font-weight: 800; letter-spacing: 0.08em; line-height: 1;
+  font-size: calc(var(--chat-fs) * 0.76); font-weight: 800; letter-spacing: 0.08em; line-height: 1;
   color: #ffd60a; vertical-align: middle;
 }
 /* the rule between speakers, with room to breathe above and below it */
 .msg + .msg { border-top: 1px solid #2b2e35; padding-top: 15px; }
 .msg-time {
   float: right; margin-left: 10px;
-  font-family: var(--mono); font-size: 10px; line-height: 1.7;
+  font-family: var(--mono); font-size: calc(var(--chat-fs) * 0.8); line-height: 1.7;
   color: #6d717a; user-select: none;
 }
 .msg-text { display: inline; color: #d3d6db; white-space: pre-wrap; overflow-wrap: anywhere; }
@@ -1575,7 +1582,7 @@ body[data-mode="single"] #runAuto { display: none; }
   margin-left: 8px; padding: 2px 7px 2px 6px;
   border: 1px solid #353941; border-radius: 999px;
   background: transparent; color: #8b8f97;
-  font: inherit; font-size: 9px; font-weight: 700;
+  font: inherit; font-size: calc(var(--chat-fs) * 0.72); font-weight: 700;
   letter-spacing: 0.07em; text-transform: uppercase;
   line-height: 1.5; cursor: pointer; opacity: 0.55;
   vertical-align: 1px; transition: color 120ms, border-color 120ms, opacity 120ms;
@@ -1592,7 +1599,7 @@ body[data-mode="single"] #runAuto { display: none; }
    fill and no border of their own — the speaker's rule and colour do that. */
 .msg-answer {
   margin: 5px 0 0;
-  font-size: 12.5px; line-height: 1.55; color: #d3d6db;
+  font-size: var(--chat-fs); line-height: 1.55; color: #d3d6db;
 }
 /* The answer, not the work: the speaker's rule is broken for one line above the
    prose, then continues beside the answer. A second rule would have read as two
@@ -1637,10 +1644,10 @@ body[data-mode="single"] #runAuto { display: none; }
 .msg-answer h4, .msg-answer h5, .msg-answer h6 {
   margin: 10px 0 5px; font-family: var(--display); color: #fff; letter-spacing: -0.2px;
 }
-.msg-answer h1 { font-size: 15px; }
-.msg-answer h2 { font-size: 14px; }
-.msg-answer h3 { font-size: 13px; }
-.msg-answer h4, .msg-answer h5, .msg-answer h6 { font-size: 12.5px; }
+.msg-answer h1 { font-size: calc(var(--chat-fs) * 1.2); }
+.msg-answer h2 { font-size: calc(var(--chat-fs) * 1.12); }
+.msg-answer h3 { font-size: calc(var(--chat-fs) * 1.04); }
+.msg-answer h4, .msg-answer h5, .msg-answer h6 { font-size: var(--chat-fs); }
 .msg-answer ul, .msg-answer ol { margin: 0 0 7px; padding-left: 19px; }
 .msg-answer li { margin: 2px 0; }
 .msg-answer strong { color: #fff; font-weight: 700; }
@@ -1648,14 +1655,14 @@ body[data-mode="single"] #runAuto { display: none; }
 .msg-answer del { color: #82868e; }
 .msg-answer a { color: var(--orange); text-decoration: underline; text-underline-offset: 2px; }
 .msg-answer code {
-  font-family: var(--mono); font-size: 11.5px;
+  font-family: var(--mono); font-size: calc(var(--chat-fs) * 0.92);
   background: #26282d; border-radius: 4px; padding: 1px 4px;
 }
 .msg-answer pre.md-code {
   margin: 7px 0; padding: 8px 9px; max-height: 260px; overflow: auto;
   background: #14161a; border: 1px solid var(--line); border-radius: 8px;
 }
-.msg-answer pre.md-code code { background: none; padding: 0; font-size: 11.5px; line-height: 1.5; }
+.msg-answer pre.md-code code { background: none; padding: 0; font-size: calc(var(--chat-fs) * 0.92); line-height: 1.5; }
 .msg-answer blockquote {
   margin: 7px 0; padding: 2px 0 2px 10px;
   border-left: 2px solid var(--violet); color: #b9bdc4;
@@ -1663,7 +1670,7 @@ body[data-mode="single"] #runAuto { display: none; }
 .msg-answer hr { border: 0; border-top: 1px solid var(--line); margin: 9px 0; }
 .msg-answer table.md-table {
   width: 100%; border-collapse: collapse;
-  margin: 0 0 7px; font-size: 12px;
+  margin: 0 0 7px; font-size: calc(var(--chat-fs) * 0.96);
 }
 .msg-answer table.md-table th,
 .msg-answer table.md-table td {
@@ -1683,18 +1690,18 @@ body[data-mode="single"] #runAuto { display: none; }
 .msg-error {
   margin-top: 5px; padding: 7px 9px; border-radius: 8px;
   background: var(--red-soft); border: 1px solid #5d2f27; color: #ffb4a6;
-  font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere;
+  font-size: calc(var(--chat-fs) * 0.96); white-space: pre-wrap; overflow-wrap: anywhere;
 }
 
 .reasoning { margin: 5px 0; }
-.reasoning summary { cursor: pointer; color: var(--muted); font-size: 11.5px; list-style: none; }
+.reasoning summary { cursor: pointer; color: var(--muted); font-size: calc(var(--chat-fs) * 0.92); list-style: none; }
 .reasoning summary::-webkit-details-marker { display: none; }
 .reasoning summary::before { content: "▸ "; color: #6d717a; }
 .reasoning[open] summary::before { content: "▾ "; }
 .reasoning pre {
   margin: 5px 0 0; padding: 7px 9px; border-radius: 8px;
   background: #191b1f; border: 1px solid #2a2d33;
-  font-family: var(--mono); font-size: 11px; line-height: 1.45;
+  font-family: var(--mono); font-size: calc(var(--chat-fs) * 0.88); line-height: 1.45;
   color: #a9adb5; white-space: pre-wrap; overflow-wrap: anywhere;
 }
 
@@ -1704,7 +1711,7 @@ body[data-mode="single"] #runAuto { display: none; }
 .tool-card { margin: 2px 0; border: 1px solid var(--line); border-radius: 8px; background: #1a1c20; overflow: hidden; }
 .tool-head {
   display: flex; align-items: center; gap: 6px;
-  padding: 2px 7px; font-family: var(--mono); font-size: 10.5px;
+  padding: 2px 7px; font-family: var(--mono); font-size: calc(var(--chat-fs) * 0.84);
   cursor: pointer; user-select: none;
 }
 .tool-head:hover { background: #212429; }
@@ -1724,7 +1731,7 @@ body[data-mode="single"] #runAuto { display: none; }
   flex: none; margin-left: auto; cursor: help; white-space: nowrap;
 }
 .tool-chev {
-  flex: none; width: 10px; color: #9aa0a8; font-size: 11px; line-height: 1;
+  flex: none; width: 10px; color: #9aa0a8; font-size: calc(var(--chat-fs) * 0.88); line-height: 1;
   text-align: center; transition: transform 0.15s ease;
 }
 .tool-card.open .tool-chev { transform: rotate(90deg); }
@@ -1732,7 +1739,7 @@ body[data-mode="single"] #runAuto { display: none; }
 .tool-body { padding: 7px 9px; }
 .tool-body + .tool-body { border-top: 1px solid #23262b; }
 .tool-body pre {
-  margin: 0; font-family: var(--mono); font-size: 11px; line-height: 1.45;
+  margin: 0; font-family: var(--mono); font-size: calc(var(--chat-fs) * 0.88); line-height: 1.45;
   color: #b6babf; white-space: pre-wrap; overflow-wrap: anywhere;
   max-height: 200px; overflow-x: hidden; overflow-y: auto;
 }
@@ -1740,7 +1747,7 @@ body[data-mode="single"] #runAuto { display: none; }
 
 .state-pill {
   display: inline-flex; align-items: center; gap: 4px;
-  font-size: 9px; font-weight: 650; border-radius: 5px; padding: 0 5px;
+  font-size: calc(var(--chat-fs) * 0.72); font-weight: 650; border-radius: 5px; padding: 0 5px;
   border: 1px solid var(--line); color: var(--muted);
 }
 .state-pill.ok    { color: var(--green); border-color: #26543f; background: var(--green-soft); }
@@ -1751,15 +1758,15 @@ body[data-mode="single"] #runAuto { display: none; }
   margin: 6px 0; padding: 10px 11px; border-radius: 8px;
   background: #241f16; border: 1px solid #5a4725;
 }
-.perm-head { display: flex; align-items: center; gap: 8px; font-size: 11.5px; font-weight: 700; color: var(--amber); }
-.perm-who { margin-left: auto; font-weight: 600; font-size: 11px; color: #b6babf; overflow-wrap: anywhere; }
-.perm-lead { margin: 7px 0 0; font-size: 13px; line-height: 1.45; color: var(--text); }
-.perm-why { margin: 6px 0 0; font-size: 11.5px; line-height: 1.45; color: #b6babf; }
-.perm-note { margin: 7px 0 0; font-size: 11px; color: #8a8e96; }
+.perm-head { display: flex; align-items: center; gap: 8px; font-size: calc(var(--chat-fs) * 0.92); font-weight: 700; color: var(--amber); }
+.perm-who { margin-left: auto; font-weight: 600; font-size: calc(var(--chat-fs) * 0.88); color: #b6babf; overflow-wrap: anywhere; }
+.perm-lead { margin: 7px 0 0; font-size: calc(var(--chat-fs) * 1.04); line-height: 1.45; color: var(--text); }
+.perm-why { margin: 6px 0 0; font-size: calc(var(--chat-fs) * 0.92); line-height: 1.45; color: #b6babf; }
+.perm-note { margin: 7px 0 0; font-size: calc(var(--chat-fs) * 0.88); color: #8a8e96; }
 .perm-res {
   margin: 6px 0 0; padding: 7px 9px; border-radius: 8px;
   background: #191b1f; border: 1px solid #3a3d43; color: #b6babf;
-  font-family: var(--mono); font-size: 11px; line-height: 1.45;
+  font-family: var(--mono); font-size: calc(var(--chat-fs) * 0.88); line-height: 1.45;
   white-space: pre-wrap; overflow-wrap: anywhere; max-height: 130px; overflow: auto;
 }
 .perm-actions { display: flex; gap: 7px; margin-top: 10px; flex-wrap: wrap; justify-content: flex-start; }
@@ -1768,7 +1775,7 @@ body[data-mode="single"] #runAuto { display: none; }
 .perm-reason {
   width: 100%; margin-top: 9px; padding: 6px 9px; border-radius: 7px;
   border: 1px solid #3a3d43; background: #191b1f; color: var(--text);
-  font-family: inherit; font-size: 11.5px; line-height: 1.4;
+  font-family: inherit; font-size: calc(var(--chat-fs) * 0.92); line-height: 1.4;
 }
 .perm-reason::placeholder { color: #6f747c; }
 .perm-reason:focus { outline: none; border-color: var(--violet); }
@@ -2053,7 +2060,7 @@ body[data-mode="single"] #runAuto { display: none; }
 .msg-file {
   padding: 1px 6px; border-radius: 5px;
   background: var(--violet-faint); border: 1px solid var(--violet-line);
-  color: #c9c6ff; font-family: var(--mono); font-size: 10px; line-height: 1.4;
+  color: #c9c6ff; font-family: var(--mono); font-size: calc(var(--chat-fs) * 0.8); line-height: 1.4;
 }
 
 .composer textarea {

@@ -10,6 +10,12 @@ import { getProviderKey } from './secrets.js';
  *  so the config can refuse an unknown name instead of silently playing nothing. */
 export const DONE_SOUNDS = ['off', 'chime', 'bell', 'wood', 'ripple'];
 
+/** The chat's text size, in pixels — the same bounds web/app.js shows in the form.
+ *  Below the floor the prose stops being readable at 100%; above the ceiling a full
+ *  answer no longer fits above the composer on a 900px-tall window. */
+export const CHAT_TEXT_MIN = 10.5;
+export const CHAT_TEXT_MAX = 16.5;
+
 export const DEFAULTS = {
   server: {
     host: '127.0.0.1',
@@ -93,6 +99,13 @@ export const DEFAULTS = {
   // web\sounds (see scripts\make-sounds.mjs); 'off' is a choice, not an absence.
   notify: {
     doneSound: 'chime',
+  },
+  // The interface's own choices. They do not touch the models or the work: the
+  // chat's text size is the first, and it is a size in pixels because that is the
+  // unit the operator sees and the one the CSS multiplies. English is the default
+  // language and the fallback for any string that has no translation.
+  ui: {
+    chatTextPx: 12.5,
   },
   cleanup: {
     // What a project left running, stopped when the project finishes and again
@@ -232,10 +245,18 @@ export function normalize(raw) {
     const picked = String(cfg.notify.doneSound ?? '').trim();
     cfg.notify.doneSound = DONE_SOUNDS.includes(picked) ? picked : DEFAULTS.notify.doneSound;
   }
-  // Panel colours were an experiment and are gone: every speaker now gets the
-  // same block with only a colour difference, so there is nothing to configure.
-  // Any `ui` left in a config file is dropped rather than carried around.
-  delete cfg.ui;
+  // The chat's text size. The whole transcript is drawn from this one number
+  // (web/synapse.css multiplies its sizes by --chat-fs), so it is clamped here as
+  // well as in the form: a hand-edited config must not make the chat unreadable or
+  // push the composer off a short window. Half-pixel steps, because that is what
+  // the form offers and a stored 13.37 would read back as 13.5 anyway.
+  cfg.ui = isPlainObject(cfg.ui) ? cfg.ui : {};
+  {
+    const n = Number(cfg.ui.chatTextPx);
+    cfg.ui.chatTextPx = Number.isFinite(n)
+      ? Math.min(CHAT_TEXT_MAX, Math.max(CHAT_TEXT_MIN, Math.round(n * 2) / 2))
+      : DEFAULTS.ui.chatTextPx;
+  }
 
   cfg.worker = cfg.worker || {};
   delete cfg.worker.timeoutSec;

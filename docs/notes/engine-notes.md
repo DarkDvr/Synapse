@@ -1064,10 +1064,11 @@ copied from: WPF, WebView2, `PerMonitorV2` DPI awareness, a dark title bar (Wind
 and `ui/` served over a **virtual https host**, not `file://`, so localStorage,
 modules and a reload behave the way the page was designed for. Measured on this
 machine: `dotnet publish` → a 58.9 MB single-file `App.exe` plus `ui/`, which runs
-on a Win10/11 machine with no .NET installed. Settings → Windows reports what the
-machine can build (`src/toolchain.js`), which is the answer to "copy Synapse
-somewhere else and start": the pane says what that PC is missing instead of a build
-failing three turns in.
+on a Win10/11 machine with no .NET installed. The machine probe behind
+`GET /api/toolchain` (`src/toolchain.js`) answers what a PC can build, which is the
+question "copy Synapse somewhere else and start" asks — it is no longer a Settings
+pane (the Windows tab was retired on the operator's request), so ask it directly or
+from a script when a copied folder misbehaves.
 
 **The free zen models are in the catalog; the account is what runs out.** Nine
 `opencode/*-free` models are listed by the engine (`/api/model`) and are selectable:

@@ -1760,4 +1760,44 @@ unreliable in the same state (a click landed on the button in `elementFromPoint`
 and the handler never ran); when the picture matters, verify the DOM before and
 after and fall back to `element.click()` and a value plus an `input` event.
 
+## The chat's text size is one number
+
+The operator asked for a size control for the conversation alone — "no other
+elements", with a floor at two points below the original — and named the risks:
+the vertical rules and the scrolling. The implementation is one custom property,
+`--chat-fs`, and every size inside the transcript is a multiple of it.
+
+- **One number, or the transcript comes apart.** A rule inside the chat that kept
+  a fixed px size would stop following the setting while its neighbours scaled: the
+  role label would leave its clock's centre line, a code span would sink into the
+  prose, a table would break its column. The rewrite touched 41 declarations, and
+  `tests/chat-text.test.mjs` now fails if any rule in the transcript's selector
+  families (`msg`, `chat-post`, `trace`, `reasoning`, `tool-card`, `perm-card`,
+  `state-pill`, `chat-alarm`) carries a `font-size` in px again. That is the
+  invariant, not a style preference.
+- **The bounds are in two places on purpose.** 10.5–16.5 px in half steps: the form
+  (`web/app.js`) and the config (`src/config.js`) both clamp, because a hand-edited
+  file must not make the chat unreadable or push the composer off a 900px window.
+  10.5 is the floor the operator asked for (12.5 − 2); 16.5 is the largest that
+  still leaves a full answer above the composer.
+- **Growing the text steals the scroll position, and that is the real defect.**
+  Measured at 1280px on a 32-message transcript: going 16.5 → 10.5 → 16.5 left the
+  view **6,895px above the newest line**, because the browser keeps the scroll
+  offset while the content grows. `applyChatText()` records whether the transcript
+  was within 4px of the bottom, sets the size, and re-pins on the next frame; when
+  the operator had scrolled up, it does not move their page at all. Re-measured
+  after the fix: distance from the bottom 0 at both extremes, and an operator
+  scrolled to the middle (offset 9,828) stayed at 9,828 across a change.
+- **It is drawn from the config, once.** Boot applies it, Save applies it, a
+  keystroke in the field previews it, Revert and closing the window put the saved
+  size back — a preview that outlived its form would be a setting nobody saved.
+- **What does not move:** the rail, the cards, the composer, the dialogs, the ask
+  panel. Verified by measurement, not by eye: page overflow 0 at 1280 and 760px and
+  at both extremes, transcript bottom 829 = composer top 829. The 340px horizontal
+  overflow at 760px is the app's own minimum width and is identical at 12.5px.
+- **The audit reports content noise on an open chat.** `--audit` on a real
+  transcript finds the composer's Send/Run heights (39 vs 36) and `code`/`em` runs
+  in different line boxes; those are there at the default size too, and none is
+  about the setting. Read them as chat-content findings, not as a size regression.
+
 
