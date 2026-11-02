@@ -9,6 +9,7 @@
 //
 // stdout carries JSON-RPC and nothing else. All logging goes to stderr.
 import { webSearch, formatResults } from '../search.js';
+import { webFetch, formatPage } from '../fetch.js';
 
 const PROTOCOL_VERSION = '2024-11-05';
 
@@ -17,7 +18,8 @@ const TOOL = {
   description:
     'Search the web and return the top results with titles, URLs and snippets. ' +
     'Works without any API key. Use this for current facts, versions, documentation ' +
-    'and anything you cannot read from the local filesystem.',
+    'and anything you cannot read from the local filesystem. Follow up with webfetch ' +
+    'on a result that matters.',
   inputSchema: {
     type: 'object',
     properties: {
@@ -30,6 +32,30 @@ const TOOL = {
       },
     },
     required: ['query'],
+    additionalProperties: false,
+  },
+};
+
+const FETCH_TOOL = {
+  name: 'webfetch',
+  description:
+    'Read one web page as clean text: the article or README, not the site around it. ' +
+    'Prefer this over fetching raw HTML yourself. GitHub repositories, issues, pull requests ' +
+    'and file links are read through GitHub itself, and X/Twitter posts through oEmbed, so ' +
+    'those come back exact. Some sites (Reddit, x.com, login-only forums) refuse anonymous ' +
+    'readers; the error says which wall was hit, so you can tell the operator instead of guessing.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      url: { type: 'string', description: 'The page to read. A bare domain is treated as https.' },
+      maxChars: {
+        type: 'integer',
+        description: 'How much text to return (2000-60000, default 14000).',
+        minimum: 2000,
+        maximum: 60000,
+      },
+    },
+    required: ['url'],
     additionalProperties: false,
   },
 };
@@ -65,12 +91,23 @@ async function handle(msg) {
       return result(id, {});
 
     case 'tools/list':
-      return result(id, { tools: [TOOL] });
+      return result(id, { tools: [TOOL, FETCH_TOOL] });
 
     case 'tools/call': {
       const name = params?.name;
-      if (name !== TOOL.name) return toolText(id, `Unknown tool: ${name}`, true);
       const args = params?.arguments || {};
+      if (name === FETCH_TOOL.name) {
+        const maxChars = Math.min(60000, Math.max(2000, Number(args.maxChars) || 14000));
+        try {
+          const page = await webFetch(args.url, { maxChars });
+          process.stderr.write(`fetch ${String(args.url).slice(0, 100)} -> ${page.source}, ${page.chars} chars\n`);
+          return toolText(id, formatPage(page));
+        } catch (err) {
+          process.stderr.write(`fetch failed: ${err.message}\n`);
+          return toolText(id, `Could not read ${args.url}: ${err.message}`, true);
+        }
+      }
+      if (name !== TOOL.name) return toolText(id, `Unknown tool: ${name}`, true);
       const limit = Math.min(10, Math.max(1, Number(args.limit) || 5));
       try {
         const found = await webSearch(args.query, { limit });

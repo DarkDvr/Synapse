@@ -36,6 +36,26 @@ Two non-obvious things, both found by testing:
 MCP tools arrive **namespaced** (`synapse-search_websearch`). Match
 names by suffix, not equality.
 
+**The same server carries `webfetch`**, because a search result is a URL and the
+engine's own fetcher returns the page, not the reading. Measured on 2 Nov:
+`github.com/DarkDvr/Synapse` is 302 KB of HTML with 11 KB of text in it, most of
+the interesting part buried in a README among navigation — a model spends its turn
+reading chrome. `src/fetch.js` reads GitHub repositories, issues, pull requests and
+file links through GitHub's own API, X posts through oEmbed, and everything else
+through a reader that strips scripts, navigation and forms and keeps the prose as
+Markdown. Its source is reported (`github:repo`, `x:oembed`, `readability`), so a
+report can say where the words came from.
+
+**It refuses walls instead of returning an empty page.** Reddit answers a bot
+challenge, x.com a 403 and 4pda a Cloudflare interstitial; a model handed "" writes
+a confident report about nothing. The error names the wall and says a signed-in
+browser session would be needed, which is a thing the operator can act on — see the
+cookie findings in `docs/notes/todo.md`.
+
+**A dropped connection is retried once; an answer is not.** `raw.githubusercontent.com`
+failed once with a bare "fetch failed" and answered on the next call — so network
+failures get one quiet retry, while 403/404 return at once.
+
 **A tool with per-session state belongs in the transcript, not in a server.** An
 MCP server has no idea which session called it, so it cannot keep per-session
 state on its own. It does not have to: the engine records **every tool call, with
