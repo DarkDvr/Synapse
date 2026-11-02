@@ -226,6 +226,12 @@ const state = {
   // transcript: the chat sat idle for nine minutes and then a report appeared.
   // The trace is shown light grey while it runs and folds to one line at the end.
   traces: new Map(),
+  // The open session's own live step, in the same shape as a run's trace. The
+  // Architect streams its thinking like a worker does, but it has no run record —
+  // so without this its panel sat empty and the whole wall arrived when the step's
+  // message was rebuilt (seen 2 Nov). `key` is `sess:<sessionId>` and is what the
+  // panel is found by, exactly as a run's is.
+  sessionTrace: { key: '', stream: null },
   // Signature of what the role cards are showing, so a poll that learned nothing
   // does not re-measure the wrapper and jiggle the chat.
   roleSig: '',
@@ -3874,7 +3880,9 @@ function renderTranscript() {
     html += renderMessage(m);
   }
   while (next < items.length) html += items[next++].html;
-  el.innerHTML = html + pending;
+  el.innerHTML = html + pending + renderSessionStream();
+  // The question is the conversation's last post, not an overlay over it.
+  mountAskPost();
   if (stick) scrollChatToBottom();
   // New lines change the distance to the end, not the place the reader is reading:
   // measure again now that they are laid out, so a box that changes size later
@@ -4184,8 +4192,25 @@ function measureStream(s) {
   return s.target;
 }
 
+/**
+ * The trace the newest writing belongs to: a delegated run's while one is live,
+ * and otherwise the open session's own step.
+ *
+ * The Architect had no trace at all, which is why its reasoning panel stayed empty
+ * until the step ended and then showed the entire wall at once: the deltas were
+ * arriving and being dropped, because only a run had somewhere to put them.
+ */
+function liveTrace() {
+  const run = traceOf(currentRun());
+  if (run) return run;
+  const own = state.sessionTrace;
+  if (!own) return null;
+  if (!own.key && state.sessionId) own.key = `sess:${state.sessionId}`;
+  return own.key ? own : null;
+}
+
 function appendStream(kind, delta) {
-  const trace = traceOf(currentRun());
+  const trace = liveTrace();
   if (!trace || !delta) return;
   if (!trace.stream || trace.stream.kind !== kind || trace.stream.ended) {
     // A new block (thinking, then speech). Its class differs, so the panel is
@@ -4207,7 +4232,7 @@ function appendStream(kind, delta) {
 
 function pumpStream(now) {
   streamRaf = 0;
-  const trace = traceOf(currentRun());
+  const trace = liveTrace();
   const s = trace?.stream;
   if (!s || !s.text) {
     streamEl = null;
@@ -4277,7 +4302,7 @@ function pumpStream(now) {
 }
 
 function endStream() {
-  const trace = traceOf(currentRun());
+  const trace = liveTrace();
   if (!trace || !trace.stream) return;
   // The last window stays on screen, still, until the next block replaces it or
   // the run folds. Taking it away here pulled eleven lines out of the chat at every
@@ -4507,13 +4532,40 @@ function noteCompactionEvent(ev) {
  *  returned, which is why the operator saw "compaction" in the chip and nothing
  *  in the chat. */
 function traceSig() {
-  return [...state.traces.values()]
-    .map(
-      (t) =>
-        `${t.key}:${t.finishedAt || 0}:${(t.notes || []).length}:${t.stream ? t.stream.text.length : 0}:` +
-        `${t.stream?.ended ? 1 : 0}:${Number(t.compactions) || 0}:${Number(t.compactingSince) || 0}`,
-    )
-    .join(';');
+  const own = state.sessionTrace;
+  const sessionPart = own?.stream ? `own:${own.key}:${own.stream.text.length}:${own.stream.ended ? 1 : 0}` : '';
+  return [
+    [...state.traces.values()]
+      .map(
+        (t) =>
+          `${t.key}:${t.finishedAt || 0}:${(t.notes || []).length}:${t.stream ? t.stream.text.length : 0}:` +
+          `${t.stream?.ended ? 1 : 0}:${Number(t.compactions) || 0}:${Number(t.compactingSince) || 0}`,
+      )
+      .join(';'),
+    sessionPart,
+  ].join(';');
+}
+
+/**
+ * The open session's own live step, drawn in the panel the workers get.
+ *
+ * Once the step's message carries the same words, the message is the record and the
+ * panel goes — otherwise the paragraph would be on screen twice.
+ */
+function renderSessionStream() {
+  const t = state.sessionTrace;
+  const text = String(t?.stream?.text || '');
+  if (!t?.key || !text.trim()) return '';
+  const seen = state.messages
+    .flatMap((m) => m.parts || [])
+    .filter((p) => p.type === 'reasoning' || p.type === 'text')
+    .map((p) => String(p.text || ''))
+    .join('\n');
+  if (seen.length >= text.length && seen.includes(text.slice(0, 40))) return '';
+  return `<div class="trace is-live" data-trace="${esc(t.key)}">
+    <div class="trace-head">${t.stream.kind === 'think' ? 'Architect · Thinking' : 'Architect'}</div>
+    <div class="trace-flow${t.stream.kind === 'think' ? ' is-think' : ''}${t.stream.ended ? ' is-idle' : ''}"><div class="trace-flow-view"><div class="trace-flow-body">${esc(text)}</div></div></div>
+  </div>`;
 }
 
 // The role label shares the first line with the text; the time rides the right.
@@ -5301,7 +5353,6 @@ function renderAskPanel() {
     state.askPage = 0;
     host.hidden = true;
     host.innerHTML = '';
-    $('chatDock')?.classList.remove('has-ask');
     syncAskState();
     return;
   }
@@ -5314,7 +5365,7 @@ function renderAskPanel() {
     .join(';')}`;
   if (sig === state.askSig) {
     host.hidden = false;
-    $('chatDock')?.classList.add('has-ask');
+    mountAskPost();
     return;
   }
   state.askSig = sig;
@@ -5345,8 +5396,45 @@ function renderAskPanel() {
   // A new form starts at its first question. The page is *not* reset on a poll:
   // an unchanged signature returns above, so a rebuild never moves the operator.
   state.askPage = 0;
-  $('chatDock')?.classList.add('has-ask');
+  mountAskPost();
   refreshAskPanel();
+  // A question is the thing the run is waiting on: show it, even if the operator
+  // had scrolled up to read. It is the one arrival that may take the chat's place.
+  chatFollowArmed = true;
+  scrollChatToBottom();
+}
+
+/**
+ * Put the question where the conversation can be read above it.
+ *
+ * The node is *moved*, never rebuilt: the transcript's markup is replaced on every
+ * change, so a panel that lived inside it would lose whatever had been answered the
+ * first time a poll rebuilt the chat. Appending the same element again keeps its
+ * fields, its page and its focus, and makes it the last thing in the conversation —
+ * which is the whole point of moving it out of the overlay.
+ */
+function mountAskPost() {
+  const host = $('askHost');
+  const el = $('transcript');
+  if (!host || !el) return;
+  if (host.hidden || !currentForm()) return;
+  if (host.parentElement !== el || el.lastElementChild !== host) el.appendChild(host);
+  fitAskPanel();
+}
+
+/**
+ * The question has to fit the chat window, or its Submit sits below the fold and the
+ * question cannot be answered without scrolling a box that looks finished. Measured
+ * on the first live question: the panel was 319px in a 294px chat. The panel's own
+ * fields scroll; its action row stays at its bottom edge.
+ */
+function fitAskPanel() {
+  const host = $('askHost');
+  const el = $('transcript');
+  const panel = host?.querySelector('.ask-panel');
+  if (!panel || !el) return;
+  const room = Math.max(200, el.clientHeight - 12);
+  panel.style.maxHeight = `${room}px`;
 }
 
 /** The panel's answers, in the shape the engine's form reply wants. */
@@ -6185,7 +6273,7 @@ function renderComposer() {
   if (input) {
     input.disabled = asking;
     input.placeholder = asking
-      ? 'Answer the question above'
+      ? 'Answer the question to continue'
       : target?.kind === 'worker'
         ? `Message ${roleLabel(target.role)} — seen at its next step`
         : target?.kind === 'architect'
@@ -6197,6 +6285,14 @@ function renderComposer() {
               : state.mode === 'single'
                 ? 'Message'
                 : 'Message the Architect…';
+  }
+  // A pending question takes the whole composer, not just the text box: Attach, the
+  // mode switch and the run menu are all "start something else", and a half-dead
+  // composer invites a click that goes nowhere. Stop stays live — it is the way out
+  // of a question nobody can answer, and the engine treats it as the immediate stop.
+  for (const id of ['attachBtn', 'modeToggle', 'runBtn']) {
+    const el = $(id);
+    if (el) el.disabled = asking;
   }
   renderStopState();
   renderCompactChip();
@@ -7125,6 +7221,18 @@ function connectStream() {
       else if (ev.type === 'session.reasoning.delta') { noteDelta(ev); appendStream('think', ev.raw?.data?.delta); }
       else if (ev.type === 'session.usage.updated') noteWorkerUsage(ev);
       else if (ev.type === 'session.text.ended' || ev.type === 'session.reasoning.ended') endStream();
+    } else if (ev.sessionId && ev.sessionId === state.sessionId) {
+      // The Architect's own step. Its deltas used to be dropped — only a delegated
+      // run had a trace to put them in — so the panel sat empty and the whole wall
+      // appeared when the step's message was rebuilt. Same panel, same code.
+      if (ev.type === 'session.text.delta') { noteDelta(ev); appendStream('word', ev.raw?.data?.delta); }
+      else if (ev.type === 'session.reasoning.delta') { noteDelta(ev); appendStream('think', ev.raw?.data?.delta); }
+      else if (ev.type === 'session.text.ended' || ev.type === 'session.reasoning.ended') endStream();
+      else if (/^session\.execution\.(succeeded|failed|interrupted)$/.test(ev.type)) {
+        // The turn is over: nothing may stream into it any more.
+        state.sessionTrace.stream = null;
+        state.sessionTrace.key = '';
+      }
     }
     // The Architect's own card gets the same number from the same event. Its
     // session is never a worker's, so the two cannot both claim it.
@@ -9011,6 +9119,7 @@ document.addEventListener('keydown', (e) => {
     fitStageHeight();
     if (state.view === 'session') applyRoleCardsLayout({ animate: false });
     fitChatHeight();
+    fitAskPanel();
     updatePlanOverflow();
     drawActivePath();
     renderChatNav();

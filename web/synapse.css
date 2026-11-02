@@ -1165,7 +1165,6 @@ body[data-view="session"] .chat-dock:not(.has-history) .composer { border-top-co
 /* While a question is up the panel is a 2px-larger box, so the dock must stop
    clipping it. Nothing escapes: the transcript clips its own content, and the
    composer, the jump buttons and the border are all behind the panel anyway. */
-body[data-view="session"] .chat-dock.has-ask { overflow: visible; }
 
 /* The chat's height is NOT transitioned.
 
@@ -1804,32 +1803,26 @@ body[data-mode="single"] #runAuto { display: none; }
    Submit fill and the selected row's rule. The surface, the option rows and the
    question text are the ordinary ones — an orange panel with orange text under
    it was too much for something that is read line by line. */
-.ask-host {
-  /* -3px inside the dock's padding box = 2px beyond its border box: the chat's
-     border, radius, jump buttons and composer are all underneath it. It is a
-     child of the dock on purpose — the browser keeps the two in the same layout
-     pass, through mode switches, resizes and page scrolling, with nothing to
-     measure and nothing that can drift. The dock drops its clipping while a
-     question is up (`.has-ask` below) so the panel can be the larger box. */
-  position: absolute; inset: -3px; z-index: 60;
-  display: flex; flex-direction: column;
-  pointer-events: none;
-}
+/* ── the question, as a chat post ────────────────────────────────────────
+   It is the last thing in the transcript, not an overlay, because the reply that
+   raised the question has to stay readable above it: the overlay covered the very
+   answer the operator needed in order to answer. It is a *moved* element, never
+   rebuilt by the transcript — its answers live in the DOM, and a poll that rebuilt
+   it would throw them away. */
+.ask-host { display: block; margin: 0 0 14px; }
 .ask-host[hidden] { display: none; }
 .ask-panel {
-  pointer-events: auto;
   /* A column: the fields take the room and scroll inside it, the action row is
      pinned at the panel's bottom. A sticky row instead would sit wherever the
      content happens to end, leaving a strip of empty panel under it that reads
      as the chat showing through. */
   display: flex; flex-direction: column;
-  background: #1a1c20; border: 1px solid var(--orange);
+  background: #241a12; border: 1px solid var(--orange);
   border-radius: 8px; padding: 12px 14px 0;
   /* Clipped, or the action row's square background paints over the bottom corners
      and hides the border's curve there. */
   overflow: hidden;
-  width: 100%; height: 100%;
-  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.6);
+  width: 100%; max-height: 66vh;
 }
 .ask-head { display: flex; align-items: center; gap: 8px; flex: none; }
 .ask-dot {

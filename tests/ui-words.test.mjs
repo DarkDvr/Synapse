@@ -238,3 +238,45 @@ test('the Settings subtitle is an empty line, not the config sentence', () => {
   assert.match(html, /<p class="modal-sub" aria-hidden="true">&nbsp;<\/p>/);
 });
 
+
+// ── the question is a chat post (2 Nov) ────────────────────────────────
+// It was an overlay that covered the reply the question was about. The operator could
+// not see what had been said, so answering meant guessing. It is now the last thing in
+// the transcript — and the two things that make that safe are that the node is
+// *moved* rather than rebuilt (or a poll would eat the answers) and that it is sized
+// to the chat (or Submit lands below the fold).
+test('the question is a moved post in the transcript, not an overlay', () => {
+  const css = read('web/synapse.css');
+  const host = /\.ask-host\s*\{([^}]*)\}/.exec(css);
+  assert.ok(host, 'the host has a rule');
+  assert.doesNotMatch(host[1], /position:\s*absolute/, 'an overlay hides the answer it is about');
+  const js = read('web/app.js');
+  assert.match(js, /function mountAskPost\(\)/, 'the panel has one place that places it');
+  assert.match(js, /el\.appendChild\(host\)/, 'it is appended to the transcript');
+  assert.match(js, /el\.lastElementChild !== host/, 'and kept as the last post');
+  assert.match(js, /function fitAskPanel\(\)/, 'it is capped to the chat height');
+  // Measured: 319px panel in a 294px chat put Submit below the fold.
+  assert.match(js, /el\.clientHeight - 12/, 'the cap is the chat, not the content');
+  assert.match(js, /fitAskPanel\(\);/, 'and it is applied when the panel is placed');
+});
+
+test('a pending question takes the composer, and leaves Stop as the way out', () => {
+  const js = read('web/app.js');
+  const block = /for \(const id of \['attachBtn', 'modeToggle', 'runBtn'\]\) \{([\s\S]*?)\}/.exec(js);
+  assert.ok(block, 'the composer controls are switched off together');
+  assert.match(block[1], /disabled = asking/);
+  assert.doesNotMatch(block[1], /stopBtn/, 'Stop stays live: it is the way out of a question nobody can answer');
+});
+
+// ── the Architect's own step streams like a worker's (2 Nov) ──────────
+test('the open session has a trace, so its reasoning streams instead of dumping', () => {
+  const js = read('web/app.js');
+  assert.match(js, /function liveTrace\(\)/, 'one place answers whose writing this is');
+  assert.match(js, /const trace = liveTrace\(\);/, 'the stream pump uses it');
+  // It used to be `traceOf(currentRun())`, which is null for the Architect: every
+  // delta it produced was dropped and the wall arrived at the step boundary.
+  assert.doesNotMatch(js, /function appendStream\(kind, delta\) \{\s*const trace = traceOf\(currentRun\(\)\);/, 'appendStream no longer ignores the session');
+  assert.match(js, /sessionTrace: \{ key: '', stream: null \}/, 'the session has a trace of its own');
+  assert.match(js, /function renderSessionStream\(\)/, 'and a panel to draw it in');
+  assert.match(js, /state\.sessionTrace\.stream = null;/, 'the stream is cleared when the turn ends');
+});

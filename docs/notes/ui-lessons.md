@@ -15,19 +15,36 @@ verbatim; read it before changing anything in `web/`.
   no row clipped. The card's own box still ellipsizes — it has a tooltip, and the
   list is where the choice happens.
 
-## Questions: a panel over the chat, never in it
+## Questions: a post in the chat, and the composer closes
 
 A model asking the operator something is not a chat message — it is a blocked
-session. The engine raises a form (see "Tools and models"), and Synapse renders
-it as a panel **painted over the chat, anchored just above the composer**.
+session. The engine raises a form (see "Tools and models"), and Synapse renders it as
+**the last post in the conversation**, in the chat's own colours with an orange
+border, above a composer that is switched off until it is answered.
 
-- **It cannot change the chat's size, and that is structural, not careful.** The
-  host is `position: absolute` inside `.chat-dock` (`position: relative`), and
-  `placeAskPanel()` sets its `bottom` and `max-height` from the composer's and
-  the dock's measured heights — the composer grows with the textarea, so CSS
-  alone cannot express it. Measured with the panel shown and hidden on the same
-  transcript: dock 269/619/888, composer top 829, transcript 559 — identical in
-  both states, and page overflow 0.
+It used to be a panel painted *over* the chat. That was wrong for a reason the
+operator named on 2 Nov: the overlay covered the reply the question was about, so
+answering meant guessing what had been said. As a post, the answer is one scroll up.
+
+- **The panel is moved, never rebuilt.** `renderTranscript()` replaces the
+  transcript's markup on every change, so an element living inside it would be
+  destroyed — and its radios, its page and its focus with it. `#askHost` is created
+  in the shell, and `mountAskPost()` appends the *same node* as the transcript's last
+  child after each render. That is what lets the polling rule below keep working.
+- **It is sized to the chat, not to its content.** Measured on the first live
+  question: the panel was 319px inside a 294px chat, which put **Submit Answer below
+  the fold** — a question you cannot answer without scrolling a box that looks
+  finished. `fitAskPanel()` caps it at the transcript's height (minus 12px) and runs
+  on render and on resize; the panel's fields scroll inside it and its action row
+  stays at its bottom edge.
+- **A question takes the whole composer.** The text box is disabled and says "Answer
+  the question to continue"; Send, Attach, the mode switch and the run menu are
+  disabled too — a half-dead composer invites a click that goes nowhere. **Stop stays
+  live**: it is the way out of a question nobody can answer, and the engine treats a
+  stop while a card is waiting as the immediate one.
+- **A new question takes the chat's place.** On a new form signature the page arms
+  the follow and scrolls to the end, because that is what the run is waiting on. The
+  rest of the time the reader's position is respected as everywhere else.
 - **The panel is polled, so it must never rebuild for nothing.** `refreshPending`
   runs every 8s; rebuilding the panel's HTML threw away answers the operator had
   already given (reproduced: pick a radio, wait for a poll, the radio cleared and
@@ -1760,8 +1777,26 @@ unreliable in the same state (a click landed on the button in `elementFromPoint`
 and the handler never ran); when the picture matters, verify the DOM before and
 after and fall back to `element.click()` and a value plus an `input` event.
 
-## The chat's text size is one number
+## Only a run had somewhere to put its words
 
+The Architect's reasoning panel sat empty for a whole step and then showed the entire
+wall at once (reported 2 Nov). Nothing was wrong with the panel: `appendStream()`
+looked up its trace with `traceOf(currentRun())`, and the Architect's own turn has no
+run — every `session.reasoning.delta` it produced was dropped on the floor, and the
+text only arrived when the step's message was rebuilt. The workers looked fine
+because a delegation *is* a run.
+
+`liveTrace()` now answers "whose writing is this": the live run's trace if there is
+one, otherwise the open session's own (`state.sessionTrace`, keyed `sess:<id>`), which
+is drawn by the same `.trace-flow` panel and fed by the same pump. Measured while a
+long reasoning turn streamed: the panel held 76 characters at the first sample and
+424 at the second, in the same DOM node.
+
+Two details that keep it honest: the panel is hidden once the step's own message
+carries the same words (`renderSessionStream()`), or the paragraph appears twice; and
+the session stream is cleared on `session.execution.ended`, so a new turn can never
+inherit the last one's text.
+## The chat's text size is one number
 The operator asked for a size control for the conversation alone — "no other
 elements", with a floor at two points below the original — and named the risks:
 the vertical rules and the scrolling. The implementation is one custom property,
