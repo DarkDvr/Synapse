@@ -69,9 +69,13 @@ export function createFormAuto({
     }
     if (fullAuto.has(sessionId)) return true;
     if (checked.has(sessionId)) return false;
-    checked.add(sessionId);
     try {
       const session = await engine.getSession(sessionId);
+      // Marked only once the engine has answered. The snapshot asks this to label
+      // the question panel, so a read that failed would otherwise be remembered as
+      // "off" for the rest of the run — and one blip would leave a chat's questions
+      // unanswered while the panel promised an answer.
+      checked.add(sessionId);
       const directory = session?.directory || '';
       if (directory) {
         dirOf.set(sessionId, directory);

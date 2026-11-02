@@ -2069,12 +2069,18 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
               : [],
           };
         }),
-        forms: open.map((f) => ({
-          id: f.id,
-          sessionId: f.sessionID,
-          title: f.title || 'Input needed',
-          fields: Array.isArray(f.fields) ? f.fields : [],
-        })),
+        forms: await Promise.all(
+          open.map(async (f) => ({
+            id: f.id,
+            sessionId: f.sessionID,
+            title: f.title || 'Input needed',
+            fields: Array.isArray(f.fields) ? f.fields : [],
+            // Whether *this chat* answers its own questions under Full auto. It is
+            // that chat's switch, not the one on screen: a worker asking from
+            // another chat must not be labelled with the open chat's setting.
+            fullAuto: await formAuto.enabledFor(f.sessionID),
+          })),
+        ),
         active,
         canStop,
         activeHere,

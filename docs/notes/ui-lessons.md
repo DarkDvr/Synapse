@@ -141,7 +141,11 @@ answering meant guessing what had been said. As a post, the answer is one scroll
   answer the engine's own output ("User has answered your questions: …") shows in
   the expanded card.
 - **A worker can ask too.** The panel is not limited to the open session: any
-  pending form is shown, with the head saying `another session is waiting on you`.
+  pending form is shown, and its head says where it came from — `asked in another
+  chat — open that chat to answer`. The wording is `web/ask-note.js`, not a template
+  string, because the first version read `another chat is waiting on you · full auto
+  answers on its next check`: the first clause is false under Full auto (the run
+  answers itself) and "check" is engine vocabulary for a poll nobody sees (2 Nov).
   A worker has the same toolset, and without this its question would be invisible
   and the run would die at the timeout with nothing to look at. **Any** pending
   question blocks the composer, whoever asked it: the operator's attention is what

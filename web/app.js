@@ -12,6 +12,7 @@ import { renderMarkdown } from './md.js';
 import { newStream, pushStream, slideTarget, nextOffset, takePending, freezeStream, STREAM_BUFFER } from './stream-view.js';
 import { addSample, rateOf } from './rate.js';
 import { DONE_SOUNDS, doneSoundName, workWillContinue } from './notify.js';
+import { askHeadNote } from './ask-note.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -1877,7 +1878,7 @@ function renderKeep() {
     const wait = fullAutoWaitSec();
     hint.textContent =
       wait === 0
-        ? 'Allow at once, no card; questions take the recommended option on the next check'
+        ? 'Allow at once, no card; questions take the recommended option at once'
         : `Allow once, or answer questions with the recommended option, after ${wait} seconds`;
   }
   btn.title =
@@ -1970,7 +1971,7 @@ async function setFullAuto(next) {
       state.fullAuto ? 'Full Auto On' : 'Full Auto Off',
       state.fullAuto
         ? wait === 0
-          ? 'Permissions are allowed at once and no permission card is shown. Questions take the recommended (or top) option on the next check.'
+          ? 'Permissions are allowed at once and no permission card is shown. Questions take the recommended (or top) option at once.'
           : `Unanswered requests take the default after ${wait} seconds: permission cards allow once, questions take the recommended (or top) option.`
         : 'Every request waits for you again.',
     );
@@ -5400,15 +5401,15 @@ function renderAskPanel() {
     <div class="ask-head">
       <span class="ask-dot" aria-hidden="true"></span>
       <span class="ask-head-title">${esc(form.title || 'Input Needed')}</span>
-      <span class="ask-head-note">${
-        form.sessionId === state.sessionId
-          ? 'this chat is waiting on you'
-          : 'another chat is waiting on you'
-      }${state.fullAuto
-        ? fullAutoWaitSec() === 0
-          ? ' · full auto answers on its next check'
-          : ` · full auto answers in ${fullAutoWaitSec()}s`
-        : ''}</span>
+      <span class="ask-head-note">${esc(
+        askHeadNote({
+          here: form.sessionId === state.sessionId,
+          // The chat's own switch when the server said so; the open chat's when it
+          // did not (an older snapshot).
+          fullAuto: (form.fullAuto ?? state.fullAuto) === true,
+          wait: fullAutoWaitSec(),
+        }),
+      )}</span>
     </div>
     <div class="ask-fields">${(form.fields || []).map(askField).join('')}</div>
     <div class="ask-actions">
