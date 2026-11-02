@@ -134,6 +134,12 @@ which one is right: whether the wording is as good, whether a control belongs
 there, or whether a difference is drift or an improvement. Judge that yourself and
 say which is which.
 
+One thing it will do that looks like a defect and is not: a mock that draws the
+window around the page — a title bar, a frame, a status strip the host supplies —
+shifts every pixel under it, and the whole picture reads as different. That is a
+fact about what was compared, not the build drifting; say so, and compare the
+mock's content against the page when the frame is the only difference.
+
 ## One look, one picture
 
 Several widths become **one contact sheet** (both images side by side at a common
