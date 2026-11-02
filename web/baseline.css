@@ -1,0 +1,16 @@
+/* The baseline, loaded as a *lower cascade layer*.
+ *
+ * Summit (vendor/summit.css) is a locked stylesheet: it is a library, not ours to
+ * edit. Loading it as a sibling meant specificity decided every conflict, and on
+ * 2 Nov that cost a real bug — `.modal p` (0,1,1) silently outranked Synapse's
+ * `.shutdown-lead` (0,1,0) and took away its centring margins and its size, so the
+ * shutdown warning's subtitle read off-centre (measured: a 370px box at the left of
+ * a 551px content area).
+ *
+ * A layer fixes that structurally: rules in a lower layer always lose to unlayered
+ * rules, whatever their specificity. So anything in web/synapse.css — which is not
+ * in a layer — wins against the baseline, and a component rule can no longer be
+ * outranked by accident. The library is untouched, which is the other half of the
+ * rule (web/vendor/summit.css stays exactly as shipped, bar the fonts comment).
+ */
+@import url('vendor/summit.css') layer(summit);

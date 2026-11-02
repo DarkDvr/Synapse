@@ -9,7 +9,9 @@
   <link rel="icon" type="image/png" href="/icon-32.png" sizes="32x32" />
   <link rel="apple-touch-icon" href="/icon-180.png" />
   <link rel="stylesheet" href="/vendor/fonts.css" />
-  <link rel="stylesheet" href="/vendor/summit.css" />
+  <!-- Summit is imported *inside a cascade layer* by this file, so Synapse's own
+       rules beat it whatever their specificity. See web/baseline.css. -->
+  <link rel="stylesheet" href="/baseline.css" />
   <link rel="stylesheet" href="/synapse.css" />
 </head>
 <body class="dark" data-view="none">
