@@ -325,6 +325,11 @@ test('the Architect’s live reasoning is drawn inside its own post', () => {
   assert.ok(own, 'the embedded panel has its own rule');
   assert.match(own[1], /border:\s*0/, 'no rule of its own: the post provides it');
   assert.match(own[1], /margin:\s*3px 0 0/, 'and no gap above');
+  // Reported 2 Nov: the panel also lost its *box*, so a long reasoning turn was a
+  // wall of italic text with no edge to it. It is the same bordered, clipped window
+  // the workers get — only the head line and the left rule are dropped.
+  assert.match(css, /\.trace-flow \{[^}]*border:\s*1px solid/, 'the scrolling panel keeps its hairline box');
+  assert.doesNotMatch(css, /\.trace\.is-own \.trace-flow \{[^}]*border:\s*0/, 'the embedded panel does not strip it again');
 });
 
 test('jumping to the question puts it at the top of the chat', () => {

@@ -1838,13 +1838,12 @@ body[data-mode="single"] #runAuto { display: none; }
 .ask-head-note { margin-left: auto; font-size: 11px; color: #82868e; }
 
 /* The Architect's live step, drawn inside its own post. It keeps the scrolling
-   panel and its grey, and loses the head line, the gap and the rule — the post's
-   green line runs down its left, unbroken, because they are one block now. */
+   panel and its grey, and loses the head line, the gap and the left rule — the
+   post's green line runs down its left, unbroken, because they are one block now.
+   It does NOT lose the box: the panel is the same bordered, clipped window the
+   workers get, so the words are the same words in the same frame. Reported 2 Nov:
+   stripping the border too left a wall of italic text with no edge to it. */
 .trace.is-own { margin: 3px 0 0; border: 0; padding: 0; }
-.trace.is-own .trace-flow {
-  border: 0; border-radius: 0; padding: 0; background: transparent;
-}
-.trace.is-own .trace-flow-body { color: #8b8f97; }
 
 /* Half a line between answers, and one between questions. */
 .ask-fields { margin-top: 8px; display: grid; gap: 8px; flex: 1 1 auto; }

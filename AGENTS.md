@@ -94,9 +94,8 @@ the cards and the commits, not the code. One reason per sentence, not a chain.
 
 ### Working style rules
 
-- **The review pane is how the operator is shown anything.** A screenshot returned
-  to the chat reaches only you (measured 2 Nov 2026); `browser.preview` puts the
-  file on their screen. Screenshot the page, then preview the PNG.
+- **The review pane is how the operator is shown anything** (measured 2 Nov 2026).
+  A screenshot in the chat reaches only you; `browser.preview` puts it on their screen.
 - **Use the browser, but surgically** — one session, reused; few screenshots.
 - **Stage the delivery.** Each stage is reviewed before the next starts.
 
@@ -113,7 +112,8 @@ the cards and the commits, not the code. One reason per sentence, not a chain.
 
 `package.json` holds `major.minor.patch` (fix = patch, feature = minor, break = major).
 Every pushed update bumps it and tags `vX.Y.Z` — checklist: `docs/notes/releases.md`;
-`tests/version.test.mjs` fails if the exe's `<Version>` or the README disagrees.
+`tests/version.test.mjs` fails if the exe's `<Version>` or the README disagrees. A bump
+is only delivered once the app restarts: with no run live, restart `Synapse.exe`.
 
 ### Destructive commands — verify before you act
 

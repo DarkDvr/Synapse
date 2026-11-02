@@ -54,13 +54,16 @@ answering meant guessing what had been said. As a post, the answer is one scroll
   (reported 2 Nov). It lands as the first thing in the chat, with the panel's header
   reserving 104px on its right: the floating jump buttons sit there, and landing the
   header underneath them hid it.
-- **The Architect's live reasoning is inside its own post.** It used to be a second
-  grey block after the message, with its own "Architect · Thinking" head and its own
-  gap, so it read as somebody else's post under a green one. `renderMessage(m, tail)`
-  now takes the live panel as a tail and puts it inside `.msg-body`, which carries the
-  speaker's 2px rule — one green line down the whole block, the reasoning in grey, no
-  head (the post already says who is speaking) and no gap. `.trace.is-own` is the only
-  difference from a worker's trace.
+- **The Architect's live reasoning is inside its own post — and still a box.** It used
+  to be a second grey block after the message, with its own "Architect · Thinking" head
+  and its own gap, so it read as somebody else's post under a green one.
+  `renderMessage(m, tail)` now takes the live panel as a tail and puts it inside
+  `.msg-body`, which carries the speaker's 2px rule — one green line down the whole
+  block, the reasoning in grey, no head (the post already says who is speaking) and no
+  gap. `.trace.is-own` drops the head line and the left rule *only*: the 11-line
+  scrolling window keeps its hairline box, radius and padding, the same frame a worker
+  gets. 1.13.4 stripped the box too, and a long reasoning turn became a wall of italic
+  text with no edge — reported and restored 2 Nov.
 - **One question, one title.** The engine often sends the same sentence as both the
   field's title and its description, which printed the question twice. The title is now
   skipped when it is the description.
