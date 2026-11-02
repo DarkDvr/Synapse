@@ -3874,13 +3874,18 @@ function renderTranscript() {
   ].sort((x, y) => x.at - y.at);
   let html = postHtml;
   let next = 0;
-  for (const m of showable) {
+  // The live step belongs to the newest assistant message, inside its own green
+  // rule — not to the transcript after it (2 Nov: the operator saw a second grey
+  // block with its own head and gap, reading as somebody else's post).
+  const liveTail = renderSessionStream();
+  for (let i = 0; i < showable.length; i += 1) {
+    const m = showable[i];
     const at = Number(m.created) || 0;
     while (next < items.length && at && items[next].at < at) html += items[next++].html;
-    html += renderMessage(m);
+    html += renderMessage(m, i === showable.length - 1 && m.type === 'assistant' ? liveTail : '');
   }
   while (next < items.length) html += items[next++].html;
-  el.innerHTML = html + pending + renderSessionStream();
+  el.innerHTML = html + pending;
   // The question is the conversation's last post, not an overlay over it.
   mountAskPost();
   if (stick) scrollChatToBottom();
@@ -4562,14 +4567,16 @@ function renderSessionStream() {
     .map((p) => String(p.text || ''))
     .join('\n');
   if (seen.length >= text.length && seen.includes(text.slice(0, 40))) return '';
-  return `<div class="trace is-live" data-trace="${esc(t.key)}">
-    <div class="trace-head">${t.stream.kind === 'think' ? 'Architect · Thinking' : 'Architect'}</div>
+  // No head line and no rule of its own: this panel sits *inside* the Architect's
+  // post, so the post's green line is the only rule and the reasoning keeps its
+  // grey. `is-own` is the whole difference from a worker's trace.
+  return `<div class="trace is-live is-own" data-trace="${esc(t.key)}">
     <div class="trace-flow${t.stream.kind === 'think' ? ' is-think' : ''}${t.stream.ended ? ' is-idle' : ''}"><div class="trace-flow-view"><div class="trace-flow-body">${esc(text)}</div></div></div>
   </div>`;
 }
 
 // The role label shares the first line with the text; the time rides the right.
-function renderMessage(m) {
+function renderMessage(m, tail = '') {
   const t = hhmm(m.created);
   const stamp = t ? `<span class="msg-time">${t}</span>` : '';
 
@@ -4678,7 +4685,7 @@ function renderMessage(m) {
     }
     if (parts.length === 0 && !m.error) body.push('<span class="msg-text">…</span>');
     if (m.error) body.push(`<div class="msg-error">${esc(m.error)}</div>`);
-    return `<div class="msg assistant" data-msg="assistant"><div class="msg-body">${body.join('')}</div></div>`;
+    return `<div class="msg assistant" data-msg="assistant"><div class="msg-body">${body.join('')}${tail}</div></div>`;
   }
   const body = m.error
     ? `<div class="msg-error">${esc(m.error)}</div>`
@@ -4960,11 +4967,7 @@ function jumpMessage(dir) {
   // the first message (its top is not at 0), which is why DOWN did nothing.
   const next = dir < 0 ? cur - 1 : cur + 1;
   if (next < 0 || next >= tops.length) return;
-  // The question stops clear of the floating jump buttons: they sit over the top
-  // right of the chat, and landing the post's header underneath them hid it.
-  const target = navMessages()[next];
-  const offset = target && target.id === 'askHost' ? 46 : 10;
-  const top = Math.max(0, tops[next] - offset);
+  const top = Math.max(0, tops[next] - 10);
   animateScroll(chatScroller(), top);
 }
 
@@ -5422,18 +5425,16 @@ function renderAskPanel() {
   mountAskPost();
   refreshAskPanel();
   // A question is the thing the run is waiting on: show it, even if the operator
-  // had scrolled up to read. It is shown from its *start* — a panel taller than the
-  // chat that is scrolled to its bottom hides the question and its header, which is
-  // exactly what it must not do.
+  // had scrolled up to read. It goes to the very top of the chat, so the question is
+  // the first thing read; the panel's header leaves room on its right for the
+  // floating jump buttons, which otherwise sat over it.
   chatFollowArmed = false;
   requestAnimationFrame(() => {
     const el = $('transcript');
     const host = askHost();
     if (!el || !host) return;
     const top = host.getBoundingClientRect().top - el.getBoundingClientRect().top;
-    // 46px, not 6: the jump buttons float over the chat's top right, and a question
-    // placed under them lost its header behind them.
-    if (Math.abs(top - 46) > 2) el.scrollTop += top - 46;
+    if (Math.abs(top) > 2) el.scrollTop += top - 6;
   });
 }
 

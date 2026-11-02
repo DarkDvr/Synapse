@@ -1826,7 +1826,7 @@ body[data-mode="single"] #runAuto { display: none; }
   overflow: hidden;
   width: 100%;
 }
-.ask-head { display: flex; align-items: center; gap: 8px; flex: none; }
+.ask-head { display: flex; align-items: center; gap: 8px; flex: none; padding-right: 104px; }
 .ask-dot {
   flex: none; width: 7px; height: 7px; border-radius: 50%;
   background: var(--orange); box-shadow: 0 0 0 3px rgba(255, 125, 26, 0.18);
@@ -1836,6 +1836,15 @@ body[data-mode="single"] #runAuto { display: none; }
   text-transform: uppercase; color: var(--orange);
 }
 .ask-head-note { margin-left: auto; font-size: 11px; color: #82868e; }
+
+/* The Architect's live step, drawn inside its own post. It keeps the scrolling
+   panel and its grey, and loses the head line, the gap and the rule — the post's
+   green line runs down its left, unbroken, because they are one block now. */
+.trace.is-own { margin: 3px 0 0; border: 0; padding: 0; }
+.trace.is-own .trace-flow {
+  border: 0; border-radius: 0; padding: 0; background: transparent;
+}
+.trace.is-own .trace-flow-body { color: #8b8f97; }
 
 /* Half a line between answers, and one between questions. */
 .ask-fields { margin-top: 8px; display: grid; gap: 8px; flex: 1 1 auto; }

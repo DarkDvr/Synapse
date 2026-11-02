@@ -48,11 +48,19 @@ answering meant guessing what had been said. As a post, the answer is one scroll
   keeps its orange border (that is what marks it as a question), the fill is neutral, and
   the answers are a plain list divided by hairlines: one above every row, the first
   included, with a radio/checkbox, a 12.5px label and a 10.5px description.
-- **The question is a jump target.** The chat's next/previous buttons step through
-  messages, and the question is one of them — it was not, so "next" walked past it and
-  the only way to read a question was to drag the chat (reported 2 Nov). It is also
-  landed 46px down rather than 10px: the floating jump buttons sit over the chat's top
-  right, and landing the post's header underneath them hid it.
+- **The question is a jump target, and it lands at the top.** The chat's next/previous
+  buttons step through messages, and the question is one of them — it was not, so
+  "next" walked past it and the only way to read a question was to drag the chat
+  (reported 2 Nov). It lands as the first thing in the chat, with the panel's header
+  reserving 104px on its right: the floating jump buttons sit there, and landing the
+  header underneath them hid it.
+- **The Architect's live reasoning is inside its own post.** It used to be a second
+  grey block after the message, with its own "Architect · Thinking" head and its own
+  gap, so it read as somebody else's post under a green one. `renderMessage(m, tail)`
+  now takes the live panel as a tail and puts it inside `.msg-body`, which carries the
+  speaker's 2px rule — one green line down the whole block, the reasoning in grey, no
+  head (the post already says who is speaking) and no gap. `.trace.is-own` is the only
+  difference from a worker's trace.
 - **One question, one title.** The engine often sends the same sentence as both the
   field's title and its description, which printed the question twice. The title is now
   skipped when it is the description.

@@ -304,3 +304,33 @@ test('the question panel survives a transcript rebuild because the node is held'
     assert.doesNotMatch(block[1], /\$\('askHost'\)/, `${fn} must not look the node up by id again`);
   }
 });
+// The live step is part of the Architect's post, not a second block after it.
+// Reported 2 Nov: a grey panel with its own "Architect · Thinking" head and its own
+// gap, reading as somebody else's message under a green one.
+test('the Architect’s live reasoning is drawn inside its own post', () => {
+  const js = read('web/app.js');
+  // renderMessage takes the tail and puts it inside .msg-body, which carries the
+  // speaker's 2px rule.
+  assert.match(js, /function renderMessage\(m, tail = ''\) \{/);
+  assert.match(js, /<div class="msg-body">\$\{body\.join\(''\)\}\$\{tail\}<\/div>/, 'the tail lands inside the post');
+  assert.match(js, /const liveTail = renderSessionStream\(\);/, 'the live step is computed once');
+  assert.match(js, /renderMessage\(m, i === showable\.length - 1 && m\.type === 'assistant' \? liveTail : ''\)/, 'and only the newest assistant message carries it');
+  assert.doesNotMatch(js, /el\.innerHTML = html \+ pending \+ renderSessionStream\(\)/, 'it is not appended after the conversation any more');
+  // No head line: the post already says who is speaking.
+  const fn = /function renderSessionStream\(\) \{([\s\S]*?)\n\}/.exec(js);
+  assert.doesNotMatch(fn[1], /trace-head/, 'no second speaker label');
+  assert.match(fn[1], /is-live is-own/);
+  const css = read('web/synapse.css');
+  const own = /\.trace\.is-own \{([^}]*)\}/.exec(css);
+  assert.ok(own, 'the embedded panel has its own rule');
+  assert.match(own[1], /border:\s*0/, 'no rule of its own: the post provides it');
+  assert.match(own[1], /margin:\s*3px 0 0/, 'and no gap above');
+});
+
+test('jumping to the question puts it at the top of the chat', () => {
+  const js = read('web/app.js');
+  // The 46px landing was a workaround for the floating buttons covering the header;
+  // the header now reserves room for them instead.
+  assert.match(js, /const top = Math\.max\(0, tops\[next\] - 10\);/);
+  assert.match(read('web/synapse.css'), /\.ask-head \{[^}]*padding-right:\s*104px/);
+});
