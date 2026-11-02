@@ -50,7 +50,7 @@ report can say where the words came from.
 challenge, x.com a 403 and 4pda a Cloudflare interstitial; a model handed "" writes
 a confident report about nothing. The error names the wall and says a signed-in
 browser session would be needed, which is a thing the operator can act on — see the
-cookie findings in `docs/notes/todo.md`.
+cookie findings in `docs/notes/web-reading.md`.
 
 **A dropped connection is retried once; an answer is not.** `raw.githubusercontent.com`
 failed once with a bare "fetch failed" and answered on the next call — so network

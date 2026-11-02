@@ -162,12 +162,12 @@ an agent does not know to open is a document that does not exist:
 | `docs/notes/desktop-app.md` | touching `shell\`, `Synapse.exe`, `bin\node`, npm or any dependency — the good-tenant rule, the process model, exit codes, where the console lives |
 | `docs/notes/remote-access.md` | the LAN switch, the token or the login page, or changing what the HTTP listener binds |
 | `docs/notes/multi-user.md` | two views at once — what "busy" means, who may send, Stop as the takeover, and the Settings lock |
-| `docs/notes/todo.md` | picking up work the operator deferred — the changes that need a decision first, and why they are not small |
+| `docs/notes/web-reading.md` | before promising to read a signed-in site — every cookie route was measured, and one of them destroyed the operator's browser data |
+| `docs/notes/i18n.md` | before starting the Russian interface — scope, plurals, what must never be translated |
 | `docs/notes/project-chat.md` | before changing how a project, a chat or a compaction works — the one-chat-per-project scope, its phases and what is still open |
 
-Two rules for this file. **A new lesson goes in `docs/notes/`, not here** — this
-file changes when a rule changes, not when something is learned. And if you move
-a section out, leave its invariant behind in one line, with the pointer.
+Two rules: **a new lesson goes in `docs/notes/`, not here**; and a rule you move out
+leaves its invariant behind in one line, with the pointer.
 
 ## Running it
 

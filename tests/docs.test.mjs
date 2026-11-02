@@ -46,7 +46,8 @@ const NOTES = [
   'docs/notes/desktop-app.md',
   'docs/notes/remote-access.md',
   'docs/notes/multi-user.md',
-  'docs/notes/todo.md',
+  'docs/notes/i18n.md',
+  'docs/notes/web-reading.md',
   'docs/notes/project-chat.md',
   'docs/notes/releases.md',
 ];
