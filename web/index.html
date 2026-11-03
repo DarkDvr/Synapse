@@ -384,7 +384,6 @@
   <div class="modal panel settings-modal" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
     <div class="panel-head" style="margin-bottom:0">
       <h3 id="settingsTitle">Settings</h3>
-      <button class="close-x" id="closeSettings" aria-label="Close">✕</button>
     </div>
     <p class="modal-sub" aria-hidden="true">&nbsp;</p>
     <div class="set-shell">
@@ -392,8 +391,14 @@
       <div class="settings-body" id="settingsBody" role="tabpanel"></div>
     </div>
     <div class="set-foot">
-      <button class="btn btn-danger btn-sm" id="revertSettings" type="button">Revert</button>
-      <button class="btn btn-primary btn-sm" id="saveSettings" type="button">Save Changes</button>
+      <div class="set-foot-side">
+        <button class="btn btn-sm btn-outline-red" id="cancelSettings" type="button">Cancel</button>
+        <button class="btn btn-sm btn-outline-red" id="revertSettings" type="button">Revert</button>
+      </div>
+      <div class="set-foot-side">
+        <button class="btn btn-sm btn-outline-green" id="applySettings" type="button" disabled>Apply</button>
+        <button class="btn btn-secondary btn-sm" id="settingsPrimary" type="button">Close</button>
+      </div>
     </div>
   </div>
 </div>

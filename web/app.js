@@ -8331,14 +8331,40 @@ function renderSettings({ scrollTop } = {}) {
   // pressed. Only a tab switch or opening the window starts at the top.
   const keep = scrollTop === undefined ? body.scrollTop : scrollTop;
   renderSettingsTabs();
-  // About and Updates are read-only: Save and Revert there would be two buttons
-  // with nothing to save. The footer comes back on the next editable tab.
-  const foot = document.querySelector('.set-foot');
-  if (foot) foot.hidden = state.settingsTab === 'about' || state.settingsTab === 'updates';
-  const closeX = $('closeSettings');
-  if (closeX) closeX.disabled = Boolean(state.updateBusy);
   body.innerHTML = SETTINGS_PANES[state.settingsTab](c);
   body.scrollTop = keep;
+  updateSettingsFoot();
+}
+
+/**
+ * The footer's one truth: does the form differ from the saved config, and does
+ * what differs only take effect on a restart?
+ *
+ * Left: Cancel and Revert, the two ways to throw the draft away. Right: Apply —
+ * green, and disabled when there is nothing to apply or when only a restart can
+ * apply it — and one primary whose label says what pressing it does: Close, Save
+ * & Close, or Save & Restart. The colours are the meaning: green adds, red
+ * discards.
+ */
+function updateSettingsFoot() {
+  const foot = document.querySelector('.set-foot');
+  if (!foot) return;
+  const editable = state.settingsTab !== 'about' && state.settingsTab !== 'updates';
+  foot.hidden = !editable;
+  if (!editable || !state.setDraft || !state.config) return;
+  collectSettings();
+  const dirty = JSON.stringify(state.setDraft) !== JSON.stringify(state.config);
+  const needsRestart = dirty && restartNeeded(state.config, state.setDraft);
+  const busy = Boolean(state.updateBusy);
+  const apply = $('applySettings');
+  if (apply) apply.disabled = !dirty || needsRestart || busy;
+  const primary = $('settingsPrimary');
+  if (!primary) return;
+  primary.disabled = busy;
+  primary.textContent = dirty ? (needsRestart ? 'Save & Restart' : 'Save & Close') : 'Close';
+  primary.dataset.action = dirty ? (needsRestart ? 'save-restart' : 'save-close') : 'close';
+  primary.className =
+    'btn btn-sm' + (dirty ? (needsRestart ? ' btn-outline-red' : ' btn-outline-green') : ' btn-secondary');
 }
 
 /** The visible pane's controls into the draft. Called before switching tabs and
@@ -8605,7 +8631,7 @@ async function onSettingsClick(e) {
   }
 }
 
-async function saveSettings() {
+async function saveSettings({ close = false, restart = false } = {}) {
   const draft = collectSettings();
   if (!draft) return;
   // A provider row added by mistake - never named, never given a server - is
@@ -8627,7 +8653,7 @@ async function saveSettings() {
     if (!effortIds(entry.ref).includes(entry.variant)) delete entry.variant;
   }
   try {
-    const restart = restartNeeded(state.settingsSnapshot || state.config, draft);
+    const needsRestart = restartNeeded(state.config, draft);
     state.config = await api('PUT', '/api/config', draft);
     // The chat's size is read from the config here, once, rather than by watching
     // for changes: this is the one place the file becomes the page's truth.
@@ -8645,9 +8671,19 @@ async function saveSettings() {
     // A new skills folder is worth reading before the operator closes the panel.
     await checkSkills({ quiet: true });
     renderSettings();
-    // Only changes the engine or the server reads at start need the question.
-    if (restart) await askRestart();
-    else toast('Settings Saved', 'These take effect straight away.');
+    // The footer named the ending before it was pressed: a restart-required save
+    // restarts here, an ordinary one is already live, and Close just closes.
+    if (needsRestart) {
+      if (restart) { await restartSynapse(); return; }
+      await askRestart();
+      return;
+    }
+    if (close) {
+      closeSettings();
+      toast('Settings Saved', 'The changes are in effect.');
+      return;
+    }
+    toast('Settings Saved', 'These take effect straight away.');
   } catch (err) {
     toast('Could not save settings', err.message);
   }
@@ -9093,9 +9129,17 @@ document.addEventListener('keydown', (e) => {
     if (d.open) state.open.add(k); else state.open.delete(k);
   }, true);
   $('settingsBtn').addEventListener('click', openSettings);
-  $('closeSettings').addEventListener('click', closeSettings);
+  $('cancelSettings').addEventListener('click', closeSettings);
   $('revertSettings').addEventListener('click', revertSettings);
-  $('saveSettings').addEventListener('click', saveSettings);
+  $('applySettings').addEventListener('click', () => saveSettings());
+  // One primary, three jobs. Its label and colour are set by updateSettingsFoot()
+  // so the sentence the operator reads is the thing the press will do.
+  $('settingsPrimary').addEventListener('click', () => {
+    const action = $('settingsPrimary').dataset.action;
+    if (action === 'save-restart') saveSettings({ close: true, restart: true });
+    else if (action === 'save-close') saveSettings({ close: true });
+    else closeSettings();
+  });
   $('settingsTabs').addEventListener('click', (e) => {
     const tab = e.target.closest('[data-set-tab]');
     if (tab) switchSettingsTab(tab.dataset.setTab);
@@ -9105,11 +9149,15 @@ document.addEventListener('keydown', (e) => {
   // per-element listeners would have to be re-attached each time.
   $('settingsBody').addEventListener('click', onSettingsClick);
   $('settingsBody').addEventListener('input', onSettingsInput);
+  // Every edit moves the footer: Apply and the primary are only honest while
+  // they know whether the form differs from the file.
+  $('settingsBody').addEventListener('input', () => updateSettingsFoot());
   // Hearing it is the whole point of a sound setting: choose one and it plays.
   $('settingsBody').addEventListener('change', (e) => {
     if (e.target instanceof HTMLSelectElement && e.target.dataset.path === 'notify.doneSound') {
       playDoneSound(e.target.value);
     }
+    updateSettingsFoot();
   });
   // A masked key is far shorter than the real one; selecting it on focus means
   // typing replaces it instead of appending to the mask.

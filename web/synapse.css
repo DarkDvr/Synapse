@@ -2478,11 +2478,11 @@ body.is-stopping .chat-dock { animation: stop-glow 0.7s ease-in-out infinite; }
 .set-tab:focus-visible { outline: 2px solid var(--orange); outline-offset: -2px; }
 
 .set-foot {
-  display: flex; align-items: center; justify-content: flex-end; gap: 9px;
+  display: flex; align-items: center; justify-content: space-between; gap: 9px;
   margin-top: 16px; padding-top: 14px;
   border-top: 1px solid var(--line);
 }
-.set-foot #revertSettings { margin-right: auto; }
+.set-foot-side { display: flex; align-items: center; gap: 9px; }
 /* About: a short centred page, the shape a small app's About window has. The
    settings body is a scroll container, so it is given its own centred column
    rather than being stretched into a form. */
@@ -2931,6 +2931,12 @@ body:has(.modal-backdrop:not([hidden])) { overflow: hidden; }
 
 .btn-danger { color: var(--red); border-color: #5d2f27; background: rgba(240, 86, 63, 0.09); }
 .btn-danger:hover:not(:disabled) { background: var(--red-soft); border-color: var(--red); }
+/* The settings footer speaks in borders: green adds or saves, red discards or
+   restarts. The fill stays quiet so the label is read, not a block of colour. */
+.btn-outline-green { color: var(--green); border-color: var(--green); background: transparent; }
+.btn-outline-green:hover:not(:disabled) { background: var(--green-soft); }
+.btn-outline-red { color: var(--red); border-color: var(--red); background: transparent; }
+.btn-outline-red:hover:not(:disabled) { background: var(--red-soft); }
 .btn-warn { color: var(--amber); border-color: #5a4725; background: rgba(232, 163, 61, 0.07); }
 .btn-warn:hover:not(:disabled) { background: var(--amber-soft); border-color: var(--amber); }
 /* The one button that starts ten minutes of work with one click. Yellow is this

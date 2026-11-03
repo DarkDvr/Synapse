@@ -115,9 +115,9 @@ the cards and the commits, not the code. One reason per sentence, not a chain.
 ### Versioning
 
 `package.json` holds `major.minor.patch` (fix = patch, feature = minor, break = major).
-Every pushed update bumps it, tags `vX.Y.Z` and — minor or major — gets a GitHub
-release with the zip: `docs/notes/releases.md`. `tests/version.test.mjs` fails if the
-exe's `<Version>` or the README disagrees; a bump lands on restart of `Synapse.exe`.
+Every pushed update bumps it, tags `vX.Y.Z` and — minor or major — gets a GitHub release
+with the zip: `docs/notes/releases.md`; `tests/version.test.mjs` keeps the exe and README
+in step. A bump lands only on restart: with no run live, restart `Synapse.exe` yourself.
 
 ### Destructive commands — verify before you act
 

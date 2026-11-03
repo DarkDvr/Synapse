@@ -218,6 +218,23 @@ test('every textual Close is the grey secondary button', () => {
   assert.match(js, /btn btn-secondary btn-sm[^>]*data-close-about/);
 });
 
+// Save Changes retired: the footer is Cancel and Revert on the left, Apply and
+// one primary on the right. The primary's label is the thing it will do, and the
+// X is gone — Cancel is the way out.
+test('the settings footer has one honest primary, not a Save Changes', () => {
+  const html = read('web/index.html');
+  assert.match(html, /id="cancelSettings"[^>]*>Cancel<\/button>/);
+  assert.match(html, /id="revertSettings"[^>]*>Revert<\/button>/);
+  assert.match(html, /id="applySettings"[^>]*disabled>Apply<\/button>/);
+  assert.match(html, /id="settingsPrimary"/);
+  assert.doesNotMatch(html, /id="closeSettings"/);
+  assert.doesNotMatch(html, /id="saveSettings"/);
+  const js = read('web/app.js');
+  assert.match(js, /'Save & Restart'/);
+  assert.match(js, /'Save & Close'/);
+  assert.match(js, /primary\.dataset\.action =/);
+});
+
 test('notices carry the yellow border and yellow text, and the work ring is twice as quick', () => {
   const css = read('web/synapse.css');
   assert.match(css, /\.toast\s*\{[^}]*border: 1px solid var\(--yellow\)/);
