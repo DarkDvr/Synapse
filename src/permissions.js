@@ -40,7 +40,13 @@ const SECRET_PARTS = [
   '.kube',
   '.config/gcloud',
   '.config/gh',
+  // Browser profiles hold cookies and saved passwords. Brave is denied as a whole
+  // folder, not just its profile: nothing under it is a model's to touch, and the
+  // operator's Brave resets itself when anything reaches it (docs/notes/web-reading.md).
   'AppData/Local/Google/Chrome/User Data',
+  'AppData/Local/Microsoft/Edge/User Data',
+  'AppData/Local/BraveSoftware',
+  'AppData/Roaming/BraveSoftware',
   'AppData/Roaming/Mozilla/Firefox/Profiles',
 ];
 

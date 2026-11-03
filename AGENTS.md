@@ -15,8 +15,8 @@ plan, approve it, let workers execute, watch it happen live. It is **not** a
 wrapper around the OpenCode desktop app — it drives the genuine `opencode.exe`
 over its HTTP + SSE API and rebuilds the interface from scratch.
 
-Everything lives in `F:\dev\Synapse`. Nothing is written outside it except the
-recycled engine binary it locates.
+Everything lives in `F:\dev\Synapse`; nothing is written outside it except the engine
+binary it locates.
 
 **It is a harness for any project, and any model.** No project, product or model
 may be named in its code, its briefs or its config: the briefs are sent to every
@@ -72,6 +72,11 @@ the cards and the commits, not the code. One reason per sentence, not a chain.
    outside the project directory ask the operator, writes inside the harness
    never happen, and credential stores are refused. Do not widen a zone in a
    brief or a config — change the policy and its tests.
+9. **Edge or headless, never Brave.** Windows' default browser here is Brave, and
+   touching it — opening a link through the default browser, launching it, reading
+   or copying its profile — resets the operator's extensions, cookies and settings.
+   Open links in Edge by its full path; take pictures with `skills/visual-review`.
+   Never open, read, copy, move or clean Brave's folders — see `docs/notes/web-reading.md`.
 
 ### Palette (do not break this)
 
@@ -96,7 +101,7 @@ the cards and the commits, not the code. One reason per sentence, not a chain.
 
 - **The review pane is how the operator is shown anything** (measured 2 Nov 2026).
   A screenshot in the chat reaches only you; `browser.preview` puts it on their screen.
-- **Use the browser, but surgically** — one session, reused; few screenshots.
+- **Use Edge, but surgically** — one session, reused; few screenshots.
 - **Stage the delivery.** Each stage is reviewed before the next starts.
 
 ### Version control
@@ -133,13 +138,12 @@ Rules:
 
 1. **Prefer an identity you own.** Stop processes by PID from a file Synapse
    wrote (`data\synapse.pid`, `data\engine.pid`), never by name.
-2. **Dry-run first.** Before any destructive command, run the *selection* alone
-   and print what it matched — count it, read the paths — and only then act. It
-   costs seconds. Skipping it cost days.
+2. **Dry-run first.** Run the *selection* alone, print what it matched — count it,
+   read the paths — and only then act. It costs seconds; skipping it cost days.
 3. **Make the selector narrow and provable.** `*node_modules\@opencode\cli*`
    matches only the engine. `*@opencode*` matches the operator's editor.
 4. **Guard anything that must never be touched** with an explicit denylist
-   (`@opencodedesktop`, `ai.opencode.desktop`).
+   (`@opencodedesktop`, `ai.opencode.desktop`, `BraveSoftware`).
 5. **When something breaks repeatedly and the evidence does not fit, suspect your
    own tooling first.** An empty crash-dump folder was the tell: the app was not
    crashing, it was being killed. I saw that clue and moved past it twice.
@@ -162,7 +166,7 @@ an agent does not know to open is a document that does not exist:
 | `docs/notes/desktop-app.md` | touching `shell\`, `Synapse.exe`, `bin\node`, npm or any dependency — the good-tenant rule, the process model, exit codes, where the console lives |
 | `docs/notes/remote-access.md` | the LAN switch, the token or the login page, or changing what the HTTP listener binds |
 | `docs/notes/multi-user.md` | two views at once — what "busy" means, who may send, Stop as the takeover, and the Settings lock |
-| `docs/notes/web-reading.md` | before promising to read a signed-in site — every cookie route was measured, and one of them destroyed the operator's browser data |
+| `docs/notes/web-reading.md` | before promising to read a signed-in site, or touching any browser — every cookie route was measured, one destroyed the operator's browser data, and Brave is never touched |
 | `docs/notes/i18n.md` | before starting the Russian interface — scope, plurals, what must never be translated |
 | `docs/notes/project-chat.md` | before changing how a project, a chat or a compaction works — the one-chat-per-project scope, its phases and what is still open |
 
@@ -182,19 +186,16 @@ vendor-engine.ps1  # copies the runtime into bin\opencode so it travels with the
 tray is where the server is stopped and started, and Exit is the only way to stop
 both. To work on the server on its own: `bin\node\node.exe src\index.js`.
 
-`server.openBrowser` is off by default here: a restart should not hijack a browser
-tab. It is ignored when the app starts the server.
+`server.openBrowser` is off here: a restart should not hijack a tab, and the app ignores it.
 
 Gotchas:
 - **Nothing here matches on a process name** — the desktop app, the rule and the
   incident that earned it are in "Destructive commands" above. The app stops the
   process it holds a handle to, and `Kill(entireProcessTree)` is the fallback.
-- The console is a first-class output, and it lives in the window now: the app
-  captures the server's stdout into `logs\console.log` and serves it to the page, so
-  it still works when the server is stopped. `logger` mirrors the `app` channel
-  **and every warning or error from any channel** into that stream, and the runner
-  writes its milestones to the app channel too. The `tools` channel's *info* lines
-  are not mirrored on purpose — it carries the tool census, which would drown it.
+- The console lives in the window: the app captures the server's stdout into
+  `logs\console.log` and serves it, so it still works when the server is stopped.
+  `logger` mirrors the `app` channel **and every warning or error** from any channel;
+  the runner's milestones go there too. The `tools` *info* census is left out.
 - Ports: **UI 8700, engine 8720**. Ports 1174–1273 are reserved by
   Hyper-V/WSL on this machine — do not pick one (1235 and 1240 both fail with
   `EACCES`; 8701 and 4343 are fine).
@@ -237,8 +238,7 @@ skills/               shipped WITH Synapse, always on the engine's skill path
   visual-review/      render a page to PNG, then read it (the agents' eyes)
   app-check/          launch a desktop app, photograph its window, report if it lived
   ui-design/ frontend-design/ aesthetic-foundations/ code-craft/ web-guidelines/
-                      the craft briefs: direction, tokens, states, composition,
-                      colour, hierarchy, and the coders' rules
+                      the craft briefs: direction, tokens, states, colour, hierarchy
 templates/win-app/    the Windows shell a new app is copied from (WPF + WebView2)
 data/                 runtime state (projects, census, probe results, engine home)
 logs/                 one file per channel: app, engine, session, tools

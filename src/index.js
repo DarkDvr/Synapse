@@ -745,17 +745,35 @@ async function main() {
   if (currentConfig.server.openBrowser && process.env.SYNAPSE_SUPERVISED !== '1') openBrowser(url);
 }
 
+// Windows' default browser here is Brave, and touching Brave resets the operator's
+// extensions, cookies and settings (docs/notes/web-reading.md). `start <url>` asks
+// the default browser, so the page is opened in Edge by its full path — or not at
+// all. A browser we did not choose is worse than no browser.
+const EDGE_PATHS = [
+  'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
+  'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe',
+];
+
 function openBrowser(url) {
-  try {
-    if (process.platform === 'win32') {
-      spawn('cmd', ['/c', 'start', '""', url], { detached: true, stdio: 'ignore', windowsHide: true }).unref();
-    } else if (process.platform === 'darwin') {
-      spawn('open', [url], { detached: true, stdio: 'ignore' }).unref();
-    } else {
-      spawn('xdg-open', [url], { detached: true, stdio: 'ignore' }).unref();
+  if (process.platform !== 'win32') {
+    bootLog.warn('not opening the page: only Edge on Windows is opened, never the default browser');
+    return;
+  }
+  const edge = EDGE_PATHS.find((file) => {
+    try {
+      return fs.statSync(file).isFile();
+    } catch {
+      return false;
     }
+  });
+  if (!edge) {
+    bootLog.warn('not opening the page: Edge is not installed, and Brave is never used');
+    return;
+  }
+  try {
+    spawn(edge, [url], { detached: true, stdio: 'ignore', windowsHide: true }).unref();
   } catch (err) {
-    bootLog.warn(`could not open browser: ${err.message}`);
+    bootLog.warn(`could not open Edge: ${err.message}`);
   }
 }
 

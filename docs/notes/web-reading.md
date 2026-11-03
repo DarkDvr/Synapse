@@ -8,6 +8,26 @@ Cloudflare check — so a model asks the operator instead of inventing an answer
 Getting *past* those walls is where this note lives, because every route was measured
 and all but one are dead.
 
+## Brave is never touched
+
+Brave is the operator's browser and this machine's default. Touching it — opening a
+link through the default browser, launching it, reading or copying its profile —
+makes it reset itself: extensions uninstalled, cookies gone, every setting back to
+default. That has happened more than once, which is why the rule is absolute.
+
+So Synapse and every agent working on it use **Edge or a headless tool**:
+
+- open a URL in Edge by its full path; never `start <url>`, which is the default browser;
+- render pages with `skills/visual-review/bin/shot.mjs`, which drives Edge headless
+  in a throwaway profile under the temp folder;
+- never read, copy, move, clean or delete anything under
+  `%LOCALAPPDATA%\BraveSoftware` or `%APPDATA%\BraveSoftware`;
+- `src/permissions.js` treats those folders as credential stores, so a model's read,
+  write or command there is denied, and `src/index.js` opens Edge by path or not at all.
+
+The cookie routes below are why a profile is never opened "just to read" something,
+and Brave is the one browser where even that excuse is refused.
+
 ## Dead ends, with the evidence (2 Nov)
 
 | route | what happened |

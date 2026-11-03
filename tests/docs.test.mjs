@@ -75,6 +75,7 @@ check(
 const MUST_KEEP = [
   ['AGENTS.md', 'Never match processes by name', 'the desktop-app kill rule'],
   ['AGENTS.md', '@opencodedesktop', 'the denylist'],
+  ['AGENTS.md', 'never Brave', 'the browser rule'],
   ['AGENTS.md', 'Zero npm dependencies', 'hard rule 1'],
   ['AGENTS.md', 'Self-contained and offline', 'hard rule 2'],
   ['AGENTS.md', 'A good tenant', 'hard rule 3'],

@@ -1,6 +1,5 @@
 #!/usr/bin/env node
-// Render an HTML file or URL, measure it, and answer questions about it — with the
-// machine's own browser.
+// Render an HTML file or URL, measure it, and answer questions about it — with Edge.
 //
 // Why a script and not a pile of flags in the skill text: browser discovery,
 // quoting, a throwaway profile, a local server and waiting for the file to land are
@@ -33,9 +32,8 @@
 // judged a page that was never 390 wide. `Emulation.setDeviceMetricsOverride` sets
 // the viewport for real.
 //
-// No dependencies: Node ships `fetch` and `WebSocket`, and Edge/Chrome already
-// exist on a Windows box. If none is found we exit 2 and say so rather than
-// pretend.
+// No dependencies: Node ships `fetch` and `WebSocket`, and Edge already exists on a
+// Windows box. If it is not found we exit 2 and say so rather than pretend.
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import http from 'node:http';
@@ -43,19 +41,28 @@ import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
+// Edge, and only Edge. The machine's default browser is Brave, and touching Brave
+// resets the operator's profile; Chrome is not chosen on their behalf either. One
+// named engine, or a clear refusal.
 const BROWSERS = [
   process.env.VISUAL_REVIEW_BROWSER,
   'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',
   'C:/Program Files/Microsoft/Edge/Application/msedge.exe',
-  'C:/Program Files/Google/Chrome/Application/chrome.exe',
-  'C:/Program Files (x86)/Google/Chrome/Application/chrome.exe',
-  'C:/Program Files/BraveSoftware/Brave-Browser/Application/brave.exe',
 ].filter(Boolean);
 
 const fail = (code, message) => {
   process.stderr.write(`${message}\n`);
   process.exit(code);
 };
+
+// Even an explicit override may not point at Brave: the point of the rule is that
+// an agent in a hurry cannot opt back in.
+if (/brave/i.test(process.env.VISUAL_REVIEW_BROWSER || '')) {
+  fail(
+    2,
+    "Brave is never launched: touching it resets the operator's profile. Point VISUAL_REVIEW_BROWSER at Edge, or unset it.",
+  );
+}
 
 const USAGE = `Usage: shot.mjs <file|url> [options]
 
@@ -193,7 +200,7 @@ const browser = BROWSERS.find((p) => {
   }
 });
 if (!browser) {
-  fail(2, 'No browser found. Review the HTML/CSS structurally and say you did not see it rendered.');
+  fail(2, 'No Edge found. Review the HTML/CSS structurally and say you did not see it rendered.');
 }
 
 /**

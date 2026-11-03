@@ -154,9 +154,9 @@ export function createHousekeeping({ root = ROOT, scratchRoot = SCRATCH_ROOT, lo
   /**
    * Browser profiles the renderer left in the shared scratch.
    *
-   * Every render starts Chrome with a throwaway profile (`visual-review-<pid>-
+   * Every render starts Edge with a throwaway profile (`visual-review-<pid>-
    * <width>-<time>`) under TEMP, which for every model is the projects' scratch
-   * root. The renderer deletes it when the render ends, but on Windows Chrome
+   * root. The renderer deletes it when the render ends, but on Windows the browser
    * often still holds a file, so the folder survives — about 12 MB each, 108 of
    * them by 30 Oct. They are not work: no file in one is a project's.
    *

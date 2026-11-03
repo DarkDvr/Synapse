@@ -33,6 +33,19 @@ test('a credential store is recognised, and a similar name is not', () => {
   assert.equal(isSecret('C:/Users/tester/.sshx/id_rsa', { home: HOME }), false);
 });
 
+// Brave is the operator's browser, and touching it resets the profile. The policy
+// refuses it as a credential store, for a read, a write and a command alike, so no
+// model can reach it even to copy it.
+test('Brave and browser profiles are credential stores, refused and never asked', () => {
+  const brave = `${HOME}/AppData/Local/BraveSoftware/Brave-Browser/User Data/Default/Cookies`;
+  assert.equal(call('read', brave).effect, 'deny');
+  assert.equal(call('read', brave).scope, 'secret');
+  assert.equal(call('edit', brave).effect, 'deny');
+  assert.equal(shell(`Copy-Item "${brave}" C:\\tmp\\cookies`).effect, 'deny');
+  // Edge is the browser we do use; its profile is still not a model's to read.
+  assert.equal(call('read', `${HOME}/AppData/Local/Microsoft/Edge/User Data/Default/Cookies`).effect, 'deny');
+});
+
 // ── file writes ─────────────────────────────────────────────────
 test('a write inside the workspace is allowed, relative or absolute', () => {
   assert.equal(call('edit', 'src/app.js').effect, 'allow');

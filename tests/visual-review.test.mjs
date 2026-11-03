@@ -22,6 +22,27 @@ test('--help prints the usage and exits 0, without needing a page', () => {
   assert.match(r.stdout, /--widths/);
 });
 
+// Brave resets the operator's profile when anything touches it, so the renderer
+// names Edge and no other browser — and an override cannot point it back at Brave.
+test('the renderer uses Edge and never Brave', () => {
+  const source = fs.readFileSync(SHOT, 'utf8');
+  assert.match(source, /Microsoft\/Edge\/Application\/msedge\.exe/);
+  assert.doesNotMatch(source, /Brave-Browser|brave\.exe/i);
+});
+
+test('an override pointing at Brave is refused before a page is touched', () => {
+  const r = spawnSync(process.execPath, [SHOT, 'page.html'], {
+    encoding: 'utf8',
+    timeout: 60000,
+    env: {
+      ...process.env,
+      VISUAL_REVIEW_BROWSER: 'C:/Program Files/BraveSoftware/Brave-Browser/Application/brave.exe',
+    },
+  });
+  assert.equal(r.status, 2);
+  assert.match(r.stderr, /Brave is never launched/);
+});
+
 test('an unknown option is refused, never treated as the target', () => {
   const r = run('--help-typo', 'somewhere.html');
   assert.equal(r.status, 1);
