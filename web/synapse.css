@@ -1826,7 +1826,14 @@ body[data-mode="single"] #runAuto { display: none; }
   overflow: hidden;
   width: 100%;
 }
-.ask-head { display: flex; align-items: center; gap: 8px; flex: none; padding-right: 104px; }
+.ask-head { display: flex; align-items: center; gap: 8px; flex: none; padding-right: 0; }
+/* The floating jump buttons sit in the transcript's top corner, and the question
+   lands at the top — so when they are actually showing, the note steps aside.
+   104px is their width plus the gap. When they are hidden (which is most of the
+   time) the note sits flush with the panel's right edge, which is where the
+   operator expects a right-aligned line to end (reported 3 Nov: it stopped 104px
+   short for a nav that was not on screen). */
+body:has(.chat-nav:not([hidden])) .ask-head { padding-right: 104px; }
 .ask-dot {
   flex: none; width: 7px; height: 7px; border-radius: 50%;
   background: var(--orange); box-shadow: 0 0 0 3px rgba(255, 125, 26, 0.18);

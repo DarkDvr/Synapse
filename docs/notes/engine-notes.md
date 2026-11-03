@@ -1648,3 +1648,18 @@ existing 20-second countdown with Cancel. A cancel starts the whole wait again
 rather than re-arming on the next sweep; a run that starts cancels it outright.
 The countdown is still armed by `armPowerCountdown` in `src/api.js`, which shares
 `clearPower`, the guards and the Cancel with the old path.
+
+### The form list is scoped by directory (3 Nov)
+
+Auto-Answer never fired, with the old Full auto switch either. The reason was not
+the answering: it was the listing. `GET /api/form` is scoped by the
+`x-opencode-directory` header, and Synapse asked from the **workspace root**, where
+the answer is always `[]` — so the sweep had nothing to answer, forever, and said
+nothing because "no forms" is also the normal state.
+
+Measured: the same sweep pointed at the form's own directory answered immediately
+(`answered: 1`). The server now passes `formsEverywhere` (`src/api.js`) to
+`createFormAuto`, which asks every known session and every active one for its own
+forms and de-duplicates by form id. Anything else that lists engine objects by
+directory — sessions are fine, they are listed by project — has to be checked the
+same way, because an empty list looks exactly like a quiet machine.

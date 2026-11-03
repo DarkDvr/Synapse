@@ -17,6 +17,10 @@ export function createFormAuto({
   engine,
   logger,
   onAnswered,
+  // Where the pending forms come from. The default asks the engine once, which is
+  // scoped by the request's directory and therefore empty for Synapse; the server
+  // passes a provider that asks every session (src/api.js). See docs/notes.
+  listForms = null,
   timeoutMs = FULL_AUTO_MS,
   getTimeoutMs = null,
   now = Date.now,
@@ -120,7 +124,7 @@ export function createFormAuto({
     try {
     let forms;
     try {
-      forms = await engine.listForms();
+      forms = listForms ? await listForms() : await engine.listForms();
     } catch {
       return { answered: 0, waiting: 0 };
     }

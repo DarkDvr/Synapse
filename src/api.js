@@ -628,6 +628,36 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
     return open;
   }
 
+  /**
+   * Every pending form, whichever chat asked it.
+   *
+   * The engine scopes its list by the request's directory header, and Synapse asks
+   * from the workspace root — where the answer is always an empty array. That is
+   * why Auto-Answer never fired, with the old single switch either (found 3 Nov:
+   * the same sweep with the form's own directory answered at once). So ask each
+   * known session, and each active one, for its own forms.
+   */
+  async function formsEverywhere() {
+    const [sessions, active] = await Promise.all([
+      safe(() => engine.listSessions(), []),
+      safe(() => engine.listActiveSessions(), []),
+    ]);
+    const ids = new Set();
+    for (const s of sessions || []) if (s?.id) ids.add(s.id);
+    for (const id of active || []) if (id) ids.add(typeof id === 'string' ? id : id.id);
+    const lists = await Promise.all([...ids].map((id) => safe(() => engine.listForms(id), [])));
+    const out = [];
+    const seen = new Set();
+    for (const list of lists) {
+      for (const form of list || []) {
+        if (!form?.id || seen.has(form.id)) continue;
+        seen.add(form.id);
+        out.push(form);
+      }
+    }
+    return out;
+  }
+
   // Auto-Answer for questions. The permission gate handles permission cards; this
   // handles forms, on the same switch and the same minute. It records the answer
   // exactly as an operator reply would: the question-loop history, the form
@@ -635,6 +665,7 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
   const formAuto = createFormAuto({
     engine,
     logger,
+    listForms: formsEverywhere,
     getTimeoutMs: () => answerTimeoutMs(getConfig()),
     onAnswered: async ({ form, sessionId, answer }) => {
       const signature = formSignature(form);

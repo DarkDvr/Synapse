@@ -334,8 +334,12 @@ test('the Architect’s live reasoning is drawn inside its own post', () => {
 
 test('jumping to the question puts it at the top of the chat', () => {
   const js = read('web/app.js');
-  // The 46px landing was a workaround for the floating buttons covering the header;
-  // the header now reserves room for them instead.
+  // The 46px landing was a workaround for the floating buttons covering the header.
   assert.match(js, /const top = Math\.max\(0, tops\[next\] - 10\);/);
-  assert.match(read('web/synapse.css'), /\.ask-head \{[^}]*padding-right:\s*104px/);
+  const css = read('web/synapse.css');
+  // The note is flush with the panel's right edge — it used to stop 104px short for
+  // jump buttons that are usually not on screen (reported 3 Nov). When they *are*
+  // showing, the head steps aside instead.
+  assert.match(css, /\.ask-head \{[^}]*padding-right:\s*0/);
+  assert.match(css, /body:has\(\.chat-nav:not\(\[hidden\]\)\) \.ask-head \{ padding-right: 104px; \}/);
 });
