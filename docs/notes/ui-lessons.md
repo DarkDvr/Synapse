@@ -1349,7 +1349,11 @@ whether a given paragraph is "the answer".
   are the project's (Keep Building, Auto-Permissions, Auto-Answer, Auto-Shutdown),
   each with a one-line hint naming the wait in Settings → Automation; the cog is
   green while any of them is on. A toast after a toggle repeats the hint, so the
-  switch explains itself where it is flipped rather than in a manual.
+  switch explains itself where it is flipped rather than in a manual. **Its own
+  listener closed it**: a capture-phase `scroll` handler on `window` dismisses the
+  menu "when the page moves", and the transcript scrolls on every streamed line —
+  so during a run the menu vanished the instant it opened. Scroll does not bubble,
+  so the same listener without capture hears only the page, which is what was meant.
 - **The tabs are the app's own nouns.** One column of
   fourteen sections gave the server port and the log retention the same weight,
   and the Providers list needed a wider window than 640px. The rail is
