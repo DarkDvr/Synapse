@@ -10,7 +10,7 @@
 // The switch lives in the session metadata (`synapse.automation.autoAnswer`), read
 // through src/automation.js so a chat saved under the older `fullAuto` name keeps
 // its behaviour.
-import { autoAnswerFor, FULL_AUTO_MS, formPages } from './auto-answer.js';
+import { autoAnswerFor, FULL_AUTO_MS, formPages, recommendedOptions } from './auto-answer.js';
 import { readAutomation } from './automation.js';
 
 export function createFormAuto({
@@ -156,6 +156,22 @@ export function createFormAuto({
       if (!answer) {
         settled.add(id);
         continue;
+      }
+      // A single-choice question can carry only one answer; a model that marked two
+      // options Recommended asked something contradictory. The first is taken (it is
+      // the top of the rows the operator would have seen), and the log says so —
+      // otherwise the other recommendation looks like a harness bug (Test4, 3 Nov:
+      // Sydney and San Francisco both recommended, one answer came back).
+      for (const field of form.fields || []) {
+        if (!field || field.hidden || field.type === 'external' || field.type === 'multiselect') continue;
+        const marked = recommendedOptions(field);
+        if (marked.length > 1) {
+          log?.warn(
+            `auto-answer took "${marked[0]?.label || marked[0]?.value}" from a single-choice question that marks ${marked.length} options recommended (${marked
+              .map((o) => o?.label || o?.value)
+              .join(', ')}): "${String(field.title || field.key || '').slice(0, 80)}"`,
+          );
+        }
       }
       try {
         await engine.replyForm(sessionId, id, answer);

@@ -5,8 +5,14 @@
 // recommendation the first option is the top row the operator would have seen.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-import { autoAnswerFor } from '../src/auto-answer.js';
+import { autoAnswerFor, recommendedOptions } from '../src/auto-answer.js';
+
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
 
 const option = (label, value = label) => ({ label, value });
 
@@ -60,4 +66,65 @@ test('a form with nothing answerable is null', () => {
   assert.equal(autoAnswerFor({ fields: [] }), null);
   assert.equal(autoAnswerFor({}), null);
   assert.equal(autoAnswerFor(null), null);
+});
+
+// The matrix that was missing (3 Nov). Every shape the engine can hand us, so a
+// change to one branch cannot quietly break another — this is what "surface-level
+// testing" looked like the one time it mattered.
+test('every field shape, and every recommendation count', () => {
+  const cases = [
+    {
+      name: 'single choice, one recommended in the middle',
+      field: { key: 'q', type: 'string', options: [option('A', 'a'), option('B (Recommended)', 'b'), option('C', 'c')] },
+      want: { q: 'b' },
+    },
+    {
+      name: 'single choice, two recommended — the first wins, the answer stays one value',
+      field: {
+        key: 'q',
+        type: 'string',
+        options: [option('Sydney (Recommended)', 'syd'), option('Rome', 'rome'), option('San Francisco (Recommended)', 'sf')],
+      },
+      want: { q: 'syd' },
+    },
+    {
+      name: 'single choice, none recommended — the top row',
+      field: { key: 'q', type: 'string', options: [option('First', '1'), option('Second', '2')] },
+      want: { q: '1' },
+    },
+    {
+      name: 'multi-select, every recommended option is taken',
+      field: {
+        key: 'q',
+        type: 'multiselect',
+        options: [option('Sydney (Recommended)', 'syd'), option('Rome', 'rome'), option('San Francisco (Recommended)', 'sf')],
+      },
+      want: { q: ['syd', 'sf'] },
+    },
+    {
+      name: 'multi-select, no recommendation — one row, never an empty list',
+      field: { key: 'q', type: 'multiselect', options: [option('A', 'a'), option('B', 'b')] },
+      want: { q: ['a'] },
+    },
+    { name: 'boolean is true', field: { key: 'q', type: 'boolean' }, want: { q: true } },
+    { name: 'number takes its default', field: { key: 'q', type: 'number', default: 7 }, want: { q: 7 } },
+    { name: 'number with no default is null', field: { key: 'q', type: 'number' }, want: { q: null } },
+    { name: 'free text takes its default', field: { key: 'q', type: 'string', default: 'Ada' }, want: { q: 'Ada' } },
+    { name: 'free text with no default is empty', field: { key: 'q', type: 'string' }, want: { q: '' } },
+  ];
+  for (const c of cases) {
+    assert.deepEqual(autoAnswerFor({ fields: [c.field] }), c.want, c.name);
+  }
+});
+
+test('a contradictory single-choice question is reported, not silently halved', () => {
+  const field = {
+    key: 'q',
+    type: 'string',
+    options: [option('Sydney (Recommended)', 'syd'), option('San Francisco (Recommended)', 'sf')],
+  };
+  assert.equal(recommendedOptions(field).length, 2, 'both recommendations are visible to the caller');
+  // The server logs it: a single-choice question with two recommendations is the
+  // model contradicting itself, and the operator should see that reason.
+  assert.match(read('src/form-auto.js'), /single-choice question that marks/);
 });

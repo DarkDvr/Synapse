@@ -67,6 +67,13 @@ export function formPages(form) {
 const isRecommended = (option) =>
   /\(recommended\)/i.test(String(option?.label || '')) || /\(recommended\)/i.test(String(option?.value || ''));
 
+/** The options a model marked Recommended. Exported so the server can say when a
+ *  single-choice question carries more than one — a contradiction the harness
+ *  cannot honour, and one the operator should see rather than discover. */
+export function recommendedOptions(field) {
+  return (Array.isArray(field?.options) ? field.options : []).filter(isRecommended);
+}
+
 /** The answer object for one form, in the engine's reply shape. Null if the form
  *  asks nothing answerable (no fields, or only external/hidden ones). */
 export function autoAnswerFor(form) {
