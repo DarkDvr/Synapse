@@ -8765,9 +8765,15 @@ document.addEventListener('keydown', (e) => {
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') closeRunMenu();
   });
-  // A fixed menu does not travel with the button: close it when the page moves.
+  // A fixed menu does not travel with the button: close it when the *page* moves.
   window.addEventListener('resize', () => closeRunMenu());
-  window.addEventListener('scroll', () => closeRunMenu(), true);
+  // Not the transcript, though. It is a capture listener here that closed the menu
+  // the instant it opened during a run: the chat scrolls on every streamed line,
+  // and a capture-phase scroll handler on window hears that too (measured 3 Nov —
+  // the four switches could not be read while a turn was live). The cog sits in the
+  // composer, which does not scroll with the conversation, so only the page's own
+  // scroll should dismiss it — and scroll does not bubble to window without capture.
+  window.addEventListener('scroll', () => closeRunMenu());
   $('menuBtn').addEventListener('click', () => $('sidebar').classList.toggle('open'));
   $('emptyNewProject').addEventListener('click', addProject);
   $('addProjectBtn').addEventListener('click', addProject);
