@@ -1916,3 +1916,14 @@ window, and both would have shipped as "works on my machine".
   saves the machine, which is also the safety net if the Cancel click never lands.
 
 
+- **A countdown that never moves is a claim nobody can check.** The question's head
+  said "Auto-Answer replies in 30s" and the 30 never changed, so a sweep that was
+  broken looked exactly like one that was about to fire. The server now says *when*
+  (`autoAnswerAt`, from the moment its sweep first saw the form) and the page ticks
+  the sentence down once a second, writing only that line — never rebuilding the
+  panel, which would clear an answer the operator had already given.
+- **A reserve for a control the operator does not want is a gap.** The question's
+  head held 104px clear on its right for the floating jump buttons. They sit above
+  the card and the chat scrolls, so the space was only a note that stopped short of
+  the edge it should touch. The head is flush now; the buttons overlap nothing that
+  matters.
