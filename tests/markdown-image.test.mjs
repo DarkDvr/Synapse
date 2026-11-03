@@ -13,7 +13,14 @@ test('a local image becomes a chip carrying its path, not an inline picture', ()
   assert.match(html, /class="chat-image"/);
   assert.match(html, /data-src=".synapse\/shots\/mock.png"/);
   assert.match(html, /the mock/);
+  assert.match(html, /class="chat-image-tag"[^>]*>PNG</, 'the tag is the extension');
   assert.doesNotMatch(html, /<img/);
+});
+
+test('the tag is the file extension, JPEG for both spellings', () => {
+  assert.match(renderMarkdown('![a](x.jpg)'), />JPEG</);
+  assert.match(renderMarkdown('![a](x.jpeg)'), />JPEG</);
+  assert.match(renderMarkdown('![a](x.png)'), />PNG</);
 });
 
 test('a picture on its own line follows the sentence it illustrates', () => {

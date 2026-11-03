@@ -2107,6 +2107,8 @@ body[data-mode="single"] #runAuto { display: none; }
   cursor: default;
 }
 .chat-image:hover { border-color: var(--violet); }
+/* A file that is not a picture has no preview to promise. */
+.chat-image.is-file:hover { border-color: var(--violet-line); }
 .chat-image-tag { font-size: 0.85em; letter-spacing: 0.08em; color: #9aa0a8; }
 .chat-image-name { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 

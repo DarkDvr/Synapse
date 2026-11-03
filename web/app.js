@@ -4613,19 +4613,21 @@ function renderMessage(m, tail = '') {
       ? `<span class="msg-files">${files
           .map((f, index) => {
             const name = esc(shortName(f.name));
+            const tag = fileTag(f.name, f.mime);
             // A picture the operator attached is the same chip the models get:
             // one line, and the bytes on hover. The bytes stay in the message's
             // raw record — the chip carries the message and index, not a second
-            // copy of the base64.
-            if (
-              (/^image\//i.test(f.mime || '') || /\.(png|jpe?g|webp|gif)$/i.test(f.name || '')) &&
-              attachmentImage(m, index)
-            ) {
+            // copy of the base64. Any other file uses the chip without a hover.
+            const image = (/^image\//i.test(f.mime || '') || /\.(png|jpe?g|webp|gif)$/i.test(f.name || '')) &&
+              Boolean(attachmentImage(m, index));
+            if (image) {
               return `<span class="chat-image" data-msg="${esc(m.id || '')}" data-file="${index}" data-alt="${esc(f.name)}" title="${name}">` +
-                '<span class="chat-image-tag" aria-hidden="true">IMG</span>' +
+                `<span class="chat-image-tag" aria-hidden="true">${esc(tag)}</span>` +
                 `<span class="chat-image-name">${name}</span></span>`;
             }
-            return `<span class="msg-file" title="${esc(f.name)}">${name}</span>`;
+            return `<span class="chat-image is-file" title="${esc(f.name)}">` +
+              `<span class="chat-image-tag" aria-hidden="true">${esc(tag)}</span>` +
+              `<span class="chat-image-name">${name}</span></span>`;
           })
           .join('')}</span>`
       : '';
@@ -6656,6 +6658,18 @@ async function sendSteer(text, files, target) {
   } finally {
     renderComposer();
   }
+}
+
+/** The tag a chip carries: the file's extension, not a generic word. PNG says
+ *  more than IMG about what the operator is about to open. */
+function fileTag(name, mime) {
+  const clean = String(name || '').split(/[?#]/)[0];
+  const dot = clean.lastIndexOf('.');
+  const ext = dot > 0 ? clean.slice(dot + 1).toLowerCase() : '';
+  if (ext) return ext === 'jpg' || ext === 'jpeg' ? 'JPEG' : ext.toUpperCase();
+  const sub = String(mime || '').split('/')[1] || '';
+  if (sub) return sub === 'jpeg' ? 'JPEG' : sub.toUpperCase();
+  return 'FILE';
 }
 
 /**

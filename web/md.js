@@ -49,11 +49,14 @@ function inline(source) {
     if (!/\.(png|jpe?g|webp|gif)(?:[?#].*)?$/i.test(src)) return alt;
     // A local picture is a model showing the operator its work. Inline would
     // spend a dozen lines of chat on a thumbnail nobody asked to see yet, so it
-    // is a chip in the sentence and the picture itself on hover.
+    // is a chip in the sentence and the picture itself on hover. The tag is the
+    // file's own extension: PNG says more than IMG about what will open.
     const name = alt || src.split('/').filter(Boolean).pop() || 'image';
+    const ext = (src.split(/[?#]/)[0].split('.').pop() || '').toUpperCase();
+    const tag = ext === 'JPG' ? 'JPEG' : ext || 'IMG';
     return (
       `<span class="chat-image" data-src="${src}" data-alt="${alt}" title="${name}">` +
-      `<span class="chat-image-tag" aria-hidden="true">IMG</span>` +
+      `<span class="chat-image-tag" aria-hidden="true">${tag}</span>` +
       `<span class="chat-image-name">${name}</span></span>`
     );
   });
