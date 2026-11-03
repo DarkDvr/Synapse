@@ -6953,6 +6953,7 @@ function showAttachPreview(id) {
   const f = (state.attachments || []).find((a) => a.id === id);
   const chip = document.querySelector(`.attach-chip[data-attach="${CSS.escape(String(id))}"]`);
   if (!box || !img || !name || !f || !chip) return;
+  box.classList.remove('is-large');
   img.src = `data:${f.mime};base64,${f.data}`;
   name.textContent = f.name;
   box.hidden = false;
@@ -6965,7 +6966,47 @@ function showAttachPreview(id) {
 
 function hideAttachPreview() {
   const box = $('attachPreview');
-  if (box) box.hidden = true;
+  if (!box) return;
+  box.hidden = true;
+  box.classList.remove('is-large');
+  const img = $('attachPreviewImg');
+  if (img) img.onload = null;
+}
+
+/** Where the route reads a chat chip's picture from: inside the open project,
+ *  never a path the page made up. The server checks the folder again. */
+function chatImageUrl(chip) {
+  const project = currentProject();
+  const dir = project?.directory;
+  const rel = String(chip?.dataset?.src || '').replace(/^[\\/]+/, '');
+  if (!dir || !rel) return '';
+  return `/api/image?dir=${encodeURIComponent(dir)}&path=${encodeURIComponent(rel)}`;
+}
+
+/** The picture behind a chat chip, full size and centred, above the chip. */
+function showChatImagePreview(chip) {
+  const box = $('attachPreview');
+  const img = $('attachPreviewImg');
+  const name = $('attachPreviewName');
+  const src = chatImageUrl(chip);
+  if (!box || !img || !name || !src) return;
+  name.textContent = chip.dataset.alt || String(chip.dataset.src || '').split('/').pop() || '';
+  box.classList.add('is-large');
+  box.hidden = false;
+  // The size is known only after the bytes arrive, so the place is computed
+  // twice: now, and again when the picture has loaded.
+  img.onload = () => { if (!box.hidden) placeChatPreview(chip); };
+  img.src = src;
+  placeChatPreview(chip);
+}
+
+function placeChatPreview(chip) {
+  const box = $('attachPreview');
+  if (!box || !chip) return;
+  const c = chip.getBoundingClientRect();
+  const b = box.getBoundingClientRect();
+  box.style.left = `${Math.round(Math.max(8, (window.innerWidth - b.width) / 2))}px`;
+  box.style.top = `${Math.round(Math.max(8, c.top - b.height - 10))}px`;
 }
 
 function fmtBytes(n) {
@@ -8358,13 +8399,18 @@ function updateSettingsFoot() {
   const busy = Boolean(state.updateBusy);
   const apply = $('applySettings');
   if (apply) apply.disabled = !dirty || needsRestart || busy;
+  // Cancel has nothing to throw away until the form differs from the file; a red
+  // button that only closes is a promise the window cannot keep.
+  const cancel = $('cancelSettings');
+  if (cancel) cancel.disabled = !dirty || busy;
   const primary = $('settingsPrimary');
   if (!primary) return;
   primary.disabled = busy;
   primary.textContent = dirty ? (needsRestart ? 'Save & Restart' : 'Save & Close') : 'Close';
   primary.dataset.action = dirty ? (needsRestart ? 'save-restart' : 'save-close') : 'close';
   primary.className =
-    'btn btn-sm' + (dirty ? (needsRestart ? ' btn-outline-red' : ' btn-outline-green') : ' btn-secondary');
+    'btn btn-sm' +
+    (dirty ? (needsRestart ? ' btn-outline-red' : ' btn-green-solid') : ' btn-secondary');
 }
 
 /** The visible pane's controls into the draft. Called before switching tabs and
@@ -8943,6 +8989,16 @@ function wire() {
   });
   $('attachStrip').addEventListener('mouseout', (e) => {
     const chip = e.target.closest('.attach-chip');
+    if (chip && !chip.contains(e.relatedTarget)) hideAttachPreview();
+  });
+  // A picture a model put in its answer: the chip is the sentence, the picture
+  // is what hovering it shows. Delegated, because the transcript re-renders.
+  $('transcript')?.addEventListener('mouseover', (e) => {
+    const chip = e.target.closest('.chat-image');
+    if (chip) showChatImagePreview(chip);
+  });
+  $('transcript')?.addEventListener('mouseout', (e) => {
+    const chip = e.target.closest('.chat-image');
     if (chip && !chip.contains(e.relatedTarget)) hideAttachPreview();
   });
   $('stopBtn').addEventListener('click', interrupt);

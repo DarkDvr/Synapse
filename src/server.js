@@ -4,7 +4,7 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { WEB_DIR } from './paths.js';
+import { WEB_DIR, WORKSPACE_DIR } from './paths.js';
 import { isLoopback, isPrivateAddress, parseCookies, tokenMatches, loginPage, REMOTE_COOKIE } from './remote.js';
 import { createPresence } from './presence.js';
 
@@ -140,9 +140,76 @@ export function createServer({ api, engine, logger, config, remote, onRemote }) 
     });
   }
 
+  const IMAGE_MIME = {
+    '.png': 'image/png',
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.webp': 'image/webp',
+    '.gif': 'image/gif',
+  };
+
+  /**
+   * A picture a model put in its answer.
+   *
+   * The transcript holds a chip with a project-relative path; the bytes are read
+   * here, read-only, and only from inside the projects root. Nothing is copied:
+   * the file is the model's own screenshot, and the hold on it is the message —
+   * compact the transcript and the chip goes with it. SVG is deliberately not in
+   * the list: it is a document, not a picture, and serving one inline is a script
+   * in the operator's page.
+   */
+  function sendProjectImage(res, query) {
+    const root = path.resolve(WORKSPACE_DIR);
+    const base = path.resolve(String(query?.get('dir') || ''));
+    const rel = String(query?.get('path') || '').replace(/^[\\/]+/, '');
+    const inside = (child, parent) => {
+      const c = process.platform === 'win32' ? child.toLowerCase() : child;
+      const p = process.platform === 'win32' ? parent.toLowerCase() : parent;
+      return c === p || c.startsWith(p + path.sep) || c.startsWith(`${p}/`);
+    };
+    if (!inside(base, root)) {
+      res.writeHead(403, { 'content-type': 'text/plain' });
+      res.end('outside the projects root');
+      return;
+    }
+    const file = path.resolve(base, rel);
+    const type = IMAGE_MIME[path.extname(file).toLowerCase()];
+    if (!type || !inside(file, base)) {
+      res.writeHead(403, { 'content-type': 'text/plain' });
+      res.end('not an image in the project');
+      return;
+    }
+    fs.realpath(file, (err, real) => {
+      if (err || !inside(real, root)) {
+        res.writeHead(404, { 'content-type': 'text/plain' });
+        res.end('Not found');
+        return;
+      }
+      fs.stat(real, (statErr, st) => {
+        if (statErr || !st.isFile() || st.size > 24 * 1024 * 1024) {
+          res.writeHead(404, { 'content-type': 'text/plain' });
+          res.end('Not found');
+          return;
+        }
+        res.writeHead(200, {
+          'content-type': type,
+          'content-length': st.size,
+          'cache-control': 'no-store',
+          'x-content-type-options': 'nosniff',
+        });
+        fs.createReadStream(real).pipe(res);
+      });
+    });
+  }
+
   async function handleApi(req, res, pathname, query) {
     const { method } = req;
     const seg = pathname.replace(/^\/api\/?/, '').split('/').filter(Boolean);
+
+    // GET /api/image?dir=…&path=… — a picture a model showed in its answer.
+    // Read-only, images only, inside the projects root; the chat holds the chip,
+    // not the bytes.
+    if (seg[0] === 'image' && seg.length === 1 && method === 'GET') return sendProjectImage(res, query);
 
     // GET /api/stream
     if (seg[0] === 'stream' && method === 'GET') {

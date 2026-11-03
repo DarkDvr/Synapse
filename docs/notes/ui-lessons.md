@@ -1209,6 +1209,15 @@ whether a given paragraph is "the answer".
   Log gets a `### attachment` line, and every brief names the folder. The inline
   attachment is still what the model reads that turn. Tested live: after a compact,
   the new session listed `.synapse/attachments/` and quoted the kept file.
+- **A picture a model shows is a chip, and the picture is the hover (3 Nov).** A
+  markdown image with a project-relative path — `![the mock](.synapse/shots/mock.png)`
+  — is not rendered inline: it is one violet chip in the sentence, and hovering it
+  shows the picture full size, centred above the chip. Inline put a wall of chat on
+  screen for every screenshot; the chip costs a line and the operator chooses to
+  look. The bytes come through `/api/image`, which serves only images inside the
+  projects root (no SVG, 24 MB cap, realpath checked). Nothing is copied: the chip
+  dies with the message at a compaction, and the file is the model's own scratch
+  shot rather than a second copy Synapse made.
 - **The finish-line flag became a cog with two switches (28 Oct).** "Keep running"
   and the new "Full auto" live in a small menu above the button. The icon is the
   familiar settings gear, not a sun-like path: it has to read as a cog at 18px.

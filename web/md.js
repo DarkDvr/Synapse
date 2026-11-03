@@ -40,9 +40,22 @@ function inline(source) {
   // Images before links: otherwise the link rule eats the [alt](src) part and
   // leaves a stray "!".
   t = t.replace(/!\[([^\]]*)\]\(([^)\s]+)\)/g, (_, alt, src) => {
-    const safe = /^(https?:\/\/|data:image\/|mailto:|\/|#)/i.test(src) ? src : '#';
-    if (safe === '#') return alt;
-    return `<img src="${safe}" alt="${alt}" loading="lazy" />`;
+    if (/^(https?:\/\/|data:image\/)/i.test(src)) {
+      return `<img src="${src}" alt="${alt}" loading="lazy" />`;
+    }
+    if (/^(mailto:|\/\/|#)/i.test(src)) return alt;
+    // Only something that names an image file is a local picture. A stray
+    // `javascript:` or a relative page link is not a chip.
+    if (!/\.(png|jpe?g|webp|gif)(?:[?#].*)?$/i.test(src)) return alt;
+    // A local picture is a model showing the operator its work. Inline would
+    // spend a dozen lines of chat on a thumbnail nobody asked to see yet, so it
+    // is a chip in the sentence and the picture itself on hover.
+    const name = alt || src.split('/').filter(Boolean).pop() || 'image';
+    return (
+      `<span class="chat-image" data-src="${src}" data-alt="${alt}" title="${name}">` +
+      `<span class="chat-image-tag" aria-hidden="true">IMG</span>` +
+      `<span class="chat-image-name">${name}</span></span>`
+    );
   });
 
   t = t.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_, label, href) => {

@@ -930,6 +930,14 @@ export function briefSession({ dir, role = 'architect', auto = false, single = f
         ? `QC: all ${QC_ROUNDS} independent QC rounds for this plan are spent. Do not plan another QC task — settle any check yourself and say in the plan that you did.`
         : `QC: ${qcSpent} of ${QC_ROUNDS} independent QC rounds spent for this plan. A QC task will run if you delegate it; a finished plan starts a new allowance.`,
     );
+    // Showing the operator something is a sentence, not a wall of pixels. The
+    // chat turns a local image into a chip and shows the picture on hover; the
+    // chip is temporary with the message, so nothing is copied or kept.
+    lines.push(
+      `To show the operator a picture, keep the image in the project (screenshots belong in .synapse/shots) and ` +
+        `write it as markdown: ![what it shows](.synapse/shots/shot.png). It appears as a chip in your message, ` +
+        `and the picture full size when the operator hovers it. Never paste image data into a message.`,
+    );
   }
 
   // Single mode is not this harness at all: it is a chat that can use tools. No
