@@ -335,7 +335,7 @@
     },
     "coder-3": {
       "ref": "opencode-go/deepseek-v4.1-flash",
-      "variant": "high",
+      "variant": "max",
       "skills": [
         "code-craft",
         "visual-review"
