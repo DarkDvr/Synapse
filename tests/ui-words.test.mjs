@@ -70,7 +70,9 @@ test('a permission chip is keyed by the tool call, never the request', () => {
 test('the click that wakes the window cannot answer a permission', () => {
   const js = read('web/app.js');
   assert.match(js, /function wakeClick\(\)/);
-  assert.equal((js.match(/if \(wakeClick\(\)\)/g) || []).length, 2, 'Allow/Reject and Stop Run both guard');
+  // Allow/Reject, Stop Run, and Reject With Reason all guard: every one of them
+  // changes what the run does, and the click that wakes a window is not a decision.
+  assert.equal((js.match(/if \(wakeClick\(\)\)/g) || []).length, 3, 'all three card actions guard');
   assert.match(js, /addEventListener\('focus', \(\) => \{ state\.focusAt = Date\.now\(\); \}\)/);
 });
 
@@ -272,7 +274,10 @@ test('a pending question takes the composer, and leaves Stop as the way out', ()
   const js = read('web/app.js');
   const block = /for \(const id of \['attachBtn', 'modeToggle', 'runBtn'\]\) \{([\s\S]*?)\}/.exec(js);
   assert.ok(block, 'the composer controls are switched off together');
-  assert.match(block[1], /disabled = asking/);
+  // `blocked` is a question *or* a pending permission: both mean the turn cannot
+  // read a message until the operator answers (3 Nov).
+  assert.match(block[1], /disabled = blocked/);
+  assert.match(js, /const blocked = asking \|\| awaitingPermission;/);
   assert.doesNotMatch(block[1], /stopBtn/, 'Stop stays live: it is the way out of a question nobody can answer');
 });
 

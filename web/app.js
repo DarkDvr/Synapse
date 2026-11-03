@@ -4985,30 +4985,17 @@ function renderPermissions() {
         : '';
       const due = Number(p.autoPermissionsAt) || null;
       return `<div class="perm-card">
-        <div class="perm-head"><span class="status-dot warn" role="img" aria-label="waiting"></span>${esc(
+        <div class="perm-head"><span class="status-dot warn" role="img" aria-label="waiting"></span><span class="perm-head-text">${esc(
           actor,
-        )} needs your permission${task ? `<span class="perm-who">${esc(task)}</span>` : ''}</div>
+        )} needs your permission</span>${
+          // The switch is on for the asking project: count down to the moment it is
+          // allowed, in the head's right corner like the question's own note (3 Nov).
+          due ? `<span class="perm-head-note" data-perm-due="${due}">${esc(permissionNote(due))}</span>` : ''
+        }${task ? `<span class="perm-who">${esc(task)}</span>` : ''}</div>
         <p class="perm-lead">${esc(permissionLead(p))}</p>
         ${paths.length ? `<pre class="perm-res">${esc(paths.join('\n'))}</pre>` : ''}
         ${p.reason ? `<p class="perm-why">${esc(p.reason)}</p>` : ''}
         ${diff}
-        <p class="perm-note">${
-          // The switch is on for the asking project: count down to the moment it is
-          // allowed, the same way a question's head does (3 Nov).
-          due ? `<span class="perm-auto" data-perm-due="${due}">${esc(permissionNote(due))}</span>` : ''
-        }${p.role && p.role !== 'architect'
-          ? 'Nothing has happened yet. You can still say no.'
-          : 'Nothing has happened yet. You can still say no — say why in the chat; the Architect is reading it.'}</p>
-        <!-- Only a rejection carries this, and only to a worker: the reply route
-             drops a message (measured), so Synapse sends the refusal as a
-             synthetic note beside the tool result instead. The Architect needs no
-             field — the operator is in its chat, and an extra synthetic turn
-             ended one of its reports empty. Optional on purpose: a reason is a
-             sentence you have, not a form to fill in. -->
-        ${p.role && p.role !== 'architect'
-          ? `<input class="perm-reason" data-perm-reason="${esc(p.requestId)}" maxlength="300"
-               placeholder="If you reject, say why — ${esc(actor)} reads it" autocomplete="off" />`
-          : ''}
         <div class="perm-actions">
           <button class="btn btn-allow btn-sm" data-perm="once" data-perm-id="${esc(
             p.requestId,
@@ -5023,6 +5010,9 @@ function renderPermissions() {
           <button class="btn btn-warn btn-sm" data-perm="reject" data-perm-id="${esc(
             p.requestId,
           )}" title="Say no. The role is told and carries on.">Reject</button>
+          <button class="btn btn-warn btn-sm" data-perm-reason-open="${esc(
+            p.requestId,
+          )}" title="Say no, and tell the role why in your own words.">Reject With Reason</button>
           <button class="btn btn-stop btn-sm" data-perm-stop="${esc(
             p.requestId,
           )}" title="Stop the whole task.">Stop Run</button>
@@ -6256,19 +6246,20 @@ async function renderProbe() {
   }
 }
 
-async function replyPermission(requestId, decision) {
-  // The card can belong to a hidden worker session, not the open one. Answering
+async function replyPermission(requestId, decision, reasonText = '') {  // The card can belong to a hidden worker session, not the open one. Answering
   // it on the open session would fail with a request id the engine never saw.
   const permission = (state.permissions || []).find((p) => p.requestId === requestId);
   const sessionId = permission?.sessionId || state.sessionId;
-  // Read the reason before the card is gone: the input is inside the card this
-  // call removes. Only a refusal sends one — an allow has nothing to explain.
-  const reason = decision === 'reject'
-    ? String(document.querySelector(`[data-perm-reason="${CSS.escape(requestId)}"]`)?.value || '')
-        .replace(/\s+/g, ' ')
-        .trim()
-        .slice(0, 300)
-    : '';
+  // A refusal may carry the operator's own sentence, typed in the dialog that
+  // "Reject With Reason" opens. Only a refusal sends one — an allow has nothing to
+  // explain.
+  const reason =
+    decision === 'reject'
+      ? String(reasonText || '')
+          .replace(/\s+/g, ' ')
+          .trim()
+          .slice(0, 300)
+      : '';
   state.permissions = state.permissions.filter((p) => p.requestId !== requestId);
   renderTranscript();
   try {
@@ -6280,6 +6271,45 @@ async function replyPermission(requestId, decision) {
   } catch (err) {
     toast('Could not answer the request', err.message);
   }
+}
+
+// ── reject with reason ─────────────────────────────────────────
+// The refusal's sentence, typed in a small dialog rather than in the card. The
+// card stays pending until Submit; Cancel (or a click outside, or Escape) leaves
+// it exactly as it was.
+let permReasonFor = null;
+
+function openPermReason(requestId) {
+  const modal = $('permReasonModal');
+  const input = $('permReasonInput');
+  if (!modal || !input || !requestId) return;
+  permReasonFor = requestId;
+  input.value = '';
+  const send = $('permReasonSend');
+  if (send) send.disabled = true; // nothing to send until a word is typed
+  modal.hidden = false;
+  input.focus();
+}
+
+function closePermReason() {
+  const modal = $('permReasonModal');
+  if (modal) modal.hidden = true;
+  permReasonFor = null;
+  const send = $('permReasonSend');
+  if (send) send.disabled = false;
+}
+
+/** Submit is a one-shot: a second click while the answer is in flight must not
+ *  send the same refusal twice. */
+async function submitPermReason() {
+  const requestId = permReasonFor;
+  const send = $('permReasonSend');
+  if (!requestId || send?.disabled) return;
+  const reason = String($('permReasonInput')?.value || '').trim();
+  if (!reason) return;
+  if (send) send.disabled = true;
+  closePermReason();
+  await replyPermission(requestId, 'reject', reason);
 }
 
 /** Stop the work that asked, not just the request: a worker refused a write
@@ -6339,6 +6369,11 @@ function steerTarget() {
 function renderComposer() {
   const hasSession = Boolean(state.sessionId);
   const asking = Boolean(currentForm());
+  // A permission card blocks the composer exactly as a question does: the turn
+  // cannot read a message while it waits on the operator, and a half-dead composer
+  // invites a click that goes nowhere (3 Nov).
+  const awaitingPermission = (state.permissions || []).length > 0;
+  const blocked = asking || awaitingPermission;
   const held = Boolean(state.busyInfo?.busy) || Boolean(currentRun());
   // The graceful stop has landed: the notice and the glow go when the work does.
   if (state.stopping && !held && !currentRun() && !state.busy) state.stopping = false;
@@ -6351,7 +6386,7 @@ function renderComposer() {
   // working — started from 192.0.2.115"), and the operator asked for it to go:
   // it took a line off the chat to say what the rail's dot and the role cards
   // already say. A dead Send with no explanation was accepted in exchange.
-  $('sendBtn').disabled = (state.busy && !hasSession) || asking || state.compacting || (held && !target);
+  sendBtn.disabled = (state.busy && !hasSession) || blocked || state.compacting || (held && !target);
   // The same click, a different promise: while work is running the button says
   // Steer and wears the live path's yellow border. Anyone may press it.
   const sendBtn = $('sendBtn');
@@ -6364,20 +6399,22 @@ function renderComposer() {
   $('stopBtn').disabled = !hasSession || !(state.busy || currentRun() || state.canStop || state.compacting);
   const input = $('promptInput');
   if (input) {
-    input.disabled = asking;
+    input.disabled = blocked;
     input.placeholder = asking
       ? 'Answer the question to continue'
-      : target?.kind === 'worker'
-        ? `Message ${roleLabel(target.role)} — seen at its next step`
-        : target?.kind === 'architect'
-          ? 'Message the Architect — seen mid-turn'
-          : held && currentRun()?.retry
-            ? 'Waiting on the provider — Stop or wait'
-            : held
-              ? 'Working — Stop to take over'
-              : state.mode === 'single'
-                ? 'Message'
-                : 'Message the Architect…';
+      : awaitingPermission
+        ? 'Resolve the permission to continue'
+        : target?.kind === 'worker'
+          ? `Message ${roleLabel(target.role)} — seen at its next step`
+          : target?.kind === 'architect'
+            ? 'Message the Architect — seen mid-turn'
+            : held && currentRun()?.retry
+              ? 'Waiting on the provider — Stop or wait'
+              : held
+                ? 'Working — Stop to take over'
+                : state.mode === 'single'
+                  ? 'Message'
+                  : 'Message the Architect…';
   }
   // A pending question takes the whole composer, not just the text box: Attach, the
   // mode switch and the run menu are all "start something else", and a half-dead
@@ -6385,7 +6422,7 @@ function renderComposer() {
   // of a question nobody can answer, and the engine treats it as the immediate stop.
   for (const id of ['attachBtn', 'modeToggle', 'runBtn']) {
     const el = $(id);
-    if (el) el.disabled = asking;
+    if (el) el.disabled = blocked;
   }
   renderStopState();
   renderCompactChip();
@@ -9189,6 +9226,16 @@ document.addEventListener('keydown', (e) => {
       return;
     }
 
+    // Reject With Reason: the dialog takes the sentence, the card stays until it
+    // is submitted or cancelled.
+    const permReason = e.target.closest('[data-perm-reason-open]');
+    if (permReason) {
+      e.preventDefault();
+      if (wakeClick()) { toast('Click Again', 'That click only brought the window forward. The request is still waiting.'); return; }
+      openPermReason(permReason.dataset.permReasonOpen);
+      return;
+    }
+
     const soon = e.target.closest('[data-soon]');
     if (soon) { e.preventDefault(); e.stopPropagation(); toast('Not wired yet', soon.dataset.soon); return; }
 
@@ -9216,6 +9263,29 @@ document.addEventListener('keydown', (e) => {
     }
   });
   $('dialogClose').addEventListener('click', () => closeDialog(null));
+  // Reject With Reason: Cancel and a click outside both return to the pending
+  // card without answering it; Escape does the same; Enter submits.
+  $('permReasonCancel').addEventListener('click', closePermReason);
+  $('permReasonSend').addEventListener('click', submitPermReason);
+  $('permReasonModal').addEventListener('click', (e) => {
+    if (e.target === $('permReasonModal')) closePermReason();
+  });
+  $('permReasonInput').addEventListener('input', () => {
+    const send = $('permReasonSend');
+    if (send) send.disabled = !String($('permReasonInput').value || '').trim();
+  });
+  $('permReasonInput').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      submitPermReason();
+    }
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !$('permReasonModal').hidden) {
+      e.preventDefault();
+      closePermReason();
+    }
+  });
   $('dialogModal').addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target.tagName === 'INPUT') { e.preventDefault(); $('dialogOk').click(); } });
 
   $('closeError').addEventListener('click', closeError);

@@ -1758,10 +1758,14 @@ body[data-mode="single"] #runAuto { display: none; }
   background: #241f16; border: 1px solid #5a4725;
 }
 .perm-head { display: flex; align-items: center; gap: 8px; font-size: calc(var(--chat-fs) * 0.92); font-weight: 700; color: var(--amber); }
+/* The countdown sits in the head's right corner, like the question's note: same
+   row, same idea, so the two cards read the same way (3 Nov). */
+.perm-head-note { margin-left: auto; flex: none; font-size: calc(var(--chat-fs) * 0.85); font-weight: 500; color: #8a8e96; }
+/* The task tag shares that corner; when a countdown is present it steps left. */
+.perm-head:has(.perm-head-note) .perm-who { margin-left: 0; }
 .perm-who { margin-left: auto; font-weight: 600; font-size: calc(var(--chat-fs) * 0.88); color: #b6babf; overflow-wrap: anywhere; }
 .perm-lead { margin: 7px 0 0; font-size: calc(var(--chat-fs) * 1.04); line-height: 1.45; color: var(--text); }
 .perm-why { margin: 6px 0 0; font-size: calc(var(--chat-fs) * 0.92); line-height: 1.45; color: #b6babf; }
-.perm-note { margin: 7px 0 0; font-size: calc(var(--chat-fs) * 0.88); color: #8a8e96; }
 .perm-res {
   margin: 6px 0 0; padding: 7px 9px; border-radius: 8px;
   background: #191b1f; border: 1px solid #3a3d43; color: #b6babf;
@@ -1769,15 +1773,17 @@ body[data-mode="single"] #runAuto { display: none; }
   white-space: pre-wrap; overflow-wrap: anywhere; max-height: 130px; overflow: auto;
 }
 .perm-actions { display: flex; gap: 7px; margin-top: 10px; flex-wrap: wrap; justify-content: flex-start; }
-/* The optional sentence a rejection carries to the role. An input, not a box of
-   instructions: one line, quiet, directly above the four buttons it belongs to. */
-.perm-reason {
-  width: 100%; margin-top: 9px; padding: 6px 9px; border-radius: 7px;
+/* The refusal's sentence, typed in its own small dialog ("Reject With Reason"), not
+   in the card: an input beside four buttons read as a form to fill before saying no. */
+.perm-reason-modal { width: min(460px, 92vw); }
+.perm-reason-modal p { margin: 0 0 10px; }
+.perm-reason-input {
+  width: 100%; padding: 8px 10px; border-radius: 7px;
   border: 1px solid #3a3d43; background: #191b1f; color: var(--text);
-  font-family: inherit; font-size: calc(var(--chat-fs) * 0.92); line-height: 1.4;
+  font-family: inherit; font-size: calc(var(--chat-fs) * 0.98); line-height: 1.4;
 }
-.perm-reason::placeholder { color: #6f747c; }
-.perm-reason:focus { outline: none; border-color: var(--violet); }
+.perm-reason-input::placeholder { color: #6f747c; }
+.perm-reason-input:focus { outline: none; border-color: var(--violet); }
 /* Four narrow buttons in one row at the left. The background is the same neutral
    as every other button; colour lives in the border and the label, so the row
    reads as four actions rather than four alarm levels. */

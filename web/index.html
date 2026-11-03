@@ -360,6 +360,23 @@
   </div>
 </div>
 
+<!-- Reject With Reason: the refusal's sentence, typed here rather than in the
+     chat. Cancel returns to the pending card; Submit refuses the request with
+     this text, and the role is told. -->
+<div class="modal-backdrop" id="permReasonModal" hidden>
+  <div class="modal panel perm-reason-modal" role="dialog" aria-modal="true" aria-labelledby="permReasonTitle">
+    <h3 id="permReasonTitle">Reject With Reason</h3>
+    <p class="modal-sub">The request is refused and the reason is read by whoever asked.</p>
+    <label class="field perm-reason-field">
+      <input class="perm-reason-input" type="text" id="permReasonInput" maxlength="300" placeholder="Why are you refusing it?" autocomplete="off" />
+    </label>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" id="permReasonCancel" type="button">Cancel</button>
+      <button class="btn btn-danger" id="permReasonSend" type="button">Submit</button>
+    </div>
+  </div>
+</div>
+
 <!-- settings — a GUI over config/synapse.config.json (live), seven tabs -->
 <div class="modal-backdrop" id="settingsModal" hidden>
   <div class="modal panel settings-modal" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
