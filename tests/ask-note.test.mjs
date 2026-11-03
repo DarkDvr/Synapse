@@ -90,6 +90,29 @@ test('the note reads the asking chat’s Auto-Answer, not the one on screen', ()
   assert.match(read('web/app.js'), /autoAnswer: \(form\.autoAnswer \?\? state\.automation\?\.autoAnswer\) === true/);
 });
 
+test('with several questions in one form, the countdown says how many', () => {
+  // Test2, 3 Nov: one form asked two questions, the panel paged them, and
+  // Auto-Answer answered both in one reply — so the second was never on screen.
+  assert.equal(
+    askHeadNote({ here: true, autoAnswer: true, wait: 10, questions: 2 }),
+    'Auto-Answering enabled, answering 2 questions with recommended options in 10s…',
+  );
+  assert.equal(
+    askHeadNote({ here: true, autoAnswer: true, wait: 10, questions: 1 }),
+    'Auto-Answering enabled, answering with recommended options in 10s…',
+  );
+});
+
+test('the panel shows every question while Auto-Answer is on, so all are seen', () => {
+  const js = read('web/app.js');
+  assert.match(js, /const answeringAll = state\.askNote\?\.autoAnswer === true;/, 'the panel knows');
+  assert.match(
+    js,
+    /for \(const holder of panel\.querySelectorAll\('\.ask-field'\)\) holder\.classList\.remove\('ask-page-off'\)/,
+    'every field is on the one page',
+  );
+});
+
 test('the note sits flush with the panel, and no nav reserve is left behind', () => {
   const css = read('web/synapse.css');
   assert.match(css, /\.ask-head \{[^}]*padding-right:\s*0/);

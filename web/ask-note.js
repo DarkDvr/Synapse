@@ -18,7 +18,7 @@
  *   `now` is the clock to measure against (a test passes its own).
  * @returns {string} the note, ready to render (no markup, no escaping needed).
  */
-export function askHeadNote({ here = true, autoAnswer = false, wait = 0, dueAt = null, now = Date.now() } = {}) {
+export function askHeadNote({ here = true, autoAnswer = false, wait = 0, dueAt = null, questions = 1, now = Date.now() } = {}) {
   if (!autoAnswer) {
     return here ? 'waiting for your answer' : 'asked in another chat — open that chat to answer';
   }
@@ -28,7 +28,11 @@ export function askHeadNote({ here = true, autoAnswer = false, wait = 0, dueAt =
       : Math.max(0, Math.ceil((Number(dueAt) - Number(now)) / 1000));
   const when = seconds > 0 ? `in ${seconds}s…` : 'now…';
   const place = here ? '' : 'another chat — ';
-  return `${place}Auto-Answering enabled, answering with recommended options ${when}`;
+  // "answering with recommended options" for one question; the count when the
+  // form holds several, because Auto-Answer answers them all in one reply and the
+  // operator is entitled to see how many that is.
+  const many = Number(questions) > 1 ? `${Number(questions)} questions ` : '';
+  return `${place}Auto-Answering enabled, answering ${many}with recommended options ${when}`;
 }
 
 /** The seconds left, for anyone who needs the number rather than the sentence. */
