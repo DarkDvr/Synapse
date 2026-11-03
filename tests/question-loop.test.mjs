@@ -46,6 +46,24 @@ check('the third ask counts as three', third.asks === 3, String(third.asks));
 // A question never asked before is not a loop, even in a session with history.
 check('a new question in the same session is shown', guardDecision(per, 'f11', 'a different question').action === 'show');
 
+// The same title with different options is a different question. Test project,
+// 3 Nov: "Single color" was asked again with Yellow marked recommended, the guard
+// matched it to the earlier ask by title alone, and answered "Red" — an option the
+// operator never picked for *that* question.
+const withOptions = (options) => ({ id: 'f20', sessionID: 'ses_x', fields: [{ key: '0', title: 'Single color', options }] });
+const red = withOptions([{ value: 'Red' }, { value: 'Yellow (Recommended)' }]);
+const blue = withOptions([{ value: 'Blue' }, { value: 'Green (Recommended)' }]);
+check('the same options give the same signature', questionSignature(red) === questionSignature(withOptions([{ value: 'Red' }, { value: 'Yellow (Recommended)' }])));
+check('different options give a different signature', questionSignature(red) !== questionSignature(blue), questionSignature(red));
+
+// A new operator message clears the history (src/api.js, sendMessage): asking the
+// same thing again on purpose is a new question, not a loop.
+const apiSource = (await import('node:fs')).readFileSync(new URL('../src/api.js', import.meta.url), 'utf8');
+check(
+  'sending a message starts the question history over',
+  /questionHistory\.delete\(sessionId\)/.test(apiSource),
+);
+
 check(
   'the answer reads as a sentence for the report',
   readableAnswer({ 0: 'Minimal pass/fail only' }) === '0: Minimal pass/fail only',

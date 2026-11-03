@@ -15,10 +15,27 @@
 // The third is loud on purpose: it is a model problem, and the operator wants to
 // see it rather than be asked again.
 
-/** What a form is asking, in one comparable string. */
+/**
+ * What a form is asking, in one comparable string.
+ *
+ * The field titles *and* the options: two forms that ask the same thing with a
+ * different set of answers are different questions, and treating them as one made
+ * the loop guard answer with an option the second form did not even offer
+ * (3 Nov — "Single color" with a recommended Yellow came back Red, because the
+ * history only remembered the title).
+ */
 export function questionSignature(form) {
   const fields = Array.isArray(form?.fields) ? form.fields : [];
-  const parts = fields.map((f) => String(f?.title || f?.key || '').trim()).filter(Boolean);
+  const parts = fields
+    .map((f) => {
+      const title = String(f?.title || f?.key || '').trim();
+      const options = (Array.isArray(f?.options) ? f.options : [])
+        .map((o) => String(o?.value ?? o?.label ?? o ?? '').trim())
+        .filter(Boolean)
+        .join(',');
+      return options ? `${title} [${options}]` : title;
+    })
+    .filter(Boolean);
   return parts.join(' | ') || String(form?.title || '').trim();
 }
 

@@ -1514,6 +1514,13 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
           app.warn(`could not keep the attachments: ${err.message}`);
         }
       }
+      // A new message is a new intent, so the question-loop history starts over.
+      // Without this, asking the same question again on purpose — which the
+      // operator does all the time in a test chat — was read as a model looping:
+      // the second ask was answered with the *old* answer and the third stopped
+      // the run (Test project, 3 Nov: "Single color" came back Red for a turn that
+      // had asked for Yellow as the recommended option).
+      questionHistory.delete(sessionId);
       // The operator's words are the message. A stop before this one is just a cut:
       // no note explains it, the same way a dropped connection is not explained. If
       // they want the work resumed or changed, they say so here.
