@@ -303,6 +303,7 @@
     },
     "coder-1": {
       "ref": "opencode-go/deepseek-v4.1-flash",
+      "variant": "high",
       "skills": [
         "code-craft",
         "visual-review"
@@ -354,13 +355,13 @@
     "shutdownMin": 5
   },
   "fullAuto": {
-    "timeoutSec": 0
+    "timeoutSec": 5
   },
   "notify": {
     "doneSound": "ripple"
   },
   "ui": {
-    "chatTextPx": 13.5,
+    "chatTextPx": 14,
     "language": "en"
   },
   "shutdown": {
@@ -373,7 +374,7 @@
   },
   "worker": {
     "stallSec": 900,
-    "resumeMax": 4,
+    "resumeMax": 3,
     "retryBaseSec": 10,
     "retryCapSec": 300,
     "ladder": [
