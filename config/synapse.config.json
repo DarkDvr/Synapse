@@ -257,6 +257,15 @@
               "name": "step-5-preview"
             }
           ]
+        },
+        {
+          "id": "polystrata",
+          "type": "openai",
+          "format": "openai",
+          "name": "PolyStrata",
+          "baseURL": "http://127.0.0.1:8080/v1",
+          "apiKey": "",
+          "models": []
         }
       ],
       "compactionKeepTokens": 0
