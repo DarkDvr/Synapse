@@ -83,6 +83,13 @@ const MAX_RESUME_MAX = 20;
 const MAX_STALL_SEC = 7200;
 const MAX_RETRY_CAP_SEC = 3600;
 
+// The loop guard. Loose on purpose: one phrase, unchanged, running for ten
+// seconds. "Building the gauge layout... Building the gauge layout..." is the
+// shape it catches; a slow turn with new reasoning in it never matches.
+const LOOP_TAIL_CHARS = 320;
+const LOOP_MIN_UNIT = 12;
+const LOOP_AFTER_MS = 10_000;
+
 // The peer ladder: roles that can stand in for one another, in escalation order.
 // A task is written for one role, and the harness moves the same task down the
 // line when that role cannot do the job — the Architect cannot make that call,
@@ -108,12 +115,84 @@ export function nextRung(role, attempt, { stepDown = false, ladder = DEFAULT_LAD
   return ladder.slice(at + skip);
 }
 
+/**
+ * The phrase a piece of thinking is stuck on, or ''.
+ *
+ * Quick and deliberate: no token statistics and no history. The last 320
+ * characters of the reasoning are periodic with a period of 12-96 characters —
+ * "Writing the gauge styles…" over and over — and that period is returned. A turn
+ * that is thinking normally does not end on a tail that repeats itself exactly.
+ */
+export function repeatedTailUnit(text) {
+  const tail = String(text || '').slice(-LOOP_TAIL_CHARS);
+  if (tail.length < LOOP_MIN_UNIT * 3) return '';
+  for (let p = LOOP_MIN_UNIT; p <= 96; p += 1) {
+    if (tail.length < p * 3) break;
+    if (tail.slice(0, tail.length - p) === tail.slice(p)) {
+      const unit = tail.slice(tail.length - p).trim();
+      if (unit.length >= LOOP_MIN_UNIT) return unit;
+    }
+  }
+  return '';
+}
+
+/**
+ * Watches one worker's thinking for one phrase held unchanged for `afterMs`.
+ *
+ * `push` returns the phrase when it has been the same for that long, and null
+ * otherwise. It is a small object rather than inline arithmetic so a test can use
+ * its own clock instead of waiting ten real seconds.
+ */
+export function createLoopDetector({ afterMs = LOOP_AFTER_MS } = {}) {
+  let unit = '';
+  let since = 0;
+  return {
+    push(text, now = Date.now()) {
+      const found = repeatedTailUnit(text);
+      if (!found) {
+        unit = '';
+        since = 0;
+        return null;
+      }
+      if (found !== unit) {
+        unit = found;
+        since = now;
+        return null;
+      }
+      return now - since >= afterMs ? found : null;
+    },
+    reset() {
+      unit = '';
+      since = 0;
+    },
+  };
+}
+
+/**
+ * The next thinking-effort variant below `current`, or '' when there is none.
+ * The engine advertises variants in ascending order (base.js), so this is the
+ * one before it. An unknown or omitted variant counts as no lower step: the
+ * harness does not invent an effort the catalog does not list.
+ */
+export function nextLowerVariant(variants, current) {
+  const ids = (Array.isArray(variants) ? variants : [])
+    .map((v) => String(v?.id || ''))
+    .filter(Boolean);
+  const at = ids.indexOf(String(current || ''));
+  return at > 0 ? ids[at - 1] : '';
+}
+
 // What the harness says when it restarts a turn. Short deliberately: the whole
 // conversation is already in the session, and repeating the brief would invite
 // the model to start over.
 const STALL_NUDGE =
   'You were interrupted because nothing had changed in your session for a long time. ' +
   'Continue from exactly where you left off; do not start over and do not redo work that is already done.';
+// Said when the thinking has been one phrase over and over. It names the fault so
+// the model does not read the interrupt as "try again from the top".
+const LOOP_NUDGE =
+  'You were repeating the same line without making progress. Stop repeating it and carry on with the task ' +
+  'from where the work stands. Do the next real step now.';
 const RETRY_NUDGE =
   'Continue from where you left off. The previous turn was cut short by the provider, not by the operator. ' +
   'Do not start over.';
@@ -588,6 +667,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
       resumeMax: num(w.resumeMax, 0, MAX_RESUME_MAX, DEFAULT_RESUME_MAX),
       retryBaseSec: num(w.retryBaseSec, 5, 300, DEFAULT_RETRY_BASE_SEC),
       retryCapSec: num(w.retryCapSec, 10, MAX_RETRY_CAP_SEC, DEFAULT_RETRY_CAP_SEC),
+      loopGuard: w.loopGuard !== false,
     };
   }
 
@@ -1238,6 +1318,11 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     // on the result line so the morning's log explains a long night.
     let retries = 0;
     let resumes = 0;
+    // How many times one repeated phrase has been caught, and whether the model
+    // was marked because even the lowest effort did it again. See the loop guard
+    // in waitForIdle and the branch below.
+    let loops = 0;
+    let loopMarked = false;
     // How many times this task's worker session has been replaced because its
     // transcript outgrew the model window. A fresh session starts with a short
     // handover, so this is a rescue, not a loop; after a few the run reports.
@@ -1360,6 +1445,11 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
       architect: architectId,
       model: modelRef,
       variant,
+      loops: 0,
+      loopFrom: '',
+      loopTo: '',
+      loopStop: false,
+      loopPhrase: '',
       startedAt,
       stallSec,
       workerId: null,
@@ -1556,6 +1646,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
             {
               window: contextWindow(modelRef),
               steer: true,
+              loopGuard: settings.loopGuard,
               // The graceful stop cuts at the step boundary, not mid-token.
               stopCheck: (messages) => {
                 if (!gracefulStop) return false;
@@ -1656,6 +1747,69 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
             // card lying (29 Oct: 306 tok/s under "retrying").
             alert({ dir, role, clear: true });
             await nudge(worker.id, STALL_NUDGE, signal);
+            before = markOf(await engine.getMessages(worker.id));
+            continue;
+          }
+
+          if (finished.looped) {
+            // The thinking is one phrase over and over. That is not progress,
+            // however fast the tokens arrive: stop the turn, move the effort down
+            // one step and ask for the next real action. At the bottom there is
+            // nowhere left to go, so the model is marked and the Architect is told.
+            try { await engine.interrupt(worker.id); } catch { /* already gone */ }
+            loops += 1;
+            const from = variant || '';
+            const lower = nextLowerVariant(variantsOf(modelRef), variant);
+            live.loops = loops;
+            live.loopFrom = from;
+            live.loopTo = lower;
+            live.loopStop = !lower;
+            live.loopPhrase = String(finished.phrase || '').slice(0, 80);
+            emit('run.progress', { ...live });
+            emit('run.note', {
+              dir,
+              role,
+              task: request.task,
+              startedAt,
+              kind: 'loop',
+              times: loops,
+              from,
+              to: lower,
+            });
+            if (!lower) {
+              loopMarked = Boolean(modelRef);
+              if (modelRef) {
+                markLoopModel(
+                  modelRef,
+                  `it repeated one phrase at the lowest reasoning effort (${from || 'default'}): "${live.loopPhrase}"`,
+                );
+              }
+              turnError =
+                `the model repeated one phrase at the lowest reasoning effort (${from || 'default'}) ` +
+                `and the harness stopped it: "${live.loopPhrase}"`;
+              outcome = 'error';
+              alert({ dir, role, message: 'The model kept repeating itself — marked ISSUES', final: true });
+              log.warn(
+                `worker ${request.task} (${role}) looped at the lowest effort (${from || 'default'}); ` +
+                  `marked ${modelRef || 'the model'} ISSUES`,
+              );
+              break;
+            }
+            if (signal?.aborted) { outcome = 'stopped'; break; }
+            variant = lower;
+            live.variant = lower;
+            emit('run.progress', { ...live });
+            log.warn(
+              `worker ${request.task} (${role}) repeated "${live.loopPhrase}" — lowering reasoning to ${lower} ` +
+                `(loop ${loops})`,
+            );
+            try {
+              await engine.switchModel(worker.id, { ref: modelRef, variant: lower });
+            } catch (err) {
+              log.warn(`could not lower ${request.task} (${role}) to ${lower}: ${err.message}`);
+            }
+            await sleep(300, signal);
+            await nudge(worker.id, LOOP_NUDGE, signal);
             before = markOf(await engine.getMessages(worker.id));
             continue;
           }
@@ -1953,6 +2107,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
         outcome,
         ms: Date.now() - startedAt,
         files: files.length,
+        loops,
       });
     }
 
@@ -2031,6 +2186,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
       // rate limiting is explained by these two numbers and the incident log.
       retries,
       resumes,
+      loops,
       error: turnError,
       // Why a stopped run stopped, and what its last finished turn had said. The
       // two must not be one field: a provider sentence from an earlier attempt is
@@ -2208,6 +2364,9 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
         stallSec,
         retries,
         resumes,
+        loops,
+        loopMarked,
+        modelRef,
       }),
     }, signal?.aborted ? undefined : signal);
     // A stop aborts the run's signal, and passing that to the wake made the wake
@@ -2245,6 +2404,31 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
         notify?.({ kind: 'model', type: 'issues', ref });
       }
     } catch { /* the cache is not worth failing a run over */ }
+  }
+
+  /**
+   * Mark a model whose thinking repeats itself at the lowest effort.
+   *
+   * A different kind from 'provider': this is not a refusal, so the ladder is not
+   * told to skip the role. It is a badge for the operator and a fact for the
+   * Architect, and the existing rule applies — a completed run clears it.
+   */
+  function markLoopModel(ref, message) {
+    try {
+      if (modelCache?.noteIssue?.(ref, { kind: 'loop', message })) {
+        notify?.({ kind: 'model', type: 'issues', ref });
+        log.warn(`model ${ref} marked ISSUES: ${message}`);
+      }
+    } catch { /* the badge is not worth failing a run over */ }
+  }
+
+  /** The variants the catalog lists for a model, ascending. */
+  function variantsOf(ref) {
+    try {
+      return modelCache?.get?.(ref)?.variants || [];
+    } catch {
+      return [];
+    }
   }
 
   /** Everything a turn has said so far, as one comparable string.
@@ -2459,7 +2643,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
    * A pending question also pauses the clock: the operator may take hours, and
    * the transcript itself says so.
    */
-  async function waitForIdle(sessionId, before, stallMs, onTool, signal, { window = null, steer = false, onContext = null, onCompact = null, onActivity = null, stopCheck = null } = {}) {
+  async function waitForIdle(sessionId, before, stallMs, onTool, signal, { window = null, steer = false, onContext = null, onCompact = null, onActivity = null, stopCheck = null, loopGuard = false } = {}) {
     let lastActivity = Date.now();
     let lastKey = '';
     let lastCtx = 0;
@@ -2470,6 +2654,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     // every streamed token would only be traffic.
     let announced = false;
     let asking = false;
+    const loopDetector = loopGuard ? createLoopDetector() : null;
     for (;;) {
       if (signal?.aborted) return { stopped: true };
       await sleep(POLL_MS, signal);
@@ -2500,6 +2685,15 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
           announced = true;
           onActivity?.();
         }
+      }
+
+      // A turn that is producing tokens is "active", so the stall clock never
+      // sees a loop: the same phrase arriving forty times a second looks like
+      // progress to every other guard here. This is the one that tells them
+      // apart, and it is deliberately slow — ten seconds of one unchanged phrase.
+      if (loopDetector) {
+        const phrase = loopDetector.push(reasoningTail(messages, before));
+        if (phrase) return { timedOut: false, looped: true, phrase };
       }
 
       if (onTool) {
@@ -2657,6 +2851,27 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
   }
 
   /**
+   * The thinking of the turn that is open now, or ''.
+   *
+   * Only the newest assistant message, and only while it has written no text and
+   * called no tool: a turn doing either is working, whatever it is also thinking.
+   * Short blocks are not judged — the guard needs enough text to see a phrase
+   * repeat three times inside its tail.
+   */
+  function reasoningTail(messages, mark) {
+    const fresh = afterMark(messages, mark).filter((m) => m?.type === 'assistant');
+    const last = fresh[fresh.length - 1];
+    if (!last) return '';
+    const parts = last.parts || [];
+    if (parts.some((p) => p?.type === 'tool' || (p?.type === 'text' && String(p.text || '').trim()))) return '';
+    const text = parts
+      .filter((p) => p?.type === 'reasoning')
+      .map((p) => String(p.text || ''))
+      .join('');
+    return text.length >= 1200 ? text : '';
+  }
+
+  /**
    * Did the turn end in an error? The *last* assistant message is the answer, not
    * the first error anywhere after the mark. A permission decline ends one step
    * with "Step interrupted", but the gate writes a refusal note and the worker can
@@ -2738,7 +2953,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     return at === -1 ? t : t.slice(0, at + 1);
   }
 
-  function report({ task, role, insteadOf, skipped, outcome, harnessStop, ms, text, files, context, workerId, planTouched, synapseTouched, qcRound, skillsRequired, skillsMissing, auto, stallSec, retries, resumes, error, stoppedBy, lastTurnError, steers }) {
+  function report({ task, role, insteadOf, skipped, outcome, harnessStop, ms, text, files, context, workerId, planTouched, synapseTouched, qcRound, skillsRequired, skillsMissing, auto, stallSec, retries, resumes, loops = 0, loopMarked = false, modelRef = '', error, stoppedBy, lastTurnError, steers }) {
     const head =
       outcome === 'completed'
         ? `${task.id} (${role}) finished in ${Math.round(ms / 1000)}s.`
@@ -2751,7 +2966,10 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
               ? `${task.id} (${role}) was stopped by the operator after ${Math.round(ms / 1000)}s. ` +
                 `A stop is not a verdict on the task or the model.`
               : outcome === 'error'
-                ? `${task.id} (${role}) could not run - the provider refused the turn, so no further work was attempted.`
+                ? loopMarked
+                  ? `${task.id} (${role}) was stopped: its thinking repeated one phrase even at the lowest ` +
+                    `reasoning effort.`
+                  : `${task.id} (${role}) could not run - the provider refused the turn, so no further work was attempted.`
                 : `${task.id} (${role}) could not run.`;
     const lines = [head];
     if (insteadOf) {
@@ -2783,6 +3001,19 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     // held, so that delegation is refused - better not to ask.
     if (stoppedBy === 'operator') {
       lines.push('The operator stopped it on purpose: do not delegate this task again unless they say so.');
+    }
+    if (loops) {
+      lines.push(
+        `Its thinking repeated one phrase, and the harness lowered the reasoning effort ` +
+          `${loops} time${loops === 1 ? '' : 's'} to get it moving again.`,
+      );
+    }
+    if (loopMarked) {
+      lines.push(
+        `The model ${modelRef || 'behind this role'} is marked with the ISSUES badge: it kept repeating itself ` +
+          `even at the lowest reasoning effort. Do not delegate to ${role} again until the operator fixes the ` +
+          `model or the role, and tell the operator this role is out of action.`,
+      );
     }
     // The evidence, never omitted: a worker that claims a file it did not write
     // is a real failure mode (it happened on the first run: the report named

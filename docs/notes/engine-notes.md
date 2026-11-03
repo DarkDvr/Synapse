@@ -498,6 +498,20 @@ Non-obvious, all verified on 2.0.30:
   `question` tool part still running, the stall clock is paused, so the operator can
   take as long as they like — otherwise every worker that asks anything would be
   interrupted for asking.
+- **A phrase repeated for ten seconds is a loop, and the stall clock cannot see it.**
+  Tokens keep arriving, so the activity signature keeps changing and the worker looks
+  busy. `waitForIdle` therefore also keeps the newest assistant message's thinking
+  while that message has written no text and called no tool, and looks at its last
+  320 characters: a tail that is periodic — the same 12–96 character phrase over and
+  over — that is still the same phrase ten seconds later is a loop. The harness
+  interrupts the turn, lowers the role's thinking effort one advertised variant
+  (high → medium → low), sends a `synthetic` "stop repeating and carry on", and puts
+  one amber pinned line on the card:
+  `↻ Loop detected ×1 → lowering reasoning to medium and recovering`. At the lowest
+  variant there is no step left: the model is marked ISSUES (kind `loop`), the run
+  reports an error, and the Architect is told the role is out of action until the
+  operator fixes it. `worker.loopGuard` (Settings → Workers, on by default) turns the
+  guard off; the number of rescues rides the run and its result line as `loops`.
 - **Recoverable provider failures never end a run.** `src/provider-errors.js`
   classifies the sentence a turn ended with. *Transient* — rate limit/429,
   connection reset, socket/network/DNS, 5xx, "overloaded", the free-tier message,

@@ -1473,8 +1473,10 @@ body[data-mode="single"] #runAuto { display: none; }
 .trace-steer-text { min-width: 0; overflow-wrap: anywhere; }
 /* A compaction is the one line in a worker's trace that is not a step: it explains
    why the next step is slower and why the window is empty again, so it is amber,
-   pinned above the four-line tail, and never trimmed away with the steps. */
-.trace-line.is-compact { color: var(--amber); font-weight: 600; }
+   pinned above the four-line tail, and never trimmed away with the steps. A loop
+   rescue is the same kind of line: news about the run, not a step in it. */
+.trace-line.is-compact,
+.trace-line.is-loop { color: var(--amber); font-weight: 600; }
 
 /* Something a model did to Synapse itself — naming it in a shell command, or a
    write shaped at it. Amber like a compaction, for the same reason: news about the

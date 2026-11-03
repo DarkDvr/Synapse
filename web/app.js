@@ -3443,6 +3443,9 @@ async function loadRuns() {
           compactions: Number(run.compactions) || 0,
           compactAt: Number(run.compactAt) || 0,
           compactLimit: Number(run.compactLimit) || 0,
+          loops: Number(run.loops) || 0,
+          loopTo: String(run.loopTo || ''),
+          loopStop: Boolean(run.loopStop),
         });
       }
     }
@@ -3459,6 +3462,7 @@ function handleRunEvent(ev) {
   if (ev.type === 'run.note') {
     const trace = traceFor(ev);
     if (trace && ev.kind === 'compact') noteCompaction(trace, ev);
+    if (trace && ev.kind === 'loop') noteLoop(trace, ev);
     renderTranscript();
     return;
   }
@@ -3507,6 +3511,9 @@ function handleRunEvent(ev) {
         finishedAt: 0,
         notes: steerNotes(run),
         stream: null,
+        loops: 0,
+        loopTo: '',
+        loopStop: false,
       });
     } else if (trace && run.tool) {
       // One note per new tool call, not one per event: the runner repeats the
@@ -3541,6 +3548,14 @@ function handleRunEvent(ev) {
       trace.compactions = Number(run.compactions);
       if (Number(run.compactAt)) trace.compactAt = Number(run.compactAt);
       if (Number(run.compactLimit)) trace.compactLimit = Number(run.compactLimit);
+    }
+    // The loop count rides the same progress tick, so a page opened after the
+    // fact still shows that the run was rescued and how many times.
+    if (trace && Number(run.loops) > (Number(trace.loops) || 0)) {
+      trace.loops = Number(run.loops);
+      if (run.loopTo) trace.loopTo = String(run.loopTo);
+      trace.loopStop = Boolean(run.loopStop);
+      if (trace.loopStop) trace.loopTo = '';
     }
   } else if (ev.type === 'run.finished') {
     // A finished, successful run is the role working again; a run that failed is
@@ -4032,7 +4047,17 @@ function renderTrace(t) {
         (t.compactAt ? ` · context at ${fmtTokens(t.compactAt)}${t.compactLimit ? `/${fmtTokens(t.compactLimit)}` : ''}` : '') +
         '</div>'
       : '';
-  const body = `${archive}${compactLine}${tail.map(note).join('')}${streaming}`;
+  // A loop rescue is pinned for the same reason: it is not a step, and it is the
+  // one line that explains why the next thinking is shorter.
+  const looped = Number(t.loops) || 0;
+  const loopLine = looped
+    ? `<div class="trace-line is-loop">↻ Loop detected ×${looped} → ` +
+      (t.loopStop || !t.loopTo
+        ? 'already at the lowest effort — marked ISSUES'
+        : `lowering reasoning to ${esc(t.loopTo)} and recovering`) +
+      '</div>'
+    : '';
+  const body = `${archive}${compactLine}${loopLine}${tail.map(note).join('')}${streaming}`;
   if (!t.finishedAt) {
     return `<div class="trace is-live" data-trace="${esc(t.key)}">
       <div class="trace-head" title="${esc(head.join(' · '))}">${esc(head.join(' · '))}</div>
@@ -4044,6 +4069,7 @@ function renderTrace(t) {
   // A compaction is not a step of the work, and it is the one thing the operator
   // needs to still see an hour later, so it rides the folded line too.
   const packedNote = Number(t.compactions) ? ` · compacted ×${t.compactions}` : '';
+  const loopedNote = looped ? ` · looped ×${looped}` : '';
   // A steer is the operator's own instruction, so a folded trace says it is in
   // there — the text itself is one click away, but it cannot become invisible.
   const steeredNote = notes.some(isSteer) ? ' · steered' : '';
@@ -4051,7 +4077,7 @@ function renderTrace(t) {
   // not what. It ellipsizes when the column is short, and the tooltip has the lot.
   const foldHead = [name, t.task, t.title].filter(Boolean).join(' · ');
   return `<details class="trace is-fold" data-trace="${esc(t.key)}">
-    <summary title="${esc(foldHead)}">${esc(foldHead)}${took}${written}${packedNote}${steeredNote}</summary>
+    <summary title="${esc(foldHead)}">${esc(foldHead)}${took}${written}${packedNote}${loopedNote}${steeredNote}</summary>
     <div class="trace-lines">${body}</div>
   </details>`;
 }
@@ -4454,6 +4480,22 @@ function noteCompaction(trace, { times, used, context } = {}) {
   if (Number(context)) trace.compactLimit = Number(context);
 }
 
+/** One loop rescue, on a trace. Like a compaction, the count only goes up: a
+ *  re-sent event must not turn one rescue into "×2". `to` is the effort it was
+ *  lowered to; no `to` means there was nowhere left to go. */
+function noteLoop(trace, { times, to } = {}) {
+  const counted = Number(times) || 0;
+  const known = Number(trace.loops) || 0;
+  trace.loops = counted > known ? counted : known || 1;
+  if (to) {
+    trace.loopTo = String(to);
+    trace.loopStop = false;
+  } else {
+    trace.loopTo = '';
+    trace.loopStop = true;
+  }
+}
+
 /** The trace of a delegated run whose worker session is this one, if any. */
 function traceForSession(sessionId) {
   if (!sessionId) return null;
@@ -4507,7 +4549,8 @@ function traceSig() {
       .map(
         (t) =>
           `${t.key}:${t.finishedAt || 0}:${(t.notes || []).length}:${t.stream ? t.stream.text.length : 0}:` +
-          `${t.stream?.ended ? 1 : 0}:${Number(t.compactions) || 0}:${Number(t.compactingSince) || 0}`,
+          `${t.stream?.ended ? 1 : 0}:${Number(t.compactions) || 0}:${Number(t.compactingSince) || 0}:` +
+          `${Number(t.loops) || 0}:${t.loopTo || ''}`,
       )
       .join(';'),
     sessionPart,
@@ -7704,15 +7747,11 @@ function settingsEngine(c) {
 function settingsWorkers(c) {
   return [
     setGroup(
-      'Full Auto',
-      setField(c, 'Permission timeout (seconds)', 'fullAuto.timeoutSec', {
-        type: 'number',
-        attr: 'min="0" max="3600"',
-        hint: 'How long Full auto waits before it answers an unanswered permission card or question. 0 means answer at once and never show a permission card. Seconds.',
-      }) +
-        `<p class="set-note">Full auto is switched on per chat, in the cog beside Send. This sets how long it waits once it is on, and a change applies at once — including to a card already open. ` +
-        `A permission is still allowed only once, and the policy still refuses a write inside Synapse or a credential store before a card exists. ` +
-        `At 0, a permission is answered immediately and no card is drawn; a question is answered on the next five-second check.</p>`,
+      'Looping',
+      `<label class="set-check" title="When a worker repeats the same phrase for ten seconds without making progress, interrupt it, lower its thinking effort one step and tell it to carry on. At the lowest effort the model is marked ISSUES and the Architect is told. On by default.">` +
+        `<input data-path="worker.loopGuard" type="checkbox" ${c.worker?.loopGuard !== false ? 'checked' : ''} />` +
+        `<span>Detect and prevent looping</span></label>` +
+        `<p class="set-note">This is for a model that gets stuck on one line — usually a thinking effort that is too high for the task. It is not a time limit: a slow turn that keeps producing new work is left alone. Every rescue is one amber line on the worker's card.</p>`,
     ),
     setGroup(
       'Timers',
@@ -8292,12 +8331,6 @@ function collectSettings() {
     // A folder list is one line in the form and an array in the config.
     if (path === 'engine.opencode.skillPaths') {
       writePath(c, path, String(value).split(';').map((p) => p.trim()).filter(Boolean));
-      continue;
-    }
-    // An empty wait is not zero: clearing the box restores the 20-second default,
-    // rather than silently making Full auto answer every card at once.
-    if (path === 'fullAuto.timeoutSec' && String(el.value).trim() === '') {
-      writePath(c, path, 20);
       continue;
     }
     // The ladder is a comma list in the form and an array in the config.

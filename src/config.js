@@ -153,6 +153,12 @@ export const DEFAULTS = {
     // nine requests, not hundreds.
     retryBaseSec: 10,
     retryCapSec: 300,
+    // A worker that repeats one phrase is not working, however fast the tokens
+    // come. When the same phrase runs for ten seconds with nothing new beside it,
+    // the harness interrupts the worker, lowers its thinking effort one step and
+    // tells it to carry on. At the lowest step the model is marked and the
+    // Architect is told. On by default; the guard is loose on purpose.
+    loopGuard: true,
     // Roles that can stand in for one another, in escalation order. A task is
     // written for one role; when that coder cannot do the job the harness moves
     // the same task down this list (see src/runs.js candidatesFor). A role not in
@@ -313,6 +319,7 @@ export function normalize(raw) {
   cfg.worker.resumeMax = clampInt(cfg.worker.resumeMax, 0, 20, DEFAULTS.worker.resumeMax);
   cfg.worker.retryBaseSec = clampInt(cfg.worker.retryBaseSec, 5, 300, DEFAULTS.worker.retryBaseSec);
   cfg.worker.retryCapSec = clampInt(cfg.worker.retryCapSec, 10, 3600, DEFAULTS.worker.retryCapSec);
+  cfg.worker.loopGuard = cfg.worker.loopGuard !== false;
   // The peer ladder is a list of role ids; anything unknown is dropped rather than
   // left to confuse a delegation with a role that has no card and no model.
   cfg.worker.ladder = Array.isArray(cfg.worker.ladder)
