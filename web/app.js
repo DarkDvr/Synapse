@@ -4611,7 +4611,22 @@ function renderMessage(m, tail = '') {
     const files = Array.isArray(m.files) ? m.files : [];
     const chips = files.length
       ? `<span class="msg-files">${files
-          .map((f) => `<span class="msg-file" title="${esc(f.name)}">${esc(shortName(f.name))}</span>`)
+          .map((f, index) => {
+            const name = esc(shortName(f.name));
+            // A picture the operator attached is the same chip the models get:
+            // one line, and the bytes on hover. The bytes stay in the message's
+            // raw record — the chip carries the message and index, not a second
+            // copy of the base64.
+            if (
+              (/^image\//i.test(f.mime || '') || /\.(png|jpe?g|webp|gif)$/i.test(f.name || '')) &&
+              attachmentImage(m, index)
+            ) {
+              return `<span class="chat-image" data-msg="${esc(m.id || '')}" data-file="${index}" data-alt="${esc(f.name)}" title="${name}">` +
+                '<span class="chat-image-tag" aria-hidden="true">IMG</span>' +
+                `<span class="chat-image-name">${name}</span></span>`;
+            }
+            return `<span class="msg-file" title="${esc(f.name)}">${name}</span>`;
+          })
           .join('')}</span>`
       : '';
     // A sent message can become a new one: this puts its words and attachments
@@ -6644,6 +6659,40 @@ async function sendSteer(text, files, target) {
 }
 
 /**
+ * The bytes of one attached picture, when the message still carries them.
+ *
+ * The engine keeps them on the raw message (`raw.files[].data`, or a `data:` URI)
+ * and a message echoed before the reload keeps them on `_files`. Nothing is
+ * copied into the DOM until the operator hovers.
+ */
+function attachmentImage(message, index) {
+  const files = Array.isArray(message?.raw?.files)
+    ? message.raw.files
+    : Array.isArray(message?._files)
+      ? message._files
+      : [];
+  const file = files[index];
+  if (!file) return null;
+  let data = String(file.data || '');
+  let mime = String(file.mime || '');
+  if (!data && typeof file.uri === 'string' && file.uri.startsWith('data:')) {
+    const comma = file.uri.indexOf(',');
+    if (comma >= 0) {
+      mime = file.uri.slice(5, comma).split(';')[0] || mime;
+      data = file.uri.slice(comma + 1);
+    }
+  }
+  // A stored attachment can lose its mime on the way through the engine; the
+  // name still says what it is.
+  if (!mime) {
+    const ext = String(file.name || '').toLowerCase().split('.').pop();
+    mime = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif' }[ext] || '';
+  }
+  if (!data || !/^image\//i.test(mime)) return null;
+  return { mime, data };
+}
+
+/**
  * The attachments of a sent message, in the composer's own shape.
  *
  * The engine keeps the bytes on the operator's message (`raw.files[].data`), not
@@ -6976,6 +7025,14 @@ function hideAttachPreview() {
 /** Where the route reads a chat chip's picture from: inside the open project,
  *  never a path the page made up. The server checks the folder again. */
 function chatImageUrl(chip) {
+  // An attached picture: the bytes are on the message's own record, so the chip
+  // carries the message id and the file's index instead of a second base64 copy.
+  const msgId = chip?.dataset?.msg;
+  if (msgId) {
+    const message = state.messages.find((m) => m.id === msgId);
+    const image = attachmentImage(message, Number(chip.dataset.file || 0));
+    return image ? `data:${image.mime};base64,${image.data}` : '';
+  }
   const project = currentProject();
   const dir = project?.directory;
   const rel = String(chip?.dataset?.src || '').replace(/^[\\/]+/, '');

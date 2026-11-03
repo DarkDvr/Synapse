@@ -127,7 +127,18 @@ function blocks(source) {
 
   const flush = () => {
     if (para.length) {
-      out.push(`<p>${inline(para.join(' '))}</p>`);
+      // A picture written on its own line — the usual shape, with a blank line
+      // before it — belongs at the end of the sentence it illustrates, not in a
+      // paragraph of its own. One paragraph saves a line of chat, and the chip
+      // wraps only when it does not fit.
+      const onlyPictures = para.every((line) => /^\s*!\[[^\]]*\]\([^)\s]+\)\s*$/.test(line));
+      const html = inline(para.join(' '));
+      const last = out[out.length - 1];
+      if (onlyPictures && last && last.startsWith('<p>') && last.endsWith('</p>')) {
+        out[out.length - 1] = `${last.slice(0, -4)} ${html}</p>`;
+      } else {
+        out.push(`<p>${html}</p>`);
+      }
       para = [];
     }
   };

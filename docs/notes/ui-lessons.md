@@ -1217,7 +1217,9 @@ whether a given paragraph is "the answer".
   look. The bytes come through `/api/image`, which serves only images inside the
   projects root (no SVG, 24 MB cap, realpath checked). Nothing is copied: the chip
   dies with the message at a compaction, and the file is the model's own scratch
-  shot rather than a second copy Synapse made.
+  shot rather than a second copy Synapse made. The operator's own attachments use
+  the same chip, so a picture sent to the AI and a picture the AI shows read the
+  same way in the transcript.
 - **The finish-line flag became a cog with two switches (28 Oct).** "Keep running"
   and the new "Full auto" live in a small menu above the button. The icon is the
   familiar settings gear, not a sun-like path: it has to read as a cog at 18px.

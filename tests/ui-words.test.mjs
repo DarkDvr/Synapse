@@ -80,6 +80,13 @@ test('the click that wakes the window cannot answer a fresh permission card', ()
   assert.match(js, /addEventListener\('focus', \(\) => \{ state\.focusAt = Date\.now\(\); \}\)/);
 });
 
+test('an attached picture uses the same chip as a picture the model shows', () => {
+  const js = read('web/app.js');
+  assert.match(js, /class="chat-image" data-msg=/);
+  assert.match(js, /function attachmentImage\(/);
+  assert.match(js, /attachmentImage\(message, Number\(chip\.dataset\.file/);
+});
+
 test('a sent message can be put back in the composer', () => {
   const js = read('web/app.js');
   assert.match(js, /data-reuse-msg/);

@@ -16,6 +16,12 @@ test('a local image becomes a chip carrying its path, not an inline picture', ()
   assert.doesNotMatch(html, /<img/);
 });
 
+test('a picture on its own line follows the sentence it illustrates', () => {
+  const html = renderMarkdown('Here it is:\n\n![the mock](.synapse/shots/mock.png)');
+  assert.equal((html.match(/<p>/g) || []).length, 1, 'one paragraph, not two');
+  assert.match(html, /Here it is:.*class="chat-image"/);
+});
+
 test('a remote image is still an image', () => {
   const html = renderMarkdown('![x](https://example.com/a.png)');
   assert.match(html, /<img src="https:\/\/example\.com\/a\.png"/);
