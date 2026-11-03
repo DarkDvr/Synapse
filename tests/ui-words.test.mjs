@@ -65,14 +65,18 @@ test('a permission chip is keyed by the tool call, never the request', () => {
 });
 
 // 30 Oct: a card "disappeared before I could answer". The one click that can
-// answer a card by accident is the one that also wakes the window, so both of
-// the card's actions must go through the wake guard.
-test('the click that wakes the window cannot answer a permission', () => {
+// answer a card by accident is the one that also wakes the window — but only a
+// card that appeared under the pointer. A card that has been waiting has been
+// read, and a click on it answers at once; the guard is the fresh card, not every
+// click after focus.
+test('the click that wakes the window cannot answer a fresh permission card', () => {
   const js = read('web/app.js');
-  assert.match(js, /function wakeClick\(\)/);
-  // Allow/Reject, Stop Run, and Reject With Reason all guard: every one of them
-  // changes what the run does, and the click that wakes a window is not a decision.
-  assert.equal((js.match(/if \(wakeClick\(\)\)/g) || []).length, 3, 'all three card actions guard');
+  assert.match(js, /function wakeClick\(e, requestId\)/);
+  // Allow/Reject, Stop Run, and Reject With Reason all guard.
+  assert.equal((js.match(/if \(wakeClick\(e, /g) || []).length, 3, 'all three card actions guard');
+  assert.match(js, /state\.permSeen/, 'the card birth time is remembered');
+  assert.match(js, /Date\.now\(\) - seen >= 2000/, 'an older card is answered at once');
+  assert.doesNotMatch(js, /That click only brought the window forward/, 'the toast is gone');
   assert.match(js, /addEventListener\('focus', \(\) => \{ state\.focusAt = Date\.now\(\); \}\)/);
 });
 

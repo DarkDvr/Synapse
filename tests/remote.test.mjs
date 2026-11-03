@@ -9,7 +9,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { isLoopback, isPrivateAddress, parseCookies, tokenMatches, createRemoteToken, loginPage } from '../src/remote.js';
+import { isLoopback, isPrivateAddress, parseCookies, tokenMatches, createRemoteToken, loginPage, machineName } from '../src/remote.js';
 
 test('loopback is only this machine', () => {
   assert.equal(isLoopback('127.0.0.1'), true);
@@ -56,4 +56,12 @@ test('the login page never embeds the token', () => {
   assert.match(html, /Access token/);
   assert.match(html, /nope/);
   assert.doesNotMatch(html, /synapse_remote/);
+});
+
+test('the machine has a name a browser can take, or none at all', () => {
+  const name = machineName();
+  assert.equal(typeof name, 'string');
+  // A hostname is letters, digits and hyphens. Anything else is refused rather
+  // than pasted into a URL where it would not resolve.
+  if (name) assert.match(name, /^[A-Za-z0-9][A-Za-z0-9-]*$/);
 });

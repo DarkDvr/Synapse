@@ -651,6 +651,14 @@ body.dark .sidebar-bottom,
    with the switch's edge above it. */
 .status-remote #remoteUrl { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .status-remote .token-chip { margin-left: auto; }
+/* The fallback address, one line under the name: shown only when the name is
+   there to fail in the first place. */
+.status-remote-ip {
+  margin: 0 0 1px 17px; min-width: 0;
+  font: 9px/1.5 var(--mono); color: #727880;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.status-remote-ip:empty { display: none; }
 /* One line, ellipsed, aligned under the address: "clients: 1 (LAPTOP)". */
 .status-clients {
   margin: 0 0 3px 17px; min-width: 0;
@@ -1768,6 +1776,7 @@ body[data-mode="single"] #runAuto { display: none; }
 .perm-who { margin-left: auto; font-weight: 600; font-size: calc(var(--chat-fs) * 0.88); color: #b6babf; overflow-wrap: anywhere; }
 .perm-lead { margin: 7px 0 0; font-size: calc(var(--chat-fs) * 1.04); line-height: 1.45; color: var(--text); }
 .perm-why { margin: 6px 0 0; font-size: calc(var(--chat-fs) * 0.92); line-height: 1.45; color: #b6babf; }
+.perm-waking { margin: 8px 0 0; font-size: calc(var(--chat-fs) * 0.88); line-height: 1.4; color: var(--amber); }
 .perm-res {
   margin: 6px 0 0; padding: 7px 9px; border-radius: 8px;
   background: #191b1f; border: 1px solid #3a3d43; color: #b6babf;

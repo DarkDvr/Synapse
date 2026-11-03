@@ -14,7 +14,7 @@ import { createEngineUpdate } from './engine-update.js';
 import { createHarnessGuard } from './harness.js';
 import { createPermissionGate } from './permission-gate.js';
 import { createPermissionMemory } from './permission-memory.js';
-import { createRemoteToken, lanAddresses } from './remote.js';
+import { createRemoteToken, lanAddresses, machineName } from './remote.js';
 import { createPermissionLog } from './permission-log.js';
 import { permissionsTimeoutMs } from './auto-answer.js';
 import { createAutoShutdown } from './auto-shutdown.js';
@@ -610,10 +610,17 @@ async function main() {
       const port = currentConfig.server.port;
       const addresses = lanAddresses().map((entry) => entry.address);
       const url = addresses.length ? `http://${addresses[0]}:${port}` : null;
+      // The name is what the operator reads out to the other machine; the address
+      // is the fallback when a network does not resolve it. Both are in the answer,
+      // so a page opened later can say either without another request.
+      const host = machineName();
+      const namedUrl = host ? `http://${host}:${port}` : null;
       return {
         enabled: Boolean(currentConfig.server.remote),
         port,
+        host,
         url,
+        namedUrl,
         addresses,
         // The token is a password. Only the PC itself may be given it; a LAN
         // client gets null and types it into the login page.

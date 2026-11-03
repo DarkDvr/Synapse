@@ -194,6 +194,10 @@ const state = {
   // forward lands on the page too, and an answer must be a click on a window the
   // operator was already using — see the permission handler (30 Oct).
   focusAt: 0,
+  // When each permission card was first drawn, and which ones the operator has
+  // already been told about a wake click. See wakeClick().
+  permSeen: new Map(),
+  permWakeOk: new Set(),
   busy: false,
   // The first Stop was pressed: the AI is finishing the step, then it ends. A
   // second press is the hard interrupt (see interrupt()).
@@ -747,7 +751,21 @@ function renderRemote() {
   const dot = $('remoteDot');
   if (dot) dot.className = 'status-dot ' + (on ? 'ok' : 'idle');
   const url = $('remoteUrl');
-  if (url) url.textContent = on ? (info.url ? `${info.url}/` : 'no LAN address') : '';
+  if (url) {
+    // The machine's name is what the operator reads out; the address is the
+    // fallback for a network that does not resolve it.
+    const named = String(info.namedUrl || '').trim();
+    const address = String(info.url || '').trim();
+    url.textContent = on ? (named ? `${named}/` : address ? `${address}/` : 'no LAN address') : '';
+    url.title = named && address ? `This PC is ${info.host || 'named'} · ${address}/` : '';
+  }
+  const ip = $('remoteIp');
+  if (ip) {
+    const named = String(info.namedUrl || '').trim();
+    const address = String(info.url || '').trim();
+    ip.textContent = on && named && address ? `or ${address}/` : '';
+    ip.title = 'Use this if the other PC cannot resolve this computer\'s name.';
+  }
   const box = $('remoteInfo');
   if (box) box.hidden = !on;
   const token = $('remoteToken');
@@ -5013,6 +5031,14 @@ function permissionLead(p) {
 }
 
 function renderPermissions() {
+  // A wake click is only dangerous on a card that appeared as the window came
+  // forward; one that has been on screen has been read. Remember when each card
+  // was first drawn so the next click can tell the two apart.
+  const now = Date.now();
+  const seen = state.permSeen || (state.permSeen = new Map());
+  const live = new Set((state.permissions || []).map((p) => p.requestId).filter(Boolean));
+  for (const id of live) if (!seen.has(id)) seen.set(id, now);
+  for (const id of [...seen.keys()]) if (!live.has(id)) { seen.delete(id); state.permWakeOk?.delete(id); }
   const html = (state.permissions || [])
     .map((p) => {
       const actor = p.role ? roleLabel(p.role) : 'The Architect';
@@ -8436,27 +8462,31 @@ async function refreshProviderModels(index) {
     renderSettings();
     return;
   }
-  const have = new Map((p.models || []).map((m) => [m.id, m]));
-  const added = r.models.filter((m) => !have.has(m.id));
-  // Refresh is not only "add what is new": a runtime reports the window of the
-  // model it has *loaded*, and that changes when the operator reloads it with a
-  // different context. So a reported window overwrites the old one — otherwise
-  // the number stays whatever was true the first time this list was fetched.
-  for (const m of r.models) {
-    const entry = have.get(m.id);
-    if (!entry || !m.context) continue;
-    entry.context = m.context;
-  }
-  p.models = [
-    ...(p.models || []),
-    ...added.map((m) => ({ id: m.id, name: m.name || m.id, ...(m.context ? { context: m.context } : {}) })),
-  ].sort((a, b) => a.id.localeCompare(b.id));
+  const previous = new Map((p.models || []).map((m) => [m.id, m]));
+  const had = p.models || [];
+  // Refresh *replaces* the list: the server is the truth about what it serves, so
+  // a model it no longer reports is gone from the row, not kept beside the new
+  // ones. What survives by id keeps the settings only the operator knows — the
+  // output budget — and takes the window the server just measured, because a
+  // runtime reports the context it has *loaded* and that changes on a reload.
+  p.models = r.models
+    .map((m) => {
+      const old = previous.get(m.id) || {};
+      return {
+        id: m.id,
+        name: m.name || old.name || m.id,
+        ...(m.context || old.context ? { context: m.context || old.context } : {}),
+        ...(old.output ? { output: old.output } : {}),
+      };
+    })
+    .sort((a, b) => a.id.localeCompare(b.id));
+  const added = r.models.filter((m) => !previous.has(m.id)).length;
+  const removed = had.filter((m) => !r.models.some((x) => x.id === m.id)).length;
   const withWindow = p.models.filter((m) => m.context).length;
   state.setProvFetch = {
     ok: true,
     text:
-      `${r.models.length} on the server · ${added.length} added` +
-      (have.size ? ` · ${have.size} already listed` : '') +
+      `${r.models.length} on the server · ${added} new · ${removed} removed` +
       (withWindow < p.models.length ? ` · ${p.models.length - withWindow} without a reported window` : ''),
   };
   renderSettings();
@@ -9225,11 +9255,40 @@ document.addEventListener('keydown', (e) => {
   // is where the operator clicked to get back to Synapse, that one press must not
   // be read as an answer — the card stays, and the click after it decides.
   window.addEventListener('focus', () => { state.focusAt = Date.now(); });
-  /** Was this click only the wake-up? Within 400ms of the window gaining focus,
-   *  which is longer than a button press (down to up) and shorter than reaching
-   *  for the mouse after an alt-tab. */
-  function wakeClick() {
-    return Date.now() - (state.focusAt || 0) < 400;
+  /**
+   * Was this click only the wake-up for a card that appeared under the pointer?
+   *
+   * A click within 400ms of the window gaining focus is suspicious, but that is
+   * not enough to refuse it: coming back to a card that has been waiting for a
+   * minute and clicking Allow is an answer. Only a card drawn in the last two
+   * seconds can have flashed under the pointer unseen, and only that one is held
+   * for a second click. Keyboard activations are never a wake click (there is no
+   * pointer to land on), and the first refused click leaves an inline note on the
+   * card — the next click on the same card is taken.
+   */
+  function wakeClick(e, requestId) {
+    if (state.permWakeOk?.delete(requestId)) return false;
+    if (!e || e.detail === 0) return false;
+    if (Date.now() - (state.focusAt || 0) >= 400) return false;
+    const seen = state.permSeen?.get(requestId) || 0;
+    if (Date.now() - seen >= 2000) return false;
+    state.permWakeOk?.add(requestId);
+    return true;
+  }
+
+  /** Say, on the card itself, that the window came forward with the press. A toast
+   *  for this was a second interruption on top of the one it described. */
+  function showPermWake(el) {
+    const card = el?.closest?.('.perm-card');
+    if (!card) return;
+    let note = card.querySelector('.perm-waking');
+    if (!note) {
+      note = document.createElement('p');
+      note.className = 'perm-waking';
+      note.textContent = 'Click again to answer — the first click only brought the window forward.';
+      card.querySelector('.perm-actions')?.before(note);
+    }
+    setTimeout(() => { try { note.remove(); } catch { /* card already gone */ } }, 3000);
   }
 
   // mockup affordances: clearly announce what is not wired yet
@@ -9246,7 +9305,7 @@ document.addEventListener('keydown', (e) => {
     const perm = e.target.closest('[data-perm]');
     if (perm) {
       e.preventDefault();
-      if (wakeClick()) { toast('Click Again', 'That click only brought the window forward. The request is still waiting.'); return; }
+      if (wakeClick(e, perm.dataset.permId)) { showPermWake(perm); return; }
       replyPermission(perm.dataset.permId, perm.dataset.perm);
       return;
     }
@@ -9254,7 +9313,7 @@ document.addEventListener('keydown', (e) => {
     const permStop = e.target.closest('[data-perm-stop]');
     if (permStop) {
       e.preventDefault();
-      if (wakeClick()) { toast('Click Again', 'That click only brought the window forward. The request is still waiting.'); return; }
+      if (wakeClick(e, permStop.dataset.permStop)) { showPermWake(permStop); return; }
       stopFromPermission(permStop.dataset.permStop);
       return;
     }
@@ -9264,7 +9323,7 @@ document.addEventListener('keydown', (e) => {
     const permReason = e.target.closest('[data-perm-reason-open]');
     if (permReason) {
       e.preventDefault();
-      if (wakeClick()) { toast('Click Again', 'That click only brought the window forward. The request is still waiting.'); return; }
+      if (wakeClick(e, permReason.dataset.permReasonOpen)) { showPermWake(permReason); return; }
       openPermReason(permReason.dataset.permReasonOpen);
       return;
     }

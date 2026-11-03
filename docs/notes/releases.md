@@ -49,8 +49,10 @@ Two things mirror it and are bumped in the same commit:
    git tag v1.0.2
    git push origin main --tags
    ```
-7. The tag is the release. A commit without one is a draft that the operator
-   cannot point at later.
+7. A patch may be a tag alone; a **minor or major is a GitHub release**, with its
+   notes and both assets (the zip and `SHA256SUMS`) attached — that is what the
+   operator links to in a report. The tag is the release: a commit without one is a
+   draft nobody can point at later.
 
 ## Reading a version before debugging
 

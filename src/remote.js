@@ -88,6 +88,18 @@ export function lanAddresses() {
   return addresses.sort((a, b) => rank(a.address) - rank(b.address) || a.address.localeCompare(b.address));
 }
 
+/** This PC's name, as the other computers on the LAN know it.
+ *
+ *  `http://<name>:8700` is easier to say and to type than an address that changes
+ *  with the DHCP lease, and Windows resolves a machine name on the local network
+ *  through NetBIOS/LLMNR without any extra service. An empty name (a hostname with
+ *  characters a browser will not take) is answered with '' rather than guessed at,
+ *  and the address stays beside it as the fallback. */
+export function machineName() {
+  const name = String(os.hostname() || '').trim();
+  return /^[A-Za-z0-9][A-Za-z0-9-]*$/.test(name) ? name : '';
+}
+
 const escapeHtml = (value) =>
   String(value || '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
