@@ -6,7 +6,7 @@ import { spawn } from 'node:child_process';
 import { appendRun, readPlan, readRuns, runLedger, briefSession, logPlanState, BRIEF_KEY } from './plans.js';
 import { ensureProjectDoc, appendRequest as appendProjectRequest, appendChat, appendDecision as appendProjectDecision, appendEntry, setHandover } from './project-doc.js';
 import { createFormAuto } from './form-auto.js';
-import { answerTimeoutMs } from './auto-answer.js';
+import { answerTimeoutMs, formPages } from './auto-answer.js';
 import { AUTOMATION_DEFAULTS, AUTOMATION_KEYS, cleanAutomation, nextSynapse, readAutomation } from './automation.js';
 import { keepAttachments } from './keep-attachments.js';
 import { skillRules, describeSkills } from './skills.js';
@@ -2155,18 +2155,23 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
             // it). It is that chat's switch, not the one on screen: a worker asking
             // from another chat must not be labelled with the open chat's setting.
             const autoAnswer = await formAuto.enabledFor(f.sessionID);
-            // When it will answer, so the note can count down instead of repeating
-            // a number that never moves. The clock starts when the sweep first saw
-            // the form (it sweeps every 5s); a form that just appeared falls back to
-            // "now plus the wait".
+            // When the first page appeared and how many pages the form has, so the
+            // panel can count each one down and turn the page itself. The reply goes
+            // after the last page's wait, which is `autoAnswerAt` — one wait per
+            // page, measured from the moment the sweep first saw the form.
             const seen = formAuto.seenAt?.(f.id);
+            const waitMs = answerTimeoutMs(getConfig());
+            const pages = formPages(f);
+            const firstAt = Number(seen) || Date.now();
             return {
               id: f.id,
               sessionId: f.sessionID,
               title: f.title || 'Input needed',
               fields: Array.isArray(f.fields) ? f.fields : [],
               autoAnswer,
-              autoAnswerAt: autoAnswer ? (Number(seen) || Date.now()) + answerTimeoutMs(getConfig()) : null,
+              autoAnswerFirstAt: autoAnswer ? firstAt : null,
+              autoAnswerPages: pages,
+              autoAnswerAt: autoAnswer ? firstAt + pages * waitMs : null,
             };
           }),
         ),

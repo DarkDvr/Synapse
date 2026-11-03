@@ -10,7 +10,7 @@
 // The switch lives in the session metadata (`synapse.automation.autoAnswer`), read
 // through src/automation.js so a chat saved under the older `fullAuto` name keeps
 // its behaviour.
-import { autoAnswerFor, FULL_AUTO_MS } from './auto-answer.js';
+import { autoAnswerFor, FULL_AUTO_MS, formPages } from './auto-answer.js';
 import { readAutomation } from './automation.js';
 
 export function createFormAuto({
@@ -145,7 +145,9 @@ export function createFormAuto({
       if (!seen.has(id)) seen.set(id, { at: now(), sessionId });
       if (settled.has(id)) continue;
       if (!(await enabledFor(sessionId))) continue;
-      const wait = waitMs();
+      // One wait per page: a three-question form gets three, because the panel shows
+      // one question at a time and each gets its own countdown before the next.
+      const wait = waitMs() * formPages(form);
       if (wait > 0 && now() - seen.get(id).at < wait) {
         waiting += 1;
         continue;

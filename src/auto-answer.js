@@ -52,6 +52,18 @@ export function shutdownIdleMs(config) {
   return (Number.isFinite(minutes) && minutes >= 1 ? minutes : 5) * 60_000;
 }
 
+/**
+ * How many pages a form is. Auto-Answer takes one page per wait — the panel shows a
+ * question, its countdown runs, the recommended options are taken and the next page
+ * appears — so a three-question form takes three waits, and this is the multiplier
+ * the sweep and the page both use. Hidden and external fields have no page.
+ */
+export function formPages(form) {
+  const fields = Array.isArray(form?.fields) ? form.fields : [];
+  const shown = fields.filter((f) => !f?.hidden && f?.type !== 'external').length;
+  return Math.max(1, shown);
+}
+
 const isRecommended = (option) =>
   /\(recommended\)/i.test(String(option?.label || '')) || /\(recommended\)/i.test(String(option?.value || ''));
 

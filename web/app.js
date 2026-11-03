@@ -12,7 +12,7 @@ import { renderMarkdown } from './md.js';
 import { newStream, pushStream, slideTarget, nextOffset, takePending, freezeStream, STREAM_BUFFER } from './stream-view.js';
 import { addSample, rateOf } from './rate.js';
 import { DONE_SOUNDS, doneSoundName, workWillContinue } from './notify.js';
-import { askHeadNote } from './ask-note.js';
+import { askHeadNote, answerTimeline } from './ask-note.js';
 import { AUTOMATION_DEFAULTS, AUTOMATION_ROWS, anyAutomationOn } from './automation.js';
 
 const $ = (id) => document.getElementById(id);
@@ -5355,18 +5355,17 @@ function renderAskPanel() {
     .map((f) => `${f.key}:${f.type}:${(f.options || []).map((o) => o.value).join(',')}`)
     .join(';')}`;
   // What the countdown measures against, refreshed on every poll: the server says
-  // when it will answer (`autoAnswerAt`), so a reload or a slow sweep does not
-  // restart the number.
+  // when the first page appeared (`autoAnswerFirstAt`, its clock), so a reload or a
+  // slow sweep does not restart the number. Each page gets its own wait; the panel
+  // turns the page when its countdown runs out and the reply goes at the last one.
   state.askNote = {
     here: form.sessionId === state.sessionId,
     // The asking chat's own switch when the server said so; the open chat's when it
     // did not (an older snapshot).
     autoAnswer: (form.autoAnswer ?? state.automation?.autoAnswer) === true,
     wait: answerWaitSec(),
-    dueAt: Number(form.autoAnswerAt) || null,
-    // How many questions this one form asks: Auto-Answer answers them all in one
-    // reply, so the note says how many are about to be answered.
-    questions: (form.fields || []).filter((f) => !f.hidden && f.type !== 'external').length || 1,
+    firstAt: Number(form.autoAnswerFirstAt) || null,
+    pages: Math.max(1, Number(form.autoAnswerPages) || 1),
   };
   startAskCountdown();
   if (sig === state.askSig) {
@@ -5381,7 +5380,7 @@ function renderAskPanel() {
     <div class="ask-head">
       <span class="ask-dot" aria-hidden="true"></span>
       <span class="ask-head-title">${esc(form.title || 'Input Needed')}</span>
-      <span class="ask-head-note">${esc(askHeadNote(state.askNote))}</span>
+      <span class="ask-head-note">${esc(paintAskNoteText())}</span>
     </div>
     <div class="ask-fields">${(form.fields || []).map(askField).join('')}</div>
     <div class="ask-actions">
@@ -5451,7 +5450,34 @@ function paintAskNote() {
   const host = askHost();
   const note = host?.querySelector?.('.ask-head-note');
   if (!note || !state.askNote) return;
-  note.textContent = askHeadNote(state.askNote);
+  // Auto-Answer turns the page when a page's wait runs out — that is the whole of
+  // it: wait, take the recommended options on this page, "click" Next, and the
+  // reply goes to the engine after the last page. Paging is never skipped, so every
+  // question still gets its own look and its own countdown (3 Nov).
+  const n = state.askNote;
+  if (n.autoAnswer && n.firstAt) {
+    const now = Date.now();
+    const timeline = answerTimeline({ firstAt: n.firstAt, wait: n.wait, pages: n.pages, now });
+    // Forward only: an operator who clicked ahead is not dragged back by the clock.
+    const page = Math.max(state.askPage, timeline.page);
+    if (page !== state.askPage) {
+      state.askPage = page;
+      applyAskPage();
+    }
+    const end = n.firstAt + (page + 1) * Math.max(1, n.wait) * 1000;
+    note.textContent = askHeadNote({ here: n.here, autoAnswer: true, seconds: Math.max(0, Math.ceil((end - now) / 1000)) });
+    return;
+  }
+  note.textContent = askHeadNote({ here: n.here, autoAnswer: false });
+}
+
+/** The same sentence, without touching the DOM — for the first render. */
+function paintAskNoteText() {
+  const n = state.askNote;
+  if (!n) return '';
+  if (!n.autoAnswer || !n.firstAt) return askHeadNote({ here: n.here, autoAnswer: n.autoAnswer });
+  const timeline = answerTimeline({ firstAt: n.firstAt, wait: n.wait, pages: n.pages });
+  return askHeadNote({ here: n.here, autoAnswer: true, seconds: timeline.seconds });
 }
 
 /**

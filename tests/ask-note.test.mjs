@@ -1,19 +1,19 @@
-// The line beside a question's title.
+// The line beside a question's title, and the clock Auto-Answer counts on.
 //
-// It read "another chat is waiting on you · full auto answers on its next check",
-// reported on 2 Nov while running Multi in Full auto. Two things were wrong: under
-// the switch nobody is waiting on the operator — the run answers itself — and
-// "check" names a poll the operator never sees. It now names the switch and counts
-// down to the moment it acts, because "in 30s" that never moves is a claim nobody
-// can check. The wording lives in `web/ask-note.js` so it can be tested as
-// sentences, not as a regex over app.js.
+// The line read "another chat is waiting on you · full auto answers on its next
+// check" until 2 Nov: two clauses answering different questions, the first one
+// false when the run answers itself. Then a longer sentence, which the operator
+// cut back to one short countdown on 3 Nov. The wording and the page clock live in
+// `web/ask-note.js` so they can be tested as sentences and numbers, not as a regex
+// over app.js.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { askHeadNote, askHeadSeconds } from '../web/ask-note.js';
+import { askHeadNote, answerTimeline } from '../web/ask-note.js';
+import { formPages } from '../src/auto-answer.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
@@ -26,95 +26,68 @@ test('a question from another chat says where it is and what to do', () => {
   assert.equal(askHeadNote({ here: false }), 'asked in another chat — open that chat to answer');
 });
 
-test('under Auto-Answer the note names the switch and the options it will take', () => {
-  const here = askHeadNote({ here: true, autoAnswer: true, wait: 30 });
-  const elsewhere = askHeadNote({ here: false, autoAnswer: true, wait: 30 });
-  assert.equal(here, 'Auto-Answering enabled, answering with recommended options in 30s…');
-  assert.equal(elsewhere, 'another chat — Auto-Answering enabled, answering with recommended options in 30s…');
-  for (const text of [here, elsewhere]) {
-    assert.doesNotMatch(text, /waiting on you/, 'nobody is waiting on the operator when it answers itself');
-    assert.doesNotMatch(text, /next check/, 'no engine vocabulary');
-  }
+test('under Auto-Answer the note is one short countdown', () => {
+  assert.equal(askHeadNote({ here: true, autoAnswer: true, seconds: 10 }), 'Auto-Answering in 10 seconds…');
+  assert.equal(askHeadNote({ here: true, autoAnswer: true, seconds: 1 }), 'Auto-Answering in 1 seconds…');
+  assert.equal(askHeadNote({ here: true, autoAnswer: true, seconds: 0 }), 'Auto-Answering now…');
+  // The location still matters when the question is elsewhere.
+  assert.equal(
+    askHeadNote({ here: false, autoAnswer: true, seconds: 7 }),
+    'another chat — Auto-Answering in 7 seconds…',
+  );
+  // No quantity, no options, no explanation — the operator asked for exactly this.
+  assert.doesNotMatch(askHeadNote({ here: true, autoAnswer: true, seconds: 5 }), /question|recommended/i);
 });
 
-test('the number counts down from the server’s due time, not from a fixed wait', () => {
-  const now = 1_700_000_000_000;
-  assert.equal(
-    askHeadNote({ here: true, autoAnswer: true, dueAt: now + 30_000, now }),
-    'Auto-Answering enabled, answering with recommended options in 30s…',
-  );
-  assert.equal(
-    askHeadNote({ here: true, autoAnswer: true, dueAt: now + 9_400, now }),
-    'Auto-Answering enabled, answering with recommended options in 10s…',
-    'part of a second rounds up, so it does not say 9s while 9.4 are left',
-  );
-  // The moment has passed (the sweep runs every few seconds, so this is visible).
-  assert.equal(
-    askHeadNote({ here: true, autoAnswer: true, dueAt: now - 1_000, now }),
-    'Auto-Answering enabled, answering with recommended options now…',
-  );
-  assert.equal(askHeadSeconds({ dueAt: now + 9_400, now }), 10);
+test('every page gets its own wait, in order', () => {
+  const firstAt = 1_700_000_000_000;
+  const wait = 10;
+  const at = (s) => ({ firstAt, wait, pages: 3, now: firstAt + s * 1000 });
+  assert.deepEqual(answerTimeline(at(0)), { page: 0, seconds: 10 });
+  assert.deepEqual(answerTimeline(at(4)), { page: 0, seconds: 6 });
+  assert.deepEqual(answerTimeline(at(10)), { page: 1, seconds: 10 });
+  assert.deepEqual(answerTimeline(at(14)), { page: 1, seconds: 6 });
+  assert.deepEqual(answerTimeline(at(20)), { page: 2, seconds: 10 });
+  // Past the last page the clock stays on it — the reply is the sweep's job.
+  assert.deepEqual(answerTimeline(at(45)), { page: 2, seconds: 0 });
+  // A page appears a moment before the server said it would: still page one.
+  assert.deepEqual(answerTimeline(at(-2)), { page: 0, seconds: 12 });
 });
 
-test('a zero wait is answered at once, and says so', () => {
-  assert.equal(
-    askHeadNote({ here: true, autoAnswer: true, wait: 0 }),
-    'Auto-Answering enabled, answering with recommended options now…',
-  );
+test('a form with no fields still has one page, and hidden ones do not count', () => {
+  assert.equal(formPages({}), 1);
+  assert.equal(formPages({ fields: [{ key: 'a' }, { key: 'b' }] }), 2);
+  assert.equal(formPages({ fields: [{ key: 'a' }, { key: 'b', hidden: true }, { key: 'c', type: 'external' }] }), 1);
 });
 
-test('the wait is the number actually set, never a stale 20', () => {
-  assert.match(askHeadNote({ here: true, autoAnswer: true, wait: 90 }), /in 90s/);
-  // A negative or unreadable wait is "at once", not a countdown to the past.
-  assert.match(askHeadNote({ here: true, autoAnswer: true, wait: -5 }), /now…$/);
-  assert.match(askHeadNote({ here: true, autoAnswer: true, wait: 'nonsense' }), /now…$/);
-});
-
-test('the page renders that note, counts it down, and keeps the panel', () => {
+test('the page turns itself while Auto-Answer counts, and is never forced back', () => {
   const js = read('web/app.js');
-  assert.match(js, /import \{ askHeadNote \} from '\.\/ask-note\.js';/);
-  assert.match(js, /askHeadNote\(state\.askNote\)/);
-  // One interval, writing only the line: rebuilding the panel per second would
-  // clear answers the operator had already given.
+  assert.match(js, /import \{ askHeadNote, answerTimeline \} from '\.\/ask-note\.js';/);
+  assert.match(js, /const timeline = answerTimeline\(\{ firstAt: n\.firstAt, wait: n\.wait, pages: n\.pages, now \}\)/);
+  // Forward only: an operator who clicked ahead is not dragged back by the clock.
+  assert.match(js, /const page = Math\.max\(state\.askPage, timeline\.page\);/);
   assert.match(js, /askTick = setInterval\(paintAskNote, 1000\)/);
-  assert.match(js, /note\.textContent = askHeadNote\(state\.askNote\)/);
-  assert.doesNotMatch(js, /another chat is waiting on you/, 'the old two-clause label is gone');
-  assert.doesNotMatch(js, /on its next check|on the next check/, 'and so is the engine vocabulary');
+  // Paging itself is untouched by the switch: one question at a time, always.
+  const start = js.indexOf('function applyAskPage');
+  const body = js.slice(start, js.indexOf('\nfunction ', start + 10));
+  assert.doesNotMatch(body, /autoAnswer/, 'the switch has no say in paging');
+  assert.match(body, /ask-page-off/);
+});
+
+test('the server sends one page per wait, and the reply after the last one', () => {
+  const api = read('src/api.js');
+  assert.match(api, /const pages = formPages\(f\);/);
+  assert.match(api, /const firstAt = Number\(seen\) \|\| Date\.now\(\);/);
+  assert.match(api, /autoAnswerFirstAt: autoAnswer \? firstAt : null/);
+  assert.match(api, /autoAnswerPages: pages/);
+  assert.match(api, /autoAnswerAt: autoAnswer \? firstAt \+ pages \* waitMs : null/);
+  // The sweep must wait the same total, or it answers before the last page is read.
+  assert.match(read('src/form-auto.js'), /const wait = waitMs\(\) \* formPages\(form\);/);
 });
 
 test('the note reads the asking chat’s Auto-Answer, not the one on screen', () => {
-  // A worker asks from another chat: its chat answers, and the label has to say
-  // that chat's truth. The server decides per session, so the snapshot carries it.
   assert.match(read('src/api.js'), /const autoAnswer = await formAuto\.enabledFor\(f\.sessionID\)/);
-  assert.match(read('src/api.js'), /autoAnswerAt: autoAnswer \?/);
   assert.match(read('web/app.js'), /autoAnswer: \(form\.autoAnswer \?\? state\.automation\?\.autoAnswer\) === true/);
-});
-
-test('with several questions in one form, the countdown says how many', () => {
-  // Test2, 3 Nov: one form asked two questions, the panel paged them, and
-  // Auto-Answer answered both in one reply — so the second was never on screen.
-  assert.equal(
-    askHeadNote({ here: true, autoAnswer: true, wait: 10, questions: 2 }),
-    'Auto-Answering enabled, answering 2 questions with recommended options in 10s…',
-  );
-  assert.equal(
-    askHeadNote({ here: true, autoAnswer: true, wait: 10, questions: 1 }),
-    'Auto-Answering enabled, answering with recommended options in 10s…',
-  );
-});
-
-test('questions are paged one at a time, whatever the switches say', () => {
-  // One question at a time, always. Paging is the rule and it does not depend on a
-  // switch: a form is read one question at a time, whether the operator answers it
-  // or Auto-Answer is about to (3 Nov — showing all of them at once was the wrong
-  // answer to "I never saw the second one", and the operator said so).
-  const js = read('web/app.js');
-  assert.doesNotMatch(js, /answeringAll/, 'no branch that puts every question on one page');
-  const start = js.indexOf('function applyAskPage');
-  assert.ok(start > 0, 'applyAskPage exists');
-  const body = js.slice(start, js.indexOf('\nfunction ', start + 10));
-  assert.match(body, /ask-page-off/, 'it still hides the questions that are not on this page');
-  assert.doesNotMatch(body, /autoAnswer/, 'the switch has no say in paging');
 });
 
 test('the note sits flush with the panel, and no nav reserve is left behind', () => {
