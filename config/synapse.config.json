@@ -23,21 +23,6 @@
       "skillPaths": [],
       "providers": [
         {
-          "id": "strata",
-          "type": "llamacpp",
-          "format": "openai",
-          "name": "Strata",
-          "baseURL": "http://127.0.0.1:8080/v1",
-          "apiKey": "",
-          "models": [
-            {
-              "id": "qwen3.8-flash-next-iq2_xs",
-              "name": "Qwen 3.8 Flash Next (IQ2_XS)",
-              "context": 131072
-            }
-          ]
-        },
-        {
           "id": "local",
           "type": "local",
           "format": "openai",
@@ -265,7 +250,23 @@
           "name": "PolyStrata",
           "baseURL": "http://127.0.0.1:8080/v1",
           "apiKey": "",
-          "models": []
+          "models": [
+            {
+              "id": "qwen3.6-35b-a3b-ud-q6_k_xl-126k",
+              "name": "qwen3.6-35b-a3b-ud-q6_k_xl-126k",
+              "context": 126976
+            },
+            {
+              "id": "qwen3.6-35b-a3b-ud-q6_k_xl-204k",
+              "name": "qwen3.6-35b-a3b-ud-q6_k_xl-204k",
+              "context": 204800
+            },
+            {
+              "id": "qwen3.8-flash-next-iq2_xs",
+              "name": "qwen3.8-flash-next-iq2_xs",
+              "context": 131072
+            }
+          ]
         }
       ],
       "compactionKeepTokens": 0
@@ -302,8 +303,7 @@
       "focus": "app"
     },
     "architect": {
-      "ref": "opencode-go/deepseek-v4.1-flash",
-      "variant": "high",
+      "ref": "opencode-go/beam-free",
       "skills": [
         "app-check",
         "find-skills",
@@ -360,7 +360,7 @@
   "automation": {
     "keepBuildingSec": 5,
     "permissionsSec": 10,
-    "answerSec": 30,
+    "answerSec": 10,
     "shutdownMin": 5
   },
   "fullAuto": {
