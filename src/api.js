@@ -2143,16 +2143,25 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
           };
         }),
         forms: await Promise.all(
-          open.map(async (f) => ({
-            id: f.id,
-            sessionId: f.sessionID,
-            title: f.title || 'Input needed',
-            fields: Array.isArray(f.fields) ? f.fields : [],
+          open.map(async (f) => {
             // Whether *this chat* answers its own questions (Auto-Answer is on for
             // it). It is that chat's switch, not the one on screen: a worker asking
             // from another chat must not be labelled with the open chat's setting.
-            autoAnswer: await formAuto.enabledFor(f.sessionID),
-          })),
+            const autoAnswer = await formAuto.enabledFor(f.sessionID);
+            // When it will answer, so the note can count down instead of repeating
+            // a number that never moves. The clock starts when the sweep first saw
+            // the form (it sweeps every 5s); a form that just appeared falls back to
+            // "now plus the wait".
+            const seen = formAuto.seenAt?.(f.id);
+            return {
+              id: f.id,
+              sessionId: f.sessionID,
+              title: f.title || 'Input needed',
+              fields: Array.isArray(f.fields) ? f.fields : [],
+              autoAnswer,
+              autoAnswerAt: autoAnswer ? (Number(seen) || Date.now()) + answerTimeoutMs(getConfig()) : null,
+            };
+          }),
         ),
         active,
         canStop,

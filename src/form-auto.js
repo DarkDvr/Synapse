@@ -180,5 +180,5 @@ export function createFormAuto({
     }
   }
 
-  return { tick, setFullAuto, setAutoAnswer, setAutomation, enabledFor };
+  return { tick, setFullAuto, setAutoAnswer, setAutomation, enabledFor, seenAt: (id) => seen.get(id)?.at ?? null };
 }

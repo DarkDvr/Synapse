@@ -337,9 +337,9 @@ test('jumping to the question puts it at the top of the chat', () => {
   // The 46px landing was a workaround for the floating buttons covering the header.
   assert.match(js, /const top = Math\.max\(0, tops\[next\] - 10\);/);
   const css = read('web/synapse.css');
-  // The note is flush with the panel's right edge — it used to stop 104px short for
-  // jump buttons that are usually not on screen (reported 3 Nov). When they *are*
-  // showing, the head steps aside instead.
+  // The note is flush with the panel's right edge. It used to stop 104px short for
+  // the floating jump buttons; the operator's answer to that was "ignore them, they
+  // are right above it and I can scroll" (3 Nov), so there is no reserve at all.
   assert.match(css, /\.ask-head \{[^}]*padding-right:\s*0/);
-  assert.match(css, /body:has\(\.chat-nav:not\(\[hidden\]\)\) \.ask-head \{ padding-right: 104px; \}/);
+  assert.doesNotMatch(css, /padding-right:\s*104px/, 'no nav reserve is left behind');
 });

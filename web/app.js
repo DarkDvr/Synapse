@@ -289,6 +289,9 @@ const state = {
   // Which question of the form is on screen. A five-question form is five pages,
   // because the ones below the fold were being missed entirely.
   askPage: 0,
+  // What the countdown beside the question's title is counting to: { here,
+  // autoAnswer, wait, dueAt }. `dueAt` is the server's clock, in epoch ms.
+  askNote: null,
   view: 'none', // none | session
   // Settings is a draft, not the file: `setDraft` is a copy of the config that
   // the panes edit, `settingsTab` is the open pane, and the provider editor's
@@ -5337,6 +5340,8 @@ function renderAskPanel() {
   if (!form) {
     state.askSig = '';
     state.askPage = 0;
+    state.askNote = null;
+    stopAskCountdown();
     host.hidden = true;
     host.innerHTML = '';
     syncAskState();
@@ -5349,9 +5354,22 @@ function renderAskPanel() {
   const sig = `${form.id}|${(form.fields || [])
     .map((f) => `${f.key}:${f.type}:${(f.options || []).map((o) => o.value).join(',')}`)
     .join(';')}`;
+  // What the countdown measures against, refreshed on every poll: the server says
+  // when it will answer (`autoAnswerAt`), so a reload or a slow sweep does not
+  // restart the number.
+  state.askNote = {
+    here: form.sessionId === state.sessionId,
+    // The asking chat's own switch when the server said so; the open chat's when it
+    // did not (an older snapshot).
+    autoAnswer: (form.autoAnswer ?? state.automation?.autoAnswer) === true,
+    wait: answerWaitSec(),
+    dueAt: Number(form.autoAnswerAt) || null,
+  };
+  startAskCountdown();
   if (sig === state.askSig) {
     host.hidden = false;
     mountAskPost();
+    paintAskNote();
     return;
   }
   state.askSig = sig;
@@ -5360,15 +5378,7 @@ function renderAskPanel() {
     <div class="ask-head">
       <span class="ask-dot" aria-hidden="true"></span>
       <span class="ask-head-title">${esc(form.title || 'Input Needed')}</span>
-      <span class="ask-head-note">${esc(
-        askHeadNote({
-          here: form.sessionId === state.sessionId,
-          // The asking chat's own switch when the server said so; the open chat's
-          // when it did not (an older snapshot).
-          autoAnswer: (form.autoAnswer ?? state.automation?.autoAnswer) === true,
-          wait: answerWaitSec(),
-        }),
-      )}</span>
+      <span class="ask-head-note">${esc(askHeadNote(state.askNote))}</span>
     </div>
     <div class="ask-fields">${(form.fields || []).map(askField).join('')}</div>
     <div class="ask-actions">
@@ -5414,6 +5424,31 @@ let askHostEl = null;
 
 function askHost() {
   return askHostEl || (askHostEl = $('askHost'));
+}
+
+// The countdown beside a question's title. One interval while a question is on
+// screen, writing only that line's text: the panel itself is never rebuilt, so an
+// answer the operator has already given survives every tick (the rule that stops
+// the polled panel clearing itself).
+let askTick = 0;
+
+function startAskCountdown() {
+  if (askTick) return;
+  askTick = setInterval(paintAskNote, 1000);
+}
+
+function stopAskCountdown() {
+  if (askTick) {
+    clearInterval(askTick);
+    askTick = 0;
+  }
+}
+
+function paintAskNote() {
+  const host = askHost();
+  const note = host?.querySelector?.('.ask-head-note');
+  if (!note || !state.askNote) return;
+  note.textContent = askHeadNote(state.askNote);
 }
 
 /**
