@@ -274,7 +274,7 @@
   },
   "roles": {
     "designer": {
-      "ref": "polystrata/qwen3.6-35b-a3b-ud-q6_k_xl-204k",
+      "ref": "polystrata/qwen3.6-35b-a3b-ud-q6_k_xl-126k",
       "variant": "high",
       "skills": [
         "aesthetic-foundations",
