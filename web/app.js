@@ -5845,6 +5845,9 @@ async function refreshPending() {
     resolved: x.resolved || [],
     reason: x.reason || '',
     scope: x.scope || '',
+    // When Auto-Permissions will allow this card (epoch ms), or null when the
+    // switch is off for the asking project. The card counts down to it.
+    autoPermissionsAt: x.autoPermissionsAt || null,
     role: x.role || null,
     task: x.task || null,
     title: x.title || null,
