@@ -274,8 +274,8 @@
   },
   "roles": {
     "designer": {
-      "ref": "polystrata/qwen3.6-35b-a3b-ud-q6_k_xl-204k",
-      "variant": "medium",
+      "ref": "opencode-go/deepseek-v4.1-flash",
+      "variant": "high",
       "skills": [
         "aesthetic-foundations",
         "app-check",
@@ -303,8 +303,8 @@
       "focus": "app"
     },
     "architect": {
-      "ref": "polystrata/qwen3.6-35b-a3b-ud-q6_k_xl-204k",
-      "variant": "medium",
+      "ref": "opencode-go/deepseek-v4.1-flash",
+      "variant": "high",
       "skills": [
         "app-check",
         "find-skills",
@@ -312,8 +312,8 @@
       ]
     },
     "coder-1": {
-      "ref": "opencode-go/deepseek-v4.1-flash",
-      "variant": "high",
+      "ref": "polystrata/qwen3.6-35b-a3b-ud-q6_k_xl-204k",
+      "variant": "medium",
       "skills": [
         "code-craft",
         "visual-review"
@@ -360,9 +360,9 @@
   },
   "automation": {
     "keepBuildingSec": 5,
-    "permissionsSec": 10,
-    "answerSec": 10,
-    "shutdownMin": 5
+    "permissionsSec": 20,
+    "answerSec": 30,
+    "shutdownMin": 20
   },
   "fullAuto": {
     "timeoutSec": 5
@@ -371,7 +371,7 @@
     "doneSound": "ripple"
   },
   "ui": {
-    "chatTextPx": 14,
+    "chatTextPx": 13.5,
     "language": "en"
   },
   "shutdown": {
@@ -387,6 +387,7 @@
     "resumeMax": 3,
     "retryBaseSec": 10,
     "retryCapSec": 300,
+    "loopGuard": true,
     "ladder": [
       "coder-1",
       "coder-2",
