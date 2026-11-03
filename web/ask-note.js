@@ -48,3 +48,15 @@ export function askHeadNote({ here = true, autoAnswer = false, seconds = 0 } = {
   const place = here ? '' : 'another chat — ';
   return left > 0 ? `${place}Auto-Answering in ${left} seconds…` : `${place}Auto-Answering now…`;
 }
+
+/**
+ * The same countdown on a permission card: "Auto-Permission: Allow Once will be
+ * picked in 7 seconds…". `dueAt` is the server's clock for the gate's own timeout,
+ * so the number is the wait that is really running, not a fixed setting.
+ */
+export function permissionNote(dueAt, now = Date.now()) {
+  const left = Math.max(0, Math.ceil((Number(dueAt) - Number(now)) / 1000));
+  return left > 0
+    ? `Auto-Permission: Allow Once will be picked in ${left} seconds… `
+    : 'Auto-Permission: Allow Once will be picked now… ';
+}

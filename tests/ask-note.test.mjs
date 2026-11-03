@@ -12,7 +12,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { askHeadNote, answerTimeline } from '../web/ask-note.js';
+import { askHeadNote, answerTimeline, permissionNote } from '../web/ask-note.js';
 import { formPages } from '../src/auto-answer.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -62,7 +62,7 @@ test('a form with no fields still has one page, and hidden ones do not count', (
 
 test('the page turns itself while Auto-Answer counts, and is never forced back', () => {
   const js = read('web/app.js');
-  assert.match(js, /import \{ askHeadNote, answerTimeline \} from '\.\/ask-note\.js';/);
+  assert.match(js, /import \{ askHeadNote, answerTimeline, permissionNote \} from '\.\/ask-note\.js';/);
   assert.match(js, /const timeline = answerTimeline\(\{ firstAt: n\.firstAt, wait: n\.wait, pages: n\.pages, now \}\)/);
   // Forward only: an operator who clicked ahead is not dragged back by the clock.
   assert.match(js, /const page = Math\.max\(state\.askPage, timeline\.page\);/);
@@ -88,6 +88,19 @@ test('the server sends one page per wait, and the reply after the last one', () 
 test('the note reads the asking chat’s Auto-Answer, not the one on screen', () => {
   assert.match(read('src/api.js'), /const autoAnswer = await formAuto\.enabledFor\(f\.sessionID\)/);
   assert.match(read('web/app.js'), /autoAnswer: \(form\.autoAnswer \?\? state\.automation\?\.autoAnswer\) === true/);
+});
+
+test('a permission card counts down to its automatic Allow Once', () => {
+  const now = 1_700_000_000_000;
+  assert.equal(permissionNote(now + 10_000, now), 'Auto-Permission: Allow Once will be picked in 10 seconds… ');
+  assert.equal(permissionNote(now + 1_400, now), 'Auto-Permission: Allow Once will be picked in 2 seconds… ');
+  assert.equal(permissionNote(now - 500, now), 'Auto-Permission: Allow Once will be picked now… ');
+  const js = read('web/app.js');
+  assert.match(js, /data-perm-due=/);
+  assert.match(js, /permTick = setInterval\(paintPermissionNotes, 1000\)/);
+  // The sentence is written once, in the module, like the question's.
+  assert.match(read('src/api.js'), /autoPermissionsAt: permissionGate\?\.autoAllowAt/);
+  assert.match(read('src/permission-gate.js'), /autoAllowAt: \(id\) => pendingAsks\.get\(id\)\?\.autoAt \?\? null/);
 });
 
 test('the note sits flush with the panel, and no nav reserve is left behind', () => {

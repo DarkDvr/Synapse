@@ -2135,6 +2135,10 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
             directory,
             reason: verdict?.reason || '',
             scope: verdict?.scope || '',
+            // When Auto-Permissions will allow this card, in epoch ms — the card
+            // counts down to that moment instead of stating a fixed wait. Null when
+            // the switch is off for the asking project, so nothing counts.
+            autoPermissionsAt: permissionGate?.autoAllowAt?.(p.id || p.requestID) ?? null,
             // A write request carries the diff the model is about to apply. That
             // is the difference between "a file" and "this exact change", and it
             // is the operator's best evidence when the card asks them to decide.

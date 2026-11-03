@@ -12,7 +12,7 @@ import { renderMarkdown } from './md.js';
 import { newStream, pushStream, slideTarget, nextOffset, takePending, freezeStream, STREAM_BUFFER } from './stream-view.js';
 import { addSample, rateOf } from './rate.js';
 import { DONE_SOUNDS, doneSoundName, workWillContinue } from './notify.js';
-import { askHeadNote, answerTimeline } from './ask-note.js';
+import { askHeadNote, answerTimeline, permissionNote } from './ask-note.js';
 import { AUTOMATION_DEFAULTS, AUTOMATION_ROWS, anyAutomationOn } from './automation.js';
 
 const $ = (id) => document.getElementById(id);
@@ -4970,7 +4970,7 @@ function permissionLead(p) {
 }
 
 function renderPermissions() {
-  return (state.permissions || [])
+  const html = (state.permissions || [])
     .map((p) => {
       const actor = p.role ? roleLabel(p.role) : 'The Architect';
       const task = p.task || '';
@@ -4983,6 +4983,7 @@ function renderPermissions() {
             files.map((f) => f.patch || f.file).join('\n'),
           )}</pre></details>`
         : '';
+      const due = Number(p.autoPermissionsAt) || null;
       return `<div class="perm-card">
         <div class="perm-head"><span class="status-dot warn" role="img" aria-label="waiting"></span>${esc(
           actor,
@@ -4991,11 +4992,11 @@ function renderPermissions() {
         ${paths.length ? `<pre class="perm-res">${esc(paths.join('\n'))}</pre>` : ''}
         ${p.reason ? `<p class="perm-why">${esc(p.reason)}</p>` : ''}
         ${diff}
-        <p class="perm-note">${state.automation?.autoPermissions
-          ? automationWaitSec('permissionsSec', 10) === 0
-            ? 'Auto-Permissions answers immediately, so this card should not stay up. '
-            : `If nobody answers within ${automationWaitSec('permissionsSec', 10)} seconds, Auto-Permissions allows it once. `
-          : ''}${p.role && p.role !== 'architect'
+        <p class="perm-note">${
+          // The switch is on for the asking project: count down to the moment it is
+          // allowed, the same way a question's head does (3 Nov).
+          due ? `<span class="perm-auto" data-perm-due="${due}">${esc(permissionNote(due))}</span>` : ''
+        }${p.role && p.role !== 'architect'
           ? 'Nothing has happened yet. You can still say no.'
           : 'Nothing has happened yet. You can still say no — say why in the chat; the Architect is reading it.'}</p>
         <!-- Only a rejection carries this, and only to a worker: the reply route
@@ -5029,6 +5030,37 @@ function renderPermissions() {
       </div>`;
     })
     .join('');
+  // A card that is going to be allowed by itself carries a countdown; the ticker
+  // runs only while one is on screen.
+  if (/data-perm-due="/.test(html)) startPermCountdown();
+  else stopPermCountdown();
+  return html;
+}
+
+// ── the permission countdown ────────────────────────────────────
+// "Auto-Permission: Allow Once will be picked in 7 seconds…", the same idea as the
+// question's head: a number that moves is a claim the operator can check. Started
+// when such a card is drawn, stopped when none is.
+let permTick = 0;
+
+function paintPermissionNotes() {
+  const notes = document.querySelectorAll('[data-perm-due]');
+  if (!notes.length) {
+    stopPermCountdown();
+    return;
+  }
+  for (const el of notes) el.textContent = permissionNote(el.dataset.permDue);
+}
+
+function startPermCountdown() {
+  if (!permTick) permTick = setInterval(paintPermissionNotes, 1000);
+}
+
+function stopPermCountdown() {
+  if (permTick) {
+    clearInterval(permTick);
+    permTick = 0;
+  }
 }
 
 // ── the question panel ──────────────────────────────────────────

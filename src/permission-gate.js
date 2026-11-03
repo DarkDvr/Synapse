@@ -251,9 +251,16 @@ export function createPermissionGate({
    *  timeout at all: the ask is answered on the next microtask, before a card can
    *  be painted. */
   function arm(p) {
-    if (p.timer || p.queued || !autoPermissionsEnabled(p.request.sessionId, p.info)) return;
+    if (p.timer || p.queued || !autoPermissionsEnabled(p.request.sessionId, p.info)) {
+      // Not armed: the card is the operator's, and nothing should count down.
+      delete p.autoAt;
+      return;
+    }
     const wait = waitMs();
     p.wait = wait;
+    // When it will be allowed, so the card can count down instead of stating a
+    // number that never moves (3 Nov — the same reason the question head counts).
+    p.autoAt = Date.now() + wait;
     if (!wait) {
       p.queued = true;
       queueMicrotask(() => {
@@ -326,9 +333,13 @@ export function createPermissionGate({
       const sameProject = key && dirKey(p.info?.directory) === key;
       if (p.request.sessionId !== sessionId && !sameProject) continue;
       if (on) arm(p);
-      else if (p.timer) {
-        clearTimeout(p.timer);
-        p.timer = null;
+      else {
+        // Off, or an unrelated save: the card is the operator's, so no countdown.
+        delete p.autoAt;
+        if (p.timer) {
+          clearTimeout(p.timer);
+          p.timer = null;
+        }
       }
     }
     return true;
@@ -503,5 +514,5 @@ export function createPermissionGate({
     });
   }
 
-  return { handle, observe, requestOf, remember, setFullAuto, setAutoPermissions, setAutomation, answered, retime, answering: (id) => answering.has(id) };
+  return { handle, observe, requestOf, remember, setFullAuto, setAutoPermissions, setAutomation, answered, retime, answering: (id) => answering.has(id), autoAllowAt: (id) => pendingAsks.get(id)?.autoAt ?? null };
 }
