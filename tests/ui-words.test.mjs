@@ -270,6 +270,19 @@ test('the question is a moved post in the transcript, not an overlay', () => {
   assert.doesNotMatch(js, /fitAskPanel/, 'no height fitting is left behind');
 });
 
+test('the composer reads the send button before it uses it', () => {
+  // A line-edit put `sendBtn.disabled = …` above its own `const` and the whole page
+  // died at boot with "Cannot access 'sendBtn' before initialization" — the rail
+  // empty, no explanation on screen (3 Nov). Cheap guard, expensive bug.
+  const js = read('web/app.js');
+  const start = js.indexOf('function renderComposer');
+  const body = js.slice(start, js.indexOf('\nfunction ', start + 10));
+  const decl = body.indexOf("const sendBtn = $('sendBtn')");
+  const use = body.indexOf('sendBtn.disabled');
+  assert.ok(decl > 0 && use > 0, 'both lines exist');
+  assert.ok(decl < use, 'the declaration comes first');
+});
+
 test('a pending question takes the composer, and leaves Stop as the way out', () => {
   const js = read('web/app.js');
   const block = /for \(const id of \['attachBtn', 'modeToggle', 'runBtn'\]\) \{([\s\S]*?)\}/.exec(js);

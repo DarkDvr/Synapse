@@ -111,12 +111,23 @@ const settle = () => new Promise((r) => setTimeout(r, 10));
 }
 
 {
-  // The Architect is the operator's own chat: the note would be an extra turn,
-  // and the operator can simply say it there.
+  // The Architect is the operator's own chat: a note with no reason would be an
+  // extra turn there, and the operator can simply say it. A *reason* is different —
+  // that sentence exists nowhere else, so it is delivered (3 Nov).
+  const { api, synthetic } = harness({ entry: { ...REQUEST, role: null } });
+  await api.permission('ses_worker', { requestId: 'per_1', decision: 'reject' });
+  await settle();
+  check('the Architect is not sent a note with no reason', synthetic.length === 0, JSON.stringify(synthetic));
+}
+
+{
+  // But a typed reason reaches the Architect's own chat: that is the point of
+  // "Reject With Reason".
   const { api, synthetic } = harness({ entry: { ...REQUEST, role: null } });
   await api.permission('ses_worker', { requestId: 'per_1', decision: 'reject', reason: 'not now' });
   await settle();
-  check('the Architect is not sent a synthetic note', synthetic.length === 0, JSON.stringify(synthetic));
+  check('the Architect is told the reason', synthetic.length === 1, JSON.stringify(synthetic));
+  check('in the operator’s words', /not now/.test(synthetic[0]?.text || ''), String(synthetic[0]?.text || ''));
 }
 
 {

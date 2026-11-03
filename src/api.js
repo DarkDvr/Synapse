@@ -1952,13 +1952,18 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
           }${who}: ${what} — ${label}${already ? ' (already answered elsewhere)' : ''}`,
         );
       }
-      if (!already && decision === 'reject') {        // The reply's `message` is dropped on this route (measured), so the note
-        // is a synthetic message: the only channel that reaches a worker. Not to
-        // the Architect: the operator is in its chat, and the extra turn ended
-        // with an empty message instead of its closing report (26 Oct).
-        if (entry?.role && entry.role !== 'architect') {
+      if (!already && decision === 'reject') {
+        // The reply's `message` is dropped on this route (measured), so the note is
+        // a synthetic message: the only channel that reaches the asker. Workers get
+        // it always (the role is told and carries on). The Architect gets it when
+        // the operator typed a reason — that sentence is the point of "Reject With
+        // Reason" (3 Nov), and without this the reason vanished for its own chat.
+        // With no reason the old rule stands: no extra turn in the Architect's chat,
+        // which once ended a report empty (26 Oct).
+        const askedByWorker = entry?.role && entry.role !== 'architect';
+        if (askedByWorker || reason) {
           Promise.resolve(
-            engine.synthetic?.(sessionId, refusalNote({ role: entry.role, scope: entry.scope, reason }), {
+            engine.synthetic?.(sessionId, refusalNote({ role: entry?.role, scope: entry?.scope, reason }), {
               description: 'permission refused',
             }),
           ).catch((err) => app.warn(`could not explain the refusal to ${sessionId}: ${err.message}`));

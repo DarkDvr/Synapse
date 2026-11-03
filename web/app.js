@@ -6386,10 +6386,10 @@ function renderComposer() {
   // working — started from 192.0.2.115"), and the operator asked for it to go:
   // it took a line off the chat to say what the rail's dot and the role cards
   // already say. A dead Send with no explanation was accepted in exchange.
+  const sendBtn = $('sendBtn');
   sendBtn.disabled = (state.busy && !hasSession) || blocked || state.compacting || (held && !target);
   // The same click, a different promise: while work is running the button says
   // Steer and wears the live path's yellow border. Anyone may press it.
-  const sendBtn = $('sendBtn');
   sendBtn.textContent = target ? 'Steer' : 'Send';
   sendBtn.classList.toggle('is-steer', Boolean(target));
   // Stop has to work while a worker is running or waiting out a retry, when the
