@@ -15,8 +15,7 @@ plan, approve it, let workers execute, watch it happen live. It is **not** a
 wrapper around the OpenCode desktop app — it drives the genuine `opencode.exe`
 over its HTTP + SSE API and rebuilds the interface from scratch.
 
-Everything lives in `F:\dev\Synapse`; nothing is written outside it except the engine
-binary it locates.
+Everything lives in `F:\dev\Synapse`; nothing is written outside it but the engine binary it locates.
 
 **It is a harness for any project, and any model.** No project, product or model
 may be named in its code, its briefs or its config: the briefs are sent to every
