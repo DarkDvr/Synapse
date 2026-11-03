@@ -5526,28 +5526,6 @@ function applyAskPage(panel = document.querySelector('.ask-panel')) {
   if (!panel || !form) return;
   const pages = askPageList(panel, form);
   const last = Math.max(0, pages.length - 1);
-  // With Auto-Answer on, the whole form is answered in one reply after the wait —
-  // so paging would show one question and answer all of them behind the operator's
-  // back (Test2, 3 Nov: two questions in a turn, only the first ever seen, and the
-  // "flowers" one answered unseen). Show every question, so what is about to be
-  // answered is what is on screen.
-  const answeringAll = state.askNote?.autoAnswer === true;
-  if (answeringAll) {
-    state.askPage = 0;
-    for (const holder of panel.querySelectorAll('.ask-field')) holder.classList.remove('ask-page-off');
-    const progress = panel.querySelector('[data-ask-progress]');
-    if (progress) {
-      progress.hidden = true;
-      progress.textContent = '';
-    }
-    const back = panel.querySelector('[data-ask-back]');
-    const next = panel.querySelector('[data-ask-next]');
-    const submit = panel.querySelector('[data-form-reply]');
-    if (back) back.hidden = true;
-    if (next) next.hidden = true;
-    if (submit) submit.hidden = false;
-    return;
-  }
   if (state.askPage > last) state.askPage = last;
   if (state.askPage < 0) state.askPage = 0;
   const active = pages[state.askPage]?.holder || null;

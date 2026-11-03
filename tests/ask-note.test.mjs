@@ -103,14 +103,18 @@ test('with several questions in one form, the countdown says how many', () => {
   );
 });
 
-test('the panel shows every question while Auto-Answer is on, so all are seen', () => {
+test('questions are paged one at a time, whatever the switches say', () => {
+  // One question at a time, always. Paging is the rule and it does not depend on a
+  // switch: a form is read one question at a time, whether the operator answers it
+  // or Auto-Answer is about to (3 Nov — showing all of them at once was the wrong
+  // answer to "I never saw the second one", and the operator said so).
   const js = read('web/app.js');
-  assert.match(js, /const answeringAll = state\.askNote\?\.autoAnswer === true;/, 'the panel knows');
-  assert.match(
-    js,
-    /for \(const holder of panel\.querySelectorAll\('\.ask-field'\)\) holder\.classList\.remove\('ask-page-off'\)/,
-    'every field is on the one page',
-  );
+  assert.doesNotMatch(js, /answeringAll/, 'no branch that puts every question on one page');
+  const start = js.indexOf('function applyAskPage');
+  assert.ok(start > 0, 'applyAskPage exists');
+  const body = js.slice(start, js.indexOf('\nfunction ', start + 10));
+  assert.match(body, /ask-page-off/, 'it still hides the questions that are not on this page');
+  assert.doesNotMatch(body, /autoAnswer/, 'the switch has no say in paging');
 });
 
 test('the note sits flush with the panel, and no nav reserve is left behind', () => {
