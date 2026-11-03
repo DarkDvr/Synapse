@@ -274,7 +274,7 @@
   },
   "roles": {
     "designer": {
-      "ref": "opencode-go/deepseek-v4.1-flash",
+      "ref": "polystrata/qwen3.6-35b-a3b-ud-q6_k_xl-204k",
       "variant": "high",
       "skills": [
         "aesthetic-foundations",
@@ -303,8 +303,8 @@
       "focus": "app"
     },
     "architect": {
-      "ref": "polystrata/qwen3.6-35b-a3b-ud-q6_k_xl-126k",
-      "variant": "medium",
+      "ref": "polystrata/qwen3.6-35b-a3b-ud-q6_k_xl-204k",
+      "variant": "high",
       "skills": [
         "app-check",
         "find-skills",
