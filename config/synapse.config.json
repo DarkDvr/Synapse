@@ -274,8 +274,8 @@
   },
   "roles": {
     "designer": {
-      "ref": "polystrata/qwen3.6-35b-a3b-ud-q6_k_xl-126k",
-      "variant": "high",
+      "ref": "polystrata/qwen3.6-35b-a3b-ud-q6_k_xl-204k",
+      "variant": "medium",
       "skills": [
         "aesthetic-foundations",
         "app-check",
@@ -304,7 +304,7 @@
     },
     "architect": {
       "ref": "polystrata/qwen3.6-35b-a3b-ud-q6_k_xl-204k",
-      "variant": "high",
+      "variant": "medium",
       "skills": [
         "app-check",
         "find-skills",
