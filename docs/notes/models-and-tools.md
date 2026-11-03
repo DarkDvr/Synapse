@@ -445,9 +445,13 @@ discovered toolset. `engine.listModels()` is recorded on every boot and every
   survives a restart until it is cleared, which is the point: a retired model is
   still advertised by the catalog, so without this the picker shows a dead model as
   perfectly healthy (that is exactly what happened to `space-bunny-free`).
-  **The record never becomes policy:** the badge does not block a selection and is
-  never mentioned in a brief. Deliberately, because a model can come back and
-  because the operator is the one who checks.
+  **The record does not block a selection and is never mentioned in a brief** —
+  the operator can still choose the model, and the Architect is told nothing about
+  the record. The one place it is policy is the ladder: a task whose planned role
+  is marked starts one rung lower (`provider`, `tools`, or `loop` — see
+  `roleMarked` in `src/runs.js`), so a model known to be broken costs a task its
+  first turn instead of every task. Deliberately narrow, because a model can come
+  back and because the operator is the one who checks.
 - **The probe marks a model that cannot drive tools.** A probe run counts its
   *real* failures — a case whose tool the model was never offered does not count
   (`offered === false`), since the case list asks about tools a model may simply

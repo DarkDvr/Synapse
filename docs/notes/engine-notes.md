@@ -389,8 +389,11 @@ Non-obvious, all verified on 2.0.30:
   rung**: `ladder.slice(skip)` sliced from the ladder's start, so a task written for
   coder-2 began on coder-1 and the report said "ran on coder-1, not coder-2" with
   nothing having failed (caught in test-project-1's f-string run, fixed to
-  `slice(at + skip)`). A role whose model carries a
-  provider mark is skipped from the start. A timeout does not loop: the worker may
+  `slice(at + skip)`). A role whose model is marked — a provider refusal, a model
+  that cannot drive the tools, or one that looped at its lowest reasoning effort —
+  is skipped from the start, so a task the Architect writes for coder-1 opens on
+  coder-2 while coder-1 is out, instead of paying for the same rescue on every task.
+  A timeout does not loop: the worker may
   still have produced something, and the attempt counter moves that case next time.
   **Changing a role's model starts the task over on that role**
   (`modelChangedSinceAttempt`): a failure on the old model is not a reason to send
@@ -508,10 +511,16 @@ Non-obvious, all verified on 2.0.30:
   (high → medium → low), sends a `synthetic` "stop repeating and carry on", and puts
   one amber pinned line on the card:
   `↻ Loop detected ×1 → lowering reasoning to medium and recovering`. At the lowest
-  variant there is no step left: the model is marked ISSUES (kind `loop`), the run
-  reports an error, and the Architect is told the role is out of action until the
-  operator fixes it. `worker.loopGuard` (Settings → Workers, on by default) turns the
-  guard off; the number of rescues rides the run and its result line as `loops`.
+  variant there is no step left: the model is marked ISSUES (kind `loop`), the task
+  moves on to the next coder **inside the same delegation**, and the run log records
+  `loopMark: { role, model }`. The report names the coder that was marked and says
+  the build now starts one rung lower — naming the run's *final* coder told the
+  Architect that the coder which had just delivered was the broken one, and it
+  stalled waiting for an operator nobody had woken (4 Nov). The mark is also
+  skipped at the start of later tasks, so coder-1 is not given the first turn of
+  every task only to loop again. `worker.loopGuard` (Settings → Workers, on by
+  default) turns the guard off; the number of rescues rides the run and its result
+  line as `loops`.
 - **Recoverable provider failures never end a run.** `src/provider-errors.js`
   classifies the sentence a turn ended with. *Transient* — rate limit/429,
   connection reset, socket/network/DNS, 5xx, "overloaded", the free-tier message,

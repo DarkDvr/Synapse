@@ -21,7 +21,7 @@ const ROOT = path.join(os.tmpdir(), 'synapse-loop-run-test');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const quiet = { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} };
 
-function project(name) {
+function project(name, ids = ['t1']) {
   const dir = path.join(ROOT, name);
   fs.rmSync(dir, { recursive: true, force: true });
   fs.mkdirSync(path.join(dir, '.synapse'), { recursive: true });
@@ -31,16 +31,25 @@ function project(name) {
       version: 1,
       goal: 'test',
       summary: '',
-      tasks: [
-        { id: 't1', title: 'Build the mock', role: 'coder-1', status: 'todo', detail: 'd', dependsOn: [], result: null, note: null },
-      ],
+      tasks: ids.map((id) => ({
+        id,
+        title: `Build ${id}`,
+        role: 'coder-1',
+        status: 'todo',
+        detail: 'd',
+        dependsOn: [],
+        result: null,
+        note: null,
+      })),
     }),
   );
   return dir;
 }
 
-/** A worker whose thinking grows the same phrase; a nudge finishes the turn. */
-function makeEngine(dir) {
+/** A worker whose thinking grows the same phrase; a nudge finishes the turn.
+ *  Roles outside `loopRoles` just finish, so one test can watch coder-2 take a
+ *  task over after coder-1 was marked. */
+function makeEngine(dir, loopRoles = ['coder-1']) {
   const sessions = new Map();
   const arch = [];
   const created = [];
@@ -79,6 +88,13 @@ function makeEngine(dir) {
     async prompt(id, text) {
       const s = sessions.get(id);
       s.messages.push({ id: `${id}-u${(turns += 1)}`, type: 'user', parts: [{ type: 'text', text }] });
+      if (!loopRoles.includes(s.role)) {
+        setTimeout(() => {
+          s.messages.push({ id: `${id}-a${(turns += 1)}`, type: 'assistant', parts: [{ type: 'text', text: 'Done.' }], completed: Date.now() });
+          s.messages.push({ id: `${id}-i${(turns += 1)}`, type: 'idle', parts: [] });
+        }, 60);
+        return;
+      }
       startLoop(id);
     },
     async synthetic(id, text) {
@@ -130,11 +146,20 @@ function readRuns(dir) {
   return fs.readFileSync(file, 'utf8').trim().split('\n').filter(Boolean).map((l) => JSON.parse(l));
 }
 
-async function startCase(name, variant) {
-  const dir = project(name);
+async function startCase(name, variant, { ladder = ['coder-1'], ids = ['t1'] } = {}) {
+  const dir = project(name, ids);
   const stub = makeEngine(dir);
   const events = [];
   const marks = [];
+  // A cache the runner can read back: a mark written by noteIssue has to be
+  // visible to roleMarked on the next delegation, the way modelcache.js makes it.
+  const models = new Map();
+  const model = (ref) => {
+    if (!models.has(ref)) {
+      models.set(ref, { variants: [{ id: 'low' }, { id: 'medium' }, { id: 'high' }], issues: [] });
+    }
+    return models.get(ref);
+  };
   const runner = createRunner({
     engine: stub.engine,
     logger: { channel: () => quiet },
@@ -144,12 +169,13 @@ async function startCase(name, variant) {
         'coder-2': { ref: 'opencode/two' },
         'coder-3': { ref: 'opencode/three' },
       },
-      worker: { ladder: ['coder-1'], stallSec: 30, resumeMax: 0, retryBaseSec: 1, retryCapSec: 2, loopGuard: true },
+      worker: { ladder, stallSec: 30, resumeMax: 0, retryBaseSec: 1, retryCapSec: 2, loopGuard: true },
       cleanup: { onFinish: false },
     }),
     modelCache: {
-      get: () => ({ variants: [{ id: 'low' }, { id: 'medium' }, { id: 'high' }] }),
+      get: (ref) => model(ref),
       noteIssue: (ref, issue) => {
+        model(ref).issues.unshift(issue);
         marks.push({ ref, issue });
         return true;
       },
@@ -158,16 +184,29 @@ async function startCase(name, variant) {
   });
 
   stub.arch.push({ id: 'u1', type: 'user', created: Date.now(), parts: [{ type: 'text', text: 'go' }] });
-  stub.arch.push({
-    id: 'a1',
-    type: 'assistant',
-    created: Date.now() + 1,
-    parts: [{ type: 'tool', name: 'synapse-delegate_delegate', id: `call_${name}`, input: { task: 't1' } }],
-  });
-  await runner.handleTurn('ses_arch', [...stub.arch]);
 
-  const result = await waitFor(() => readRuns(dir).find((r) => r.kind === 'result'));
-  return { dir, stub, events, marks, result };
+  const delegate = async (taskId) => {
+    const callId = `call_${name}_${taskId}`;
+    stub.arch.push({
+      id: `a-${callId}`,
+      type: 'assistant',
+      created: Date.now(),
+      parts: [{ type: 'tool', name: 'synapse-delegate_delegate', id: callId, input: { task: taskId } }],
+    });
+    await runner.handleTurn('ses_arch', [...stub.arch]);
+    return waitFor(() => readRuns(dir).find((r) => r.kind === 'result' && r.task === taskId));
+  };
+
+  const result = await delegate('t1');
+  return { dir, stub, events, marks, result, delegate };
+}
+
+/** Everything the Architect was told, in order. */
+function told(stub) {
+  return stub.arch
+    .filter((m) => m.type === 'synthetic')
+    .map((m) => m.parts[0]?.text || '')
+    .join('\n---\n');
 }
 
 test('a worker repeating one phrase is interrupted, lowered one effort and continues', async () => {
@@ -198,7 +237,50 @@ test('at the lowest effort the model is marked and the Architect is told', async
   assert.equal(marks[0].issue.kind, 'loop', 'the mark names the reason');
   assert.match(marks[0].issue.message, /lowest reasoning effort/);
 
-  const report = stub.arch.filter((m) => m.type === 'synthetic').map((m) => m.parts[0]?.text || '').join('\n');
+  const report = told(stub);
   assert.match(report, /ISSUES/, 'the Architect is told the model is marked');
   assert.match(report, /out of action/, 'and that the role is stuck until the operator fixes it');
 });
+
+// The move the operator asked for: a coder-1 that loops at the bottom must not
+// end the night - the task carries on down the ladder in the same delegation, and
+// the report names the coder that is marked, never the one that took over.
+test('a loop at the bottom moves the task to coder-2, and the report names coder-1', async () => {
+  const { stub, marks, result } = await startCase('loop-ladder', 'low', {
+    ladder: ['coder-1', 'coder-2', 'coder-3'],
+  });
+  assert.ok(result, 'the run finished and wrote a result');
+  assert.equal(result.role, 'coder-2', 'coder-2 ran the task');
+  assert.equal(result.outcome, 'completed', 'and finished it');
+  assert.equal(result.plannedRole, 'coder-1', 'the plan still says coder-1');
+  assert.deepEqual(result.loopMark, { role: 'coder-1', model: 'polystrata/model' }, 'the log says which rung was marked');
+
+  assert.deepEqual(marks.map((m) => m.ref), ['polystrata/model'], 'only the looping model is marked');
+
+  const report = told(stub);
+  assert.match(report, /ran on coder-2, not coder-1/, 'the Architect is told who actually ran it');
+  assert.match(report, /polystrata\/model is marked with the ISSUES badge/, 'the marked model is named');
+  assert.match(report, /start this project's build tasks one rung lower/, 'and the consequence for later tasks');
+  assert.doesNotMatch(report, /opencode\/two is marked/, 'the coder that delivered is not accused');
+  assert.doesNotMatch(report, /Do not delegate to coder-2/, 'and is not taken out of action');
+});
+
+test('once coder-1 is marked, the next task starts on coder-2', async () => {
+  const { stub, delegate, result } = await startCase('loop-next-task', 'low', {
+    ladder: ['coder-1', 'coder-2', 'coder-3'],
+    ids: ['t1', 't2'],
+  });
+  assert.equal(result.role, 'coder-2');
+
+  const second = await delegate('t2');
+  assert.ok(second, 'the second task ran');
+  assert.equal(second.role, 'coder-2', 'the task started on coder-2, without paying for the loop again');
+  assert.equal(second.loops, 0, 'no rescue was needed this time');
+
+  const roles = [...stub.sessions.values()].map((s) => s.role);
+  assert.deepEqual(roles, ['coder-1', 'coder-2', 'coder-2'], 'coder-1 was never spawned a second time');
+
+  const report = told(stub);
+  assert.match(report, /coder-1's model is marked ISSUES, so this task started further down the line/);
+});
+

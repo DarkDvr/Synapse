@@ -679,14 +679,24 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     return Math.round(raw * 1000 * jitter);
   }
 
-  /** Has this role's model already been refused outright — deprecated, or unable
-   *  to drive the critical tools? A provider *rate limit* is not a mark: it is a
-   *  bad minute, and the next attempt may be fine. */
-  function providerMarked(roleId, config) {
+  /** Is this role's model marked unfit to *start* a task — refused outright by
+   *  the provider, unable to drive the critical tools, or stuck repeating itself
+   *  at the lowest reasoning effort? A provider *rate limit* is not a mark: it is
+   *  a bad minute, and the next attempt may be fine.
+   *
+   *  A loop mark counts here too, and not only as a badge. The model has already
+   *  been walked down every variant and failed at the bottom, so the next task
+   *  must not pay for the same rescue again: it starts one rung lower, on the
+   *  coder that took over last time. The mark stays until the operator clears it
+   *  in the picker or a completed run on that model redeems it.
+   */
+  function roleMarked(roleId, config) {
     const ref = config?.roles?.[roleId]?.ref;
     if (!ref || !modelCache?.get) return false;
     return Boolean(
-      modelCache.get(ref)?.issues?.some((i) => i.kind === 'provider' || i.kind === 'tools'),
+      modelCache
+        .get(ref)
+        ?.issues?.some((i) => i.kind === 'provider' || i.kind === 'tools' || i.kind === 'loop'),
     );
   }
 
@@ -725,8 +735,9 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
    *    a run that failed or timed out, or a model the provider has refused. In
    *    Shift Test 6 a one-character regex change sent a completed task to a fresh
    *    coder-2 session for 136k tokens of prompt, and coder-1 was told nothing;
-   *  - a rung whose model carries a provider mark is skipped, because the provider
-   *    has already said it will not run it;
+   *  - a rung whose model is marked unfit to start is skipped: the provider has
+   *    already refused it, or it looped at its lowest effort, and starting there
+   *    again spends the first turn of every new task on the same failure;
    *  - the next rung is tried after a failure, floored at the last one.
    *
    * A role outside the ladder has no peers and is tried alone.
@@ -735,10 +746,9 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     const ladder =
       Array.isArray(config?.worker?.ladder) && config.worker.ladder.length ? config.worker.ladder : DEFAULT_LADDER;
     const rest = nextRung(role, attempt, { stepDown, ladder });
-    // A rung whose model the provider has refused is skipped: the provider has
-    // already said it will not run it. If every rung is marked, the list is left
-    // as it was — a refusal inside the run is a better answer than no attempt.
-    const clean = rest.filter((id) => !providerMarked(id, config));
+    // A marked rung is skipped. If every rung is marked, the list is left as it
+    // was — a marked model inside the run is a better answer than no attempt.
+    const clean = rest.filter((id) => !roleMarked(id, config));
     return clean.length ? clean : rest;
   }
 
@@ -1189,7 +1199,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
         (Array.isArray(t.dependsOn) ? t.dependsOn : []).every((d) => done.has(d)),
     );
     if (!ready) return;
-    if (providerMarked(ready.role, getConfig() || {})) return;
+    if (roleMarked(ready.role, getConfig() || {})) return;
     nudged.add(`${dirKey(dir)}|${ready.id}`);
     out.info(
       `plan step ${ready.id} (${ready.role}) is ready and was never asked for - reminding the Architect once`,
@@ -1281,6 +1291,10 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     const settings = workerSettings(config);
     const candidates = candidatesFor(task.role, attempts + 1, config, { stepDown });
     let role = candidates[0];
+    // The planned rung was skipped because its model is marked, so this task
+    // started lower without any attempt of its own failing. The report has to say
+    // why: "coder-2 ran it" with no reason reads as the harness picking at random.
+    const startedBelow = role !== task.role && roleMarked(task.role, config);
     let roleConfig = config.roles?.[role] || {};
     let modelRef = roleConfig.ref || null;
     let variant = roleConfig.variant || null;
@@ -1322,7 +1336,13 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     // was marked because even the lowest effort did it again. See the loop guard
     // in waitForIdle and the branch below.
     let loops = 0;
+    // The rung whose thinking was still repeating at the lowest effort, and its
+    // model. Kept apart from the run's final `role`/`modelRef`, because the task
+    // moves on to the next rung: the report must name the coder that is marked,
+    // never the one that took over after it.
     let loopMarked = false;
+    let loopRole = null;
+    let loopModel = null;
     // How many times this task's worker session has been replaced because its
     // transcript outgrew the model window. A fresh session starts with a short
     // handover, so this is a rescue, not a loop; after a few the run reports.
@@ -1406,6 +1426,11 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     // Roles that were tried for this task and refused by their model. The report
     // carries the reason and the cards show it while the run is live.
     const skipped = [];
+    // The planned role was already out before this task began: put it on the same
+    // list so its card says "Skipped" instead of looking idle while coder-2 works.
+    if (startedBelow) {
+      skipped.push({ role: task.role, message: 'its model is marked ISSUES' });
+    }
     // Guidance the operator sent while the worker was working. Each entry is in
     // runs.jsonl as it happens, and the report quotes them: the Architect judges
     // the work against the instruction that was actually in force, not the brief
@@ -1593,6 +1618,14 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
           log.warn(
             `worker ${request.task}: ${candidates[rung - 1]} could not run it (${outcome}), moving to ${candidate}`,
           );
+          // The loop that ended the previous rung belongs to that rung's card.
+          // Left alone, the next coder's card would say "Loop detected" while it
+          // is working normally, and the operator would read it as a repeat.
+          live.loops = 0;
+          live.loopFrom = '';
+          live.loopTo = '';
+          live.loopStop = false;
+          live.loopPhrase = '';
         }
         role = candidate;
         roleConfig = config.roles?.[role] || {};
@@ -1778,6 +1811,8 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
             });
             if (!lower) {
               loopMarked = Boolean(modelRef);
+              loopRole = role;
+              loopModel = modelRef || null;
               if (modelRef) {
                 markLoopModel(
                   modelRef,
@@ -2187,6 +2222,9 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
       retries,
       resumes,
       loops,
+      // Which rung (if any) was marked ISSUES, so the run log answers "why did
+      // the next task start on coder-2" without reading the model cache.
+      loopMark: loopRole && loopModel ? { role: loopRole, model: loopModel } : null,
       error: turnError,
       // Why a stopped run stopped, and what its last finished turn had said. The
       // two must not be one field: a provider sentence from an earlier attempt is
@@ -2343,6 +2381,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
         task,
         role,
         insteadOf: task.role !== role ? task.role : null,
+        startedBelow,
         skipped,
         outcome,
         harnessStop: Boolean(stopReason),
@@ -2366,6 +2405,8 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
         resumes,
         loops,
         loopMarked,
+        loopRole,
+        loopModel,
         modelRef,
       }),
     }, signal?.aborted ? undefined : signal);
@@ -2409,9 +2450,12 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
   /**
    * Mark a model whose thinking repeats itself at the lowest effort.
    *
-   * A different kind from 'provider': this is not a refusal, so the ladder is not
-   * told to skip the role. It is a badge for the operator and a fact for the
-   * Architect, and the existing rule applies — a completed run clears it.
+   * A different kind from 'provider' — this is not a refusal — but the ladder
+   * treats it the same way when a task *starts*: the model has been walked down
+   * every variant and failed at the bottom, so the next task opens one rung lower
+   * instead of spending its first turn on the same rescue. The kind is kept apart
+   * so the badge and the report can say "kept repeating itself" rather than
+   * "refused". A completed run on the model still clears the mark.
    */
   function markLoopModel(ref, message) {
     try {
@@ -2953,7 +2997,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     return at === -1 ? t : t.slice(0, at + 1);
   }
 
-  function report({ task, role, insteadOf, skipped, outcome, harnessStop, ms, text, files, context, workerId, planTouched, synapseTouched, qcRound, skillsRequired, skillsMissing, auto, stallSec, retries, resumes, loops = 0, loopMarked = false, modelRef = '', error, stoppedBy, lastTurnError, steers }) {
+  function report({ task, role, insteadOf, startedBelow = false, skipped, outcome, harnessStop, ms, text, files, context, workerId, planTouched, synapseTouched, qcRound, skillsRequired, skillsMissing, auto, stallSec, retries, resumes, loops = 0, loopMarked = false, loopRole = null, loopModel = null, modelRef = '', error, stoppedBy, lastTurnError, steers }) {
     const head =
       outcome === 'completed'
         ? `${task.id} (${role}) finished in ${Math.round(ms / 1000)}s.`
@@ -2966,19 +3010,23 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
               ? `${task.id} (${role}) was stopped by the operator after ${Math.round(ms / 1000)}s. ` +
                 `A stop is not a verdict on the task or the model.`
               : outcome === 'error'
-                ? loopMarked
+                ? loopMarked && (!loopRole || loopRole === role)
                   ? `${task.id} (${role}) was stopped: its thinking repeated one phrase even at the lowest ` +
                     `reasoning effort.`
                   : `${task.id} (${role}) could not run - the provider refused the turn, so no further work was attempted.`
                 : `${task.id} (${role}) could not run.`;
     const lines = [head];
     if (insteadOf) {
-      const why = (skipped || []).find((s) => s.role === insteadOf);
+      const why = startedBelow ? null : (skipped || []).find((s) => s.role === insteadOf);
       lines.push(
         `This attempt ran on ${role}, not ${insteadOf}: ${insteadOf} could not do it, so the harness moved the ` +
           `task down its line of coders. The plan still says ${insteadOf} - leave the role as it is and judge ` +
           `the work on its merits.` +
-          (why?.message ? `\n${insteadOf}'s model was refused: ${why.message}` : ''),
+          (why?.message
+            ? `\n${insteadOf} did not finish: ${why.message}`
+            : startedBelow
+              ? `\n${insteadOf}'s model is marked ISSUES, so this task started further down the line.`
+              : ''),
       );
     }
     // The operator may have changed the task while it ran. The Architect must
@@ -3004,15 +3052,26 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     }
     if (loops) {
       lines.push(
-        `Its thinking repeated one phrase, and the harness lowered the reasoning effort ` +
-          `${loops} time${loops === 1 ? '' : 's'} to get it moving again.`,
+        `${loopRole && loopRole !== role ? `${loopRole}'s thinking` : 'Its thinking'} repeated one phrase, and ` +
+          `the harness lowered the reasoning effort ${loops} time${loops === 1 ? '' : 's'} to get it moving again.`,
       );
     }
+    // The mark is a fact about one coder, and the task may already have moved on.
+    // Naming the run's *final* role here told the Architect that the coder which
+    // had just delivered the work was the broken one, and the next task stalled
+    // while it waited for an operator nobody had woken.
     if (loopMarked) {
+      const markedRole = loopRole || role;
+      const markedModel = loopModel || modelRef;
       lines.push(
-        `The model ${modelRef || 'behind this role'} is marked with the ISSUES badge: it kept repeating itself ` +
-          `even at the lowest reasoning effort. Do not delegate to ${role} again until the operator fixes the ` +
-          `model or the role, and tell the operator this role is out of action.`,
+        `The model ${markedModel || `behind ${markedRole}`} is marked with the ISSUES badge: it kept repeating ` +
+          `itself even at the lowest reasoning effort.` +
+          (markedRole === role
+            ? ` Do not delegate to ${markedRole} again until the operator fixes the model or the role, and tell the ` +
+              `operator this role is out of action.`
+            : ` This task ran on ${role} instead, and Synapse will start this project's build tasks one rung lower ` +
+              `from now on - on ${role} until the operator fixes ${markedRole} or its model. Tell the operator ` +
+              `${markedRole} is out of action, and judge ${role}'s work on its merits.`),
       );
     }
     // The evidence, never omitted: a worker that claims a file it did not write
