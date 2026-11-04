@@ -312,7 +312,7 @@
       ]
     },
     "coder-1": {
-      "ref": "polystrata/qwen3.6-35b-a3b-ud-q6_k_xl-204k",
+      "ref": "polystrata/qwen3.8-flash-next-iq2_xs",
       "variant": "medium",
       "skills": [
         "code-craft",
