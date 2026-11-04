@@ -322,7 +322,7 @@
     },
     "coder-1": {
       "ref": "polystrata/qwen3.8-flash-next-iq2_xs",
-      "variant": "high",
+      "variant": "medium",
       "skills": [
         "code-craft",
         "visual-review"
@@ -333,6 +333,7 @@
     },
     "coder-2": {
       "ref": "opencode-go/deepseek-v4.1-flash",
+      "variant": "high",
       "skills": [
         "code-craft",
         "visual-review"
@@ -371,8 +372,8 @@
     "permissionsSec": 20,
     "answerSec": 30,
     "shutdownMin": 20,
-    "keepAwake": false,
-    "keepDisplay": false
+    "keepAwake": true,
+    "keepDisplay": true
   },
   "fullAuto": {
     "timeoutSec": 5
