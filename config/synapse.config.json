@@ -387,6 +387,17 @@
     "whenDone": false,
     "minutes": 1
   },
+  "protection": {
+    "builtinsOff": [],
+    "paths": [
+      {
+        "path": "C:\\Users\\Andrew\\AppData\\Local\\BraveSoftware",
+        "label": "Brave browser data",
+        "enabled": true
+      }
+    ],
+    "removed": []
+  },
   "cleanup": {
     "onFinish": true,
     "onBoot": true
