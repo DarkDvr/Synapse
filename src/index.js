@@ -15,6 +15,7 @@ import { createHarnessGuard } from './harness.js';
 import { createPermissionGate } from './permission-gate.js';
 import { createPermissionMemory } from './permission-memory.js';
 import { braveEntries, protectionFor } from './protection.js';
+import { createPowerKeeper } from './power.js';
 import { createRemoteToken, lanAddresses, machineName } from './remote.js';
 import { createPermissionLog } from './permission-log.js';
 import { permissionsTimeoutMs } from './auto-answer.js';
@@ -37,6 +38,7 @@ const bootLog = logger.channel('app');
 let bootError = null;
 let engine = null;
 let http = null;
+let powerKeeper = null;
 
 /**
  * npm, and what its absence means. See src/npm-check.js for the four cases.
@@ -665,9 +667,15 @@ async function main() {
   };
 
   // ── http ─────────────────────────────────────────────────────
+  const power = createPowerKeeper({ logger, file: path.join(DATA_DIR, 'wakelock.txt') });
+  powerKeeper = power;
+  // The lock is a standing choice, so it comes back with the server. If the PC was
+  // told to stay awake, it stays awake across a restart too.
+  power.apply(currentConfig.automation);
   const api = createApi({
     getConfig,
     applyConfig,
+    power,
     engine,
     logger,
     getBootError: () => bootError,
@@ -855,6 +863,7 @@ async function shutdown(signal, code = 0) {
   const app = logger.channel('app');
   app.info(`${signal} received, shutting down...`);
   try { await http?.close(); } catch { /* ignore */ }
+  try { powerKeeper?.stop(); } catch { /* the child exits with its owner anyway */ }
   try { await engine?.stop(); } catch { /* ignore */ }
   try { fs.rmSync(PID_FILE, { force: true }); } catch { /* ignore */ }
   app.info('Synapse stopped.');

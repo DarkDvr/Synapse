@@ -106,6 +106,11 @@ export const DEFAULTS = {
     permissionsSec: 10,
     answerSec: 30,
     shutdownMin: 5,
+    // The wake lock is global: it is this machine that must stay awake. `keepDisplay`
+    // is the amplified half — it only means anything while `keepAwake` is on, and
+    // then it also stops the monitor turning off. See src/power.js.
+    keepAwake: false,
+    keepDisplay: false,
   },
   fullAuto: {
     // The old single wait, kept so an existing config still loads. `automation`
@@ -299,6 +304,8 @@ export function normalize(raw) {
   cfg.automation.permissionsSec = clampInt(cfg.automation.permissionsSec, 0, 3600, DEFAULTS.automation.permissionsSec);
   cfg.automation.answerSec = clampInt(cfg.automation.answerSec, 0, 3600, DEFAULTS.automation.answerSec);
   cfg.automation.shutdownMin = clampInt(cfg.automation.shutdownMin, 1, 180, DEFAULTS.automation.shutdownMin);
+  cfg.automation.keepAwake = cfg.automation.keepAwake === true;
+  cfg.automation.keepDisplay = cfg.automation.keepDisplay === true;
   // The finished-work sound: a named file in web\sounds, or 'off'. An unknown name  // would be a page asking the server for a file that is not there, so it becomes
   // the default instead of a silent typo.
   cfg.notify = isPlainObject(cfg.notify) ? cfg.notify : {};

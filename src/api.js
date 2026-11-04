@@ -161,7 +161,7 @@ export function normalizeAttachments(list) {
   return out;
 }
 
-export function createApi({ getConfig, applyConfig, engine, logger, getBootError, projects, toolStats, probe, modelCache, inspectModel: inspectRef, probeDir, runs, engineUpdate, synapseUpdate, restart, stopSelf, pcShutdown, notify, permissionLog, permissionGate, permissionMemory }) {
+export function createApi({ getConfig, applyConfig, power, engine, logger, getBootError, projects, toolStats, probe, modelCache, inspectModel: inspectRef, probeDir, runs, engineUpdate, synapseUpdate, restart, stopSelf, pcShutdown, notify, permissionLog, permissionGate, permissionMemory }) {
   const app = logger.channel('app');
 
   // ── the timed shutdown's clock ──────────────────────────────────────
@@ -746,6 +746,9 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
       engine: engine.status(),
       bootError: getBootError(),
       config: toClientConfig(getConfig()),
+      // Whether the machine is actually being held awake right now, and whether the
+      // monitor is included. The config says what was asked; this says what happened.
+      power: power?.state?.() || null,
     }),
 
     getConfig: async () => toClientConfig(getConfig()),
@@ -911,6 +914,9 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
         Object.entries(getConfig()?.roles || {}).map(([role, entry]) => [role, String(entry?.ref || '')]),
       );
       const saved = applyConfig(reconcile(body));
+      // The wake lock is a config answer too: Settings' checkboxes take effect on
+      // Save, not at the next restart.
+      power?.apply?.(saved.automation);
       // A changed Auto-Answer wait applies to cards already on screen, not only to
       // the next ask.
       permissionGate?.retime?.();
@@ -1882,6 +1888,37 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
         autoPermissions: body?.enabled === true,
         autoAnswer: body?.enabled === true,
       }),
+
+    /**
+     * The cog's "Keep PC Awake".
+     *
+     * It is not a per-project switch like the four above: the machine is one
+     * machine. The cog toggles the global answer and it is written to the config,
+     * so it survives a restart; Settings > Automation has the same switch plus the
+     * amplified one (keep the monitor on too).
+     */
+    setPower: async (body) => {
+      const awake = body?.awake === true;
+      const current = getConfig() || {};
+      const saved = applyConfig({
+        ...current,
+        automation: { ...(current.automation || {}), keepAwake: awake },
+      });
+      const state = power?.apply?.(saved.automation) || { awake: false, display: false, error: null };
+      if (awake && state.error) {
+        const err = new Error(`the wake lock could not be held: ${state.error}`);
+        err.status = 500;
+        throw err;
+      }
+      notify?.({
+        kind: 'config',
+        type: 'config.saved',
+        config: toClientConfig(saved),
+        by: null,
+        byId: null,
+      });
+      return { ok: true, automation: saved.automation, power: state };
+    },
 
     /** One form sweep, called on a timer by the server. Exposed for tests. */
     autoAnswerTick: async () => formAuto.tick(),
