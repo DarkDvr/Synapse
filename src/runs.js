@@ -91,7 +91,7 @@ const MAX_RETRY_CAP_SEC = 3600;
 // shape it catches; a slow turn with new reasoning in it never matches.
 const LOOP_TAIL_CHARS = 320;
 const LOOP_MIN_UNIT = 12;
-const LOOP_AFTER_MS = 10_000;
+const LOOP_AFTER_MS = 20_000;
 
 // The peer ladder: roles that can stand in for one another, in escalation order.
 // A task is written for one role, and the harness moves the same task down the
@@ -156,7 +156,7 @@ export function repeatedTailUnit(text) {
  *
  * `push` returns the phrase when it has been the same for that long, and null
  * otherwise. It is a small object rather than inline arithmetic so a test can use
- * its own clock instead of waiting ten real seconds.
+ * its own clock instead of waiting twenty real seconds.
  */
 export function createLoopDetector({ afterMs = LOOP_AFTER_MS } = {}) {
   let unit = '';
@@ -2832,7 +2832,9 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
       // A turn that is producing tokens is "active", so the stall clock never
       // sees a loop: the same phrase arriving forty times a second looks like
       // progress to every other guard here. This is the one that tells them
-      // apart, and it is deliberately slow — ten seconds of one unchanged phrase.
+      // apart, and it is deliberately slow — twenty seconds of one unchanged
+      // phrase. It was ten, and a local model pausing between chunks of thinking
+      // tripped it while it was working (4 Nov).
       if (loopDetector) {
         const phrase = loopDetector.push(reasoningTail(messages, before));
         if (phrase) return { timedOut: false, looped: true, phrase };
@@ -2840,10 +2842,16 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
 
       // Tool calls are the other half of "going in circles": the thinking check
       // cannot see this one, because a step that calls a tool ends with a tool part
-      // and `reasoningTail` is empty. Three of the same call inside the last five
+      // and `reasoningTail` is empty. Four of the same call inside the last eight
       // is a loop — the same command run over and over is as stuck as a repeated
       // phrase, and it looks busy to every clock here (4 Nov: eight runs of one
       // proof script in seven minutes, `loops: 0`).
+      //
+      // A call whose input did not arrive is not evidence of anything: on 4 Nov
+      // eight calls arrived with `input: {}` — four reads and four globs, all
+      // empty — and every one of them shared the empty target. That produced two
+      // "loop" strikes three seconds apart on a worker that had only started to
+      // read its files. No target, no signature.
       if (loopGuard) for (const message of afterMark(messages, before)) {
         for (const part of message?.parts || []) {
           const tool = toolOfPart(part);
@@ -2851,14 +2859,15 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
           // Identity is the call id: without one, every poll would count the same
           // call again and the guard would fire on a worker doing nothing wrong.
           if (!tool.id) continue;
+          if (!tool.target) continue;
           if (toolSeen.has(tool.id)) continue;
           toolSeen.add(tool.id);
           onTool?.(tool);
           const sig = `${tool.name}\u0000${tool.target}`;
           toolWindow.push(sig);
-          while (toolWindow.length > 5) toolWindow.shift();
+          while (toolWindow.length > 8) toolWindow.shift();
           const times = toolWindow.filter((s) => s === sig).length;
-          if (times >= 3) {
+          if (times >= 4) {
             return {
               timedOut: false,
               looped: true,

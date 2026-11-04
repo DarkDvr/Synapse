@@ -8,8 +8,8 @@
 //
 // The phrase is produced by a stub engine that grows one reasoning message every
 // 200ms; the runner's poll is 1.5s and the guard waits ten seconds, so a phrase
-// loop takes about a quarter of a minute. A tool loop (the same call three times in
-// five) is caught in about two seconds, which is the point of the second half.
+// loop takes about a quarter of a minute. A tool loop (the same call four times in
+// eight) is caught in about three seconds, which is the point of the second half.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -51,7 +51,7 @@ function project(name, ids = ['t1']) {
  *  `keepLooping` makes the nudge start another loop, so a run can reach the limit;
  *  otherwise the nudge finishes the turn. Roles outside `loopRoles` just finish, so
  *  one test can watch coder-2 take a task over after coder-1 was marked. */
-function makeEngine(dir, { loopRoles = ['coder-1'], keepLooping = false, toolLoop = false } = {}) {
+function makeEngine(dir, { loopRoles = ['coder-1'], keepLooping = false, toolLoop = false, emptyLoop = false } = {}) {
   const sessions = new Map();
   const arch = [];
   const created = [];
@@ -100,7 +100,31 @@ function makeEngine(dir, { loopRoles = ['coder-1'], keepLooping = false, toolLoo
       });
     }, 400);
   };
-  const start = (id) => (toolLoop ? startToolLoop(id) : startLoop(id));
+  // The 4 Nov false positive: tool calls whose input never arrived (`{}`), so every
+  // one of them had the empty target. Eight of them used to look like two loops.
+  const startEmptyTools = (id) => {
+    const s = sessions.get(id);
+    let n = 0;
+    s.timer = setInterval(() => {
+      const at = Date.now();
+      n += 1;
+      s.messages.push({
+        id: `${id}-e${(turns += 1)}`,
+        type: 'assistant',
+        created: at,
+        updated: at,
+        completed: at,
+        parts: [{ type: 'tool', name: n % 2 ? 'read' : 'glob', id: `${id}-ecall${n}`, input: {}, status: 'error' }],
+      });
+      if (n >= 6) {
+        clearInterval(s.timer);
+        s.timer = null;
+        s.messages.push({ id: `${id}-f`, type: 'assistant', parts: [{ type: 'text', text: 'Done.' }], completed: Date.now() });
+        s.messages.push({ id: `${id}-fi`, type: 'idle', parts: [] });
+      }
+    }, 120);
+  };
+  const start = (id) => (emptyLoop ? startEmptyTools(id) : toolLoop ? startToolLoop(id) : startLoop(id));
 
   const engine = {
     async getSession(id) {
@@ -181,9 +205,9 @@ function readRuns(dir) {
   return fs.readFileSync(file, 'utf8').trim().split('\n').filter(Boolean).map((l) => JSON.parse(l));
 }
 
-async function startCase(name, variant, { ladder = ['coder-1'], ids = ['t1'], loopLimit = 3, keepLooping = false, toolLoop = false } = {}) {
+async function startCase(name, variant, { ladder = ['coder-1'], ids = ['t1'], loopLimit = 3, keepLooping = false, toolLoop = false, emptyLoop = false } = {}) {
   const dir = project(name, ids);
-  const stub = makeEngine(dir, { keepLooping, toolLoop });
+  const stub = makeEngine(dir, { keepLooping, toolLoop, emptyLoop });
   const events = [];
   const marks = [];
   // A cache the runner can read back: a mark written by noteIssue has to be
@@ -244,6 +268,17 @@ function told(stub) {
     .join('\n---\n');
 }
 
+test('a call with no input is not a repeated call', async () => {
+  // Eight tool parts with `input: {}` — four reads, four globs — shared the empty
+  // target, and three of a kind marked a worker that had only begun to read its
+  // files (4 Nov, twice in three seconds).
+  const { result, marks } = await startCase('empty-tools', 'medium', { emptyLoop: true, loopLimit: 1 });
+  assert.ok(result, 'the run finished and wrote a result');
+  assert.equal(result.outcome, 'completed');
+  assert.equal(result.loops, 0, 'no loop was counted');
+  assert.equal(marks.length, 0, 'nothing was marked');
+});
+
 test('a repeating worker is interrupted, asked to carry on, and finishes', async () => {
   const { stub, events, result } = await startCase('loop-phrase', 'medium');
   assert.ok(result, 'the run finished and wrote a result');
@@ -278,7 +313,7 @@ test('at the limit the model is marked and the Architect is told', async () => {
 
 // The incident of 4 Nov: the worker never repeated a phrase, it ran the same command
 // over and over. The thinking check cannot see that; the tool window can.
-test('a tool loop — the same call three times — is caught without any thinking loop', async () => {
+test('a tool loop — the same call four times — is caught without any thinking loop', async () => {
   const { stub, marks, result } = await startCase('loop-tool', 'medium', {
     keepLooping: true,
     toolLoop: true,
