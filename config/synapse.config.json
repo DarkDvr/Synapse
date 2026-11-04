@@ -312,7 +312,7 @@
       "focus": "app"
     },
     "architect": {
-      "ref": "polystrata/qwen3.6-35b-a3b-ud-q6_k_xl-126k",
+      "ref": "opencode-go/deepseek-v4.1-flash",
       "variant": "high",
       "skills": [
         "app-check",
@@ -321,7 +321,7 @@
       ]
     },
     "coder-1": {
-      "ref": "opencode-go/deepseek-v4.1-flash",
+      "ref": "polystrata/qwen3.6-35b-a3b-ud-q6_k_xl-126k",
       "variant": "high",
       "skills": [
         "code-craft",
