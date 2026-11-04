@@ -555,6 +555,15 @@ async function main() {
     permissionGate.observe(ev);
     permissionGate.handle(ev);
     watchFirstToken(ev);
+    // A retired worker is a run that is over. The engine can still deliver a note
+    // queued as its last turn ended (a refusal, a nudge), and that starts a turn of
+    // its own with nobody watching — on 4 Nov it ran beside the Architect's next
+    // run for 27 minutes, two conversations alternating on one local model. Cut it
+    // the moment it starts.
+    if (type === 'session.execution.started' && runner.retired?.(ev.sessionId)) {
+      engine.interrupt(ev.sessionId).catch(() => { /* already gone */ });
+      app.warn(`cut a retired worker session that started again: ${ev.sessionId}`);
+    }
     if (/^session\.execution\.(succeeded|failed|interrupted)$/.test(type)) afterTurn(ev.sessionId, type);
   });
 

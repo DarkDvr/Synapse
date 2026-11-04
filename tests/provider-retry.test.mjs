@@ -197,7 +197,7 @@ async function runCase({ name, script, wakeScript = [{}], ladder = ['coder-1'], 
   const lines = fs.existsSync(runsFile)
     ? fs.readFileSync(runsFile, 'utf8').trim().split('\n').filter(Boolean).map((l) => JSON.parse(l))
     : [];
-  return { dir, result, runs: lines, woke, descriptions, interrupts, events, noted, logged, created, deleted, prompts, sessions: [...sessions.values()] };
+  return { dir, result, runs: lines, woke, descriptions, interrupts, events, noted, logged, created, deleted, prompts, runner, sessions: [...sessions.values()] };
 }
 
 const checks = [];
@@ -267,6 +267,15 @@ expect(
 );
 expect('rate limit: report delivered to the Architect', retried.woke.some((t) => /finished/.test(t)), `woke=${retried.woke.length}`);
 expect('rate limit: logged to the provider diary', fs.readFileSync(PROVIDER_LOG, 'utf8').includes(`rate-limit`));
+// The worker session is single-use: at the end of the run it is interrupted, and
+// remembered as retired, so a note queued as the turn ended cannot start an
+// unwatched turn (4 Nov: 27 minutes of two conversations alternating).
+expect(
+  'the worker is cut when its run ends',
+  retried.interrupts.includes(retried.created[0]),
+  JSON.stringify(retried.interrupts),
+);
+expect('the worker session is retired', retried.runner.retired(retried.created[0]) === true);
 
 // 3. a retired model ends the run and is marked
 const dead = await runCase({ name: 'dead', script: [{ error: DEPRECATED }] });

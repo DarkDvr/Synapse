@@ -712,6 +712,9 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
   // and the live path from this; it is also served over HTTP so a page reload
   // mid-run does not lose the picture.
   const running = new Map();
+  // Worker sessions whose run is over. Kept so a queued note delivered after the
+  // run cannot start an unwatched turn (see the finally in run(), and index.js).
+  const retired = new Set();
   // One stop button per live run: Stop must cut a backoff short, not wait it out.
   const controls = new Map();
   // Projects the operator has stopped. Nothing is delegated and no reminder is
@@ -2201,20 +2204,21 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
       // The card goes back to idle and the path is erased as soon as the worker
       // stops — before the Architect is woken, so the two never disagree.
       running.delete(dirKey(dir));
-      // A steer admitted just as the turn ended can start a turn of its own with
-      // nobody polling it. The run is over, so cut that turn; a steer delivered
-      // inside the run kept the worker busy, and we would not be here yet.
-      if (steers.length && worker?.id) {
+      // The worker's session is single-use, and the run is over. A note queued as
+      // the last turn ended (a refusal, a nudge) can start a turn of its own with
+      // nobody watching — on 4 Nov that turn ran for 27 minutes beside the
+      // Architect's next run: two conversations alternating on one local model,
+      // each re-reading its whole prompt every turn. Cut whatever is executing, and
+      // remember the session: if the engine delivers the queued note anyway, the
+      // event handler cuts it the moment it starts (see index.js).
+      if (worker?.id) {
         try { await engine.interrupt(worker.id); } catch { /* already gone */ }
+        retired.add(worker.id);
+        if (retired.size > 50) retired.delete(retired.values().next().value);
       }
       if (stopTimer) {
         clearTimeout(stopTimer);
         stopTimer = null;
-      }
-      // A graceful stop's note can start a turn of its own if the turn ended
-      // before reading it; the run is over, so cut that turn.
-      if (gracefulStop && worker?.id) {
-        try { await engine.interrupt(worker.id); } catch { /* already gone */ }
       }
       emit('run.finished', {
         dir,
@@ -3691,6 +3695,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     recoverStops,
     requestsIn,
     active,
+    retired: (sessionId) => retired.has(String(sessionId || '')),
     steer,
     requestStop,
     cancel,
