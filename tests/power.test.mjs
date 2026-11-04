@@ -26,13 +26,12 @@ function fakeSpawn() {
 test('the wake lock asks for the system, and the display only when told', () => {
   const system = wakeScript({ display: false, ownerPid: 123 });
   assert.match(system, /SetThreadExecutionState/);
-  assert.match(system, /ES_SYSTEM_REQUIRED/);
-  assert.match(system, /\$ES_DISPLAY_REQUIRED = 0x0/);
+  assert.match(system, /\$ES_FLAGS = 2147483649/, 'ES_CONTINUOUS | ES_SYSTEM_REQUIRED');
   assert.match(system, /\$owner = 123/);
+  assert.match(system, /\[uint32\]\$ES_FLAGS/, 'a negative Int32 is refused by the API');
 
   const shown = wakeScript({ display: true, ownerPid: 123 });
-  assert.match(shown, /\$ES_DISPLAY_REQUIRED = 0x2/);
-  assert.match(shown, /ES_CONTINUOUS -bor \$ES_SYSTEM_REQUIRED -bor \$ES_DISPLAY_REQUIRED/);
+  assert.match(shown, /\$ES_FLAGS = 2147483651/, 'ES_CONTINUOUS | ES_SYSTEM_REQUIRED | ES_DISPLAY_REQUIRED');
 });
 
 test('the lock starts, changes its flags once, and stops', () => {

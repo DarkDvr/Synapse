@@ -28,24 +28,26 @@ const TICK_SECONDS = 20;
  * cheaper than a machine that will not sleep.
  */
 export function wakeScript({ display = false, ownerPid = 0, heartbeat = null } = {}) {
-  const displayFlag = display ? '0x2' : '0x0';
+  // 0x80000000 | ES_SYSTEM_REQUIRED | (display ? ES_DISPLAY_REQUIRED : 0), as a
+  // positive decimal. PowerShell reads the literal `0x80000000` as a negative
+  // Int32, and a negative Int32 cannot be passed to a UInt32 parameter — the
+  // first version held the lock for exactly zero seconds because of it (4 Nov).
+  const flags = 0x80000000 + 0x1 + (display ? 0x2 : 0);
   const beat = heartbeat
     ? `[System.IO.File]::WriteAllText('${String(heartbeat).replace(/'/g, "''")}', [DateTime]::UtcNow.ToString('o'))`
     : '';
   return [
     "Add-Type -Name Power -Namespace Syn -MemberDefinition '[DllImport(\"kernel32.dll\", SetLastError = true)] public static extern uint SetThreadExecutionState(uint esFlags);'",
-    '$ES_CONTINUOUS = 0x80000000',
-    '$ES_SYSTEM_REQUIRED = 0x1',
-    `$ES_DISPLAY_REQUIRED = ${displayFlag}`,
+    `$ES_FLAGS = ${flags}`,
     `$owner = ${Number(ownerPid) || 0}`,
     'try {',
     `  while (($owner -eq 0) -or (Get-Process -Id $owner -ErrorAction SilentlyContinue)) {`,
-    '    [Syn.Power]::SetThreadExecutionState($ES_CONTINUOUS -bor $ES_SYSTEM_REQUIRED -bor $ES_DISPLAY_REQUIRED) | Out-Null',
+    '    [Syn.Power]::SetThreadExecutionState([uint32]$ES_FLAGS) | Out-Null',
     beat ? `    ${beat}` : '',
     `    Start-Sleep -Seconds ${TICK_SECONDS}`,
     '  }',
     '} finally {',
-    '  [Syn.Power]::SetThreadExecutionState($ES_CONTINUOUS) | Out-Null',
+    '  [Syn.Power]::SetThreadExecutionState([uint32]0) | Out-Null',
     '}',
   ]
     .filter((line) => line !== '')
