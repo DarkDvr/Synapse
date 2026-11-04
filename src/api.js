@@ -917,6 +917,19 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
       for (const [role, entry] of Object.entries(saved.roles || {})) {
         const ref = String(entry?.ref || '');
         if (!ref || ref === beforeRefs.get(role)) continue;
+        // The operator chose a model for this role: the harness's loop marks on it
+        // are about a different run, and must not greet the choice as ISSUES. The
+        // task attempt counts for this role reset lazily as well — a run on the old
+        // model is not evidence against the new one (`modelChangedSinceAttempt`).
+        try {
+          const cleared = modelCache?.clearLoopIssues?.(ref) || 0;
+          if (cleared) {
+            notify?.({ kind: 'model', type: 'issues', ref });
+            app.info(`model loops cleared for ${role}: ${ref} (${cleared} mark(s); the role's model changed)`);
+          }
+        } catch (err) {
+          app.warn(`could not clear the loop marks on ${ref}: ${err.message}`);
+        }
         try {
           // The variant travels with the ref: a role set to a high thinking
           // effort must not come back as the default one mid-run. The runner may

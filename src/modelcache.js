@@ -165,6 +165,26 @@ export function createModelCache({ logger, file }) {
   }
 
   /**
+   * Clear only the loop marks on a model.
+   *
+   * The operator changing a role's model is a fresh choice, and the harness's
+   * memory of the model circling belongs to the model it was circling on — a loop
+   * mark must not greet the new choice as ISSUES. Provider marks stay: a deprecated
+   * model or a refused key is still true, and it is not a punishment for looping.
+   */
+  function clearLoopIssues(ref) {
+    const rec = ref ? data.models[ref] : null;
+    if (!rec?.issues?.length) return 0;
+    const before = rec.issues.length;
+    const kept = rec.issues.filter((issue) => issue.kind !== 'loop');
+    if (kept.length === before) return 0;
+    if (kept.length) rec.issues = kept;
+    else delete rec.issues;
+    persist();
+    return before - kept.length;
+  }
+
+  /**
    * A provider refused a prompt of this size: the real window is smaller than it.
    *
    * The cloud equivalent of reading a local server's loaded window. A local
@@ -184,5 +204,5 @@ export function createModelCache({ logger, file }) {
     return true;
   }
 
-  return { record, get, setTools, isChecked, attempts, resetAsks, noteIssue, clearIssues, noteContext, snapshot: () => data };
+  return { record, get, setTools, isChecked, attempts, resetAsks, noteIssue, clearIssues, clearLoopIssues, noteContext, snapshot: () => data };
 }

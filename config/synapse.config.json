@@ -3,7 +3,7 @@
     "host": "127.0.0.1",
     "port": 8700,
     "openBrowser": false,
-    "remote": true
+    "remote": false
   },
   "engine": {
     "type": "opencode",
@@ -321,7 +321,7 @@
       ]
     },
     "coder-1": {
-      "ref": "polystrata/qwen-agentworld-35b-a3b-q6-126k",
+      "ref": "polystrata/qwen-agentworld-35b-a3b-q6-200k",
       "variant": "high",
       "skills": [
         "code-craft",
@@ -332,8 +332,8 @@
       ]
     },
     "coder-2": {
-      "ref": "polystrata/qwen-agentworld-35b-a3b-q6-126k",
-      "variant": "medium",
+      "ref": "polystrata/qwen-agentworld-35b-a3b-q6-200k",
+      "variant": "high",
       "skills": [
         "code-craft",
         "visual-review"

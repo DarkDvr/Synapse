@@ -256,6 +256,26 @@ const isDelegate = (name) => {
   return n === 'delegate' || n.endsWith('_delegate');
 };
 
+/**
+ * What a tool call acted on, as one comparable string.
+ *
+ * The path (or command, pattern, URL) plus the read slice when there is one. The
+ * slice is what makes paging through a file different from asking for the same
+ * bytes again, and it is the difference between work and a loop.
+ */
+export function toolTarget(input = {}) {
+  const raw =
+    input.filePath ?? input.file_path ?? input.path ??
+    input.command ?? input.pattern ?? input.url ??
+    input.skill ?? input.agent ?? '';
+  const slice = [input.offset, input.limit, input.start_line, input.end_line]
+    .filter((value) => value !== undefined && value !== null && value !== '')
+    .map(String)
+    .join(':');
+  const target = String(raw ?? '').trim();
+  return slice ? `${target}#${slice}` : target;
+}
+
 /** The tool input may arrive as an object or as a JSON string. */
 function parseInput(input) {
   if (input && typeof input === 'object') return input;
@@ -1841,6 +1861,9 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
           }
 
           if (finished.looped) {
+            // A Stop is not a fault: if the operator's abort arrived with the loop,
+            // count nothing and mark nothing. Stop must never leave a role marked.
+            if (signal?.aborted) { outcome = 'stopped'; break; }
             // The worker is going in circles: one phrase over and over, or the same
             // call again and again. That is not progress, however fast the tokens
             // arrive. Interrupt it and ask for the next real step; every rescue is
@@ -1866,6 +1889,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
               phrase: live.loopPhrase,
             });
             if (rungLoops >= loopLimit) {
+              if (signal?.aborted) { outcome = 'stopped'; break; }
               loopMarked = Boolean(modelRef);
               loopRole = role;
               loopModel = modelRef || null;
@@ -2911,17 +2935,21 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
    * calendar.py", not "write".
    */
   /** One tool call in the shape the cards use: what ran, and on what. */
+  /**
+   * The part of a tool call that says what it acted on.
+   *
+   * A read's slice is part of it. Reading one large file in three chunks is
+   * progress, not a loop, and on 4 Nov the old signature — the path alone — turned
+   * a model paging through `Transfer.cs` into three "read run 3 times" strikes in
+   * thirty seconds, which marked it ISSUES.
+   */
   function toolOfPart(part) {
     if (part?.type !== 'tool' || !part.name) return null;
     const input = parseInput(part.input) || {};
-    const raw =
-      input.filePath ?? input.file_path ?? input.path ??
-      input.command ?? input.pattern ?? input.url ??
-      input.skill ?? input.agent ?? '';
     return {
       id: String(part.id || ''),
       name: String(part.name),
-      target: String(raw || '').trim(),
+      target: toolTarget(input),
     };
   }
 
