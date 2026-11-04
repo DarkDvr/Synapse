@@ -1431,6 +1431,12 @@ body[data-mode="single"] #runAuto { display: none; }
 }
 .msg.assistant { --speaker: var(--green); }
 .msg.harness { --speaker: var(--yellow); }
+/* A PROHIBITED refusal is the one harness line in red. It is not a report and not
+   a declined tool call: the operator's protected list said no to changing the
+   machine, and that is an alarm. */
+.msg.harness.is-prohibited { --speaker: var(--red); }
+.msg.harness.is-prohibited .msg-role { color: var(--red); }
+.msg.harness.is-prohibited .msg-answer { color: #ffb3a7; border-left: 2px solid var(--red); padding-left: 10px; }
 
 /* A worker's own working, while it works. It is deliberately the quietest thing
    in the chat: no speaker colour, no filled panel, a thin rule in the same grey
@@ -1493,6 +1499,11 @@ body[data-mode="single"] #runAuto { display: none; }
   font-size: calc(var(--chat-fs) * 0.92); line-height: 1.45; color: var(--amber);
 }
 .chat-alarm-mark { font-size: calc(var(--chat-fs) * 0.88); }
+/* The one alarm in bright red: a tool tried to change something on the prohibited
+   list. It is louder than the amber "touched Synapse" line on purpose — that one
+   is news, this one is the machine saying no. */
+.chat-alarm.is-prohibited { border-left-color: var(--red); color: #ff7a66; }
+.chat-alarm.is-prohibited .chat-alarm-mark { color: var(--red); }
 .chat-alarm-text {
   min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
@@ -2728,6 +2739,33 @@ body.is-stopping .chat-dock { animation: stop-glow 0.7s ease-in-out infinite; }
 }
 .prov-add-menu button:hover:not(:disabled) { background: var(--violet-soft); color: #fff; }
 .prov-add-menu button:disabled { color: #5e626a; cursor: not-allowed; }
+
+/* ── Prohibited ───────────────────────────────────────────────────────────
+   The one pane whose rows are a list of the machine's untouchable places. Wide
+   rows, a mono path that ellipsises from the middle of the line, a tag that says
+   whether the row is a built-in or the operator's, and the delete button only
+   where deleting means something. */
+.prot-list { display: flex; flex-direction: column; gap: 6px; margin-top: 2px; }
+.prot-row {
+  display: flex; align-items: center; gap: 10px; min-width: 0;
+  padding: 9px 12px; border: 1px solid var(--line); border-radius: 8px; background: #17181b;
+}
+.prot-row.is-off { opacity: 0.52; }
+.prot-check { flex: none; width: 15px; height: 15px; margin: 0; accent-color: var(--red); cursor: pointer; }
+.prot-path {
+  flex: 1 1 auto; min-width: 0; font-family: var(--mono); font-size: 11px; color: #c6cad1;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.prot-tag {
+  flex: none; font-family: var(--mono); font-size: 8.5px; font-weight: 700;
+  letter-spacing: 0.06em; text-transform: uppercase; color: #9a9ea6;
+  border: 1px solid #3a3d43; border-radius: 4px; padding: 0 5px; line-height: 1.6;
+}
+.prot-tag.is-builtin { color: #b9a1f6; border-color: #4b3f74; }
+.prot-tag.is-sealed { color: var(--red); border-color: rgba(240, 86, 63, 0.55); }
+.prot-del { color: var(--red); }
+.prot-del:hover { background: var(--red-soft); border-color: rgba(240, 86, 63, 0.5); }
+.prot-empty { color: #6d717a; font-size: 11.5px; padding: 10px 2px; }
 
 .prov-edit {
   display: grid; gap: 10px; margin-top: 4px; padding: 13px;

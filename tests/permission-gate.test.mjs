@@ -25,7 +25,14 @@ function setup({ directory = PROJECT, metadata = { synapse: { role: 'coder-1', t
       replies.push({ sessionId, requestId, decision });
     },
   };
-  const gate = createPermissionGate({ engine, logger: quiet, root: ROOT, home: HOME });
+  const gate = createPermissionGate({
+    engine,
+    logger: quiet,
+    root: ROOT,
+    home: HOME,
+    // The shipped default: Synapse is a built-in prohibited entry.
+    getProtection: () => [{ path: ROOT, label: 'Synapse', sealed: false }],
+  });
   return { gate, replies };
 }
 
@@ -279,7 +286,8 @@ test('a refusal carries an explanation, an allow does not', async () => {
     },
   };
   const gate = createPermissionGate({ engine, logger: quiet, root: ROOT, home: HOME });
-  await gate.handle(event('edit', [`${ROOT}/src/api.js`]));
+  // A credential store: refused permanently, and the asking worker is told why.
+  await gate.handle(event('read', [`${HOME}/.ssh/id_rsa`]));
   assert.equal(replies[0], 'reject');
   // The synthetic note is fired without awaiting; let its microtask run.
   await new Promise((r) => setImmediate(r));
@@ -307,7 +315,10 @@ test('a refusal to the Architect is not repeated as a synthetic note', async () 
     },
   };
   const gate = createPermissionGate({ engine, logger: quiet, root: ROOT, home: HOME });
-  await gate.handle(event('edit', [`${ROOT}/src/api.js`]));
+  // A credential store, not a prohibited path: a PROHIBITED refusal *is* told to
+  // the Architect on purpose (something tried to change the machine), while a
+  // refused read is not repeated as an extra turn in its own chat.
+  await gate.handle(event('read', [`${HOME}/.ssh/id_rsa`]));
   await new Promise((r) => setImmediate(r));
   assert.equal(replies[0], 'reject');
   assert.equal(notes.length, 0, 'the operator is already in the Architect chat; no extra turn');
@@ -399,6 +410,7 @@ test('a remembered request never overrides a refusal', async () => {
     logger: quiet,
     root: ROOT,
     home: HOME,
+    getProtection: () => [{ path: ROOT, label: 'Synapse', sealed: false }],
     onDecision: (entry) => seen.push(entry),
   });
   gate.remember('ses_1', 'edit', [`${ROOT}/src/api.js`]);

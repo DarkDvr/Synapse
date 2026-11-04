@@ -15,7 +15,18 @@ const SCRATCH = 'F:/dev/Synapse.Projects/_scratch';
 const CWD = 'F:\\dev\\Synapse.Projects\\demo';
 
 const call = (action, resource, extra = {}) =>
-  decide({ action, resources: [resource], cwd: CWD, projectRoot: PROJECT, harnessRoot: HARNESS, home: HOME, ...extra });
+  decide({
+    action,
+    resources: [resource],
+    cwd: CWD,
+    projectRoot: PROJECT,
+    harnessRoot: HARNESS,
+    home: HOME,
+    // The shipped default: Synapse itself is a built-in prohibited entry, so a
+    // write inside the harness is refused with scope 'prohibited'.
+    protection: [{ path: HARNESS, label: 'Synapse', sealed: false }],
+    ...extra,
+  });
 
 const shell = (command, extra = {}) => call('shell', command, extra);
 
@@ -33,17 +44,17 @@ test('a credential store is recognised, and a similar name is not', () => {
   assert.equal(isSecret('C:/Users/tester/.sshx/id_rsa', { home: HOME }), false);
 });
 
-// Brave is the operator's browser, and touching it resets the profile. The policy
-// refuses it as a credential store, for a read, a write and a command alike, so no
-// model can reach it even to copy it.
-test('Brave and browser profiles are credential stores, refused and never asked', () => {
-  const brave = `${HOME}/AppData/Local/BraveSoftware/Brave-Browser/User Data/Default/Cookies`;
-  assert.equal(call('read', brave).effect, 'deny');
-  assert.equal(call('read', brave).scope, 'secret');
-  assert.equal(call('edit', brave).effect, 'deny');
-  assert.equal(shell(`Copy-Item "${brave}" C:\\tmp\\cookies`).effect, 'deny');
+// Browser profiles hold cookies, and Edge's is still refused as a credential
+// store. Brave moved to the prohibited list (src/protection.js): it is the
+// operator's to delete from that list, and its entry refuses reads as well.
+test('browser profiles are refused, and Brave through the prohibited list', () => {
   // Edge is the browser we do use; its profile is still not a model's to read.
   assert.equal(call('read', `${HOME}/AppData/Local/Microsoft/Edge/User Data/Default/Cookies`).effect, 'deny');
+  const brave = `${HOME}/AppData/Local/BraveSoftware/Brave-Browser/User Data/Default/Cookies`;
+  const guarded = [{ path: `${HOME}/AppData/Local/BraveSoftware`, sealed: true, label: 'Brave' }];
+  assert.equal(call('read', brave, { protection: guarded }).effect, 'deny');
+  assert.equal(call('read', brave, { protection: guarded }).scope, 'prohibited');
+  assert.equal(call('edit', brave, { protection: guarded }).effect, 'deny');
 });
 
 // ── file writes ─────────────────────────────────────────────────
@@ -76,7 +87,14 @@ test('a write into a credential store is denied', () => {
 // exists so a probe script never has to go into the machine's temp folder or the
 // project's own git tree.
 test('the scratch folder is writable without asking, and is not the harness', () => {
-  const base = { cwd: CWD, projectRoot: PROJECT, harnessRoot: HARNESS, scratchRoot: SCRATCH, home: HOME };
+  const base = {
+    cwd: CWD,
+    projectRoot: PROJECT,
+    harnessRoot: HARNESS,
+    scratchRoot: SCRATCH,
+    home: HOME,
+    protection: [{ path: HARNESS, label: 'Synapse', sealed: false }],
+  };
   const file = `${SCRATCH}/demo-1234/probe.ps1`;
   assert.equal(zoneOf(file, { projectRoot: PROJECT, harnessRoot: HARNESS, scratchRoot: SCRATCH }), 'scratch');
   const write = decide({ ...base, action: 'edit', resources: [file] });
@@ -411,7 +429,7 @@ test('a decision says whether the call reached outside the project', () => {
 test('a decision says where it lands, for the card to explain', () => {
   assert.equal(call('edit', 'src/a.js').scope, 'project');
   assert.equal(call('edit', 'D:/x.txt').scope, 'outside');
-  assert.equal(call('edit', `${HARNESS}/x`).scope, 'harness');
+  assert.equal(call('edit', `${HARNESS}/x`).scope, 'prohibited');
   assert.equal(call('edit', 'C:/Users/tester/.ssh/known_hosts').scope, 'secret');
   assert.equal(call('read', '.env').scope, 'project');
   assert.equal(call('read', 'C:/Windows/hosts').scope, 'outside');

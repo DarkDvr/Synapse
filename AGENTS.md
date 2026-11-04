@@ -67,15 +67,14 @@ the cards and the commits, not the code. One reason per sentence, not a chain.
    say so rather than drawing a mock that implies it works. Never print secrets
    or tokens.
 8. **A model touches its project, reads the harness, and asks for the rest.**
-   `src/permissions.js` decides and the engine enforces: writes and commands
-   outside the project directory ask the operator, writes inside the harness
-   never happen, and credential stores are refused. Do not widen a zone in a
-   brief or a config — change the policy and its tests.
-9. **Edge or headless, never Brave.** Windows' default browser here is Brave, and
-   touching it — opening a link through the default browser, launching it, reading
-   or copying its profile — resets the operator's extensions, cookies and settings.
-   Open links in Edge by its full path; take pictures with `skills/visual-review`.
-   Never open, read, copy, move or clean Brave's folders — see `docs/notes/web-reading.md`.
+   `src/permissions.js` decides and the engine enforces: outside the project it
+   asks, inside the harness it refuses, and credential stores are refused. The
+   prohibited list outranks every rule here (`docs/notes/protection.md`). Do not
+   widen a zone in a brief or a config — change the policy and its tests.
+9. **Edge or headless, never Brave.** Windows' default browser here is Brave; touching
+   it — opening it, reading or copying its profile — resets extensions, cookies and
+   settings. Open links in Edge by its full path, take pictures with `skills/visual-review`,
+   and leave the seeded Brave entry in the prohibited list (No reads) alone.
 
 ### Palette (do not break this)
 
@@ -169,6 +168,7 @@ an agent does not know to open is a document that does not exist:
 | `docs/notes/web-reading.md` | before promising to read a signed-in site, or touching any browser — every cookie route was measured, one destroyed the operator's browser data, and Brave is never touched |
 | `docs/notes/i18n.md` | before starting the Russian interface — scope, plurals, what must never be translated |
 | `docs/notes/project-chat.md` | before changing how a project, a chat or a compaction works — the one-chat-per-project scope, its phases and what is still open |
+| `docs/notes/protection.md` | before touching `src/protection.js`, the prohibited list, or the Brave rule — what is refused without asking, and what the fence cannot see |
 
 Two rules: **a new lesson goes in `docs/notes/`, not here**; and a rule you move out
 leaves its invariant behind in one line, with the pointer.

@@ -49,6 +49,7 @@ const NOTES = [
   'docs/notes/i18n.md',
   'docs/notes/web-reading.md',
   'docs/notes/project-chat.md',
+  'docs/notes/protection.md',
   'docs/notes/releases.md',
 ];
 const agents = read('AGENTS.md');

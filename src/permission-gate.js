@@ -25,6 +25,9 @@ export function createPermissionGate({
   scratchRoot = null,
   onDecision,
   memory,
+  // The enabled PROHIBITED list, read per request so a Settings change applies to
+  // the next tool call without a restart.
+  getProtection = null,
   // How long an unanswered card waits before it is allowed once. Tests pass a
   // few milliseconds; the product reads `fullAuto.timeoutSec` (20 seconds by
   // default). `getTimeoutMs` wins when present so a Settings change applies to
@@ -400,6 +403,7 @@ export function createPermissionGate({
       harnessRoot: root,
       scratchRoot,
       home,
+      protection: getProtection?.() || [],
     });
     const who = [info.role, info.task].filter(Boolean).join(' ');
     const what = shown(request);
@@ -455,11 +459,16 @@ export function createPermissionGate({
       // Architect is not sent one: the operator is in its chat, the refusal is
       // already on its card, and the extra turn ended with an empty message
       // (measured 26 Oct) instead of the Architect's closing report.
-      const escalate = Boolean(info.role) && info.role !== 'architect';
+      // A PROHIBITED refusal is not a declined tool call: it is the operator's
+      // protected list saying no, and it is told to whoever asked — including the
+      // Architect, because "something tried to change Windows" is news the chat
+      // should carry. Everything else keeps the old rule: workers are told, the
+      // Architect is not (an extra turn once ended with an empty report).
+      const escalate = (Boolean(info.role) && info.role !== 'architect') || verdict.scope === 'prohibited';
       if (verdict.effect === 'deny' && escalate) {
         Promise.resolve(
           engine.synthetic?.(request.sessionId, refusalNote({ role: info.role, scope: verdict.scope }), {
-            description: 'permission refused',
+            description: verdict.scope === 'prohibited' ? 'PROHIBITED' : 'permission refused',
           }),
         ).catch((err) => log.warn(`could not explain the refusal to ${request.sessionId}: ${err.message}`));
       }

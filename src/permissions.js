@@ -19,6 +19,8 @@
 import os from 'node:os';
 import path from 'node:path';
 
+import { covers } from './protection.js';
+
 const WRITE_ACTIONS = new Set(['edit', 'write', 'patch', 'create']);
 const SHELL_ACTIONS = new Set(['shell', 'bash']);
 const EXECUTE_ACTIONS = new Set(['execute']);
@@ -40,13 +42,12 @@ const SECRET_PARTS = [
   '.kube',
   '.config/gcloud',
   '.config/gh',
-  // Browser profiles hold cookies and saved passwords. Brave is denied as a whole
-  // folder, not just its profile: nothing under it is a model's to touch, and the
-  // operator's Brave resets itself when anything reaches it (docs/notes/web-reading.md).
+  // Browser profiles hold cookies and saved passwords. Brave is handled by the
+  // prohibited list instead (src/protection.js): it is not only unreadable, it is a
+  // folder the operator can delete from that list deliberately, and the list is the
+  // one place a path is called off limits.
   'AppData/Local/Google/Chrome/User Data',
   'AppData/Local/Microsoft/Edge/User Data',
-  'AppData/Local/BraveSoftware',
-  'AppData/Roaming/BraveSoftware',
   'AppData/Roaming/Mozilla/Firefox/Profiles',
 ];
 
@@ -290,6 +291,17 @@ const ask = (reason, outside = false, scope = 'project') => ({ effect: 'ask', re
 const deny = (reason, outside = false, scope = 'project') => ({ effect: 'deny', reason, outside: Boolean(outside), scope });
 
 /**
+ * The enabled protected entry covering this path, if any.
+ *
+ * `ctx.protection` is the list Settings > Prohibited keeps — `{ path, sealed }`
+ * entries, built-in and added. It is read per request, so ticking a box applies to
+ * the next tool call without a restart.
+ */
+function prohibited(target, ctx) {
+  return (ctx.protection || []).find((entry) => covers(entry.path, target)) || null;
+}
+
+/**
  * What the model is told when a request is refused.
  *
  * A bare "declined" invites the next attempt: in the 26 Oct test the worker tried
@@ -306,6 +318,13 @@ export function refusalNote({ role, scope, reason } = {}) {
   const worker = Boolean(role) && role !== 'architect';
   const why = String(reason || '').replace(/\s+/g, ' ').trim().slice(0, 300);
   const said = why ? ` They said: "${why}".` : '';
+  if (scope === 'prohibited') {
+    return (
+      'PROHIBITED: this path is on the operator\'s protected list and cannot be changed by any tool, even ' +
+      'with permission. Do not try another tool, another path or a shell command to reach the same place. ' +
+      'Stop and say in your report what you were trying to change and why.'
+    ) + said;
+  }
   if (scope === 'harness' || scope === 'secret') {
     return (
       'The harness refused this permanently: Synapse\'s own files and saved-password folders are never ' +
@@ -336,12 +355,18 @@ function decideWrite(resources, ctx) {
   for (const value of list) {
     const target = resolvePath(first(value), ctx.cwd, { home: ctx.home });
     if (!target || target.unknown) return ask('The harness cannot tell which folder this is.', true, 'unknown');
+    // PROHIBITED beats every other rule: no card, no remembered grant, no answer.
+    const guarded = prohibited(target.path, ctx);
+    if (guarded) return deny(`PROHIBITED: ${guarded.label} is on the protected list.`, true, 'prohibited');
     if (isSecret(target.path, ctx)) return deny('The harness never opens saved-password folders.', true, 'secret');
     paths.push(target.path);
     zones.push(zoneOf(target.path, ctx));
   }
   if (zones.includes('harness')) {
-    return deny('Synapse is the app itself; it may be read, not changed.', true, 'harness');
+    // The Synapse folder is a built-in protection, so reaching this line means the
+    // operator switched that entry off on purpose. A change to Synapse itself is
+    // then their decision to make, exactly like any other folder outside the project.
+    return ask('Synapse is the app itself. Changing it is a deliberate choice.', true, 'harness');
   }
   if (zones.includes('outside')) {
     return ask(
@@ -371,6 +396,13 @@ function decideShell(resources, ctx) {
   if (!command) return ask('The harness got an empty command.', true, 'unknown');
   const info = analyzeCommand(command, ctx.cwd, { home: ctx.home });
   if (info.unknown) return ask('The harness cannot tell where this command lands.', true, 'unknown');
+
+  // PROHIBITED before everything else: a statement that is not read-only may not
+  // name a protected path, and neither may a redirect, wherever the command starts.
+  // Reading one is fine unless the entry is sealed (Brave), which decides below.
+  const segments = Array.isArray(info.segments) && info.segments.length
+    ? info.segments
+    : [{ paths: info.paths, redirects: info.redirects, readsOnly: info.readsOnly }];
 
   const zones = info.paths.map((p) => zoneOf(p, ctx));
   const redirectZones = info.redirects.map((p) => zoneOf(p, ctx));
@@ -424,10 +456,42 @@ function decideShell(resources, ctx) {
     }
     return false;
   })();
+  // PROHIBITED: a statement that is not read-only may not name a protected path,
+  // and neither may a redirect. Running a shipped script is the exception — it is
+  // execution, not a change — so the script words a toolbox command names are not
+  // counted as writes. Writing *into* skills/ is still caught, redirect included.
+  const toolPath = (p) => runsShippedTool && inside(p, `${slash(ctx.harnessRoot)}/skills`);
+  const guardedWrite = segments
+    .flatMap((part) => [
+      ...(part.readsOnly ? [] : part.paths.filter((p) => !toolPath(p))),
+      ...part.redirects,
+    ])
+    .find((p) => prohibited(p, ctx));
+  if (guardedWrite) {
+    const entry = prohibited(guardedWrite, ctx);
+    return deny(`PROHIBITED: ${entry.label} is on the protected list.`, true, 'prohibited');
+  }
+  // A write with no path of its own runs in the statement's directory: `cd
+  // C:\Windows` then `del x` names nothing and still lands in Windows.
+  const guardedDir = segments.find((part) => !part.readsOnly && part.dir && prohibited(part.dir, ctx));
+  if (guardedDir) {
+    const entry = prohibited(guardedDir.dir, ctx);
+    return deny(`PROHIBITED: ${entry.label} is on the protected list.`, true, 'prohibited');
+  }
+  if (info.readsOnly) {
+    const sealed = segments
+      .flatMap((part) => [...part.paths, ...part.redirects])
+      .map((p) => prohibited(p, ctx))
+      .find((entry) => entry?.sealed);
+    if (sealed) return deny(`PROHIBITED: ${sealed.label} is not read either.`, true, 'prohibited');
+  }
   const writesHarness =
     redirectZones.includes('harness') || (harnessPaths.length > 0 && !info.readsOnly && !runsShippedTool);
   if (writesHarness) {
-    return deny('Synapse is the app itself; it may be read, not changed.', true, 'harness');
+    // The Synapse folder is a built-in protection, so this line means the operator
+    // switched that entry off on purpose: a change to the harness is then their
+    // decision to make, like any other folder outside the project.
+    return ask('Synapse is the app itself. Changing it is a deliberate choice.', true, 'harness');
   }
   if (harnessPaths.length > 0 && info.readsOnly && !harnessPaths.every((p) => harnessReadable(p, ctx))) {
     return deny("These are Synapse's private files.", true, 'harness');
@@ -500,6 +564,11 @@ function decideRead(resources, ctx) {
     if (zone === 'harness') scope = 'harness';
     else if (zone === 'outside' && scope !== 'harness') scope = 'outside';
     if (isSecret(target.path, ctx)) return deny('The harness never opens saved-password folders.', outside, 'secret');
+    // A sealed protected entry (Brave) is not read either: the browser treats a
+    // read as a touch. Every other protected path is readable — that is the point
+    // of the tier, so OS logs and drivers can be inspected.
+    const guarded = prohibited(target.path, ctx);
+    if (guarded?.sealed) return deny(`PROHIBITED: ${guarded.label} is not read either.`, outside, 'prohibited');
     // A .env holds live keys. The model may read .env.example; the real file is
     // the operator's to hand over, because the values are the point of it.
     if (isEnvFile(target.path)) return ask('This file holds keys or passwords.', outside, zone);
@@ -553,9 +622,9 @@ export function grantKey({ action, resources, cwd, projectRoot, harnessRoot, hom
   return [`${head}|${mode}|${paths.join('|')}`];
 }
 
-export function decide({ action, resources, cwd, projectRoot, harnessRoot, scratchRoot, home = os.homedir() }) {
+export function decide({ action, resources, cwd, projectRoot, harnessRoot, scratchRoot, home = os.homedir(), protection = [] }) {
   const a = String(action || '').toLowerCase();
-  const ctx = { cwd, projectRoot, harnessRoot, scratchRoot, home };
+  const ctx = { cwd, projectRoot, harnessRoot, scratchRoot, home, protection };
   if (WRITE_ACTIONS.has(a)) return decideWrite(resources, ctx);
   if (SHELL_ACTIONS.has(a)) return decideShell(resources, ctx);
   if (EXECUTE_ACTIONS.has(a)) return ask('This is code the harness cannot inspect.', false, 'unknown');

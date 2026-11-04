@@ -133,6 +133,15 @@ export const DEFAULTS = {
     whenDone: false,
     minutes: 5,
   },
+  // The PROHIBITED tier: paths Synapse may read but never change. Built-ins live in
+  // code (src/protection.js) and are switched off by id; `paths` are the entries the
+  // operator added, and `removed` remembers a seeded one they deleted so it does not
+  // come back. See docs/notes/protection.md.
+  protection: {
+    builtinsOff: [],
+    paths: [],
+    removed: [],
+  },
   cleanup: {
     // What a project left running, stopped when the project finishes and again
     // when Synapse boots (see src/cleanup.js). The selection is narrow and
@@ -526,6 +535,25 @@ export function normalize(raw) {
   cfg.update.synapse = isPlainObject(cfg.update.synapse) ? cfg.update.synapse : {};
   const feed = String(cfg.update.synapse.feed || '').trim();
   cfg.update.synapse.feed = feed || DEFAULTS.update.synapse.feed;
+
+  // The prohibited list. Ids are kept as written (a built-in the operator switched
+  // off), added entries keep their path and label, and a removed path is remembered
+  // so a boot seed does not put it back.
+  cfg.protection = isPlainObject(cfg.protection) ? cfg.protection : {};
+  cfg.protection.builtinsOff = (Array.isArray(cfg.protection.builtinsOff) ? cfg.protection.builtinsOff : [])
+    .map((id) => String(id || '').trim())
+    .filter(Boolean);
+  cfg.protection.paths = (Array.isArray(cfg.protection.paths) ? cfg.protection.paths : [])
+    .filter(isPlainObject)
+    .map((entry) => ({
+      path: String(entry.path || '').trim(),
+      label: String(entry.label || '').trim(),
+      enabled: entry.enabled !== false,
+    }))
+    .filter((entry) => entry.path);
+  cfg.protection.removed = (Array.isArray(cfg.protection.removed) ? cfg.protection.removed : [])
+    .map((entry) => String(entry || '').trim())
+    .filter(Boolean);
 
   return cfg;
 }

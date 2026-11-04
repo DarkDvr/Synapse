@@ -14,6 +14,7 @@ import { createEngineUpdate } from './engine-update.js';
 import { createHarnessGuard } from './harness.js';
 import { createPermissionGate } from './permission-gate.js';
 import { createPermissionMemory } from './permission-memory.js';
+import { braveEntries, protectionFor } from './protection.js';
 import { createRemoteToken, lanAddresses, machineName } from './remote.js';
 import { createPermissionLog } from './permission-log.js';
 import { permissionsTimeoutMs } from './auto-answer.js';
@@ -133,6 +134,26 @@ async function main() {
     return currentConfig;
   };
 
+  // Brave is the one prohibited entry that is seeded rather than built in: the
+  // browser's data folder is machine-specific, the operator must be able to delete
+  // it, and the deletion sticks because the path is remembered in
+  // `protection.removed` (src/protection.js). Measured on this machine: touching
+  // the folder resets every extension, cookie and setting the operator has.
+  try {
+    const brave = braveEntries(currentConfig);
+    if (brave.length) {
+      currentConfig = saveConfig({
+        ...currentConfig,
+        protection: { ...currentConfig.protection, paths: [...currentConfig.protection.paths, ...brave] },
+      });
+      logger
+        .channel('app')
+        .info(`protection: Brave data added to the PROHIBITED list (${brave.map((entry) => entry.path).join(', ')})`);
+    }
+  } catch (err) {
+    logger.channel('app').warn(`could not seed the Brave protection: ${err.message}`);
+  }
+
   // ── pid file (so the app, and a human, can see what is running) ──
   try { fs.writeFileSync(PID_FILE, String(process.pid), 'utf8'); } catch { /* ignore */ }
 
@@ -249,11 +270,18 @@ async function main() {
     root: ROOT,
     scratchRoot: SCRATCH_ROOT,
     memory: permissionMemory,
+    getProtection: () => protectionFor(currentConfig),
     getTimeoutMs: () => permissionsTimeoutMs(currentConfig),
     onDecision: (entry) => {
       permissionLog.record(entry);
       if (entry.decided) {
         http?.broadcast({ kind: 'permission', type: 'permission.decided', decision: entry, ts: Date.now() });
+        // A worker's session cannot be opened from the rail, so a red line only in
+        // the worker's own chat would be one the operator never sees. The alarm
+        // carries the project so it lands in the chat they are looking at.
+        if (entry.scope === 'prohibited') {
+          http?.broadcast({ kind: 'prohibition', entry, ts: Date.now() });
+        }
       }
     },
   });

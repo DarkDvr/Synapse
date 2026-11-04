@@ -2,7 +2,7 @@
 // Handlers call the engine adapter; nothing here knows about OpenCode.
 import fs from 'node:fs';
 import path from 'node:path';
-import { spawn } from 'node:child_process';
+import { spawn, execFile } from 'node:child_process';
 import { appendRun, readPlan, readRuns, runLedger, briefSession, logPlanState, BRIEF_KEY } from './plans.js';
 import { ensureProjectDoc, appendRequest as appendProjectRequest, appendChat, appendDecision as appendProjectDecision, appendEntry, setHandover } from './project-doc.js';
 import { createFormAuto } from './form-auto.js';
@@ -13,6 +13,7 @@ import { skillRules, describeSkills } from './skills.js';
 import { rulesFor, decide, resolvePath, refusalNote, SINGLE_RULES } from './permissions.js';
 import { stopTargets } from './stop.js';
 import { PROJECTS_ROOT, SKILLS_DIR, ROOT, SCRATCH_ROOT, scratchDir } from './paths.js';
+import { braveEntries, entryCovering, protectionEntries, protectionFor } from './protection.js';
 import { mayRecycleFolder } from './projects.js';
 import { fetchProviderModels } from './providers.js';
 import { providerId } from './providers.js';
@@ -1211,6 +1212,12 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
         err.status = 400;
         throw err;
       }
+      const guarded = entryCovering(dir, getConfig() || {});
+      if (guarded) {
+        const err = new Error(`${dir} is protected (${guarded.label}) and cannot be deleted`);
+        err.status = 403;
+        throw err;
+      }
       const rel = path.relative(PROJECTS_ROOT, path.resolve(dir));
       if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) {
         const err = new Error(`refusing to wipe ${dir}: it is not inside ${PROJECTS_ROOT}`);
@@ -1319,6 +1326,14 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
           err.status = 400;
           throw err;
         }
+        const guarded = entryCovering(current.directory, getConfig() || {});
+        if (guarded) {
+          const err = new Error(
+            `refusing to delete ${current.directory}: it is on the prohibited list (${guarded.label})`,
+          );
+          err.status = 403;
+          throw err;
+        }
         try {
           await recycleFolder(current.directory);
           recycled = true;
@@ -1359,6 +1374,48 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
       }
       projects.remove(id);
       return { ok: true, recycled, directory: current.directory, binFiles: bin.files };
+    },
+
+    /**
+     * The PROHIBITED list, for Settings. Entries are built-ins from src/protection.js
+     * plus the ones the operator added; `enabled` is their tick, `builtin` decides
+     * whether the row can be deleted.
+     */
+    protection: async () => ({ entries: protectionEntries(getConfig() || {}) }),
+
+    /** The native picker behind Settings > Prohibited > Add. Runs on this PC. */
+    pickProtectionPath: async (body) => {
+      const kind = body?.kind === 'file' ? 'file' : 'folder';
+      const script =
+        kind === 'file'
+          ? [
+              'Add-Type -AssemblyName System.Windows.Forms',
+              '$d = New-Object System.Windows.Forms.OpenFileDialog',
+              "$d.Title = 'Protect a file'",
+              'if ($d.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { $d.FileName }',
+            ].join('\n')
+          : [
+              'Add-Type -AssemblyName System.Windows.Forms',
+              '$d = New-Object System.Windows.Forms.FolderBrowserDialog',
+              "$d.Description = 'Protect a folder'",
+              '$d.ShowNewFolderButton = $false',
+              'if ($d.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { $d.SelectedPath }',
+            ].join('\n');
+      const chosen = await new Promise((resolve, reject) => {
+        execFile(
+          'powershell.exe',
+          ['-NoProfile', '-STA', '-Command', script],
+          { windowsHide: true, timeout: 300000 },
+          (err, stdout, stderr) => {
+            if (err) {
+              reject(new Error(String(stderr || err.message).split(/\r?\n/).filter(Boolean).pop() || err.message));
+              return;
+            }
+            resolve(String(stdout || '').trim());
+          },
+        );
+      });
+      return { path: chosen || null };
     },
 
     createSession: async (body) => {
@@ -2157,7 +2214,15 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
           const resolved =
             isPath && directory ? resources.map((r) => resolvePath(r, directory)?.path || String(r)) : [];
           const verdict = directory
-            ? decide({ action, resources, cwd: directory, projectRoot: directory, harnessRoot: ROOT, scratchRoot: SCRATCH_ROOT })
+            ? decide({
+                action,
+                resources,
+                cwd: directory,
+                projectRoot: directory,
+                harnessRoot: ROOT,
+                scratchRoot: SCRATCH_ROOT,
+                protection: protectionFor(getConfig() || {}),
+              })
             : null;
           return {
             requestId: p.id || p.requestID || null,

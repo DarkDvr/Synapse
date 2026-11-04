@@ -411,6 +411,14 @@ export function createServer({ api, engine, logger, config, remote, onRemote }) 
     }
     if (seg[0] === 'tools' && seg[1] === 'probe' && method === 'GET') return sendJson(res, 200, await api.probe());
 
+    // /api/protection — the PROHIBITED list Settings edits, and the native picker.
+    if (seg[0] === 'protection') {
+      if (seg.length === 1 && method === 'GET') return sendJson(res, 200, await api.protection());
+      if (seg[1] === 'pick' && method === 'POST') {
+        return sendJson(res, 200, await api.pickProtectionPath(await readBody(req)));
+      }
+    }
+
     // /api/projects...
     if (seg[0] === 'projects') {
       if (seg.length === 1 && method === 'GET') return sendJson(res, 200, await api.projects());

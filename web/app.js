@@ -310,6 +310,9 @@ const state = {
   setProvSelected: null,
   setKeyRevealed: false,
   setProvFetch: null,
+  // The PROHIBITED list as the server sees it (built-ins and added paths). The
+  // settings draft edits the *state* of an entry, never this list.
+  protection: null,
 };
 
 // ── helpers ─────────────────────────────────────────────────────
@@ -572,6 +575,28 @@ function openAlarm(ev) {
   renderTranscript();
 }
 function closeError() { $('errorModal').hidden = true; }
+
+/**
+ * A tool tried to change a prohibited path. This is the chat's red line: the
+ * worker that asked may be a hidden session, so the alarm is carried on the
+ * decision broadcast and shown in the project's own chat (4 Nov).
+ */
+function openProhibition(entry) {
+  if (!entry) return;
+  const run = entry.sessionId ? [...state.runs.values()].find((r) => r.workerId === entry.sessionId) : null;
+  const paths = (Array.isArray(entry.resolved) && entry.resolved.length ? entry.resolved : entry.resources || []).map(String);
+  state.alarms.push({
+    at: Number(entry.at) || Date.now(),
+    sessionId: entry.sessionId || null,
+    dir: run?.dir || entry.directory || null,
+    prohibited: true,
+    action: String(entry.action || 'change'),
+    paths,
+    note: entry.role ? `by ${entry.role}${entry.task ? ` (${entry.task})` : ''}` : '',
+  });
+  if (state.alarms.length > 20) state.alarms.splice(0, state.alarms.length - 20);
+  renderTranscript();
+}
 
 // ── generic dialog (confirmations and small forms) ──────────────
 let dialogResolve = null;
@@ -4030,6 +4055,15 @@ function forgetConversation(dir, oldSessionId) {
  * it, so what they need is to know it happened, not to read it.
  */
 function renderAlarm(a) {
+  if (a.prohibited) {
+    const target = (a.paths || []).join(' | ');
+    const shown = target.length > 150 ? `${target.slice(0, 149)}…` : target;
+    const who = String(a.note || '');
+    return `<div class="chat-alarm is-prohibited" title="${esc(`PROHIBITED: ${a.action} ${target}${who ? ` ${who}` : ''}`)}">
+    <span class="chat-alarm-mark">⛔</span>
+    <span class="chat-alarm-text">PROHIBITED · ${esc(a.action)}${shown ? ` ${esc(shown)}` : ''}${who ? ` · ${esc(who)}` : ''}</span>
+  </div>`;
+  }
   const title = /write|edit/i.test(a.what) ? 'Something tried to write inside Synapse' : 'A model named Synapse in a tool call';
   const detail = a.paths.join(' | ');
   const shown = detail.length > 150 ? `${detail.slice(0, 149)}…` : detail;
@@ -4762,6 +4796,10 @@ function renderMessage(m, tail = '') {
     // so this is done here rather than only at the source.
     const label = m.description ? esc(m.description) : 'report';
     const body = String(m.text || '').replace(/^\s*\[harness\]\s*/i, '');
+    // A PROHIBITED refusal is the one harness line in red: the operator's protected
+    // list said no to a change, which is an alarm, not a report (4 Nov).
+    const prohibited = String(m.description || '').trim().toUpperCase() === 'PROHIBITED';
+    const cls = `msg harness${prohibited ? ' is-prohibited' : ''}`;
     // The engine announces every file it loads as an instruction and posts the whole
     // text with it — `android\AGENTS.md` ran to a hundred lines and buried the new
     // chat the moment it was compacted. The content is in the model's context either
@@ -4784,7 +4822,7 @@ function renderMessage(m, tail = '') {
         </details>
       </div></div>`;
     }
-    return `<div class="msg harness" data-msg="synapse"><div class="msg-body">
+    return `<div class="${cls}" data-msg="synapse"><div class="msg-body">
       ${stamp}<span class="msg-role">Synapse · ${label}</span>
       <div class="msg-answer">${renderMarkdown(body)}</div>
     </div></div>`;
@@ -7430,6 +7468,13 @@ function connectStream() {
     }
 
     // A card was answered somewhere else: the panel is rebuilt from pending, and
+    // A tool asked to change a prohibited path: the operator sees the red line even
+    // when the asker was a hidden worker session.
+    if (ev.kind === 'prohibition') {
+      openProhibition(ev.entry);
+      return;
+    }
+
     // the chip on the tool call it belonged to is keyed by that call's id — not
     // by the request id, or the tool card would never find it.
     if (ev.kind === 'permission' && ev.type === 'permission.decided') {
@@ -7827,6 +7872,7 @@ const ICONS = {
   general:
     '<rect x="2.4" y="2.9" width="11.2" height="10.2" rx="2"/><path d="M2.4 6.2h11.2"/><path d="M5 4.6h.01M6.6 4.6h.01"/>',
   automation: '<path d="M8.6 1.6 3.2 9h3.4l-.8 5.4L11.2 7H7.8z"/>',
+  shield: '<path d="M8 1.9 13 3.7v4.1c0 3.2-2.1 5.5-5 6.5-2.9-1-5-3.3-5-6.5V3.7z"/><path d="M5.9 7.9 7.4 9.4l2.8-2.9"/>',
 };
 
 const setIcon = (name) =>
@@ -7841,6 +7887,7 @@ const SETTINGS_TABS = [
   { id: 'workers', label: 'Workers', icon: 'nodes' },
   { id: 'tools', label: 'Tools', icon: 'tools' },
   { id: 'automation', label: 'Automation', icon: 'automation' },
+  { id: 'prohibited', label: 'Prohibited', icon: 'shield' },
   { id: 'logging', label: 'Logging', icon: 'lines' },
   { id: 'updates', label: 'Check for Updates', icon: 'refresh' },
   { id: 'about', label: 'About', icon: 'info' },
@@ -8220,6 +8267,111 @@ function settingsAutomation(c) {
   ].join('');
 }
 
+// ── Prohibited ──────────────────────────────────────────────────
+// The PROHIBITED tier: paths Synapse may read and must never change. The list
+// belongs to the server (src/protection.js); this pane edits only each entry's
+// tick, so a built-in can be switched off but never deleted out of the file.
+
+const samePath = (a, b) =>
+  String(a || '').replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase() ===
+  String(b || '').replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
+
+async function loadProtection() {
+  try {
+    state.protection = await api('GET', '/api/protection');
+  } catch { /* the pane shows what it already knows */ }
+  return state.protection;
+}
+
+function settingsProhibited(c) {
+  const entries = state.protection?.entries || [];
+  const builtins = entries.filter((entry) => entry.builtin);
+  const off = new Set((c.protection?.builtinsOff || []).map(String));
+  const added = Array.isArray(c.protection?.paths) ? c.protection.paths : [];
+  const row = ({ id, path: target, builtin, enabled, sealed }) => `
+    <div class="prot-row${enabled ? '' : ' is-off'}">
+      <input type="checkbox" class="prot-check"${builtin ? ` data-prot-builtin="${esc(id)}"` : ` data-prot-toggle="${esc(target)}"`}${enabled ? ' checked' : ''}
+             title="${enabled ? 'Protected: untick to let the normal permission rules handle it again' : 'Not protected: tick to refuse every change to it'}" />
+      <span class="prot-path" title="${esc(target)}">${esc(target)}</span>
+      ${sealed ? '<span class="prot-tag is-sealed" title="Not readable either: touching this folder resets the browser">No reads</span>' : ''}
+      <span class="prot-tag${builtin ? ' is-builtin' : ''}">${builtin ? 'Built-in' : 'Added'}</span>
+      ${builtin
+        ? ''
+        : `<button type="button" class="role-btn prot-del" data-prot-del="${esc(target)}" title="Remove this path from the list" aria-label="Remove ${esc(target)}">✕</button>`}
+    </div>`;
+  const rows = [
+    ...builtins.map((entry) => row({ ...entry, enabled: !off.has(entry.id) })),
+    ...added.map((entry) =>
+      row({
+        id: entry.path,
+        path: entry.path,
+        builtin: false,
+        enabled: entry.enabled !== false,
+        sealed: /bravesoftware/i.test(entry.path),
+      }),
+    ),
+  ].join('');
+  return `
+    <section class="set-group prot-pane">
+      <h4 title="Built-in entries can be switched off but not removed. Paths you add can be deleted. Reads are allowed unless the entry says No reads.">Prohibited</h4>
+      <p class="set-note">Reads are allowed; any change to these paths is refused before a permission card exists.</p>
+      <div class="prov-add">
+        <button type="button" class="btn btn-provider btn-sm" data-prot-add>+ Add Path</button>
+        <div class="prov-add-menu" id="protAddMenu" hidden>
+          <button type="button" data-prot-new="folder">Add Folder…</button>
+          <button type="button" data-prot-new="file">Add File…</button>
+        </div>
+      </div>
+      <div class="prot-list">${rows || '<div class="prot-empty">Loading the list…</div>'}</div>
+    </section>`;
+}
+
+function toggleProtection(input) {
+  const c = collectSettings();
+  if (!c) return;
+  c.protection = c.protection || {};
+  const id = input.dataset.protBuiltin;
+  if (id) {
+    const off = new Set((c.protection.builtinsOff || []).map(String));
+    if (input.checked) off.delete(id);
+    else off.add(id);
+    c.protection.builtinsOff = [...off];
+  } else {
+    const target = input.dataset.protToggle;
+    const entry = (c.protection.paths || []).find((p) => samePath(p.path, target));
+    if (entry) entry.enabled = input.checked;
+  }
+  renderSettings();
+}
+
+function removeProtectionPath(target) {
+  if (!target) return;
+  const c = collectSettings();
+  if (!c) return;
+  c.protection = c.protection || {};
+  c.protection.paths = (c.protection.paths || []).filter((p) => !samePath(p.path, target));
+  // Remembered, so the boot seed for a browser folder does not put it back.
+  c.protection.removed = [...new Set([...(c.protection.removed || []), target])];
+  renderSettings();
+}
+
+async function addProtectionPath(kind) {
+  try {
+    const picked = await api('POST', '/api/protection/pick', { kind: kind === 'file' ? 'file' : 'folder' });
+    const chosen = String(picked?.path || '').trim();
+    if (!chosen) return;
+    const c = collectSettings();
+    if (!c) return;
+    c.protection = c.protection || {};
+    const paths = Array.isArray(c.protection.paths) ? c.protection.paths : (c.protection.paths = []);
+    if (!paths.some((p) => samePath(p.path, chosen))) paths.push({ path: chosen, label: '', enabled: true });
+    c.protection.removed = (c.protection.removed || []).filter((p) => !samePath(p, chosen));
+    renderSettings();
+  } catch (err) {
+    toast('Could Not Add A Path', err.message);
+  }
+}
+
 function settingsLogging(c) {
   return [
     setGroup(
@@ -8519,6 +8671,7 @@ const SETTINGS_PANES = {
   workers: settingsWorkers,
   tools: settingsTools,
   automation: settingsAutomation,
+  prohibited: settingsProhibited,
   logging: settingsLogging,
   updates: settingsUpdates,
   about: settingsAbout,
@@ -8631,6 +8784,13 @@ function switchSettingsTab(id) {
   // Opening the Updates page is the operator asking, like opening the chip's
   // popup: check both feeds now rather than showing a stale answer.
   if (id === 'updates') checkUpdates();
+  // The prohibited list is the server's (built-ins live in code), so the tab
+  // reads it once. The draft's ticks survive the re-render.
+  if (id === 'prohibited' && !state.protection) {
+    loadProtection().then(() => {
+      if (state.settingsTab === 'prohibited') renderSettings();
+    });
+  }
 }
 
 // ── providers: the editor's own small state machine ─────────────
@@ -8833,6 +8993,19 @@ async function onSettingsClick(e) {
   // The Runtime pane's own button now lands on the Updates page instead of
   // opening the chip's popup over the settings window.
   if (e.target.closest('[data-check-update]')) { switchSettingsTab('updates'); return; }
+  // Prohibited: the tick and the two add buttons. A tick is a draft change, saved
+  // with the rest of the settings; nothing is enforced until Save.
+  if (e.target.closest('[data-prot-add]')) {
+    const menu = $('protAddMenu');
+    if (menu) menu.hidden = !menu.hidden;
+    return;
+  }
+  const protNew = e.target.closest('[data-prot-new]');
+  if (protNew) { addProtectionPath(protNew.dataset.protNew); return; }
+  const protDel = e.target.closest('[data-prot-del]');
+  if (protDel) { removeProtectionPath(protDel.dataset.protDel); return; }
+  const protToggle = e.target.closest('[data-prot-builtin],[data-prot-toggle]');
+  if (protToggle) { toggleProtection(protToggle); return; }
   const add = e.target.closest('[data-prov-add]');
   if (add) {
     const menu = $('provAddMenu');
@@ -9814,6 +9987,9 @@ async function boot() {
   await refreshUpdates();
   await loadModels();
   await loadProjects();
+  // The Prohibited pane needs the built-in list from the server; one read here
+  // means the tab opens instantly and the rows are never guessed at.
+  await loadProtection();
   await restoreOpenSession();
   await checkSkills();
   await loadRuns();
