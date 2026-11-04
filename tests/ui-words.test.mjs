@@ -138,6 +138,15 @@ test('Something Else answers like the chat: Enter newline, Ctrl+Enter sends', ()
   assert.match(css, /field-sizing: content/);
 });
 
+// 4 Nov: a role card shows Blocked only while the harness is actually stuck on the
+// task — not for an old blocker the role has worked past, and not during the
+// Architect's own turn.
+test('a role is only Blocked while the plan is genuinely stuck', () => {
+  const js = read('web/app.js');
+  assert.match(js, /const blocked = blockedTasks\.length > 0 && !archBusy && !run && !anyReady;/);
+  assert.match(js, /const stuck = blockedTasks\[0\];/);
+});
+
 // 4 Nov: the PROHIBITED list is a table — the path, a Write box, a Read box, and
 // a delete button that is disabled for the ones Synapse ships.
 test('Prohibited is a table with a Write and a Read box per row', () => {

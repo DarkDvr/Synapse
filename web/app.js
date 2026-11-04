@@ -3337,7 +3337,8 @@ function initRoleCards() {
  * stored, a reload and a restart show the same picture, and a new plan (whose
  * tasks are all `todo` again) puts every card back to 80% by itself.
  *
- * Precedence per role: running → blocked → done → idle.
+ * Precedence per role: running → blocked (only while the plan is stuck on it) →
+ * done → idle.
  */
 function renderRoleActivity() {
   const run = currentRun();
@@ -3359,7 +3360,17 @@ function renderRoleActivity() {
     // starts over in a new session. Per the operator: a role card is about whether
     // this role was used for anything in this session, ever.
     const participated = (state.planState?.used || []).includes(role);
-    const blocked = mine.some((t) => t.status === 'blocked' || t.status === 'failed');
+    const blockedTasks = mine.filter((t) => t.status === 'blocked' || t.status === 'failed');
+    // Blocked is the harness actually being stuck: nobody is running, the Architect
+    // is not mid-turn, and nothing else in the plan can proceed. An old blocked task
+    // that the role has long since worked past is history, not the card's current
+    // state — during the Architect's turn the red used to stay up for the whole turn
+    // (4 Nov: "it's doing other work").
+    const doneTaskIds = new Set(tasks.filter((t) => t.status === 'done').map((t) => t.id));
+    const anyReady = tasks.some(
+      (t) => t.status === 'todo' && (Array.isArray(t.dependsOn) ? t.dependsOn : []).every((d) => doneTaskIds.has(d)),
+    );
+    const blocked = blockedTasks.length > 0 && !archBusy && !run && !anyReady;
     // A role whose *current* model the provider has already refused keeps its mark
     // after the run: the run is over, the dead model is still selected. It clears
     // the moment the role points at another model, or the operator clears the badge.
@@ -3448,7 +3459,7 @@ function renderRoleActivity() {
       // an unexplained red card read as "the Designer errored" (28 Oct). Name
       // the task; the reason is on its plan row.
       dot = 'err';
-      const stuck = mine.find((t) => t.status === 'blocked' || t.status === 'failed');
+      const stuck = blockedTasks[0];
       text = stuck ? `Blocked — ${stuck.title}` : 'Blocked';
     }
     else if (participated) dot = 'ok';
