@@ -138,6 +138,26 @@ test('Something Else answers like the chat: Enter newline, Ctrl+Enter sends', ()
   assert.match(css, /field-sizing: content/);
 });
 
+// 4 Nov: the wake lock. Settings owns both halves; the cog has only the master.
+test('Keep PC Awake is in Settings and the cog, with the monitor as the second half', () => {
+  const js = read('web/app.js');
+  assert.match(js, /'Keep PC Awake'/);
+  assert.match(js, /'Also Keep The Monitor On'/);
+  assert.match(js, /async function togglePower/);
+  assert.match(js, /\/api\/power/);
+  const html = read('web/index.html');
+  assert.match(html, /id="run_keepAwake"/);
+  assert.match(html, /data-power="keepAwake"/);
+});
+
+// 4 Nov: a provider that reports `reasoning: 0` while writing reasoning must not be
+// described as "0% was reasoning" — the header uses the same truth as the body.
+test('the run header does not claim 0% reasoning when it was not split', () => {
+  const src = read('src/runs.js');
+  assert.match(src, /tokens \(\$\{thinkNote\(context\)\}\)/);
+  assert.doesNotMatch(src, /% was reasoning/);
+});
+
 // 4 Nov: a role card shows Blocked only while the harness is actually stuck on the
 // task — not for an old blocker the role has worked past, and not during the
 // Architect's own turn.

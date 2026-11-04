@@ -760,14 +760,17 @@ function closeDialog(result) {
 async function refreshStatus() {
   try {
     state.status = await api('GET', '/api/status');
+    state.power = state.status?.power || null;
     state.workspace = state.status?.engine?.workspace || '';
     // The page got an answer, so the server is running; the app overrides this the
     // moment it says otherwise, and a failed fetch below leaves it alone.
     state.server = { state: 'running', reason: '' };
   } catch (err) {
     state.status = { engine: { ready: false, kind: 'engine' }, bootError: err.message };
+    state.power = null;
   }
   renderStatus();
+  renderKeep();
 }
 
 // ── remote access (LAN) ─────────────────────────────────────────
@@ -1937,8 +1940,10 @@ function renderKeep() {
   btn.hidden = state.view !== 'session' || !state.sessionId;
   // Green while any switch is on — a standing decision the operator can see
   // without opening the menu. All off: gray.
-  btn.classList.toggle('is-on', anyAutomationOn(state.automation));
+  const awake = state.config?.automation?.keepAwake === true;
+  btn.classList.toggle('is-on', anyAutomationOn(state.automation) || awake);
   const on = AUTOMATION_ROWS.filter((row) => state.automation?.[row.key] === true).map((row) => row.label);
+  if (awake) on.push('Keep PC Awake');
   btn.title = on.length ? `Automation: ${on.join(', ')}` : 'Automation — four switches, all off';
   for (const row of AUTOMATION_ROWS) {
     const el = $(row.id || `run_${row.key}`);
@@ -1946,6 +1951,16 @@ function renderKeep() {
     el.setAttribute('aria-checked', String(state.automation?.[row.key] === true));
     const hint = el.querySelector('small');
     if (hint) hint.textContent = row.hint;
+  }
+  const powerRow = $('run_keepAwake');
+  if (powerRow) {
+    powerRow.setAttribute('aria-checked', String(awake));
+    const hint = powerRow.querySelector('small');
+    if (hint) {
+      hint.textContent = awake && state.config?.automation?.keepDisplay === true
+        ? 'Holding Windows awake, monitor included — Settings decides that half'
+        : 'Stop Windows sleeping — Settings decides whether the monitor stays on';
+    }
   }
 }
 
@@ -1996,6 +2011,36 @@ function toggleRunMenu() {
   if (open) {
     positionRunMenu();
     $('run_keepBuilding')?.focus();
+  }
+}
+
+/**
+ * Toggle the machine's wake lock from the cog.
+ *
+ * The answer is the config's `automation.keepAwake`, not a per-project switch: the
+ * PC is one PC. Settings > Automation owns the amplified half (the monitor), and
+ * the server applies both now — no restart.
+ */
+async function togglePower() {
+  const next = !(state.config?.automation?.keepAwake === true);
+  try {
+    const res = await api('POST', '/api/power', { awake: next });
+    state.config = {
+      ...(state.config || {}),
+      automation: { ...(state.config?.automation || {}), ...(res.automation || {}) },
+    };
+    state.power = res.power || state.power;
+    renderKeep();
+    toast(
+      next ? 'PC Kept Awake' : 'Wake Lock Released',
+      next
+        ? state.config?.automation?.keepDisplay === true
+          ? 'Windows will not sleep, and the monitor stays on (Settings > Automation).'
+          : 'Windows will not sleep or hibernate until you release it.'
+        : 'Windows may sleep again.',
+    );
+  } catch (err) {
+    toast('Could Not Keep The PC Awake', err.message);
   }
 }
 
@@ -8275,6 +8320,23 @@ function settingsAutomation(c) {
       undefined,
       'The waits all four switches obey. Which switches are on belongs to each project — the cog between Stop and Send.',
     ),
+    setGroup(
+      'Power',
+      setCheck(
+        c,
+        'Keep PC Awake',
+        'automation.keepAwake',
+        'Hold a Windows wake lock so this PC does not sleep or hibernate while Synapse is running. Global: it applies to the machine, and the cog in the chat toggles the same switch.',
+      ) +
+        setCheck(
+          c,
+          'Also Keep The Monitor On',
+          'automation.keepDisplay',
+          'The amplified half: while Keep PC Awake is on, the screen is kept on too, instead of following Windows’ own turn-off time. Has no effect on its own.',
+        ),
+      undefined,
+      'Keep PC Awake holds the system awake; Also Keep The Monitor On adds the display to the same request.',
+    ),
   ].join('');
 }
 
@@ -9476,6 +9538,8 @@ document.addEventListener('keydown', (e) => {
     toggleRunMenu();
   });
   $('runMenu').addEventListener('click', (e) => {
+    // Keep PC Awake is the one row here that is not a per-project switch.
+    if (e.target.closest?.('[data-power]')) { togglePower(); return; }
     const row = e.target.closest?.('[data-automation]');
     if (!row) return;
     const key = row.dataset.automation;

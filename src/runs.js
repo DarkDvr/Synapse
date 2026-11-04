@@ -2477,7 +2477,11 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
                 : `stopped in ${who}`;
         const spent = context?.turns
           ? ` · ran for ${ranFor(Date.now() - startedAt)} · used ` +
-            `${tokens((context.prompt || 0) + (context.generated || 0))} tokens (${context.thinkShare || 0}% was reasoning)`
+            // A provider may not split reasoning out of `generated` (it reports
+            // `reasoning: 0` while the transcript is full of it). Saying "0% was
+            // reasoning" is then a claim we cannot make; thinkNote says the truth,
+            // the same sentence the report body already uses.
+            `${tokens((context.prompt || 0) + (context.generated || 0))} tokens (${thinkNote(context)})`
           : '';
         return `${request.task} ${said} (${model})${spent}`;
       })(),

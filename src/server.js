@@ -336,6 +336,11 @@ export function createServer({ api, engine, logger, config, remote, onRemote }) 
       if (method === 'PUT') return sendJson(res, 200, await api.saveConfig(await readBody(req), actorOf(req)));
     }
 
+    // POST /api/power — the cog's Keep PC Awake toggle (the wake lock is global).
+    if (seg[0] === 'power' && seg.length === 1 && method === 'POST') {
+      return sendJson(res, 200, await api.setPower(await readBody(req)));
+    }
+
     // The engine: is there a newer one, and do it.
     //   GET  /api/engine/update        what we already know (no network)
     //   POST /api/engine/update/check  ask npm (the operator's click)

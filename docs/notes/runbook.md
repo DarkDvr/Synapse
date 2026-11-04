@@ -319,3 +319,23 @@ folders and my own probe screenshots.
 - **The engine's `snapshot` store** (`data\engine\opencode\data\opencode\snapshot`,
   347 MB and growing) — it is the engine's own undo history. Deleting it needs the
   engine stopped and is a separate, explicit action, not a boot sweep.
+
+## Keeping the PC awake
+
+`src/power.js` holds a Windows wake lock while Settings → Automation says so. It is
+a PowerShell child that calls `SetThreadExecutionState` every twenty seconds with
+`ES_SYSTEM_REQUIRED` — the same API PowerToys Awake uses — so the machine does not
+idle into sleep or hibernate. The amplified half (`keepDisplay`) adds
+`ES_DISPLAY_REQUIRED`, which keeps the monitor on; without it the screen follows the
+operator's own turn-off time and the machine stays awake behind it.
+
+The lock belongs to the child process: if the server dies, the child notices at its
+next twenty-second tick and exits, and Windows drops the request with it. `shutdown()`
+stops it explicitly as well. The child also writes `data\wakelock.txt` each tick, so
+the app's own disk is not idle either.
+
+It is a wake lock, not a power-plan edit: it does not keep a *second* disk spinning
+down (that is the drive's own idle timer), and it does not stop the operator pressing
+Sleep. Settings owns both halves; the cog in the chat toggles only the master
+(`automation.keepAwake`), because the PC is one PC and the four switches beside it
+are per project.
