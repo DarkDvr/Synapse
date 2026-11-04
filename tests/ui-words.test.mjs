@@ -125,6 +125,19 @@ test('a steer is on screen before the engine echoes it', () => {
   assert.match(js, /text: `\[steer\] \$\{text\}`/);
 });
 
+// 4 Nov: the operator arranged providers in Settings and the model menu sorted
+// by label instead; the rail's project order was likewise fixed. Both orders are
+// now the operator's, saved with the config / the registry.
+test('the rail and the model menu follow the order the operator arranged', () => {
+  const js = read('web/app.js');
+  assert.match(js, /function providerOrderOf\(/);
+  assert.match(js, /rankOf\(a\.provider\) - rankOf\(b\.provider\)/);
+  assert.match(js, /data-prov-up=|data-prov-down=/);
+  assert.match(js, /function moveProvider\(/);
+  assert.match(js, /data-menu-action="up"|data-menu-action="down"/);
+  assert.match(js, /\/api\/projects\/\$\{encodeURIComponent\(id\)\}\/move/);
+});
+
 // "Views: 2" counted the window you were looking at as well as the laptop, and
 // sat in the rail whether or not Remote Access was on. The LAN clients are what
 // the address is for; they are named under it, and they hide with it.
@@ -140,8 +153,8 @@ test('the rail names LAN clients under the address, not a Views row', () => {
   // the machines moved from the rail into the tooltip - the line is a count.
   assert.doesNotMatch(js, /remoteIp|status-remote-ip/);
   assert.doesNotMatch(html, /id="remoteIp"/);
-  assert.match(js, /Connected clients: \$\{named\.join\(', '\)\}/);
-  assert.match(js, /network has not given/, 'an unnamed client is never printed as an address');
+  assert.match(js, /Connected clients: \$\{names\.join\(', '\)\}/);
+  assert.doesNotMatch(js, /network has not given/, 'an unnamed client shows its address, not a note');
   assert.doesNotMatch(js, /function renderViews\(/);
 });
 

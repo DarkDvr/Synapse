@@ -1974,3 +1974,16 @@ that had just appeared said "picked now" in the other room while counting
 properly on the desktop. Every response's `Date` header is now read into
 `state.clockSkew`, and the countdowns run on `serverNow()`; see
 `remote-access.md` for the operator's side of it.
+
+## The rail is a list the operator arranges (4 Nov)
+
+Right-click a project and the menu offers **Move Up** / **Move Down**; the ends are
+disabled rather than a click that does nothing. The order is the registry file
+(`data\projects.json`), which is a ledger: it is written in the order shown, and a
+new project is appended at the bottom. Nothing is sorted by name — a rename must
+not move a row the operator is looking for, and a project added five minutes ago
+should be where they just put it.
+
+The same idea one pane over: providers can be moved in Settings, and the model
+menu in a role card follows the order there (see `models-and-tools.md`). A list the
+user arranged and a menu that ignores it is the bug, not a preference.

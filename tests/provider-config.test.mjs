@@ -116,6 +116,22 @@ const blank = normalize({
 });
 check('a row with no name and no server is dropped', blank.engine.opencode.providers.length === 0);
 
+// 4 Nov: the order the operator arranges in Settings is a config value, so it
+// has to survive a normalise-and-save like every other one.
+const ordered = normalize({
+  engine: { opencode: { providerOrder: ['b', 2, '', 'a'] } },
+});
+check(
+  'the provider order is kept, as ids',
+  JSON.stringify(ordered.engine.opencode.providerOrder) === JSON.stringify(['b', '2', 'a']),
+  JSON.stringify(ordered.engine.opencode.providerOrder),
+);
+const unordered = normalize({ engine: {} });
+check(
+  'a config without an order gets an empty one',
+  Array.isArray(unordered.engine.opencode.providerOrder) && unordered.engine.opencode.providerOrder.length === 0,
+);
+
 // ── the type, and the id a provider gets when it was added in Settings ──
 const typed = normalize({
   engine: {

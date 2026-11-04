@@ -67,6 +67,10 @@ export const DEFAULTS = {
       // the engine's own budgeting. Left out, nothing is assumed — see
       // docs/notes/models-and-tools.md.
       providers: [],
+      // The operator's order for the Providers list, an array of provider ids;
+      // the model menu follows it. Empty means "catalog rows first, then the
+      // servers in the order they were added".
+      providerOrder: [],
       // How much conversation the engine carries over verbatim when it compacts.
       // The summary itself is the engine's own template and cannot be shortened,
       // but this can: it is the "keep the last N tokens" budget, 15,000 by
@@ -412,6 +416,13 @@ export function normalize(raw) {
       seen.push(id);
       return { ...p, id };
     })([]));
+
+  // The operator's order for the Providers list and, through it, the model menu.
+  // Ids only: a provider deleted from the list is simply not matched any more,
+  // and one added later appears at the end without being placed by hand.
+  oc.providerOrder = Array.isArray(oc.providerOrder)
+    ? oc.providerOrder.map((id) => String(id || '').trim()).filter(Boolean)
+    : [];
 
   // The mode is applied at send now, and a conversation belongs to a project, so
   // the old defaults block has nothing left to say.

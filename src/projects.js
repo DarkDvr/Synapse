@@ -329,6 +329,33 @@ export function createProjectStore({ file, rootDir, legacyGeneralDir = null, har
     return shape(project);
   }
 
+  /**
+   * Move a project up or down the rail.
+   *
+   * The registry file *is* the order: the rail lists it as written and a new
+   * project is appended, so moving one row rewrites the array. A move past either
+   * end is a no-op, not an error — the menu disables those items, and a stale
+   * click must not throw.
+   */
+  function move(id, delta = 0) {
+    const raw = readRaw();
+    const at = raw.findIndex((p) => (p.id || idFor(p.directory)) === id);
+    if (at === -1) {
+      const err = new Error('project not found');
+      err.status = 404;
+      throw err;
+    }
+    const step = Number(delta) < 0 ? -1 : 1;
+    const to = Math.min(raw.length - 1, Math.max(0, at + step));
+    if (to === at) return { ok: true, moved: false, at };
+    const next = raw.slice();
+    const [row] = next.splice(at, 1);
+    next.splice(to, 0, row);
+    writeRaw(next);
+    log.info(`project order: ${row.name || row.directory} moved to position ${to + 1}`);
+    return { ok: true, moved: true, at: to };
+  }
+
   function update(id, { name } = {}) {
     const raw = readRaw();
     const current = raw.find((p) => (p.id || idFor(p.directory)) === id);
@@ -357,5 +384,5 @@ export function createProjectStore({ file, rootDir, legacyGeneralDir = null, har
     return true;
   }
 
-  return { list, find, create, update, remove, idFor, normalizeDir, pruneMissing, discover };
+  return { list, find, create, move, update, remove, idFor, normalizeDir, pruneMissing, discover };
 }

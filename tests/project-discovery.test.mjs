@@ -32,6 +32,36 @@ function arena() {
 
 const readJson = (file) => JSON.parse(fs.readFileSync(file, 'utf8'));
 
+// 4 Nov: the operator can move a project up or down the rail, and the registry
+// file is the order — the rail reads it as written.
+test('projects move up and down the rail, and the registry is the order', () => {
+  const a = arena();
+  try {
+    for (const name of ['alpha', 'beta', 'gamma']) fs.mkdirSync(path.join(a.root, name), { recursive: true });
+    const store = a.store();
+    store.discover();
+    const ids = () => store.list().map((p) => p.name);
+    assert.deepEqual(ids(), ['alpha', 'beta', 'gamma'], 'discovery keeps the folders it found');
+
+    const beta = store.list().find((p) => p.name === 'beta');
+    assert.equal(store.move(beta.id, -1).moved, true);
+    assert.deepEqual(ids(), ['beta', 'alpha', 'gamma']);
+    // The file is what the rail reads, so a fresh store sees the same order.
+    assert.deepEqual(a.store().list().map((p) => p.name), ['beta', 'alpha', 'gamma']);
+
+    // The ends are a no-op, not an error: the menu disables them, and a stale
+    // click must not throw.
+    const first = store.list().find((p) => p.name === 'beta');
+    const last = store.list().find((p) => p.name === 'gamma');
+    assert.equal(store.move(first.id, -1).moved, false);
+    assert.equal(store.move(last.id, 1).moved, false);
+    assert.deepEqual(ids(), ['beta', 'alpha', 'gamma']);
+    assert.throws(() => store.move('nope', 1), /not found/);
+  } finally {
+    a.done();
+  }
+});
+
 test('a folder already in the projects root becomes a project with its plan and scratch folder', () => {
   const a = arena();
   try {

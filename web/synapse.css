@@ -567,6 +567,7 @@ body.dark .sidebar .nav-link.active > span:first-child { color: #fff; }
   font-family: inherit; font-size: 12px; cursor: pointer;
 }
 .project-menu-item:hover, .project-menu-item:focus-visible { background: #2b2e33; outline: none; }
+.project-menu-item:disabled { color: #5c6168; background: transparent; cursor: default; }
 .project-menu-item.is-danger { color: var(--red); }
 .project-menu-sep { display: block; height: 1px; margin: 4px 6px; background: var(--line); }
 

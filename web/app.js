@@ -790,20 +790,15 @@ function renderRemote() {
 // under it in one line, because the rail has no room for a second row and a view
 // on this PC is not a client of the address it already has. The names are the
 // hover: a rail line that lists machines wraps or ellipses, and the operator
-// asked for the count there and the list in the tooltip (4 Nov). An address the
-// network could not name is not printed — the tooltip says it has no name yet.
+// asked for the count there and the list in the tooltip (4 Nov). When the network
+// has not named a machine yet, its address is shown — that is more use than an
+// absent name, and the lookup keeps trying (presence.js).
 function renderClients() {
   const el = $('remoteClients');
   if (!el) return;
   const names = [...new Set((state.views || []).filter((v) => !v.local).map((v) => v.name).filter(Boolean))];
-  const address = (n) => /^\d{1,3}(\.\d{1,3}){3}$/.test(n) || /^[0-9a-f]{0,4}(:[0-9a-f]{0,4}){2,}$/i.test(n);
-  const named = names.filter((n) => !address(n));
   el.textContent = names.length ? `clients: ${names.length}` : 'clients: 0';
-  el.title = !names.length
-    ? 'No other device is connected.'
-    : named.length
-      ? `Connected clients: ${named.join(', ')}`
-      : `Connected clients: ${names.length} — the network has not given ${names.length === 1 ? 'it' : 'them'} a name yet`;
+  el.title = names.length ? `Connected clients: ${names.join(', ')}` : 'No other device is connected.';
 }
 
 // The page was cut off. Everything behind the panel is stale, so it is covered
@@ -1597,6 +1592,28 @@ const providerLabel = (p) => {
     .join(' ');
 };
 
+// ── the provider order ──────────────────────────────────────────
+// Settings lists providers in one order the operator arranges (`providerOrder`
+// in the config, an array of ids), and the model menu follows it. Two lists that
+// disagreed were the complaint: the operator moved a provider up and the picker
+// still grouped by label (4 Nov). Built-in catalog rows are in the same order:
+// "OpenCode Zen at the bottom" means the engine's own row can be moved too.
+function knownProviderIds(c) {
+  const custom = (c?.engine?.opencode?.providers || []).map((p) => String(p.id || slugify(p.name)));
+  return [...new Set([...ENGINE_PROVIDERS.map((p) => p.id), ...custom])];
+}
+
+function providerOrderOf(c) {
+  const all = knownProviderIds(c);
+  const saved = Array.isArray(c?.engine?.opencode?.providerOrder) ? c.engine.opencode.providerOrder : [];
+  const out = [];
+  for (const id of saved) if (all.includes(String(id)) && !out.includes(String(id))) out.push(String(id));
+  // Anything the saved order does not mention keeps its default place at the
+  // end, so a provider added tomorrow appears without being placed by hand.
+  for (const id of all) if (!out.includes(id)) out.push(id);
+  return out;
+}
+
 // ── searchable model picker ─────────────────────────────────────
 // The native <select> stays in the DOM as the source of truth — every existing
 // handler (fillRoleModels, renderEffort, setRoleModel) keeps working — but it is
@@ -1763,18 +1780,17 @@ function openModelMenu(role, fromTyping) {
   menuRole = role;
   if (!fromTyping) p.input.select();
   const q = fromTyping ? p.input.value.trim().toLowerCase() : '';
+  // The operator's own order, from Settings > Providers. Two servers with the
+  // same badge ("Local") are two different providers here, and the label no
+  // longer decides where a group sits (4 Nov).
+  const order = providerOrderOf(state.config);
+  const rankOf = (id) => {
+    const at = order.indexOf(String(id));
+    return at === -1 ? order.length : at;
+  };
   const list = state.models
     .filter((m) => !q || m.name.toLowerCase().includes(q) || m.ref.toLowerCase().includes(q))
-    // Grouped by the chip the operator reads, not by provider id. Two local
-    // servers (a runtime on 1235 and a llama.cpp one on 8080) are one visually
-    // distinct group of "Local", so sorting by id put the second one after every
-    // hosted provider — the same badge twice, with other sources in between.
-    .sort(
-      (a, b) =>
-        providerLabel(a.provider).localeCompare(providerLabel(b.provider)) ||
-        String(a.provider).localeCompare(String(b.provider)) ||
-        a.name.localeCompare(b.name),
-    );
+    .sort((a, b) => rankOf(a.provider) - rankOf(b.provider) || a.name.localeCompare(b.name));
   menuRefs = list.map((m) => m.ref);
   // A rule between provider groups. Eleven rows of eight different sources read
   // as one list until the source changes are visible: the chip alone was too
@@ -2827,9 +2843,17 @@ function openProjectMenu(id, x, y) {
   const el = $('projectMenu');
   if (!p || !el) return;
   menuProjectId = id;
+  // The rail is the registry order, so the ends are where a move stops. The menu
+  // disables the impossible one rather than letting a click do nothing.
+  const at = state.projects.findIndex((q) => q.id === id);
+  const first = at <= 0;
+  const last = at < 0 || at >= state.projects.length - 1;
   el.innerHTML = `
     <button type="button" class="project-menu-item" data-menu-action="browse" role="menuitem">Browse</button>
     <button type="button" class="project-menu-item" data-menu-action="cmd" role="menuitem">Cmd</button>
+    <span class="project-menu-sep" aria-hidden="true"></span>
+    <button type="button" class="project-menu-item" data-menu-action="up" role="menuitem"${first ? ' disabled' : ''}>Move Up</button>
+    <button type="button" class="project-menu-item" data-menu-action="down" role="menuitem"${last ? ' disabled' : ''}>Move Down</button>
     <span class="project-menu-sep" aria-hidden="true"></span>
     <button type="button" class="project-menu-item" data-menu-action="rename" role="menuitem">Rename</button>
     <button type="button" class="project-menu-item is-danger" data-menu-action="delete" role="menuitem">Delete…</button>`;
@@ -2846,8 +2870,22 @@ function projectMenuAction(id, action) {
   if (!id) return;
   if (action === 'browse') openProjectFolder(id, 'browse');
   else if (action === 'cmd') openProjectFolder(id, 'cmd');
+  else if (action === 'up') moveProject(id, -1);
+  else if (action === 'down') moveProject(id, 1);
   else if (action === 'rename') renameProject(id);
   else if (action === 'delete') removeProject(id);
+}
+
+/** Move a project up or down the rail. The order lives in the registry file. */
+async function moveProject(id, delta) {
+  try {
+    await api('POST', `/api/projects/${encodeURIComponent(id)}/move`, { delta });
+    // Re-read rather than rearranging the local list: the rail is the registry,
+    // and the reload brings every row and its state back with it.
+    await loadProjects({ keepOpen: true });
+  } catch (err) {
+    toast('Could Not Move The Project', err.message);
+  }
 }
 
 /**
@@ -8405,33 +8443,43 @@ function settingsProviders(c) {
     acc[m.provider] = (acc[m.provider] || 0) + 1;
     return acc;
   }, {});
-  const builtins = ENGINE_PROVIDERS.map((p) => {
-    const count = countsByProvider[p.id] || 0;
-    return `<div class="prov-row is-builtin" title="${esc(p.note)}">
-        <span class="prov-type">${esc(p.label)}</span>
+  const order = providerOrderOf(c);
+  const indexById = new Map(providers.map((p, i) => [String(p.id || slugify(p.name)), i]));
+  const moves = (id, at) => `
+          <button type="button" class="role-btn ic-move" data-prov-up="${esc(id)}" title="Move Up"
+                  aria-label="Move ${esc(id)} up"${at === 0 ? ' disabled' : ''}>↑</button>
+          <button type="button" class="role-btn ic-move" data-prov-down="${esc(id)}" title="Move Down"
+                  aria-label="Move ${esc(id)} down"${at === order.length - 1 ? ' disabled' : ''}>↓</button>`;
+  const rowFor = (id, at) => {
+    const builtin = ENGINE_PROVIDERS.find((p) => p.id === id);
+    if (builtin) {
+      const count = countsByProvider[builtin.id] || 0;
+      return `<div class="prov-row is-builtin" title="${esc(builtin.note)}">
+        <span class="prov-type">${esc(builtin.label)}</span>
         <span class="prov-name">Engine catalog</span>
-        <span class="prov-url">${esc(p.note)}</span>
+        <span class="prov-url">${esc(builtin.note)}</span>
         <span class="prov-meta">${count ? `${count} model${count === 1 ? '' : 's'}` : 'not connected'}</span>
+        <span class="prov-acts">${moves(id, at)}</span>
       </div>`;
-  }).join('');
-
-  const rows = providers
-    .map((p, i) => {
-      const used = Object.entries(c.roles || {}).filter(([, r]) => String(r?.ref || '').startsWith(`${p.id || slugify(p.name)}/`));
-      const count = (p.models || []).length;
-      return `<div class="prov-row${i === selected ? ' is-active' : ''}" data-prov-row="${i}" role="button" tabindex="0"
-                   aria-label="Edit ${esc(p.name || 'provider')}">
+    }
+    const i = indexById.get(id);
+    if (i === undefined) return '';
+    const p = providers[i];
+    const used = Object.entries(c.roles || {}).filter(([, r]) => String(r?.ref || '').startsWith(`${p.id || slugify(p.name)}/`));
+    const count = (p.models || []).length;
+    return `<div class="prov-row${i === selected ? ' is-active' : ''}" data-prov-row="${i}" role="button" tabindex="0"
+                 aria-label="Edit ${esc(p.name || 'provider')}">
         <span class="prov-type">${esc(providerBadge(p))}</span>
         <span class="prov-name">${esc(p.name || 'Untitled provider')}</span>
         <span class="prov-url">${esc(p.baseURL || 'no server URL yet')}</span>
         <span class="prov-meta">${count} model${count === 1 ? '' : 's'}${used.length ? ` · ${used.length} role${used.length === 1 ? '' : 's'}` : ''}</span>
-        <span class="prov-acts">
+        <span class="prov-acts">${moves(id, at)}
           <button type="button" class="role-btn ic-edit" data-prov-edit="${i}" title="Edit ${esc(p.name || 'this provider')}" aria-label="Edit ${esc(p.name || 'this provider')}">✎</button>
           <button type="button" class="role-btn prov-del" data-prov-del="${i}" title="Remove ${esc(p.name || 'this provider')}" aria-label="Remove ${esc(p.name || 'this provider')}">✕</button>
         </span>
       </div>`;
-    })
-    .join('');
+  };
+  const rows = order.map((id, at) => rowFor(id, at)).join('');
 
   return `
     <section class="set-group"><h4>Providers <em class="set-restart">Restart</em></h4>
@@ -8445,7 +8493,6 @@ function settingsProviders(c) {
         </div>
       </div>
       <div class="prov-list">
-        ${builtins}
         ${rows}
       </div>
       <hr class="prov-divider" />
@@ -8583,6 +8630,28 @@ function switchSettingsTab(id) {
 function providerAt(index) {
   const list = state.setDraft?.engine?.opencode?.providers;
   return Array.isArray(list) && list[index] ? list[index] : null;
+}
+
+/**
+ * Move a provider up or down the list the model menu follows.
+ *
+ * The order is saved with the settings (`engine.opencode.providerOrder`), so this
+ * is a config change like any other: the footer offers Apply/Save and the menu
+ * picks it up when the settings are saved. The edit form is flushed into the
+ * draft first, or a value typed but not yet collected would be lost by the
+ * re-render.
+ */
+function moveProvider(id, delta) {
+  const c = collectSettings();
+  if (!c) return;
+  const order = providerOrderOf(c);
+  const at = order.indexOf(String(id || ''));
+  const to = at + delta;
+  if (at < 0 || to < 0 || to >= order.length) return;
+  order.splice(to, 0, order.splice(at, 1)[0]);
+  c.engine.opencode = c.engine.opencode || {};
+  c.engine.opencode.providerOrder = order;
+  renderSettings();
 }
 
 function addProvider(type) {
@@ -8767,6 +8836,14 @@ async function onSettingsClick(e) {
     const menu = $('provAddMenu');
     if (menu) menu.hidden = true;
     addProvider(newProvider.dataset.provNew);
+    return;
+  }
+  // The order arrows come before the row handler: a click on one is a move, not
+  // a request to open the provider for editing.
+  const move = e.target.closest('[data-prov-up],[data-prov-down]');
+  if (move) {
+    const up = move.hasAttribute('data-prov-up');
+    moveProvider(up ? move.dataset.provUp : move.dataset.provDown, up ? -1 : 1);
     return;
   }
   const del = e.target.closest('[data-prov-del]');

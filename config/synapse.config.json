@@ -254,17 +254,17 @@
             {
               "id": "qwen3.6-35b-a3b-ud-q6_k_xl-126k",
               "name": "qwen3.6-35b-a3b-ud-q6_k_xl-126k",
-              "context": 126976
+              "context": 32768
             },
             {
               "id": "qwen3.6-35b-a3b-ud-q6_k_xl-204k",
               "name": "qwen3.6-35b-a3b-ud-q6_k_xl-204k",
-              "context": 204800
+              "context": 32768
             },
             {
               "id": "qwen3.8-flash-next-iq2_xs",
               "name": "qwen3.8-flash-next-iq2_xs",
-              "context": 131072
+              "context": 32768
             }
           ]
         }

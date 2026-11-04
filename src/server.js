@@ -426,6 +426,10 @@ export function createServer({ api, engine, logger, config, remote, onRemote }) 
       // What the delete dialog has to show before it asks: the folder, and whether
       // there are deliverables in `bin\` that need their own consent.
       if (seg[2] === 'delete-info' && method === 'GET') return sendJson(res, 200, await api.projectDeleteInfo(projectId));
+      // Up or down the rail. The registry order is what the operator arranged.
+      if (seg[2] === 'move' && method === 'POST') {
+        return sendJson(res, 200, await api.moveProject(projectId, await readBody(req)));
+      }
       if (seg.length === 2 && method === 'DELETE') {
         return sendJson(res, 200, await api.deleteProject(projectId, await readBody(req)));
       }

@@ -326,6 +326,14 @@ saved. Before this the type won, so the one server that was answering was invisi
 while the row said "no answer" — and red is only claimed when *no* registered local
 server answers at all.
 
+**The provider order is the operator's, and the model menu follows it.** Settings
+> Providers has ↑/↓ on every row, the engine catalog's two rows included; the
+order is saved as `engine.opencode.providerOrder`, an array of provider ids, and a
+role card's model menu lists providers in exactly that order. An id the array does
+not mention keeps its default place at the end, so a provider added later appears
+without being placed by hand. Reordering touches nothing in the engine — only the
+list Synapse draws — so it applies when the settings are saved.
+
 **A local server is one of two list formats.** `format: "openai"` (LM Studio,
 vLLM, llama.cpp) answers `GET /models`; `format: "ollama"` answers
 `GET /api/tags`, whose entries are `{name}` rather than `{id}`. Chat goes through

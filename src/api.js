@@ -1156,6 +1156,12 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
       return { project };
     },
 
+    /** Move a project up or down the rail: the registry is the order. */
+    moveProject: async (id, body) => {
+      const moved = projects.move(id, Number(body?.delta) < 0 ? -1 : 1);
+      return { ...moved, projects: projects.list() };
+    },
+
     /**
      * Look at a folder *before* a project is registered there.
      *
