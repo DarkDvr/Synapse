@@ -114,6 +114,16 @@ export function describeSkills(config, role, { chat = false } = {}) {
         `its ui\\ folder. Do not write a new WPF project from scratch.`,
     );
   }
+  // align-grid ships a Puppeteer harness; Synapse installs no packages, so the
+  // script cannot run here. Saying that in the brief is the difference between QC
+  // measuring the grid with the renderer it has and QC spending a turn on ENOENT.
+  if (all.includes('align-grid')) {
+    parts.push(
+      `The align-grid harness in ${path.join(SKILLS_DIR, 'align-grid', 'scripts')} needs puppeteer-core, which ` +
+        `is not installed here: use the checks it describes - column lines, the baseline, each label's centre ` +
+        `against its control - with the visual-review renderer, and quote the numbers you measured.`,
+    );
+  }
   parts.push(
     chat ? 'Any other skill is refused. Say which ones you loaded.' : 'Any other skill is refused. Say in your report which ones you loaded.',
   );

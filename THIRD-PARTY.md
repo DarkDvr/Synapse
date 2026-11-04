@@ -9,6 +9,9 @@ These components travel with it and keep their own licences.
 | Node.js 24.21.0 | MIT, with its bundled third-party notices | `bin\node\LICENSE` |
 | DM Sans | SIL Open Font License 1.1 | `web\vendor\fonts\OFL-DMSans.txt` |
 | Manrope | SIL Open Font License 1.1 | `web\vendor\fonts\OFL-Manrope.txt` |
+| ui-design skill (CloudBase) | MIT, Copyright (c) Tencent CloudBase | `skills\ui-design\LICENSE.md` |
+| frontend-syntax-css-grid-subgrid | MIT, Copyright (c) 2026 OpenAEC Foundation | `skills\frontend-syntax-css-grid-subgrid\LICENSE.md` |
+| align-grid skill | MIT, Copyright (c) 2026 Daniel VM | `skills\align-grid\LICENSE.md` |
 
 The font files are served locally by `web\vendor\fonts.css`; nothing is fetched
 from a font CDN. The engine and Node licences travel with their binaries.

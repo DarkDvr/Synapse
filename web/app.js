@@ -290,6 +290,9 @@ const state = {
   // Signature of what the question panel is showing, so a poll does not rebuild
   // it and discard answers the operator has already given.
   askSig: '',
+  // Server clock minus this page's, in ms (see api()): every countdown compares
+  // a server timestamp with "now", and a remote PC runs on its own clock.
+  clockSkew: 0,
   // Which question of the form is on screen. A five-question form is five pages,
   // because the ones below the fold were being missed entirely.
   askPage: 0,
@@ -325,6 +328,16 @@ async function api(method, path, body) {
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
   const text = await res.text();
+  // Two clocks. Every countdown here compares a timestamp the server wrote with
+  // "now" on this machine, and a remote PC's clock can be minutes off - which is
+  // why a countdown that had just started read "picked now" in the other room
+  // (4 Nov). The HTTP Date header is the server's own time; the difference is
+  // kept and added wherever a server timestamp is compared.
+  const date = res.headers.get('date');
+  if (date) {
+    const server = Date.parse(date);
+    if (Number.isFinite(server)) state.clockSkew = server - Date.now();
+  }
   let json = null;
   try { json = text ? JSON.parse(text) : null; } catch { /* non-JSON */ }
   if (!res.ok) {
@@ -340,6 +353,9 @@ function debounce(fn, ms) {
   let t;
   return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); };
 }
+
+/** "Now" on the server's clock, as this page understands it (see api()). */
+const serverNow = () => Date.now() + (Number(state.clockSkew) || 0);
 
 const relTime = (ts) => {
   if (!ts) return '';
@@ -752,19 +768,14 @@ function renderRemote() {
   if (dot) dot.className = 'status-dot ' + (on ? 'ok' : 'idle');
   const url = $('remoteUrl');
   if (url) {
-    // The machine's name is what the operator reads out; the address is the
-    // fallback for a network that does not resolve it.
+    // The machine's name is what the operator reads out. The bare address used to
+    // sit under it as "or http://192.168.1.38:8700/" - a second line with a
+    // number in it that nobody reads out and that goes stale when DHCP moves the
+    // PC. The name is the address; the number was noise (4 Nov).
     const named = String(info.namedUrl || '').trim();
     const address = String(info.url || '').trim();
     url.textContent = on ? (named ? `${named}/` : address ? `${address}/` : 'no LAN address') : '';
-    url.title = named && address ? `This PC is ${info.host || 'named'} · ${address}/` : '';
-  }
-  const ip = $('remoteIp');
-  if (ip) {
-    const named = String(info.namedUrl || '').trim();
-    const address = String(info.url || '').trim();
-    ip.textContent = on && named && address ? `or ${address}/` : '';
-    ip.title = 'Use this if the other PC cannot resolve this computer\'s name.';
+    url.title = named && address ? `This PC is ${info.host || 'named'}` : '';
   }
   const box = $('remoteInfo');
   if (box) box.hidden = !on;
@@ -779,13 +790,22 @@ function renderRemote() {
 // computers sit under it in one line, because the rail has no room for a second
 // row and a view on this PC is not a client of the address it already has.
 // Names are de-duplicated — one machine with two tabs is one client — and the
-// line ellipses rather than wrap, so the rail never changes height.
+// line ellipses rather than wrap, so the rail never changes height. A client the
+// network could not name is counted and not printed: "clients: 1 (192.168.1.115)"
+// is an IP address in a line the operator asked to keep human (4 Nov).
 function renderClients() {
   const el = $('remoteClients');
   if (!el) return;
-  const names = [...new Set((state.views || []).filter((v) => !v.local).map((v) => v.name).filter(Boolean))];
-  el.textContent = names.length ? `clients: ${names.length} (${names.join(', ')})` : 'clients: 0';
-  el.title = names.length ? names.join(', ') : 'No other device is connected.';
+  const all = [...new Set((state.views || []).filter((v) => !v.local).map((v) => v.name).filter(Boolean))];
+  const named = all.filter((n) => !/^\d{1,3}(\.\d{1,3}){3}$/.test(n) && !/^[0-9a-f]{0,4}(:[0-9a-f]{0,4}){2,}$/i.test(n));
+  el.textContent = all.length
+    ? `clients: ${all.length}${named.length ? ` (${named.join(', ')})` : ''}`
+    : 'clients: 0';
+  el.title = all.length
+    ? named.length
+      ? named.join(', ')
+      : `${all.length} other device${all.length === 1 ? '' : 's'} connected.`
+    : 'No other device is connected.';
 }
 
 // The page was cut off. Everything behind the panel is stale, so it is covered
@@ -911,13 +931,17 @@ function renderLastEventAge() {
 
 /** Is this provider a server on this machine? True for `local` and for
  *  `llamacpp`, which is the same kind of thing speaking a slightly different
- *  dialect about itself. Mirrors providerType() in src/providers.js — the UI has no
- *  imports from the server, so the rule is written once here too. */
+ *  dialect about itself — and for any address that points at this machine,
+ *  whatever type the row was given. A custom runtime added as "openai" with a
+ *  localhost URL answers here like any other; before this the type won and the
+ *  sidebar said nothing was running while it served every turn (4 Nov).
+ *  Mirrors providerType() in src/providers.js — the UI has no imports from the
+ *  server, so the rule is written once here too. */
 function isLocalServer(p) {
   const type = String(p?.type || '').toLowerCase();
   if (type === 'local' || type === 'llamacpp') return true;
-  if (type) return false;
-  return /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:|\/|$)/i.test(String(p?.baseURL || ''));
+  if (/^https?:\/\/(localhost|127\.0\.0\.1|\[::1\]|0\.0\.0\.0)(:|\/|$)/i.test(String(p?.baseURL || ''))) return true;
+  return false;
 }
 
 /** The badge beside this provider's models.
@@ -5076,7 +5100,7 @@ function renderPermissions() {
         )} needs your permission</span>${
           // The switch is on for the asking project: count down to the moment it is
           // allowed, in the head's right corner like the question's own note (3 Nov).
-          due ? `<span class="perm-head-note" data-perm-due="${due}">${esc(permissionNote(due))}</span>` : ''
+          due ? `<span class="perm-head-note" data-perm-due="${due}">${esc(permissionNote(due, serverNow()))}</span>` : ''
         }${task ? `<span class="perm-who">${esc(task)}</span>` : ''}</div>
         <p class="perm-lead">${esc(permissionLead(p))}</p>
         ${paths.length ? `<pre class="perm-res">${esc(paths.join('\n'))}</pre>` : ''}
@@ -5125,7 +5149,7 @@ function paintPermissionNotes() {
     stopPermCountdown();
     return;
   }
-  for (const el of notes) el.textContent = permissionNote(el.dataset.permDue);
+  for (const el of notes) el.textContent = permissionNote(el.dataset.permDue, serverNow());
 }
 
 function startPermCountdown() {
@@ -5564,7 +5588,7 @@ function paintAskNote() {
   // question still gets its own look and its own countdown (3 Nov).
   const n = state.askNote;
   if (n.autoAnswer && n.firstAt) {
-    const now = Date.now();
+    const now = serverNow();
     const timeline = answerTimeline({ firstAt: n.firstAt, wait: n.wait, pages: n.pages, now });
     // Forward only: an operator who clicked ahead is not dragged back by the clock.
     const page = Math.max(state.askPage, timeline.page);
@@ -5584,7 +5608,7 @@ function paintAskNoteText() {
   const n = state.askNote;
   if (!n) return '';
   if (!n.autoAnswer || !n.firstAt) return askHeadNote({ here: n.here, autoAnswer: n.autoAnswer });
-  const timeline = answerTimeline({ firstAt: n.firstAt, wait: n.wait, pages: n.pages });
+  const timeline = answerTimeline({ firstAt: n.firstAt, wait: n.wait, pages: n.pages, now: serverNow() });
   return askHeadNote({ here: n.here, autoAnswer: true, seconds: timeline.seconds });
 }
 

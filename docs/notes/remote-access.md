@@ -49,12 +49,21 @@ the network.
 ## Using it
 
 1. On the desktop, with the server up: STATUS → Remote Access → on.
-2. A second line appears under the switch with `http://<lan-ip>:8700/`. Open it on
-   the laptop.
+2. A second line appears under the switch with the desktop's name,
+   `http://<machine-name>:8700/`. Open it on the laptop. The raw `192.168.…`
+   address went on 4 Nov: it was a second line of numbers under the name, and DHCP
+   moves it. A client the network cannot name is counted (`clients: 1`) without
+   printing its address either.
 3. The **TOKEN** chip on that line copies the token; paste it into the login
    page. The cookie signs in once; the address then opens straight to the UI.
 4. If the desktop's IP changes, the address changes; the token stays valid.
 5. Off hides the address and the chip entirely: one row, nothing on the LAN.
+6. **Countdowns follow the desktop's clock, not the laptop's.** Auto-Answer and
+   Auto-Permission compare a timestamp the server wrote with "now"; every response's
+   `Date` header becomes an offset (`state.clockSkew`), so a laptop whose clock is
+   minutes off counts from the same start. Without it, a card that had just appeared
+   read "picked now" on the remote PC while it counted properly on the desktop
+   (4 Nov).
 
 Windows Firewall may ask for permission the first time the listener goes public;
 allow it on **Private** networks only. Do not port-forward 8700; if you need

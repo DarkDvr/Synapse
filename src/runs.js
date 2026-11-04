@@ -98,6 +98,18 @@ const LOOP_AFTER_MS = 10_000;
 // its own.
 const DEFAULT_LADDER = ['coder-1', 'coder-2', 'coder-3'];
 
+// What a role is called in the chat's header. The ids stay in the plan, the run
+// log and every model ref; only the sentence the operator reads is translated.
+const ROLE_NAMES = {
+  architect: 'the Architect',
+  inventor: 'the Inventor',
+  designer: 'the Designer',
+  qc: 'QC',
+  'coder-1': 'Coder 1',
+  'coder-2': 'Coder 2',
+  'coder-3': 'Coder 3',
+};
+
 /**
  * Which rungs this attempt may use, starting with the one it starts on.
  *
@@ -2371,12 +2383,20 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     }
 
     const told = await wake(architectId, dir, {
-      // The header of the yellow Synopsis line in the chat. "failed" says nothing
-      // about who ended the run; a harness stop is the one the operator cannot
-      // work out for themselves, so the line names it.
-      description: stopReason
-        ? `${request.task} (${role}) stopped by the harness`
-        : `worker ${request.task} (${role}) ${outcome}`,
+      // The header of the yellow Synopsis line in the chat. It names the task,
+      // what happened, which coder did it and on which model - "worker t6 (qc)
+      // completed" answered none of the questions the line is there to answer
+      // (4 Nov). A harness stop still names itself: that is the one the operator
+      // cannot work out from the report alone.
+      description: (() => {
+        const who = ROLE_NAMES[role] || role;
+        const model = modelCache?.get?.(modelRef)?.name || modelRef || 'engine default';
+        if (stopReason) return `${request.task} stopped by the harness in ${who} (${model})`;
+        if (outcome === 'completed') return `${request.task} completed by ${who} (${model})`;
+        if (outcome === 'error') return `${request.task} failed in ${who} (${model})`;
+        if (outcome === 'timeout') return `${request.task} timed out in ${who} (${model})`;
+        return `${request.task} stopped in ${who} (${model})`;
+      })(),
       text: report({
         task,
         role,

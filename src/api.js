@@ -685,6 +685,19 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
         app.warn(`could not write the full-auto answer to the project document: ${err.message}`);
       }
       app.info(`auto-answer answered a question in ${sessionId}`);
+      // The model must not read an automatic reply as the operator's own decision:
+      // they are away from the harness, which is the whole reason this fired. A
+      // synthetic line is the only channel into its context, so it is told plainly
+      // who answered (4 Nov).
+      Promise.resolve(
+        engine.synthetic?.(
+          sessionId,
+          'Auto-Answer answered that question: the operator is away from the harness right now, so Synapse ' +
+            'itself took the recommended options. Treat these answers as the harness\'s, not as the operator\'s, ' +
+            'and say so when you report the decision.',
+          { description: 'Auto-Answer' },
+        ),
+      ).catch((err) => app.warn(`could not tell ${sessionId} that Auto-Answer replied: ${err.message}`));
     },
   });
 

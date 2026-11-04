@@ -26,13 +26,20 @@ export function isLocalProvider(provider) {
 /** What a provider *is*, from what it points at. A config written before types
  *  existed answers the same way the screen would, so nothing is lost by not
  *  having stored it. `llamacpp` is folded into `local`: every check downstream is
- *  about "a server on this machine", not about which dialect it speaks. */
+ *  about "a server on this machine", not about which dialect it speaks.
+ *
+ *  The address is asked first. A custom local runtime added as "openai" (a
+ *  PolyStrata server on 127.0.0.1, 4 Nov) used to be classified by the stored
+ *  type, so the Local LLM row and the window probe both ignored the one server
+ *  that was answering. A localhost URL is a local server whatever the row says;
+ *  the declared type still decides for every remote address. */
 export function providerType(provider) {
   const declared = String(provider?.type || '').trim().toLowerCase();
-  if (declared === 'llamacpp') return 'local';
-  if (ADDABLE_PROVIDER_TYPES.includes(declared)) return declared;
+  if (declared === 'llamacpp' || declared === 'local') return 'local';
   const url = String(provider?.baseURL || '');
-  return /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\]|0\.0\.0\.0)(:|\/|$)/i.test(url) ? 'local' : 'openai';
+  if (/^https?:\/\/(localhost|127\.0\.0\.1|\[::1\]|0\.0\.0\.0)(:|\/|$)/i.test(url)) return 'local';
+  if (ADDABLE_PROVIDER_TYPES.includes(declared)) return declared;
+  return 'openai';
 }
 
 /** The declared type, kept for the screen. A stored `llamacpp` stays `llamacpp`;

@@ -566,6 +566,17 @@ Non-obvious, all verified on 2.0.30:
   followed, and the run stopped with the UI showing an idle screen. The wake now
   waits for the Architect's turn and retries its failures on the same schedule; the
   report is sent once and later attempts just say "continue".
+- **A report's header names the task, the coder and the model.** It used to read
+  "worker t6 (qc) completed" — a noun, an id and nothing else. It is now
+  "t6 completed by QC (<model name>)", and the other outcomes follow the same
+  shape (`failed in`, `timed out in`, `stopped in`); the model is the catalog's
+  display name, with the ref as the fallback (4 Nov). This is the line above the
+  report in the chat, not the report itself.
+- **An automatic answer is not the operator speaking.** After Auto-Answer replies,
+  a synthetic line goes into the asking session: the operator is away, the harness
+  chose the recommended options, treat them as the harness's. Without it the next
+  turn reasoned about a decision nobody had made. Best effort, once per form — the
+  reply has already landed by then.
 - **Stop is the way out, and it is a run-level cancel.** `POST /api/runs/cancel`
   aborts an `AbortController` for that directory: the poll and the backoff sleep see
   it on the next tick (so a five-minute wait stops immediately), the worker session

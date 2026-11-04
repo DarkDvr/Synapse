@@ -103,6 +103,23 @@ test('a permission card counts down to its automatic Allow Once', () => {
   assert.match(read('src/permission-gate.js'), /autoAllowAt: \(id\) => pendingAsks\.get\(id\)\?\.autoAt \?\? null/);
 });
 
+// 4 Nov: on a remote PC the countdown said "picked now" the moment it started.
+// Both numbers compare a timestamp the server wrote with "now" on the page, so
+// both clocks have to be reconciled — the HTTP Date header is the reconciler.
+test('every countdown runs on the server’s clock, not the page’s', () => {
+  const js = read('web/app.js');
+  assert.match(js, /const serverNow = \(\) => Date\.now\(\) \+ \(Number\(state\.clockSkew\) \|\| 0\)/);
+  assert.match(js, /state\.clockSkew = server - Date\.now\(\)/);
+  assert.match(js, /res\.headers\.get\('date'\)/);
+  assert.match(js, /permissionNote\(due, serverNow\(\)\)/);
+  assert.match(js, /permissionNote\(el\.dataset\.permDue, serverNow\(\)\)/);
+  assert.match(js, /const now = serverNow\(\);/);
+  assert.match(
+    js,
+    /answerTimeline\(\{ firstAt: n\.firstAt, wait: n\.wait, pages: n\.pages, now: serverNow\(\) \}\)/,
+  );
+});
+
 test('the note sits flush with the panel, and no nav reserve is left behind', () => {
   const css = read('web/synapse.css');
   assert.match(css, /\.ask-head \{[^}]*padding-right:\s*0/);

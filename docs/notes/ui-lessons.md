@@ -1938,3 +1938,39 @@ window, and both would have shipped as "works on my machine".
   the card and the chat scrolls, so the space was only a note that stopped short of
   the edge it should touch. The head is flush now; the buttons overlap nothing that
   matters.
+
+## Vertical alignment is a measurement, not a taste (4 Nov)
+
+The operator's report: "vertical alignments of UI elements being terribly off
+centre almost all the time, and overall nothing is grid-based - buttons and labels
+are all over the place, especially vertically. Gaps and margins are seemingly
+random." The design brief asked for a direction and a palette; it never asked for
+the grid the controls sit on, so every build invented its own spacing.
+
+Three skills now ship with Synapse and are named in the roles:
+
+- **Designer: `frontend-syntax-css-grid-subgrid` is required.** It is the CSS Grid
+  and subgrid skill (Baseline, `subgrid` since 2023), and it exists because a card
+  title that refuses to line up across columns is a grid problem, not a margin
+  problem that needs hand-tuning.
+- **Designer: `ui-design` is now the CloudBase skill** (MIT, shipped with its
+  licence), replacing the hand-written one. It covers direction, hierarchy and the
+  self-audit the old sheet only summarised.
+- **QC: `align-grid` is required.** Its harness (`scripts/verify_grid.js`) needs
+  puppeteer-core, which Synapse does not install, so the brief says so: QC runs
+  the checks it describes - column lines, the 8px baseline, each label's centre
+  against its control - with the `visual-review` renderer and quotes the numbers.
+
+The designer's spec must now state the grid as numbers (columns, gutter, baseline,
+spacing scale) and the Architect's `design:` rule says the build is measured
+against it. A page whose rows drift a few pixels apart is the defect this is for:
+"looks fine" is not a measurement.
+
+## The other room's clock (4 Nov)
+
+Both countdowns compared a timestamp the server wrote with `Date.now()` on the
+page. On the desktop those are one clock; on a laptop they are two, and a card
+that had just appeared said "picked now" in the other room while counting
+properly on the desktop. Every response's `Date` header is now read into
+`state.clockSkew`, and the countdowns run on `serverNow()`; see
+`remote-access.md` for the operator's side of it.

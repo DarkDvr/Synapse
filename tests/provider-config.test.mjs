@@ -423,6 +423,21 @@ const notFound = { ok: false, status: 404, text: async () => 'Not Found' };
   check('a plain local provider is unchanged', declaredProviderType({ type: 'local' }) === 'local');
   check('an undeclared provider answers by its address', declaredProviderType({ baseURL: 'http://localhost:1235/v1' }) === 'local');
   check('a vendor stays a vendor', declaredProviderType({ type: 'openai', baseURL: 'https://api.example.com/v1' }) === 'openai');
+  // 4 Nov: PolyStrata was added as an OpenAI-type row with a localhost URL. The
+  // stored type won, so the Local LLM row said nothing was answering while that
+  // server served every turn. The address decides.
+  check(
+    'a local server added as openai still counts as local',
+    providerType({ type: 'openai', baseURL: 'http://127.0.0.1:8080/v1' }) === 'local',
+  );
+  check(
+    'and the screen still shows the row as it was stored',
+    declaredProviderType({ type: 'openai', baseURL: 'http://127.0.0.1:8080/v1' }) === 'openai',
+  );
+  check(
+    'a vendor with an https address is still a vendor',
+    providerType({ type: 'openai', baseURL: 'https://api.example.com/v1' }) === 'openai',
+  );
 
   // The measured window must reach a llama.cpp provider exactly as it does a
   // local one — that is the whole reason the type exists.

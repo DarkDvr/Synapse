@@ -651,14 +651,8 @@ body.dark .sidebar-bottom,
    with the switch's edge above it. */
 .status-remote #remoteUrl { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .status-remote .token-chip { margin-left: auto; }
-/* The fallback address, one line under the name: shown only when the name is
-   there to fail in the first place. */
-.status-remote-ip {
-  margin: 0 0 1px 17px; min-width: 0;
-  font: 9px/1.5 var(--mono); color: #727880;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-.status-remote-ip:empty { display: none; }
+/* The fallback address line went on 4 Nov: the machine's name is the address
+   people read out, and a second line with a number in it was noise. */
 /* One line, ellipsed, aligned under the address: "clients: 1 (LAPTOP)". */
 .status-clients {
   margin: 0 0 3px 17px; min-width: 0;

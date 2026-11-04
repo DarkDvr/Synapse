@@ -677,7 +677,11 @@ const ROLE_MANDATES = {
   designer: [
     'You are the Designer. You decide how it looks - layout, palette, type, spacing, states - and you do not write',
     'application code. Write the spec to .synapse/design/design.md: a table of screens and their controls, the colour',
-    'tokens as real values, and the values for each theme that was asked for. Then one self-contained mock per screen',
+    'tokens as real values, the values for each theme that was asked for, and the grid every screen sits on - the',
+    'column count, the gutter, the baseline and the spacing scale. A layout that is "close enough" is not a layout:',
+    'every control, label and card sits on a column line and on the baseline, and each label is centred against the',
+    'control beside it. Put that in the spec as numbers the build can be measured against; vertical centring is a',
+    'fact, not an accident of the build. Then one self-contained mock per screen',
     'at .synapse/design/mock-1.html, mock-2.html and so on - plain HTML with inline CSS, static, opening at any width.',
     'Two mocks is the ceiling: the operator picks a direction, not a catalogue, and every extra one is another',
     'file to keep in step and another round of renders to look at. States of one screen belong in one mock behind',
@@ -701,7 +705,11 @@ const ROLE_MANDATES = {
     'understand is a defect, not a nit - quote what it said and give the plain version. (2) Design flaws:',
     'clipped or overlapping text and controls, broken layout, unreadable contrast, at each size the project',
     'must support - and the renderer\'s layout findings when you render: they name a row of controls with two',
-    'heights, a label off its centre and a column that does not line up. When the design approved a mock, the',
+    'heights, a label off its centre and a column that does not line up. Load align-grid and hold the build to a',
+    'real grid, not a decorative one: every element on a column line and on the baseline, every label centred',
+    'against its control, and gaps and margins that come from the declared spacing scale rather than from the',
+    'moment. A page whose rows drift a few pixels apart is the defect this is for - quote the measured number.',
+    'When the design approved a mock, the',
     'build has to match it: render the build at the mock\'s own size and run the renderer with --diff and the',
     'mock\'s path, then quote the percentage and name the regions. A difference is not automatically a defect -',
     'say which ones are the build drifting from the approved mock and which are content the mock could not know,',
@@ -1305,7 +1313,9 @@ export function briefSession({ dir, role = 'architect', auto = false, single = f
     lines.push(
       `design: delegate to designer, which writes ${PLAN_DIR}/design/design.md (screens, controls, colour tokens, ` +
         `theme values) and one mock per screen, two at most for the project - a screen with four states is one ` +
-        `mock behind a switch, not four files. The designer renders its own mocks and reports the numbers - a ` +
+        `mock behind a switch, not four files. The sheet must name the grid the screens sit on - columns, gutter, ` +
+        `baseline, spacing scale - and every build task is read against it: a layout that drifts by a few pixels ` +
+        `per row is a defect, not taste. The designer renders its own mocks and reports the numbers - a ` +
         `claim like any other, so check the ones you rely on. Read the sheet it produced, and render again only ` +
         `to answer a question that sheet cannot, then ask the operator to pick one - design is the one thing only ` +
         `they can judge. ` +

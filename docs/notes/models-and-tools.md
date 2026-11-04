@@ -317,6 +317,15 @@ server URL and a key, and *Refresh List* asks that server what it serves. Saving
 writes the same `providers` array documented here, so a hand-written entry and a
 clicked one are the same thing.
 
+**The address decides whether a provider is local, not the type it was saved
+as.** A custom runtime added as *OpenAI Compatible* with a `localhost`/`127.0.0.1`
+URL (PolyStrata, 4 Nov) is a server on this machine: the Local LLM row counts it,
+the window probe asks it, and the picker badges it LOCAL. The stored type still
+decides for every remote address, and Settings keeps showing the row as it was
+saved. Before this the type won, so the one server that was answering was invisible
+while the row said "no answer" — and red is only claimed when *no* registered local
+server answers at all.
+
 **A local server is one of two list formats.** `format: "openai"` (LM Studio,
 vLLM, llama.cpp) answers `GET /models`; `format: "ollama"` answers
 `GET /api/tags`, whose entries are `{name}` rather than `{id}`. Chat goes through
