@@ -125,6 +125,19 @@ test('a steer is on screen before the engine echoes it', () => {
   assert.match(js, /text: `\[steer\] \$\{text\}`/);
 });
 
+// 4 Nov: the answer box behind "Something Else" is prose. Enter is a newline and
+// Ctrl+Enter sends, the same as the chat composer; every other ask field keeps
+// Enter-to-move-on.
+test('Something Else answers like the chat: Enter newline, Ctrl+Enter sends', () => {
+  const js = read('web/app.js');
+  assert.match(js, /<textarea class="ask-input ask-other-text"/);
+  assert.match(js, /closest\?\.\('\.ask-other-text'\)/);
+  assert.match(js, /e\.ctrlKey \|\| e\.metaKey/);
+  const css = read('web/synapse.css');
+  assert.match(css, /\.ask-opt \.ask-other-text/);
+  assert.match(css, /field-sizing: content/);
+});
+
 // 4 Nov: the PROHIBITED list is a table — the path, a Write box, a Read box, and
 // a delete button that is disabled for the ones Synapse ships.
 test('Prohibited is a table with a Write and a Read box per row', () => {

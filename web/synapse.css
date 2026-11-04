@@ -1928,6 +1928,10 @@ body[data-mode="single"] #runAuto { display: none; }
    panel and gave the fields a horizontal scrollbar. */
 .ask-opt .ask-other-text {
   margin: 0 0 0 21px; width: calc(100% - 21px); min-width: 0;
+  resize: none; overflow-y: auto; max-height: 132px; line-height: 1.45;
+  /* Grow with the answer, in the same layout pass: Enter is a newline here now,
+     so a two-line answer must not hide its own second line. */
+  field-sizing: content;
 }
 .ask-other-text:disabled { opacity: 0.45; }
 

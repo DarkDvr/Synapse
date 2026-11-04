@@ -5516,7 +5516,7 @@ function askCustom(kind, name) {
       <input type="${kind}" name="${esc(name)}" value="__custom" data-ask-custom="1" />
       <span class="ask-opt-label">Something Else…</span>
     </label>
-    <input class="ask-input ask-other-text" type="text" placeholder="Type it here" disabled />
+    <textarea class="ask-input ask-other-text" rows="1" placeholder="Type it here" disabled></textarea>
   </div>`;
 }
 
@@ -9567,9 +9567,23 @@ document.addEventListener('keydown', (e) => {
       if (e.target.closest('[data-ask-next]')) { moveAskPage(1); return; }
       if (e.target.closest('[data-ask-back]')) { moveAskPage(-1); return; }
     });
-    // Enter in a text field moves on, the way any small form should — Submit is
-    // only the last page's word for it.
+    // The "Something Else" box is prose, not a one-line field: Enter starts a new
+    // line there and Ctrl+Enter sends, the same as the chat composer. Every other
+    // field keeps Enter-to-move-on.
     askHost.addEventListener('keydown', (e) => {
+      if (e.target.closest?.('.ask-other-text')) {
+        if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+          e.preventDefault();
+          const next = askHost.querySelector('[data-ask-next]');
+          if (next && !next.hidden) {
+            if (!next.disabled) moveAskPage(1);
+            return;
+          }
+          const btn = askHost.querySelector('[data-form-reply]');
+          if (btn && !btn.disabled) replyForm(btn.dataset.formReply);
+        }
+        return;
+      }
       if (e.key !== 'Enter' || e.target.tagName !== 'INPUT') return;
       e.preventDefault();
       const next = askHost.querySelector('[data-ask-next]');
@@ -9579,6 +9593,10 @@ document.addEventListener('keydown', (e) => {
       }
       const btn = askHost.querySelector('[data-form-reply]');
       if (btn && !btn.disabled) replyForm(btn.dataset.formReply);
+    });
+    // A multi-line answer grows instead of hiding its own text.
+    askHost.addEventListener('input', (e) => {
+      if (e.target.classList?.contains('ask-other-text')) autoGrow(e.target);
     });
   }
 

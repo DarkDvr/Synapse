@@ -3,7 +3,7 @@
     "host": "127.0.0.1",
     "port": 8700,
     "openBrowser": false,
-    "remote": true
+    "remote": false
   },
   "engine": {
     "type": "opencode",
@@ -252,13 +252,13 @@
           "apiKey": "",
           "models": [
             {
-              "id": "qwen3.6-35b-a3b-ud-q6_k_xl-126k",
-              "name": "qwen3.6-35b-a3b-ud-q6_k_xl-126k",
+              "id": "qwen-agentworld-35b-a3b-q6-126k",
+              "name": "qwen-agentworld-35b-a3b-q6-126k",
               "context": 126976
             },
             {
-              "id": "qwen3.6-35b-a3b-ud-q6_k_xl-204k",
-              "name": "qwen3.6-35b-a3b-ud-q6_k_xl-204k",
+              "id": "qwen-agentworld-35b-a3b-q6-200k",
+              "name": "qwen-agentworld-35b-a3b-q6-200k",
               "context": 126976
             },
             {
@@ -321,7 +321,7 @@
       ]
     },
     "coder-1": {
-      "ref": "polystrata/qwen3.6-35b-a3b-ud-q6_k_xl-126k",
+      "ref": "polystrata/qwen-agentworld-35b-a3b-q6-126k",
       "variant": "high",
       "skills": [
         "code-craft",
