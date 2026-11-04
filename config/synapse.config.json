@@ -369,7 +369,7 @@
   },
   "automation": {
     "keepBuildingSec": 5,
-    "permissionsSec": 20,
+    "permissionsSec": 10,
     "answerSec": 30,
     "shutdownMin": 20,
     "keepAwake": true,
