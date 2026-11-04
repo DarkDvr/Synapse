@@ -389,11 +389,13 @@
   },
   "protection": {
     "builtinsOff": [],
+    "builtinsSealed": [],
     "paths": [
       {
         "path": "C:\\Users\\Andrew\\AppData\\Local\\BraveSoftware",
         "label": "Brave browser data",
-        "enabled": true
+        "write": false,
+        "read": false
       }
     ],
     "removed": []

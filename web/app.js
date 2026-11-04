@@ -8286,27 +8286,47 @@ async function loadProtection() {
 function settingsProhibited(c) {
   const entries = state.protection?.entries || [];
   const builtins = entries.filter((entry) => entry.builtin);
+  // Both lists store the refusals: an id in builtinsOff means its Write is cleared,
+  // an id in builtinsSealed means its Read is cleared. The boxes are the permissions.
   const writeOff = new Set((c.protection?.builtinsOff || []).map(String));
   const readOff = new Set((c.protection?.builtinsSealed || []).map(String));
   const added = Array.isArray(c.protection?.paths) ? c.protection.paths : [];
-  const boxes = (kind, target, write, read) => `
-      <input type="checkbox" class="prot-check" data-prot-write="${esc(target)}" data-prot-kind="${kind}"${write ? ' checked' : ''}
+  const boxes = (kind, key, write, read) => `
+      <input type="checkbox" class="prot-check" data-prot-write="${esc(key)}" data-prot-kind="${kind}"${write ? ' checked' : ''}
              title="${write ? 'Changes allowed: untick to refuse every change to this path' : 'Changes refused before any permission card'}"
-             aria-label="Allow changes to ${esc(target)}" />
-      <input type="checkbox" class="prot-check" data-prot-read="${esc(target)}" data-prot-kind="${kind}"${read ? ' checked' : ''}
+             aria-label="Allow changes to ${esc(key)}" />
+      <input type="checkbox" class="prot-check" data-prot-read="${esc(key)}" data-prot-kind="${kind}"${read ? ' checked' : ''}
              title="${read ? 'Reads allowed: untick to refuse reads as well' : 'Reads refused: tick to allow reading this path'}"
-             aria-label="Allow reads of ${esc(target)}" />`;
-  const row = (kind, target, builtin, write, read) => `
+             aria-label="Allow reads of ${esc(key)}" />`;
+  const row = ({ kind, key, target, builtin, write, read }) => `
     <div class="prot-row">
       <span class="prot-path" title="${esc(target)}"><span class="prot-name">${esc(target)}</span>${builtin ? '<span class="prot-tag is-builtin">Built-in</span>' : ''}</span>
-      ${boxes(kind, target, write, read)}
+      ${boxes(kind, key, write, read)}
       ${builtin
         ? '<button type="button" class="prot-x" disabled title="Built-in paths can be switched off but not removed" aria-label="Built-in path, cannot be removed">✕</button>'
         : `<button type="button" class="prot-x" data-prot-del="${esc(target)}" title="Remove this path from the list" aria-label="Remove ${esc(target)}">✕</button>`}
     </div>`;
   const rows = [
-    ...builtins.map((entry) => row('builtin', entry.id, true, !writeOff.has(entry.id), !readOff.has(entry.id))),
-    ...added.map((entry) => row('added', entry.path, false, entry.write === true, entry.read === true)),
+    ...builtins.map((entry) =>
+      row({
+        kind: 'builtin',
+        key: entry.id,
+        target: entry.path,
+        builtin: true,
+        write: writeOff.has(entry.id),
+        read: !readOff.has(entry.id),
+      }),
+    ),
+    ...added.map((entry) =>
+      row({
+        kind: 'added',
+        key: entry.path,
+        target: entry.path,
+        builtin: false,
+        write: entry.write === true,
+        read: entry.read === true,
+      }),
+    ),
   ].join('');
   return `
     <section class="set-group prot-pane">
@@ -8344,8 +8364,9 @@ function toggleProtection(input) {
     const key = isWrite ? 'builtinsOff' : 'builtinsSealed';
     const set = new Set((c.protection[key] || []).map(String));
     if (isWrite) {
-      if (input.checked) set.delete(target);
-      else set.add(target);
+      // Ticked = changes allowed = the id is listed in builtinsOff.
+      if (input.checked) set.add(target);
+      else set.delete(target);
     } else if (input.checked) set.delete(target);
     else set.add(target);
     c.protection[key] = [...set];
