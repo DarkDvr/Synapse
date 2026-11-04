@@ -312,8 +312,8 @@
       ]
     },
     "coder-1": {
-      "ref": "polystrata/qwen3.6-35b-a3b-ud-q6_k_xl-204k",
-      "variant": "medium",
+      "ref": "opencode-go/deepseek-v4.1-flash",
+      "variant": "high",
       "skills": [
         "code-craft",
         "visual-review"
