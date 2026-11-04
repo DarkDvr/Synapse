@@ -254,17 +254,17 @@
             {
               "id": "qwen-agentworld-35b-a3b-q6-126k",
               "name": "qwen-agentworld-35b-a3b-q6-126k",
-              "context": 126976
+              "context": 204800
             },
             {
               "id": "qwen-agentworld-35b-a3b-q6-200k",
               "name": "qwen-agentworld-35b-a3b-q6-200k",
-              "context": 126976
+              "context": 204800
             },
             {
               "id": "qwen3.8-flash-next-iq2_xs",
               "name": "qwen3.8-flash-next-iq2_xs",
-              "context": 126976
+              "context": 204800
             }
           ]
         }
