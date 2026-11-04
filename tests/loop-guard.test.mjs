@@ -1,19 +1,16 @@
-// The loop guard: one phrase, unchanged, for ten seconds.
+// The loop guard: one phrase unchanged for ten seconds, or one command run three
+// times in five calls.
 //
 // The rule is deliberately loose. A worker that is thinking produces new text
 // every second; a worker that is stuck writes the same line again and again, and
 // the existing stall clock cannot see it because tokens keep arriving. These are
-// the cheap halves — the pure detector and the effort step-down — so the shape is
-// asserted without a model, a network or a ten-second wait.
+// the cheap halves — the pure detector and its defaults — so the shape is asserted
+// without a model, a network or a ten-second wait.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import {
-  repeatedTailUnit,
-  createLoopDetector,
-  nextLowerVariant,
-} from '../src/runs.js';
-import { DEFAULTS } from '../src/config.js';
+import { repeatedTailUnit, createLoopDetector } from '../src/runs.js';
+import { DEFAULTS, normalize } from '../src/config.js';
 
 const UNIT = 'Building the gauge layout... ';
 
@@ -57,15 +54,13 @@ test('a different phrase restarts the clock, and normal thinking cancels it', ()
   assert.equal(detector.push(`${other.repeat(24)}`, 2600), null);
 });
 
-test('the effort steps down one advertised variant at a time', () => {
-  const variants = [{ id: 'low' }, { id: 'medium' }, { id: 'high' }];
-  assert.equal(nextLowerVariant(variants, 'high'), 'medium');
-  assert.equal(nextLowerVariant(variants, 'medium'), 'low');
-  assert.equal(nextLowerVariant(variants, 'low'), '', 'nothing below the bottom');
-  assert.equal(nextLowerVariant(variants, ''), '', 'an unset effort is not guessed at');
-  assert.equal(nextLowerVariant([], 'high'), '');
+test('the guard is on by default, with three loops to a work order', () => {
+  assert.equal(DEFAULTS.worker.loopGuard, true);
+  assert.equal(DEFAULTS.worker.loopLimit, 3);
 });
 
-test('the guard is on by default', () => {
-  assert.equal(DEFAULTS.worker.loopGuard, true);
+test('the loop limit is clamped to 1–20', () => {
+  assert.equal(normalize({ worker: { loopLimit: 99 } }).worker.loopLimit, 20);
+  assert.equal(normalize({ worker: { loopLimit: 0 } }).worker.loopLimit, 1);
+  assert.equal(normalize({ worker: { loopLimit: 'x' } }).worker.loopLimit, 3);
 });

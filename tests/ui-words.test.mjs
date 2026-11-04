@@ -125,6 +125,25 @@ test('a steer is on screen before the engine echoes it', () => {
   assert.match(js, /text: `\[steer\] \$\{text\}`/);
 });
 
+// 4 Nov: the guard no longer rewrites the effort; it counts loops and sets the
+// model aside at the limit. The setting is a number beside the switch.
+test('the loop setting is a count, and the card says what happened', () => {
+  const js = read('web/app.js');
+  assert.match(js, /worker\.loopLimit/);
+  assert.match(js, /asking it to carry on/);
+  assert.match(js, /marked ISSUES, next coder/);
+  assert.doesNotMatch(js, /lowering reasoning to/);
+});
+
+// 4 Nov: settings had a wall of grey notes in a coder's voice. What is left is
+// short and only where it has to be seen; the rest is a tooltip.
+test('the settings panes keep only a few short notes', () => {
+  const js = read('web/app.js');
+  const notes = js.match(/class="set-note"/g) || [];
+  assert.ok(notes.length <= 6, `set-note blocks: ${notes.length}`);
+  assert.match(js, /const setGroup = \(title, body, cols, hint = ''\)/, 'a group can carry its own tooltip');
+});
+
 // 4 Nov: the operator arranged providers in Settings and the model menu sorted
 // by label instead; the rail's project order was likewise fixed. Both orders are
 // now the operator's, saved with the config / the registry.

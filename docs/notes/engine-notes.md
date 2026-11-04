@@ -390,7 +390,7 @@ Non-obvious, all verified on 2.0.30:
   coder-2 began on coder-1 and the report said "ran on coder-1, not coder-2" with
   nothing having failed (caught in test-project-1's f-string run, fixed to
   `slice(at + skip)`). A role whose model is marked — a provider refusal, a model
-  that cannot drive the tools, or one that looped at its lowest reasoning effort —
+  that cannot drive the tools, or one that looped to its limit in one work order —
   is skipped from the start, so a task the Architect writes for coder-1 opens on
   coder-2 while coder-1 is out, instead of paying for the same rescue on every task.
   A timeout does not loop: the worker may
@@ -501,38 +501,30 @@ Non-obvious, all verified on 2.0.30:
   `question` tool part still running, the stall clock is paused, so the operator can
   take as long as they like — otherwise every worker that asks anything would be
   interrupted for asking.
-- **A phrase repeated for ten seconds is a loop, and the stall clock cannot see it.**
-  Tokens keep arriving, so the activity signature keeps changing and the worker looks
-  busy. `waitForIdle` therefore also keeps the newest assistant message's thinking
-  while that message has written no text and called no tool, and looks at its last
-  320 characters: a tail that is periodic — the same 12–96 character phrase over and
-  over — that is still the same phrase ten seconds later is a loop. The harness
-  interrupts the turn, lowers the role's thinking effort one advertised variant
-  (high → medium → low), sends a `synthetic` "stop repeating and carry on", and puts
-  one amber pinned line on the card:
-  `↻ Loop detected ×1 → lowering reasoning to medium and recovering`. At the lowest
-  variant there is no step left: the model is marked ISSUES (kind `loop`), the task
-  moves on to the next coder **inside the same delegation**, and the run log records
-  `loopMark: { role, model }`. The report names the coder that was marked and says
-  the build now starts one rung lower — naming the run's *final* coder told the
-  Architect that the coder which had just delivered was the broken one, and it
-  stalled waiting for an operator nobody had woken (4 Nov). The mark is also
-  skipped at the start of later tasks, so coder-1 is not given the first turn of
-  every task only to loop again. `worker.loopGuard` (Settings → Workers, on by
-  default) turns the guard off; the number of rescues rides the run and its result
-  line as `loops`.
-- **The guard watches thinking, not actions (4 Nov).** It only looks at a step's
-  reasoning, and only while that assistant message has written no text and called
-  no tool (`reasoningTail` returns `''` the moment a tool part exists). A worker
-  that loops *through tools* — the same proof script five times, `npm install`
-  twice, a hunt for a renderer — does not trip it: every step ends in a tool call,
-  the window resets, and the stall clock stays happy because tokens and calls keep
-  arriving. Measured on 4 Nov: coder-1 ran `node bin/t1a-proof.js` at 10:34:54,
-  10:34:58, 10:35:01 and again five times from 10:38:39, with `npm install
-  puppeteer` twice, after a `shot.mjs` denial; 35 turns, 40 tool calls,
-  `loops: 0`, no variant change, stopped by the operator. A tool-call loop needs
-  its own rule (repeated identical commands), not a looser thinking rule — the
-  thinking check is deliberately specific so a slow model is not interrupted.
+- **A loop is one phrase held, or one call repeated. The harness counts it and
+  never changes the effort.** Tokens keep arriving, so the activity signature keeps
+  changing and the worker looks busy; two cheap rules catch the shapes that are not
+  progress:
+  * **thinking** — the newest assistant message is looked at only while it has
+    written no text and called no tool: a last 320-character tail that is periodic
+    (the same 12–96 character phrase) and still the same ten seconds later is a loop;
+  * **calls** — the same tool with the same target three times inside the last five
+    calls. A step that calls a tool ends with a tool part, so the thinking check
+    cannot see this one; `node bin/t1a-proof.js` eight times in seven minutes was
+    `loops: 0` on 4 Nov precisely because of that.
+  On a loop the runner interrupts the turn, sends a `synthetic` "stop repeating and
+  carry on", and counts it: `↻ Loop detected ×1 of 3 — asking it to carry on`. It
+  **does not touch the model's thinking effort** — walking the variant down made the
+  model worse, not better, and was removed on 4 Nov. At `worker.loopLimit` loops in
+  one work order (Settings → Workers, three by default) the model is marked ISSUES
+  (kind `loop`), the task moves to the next coder **inside the same delegation**, and
+  the run log records `loopMark: { role, model }`. The report names the coder that
+  was marked and says the build now starts one rung lower — naming the run's *final*
+  coder once told the Architect that the coder which had just delivered was the
+  broken one, and it stalled waiting for an operator nobody had woken (4 Nov). The
+  mark is also skipped at the start of later tasks, so coder-1 is not given the
+  first turn of every task only to loop again. `worker.loopGuard` turns the guard
+  off; the number of rescues rides the run and its result line as `loops`.
 - **Recoverable provider failures never end a run.** `src/provider-errors.js`
   classifies the sentence a turn ended with. *Transient* — rate limit/429,
   connection reset, socket/network/DNS, 5xx, "overloaded", the free-tier message,

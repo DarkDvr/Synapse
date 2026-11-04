@@ -1987,3 +1987,16 @@ should be where they just put it.
 The same idea one pane over: providers can be moved in Settings, and the model
 menu in a role card follows the order there (see `models-and-tools.md`). A list the
 user arranged and a menu that ignores it is the bug, not a preference.
+
+## Settings speak like a person (4 Nov)
+
+The Settings panes had grown a grey note under almost every control, written in
+the voice of whoever built it: how the engine compacts, what a probe run does,
+which folder a key lands in. Read once, it is noise; read never, it is a wall of
+text between the operator and the one number they came to change.
+
+The rule now: every control carries a plain-English tooltip (`title`), and a pane
+has **at most one short visible line**, and only for the thing that would bite if
+it were missed — a restart, where keys are stored, what a limit does. A group
+heading can carry the rest in its own tooltip. "Running 2.2.5 from …" stays,
+because it is a fact, not an explanation.

@@ -162,7 +162,12 @@ export const DEFAULTS = {
     // the harness interrupts the worker, lowers its thinking effort one step and
     // tells it to carry on. At the lowest step the model is marked and the
     // Architect is told. On by default; the guard is loose on purpose.
+    // A worker that repeats one phrase, or one command, is interrupted and told to
+    // carry on. Every rescue is one loop. At `loopLimit` loops in one work order the
+    // model is marked ISSUES and the task moves to the next coder. Effort is never
+    // changed. On by default; the guard is loose on purpose.
     loopGuard: true,
+    loopLimit: 3,
     // Roles that can stand in for one another, in escalation order. A task is
     // written for one role; when that coder cannot do the job the harness moves
     // the same task down this list (see src/runs.js candidatesFor). A role not in
@@ -324,6 +329,7 @@ export function normalize(raw) {
   cfg.worker.retryBaseSec = clampInt(cfg.worker.retryBaseSec, 5, 300, DEFAULTS.worker.retryBaseSec);
   cfg.worker.retryCapSec = clampInt(cfg.worker.retryCapSec, 10, 3600, DEFAULTS.worker.retryCapSec);
   cfg.worker.loopGuard = cfg.worker.loopGuard !== false;
+  cfg.worker.loopLimit = clampInt(cfg.worker.loopLimit, 1, 20, DEFAULTS.worker.loopLimit);
   // The peer ladder is a list of role ids; anything unknown is dropped rather than
   // left to confuse a delegation with a role that has no card and no model.
   cfg.worker.ladder = Array.isArray(cfg.worker.ladder)

@@ -1,14 +1,15 @@
-// The loop rescue, through the real delegation runner.
+// The loop guard, through the real delegation runner.
 //
 // A model that repeats one phrase keeps the activity clock moving, so the stall
-// guard never sees it. This drives the other path: the runner notices the phrase,
-// interrupts the turn, lowers the role's thinking effort one step, tells the
-// worker to carry on, and finishes on the lower effort.
+// guard never sees it; this drives the other path. The runner notices the loop,
+// interrupts the turn, tells the worker to carry on and counts it. Effort is never
+// changed. At the configured number of loops in one work order (Settings > Workers,
+// three by default) the model is marked ISSUES and the task moves to the next coder.
 //
 // The phrase is produced by a stub engine that grows one reasoning message every
-// 200ms; the runner's poll is 1.5s and the guard waits ten seconds, so this test
-// takes about a quarter of a minute. That is the point of the guard: it is slow
-// enough that normal thinking never matches it.
+// 200ms; the runner's poll is 1.5s and the guard waits ten seconds, so a phrase
+// loop takes about a quarter of a minute. A tool loop (the same call three times in
+// five) is caught in about two seconds, which is the point of the second half.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -46,10 +47,11 @@ function project(name, ids = ['t1']) {
   return dir;
 }
 
-/** A worker whose thinking grows the same phrase; a nudge finishes the turn.
- *  Roles outside `loopRoles` just finish, so one test can watch coder-2 take a
- *  task over after coder-1 was marked. */
-function makeEngine(dir, loopRoles = ['coder-1']) {
+/** A worker that loops: one phrase over and over, or the same call again and again.
+ *  `keepLooping` makes the nudge start another loop, so a run can reach the limit;
+ *  otherwise the nudge finishes the turn. Roles outside `loopRoles` just finish, so
+ *  one test can watch coder-2 take a task over after coder-1 was marked. */
+function makeEngine(dir, { loopRoles = ['coder-1'], keepLooping = false, toolLoop = false } = {}) {
   const sessions = new Map();
   const arch = [];
   const created = [];
@@ -72,6 +74,33 @@ function makeEngine(dir, loopRoles = ['coder-1']) {
       s.assistant.updated = Date.now();
     }, 200);
   };
+  // The action half: a new call every 400ms, same name and same command. Three of
+  // them inside five is a loop, and no thinking is involved.
+  const startToolLoop = (id) => {
+    const s = sessions.get(id);
+    let n = 0;
+    s.timer = setInterval(() => {
+      const at = Date.now();
+      n += 1;
+      s.messages.push({
+        id: `${id}-t${(turns += 1)}`,
+        type: 'assistant',
+        created: at,
+        updated: at,
+        completed: at,
+        parts: [
+          {
+            type: 'tool',
+            name: 'bash',
+            id: `${id}-call${n}`,
+            input: { command: 'node proof.js' },
+            status: 'completed',
+          },
+        ],
+      });
+    }, 400);
+  };
+  const start = (id) => (toolLoop ? startToolLoop(id) : startLoop(id));
 
   const engine = {
     async getSession(id) {
@@ -95,7 +124,7 @@ function makeEngine(dir, loopRoles = ['coder-1']) {
         }, 60);
         return;
       }
-      startLoop(id);
+      start(id);
     },
     async synthetic(id, text) {
       if (id === 'ses_arch') {
@@ -108,6 +137,12 @@ function makeEngine(dir, loopRoles = ['coder-1']) {
       }
       const s = sessions.get(id);
       stopStream(s);
+      if (keepLooping) {
+        // The nudge did not help: the same loop starts again, which is how a run
+        // reaches the limit.
+        setTimeout(() => start(id), 40);
+        return;
+      }
       setTimeout(() => {
         s.messages.push({ id: `${id}-a${(turns += 1)}`, type: 'assistant', parts: [{ type: 'text', text: 'Done.' }], completed: Date.now() });
         s.messages.push({ id: `${id}-i${(turns += 1)}`, type: 'idle', parts: [] });
@@ -146,9 +181,9 @@ function readRuns(dir) {
   return fs.readFileSync(file, 'utf8').trim().split('\n').filter(Boolean).map((l) => JSON.parse(l));
 }
 
-async function startCase(name, variant, { ladder = ['coder-1'], ids = ['t1'] } = {}) {
+async function startCase(name, variant, { ladder = ['coder-1'], ids = ['t1'], loopLimit = 3, keepLooping = false, toolLoop = false } = {}) {
   const dir = project(name, ids);
-  const stub = makeEngine(dir);
+  const stub = makeEngine(dir, { keepLooping, toolLoop });
   const events = [];
   const marks = [];
   // A cache the runner can read back: a mark written by noteIssue has to be
@@ -169,7 +204,7 @@ async function startCase(name, variant, { ladder = ['coder-1'], ids = ['t1'] } =
         'coder-2': { ref: 'opencode/two' },
         'coder-3': { ref: 'opencode/three' },
       },
-      worker: { ladder, stallSec: 30, resumeMax: 0, retryBaseSec: 1, retryCapSec: 2, loopGuard: true },
+      worker: { ladder, stallSec: 30, resumeMax: 0, retryBaseSec: 1, retryCapSec: 2, loopGuard: true, loopLimit },
       cleanup: { onFinish: false },
     }),
     modelCache: {
@@ -209,45 +244,62 @@ function told(stub) {
     .join('\n---\n');
 }
 
-test('a worker repeating one phrase is interrupted, lowered one effort and continues', async () => {
-  const { stub, events, result } = await startCase('loop-high', 'high');
+test('a repeating worker is interrupted, asked to carry on, and finishes', async () => {
+  const { stub, events, result } = await startCase('loop-phrase', 'medium');
   assert.ok(result, 'the run finished and wrote a result');
-  assert.equal(result.outcome, 'completed', 'the lower effort carried the task to the end');
+  assert.equal(result.outcome, 'completed', 'the nudge carried the task to the end');
   assert.equal(result.loops, 1, 'one rescue is recorded');
+  assert.equal(stub.switched.length, 0, 'the effort is never changed');
 
   const worker = stub.created[0];
-  const switched = stub.switched.find((s) => s.id === worker);
-  assert.ok(switched, 'the worker session was moved to the lower variant');
-  assert.equal(switched.model.variant, 'medium', 'high stepped down to medium');
-
   const note = events.find((e) => e.type === 'run.note' && e.kind === 'loop');
   assert.ok(note, 'the card was told about the loop');
   assert.equal(note.times, 1);
-  assert.equal(note.to, 'medium');
+  assert.equal(note.limit, 3);
   assert.ok(stub.interrupts.includes(worker), 'the looping turn was interrupted');
 });
 
-test('at the lowest effort the model is marked and the Architect is told', async () => {
-  const { stub, marks, result } = await startCase('loop-low', 'low');
+test('at the limit the model is marked and the Architect is told', async () => {
+  const { stub, marks, result } = await startCase('loop-limit', 'medium', { keepLooping: true, loopLimit: 2 });
   assert.ok(result, 'the run finished and wrote a result');
-  assert.equal(result.outcome, 'error', 'a loop at the bottom is a failure, not a rescue');
-  assert.equal(result.loops, 1, 'the loop is still counted');
+  assert.equal(result.outcome, 'error', 'the limit ends the run');
+  assert.equal(result.loops, 2, 'both loops are counted');
+  assert.equal(stub.switched.length, 0, 'no effort step');
 
   assert.equal(marks.length, 1, 'the model is marked once');
   assert.equal(marks[0].issue.kind, 'loop', 'the mark names the reason');
-  assert.match(marks[0].issue.message, /lowest reasoning effort/);
+  assert.match(marks[0].issue.message, /looped 2 times/);
 
   const report = told(stub);
-  assert.match(report, /ISSUES/, 'the Architect is told the model is marked');
+  assert.match(report, /looped 2 times in one work order/, 'the Architect is told the count');
+  assert.match(report, /ISSUES/, 'and that the model is marked');
   assert.match(report, /out of action/, 'and that the role is stuck until the operator fixes it');
 });
 
-// The move the operator asked for: a coder-1 that loops at the bottom must not
-// end the night - the task carries on down the ladder in the same delegation, and
-// the report names the coder that is marked, never the one that took over.
-test('a loop at the bottom moves the task to coder-2, and the report names coder-1', async () => {
-  const { stub, marks, result } = await startCase('loop-ladder', 'low', {
+// The incident of 4 Nov: the worker never repeated a phrase, it ran the same command
+// over and over. The thinking check cannot see that; the tool window can.
+test('a tool loop — the same call three times — is caught without any thinking loop', async () => {
+  const { stub, marks, result } = await startCase('loop-tool', 'medium', {
+    keepLooping: true,
+    toolLoop: true,
+    loopLimit: 1,
+  });
+  assert.ok(result, 'the run finished and wrote a result');
+  assert.equal(result.outcome, 'error', 'the tool loop is a loop like any other');
+  assert.equal(result.loops, 1);
+  assert.equal(marks.length, 1, 'the model is marked');
+  assert.match(marks[0].issue.message, /bash/, 'the mark names what it kept running');
+  const report = told(stub);
+  assert.match(report, /node proof\.js/, 'the report quotes the repeated call');
+});
+
+// The task carries on down the ladder in the same delegation, and the report names
+// the coder that is marked, never the one that took over.
+test('a looped coder moves the task to coder-2, and the report names coder-1', async () => {
+  const { stub, marks, result } = await startCase('loop-ladder', 'medium', {
     ladder: ['coder-1', 'coder-2', 'coder-3'],
+    keepLooping: true,
+    loopLimit: 1,
   });
   assert.ok(result, 'the run finished and wrote a result');
   assert.equal(result.role, 'coder-2', 'coder-2 ran the task');
@@ -266,9 +318,11 @@ test('a loop at the bottom moves the task to coder-2, and the report names coder
 });
 
 test('once coder-1 is marked, the next task starts on coder-2', async () => {
-  const { stub, delegate, result } = await startCase('loop-next-task', 'low', {
+  const { stub, delegate, result } = await startCase('loop-next-task', 'medium', {
     ladder: ['coder-1', 'coder-2', 'coder-3'],
     ids: ['t1', 't2'],
+    keepLooping: true,
+    loopLimit: 1,
   });
   assert.equal(result.role, 'coder-2');
 
@@ -283,4 +337,3 @@ test('once coder-1 is marked, the next task starts on coder-2', async () => {
   const report = told(stub);
   assert.match(report, /coder-1's model is marked ISSUES, so this task started further down the line/);
 });
-

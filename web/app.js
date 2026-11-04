@@ -3544,7 +3544,7 @@ async function loadRuns() {
           compactAt: Number(run.compactAt) || 0,
           compactLimit: Number(run.compactLimit) || 0,
           loops: Number(run.loops) || 0,
-          loopTo: String(run.loopTo || ''),
+          loopLimit: Number(run.loopLimit) || 3,
           loopStop: Boolean(run.loopStop),
         });
       }
@@ -3621,7 +3621,7 @@ function handleRunEvent(ev) {
         notes: steerNotes(run),
         stream: null,
         loops: 0,
-        loopTo: '',
+        loopLimit: 3,
         loopStop: false,
       });
     } else if (trace && run.tool) {
@@ -3662,9 +3662,8 @@ function handleRunEvent(ev) {
     // fact still shows that the run was rescued and how many times.
     if (trace && Number(run.loops) > (Number(trace.loops) || 0)) {
       trace.loops = Number(run.loops);
-      if (run.loopTo) trace.loopTo = String(run.loopTo);
+      if (Number(run.loopLimit)) trace.loopLimit = Number(run.loopLimit);
       trace.loopStop = Boolean(run.loopStop);
-      if (trace.loopStop) trace.loopTo = '';
     }
   } else if (ev.type === 'run.finished') {
     // A finished, successful run is the role working again; a run that failed is
@@ -4168,11 +4167,12 @@ function renderTrace(t) {
   // A loop rescue is pinned for the same reason: it is not a step, and it is the
   // one line that explains why the next thinking is shorter.
   const looped = Number(t.loops) || 0;
+  const loopLimit = Number(t.loopLimit) || 3;
   const loopLine = looped
-    ? `<div class="trace-line is-loop">↻ Loop detected ×${looped} → ` +
-      (t.loopStop || !t.loopTo
-        ? 'already at the lowest effort — marked ISSUES'
-        : `lowering reasoning to ${esc(t.loopTo)} and recovering`) +
+    ? `<div class="trace-line is-loop">↻ Loop detected ×${looped}` +
+      (looped >= loopLimit
+        ? ` — marked ISSUES, next coder`
+        : ` of ${loopLimit} — asking it to carry on`) +
       '</div>'
     : '';
   const body = `${archive}${compactLine}${loopLine}${tail.map(note).join('')}${streaming}`;
@@ -4601,17 +4601,12 @@ function noteCompaction(trace, { times, used, context } = {}) {
 /** One loop rescue, on a trace. Like a compaction, the count only goes up: a
  *  re-sent event must not turn one rescue into "×2". `to` is the effort it was
  *  lowered to; no `to` means there was nowhere left to go. */
-function noteLoop(trace, { times, to } = {}) {
+function noteLoop(trace, { times, limit } = {}) {
   const counted = Number(times) || 0;
   const known = Number(trace.loops) || 0;
   trace.loops = counted > known ? counted : known || 1;
-  if (to) {
-    trace.loopTo = String(to);
-    trace.loopStop = false;
-  } else {
-    trace.loopTo = '';
-    trace.loopStop = true;
-  }
+  if (Number(limit)) trace.loopLimit = Number(limit);
+  trace.loopStop = trace.loops >= trace.loopLimit;
 }
 
 /** The trace of a delegated run whose worker session is this one, if any. */
@@ -4668,7 +4663,7 @@ function traceSig() {
         (t) =>
           `${t.key}:${t.finishedAt || 0}:${(t.notes || []).length}:${t.stream ? t.stream.text.length : 0}:` +
           `${t.stream?.ended ? 1 : 0}:${Number(t.compactions) || 0}:${Number(t.compactingSince) || 0}:` +
-          `${Number(t.loops) || 0}:${t.loopTo || ''}`,
+          `${Number(t.loops) || 0}:${Number(t.loopLimit) || 0}:${t.loopStop ? 1 : 0}`,
       )
       .join(';'),
     sessionPart,
@@ -7888,8 +7883,8 @@ const setCheck = (c, label, path, hint = '') => `
       <span>${esc(label)}</span>
     </label>`;
 
-const setGroup = (title, body, cols) =>
-  `<section class="set-group"><h4>${title}</h4><div class="set-grid${cols === 3 ? ' cols-3' : ''}">${body}</div></section>`;
+const setGroup = (title, body, cols, hint = '') =>
+  `<section class="set-group"><h4${hint ? ` title="${esc(hint)}"` : ''}>${title}</h4><div class="set-grid${cols === 3 ? ' cols-3' : ''}">${body}</div></section>`;
 
 // ── panes ───────────────────────────────────────────────────────
 
@@ -7962,11 +7957,8 @@ function settingsEngine(c) {
           hint: 'Where the engine keeps its own settings, logs and data. Blank uses the copy inside Synapse; the machine-wide OpenCode install is never touched.',
         }) +
         `<p class="set-note">Running <strong>${esc(detected.version || 'not started')}</strong> from ` +
-        `<code>${esc(detected.binary || 'auto-detected')}</code>. The model list is read from this runtime at ` +
-        `every launch, but the catalog ships inside its binary — so a stale model list means a stale copy. ` +
-        `A copy inside <code>bin\\opencode</code> travels with Synapse and wins over a global install; ` +
-        `Check for Updates fetches the newest from npm and copies it over this one.</p>` +
-        `<div class="set-field wide" title="Ask npm whether a newer engine has been published. The engine carries the model catalog, so this is also how the model list gets current."><span>Runtime version</span>` +
+        `<code>${esc(detected.binary || 'auto-detected')}</code>.</p>` +
+        `<div class="set-field wide" title="The model catalog ships inside the engine binary, so a stale model list means a stale copy. A copy inside bin\\opencode wins over a global install; Check for Updates fetches the newest from npm."><span>Runtime version</span>` +
         `<button type="button" class="btn btn-secondary btn-sm" data-check-update>Check for Updates</button></div>`,
     ),
     setGroup(
@@ -7984,11 +7976,9 @@ function settingsEngine(c) {
         type: 'number',
         restart: true,
         hint: 'When the engine compacts, it writes a summary and carries the last N tokens of the conversation over word for word. 15,000 by default. The summary itself is the engine\'s and cannot be shortened; this can, and it is most of the prompt afterwards. 0 leaves the engine alone.',
-      }) +
-        `<p class="set-note">The engine compacts by itself once the prompt reaches its own ceiling: the window it was told,
-      minus the larger of 15% of it or 16,000 tokens. On a 60,160 window that is 44,160. The summary it writes is about
-      2,500 tokens and is not configurable; the text carried over beside it is, with the number above. A smaller
-      number means less to re-read after a compaction and the same ceiling to reach, so the window lasts longer.</p>`,
+      }),
+      undefined,
+      'The engine compacts at its own ceiling and keeps the last N tokens word for word; a smaller number means less to re-read after each compaction.',
     ),
   ].join('');
 }
@@ -7997,10 +7987,19 @@ function settingsWorkers(c) {
   return [
     setGroup(
       'Looping',
-      `<label class="set-check" title="When a worker repeats the same phrase for ten seconds without making progress, interrupt it, lower its thinking effort one step and tell it to carry on. At the lowest effort the model is marked ISSUES and the Architect is told. On by default.">` +
+      `<label class="set-check" title="Interrupts a worker that repeats one phrase or one command, and counts it. At the limit the model is marked and the task moves to the next coder.">` +
         `<input data-path="worker.loopGuard" type="checkbox" ${c.worker?.loopGuard !== false ? 'checked' : ''} />` +
-        `<span>Detect and prevent looping</span></label>` +
-        `<p class="set-note">This is for a model that gets stuck on one line — usually a thinking effort that is too high for the task. It is not a time limit: a slow turn that keeps producing new work is left alone. Every rescue is one amber line on the worker's card.</p>`,
+        `<span>Detect looping</span></label>` +
+        setField(c, 'Loops before the model is set aside', 'worker.loopLimit', {
+          type: 'number',
+          // A config saved before this existed has no key; the box shows the
+          // default it would get rather than an empty field.
+          value: c.worker?.loopLimit ?? 3,
+          attr: 'min="1" max="20" step="1"',
+          hint: 'How many loops one task may show before the model is marked ISSUES and the next coder takes over. 1 to 20.',
+        }),
+      undefined,
+      'A loop is one phrase or one command repeated. Each rescue is one amber line; the third sends the task to the next coder.',
     ),
     setGroup(
       'Timers',
@@ -8021,8 +8020,9 @@ function settingsWorkers(c) {
           type: 'number',
           scale: 60,
           hint: 'The ceiling for that wait. Recoverable failures are retried indefinitely at this interval; there is no attempt limit, so only Stop ends one. Minutes.',
-        }) +
-        `<p class="set-note">Rate limits, dropped connections and server errors are retried for as long as it takes, and they do not count as attempts: the worker keeps its progress. A retired model, a wrong key or a malformed request is final, and is reported. Every provider failure is written to <code>data\\provider-errors.log</code>, which keeps 30 days regardless of the log retention below.</p>`,
+        }),
+      undefined,
+      'Rate limits and dropped connections are retried without spending an attempt. A retired model or a bad key is final, and reported.',
     ),
     setGroup(
       'Escalation',
@@ -8030,8 +8030,9 @@ function settingsWorkers(c) {
         wide: true,
         value: (readPath(c, 'worker.ladder') || []).join(', '),
         hint: 'Roles that can stand in for one another, in escalation order. When a coder cannot do the job, the same task moves down this list.',
-      }) +
-        `<p class="set-note">A task is written for one role. When that coder cannot do the job, the harness hands the same task down this list — never to a role that is not on it.</p>`,
+      }),
+      undefined,
+      'When a coder cannot do the job, the same task moves down this list — never to a role that is not on it.',
     ),
   ].join('');
 }
@@ -8057,12 +8058,9 @@ function settingsTools(c) {
         value: (c.engine?.opencode?.skillPaths || []).join(';'),
         hint: "Extra folders of agent skills, separated by semicolons. Synapse's own skills and your ~/.agents/skills always load; add a folder here only for skills in neither.",
       }) +
-        `<p class="set-note">${esc(skillsSummary())}</p>` +
-        `<p class="set-note">Synapse's own skills ship in <code>skills\\</code> beside the app and always load, ` +
-        `so the pipeline works on a fresh machine with nothing installed. The engine also reads your own ` +
-        `<code>~/.agents/skills</code>, which is why your library appears here too — and where a name exists in ` +
-        `both places, the copy Synapse ships is the one that loads. A skill a role names but this machine does ` +
-        `not have is listed above instead of disappearing quietly.</p>`,
+        `<p class="set-note">${esc(skillsSummary())}</p>`,
+      undefined,
+      "Synapse's own skills ship beside the app and always load; a name in both places loads the shipped copy.",
     ),
   ].join('');
 }
@@ -8152,15 +8150,12 @@ function settingsGeneral(c) {
           LANGUAGES,
           {
             value: String(readPath(c, 'ui.language') || 'en'),
-            hint: 'The language of Synapse’s own controls. English is the default. Model output is never translated — it answers in the language you write to it.',
+            hint: 'English for now; Russian is planned. Model output is never translated — it answers in the language you write to it.',
           },
-        ) +
-        `<p class="set-note">The whole transcript scales with this one number, and keeps its proportions: ` +
-        `the role label, the clock, headings, code and tables all move together. ` +
-        `<strong>${CHAT_TEXT_MIN}</strong> is the smallest that still reads; <strong>${CHAT_TEXT_MAX}</strong> is the largest ` +
-        `that keeps a full answer above the composer on a 900px-tall window.</p>` +
-        `<p class="set-note">One language for now. A Russian translation is on the deferred list; ` +
-        `the selector is here so it has somewhere to go, not to switch something that does not exist yet.</p>`,
+        ),
+      undefined,
+      'Scales the whole conversation, headings and code included. The smallest that still reads is ' +
+        `${CHAT_TEXT_MIN}px; the largest that keeps an answer above the composer is ${CHAT_TEXT_MAX}px.`,
     ),
     // Notices lived in their own tab until 2 Nov. One setting does not need a
     // tab, and a tab that holds one setting is a place the operator forgets to
@@ -8172,10 +8167,9 @@ function settingsGeneral(c) {
         hint: 'Played when the chat you are looking at goes quiet after the Architect worked — its last words already on screen and nothing else running. Not on Stop, and not when the turn failed.',
       }) +
         `<div class="set-field" title="Hear the sound before you save it."><span>Preview</span>` +
-        `<button type="button" class="btn btn-secondary btn-sm" data-test-sound>Play It</button></div>` +
-        `<p class="set-note">Four short ones, all built to be noticed and talked over: a two-note <strong>Chime</strong>, a single <strong>Bell</strong>, a wooden <strong>knock</strong>, and a <strong>Ripple</strong> of three light plips. Off silences it. ` +
-        `They are Synapse's own files in <code>web\\sounds</code>, generated by <code>scripts\\make-sounds.mjs</code>, so they travel with the folder and nothing is downloaded.</p>` +
-        `<p class="set-note">The sound is for this window's open chat. A run in a project you are not looking at does not chime — the rail's dot is what tells you it is alive.</p>`,
+        `<button type="button" class="btn btn-secondary btn-sm" data-test-sound>Play It</button></div>`,
+      undefined,
+      "Four short sounds, built into the app. Only the chat you are looking at chimes; a run elsewhere shows its dot in the rail.",
     ),
   ].join('');
 }
@@ -8220,12 +8214,8 @@ function settingsAutomation(c) {
           attr: 'min="1" max="180" step="1"',
           hint: 'How long Synapse waits with nothing running and nothing left to start before it shows the 20-second shutdown countdown. Minutes, 1 to 180.',
         }) +
-        `<p class="set-note">These are the waits <em>all four switches</em> obey, in every project. ` +
-        `Which of the four is on belongs to the project: open its chat and use the <strong>cog</strong> between Stop and Send. ` +
-        `A new project starts with <strong>Keep Building</strong> on and the other three off.</p>` +
-        `<p class="set-note">Auto-Shutdown turns the machine off only when nothing is running, nothing is waiting for a question ` +
-        `or a permission, and no task can start on its own. It is the same countdown as before — 20 seconds, with a Cancel — ` +
-        `and a new run cancels it.</p>`,
+      undefined,
+      'The waits all four switches obey. Which switches are on belongs to each project — the cog between Stop and Send.',
     ),
   ].join('');
 }
@@ -8255,11 +8245,9 @@ function settingsLogging(c) {
         setField(c, 'Max file size (MB)', 'logging.maxFileMb', {
           type: 'number',
           hint: 'When a log file reaches this size it is rotated to a .1 file and a fresh one is started. Megabytes.',
-        }) +
-        `<p class="set-note">One file per channel: <code>app</code>, <code>engine</code>, <code>session</code> and ` +
-        `<code>tools</code>, in <code>logs\\</code>. The console mirrors the app channel and every warning or error ` +
-        `from any channel, so a retry or a stall shows up in the window Synapse was started from. ` +
-        `<code>data\\provider-errors.log</code> keeps 30 days on its own.</p>`,
+        }),
+      undefined,
+      'One file per channel in logs\\. The console mirrors warnings and errors from every channel; the provider diary keeps its own 30 days.',
     ),
   ].join('');
 }
@@ -8395,10 +8383,10 @@ function providerEditor(providers, index) {
         </select>
         <small class="prov-hint">${
           p.type === 'llamacpp'
-            ? 'Strata, llama-server and KoboldCpp all speak this one: the window comes from /props, and no key is needed on this machine.'
+            ? 'A llama.cpp server on this machine; its window comes from /props.'
             : p.type === 'openai'
-              ? 'Reached over the network. Its window is whatever you type in the model list — nobody can be asked.'
-              : 'LM Studio and friends: the window is asked for at /api/v0/models.'
+              ? 'Reached over the network; its window is the one you type.'
+              : 'A local server that reports its window at /api/v0/models.'
         }</small>
       </label>
       <label class="set-field" title="The name on the badge beside this provider's models in every role's menu.">
@@ -8415,7 +8403,7 @@ function providerEditor(providers, index) {
           <option value="openai"${p.format !== 'ollama' ? ' selected' : ''}>OpenAI API (/models)</option>
           <option value="ollama"${p.format === 'ollama' ? ' selected' : ''}>Ollama (/api/tags)</option>
         </select>
-        <small class="prov-hint">${p.format === 'ollama' ? 'Ollama' : 'LM Studio, vLLM, llama.cpp'} — either one answers the other endpoint too, so this only decides which is asked first.</small>
+        <small class="prov-hint">Either endpoint answers the other; this only decides which is asked first.</small>
       </label>` : ''}
       <div class="set-field wide" title="Sent as a bearer token. A key typed here is stored beside the app's data (not in the config file); env:NAME reads the environment when Synapse starts.">
         <span>API Key</span>
@@ -8444,8 +8432,8 @@ function providerEditor(providers, index) {
         </div>
         <small class="prov-hint">${
           isLocalServer(p)
-            ? 'One model per line: <code>id | name</code>. The context window is read from the server at every start — that is the number the engine compacts on, so there is nothing to type here.'
-            : 'One model per line: <code>id | name | context | output</code>. Only the id is required; nobody can be asked for the window, so this is the one the engine budgets from.'
+            ? 'One per line: <code>id | name</code>. The window is read from the server.'
+            : 'One per line: <code>id | name | context | output</code>. Only the id is required.'
         }</small>
       </div>
     </div>
@@ -8519,9 +8507,7 @@ function settingsProviders(c) {
       </div>
       <hr class="prov-divider" />
       ${providerEditor(providers, selected)}
-      <p class="set-note">A new or changed provider reaches the model menu after a restart: the engine reads its
-      provider list when it starts. A key written as <code>env:NAME</code> is read from the environment at boot;
-      a key typed here is kept beside the app's data, never in the config file.</p>
+      <p class="set-note">A new or changed provider appears in the model menu after a restart. Keys typed here are stored beside the app's data, never in the config.</p>
     </section>`;
 }
 
