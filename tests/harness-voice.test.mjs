@@ -26,7 +26,11 @@ test('a worker report’s header names the task, the coder, the model and the co
   // not say the same numbers twice.
   assert.match(src, /ran for \$\{ranFor\(Date\.now\(\) - startedAt\)\}/);
   assert.match(src, /tokens\(\(context\.prompt \|\| 0\) \+ \(context\.generated \|\| 0\)\)/);
-  assert.match(src, /% was reasoning/);
+  // The reasoning share moved into the header with the clock; when the provider
+  // does not split reasoning out, the header uses the body's honest sentence
+  // instead of claiming "0% was reasoning" (4 Nov).
+  assert.match(src, /thinkNote\(context\)/);
+  assert.doesNotMatch(src, /% was reasoning/);
   assert.doesNotMatch(src, /finished in \$\{Math\.round\(ms \/ 1000\)\}s/, 'the report head keeps no clock');
   assert.doesNotMatch(src, /read \(the provider's meter\)/, 'the report keeps no token totals');
   assert.doesNotMatch(src, /worker \$\{request\.task\} \(\$\{role\}\) \$\{outcome\}/, 'the old header is gone');

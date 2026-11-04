@@ -321,7 +321,7 @@
       ]
     },
     "coder-1": {
-      "ref": "polystrata/qwen-agentworld-35b-a3b-q6-200k",
+      "ref": "polystrata/qwen3.8-flash-next-iq2_xs",
       "variant": "high",
       "skills": [
         "code-craft",
@@ -332,8 +332,7 @@
       ]
     },
     "coder-2": {
-      "ref": "polystrata/qwen3.8-flash-next-iq2_xs",
-      "variant": "medium",
+      "ref": "opencode-go/deepseek-v4.1-flash",
       "skills": [
         "code-craft",
         "visual-review"
