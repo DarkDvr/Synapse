@@ -8286,35 +8286,32 @@ async function loadProtection() {
 function settingsProhibited(c) {
   const entries = state.protection?.entries || [];
   const builtins = entries.filter((entry) => entry.builtin);
-  const off = new Set((c.protection?.builtinsOff || []).map(String));
+  const writeOff = new Set((c.protection?.builtinsOff || []).map(String));
+  const readOff = new Set((c.protection?.builtinsSealed || []).map(String));
   const added = Array.isArray(c.protection?.paths) ? c.protection.paths : [];
-  const row = ({ id, path: target, builtin, enabled, sealed }) => `
-    <div class="prot-row${enabled ? '' : ' is-off'}">
-      <input type="checkbox" class="prot-check"${builtin ? ` data-prot-builtin="${esc(id)}"` : ` data-prot-toggle="${esc(target)}"`}${enabled ? ' checked' : ''}
-             title="${enabled ? 'Protected: untick to let the normal permission rules handle it again' : 'Not protected: tick to refuse every change to it'}" />
-      <span class="prot-path" title="${esc(target)}">${esc(target)}</span>
-      ${sealed ? '<span class="prot-tag is-sealed" title="Not readable either: touching this folder resets the browser">No reads</span>' : ''}
-      <span class="prot-tag${builtin ? ' is-builtin' : ''}">${builtin ? 'Built-in' : 'Added'}</span>
+  const boxes = (kind, target, write, read) => `
+      <input type="checkbox" class="prot-check" data-prot-write="${esc(target)}" data-prot-kind="${kind}"${write ? ' checked' : ''}
+             title="${write ? 'Changes allowed: untick to refuse every change to this path' : 'Changes refused before any permission card'}"
+             aria-label="Allow changes to ${esc(target)}" />
+      <input type="checkbox" class="prot-check" data-prot-read="${esc(target)}" data-prot-kind="${kind}"${read ? ' checked' : ''}
+             title="${read ? 'Reads allowed: untick to refuse reads as well' : 'Reads refused: tick to allow reading this path'}"
+             aria-label="Allow reads of ${esc(target)}" />`;
+  const row = (kind, target, builtin, write, read) => `
+    <div class="prot-row">
+      <span class="prot-path" title="${esc(target)}"><span class="prot-name">${esc(target)}</span>${builtin ? '<span class="prot-tag is-builtin">Built-in</span>' : ''}</span>
+      ${boxes(kind, target, write, read)}
       ${builtin
-        ? ''
-        : `<button type="button" class="role-btn prot-del" data-prot-del="${esc(target)}" title="Remove this path from the list" aria-label="Remove ${esc(target)}">✕</button>`}
+        ? '<button type="button" class="prot-x" disabled title="Built-in paths can be switched off but not removed" aria-label="Built-in path, cannot be removed">✕</button>'
+        : `<button type="button" class="prot-x" data-prot-del="${esc(target)}" title="Remove this path from the list" aria-label="Remove ${esc(target)}">✕</button>`}
     </div>`;
   const rows = [
-    ...builtins.map((entry) => row({ ...entry, enabled: !off.has(entry.id) })),
-    ...added.map((entry) =>
-      row({
-        id: entry.path,
-        path: entry.path,
-        builtin: false,
-        enabled: entry.enabled !== false,
-        sealed: /bravesoftware/i.test(entry.path),
-      }),
-    ),
+    ...builtins.map((entry) => row('builtin', entry.id, true, !writeOff.has(entry.id), !readOff.has(entry.id))),
+    ...added.map((entry) => row('added', entry.path, false, entry.write === true, entry.read === true)),
   ].join('');
   return `
     <section class="set-group prot-pane">
-      <h4 title="Built-in entries can be switched off but not removed. Paths you add can be deleted. Reads are allowed unless the entry says No reads.">Prohibited</h4>
-      <p class="set-note">Reads are allowed; any change to these paths is refused before a permission card exists.</p>
+      <h4 title="Built-in entries can be switched off but not removed; paths you add can be deleted. Each box is a permission: a cleared Write refuses every change to that path; a cleared Read refuses reading it too.">Prohibited</h4>
+      <p class="set-note">Each box is a permission. Clearing Write refuses every change to that path before a permission card exists; clearing Read refuses reading it too.</p>
       <div class="prov-add">
         <button type="button" class="btn btn-provider btn-sm" data-prot-add>+ Add Path</button>
         <div class="prov-add-menu" id="protAddMenu" hidden>
@@ -8322,7 +8319,15 @@ function settingsProhibited(c) {
           <button type="button" data-prot-new="file">Add File…</button>
         </div>
       </div>
-      <div class="prot-list">${rows || '<div class="prot-empty">Loading the list…</div>'}</div>
+      <div class="prot-table">
+        <div class="prot-row is-head" aria-hidden="true">
+          <span class="prot-path">Path</span>
+          <span class="prot-head">Write</span>
+          <span class="prot-head">Read</span>
+          <span class="prot-head"></span>
+        </div>
+        ${rows || '<div class="prot-empty">Loading the list…</div>'}
+      </div>
     </section>`;
 }
 
@@ -8330,16 +8335,26 @@ function toggleProtection(input) {
   const c = collectSettings();
   if (!c) return;
   c.protection = c.protection || {};
-  const id = input.dataset.protBuiltin;
-  if (id) {
-    const off = new Set((c.protection.builtinsOff || []).map(String));
-    if (input.checked) off.delete(id);
-    else off.add(id);
-    c.protection.builtinsOff = [...off];
+  const kind = input.dataset.protKind;
+  const target = input.dataset.protWrite || input.dataset.protRead;
+  const isWrite = input.hasAttribute('data-prot-write');
+  if (kind === 'builtin') {
+    // The two id lists store the *refusals*: a built-in id sits in builtinsOff when
+    // its Write is cleared, and in builtinsSealed when its Read is cleared.
+    const key = isWrite ? 'builtinsOff' : 'builtinsSealed';
+    const set = new Set((c.protection[key] || []).map(String));
+    if (isWrite) {
+      if (input.checked) set.delete(target);
+      else set.add(target);
+    } else if (input.checked) set.delete(target);
+    else set.add(target);
+    c.protection[key] = [...set];
   } else {
-    const target = input.dataset.protToggle;
     const entry = (c.protection.paths || []).find((p) => samePath(p.path, target));
-    if (entry) entry.enabled = input.checked;
+    if (entry) {
+      if (isWrite) entry.write = input.checked;
+      else entry.read = input.checked;
+    }
   }
   renderSettings();
 }
@@ -8364,14 +8379,17 @@ async function addProtectionPath(kind) {
     if (!c) return;
     c.protection = c.protection || {};
     const paths = Array.isArray(c.protection.paths) ? c.protection.paths : (c.protection.paths = []);
-    if (!paths.some((p) => samePath(p.path, chosen))) paths.push({ path: chosen, label: '', enabled: true });
+    if (!paths.some((p) => samePath(p.path, chosen))) {
+      // A new path starts protected for writes and readable, the same default the
+      // built-ins have; the operator clears Read only when touching it is dangerous.
+      paths.push({ path: chosen, label: '', write: false, read: true });
+    }
     c.protection.removed = (c.protection.removed || []).filter((p) => !samePath(p, chosen));
     renderSettings();
   } catch (err) {
     toast('Could Not Add A Path', err.message);
   }
 }
-
 function settingsLogging(c) {
   return [
     setGroup(
@@ -9004,7 +9022,7 @@ async function onSettingsClick(e) {
   if (protNew) { addProtectionPath(protNew.dataset.protNew); return; }
   const protDel = e.target.closest('[data-prot-del]');
   if (protDel) { removeProtectionPath(protDel.dataset.protDel); return; }
-  const protToggle = e.target.closest('[data-prot-builtin],[data-prot-toggle]');
+  const protToggle = e.target.closest('[data-prot-write],[data-prot-read]');
   if (protToggle) { toggleProtection(protToggle); return; }
   const add = e.target.closest('[data-prov-add]');
   if (add) {

@@ -13,7 +13,7 @@ import { skillRules, describeSkills } from './skills.js';
 import { rulesFor, decide, resolvePath, refusalNote, SINGLE_RULES } from './permissions.js';
 import { stopTargets } from './stop.js';
 import { PROJECTS_ROOT, SKILLS_DIR, ROOT, SCRATCH_ROOT, scratchDir } from './paths.js';
-import { braveEntries, entryCovering, protectionEntries, protectionFor } from './protection.js';
+import { braveEntries, entryBlockingWrite, protectionEntries, protectionFor } from './protection.js';
 import { mayRecycleFolder } from './projects.js';
 import { fetchProviderModels } from './providers.js';
 import { providerId } from './providers.js';
@@ -1212,7 +1212,7 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
         err.status = 400;
         throw err;
       }
-      const guarded = entryCovering(dir, getConfig() || {});
+      const guarded = entryBlockingWrite(dir, getConfig() || {});
       if (guarded) {
         const err = new Error(`${dir} is protected (${guarded.label}) and cannot be deleted`);
         err.status = 403;
@@ -1326,7 +1326,7 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
           err.status = 400;
           throw err;
         }
-        const guarded = entryCovering(current.directory, getConfig() || {});
+        const guarded = entryBlockingWrite(current.directory, getConfig() || {});
         if (guarded) {
           const err = new Error(
             `refusing to delete ${current.directory}: it is on the prohibited list (${guarded.label})`,

@@ -11,38 +11,51 @@ profile whose loss resets everything the operator has.
 
 ## What is on the list
 
-- **Built-ins**, defined in `src/protection.js`, from the machine's own variables:
-  `%SystemRoot%`, `%ProgramFiles%`, `%ProgramFiles(x86)%`, `%ProgramData%`, and the
-  folder Synapse runs from. They can be switched **off** in Settings → Prohibited
-  but never deleted: a half-ticked list must not be able to lose Windows.
-- **Added entries**, chosen in that pane with the native folder or file picker.
-  They can be switched off and deleted. Deleting one records its path in
-  `protection.removed`, which is what stops a seeded entry coming back at boot.
+The list is a table of **two permissions per path**, because they are independent:
 
-The entry list lives in `config/synapse.config.json` as
-`protection: { builtinsOff, paths, removed }`. Built-ins are *code plus an off
-switch*, so editing the config cannot invent or erase one; added paths are data.
+| column | means |
+|---|---|
+| Path | the file or folder; the built-ins are marked **Built-in** |
+| **Write** | ticked: changes are allowed and the normal rules apply. cleared: every write, edit or destructive command aimed inside it is refused before a card exists |
+| **Read** | ticked: reading is allowed. cleared: reads are refused too |
+| delete | removes an added path. A built-in's ✕ is permanently disabled |
+
+- **Built-ins**, defined in `src/protection.js` from the machine's own variables:
+  `%SystemRoot%`, `%ProgramFiles%`, `%ProgramFiles(x86)%`, `%ProgramData%`, and the
+  folder Synapse runs from. They start **Write cleared, Read ticked**. They can be
+  changed but never deleted: a half-ticked list must not be able to lose Windows.
+- **Added entries**, chosen in that pane with the native folder or file picker.
+  They start the same way — Write cleared, Read ticked — and can be deleted.
+  Deleting one records its path in `protection.removed`, which is what stops a
+  seeded entry coming back at boot.
+
+The config keeps `protection: { builtinsOff, builtinsSealed, paths, removed }`:
+`builtinsOff` lists the built-in ids whose Write was switched back on,
+`builtinsSealed` the ids whose Read was cleared, and each added path carries
+`{ path, label, write, read }`. The older one-box form (`enabled` / `sealed`) is
+folded into it on load, so an existing file opens with the answers it showed.
 
 ## Brave
 
 Brave is an **added** entry, seeded at boot from
 `%LOCALAPPDATA%\BraveSoftware` and `%APPDATA%\BraveSoftware` when those folders
-exist. Its row is marked **No reads** as well: Brave treats a read as a touch, and
-touching it resets extensions, cookies and settings — see `web-reading.md`. The
-seed is why a fresh install gets the protection without a machine-specific path in
-the shipped config, and deleting the row is a deliberate act that lasts.
+exist. Both boxes are cleared: Brave treats a read as a touch, and touching it
+resets extensions, cookies and settings — see `web-reading.md`. The seed is why a
+fresh install gets the protection without a machine-specific path in the shipped
+config, and deleting the row is a deliberate act that lasts.
 
 ## How it is enforced
 
 - Every engine tool call is judged by `decide()` in `src/permissions.js`; the gate
-  in `src/permission-gate.js` passes the enabled list in, read per request, so a
-  tick applies to the next tool call without a restart.
-- A write or edit that resolves inside an entry is `deny`, `scope: 'prohibited'`.
+  in `src/permission-gate.js` passes the list in, read per request, so a tick
+  applies to the next tool call without a restart.
+- A write or edit that resolves inside an entry whose **Write is cleared** is
+  `deny`, `scope: 'prohibited'`.
 - A shell command is judged per statement: a statement that is not read-only may
-  not name a protected path, a redirect may not land in one, and a write with no
-  path (`cd C:\Windows` then `del x`) is judged by the directory it runs in. A
-  read-only command may read one, unless the entry is sealed.
-- A sealed entry (Brave) refuses reads too.
+  not name such a path, a redirect may not land in one, and a write with no path
+  (`cd C:\Windows` then `del x`) is judged by the directory it runs in.
+- An entry whose **Read is cleared** refuses reads too, for a file tool and for a
+  read-only command alike.
 - Deleting a project whose folder sits inside an entry is refused, as is wiping
   one.
 - The model is told what happened with the strongest refusal note there is, and

@@ -297,8 +297,12 @@ const deny = (reason, outside = false, scope = 'project') => ({ effect: 'deny', 
  * entries, built-in and added. It is read per request, so ticking a box applies to
  * the next tool call without a restart.
  */
-function prohibited(target, ctx) {
-  return (ctx.protection || []).find((entry) => covers(entry.path, target)) || null;
+function prohibitedWrite(target, ctx) {
+  return (ctx.protection || []).find((entry) => entry.write === false && covers(entry.path, target)) || null;
+}
+
+function prohibitedRead(target, ctx) {
+  return (ctx.protection || []).find((entry) => entry.read === false && covers(entry.path, target)) || null;
 }
 
 /**
@@ -356,7 +360,7 @@ function decideWrite(resources, ctx) {
     const target = resolvePath(first(value), ctx.cwd, { home: ctx.home });
     if (!target || target.unknown) return ask('The harness cannot tell which folder this is.', true, 'unknown');
     // PROHIBITED beats every other rule: no card, no remembered grant, no answer.
-    const guarded = prohibited(target.path, ctx);
+    const guarded = prohibitedWrite(target.path, ctx);
     if (guarded) return deny(`PROHIBITED: ${guarded.label} is on the protected list.`, true, 'prohibited');
     if (isSecret(target.path, ctx)) return deny('The harness never opens saved-password folders.', true, 'secret');
     paths.push(target.path);
@@ -466,23 +470,23 @@ function decideShell(resources, ctx) {
       ...(part.readsOnly ? [] : part.paths.filter((p) => !toolPath(p))),
       ...part.redirects,
     ])
-    .find((p) => prohibited(p, ctx));
+    .find((p) => prohibitedWrite(p, ctx));
   if (guardedWrite) {
-    const entry = prohibited(guardedWrite, ctx);
+    const entry = prohibitedWrite(guardedWrite, ctx);
     return deny(`PROHIBITED: ${entry.label} is on the protected list.`, true, 'prohibited');
   }
   // A write with no path of its own runs in the statement's directory: `cd
   // C:\Windows` then `del x` names nothing and still lands in Windows.
-  const guardedDir = segments.find((part) => !part.readsOnly && part.dir && prohibited(part.dir, ctx));
+  const guardedDir = segments.find((part) => !part.readsOnly && part.dir && prohibitedWrite(part.dir, ctx));
   if (guardedDir) {
-    const entry = prohibited(guardedDir.dir, ctx);
+    const entry = prohibitedWrite(guardedDir.dir, ctx);
     return deny(`PROHIBITED: ${entry.label} is on the protected list.`, true, 'prohibited');
   }
   if (info.readsOnly) {
     const sealed = segments
       .flatMap((part) => [...part.paths, ...part.redirects])
-      .map((p) => prohibited(p, ctx))
-      .find((entry) => entry?.sealed);
+      .map((p) => prohibitedRead(p, ctx))
+      .find(Boolean);
     if (sealed) return deny(`PROHIBITED: ${sealed.label} is not read either.`, true, 'prohibited');
   }
   const writesHarness =
@@ -564,11 +568,11 @@ function decideRead(resources, ctx) {
     if (zone === 'harness') scope = 'harness';
     else if (zone === 'outside' && scope !== 'harness') scope = 'outside';
     if (isSecret(target.path, ctx)) return deny('The harness never opens saved-password folders.', outside, 'secret');
-    // A sealed protected entry (Brave) is not read either: the browser treats a
-    // read as a touch. Every other protected path is readable — that is the point
-    // of the tier, so OS logs and drivers can be inspected.
-    const guarded = prohibited(target.path, ctx);
-    if (guarded?.sealed) return deny(`PROHIBITED: ${guarded.label} is not read either.`, outside, 'prohibited');
+    // A protected entry whose Read box is unticked is not read either: the browser
+    // treats a read as a touch. Every other protected path is readable — that is
+    // the point of the tier, so OS logs and drivers can be inspected.
+    const guarded = prohibitedRead(target.path, ctx);
+    if (guarded) return deny(`PROHIBITED: ${guarded.label} is not read either.`, outside, 'prohibited');
     // A .env holds live keys. The model may read .env.example; the real file is
     // the operator's to hand over, because the values are the point of it.
     if (isEnvFile(target.path)) return ask('This file holds keys or passwords.', outside, zone);

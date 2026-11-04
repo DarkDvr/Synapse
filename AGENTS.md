@@ -74,7 +74,7 @@ the cards and the commits, not the code. One reason per sentence, not a chain.
 9. **Edge or headless, never Brave.** Windows' default browser here is Brave; touching
    it — opening it, reading or copying its profile — resets extensions, cookies and
    settings. Open links in Edge by its full path, take pictures with `skills/visual-review`,
-   and leave the seeded Brave entry in the prohibited list (No reads) alone.
+   and leave the seeded Brave entry in the prohibited list (Write and Read cleared) alone.
 
 ### Palette (do not break this)
 

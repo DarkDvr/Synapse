@@ -125,20 +125,22 @@ test('a steer is on screen before the engine echoes it', () => {
   assert.match(js, /text: `\[steer\] \$\{text\}`/);
 });
 
-// 4 Nov: the PROHIBITED list is its own tab — a list, a native picker, and a red
-// alarm in the chat when something tries to change one of those paths.
-test('Prohibited is a tab with a list, a picker and a red line', () => {
+// 4 Nov: the PROHIBITED list is a table — the path, a Write box, a Read box, and
+// a delete button that is disabled for the ones Synapse ships.
+test('Prohibited is a table with a Write and a Read box per row', () => {
   const js = read('web/app.js');
   assert.match(js, /id: 'prohibited', label: 'Prohibited'/);
   assert.match(js, /function settingsProhibited/);
-  assert.match(js, /data-prot-add/);
-  assert.match(js, /data-prot-builtin/);
-  assert.match(js, /data-prot-del/);
-  assert.match(js, /\/api\/protection\/pick/);
-  assert.match(js, /is-prohibited/);
+  assert.match(js, /data-prot-write=/);
+  assert.match(js, /data-prot-read=/);
+  assert.match(js, /data-prot-del=/);
+  assert.match(js, /class="prot-head">Write</);
+  assert.match(js, /class="prot-head">Read</);
+  assert.match(js, /Built-in paths can be switched off but not removed/);
   const css = read('web/synapse.css');
+  assert.match(css, /\.prot-row \{/);
+  assert.match(css, /\.prot-x:disabled/);
   assert.match(css, /\.msg\.harness\.is-prohibited/);
-  assert.match(css, /\.prot-row/);
 });
 
 // 4 Nov: the guard no longer rewrites the effort; it counts loops and sets the

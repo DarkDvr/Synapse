@@ -52,23 +52,28 @@ export function builtinEntries(env = process.env) {
   });
 }
 
-/** A browser profile folder is not merely protected: it must not be read either. */
+/** A browser profile folder is not merely protected: reading it resets the browser. */
 export const sealedPath = (value) => /bravesoftware/i.test(String(value || ''));
 
 /**
  * Every entry, built-in and added, in the order Settings shows them.
  *
- * `enabled` is the operator's answer; `builtin` decides whether the row can be
- * deleted. A sealed entry (Brave) also refuses reads, because the browser treats a
- * read as a touch.
+ * Each entry carries **two permissions**, because they are independent: `write`
+ * (may it be changed?) and `read` (may it be looked at?). A Windows folder is
+ * write:false, read:true; Brave is false on both. The list is the operator's, and
+ * each box is one answer.
+ *
+ * Built-ins come from the machine's variables and are switched off by id, never
+ * removed. Added entries are data in the config and can be deleted.
  */
 export function protectionEntries(config, { env = process.env } = {}) {
-  const off = new Set((config?.protection?.builtinsOff || []).map(String));
+  const writeOff = new Set((config?.protection?.builtinsOff || []).map(String));
+  const readOff = new Set((config?.protection?.builtinsSealed || []).map(String));
   const builtins = builtinEntries(env).map((entry) => ({
     ...entry,
     builtin: true,
-    enabled: !off.has(entry.id),
-    sealed: sealedPath(entry.path),
+    write: writeOff.has(entry.id),
+    read: !readOff.has(entry.id),
   }));
   const custom = (Array.isArray(config?.protection?.paths) ? config.protection.paths : [])
     .filter((entry) => entry && String(entry.path || '').trim())
@@ -77,23 +82,43 @@ export function protectionEntries(config, { env = process.env } = {}) {
       path: String(entry.path),
       label: String(entry.label || path.basename(String(entry.path)) || entry.path),
       builtin: false,
-      enabled: entry.enabled !== false,
-      sealed: sealedPath(entry.path),
+      // A config written before the two boxes existed carried one `enabled` and a
+      // Brave-by-name seal. Both are folded here, so an old file opens with the
+      // same answers the old row showed.
+      write: entry.write !== undefined ? entry.write === true : entry.enabled === false,
+      read:
+        entry.read !== undefined
+          ? entry.read === true
+          : entry.sealed !== undefined
+            ? entry.sealed !== true
+            : !sealedPath(entry.path),
     }));
   return [...builtins, ...custom];
 }
 
-/** The enabled entries, in the shape permissions.js judges with. */
+/** The entries in the shape permissions.js judges with: write and read allowed. */
 export function protectionFor(config, { env = process.env } = {}) {
-  return protectionEntries(config, { env })
-    .filter((entry) => entry.enabled)
-    .map((entry) => ({ path: entry.path, sealed: entry.sealed, label: entry.label }));
+  return protectionEntries(config, { env }).map((entry) => ({
+    path: entry.path,
+    label: entry.label,
+    write: entry.write,
+    read: entry.read,
+    builtin: entry.builtin,
+  }));
 }
 
-/** The first enabled entry covering `target`, or null. */
+/** The first entry covering `target`, or null. */
 export function entryCovering(target, config, { env = process.env } = {}) {
   const at = String(target || '');
   return protectionFor(config, { env }).find((entry) => covers(entry.path, at)) || null;
+}
+
+/** The first entry covering `target` whose writes are refused, or null. */
+export function entryBlockingWrite(target, config, { env = process.env } = {}) {
+  const at = String(target || '');
+  return (
+    protectionFor(config, { env }).find((entry) => entry.write === false && covers(entry.path, at)) || null
+  );
 }
 
 /**
@@ -121,7 +146,7 @@ export function braveEntries(config, { home = os.homedir() } = {}) {
     const target = key(candidate);
     if (removed.has(target)) continue;
     if (known.some((entry) => covers(entry, candidate) || covers(candidate, entry))) continue;
-    added.push({ path: candidate, label: 'Brave browser data', enabled: true });
+    added.push({ path: candidate, label: 'Brave browser data', write: false, read: false });
   }
   return added;
 }

@@ -1,9 +1,11 @@
-// The PROHIBITED tier: reads are fine, changes are refused.
+// The PROHIBITED tier: two permissions per path — may it be changed, and may it
+// be read?
 //
 // This is the layer that does not ask. Its unit is a path; its promise is that a
-// write, an edit or a destructive shell command aimed at the Windows folder (or
-// Synapse itself, or the Brave data) is denied before a permission card exists.
-// The list is the operator's: built-ins can be switched off, added paths deleted.
+// write, an edit or a destructive shell command aimed at Windows (or Synapse
+// itself, or the Brave data) is denied before a permission card exists. Reads are
+// a separate answer on the same row, because reading the event log is useful work
+// and reading Brave is a reset.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -17,7 +19,7 @@ import {
   braveEntries,
   builtinEntries,
   covers,
-  entryCovering,
+  entryBlockingWrite,
   protectionEntries,
   protectionFor,
 } from '../src/protection.js';
@@ -38,42 +40,71 @@ test('the built-in list is the machine, and it always has Synapse in it', () => 
   assert.ok(ids.includes('synapse'), 'Synapse itself is built in');
   assert.ok(ids.includes('windows'), 'the Windows folder is built in');
   for (const entry of entries) assert.ok(fs.existsSync(entry.path), `${entry.id} exists`);
-  // The folder this program runs from is the Synapse entry.
   const synapse = entries.find((entry) => entry.id === 'synapse');
   assert.equal(covers(synapse.path, path.join(ROOT, 'src')), true);
 });
 
-test('a disabled entry is off, and an added one is deletable by its absence', () => {
-  const config = {
-    protection: {
-      builtinsOff: ['windows'],
-      paths: [{ path: 'D:\\Archive', label: 'Archive', enabled: false }, { path: 'D:\\Data', enabled: true }],
-    },
-  };
-  const entries = protectionEntries(config);
-  assert.equal(entries.find((entry) => entry.id === 'windows').enabled, false);
-  assert.equal(entries.find((entry) => entry.path === 'D:\\Archive').enabled, false);
-  assert.equal(entries.find((entry) => entry.path === 'D:\\Archive').builtin, false);
-  const enabled = protectionFor(config).map((entry) => entry.path);
-  assert.ok(!enabled.some((p) => /Windows/i.test(p)), 'a switched-off built-in is not enforced');
-  assert.ok(enabled.includes('D:\\Data'), 'an enabled added path is');
-  assert.equal(entryCovering('D:\\Data\\x.bin', config)?.path, 'D:\\Data');
+test('two boxes per entry: writes refused, reads allowed by default', () => {
+  const entries = protectionEntries(normalize({}));
+  for (const entry of entries) {
+    assert.equal(entry.write, false, `${entry.path} refuses writes`);
+    assert.equal(entry.read, true, `${entry.path} allows reads`);
+  }
+  // Switching a built-in's Write back on is an id list; clearing its Read is another.
+  const off = protectionEntries(
+    normalize({ protection: { builtinsOff: ['windows'], builtinsSealed: ['program-data'] } }),
+  );
+  assert.equal(off.find((entry) => entry.id === 'windows').write, true);
+  assert.equal(off.find((entry) => entry.id === 'program-data').read, false);
 });
 
-test('Brave is an added, sealed entry, seeded only when its folder exists', () => {
+test('an added path keeps its own answers, and old ones migrate', () => {
+  const cfg = normalize({
+    protection: {
+      paths: [
+        { path: 'D:\\Data', label: 'Data', write: true, read: true },
+        { path: 'D:\\Archive', label: 'Archive', write: false, read: false },
+        // The one-box list: enabled meant "protected", sealed meant "no reads".
+        { path: 'D:\\Old', enabled: true },
+        { path: 'D:\\Open', enabled: false },
+        { path: 'C:\\Users\\tester\\AppData\\Local\\BraveSoftware' },
+      ],
+    },
+  });
+  const by = (p) => cfg.protection.paths.find((entry) => entry.path === p);
+  assert.deepEqual(by('D:\\Data'), { path: 'D:\\Data', label: 'Data', write: true, read: true });
+  assert.deepEqual(by('D:\\Archive'), { path: 'D:\\Archive', label: 'Archive', write: false, read: false });
+  assert.equal(by('D:\\Old').write, false, 'enabled:true meant protected');
+  assert.equal(by('D:\\Old').read, true);
+  assert.equal(by('D:\\Open').write, true, 'enabled:false meant writes allowed');
+  assert.equal(
+    by('C:\\Users\\tester\\AppData\\Local\\BraveSoftware').read,
+    false,
+    'a Brave path written before the boxes is read-refused',
+  );
+
+  const entries = protectionEntries(cfg);
+  const data = entries.find((entry) => entry.path === 'D:\\Data');
+  assert.equal(data.write, true);
+  assert.equal(data.builtin, false);
+  assert.equal(protectionFor(cfg).find((entry) => entry.path === 'D:\\Archive').read, false);
+});
+
+test('Brave is an added entry, seeded once, refused for both answers', () => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'synapse-brave-'));
   try {
     const brave = path.join(home, 'AppData', 'Local', 'BraveSoftware');
     fs.mkdirSync(brave, { recursive: true });
-    const empty = normalize({});
-    const seeded = braveEntries(empty, { home });
+    const seeded = braveEntries(normalize({}), { home });
     assert.equal(seeded.length, 1, 'the folder on this machine is offered once');
     assert.equal(seeded[0].path, brave);
+    assert.deepEqual([seeded[0].write, seeded[0].read], [false, false]);
 
     const listed = { protection: { paths: seeded } };
     assert.equal(braveEntries(listed, { home }).length, 0, 'not added twice');
     const entry = protectionEntries(listed).find((e) => e.path === brave);
-    assert.equal(entry.sealed, true, 'a Brave folder refuses reads too');
+    assert.equal(entry.read, false, 'a Brave folder refuses reads');
+    assert.equal(entry.builtin, false, 'and is not a built-in');
 
     const removed = { protection: { paths: [], removed: [brave] } };
     assert.equal(braveEntries(removed, { home }).length, 0, 'a deleted entry does not come back at boot');
@@ -83,7 +114,7 @@ test('Brave is an added, sealed entry, seeded only when its folder exists', () =
 });
 
 // ── the policy itself ───────────────────────────────────────────
-const protection = [{ path: 'C:\\Windows', sealed: false, label: 'Windows' }];
+const protection = [{ path: 'C:\\Windows', label: 'Windows', write: false, read: true }];
 const call = (action, resources, extra = {}) =>
   decide({
     action,
@@ -120,32 +151,45 @@ test('a destructive shell command is refused; reading the same file is not', () 
   assert.equal(cd.effect, 'deny', 'a write inherits the directory it runs in');
 });
 
-test('a sealed entry (Brave) refuses reads too', () => {
-  const brave = [{ path: 'C:\\Users\\tester\\AppData\\Local\\BraveSoftware', sealed: true, label: 'Brave' }];
-  const verdict = call('read', ['C:\\Users\\tester\\AppData\\Local\\BraveSoftware\\Brave-Browser\\User Data\\Cookies'], {
+test('the Read box is independent: refused reads, allowed writes', () => {
+  const brave = [{ path: 'C:\\Users\\tester\\AppData\\Local\\BraveSoftware', label: 'Brave', write: false, read: false }];
+  const read = call('read', ['C:\\Users\\tester\\AppData\\Local\\BraveSoftware\\Brave-Browser\\User Data\\Cookies'], {
     protection: brave,
   });
-  assert.equal(verdict.effect, 'deny');
-  assert.equal(verdict.scope, 'prohibited');
+  assert.equal(read.effect, 'deny');
+  assert.equal(read.scope, 'prohibited');
+
+  // A path with writes allowed but reads refused: the read is denied, and a write
+  // inside it is judged by the normal rules (here, outside the project → ask).
+  const odd = [{ path: 'D:\\Secrets', label: 'Secrets', write: true, read: false }];
+  assert.equal(call('read', ['D:\\Secrets\\x'], { protection: odd }).effect, 'deny');
+  assert.equal(call('edit', ['D:\\Secrets\\x'], { protection: odd }).effect, 'ask');
 });
 
-test('switching the entry off returns the normal rule, not a permanent no', () => {
-  const off = call('edit', ['C:\\Windows\\System32\\drivers\\etc\\hosts'], { protection: [] });
-  assert.equal(off.effect, 'ask', 'outside the project, the operator is asked again');
-  assert.notEqual(off.scope, 'prohibited');
+test('switching Write back on returns the normal rule, not a permanent no', () => {
+  const open = [{ path: 'C:\\Windows', label: 'Windows', write: true, read: true }];
+  const verdict = call('edit', ['C:\\Windows\\System32\\drivers\\etc\\hosts'], { protection: open });
+  assert.equal(verdict.effect, 'ask', 'outside the project, the operator is asked again');
+  assert.notEqual(verdict.scope, 'prohibited');
+  assert.equal(
+    entryBlockingWrite('C:\\Windows\\System32\\drivers\\etc\\hosts', { protection: { paths: [] } }, { env: {} }),
+    null,
+  );
 });
 
-test('the config keeps the list, strips junk, and defaults to empty', () => {
+test('the config keeps both answers, strips junk, and defaults sensibly', () => {
   const cfg = normalize({
     protection: {
       builtinsOff: ['windows', '', 7],
-      paths: [{ path: 'D:\\Keep', label: 'Keep', enabled: true }, { path: '', label: 'no' }],
+      builtinsSealed: ['program-data'],
+      paths: [{ path: 'D:\\Keep', label: 'Keep', write: false, read: true }, { path: '', label: 'no' }],
       removed: ['C:\\Users\\x\\AppData\\Local\\BraveSoftware'],
     },
   });
   assert.deepEqual(cfg.protection.builtinsOff, ['windows', '7']);
-  assert.deepEqual(cfg.protection.paths, [{ path: 'D:\\Keep', label: 'Keep', enabled: true }]);
+  assert.deepEqual(cfg.protection.builtinsSealed, ['program-data']);
+  assert.deepEqual(cfg.protection.paths, [{ path: 'D:\\Keep', label: 'Keep', write: false, read: true }]);
   assert.deepEqual(cfg.protection.removed, ['C:\\Users\\x\\AppData\\Local\\BraveSoftware']);
   const blank = normalize({});
-  assert.deepEqual(blank.protection, { builtinsOff: [], paths: [], removed: [] });
+  assert.deepEqual(blank.protection, { builtinsOff: [], builtinsSealed: [], paths: [], removed: [] });
 });

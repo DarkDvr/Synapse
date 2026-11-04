@@ -137,8 +137,14 @@ export const DEFAULTS = {
   // code (src/protection.js) and are switched off by id; `paths` are the entries the
   // operator added, and `removed` remembers a seeded one they deleted so it does not
   // come back. See docs/notes/protection.md.
+  // The prohibited list: two independent permissions per entry, written as the
+  // boxes in Settings show them. `builtinsOff` holds the built-in ids whose
+  // **write** is allowed again; `builtinsSealed` the ids whose **read** is refused.
+  // Added entries carry `{ path, label, write, read }`, with the older single
+  // `enabled` folded in so a config from before the table keeps its answers.
   protection: {
     builtinsOff: [],
+    builtinsSealed: [],
     paths: [],
     removed: [],
   },
@@ -537,19 +543,33 @@ export function normalize(raw) {
   cfg.update.synapse.feed = feed || DEFAULTS.update.synapse.feed;
 
   // The prohibited list. Ids are kept as written (a built-in the operator switched
-  // off), added entries keep their path and label, and a removed path is remembered
-  // so a boot seed does not put it back.
+  // off), added entries keep their path, label and two answers, and a removed path
+  // is remembered so a boot seed does not put it back.
   cfg.protection = isPlainObject(cfg.protection) ? cfg.protection : {};
   cfg.protection.builtinsOff = (Array.isArray(cfg.protection.builtinsOff) ? cfg.protection.builtinsOff : [])
     .map((id) => String(id || '').trim())
     .filter(Boolean);
+  cfg.protection.builtinsSealed = (
+    Array.isArray(cfg.protection.builtinsSealed) ? cfg.protection.builtinsSealed : []
+  )
+    .map((id) => String(id || '').trim())
+    .filter(Boolean);
   cfg.protection.paths = (Array.isArray(cfg.protection.paths) ? cfg.protection.paths : [])
     .filter(isPlainObject)
-    .map((entry) => ({
-      path: String(entry.path || '').trim(),
-      label: String(entry.label || '').trim(),
-      enabled: entry.enabled !== false,
-    }))
+    .map((entry) => {
+      const target = String(entry.path || '').trim();
+      // Migration from the one-box list: `enabled: true` meant "protected", so its
+      // write was refused; `sealed: true` meant "no reads"; Brave by name is read-only.
+      const write =
+        entry.write !== undefined ? entry.write === true : entry.enabled === false;
+      const read =
+        entry.read !== undefined
+          ? entry.read === true
+          : entry.sealed !== undefined
+            ? entry.sealed !== true
+            : !/bravesoftware/i.test(target);
+      return { path: target, label: String(entry.label || '').trim(), write, read };
+    })
     .filter((entry) => entry.path);
   cfg.protection.removed = (Array.isArray(cfg.protection.removed) ? cfg.protection.removed : [])
     .map((entry) => String(entry || '').trim())

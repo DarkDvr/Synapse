@@ -24,7 +24,7 @@ const call = (action, resource, extra = {}) =>
     home: HOME,
     // The shipped default: Synapse itself is a built-in prohibited entry, so a
     // write inside the harness is refused with scope 'prohibited'.
-    protection: [{ path: HARNESS, label: 'Synapse', sealed: false }],
+    protection: [{ path: HARNESS, label: 'Synapse', write: false, read: true }],
     ...extra,
   });
 
@@ -51,7 +51,7 @@ test('browser profiles are refused, and Brave through the prohibited list', () =
   // Edge is the browser we do use; its profile is still not a model's to read.
   assert.equal(call('read', `${HOME}/AppData/Local/Microsoft/Edge/User Data/Default/Cookies`).effect, 'deny');
   const brave = `${HOME}/AppData/Local/BraveSoftware/Brave-Browser/User Data/Default/Cookies`;
-  const guarded = [{ path: `${HOME}/AppData/Local/BraveSoftware`, sealed: true, label: 'Brave' }];
+  const guarded = [{ path: `${HOME}/AppData/Local/BraveSoftware`, write: false, read: false, label: 'Brave' }];
   assert.equal(call('read', brave, { protection: guarded }).effect, 'deny');
   assert.equal(call('read', brave, { protection: guarded }).scope, 'prohibited');
   assert.equal(call('edit', brave, { protection: guarded }).effect, 'deny');
@@ -93,7 +93,7 @@ test('the scratch folder is writable without asking, and is not the harness', ()
     harnessRoot: HARNESS,
     scratchRoot: SCRATCH,
     home: HOME,
-    protection: [{ path: HARNESS, label: 'Synapse', sealed: false }],
+    protection: [{ path: HARNESS, label: 'Synapse', write: false, read: true }],
   };
   const file = `${SCRATCH}/demo-1234/probe.ps1`;
   assert.equal(zoneOf(file, { projectRoot: PROJECT, harnessRoot: HARNESS, scratchRoot: SCRATCH }), 'scratch');

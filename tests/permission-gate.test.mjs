@@ -31,7 +31,7 @@ function setup({ directory = PROJECT, metadata = { synapse: { role: 'coder-1', t
     root: ROOT,
     home: HOME,
     // The shipped default: Synapse is a built-in prohibited entry.
-    getProtection: () => [{ path: ROOT, label: 'Synapse', sealed: false }],
+    getProtection: () => [{ path: ROOT, label: 'Synapse', write: false, read: true }],
   });
   return { gate, replies };
 }
@@ -410,7 +410,7 @@ test('a remembered request never overrides a refusal', async () => {
     logger: quiet,
     root: ROOT,
     home: HOME,
-    getProtection: () => [{ path: ROOT, label: 'Synapse', sealed: false }],
+    getProtection: () => [{ path: ROOT, label: 'Synapse', write: false, read: true }],
     onDecision: (entry) => seen.push(entry),
   });
   gate.remember('ses_1', 'edit', [`${ROOT}/src/api.js`]);
