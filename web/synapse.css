@@ -2741,46 +2741,51 @@ body.is-stopping .chat-dock { animation: stop-glow 0.7s ease-in-out infinite; }
 .prov-add-menu button:disabled { color: #5e626a; cursor: not-allowed; }
 
 /* ── Prohibited ───────────────────────────────────────────────────────────
-   One table: the path takes the room, Write and Read are two narrow columns of
-   checkboxes, and the delete button has the last. The header names the columns
-   once; every row is the same grid, so the boxes line up down the pane. */
-.prot-table { display: flex; flex-direction: column; gap: 6px; margin-top: 2px; }
+   One condensed table: the path takes the room, Write and Read are two narrow
+   columns of checkboxes, and the delete button has the last. One border for the
+   whole table and hairlines between the rows, so a list of eight paths is one
+   quiet block rather than eight cards. */
+.prot-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0 0 8px; }
+.prot-pane .set-note { margin: 0; }
+.prot-table {
+  border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: #15161a;
+}
 .prot-row {
-  display: grid; grid-template-columns: minmax(0, 1fr) 46px 46px 30px;
-  align-items: center; gap: 10px; min-width: 0;
-  padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px; background: #17181b;
+  display: grid; grid-template-columns: minmax(0, 1fr) 44px 44px 26px;
+  align-items: center; gap: 8px; min-width: 0;
+  padding: 3px 10px; background: transparent;
 }
-.prot-row.is-head {
-  padding-top: 0; padding-bottom: 0; border-color: transparent; background: transparent;
-}
+.prot-row + .prot-row { border-top: 1px solid rgba(255, 255, 255, 0.045); }
+.prot-row:not(.is-head):hover { background: rgba(255, 255, 255, 0.025); }
+.prot-row.is-head { padding: 4px 10px; background: #1b1d21; border-bottom: 1px solid var(--line); }
 .prot-head {
-  font-family: var(--mono); font-size: 8.5px; font-weight: 700; letter-spacing: 0.06em;
+  font-family: var(--mono); font-size: 8px; font-weight: 700; letter-spacing: 0.06em;
   text-transform: uppercase; color: #9a9ea6; text-align: center;
 }
 .prot-row.is-head .prot-path {
-  font-family: var(--mono); font-size: 8.5px; font-weight: 700; letter-spacing: 0.06em;
+  font-family: var(--mono); font-size: 8px; font-weight: 700; letter-spacing: 0.06em;
   text-transform: uppercase; color: #9a9ea6;
 }
-.prot-path { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.prot-path { display: flex; align-items: center; gap: 7px; min-width: 0; }
 .prot-name {
   min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  font-family: var(--mono); font-size: 11px; color: #c6cad1;
+  font-family: var(--mono); font-size: 10.5px; color: #c6cad1; line-height: 18px;
 }
-.prot-check { justify-self: center; width: 15px; height: 15px; margin: 0; accent-color: var(--red); cursor: pointer; }
+.prot-check { justify-self: center; width: 13px; height: 13px; margin: 0; accent-color: var(--red); cursor: pointer; }
 .prot-tag {
-  flex: none; font-family: var(--mono); font-size: 8.5px; font-weight: 700;
-  letter-spacing: 0.06em; text-transform: uppercase; color: #9a9ea6;
-  border: 1px solid #3a3d43; border-radius: 4px; padding: 0 5px; line-height: 1.6;
+  flex: none; font-family: var(--mono); font-size: 7.5px; font-weight: 700;
+  letter-spacing: 0.05em; text-transform: uppercase; color: #9a9ea6;
+  border: 1px solid #3a3d43; border-radius: 3px; padding: 0 4px; line-height: 1.5;
 }
 .prot-tag.is-builtin { color: #b9a1f6; border-color: #4b3f74; }
 .prot-x {
-  justify-self: center; width: 22px; height: 22px; padding: 0; display: grid; place-items: center;
-  border: 1px solid transparent; border-radius: 6px; background: transparent;
-  color: var(--red); font-size: 11px; line-height: 1; cursor: pointer;
+  justify-self: center; width: 18px; height: 18px; padding: 0; display: grid; place-items: center;
+  border: 1px solid transparent; border-radius: 5px; background: transparent;
+  color: var(--red); font-size: 10px; line-height: 1; cursor: pointer;
 }
 .prot-x:hover:not(:disabled) { background: var(--red-soft); border-color: rgba(240, 86, 63, 0.5); }
-.prot-x:disabled { color: #4a4d54; cursor: default; }
-.prot-empty { color: #6d717a; font-size: 11.5px; padding: 10px 2px; }
+.prot-x:disabled { color: #33363c; cursor: default; }
+.prot-empty { color: #6d717a; font-size: 11.5px; padding: 9px 10px; }
 
 .prov-edit {
   display: grid; gap: 10px; margin-top: 4px; padding: 13px;

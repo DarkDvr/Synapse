@@ -8331,12 +8331,14 @@ function settingsProhibited(c) {
   return `
     <section class="set-group prot-pane">
       <h4 title="Built-in entries can be switched off but not removed; paths you add can be deleted. Each box is a permission: a cleared Write refuses every change to that path; a cleared Read refuses reading it too.">Prohibited</h4>
-      <p class="set-note">Each box is a permission. Clearing Write refuses every change to that path before a permission card exists; clearing Read refuses reading it too.</p>
-      <div class="prov-add">
-        <button type="button" class="btn btn-provider btn-sm" data-prot-add>+ Add Path</button>
-        <div class="prov-add-menu" id="protAddMenu" hidden>
-          <button type="button" data-prot-new="folder">Add Folder…</button>
-          <button type="button" data-prot-new="file">Add File…</button>
+      <div class="prot-top">
+        <p class="set-note">Cleared Write refuses changes; cleared Read refuses reads too.</p>
+        <div class="prov-add">
+          <button type="button" class="btn btn-provider btn-sm" data-prot-add>+ Add Path</button>
+          <div class="prov-add-menu" id="protAddMenu" hidden>
+            <button type="button" data-prot-new="folder">Add Folder…</button>
+            <button type="button" data-prot-new="file">Add File…</button>
+          </div>
         </div>
       </div>
       <div class="prot-table">
