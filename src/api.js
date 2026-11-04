@@ -1901,6 +1901,19 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
         } catch (err) {
           app.warn(`could not cancel the run before stopping: ${err.message}`);
         }
+        // The report to the Architect is delivered after the run's own control is
+        // gone, so `cancel` cannot reach that loop. Stop it here or every Stop is
+        // followed by another "(retry)" wake (measured 4 Nov, three stops, three
+        // retries). `hold` keeps the project quiet until the operator speaks.
+        const stoppedWake = (() => {
+          try {
+            return Boolean(runs?.stopWake?.(directory));
+          } catch (err) {
+            app.warn(`could not stop the Architect wake: ${err.message}`);
+            return false;
+          }
+        })();
+        if (stoppedWake) app.info('stop: the Architect report loop was stopped too');
         // No run in flight (the Architect was thinking): hold the project anyway,
         // or the next turn delegates the work that was just stopped.
         if (!stoppedRun) runs?.hold?.(directory);
@@ -1965,6 +1978,10 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
         }
       }
       const targetId = busy.sessionId || sessionId;
+      // A graceful Stop on the Architect also ends the report loop now, not at the
+      // step boundary: otherwise the cut turn looks like a failed wake and the loop
+      // sends the report again.
+      if (runs?.stopWake?.(directory)) app.info('graceful stop: the Architect report loop was stopped too');
       // No note to the model: watch for the next assistant message, which is the
       // step boundary, and cut there. If the turn ends first, the idle marker is
       // the boundary and nothing needs cutting.

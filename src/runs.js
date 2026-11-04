@@ -676,6 +676,14 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
   // chat's model ends its wait too (see wakeRole). The entry stays after the wake
   // returns; `waiting()` is false then, so a later model change does not count it.
   const archWakes = new Map();
+  // The signal of the Architect wake loop that is running now, one per project.
+  //
+  // The run's own control is deleted in its `finally` *before* the report is
+  // delivered, so `cancel()` cannot reach the wake: on 4 Nov the operator stopped
+  // the Architect three times and each stop was followed by another "(retry)"
+  // synthetic, which started it again. Stop has to stop this loop too, and it has
+  // to stay stopped until the operator speaks — `resume()` is that speech.
+  const wakeStops = new Map();
   // Steps the Architect has already been reminded about, keyed `${dir}|${task}`.
   // One reminder each: the point is to break a silence, not to nag a model that
   // has read the message and decided otherwise.
@@ -2107,6 +2115,15 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
             'The worker ended its turn by writing a tool call into its message instead of making it, so ' +
             'nothing ran after that point and no file was written. What it wrote:\n' + text;
         }
+        // A turn can end with nothing but reasoning: the model thought and stopped.
+        // The Architect then received "completed" with an empty body (4 Nov, t7) and
+        // had to work out that nothing had happened. Say it in the report.
+        if (!stopReason && !text && !files.length) {
+          out.warn(`worker ${request.task} (${role}) ended with reasoning only - no file, no report`);
+          text =
+            'The worker ended its turn without writing a file, calling a tool or saying anything: its last ' +
+            'step was reasoning only. Treat the task as not done.';
+        }
         // A file written outside the project is odd enough to say out loud: a coder
         // ran a scratch script out of %TEMP% through `shell`, where no path rule can
         // reach it. It is a note and not a refusal - a scratch script is not an act
@@ -3265,6 +3282,20 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
    * the transcript — and later attempts just say "continue".
    */
   async function wake(architectId, dir, { description, text }, signal) {
+    const key = dirKey(dir);
+    const stop = new AbortController();
+    wakeStops.set(key, stop);
+    // One signal for both reasons to end: the run's own Stop, and the operator's
+    // Stop on the Architect's chat. Either one leaves the report undelivered.
+    const away = signal ? AbortSignal.any([signal, stop.signal]) : stop.signal;
+    try {
+      return await wakeLoop(architectId, dir, { description, text }, away);
+    } finally {
+      if (wakeStops.get(key) === stop) wakeStops.delete(key);
+    }
+  }
+
+  async function wakeLoop(architectId, dir, { description, text }, signal) {
     const settings = workerSettings(getConfig() || {});
     // A model change for the Architect's own chat ends a backoff here too: the
     // same wake a worker gets, on the loop that sends the report.
@@ -3496,11 +3527,24 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     return { ok: true, stopping: true, already: !fresh, task: live.task, role: live.role };
   }
 
+  /** Stop the Architect's wake loop now, and leave no retry behind. The report is
+   *  in the transcript; the operator can read it when they choose to speak again. */
+  function stopWake(dir) {
+    const key = dirKey(dir);
+    const stop = wakeStops.get(key);
+    if (!stop) return false;
+    wakeStops.delete(key);
+    stop.abort();
+    return true;
+  }
+
   /** Stop the run in a project, whichever part of it is running. Returns whether
    *  there was anything to stop. The wait loops see the abort on their next poll
    *  (and a backoff sleep is cut short), so this is immediate even mid-retry. */
   function cancel(dir) {
     const key = dirKey(dir);
+    // The wake belongs to a run whose control is already gone; end it too.
+    stopWake(dir);
     const control = controls.get(key);
     if (!control) return false;
     // Stop means stop: nothing is delegated and nobody is reminded until the
@@ -3609,6 +3653,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     steer,
     requestStop,
     cancel,
+    stopWake,
     resume,
     hold,
     stopWithReason,

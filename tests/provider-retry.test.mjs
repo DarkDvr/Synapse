@@ -65,7 +65,10 @@ function makeEngine({ dir, script, wakeScript }) {
       if (!sessions.has(id)) return;
       const err = step.error || null;
       const text = err ? (step.text || '') : 'done';
-      s.messages.push({ id: `${id}-a${n}`, type: 'assistant', parts: [{ type: 'text', text }], completed: Date.now(), error: err });
+      // A model that thinks and then ends its turn: no text, no tool call. The
+      // report used to be empty and read as a finished task (4 Nov, t7).
+      const parts = step.reasoning ? [{ type: 'reasoning', text: 'thinking it over' }] : [{ type: 'text', text }];
+      s.messages.push({ id: `${id}-a${n}`, type: 'assistant', parts, completed: Date.now(), error: err });
       s.messages.push({ id: `${id}-i${n}`, type: 'idle', parts: [], error: err });
     }, 15);
   };
@@ -120,7 +123,7 @@ function makeEngine({ dir, script, wakeScript }) {
   return { engine, sessions, woke, descriptions, interrupts, created, deleted, prompts };
 }
 
-async function runCase({ name, script, wakeScript = [{}], ladder = ['coder-1'], roleRef = 'opencode/deepseek-v4.1-flash-free', cancelAfter = 0, untilWoke = 1, harnessStopAfter = 0, harnessReason = '' }) {
+async function runCase({ name, script, wakeScript = [{}], ladder = ['coder-1'], roleRef = 'opencode/deepseek-v4.1-flash-free', cancelAfter = 0, stopWakeAfter = 0, untilWoke = 1, harnessStopAfter = 0, harnessReason = '' }) {
   const dir = project(name);
   const runsFile = path.join(dir, '.synapse', 'runs.jsonl');
   const { engine, sessions, woke, descriptions, interrupts, created, deleted, prompts } = makeEngine({ dir, script, wakeScript });
@@ -157,6 +160,15 @@ async function runCase({ name, script, wakeScript = [{}], ladder = ['coder-1'], 
 
   if (cancelAfter) {
     setTimeout(() => runner.cancel(dir), cancelAfter);
+  }
+
+  // Stop on the Architect's chat: the report loop must end, not retry. This is the
+  // 4 Nov bug — three stops, three "(retry)" wakes.
+  if (stopWakeAfter) {
+    (async () => {
+      for (let i = 0; i < 200 && woke.length < 1; i += 1) await sleep(20);
+      runner.stopWake(dir);
+    })();
   }
 
   // A harness stop is the question-loop guard's verdict: the worker asked the
@@ -333,6 +345,35 @@ expect('wake: second attempt says continue', /continue/i.test(woken.woke[1] || '
 expect(
   'wake: retry announced',
   woken.events.some((e) => e.kind === 'role-error' && e.role === 'architect' && e.retrying),
+);
+
+// 6b. Stop on the Architect ends the wake loop: no retry, no second synthetic.
+// The run's own control is deleted before the report is delivered, so the wake is
+// the one part of a run that Stop could not reach (4 Nov).
+const halted = await runCase({
+  name: 'halted-wake',
+  script: [{}],
+  wakeScript: [{ error: RATE }, {}],
+  untilWoke: 1,
+  stopWakeAfter: 120,
+});
+expect('wake stop: one synthetic only', halted.woke.length === 1, `woke=${halted.woke.length}`);
+await sleep(1400);
+expect('wake stop: still stopped after the backoff', halted.woke.length === 1, `woke=${halted.woke.length}`);
+expect(
+  'wake stop: the run itself still completed',
+  halted.result?.outcome === 'completed',
+  halted.result?.outcome,
+);
+
+// 6c. A turn that ends with only reasoning is not a finished task: the report says
+// so instead of handing the Architect an empty "completed" body.
+const empty = await runCase({ name: 'reasoning-only', script: [{ reasoning: true }] });
+expect('reasoning-only: outcome completed', empty.result?.outcome === 'completed', empty.result?.outcome);
+expect(
+  'reasoning-only: the report says nothing was done',
+  /reasoning only/.test(empty.result?.text || ''),
+  String(empty.result?.text).slice(0, 120),
 );
 
 // 7. a failed compaction replaces the worker session with a handover
