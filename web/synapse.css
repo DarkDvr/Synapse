@@ -962,7 +962,7 @@ body.dark .sidebar-bottom,
   appearance: none; background: #202226;
   border: 1px solid var(--line); border-radius: 8px;
   color: #b6bac1; font-family: var(--mono); font-size: 10.5px;
-  padding: 3px 8px; flex: 0 1 auto; width: auto;
+  padding: 3px 8px; flex: 0 1 auto; width: 30ch;
   min-width: 76px; max-width: 210px;
   text-overflow: ellipsis; cursor: text;
 }

@@ -521,6 +521,18 @@ Non-obvious, all verified on 2.0.30:
   every task only to loop again. `worker.loopGuard` (Settings → Workers, on by
   default) turns the guard off; the number of rescues rides the run and its result
   line as `loops`.
+- **The guard watches thinking, not actions (4 Nov).** It only looks at a step's
+  reasoning, and only while that assistant message has written no text and called
+  no tool (`reasoningTail` returns `''` the moment a tool part exists). A worker
+  that loops *through tools* — the same proof script five times, `npm install`
+  twice, a hunt for a renderer — does not trip it: every step ends in a tool call,
+  the window resets, and the stall clock stays happy because tokens and calls keep
+  arriving. Measured on 4 Nov: coder-1 ran `node bin/t1a-proof.js` at 10:34:54,
+  10:34:58, 10:35:01 and again five times from 10:38:39, with `npm install
+  puppeteer` twice, after a `shot.mjs` denial; 35 turns, 40 tool calls,
+  `loops: 0`, no variant change, stopped by the operator. A tool-call loop needs
+  its own rule (repeated identical commands), not a looser thinking rule — the
+  thinking check is deliberately specific so a slow model is not interrupted.
 - **Recoverable provider failures never end a run.** `src/provider-errors.js`
   classifies the sentence a turn ended with. *Transient* — rate limit/429,
   connection reset, socket/network/DNS, 5xx, "overloaded", the free-tier message,

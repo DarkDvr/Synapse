@@ -3,7 +3,7 @@
     "host": "127.0.0.1",
     "port": 8700,
     "openBrowser": false,
-    "remote": true
+    "remote": false
   },
   "engine": {
     "type": "opencode",
@@ -254,20 +254,27 @@
             {
               "id": "qwen3.6-35b-a3b-ud-q6_k_xl-126k",
               "name": "qwen3.6-35b-a3b-ud-q6_k_xl-126k",
-              "context": 32768
+              "context": 204800
             },
             {
               "id": "qwen3.6-35b-a3b-ud-q6_k_xl-204k",
               "name": "qwen3.6-35b-a3b-ud-q6_k_xl-204k",
-              "context": 32768
+              "context": 204800
             },
             {
               "id": "qwen3.8-flash-next-iq2_xs",
               "name": "qwen3.8-flash-next-iq2_xs",
-              "context": 32768
+              "context": 204800
             }
           ]
         }
+      ],
+      "providerOrder": [
+        "polystrata",
+        "local",
+        "deepseek",
+        "opencode-go",
+        "opencode"
       ],
       "compactionKeepTokens": 0
     }

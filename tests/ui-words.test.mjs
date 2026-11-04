@@ -138,6 +138,16 @@ test('the rail and the model menu follow the order the operator arranged', () =>
   assert.match(js, /\/api\/projects\/\$\{encodeURIComponent\(id\)\}\/move/);
 });
 
+// 4 Nov: a moved project row should read as one motion, and the model picker
+// needed about six more characters for the names it holds.
+test('a moved project slides, and the model picker is six characters wider', () => {
+  const js = read('web/app.js');
+  assert.match(js, /row\.animate\(\[\{ transform: `translateY\(\$\{dy\}px\)` \}/);
+  assert.match(js, /prefers-reduced-motion/);
+  const css = read('web/synapse.css');
+  assert.match(css, /\.model-search \{[^}]*width: 30ch/);
+});
+
 // "Views: 2" counted the window you were looking at as well as the laptop, and
 // sat in the rail whether or not Remote Access was on. The LAN clients are what
 // the address is for; they are named under it, and they hide with it.

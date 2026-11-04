@@ -2878,6 +2878,16 @@ function projectMenuAction(id, action) {
 
 /** Move a project up or down the rail. The order lives in the registry file. */
 async function moveProject(id, delta) {
+  // Where every row was, so the rows that swap slide into place instead of
+  // teleporting. Two lines of transforms, no dependency, and the motion is
+  // skipped for anyone who asked for less of it.
+  const calm = window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches;
+  const before = new Map(
+    [...document.querySelectorAll('[data-project-row]')].map((row) => [
+      row.dataset.projectRow,
+      row.getBoundingClientRect().top,
+    ]),
+  );
   try {
     await api('POST', `/api/projects/${encodeURIComponent(id)}/move`, { delta });
     // Re-read rather than rearranging the local list: the rail is the registry,
@@ -2885,6 +2895,18 @@ async function moveProject(id, delta) {
     await loadProjects({ keepOpen: true });
   } catch (err) {
     toast('Could Not Move The Project', err.message);
+    return;
+  }
+  if (calm) return;
+  for (const row of document.querySelectorAll('[data-project-row]')) {
+    const was = before.get(row.dataset.projectRow);
+    if (was === undefined) continue;
+    const dy = was - row.getBoundingClientRect().top;
+    if (Math.abs(dy) < 1) continue;
+    row.animate([{ transform: `translateY(${dy}px)` }, { transform: 'translateY(0)' }], {
+      duration: 160,
+      easing: 'cubic-bezier(.2, .8, .2, 1)',
+    });
   }
 }
 
