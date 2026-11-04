@@ -374,6 +374,14 @@ export class OpenCodeEngine extends Engine {
     // project builds on a copied folder with no network, which is the whole point of
     // vendoring it. Absent, nothing is set and NuGet behaves normally.
     const nugetCache = path.join(ROOT, 'vendor', 'nuget-packages');
+    // The Node that travels with Synapse, first on the engine's PATH. Workers run
+    // the shipped skill scripts (`node ...\skills\...`) with a plain `node`; on a
+    // machine where Node is not installed that is "not recognized", and the only
+    // copy the model can find is the one under `bin\`, which the policy refuses as
+    // private (4 Nov). The engine's children inherit this; the machine's PATH is
+    // not touched.
+    const nodeDir = path.join(ROOT, 'bin', 'node');
+    const nodeThere = fs.existsSync(path.join(nodeDir, process.platform === 'win32' ? 'node.exe' : 'node'));
     const env = {
       ...process.env,
       OPENCODE_SERVER_PASSWORD: this.password,
@@ -381,6 +389,7 @@ export class OpenCodeEngine extends Engine {
       XDG_DATA_HOME: home.data,
       XDG_STATE_HOME: home.state,
       TMPDIR: home.tmp,
+      ...(nodeThere ? { PATH: `${nodeDir}${path.delimiter}${process.env.PATH || ''}` } : {}),
       ...(fs.existsSync(nugetCache) ? { NUGET_PACKAGES: nugetCache } : {}),
     };
 

@@ -568,8 +568,8 @@ Non-obvious, all verified on 2.0.30:
   report is sent once and later attempts just say "continue".
 - **A report's header names the task, the coder, the model and the cost.** It used
   to read "worker t6 (qc) completed" — a noun, an id and nothing else. It is now
-  "t6 completed by QC (<model name>) · ran for 26m 28s · used 12.4M tokens (58% of
-  the writing was reasoning)", and the other outcomes follow the same shape (`failed in`, `timed
+  "t6 completed by QC (<model name>) · ran for 00:26:28 · used 12.4M tokens (58% was
+  reasoning)", and the other outcomes follow the same shape (`failed in`, `timed
   out in`, `stopped in`); the model is the catalog's display name, with the ref as
   the fallback (4 Nov). The clock and the token totals moved here *from* the report,
   so the chat says each number once; the report keeps turns, the peak context and
@@ -583,6 +583,14 @@ Non-obvious, all verified on 2.0.30:
   with a fresh budget. Records from before the stamp cannot be shown to belong to
   the current ask, so they do not count either — the first delegation after the
   upgrade starts clean.
+- **A steer is on the trace before the model reads it.** The engine's
+  `delivery: "steer"` prompt does not come back until the worker reaches its next
+  step, so waiting for it left the chat silent for minutes after the operator
+  pressed Steer — they could not tell it had landed (4 Nov). The run line is
+  pushed, journalled and broadcast when the button is pressed; the prompt is then
+  awaited in the background, and a refusal takes the line back off the trace with
+  a toast and a log warning. An Architect steer paints the operator's sentence in
+  the page at once and keeps it until the engine's own message replaces it.
 - **An automatic answer is not the operator speaking.** After Auto-Answer replies,
   a synthetic line goes into the asking session: the operator is away, the harness
   chose the recommended options, treat them as the harness's. Without it the next
@@ -742,6 +750,17 @@ says where the data belongs. An app that already keeps data in AppData must move
 it and import the old copy once; the current Fever Tracker uses
 `%APPDATA%\FeverTracker\data.json` and extracts its web assets under
 `%LOCALAPPDATA%\FeverTracker\web`, so it still needs that migration.
+
+**A shipped tool runs from anywhere in a command (4 Nov).** The rule that lets a
+model run `node skills\...` (`toolbox`) looked only at the command's *first* word:
+a QC run wrote `timeout 30 node ...\skills\visual-review\bin\shot.mjs`, the head was
+`timeout`, so the call was judged a write to the harness and refused. It is per
+statement and per interpreter now: the first non-flag word after the last
+interpreter must be a script under `skills/`, inline code (`-e`, `-c`,
+`-Command`) never qualifies, and every harness path the command names must be
+under `skills/`. The engine's PATH also carries `bin\node` first, so the plain
+`node` in a brief works on a machine with no Node installed — the alternative the
+model found was the vendored binary under `bin\`, which the policy refuses.
 
 **An example in a brief is a template, not an illustration.** The Inventor's first
 mandate said "build me a clock, go" and offered an alarm, a theme and a second time

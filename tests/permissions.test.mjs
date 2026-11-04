@@ -162,6 +162,18 @@ test('the shipped toolbox may run', () => {
     shell('node F:\\dev\\Synapse\\skills\\visual-review\\bin\\shot.mjs page.html').effect,
     'allow',
   );
+  // 4 Nov: a worker wrapped the same call in `timeout 30`, and the whole
+  // command's head was not an interpreter, so a shipped tool read as a harness
+  // write and was refused. The statement is what matters, not its first word.
+  assert.equal(
+    shell('timeout 30 node F:\\dev\\Synapse\\skills\\visual-review\\bin\\shot.mjs page.html').effect,
+    'allow',
+  );
+  // Inline code is not a shipped tool: `-e` must not buy a write into skills/.
+  assert.equal(
+    shell('node -e "x" F:\\dev\\Synapse\\skills\\visual-review\\SKILL.md').effect,
+    'deny',
+  );
 });
 
 test('changing directory out of the workspace turns a write into a question', () => {

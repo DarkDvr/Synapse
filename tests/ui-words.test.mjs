@@ -115,6 +115,16 @@ test('the attachment budget is total size, with a count sanity cap', () => {
   assert.match(js, /\.attach-total|attach-total/);
 });
 
+// 4 Nov: a steer only appeared once the engine had delivered it, which can be
+// minutes. The page paints the operator's own sentence at once, and keeps it
+// until the transcript carries it.
+test('a steer is on screen before the engine echoes it', () => {
+  const js = read('web/app.js');
+  assert.match(js, /local-steer-/);
+  assert.match(js, /startsWith\('local-steer-'\)/);
+  assert.match(js, /text: `\[steer\] \$\{text\}`/);
+});
+
 // "Views: 2" counted the window you were looking at as well as the laptop, and
 // sat in the rail whether or not Remote Access was on. The LAN clients are what
 // the address is for; they are named under it, and they hide with it.
@@ -130,7 +140,8 @@ test('the rail names LAN clients under the address, not a Views row', () => {
   // the machines moved from the rail into the tooltip - the line is a count.
   assert.doesNotMatch(js, /remoteIp|status-remote-ip/);
   assert.doesNotMatch(html, /id="remoteIp"/);
-  assert.match(js, /Connected clients: \$\{names\.join\(', '\)\}/);
+  assert.match(js, /Connected clients: \$\{named\.join\(', '\)\}/);
+  assert.match(js, /network has not given/, 'an unnamed client is never printed as an address');
   assert.doesNotMatch(js, /function renderViews\(/);
 });
 

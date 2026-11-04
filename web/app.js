@@ -790,13 +790,20 @@ function renderRemote() {
 // under it in one line, because the rail has no room for a second row and a view
 // on this PC is not a client of the address it already has. The names are the
 // hover: a rail line that lists machines wraps or ellipses, and the operator
-// asked for the count there and the list in the tooltip (4 Nov).
+// asked for the count there and the list in the tooltip (4 Nov). An address the
+// network could not name is not printed — the tooltip says it has no name yet.
 function renderClients() {
   const el = $('remoteClients');
   if (!el) return;
   const names = [...new Set((state.views || []).filter((v) => !v.local).map((v) => v.name).filter(Boolean))];
+  const address = (n) => /^\d{1,3}(\.\d{1,3}){3}$/.test(n) || /^[0-9a-f]{0,4}(:[0-9a-f]{0,4}){2,}$/i.test(n);
+  const named = names.filter((n) => !address(n));
   el.textContent = names.length ? `clients: ${names.length}` : 'clients: 0';
-  el.title = names.length ? `Connected clients: ${names.join(', ')}` : 'No other device is connected.';
+  el.title = !names.length
+    ? 'No other device is connected.'
+    : named.length
+      ? `Connected clients: ${named.join(', ')}`
+      : `Connected clients: ${names.length} — the network has not given ${names.length === 1 ? 'it' : 'them'} a name yet`;
 }
 
 // The page was cut off. Everything behind the panel is stale, so it is covered
@@ -3506,8 +3513,17 @@ function handleRunEvent(ev) {
     const trace = traceFor(ev);
     if (trace) {
       const said = String(ev.text || '').replace(/\s+/g, ' ').trim();
-      trace.notes.push({ steer: true, text: said.length > 300 ? `${said.slice(0, 299)}…` : said });
-      if (trace.notes.length > 60) trace.notes.splice(0, trace.notes.length - 60);
+      const line = said.length > 300 ? `${said.slice(0, 299)}…` : said;
+      if (ev.failed) {
+        // The line was painted when the operator pressed Steer; the engine then
+        // refused it, so the line comes back off and the toast says why.
+        const at = trace.notes.findIndex((n) => n?.steer && n.text === line);
+        if (at >= 0) trace.notes.splice(at, 1);
+        toast('Steer Not Delivered', ev.error || 'The worker never took it.');
+      } else {
+        trace.notes.push({ steer: true, text: line });
+        if (trace.notes.length > 60) trace.notes.splice(0, trace.notes.length - 60);
+      }
       renderTranscript();
     }
     return;
@@ -3703,7 +3719,16 @@ async function loadMessages() {
   try {
     const loaded = (await api('GET', `/api/sessions/${encodeURIComponent(id)}/messages`)).messages;
     if (state.sessionId !== id) return;
-    state.messages = loaded;
+    // A steer this page painted the moment it was sent is not in the engine's
+    // transcript until the model has read it. Dropping it here made the operator's
+    // own sentence vanish for minutes - the "no confirmation" they reported
+    // (4 Nov). One that is still wanted is kept beside the loaded transcript until
+    // the engine echoes the same text, or for ten minutes.
+    const pending = (state.messages || []).filter(
+      (m) => String(m?.id || '').startsWith('local-steer-') && Date.now() - Number(m.created || 0) < 10 * 60 * 1000,
+    );
+    const echoed = new Set(loaded.map((m) => String(m.text || '')));
+    state.messages = [...loaded, ...pending.filter((m) => !echoed.has(String(m.text || '')))];
     // The chips on tool calls are a record that outlives the request, so a
     // transcript opened after the fact asks once. While the session is open they
     // arrive on the stream; this is only the catch-up.
@@ -6661,6 +6686,17 @@ async function sendSteer(text, files, target) {
         : 'The Architect will see it mid-turn.',
     );
     if (sent?.target !== 'worker') {
+      // The engine only writes the operator's words into the transcript when it
+      // delivers them, so the page paints the sentence now and keeps it until the
+      // real message arrives (see loadMessages).
+      state.messages.push({
+        id: `local-steer-${Date.now()}`,
+        type: 'user',
+        text: `[steer] ${text}`,
+        created: Date.now(),
+      });
+      renderTranscript();
+      scrollChatToEnd();
       await loadMessages();
       scrollChatToEnd();
     }

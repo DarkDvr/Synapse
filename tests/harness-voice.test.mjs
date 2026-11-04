@@ -26,7 +26,7 @@ test('a worker report’s header names the task, the coder, the model and the co
   // not say the same numbers twice.
   assert.match(src, /ran for \$\{ranFor\(Date\.now\(\) - startedAt\)\}/);
   assert.match(src, /tokens\(\(context\.prompt \|\| 0\) \+ \(context\.generated \|\| 0\)\)/);
-  assert.match(src, /% of the writing was reasoning/);
+  assert.match(src, /% was reasoning/);
   assert.doesNotMatch(src, /finished in \$\{Math\.round\(ms \/ 1000\)\}s/, 'the report head keeps no clock');
   assert.doesNotMatch(src, /read \(the provider's meter\)/, 'the report keeps no token totals');
   assert.doesNotMatch(src, /worker \$\{request\.task\} \(\$\{role\}\) \$\{outcome\}/, 'the old header is gone');

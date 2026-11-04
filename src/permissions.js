@@ -387,13 +387,45 @@ function decideShell(resources, ctx) {
   if (anySecret) return deny('The harness never opens saved-password folders.', true, 'secret');
 
   const harnessPaths = info.paths.filter((p) => zoneOf(p, ctx) === 'harness');
-  const head = (wordsOf(segmentsOf(command)[0] || '')[0] || '').toLowerCase();
-  const toolbox =
-    INTERPRETERS.has(head) &&
-    harnessPaths.length > 0 &&
-    harnessPaths.every((p) => inside(p, `${slash(ctx.harnessRoot)}/skills`));
+  const skillsRoot = `${slash(ctx.harnessRoot)}/skills`;
+  // A shipped tool runs from the harness's own `skills/` folder, and that is what
+  // this allows. The script is the first non-flag word after an interpreter in its
+  // statement — so `timeout 30 node "<path>"` counts, and `node -e "…"` does not,
+  // because inline code is not a shipped tool and treating it as one would let a
+  // worker write anywhere under `skills/` through a one-liner. Measured 4 Nov: a
+  // QC command `timeout 30 node ...\skills\visual-review\bin\shot.mjs` was denied
+  // as a harness write because the *whole command's* head was `timeout`, not an
+  // interpreter.
+  const runsShippedTool = (() => {
+    if (!harnessPaths.length) return false;
+    if (!harnessPaths.every((p) => inside(p, skillsRoot))) return false;
+    for (const segment of segmentsOf(command)) {
+      const words = wordsOf(segment);
+      let at = -1;
+      for (let i = words.length - 1; i >= 0; i -= 1) {
+        if (INTERPRETERS.has(words[i].toLowerCase().replace(/\.exe$/i, ''))) {
+          at = i;
+          break;
+        }
+      }
+      if (at === -1) continue;
+      for (let i = at + 1; i < words.length; i += 1) {
+        const word = words[i];
+        if (/^[-/]/.test(word)) {
+          const flag = word.replace(/^[-/]+/, '').toLowerCase();
+          // `-e`/`-c`/`-Command` carry code, not a file: no tool to allow here.
+          if (['e', 'c', 'eval', 'command', 'encodedcommand', 'exec'].includes(flag)) break;
+          continue;
+        }
+        const target = resolvePath(word, ctx.cwd, { home: ctx.home });
+        if (!target || target.unknown) break;
+        return inside(target.path, skillsRoot);
+      }
+    }
+    return false;
+  })();
   const writesHarness =
-    redirectZones.includes('harness') || (harnessPaths.length > 0 && !info.readsOnly && !toolbox);
+    redirectZones.includes('harness') || (harnessPaths.length > 0 && !info.readsOnly && !runsShippedTool);
   if (writesHarness) {
     return deny('Synapse is the app itself; it may be read, not changed.', true, 'harness');
   }

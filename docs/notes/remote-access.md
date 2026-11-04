@@ -54,7 +54,10 @@ the network.
    address went on 4 Nov: it was a second line of numbers under the name, and DHCP
    moves it. The line under it is a count (`clients: 1`); the machines' network
    names are in its tooltip, `Connected clients: …`, because a rail line that
-   lists them either wraps or ellipses.
+   lists them either wraps or ellipses. A name arrives from a reverse lookup that
+   runs after the connection is accepted: when it answers, every page is told
+   again, and a client the network cannot name is never printed as an address —
+   the tooltip says the name has not arrived.
 3. The **TOKEN** chip on that line copies the token; paste it into the login
    page. The cookie signs in once; the address then opens straight to the UI.
 4. If the desktop's IP changes, the address changes; the token stays valid.

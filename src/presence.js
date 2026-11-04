@@ -2,8 +2,10 @@
 //
 // A view is one page connected to the event stream. It carries the computer's
 // name, which is what the lock messages say: "busy — laptop, Fever Tracker". The
-// name is the host's own for loopback, a reverse lookup for a LAN address, and
-// the address itself when the lookup has nothing to say.
+// name is the host's own for loopback and a reverse lookup for a LAN address; a
+// lookup that has not answered yet leaves the address in place, and the page is
+// told again when a name arrives (4 Nov: the tooltip kept the IP because the
+// resolution finished quietly, with no frame to carry it).
 //
 // The Settings lock lives here because it is about a person, not about work: it
 // is released by closing the panel, by losing the connection, or by going quiet
@@ -18,15 +20,31 @@ const local = (address) => {
   return value === '::1' || value === '127.0.0.1' || value === '::ffff:127.0.0.1';
 };
 
-export function createPresence({ logger, hostname = os.hostname(), reverse = (ip) => dns.reverse(ip), now = Date.now } = {}) {
+/** IPv4-mapped IPv6 (`::ffff:192.168.1.5`) is the IPv4 address, for every use. */
+const clean = (address) => String(address || '').replace(/^::ffff:(?=\d{1,3}\.)/i, '');
+
+export function createPresence({
+  logger,
+  hostname = os.hostname(),
+  reverse = (ip) => dns.reverse(ip),
+  now = Date.now,
+  onChange = null,
+  retryMs = 5000,
+  retries = 4,
+} = {}) {
   const log = logger?.channel?.('app');
   const views = new Map(); // id -> { id, address, name, local, since }
   const names = new Map(); // address -> resolved name
   let lock = null; // { id, name, since }
 
   const labelOf = (address) => (local(address) ? hostname : names.get(address) || address);
+  const announce = () => {
+    try {
+      onChange?.();
+    } catch { /* one listener's failure is not the presence list's */ }
+  };
 
-  function resolveLater(address) {
+  function resolveLater(address, attempt = 0) {
     if (local(address) || names.has(address)) return;
     Promise.resolve()
       .then(() => reverse(address))
@@ -34,14 +52,32 @@ export function createPresence({ logger, hostname = os.hostname(), reverse = (ip
         const name = Array.isArray(found) ? found[0] : found;
         if (!name) return;
         names.set(address, String(name).replace(/\.local$/i, ''));
-        for (const view of views.values()) if (view.address === address) view.name = labelOf(address);
-        if (lock) lock.name = labelOf(views.get(lock.id)?.address) || lock.name;
+        let changed = false;
+        for (const view of views.values()) {
+          if (view.address !== address) continue;
+          view.name = labelOf(address);
+          changed = true;
+        }
+        if (changed) {
+          // The lock's sentence names the same computer, so it is refreshed too.
+          if (lock) lock.name = labelOf(views.get(lock.id)?.address) || lock.name;
+          announce();
+        }
       })
-      .catch(() => { /* no reverse lookup: the address is the name */ });
+      .catch(() => {
+        // A lookup that fails now can succeed once the router's table has caught
+        // up, or once the machine answers. Retrying quietly costs nothing and is
+        // the difference between a tooltip that says "192.168…" and one that says
+        // the laptop's name.
+        if (attempt < retries && views.size) {
+          setTimeout(() => resolveLater(address, attempt + 1), retryMs).unref?.();
+        }
+      });
   }
 
   function join({ id, address }) {
-    const view = { id, address: String(address || ''), name: labelOf(address), local: local(address), since: now() };
+    const at = clean(address);
+    const view = { id, address: at, name: labelOf(at), local: local(at), since: now() };
     views.set(id, view);
     resolveLater(view.address);
     return view;

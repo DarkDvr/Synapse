@@ -359,13 +359,11 @@ export const thinkNote = (context) =>
 /** Token counts read as words, not as digits: 212k, 1.4M. */
 const tokens = (n) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : `${Math.round(n / 1e3)}k`);
 
-/** How long a run took, in the operator's words: 45s, 26m 28s, 1h 4m. */
+/** How long a run took, in the same HH:MM:SS the role cards' clocks use. */
 function ranFor(ms) {
-  const s = Math.max(0, Math.round(Number(ms) / 1000) || 0);
-  if (s < 60) return `${s}s`;
-  const m = Math.floor(s / 60);
-  if (m < 60) return s % 60 ? `${m}m ${s % 60}s` : `${m}m`;
-  return `${Math.floor(m / 60)}h ${m % 60}m`;
+  const total = Math.max(0, Math.round(Number(ms) / 1000) || 0);
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${pad(Math.floor(total / 3600))}:${pad(Math.floor((total % 3600) / 60))}:${pad(total % 60)}`;
 }
 
 /**
@@ -2453,7 +2451,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
                 : `stopped in ${who}`;
         const spent = context?.turns
           ? ` · ran for ${ranFor(Date.now() - startedAt)} · used ` +
-            `${tokens((context.prompt || 0) + (context.generated || 0))} tokens (${context.thinkShare || 0}% of the writing was reasoning)`
+            `${tokens((context.prompt || 0) + (context.generated || 0))} tokens (${context.thinkShare || 0}% was reasoning)`
           : '';
         return `${request.task} ${said} (${model})${spent}`;
       })(),
@@ -3444,26 +3442,35 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     }
     const said = String(text || '').trim();
     if (!said) return { ok: false, reason: 'The steer is empty.' };
-    try {
-      // `[steer]` is what tells the model this is guidance for the current task
-      // and not a new request; the role briefs say how to treat it.
-      await engine.prompt(live.workerId, `[steer] ${said}`, { files, delivery: 'steer' });
-    } catch (err) {
-      return { ok: false, reason: `Could not reach the worker: ${err.message}` };
-    }
     const at = Date.now();
     const entry = { at, by: actor?.name || null, text: said.slice(0, 1200) };
+    // On screen at once. `delivery: "steer"` does not come back until the worker
+    // reads it at its next step — minutes on a long tool call — so waiting for the
+    // engine made the operator's sentence appear long after they pressed the
+    // button, with nothing to show it had landed (4 Nov). The line is painted now,
+    // and taken back if the engine refuses it.
     live.steers.push(entry);
     live.steered = live.steers.length;
     appendRun(dir, { kind: 'steer', scope: 'worker', task: live.task, role: live.role, ...entry });
-    emit('run.steer', {
-      dir,
-      task: live.task,
-      role: live.role,
-      startedAt: live.startedAt,
-      ...entry,
-    });
+    emit('run.steer', { dir, task: live.task, role: live.role, startedAt: live.startedAt, ...entry });
     out.info(`steer -> ${live.task} (${live.role}) from ${entry.by || 'operator'}: ${said.slice(0, 120)}`);
+    engine
+      .prompt(live.workerId, `[steer] ${said}`, { files, delivery: 'steer' })
+      .catch((err) => {
+        const where = live.steers.indexOf(entry);
+        if (where >= 0) live.steers.splice(where, 1);
+        live.steered = live.steers.length;
+        emit('run.steer', {
+          dir,
+          task: live.task,
+          role: live.role,
+          startedAt: live.startedAt,
+          ...entry,
+          failed: true,
+          error: err.message,
+        });
+        out.warn(`steer -> ${live.task} (${live.role}) was not delivered: ${err.message}`);
+      });
     return { ok: true, target: 'worker', task: live.task, role: live.role, at };
   }
 

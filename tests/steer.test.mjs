@@ -194,6 +194,61 @@ test('a steer goes into the live worker, marked as guidance', async () => {
   assert.ok(stub.interrupts.includes(live.workerId), 'the worker is interrupted after the run');
 });
 
+test('a steer is on the trace before the worker has read it', async () => {
+  const dir = project('early');
+  const stub = makeEngine(dir);
+  const events = [];
+  const runner = runnerFor(stub.engine, dir, events);
+  await runner.handleTurn('ses_arch', archMessages('call_early'));
+  const live = await waitFor(() => runner.active().find((r) => r.workerId));
+  assert.ok(live, 'the run should have a worker session');
+
+  // The engine's steer prompt does not come back until the worker reaches its
+  // next step; holding it there is the case the operator hit at night (4 Nov).
+  const real = stub.engine.prompt;
+  let release = () => {};
+  stub.engine.prompt = (id, text, opts) => {
+    if (opts?.delivery !== 'steer') return real(id, text, opts);
+    return new Promise((resolve, reject) => {
+      release = () => real(id, text, opts).then(resolve, reject);
+    });
+  };
+
+  const result = await runner.steer(dir, { text: 'change of plan', actor: { name: 'PC-A' } });
+  assert.equal(result.ok, true, 'the operator is told it was taken at once');
+  assert.ok(
+    events.some((e) => e.type === 'run.steer' && e.text === 'change of plan' && !e.failed),
+    'the line is broadcast before delivery',
+  );
+  assert.ok(runs(dir).some((r) => r.kind === 'steer'), 'and journalled');
+  release();
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  stub.finish(live.workerId);
+});
+
+test('a steer the engine refuses is taken back off the trace', async () => {
+  const dir = project('refused');
+  const stub = makeEngine(dir);
+  const events = [];
+  const runner = runnerFor(stub.engine, dir, events);
+  await runner.handleTurn('ses_arch', archMessages('call_refused'));
+  const live = await waitFor(() => runner.active().find((r) => r.workerId));
+  assert.ok(live);
+  const real = stub.engine.prompt;
+  stub.engine.prompt = (id, text, opts) => {
+    if (opts?.delivery === 'steer') return Promise.reject(new Error('session gone'));
+    return real(id, text, opts);
+  };
+  const result = await runner.steer(dir, { text: 'too late', actor: { name: 'PC-A' } });
+  assert.equal(result.ok, true, 'the operator was told it was sent');
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  const failed = events.find((e) => e.type === 'run.steer' && e.failed);
+  assert.ok(failed, 'the page is told the line did not land');
+  assert.equal(failed.text, 'too late');
+  assert.equal(runner.active().find((r) => r.task === 't1')?.steers.length, 0, 'the run does not claim it');
+  stub.finish(live.workerId);
+});
+
 test('a steer is refused when nothing is running', async () => {
   const dir = project('idle');
   const stub = makeEngine(dir);

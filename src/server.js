@@ -59,7 +59,10 @@ function readBody(req, limit = 2 * 1024 * 1024) {
 export function createServer({ api, engine, logger, config, remote, onRemote }) {
   const app = logger.channel('app');
   const sseClients = new Map(); // res -> view { id, address, name, local, since }
-  const presence = createPresence({ logger });
+  // A reverse lookup finishes after the join frame has gone out; whenever a name
+  // arrives, the pages are told again (see presence.js).
+  let presenceChanged = () => {};
+  const presence = createPresence({ logger, onChange: () => presenceChanged() });
 
   // One frame shape for every client: engine events and Synapse's own.
   const broadcast = (ev) => {
@@ -75,6 +78,7 @@ export function createServer({ api, engine, logger, config, remote, onRemote }) 
   const broadcastPresence = () => {
     broadcast({ kind: 'presence', views: presence.list(), lock: presence.holder(), ts: Date.now() });
   };
+  presenceChanged = broadcastPresence;
 
   /** Who is asking: the view's name, or the address when the page is unknown. */
   const actorOf = (req) => {
