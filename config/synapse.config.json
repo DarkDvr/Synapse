@@ -3,7 +3,7 @@
     "host": "127.0.0.1",
     "port": 8700,
     "openBrowser": false,
-    "remote": true
+    "remote": false
   },
   "engine": {
     "type": "opencode",
@@ -409,7 +409,7 @@
     "resumeMax": 3,
     "retryBaseSec": 10,
     "retryCapSec": 300,
-    "loopGuard": true,
+    "loopGuard": false,
     "loopLimit": 3,
     "ladder": [
       "coder-1",
