@@ -288,7 +288,8 @@ It removes only what it can prove is dead:
 |---|---|---|
 | an applied update's staging: the zip, the extracted tree, the helper copies | `data\update\last.json` says `ok`, and it is more than a minute old | the update has copied the files out and Synapse is running; the helper starts Synapse *before* it writes that record, which is why the minute matters. A failed update is left alone — its staging is the diagnosis. The newest `data\backups` folder is kept; older ones go. "Newest" is its timestamp, and a tie — two folders written in the same breath — is settled by the version and the clock in the name, never by whichever one the directory listed first. |
 | old release zips in `dist` | more than one exists | one release is enough; the code is in git and the asset is on GitHub. `SHA256SUMS` is rewritten for the one that stayed. `make-release.ps1` does the same when it builds. |
-| spent render profiles in `..\Synapse.Projects\_scratch` | a `visual-review-*` folder is more than a day old | each is Chrome's throwaway profile for one render (~12 MB), not work. The renderer deletes its own, but Windows often keeps a file locked, so they pile up. A **project's** own scratch folder (`<project>-<hash>`) is never touched, however old: the brief tells a model it may write there, and a project can be resumed days later. |
+| spent render profiles in `..\Synapse.Projects\_scratch` | a `visual-review-*` folder is more than a day old | each is Chrome's throwaway profile for one render (~12 MB), not work. The renderer deletes its own, but Windows often keeps a file locked, so they pile up. |
+| a scratch folder whose project is gone (`<project>-<hash>`) | no registered project claims the name, it is a week old, and it matches the harness's own naming shape | deleting a project in Synapse removes its scratch with it, so this only catches folders whose project folder was moved or removed outside Synapse. One project's scratch alone reached 12 GB (4 Nov). The rest of `_scratch` is the engine's temp and is not pruned by name. |
 
 The engine's own store is not in this pass, because it must be deleted while the
 engine is down:
@@ -308,12 +309,13 @@ folders and my own probe screenshots.
 
 **Deliberately not touched:**
 
-- **`..\Synapse.Projects\_scratch`** — the per-project scratch folder is where a
-  model may leave work it is told to keep, and the operator may resume a project
-  days later. The `visual-review-*` folders inside it are browser profiles, not
-  work (each about 12 MB, and Windows often keeps a file locked so the renderer
-  cannot remove its own), but the rule is the same either way: no age-based
-  deletion in a folder a run was told it may write.
+- **A live project's scratch** (`..\Synapse.Projects\_scratch\<project>-<hash>`) —
+  where a model may leave work it is told to keep, and the operator may resume a
+  project days later. No age-based deletion applies to it. A project's scratch now
+  goes when the project is deleted (the folder is outside the project, so the
+  Recycle Bin never sees it), and an orphan nobody claims is swept after a week;
+  nothing clears it on compaction, because compaction happens mid-run and the
+  scratch is often the working set of the worker being compacted.
 - **The engine's `snapshot` store** (`data\engine\opencode\data\opencode\snapshot`,
   347 MB and growing) — it is the engine's own undo history. Deleting it needs the
   engine stopped and is a separate, explicit action, not a boot sweep.

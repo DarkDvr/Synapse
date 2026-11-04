@@ -189,8 +189,47 @@ export function createHousekeeping({ root = ROOT, scratchRoot = SCRATCH_ROOT, lo
     return report;
   }
 
+  /**
+   * Scratch folders whose project is gone.
+   *
+   * Every project owns `<name>-<hash>` under the scratch root (paths.js), and
+   * deleting a project in Synapse takes its folder with it. A project whose folder
+   * the operator moved or removed outside Synapse leaves its scratch behind — and
+   * on 4 Nov one project's scratch alone held 12 GB. Only the harness's own naming
+   * shape is considered: the rest of the root is the engine's temp, which is not
+   * ours to prune by name. A folder nobody claims must also be a week old, so a
+   * project that is about to be re-added keeps its working set.
+   */
+  function sweepOrphanScratch({ keep = [], olderThanMs = 7 * DAY } = {}) {
+    const report = { removed: 0, bytes: 0, skipped: null };
+    if (!scratchRoot || !fs.existsSync(scratchRoot)) return { ...report, skipped: 'no scratch root' };
+    const keepSet = new Set((keep || []).map((name) => String(name || '').toLowerCase()));
+    const cutoff = now() - olderThanMs;
+    let entries = [];
+    try {
+      entries = fs.readdirSync(scratchRoot, { withFileTypes: true });
+    } catch {
+      return { ...report, skipped: 'the scratch root cannot be read' };
+    }
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      if (!/^.+-(?:[0-9a-f]{8})$/i.test(entry.name)) continue;
+      if (keepSet.has(entry.name.toLowerCase())) continue;
+      const target = path.join(scratchRoot, entry.name);
+      let at = 0;
+      try {
+        at = fs.statSync(target).mtimeMs;
+      } catch {
+        continue;
+      }
+      if (at > cutoff) continue;
+      drop(target, report);
+    }
+    return report;
+  }
+
   /** Everything, in the order that keeps the record of an update. */
-  function run({ update = true, releases = true, scratch = true } = {}) {
+  function run({ update = true, releases = true, scratch = true, keepScratch = [] } = {}) {
     const result = { removed: 0, bytes: 0, update: null, releases: null, scratch: null };
     if (update) {
       const r = sweepUpdate();
@@ -221,11 +260,21 @@ export function createHousekeeping({ root = ROOT, scratchRoot = SCRATCH_ROOT, lo
       if (r.removed) {
         say(`housekeeping: ${dryRun ? 'would remove' : 'removed'} ${r.removed} spent render profile(s), ${mb(r.bytes)}`);
       }
+      const orphans = sweepOrphanScratch({ keep: keepScratch });
+      result.scratchProjects = orphans;
+      result.removed += orphans.removed;
+      result.bytes += orphans.bytes;
+      if (orphans.removed) {
+        say(
+          `housekeeping: ${dryRun ? 'would remove' : 'removed'} ${orphans.removed} scratch folder(s) of ` +
+            `projects that no longer exist, ${mb(orphans.bytes)}`,
+        );
+      }
     }
     return result;
   }
 
-  return { run, sweepUpdate, pruneReleases, sweepScratchProfiles };
+  return { run, sweepUpdate, pruneReleases, sweepScratchProfiles, sweepOrphanScratch };
 }
 
 const mb = (bytes) => `${(bytes / (1024 * 1024)).toFixed(1)} MB`;

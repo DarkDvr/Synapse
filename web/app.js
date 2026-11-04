@@ -786,26 +786,17 @@ function renderRemote() {
   renderClients();
 }
 
-// Who is on the LAN. The address is what the other PC opens; the count and the
-// computers sit under it in one line, because the rail has no room for a second
-// row and a view on this PC is not a client of the address it already has.
-// Names are de-duplicated — one machine with two tabs is one client — and the
-// line ellipses rather than wrap, so the rail never changes height. A client the
-// network could not name is counted and not printed: "clients: 1 (192.168.1.115)"
-// is an IP address in a line the operator asked to keep human (4 Nov).
+// Who is on the LAN. The address is what the other PC opens; the count sits
+// under it in one line, because the rail has no room for a second row and a view
+// on this PC is not a client of the address it already has. The names are the
+// hover: a rail line that lists machines wraps or ellipses, and the operator
+// asked for the count there and the list in the tooltip (4 Nov).
 function renderClients() {
   const el = $('remoteClients');
   if (!el) return;
-  const all = [...new Set((state.views || []).filter((v) => !v.local).map((v) => v.name).filter(Boolean))];
-  const named = all.filter((n) => !/^\d{1,3}(\.\d{1,3}){3}$/.test(n) && !/^[0-9a-f]{0,4}(:[0-9a-f]{0,4}){2,}$/i.test(n));
-  el.textContent = all.length
-    ? `clients: ${all.length}${named.length ? ` (${named.join(', ')})` : ''}`
-    : 'clients: 0';
-  el.title = all.length
-    ? named.length
-      ? named.join(', ')
-      : `${all.length} other device${all.length === 1 ? '' : 's'} connected.`
-    : 'No other device is connected.';
+  const names = [...new Set((state.views || []).filter((v) => !v.local).map((v) => v.name).filter(Boolean))];
+  el.textContent = names.length ? `clients: ${names.length}` : 'clients: 0';
+  el.title = names.length ? `Connected clients: ${names.join(', ')}` : 'No other device is connected.';
 }
 
 // The page was cut off. Everything behind the panel is stale, so it is covered

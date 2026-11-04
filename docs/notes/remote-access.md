@@ -52,8 +52,9 @@ the network.
 2. A second line appears under the switch with the desktop's name,
    `http://<machine-name>:8700/`. Open it on the laptop. The raw `192.168.…`
    address went on 4 Nov: it was a second line of numbers under the name, and DHCP
-   moves it. A client the network cannot name is counted (`clients: 1`) without
-   printing its address either.
+   moves it. The line under it is a count (`clients: 1`); the machines' network
+   names are in its tooltip, `Connected clients: …`, because a rail line that
+   lists them either wraps or ellipses.
 3. The **TOKEN** chip on that line copies the token; paste it into the login
    page. The cookie signs in once; the address then opens straight to the UI.
 4. If the desktop's IP changes, the address changes; the token stays valid.

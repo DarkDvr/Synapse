@@ -253,7 +253,7 @@ expect(
   'rate limit: a retry event was emitted',
   retried.events.some((e) => e.kind === 'role-error' && e.retrying),
 );
-expect('rate limit: report delivered to the Architect', retried.woke.some((t) => /finished in/.test(t)), `woke=${retried.woke.length}`);
+expect('rate limit: report delivered to the Architect', retried.woke.some((t) => /finished/.test(t)), `woke=${retried.woke.length}`);
 expect('rate limit: logged to the provider diary', fs.readFileSync(PROVIDER_LOG, 'utf8').includes(`rate-limit`));
 
 // 3. a retired model ends the run and is marked

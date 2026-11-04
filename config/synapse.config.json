@@ -296,13 +296,11 @@
       "skills": [
         "web-guidelines",
         "aesthetic-foundations",
-        "align-grid",
         "visual-review"
       ],
       "mustLoad": [
         "web-guidelines",
-        "aesthetic-foundations",
-        "align-grid"
+        "aesthetic-foundations"
       ],
       "focus": "app"
     },

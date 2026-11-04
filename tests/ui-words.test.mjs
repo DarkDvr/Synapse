@@ -125,12 +125,12 @@ test('the rail names LAN clients under the address, not a Views row', () => {
   assert.match(html, /id="remoteClients"/);
   const js = read('web/app.js');
   assert.match(js, /function renderClients\(/);
-  assert.match(js, /clients: \$\{all\.length\}/);
-  // 4 Nov: the second line "or http://192.168.1.38:8700/" went, and a client the
-  // network could not name is counted without printing its address.
+  assert.match(js, /clients: \$\{names\.length\}/);
+  // 4 Nov: the second line "or http://192.168.1.38:8700/" went, and the names of
+  // the machines moved from the rail into the tooltip - the line is a count.
   assert.doesNotMatch(js, /remoteIp|status-remote-ip/);
   assert.doesNotMatch(html, /id="remoteIp"/);
-  assert.match(js, /\^\[0-9a-f\]\{0,4\}/, 'an address is not printed as a name');
+  assert.match(js, /Connected clients: \$\{names\.join\(', '\)\}/);
   assert.doesNotMatch(js, /function renderViews\(/);
 });
 

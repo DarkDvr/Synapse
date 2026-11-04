@@ -1947,7 +1947,7 @@ are all over the place, especially vertically. Gaps and margins are seemingly
 random." The design brief asked for a direction and a palette; it never asked for
 the grid the controls sit on, so every build invented its own spacing.
 
-Three skills now ship with Synapse and are named in the roles:
+Two skills now ship with Synapse and are named in the roles:
 
 - **Designer: `frontend-syntax-css-grid-subgrid` is required.** It is the CSS Grid
   and subgrid skill (Baseline, `subgrid` since 2023), and it exists because a card
@@ -1956,10 +1956,10 @@ Three skills now ship with Synapse and are named in the roles:
 - **Designer: `ui-design` is now the CloudBase skill** (MIT, shipped with its
   licence), replacing the hand-written one. It covers direction, hierarchy and the
   self-audit the old sheet only summarised.
-- **QC: `align-grid` is required.** Its harness (`scripts/verify_grid.js`) needs
-  puppeteer-core, which Synapse does not install, so the brief says so: QC runs
-  the checks it describes - column lines, the 8px baseline, each label's centre
-  against its control - with the `visual-review` renderer and quotes the numbers.
+
+QC was given a third skill, `align-grid`, for the same lesson; the operator took it
+out again the same day — the grid skill covers the discipline, and QC judges the
+build against the design with the renderer it already has.
 
 The designer's spec must now state the grid as numbers (columns, gutter, baseline,
 spacing scale) and the Architect's `design:` rule says the build is measured

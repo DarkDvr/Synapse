@@ -334,6 +334,29 @@ try {
     'a restart is not an attempt: the role never got to fail',
     countedAttempts([at(1), res(1, 'interrupted')], 't1') === 0,
   );
+  // 4 Nov: the operator compacted, asked for a rebuilt plan, and t1 was refused
+  // for attempts spent by the plan before it. An attempt belongs to the ask it
+  // ran for — the plan's goal and that task's title — not to the id alone.
+  const ask = (n, goal, title) => ({ kind: 'delegate', callId: `p${n}`, task: 't1', attempt: n, goal, title });
+  const done = (n, goal, title) => ({ kind: 'result', callId: `p${n}`, task: 't1', outcome: 'completed', goal, title });
+  expect(
+    'a rebuilt plan does not spend the new plan’s attempts',
+    countedAttempts(
+      [ask(1, 'old goal', 'Old task'), done(1, 'old goal', 'Old task'), ask(2, 'new goal', 'New task')],
+      't1',
+      'new goal',
+      'New task',
+    ) === 1,
+  );
+  expect(
+    'the attempts of the ask in front of us still count',
+    countedAttempts([ask(1, 'g', 'T'), ask(2, 'g', 'T')], 't1', 'g', 'T') === 2,
+  );
+  expect(
+    'a record from before the stamp cannot be shown to belong to this ask',
+    countedAttempts([at(1)], 't1', 'g', 'T') === 0,
+  );
+  expect('without a goal, the old two-argument rule stands', countedAttempts([at(1)], 't1') === 1);
   expect(
     'a restart does not step the task down',
     attemptFailed({ outcome: 'interrupted' }) === false,

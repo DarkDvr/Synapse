@@ -566,12 +566,23 @@ Non-obvious, all verified on 2.0.30:
   followed, and the run stopped with the UI showing an idle screen. The wake now
   waits for the Architect's turn and retries its failures on the same schedule; the
   report is sent once and later attempts just say "continue".
-- **A report's header names the task, the coder and the model.** It used to read
-  "worker t6 (qc) completed" — a noun, an id and nothing else. It is now
-  "t6 completed by QC (<model name>)", and the other outcomes follow the same
-  shape (`failed in`, `timed out in`, `stopped in`); the model is the catalog's
-  display name, with the ref as the fallback (4 Nov). This is the line above the
-  report in the chat, not the report itself.
+- **A report's header names the task, the coder, the model and the cost.** It used
+  to read "worker t6 (qc) completed" — a noun, an id and nothing else. It is now
+  "t6 completed by QC (<model name>) · ran for 26m 28s · used 12.4M tokens (58% of
+  the writing was reasoning)", and the other outcomes follow the same shape (`failed in`, `timed
+  out in`, `stopped in`); the model is the catalog's display name, with the ref as
+  the fallback (4 Nov). The clock and the token totals moved here *from* the report,
+  so the chat says each number once; the report keeps turns, the peak context and
+  the compactions, which are about the shape of the effort rather than its size.
+- **An attempt belongs to the ask, not to the id.** A rebuilt plan reuses t1, t2,
+  …, so the attempt budget used to follow the id across plans: on 4 Nov a plan the
+  operator had just asked to be rebuilt refused its t1 because an earlier plan had
+  spent the three attempts. A delegate now carries the plan's goal and the task's
+  title, and `countedAttempts` only counts records whose stamp matches the plan in
+  front of it (`sameAsk`); a plan with a new goal or a reworded task is a new ask
+  with a fresh budget. Records from before the stamp cannot be shown to belong to
+  the current ask, so they do not count either — the first delegation after the
+  upgrade starts clean.
 - **An automatic answer is not the operator speaking.** After Auto-Answer replies,
   a synthetic line goes into the asking session: the operator is away, the harness
   chose the recommended options, treat them as the harness's. Without it the next

@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn, execFile } from 'node:child_process';
-import { DATA_DIR, LOGS_DIR, WORKSPACE_DIR, GENERAL_DIR, ENGINE_HOME, PID_FILE, PROJECTS_FILE, TOOL_STATS_FILE, PROBE_DIR, PROBE_FILE, MODEL_CACHE_FILE, NPM_ATTEMPT_FILE, PERMISSION_MEMORY_FILE, REMOTE_TOKEN_FILE, ROOT, SCRATCH_ROOT } from './paths.js';
+import { DATA_DIR, LOGS_DIR, WORKSPACE_DIR, GENERAL_DIR, ENGINE_HOME, PID_FILE, PROJECTS_FILE, TOOL_STATS_FILE, PROBE_DIR, PROBE_FILE, MODEL_CACHE_FILE, NPM_ATTEMPT_FILE, PERMISSION_MEMORY_FILE, REMOTE_TOKEN_FILE, ROOT, SCRATCH_ROOT, scratchDir } from './paths.js';
 import { loadConfig, saveConfig, repairMachinePaths } from './config.js';
 import { logger } from './logger.js';
 import { createEngine } from './engines/index.js';
@@ -740,7 +740,13 @@ async function main() {
   // (196 MB each). See housekeeping.js for exactly what it may and may not touch.
   setTimeout(() => {
     try {
-      const report = housekeeping.run();
+      // The scratch folders of the projects that exist now: everything else that
+      // carries the harness's naming shape is a deleted (or moved) project's, and
+      // a week-old one is worth more as disk space (see housekeeping.js).
+      const keepScratch = projects
+        .list()
+        .map((p) => path.basename(scratchDir(p.directory)));
+      const report = housekeeping.run({ keepScratch });
       if (report.removed) {
         app.info(`housekeeping: ${report.removed} item(s), ${Math.round(report.bytes / (1024 * 1024))} MB freed`);
       }

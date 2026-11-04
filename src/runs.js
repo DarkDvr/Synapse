@@ -359,6 +359,15 @@ export const thinkNote = (context) =>
 /** Token counts read as words, not as digits: 212k, 1.4M. */
 const tokens = (n) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : `${Math.round(n / 1e3)}k`);
 
+/** How long a run took, in the operator's words: 45s, 26m 28s, 1h 4m. */
+function ranFor(ms) {
+  const s = Math.max(0, Math.round(Number(ms) / 1000) || 0);
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return s % 60 ? `${m}m ${s % 60}s` : `${m}m`;
+  return `${Math.floor(m / 60)}h ${m % 60}m`;
+}
+
 /**
  * Did this write land outside the project folder?
  *
@@ -386,9 +395,32 @@ export function outsideProject(file, dir) {
  *
  * Only this round counts. Task ids are reused by every new plan (t1, t2, …), and
  * without the round boundary a project that ran four bugfix rounds reached the cap
- * on a task whose every attempt succeeded.
+ * on a task whose every attempt succeeded. And only this *ask*: a plan the operator
+ * asked the Architect to rebuild is a new request, so a delegate stamped with
+ * another goal or another task title is not spending this one's three attempts
+ * (4 Nov — a rebuilt plan refused t1 because a plan from hours earlier had used
+ * the budget).
  */
-export function countedAttempts(history, taskId) {
+/**
+ * Is this record from the same ask?
+ *
+ * A task id says which row, not which round: every plan the Architect writes
+ * starts again at t1, and a rebuilt plan is a new request even when it reuses the
+ * ids. A delegate carries the plan's goal and the task's title as they were when
+ * it ran, so a record whose goal or title differs from the plan in front of us is
+ * another ask and does not spend this one's attempts. A record with no goal is
+ * older than this stamp: it cannot be shown to belong to the current plan either,
+ * which is why the first delegation after an upgrade is never refused for history
+ * it cannot identify.
+ */
+export function sameAsk(record, goal, title) {
+  if (goal === null || goal === undefined) return true;
+  return (
+    String(record?.goal || '') === String(goal || '') && String(record?.title || '') === String(title || '')
+  );
+}
+
+export function countedAttempts(history, taskId, goal = null, title = null) {
   const spent = sinceRoundClosed(history);
   const unspent = new Set(
     spent
@@ -396,7 +428,12 @@ export function countedAttempts(history, taskId) {
       .map((r) => r.callId),
   );
   return spent.filter(
-    (r) => r.kind === 'delegate' && r.task === taskId && typeof r.attempt === 'number' && !unspent.has(r.callId),
+    (r) =>
+      r.kind === 'delegate' &&
+      r.task === taskId &&
+      typeof r.attempt === 'number' &&
+      !unspent.has(r.callId) &&
+      sameAsk(r, goal, title),
   ).length;
 }
 
@@ -1267,14 +1304,20 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     const config = getConfig() || {};
     // How many times this task has actually been run — see countedAttempts. A
     // model change for the planned role starts the count over: the earlier
-    // failures were the old model's, and the operator has fixed it.
+    // failures were the old model's, and the operator has fixed it. So does a
+    // rebuilt plan: its goal and its task titles are the ask this round belongs to.
+    const planGoal = String(plan.plan?.goal || '');
     const history = readRuns(dir);
     const plannedRef = config.roles?.[task.role]?.ref || null;
     const modelChanged = modelChangedSinceAttempt(history, task.id, task.role, plannedRef);
-    const attempts = modelChanged ? 0 : countedAttempts(history, task.id);
+    const attempts = modelChanged ? 0 : countedAttempts(history, task.id, planGoal, task.title);
     // What the last attempt actually achieved. Only a real failure moves the task
-    // down the ladder; a stop or a restart is not the role's failure.
-    const previous = history.filter((r) => r.kind === 'result' && r.task === task.id).pop() || null;
+    // down the ladder; a stop or a restart is not the role's failure. An earlier
+    // plan's result is not this task's result.
+    const previous =
+      history
+        .filter((r) => r.kind === 'result' && r.task === task.id && sameAsk(r, planGoal, task.title))
+        .pop() || null;
     const stepDown = !modelChanged && attemptFailed(previous);
     if (attempts >= MAX_ATTEMPTS) {
       appendRun(dir, {
@@ -1458,6 +1501,9 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
       role,
       plannedRole: task.role,
       title: task.title,
+      // What this attempt belongs to: the plan's goal and the task's title as they
+      // were when it ran. See sameAsk() — a rebuilt plan starts the budget again.
+      goal: planGoal,
       model: modelRef,
       variant,
       architect: architectId,
@@ -2220,6 +2266,9 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
       callId: request.callId,
       task: request.task,
       title: task.title,
+      // The same stamp the delegate carries: a result from another plan is not this
+      // task's history (see sameAsk).
+      goal: planGoal,
       role,
       plannedRole: task.role,
       // The session that asked for this run. The plan pane and the role cards
@@ -2384,18 +2433,29 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
 
     const told = await wake(architectId, dir, {
       // The header of the yellow Synopsis line in the chat. It names the task,
-      // what happened, which coder did it and on which model - "worker t6 (qc)
-      // completed" answered none of the questions the line is there to answer
-      // (4 Nov). A harness stop still names itself: that is the one the operator
-      // cannot work out from the report alone.
+      // what happened, which coder did it and on which model, how long it took and
+      // what it cost - "worker t6 (qc) completed" answered none of the questions
+      // the line is there to answer (4 Nov). The time and the token spend moved
+      // here from the report below, so the chat does not say them twice. A harness
+      // stop still names itself: that is the one the operator cannot work out from
+      // the report alone.
       description: (() => {
         const who = ROLE_NAMES[role] || role;
         const model = modelCache?.get?.(modelRef)?.name || modelRef || 'engine default';
-        if (stopReason) return `${request.task} stopped by the harness in ${who} (${model})`;
-        if (outcome === 'completed') return `${request.task} completed by ${who} (${model})`;
-        if (outcome === 'error') return `${request.task} failed in ${who} (${model})`;
-        if (outcome === 'timeout') return `${request.task} timed out in ${who} (${model})`;
-        return `${request.task} stopped in ${who} (${model})`;
+        const said = stopReason
+          ? `stopped by the harness in ${who}`
+          : outcome === 'completed'
+            ? `completed by ${who}`
+            : outcome === 'error'
+              ? `failed in ${who}`
+              : outcome === 'timeout'
+                ? `timed out in ${who}`
+                : `stopped in ${who}`;
+        const spent = context?.turns
+          ? ` · ran for ${ranFor(Date.now() - startedAt)} · used ` +
+            `${tokens((context.prompt || 0) + (context.generated || 0))} tokens (${context.thinkShare || 0}% of the writing was reasoning)`
+          : '';
+        return `${request.task} ${said} (${model})${spent}`;
       })(),
       text: report({
         task,
@@ -2405,7 +2465,6 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
         skipped,
         outcome,
         harnessStop: Boolean(stopReason),
-        ms: Date.now() - startedAt,
         text,
         files,
         context,
@@ -3017,17 +3076,17 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     return at === -1 ? t : t.slice(0, at + 1);
   }
 
-  function report({ task, role, insteadOf, startedBelow = false, skipped, outcome, harnessStop, ms, text, files, context, workerId, planTouched, synapseTouched, qcRound, skillsRequired, skillsMissing, auto, stallSec, retries, resumes, loops = 0, loopMarked = false, loopRole = null, loopModel = null, modelRef = '', error, stoppedBy, lastTurnError, steers }) {
+  function report({ task, role, insteadOf, startedBelow = false, skipped, outcome, harnessStop, text, files, context, workerId, planTouched, synapseTouched, qcRound, skillsRequired, skillsMissing, auto, stallSec, retries, resumes, loops = 0, loopMarked = false, loopRole = null, loopModel = null, modelRef = '', error, stoppedBy, lastTurnError, steers }) {
     const head =
       outcome === 'completed'
-        ? `${task.id} (${role}) finished in ${Math.round(ms / 1000)}s.`
+        ? `${task.id} (${role}) finished.`
         : outcome === 'timeout'
           ? `${task.id} (${role}) produced nothing for ${Math.round(stallSec / 60)} minutes in a row and was stopped` +
             `${resumes ? ` after ${resumes} restart${resumes === 1 ? '' : 's'}` : ''}.`
           : harnessStop
-            ? `${task.id} (${role}) ran for ${Math.round(ms / 1000)}s and was stopped by the harness, not by the operator.`
+            ? `${task.id} (${role}) was stopped by the harness, not by the operator.`
             : stoppedBy === 'operator'
-              ? `${task.id} (${role}) was stopped by the operator after ${Math.round(ms / 1000)}s. ` +
+              ? `${task.id} (${role}) was stopped by the operator. ` +
                 `A stop is not a verdict on the task or the model.`
               : outcome === 'error'
                 ? loopMarked && (!loopRole || loopRole === role)
@@ -3111,11 +3170,15 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     // reached 200k generated at half the rate of one that stayed under 50k, so a
     // long run is mostly a big transcript — which is the signal to split it, not
     // to doubt the model.
+    // The time and the token spend are in the chat's header (see the wake's
+    // description), so they are not repeated here. What is left is the shape of
+    // the effort: how many turns, how big the context got, whether it was
+    // summarised. A long run that stayed under 50k generated is a big transcript,
+    // which is the signal to split it, not to doubt the model.
     if (context && context.turns) {
       lines.push(
-        `Effort: ${context.turns} turn${context.turns === 1 ? '' : 's'}, ${tokens(context.prompt)} prompt tokens ` +
-          `read (the provider's meter), ${tokens(context.generated)} written (${thinkNote(context)}), ` +
-          `context peaked at ${tokens(context.peak)}` +
+        `Effort: ${context.turns} turn${context.turns === 1 ? '' : 's'}; the context peaked at ` +
+          `${tokens(context.peak)}` +
           (context.compactions
             ? context.compactions === 1
               ? ' and was summarised once.'

@@ -12,7 +12,7 @@ import { keepAttachments } from './keep-attachments.js';
 import { skillRules, describeSkills } from './skills.js';
 import { rulesFor, decide, resolvePath, refusalNote, SINGLE_RULES } from './permissions.js';
 import { stopTargets } from './stop.js';
-import { PROJECTS_ROOT, SKILLS_DIR, ROOT, SCRATCH_ROOT } from './paths.js';
+import { PROJECTS_ROOT, SKILLS_DIR, ROOT, SCRATCH_ROOT, scratchDir } from './paths.js';
 import { mayRecycleFolder } from './projects.js';
 import { fetchProviderModels } from './providers.js';
 import { providerId } from './providers.js';
@@ -1325,6 +1325,19 @@ export function createApi({ getConfig, applyConfig, engine, logger, getBootError
           throw e;
         }
         app.info(`deleted project folder to the Recycle Bin: ${current.directory}`);
+      }
+      // The project's scratch folder lives beside the projects, not inside the
+      // folder the Recycle Bin takes, and it belongs to this project and nothing
+      // else. A deleted project must not leave gigabytes behind: one project's
+      // scratch alone had reached 12 GB (4 Nov).
+      try {
+        const scratch = scratchDir(current.directory);
+        if (fs.existsSync(scratch)) {
+          fs.rmSync(scratch, { recursive: true, force: true });
+          app.info(`removed the deleted project's scratch folder: ${scratch}`);
+        }
+      } catch (err) {
+        app.warn(`could not remove the scratch folder of a deleted project: ${err.message}`);
       }
       // The folder is gone first, so a failed conversation delete cannot leave a
       // working project pointing at nothing; a session that fails to delete here

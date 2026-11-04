@@ -189,6 +189,39 @@ test('spent render profiles go, a live one stays, and a project’s scratch is n
   }
 });
 
+// 5: a project that is gone takes its scratch with it; a folder nobody can claim
+// and that nothing has touched for a week is the same thing. The rest of the
+// scratch root is the engine's temp and is not pruned by name.
+test('orphaned project scratch goes, a live project’s and a fresh one stay', () => {
+  const dir = root();
+  try {
+    const scratch = path.join(dir, 'scratch');
+    const orphan = path.join(scratch, 'gone-1234abcd');
+    const kept = path.join(scratch, 'live-1234abcd');
+    const fresh = path.join(scratch, 'fresh-1234abcd');
+    const temp = path.join(scratch, 'NuGetScratch');
+    const profile = path.join(scratch, 'visual-review-111-390-1700000000000');
+    write(path.join(orphan, 'proof', 'download.zip'), 'x'.repeat(2048));
+    write(path.join(kept, 'probe.mjs'), 'mine');
+    write(path.join(fresh, 'probe.mjs'), 'mine too');
+    write(path.join(temp, 'packages', 'a.nupkg'), 'cache');
+    write(path.join(profile, 'Default', 'Cache', 'data_0'), 'x');
+    const longAgo = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000);
+    for (const p of [orphan, kept, temp, profile]) fs.utimesSync(p, longAgo, longAgo);
+
+    const report = house(dir).sweepOrphanScratch({ keep: ['live-1234abcd'] });
+    assert.equal(report.removed, 1);
+    assert.ok(report.bytes >= 2048);
+    assert.equal(fs.existsSync(orphan), false, 'the dead project’s scratch is gone');
+    assert.equal(fs.existsSync(kept), true, 'a project that still exists keeps its working set');
+    assert.equal(fs.existsSync(fresh), true, 'a fresh folder may be a project about to be re-added');
+    assert.equal(fs.existsSync(temp), true, 'the engine’s temp is not this pass’s business');
+    assert.equal(fs.existsSync(profile), true, 'render profiles are swept by their own pass');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 // 5: the engine's undo store is dropped before the engine starts.
 test('the engine snapshot store is emptied before start and its folder kept', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'synapse-snap-'));
