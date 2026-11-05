@@ -3,7 +3,7 @@
     "host": "127.0.0.1",
     "port": 8700,
     "openBrowser": false,
-    "remote": true
+    "remote": false
   },
   "engine": {
     "type": "opencode",
@@ -287,7 +287,7 @@
   "roles": {
     "designer": {
       "ref": "opencode-go/deepseek-v4.1-flash",
-      "variant": "high",
+      "variant": "max",
       "skills": [
         "aesthetic-foundations",
         "app-check",
