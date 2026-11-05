@@ -325,6 +325,12 @@ Non-obvious, all verified on 2.0.30:
   records `outcome: 'deferred'`, and every refusal path (`single-mode`,
   `unknown-task`, `qc-cap`, `keep-building-off`, `stopped-by-operator`, `deferred`)
   is a line in `runs.jsonl`, which is what makes "unread" mean unread.
+  **A deferral is reported with the run, not woken on its own.** The busy branch
+  used to wake the Architect with "ask again when it reports back", which cost a
+  whole turn per duplicate ask: three delegate calls in one turn bought three
+  Architect turns, two of them only to say "I'll hold" while the worker was still
+  working (5 Nov). The ask is journalled, remembered on the live run, and named in
+  that run's report — once, when the Architect is free to act on it.
   The lesson for the UI: a form reply that answers `Form not found` means the
   question is gone, so clear the panel and say so — never leave a dead form up.
   rather than omitting the line, and why the harness never moves a task.
