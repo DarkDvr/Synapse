@@ -14,7 +14,7 @@ import {
   normalizeSession,
   parseModelRef,
 } from './base.js';
-import { ROOT, SEARCH_SERVER, DELEGATE_SERVER, ENGINE_PID_FILE, SKILLS_DIR, VENDOR_ENGINE } from '../paths.js';
+import { ROOT, SEARCH_SERVER, DELEGATE_SERVER, LEASE_SERVER, ENGINE_PID_FILE, SKILLS_DIR, VENDOR_ENGINE } from '../paths.js';
 import { providerApiKey } from '../config.js';
 
 const ENGINE_USERNAME = 'opencode';
@@ -181,6 +181,7 @@ export class OpenCodeEngine extends Engine {
     delete servers.synapse;
     delete servers['synapse-search'];
     delete servers['synapse-delegate'];
+    delete servers['synapse-lease'];
     // A server that no longer exists: the plan became a file the Architect owns
     // (src/plans.js), so the entry must not linger pointing at a deleted file.
     delete servers['synapse-plan'];
@@ -207,9 +208,19 @@ export class OpenCodeEngine extends Engine {
       codemode: false,
     };
 
+    // A worker's estimate of how long a long command will take. The call is a
+    // receipt; the runner reads it from the transcript and holds the stall clock
+    // off for that long (see the lease in src/runs.js).
+    servers['synapse-lease'] = {
+      type: 'local',
+      command: [process.execPath, LEASE_SERVER],
+      codemode: false,
+    };
+
     const legacyMcp = { ...(cfg.mcp || {}) };
     delete legacyMcp['synapse-search'];
     delete legacyMcp['synapse-delegate'];
+    delete legacyMcp['synapse-lease'];
     delete legacyMcp['synapse-plan'];
     delete legacyMcp.synapse;
 

@@ -194,6 +194,11 @@ const STALL_NUDGE =
 const LOOP_NUDGE =
   'You were repeating the same line without making progress. Stop repeating it and carry on with the task ' +
   'from where the work stands. Do the next real step now.';
+// Said when a worker's own lease ends. It is a question, not a kill: the worker can
+// confirm and get one more window, or say it is stuck and stop.
+const LEASE_QUESTION =
+  'Your lease has ended. If you are still working, call lease again with the time you need ' +
+  '(one extension is allowed) and carry on. If you are stuck or finished, say so and stop.';
 const RETRY_NUDGE =
   'Continue from where you left off. The previous turn was cut short by the provider, not by the operator. ' +
   'Do not start over.';
@@ -738,6 +743,12 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
       // How many loops one work order may show before the model is marked and the
       // task moves on. Effort is never changed (see the loop branch).
       loopLimit: num(w.loopLimit, 1, 20, DEFAULT_LOOP_LIMIT),
+      // 0 = no step limit. A task that needs more is too big for its model: stop
+      // and report "needs splitting" rather than spend hours in one work order.
+      maxTurns: num(w.maxTurns, 0, 1000, 80),
+      // How long a worker gets to answer after its lease ends, before the silence
+      // is treated as a stall. Seconds.
+      leaseGraceSec: num(w.leaseGraceSec, 5, 3600, 300),
     };
   }
 
@@ -1759,6 +1770,20 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
               window: contextWindow(modelRef),
               steer: true,
               loopGuard: settings.loopGuard,
+              maxSteps: settings.maxTurns,
+              leaseGraceMs: settings.leaseGraceSec * 1000,
+              onLease: (lease) => {
+                live.lease = { ...lease, at: Date.now() };
+                emit('run.progress', { ...live });
+                emit('run.note', {
+                  dir,
+                  role,
+                  task: request.task,
+                  startedAt,
+                  kind: 'lease',
+                  ...lease,
+                });
+              },
               // The graceful stop cuts at the step boundary, not mid-token.
               stopCheck: (messages) => {
                 if (!gracefulStop) return false;
@@ -1817,6 +1842,25 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
           }
 
           const now = await engine.getMessages(worker.id);
+
+          if (finished.overSteps) {
+            // The task is too big for its model, not stalled: every step re-sends the
+            // whole conversation, and 178 steps is a task that should have been three.
+            // Stop it, count no attempt against the role, and tell the Architect to
+            // split it. The model is not marked — the plan is what was wrong.
+            try { await engine.interrupt(worker.id); } catch { /* already gone */ }
+            outcome = 'stopped';
+            stoppedBy = 'limit';
+            text =
+              `The work order hit the ${settings.maxTurns}-step limit without finishing: it is too big ` +
+              `for one delegation. Split it into smaller tasks and delegate them.`;
+            log.warn(
+              `worker ${request.task} (${role}) hit the step limit (${finished.steps}/${settings.maxTurns}); ` +
+                `reporting that it needs splitting`,
+            );
+            alert({ dir, role, message: 'Step limit — task needs splitting', final: true });
+            break;
+          }
 
           if (finished.stalled) {
             // Nothing written, read, said or streamed for the whole window: the
@@ -2791,7 +2835,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
    * A pending question also pauses the clock: the operator may take hours, and
    * the transcript itself says so.
    */
-  async function waitForIdle(sessionId, before, stallMs, onTool, signal, { window = null, steer = false, onContext = null, onCompact = null, onActivity = null, stopCheck = null, loopGuard = false } = {}) {
+  async function waitForIdle(sessionId, before, stallMs, onTool, signal, { window = null, steer = false, onContext = null, onCompact = null, onActivity = null, stopCheck = null, loopGuard = false, maxSteps = 0, leaseGraceMs = 300_000, onLease = null } = {}) {
     let lastActivity = Date.now();
     let lastCtx = 0;
     let compactions = 0;
@@ -2805,6 +2849,20 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     // The action half of the same guard (see the tool block below).
     const toolSeen = new Set();
     const toolWindow = [];
+    // The worker's own estimate of a long command (src/mcp/lease-server.js). While
+    // a lease is live, silence is expected; at its end the worker is asked, and one
+    // extension is allowed before the silence becomes a stall.
+    let leaseUntil = 0;
+    let leaseMinutes = 0;
+    let leaseAsked = false;
+    let leaseExtended = false;
+    let leaseGraceUntil = 0;
+    let leaseAskMark = '';
+    const leaseSeen = new Set();
+    // Steps: the model's own turns, each of which re-sends the whole conversation.
+    // A task that needs more than `maxSteps` is too big for its model, not a stall.
+    const stepSeen = new Set();
+    let steps = 0;
     for (;;) {
       if (signal?.aborted) return { stopped: true };
       await sleep(POLL_MS, signal);
@@ -2827,6 +2885,42 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
         return { stopped: true };
       }
 
+      // Steps, and leases. Both are read from the transcript on this poll: the model
+      // called `lease` before a long command, and each assistant message with usage
+      // is one more step of the conversation.
+      for (const message of afterMark(messages, before)) {
+        if (message?.type === 'assistant' && message?.raw?.tokens && message.id && !stepSeen.has(message.id)) {
+          stepSeen.add(message.id);
+          steps += 1;
+        }
+        for (const part of message?.parts || []) {
+          if (part?.type !== 'tool' || !part?.name) continue;
+          if (!/_lease$/i.test(String(part.name))) continue;
+          const key = String(part.id || `${message.id}:${part.name}`);
+          if (leaseSeen.has(key)) continue;
+          leaseSeen.add(key);
+          const input = parseInput(part.input) || {};
+          const asked = Number(input.minutes);
+          const minutes = Number.isFinite(asked) ? Math.min(480, Math.max(0.1, asked)) : 0;
+          if (!minutes) continue;
+          const reason = String(input.reason || '').trim().slice(0, 200);
+          const wasAsked = leaseAsked;
+          leaseUntil = Date.now() + minutes * 60_000;
+          leaseMinutes = minutes;
+          leaseAsked = false;
+          leaseGraceUntil = 0;
+          if (wasAsked) leaseExtended = true;
+          onLease?.({
+            kind: wasAsked ? 'extended' : 'granted',
+            minutes,
+            reason,
+            until: leaseUntil,
+            extended: leaseExtended,
+          });
+        }
+      }
+      if (maxSteps && steps > maxSteps) return { timedOut: false, overSteps: true, steps };
+
       const nextSig = activityKey(messages);
       if (nextSig !== sig) {
         sig = nextSig;
@@ -2834,6 +2928,40 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
         if (!announced) {
           announced = true;
           onActivity?.();
+        }
+        // The worker answered the lease question: an assistant message *after* the
+        // question is the answer, and it earns the one extension. The question's own
+        // synthetic message must not count as the answer.
+        if (
+          leaseAsked &&
+          !leaseExtended &&
+          afterMark(messages, leaseAskMark).some((m) => m.type === 'assistant')
+        ) {
+          leaseExtended = true;
+          leaseAsked = false;
+          leaseGraceUntil = 0;
+          leaseUntil = Date.now() + leaseMinutes * 60_000;
+          onLease?.({ kind: 'extended', minutes: leaseMinutes, until: leaseUntil, extended: true });
+        }
+      }
+
+      // The lease clock. Silence is expected while it runs; at its end the worker is
+      // asked once, and a grace window decides whether the silence is a stall.
+      {
+        const at = Date.now();
+        if (leaseUntil && at < leaseUntil) lastActivity = at;
+        else if (leaseUntil && leaseAsked && at >= leaseGraceUntil) {
+          return { timedOut: true, stalled: true, leaseExpired: true };
+        } else if (leaseUntil && leaseExtended && at >= leaseUntil) {
+          return { timedOut: true, stalled: true, leaseExpired: true };
+        } else if (leaseUntil && !leaseAsked && at >= leaseUntil) {
+          leaseAsked = true;
+          leaseAskMark = markOf(messages);
+          leaseGraceUntil = at + leaseGraceMs;
+          onLease?.({ kind: 'expired', minutes: leaseMinutes, until: leaseUntil });
+          Promise.resolve(
+            engine.synthetic?.(sessionId, LEASE_QUESTION, { description: 'lease' }),
+          ).catch(() => { /* the stall path will handle a session that is gone */ });
         }
       }
 
@@ -2992,6 +3120,21 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     lines.push(
       `Work in the project directory you were given. Deliverables go in bin/ (create it if it does not ` +
         `exist); everything else there is scratch. Do only this task.`,
+    );
+    // Waste rules. A local model with a small budget re-reads everything it is sent;
+    // these lines are the difference between a 30-step task and a 178-step one.
+    lines.push(
+      `Work economically: read a file once and read only the part you need; do not re-read a file ` +
+        `unless it changed. Never re-run a check that already passed. Use the project's own scripts ` +
+        `(bin/*.ps1, bin/*.mjs) instead of writing a new variant of a check that already exists. ` +
+        `Keep a short notes file in the scratch folder — what you changed, what passed, what is left — ` +
+        `and update it instead of re-deriving from the transcript.`,
+    );
+    lines.push(
+      `Before a command you expect to run longer than about ten minutes (a download, a build, an ` +
+        `install), call lease with your estimate in minutes and a one-line reason. It is a warning ` +
+        `with a clock, not a command: the harness will not mistake the silence for a stall, and it ` +
+        `will ask you if the time is enough.`,
     );
     lines.push(
       `When you are finished, reply with a short report: what you produced, the exact file paths you ` +

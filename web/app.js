@@ -275,6 +275,9 @@ const state = {
   // was one click to dismiss and impossible to act on; the log has the detail, so
   // the chat gets a line and the operator gets on with their work.
   alarms: [],
+  // Worker leases: a worker's own estimate of a long command, with a live clock in
+  // the chat. Keyed `${dir}|${task}`.
+  leases: new Map(),
   clocks: null,
   collapsed: new Set(),
   // True once the first project list has arrived; see loadProjects.
@@ -1121,6 +1124,12 @@ function roleIsWorking(role) {
 function tickClocks() {
   const now = Date.now();
   renderLastEventAge();
+  // The worker's lease clock: a plain text update, no rebuild.
+  for (const el of document.querySelectorAll('[data-lease-until]')) {
+    const until = Number(el.dataset.leaseUntil) || 0;
+    const text = hhmmss(Math.max(0, until - now));
+    if (el.textContent !== text) el.textContent = text;
+  }
   // The plan's per-step stopwatches, before the early return below: they are
   // driven by the harness's run records (data-ms) plus this run's start, so they
   // do not depend on the card clocks existing yet.
@@ -3602,6 +3611,23 @@ async function loadRuns() {
   try {
     const { runs } = await api('GET', '/api/runs');
     state.runs = new Map((runs || []).map((r) => [dirKey(r.dir), r]));
+    // A lease that is still running when the page opens: seed the clock from the
+    // run the server already has, so a reload does not lose it.
+    for (const run of runs || []) {
+      if (!run.lease || !run.lease.until) continue;
+      if (run.lease.kind === 'expired') continue;
+      state.leases.set(`${dirKey(run.dir)}|${run.task || ''}`, {
+        dir: run.dir || null,
+        task: run.task || '',
+        role: run.role || '',
+        until: Number(run.lease.until) || 0,
+        minutes: Number(run.lease.minutes) || 0,
+        reason: String(run.lease.reason || ''),
+        extended: Boolean(run.lease.extended),
+        expired: false,
+        at: Date.now(),
+      });
+    }
     // A page opened mid-run has no trace of its own yet: make one from what the
     // server knows, so the chat shows the worker working straight away rather
     // than waiting for the next progress tick.
@@ -3644,6 +3670,7 @@ function handleRunEvent(ev) {
     const trace = traceFor(ev);
     if (trace && ev.kind === 'compact') noteCompaction(trace, ev);
     if (trace && ev.kind === 'loop') noteLoop(trace, ev);
+    if (ev.kind === 'lease') noteLease(ev);
     renderTranscript();
     return;
   }
@@ -3683,6 +3710,11 @@ function handleRunEvent(ev) {
     // longer the news. `run.progress` cannot clear it: the runner sends one right
     // after a retry notice, which would erase the notice it just sent.
     if (ev.type === 'run.started' && ev.role) state.roleErrors.delete(`${key}|${ev.role}`);
+    if (ev.type === 'run.started') {
+      for (const [leaseKey, lease] of state.leases) {
+        if (lease.dir && dirKey(lease.dir) === key) state.leases.delete(leaseKey);
+      }
+    }
     // A new run measures its own speed: the previous one's windows and token
     // totals are not this model's, and carrying them over made the first number
     // on a new card belong to a run that had already finished.
@@ -3762,6 +3794,9 @@ function handleRunEvent(ev) {
       trace.outcome = ev.outcome || 'finished';
     }
     state.runs.delete(key);
+    for (const [leaseKey, lease] of state.leases) {
+      if (lease.dir && dirKey(lease.dir) === key) state.leases.delete(leaseKey);
+    }
   } else {
     return;
   }
@@ -4061,6 +4096,7 @@ function renderTranscript() {
     html += renderMessage(m, i === showable.length - 1 && m.type === 'assistant' ? liveTail : '');
   }
   while (next < items.length) html += items[next++].html;
+  html += leasesHere().map(renderLease).join('');
   el.innerHTML = html + pending;
   // The question is the conversation's last post, not an overlay over it.
   mountAskPost();
@@ -4126,6 +4162,56 @@ function renderAlarm(a) {
   return `<div class="chat-alarm" title="${esc(`${title}: ${detail}${a.note ? ` — ${a.note}` : ''}`)}">
     <span class="chat-alarm-mark">⚠</span>
     <span class="chat-alarm-text">${esc(title)}${shown ? ` · ${esc(shown)}` : ''}</span>
+  </div>`;
+}
+
+/**
+ * A worker's lease: its own estimate of how long a long command will take, with a
+ * clock in the chat that counts down. Granted, extended, expired, or ended by the
+ * run finishing.
+ */
+function noteLease(ev) {
+  const key = `${dirKey(ev.dir)}|${ev.task || ''}`;
+  if (ev.kind === 'granted' || ev.kind === 'extended') {
+    state.leases.set(key, {
+      dir: ev.dir || null,
+      task: ev.task || '',
+      role: ev.role || '',
+      until: Number(ev.until) || 0,
+      minutes: Number(ev.minutes) || 0,
+      reason: String(ev.reason || ''),
+      extended: Boolean(ev.extended),
+      expired: false,
+      at: Date.now(),
+    });
+  } else if (ev.kind === 'expired') {
+    const lease = state.leases.get(key);
+    if (lease) lease.expired = true;
+  }
+}
+
+function leasesHere() {
+  const dir = currentProject()?.directory;
+  return [...state.leases.values()].filter(
+    (lease) => !lease.dir || !dir || dirKey(lease.dir) === dirKey(dir),
+  );
+}
+
+function renderLease(lease) {
+  const role = roleLabel(lease.role) || 'Worker';
+  const reason = lease.reason ? ` · “${esc(lease.reason)}”` : '';
+  if (lease.expired) {
+    return `<div class="chat-lease is-expired" data-lease="${esc(`${lease.dir}|${lease.task}`)}">
+      <span class="chat-lease-mark">⏱</span>
+      <span class="chat-lease-text">Lease ended for ${esc(role)} — asking whether it needs more${reason}</span>
+    </div>`;
+  }
+  const clock = hhmmss(Math.max(0, lease.until - Date.now()));
+  const asked = hhmmss(Math.max(0, lease.minutes * 60_000));
+  return `<div class="chat-lease" data-lease="${esc(`${lease.dir}|${lease.task}`)}">
+    <span class="chat-lease-mark">⏱</span>
+    <span class="chat-lease-text">${esc(role)} asked for ${lease.extended ? 'more' : `a ${asked} lease`} ·
+      <span class="chat-lease-clock" data-lease-until="${Number(lease.until) || 0}">${esc(clock)}</span> left${reason}</span>
   </div>`;
 }
 
@@ -8103,6 +8189,23 @@ function settingsWorkers(c) {
         }),
       undefined,
       'A loop is one phrase or one command repeated. Each rescue is one amber line; the third sends the task to the next coder.',
+    ),
+    setGroup(
+      'Size and time',
+      setField(c, 'Most steps per task (0 = no limit)', 'worker.maxTurns', {
+        type: 'number',
+        value: c.worker?.maxTurns ?? 80,
+        attr: 'min="0" max="1000" step="1"',
+        hint: 'A task that needs more steps than this is too big for one delegation: the run stops and the Architect is told to split it. Every step re-sends the whole conversation, so this is also the cost of one task. 0 turns the limit off.',
+      }) +
+        setField(c, 'Lease grace after a worker’s time is up (seconds)', 'worker.leaseGraceSec', {
+          type: 'number',
+          value: c.worker?.leaseGraceSec ?? 300,
+          attr: 'min="5" max="3600" step="5"',
+          hint: 'A worker can call lease before a long command. When the lease ends Synapse asks whether it needs more; this is how long it waits for that answer before treating the silence as a stall. One extension is allowed.',
+        }),
+      undefined,
+      'A step is one model turn; a lease is a worker’s own warning that a command will be long.',
     ),
     setGroup(
       'Timers',

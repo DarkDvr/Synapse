@@ -188,6 +188,16 @@ export const DEFAULTS = {
     // changed. On by default; the guard is loose on purpose.
     loopGuard: true,
     loopLimit: 3,
+    // A work order that needs this many steps is too big for the model it was given:
+    // the run stops and reports "needs splitting" instead of spending hours in one
+    // task. 0 turns the limit off. The steps are the model's own turns (each one
+    // re-sends the whole conversation, so they are also the cost).
+    maxTurns: 80,
+    // A worker can call `lease` before a long command; the stall clock is held off
+    // until the lease ends. At the end Synapse asks whether it needs more, and waits
+    // this long for an answer before treating it as a stall (one extension is
+    // allowed). Seconds.
+    leaseGraceSec: 300,
     // Roles that can stand in for one another, in escalation order. A task is
     // written for one role; when that coder cannot do the job the harness moves
     // the same task down this list (see src/runs.js candidatesFor). A role not in
@@ -352,6 +362,9 @@ export function normalize(raw) {
   cfg.worker.retryCapSec = clampInt(cfg.worker.retryCapSec, 10, 3600, DEFAULTS.worker.retryCapSec);
   cfg.worker.loopGuard = cfg.worker.loopGuard !== false;
   cfg.worker.loopLimit = clampInt(cfg.worker.loopLimit, 1, 20, DEFAULTS.worker.loopLimit);
+  // 0 is a real value: no step limit.
+  cfg.worker.maxTurns = clampInt(cfg.worker.maxTurns, 0, 1000, DEFAULTS.worker.maxTurns);
+  cfg.worker.leaseGraceSec = clampInt(cfg.worker.leaseGraceSec, 5, 3600, DEFAULTS.worker.leaseGraceSec);
   // The peer ladder is a list of role ids; anything unknown is dropped rather than
   // left to confuse a delegation with a role that has no card and no model.
   cfg.worker.ladder = Array.isArray(cfg.worker.ladder)

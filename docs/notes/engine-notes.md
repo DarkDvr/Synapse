@@ -1513,6 +1513,47 @@ reads the steer in the worker's report. If the run is stopped before that report
 the next brief carries “the operator's steer to the last run still stands” so it
 can put the change in the plan on its next turn.
 
+## A long command is a lease, not a stall
+
+A worker that runs a 90-minute download produces no transcript change while it
+runs, and `waitForIdle` measures exactly that: silence. Before the lease, the stall
+clock would fire at `worker.stallSec` and the interrupt would kill the download.
+
+The worker now calls the `lease` tool **before** the long command (`src/mcp/lease-server.js`,
+a stateless receipt like `delegate`): minutes and a one-line reason. The runner reads
+the call from the transcript on its next poll (the same way it reads delegation
+requests) and holds the stall clock off until the lease ends. The chat shows one
+violet line with a live countdown — “Coder 1 asked for a 02:00:00 lease · 01:58:41
+left · ‘downloading a 200 GB archive’” — and `/api/runs` carries the lease so a
+reload rebuilds it.
+
+At the end the worker is **asked**, not killed: a synthetic says the lease is over
+and that it may call `lease` once more for the time it needs. Any assistant message
+after the question is an answer and earns the one extension; a second lease call
+replaces the clock. If nothing arrives within `worker.leaseGraceSec` (default 300),
+the silence is a stall again and the normal interrupt/resume path runs.
+
+A model inside a shell call cannot answer — that is why the lease is requested
+before the command, and why the question is queued rather than expected immediately.
+The one extension is the guard against a model that asks for two hours and needs
+four; after it, the clock is the clock.
+
+`tests/lease.test.mjs` pins the receipt and the settings; the timer needs a live run
+(the manual test uses a 0.1-minute lease so it finishes in six seconds).
+
+## A task that needs 80 steps is too big
+
+Every step re-sends the whole conversation, so the step count is both the time and
+the cost of a work order. `worker.maxTurns` (default 80, 0 turns it off) stops a run
+that crosses it with “the task needs splitting” — outcome `stopped`, no attempt
+counted against the role, the model not marked. The Architect is told to split it.
+Measured 4–5 Nov: a local coder spent 178 steps and 18.6M prompt tokens on one task;
+that is a plan problem, not a model problem, and the report says so.
+
+The worker brief also carries the cheap rules: read a file once, never re-run a
+passing check, use the project's own scripts instead of a new variant, and keep a
+notes file in scratch.
+
 ## A model that writes its tool call instead of making it
 
 Measured 30 Oct (test6, coder-2, a local model): the worker's turn ended with a

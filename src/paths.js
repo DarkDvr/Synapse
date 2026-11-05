@@ -106,6 +106,7 @@ export const MODEL_CACHE_FILE = path.join(DATA_DIR, 'model-cache.json');
 // hands tasks to a role with.
 export const SEARCH_SERVER = path.join(ROOT, 'src', 'mcp', 'search-server.js');
 export const DELEGATE_SERVER = path.join(ROOT, 'src', 'mcp', 'delegate-server.js');
+export const LEASE_SERVER = path.join(ROOT, 'src', 'mcp', 'lease-server.js');
 
 export const PID_FILE = path.join(DATA_DIR, 'synapse.pid');
 
