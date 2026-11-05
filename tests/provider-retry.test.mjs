@@ -123,7 +123,7 @@ function makeEngine({ dir, script, wakeScript }) {
   return { engine, sessions, woke, descriptions, interrupts, created, deleted, prompts };
 }
 
-async function runCase({ name, script, wakeScript = [{}], ladder = ['coder-1'], roleRef = 'opencode/deepseek-v4.1-flash-free', cancelAfter = 0, stopWakeAfter = 0, untilWoke = 1, harnessStopAfter = 0, harnessReason = '' }) {
+async function runCase({ name, script, wakeScript = [{}], ladder = ['coder-1'], roleRef = 'opencode/deepseek-v4.1-flash-free', cancelAfter = 0, stopWakeAfter = 0, untilWoke = 1, harnessStopAfter = 0, harnessReason = '', delegates = 1 }) {
   const dir = project(name);
   const runsFile = path.join(dir, '.synapse', 'runs.jsonl');
   const { engine, sessions, woke, descriptions, interrupts, created, deleted, prompts } = makeEngine({ dir, script, wakeScript });
@@ -148,13 +148,17 @@ async function runCase({ name, script, wakeScript = [{}], ladder = ['coder-1'], 
     notify: (ev) => events.push(ev),
   });
 
+  const parts = [];
+  for (let i = 0; i < delegates; i += 1) {
+    parts.push({ type: 'tool', name: 'synapse-delegate_delegate', id: `call_${name}_${i}`, input: { task: 't1' } });
+  }
   runner.handleTurn('ses_arch', [
     { id: 'u1', type: 'user', created: 1000, parts: [{ type: 'text', text: 'go' }] },
     {
       id: 'a1',
       type: 'assistant',
       created: 3000,
-      parts: [{ type: 'tool', name: 'synapse-delegate_delegate', id: `call_${name}`, input: { task: 't1' } }],
+      parts,
     },
   ]);
 
@@ -413,6 +417,26 @@ expect(
   /larger than the model window/.test(ctxReset.prompts.at(-1)?.text || ''),
   (ctxReset.prompts.at(-1)?.text || '').slice(0, 120),
 );
+
+// 9. Two asks for the same task in one turn: one worker, and the second ask is
+// deferred without a turn of its own. Measured 5 Nov: three delegate calls in one
+// turn bought three Architect turns, two of them only to say "I'll hold" while the
+// worker was still working.
+const dupes = await runCase({ name: 'dupes', script: [{}], delegates: 2 });
+expect('duplicate asks: one worker', dupes.created.length === 1, JSON.stringify(dupes.created));
+expect('duplicate asks: one wake, the report', dupes.woke.length === 1, `woke=${dupes.woke.length}`);
+expect(
+  'duplicate asks: no wake of its own for the deferred ask',
+  !dupes.descriptions.some((d) => /deferred/.test(d)),
+  JSON.stringify(dupes.descriptions),
+);
+expect(
+  'duplicate asks: the report says it was deferred',
+  /deferred it/.test(dupes.woke[0] || ''),
+  (dupes.woke[0] || '').slice(-220),
+);
+const deferredLines = dupes.runs.filter((r) => r.kind === 'delegate' && r.outcome === 'deferred');
+expect('duplicate asks: the deferral is journalled', deferredLines.length === 1, String(deferredLines.length));
 
 // restore the operator's diary — a test must not write into a month of evidence
 if (logBefore === null) fs.rmSync(PROVIDER_LOG, { force: true });

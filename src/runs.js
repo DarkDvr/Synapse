@@ -1326,12 +1326,17 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
       // deferral had left no record.
       appendRun(dir, { kind: 'delegate', callId: request.callId, task: request.task, outcome: 'deferred' });
       log.warn(`delegation deferred: a worker is already running in ${project}`);
-      await wake(architectId, dir, {
-        description: `delegate ${request.task} deferred`,
-        text:
-          `Nothing was run yet: another task is already running in this project. ` +
-          `Ask again when it reports back.`,
-      });
+      // No wake. The ask is in the journal and the run's own report carries it
+      // (see `deferred` in report()), so the Architect hears about it once, at the
+      // moment it is free to act. Waking here cost a whole turn per duplicate ask —
+      // measured 5 Nov: three delegate calls in one turn bought three Architect
+      // turns, two of them only to say "I'll hold" while the worker was still
+      // working.
+      const holder = running.get(dirKey(dir));
+      if (holder) {
+        holder.deferred = holder.deferred || [];
+        holder.deferred.push({ task: request.task, callId: request.callId });
+      }
       return;
     }
 
@@ -1581,6 +1586,9 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
       // `steers` array so the report and the result line read the same record.
       steers,
       steered: 0,
+      // Delegation asks that arrived while this run was live. The report carries
+      // them to the Architect once, instead of a wake per ask.
+      deferred: [],
     };
     running.set(dirKey(dir), live);
     emit('run.started', live);
@@ -2558,6 +2566,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
         stoppedBy,
         lastTurnError,
         steers,
+        deferred: live.deferred,
         auto,
         stallSec,
         retries,
@@ -3294,7 +3303,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     return at === -1 ? t : t.slice(0, at + 1);
   }
 
-  function report({ task, role, insteadOf, startedBelow = false, skipped, outcome, harnessStop, text, files, context, workerId, planTouched, synapseTouched, qcRound, skillsRequired, skillsMissing, auto, stallSec, retries, resumes, loops = 0, loopCount = 0, loopMarked = false, loopRole = null, loopModel = null, modelRef = '', error, stoppedBy, lastTurnError, steers }) {
+  function report({ task, role, insteadOf, startedBelow = false, skipped, outcome, harnessStop, text, files, context, workerId, planTouched, synapseTouched, qcRound, skillsRequired, skillsMissing, auto, stallSec, retries, resumes, loops = 0, loopCount = 0, loopMarked = false, loopRole = null, loopModel = null, modelRef = '', error, stoppedBy, lastTurnError, steers, deferred }) {
     const head =
       outcome === 'completed'
         ? `${task.id} (${role}) finished.`
@@ -3346,6 +3355,20 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     // held, so that delegation is refused - better not to ask.
     if (stoppedBy === 'operator') {
       lines.push('The operator stopped it on purpose: do not delegate this task again unless they say so.');
+    }
+    // Asks that arrived while this ran were answered "another task is already
+    // running" and nothing was started for them. The report is where the Architect
+    // hears it, once, when it is free to act — a wake per ask bought a turn per ask
+    // while the worker was still working (5 Nov).
+    if (deferred?.length) {
+      const counts = new Map();
+      for (const d of deferred) counts.set(d.task, (counts.get(d.task) || 0) + 1);
+      const said = [...counts].map(([id, n]) => (n > 1 ? `${id} ${n} times` : id)).join(', ');
+      lines.push(
+        `While this ran, the harness also received a delegation for ${said} and deferred it: another task was ` +
+          `already running, so nothing was started for it. Judge this report first; then delegate it if it is ` +
+          `still to do.`,
+      );
     }
     if (loops) {
       lines.push(
