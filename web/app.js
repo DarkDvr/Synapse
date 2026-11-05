@@ -14,6 +14,7 @@ import { addSample, rateOf } from './rate.js';
 import { DONE_SOUNDS, doneSoundName, workWillContinue } from './notify.js';
 import { askHeadNote, answerTimeline, permissionNote } from './ask-note.js';
 import { AUTOMATION_DEFAULTS, AUTOMATION_ROWS, anyAutomationOn } from './automation.js';
+import { reconcileRuns } from './runs-sync.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -3661,6 +3662,56 @@ async function loadRuns() {
   renderRoleActivity();
 }
 
+/**
+ * The server is the authority on what is running — ask it, and reconcile.
+ *
+ * The stream was the only thing that ever *removed* a run, so a page that missed
+ * `run.finished` kept it for ever: a dropped connection, a restart, a tab asleep
+ * through the event. The chat then said "Working — Stop to take over" over an
+ * Architect that had already said it was waiting, and Stop stayed live on a project
+ * with nothing running (measured 5 Nov). Nothing corrected it, because the
+ * eight-second poll only asked about cards and the engine's own list — and a worker
+ * is invisible to both.
+ *
+ * `askedAt` guards the one race that matters: a run that started after this request
+ * left cannot be in its answer, so it is left alone rather than dropped mid-paint.
+ */
+async function syncRuns() {
+  const askedAt = Date.now();
+  let runs;
+  try {
+    runs = (await api('GET', '/api/runs')).runs || [];
+  } catch {
+    return;
+  }
+  const live = runs.map((run) => ({ ...run, key: dirKey(run.dir) }));
+  const { drop, add } = reconcileRuns(state.runs, live, askedAt);
+  for (const key of drop) {
+    const run = state.runs.get(key);
+    state.runs.delete(key);
+    for (const [leaseKey, lease] of state.leases) {
+      if (lease.dir && dirKey(lease.dir) === key) state.leases.delete(leaseKey);
+    }
+    // Fold its card the way `run.finished` would, without the chime: this is a
+    // correction, not work that just ended.
+    const trace = run ? traceOf(run) : null;
+    if (trace && !trace.finishedAt) {
+      trace.finishedAt = Date.now();
+      trace.outcome = trace.outcome || 'finished';
+    }
+  }
+  for (const run of add) {
+    const { key, ...rest } = run;
+    state.runs.set(key, rest);
+  }
+  if (!drop.length && !add.length) return;
+  state.stopping = false;
+  renderRoleActivity();
+  renderTree();
+  renderPlan();
+  renderComposer();
+}
+
 /** One delegated run, live: started, its newest tool call, then finished. */
 function handleRunEvent(ev) {
   const key = dirKey(ev.dir);
@@ -6236,6 +6287,20 @@ async function refreshPending() {
   settleEventChip(state.busySessions);
 
   renderTree();
+  // What the server says is running, not only what the stream said. A missed
+  // `run.finished` used to leave a run on screen for ever — Stop live over an
+  // Architect that had already said it was waiting (see syncRuns).
+  await syncRuns();
+  // The same authority for the turn itself. A restart, or a stream that died just
+  // before the end event, leaves `state.busy` true for ever — and the composer then
+  // says "Working — Stop to take over" over a chat that is waiting for the operator.
+  // The server's own answer is the only thing that can settle it. If this races a
+  // turn that is just starting, the next event sets it back and the server refuses
+  // the Send itself, which is the same answer a stale button would have given.
+  if (state.sessionId && state.busy && state.busyInfo && !state.busyInfo.busy && !currentRun()) {
+    state.busy = false;
+    renderComposer();
+  }
   if (state.view === 'session') {
     // Only what this poll can actually have changed is repainted. The transcript
     // used to be rebuilt every eight seconds whatever had happened, and the
@@ -7536,6 +7601,9 @@ function connectStream() {
       clearDisconnected();
       renderClients();
       renderStatus();
+      // A reconnect is exactly when a `run.finished` was missed: the stream that
+      // would have carried it died first. Ask what is actually running.
+      syncRuns().catch(() => {});
       return;
     }
 
