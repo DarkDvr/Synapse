@@ -7758,6 +7758,9 @@ function connectStream() {
       renderDesk();
       if (ev.type === 'desk.released') {
         toast('Screen Released', 'The AI is not using your mouse or keyboard any more.');
+        // A chime is the "you can come back" signal — unless they took it back
+        // themselves, which needs no announcement: they were right there.
+        if (String(ev.why || '') !== 'the operator took it back') playDoneSound();
       }
       return;
     }
