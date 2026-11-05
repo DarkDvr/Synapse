@@ -318,7 +318,7 @@
     },
     "architect": {
       "ref": "opencode-go/deepseek-v4.1-flash",
-      "variant": "high",
+      "variant": "max",
       "skills": [
         "app-check",
         "find-skills",
