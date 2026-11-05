@@ -192,6 +192,21 @@ test('the shipped toolbox may run', () => {
     shell('node -e "x" F:\\dev\\Synapse\\skills\\visual-review\\SKILL.md').effect,
     'deny',
   );
+  // 5 Nov: PowerShell's call operator is how a worker runs a shipped `.ps1` that is
+  // not on PATH — the only form the shell offers — and it has no interpreter word
+  // for the rule above to find. It was refused as a harness write, so the operator's
+  // own skills were unusable through their shell's syntax.
+  assert.equal(
+    shell('& "F:\\dev\\Synapse\\skills\\app-check\\bin\\window.ps1" -Action shot -TargetPid 111000 -Out shots\\t5.png').effect,
+    'allow',
+  );
+  // The exemption is per statement: the same command may not also delete a skill.
+  assert.equal(
+    shell('& "F:\\dev\\Synapse\\skills\\app-check\\bin\\window.ps1"; Remove-Item F:\\dev\\Synapse\\skills\\visual-review\\SKILL.md').effect,
+    'deny',
+  );
+  // A script that is in the harness but not in skills/ is not a shipped tool.
+  assert.equal(shell('& "F:\\dev\\Synapse\\src\\build.ps1"').effect, 'deny');
 });
 
 test('changing directory out of the workspace turns a write into a question', () => {

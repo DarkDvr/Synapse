@@ -224,7 +224,7 @@ export function analyzeCommand(command, cwd, { home = os.homedir() } = {}) {
     // AppData and writes its report in scratch is two statements, not one
     // outside write; judging the whole command by `readsOnly` asked for a card
     // in the last run (28 Oct).
-    const part = { paths: [], redirects: [], readsOnly: true, verbRead: true, dir };
+    const part = { paths: [], redirects: [], readsOnly: true, verbRead: true, dir, words };
     const finish = () => {
       part.dir = dir;
       result.segments.push(part);
@@ -425,49 +425,62 @@ function decideShell(resources, ctx) {
   const harnessPaths = info.paths.filter((p) => zoneOf(p, ctx) === 'harness');
   const skillsRoot = `${slash(ctx.harnessRoot)}/skills`;
   // A shipped tool runs from the harness's own `skills/` folder, and that is what
-  // this allows. The script is the first non-flag word after an interpreter in its
-  // statement — so `timeout 30 node "<path>"` counts, and `node -e "…"` does not,
-  // because inline code is not a shipped tool and treating it as one would let a
-  // worker write anywhere under `skills/` through a one-liner. Measured 4 Nov: a
-  // QC command `timeout 30 node ...\skills\visual-review\bin\shot.mjs` was denied
-  // as a harness write because the *whole command's* head was `timeout`, not an
-  // interpreter.
-  const runsShippedTool = (() => {
-    if (!harnessPaths.length) return false;
-    if (!harnessPaths.every((p) => inside(p, skillsRoot))) return false;
-    for (const segment of segmentsOf(command)) {
-      const words = wordsOf(segment);
-      let at = -1;
-      for (let i = words.length - 1; i >= 0; i -= 1) {
-        if (INTERPRETERS.has(words[i].toLowerCase().replace(/\.exe$/i, ''))) {
-          at = i;
-          break;
-        }
-      }
-      if (at === -1) continue;
-      for (let i = at + 1; i < words.length; i += 1) {
-        const word = words[i];
-        if (/^[-/]/.test(word)) {
-          const flag = word.replace(/^[-/]+/, '').toLowerCase();
-          // `-e`/`-c`/`-Command` carry code, not a file: no tool to allow here.
-          if (['e', 'c', 'eval', 'command', 'encodedcommand', 'exec'].includes(flag)) break;
-          continue;
-        }
-        const target = resolvePath(word, ctx.cwd, { home: ctx.home });
-        if (!target || target.unknown) break;
-        return inside(target.path, skillsRoot);
+  // this allows — statement by statement, never for the whole command, so a second
+  // statement that deletes a skill is still judged as the write it is.
+  //
+  // Two ways to name the script: after an interpreter (`node "<path>"`,
+  // `timeout 30 node "<path>"` — measured 4 Nov, the command's head was `timeout`),
+  // or with no interpreter at all — PowerShell's call operator (`& "<path>"`, which
+  // is how a worker runs a shipped `.ps1`), or the script path as the statement's
+  // own head. Inline code is still not a tool: `node -e "…"` names a script it does
+  // not run, and treating that as one would let a one-liner write anywhere under
+  // `skills/`.
+  //
+  // Measured 5 Nov: a worker ran `& "…\skills\app-check\bin\window.ps1" -Action shot
+  // -Out "…\shots\t5.png"`, the only form PowerShell offers for a `.ps1` that is not
+  // on PATH, and the PROHIBITED entry for Synapse refused it as a harness write. The
+  // operator's own skills were unusable through the one syntax their shell uses.
+  const invokesShippedScript = (words = []) => {
+    if (!words.length) return false;
+    let at = -1;
+    for (let i = words.length - 1; i >= 0; i -= 1) {
+      if (INTERPRETERS.has(words[i].toLowerCase().replace(/\.exe$/i, ''))) {
+        at = i;
+        break;
       }
     }
+    if (at === -1) {
+      let head = 0;
+      while (head < words.length && (words[head] === '&' || words[head] === '.')) head += 1;
+      const word = words[head];
+      if (!word) return false;
+      const target = resolvePath(word, ctx.cwd, { home: ctx.home });
+      return Boolean(target && !target.unknown && inside(target.path, skillsRoot));
+    }
+    for (let i = at + 1; i < words.length; i += 1) {
+      const word = words[i];
+      if (/^[-/]/.test(word)) {
+        const flag = word.replace(/^[-/]+/, '').toLowerCase();
+        // `-e`/`-c`/`-Command` carry code, not a file: no tool to allow here.
+        if (['e', 'c', 'eval', 'command', 'encodedcommand', 'exec'].includes(flag)) return false;
+        continue;
+      }
+      const target = resolvePath(word, ctx.cwd, { home: ctx.home });
+      if (!target || target.unknown) return false;
+      return inside(target.path, skillsRoot);
+    }
     return false;
-  })();
+  };
+  const toolParts = new Set(segments.filter((part) => invokesShippedScript(part.words)));
+  const runsShippedTool = toolParts.size > 0;
   // PROHIBITED: a statement that is not read-only may not name a protected path,
   // and neither may a redirect. Running a shipped script is the exception — it is
-  // execution, not a change — so the script words a toolbox command names are not
+  // execution, not a change — so the script words that statement names are not
   // counted as writes. Writing *into* skills/ is still caught, redirect included.
-  const toolPath = (p) => runsShippedTool && inside(p, `${slash(ctx.harnessRoot)}/skills`);
+  const toolPath = (p, part) => toolParts.has(part) && inside(p, skillsRoot);
   const guardedWrite = segments
     .flatMap((part) => [
-      ...(part.readsOnly ? [] : part.paths.filter((p) => !toolPath(p))),
+      ...(part.readsOnly ? [] : part.paths.filter((p) => !toolPath(p, part))),
       ...part.redirects,
     ])
     .find((p) => prohibitedWrite(p, ctx));
