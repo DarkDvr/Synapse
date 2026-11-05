@@ -326,7 +326,7 @@
       ]
     },
     "coder-1": {
-      "ref": "opencode-go/deepseek-v4-pro",
+      "ref": "polystrata/tiel-coder-35b-a3b-Q5_K_XL-200k",
       "variant": "high",
       "skills": [
         "code-craft",
