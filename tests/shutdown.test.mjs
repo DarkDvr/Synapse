@@ -145,6 +145,20 @@ test('cancelling during the countdown stops it too', async (t) => {
   assert.equal(offs(), 0, 'the countdown was cleared, not left running');
 });
 
+test('Auto-Shutdown fires with the legacy whenDone switch off', async (t) => {
+  // The project's Auto-Shutdown switch is the one the operator sees; `whenDone` is
+  // the old global switch and is no longer in Settings. The countdown used to clear
+  // its own "armed by automation" flag before the final check, so it refused itself
+  // every twenty minutes all night (4 Nov).
+  t.mock.timers.enable({ apis: ['setTimeout', 'setInterval'] });
+  const { api, events, offs } = harness({ config: { shutdown: { whenDone: false, minutes: 5 } } });
+  const armed = await api.armPowerCountdown();
+  assert.equal(armed.ok, true);
+  t.mock.timers.tick(20_000);
+  assert.equal(offs(), 1, 'the automation countdown turned the PC off');
+  assert.equal(events.at(-1).kind, 'shutdown-done');
+});
+
 test('a run starting during the countdown saves the machine', async (t) => {
   t.mock.timers.enable({ apis: ['setTimeout', 'setInterval'] });
   const live = [];

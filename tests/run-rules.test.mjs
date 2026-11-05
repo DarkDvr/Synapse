@@ -523,6 +523,18 @@ try {
     'a piped render with a 2>&1 is still tool use',
     alarmCount(turn('Get-ChildItem F:\\dev\\Synapse\\skills\\visual-review -Recurse | node "F:/dev/Synapse/skills/visual-review/bin/shot.mjs" "F:/x.html" 2>&1 | Out-String')) === 0,
   );
+  // The 4 Nov command: a worker lost its renderer, asked the skill for --help and
+  // listed the skills folder. Listing the folder is a read, and the command names
+  // nothing outside the toolbox — it must not raise the alarm.
+  expect(
+    'listing the skills folder beside a skill run is tool use',
+    alarmCount(
+      turn(
+        'node F:/dev/Synapse/skills/visual-review/bin/shot.mjs --help 2>&1 | Select-Object -First 20; ' +
+          'Get-ChildItem F:/dev/Synapse/skills -Directory | Select-Object Name',
+      ),
+    ) === 0,
+  );
   // The real Clock Test 3 command: clear the project's own shots, then render.
   // One line, it names a skill, and it writes only inside the project.
   expect(

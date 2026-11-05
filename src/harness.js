@@ -127,7 +127,12 @@ export function createHarnessGuard({ root, logger, notify }) {
   /** Is this shell command just the harness's own toolbox being used? */
   const runsTheToolbox = (command) => {
     const named = harnessPathsIn(command);
-    if (!named.length || !named.every((p) => p.startsWith(skillsKey))) return false;
+    // The skills folder itself counts: a worker that lost a renderer lists
+    // `...\skills` before it finds the tool, and listing a folder is a read. Without
+    // this, `Get-ChildItem ...\skills` beside a skill run raised "shell command
+    // naming the harness" (4 Nov).
+    const skillsRoot = skillsKey.slice(0, -1);
+    if (!named.length || !named.every((p) => p === skillsRoot || p.startsWith(skillsKey))) return false;
     return !redirectsInto(command);
   };
 
@@ -164,8 +169,12 @@ export function createHarnessGuard({ root, logger, notify }) {
         const input = part.input && typeof part.input === 'object' ? part.input : {};
         const target = input.filePath || input.file_path || input.path || '';
         if (WRITE_TOOLS.test(name) && inHarness(target)) writes.add(String(target));
-        if (SHELL_TOOLS.test(name) && harnessPathsIn(input.command).length && !runsTheToolbox(input.command)) {
+        if (SHELL_TOOLS.test(name) && harnessPathsIn(input.command).length) {
           const shown = String(input.command).replace(/\s+/g, ' ').slice(0, 160);
+          // A toolbox run is tool use and is not reported. A command that only
+          // *looks* at the toolbox is a read, and is written down: the distinction
+          // is `onlyReads`, not which folder it named.
+          if (runsTheToolbox(input.command) && !onlyReads(input.command)) continue;
           if (couldWriteHarness(input.command)) shells.add(shown);
           else reads.add(shown);
         }

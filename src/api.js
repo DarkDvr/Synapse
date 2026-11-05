@@ -186,10 +186,15 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
   }
 
   /** Why the machine must stay on, or null when it may go. Shared by the route and
-   *  the countdown so the last second is guarded as hard as the request. */
-  function powerRefusal(confirmed) {
+   *  the countdown so the last second is guarded as hard as the request.
+   *
+   *  `byAutomation` is passed explicitly by the countdown: it clears the flag as it
+   *  disarms, and reading the cleared flag here is how Auto-Shutdown spent a night
+   *  refusing itself (4 Nov: "Turning the PC off when the Architect finishes is off
+   *  in Settings", every twenty minutes until morning). */
+  function powerRefusal(confirmed, byAutomation = powerByAutomation) {
     const c = getConfig();
-    if (!powerByAutomation && c?.shutdown?.whenDone !== true) {
+    if (!byAutomation && c?.shutdown?.whenDone !== true) {
       return 'Turning the PC off when the Architect finishes is off in Settings.';
     }
     if (!confirmed) return 'The countdown has to be confirmed before the PC is turned off.';
@@ -200,6 +205,8 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
 
   function startPowerCountdown() {
     powerGrace = 0;
+    // Who armed it, remembered across clearPower() at the final tick.
+    const automated = powerByAutomation;
     let left = POWER_COUNTDOWN_SEC;
     notify?.({ kind: 'shutdown-warning', seconds: left });
     powerTick = setInterval(() => {
@@ -216,7 +223,10 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
         return;
       }
       clearPower();
-      const refused = powerRefusal(true);
+      // `clearPower` resets the automation flag, so the answer is carried across
+      // the disarm: the countdown was armed by Auto-Shutdown, and that is what
+      // authorises the last second.
+      const refused = powerRefusal(true, automated);
       if (refused) {
         app.warn(`timed shutdown did not run: ${refused}`);
         notify?.({ kind: 'shutdown-cancelled', reason: refused });
