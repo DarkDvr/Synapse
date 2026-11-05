@@ -188,7 +188,9 @@ export function createLoopDetector({ afterMs = LOOP_AFTER_MS } = {}) {
 // the model to start over.
 const STALL_NUDGE =
   'You were interrupted because nothing had changed in your session for a long time. ' +
-  'Continue from exactly where you left off; do not start over and do not redo work that is already done.';
+  'Continue from exactly where you left off; do not start over and do not redo work that is already done. ' +
+  'If you were running a long command, call lease next time before you start it, with your estimate in ' +
+  'minutes, so Synapse knows to wait.';
 // Said when the thinking has been one phrase over and over. It names the fault so
 // the model does not read the interrupt as "try again from the top".
 const LOOP_NUDGE =
@@ -1869,7 +1871,9 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
             try { await engine.interrupt(worker.id); } catch { /* already gone */ }
             if (rungResumes >= settings.resumeMax) {
               outcome = 'timeout';
-              turnError = `nothing happened for ${Math.round(stallSec / 60)} minutes`;
+              turnError =
+                `nothing happened for ${Math.round(stallSec / 60)} minutes; if it was a long command, ` +
+                `it should have called lease before starting it`;
               log.warn(`worker ${request.task} (${role}) stalled ${rungResumes + 1} times; reporting a timeout`);
               alert({ dir, role, message: turnError, final: true });
               break;
