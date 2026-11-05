@@ -6166,9 +6166,22 @@ function syncAskCustoms(target) {
   if (pick?.checked) text?.focus();
 }
 
+// One answer per question, however the click arrives.
+//
+// The ask panel is *moved into the transcript* while a question is up (mountAskPost
+// does that so the question is the first thing read), so a click on Submit bubbles
+// through two handlers — the panel's own and the transcript's — and both called
+// this. Two POSTs went out: the first answered, the second came back "409 Form
+// already settled", and the operator got an error toast above a success toast for
+// one click (measured 6 Nov). The guard is the fix; the 409 is still handled, for
+// the case where another window answered first.
+const replyingForms = new Set();
+
 async function replyForm(formId) {
+  if (replyingForms.has(formId)) return;
   const form = currentForm();
   if (!form || form.id !== formId) return;
+  replyingForms.add(formId);
   // The form's own session, not the open one: a worker's question is answered
   // in the session that asked it.
   const sessionId = form.sessionId || state.sessionId;
@@ -6198,8 +6211,22 @@ async function replyForm(formId) {
       toast('That Question Is Gone', 'The chat was restarted and the engine cancelled it. Message it to carry on.');
       return;
     }
+    // The question was settled by someone else — another window, or the
+    // Auto-Answer countdown — between this page drawing it and the click. The
+    // answer did not apply, but the panel must not stay up with a dead button.
+    if (/already settled/i.test(String(err.message || ''))) {
+      state.forms = state.forms.filter((f) => f.id !== formId);
+      renderAskPanel();
+      renderTree();
+      renderComposer();
+      renderTranscript();
+      toast('That Question Was Already Answered', 'It was settled a moment ago — here or in another window.');
+      return;
+    }
     toast('Could Not Send The Answer', err.message);
     refreshPending();
+  } finally {
+    replyingForms.delete(formId);
   }
 }
 
@@ -9928,6 +9955,10 @@ document.addEventListener('keydown', (e) => {
   }
 
   $('transcript').addEventListener('click', (e) => {
+    // The ask panel is *inside* the transcript while a question is up, and it has
+    // its own handler above: letting the click through here sent the answer twice
+    // (6 Nov). The guard in replyForm is the belt to this brace.
+    if (e.target.closest('.ask-panel')) return;
     const formBtn = e.target.closest('[data-form-reply]');
     if (formBtn) { replyForm(formBtn.dataset.formReply); return; }
     if (e.target.closest('[data-error]')) return; // the error button is not a toggle

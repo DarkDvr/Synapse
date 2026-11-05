@@ -84,3 +84,16 @@ test('the call id travels with the lease', () => {
   desk.take({ dir: A, callId: 'call_a' });
   assert.equal(desk.holder().callId, 'call_a');
 });
+test('the lease ends when the call does, whoever asked for it', async () => {
+  // Measured 6 Nov: a launch in a Single-mode chat held the badge for two and a
+  // half minutes. The per-call release lived only in the run loop, and that turn
+  // had no run — so the lease watches the transcript itself.
+  const parts = [{ type: 'tool', id: 'call_a', name: 'shell', status: 'running' }];
+  const desk = createDesk({ getMessages: async () => [{ type: 'assistant', parts }] });
+  desk.take({ dir: A, sessionId: 'ses_x', callId: 'call_a' });
+  await new Promise((r) => setTimeout(r, 1200));
+  assert.equal(desk.holds(A), true, 'the call is still running');
+  parts[0].status = 'completed';
+  await new Promise((r) => setTimeout(r, 1400));
+  assert.equal(desk.holds(A), false, 'the call finished, so the screen is back');
+});

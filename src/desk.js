@@ -30,8 +30,38 @@ export function screenCallOver(messages, callId) {
   return Boolean(part && part.status && part.status !== 'running');
 }
 
-export function createDesk({ log = null, notify = null } = {}) {
-  let held = null; // { dir, key, role, task, sessionId, at }
+export function createDesk({ log = null, notify = null, getMessages = null } = {}) {
+  let held = null; // { dir, key, role, task, sessionId, callId, at }
+  // The lease is watched, not assumed: whoever asked may be a worker in a run or
+  // the Architect's own turn, and only the transcript knows when the call is over.
+  // Measured 6 Nov: a launch in a Single-mode chat held the badge for two and a
+  // half minutes, because the per-call release only existed in the run loop.
+  let watcher = 0;
+
+  function stopWatching() {
+    if (watcher) clearInterval(watcher);
+    watcher = 0;
+  }
+
+  function watch(lease) {
+    stopWatching();
+    if (!getMessages || !lease?.sessionId || !lease?.callId) return;
+    let ticks = 0;
+    watcher = setInterval(async () => {
+      if (!held || held !== lease || (ticks += 1) > 1800) {
+        stopWatching();
+        return;
+      }
+      let messages = null;
+      try {
+        messages = await getMessages(lease.sessionId);
+      } catch {
+        return; // the engine is restarting; the next tick decides
+      }
+      if (screenCallOver(messages, lease.callId)) release('the call finished with the screen', lease.dir);
+    }, 1000);
+    watcher.unref?.();
+  }
 
   const announce = (type, extra = {}) => {
     notify?.({
@@ -61,6 +91,7 @@ export function createDesk({ log = null, notify = null } = {}) {
     }
     const already = Boolean(held);
     held = { dir, key, role, task, sessionId, callId: callId || held?.callId || null, at: held?.at || Date.now() };
+    watch(held);
     if (!already) {
       log?.info(`the screen was given to ${task || role || 'a worker'} (${dir})`);
       announce('desk.taken');
@@ -73,6 +104,7 @@ export function createDesk({ log = null, notify = null } = {}) {
   function release(why = '', onlyDir = null) {
     if (!held) return { ok: false, released: false };
     if (onlyDir && held.key !== norm(onlyDir)) return { ok: false, released: false };
+    stopWatching();
     const was = held;
     held = null;
     log?.info(`the screen was released${why ? `: ${why}` : ''} (${was.dir})`);

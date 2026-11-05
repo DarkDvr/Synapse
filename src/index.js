@@ -273,6 +273,9 @@ async function main() {
   const desk = createDesk({
     log: logger.channel('app'),
     notify: (ev) => http?.broadcast({ ...ev, ts: Date.now() }),
+    // The lease ends when the call that took it does, and only the transcript
+    // knows that — the asker may be a worker in a run or the Architect's own turn.
+    getMessages: (id) => engine.getMessages(id),
   });
   const permissionGate = createPermissionGate({
     engine,
