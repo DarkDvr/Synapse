@@ -418,7 +418,7 @@
     "retryCapSec": 300,
     "loopGuard": false,
     "loopLimit": 3,
-    "maxTurns": 1,
+    "maxTurns": 80,
     "leaseGraceSec": 300,
     "ladder": [
       "coder-1",
