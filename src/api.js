@@ -2042,6 +2042,15 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
       // step boundary: otherwise the cut turn looks like a failed wake and the loop
       // sends the report again.
       if (runs?.stopWake?.(directory)) app.info('graceful stop: the Architect report loop was stopped too');
+      // Stop means stop for the project, not only for the turn on screen. A cut
+      // Architect turn ends with no delegation, and the plan reminder
+      // (`remindSkippedWork`) wakes it again the moment it does — measured 5 Nov:
+      // Stop at the report line, the report loop died as it should, and a fresh
+      // turn started two seconds later from the reminder and marked the task done.
+      // The hold is what keeps every harness wake quiet until the operator speaks;
+      // their next message clears it. `interrupt()` has always held; this path did
+      // not, which is why the gentle Stop looked like it did not stick.
+      runs?.hold?.(directory);
       // No note to the model: watch for the next assistant message, which is the
       // step boundary, and cut there. If the turn ends first, the idle marker is
       // the boundary and nothing needs cutting.
