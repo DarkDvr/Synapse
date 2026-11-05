@@ -263,6 +263,9 @@ export function analyzeCommand(command, cwd, { home = os.homedir() } = {}) {
         skip = /replace$/i.test(word) ? 2 : 1;
         continue;
       }
+      // A cmd-style switch (/c, -k) is a letter after a slash, not a path: it
+      // resolved to F:/c and made cmd /c dir look like an outside write.
+      if (/^[-/][A-Za-z]$/.test(word)) continue;
       const candidate = word.includes('=') ? word.slice(word.indexOf('=') + 1) : word;
       if (!looksLikePath(candidate)) continue;
       const target = resolvePath(candidate, dir, { home });
@@ -505,6 +508,30 @@ function decideShell(resources, ctx) {
   };
   const toolParts = new Set(segments.filter((part) => invokesShippedScript(part.words)));
   const runsShippedTool = toolParts.size > 0;
+  // A program named in a shipped tool's arguments is *run*, not written:
+  // `-Exe C:\Windows\System32\cmd.exe` launches cmd. Judging that as a change to
+  // Windows refused the operator's own skill with "PROHIBITED: Windows is on the
+  // protected list" (6 Nov). Only statements that run a shipped script get this,
+  // and only program extensions — a path the tool is told to write to
+  // (`-Out …\evil.png`) is still judged as the write it is.
+  const PROGRAM_EXT = /\.(?:exe|com|bat|cmd|ps1|msi)$/i;
+  // The program a statement runs — the head word, or the word after PowerShell's
+  // call operator. & "C:\Windows\System32\cmd.exe" /c dir is execution too.
+  const headProgram = (part) => {
+    const words = part.words || [];
+    let at = 0;
+    while (at < words.length && (words[at] === '&' || words[at] === '.')) at += 1;
+    const word = words[at];
+    if (!word || /^[-/]/.test(word)) return null;
+    const target = resolvePath(word, ctx.cwd, { home: ctx.home });
+    return target && !target.unknown && PROGRAM_EXT.test(target.path) ? target.path : null;
+  };
+  // The harness keeps its stricter rule: only a shipped tool under skills/ may run,
+  // so & "…\src\build.ps1" is still the app changing itself. Everything else may
+  // be run by its own path — running a program is not writing to it.
+  const programInTool = (p, part) =>
+    PROGRAM_EXT.test(String(p || '')) &&
+    (toolParts.has(part) || (p === headProgram(part) && zoneOf(p, ctx) !== 'harness'));
   // PROHIBITED: a statement that is not read-only may not name a protected path,
   // and neither may a redirect. Running a shipped script is the exception — it is
   // execution, not a change — so the script words that statement names are not
@@ -512,7 +539,7 @@ function decideShell(resources, ctx) {
   const toolPath = (p, part) => toolParts.has(part) && inside(p, skillsRoot);
   const guardedWrite = segments
     .flatMap((part) => [
-      ...(part.readsOnly ? [] : part.paths.filter((p) => !toolPath(p, part))),
+      ...(part.readsOnly ? [] : part.paths.filter((p) => !toolPath(p, part) && !programInTool(p, part))),
       ...part.redirects,
     ])
     .find((p) => prohibitedWrite(p, ctx));
@@ -562,7 +589,7 @@ function decideShell(resources, ctx) {
     : [{ paths: info.paths, redirects: info.redirects, readsOnly: info.readsOnly, verbRead: info.readsOnly }];
   const outsideWrites = [];
   for (const part of parts) {
-    const outsidePartPaths = part.paths.filter((p) => zoneOf(p, ctx) === 'outside');
+    const outsidePartPaths = part.paths.filter((p) => zoneOf(p, ctx) === 'outside' && !programInTool(p, part));
     const outsidePartRedirects = part.redirects.filter((p) => zoneOf(p, ctx) === 'outside');
     // A write with no explicit path runs in the statement's directory: `del x`
     // after `cd D:\projects` is an outside write, though it names nothing.

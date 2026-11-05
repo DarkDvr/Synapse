@@ -3,7 +3,7 @@
     "host": "127.0.0.1",
     "port": 8700,
     "openBrowser": false,
-    "remote": true
+    "remote": false
   },
   "engine": {
     "type": "opencode",
@@ -317,8 +317,8 @@
       "focus": "app"
     },
     "architect": {
-      "ref": "opencode-go/deepseek-v4.1-flash",
-      "variant": "max",
+      "ref": "polystrata/tiel-coder-35b-a3b-Q5_K_XL-200k",
+      "variant": "medium",
       "skills": [
         "app-check",
         "find-skills",

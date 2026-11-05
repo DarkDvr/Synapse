@@ -481,3 +481,30 @@ test('a refusal about the screen says what it means', () => {
   assert.match(said, /did not give you their screen/);
   assert.match(said, /Do not try another command/);
 });
+// A shipped tool launches Windows programs — `-Exe C:\Windows\System32\cmd.exe` —
+// and naming a program is execution, not a change. Judging it as a write refused
+// the operator's own skill with "PROHIBITED: Windows is on the protected list"
+// (6 Nov), which is the same false positive as the `&` form two days before.
+test('a program a shipped tool runs is not a write into Windows', () => {
+  const windows = [
+    { path: HARNESS, label: 'Synapse', write: false, read: true },
+    { path: 'C:/Windows', label: 'Windows', write: false, read: true },
+  ];
+  const launch =
+    '& "F:\\dev\\Synapse\\skills\\app-check\\bin\\window.ps1" -Action launch -Exe C:\\Windows\\System32\\cmd.exe -WaitMs 8000';
+  // Without a lease it is the screen question, not PROHIBITED.
+  const asked = shell(launch, { protection: windows });
+  assert.equal(asked.effect, 'ask');
+  assert.equal(asked.scope, 'desk');
+  // With the lease it is the toolbox working.
+  assert.equal(shell(launch, { protection: windows, deskHeld: true }).effect, 'allow');
+  // Writing into Windows is still refused, whoever does it.
+  assert.equal(
+    shell('& "F:\\dev\\Synapse\\skills\\app-check\\bin\\window.ps1" -Action shot -Out C:\\Windows\\evil.png', { protection: windows }).effect,
+    'deny',
+  );
+  // And so is deleting a Windows binary.
+  assert.equal(shell('Remove-Item C:\\Windows\\System32\\cmd.exe', { protection: windows }).effect, 'deny');
+  // A cmd-style switch is a switch, not a path: `/c` used to resolve to `F:/c`.
+  assert.equal(shell('& "C:\\Windows\\System32\\cmd.exe" /c dir', { protection: windows }).effect, 'allow');
+});

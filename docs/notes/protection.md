@@ -102,6 +102,12 @@ lease (`src/desk.js`) rather than a rule.
   when it was the work that let go rather than the operator.
 - Headless work is untouched: `skills/visual-review` renders in `--headless=new`,
   so it never asks and never takes anything.
+- **A program is run, not written.** A shipped tool that launches Windows software
+  (`-Exe C:\Windows\System32\cmd.exe`) names a program, and judging that as a
+  change to Windows refused the operator's own skill (6 Nov). Writing into a
+  protected folder (`-Out C:\Windows\…`) and deleting a binary there are still
+  refused, and a cmd-style switch (`/c`) is a switch, not a path — it used to
+  resolve to `F:/c` and make `cmd /c dir` look like an outside write.
 
 What this does not cover: a project's own test that launches a GUI app directly
 (`& .\bin\app.exe`) names no window call, so the gate cannot see it. It is a fence
