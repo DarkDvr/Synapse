@@ -685,7 +685,7 @@ export function windowAction(state, ctx, room) {
   return ctx < room * 0.7 ? 'arm' : 'none';
 }
 
-export function createRunner({ engine, logger, getConfig, guard, notify, modelCache, onModelWindow }) {
+export function createRunner({ engine, logger, getConfig, guard, notify, modelCache, onModelWindow, desk }) {
   const log = logger.channel('tools');
   // The same milestones into the app channel, which is mirrored to the console:
   // a bat file leaves a window open all day, and "what is it doing" should be
@@ -2344,6 +2344,15 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     // A stop puts the task back in todo: nothing is running, and a task left
     // `doing` reports "1 running" on the plan for the rest of the day.
     if (outcome === 'stopped' && stoppedBy === 'operator') setTaskStatus(dir, task.id, 'todo');
+
+    // The operator's screen is theirs again the moment the work that asked for it
+    // ends. A lease that outlived its run would leave the badge up, and the next
+    // run's first screenshot would not ask (src/desk.js).
+    try {
+      desk?.release?.('the run ended', dir);
+    } catch (err) {
+      log.warn(`could not release the screen after ${request.task}: ${err.message}`);
+    }
 
     appendRun(dir, {
       kind: 'result',

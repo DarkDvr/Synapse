@@ -3287,3 +3287,36 @@ body.is-disconnected .app-shell { filter: blur(2px) brightness(0.45); pointer-ev
 }
 .disconnect-card h2 { margin: 0 0 10px; font-size: 22px; color: #fff; }
 .disconnect-card p { margin: 0 0 20px; color: #9aa2ad; line-height: 1.5; }
+
+/* The screen lease: a worker has the operator's mouse, keyboard and focus because
+   they allowed it. Violet is the surface, white the text; the dot is the same
+   violet as the fills, and Take Back is a quiet button — it takes the screen, not
+   the work, so it is not red. */
+.desk-badge {
+  position: fixed; top: 18px; left: 50%; transform: translateX(-50%); z-index: 95;
+  display: flex; align-items: center; gap: 10px;
+  max-width: min(520px, calc(100vw - 36px)); padding: 8px 9px 8px 12px;
+  background: #1a1c21; border: 1px solid var(--violet); border-radius: 11px;
+  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.5);
+}
+.desk-badge[hidden] { display: none; }
+.desk-badge-mark {
+  width: 8px; height: 8px; flex: none; border-radius: 50%;
+  background: var(--violet-bright); box-shadow: 0 0 0 4px rgba(98, 91, 246, 0.18);
+  animation: desk-dot 1.6s ease-in-out infinite;
+}
+.desk-badge-text { min-width: 0; }
+.desk-badge-text strong {
+  display: block; font-size: 11.5px; font-weight: 700; color: #fff; letter-spacing: 0.02em;
+}
+.desk-badge-text span {
+  display: block; margin-top: 1px; font-size: 10.5px; line-height: 1.4; color: #c7c9cf;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.desk-badge-take {
+  flex: none; margin-left: 4px; padding: 5px 10px; border-radius: 7px; cursor: pointer;
+  background: var(--violet); border: 1px solid var(--violet-bright); color: #fff;
+  font: inherit; font-size: 10.5px; font-weight: 700; letter-spacing: 0.02em;
+}
+.desk-badge-take:hover { background: var(--primary-dark); }
+@keyframes desk-dot { 50% { opacity: 0.45; } }

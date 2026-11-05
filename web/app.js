@@ -895,6 +895,40 @@ async function toggleRemote() {
   }
 }
 
+/**
+ * The screen lease badge: who has the operator's mouse, keyboard and focus.
+ *
+ * Shown from the server's answer, not from an event, so a page opened mid-lease
+ * or a stream that dropped still tells the truth. Take Back is the one control:
+ * the work keeps running, it just cannot take the screen again without asking.
+ */
+function renderDesk() {
+  const badge = $('deskBadge');
+  if (!badge) return;
+  const desk = state.desk;
+  if (!desk) {
+    badge.hidden = true;
+    return;
+  }
+  const who = [desk.role ? roleLabel(desk.role) : '', desk.task || ''].filter(Boolean).join(' · ');
+  const project = String(desk.dir || '').split(/[\\/]/).filter(Boolean).pop() || '';
+  $('deskBadgeTitle').textContent = 'Screen in use';
+  $('deskBadgeWho').textContent = `${who || 'A worker'} may use your mouse and keyboard${project ? ` (${project})` : ''}.`;
+  badge.hidden = false;
+}
+
+async function takeBackScreen() {
+  try {
+    await api('POST', '/api/desk/release', { why: 'the operator took it back' });
+  } catch (err) {
+    toast('Could Not Take the Screen Back', err.message);
+    return;
+  }
+  state.desk = null;
+  renderDesk();
+  toast('Screen Taken Back', 'The AI cannot take your mouse or keyboard again without asking.');
+}
+
 function renderStatus() {
   const engine = state.status?.engine || {};
   const ready = Boolean(engine.ready);
@@ -3712,6 +3746,21 @@ async function syncRuns() {
   renderComposer();
 }
 
+/**
+ * The screen lease, from the server. The stream carries the changes; this is what
+ * a page opened mid-lease, or a reconnect, starts from — a lease is not something
+ * the page may lose and keep painting the wrong answer.
+ */
+async function loadDesk() {
+  try {
+    const out = await api('GET', '/api/desk');
+    state.desk = out?.desk || null;
+  } catch {
+    state.desk = null;
+  }
+  renderDesk();
+}
+
 /** One delegated run, live: started, its newest tool call, then finished. */
 function handleRunEvent(ev) {
   const key = dirKey(ev.dir);
@@ -5347,6 +5396,9 @@ function jumpMessage(dir) {
  *  so the sentence never claims the operator is the one outside their project. */
 function permissionLead(p) {
   const actor = p.role ? roleLabel(p.role) : 'The Architect';
+  // The screen is not a file, and the sentence has to say so: this card is the
+  // "may I use your PC" question, and it is the only one that takes the mouse.
+  if (p.scope === 'desk') return `${actor} wants to use your screen.`;
   const action = String(p.action || '').toLowerCase();
   const verb =
     action === 'read'
@@ -5396,10 +5448,14 @@ function renderPermissions() {
           )}</pre></details>`
         : '';
       const due = Number(p.autoPermissionsAt) || null;
-      return `<div class="perm-card">
+      // The screen is a different question from a file: it is the operator's mouse,
+      // keyboard and focus, and the answer lasts for the run rather than for one
+      // command — so it has its own two buttons and no "Always Allow".
+      const screen = p.scope === 'desk';
+      return `<div class="perm-card${screen ? ' is-screen' : ''}">
         <div class="perm-head"><span class="status-dot warn" role="img" aria-label="waiting"></span><span class="perm-head-text">${esc(
           actor,
-        )} needs your permission</span>${
+        )} needs your ${screen ? 'screen' : 'permission'}</span>${
           // The switch is on for the asking project: count down to the moment it is
           // allowed, in the head's right corner like the question's own note (3 Nov).
           due ? `<span class="perm-head-note" data-perm-due="${due}">${esc(permissionNote(due, serverNow()))}</span>` : ''
@@ -5411,14 +5467,22 @@ function renderPermissions() {
         <div class="perm-actions">
           <button class="btn btn-allow btn-sm" data-perm="once" data-perm-id="${esc(
             p.requestId,
-          )}" title="Do it this time only.">Allow Once</button>
-          <button class="btn btn-warn btn-sm" data-perm="always" data-perm-id="${esc(
-            p.requestId,
           )}" title="${
-            p.action === 'shell' || p.action === 'bash'
-              ? 'Do it, and stop asking for this command and the files it names in this chat — extra arguments do not ask again.'
-              : 'Do it, and stop asking for this exact request in this chat.'
-          }">Always Allow</button>
+            screen
+              ? 'Let it use your mouse, keyboard and focus for the rest of this run. You can take the screen back from the badge at any time.'
+              : 'Do it this time only.'
+          }">${screen ? 'Allow Screen' : 'Allow Once'}</button>
+          ${
+            screen
+              ? ''
+              : `<button class="btn btn-warn btn-sm" data-perm="always" data-perm-id="${esc(
+                  p.requestId,
+                )}" title="${
+                  p.action === 'shell' || p.action === 'bash'
+                    ? 'Do it, and stop asking for this command and the files it names in this chat — extra arguments do not ask again.'
+                    : 'Do it, and stop asking for this exact request in this chat.'
+                }">Always Allow</button>`
+          }
           <button class="btn btn-warn btn-sm" data-perm="reject" data-perm-id="${esc(
             p.requestId,
           )}" title="Say no. The role is told and carries on.">Reject</button>
@@ -7604,6 +7668,7 @@ function connectStream() {
       // A reconnect is exactly when a `run.finished` was missed: the stream that
       // would have carried it died first. Ask what is actually running.
       syncRuns().catch(() => {});
+      loadDesk().catch(() => {});
       return;
     }
 
@@ -7682,6 +7747,18 @@ function connectStream() {
     // when the asker was a hidden worker session.
     if (ev.kind === 'prohibition') {
       openProhibition(ev.entry);
+      return;
+    }
+
+    // The screen lease, from the server: taken, or given back. The badge is the
+    // answer to "is the AI using my PC right now", so it is drawn from the lease
+    // and never from a guess.
+    if (ev.kind === 'desk') {
+      state.desk = ev.desk || null;
+      renderDesk();
+      if (ev.type === 'desk.released') {
+        toast('Screen Released', 'The AI is not using your mouse or keyboard any more.');
+      }
       return;
     }
 
@@ -9667,6 +9744,7 @@ function wire() {
     if (chip && !chip.contains(e.relatedTarget)) hideAttachPreview();
   });
   $('stopBtn').addEventListener('click', interrupt);
+  $('deskTakeBack')?.addEventListener('click', takeBackScreen);
   $('modeToggle').addEventListener('click', switchMode);
   $('compactChip').addEventListener('click', compactClick);
   // The compact post is a <details>; its open state is kept like a reasoning
@@ -10298,6 +10376,7 @@ async function boot() {
   await restoreOpenSession();
   await checkSkills();
   await loadRuns();
+  await loadDesk();
   renderTranscript();
   connectStream();
   refreshPending();

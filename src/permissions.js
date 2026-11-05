@@ -329,6 +329,13 @@ export function refusalNote({ role, scope, reason } = {}) {
       'Stop and say in your report what you were trying to change and why.'
     ) + said;
   }
+  if (scope === 'desk') {
+    return (
+      'The operator did not give you their screen. That is their machine, their mouse and their keyboard, and ' +
+      'they are using it. Do not try another command, another window or another tool to reach it. Work without ' +
+      'the screen, or say in your report what you needed it for and why.'
+    ) + said;
+  }
   if (scope === 'harness' || scope === 'secret') {
     return (
       'The harness refused this permanently: Synapse\'s own files and saved-password folders are never ' +
@@ -387,6 +394,30 @@ function decideWrite(resources, ctx) {
   return allow('This is in the project folder.', false, 'project');
 }
 
+// The things that take the operator's screen: the mouse, the keyboard and the
+// focus of whatever they were doing. A window brought to the front is the usual
+// one (app-check does it only when PrintWindow is refused), and input injection is
+// the other.
+const SCREEN_APIS = /\b(?:setforegroundwindow|sendinput|sendkeys|mouse_event|setcursorpos|keybd_event|appactivate)\b/i;
+const WINDOW_TOOL = /app-check[\\/]+bin[\\/]+window\.ps1/i;
+
+/**
+ * Would this command take the operator's screen?
+ *
+ * Not a permission question about a file: the machine is the operator's, and a
+ * model that yanks a window in front of them mid-sentence has taken something that
+ * was not the harness's to give. The gate asks once per run instead (src/desk.js).
+ */
+export function screenTaking(command) {
+  const text = String(command || '');
+  if (!text) return false;
+  if (SCREEN_APIS.test(text)) return true;
+  // The shipped window tool: every action but `query` may put a window in front,
+  // because the screenshot falls back to the screen when PrintWindow is refused.
+  if (WINDOW_TOOL.test(text) && !/-\s*action\s+"?query"?/i.test(text)) return true;
+  return false;
+}
+
 function decideShell(resources, ctx) {
   // A shell command may arrive as one string or as its lines, one resource per
   // line. Joining with a space merged them into a single statement: measured
@@ -398,6 +429,16 @@ function decideShell(resources, ctx) {
     .join('\n')
     .trim();
   if (!command) return ask('The harness got an empty command.', true, 'unknown');
+  // The screen first: it is the one thing on this machine that is the operator's
+  // while they are using it, and a command that takes it must be their decision,
+  // not a policy default. `deskHeld` is the lease they gave for this run.
+  if (screenTaking(command) && !ctx.deskHeld) {
+    return ask(
+      'This would take your screen: the mouse, the keyboard and the focus of whatever you are doing.',
+      true,
+      'desk',
+    );
+  }
   const info = analyzeCommand(command, ctx.cwd, { home: ctx.home });
   if (info.unknown) return ask('The harness cannot tell where this command lands.', true, 'unknown');
 
@@ -639,9 +680,9 @@ export function grantKey({ action, resources, cwd, projectRoot, harnessRoot, hom
   return [`${head}|${mode}|${paths.join('|')}`];
 }
 
-export function decide({ action, resources, cwd, projectRoot, harnessRoot, scratchRoot, home = os.homedir(), protection = [] }) {
+export function decide({ action, resources, cwd, projectRoot, harnessRoot, scratchRoot, home = os.homedir(), protection = [], deskHeld = false }) {
   const a = String(action || '').toLowerCase();
-  const ctx = { cwd, projectRoot, harnessRoot, scratchRoot, home, protection };
+  const ctx = { cwd, projectRoot, harnessRoot, scratchRoot, home, protection, deskHeld };
   if (WRITE_ACTIONS.has(a)) return decideWrite(resources, ctx);
   if (SHELL_ACTIONS.has(a)) return decideShell(resources, ctx);
   if (EXECUTE_ACTIONS.has(a)) return ask('This is code the harness cannot inspect.', false, 'unknown');

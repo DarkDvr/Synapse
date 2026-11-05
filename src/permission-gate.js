@@ -28,6 +28,9 @@ export function createPermissionGate({
   // The enabled PROHIBITED list, read per request so a Settings change applies to
   // the next tool call without a restart.
   getProtection = null,
+  // The screen lease (src/desk.js). A command that would take the operator's mouse,
+  // keyboard or focus asks until this project holds it.
+  desk = null,
   // How long an unanswered card waits before it is allowed once. Tests pass a
   // few milliseconds; the product reads `fullAuto.timeoutSec` (20 seconds by
   // default). `getTimeoutMs` wins when present so a Settings change applies to
@@ -335,6 +338,7 @@ export function createPermissionGate({
     for (const p of pendingAsks.values()) {
       const sameProject = key && dirKey(p.info?.directory) === key;
       if (p.request.sessionId !== sessionId && !sameProject) continue;
+      if (p.deskAsk) continue;
       if (on) arm(p);
       else {
         // Off, or an unrelated save: the card is the operator's, so no countdown.
@@ -357,12 +361,22 @@ export function createPermissionGate({
    *  "Full auto" allowed permission cards, so it is Auto-Permissions. */
   const setFullAuto = (sessionId, on, directory = '') => setAutoPermissions(sessionId, on, directory);
 
-  /** The operator (or another view) answered a card: the timer must not fire. */
-  function answered(requestId) {
+  /** The operator (or another view) answered a card: the timer must not fire.
+   *  A desk card is also where the screen is handed over: allowing it *is* the
+   *  lease, and nothing else takes one. */
+  function answered(requestId, decision = '') {
     const p = pendingAsks.get(requestId);
     if (!p) return false;
     if (p.timer) clearTimeout(p.timer);
     pendingAsks.delete(requestId);
+    if (p.deskAsk && decision && decision !== 'reject') {
+      desk?.take?.({
+        dir: p.info?.directory,
+        role: p.info?.role,
+        task: p.info?.task,
+        sessionId: p.request?.sessionId,
+      });
+    }
     return true;
   }
 
@@ -371,6 +385,8 @@ export function createPermissionGate({
   function retime() {
     const next = waitMs();
     for (const p of pendingAsks.values()) {
+      // A desk card has no clock: it waits for the operator however long they take.
+      if (p.deskAsk) continue;
       // An unrelated Settings save must not give a card that has already waited
       // another full wait; only a changed wait moves it.
       if (p.wait === next && (p.timer || p.queued)) continue;
@@ -404,7 +420,11 @@ export function createPermissionGate({
       scratchRoot,
       home,
       protection: getProtection?.() || [],
+      // The screen is the operator's, not the policy's: a command that would take
+      // it asks until they give this run a desk lease (src/desk.js).
+      deskHeld: Boolean(desk?.holds?.(info.directory)),
     });
+    const deskAsk = verdict.scope === 'desk';
     const who = [info.role, info.task].filter(Boolean).join(' ');
     const what = shown(request);
     const isPath = /^(edit|write|read|patch|create)$/i.test(request.action);
@@ -426,6 +446,7 @@ export function createPermissionGate({
       at: Date.now(),
     };
     const forgiven =
+      !deskAsk &&
       verdict.effect === 'ask' &&
       wasRemembered(
         request.sessionId,
@@ -444,9 +465,12 @@ export function createPermissionGate({
       // request on record to become one.
       onDecision?.({ ...entry, effect: 'ask', asked: true, decided: false, decidedBy: null });
       log.info(`permission asked${who ? ` (${who})` : ''}: ${request.action || 'tool call'} ${what} — ${verdict.reason}`);
-      const pending = { request, info, entry, timer: null, queued: false };
+      const pending = { request, info, entry, timer: null, queued: false, deskAsk };
       pendingAsks.set(request.requestId, pending);
-      arm(pending);
+      // The screen is never answered for them: Auto-Permissions, the timeout and a
+      // remembered "Always Allow" all stop here. The operator's own click is the
+      // only way a worker gets their mouse and keyboard.
+      if (!deskAsk) arm(pending);
       return verdict;
     }
     const decision = verdict.effect === 'deny' ? 'reject' : 'once';

@@ -287,7 +287,7 @@
   "roles": {
     "designer": {
       "ref": "opencode-go/deepseek-v4.1-flash",
-      "variant": "max",
+      "variant": "high",
       "skills": [
         "aesthetic-foundations",
         "app-check",
@@ -304,7 +304,7 @@
     },
     "qc": {
       "ref": "opencode-go/deepseek-v4.1-flash",
-      "variant": "high",
+      "variant": "max",
       "skills": [
         "web-guidelines",
         "aesthetic-foundations",
@@ -337,7 +337,7 @@
       ]
     },
     "coder-2": {
-      "ref": "opencode-go/deepseek-v4.1-flash",
+      "ref": "polystrata/tiel-coder-35b-a3b-Q5_K_XL-200k",
       "variant": "high",
       "skills": [
         "code-craft",

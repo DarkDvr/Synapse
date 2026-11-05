@@ -161,7 +161,7 @@ export function normalizeAttachments(list) {
   return out;
 }
 
-export function createApi({ getConfig, applyConfig, power, engine, logger, getBootError, projects, toolStats, probe, modelCache, inspectModel: inspectRef, probeDir, runs, engineUpdate, synapseUpdate, restart, stopSelf, pcShutdown, notify, permissionLog, permissionGate, permissionMemory }) {
+export function createApi({ getConfig, applyConfig, power, engine, logger, getBootError, projects, toolStats, probe, modelCache, inspectModel: inspectRef, probeDir, runs, desk, engineUpdate, synapseUpdate, restart, stopSelf, pcShutdown, notify, permissionLog, permissionGate, permissionMemory }) {
   const app = logger.channel('app');
 
   // ── the timed shutdown's clock ──────────────────────────────────────
@@ -1974,6 +1974,13 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
           }
         })();
         if (stoppedWake) app.info('stop: the Architect report loop was stopped too');
+        // The screen goes back with the work: Stop means the operator has their
+        // machine again, whether or not the run that asked for it ever ended.
+        try {
+          desk?.release?.('the run was stopped', directory);
+        } catch (err) {
+          app.warn(`could not release the screen after a stop: ${err.message}`);
+        }
         // No run in flight (the Architect was thinking): hold the project anyway,
         // or the next turn delegates the work that was just stopped.
         if (!stoppedRun) runs?.hold?.(directory);
@@ -2081,6 +2088,19 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
       return { ok: true, stopping: true, target: 'architect' };
     },
 
+    // ── the screen ──────────────────────────────────────────
+    /** Who has the operator's screen, if anyone. Read by the page on load and
+     *  after every reconnect: a lease is not something the stream can lose. */
+    deskState: async () => ({ ...(desk?.state?.() || { desk: null }), now: Date.now() }),
+
+    /** Take the screen back. The work that asked keeps running — it just cannot
+     *  take the screen again until the operator allows it once more. */
+    releaseDesk: async (body = {}) => {
+      const why = String(body?.why || '').trim() || 'the operator took it back';
+      const out = desk?.release?.(why) || { ok: false, released: false };
+      if (out.released) app.info(`the screen was taken back by the operator (${out.held?.dir || 'unknown'})`);
+      return out;
+    },
     permission: async (sessionId, body, actor = null) => {
       requireReady();
       const wanted = body?.decision || 'once';
@@ -2109,7 +2129,7 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
       }
       // Answered here (or by another view): a pending permission-timeout must not
       // fire on a card that is already settled.
-      permissionGate?.answered?.(body?.requestId);
+      permissionGate?.answered?.(body?.requestId, decision);
       // The gate logs what the policy decided; the operator's own answer had no
       // line at all, so a card that left the screen had no record of who removed
       // it, from which page, or with which button. One line per decision, in the

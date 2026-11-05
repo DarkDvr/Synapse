@@ -13,6 +13,7 @@ import { createRunner } from './runs.js';
 import { createEngineUpdate } from './engine-update.js';
 import { createHarnessGuard } from './harness.js';
 import { createPermissionGate } from './permission-gate.js';
+import { createDesk } from './desk.js';
 import { createPermissionMemory } from './permission-memory.js';
 import { braveEntries, protectionFor } from './protection.js';
 import { createPowerKeeper } from './power.js';
@@ -266,12 +267,20 @@ async function main() {
   // "Always Allow" is the operator's decision, so it outlives the process: the
   // memory is written to data\permission-memory.json and read back at boot.
   const permissionMemory = createPermissionMemory({ file: PERMISSION_MEMORY_FILE, logger });
+  // The screen. One project at a time may use the operator's mouse, keyboard and
+  // focus, and only because they said so; the lease is what "yes" becomes, and
+  // Take Back is what ends it early (src/desk.js).
+  const desk = createDesk({
+    log: logger.channel('app'),
+    notify: (ev) => http?.broadcast({ ...ev, ts: Date.now() }),
+  });
   const permissionGate = createPermissionGate({
     engine,
     logger,
     root: ROOT,
     scratchRoot: SCRATCH_ROOT,
     memory: permissionMemory,
+    desk,
     getProtection: () => protectionFor(currentConfig),
     getTimeoutMs: () => permissionsTimeoutMs(currentConfig),
     onDecision: (entry) => {
@@ -326,6 +335,7 @@ async function main() {
     getConfig,
     guard,
     modelCache,
+    desk,
     notify: (ev) => http?.broadcast({ ...ev, ts: Date.now() }),
     // A model reloaded in its own app while we run: the measurement is used for
     // this run either way, and this keeps the config file in step so the next
@@ -695,6 +705,7 @@ async function main() {
     inspectModel,
     probeDir: PROBE_DIR,
     runs: runner,
+    desk,
     synapseUpdate,
     engineUpdate,
     // Settings > Save Changes offers a restart, so the server can hand its own

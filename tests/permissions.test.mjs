@@ -6,7 +6,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { decide, grantKey, rulesFor, zoneOf, inside, isSecret, analyzeCommand, refusalNote } from '../src/permissions.js';
+import { decide, grantKey, rulesFor, zoneOf, inside, isSecret, analyzeCommand, refusalNote, screenTaking } from '../src/permissions.js';
 
 const HOME = 'C:/Users/tester';
 const PROJECT = 'F:/dev/Synapse.Projects/demo';
@@ -448,4 +448,36 @@ test('a decision says where it lands, for the card to explain', () => {
   assert.equal(call('edit', 'C:/Users/tester/.ssh/known_hosts').scope, 'secret');
   assert.equal(call('read', '.env').scope, 'project');
   assert.equal(call('read', 'C:/Windows/hosts').scope, 'outside');
+});
+
+// ── the screen ──────────────────────────────────────────────────
+// A window brought to the front takes the operator's mouse, keyboard and focus.
+// That is not a file: it is their machine, and the policy asks instead of deciding.
+test('a command that takes the screen is recognised', () => {
+  assert.equal(screenTaking('& "F:\\dev\\Synapse\\skills\\app-check\\bin\\window.ps1" -Action shot -TargetPid 1 -Out t.png'), true);
+  assert.equal(screenTaking('& "F:\\dev\\Synapse\\skills\\app-check\\bin\\window.ps1" -Action launch -Exe calc.exe'), true);
+  // Reading a window's size and title is not taking it.
+  assert.equal(screenTaking('& "F:\\dev\\Synapse\\skills\\app-check\\bin\\window.ps1" -Action query -TargetPid 1'), false);
+  assert.equal(screenTaking('Add-Type -MemberDefinition "SetForegroundWindow" -Name W'), true);
+  assert.equal(screenTaking('[System.Windows.Forms.SendKeys]::SendWait("x")'), true);
+  // Ordinary work is not the screen.
+  assert.equal(screenTaking('Get-Content notes.md'), false);
+  assert.equal(screenTaking('node F:\\dev\\Synapse\\skills\\visual-review\\bin\\shot.mjs page.html'), false);
+});
+
+test('the screen asks until the operator has given it for this run', () => {
+  const shot = '& "F:\\dev\\Synapse\\skills\\app-check\\bin\\window.ps1" -Action shot -TargetPid 1 -Out t.png';
+  const asked = shell(shot);
+  assert.equal(asked.effect, 'ask');
+  assert.equal(asked.scope, 'desk');
+  assert.match(asked.reason, /take your screen/);
+  // The lease is the answer: with it, the same command is the toolbox working.
+  const allowed = shell(shot, { deskHeld: true });
+  assert.equal(allowed.effect, 'allow');
+});
+
+test('a refusal about the screen says what it means', () => {
+  const said = refusalNote({ role: 'coder-1', scope: 'desk' });
+  assert.match(said, /did not give you their screen/);
+  assert.match(said, /Do not try another command/);
 });

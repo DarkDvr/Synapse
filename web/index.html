@@ -24,6 +24,17 @@
     <span>The AI will finish this step, then stop. Click Stop again to stop now.</span>
   </div>
 </div>
+<!-- A worker has the operator's mouse, keyboard and focus, because they allowed
+     it. It stays on screen while the lease is held — from any project — and Take
+     Back ends it. This is the "may I use your PC" answer made visible. -->
+<div class="desk-badge" id="deskBadge" hidden role="status" aria-live="polite">
+  <span class="desk-badge-mark" aria-hidden="true"></span>
+  <div class="desk-badge-text">
+    <strong id="deskBadgeTitle">Screen in use</strong>
+    <span id="deskBadgeWho">A worker may use your mouse and keyboard.</span>
+  </div>
+  <button class="desk-badge-take" id="deskTakeBack" type="button" title="End the screen lease now">Take Back</button>
+</div>
 <div class="app-shell control-room">
 
   <!-- ── left rail ────────────────────────────────────────────────────── -->

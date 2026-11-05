@@ -310,6 +310,16 @@ export function createServer({ api, engine, logger, config, remote, onRemote }) 
     if (seg[0] === 'toolchain' && method === 'GET') {
       return sendJson(res, 200, await api.toolchain({ force: query?.get('force') === '1' }));
     }
+    // GET /api/desk — who has the operator's screen, if anyone.
+    // POST /api/desk/release — Take Back: the lease ends now, and the work that
+    // asked cannot take the screen again until it is allowed once more.
+    if (seg[0] === 'desk') {
+      if (seg.length === 1 && method === 'GET') return sendJson(res, 200, await api.deskState());
+      if (seg[1] === 'release' && method === 'POST') {
+        return sendJson(res, 200, await api.releaseDesk(await readBody(req)));
+      }
+    }
+
     // POST /api/restart — relaunch Synapse (Settings > Save Changes).
     if (seg[0] === 'restart' && method === 'POST') return sendJson(res, 200, await api.restart());
     // POST /api/shutdown — stop the server (tray > Stop Server). The app reads

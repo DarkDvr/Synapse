@@ -8,6 +8,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { createPermissionGate } from '../src/permission-gate.js';
+import { createDesk } from '../src/desk.js';
 import { ROOT } from '../src/paths.js';
 import { normalizeSession } from '../src/engines/base.js';
 
@@ -15,7 +16,7 @@ const HOME = 'C:/Users/tester';
 const PROJECT = 'F:/dev/Synapse.Projects/demo';
 const quiet = { channel: () => ({ info() {}, warn() {}, error() {} }) };
 
-function setup({ directory = PROJECT, metadata = { synapse: { role: 'coder-1', task: 'Add CSV import' } } } = {}) {
+function setup({ directory = PROJECT, metadata = { synapse: { role: 'coder-1', task: 'Add CSV import' } }, desk = null, timeoutMs = 20_000 } = {}) {
   const replies = [];
   const engine = {
     async getSession(id) {
@@ -32,6 +33,8 @@ function setup({ directory = PROJECT, metadata = { synapse: { role: 'coder-1', t
     home: HOME,
     // The shipped default: Synapse is a built-in prohibited entry.
     getProtection: () => [{ path: ROOT, label: 'Synapse', write: false, read: true }],
+    desk,
+    permissionTimeoutMs: timeoutMs,
   });
   return { gate, replies };
 }
@@ -90,6 +93,44 @@ test('a request left to the operator is not marked as answering', async () => {
   assert.equal(gate.answering('req_1'), false, 'the card is the operator’s, not the gate’s');
 });
 
+// ── the screen ──────────────────────────────────────────────────
+// The one thing the harness does that is not about files: a window brought to the
+// front takes the operator's mouse, keyboard and focus. It asks, once, and the
+// operator's own click is the only answer — no timeout, no Auto-Permissions, no
+// remembered "Always Allow" (5 Nov).
+const SHOT = '& "F:\\dev\\Synapse\\skills\\app-check\\bin\\window.ps1" -Action shot -TargetPid 111000 -Out shots\\t5.png';
+
+test('a window grab asks the operator, and Auto-Permissions does not answer it', async () => {
+  const desk = createDesk();
+  const { gate, replies } = setup({ desk, timeoutMs: 10 });
+  await gate.setAutoPermissions('ses_1', true, PROJECT);
+  const verdict = await gate.handle(event('shell', [SHOT]));
+  assert.equal(verdict.effect, 'ask');
+  assert.equal(verdict.scope, 'desk');
+  await new Promise((r) => setTimeout(r, 60));
+  assert.deepEqual(replies, [], 'the card waited for the operator past the auto-answer');
+  assert.equal(desk.holds(PROJECT), false, 'nothing is taken before the answer');
+});
+
+test('allowing the card is what hands the screen over, and then it is not asked again', async () => {
+  const desk = createDesk();
+  const { gate, replies } = setup({ desk, timeoutMs: 10 });
+  await gate.handle(event('shell', [SHOT]));
+  assert.equal(desk.holds(PROJECT), false);
+  gate.answered('req_1', 'once');
+  assert.equal(desk.holds(PROJECT), true, 'the operator said yes');
+  const second = await gate.handle(event('shell', [SHOT], { raw: { id: 'evt_2', type: 'permission.asked', data: { id: 'req_2', sessionID: 'ses_1', action: 'shell', resources: [SHOT] } } }));
+  assert.equal(second.effect, 'allow');
+  assert.deepEqual(replies.at(-1), { sessionId: 'ses_1', requestId: 'req_2', decision: 'once' });
+});
+
+test('rejecting the card takes nothing', async () => {
+  const desk = createDesk();
+  const { gate } = setup({ desk, timeoutMs: 10 });
+  await gate.handle(event('shell', [SHOT]));
+  gate.answered('req_1', 'reject');
+  assert.equal(desk.holds(PROJECT), false);
+});
 test('a write into the harness is rejected', async () => {
   const { gate, replies } = setup();
   await gate.handle(event('edit', [`${ROOT}/src/api.js`]));
