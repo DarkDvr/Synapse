@@ -326,7 +326,7 @@
       ]
     },
     "coder-1": {
-      "ref": "local/qwen3.8-27b-ud",
+      "ref": "opencode-go/deepseek-v4.1-flash",
       "variant": "high",
       "skills": [
         "code-craft",
