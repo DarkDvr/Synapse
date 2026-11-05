@@ -86,13 +86,20 @@ lease (`src/desk.js`) rather than a rule.
 - With no lease, the gate leaves the card to the operator with `scope: 'desk'`, and
   the card says "wants to use your screen" with **Allow Screen** and **Reject** —
   no "Always Allow", because the lease already covers the run.
-- The screen is never answered for them: Auto-Permissions, the timeout and a
-  remembered grant all stop at that card. The operator's click is the only way.
+- With Auto-Permissions **off** the card waits for the operator however long they
+  take: no timeout answers it. With the switch **on** for that project it is allowed
+  after the same wait as any other card — that is what makes an overnight run
+  possible — and the card is still drawn, so an operator who is awake sees it and
+  can take the screen back or reject it.
 - Allowing it takes the lease (one project at a time, machine-wide). The badge in
   the bar says who has it and offers **Take Back**, which ends it at once; the work
   keeps running and simply cannot take the screen again without asking.
-- The lease ends with the run, with Take Back, or with a stop — and every ending is
-  announced, because the operator needs to know when the machine is theirs again.
+- **The lease is about the call, not the run.** It ends when the tool call that took
+  it finishes — the runner watches the worker's transcript for that call id — so a
+  worker that clicks one button and carries on hands the machine back at once and
+  keeps working. It also ends with the run, with Take Back, or with a stop, and
+  every ending is announced: the badge clears, the chat says so, and a chime plays
+  when it was the work that let go rather than the operator.
 - Headless work is untouched: `skills/visual-review` renders in `--headless=new`,
   so it never asks and never takes anything.
 

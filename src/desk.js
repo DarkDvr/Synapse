@@ -15,6 +15,21 @@
 // the operator needs to know when their PC is theirs again.
 const norm = (dir) => String(dir || '').replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
 
+/**
+ * Has the tool call that took the screen finished?
+ *
+ * The lease is about the call, not the run: a worker that clicks one button and
+ * carries on must not keep the operator's mouse for the rest of a two-hour turn.
+ * A call that is not in the transcript yet is not over — the poll will see it.
+ */
+export function screenCallOver(messages, callId) {
+  if (!callId) return false;
+  const part = (messages || [])
+    .flatMap((message) => message?.parts || [])
+    .find((p) => p?.type === 'tool' && p.id === callId);
+  return Boolean(part && part.status && part.status !== 'running');
+}
+
 export function createDesk({ log = null, notify = null } = {}) {
   let held = null; // { dir, key, role, task, sessionId, at }
 
@@ -38,14 +53,14 @@ export function createDesk({ log = null, notify = null } = {}) {
    * Give this project the screen. Refused when another project holds it: the
    * operator can only be using one of them.
    */
-  function take({ dir, role = null, task = null, sessionId = null } = {}) {
+  function take({ dir, role = null, task = null, sessionId = null, callId = null } = {}) {
     const key = norm(dir);
     if (!key) return { ok: false, reason: 'no directory' };
     if (held && held.key !== key) {
       return { ok: false, reason: `${held.dir} already has the screen`, held: { ...held } };
     }
     const already = Boolean(held);
-    held = { dir, key, role, task, sessionId, at: held?.at || Date.now() };
+    held = { dir, key, role, task, sessionId, callId: callId || held?.callId || null, at: held?.at || Date.now() };
     if (!already) {
       log?.info(`the screen was given to ${task || role || 'a worker'} (${dir})`);
       announce('desk.taken');

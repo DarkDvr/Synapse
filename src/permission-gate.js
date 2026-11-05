@@ -290,6 +290,17 @@ export function createPermissionGate({
     }
     const wait = waitMs();
     pendingAsks.delete(p.request.requestId);
+    // A desk card that was allowed by the switch hands the screen over, exactly as
+    // the operator's own click does — and the lease still ends when the call does.
+    if (p.deskAsk) {
+      desk?.take?.({
+        dir: p.info?.directory,
+        role: p.info?.role,
+        task: p.info?.task,
+        sessionId: p.request?.sessionId,
+        callId: p.request?.toolCallId || null,
+      });
+    }
     try {
       await engine.replyPermission(p.request.sessionId, p.request.requestId, 'once');
       const where = [p.info.role, p.info.task].filter(Boolean).join(' ');
@@ -338,7 +349,6 @@ export function createPermissionGate({
     for (const p of pendingAsks.values()) {
       const sameProject = key && dirKey(p.info?.directory) === key;
       if (p.request.sessionId !== sessionId && !sameProject) continue;
-      if (p.deskAsk) continue;
       if (on) arm(p);
       else {
         // Off, or an unrelated save: the card is the operator's, so no countdown.
@@ -375,6 +385,7 @@ export function createPermissionGate({
         role: p.info?.role,
         task: p.info?.task,
         sessionId: p.request?.sessionId,
+        callId: p.request?.toolCallId || null,
       });
     }
     return true;
@@ -385,8 +396,6 @@ export function createPermissionGate({
   function retime() {
     const next = waitMs();
     for (const p of pendingAsks.values()) {
-      // A desk card has no clock: it waits for the operator however long they take.
-      if (p.deskAsk) continue;
       // An unrelated Settings save must not give a card that has already waited
       // another full wait; only a changed wait moves it.
       if (p.wait === next && (p.timer || p.queued)) continue;
@@ -467,10 +476,12 @@ export function createPermissionGate({
       log.info(`permission asked${who ? ` (${who})` : ''}: ${request.action || 'tool call'} ${what} — ${verdict.reason}`);
       const pending = { request, info, entry, timer: null, queued: false, deskAsk };
       pendingAsks.set(request.requestId, pending);
-      // The screen is never answered for them: Auto-Permissions, the timeout and a
-      // remembered "Always Allow" all stop here. The operator's own click is the
-      // only way a worker gets their mouse and keyboard.
-      if (!deskAsk) arm(pending);
+      // A desk card is armed like any other: with Auto-Permissions on for this
+      // project it is allowed after the same wait, which is what makes an overnight
+      // run possible — the card still shows, with its countdown, so an operator who
+      // is awake can take it back or reject it. With the switch off, `fire()` leaves
+      // it alone and it waits for their click.
+      arm(pending);
       return verdict;
     }
     const decision = verdict.effect === 'deny' ? 'reject' : 'once';

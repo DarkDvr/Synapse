@@ -100,16 +100,28 @@ test('a request left to the operator is not marked as answering', async () => {
 // remembered "Always Allow" (5 Nov).
 const SHOT = '& "F:\\dev\\Synapse\\skills\\app-check\\bin\\window.ps1" -Action shot -TargetPid 111000 -Out shots\\t5.png';
 
-test('a window grab asks the operator, and Auto-Permissions does not answer it', async () => {
+test('a window grab asks the operator, and waits when the switch is off', async () => {
   const desk = createDesk();
   const { gate, replies } = setup({ desk, timeoutMs: 10 });
-  await gate.setAutoPermissions('ses_1', true, PROJECT);
   const verdict = await gate.handle(event('shell', [SHOT]));
   assert.equal(verdict.effect, 'ask');
   assert.equal(verdict.scope, 'desk');
   await new Promise((r) => setTimeout(r, 60));
-  assert.deepEqual(replies, [], 'the card waited for the operator past the auto-answer');
+  assert.deepEqual(replies, [], 'the card is the operator’s: no timeout answers it');
   assert.equal(desk.holds(PROJECT), false, 'nothing is taken before the answer');
+});
+
+test('with Auto-Permissions on, the desk card is allowed after the same wait', async () => {
+  // Overnight work has to be possible: the switch the operator turned on for this
+  // project answers the screen card too, on the same cooldown. The card is still
+  // drawn, so an operator who is awake sees it and can take the screen back.
+  const desk = createDesk();
+  const { gate, replies } = setup({ desk, timeoutMs: 10 });
+  await gate.setAutoPermissions('ses_1', true, PROJECT);
+  await gate.handle(event('shell', [SHOT]));
+  await new Promise((r) => setTimeout(r, 60));
+  assert.equal(replies.at(-1)?.decision, 'once');
+  assert.equal(desk.holds(PROJECT), true, 'the screen was handed over by the switch');
 });
 
 test('allowing the card is what hands the screen over, and then it is not asked again', async () => {

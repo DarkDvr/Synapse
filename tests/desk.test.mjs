@@ -8,7 +8,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { createDesk } from '../src/desk.js';
+import { createDesk, screenCallOver } from '../src/desk.js';
 
 const A = 'F:\\dev\\Synapse.Projects\\a';
 const B = 'F:\\dev\\Synapse.Projects\\b';
@@ -65,4 +65,22 @@ test('nothing held is nothing to release', () => {
   const desk = createDesk();
   assert.equal(desk.release('x').released, false);
   assert.equal(desk.state().desk, null);
+});
+
+test('the lease is about the call, not the run: it ends when that call does', () => {
+  const messages = [
+    { type: 'assistant', parts: [{ type: 'tool', id: 'call_a', name: 'shell', status: 'running' }] },
+  ];
+  assert.equal(screenCallOver(messages, 'call_a'), false, 'still running');
+  messages[0].parts[0].status = 'completed';
+  assert.equal(screenCallOver(messages, 'call_a'), true);
+  // A call the poll has not seen yet is not over.
+  assert.equal(screenCallOver(messages, 'call_b'), false);
+  assert.equal(screenCallOver(messages, ''), false);
+});
+
+test('the call id travels with the lease', () => {
+  const desk = createDesk();
+  desk.take({ dir: A, callId: 'call_a' });
+  assert.equal(desk.holder().callId, 'call_a');
 });

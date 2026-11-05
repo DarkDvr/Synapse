@@ -43,6 +43,7 @@ import {
   setTaskStatus,
   openDelegations,
 } from './plans.js';
+import { screenCallOver } from './desk.js';
 import { skillRules, describeSkills, roleMustLoad } from './skills.js';
 import { rulesFor } from './permissions.js';
 import { configSavedAt } from './config.js';
@@ -1782,6 +1783,18 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
               loopGuard: settings.loopGuard,
               maxSteps: settings.maxTurns,
               leaseGraceMs: settings.leaseGraceSec * 1000,
+              // The screen goes back the moment the call that took it ends, not
+              // when the whole run does. A worker that clicks one button and carries
+              // on has no reason to hold the operator's mouse for another hour, and
+              // they need to see it let go to start using the machine again (6 Nov).
+              onPoll: (messages) => {
+                const lease = desk?.holder?.();
+                if (!lease || !lease.callId) return;
+                if (dirKey(lease.dir) !== dirKey(dir)) return;
+                if (screenCallOver(messages, lease.callId)) {
+                  desk.release('the worker finished with the screen', dir);
+                }
+              },
               onLease: (lease) => {
                 live.lease = { ...lease, at: Date.now() };
                 emit('run.progress', { ...live });
@@ -2857,7 +2870,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
    * A pending question also pauses the clock: the operator may take hours, and
    * the transcript itself says so.
    */
-  async function waitForIdle(sessionId, before, stallMs, onTool, signal, { window = null, steer = false, onContext = null, onCompact = null, onActivity = null, stopCheck = null, loopGuard = false, maxSteps = 0, leaseGraceMs = 300_000, onLease = null } = {}) {
+  async function waitForIdle(sessionId, before, stallMs, onTool, signal, { window = null, steer = false, onContext = null, onCompact = null, onActivity = null, stopCheck = null, loopGuard = false, maxSteps = 0, leaseGraceMs = 300_000, onLease = null, onPoll = null } = {}) {
     let lastActivity = Date.now();
     let lastCtx = 0;
     let compactions = 0;
@@ -3050,6 +3063,10 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
           onCompact?.(compactions, events[compactions - 1]?.used || used, window?.context || 0);
         }
       }
+
+      // Every poll hands the transcript back: the screen lease is released from
+      // here when the call that took it is over (see the desk in src/desk.js).
+      onPoll?.(messages);
 
       // The prompt is in hand on every poll, which is the only place in a run
       // where the window can be watched without another engine call. It does
@@ -3602,7 +3619,16 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
         settings.stallSec * 1000,
         null,
         signal,
-        { window: contextWindow(archRef) },
+        { window: contextWindow(archRef),
+          // The Architect can take the screen too (a window launch it runs itself),
+          // and the lease must end when that call does — the same rule as a worker's.
+          onPoll: (messages) => {
+            const lease = desk?.holder?.();
+            if (!lease || !lease.callId) return;
+            if (dirKey(lease.dir) !== dirKey(dir)) return;
+            if (screenCallOver(messages, lease.callId)) desk.release('the call finished with the screen', dir);
+          },
+        },
       );
       if (finished.stopped) return { ok: false, stopped: true };
 
