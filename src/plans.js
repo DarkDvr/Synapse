@@ -1068,6 +1068,16 @@ export function briefSession({ dir, role = 'architect', auto = false, single = f
         'your job - that is how a report gets verified. What a task produces is not yours to change: any edit to ' +
         'it, however small, is a task. Put it in the plan and delegate it.',
     );
+    // The lease has to be in the task, not only in the worker's brief: a worker
+    // that is never told, and does not find the tool, runs the download and is cut
+    // by the stall clock (measured 5 Nov: Tiel ignored it in two tasks).
+    lines.push(
+      'A task that will run a long command - a download, a build, an install - must carry the lease ' +
+        'requirement in its detail, naming the tool exactly: "This task needs a long command; call the ' +
+        'lease tool (synapse-lease_lease) with your estimate in minutes and a one-line reason BEFORE you ' +
+        'start it, or the harness will treat the silence as a stall and stop the run." A worker that is ' +
+        'not told may be interrupted in the middle of the download.',
+    );
     lines.push(
       'When a delegation cannot run - refused, blocked, or the loop it belongs to is capped - never do that ' +
         'work yourself and never wait on it. Record the task as blocked, or as done if you verified it ' +

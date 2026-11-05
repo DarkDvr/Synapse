@@ -3136,9 +3136,9 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     );
     lines.push(
       `Before a command you expect to run longer than about ten minutes (a download, a build, an ` +
-        `install), call lease with your estimate in minutes and a one-line reason. It is a warning ` +
-        `with a clock, not a command: the harness will not mistake the silence for a stall, and it ` +
-        `will ask you if the time is enough.`,
+        `install), call the lease tool — its exact name is \`synapse-lease_lease\` — with your estimate ` +
+        `in minutes and a one-line reason. It is a warning with a clock, not a command: the harness ` +
+        `will not mistake the silence for a stall, and it will ask you if the time is enough.`,
     );
     lines.push(
       `When you are finished, reply with a short report: what you produced, the exact file paths you ` +
