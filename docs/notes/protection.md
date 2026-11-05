@@ -70,3 +70,32 @@ this layer can execute PowerShell to find out what it will touch. The protection
 a strong fence against the model that reaches for `C:\Windows` by name, not a
 kernel. The OS's own permissions are the last line, and Synapse does not change
 them.
+
+## The screen is not a file
+
+A worker that launches an app or photographs a window takes the operator's mouse,
+keyboard and focus. That is the one thing on this machine that is theirs *while
+they are using it*, so the policy does not decide it: it asks, and the answer is a
+lease (`src/desk.js`) rather than a rule.
+
+- `screenTaking()` in `src/permissions.js` names the shapes: `SetForegroundWindow`,
+  `SendInput`/`SendKeys`/`mouse_event`/`SetCursorPos`, and the shipped window tool
+  (`skills/app-check/bin/window.ps1`) with any action but `query` — its screenshot
+  falls back to `SetForegroundWindow` + `CopyFromScreen` when `PrintWindow` is
+  refused, which is exactly the window that jumps in front of the operator.
+- With no lease, the gate leaves the card to the operator with `scope: 'desk'`, and
+  the card says "wants to use your screen" with **Allow Screen** and **Reject** —
+  no "Always Allow", because the lease already covers the run.
+- The screen is never answered for them: Auto-Permissions, the timeout and a
+  remembered grant all stop at that card. The operator's click is the only way.
+- Allowing it takes the lease (one project at a time, machine-wide). The badge in
+  the bar says who has it and offers **Take Back**, which ends it at once; the work
+  keeps running and simply cannot take the screen again without asking.
+- The lease ends with the run, with Take Back, or with a stop — and every ending is
+  announced, because the operator needs to know when the machine is theirs again.
+- Headless work is untouched: `skills/visual-review` renders in `--headless=new`,
+  so it never asks and never takes anything.
+
+What this does not cover: a project's own test that launches a GUI app directly
+(`& .\bin\app.exe`) names no window call, so the gate cannot see it. It is a fence
+around the shipped tools and the obvious API names, not a desktop sandbox.

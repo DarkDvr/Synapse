@@ -429,16 +429,7 @@ function decideShell(resources, ctx) {
     .join('\n')
     .trim();
   if (!command) return ask('The harness got an empty command.', true, 'unknown');
-  // The screen first: it is the one thing on this machine that is the operator's
-  // while they are using it, and a command that takes it must be their decision,
-  // not a policy default. `deskHeld` is the lease they gave for this run.
-  if (screenTaking(command) && !ctx.deskHeld) {
-    return ask(
-      'This would take your screen: the mouse, the keyboard and the focus of whatever you are doing.',
-      true,
-      'desk',
-    );
-  }
+
   const info = analyzeCommand(command, ctx.cwd, { home: ctx.home });
   if (info.unknown) return ask('The harness cannot tell where this command lands.', true, 'unknown');
 
@@ -535,6 +526,17 @@ function decideShell(resources, ctx) {
   if (guardedDir) {
     const entry = prohibitedWrite(guardedDir.dir, ctx);
     return deny(`PROHIBITED: ${entry.label} is on the protected list.`, true, 'prohibited');
+  }
+  // The screen: the one thing on this machine that is the operator's while they are
+  // using it. A command that takes it must be their decision, not a policy default —
+  // after PROHIBITED, which still outranks every rule here. `deskHeld` is the lease
+  // they gave for this run (src/desk.js).
+  if (screenTaking(command) && !ctx.deskHeld) {
+    return ask(
+      'This would take your screen: the mouse, the keyboard and the focus of whatever you are doing.',
+      true,
+      'desk',
+    );
   }
   if (info.readsOnly) {
     const sealed = segments

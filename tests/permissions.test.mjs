@@ -197,7 +197,7 @@ test('the shipped toolbox may run', () => {
   // for the rule above to find. It was refused as a harness write, so the operator's
   // own skills were unusable through their shell's syntax.
   assert.equal(
-    shell('& "F:\\dev\\Synapse\\skills\\app-check\\bin\\window.ps1" -Action shot -TargetPid 111000 -Out shots\\t5.png').effect,
+    shell('& "F:\\dev\\Synapse\\skills\\app-check\\bin\\window.ps1" -Action query -TargetPid 111000').effect,
     'allow',
   );
   // The exemption is per statement: the same command may not also delete a skill.

@@ -1,0 +1,75 @@
+// The screen: one project at a time may use it, and only because the operator
+// said so.
+//
+// A worker that launches an app or photographs a window takes the mouse, the
+// keyboard and the focus of whatever the operator was doing — a game, a sentence
+// half typed. That is not a question about a file; it is "may I use your PC for a
+// moment". So it is asked once, in the operator's own words, and the answer is a
+// lease they can take back at any moment (5 Nov).
+//
+// The lease is machine-wide on purpose: there is one mouse and one keyboard, so a
+// second project asking while another holds it is refused, not queued.
+//
+// It ends when the work that asked ends (the run), when the operator takes it back,
+// or when the worker says it is done with the screen. Every ending is announced:
+// the operator needs to know when their PC is theirs again.
+const norm = (dir) => String(dir || '').replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
+
+export function createDesk({ log = null, notify = null } = {}) {
+  let held = null; // { dir, key, role, task, sessionId, at }
+
+  const announce = (type, extra = {}) => {
+    notify?.({
+      kind: 'desk',
+      type,
+      desk: held ? { ...held } : null,
+      ...extra,
+      ts: Date.now(),
+    });
+  };
+
+  /** Is this project holding the screen right now? */
+  const holds = (dir) => Boolean(held) && held.key === norm(dir);
+
+  /** The project that holds it, or null. */
+  const holder = () => (held ? { ...held } : null);
+
+  /**
+   * Give this project the screen. Refused when another project holds it: the
+   * operator can only be using one of them.
+   */
+  function take({ dir, role = null, task = null, sessionId = null } = {}) {
+    const key = norm(dir);
+    if (!key) return { ok: false, reason: 'no directory' };
+    if (held && held.key !== key) {
+      return { ok: false, reason: `${held.dir} already has the screen`, held: { ...held } };
+    }
+    const already = Boolean(held);
+    held = { dir, key, role, task, sessionId, at: held?.at || Date.now() };
+    if (!already) {
+      log?.info(`the screen was given to ${task || role || 'a worker'} (${dir})`);
+      announce('desk.taken');
+    }
+    return { ok: true, already, held: { ...held } };
+  }
+
+  /** Give it back. `why` is the sentence the operator sees; `onlyDir` limits the
+   *  release to that project, so a run ending cannot take another project's lease. */
+  function release(why = '', onlyDir = null) {
+    if (!held) return { ok: false, released: false };
+    if (onlyDir && held.key !== norm(onlyDir)) return { ok: false, released: false };
+    const was = held;
+    held = null;
+    log?.info(`the screen was released${why ? `: ${why}` : ''} (${was.dir})`);
+    announce('desk.released', { why });
+    return { ok: true, released: true, held: was };
+  }
+
+  return {
+    take,
+    release,
+    holds,
+    holder,
+    state: () => ({ desk: held ? { ...held } : null }),
+  };
+}
