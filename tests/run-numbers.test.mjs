@@ -41,7 +41,7 @@ const turn = ({ out = 100, reasoning = 0, created = 1000, streamed = null, compl
 {
   const c = contextStats([turn({ out: 14875, reasoning: 0, reasoningText: 'x'.repeat(43526) })]);
   check('thinking inside the answer is not reported as zero', c.thinkUnsplit === true, JSON.stringify(c));
-  check('and the words say so', thinkNote(c).includes('thinking included'), thinkNote(c));
+  check('and the words say so', thinkNote(c) === 'including reasoning', thinkNote(c));
   check('the written total still counts it', c.generated === 14875, String(c.generated));
 }
 

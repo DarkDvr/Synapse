@@ -370,7 +370,7 @@ export function contextStats(messages) {
 
 /** "23% thinking", or the truth when the provider did not separate it. */
 export const thinkNote = (context) =>
-  context?.thinkUnsplit ? 'thinking included, not counted separately' : `${context?.thinkShare || 0}% thinking`;
+  context?.thinkUnsplit ? 'including reasoning' : `${context?.thinkShare || 0}% thinking`;
 
 /** Token counts read as words, not as digits: 212k, 1.4M. */
 const tokens = (n) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : `${Math.round(n / 1e3)}k`);
