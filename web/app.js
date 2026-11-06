@@ -13,6 +13,17 @@ import { EV, turnEnded, shortEvent } from './events.js';
 import { state } from './state.js';
 import { esc, relTime, hhmm, toolTarget, versionTag, shortSpan, fmtBytes, samePath } from './format.js';
 import { readPath, writePath, maskSecret, slugify, modelLines, parseModelLines, isLocalServer, providerBadge } from './settings-data.js';
+import { providerLabel, providerOrderOf, hiddenProviderIds } from './provider-list.js';
+import {
+  settingsProviders,
+  providersWiring,
+  providerAt,
+  moveProvider,
+  addProvider,
+  removeProvider,
+  selectProvider,
+  refreshProviderModels,
+} from './providers.js';
 import { setIcon } from './icons.js';
 import { api, serverNow } from './api.js';
 import { $, debounce } from './dom.js';
@@ -1272,58 +1283,6 @@ const issuesTitle = (m) =>
 // plan, a separate provider with its own key. Both keys live in the engine, never
 // here. A provider the operator adds in Settings is labelled by its *type* —
 // `Local` for anything on this machine, its own name for a vendor (DeepSeek).
-const ENGINE_PROVIDERS = [
-  { id: 'opencode', label: 'OC Zen', note: 'Free models need no key; a Zen key unlocks the paid ones.' },
-  { id: 'opencode-go', label: 'OC Go', note: 'Paid plan — its key lives in the engine.' },
-];
-const ENGINE_BADGES = Object.fromEntries(ENGINE_PROVIDERS.map((p) => [p.id, p.label]));
-const providerLabel = (p) => {
-  const id = String(p || 'unknown');
-  const configured = (state.config?.engine?.opencode?.providers || []).find((x) => x.id === id);
-  // A local server is labelled by what it *is*, not by the app that happens to
-  // be running it: the next machine's may be Ollama or vLLM, and a badge naming
-  // one of them would be wrong everywhere else.
-  if (configured) return providerBadge(configured) || id;
-  if (ENGINE_BADGES[id]) return ENGINE_BADGES[id];
-  return id
-    .split(/[-_]/)
-    .filter(Boolean)
-    .map((w) => w[0].toUpperCase() + w.slice(1))
-    .join(' ');
-};
-
-// ── the provider order ──────────────────────────────────────────
-// Settings lists providers in one order the operator arranges (`providerOrder`
-// in the config, an array of ids), and the model menu follows it. Two lists that
-// disagreed were the complaint: the operator moved a provider up and the picker
-// still grouped by label (4 Nov). Built-in catalog rows are in the same order:
-// "OpenCode Zen at the bottom" means the engine's own row can be moved too.
-function knownProviderIds(c) {
-  // An engine provider the operator removed in Settings is gone from this list, so
-  // its row goes and its models leave the menu (the server filters them). The
-  // engine still serves them, and Add Provider puts the row back.
-  const hidden = hiddenProviderIds(c);
-  const custom = (c?.engine?.opencode?.providers || []).map((p) => String(p.id || slugify(p.name)));
-  const engine = ENGINE_PROVIDERS.map((p) => p.id).filter((id) => !hidden.has(id));
-  return [...new Set([...engine, ...custom])];
-}
-
-/** The engine providers this config has removed from the list, as a Set of ids. */
-function hiddenProviderIds(c = state.config) {
-  return new Set((c?.engine?.opencode?.hiddenProviders || []).map(String));
-}
-
-function providerOrderOf(c) {
-  const all = knownProviderIds(c);
-  const saved = Array.isArray(c?.engine?.opencode?.providerOrder) ? c.engine.opencode.providerOrder : [];
-  const out = [];
-  for (const id of saved) if (all.includes(String(id)) && !out.includes(String(id))) out.push(String(id));
-  // Anything the saved order does not mention keeps its default place at the
-  // end, so a provider added tomorrow appears without being placed by hand.
-  for (const id of all) if (!out.includes(id)) out.push(id);
-  return out;
-}
-
 // ── searchable model picker ─────────────────────────────────────
 // The native <select> stays in the DOM as the source of truth — every existing
 // handler (fillRoleModels, renderEffort, setRoleModel) keeps working — but it is
@@ -7909,183 +7868,6 @@ async function addProtectionPath(kind) {
   }
 }
 
-// ── providers: the only editable list in this window ────────────
-// maskSecret, slugify, modelLines and parseModelLines moved to ./settings-data.js;
-// their notes went with them.
-
-function providerEditor(providers, index) {
-  const p = providers[index];
-  if (!p) return '';
-  const key = String(p.apiKey || '');
-  const revealed = Boolean(state.setKeyRevealed);
-  const fromEnv = /^env:/i.test(key);
-  const typed = Boolean(key) && !fromEnv;              // typed in this window, never sent by the server
-  const stored = Boolean(p.apiKeySet) && !p.apiKeyRemoved;
-  const shown = typed ? (revealed ? key : maskSecret(key)) : fromEnv ? key : stored ? p.apiKeyMasked || '' : '';
-  const canReveal = typed;
-  const taken = providers.filter((q, i) => i !== index).map((q) => q.id || slugify(q.name));
-  const previewId = p.id || slugify(p.name || '') || 'provider';
-  const clash = !p.id && taken.includes(previewId);
-  const fetchNote = state.setProvFetch;
-  const roles = Object.entries(state.setDraft?.roles || {})
-    .filter(([, r]) => String(r?.ref || '').startsWith(`${p.id || previewId}/`))
-    .map(([role]) => role);
-
-  return `
-  <section class="prov-edit" data-prov-edit-form>
-    <div class="set-grid">
-      <label class="set-field" title="A local server runs on this machine. llama.cpp Server is one of those too: the same kind of server, which reports its window at /props. An OpenAI-compatible endpoint can be anything that speaks the same API, including a paid service.">
-        <span>Type</span>
-        <select data-prov="type">
-          <option value="local"${p.type === 'local' || !p.type ? ' selected' : ''}>Local provider (LM Studio)</option>
-          <option value="llamacpp"${p.type === 'llamacpp' ? ' selected' : ''}>Local provider (llama.cpp)</option>
-          <option value="openai"${p.type && p.type !== 'local' && p.type !== 'llamacpp' ? ' selected' : ''}>OpenAI Compatible</option>
-        </select>
-        <small class="prov-hint">${
-          p.type === 'llamacpp'
-            ? 'A llama.cpp server on this machine; its window comes from /props.'
-            : p.type === 'openai'
-              ? 'Reached over the network; its window is the one you type.'
-              : 'A local server that reports its window at /api/v0/models.'
-        }</small>
-      </label>
-      <label class="set-field" title="The name on the badge beside this provider's models in every role's menu.">
-        <span>Name</span>
-        <input data-prov="name" value="${esc(p.name || '')}" placeholder="DeepSeek" />
-      </label>
-      <label class="set-field wide" title="The server's address, including /v1 when it needs one. Nothing is contacted until you press Refresh List or run a turn.">
-        <span>Server URL</span>
-        <input data-prov="baseURL" value="${esc(p.baseURL || '')}" placeholder="http://localhost:1234/v1" spellcheck="false" />
-      </label>
-      ${p.type === 'local' ? `<label class="set-field" title="Which endpoint Refresh List asks for the model list. Chat goes through the OpenAI-compatible URL either way; the other endpoint is tried automatically if this one fails.">
-        <span>Format</span>
-        <select data-prov="format">
-          <option value="openai"${p.format !== 'ollama' ? ' selected' : ''}>OpenAI API (/models)</option>
-          <option value="ollama"${p.format === 'ollama' ? ' selected' : ''}>Ollama (/api/tags)</option>
-        </select>
-        <small class="prov-hint">Either endpoint answers the other; this only decides which is asked first.</small>
-      </label>` : ''}
-      <div class="set-field wide" title="Sent as a bearer token. A key typed here is stored beside the app's data (not in the config file); env:NAME reads the environment when Synapse starts.">
-        <span>API Key</span>
-        <div class="set-key">
-          <input data-prov="apiKey" value="${esc(shown)}" data-masked="${typed && !revealed ? '1' : '0'}" type="text" spellcheck="false"
-                 placeholder="${isLocalServer(p) ? 'Empty for local servers' : 'sk-…'}" autocomplete="off" />
-          ${canReveal ? `<button type="button" class="input-eye" data-prov-eye aria-label="${revealed ? 'Hide the key' : 'Show the key'}" title="${revealed ? 'Hide the key' : 'Show the key'}">${setIcon(revealed ? 'eyeOff' : 'eye')}</button>` : ''}
-        </div>
-        <small class="prov-hint">${
-          p.apiKeyRemoved
-            ? 'The stored key is removed when you save.'
-            : fromEnv
-              ? `Read from the environment when Synapse starts — the config file keeps the variable's name, not the key. Type over it to store a key beside the app instead.`
-              : stored
-                ? `Stored beside the app's data, not in the config file — type over it to replace it.`
-                : 'Kept beside the app\'s data, never in the config file. Only needed for a service.'
-        }</small>
-        ${stored || fromEnv ? `<div class="prov-tools"><button type="button" class="btn btn-danger btn-sm" data-prov-remove>Remove Key</button></div>` : ''}
-      </div>
-      <div class="set-field wide">
-        <span>Models</span>
-        <textarea data-prov="models" rows="4" spellcheck="false">${esc(modelLines(p.models, !isLocalServer(p)))}</textarea>
-        <div class="prov-tools">
-          <button type="button" class="btn btn-secondary btn-sm" data-prov-fetch>Refresh List</button>
-          <span class="prov-fetch-state${fetchNote ? (fetchNote.ok ? ' is-ok' : ' is-bad') : ''}">${esc(fetchNote?.text || '')}</span>
-        </div>
-        <small class="prov-hint">${
-          isLocalServer(p)
-            ? 'One per line: <code>id | name</code>. The window is read from the server.'
-            : 'One per line: <code>id | name | context | output</code>. Only the id is required.'
-        }</small>
-      </div>
-    </div>
-    <p class="prov-badge-line">
-      Model refs use <code>${esc(p.id || previewId)}/…</code>.
-      ${(p.models || []).length ? '' : '<span class="prov-warn">No models yet — saved, but not registered with the engine until it has one.</span>'}
-      ${clash ? '<span class="prov-warn">That id is already used — pick another name.</span>' : ''}
-      ${roles.length ? `<span class="prov-inuse">In use by ${esc(roles.join(', '))}.</span>` : ''}
-    </p>
-  </section>`;
-}
-
-function settingsProviders(c) {
-  const providers = c.engine?.opencode?.providers || [];
-  const selected = Number.isInteger(state.setProvSelected) ? state.setProvSelected : -1;
-  const countsByProvider = (state.models || []).reduce((acc, m) => {
-    acc[m.provider] = (acc[m.provider] || 0) + 1;
-    return acc;
-  }, {});
-  const order = providerOrderOf(c);
-  const indexById = new Map(providers.map((p, i) => [String(p.id || slugify(p.name)), i]));
-  const moves = (id, at) => `
-          <button type="button" class="role-btn ic-move" data-prov-up="${esc(id)}" title="Move Up"
-                  aria-label="Move ${esc(id)} up"${at === 0 ? ' disabled' : ''}>↑</button>
-          <button type="button" class="role-btn ic-move" data-prov-down="${esc(id)}" title="Move Down"
-                  aria-label="Move ${esc(id)} down"${at === order.length - 1 ? ' disabled' : ''}>↓</button>`;
-  const rowFor = (id, at) => {
-    const builtin = ENGINE_PROVIDERS.find((p) => p.id === id);
-    if (builtin) {
-      const count = countsByProvider[builtin.id] || 0;
-      // Engine rows are the engine's own catalog: its key and its URL are not ours
-      // to edit, but whether it is in this list is the operator's choice, so it can
-      // be removed like any other and put back from Add Provider. Nothing is
-      // unregistered — the models simply stop being offered.
-      return `<div class="prov-row is-builtin" title="${esc(builtin.note)}">
-        <span class="prov-type">${esc(builtin.label)}</span>
-        <span class="prov-name">Engine catalog</span>
-        <span class="prov-url">${esc(builtin.note)}</span>
-        <span class="prov-meta">${count ? `${count} model${count === 1 ? '' : 's'}` : 'not connected'}</span>
-        <span class="prov-acts">${moves(id, at)}
-          <button type="button" class="role-btn prov-del" data-prov-hide="${esc(builtin.id)}"
-                  title="Remove ${esc(builtin.label)} from the list — its models leave the model menu, and Add Provider puts it back"
-                  aria-label="Remove ${esc(builtin.label)} from the list">✕</button>
-        </span>
-      </div>`;
-    }
-    const i = indexById.get(id);
-    if (i === undefined) return '';
-    const p = providers[i];
-    const used = Object.entries(c.roles || {}).filter(([, r]) => String(r?.ref || '').startsWith(`${p.id || slugify(p.name)}/`));
-    const count = (p.models || []).length;
-    return `<div class="prov-row${i === selected ? ' is-active' : ''}" data-prov-row="${i}" role="button" tabindex="0"
-                 aria-label="Edit ${esc(p.name || 'provider')}">
-        <span class="prov-type">${esc(providerBadge(p))}</span>
-        <span class="prov-name">${esc(p.name || 'Untitled provider')}</span>
-        <span class="prov-url">${esc(p.baseURL || 'no server URL yet')}</span>
-        <span class="prov-meta">${count} model${count === 1 ? '' : 's'}${used.length ? ` · ${used.length} role${used.length === 1 ? '' : 's'}` : ''}</span>
-        <span class="prov-acts">${moves(id, at)}
-          <button type="button" class="role-btn ic-edit" data-prov-edit="${i}" title="Edit ${esc(p.name || 'this provider')}" aria-label="Edit ${esc(p.name || 'this provider')}">✎</button>
-          <button type="button" class="role-btn prov-del" data-prov-del="${i}" title="Remove ${esc(p.name || 'this provider')}" aria-label="Remove ${esc(p.name || 'this provider')}">✕</button>
-        </span>
-      </div>`;
-  };
-  const rows = order.map((id, at) => rowFor(id, at)).join('');
-  // The engine's own providers are always registered, so "adding" one is putting a
-  // row the operator removed back into the list. Only the ones that are gone are
-  // offered, and the entry says where it comes from.
-  const hidden = hiddenProviderIds(c);
-  const restore = ENGINE_PROVIDERS.filter((p) => hidden.has(p.id))
-    .map((p) => `<button type="button" data-prov-show="${esc(p.id)}">${esc(p.label)} (engine)</button>`)
-    .join('');
-
-  return `
-    <section class="set-group"><h4>Providers <em class="set-restart">Restart</em></h4>
-      <div class="prov-add">
-        <button type="button" class="btn btn-provider btn-sm" data-prov-add>+ Add Provider</button>
-        <div class="prov-add-menu" id="provAddMenu" hidden>
-          <button type="button" data-prov-new="local">Local Provider</button>
-          <button type="button" data-prov-new="llamacpp">Local Provider (llama.cpp)</button>
-          <button type="button" data-prov-new="openai">OpenAI Compatible</button>
-          ${restore || '<button type="button" disabled title="The engine registers its own catalog, so OC Zen and OC Go are already in the list. Remove one here to offer it back.">Engine providers (in the list)</button>'}
-        </div>
-      </div>
-      <div class="prov-list">
-        ${rows}
-      </div>
-      <hr class="prov-divider" />
-      ${providerEditor(providers, selected)}
-      <p class="set-note">A new or changed provider appears in the model menu after a restart. Keys typed here are stored beside the app's data, never in the config.</p>
-    </section>`;
-}
-
 // The nine panes come from ./settings-panes.js; Providers is the one editor that
 // needs this file's own state machine, so it is added here.
 const SETTINGS_PANES = { ...PANES, providers: settingsProviders };
@@ -8212,144 +7994,6 @@ function switchSettingsTab(id) {
       if (state.settingsTab === 'prohibited') renderSettings();
     });
   }
-}
-
-// ── providers: the editor's own small state machine ─────────────
-
-function providerAt(index) {
-  const list = state.setDraft?.engine?.opencode?.providers;
-  return Array.isArray(list) && list[index] ? list[index] : null;
-}
-
-/**
- * Move a provider up or down the list the model menu follows.
- *
- * The order is saved with the settings (`engine.opencode.providerOrder`), so this
- * is a config change like any other: the footer offers Apply/Save and the menu
- * picks it up when the settings are saved. The edit form is flushed into the
- * draft first, or a value typed but not yet collected would be lost by the
- * re-render.
- */
-function moveProvider(id, delta) {
-  const c = collectSettings();
-  if (!c) return;
-  const order = providerOrderOf(c);
-  const at = order.indexOf(String(id || ''));
-  const to = at + delta;
-  if (at < 0 || to < 0 || to >= order.length) return;
-  order.splice(to, 0, order.splice(at, 1)[0]);
-  c.engine.opencode = c.engine.opencode || {};
-  c.engine.opencode.providerOrder = order;
-  renderSettings();
-}
-
-function addProvider(type) {
-  const c = collectSettings();
-  if (!c) return;
-  c.engine.opencode = c.engine.opencode || {};
-  const list = Array.isArray(c.engine.opencode.providers) ? c.engine.opencode.providers : (c.engine.opencode.providers = []);
-  list.push({
-    id: '',
-    type,
-    // Three kinds, two behaviours: a `llamacpp` server *is* a local server, it just
-    // answers /props rather than LM Studio's /api/v0/models. Named for the dialect
-    // so it fits every wrapper of it, not one product.
-    name: type === 'local' ? 'Local Server' : type === 'llamacpp' ? 'Local Server' : 'OpenAI Compatible',
-    format: 'openai',
-    baseURL: type === 'llamacpp' ? 'http://localhost:8080/v1' : '',
-    apiKey: '',
-    models: [],
-  });
-  state.setProvSelected = list.length - 1;
-  state.setKeyRevealed = false;
-  state.setProvFetch = null;
-  renderSettings();
-  $('settingsBody').querySelector('[data-prov="name"]')?.focus();
-}
-
-async function removeProvider(index) {
-  const p = providerAt(index);
-  if (!p) return;
-  const c = state.setDraft;
-  const used = Object.entries(c.roles || {}).filter(([, r]) =>
-    String(r?.ref || '').startsWith(`${p.id || slugify(p.name)}/`),
-  );
-  if (used.length) {
-    const ok = await openDialog({
-      title: 'Remove Provider',
-      message:
-        `${p.name || 'This provider'} is in use by ${used.map(([role]) => role).join(', ')}. ` +
-        `Removing it leaves those roles pointing at models that will no longer exist, until you pick another on the card.`,
-      confirmLabel: 'Remove',
-      danger: true,
-      okResult: true,
-    });
-    if (!ok) return;
-  }
-  c.engine.opencode.providers.splice(index, 1);
-  state.setProvSelected = null;
-  state.setKeyRevealed = false;
-  state.setProvFetch = null;
-  renderSettings();
-}
-
-async function refreshProviderModels(index) {
-  const p = providerAt(index);
-  if (!p) return;
-  const stateEl = $('settingsBody').querySelector('.prov-fetch-state');
-  if (stateEl) { stateEl.className = 'prov-fetch-state'; stateEl.textContent = 'Asking the server…'; }
-  const r = await api('POST', '/api/providers/models', {
-    id: p.id,
-    baseURL: p.baseURL,
-    apiKey: p.apiKey,
-    format: p.format,
-    type: p.type,
-  }).catch((err) => ({
-    ok: false,
-    models: [],
-    error: err.message,
-  }));
-  if (!r.ok) {
-    state.setProvFetch = { ok: false, text: r.error || 'The server did not answer.' };
-    renderSettings();
-    return;
-  }
-  const previous = new Map((p.models || []).map((m) => [m.id, m]));
-  const had = p.models || [];
-  // Refresh *replaces* the list: the server is the truth about what it serves, so
-  // a model it no longer reports is gone from the row, not kept beside the new
-  // ones. What survives by id keeps the settings only the operator knows — the
-  // output budget — and takes the window the server just measured, because a
-  // runtime reports the context it has *loaded* and that changes on a reload.
-  p.models = r.models
-    .map((m) => {
-      const old = previous.get(m.id) || {};
-      return {
-        id: m.id,
-        name: m.name || old.name || m.id,
-        ...(m.context || old.context ? { context: m.context || old.context } : {}),
-        ...(old.output ? { output: old.output } : {}),
-      };
-    })
-    .sort((a, b) => a.id.localeCompare(b.id));
-  const added = r.models.filter((m) => !previous.has(m.id)).length;
-  const removed = had.filter((m) => !r.models.some((x) => x.id === m.id)).length;
-  const withWindow = p.models.filter((m) => m.context).length;
-  state.setProvFetch = {
-    ok: true,
-    text:
-      `${r.models.length} on the server · ${added} new · ${removed} removed` +
-      (withWindow < p.models.length ? ` · ${p.models.length - withWindow} without a reported window` : ''),
-  };
-  renderSettings();
-}
-
-function selectProvider(index) {
-  collectSettings();
-  state.setProvSelected = index;
-  state.setKeyRevealed = false;
-  state.setProvFetch = null;
-  renderSettings();
 }
 
 // The editor's fields write straight into the selected draft provider: there is
@@ -9451,6 +9095,9 @@ async function boot() {
     updateBodyHtml,
     updateChecking: () => updateChecking,
   });
+  // The Providers pane flushes its fields into the draft and re-renders the window,
+  // and asks before removing a provider a role is using: all four live here.
+  providersWiring({ collectSettings, renderSettings, openDialog, toast });
   initShellChannel();
   // Before anything is measured: the cards need their role id and their
   // subtitle slot, and a card's height is what the wrapper is measured against.

@@ -212,10 +212,12 @@ test('the settings panes keep only a few short notes', () => {
 // now the operator's, saved with the config / the registry.
 test('the rail and the model menu follow the order the operator arranged', () => {
   const js = read('web/app.js');
-  assert.match(js, /function providerOrderOf\(/);
+  // The order itself moved to ./provider-list.js (6 Nov) — it is one answer three
+  // parts of the page need — so the rule is read where it lives now.
+  assert.match(read('web/provider-list.js'), /function providerOrderOf\(/);
   assert.match(js, /rankOf\(a\.provider\) - rankOf\(b\.provider\)/);
-  assert.match(js, /data-prov-up=|data-prov-down=/);
-  assert.match(js, /function moveProvider\(/);
+  assert.match(read('web/providers.js'), /data-prov-up=|data-prov-down=/);
+  assert.match(read('web/providers.js'), /function moveProvider\(/);
   assert.match(js, /data-menu-action="up"|data-menu-action="down"/);
   assert.match(js, /\/api\/projects\/\$\{encodeURIComponent\(id\)\}\/move/);
 });
