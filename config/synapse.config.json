@@ -281,6 +281,7 @@
         "opencode-go",
         "opencode"
       ],
+      "hiddenProviders": [],
       "compactionKeepTokens": 0
     }
   },
@@ -317,7 +318,7 @@
       "focus": "app"
     },
     "architect": {
-      "ref": "opencode-go/deepseek-v4.1-flash",
+      "ref": "polystrata/qwen3.8-flash-next-IQ2_XS-GSQ-200k",
       "skills": [
         "app-check",
         "find-skills",

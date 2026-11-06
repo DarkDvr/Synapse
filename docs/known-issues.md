@@ -8,6 +8,32 @@ Newest first. When one is fixed, delete it here and say so in the commit.
 
 ---
 
+## The window does not refresh when the model is switched (6 Nov)
+
+Switching a role's model from one local model to another — 126k to 200k — leaves the
+old window in place: the card's "Nk/Mk ctx" corner and the point where the watchdog
+compacts keep the first model's number until Synapse restarts.
+
+Where it comes from, so far as it is known without reproducing it: a local provider's
+window is *measured*, not typed — `measureLocalWindows()` in `src/providers.js` runs
+once at boot (`src/index.js`), writes `context` into the config, and the engine's own
+config is written from that same pass. `contextWindow()` in `src/runs.js` then reads
+`modelLimits` → the provider's `models[].context` → the model cache, all of which were
+filled at boot. A model switch changes which entry is read, not when the entries were
+measured.
+
+Shows: the rate corner says 126K after the switch; a run budgets and compacts for 126k
+on a 200k model (the safe direction, but the operator sees a number that is not true).
+`noteLoadedWindow()` already re-asks a local server once per run — that is the hook the
+fix probably wants, extended to a model switch rather than a run start.
+
+Where: `src/providers.js` (`measureLocalWindows`), `src/runs.js` (`contextWindow`,
+`noteLoadedWindow`), `web/app.js` (`loadModels`, and the card's corner in
+`web/rate-view.js`).
+Fix: re-measure the selected model's window when the model changes, and tell the page
+the new number; confirm first whether the engine's own config needs the same update or
+whether it reads the window per turn.
+
 ## OC provider fixes — details to come (6 Nov)
 
 The operator has a list of fixes for the OpenCode providers — the two engine rows
