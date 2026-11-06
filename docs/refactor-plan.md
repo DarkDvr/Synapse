@@ -18,7 +18,7 @@ fixed on the spot; a bug found on the way that is unrelated goes in
 | 3 — a catch that says nothing | **done** — baseline of 71, and it may only go down |
 | 4 — sync reads on the request path | **done** — the plan is parsed once per change |
 | 5 — the wake loop leaves `runs.js` | **half** — the report writer is out; the wake loop waits on `waitForIdle` moving first (measured, see below) |
-| 6 — `web/app.js` comes apart | **in progress** — out: `state.js`, `format.js`, `api.js`, `dom.js`, `console.js`, `settings-data.js`, `events.js`, `settings-form.js`, `settings-panes.js`, `ui-prefs.js` (10,546 → 9,465). **Next:** the Providers editor (the last ~800 lines of the Settings block), then the transcript |
+| 6 — `web/app.js` comes apart | **in progress** — out: `state.js`, `format.js`, `api.js`, `dom.js`, `console.js`, `settings-data.js`, `events.js`, `settings-form.js`, `settings-panes.js`, `ui-prefs.js`, `provider-list.js`, `providers.js` (10,546 → 9,177). **Next:** the transcript |
 
 ---
 
@@ -150,20 +150,29 @@ settings pages, update dialog, ask panel, desk badge, SSE handler, over one muta
 
 **Done so far.** `state.js` (the 160-line store, 78 keys at load), then `format.js`,
 `api.js`, `dom.js`, `console.js`, `settings-data.js`, `events.js`, `settings-form.js`
-(the four form primitives), `settings-panes.js` (the tab list and nine panes) and
-`ui-prefs.js` (the chat's text size and the language). app.js is 9,465 lines, down
-from 10,546.
+(the four form primitives), `settings-panes.js` (the tab list and nine panes),
+`ui-prefs.js` (the chat's text size and the language), `provider-list.js` (which
+providers exist, their names and order) and `providers.js` (the Providers pane and
+its editor). app.js is 9,177 lines, down from 10,546. **The Settings block is now
+entirely out.**
 
 The Settings block is what proved the order matters: the panes could not leave until
 their primitives had, and the four Prohibited handlers could not leave at all — they
 edit the draft and re-render the window, which is the app's state machine, not a
-pane's job. Two things stayed behind on purpose, and the plan is now honest about
-them: those handlers, and the `providers` pane, which is a real editor.
+pane's job. The Providers editor *could* leave, because the four app calls it needs
+(`collectSettings`, `renderSettings`, `openDialog`, `toast`) are few enough to wire in
+at boot — the same pattern the console and the panes already use.
 
 A lesson for the next step: a test that reads `web/app.js` for text which moved is
 not a test that broke, it is a test that lied about where the code lives. The four
 UI test files now read the page's modules together, so a move cannot read as a
 deletion.
+
+**And a second lesson, paid for twice.** A script that moves code with multi-line
+anchors silently does nothing on a CRLF file, and a missing `wiring` call or a
+function left un-exported fails *quietly*: the pane still draws, the row still
+clicks, nothing happens. Both were caught by clicking through the page afterwards,
+not by the suite. Move it, run the suite, then **use it**.
 
 **Test that proves it.** After each step the suite is unchanged and green, and
 `tests/ui-layout.test.mjs` + a screenshot of the page still match. The structural
