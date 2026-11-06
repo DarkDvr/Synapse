@@ -8,6 +8,40 @@ Newest first. When one is fixed, delete it here and say so in the commit.
 
 ---
 
+## A run's snapshot commits whatever is uncommitted in the Synapse repo — 7 Nov
+
+Starting a delegation writes a `snapshot: before t1 (coder-1)` commit, and it takes
+the harness repository's whole working tree with it. During the smoke test that
+swept up half-finished edits to `web/` and `src/` into three commits with a message
+nobody wrote. The work was safe, but it landed under the wrong name: `git log` said
+"snapshot: before t1 (coder-1)" for a fix to the permission policy.
+
+Shows: `git status` clean in the middle of an editing session, and two or three
+commits with the same generated message.
+
+Where: the harness snapshot in `src/runs.js` (`harness snapshot committed …`).
+Fix: decide what the snapshot is *for*. If it is the project's state, it must run in
+the project's directory and skip a project that is not a repository. If it is the
+harness's, it must refuse to commit a dirty tree and say so — taking someone else's
+in-progress work under a generated message is worse than not snapshotting.
+
+## `/api/busy` with no session says the engine is down — 7 Nov
+
+`GET /api/busy` without `?session=` asks the engine for `GET /api/session/null`,
+gets a 400, and answers
+`{"busy":false,"engineDown":true,"reason":"GET /api/session/null -> 400 …"}`. The
+page never calls it that way — it passes `state.sessionId` and skips the call when
+there is none — so nothing shows this today. Anything else that asks (a stale tab, a
+script, a future caller) is told the engine is down while it is answering every
+other route.
+
+Where: `busyFor()` in `src/api.js`; the `catch` around `engine.getSession()` reads
+any failure as "not answering".
+Fix: return `{ busy: false }` when there is no session id, before the engine is
+asked. Then a failure there can only mean the engine is really unwell.
+
+---
+
 ## The suite fails intermittently on its two browser tests — 7 Nov
 
 `node --test "tests/*.test.mjs"` runs test *files* in parallel. Two of them launch

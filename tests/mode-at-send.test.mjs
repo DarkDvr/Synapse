@@ -25,7 +25,10 @@ function harness({ applied = 'multi', dir = null } = {}) {
     getSession: async (id) => ({ id, directory: dir, single: mode === 'single', auto: false }),
     updateSessionPermissions: async (sessionId, rules) => {
       calls.push({ at: 'permissions', rules });
-      mode = Array.isArray(rules) && rules.length ? 'single' : 'multi';
+      // The mode is the *presence of the delegation deny*, not "any rule at all".
+      // The policy's own asks are always in the list: sending the mode rule alone
+      // used to switch the whole policy off (found by the smoke test, 7 Nov).
+      mode = (rules || []).some((r) => r.action === 'subagent' && r.effect === 'deny') ? 'single' : 'multi';
     },
     setInstruction: async (sessionId, key, text) => { briefs.push(text); return true; },
     prompt: async (sessionId, text) => { calls.push({ at: 'prompt' }); prompts.push(text); return {}; },
@@ -56,6 +59,7 @@ function harness({ applied = 'multi', dir = null } = {}) {
 }
 
 const project = () => fs.mkdtempSync(path.join(os.tmpdir(), 'synapse-mode-'));
+const asks = (rules, action) => (rules || []).some((r) => r.action === action && r.effect === 'ask');
 
 test('a Single send applies the ruleset once, before the prompt', async () => {
   const dir = project();
@@ -63,7 +67,13 @@ test('a Single send applies the ruleset once, before the prompt', async () => {
   await h.api.sendMessage('ses_x', { text: 'Do one small thing', mode: 'single' });
   const perms = h.calls.filter((c) => c.at === 'permissions');
   assert.equal(perms.length, 1);
-  assert.deepEqual(perms[0].rules, SINGLE_RULES);
+  // The mode rule is in there…
+  assert.ok(perms[0].rules.some((r) => r.action === 'subagent' && r.effect === 'deny'));
+  // …and so is the policy. It used to be replaced by the mode rule alone, which
+  // left the engine with no ask for any tool.
+  for (const action of ['edit', 'write', 'shell', 'execute', 'read']) {
+    assert.ok(asks(perms[0].rules, action), `${action} must still ask in Single`);
+  }
   // The ruleset is applied before the turn that depends on it.
   assert.deepEqual(h.calls.map((c) => c.at), ['permissions', 'prompt']);
   assert.match(h.briefs.at(-1), /do not delegate/);
@@ -95,13 +105,19 @@ test('ten toggles and one send is one apply', async () => {
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
-test('switching back to Multi at send clears the ruleset', async () => {
+test('switching back to Multi at send drops the mode rule and keeps the policy', async () => {
   const dir = project();
   const h = harness({ dir, applied: 'single' });
   await h.api.sendMessage('ses_x', { text: 'Use the team again', mode: 'multi' });
   const perms = h.calls.filter((c) => c.at === 'permissions');
   assert.equal(perms.length, 1);
-  assert.deepEqual(perms[0].rules, []);
+  // No delegation deny…
+  assert.ok(!perms[0].rules.some((r) => r.action === 'subagent'));
+  // …and still every ask. An empty list here is what the engine reads as "the
+  // policy is gone"; the page then said "nothing is running" for a dead engine.
+  for (const action of ['edit', 'write', 'shell', 'execute', 'read']) {
+    assert.ok(asks(perms[0].rules, action), `${action} must still ask in Multi`);
+  }
   assert.match(h.briefs.at(-1), /You judge; you do not build/);
   assert.doesNotMatch(h.briefs.at(-1), /do not delegate/);
   fs.rmSync(dir, { recursive: true, force: true });

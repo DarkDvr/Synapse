@@ -1555,9 +1555,17 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
         const applied = session?.single === true ? 'single' : 'multi';
         single = asked ? asked === 'single' : applied === 'single';
         if (asked && asked !== applied) {
-          // Single denies the delegation tool; Multi clears the ruleset. Applied to
-          // later turns of this session, which is exactly this one.
-          await engine.updateSessionPermissions(sessionId, single ? SINGLE_RULES : []);
+          // The mode rule is added to the policy, never instead of it. This used to
+          // send the mode rule alone, and the engine then had no ask rule for any
+          // tool: switching a chat to Single quietly turned the whole policy off,
+          // and a write outside the project stopped raising a card (found by the
+          // smoke test, 7 Nov). Session creation and the boot pass already compose
+          // it this way; keep the three identical.
+          await engine.updateSessionPermissions(sessionId, [
+            ...rulesFor(),
+            ...(single ? SINGLE_RULES : []),
+            ...skillRules(getConfig(), 'architect'),
+          ]);
           app.info(`mode ${applied} -> ${asked} for ${sessionId} (applied at send)`);
           notify?.({ kind: 'sessions', type: EV.mode, sessionId, mode: asked });
         }
