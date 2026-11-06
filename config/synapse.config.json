@@ -425,14 +425,9 @@
       "coder-3"
     ]
   },
-  "update": {
-    "synapse": {
-      "feed": "https://api.github.com/repos/DarkDvr/Synapse/releases/latest"
-    }
-  },
   "logging": {
     "level": "info",
-    "retentionDays": 1,
+    "retentionDays": 2,
     "maxFileMb": 5,
     "channels": {
       "app": true,
@@ -444,6 +439,11 @@
       "enabled": true,
       "retentionDays": 2,
       "maxFileMb": 20
+    }
+  },
+  "update": {
+    "synapse": {
+      "feed": "https://api.github.com/repos/DarkDvr/Synapse/releases/latest"
     }
   }
 }
