@@ -18,7 +18,7 @@ fixed on the spot; a bug found on the way that is unrelated goes in
 | 3 — a catch that says nothing | **done** — baseline of 71, and it may only go down |
 | 4 — sync reads on the request path | **done** — the plan is parsed once per change |
 | 5 — the wake loop leaves `runs.js` | **half** — the report writer is out; the wake loop waits on `waitForIdle` moving first (measured, see below) |
-| 6 — `web/app.js` comes apart | **in progress** — out: `state.js`, `format.js`, `api.js`, `dom.js`, `console.js`, `settings-data.js`, `events.js`, `settings-form.js`, `settings-panes.js`, `ui-prefs.js`, `provider-list.js`, `providers.js`, `chat-notes.js`, `rate-view.js` (10,546 → 8,917). **Next:** the transcript — see "The transcript is four things" below |
+| 6 — `web/app.js` comes apart | **in progress** — out: `state.js`, `format.js`, `api.js`, `dom.js`, `console.js`, `settings-data.js`, `events.js`, `settings-form.js`, `settings-panes.js`, `ui-prefs.js`, `provider-list.js`, `providers.js`, `chat-notes.js`, `rate-view.js`, `chat-scroll.js` (10,546 → 8,502). **Next:** `run-view.js`, then the renderers — see "The transcript is four things" below |
 
 ---
 
@@ -182,25 +182,23 @@ The plan said "the transcript" as one step. It is not one block: the 1,147 lines
 between `renderTranscript` and the scrolling section are four subsystems that happen
 to be next to each other, and they are tangled through the rest of the file.
 
-- **What is drawn** — `renderMessage`, `renderTool`, `renderTrace`, `renderAlarm`,
-  `renderLease`, `renderChatError`. Needs 24 things from app.js, because a message's
-  parts reach into the run, the plan, the permission cards and the ask panel.
-- **The streaming panel** — `appendStream`, `pumpStream`, `measureStream`,
-  `endStream`, `liveTrace` and their timers. Movable; needs about six names.
+- **What is drawn** — `renderMessage`, `renderTool`, `renderTrace`. Needs 24 things
+  from app.js, because a message's parts reach into the run, the plan, the permission
+  cards and the ask panel. **Not started** — it is the one that needs `run-view.js`.
+- **The streaming panel and the follow** — **done**, `web/chat-scroll.js` (466 lines:
+  the scroll helpers, the two-line follow rule, the reader's-place slack and the
+  panel that slides). It went with the follow logic because they are one mechanism:
+  `appendStream` arms the follow and reads the scroller, and `endStream` redraws.
 - **The rates and the window** — **done**, `web/rate-view.js`.
 - **The non-message lines** — **done**, `web/chat-notes.js`.
 
-Two of the four are out. Next is the streaming panel — with the chat-follow logic,
-because they are the same seam: `appendStream` arms the follow and reads the
-scroller, and `endStream` calls `renderTranscript`. That pair is about 400 lines
-across the transcript section and the scrolling section, and it is the last piece
-that can leave without a `run-view` module.
-
-"What is drawn" comes last: it would need a twenty-name wiring object, which is not
-a boundary, it is a shard. Before that move, the names it needs (`dirKey`,
-`currentRun`, `roleLabel`, `modelByRef`, `selectionFor`, `fmtTokens`, `groupTurns`, …)
-want to live in a module of their own — call it `web/run-view.js` — and then both it
-and the transcript read from there instead of being wired together.
+Three of the four are out. The last one is the biggest and the only one left, and it
+waits on a module rather than on courage: the names it needs (`dirKey`, `currentRun`,
+`roleLabel`, `modelByRef`, `selectionFor`, `fmtTokens`, `groupTurns`, …) are used all
+over app.js — `dirKey` thirteen times outside the block alone. Wiring twenty of those
+is not a boundary, it is a shard. So the next move is `web/run-view.js`: what the page
+knows about the run on screen, in one place. Then the renderers read from it and the
+wiring object shrinks to the two or three things that really are the app's.
 
 **Test that proves it.** After each step the suite is unchanged and green, and
 `tests/ui-layout.test.mjs` + a screenshot of the page still match. The structural
