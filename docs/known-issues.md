@@ -8,6 +8,36 @@ Newest first. When one is fixed, delete it here and say so in the commit.
 
 ---
 
+## A local name shadows an imported function (`askHost`) — 7 Nov
+
+In `web/app.js`'s wiring there is `const askHost = $('askHost');` inside a function,
+while the module also imports `askHost` (the accessor the ask panel uses, from
+`web/ask-panel.js`). Legal JavaScript, and harmless today because nothing in that
+function calls `askHost()` — but it is a trap: a later line in that scope that means
+the accessor gets the DOM element instead, and the failure would be "cannot read
+properties of undefined" a long way from the cause.
+
+Where: `web/app.js`, the wiring function that binds the ask panel's input events.
+Fix: rename the local (`askHostBox`), one line, no behaviour change. Filed rather than
+fixed because it sits inside the file the refactor is still taking apart.
+
+## The chat page's layout audit reports five standing nits — 7 Nov
+
+`skills/visual-review` with `--audit` reports the same five findings on the chat page
+every time it is run, and they are real but small: the Send button is 39px tall
+against the run button's 36 (tops 1.5px apart), and four baselines sit apart on one
+line (two `code` runs 19.8px apart, `tool-name` against `tool-chev` 0.9px, two `em`
+41.8px, two `strong` 20.9px).
+
+Shows: a composer row that is a hair out of line, and inline code or emphasis that
+does not sit on the text's baseline. Nobody has reported them; the tool sees them.
+
+Where: `web/synapse.css` — the composer's button row and the inline-code/emphasis
+rules in the transcript.
+Fix: measure the row and set one height for both buttons; give inline `code` a
+`vertical-align` that matches its line box. Do it as its own change with a screenshot
+before and after, not inside a refactor.
+
 ## The window does not refresh when the model is switched (6 Nov)
 
 Switching a role's model from one local model to another — 126k to 200k — leaves the
