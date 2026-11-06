@@ -88,14 +88,16 @@ test('debug goes to its own file, and a channel file stays readable', () => {
   }
 });
 
-test('at info nothing reaches the debug file at all', () => {
+test('with the debug switch off nothing reaches the deep file', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'synapse-log-'));
   const level = logger.level;
   const loggerDir = logger.dir;
   try {
-    logger.configure({ level: 'info', dir });
+    logger.configure({ level: 'info', dir, debug: { enabled: false } });
     logger.channel('session').debug('should never be written');
     assert.equal(fs.existsSync(path.join(dir, DEBUG_FILE)), false, 'the deep file is not even created');
+    logger.channel('app').info('but the channel file still works');
+    assert.match(fs.readFileSync(path.join(dir, 'app.log'), 'utf8'), /still works/);
   } finally {
     logger.configure({ level, dir: loggerDir });
     fs.rmSync(dir, { recursive: true, force: true });

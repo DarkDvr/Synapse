@@ -21,8 +21,6 @@ export const LEVELS = { error: 0, warn: 1, info: 2, debug: 3 };
 
 /** Where the deep detail goes, whatever the channel. */
 export const DEBUG_FILE = 'debug.log';
-/** The chatter is rotated much sooner than a channel file. */
-const DEBUG_MAX_BYTES = 20 * 1024 * 1024;
 
 function ts() {
   return new Date().toISOString();
@@ -34,6 +32,9 @@ class Logger {
     this.maxBytes = 5 * 1024 * 1024;
     this.retentionDays = 7;
     this.dir = LOGS_DIR;
+    this.debugEnabled = true;
+    this.debugMaxBytes = 20 * 1024 * 1024;
+    this.debugRetentionDays = 2;
     this.enabled = { app: true, engine: true, session: true, tools: true };
     this._cleanupTimer = null;
   }
@@ -43,6 +44,10 @@ class Logger {
     this.maxBytes = (Number(logging.maxFileMb) || 5) * 1024 * 1024;
     this.retentionDays = Number(logging.retentionDays) || 7;
     this.enabled = { app: true, engine: true, session: true, tools: true, ...(logging.channels || {}) };
+    const debug = logging.debug || {};
+    this.debugEnabled = debug.enabled !== false;
+    this.debugMaxBytes = (Number(debug.maxFileMb) || 20) * 1024 * 1024;
+    this.debugRetentionDays = Number(debug.retentionDays) || 2;
     // Tests point this at a temp folder; the app never passes it.
     if (logging.dir) this.dir = logging.dir;
     fs.mkdirSync(this.dir, { recursive: true });
@@ -66,7 +71,10 @@ class Logger {
 
   _write(channel, level, msg) {
     if (this.enabled[channel] === false) return;
-    if (LEVELS[level] > LEVELS[this.level]) return;
+    // The channel files always take error, warn and info — they are the readable
+    // story. The deep file has its own switch and its own two numbers, and it is
+    // the only place a debug line can land.
+    if (level === 'debug' ? !this.debugEnabled : LEVELS[level] > LEVELS[this.level]) return;
     const line = `${ts()} [${level.toUpperCase().padEnd(5)}] ${msg}\n`;
     // The console is the operator's quick check: the app channel is Synapse's own
     // narrative, and every warning or error from any channel. An info line from a
@@ -79,7 +87,7 @@ class Logger {
       if (level === 'debug') {
         // One timeline for all channels, each line saying which one it came from.
         const file = path.join(this.dir, DEBUG_FILE);
-        this._rotate(file, DEBUG_MAX_BYTES);
+        this._rotate(file, this.debugMaxBytes);
         fs.appendFileSync(file, `${ts()} [DEBUG] [${channel}] ${msg}\n`, 'utf8');
         return;
       }
@@ -101,16 +109,16 @@ class Logger {
     };
   }
 
-  /** Delete rotated/old log files past retention. */
+  /** Delete rotated/old log files past retention. The deep file has its own. */
   cleanup() {
     try {
       fs.mkdirSync(this.dir, { recursive: true });
-      const cutoff = Date.now() - this.retentionDays * 86400000;
       for (const name of fs.readdirSync(this.dir)) {
         if (!name.endsWith('.log')) continue;
+        const days = name.startsWith('debug.') ? this.debugRetentionDays : this.retentionDays;
         const file = path.join(this.dir, name);
         const st = fs.statSync(file);
-        if (st.mtimeMs < cutoff) fs.rmSync(file, { force: true });
+        if (st.mtimeMs < Date.now() - days * 86400000) fs.rmSync(file, { force: true });
       }
     } catch {
       /* ignore */

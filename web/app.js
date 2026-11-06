@@ -8461,23 +8461,11 @@ async function addProtectionPath(kind) {
   }
 }
 function settingsLogging(c) {
+  const debugOn = readPath(c, 'logging.debug.enabled');
   return [
     setGroup(
       'Logging',
-      setSelect(
-        c,
-        'Level',
-        'logging.level',
-        [
-          { v: 'debug', l: 'Debug' },
-          { v: 'info', l: 'Info' },
-          { v: 'warn', l: 'Warn' },
-          { v: 'error', l: 'Error' },
-        ],
-        {
-          hint: 'How much Synapse writes. Info and above go to the channel files (app, engine, session, tools); Debug adds a separate debug.log with everything, which is what to turn on to catch a problem.',
-        },
-      ) +
+      `<p class="set-sub">App, engine, session &amp; tool logs:</p>` +
         setField(c, 'Retention (days)', 'logging.retentionDays', {
           type: 'number',
           hint: 'How many days the app, engine, session and tool logs are kept. Days.',
@@ -8485,9 +8473,23 @@ function settingsLogging(c) {
         setField(c, 'Max file size (MB)', 'logging.maxFileMb', {
           type: 'number',
           hint: 'When a log file reaches this size it is rotated to a .1 file and a fresh one is started. Megabytes.',
+        }) +
+        setCheck(
+          c,
+          'Also enable Debug log (verbose):',
+          'logging.debug.enabled',
+          'Write everything, from every channel, into logs\debug.log. It is what to turn on to catch a tricky bug; it is bounded by the two numbers below.',
+        ) +
+        setField(c, 'Retention (days)', 'logging.debug.retentionDays', {
+          type: 'number',
+          hint: 'How many days debug.log is kept. Two is the default: the detail matters while the bug is fresh.',
+        }) +
+        setField(c, 'Max file size (MB)', 'logging.debug.maxFileMb', {
+          type: 'number',
+          hint: 'When debug.log reaches this size it is rotated to debug.1.log. Twenty megabytes is the default, because the chatter is enormous.',
         }),
       undefined,
-      'One file per channel in logs\\. The console mirrors warnings and errors from every channel; the provider diary keeps its own 30 days.',
+      `One file per channel in logs\\. ${debugOn ? '' : 'The debug file is off, so only the channel files are written. '}The console mirrors warnings and errors from every channel; the provider diary keeps its own 30 days.`,
     ),
   ].join('');
 }

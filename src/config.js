@@ -209,6 +209,10 @@ export const DEFAULTS = {
     retentionDays: 7,
     maxFileMb: 5,
     channels: { app: true, engine: true, session: true, tools: true },
+    // The deep file is the evidence you want when something tricky happens, so it
+    // is on by default: 20 MB with one rotation, two days of history. The channel
+    // files above are always on, and always readable.
+    debug: { enabled: true, retentionDays: 2, maxFileMb: 20 },
   },
   // Where Synapse asks about its own releases. A private repository answers 404;
   // point this at a public release feed (or make the repository public) and the
@@ -556,6 +560,12 @@ export function normalize(raw) {
   lg.retentionDays = clampInt(lg.retentionDays, 1, 365, 7);
   lg.maxFileMb = clampInt(lg.maxFileMb, 1, 200, 5);
   lg.channels = merge(DEFAULTS.logging.channels, lg.channels || {});
+  // The debug file's own two numbers, and its switch. A config written before it
+  // existed gets the defaults, which is what every install should have.
+  lg.debug = merge(DEFAULTS.logging.debug, lg.debug || {});
+  lg.debug.enabled = lg.debug.enabled !== false;
+  lg.debug.retentionDays = clampInt(lg.debug.retentionDays, 1, 365, 2);
+  lg.debug.maxFileMb = clampInt(lg.debug.maxFileMb, 1, 500, 20);
 
   cfg.update = isPlainObject(cfg.update) ? cfg.update : {};
   cfg.update.synapse = isPlainObject(cfg.update.synapse) ? cfg.update.synapse : {};

@@ -76,9 +76,10 @@ one or two.
 
 The chatter lives apart. **`logs\debug.log`** holds every debug line from every
 channel in one timeline, each line naming its channel, because debugging a run
-means following one thing across the harness and the engine at once. It only
-exists while Settings → Logging → Level is **Debug**: at Info those lines are not
-written at all, and the file is not even created.
+means following one thing across the harness and the engine at once. It is **on by
+default** (Settings → Logging → *Also enable Debug log*): the evidence you want
+when a tricky bug happens has to exist before the bug does. Untick it and the file
+is neither written nor created.
 
 The split is deliberate and it was measured (6 Nov): one day of `app.log` was
 13,480 lines, 9,131 of them "permission allow", and one day of `session.log` was
@@ -86,12 +87,14 @@ The split is deliberate and it was measured (6 Nov): one day of `app.log` was
 of the text is a file nobody reads, and the failure that matters is the line you
 have to find.
 
-Both files rotate: a channel file at 5 MB (`logging.maxFileMb`) into `.1.log`, and
-`debug.log` at 20 MB into its own `.1.log`. Cleanup deletes anything older than
-`logging.retentionDays` (7 by default) every six hours and at boot.
+Both files rotate on their own numbers, both set in Settings → Logging: a channel
+file at `logging.maxFileMb` (5 MB) into `.1.log`, and `debug.log` at
+`logging.debug.maxFileMb` (20 MB) into its own `.1.log`. Cleanup deletes a channel
+file older than `logging.retentionDays` (7 by default) and a debug file older than
+`logging.debug.retentionDays` (2 by default), every six hours and at boot.
 
-To catch a problem: set the level to **Debug**, reproduce it, set it back to Info.
-The channel files keep the story; `debug.log` keeps the detail.
+To catch a problem: reproduce it, then open `debug.log`. The channel files keep the
+story; the deep file keeps the detail.
 
 A restart is **the app's job**: the window, the tray icon and the page all survive,
 because none of them was ever part of the server.
