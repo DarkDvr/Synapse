@@ -457,11 +457,14 @@ test('a pending question takes the composer, and leaves Stop as the way out', ()
 // ── the Architect's own step streams like a worker's (2 Nov) ──────────
 test('the open session has a trace, so its reasoning streams instead of dumping', () => {
   const js = read('web/app.js');
-  assert.match(js, /function liveTrace\(\)/, 'one place answers whose writing this is');
-  assert.match(js, /const trace = liveTrace\(\);/, 'the stream pump uses it');
+  // 6 Nov: the streaming panel and the follow rule moved to ./chat-scroll.js, so the
+  // half of this rule that lives there is read there.
+  const scroll = read('web/chat-scroll.js');
+  assert.match(scroll, /function liveTrace\(\)/, 'one place answers whose writing this is');
+  assert.match(scroll, /const trace = liveTrace\(\);/, 'the stream pump uses it');
   // It used to be `traceOf(currentRun())`, which is null for the Architect: every
   // delta it produced was dropped and the wall arrived at the step boundary.
-  assert.doesNotMatch(js, /function appendStream\(kind, delta\) \{\s*const trace = traceOf\(currentRun\(\)\);/, 'appendStream no longer ignores the session');
+  assert.doesNotMatch(scroll, /function appendStream\(kind, delta\) \{\s*const trace = traceOf\(currentRun\(\)\);/, 'appendStream no longer ignores the session');
   // The store moved to web/state.js when app.js began to come apart; the trace is
   // still a field of it, so the assertion follows the field.
   const store = read('web/state.js');
@@ -514,7 +517,8 @@ test('the Architect’s live reasoning is drawn inside its own post', () => {
 });
 
 test('jumping to the question puts it at the top of the chat', () => {
-  const js = read('web/app.js');
+  // 6 Nov: the jump itself moved to ./chat-scroll.js with the rest of the scrolling.
+  const js = read('web/chat-scroll.js');
   // The 46px landing was a workaround for the floating buttons covering the header.
   assert.match(js, /const top = Math\.max\(0, tops\[next\] - 10\);/);
   const css = read('web/synapse.css');
