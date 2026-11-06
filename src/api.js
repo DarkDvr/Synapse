@@ -1705,6 +1705,13 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
       // A delegated worker is the thing working; the Architect is idle and would
       // only start a competing turn. `runs.steer` is the one place that knows the
       // live worker session.
+      //
+      // The operator speaking ends any stop in force, whichever way their words
+      // travel. Measured 6 Nov: Stop, then a message sent a second later, and the
+      // message became a steer to the very worker the stop was about to cut — the
+      // stop went ahead and the words were never read.
+      stopper.clear(directory);
+      runs?.resume?.(directory);
       if (busy.kind === 'run') {
         const result = await runs?.steer?.(directory, { text, files: attachments, actor });
         if (!result?.ok) {

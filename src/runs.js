@@ -1506,6 +1506,17 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
         // decision, and the two disagreed for days.
         return true;
       },
+      // The operator spoke before the stop took effect: the run is not stopped any
+      // more, and its report must not say it was.
+      resumeStop: () => {
+        gracefulStop = false;
+        stopRequestedAt = 0;
+        const liveNow = running.get(dirKey(dir));
+        if (liveNow) {
+          liveNow.stopping = false;
+          liveNow.stopRequestedAt = 0;
+        }
+      },
     });
     const signal = controller.signal;
     // Roles that were tried for this task and refused by their model. The report
@@ -3781,6 +3792,9 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
   /** The operator has spoken. Whatever they stopped may run again. */
   function resume(dir) {
     const key = dirKey(dir);
+    // A stop that has not taken effect yet is called off too: the operator spoke,
+    // and their words outrank the button they pressed a moment earlier.
+    controls.get(key)?.resumeStop?.();
     if (!stoppedByOperator.delete(key)) return false;
     log.info(`the operator spoke in ${dir} - runs may start again`);
     return true;

@@ -50,14 +50,12 @@ export function busyInfo({
     };
   }
 
-  const activeHere = (active || [])
-    .map((id) => sessionIn(id))
-    .filter((s) => s && sameDir(s.directory));
-  if (activeHere.length) {
-    const s = activeHere[0];
-    return { ...base, state: 'running', kind: 'turn', sessionId: s.id, title: s.title || null, role: null };
-  }
-
+  // A card waiting comes before the active list, because a session blocked on a
+  // card is *active* — the engine holds the turn open — so checking activity first
+  // answered "running" for work that was doing nothing but wait. Stop then chose
+  // the gentle path and sat behind its grace while nothing could possibly finish
+  // (measured 6 Nov: Stop pressed on a waiting question, 45 s of "Stopping…" and
+  // the card still up).
   const waiting = (permissions || []).find((p) => sameDir(p.directory));
   if (waiting) {
     return {
@@ -84,6 +82,14 @@ export function busyInfo({
       title: form.title || null,
       role: form.role || null,
     };
+  }
+
+  const activeHere = (active || [])
+    .map((id) => sessionIn(id))
+    .filter((s) => s && sameDir(s.directory));
+  if (activeHere.length) {
+    const s = activeHere[0];
+    return { ...base, state: 'running', kind: 'turn', sessionId: s.id, title: s.title || null, role: null };
   }
 
   return { busy: false, directory, project: projectName(directory) };

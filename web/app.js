@@ -7839,6 +7839,14 @@ function connectStream() {
         toast('Stopped', 'The work has stopped.');
         return;
       }
+      if (ev.type === 'stop.cleared') {
+        // The operator spoke before the stop took effect. Nothing was stopped, so
+        // there is nothing to announce — the notice just goes.
+        state.stopping = false;
+        state.stoppingReason = null;
+        renderComposer();
+        return;
+      }
       if (ev.type === 'stop.stuck') {
         state.stopping = true;
         state.stoppingReason = ev.reason || null;

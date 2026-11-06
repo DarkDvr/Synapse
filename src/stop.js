@@ -312,17 +312,51 @@ export function createStopper({
     }
 
     const live = (runs?.active?.() || []).find((r) => norm(r.dir) === norm(dir)) || null;
+    // Is the step already over? A turn that failed and is waiting out the engine's
+    // own retry has nothing in flight — the engine will not read anything until its
+    // timer fires. Treating that as "finish the step first" leaves the notice on
+    // screen for the whole grace while nothing happens at all (measured 6 Nov: a
+    // wedged session, 45 s of "Stopping…" with a retry that never came). There is
+    // nothing to finish, so cut now.
+    let inRetry = false;
+    let note = null;
+    try {
+      const messages = await engine.getMessages(sessionId);
+      const last = Array.isArray(messages) ? messages[messages.length - 1] : null;
+      inRetry = Boolean(last && last.type === 'assistant' && last.raw?.retry);
+      if (inRetry) {
+        const said = last.raw.retry?.error?.message;
+        if (said) note = String(said).replace(/\s+/g, ' ').slice(0, 200);
+      }
+    } catch { /* no transcript to read: the boundary still decides */ }
+    // A card waiting is a step that cannot finish on its own: the engine holds the
+    // turn open until someone answers. Waiting the grace for a boundary only an
+    // answer could produce is 45 seconds of a Stop button that looks broken
+    // (measured 6 Nov: a question on screen, Stop pressed, the card still up).
+    let waiting = false;
+    if (!inRetry) {
+      try {
+        const forms = await engine.listForms(sessionId);
+        waiting = Array.isArray(forms) && forms.length > 0;
+      } catch { /* an engine without forms */ }
+      if (!waiting) {
+        try {
+          const asks = await engine.listSessionPermissions(sessionId);
+          waiting = Array.isArray(asks) && asks.length > 0;
+        } catch { /* an engine without the list */ }
+      }
+    }
     intent = {
       dir,
       sessionId,
       at: now(),
-      phase: hard ? 'cutting' : 'graceful',
+      phase: hard || inRetry || waiting ? 'cutting' : 'graceful',
       sessions: new Set([sessionId]),
       cuts: 0,
       quiet: 0,
-      boundary: false,
+      boundary: inRetry || waiting,
       hard,
-      note: null,
+      note,
       lastCutAt: 0,
       target: live ? 'worker' : 'architect',
     };
@@ -357,7 +391,7 @@ export function createStopper({
 
     log?.info(
       `stop: ${live ? `${live.task} (${live.role})` : sessionId} in ${dir} — ${
-        hard ? 'cutting now' : 'finishing the step first'
+        intent.phase === 'cutting' ? 'cutting now' : 'finishing the step first'
       }`,
     );
     notify?.({ kind: 'stop', type: 'stop.started', dir, sessionId, hard });
@@ -376,6 +410,7 @@ export function createStopper({
     stopTimer(intent);
     intents.delete(norm(dir));
     log?.info(`stop: ${dir} was cleared — the operator spoke again`);
+    notify?.({ kind: 'stop', type: 'stop.cleared', dir: intent.dir, sessionId: intent.sessionId });
     return true;
   }
 

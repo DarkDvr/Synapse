@@ -23,12 +23,14 @@ import { createStopper } from '../src/stop.js';
 const DIR = 'F:\\projects\\one';
 const SID = 'ses_arch';
 
-function world({ active = () => [SID], messages = () => [{ id: 'a1', type: 'assistant' }] } = {}) {
+function world({ active = () => [SID], messages = () => [{ id: 'a1', type: 'assistant' }], forms = () => [], asks = () => [] } = {}) {
   const state = { interrupts: 0, calls: [] };
   const engine = {
     getSession: async (id) => ({ id, directory: DIR, title: 'arch' }),
     listActiveSessions: async () => active(state),
     getMessages: async () => messages(state),
+    listForms: async () => forms(state),
+    listSessionPermissions: async () => asks(state),
     interrupt: async (id) => {
       state.interrupts += 1;
       state.calls.push({ at: 'interrupt', id });
@@ -99,6 +101,45 @@ test('a retry the engine scheduled is a boundary too, not a reason to wait', asy
   assert.ok(h.state.interrupts >= 1, 'cut at once');
   const stuck = h.events.find((e) => e.type === 'stop.stuck');
   assert.equal(stuck, undefined, 'and it is not reported as stuck');
+  h.stopper.dispose();
+});
+
+test('a turn already waiting out the engine retry is cut at once, not after the grace', async () => {
+  // Measured 6 Nov, twice: the engine scheduled a retry and never fired it, so the
+  // session sat "active" with nothing running. The gentle press has nothing to
+  // finish there — waiting the 45-second grace is 45 seconds of "Stopping…" for a
+  // step that already ended.
+  const h = world({
+    messages: () => [
+      {
+        id: 'a1',
+        type: 'assistant',
+        raw: { retry: { attempt: 8, error: { message: 'the cell is at capacity; retry shortly' } } },
+      },
+    ],
+  });
+  await h.stopper.stop({ sessionId: SID, hard: false });
+  await settle();
+  assert.ok(h.state.interrupts >= 1, 'cut without waiting for the grace');
+  h.stopper.dispose();
+});
+
+test('a turn blocked on a question is cut at once, not after the grace', async () => {
+  // The engine holds a turn open while a card waits, so the step cannot finish by
+  // itself. Measured 6 Nov: Stop on a waiting question sent the gentle path, the
+  // notice sat there for the whole grace, and the card stayed up.
+  const h = world({ forms: () => [{ id: 'frm_1', sessionId: SID, title: 'Questions' }] });
+  await h.stopper.stop({ sessionId: SID, hard: false });
+  await settle();
+  assert.ok(h.state.interrupts >= 1, 'cut without waiting for the grace');
+  h.stopper.dispose();
+});
+
+test('a turn blocked on a permission card is cut at once too', async () => {
+  const h = world({ asks: () => [{ id: 'per_1', sessionID: SID }] });
+  await h.stopper.stop({ sessionId: SID, hard: false });
+  await settle();
+  assert.ok(h.state.interrupts >= 1);
   h.stopper.dispose();
 });
 

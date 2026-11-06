@@ -29,6 +29,7 @@ function harness({ active = ['ses_arch'] } = {}) {
     // Already idle, so the graceful poll clears itself on its first tick.
     getMessages: async () => [{ id: 'i1', type: 'idle' }],
     interrupt: async (id) => { calls.push({ at: 'interrupt', id }); },
+    prompt: async (id, text) => { calls.push({ at: 'prompt', id, text }); },
   };
   const api = createApi({
     getConfig: () => ({}),
@@ -78,5 +79,18 @@ test('a Stop with nothing running is refused and holds nothing', async () => {
   const h = harness({ active: [] });
   await assert.rejects(() => h.api.stop('ses_arch'), /Nothing is running/);
   assert.deepEqual(h.held, []);
+  fs.rmSync(h.dir, { recursive: true, force: true });
+});
+
+// Measured 6 Nov: Stop, then a message sent a second later. The message became a
+// steer to the very worker the stop was about to cut, the stop went ahead at its
+// next step, and the operator's words were never read.
+test('the operator speaking calls a stop off, even when the words travel as a steer', async () => {
+  const h = harness();
+  await h.api.stop('ses_arch');
+  assert.ok(h.api.stopState(h.dir), 'a stop is in force');
+  const out = await h.api.steer('ses_arch', { text: 'keep going, I changed my mind' });
+  assert.equal(out.ok, true);
+  assert.equal(h.api.stopState(h.dir), null, 'the stop is gone, so their next turn is not cut');
   fs.rmSync(h.dir, { recursive: true, force: true });
 });

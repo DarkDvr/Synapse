@@ -1498,6 +1498,10 @@ So Stop was rebuilt rather than patched again (`src/stop.js`):
   press.
 - **A retry is a boundary.** The gentle press cuts when the next step begins, and a
   scheduled retry counts: the step failed, so there is nothing left to finish.
+- **A turn already waiting out a retry is cut at once.** The gentle press reads the
+  last message first: if it is a failed assistant turn with a retry scheduled, the
+  step is over and there is nothing to wait for. Without this, a wedged session sat
+  behind "Stopping…" for the whole 45-second grace while the engine did nothing.
 - **A wedged session is recognised.** Not active, no idle marker, a failed
   assistant turn: it is interrupted again, which is what clears it. (One interrupt
   cleared the 11:58 wedge.)
