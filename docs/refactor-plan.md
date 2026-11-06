@@ -190,12 +190,17 @@ to be next to each other, and they are tangled through the rest of the file.
 - **The rates and the window** — **done**, `web/rate-view.js`.
 - **The non-message lines** — **done**, `web/chat-notes.js`.
 
-Two of the four are out. The streaming panel is next (it is the other clean seam),
-and "what is drawn" comes last: it is the one that would need a twenty-name wiring
-object, which is not a boundary, it is a shard. Before that move, the names it needs
-(`dirKey`, `currentRun`, `roleLabel`, `modelByRef`, `selectionFor`, `fmtTokens`,
-`groupTurns`, …) want to live in a module of their own — call it `web/run-view.js` —
-and then both it and the transcript read from there instead of being wired together.
+Two of the four are out. Next is the streaming panel — with the chat-follow logic,
+because they are the same seam: `appendStream` arms the follow and reads the
+scroller, and `endStream` calls `renderTranscript`. That pair is about 400 lines
+across the transcript section and the scrolling section, and it is the last piece
+that can leave without a `run-view` module.
+
+"What is drawn" comes last: it would need a twenty-name wiring object, which is not
+a boundary, it is a shard. Before that move, the names it needs (`dirKey`,
+`currentRun`, `roleLabel`, `modelByRef`, `selectionFor`, `fmtTokens`, `groupTurns`, …)
+want to live in a module of their own — call it `web/run-view.js` — and then both it
+and the transcript read from there instead of being wired together.
 
 **Test that proves it.** After each step the suite is unchanged and green, and
 `tests/ui-layout.test.mjs` + a screenshot of the page still match. The structural
