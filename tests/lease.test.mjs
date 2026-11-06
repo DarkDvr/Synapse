@@ -107,10 +107,12 @@ test('the engine is handed the lease server, and the runner reads it', () => {
   assert.match(runs, /_lease\$\/i\.test/, 'the lease call is matched by suffix');
   assert.match(runs, /LEASE_QUESTION/);
   assert.match(runs, /overSteps/);
-  const app = fs.readFileSync(path.join(ROOT, 'web', 'app.js'), 'utf8');
-  assert.match(app, /function noteLease/);
-  assert.match(app, /chat-lease-clock/);
-  assert.match(app, /data-lease-until/);
+  // 6 Nov: the lease line moved to ./chat-notes.js with the alarms and the kept
+  // errors — they are the same kind of thing, drawn in the same place.
+  const notes = fs.readFileSync(path.join(ROOT, 'web', 'chat-notes.js'), 'utf8');
+  assert.match(notes, /function noteLease/);
+  assert.match(notes, /chat-lease-clock/);
+  assert.match(notes, /data-lease-until/);
   const css = fs.readFileSync(path.join(ROOT, 'web', 'synapse.css'), 'utf8');
   assert.match(css, /\.chat-lease\b/);
 });

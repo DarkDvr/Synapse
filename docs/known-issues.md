@@ -8,6 +8,17 @@ Newest first. When one is fixed, delete it here and say so in the commit.
 
 ---
 
+## OC provider fixes — details to come (6 Nov)
+
+The operator has a list of fixes for the OpenCode providers — the two engine rows
+(`opencode` / OC Zen, `opencode-go` / OC Go) and what Synapse does with them. Held
+here on purpose so the list is not lost between sessions; the detail arrives later.
+
+Where: `web/provider-list.js` (`ENGINE_PROVIDERS`, `providerLabel`), `web/providers.js`
+(the pane and the editor), `src/engines/opencode.js` (what is registered with the
+engine) — depending on what the list turns out to be.
+Fix: wait for the operator's notes. Do not guess at them.
+
 ## A boot error leaves a page that looks alive and is not
 
 `boot()` in `web/app.js` is one long `await` chain: `wire()` binds the handlers, then
