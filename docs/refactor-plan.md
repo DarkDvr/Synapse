@@ -18,7 +18,7 @@ fixed on the spot; a bug found on the way that is unrelated goes in
 | 3 — a catch that says nothing | **done** — baseline of 71, and it may only go down |
 | 4 — sync reads on the request path | **done** — the plan is parsed once per change |
 | 5 — the wake loop leaves `runs.js` | **half** — the report writer is out; the wake loop waits on `waitForIdle` moving first (measured, see below) |
-| 6 — `web/app.js` comes apart | **transcript done** — out: `state.js`, `format.js`, `api.js`, `dom.js`, `console.js`, `settings-data.js`, `events.js`, `settings-form.js`, `settings-panes.js`, `ui-prefs.js`, `provider-list.js`, `providers.js`, `chat-notes.js`, `rate-view.js`, `chat-scroll.js`, `run-view.js`, `traces.js`, `transcript.js` (10,546 → 7,756). **Next:** the composer (5,074–5,835), then the rail |
+| 6 — `web/app.js` comes apart | **in progress** — out: `state.js`, `format.js`, `api.js`, `dom.js`, `console.js`, `settings-data.js`, `events.js`, `settings-form.js`, `settings-panes.js`, `ui-prefs.js`, `provider-list.js`, `providers.js`, `chat-notes.js`, `rate-view.js`, `chat-scroll.js`, `run-view.js`, `traces.js`, `transcript.js`, `composer.js`, `toast.js` (10,546 → 7,004). **Next:** the question panel (four wires) — see the table below |
 
 ---
 
@@ -206,11 +206,30 @@ the operator. It took the renderers' need from 24 names to 10 — and the same m
 `chat-notes`, `rate-view`, `chat-scroll` and `traces` stop being wired to app.js for
 `dirKey`, `currentRun`, `roleLabel` and friends.
 
-**What is left in app.js, by size:** the composer (5,074–5,835), the question panel
-(3,807–4,446), the live event stream (5,836–6,328), the project plan (4,629–5,012), the
-role cards (1,770–1,936), projects and sessions (2,352–2,550), the model picker
-(1,304–1,770) and the wiring at the bottom. The composer is the next one the plan
-named; the event stream is the one that would hurt most to break.
+**The composer is out too** (7 Nov): `web/composer.js` (796 lines, four wires) and
+`web/toast.js` (the page-wide one-liner the composer and app.js both need). `app.js`
+is 7,004 lines.
+
+**What is left, measured rather than guessed:**
+
+| Block | Lines | What it needs from app.js |
+|---|---|---|
+| the question panel | 639 | **4** — `answerWaitSec`, `refreshPending`, `renderTree`, `wideLayout` |
+| the chat geometry (inside the question-panel section) | ~125 | its own two, and the ask panel would import `fitChatHeight` |
+| the project plan | 380 | not measured yet |
+| projects + sessions, role cards | ~365 | not measured yet |
+| the model picker | 465 | not measured yet |
+| the live event stream | 492 | **38** — it is the spine |
+
+**The event stream is not a module candidate.** It needs thirty-eight names from
+app.js because it is the thing that *is* the wiring: every event it receives belongs
+to some other part of the page, and its job is to hand it over. If it ever leaves, it
+leaves last, and it leaves as a router that each part registers with — not as a
+750-line file with a thirty-eight-name object at the top.
+
+The question panel is the next move, and the measurement above says it is the easiest
+one left: four wires, and its own chat-geometry helpers go with it (the ask post has
+to size the box it sits in).
 
 **Test that proves it.** After each step the suite is unchanged and green, and
 `tests/ui-layout.test.mjs` + a screenshot of the page still match. The structural
