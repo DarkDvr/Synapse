@@ -201,7 +201,7 @@ test('the settings panes keep only a few short notes', () => {
   const js = read('web/app.js');
   const notes = js.match(/class="set-note"/g) || [];
   assert.ok(notes.length <= 6, `set-note blocks: ${notes.length}`);
-  assert.match(js, /const setGroup = \(title, body, cols, hint = ''\)/, 'a group can carry its own tooltip');
+  assert.match(read('web/settings-form.js'), /export const setGroup = \(title, body, cols, hint = ''\)/, 'a group can carry its own tooltip');
 });
 
 // 4 Nov: the operator arranged providers in Settings and the model menu sorted
