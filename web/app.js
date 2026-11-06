@@ -952,6 +952,13 @@ function renderStatus() {
       ? `${engine.kind} ${versionTag(engine.version)}`.trim()
       : failed ? 'failed' : 'starting';
 
+  // The version this page is actually talking to. It is set from the server's
+  // answer, not from anything the window read at launch, so a restart moves it
+  // without closing the window.
+  const version = String(state.status?.version || '').trim();
+  const note = $('statusVersion');
+  if (note) note.textContent = version ? `v${version}` : '';
+
   // There is no separate "Event stream" row any more: this dot is the stream's
   // state, and the age on its label is the evidence. A row that said "connected"
   // next to a clock that keeps resetting said the same thing twice.

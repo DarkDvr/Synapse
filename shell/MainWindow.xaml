@@ -89,10 +89,12 @@
         <Image x:Name="BarMark" Grid.Column="0" Width="18" Height="18" Margin="14,0,8,0" />
         <TextBlock Grid.Column="1" Text="Synapse" FontSize="12.5" FontWeight="SemiBold"
                    Foreground="#ECEEF1" VerticalAlignment="Center" />
-        <Border Grid.Column="2" Margin="8,0,0,0" Padding="6,1" CornerRadius="9"
-                BorderBrush="#32353B" BorderThickness="1" VerticalAlignment="Center">
-          <TextBlock x:Name="BarVersion" FontSize="10" Foreground="#94979E" />
-        </Border>
+
+        <!-- No version here any more. This bar is drawn once, at launch, from the
+             package.json beside the exe, so it showed the number the window started
+             with while the server ran a newer one — the operator's "the header's
+             version lies". It lives in the rail's STATUS label now, where the page
+             can keep it current from the server's own answer. -->
 
         <!-- The server is down. Said here as well as in the Runtime row, because
              this strip does not depend on the page below it. -->

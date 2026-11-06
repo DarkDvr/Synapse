@@ -1967,6 +1967,11 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
      */
     stop: async (sessionId) => {
       requireReady();
+      // A compact is a request plus a wait, not a step: there is nothing to finish
+      // and its own timeout is three minutes. The immediate press always cancelled
+      // it; the gentle one did not, so Stop during a compact sat behind the grace
+      // while the page said "Compacting…".
+      if (cancelCompact(sessionId)) app.info(`compact cancelled for ${sessionId}`);
       const busy = await busyFor(sessionId);
       if (!busy.busy) {
         const err = new Error('Nothing is running now.');

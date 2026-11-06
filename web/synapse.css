@@ -419,6 +419,23 @@ body.dark .sidebar .nav-link.active > span:first-child { color: #fff; }
   font-size: 10px; letter-spacing: 0.12em; color: #8a8e96;
   padding: 0 8px 7px; font-weight: 700;
 }
+/* The version lives here, not in the window bar. The bar could only read
+   `package.json` once, at launch, so it kept saying the number it started with
+   while the server had moved on (6 Nov: 1.29.0 running, the bar on 1.28.3). This
+   note is drawn from the server's own answer and re-read on every reconnect, so
+   it is the version that is actually running. Right-aligned across the STATUS
+   label, small and grey: a fact, not a control. */
+.sidebar .status-label {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 8px;
+  /* The label's own right padding would stop the version 8px short of the column
+     every other STATUS value ends on (measured 6 Nov: 227 against 235). The left
+     padding stays, so STATUS still starts over the dots. */
+  padding-right: 0;
+}
+.sidebar .status-version {
+  font-size: 10px; letter-spacing: 0.02em; font-weight: 500;
+  color: #8a8e96; font-variant-numeric: tabular-nums; white-space: nowrap;
+}
 .tree-block { margin: 10px 0 12px; }
 /* The rail is a fixed column: brand on top, the project list scrolling in the
    middle, Settings and STATUS pinned at the bottom. It used to be one scrolling

@@ -30,6 +30,9 @@ function harness({ active = ['ses_arch'] } = {}) {
     getMessages: async () => [{ id: 'i1', type: 'idle' }],
     interrupt: async (id) => { calls.push({ at: 'interrupt', id }); },
     prompt: async (id, text) => { calls.push({ at: 'prompt', id, text }); },
+    // A compaction starts at once and then has nothing to write: the wait is the
+    // part a Stop has to end.
+    compact: async (id) => { calls.push({ at: 'compact', id }); },
   };
   const api = createApi({
     getConfig: () => ({}),
@@ -57,7 +60,7 @@ function harness({ active = ['ses_arch'] } = {}) {
     notify: () => {},
     guard: null,
   });
-  return { api, held, calls, dir };
+  return { api, held, calls, dir, engine };
 }
 
 test('the gentle Stop on the Architect holds the project', async () => {
@@ -85,6 +88,22 @@ test('a Stop with nothing running is refused and holds nothing', async () => {
 // Measured 6 Nov: Stop, then a message sent a second later. The message became a
 // steer to the very worker the stop was about to cut, the stop went ahead at its
 // next step, and the operator's words were never read.
+// Measured 6 Nov: a compact is a request plus a wait, and its own timeout is three
+// minutes. The immediate Stop cancelled the wait; the gentle one did not, so the
+// page sat on "Compacting…" behind the 45-second grace and then whatever the
+// engine did next. A compact is not a step — there is nothing to finish.
+test('a Stop during a compaction ends the wait at once', async () => {
+  const active = [];
+  const h = harness({ active });
+  const compacting = h.api.compactSession('ses_arch').catch((err) => err);
+  await new Promise((resolve) => setTimeout(resolve, 80));
+  active.push('ses_arch'); // the engine reports the session busy while it summarises
+  await h.api.stop('ses_arch');
+  const err = await compacting;
+  assert.match(String(err?.message || ''), /cancelled/i);
+  fs.rmSync(h.dir, { recursive: true, force: true });
+});
+
 test('the operator speaking calls a stop off, even when the words travel as a steer', async () => {
   const h = harness();
   await h.api.stop('ses_arch');
