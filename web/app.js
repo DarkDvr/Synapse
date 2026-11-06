@@ -11,6 +11,7 @@
 import { renderMarkdown } from './md.js';
 import { EV, turnEnded, shortEvent } from './events.js';
 import { state } from './state.js';
+import { esc, relTime, hhmm, toolTarget, versionTag, shortSpan, fmtBytes } from './format.js';
 import { newStream, pushStream, slideTarget, nextOffset, takePending, freezeStream, STREAM_BUFFER } from './stream-view.js';
 import { addSample, rateOf } from './rate.js';
 import { DONE_SOUNDS, doneSoundName, workWillContinue } from './notify.js';
@@ -167,9 +168,6 @@ const ROLES = [
 
 
 // ── helpers ─────────────────────────────────────────────────────
-const esc = (s) =>
-  String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-
 async function api(method, path, body) {
   const res = await fetch(path, {
     method,
@@ -211,38 +209,8 @@ function debounce(fn, ms) {
 /** "Now" on the server's clock, as this page understands it (see api()). */
 const serverNow = () => Date.now() + (Number(state.clockSkew) || 0);
 
-const relTime = (ts) => {
-  if (!ts) return '';
-  const d = Date.now() - ts;
-  if (d < 60000) return 'now';
-  if (d < 3600000) return `${Math.floor(d / 60000)}m ago`;
-  if (d < 86400000) return `${Math.floor(d / 3600000)}h ago`;
-  return new Date(ts).toLocaleDateString();
-};
-
 /** 24-hour HH:MM for message timestamps. */
-const hhmm = (ts) => {
-  if (!ts) return '';
-  const d = new Date(ts);
-  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-};
-
 /** A tool call's one-line description: what it is actually running. */
-function toolTarget(part) {
-  const i = part?.input;
-  const clean = (v) => (typeof v === 'string' ? v.replace(/\s+/g, ' ').trim() : '');
-  if (i && typeof i === 'object') {
-    const named = clean(i.command) || clean(i.path) || clean(i.filePath) || clean(i.pattern)
-      || clean(i.query) || clean(i.url) || clean(i.name);
-    if (named) return named;
-    for (const v of Object.values(i)) {
-      const s = clean(v);
-      if (s) return s;
-    }
-  }
-  return clean(part?.title);
-}
-
 // The model's own name, whole.
 //
 // It used to have "free" stripped out and be cut at 28 characters, because a
@@ -808,23 +776,7 @@ function renderStatus() {
   renderLastEventAge();
 }
 
-const versionTag = (v) => {
-  const s = String(v || '').trim();
-  if (!s) return '';
-  return /^v/i.test(s) ? s : `v${s}`;
-};
-
 /** 10s, 2m, 3h: a unit that never makes you do arithmetic, rounded down. */
-function shortSpan(ms) {
-  const s = Math.max(0, Math.floor(ms / 1000));
-  if (s < 60) return `${s}s`;
-  const m = Math.floor(s / 60);
-  if (m < 60) return `${m}m`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h`;
-  return `${Math.floor(h / 24)}d`;
-}
-
 /** HH:MM:SS, hours not padded — a stopwatch, read at a glance. */
 function hhmmss(ms) {
   const total = Math.max(0, Math.floor(ms / 1000));
@@ -7381,13 +7333,6 @@ function placeChatPreview(chip) {
   const b = box.getBoundingClientRect();
   box.style.left = `${Math.round(Math.max(8, (window.innerWidth - b.width) / 2))}px`;
   box.style.top = `${Math.round(Math.max(8, c.top - b.height - 10))}px`;
-}
-
-function fmtBytes(n) {
-  const v = Number(n) || 0;
-  if (v < 1024) return `${v} B`;
-  if (v < 1024 * 1024) return `${Math.round(v / 1024)} KB`;
-  return `${(v / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 /** Put the newest message in view, and the cards above it.
