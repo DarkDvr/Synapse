@@ -79,3 +79,20 @@ export function parseModelLines(text, previous = []) {
     })
     .filter(Boolean);
 }
+
+/** Is this provider a server on this machine? Mirrors providerType() in
+ *  src/providers.js — the page imports nothing from the server, so the rule is
+ *  written once here too. */
+export function isLocalServer(p) {
+  const type = String(p?.type || '').toLowerCase();
+  if (type === 'local' || type === 'llamacpp') return true;
+  if (/^https?:\/\/(localhost|127\.0\.0\.1|\[::1\]|0\.0\.0\.0)(:|\/|$)/i.test(String(p?.baseURL || ''))) return true;
+  return false;
+}
+
+/** The badge beside this provider's models: 'Local' for anything on this machine,
+ *  its own name for a vendor. One badge for every local server, whichever dialect
+ *  it speaks — labelling llamacpp separately split the picker in two. */
+export function providerBadge(p) {
+  return isLocalServer(p) ? 'Local' : p?.name || '';
+}
