@@ -16,7 +16,22 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
 // The page is several modules now (app.js plus the ones that left it), so "the page
 // says" reads them all: a move must not read as a deletion.
-const ui = () => ['web/app.js', 'web/settings-panes.js', 'web/settings-form.js', 'web/ui-prefs.js'].map(read).join('\n');
+const ui = () =>
+  [
+    'web/app.js',
+    'web/settings-panes.js',
+    'web/settings-form.js',
+    'web/ui-prefs.js',
+    'web/traces.js',
+    'web/run-view.js',
+    'web/chat-scroll.js',
+    'web/chat-notes.js',
+    'web/rate-view.js',
+    'web/providers.js',
+    'web/provider-list.js',
+  ]
+    .map(read)
+    .join('\n');
 
 test('index.html says nothing about sessions or General', () => {
   const html = read('web/index.html');
@@ -261,9 +276,11 @@ test('a compact takes the discarded chat’s folds and alarms with it', () => {
   assert.notEqual(at, -1, 'the compacted event is still handled');
   const branch = js.slice(at, at + 1200);
   assert.match(branch, /forgetConversation\(/, 'the handler clears them before opening the new chat');
-  assert.match(js, /function forgetConversation\(dir, oldSessionId\)/);
-  assert.match(js, /state\.traces\.delete\(k\)/, 'the folds go');
-  assert.match(js, /state\.alarms = state\.alarms\.filter/, 'the alarm lines go');
+  // 6 Nov: the fold store went to ./traces.js with the trace it belongs to.
+  const traces = read('web/traces.js');
+  assert.match(traces, /function forgetConversation\(dir, oldSessionId\)/);
+  assert.match(traces, /state\.traces\.delete\(k\)/, 'the folds go');
+  assert.match(traces, /state\.alarms = state\.alarms\.filter/, 'the alarm lines go');
 });
 
 // 1 Nov: the engine announces every instruction file it loads and posts the whole text,
@@ -469,7 +486,7 @@ test('the open session has a trace, so its reasoning streams instead of dumping'
   // still a field of it, so the assertion follows the field.
   const store = read('web/state.js');
   assert.match(store, /sessionTrace: \{ key: '', stream: null \}/, 'the session has a trace of its own');
-  assert.match(js, /function renderSessionStream\(\)/, 'and a panel to draw it in');
+  assert.match(read('web/traces.js'), /function renderSessionStream\(\)/, 'and a panel to draw it in');
   assert.match(js, /state\.sessionTrace\.stream = null;/, 'the stream is cleared when the turn ends');
 });
 // The panel used to vanish for a whole turn: the transcript's innerHTML replaced its
@@ -493,6 +510,8 @@ test('the question panel survives a transcript rebuild because the node is held'
 // gap, reading as somebody else's message under a green one.
 test('the Architect’s live reasoning is drawn inside its own post', () => {
   const js = read('web/app.js');
+  // 6 Nov: the panel itself moved to ./traces.js with the trace it draws.
+  const traces = read('web/traces.js');
   // renderMessage takes the tail and puts it inside .msg-body, which carries the
   // speaker's 2px rule.
   assert.match(js, /function renderMessage\(m, tail = ''\) \{/);
@@ -501,7 +520,7 @@ test('the Architect’s live reasoning is drawn inside its own post', () => {
   assert.match(js, /renderMessage\(m, i === showable\.length - 1 && m\.type === 'assistant' \? liveTail : ''\)/, 'and only the newest assistant message carries it');
   assert.doesNotMatch(js, /el\.innerHTML = html \+ pending \+ renderSessionStream\(\)/, 'it is not appended after the conversation any more');
   // No head line: the post already says who is speaking.
-  const fn = /function renderSessionStream\(\) \{([\s\S]*?)\n\}/.exec(js);
+  const fn = /function renderSessionStream\(\) \{([\s\S]*?)\n\}/.exec(traces);
   assert.doesNotMatch(fn[1], /trace-head/, 'no second speaker label');
   assert.match(fn[1], /is-live is-own/);
   const css = read('web/synapse.css');

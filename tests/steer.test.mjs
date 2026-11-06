@@ -415,7 +415,8 @@ test('the composer says what a steer will do', () => {
 // 30 Oct: a steer fell into the trace's "N earlier steps" fold while the run went
 // on, and the tag sat a pixel and a half above the sentence's centre line.
 test('a steer is pinned in the trace, centred and bright', () => {
-  const app = fs.readFileSync(path.join(process.cwd(), 'web', 'app.js'), 'utf8');
+  // 6 Nov: the trace moved to ./traces.js, so its half of this rule is read there.
+  const app = fs.readFileSync(path.join(process.cwd(), 'web', 'traces.js'), 'utf8');
   const css = fs.readFileSync(path.join(process.cwd(), 'web', 'synapse.css'), 'utf8');
   assert.match(app, /const tail = notes\.filter\(\(n, i\) => i >= cut \|\| isSteer\(n\)\)/);
   assert.match(app, /const older = notes\.filter\(\(n, i\) => i < cut && !isSteer\(n\)\)/);

@@ -1,0 +1,293 @@
+// The trace: what a worker is doing while it does it, and the one line it folds to
+// when the step is over.
+//
+// A worker's session is its own, so its turns never reach the transcript — the
+// operator watched a nine-minute design run with nothing on screen and then one
+// report. A trace is the page's own record of that run: the newest tool call, the
+// newest sentence, the leases, the compactions and the loops, drawn light grey while
+// it is live and folded to a summary afterwards. It is also what makes a worker's
+// reasoning stream into the chat at all.
+//
+// One thing comes from app.js: a redraw of the transcript, because a trace that ends
+// has to be re-rendered where it stands. Wired at boot.
+import { state } from './state.js';
+import { esc, shortSpan } from './format.js';
+import { fmtTokens, dirKey, roleLabel } from './run-view.js';
+
+const missing = (name) => () => {
+  throw new Error(`traces.js: ${name} was not wired at boot`);
+};
+const wired = {
+  renderTranscript: missing('renderTranscript'),
+};
+
+/** Hand this module the one thing that lives in app.js. Called once, at boot. */
+export function tracesWiring(fns) {
+  Object.assign(wired, fns);
+}
+
+/**
+ * After a compact, the chat is meant to be one post and the new conversation.
+ *
+ * The fold lines (one per finished run) and the amber alarm lines are page state kept
+ * per project, not messages, so they outlived the conversation they described and
+ * reappeared above the fresh chat (1 Nov: eleven folds and an alarm under the
+ * "Compacted" post). They are that chat's evidence — the run log still has them — so
+ * they go with it. The new chat starts with its post and nothing above it.
+ */
+export function forgetConversation(dir, oldSessionId) {
+  const key = dir ? dirKey(dir) : '';
+  if (key) {
+    for (const [k, t] of [...state.traces]) if (dirKey(t.dir) === key) state.traces.delete(k);
+  }
+  state.alarms = state.alarms.filter((a) => {
+    if (oldSessionId && a.sessionId === oldSessionId) return false;
+    if (key && a.dir && dirKey(a.dir) === key) return false;
+    return true;
+  });
+}
+
+/**
+ * What a worker is doing, in the chat, while it does it.
+ *
+ * A worker's session is its own, so its turns never reach this transcript — the
+ * operator watched a nine-minute design run with nothing on screen and then one
+ * report. Its newest tool call (from the runner) and its newest sentence (read
+ * from its session, because that is the only honest source) are shown light grey
+ * so the chat is visibly alive, and the whole thing folds to a single line once
+ * the run ends: the report is the thing to read, not the transcript behind it.
+ */
+export function renderTrace(t) {
+  const name = roleLabel(t.role);
+  const head = [name, t.task, t.title].filter(Boolean);
+  const note = (n) => {
+    const text = typeof n === 'string' ? n : String(n?.text || '');
+    const steer = typeof n === 'object' && n?.steer === true;
+    // A steer is the operator's own instruction: its own line shape, so the tag
+    // and the sentence can be centred against each other and the sentence wraps
+    // instead of being cut with the steps.
+    if (steer) {
+      return `<div class="trace-line is-steer"><span class="msg-steer">STEER:</span><span class="trace-steer-text">${esc(text)}</span></div>`;
+    }
+    return `<div class="trace-line">${esc(text)}</div>`;
+  };
+  const notes = t.notes || [];
+  // Only the last few steps stay open. Everything before is one line that opens:
+  // a worker ten minutes in has done forty things, and forty lines of it is the
+  // whole chat. This is the shape an editor's agent uses, for the same reason.
+  //
+  // A steer is not a step. The four-line tail is for steps, and folding the
+  // operator's own instruction into "N earlier steps" hid it while the run went
+  // on (30 Oct), so every steer stays in the open tail whatever has happened since.
+  const isSteer = (n) => typeof n === 'object' && n?.steer === true;
+  const cut = Math.max(0, notes.length - 4);
+  const tail = notes.filter((n, i) => i >= cut || isSteer(n));
+  const older = notes.filter((n, i) => i < cut && !isSteer(n));
+  const archive = older.length
+    ? `<details class="trace-archive"><summary>${older.length} earlier step${older.length === 1 ? '' : 's'}</summary>${older
+        .map(note)
+        .join('')}</details>`
+    : '';
+  // What it is saying *now*. The words stream in as they are written, and the last
+  // window stays on screen when the step ends — still, and dimmed. Removing it took
+  // eleven lines out of the chat and put them back at every step boundary, which a
+  // fast model does several times a second. The whole block is rendered and the
+  // panel keeps its window; nothing is sliced here, so a re-render never changes a
+  // line break.
+  const streaming = t.stream && t.stream.text
+    ? `<div class="trace-flow${t.stream.kind === 'think' ? ' is-think' : ''}${t.stream.ended ? ' is-idle' : ''}"><div class="trace-flow-view"><div class="trace-flow-body">${esc(
+        t.stream.text,
+      )}</div></div></div>`
+    : '';
+  // A compaction line is pinned: the four-line tail is for steps, and this is not
+  // a step — it is the reason the next step is slower and the window is empty
+  // again. It stays for the whole run, and the folded summary counts it.
+    const packed = Number(t.compactions) || 0;
+  const compacting = Number(t.compactingSince) || 0;
+  // While one is in flight the count is "the ones that have finished, plus this
+  // one" — `compactions` only ever counts finished compactions, so the number here
+  // is the number of the one being written.
+  const compactLine = compacting
+    ? `<div class="trace-line is-compact">⏳ Compacting ×${packed + 1}</div>`
+    : packed
+      ? `<div class="trace-line is-compact">⏳ Compacted ×${packed}` +
+        (t.compactAt ? ` · context at ${fmtTokens(t.compactAt)}${t.compactLimit ? `/${fmtTokens(t.compactLimit)}` : ''}` : '') +
+        '</div>'
+      : '';
+  // A loop rescue is pinned for the same reason: it is not a step, and it is the
+  // one line that explains why the next thinking is shorter.
+  const looped = Number(t.loops) || 0;
+  const loopLimit = Number(t.loopLimit) || 3;
+  const loopLine = looped
+    ? `<div class="trace-line is-loop">↻ Loop detected ×${looped}` +
+      (looped >= loopLimit
+        ? ` — marked ISSUES, next coder`
+        : ` of ${loopLimit} — asking it to carry on`) +
+      '</div>'
+    : '';
+  const body = `${archive}${compactLine}${loopLine}${tail.map(note).join('')}${streaming}`;
+  if (!t.finishedAt) {
+    return `<div class="trace is-live" data-trace="${esc(t.key)}">
+      <div class="trace-head" title="${esc(head.join(' · '))}">${esc(head.join(' · '))}</div>
+      <div class="trace-lines">${body || '<div class="trace-line">starting…</div>'}</div>
+    </div>`;
+  }
+  const took = t.ms ? ` · ${shortSpan(t.ms)}` : '';
+  const written = t.files ? ` · ${t.files} file${t.files === 1 ? '' : 's'}` : '';
+  // A compaction is not a step of the work, and it is the one thing the operator
+  // needs to still see an hour later, so it rides the folded line too.
+  const packedNote = Number(t.compactions) ? ` · compacted ×${t.compactions}` : '';
+  const loopedNote = looped ? ` · looped ×${looped}` : '';
+  // A steer is the operator's own instruction, so a folded trace says it is in
+  // there — the text itself is one click away, but it cannot become invisible.
+  const steeredNote = notes.some(isSteer) ? ' · steered' : '';
+  // The task's own title belongs on the folded line: "Coder 1 · t8" says where,
+  // not what. It ellipsizes when the column is short, and the tooltip has the lot.
+  const foldHead = [name, t.task, t.title].filter(Boolean).join(' · ');
+  return `<details class="trace is-fold" data-trace="${esc(t.key)}">
+    <summary title="${esc(foldHead)}">${esc(foldHead)}${took}${written}${packedNote}${loopedNote}${steeredNote}</summary>
+    <div class="trace-lines">${body}</div>
+  </details>`;
+}
+
+/** The traces that belong to a project, in the order they started. */
+export function tracesFor(dir) {
+  const key = dirKey(dir);
+  return [...state.traces.values()].filter((t) => dirKey(t.dir) === key);
+}
+
+export const traceKeyOf = (run) => `${dirKey(run.dir)}|${run.task}|${Number(run.startedAt) || 0}`;
+// A steer is a note on the run, and it must survive a reload: `/api/runs` carries
+// the list, so a page opened mid-run can rebuild the yellow STEER lines.
+export const steerNotes = (run) =>
+  (Array.isArray(run?.steers) ? run.steers : []).map((s) => ({ steer: true, text: s.text }));
+export function traceOf(run) {
+  return run ? state.traces.get(traceKeyOf(run)) || null : null;
+}
+
+/**
+ * The trace a runner event belongs to.
+ *
+ * Its own key when the page saw the run start, and otherwise the newest trace for
+ * that task in that project: the same run before a reload has a different
+ * `startedAt` (the page rebuilds it from `/api/runs`), and a note that lands in
+ * that gap must still reach the right line rather than being dropped in silence.
+ */
+export function traceFor(ev) {
+  const exact = state.traces.get(traceKeyOf(ev));
+  if (exact) return exact;
+  const dir = dirKey(ev.dir);
+  let best = null;
+  for (const t of state.traces.values()) {
+    if (dirKey(t.dir) !== dir || t.task !== ev.task) continue;
+    if (!best || (Number(t.startedAt) || 0) > (Number(best.startedAt) || 0)) best = t;
+  }
+  return best;
+}
+
+/** One compaction, on a trace. `times` is the transcript's own tally, so the
+ *  count only ever goes up: a note repeated (a re-sent event, two pages open) must
+ *  not become "Compacting ×2" for one compaction. */
+export function noteCompaction(trace, { times, used, context } = {}) {
+  const counted = Number(times) || 0;
+  const known = Number(trace.compactions) || 0;
+  trace.compactions = counted > known ? counted : known || 1;
+  if (Number(used)) trace.compactAt = Number(used);
+  if (Number(context)) trace.compactLimit = Number(context);
+}
+
+/** One loop rescue, on a trace. Like a compaction, the count only goes up: a
+ *  re-sent event must not turn one rescue into "×2". `to` is the effort it was
+ *  lowered to; no `to` means there was nowhere left to go. */
+export function noteLoop(trace, { times, limit } = {}) {
+  const counted = Number(times) || 0;
+  const known = Number(trace.loops) || 0;
+  trace.loops = counted > known ? counted : known || 1;
+  if (Number(limit)) trace.loopLimit = Number(limit);
+  trace.loopStop = trace.loops >= trace.loopLimit;
+}
+
+/** The trace of a delegated run whose worker session is this one, if any. */
+export function traceForSession(sessionId) {
+  if (!sessionId) return null;
+  for (const run of state.runs.values()) {
+    if (run.workerId === sessionId) return traceOf(run);
+  }
+  return null;
+}
+
+/**
+ * The engine compacting a worker's transcript, seen on its own stream.
+ *
+ * `started` puts the line in the chat while it is happening — the operator watched
+ * "compaction.started" sit in the status rail with nothing in the chat beside it,
+ * which is the one moment they could have used a word in the conversation. `ended`
+ * counts it; `failed` clears the line and counts nothing. The size beside it is the
+ * prompt the run last reported, which is the size that caused it.
+ */
+export function noteCompactionEvent(ev) {
+  const trace = traceForSession(ev.sessionId);
+  if (!trace) return;
+  if (ev.type === EV.compactionStarted) {
+    trace.compactingSince = Date.now();
+  } else {
+    trace.compactingSince = 0;
+    if (ev.type === EV.compactionEnded) {
+      // Count it; do not guess its size. The runner reads the compaction's own
+      // usage out of the transcript and sends it a moment later, and that is the
+      // only number worth printing — `run.ctx` here is *this* poll's prompt, which
+      // is the small one if the transcript has already shrunk. Showing that was
+      // the "Compacted ×2 · context at 11K" the operator was rightly suspicious of.
+      noteCompaction(trace, { times: (Number(trace.compactions) || 0) + 1 });
+    }
+  }
+  wired.renderTranscript();
+}
+
+/** What the traces are showing, so a rebuilt transcript is not rebuilt for
+ *  nothing while they sit still.
+ *
+ *  The compaction count is part of it and has to be: a compaction changes no note
+ *  and no stream, so without this the `run.note` arrived, set the count, asked for
+ *  a re-render — and the re-render found nothing new in this signature and
+ *  returned, which is why the operator saw "compaction" in the chip and nothing
+ *  in the chat. */
+export function traceSig() {
+  const own = state.sessionTrace;
+  const sessionPart = own?.stream ? `own:${own.key}:${own.stream.text.length}:${own.stream.ended ? 1 : 0}` : '';
+  return [
+    [...state.traces.values()]
+      .map(
+        (t) =>
+          `${t.key}:${t.finishedAt || 0}:${(t.notes || []).length}:${t.stream ? t.stream.text.length : 0}:` +
+          `${t.stream?.ended ? 1 : 0}:${Number(t.compactions) || 0}:${Number(t.compactingSince) || 0}:` +
+          `${Number(t.loops) || 0}:${Number(t.loopLimit) || 0}:${t.loopStop ? 1 : 0}`,
+      )
+      .join(';'),
+    sessionPart,
+  ].join(';');
+}
+
+/**
+ * The open session's own live step, drawn in the panel the workers get.
+ *
+ * Once the step's message carries the same words, the message is the record and the
+ * panel goes — otherwise the paragraph would be on screen twice.
+ */
+export function renderSessionStream() {
+  const t = state.sessionTrace;
+  const text = String(t?.stream?.text || '');
+  if (!t?.key || !text.trim()) return '';
+  const seen = state.messages
+    .flatMap((m) => m.parts || [])
+    .filter((p) => p.type === 'reasoning' || p.type === 'text')
+    .map((p) => String(p.text || ''))
+    .join('\n');
+  if (seen.length >= text.length && seen.includes(text.slice(0, 40))) return '';
+  // No head line and no rule of its own: this panel sits *inside* the Architect's
+  // post, so the post's green line is the only rule and the reasoning keeps its
+  // grey. `is-own` is the whole difference from a worker's trace.
+  return `<div class="trace is-live is-own" data-trace="${esc(t.key)}">
+    <div class="trace-flow${t.stream.kind === 'think' ? ' is-think' : ''}${t.stream.ended ? ' is-idle' : ''}"><div class="trace-flow-view"><div class="trace-flow-body">${esc(text)}</div></div></div>
+  </div>`;
+}
