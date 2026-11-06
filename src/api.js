@@ -61,7 +61,7 @@ export function binContents(dir) {
   try {
     if (!fs.statSync(bin).isDirectory()) return found;
   } catch {
-    return found;
+    return found; // no bin folder: nothing to count
   }
   found.exists = true;
   const walk = (at) => {
@@ -69,7 +69,7 @@ export function binContents(dir) {
     try {
       entries = fs.readdirSync(at, { withFileTypes: true });
     } catch {
-      return;
+      return; // an unreadable folder is skipped, not counted
     }
     for (const entry of entries) {
       const full = path.join(at, entry.name);
@@ -288,7 +288,11 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
     let directory = '';
     try {
       directory = (await engine.getSession(sessionId))?.directory || '';
-    } catch { return { busy: false }; }
+    } catch (err) {
+      // The engine is not answering. Nothing can be running, but the reason matters:
+      // 'Nothing is running now' for a dead engine is a lie the operator would act on.
+      return { busy: false, engineDown: true, reason: err.message };
+    }
     if (!directory) return { busy: false };
 
     const [active, sessions, permissions] = await Promise.all([
@@ -1918,6 +1922,7 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
       // while the page said "Compacting…".
       if (cancelCompact(sessionId)) app.info(`compact cancelled for ${sessionId}`);
       const busy = await busyFor(sessionId);
+      if (busy.engineDown) throw fail(503, 'The engine is not answering, so there is nothing to stop.');
       if (!busy.busy) {
         throw fail(409, 'Nothing is running now.');
       }

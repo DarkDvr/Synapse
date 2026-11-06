@@ -104,6 +104,21 @@ test('a Stop during a compaction ends the wait at once', async () => {
   fs.rmSync(h.dir, { recursive: true, force: true });
 });
 
+// Measured 6 Nov, while doing the catch audit: `busyFor` swallowed a dead engine and
+// answered "Nothing is running now" — a lie the operator would act on. The engine
+// being down is its own answer.
+test('a Stop against a dead engine says so, instead of "nothing is running"', async () => {
+  const h = harness();
+  h.engine.getSession = async () => {
+    throw new Error('ECONNREFUSED 127.0.0.1:8720');
+  };
+  await assert.rejects(
+    () => h.api.stop('ses_arch'),
+    (err) => err.status === 503 && /engine is not answering/i.test(err.message),
+  );
+  fs.rmSync(h.dir, { recursive: true, force: true });
+});
+
 test('the operator speaking calls a stop off, even when the words travel as a steer', async () => {
   const h = harness();
   await h.api.stop('ses_arch');
