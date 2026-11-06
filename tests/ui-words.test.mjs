@@ -75,7 +75,8 @@ test('the dead session-row styles are gone from the stylesheet', () => {
 // Phase 5 removed the function but left the project menu calling it, so Delete…
 // threw instead of asking. The menu is only as good as the handler behind it.
 test('the project menu’s Delete is wired to a client path that exists', () => {
-  const js = read('web/app.js');
+  // 7 Nov: the menu is its own module.
+  const js = read('web/project-menu.js');
   assert.match(js, /data-menu-action="delete"/);
   assert.match(js, /async function removeProject\(id\)/);
   assert.match(js, /function recycleReason\(/);
@@ -234,7 +235,8 @@ test('the settings panes keep only a few short notes', () => {
 // by label instead; the rail's project order was likewise fixed. Both orders are
 // now the operator's, saved with the config / the registry.
 test('the rail and the model menu follow the order the operator arranged', () => {
-  const js = read('web/app.js');
+  // 7 Nov: the project menu is its own module; the rail's rows are in projects.js.
+  const menu = read('web/project-menu.js');
   // The order itself moved to ./provider-list.js (6 Nov) — it is one answer three
   // parts of the page need — so the rule is read where it lives now.
   assert.match(read('web/provider-list.js'), /function providerOrderOf\(/);
@@ -242,14 +244,15 @@ test('the rail and the model menu follow the order the operator arranged', () =>
   assert.match(read('web/model-picker.js'), /rankOf\(a\.provider\) - rankOf\(b\.provider\)/);
   assert.match(read('web/providers.js'), /data-prov-up=|data-prov-down=/);
   assert.match(read('web/providers.js'), /function moveProvider\(/);
-  assert.match(js, /data-menu-action="up"|data-menu-action="down"/);
-  assert.match(js, /\/api\/projects\/\$\{encodeURIComponent\(id\)\}\/move/);
+  assert.match(menu, /data-menu-action="up"|data-menu-action="down"/);
+  assert.match(menu, /\/api\/projects\/\$\{encodeURIComponent\(id\)\}\/move/);
 });
 
 // 4 Nov: a moved project row should read as one motion, and the model picker
 // needed about six more characters for the names it holds.
 test('a moved project slides, and the model picker is six characters wider', () => {
-  const js = read('web/app.js');
+  // 7 Nov: the move lives in the project menu's module.
+  const js = read('web/project-menu.js');
   assert.match(js, /row\.animate\(\[\{ transform: `translateY\(\$\{dy\}px\)` \}/);
   assert.match(js, /prefers-reduced-motion/);
   const css = read('web/synapse.css');
