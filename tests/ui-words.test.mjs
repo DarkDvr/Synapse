@@ -189,7 +189,8 @@ test('the run header does not claim 0% reasoning when it was not split', () => {
 // task — not for an old blocker the role has worked past, and not during the
 // Architect's own turn.
 test('a role is only Blocked while the plan is genuinely stuck', () => {
-  const js = read('web/app.js');
+  // 7 Nov: the cards' activity moved to ./live-runs.js.
+  const js = read('web/live-runs.js');
   assert.match(js, /const blocked = blockedTasks\.length > 0 && !archBusy && !run && !anyReady;/);
   assert.match(js, /const stuck = blockedTasks\[0\];/);
 });
