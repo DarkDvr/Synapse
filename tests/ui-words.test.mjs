@@ -448,7 +448,10 @@ test('the open session has a trace, so its reasoning streams instead of dumping'
   // It used to be `traceOf(currentRun())`, which is null for the Architect: every
   // delta it produced was dropped and the wall arrived at the step boundary.
   assert.doesNotMatch(js, /function appendStream\(kind, delta\) \{\s*const trace = traceOf\(currentRun\(\)\);/, 'appendStream no longer ignores the session');
-  assert.match(js, /sessionTrace: \{ key: '', stream: null \}/, 'the session has a trace of its own');
+  // The store moved to web/state.js when app.js began to come apart; the trace is
+  // still a field of it, so the assertion follows the field.
+  const store = read('web/state.js');
+  assert.match(store, /sessionTrace: \{ key: '', stream: null \}/, 'the session has a trace of its own');
   assert.match(js, /function renderSessionStream\(\)/, 'and a panel to draw it in');
   assert.match(js, /state\.sessionTrace\.stream = null;/, 'the stream is cleared when the turn ends');
 });

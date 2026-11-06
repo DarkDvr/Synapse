@@ -136,6 +136,9 @@ settings pages, update dialog, ask panel, desk badge, SSE handler, over one muta
 5. `web/composer.js` — the dock, Stop, attachments.
 6. `web/rail.js` — projects, cards, plan pane.
 
+**Done so far.** web/state.js — the 160-line store, now its own module (78 keys at
+load, checked live). app.js is 10,387 lines, down from 10,546.
+
 **Test that proves it.** After each step the suite is unchanged and green, and
 `tests/ui-layout.test.mjs` + a screenshot of the page still match. The structural
 check: `app.js` line count falls below the previous step's and nothing else changes.
