@@ -46,6 +46,7 @@ import {
 import { screenCallOver } from './desk.js';
 import { normDir } from './paths.js';
 import { report } from './report.js';
+import { tokens, ranFor } from './words.js';
 import { skillRules, describeSkills, roleMustLoad } from './skills.js';
 import { rulesFor } from './permissions.js';
 import { configSavedAt } from './config.js';
@@ -375,16 +376,6 @@ export function contextStats(messages) {
 /** "23% thinking", or the truth when the provider did not separate it. */
 export const thinkNote = (context) =>
   context?.thinkUnsplit ? 'including reasoning' : `${context?.thinkShare || 0}% thinking`;
-
-/** Token counts read as words, not as digits: 212k, 1.4M. */
-const tokens = (n) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : `${Math.round(n / 1e3)}k`);
-
-/** How long a run took, in the same HH:MM:SS the role cards' clocks use. */
-function ranFor(ms) {
-  const total = Math.max(0, Math.round(Number(ms) / 1000) || 0);
-  const pad = (n) => String(n).padStart(2, '0');
-  return `${pad(Math.floor(total / 3600))}:${pad(Math.floor((total % 3600) / 60))}:${pad(total % 60)}`;
-}
 
 /**
  * Did this write land outside the project folder?

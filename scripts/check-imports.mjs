@@ -51,12 +51,22 @@ function templateCalls(src) {
 }
 
 const exportsOf = new Map();
+// Everything a module declares at its top level, exported or not. A name that is
+// declared in one file and used in another without being exported is not a missing
+// import in the usual sense — there is nothing to import — and the exports pass
+// cannot see it. Two of those shipped on 7 Nov: `workEndQuiet` in live-runs.js and,
+// before it, the same shape in report.js. In a module, the use is a ReferenceError.
+const declaredOf = new Map();
 for (const f of fs.readdirSync(WEB).filter((f) => f.endsWith('.js'))) {
   const text = codeOnly(fs.readFileSync(path.join(WEB, f), 'utf8'));
   const names = new Set();
   for (const m of text.matchAll(/^export (?:async )?function ([A-Za-z_$][\w$]*)/gm)) names.add(m[1]);
   for (const m of text.matchAll(/^export (?:const|let) ([A-Za-z_$][\w$]*)/gm)) names.add(m[1]);
   exportsOf.set(f, names);
+  const all = new Set(names);
+  for (const m of text.matchAll(/^(?:export )?(?:async )?(?:function|class) ([A-Za-z_$][\w$]*)/gm)) all.add(m[1]);
+  for (const m of text.matchAll(/^(?:export )?(?:const|let|var) ([A-Za-z_$][\w$]*)/gm)) all.add(m[1]);
+  declaredOf.set(f, all);
 }
 
 let problems = 0;
@@ -68,15 +78,25 @@ for (const file of targets) {
   const known = new Set();
   for (const m of src.matchAll(/^(?:export )?(?:async )?function ([A-Za-z_$][\w$]*)/gm)) known.add(m[1]);
   for (const m of src.matchAll(/^(?:export )?(?:const|let|var) ([A-Za-z_$][\w$]*)/gm)) known.add(m[1]);
-  for (const m of src.matchAll(/^import \{([^}]+)\} from/gm)) {
+  // Imports may be written across several lines (app.js's are), so the braces have to
+  // be allowed to span them — otherwise every name in a wrapped import reads as a
+  // missing one, and the checker cries wolf on a page that works.
+  for (const m of src.matchAll(/^import\s*\{([\s\S]*?)\}\s*from/gm)) {
     for (const part of m[1].split(',')) known.add(part.trim().split(' as ').pop().trim());
+  }
+  // Anything this file declares anywhere — a `const missing` inside one function is
+  // still this file's own name, and flagging it as "declared in ask-panel.js" is the
+  // checker being wrong about working code (7 Nov, twice).
+  const declaredHere = new Set(known);
+  for (const m of src.matchAll(/(?:^|[^\w$.])(?:const|let|var|function|class)\s+([A-Za-z_$][\w$]*)/g)) {
+    declaredHere.add(m[1]);
   }
 
   // The other half of the same mistake: importing a name the target does not export.
   // The browser answers that one with a module-graph SyntaxError and a dead page, and
   // nothing else in the suite notices (7 Nov: `isBusy` from projects.js).
   const badImports = [];
-  for (const m of raw.matchAll(/import \{([^}]+)\} from '\.\/([^']+)';/g)) {
+  for (const m of raw.matchAll(/import\s*\{([\s\S]*?)\}\s*from '\.\/([^']+)';/g)) {
     const target = m[2];
     const exported = exportsOf.get(target);
     if (!exported) { badImports.push(`${target}  <- no such module`); continue; }
@@ -115,6 +135,17 @@ for (const file of targets) {
     for (const [f, names] of exportsOf) {
       if (f === own) continue;
       if (names.has(name)) { missing.push(`${name}  <- ${f}`); break; }
+    }
+    // Declared elsewhere, exported nowhere: there is no import to write, so say the
+    // shape of the fix rather than leaving it as "missing".
+    if (missing.some((line) => line.startsWith(`${name}  `))) continue;
+    if (declaredHere.has(name)) continue;
+    for (const [f, names] of declaredOf) {
+      if (f === own) continue;
+      if (names.has(name) && !exportsOf.get(f).has(name)) {
+        missing.push(`${name}  <- declared in ${f} and never exported`);
+        break;
+      }
     }
   }
   if (missing.length) {

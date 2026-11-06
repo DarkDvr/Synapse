@@ -9,8 +9,17 @@
 // operator, stopped by the harness, timed out), the body says what the worker
 // claimed, and the last line says what the Architect should do next. A stop is not
 // a failure and must not read like one.
+//
+// Everything this file uses has to be imported: it was carved out of runs.js, and a
+// name left behind there is not a syntax error, it is a ReferenceError five seconds
+// after a worker finishes - the Architect never told, the plan stuck on `doing`, the
+// screen saying nothing (found by the smoke test, 7 Nov). tests/report.test.mjs
+// walks every branch so the next move cannot repeat it.
 
-export   function report({ task, role, insteadOf, startedBelow = false, skipped, outcome, harnessStop, text, files, context, workerId, planTouched, synapseTouched, qcRound, skillsRequired, skillsMissing, auto, stallSec, retries, resumes, loops = 0, loopCount = 0, loopMarked = false, loopRole = null, loopModel = null, modelRef = '', error, stoppedBy, lastTurnError, steers, deferred }) {
+import { QC_ROUNDS } from './plans.js';
+import { tokens } from './words.js';
+
+export function report({ task, role, insteadOf, startedBelow = false, skipped, outcome, harnessStop, text, files, context, workerId, planTouched, synapseTouched, qcRound, skillsRequired, skillsMissing, auto, stallSec, retries, resumes, loops = 0, loopCount = 0, loopMarked = false, loopRole = null, loopModel = null, modelRef = '', error, stoppedBy, lastTurnError, steers, deferred }) {
     const head =
       outcome === 'completed'
         ? `${task.id} (${role}) finished.`

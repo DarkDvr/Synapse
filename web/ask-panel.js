@@ -442,7 +442,7 @@ function applyAskConditions() {
 }
 
 /** The free-text box on a choice question is only usable once its row is picked. */
-function syncAskCustoms(target) {
+export function syncAskCustoms(target) {
   const row = target.closest('.ask-opt-other');
   if (!row) return;
   const pick = row.querySelector('[data-ask-custom]');

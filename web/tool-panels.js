@@ -163,7 +163,7 @@ export async function renderProbe() {
   }
 }
 
-async function replyPermission(requestId, decision, reasonText = '') {  // The card can belong to a hidden worker session, not the open one. Answering
+export async function replyPermission(requestId, decision, reasonText = '') {  // The card can belong to a hidden worker session, not the open one. Answering
   // it on the open session would fail with a request id the engine never saw.
   const permission = (state.permissions || []).find((p) => p.requestId === requestId);
   const sessionId = permission?.sessionId || state.sessionId;

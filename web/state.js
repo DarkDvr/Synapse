@@ -45,9 +45,18 @@ export const state = {
   permSeen: new Map(),
   permWakeOk: new Set(),
   busy: false,
-  // The first Stop was pressed: the AI is finishing the step, then it ends. A
+  // A stop is in force — the operator pressed Stop, or the server said so. The page
+  // draws the notice from this and never decides for itself that a stop is over (see
+  // `stop.done`). The first press is graceful: the AI finishes the step, then ends; a
   // second press is the hard interrupt (see interrupt()).
   stopping: false,
+  stoppingPhase: null,
+  stoppingReason: null,
+  // The done-chime's memory: was work live on the last look, and should this end be
+  // silent because the operator stopped it. Shared with live-runs.js, which sees
+  // `run.stopping` before the working state does.
+  workWasLive: false,
+  workEndQuiet: false,
   busySessions: new Set(),
   busySince: new Map(),
   toolsInFlight: new Set(),
@@ -56,11 +65,6 @@ export const state = {
   // Stop used to be disabled while the run was still working.
   canStop: false,
   activeHere: 0,
-  // A stop in force, as the server reports it. The page draws the notice from this
-  // and never decides for itself that a stop is over — see `stop.done`.
-  stopping: false,
-  stoppingPhase: null,
-  stoppingReason: null,
   // Delegated work in flight, keyed by directory: one worker per project, so a
   // project has at most one entry. The cards and the live path are drawn from
   // this, and `GET /api/runs` is what a page opened mid-run starts from.

@@ -8,7 +8,7 @@ import { state } from './state.js';
 import { esc } from './format.js';
 import { readPath } from './settings-data.js';
 import { setField, setSelect, setCheck, setGroup } from './settings-form.js';
-import { DONE_SOUNDS, doneSoundName } from './notify.js';
+import { DONE_SOUNDS, DONE_SOUND_DEFAULT, doneSoundName } from './notify.js';
 import { CHAT_TEXT_DEFAULT, CHAT_TEXT_MIN, CHAT_TEXT_MAX, chatTextPx, LANGUAGES } from './ui-prefs.js';
 
 // Three things in this module come from app.js: the two halves of the update page,

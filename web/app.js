@@ -136,6 +136,7 @@ import {
   refreshAskPanel,
   replyForm,
   moveAskPage,
+  syncAskCustoms,
   askPanelWiring,
 } from './ask-panel.js';
 import {
@@ -178,7 +179,7 @@ import {
   liveRunsWiring,
 } from './live-runs.js';
 import { refreshPending, schedulePendingRefresh, schedulePermissionRender, pendingWiring } from './pending.js';
-import { openRailModal, closeRailModal, renderToolUsage, renderProbe } from './tool-panels.js';
+import { openRailModal, closeRailModal, renderToolUsage, renderProbe, replyPermission } from './tool-panels.js';
 import {
   renderSettings,
   updateSettingsFoot,
@@ -293,8 +294,8 @@ function playDoneSound(value = state.config?.notify?.doneSound) {
 
 // One chime per finished piece of work, and none for a stop or a failure: the sound
 // means "the Architect is done", so it must not say that when the work was cut short.
-let workWasLive = false;
-let workEndQuiet = false;
+// The memory itself is `state.workWasLive` / `state.workEndQuiet`, because the run
+// stream in live-runs.js sees `run.stopping` before this file sees the work end.
 
 /**
  * Called whenever "is this chat working?" could have changed. The answer comes from
@@ -315,19 +316,19 @@ function noteWorking() {
     // evaluation would undo it here: after a failed turn the project lock is still
     // held for a moment, so the page reads "still working" once more and would then
     // chime when the lock goes — for a turn that failed.
-    if (!workWasLive) workEndQuiet = false;
-    workWasLive = true;
+    if (!state.workWasLive) state.workEndQuiet = false;
+    state.workWasLive = true;
     // Work has resumed, so the Architect is not finished after all: a shutdown
     // waiting on silence is waiting on nothing. (The first evaluation, before any
     // work has run, also lands here — and disarms nothing that was not armed.)
     cancelShutdown();
     return;
   }
-  if (!workWasLive) return;
+  if (!state.workWasLive) return;
   if (workWillContinue({ mode: state.mode, auto: state.automation?.keepBuilding === true, tasks: state.planState?.plan?.tasks || [] })) return;
-  workWasLive = false;
-  if (workEndQuiet) {
-    workEndQuiet = false;
+  state.workWasLive = false;
+  if (state.workEndQuiet) {
+    state.workEndQuiet = false;
     return;
   }
   playDoneSound();
@@ -618,8 +619,8 @@ async function openSession(id) {
   state.automation = { ...AUTOMATION_DEFAULTS, ...(findSession(id)?.automation || {}) };
   // Arriving mid-run is not "it just finished": arm the chime from where the chat
   // actually is, or switching to a busy chat and back would chirp for old work.
-  workWasLive = sessionWorking(id);
-  workEndQuiet = false;
+  state.workWasLive = sessionWorking(id);
+  state.workEndQuiet = false;
   renderMode();
   renderKeep();
   $('sidebar').classList.remove('open');
@@ -1393,7 +1394,7 @@ function connectStream() {
         else if (turnEnded(ev.type) || ev.type === EV.idle) state.busy = false;
         // A turn that failed or was interrupted is not "done": the chime stays quiet
         // for it, so the sound always means the work finished.
-        if (ev.type === EV.executionFailed || ev.type === EV.executionInterrupted) workEndQuiet = true;
+        if (ev.type === EV.executionFailed || ev.type === EV.executionInterrupted) state.workEndQuiet = true;
         renderComposer();
       }
       if (changed) {

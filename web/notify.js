@@ -20,7 +20,7 @@ export const DONE_SOUNDS = [
 ];
 
 /** What the config chooses when the key is missing (a config from an older build). */
-const DONE_SOUND_DEFAULT = 'chime';
+export const DONE_SOUND_DEFAULT = 'chime';
 
 /** A known name, or the default — never a file that does not exist. */
 export const doneSoundName = (value) => (DONE_SOUNDS.some((s) => s.v === value) ? value : DONE_SOUND_DEFAULT);

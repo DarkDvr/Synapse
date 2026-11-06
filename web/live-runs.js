@@ -512,7 +512,7 @@ export function handleRunEvent(ev) {
   if (ev.type === 'run.stopping') {
     state.stopping = true;
     // A stop is not a finish: no sound for work the operator ended on purpose.
-    workEndQuiet = true;
+    state.workEndQuiet = true;
     renderComposer();
     return;
   }
