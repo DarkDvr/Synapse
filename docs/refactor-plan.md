@@ -18,7 +18,7 @@ fixed on the spot; a bug found on the way that is unrelated goes in
 | 3 — a catch that says nothing | **done** — baseline of 71, and it may only go down |
 | 4 — sync reads on the request path | **done** — the plan is parsed once per change |
 | 5 — the wake loop leaves `runs.js` | **half** — the report writer is out; the wake loop waits on `waitForIdle` moving first (measured, see below) |
-| 6 — `web/app.js` comes apart | **in progress** — out: `state.js`, `format.js`, `api.js`, `dom.js`, `console.js`, `settings-data.js` (10,546 → 10,110). **Next:** the Settings block still calls ~24 things, and several are small helpers of their own — `isLocalServer`, `setIcon`, `providerBadge` — so they move before the block does |
+| 6 — `web/app.js` comes apart | **in progress** — out: `state.js`, `format.js`, `api.js`, `dom.js`, `console.js`, `settings-data.js`, `events.js`, `settings-form.js`, `settings-panes.js`, `ui-prefs.js` (10,546 → 9,465). **Next:** the Providers editor (the last ~800 lines of the Settings block), then the transcript |
 
 ---
 
@@ -142,13 +142,28 @@ settings pages, update dialog, ask panel, desk badge, SSE handler, over one muta
 **Plan.** In this order, one commit each, each behind the UI tests:
 1. `web/state.js` — the store and its accessors.
 2. `web/events.js` — the SSE handler and the sync functions.
-3. `web/settings.js` — the Settings pages.
+3. `web/settings-*.js` — the Settings pages (form primitives, then panes; the
+   Providers editor is the last piece).
 4. `web/transcript.js` — the chat rendering.
 5. `web/composer.js` — the dock, Stop, attachments.
 6. `web/rail.js` — projects, cards, plan pane.
 
-**Done so far.** web/state.js — the 160-line store, now its own module (78 keys at
-load, checked live). app.js is 10,387 lines, down from 10,546.
+**Done so far.** `state.js` (the 160-line store, 78 keys at load), then `format.js`,
+`api.js`, `dom.js`, `console.js`, `settings-data.js`, `events.js`, `settings-form.js`
+(the four form primitives), `settings-panes.js` (the tab list and nine panes) and
+`ui-prefs.js` (the chat's text size and the language). app.js is 9,465 lines, down
+from 10,546.
+
+The Settings block is what proved the order matters: the panes could not leave until
+their primitives had, and the four Prohibited handlers could not leave at all — they
+edit the draft and re-render the window, which is the app's state machine, not a
+pane's job. Two things stayed behind on purpose, and the plan is now honest about
+them: those handlers, and the `providers` pane, which is a real editor.
+
+A lesson for the next step: a test that reads `web/app.js` for text which moved is
+not a test that broke, it is a test that lied about where the code lives. The four
+UI test files now read the page's modules together, so a move cannot read as a
+deletion.
 
 **Test that proves it.** After each step the suite is unchanged and green, and
 `tests/ui-layout.test.mjs` + a screenshot of the page still match. The structural

@@ -8,6 +8,21 @@ Newest first. When one is fixed, delete it here and say so in the commit.
 
 ---
 
+## A boot error leaves a page that looks alive and is not
+
+`boot()` in `web/app.js` is one long `await` chain: `wire()` binds the handlers, then
+a dozen loads run in order, then `connectStream()` — which is what gives the page its
+identity and its live feed — is the *last* line. One rejection anywhere in the middle
+(the 6 Nov pane split put a `ReferenceError` there for ten minutes) and everything
+before it stays: the project rail draws, the chat size is applied, the page looks
+finished. What is missing is silent — no console message the operator would see, no
+toast, and the Settings button answers "this view is not connected" because the page
+never got a client id.
+
+Where: `web/app.js`, `boot()`.
+Fix: `connectStream()` first, and a `window.onerror` / `unhandledrejection` trap that
+puts a line in the chat or a toast. Found by accident; it will be found again.
+
 ## The page knows two engine provider ids by name
 
 `ENGINE_PROVIDERS` in `web/app.js` hardcodes `opencode` and `opencode-go`, with the
