@@ -11,7 +11,7 @@
 import { renderMarkdown } from './md.js';
 import { EV, turnEnded, shortEvent } from './events.js';
 import { state } from './state.js';
-import { esc, relTime, hhmm, toolTarget, versionTag, shortSpan, fmtBytes } from './format.js';
+import { esc, relTime, hhmm, toolTarget, versionTag, shortSpan, fmtBytes, samePath } from './format.js';
 import { api, serverNow } from './api.js';
 import { $, debounce } from './dom.js';
 import { initShellChannel, openConsole, closeConsole, consoleWiring } from './console.js';
@@ -8319,9 +8319,6 @@ function settingsAutomation(c) {
 // belongs to the server (src/protection.js); this pane edits only each entry's
 // tick, so a built-in can be switched off but never deleted out of the file.
 
-const samePath = (a, b) =>
-  String(a || '').replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase() ===
-  String(b || '').replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
 
 async function loadProtection() {
   try {

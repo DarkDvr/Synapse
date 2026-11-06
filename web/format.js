@@ -68,3 +68,13 @@ export function toolTarget(part) {
   }
   return clean(part?.title);
 }
+
+/** Forward slashes, no trailing separator, lower case: one spelling per path.
+ *  The same rule as `normDir` in src/paths.js, and for the same reason - a path
+ *  that arrives with a different separator is the same folder, and comparing the
+ *  raw strings says it is not. */
+export const normDir = (value) =>
+  String(value || '').replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
+
+/** Are these the same folder, however each was spelled? */
+export const samePath = (a, b) => normDir(a) === normDir(b);
