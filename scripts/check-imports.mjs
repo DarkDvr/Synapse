@@ -23,12 +23,20 @@ const targets = args.length ? args : fs.readdirSync(WEB).filter((f) => f.endsWit
 
 /** Drop comments and quoted strings so a name in prose is not a name in code. */
 function codeOnly(src) {
+  // Every replacement keeps its newlines: a template literal that spans ten lines must
+  // still be ten lines, or the `^export` anchors below stop matching and the checker
+  // reports exports that are plainly there (paid for once, 7 Nov).
+  //
+  // Templates go first and quotes may not cross a newline: a `'` inside a template
+  // (`It's`) otherwise pairs with the next apostrophe hundreds of lines later and eats
+  // everything between.
+  const keepLines = (text) => '\n'.repeat((text.match(/\n/g) || []).length);
   return src
-    .replace(/\/\*[\s\S]*?\*\//g, ' ')
+    .replace(/\/\*[\s\S]*?\*\//g, (m) => ' ' + keepLines(m))
     .replace(/(^|[^:])\/\/[^\n]*/g, '$1 ')
-    .replace(/'(?:\\.|[^'\\])*'/g, "''")
-    .replace(/"(?:\\.|[^"\\])*"/g, '""')
-    .replace(/`(?:\\.|[^`\\])*`/g, '``');
+    .replace(/`(?:\\.|[^`\\])*`/g, (m) => '``' + keepLines(m))
+    .replace(/"(?:\\.|[^"\\\n])*"/g, '""')
+    .replace(/'(?:\\.|[^'\\\n])*'/g, "''");
 }
 
 const exportsOf = new Map();
@@ -51,6 +59,25 @@ for (const file of targets) {
   for (const m of src.matchAll(/^(?:export )?(?:const|let|var) ([A-Za-z_$][\w$]*)/gm)) known.add(m[1]);
   for (const m of src.matchAll(/^import \{([^}]+)\} from/gm)) {
     for (const part of m[1].split(',')) known.add(part.trim().split(' as ').pop().trim());
+  }
+
+  // The other half of the same mistake: importing a name the target does not export.
+  // The browser answers that one with a module-graph SyntaxError and a dead page, and
+  // nothing else in the suite notices (7 Nov: `isBusy` from projects.js).
+  const badImports = [];
+  for (const m of raw.matchAll(/import \{([^}]+)\} from '\.\/([^']+)';/g)) {
+    const target = m[2];
+    const exported = exportsOf.get(target);
+    if (!exported) { badImports.push(`${target}  <- no such module`); continue; }
+    for (const part of m[1].split(',')) {
+      const name = part.trim().split(' as ').pop().trim();
+      if (name && !exported.has(name)) badImports.push(`${name}  not exported by ${target}`);
+    }
+  }
+  if (badImports.length) {
+    problems += badImports.length;
+    console.log(`${file}:`);
+    for (const line of [...new Set(badImports)].sort()) console.log(`  ${line}`);
   }
 
   const missing = [];

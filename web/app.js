@@ -13,6 +13,18 @@ import { EV, turnEnded, shortEvent } from './events.js';
 import { state } from './state.js';
 import { esc, relTime, hhmm, hhmmss, toolTarget, versionTag, shortSpan, fmtBytes, samePath, ago } from './format.js';
 import { loadPlan, renderPlan, updatePlanOverflow, planPaneWiring } from './plan-pane.js';
+import {
+  loadProjects,
+  renderTree,
+  openProjectChat,
+  openProjectFolder,
+  findSession,
+  sessionWorking,
+  isBusy,
+  isStalled,
+  newestSession,
+  projectsWiring,
+} from './projects.js';
 import { readPath, writePath, maskSecret, slugify, modelLines, parseModelLines, isLocalServer, providerBadge } from './settings-data.js';
 import { providerLabel, providerOrderOf, hiddenProviderIds } from './provider-list.js';
 import {
@@ -2346,204 +2358,6 @@ async function cycleEffort(roleId) {
     if (roleId === 'architect') await applyArchitectModel();
   } catch (err) {
     toast('Could not save the thinking effort', err.message);
-  }
-}
-
-// ── projects + sessions ─────────────────────────────────────────
-async function loadProjects({ keepOpen = false } = {}) {
-  try {
-    state.projects = (await api('GET', '/api/projects')).projects;
-  } catch (err) {
-    state.projects = [];
-    setEventChip('projects unavailable');
-    renderTree();
-    return;
-  }
-  // The rail has no expand/collapse any more: a project is one row that opens
-  // its conversation. The old per-load collapse state is not needed.
-  renderTree();
-  // The open session can be deleted from another tab, or by Synapse's own
-  // scaffolding sweep. Left alone, the UI keeps a dead session open and every
-  // control on it answers 404 — which is how a mode switch once reported
-  // "Session not found". The list is only trusted while the engine is up: with
-  // the engine down it is empty for a reason that has nothing to do with this
-  // session, and closing the view would be wrong.
-  //
-  // `keepOpen` is for a load that is part of a replacement: a compact deletes
-  // the old chat on purpose and opens a new one, so the moment the old id leaves
-  // the list is not a moment to close the view. `state.compacting` is the same
-  // rule one step earlier — the engine announces the old chat's deletion while the
-  // compact is still running, and that announcement must not blank the page.
-  if (
-    !keepOpen &&
-    !state.compacting &&
-    state.sessionId &&
-    state.status?.engine?.ready === true &&
-    !findSession(state.sessionId)
-  ) {
-    toast('Chat Closed', 'It was replaced or removed, so it is no longer open.');
-    showNothing();
-  }
-}
-
-const findSession = (id) => {
-  for (const p of state.projects) {
-    const s = p.sessions.find((x) => x.id === id);
-    if (s) return s;
-  }
-  return null;
-};
-
-
-const isBusy = (sessionId) => state.busySessions.has(sessionId);
-/**
- * Is anything being done on this session's behalf?
- *
- * The engine only knows about its own turns, and the Architect's turn ends the
- * moment it delegates: for the whole worker run that follows, the engine says
- * the session is idle. The rail then showed a yellow breathing dot while the
- * Architect was thinking and a dead one while a worker built the thing — the
- * exact opposite of when the work is happening. So a run the session started
- * counts as work too.
- */
-const sessionWorking = (sessionId) => {
-  if (!sessionId) return false;
-  if (isBusy(sessionId)) return true;
-  // The engine's active list can be empty in the middle of a turn (measured);
-  // the project lock is the second source, and it is the one the server refuses
-  // on, so the rail must agree with it.
-  if (sessionId === state.sessionId && state.busyInfo?.busy) return true;
-  const project = projectOf(sessionId);
-  const run = project ? runIn(project) : null;
-  return Boolean(run && (!run.architect || run.architect === sessionId));
-};
-const lastProgress = (sessionId) => state.busySince.get(sessionId) || 0;
-// A running session that has produced nothing for this long is not "working",
-// it is waiting on an upstream request that is never coming back. A tool that
-// is genuinely still executing emits nothing either (measured: a 100s shell
-// command logs one progress event and then silence), so an in-flight tool
-// always counts as progress. Measured first-token latency on the free models
-// reached 69s on a cold start, so the window has to clear that comfortably.
-const STALL_MS = 180000;
-const isStalled = (sessionId) =>
-  isBusy(sessionId) &&
-  !state.toolsInFlight.has(sessionId) &&
-  Date.now() - lastProgress(sessionId) > STALL_MS;
-
-function liveDot(sessionId, { clickable = true, on = sessionWorking(sessionId), ok = false, idle = false } = {}) {
-  const stalled = isStalled(sessionId);
-  if (stalled && clickable) {
-    return `<button class="tree-live on stalled" data-interrupt="${esc(sessionId)}" title="No response for over ${Math.round(STALL_MS / 1000)}s — click to interrupt"></button>`;
-  }
-  if (stalled) return '<span class="tree-live on stalled" title="Stalled"></span>';
-  const cls = `${on ? ' on' : ''}${ok ? ' ok' : ''}${idle ? ' idle' : ''}`;
-  const title = on ? 'Working' : ok ? 'Idle — this project has a conversation' : idle ? 'Never used' : '';
-  return `<span class="tree-live${cls}" title="${title}"></span>`;
-}
-
-/**
- * What a session is stopped on, if anything.
- *
- * A session waiting on an answer emits nothing, exactly like an idle one, and
- * the question panel only exists inside an open session — so after a reload a
- * blocked session used to look like any other and the operator had no way to
- * know a question was sitting there. The rail says it instead.
- */
-function waitingFor(sessionId) {
-  if (!sessionId) return null;
-  if ((state.forms || []).some((f) => f.sessionId === sessionId)) return 'answer';
-  if ((state.permissions || []).some((p) => p.sessionId === sessionId)) return 'decision';
-  return null;
-}
-
-// Every project is one conversation: there is no session list and no "New
-// Session" row. Clicking a project opens its chat, and the chat is the newest
-// session in that folder (a compact replaces it).
-function newestSession(project) {
-  // By creation, not by update: the engine touches `updated` for reasons that
-  // have nothing to do with the conversation (a policy write at boot), and the
-  // chat is the one made last — a compact makes a newer one.
-  return (
-    [...(project?.sessions || [])].sort(
-      (a, b) => (b.created || b.updated || 0) - (a.created || a.updated || 0),
-    )[0] || null
-  );
-}
-
-/** Has this project's conversation been used at all (as opposed to just opened)? */
-function projectUsed(project) {
-  const chat = newestSession(project);
-  if (!chat) return false;
-  const t = chat.raw?.tokens;
-  const tokens = (Number(t?.input) || 0) + (Number(t?.output) || 0) + (Number(t?.reasoning) || 0);
-  return tokens > 0 || Number(chat.updated || 0) > Number(chat.created || 0) + 1000;
-}
-
-function renderTree() {
-  const el = $('projectTree');
-  if (!el) return;
-  el.innerHTML = state.projects
-    .map((p) => {
-      const chat = newestSession(p);
-      const current = Boolean(chat) && state.view === 'session' && chat.id === state.sessionId;
-      const working = Boolean(chat) && sessionWorking(chat.id);
-      const waiting = chat ? waitingFor(chat.id) : null;
-      const used = projectUsed(p);
-      const waitNote =
-        waiting === 'answer' ? ' · waiting on your answer' : waiting === 'decision' ? ' · waiting for your decision' : '';
-      const title = `${p.name}${working ? ' · working' : ''}${waitNote}${p.exists === false ? ' · folder missing' : ''}`;
-      return `<div class="tree-project">
-        <div class="tree-row project${current ? ' is-current' : ''}${working ? ' has-work' : ''}${waiting ? ' has-question' : ''}" data-project-row="${esc(p.id)}">
-          <button class="tree-open" data-project="${esc(p.id)}" title="${esc(title)}">
-            <span class="tree-name">${esc(p.name)}</span>
-          </button>
-          <span class="tree-actions">
-            ${waiting ? `<span class="tree-wait" title="${waiting === 'answer' ? 'Waiting on your answer' : 'Waiting for your decision'}" aria-label="${waiting === 'answer' ? 'Waiting on your answer' : 'Waiting for your decision'}">?</span>` : ''}
-            ${liveDot('', { clickable: false, on: working, ok: used && !working, idle: !used && !working })}
-            <button class="tree-menu" data-menu-project="${esc(p.id)}" title="Project menu" aria-label="Project menu" aria-haspopup="menu">⋯</button>
-          </span>
-        </div>
-      </div>`;
-    })
-    .join('');
-  renderEmpty();
-}
-
-/** The landing panel: it says what to do depending on whether any project exists. */
-function renderEmpty() {
-  const note = $('emptyNote');
-  if (!note) return;
-  note.textContent = state.projects.length
-    ? 'Pick a project in the left rail to open its conversation.'
-    : 'A project is a folder. Make one and its conversation opens here.';
-}
-
-/** A project's one conversation. With no chat yet, the first open makes one. */
-async function openProjectChat(id) {
-  const p = state.projects.find((x) => x.id === id);
-  if (!p) return;
-  if (p.exists === false) {
-    toast('Folder Missing', `${p.directory} does not exist, so no conversation can run there.`);
-    return;
-  }
-  const chat = newestSession(p);
-  if (chat) {
-    await openSession(chat.id);
-    return;
-  }
-  await createChat(p.id);
-}
-
-/**
- * Open a project's folder in Explorer, or a command prompt at it. The backend
- * spawns a detached GUI process; nothing here tracks it, and a failure is
- * reported rather than swallowed.
- */
-async function openProjectFolder(id, what) {
-  try {
-    await api('POST', `/api/projects/${encodeURIComponent(id)}/open`, { what });
-  } catch (err) {
-    toast(what === 'cmd' ? 'Could Not Open a Command Prompt' : 'Could Not Open the Folder', err.message);
   }
 }
 
@@ -6061,6 +5875,9 @@ async function boot() {
   // A plan row and a role card are two views of the same worker, so the pane asks for
   // the cards' activity and the chime's "is more work coming?".
   planPaneWiring({ noteWorking, renderRoleActivity });
+  // The rail asks the app to make a chat, open one, set the status chip and show the
+  // empty view.
+  projectsWiring({ createChat, openSession, setEventChip, showNothing });
   initShellChannel();
   // Before anything is measured: the cards need their role id and their
   // subtitle slot, and a card's height is what the wrapper is measured against.
