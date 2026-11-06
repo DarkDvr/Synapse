@@ -150,7 +150,9 @@ test('a steer is on screen before the engine echoes it', () => {
 // Ctrl+Enter sends, the same as the chat composer; every other ask field keeps
 // Enter-to-move-on.
 test('Something Else answers like the chat: Enter newline, Ctrl+Enter sends', () => {
-  const js = read('web/app.js');
+  // 6 Nov: the field is drawn by ./ask-panel.js; its key and click handlers are wired
+  // in app.js, so the rule is read across both.
+  const js = read('web/ask-panel.js') + read('web/app.js');
   assert.match(js, /<textarea class="ask-input ask-other-text"/);
   assert.match(js, /closest\?\.\('\.ask-other-text'\)/);
   assert.match(js, /e\.ctrlKey \|\| e\.metaKey/);
@@ -432,7 +434,7 @@ test('the question is a moved post in the transcript, not an overlay', () => {
   const host = /\.ask-host\s*\{([^}]*)\}/.exec(css);
   assert.ok(host, 'the host has a rule');
   assert.doesNotMatch(host[1], /position:\s*absolute/, 'an overlay hides the answer it is about');
-  const js = read('web/app.js');
+  const js = read('web/ask-panel.js');
   assert.match(js, /function mountAskPost\(\)/, 'the panel has one place that places it');
   assert.match(js, /el\.appendChild\(host\)/, 'it is appended to the transcript');
   assert.match(js, /el\.lastElementChild !== host/, 'and kept as the last post');
@@ -499,7 +501,7 @@ test('the open session has a trace, so its reasoning streams instead of dumping'
 // composer said "Answer the question to continue" and there was no question on
 // screen until a reload rebuilt the page (reported and reproduced 2 Nov).
 test('the question panel survives a transcript rebuild because the node is held', () => {
-  const js = read('web/app.js');
+  const js = read('web/ask-panel.js');
   assert.match(js, /let askHostEl = null;/, 'the node is kept in a variable');
   assert.match(js, /function askHost\(\) \{/, 'and looked up through one accessor');
   for (const fn of ['renderAskPanel', 'mountAskPost']) {

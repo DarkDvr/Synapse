@@ -61,8 +61,8 @@ test('a form with no fields still has one page, and hidden ones do not count', (
 });
 
 test('the page turns itself while Auto-Answer counts, and is never forced back', () => {
-  const js = read('web/app.js');
-  assert.match(js, /import \{ askHeadNote, answerTimeline, permissionNote \} from '\.\/ask-note\.js';/);
+  const js = read('web/ask-panel.js');
+  assert.match(js, /import \{ askHeadNote, answerTimeline \} from '\.\/ask-note\.js';/);
   assert.match(js, /const timeline = answerTimeline\(\{ firstAt: n\.firstAt, wait: n\.wait, pages: n\.pages, now \}\)/);
   // Forward only: an operator who clicked ahead is not dragged back by the clock.
   assert.match(js, /const page = Math\.max\(state\.askPage, timeline\.page\);/);
@@ -87,7 +87,7 @@ test('the server sends one page per wait, and the reply after the last one', () 
 
 test('the note reads the asking chat’s Auto-Answer, not the one on screen', () => {
   assert.match(read('src/api.js'), /const autoAnswer = await formAuto\.enabledFor\(f\.sessionID\)/);
-  assert.match(read('web/app.js'), /autoAnswer: \(form\.autoAnswer \?\? state\.automation\?\.autoAnswer\) === true/);
+  assert.match(read('web/ask-panel.js'), /autoAnswer: \(form\.autoAnswer \?\? state\.automation\?\.autoAnswer\) === true/);
 });
 
 test('a permission card counts down to its automatic Allow Once', () => {
@@ -96,7 +96,7 @@ test('a permission card counts down to its automatic Allow Once', () => {
   assert.equal(permissionNote(now + 1_400, now), 'Auto-Permission: Allow Once will be picked in 2 seconds… ');
   assert.equal(permissionNote(now - 500, now), 'Auto-Permission: Allow Once will be picked now… ');
   const js = read('web/app.js');
-  assert.match(js, /data-perm-due=/);
+  assert.match(read('web/app.js'), /data-perm-due=/);
   assert.match(js, /permTick = setInterval\(paintPermissionNotes, 1000\)/);
   // The sentence is written once, in the module, like the question's.
   assert.match(read('src/api.js'), /autoPermissionsAt: permissionGate\?\.autoAllowAt/);
@@ -107,14 +107,17 @@ test('a permission card counts down to its automatic Allow Once', () => {
 // Both numbers compare a timestamp the server wrote with "now" on the page, so
 // both clocks have to be reconciled — the HTTP Date header is the reconciler.
 test('every countdown runs on the server’s clock, not the page’s', () => {
-  const js = read('web/app.js');
+  const js = read('web/ask-panel.js');
+  // 6 Nov: the question's clock moved to ./ask-panel.js, the permission card's stayed
+  // in app.js — both read serverNow, so both are checked.
+  const permissionCard = read('web/app.js');
   // serverNow moved to web/api.js with the fetch wrapper; it is still the same
   // function, so the assertion follows it there.
   assert.match(read('web/api.js'), /export const serverNow = \(\) => Date\.now\(\) \+ \(Number\(state\.clockSkew\) \|\| 0\)/);
   assert.match(read('web/api.js'), /state\.clockSkew = server - Date\.now\(\)/);
   assert.match(read('web/api.js'), /res\.headers\.get\('date'\)/);
-  assert.match(js, /permissionNote\(due, serverNow\(\)\)/);
-  assert.match(js, /permissionNote\(el\.dataset\.permDue, serverNow\(\)\)/);
+  assert.match(permissionCard, /permissionNote\(due, serverNow\(\)\)/);
+  assert.match(permissionCard, /permissionNote\(el\.dataset\.permDue, serverNow\(\)\)/);
   assert.match(js, /const now = serverNow\(\);/);
   assert.match(
     js,
