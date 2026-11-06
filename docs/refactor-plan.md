@@ -18,7 +18,7 @@ fixed on the spot; a bug found on the way that is unrelated goes in
 | 3 — a catch that says nothing | **done** — baseline of 71, and it may only go down |
 | 4 — sync reads on the request path | **done** — the plan is parsed once per change |
 | 5 — the wake loop leaves `runs.js` | **half** — the report writer is out; the wake loop waits on `waitForIdle` moving first (measured, see below) |
-| 6 — `web/app.js` comes apart | **in progress** — out: 21 modules, from `state.js` to `ask-panel.js` (10,546 → 6,355). **Next:** the project plan, the model picker, projects + sessions — measured table below |
+| 6 — `web/app.js` comes apart | **in progress** — out: 24 modules, from `state.js` to `projects.js` (10,546 → 5,944). **Next:** the picker section is three subjects — see the table below |
 
 ---
 
@@ -211,17 +211,30 @@ the operator. It took the renderers' need from 24 names to 10 — and the same m
 
 **Then the chat geometry and the question panel** (7 Nov): `web/chat-geometry.js` (178
 lines — how tall the chat is, the 1359 breakpoint, and holding the reader's place while
-the box changes) and `web/ask-panel.js` (510 lines, three wires). `app.js` is 6,355
-lines, from 10,546.
+the box changes) and `web/ask-panel.js` (510 lines, three wires).
+
+**Then the plan pane and the rail** (7 Nov): `web/plan-pane.js` (242 lines, two wires),
+with `ago` and `hhmmss` moved into `format.js` because three modules now need them; and
+`web/projects.js` (227 lines, four wires) — the whole navigation, plus `findSession`
+and the stall window. `app.js` is 5,944 lines, from 10,546.
 
 **What is left, measured rather than guessed:**
 
 | Block | Lines | What it needs from app.js |
 |---|---|---|
-| the project plan | 380 | not measured yet |
-| projects + sessions, role cards | ~365 | not measured yet |
-| the model picker | 465 | not measured yet |
+| the model picker | 466 | **3** — `fillRoleModels`, `modelLabel`, `modelMeta`/`modelTitle`/`issuesTitle` |
 | the live event stream | 492 | **38** — it is the spine |
+| "live delegated work" | 653 | 5 — but it holds `handleRunEvent` and `syncRuns` |
+| the project menu, compact, things that block a session | 299 / 416 / 344 | 8 / 8 / 6 |
+| the Prohibited handlers | 605 | 11 |
+| the wiring at the bottom | 800 | 62 — it is the app's assembly, it stays |
+
+**The "searchable model picker" section is three subjects** (measured 7 Nov): the picker
+itself (`setupModelPickers`, `openModelMenu`, `chooseModel`, `onModelKey`, the shared
+`pickers` map), the **run menu** (`toggleRunMenu`, `positionRunMenu`, `togglePower`,
+`setAutomationSwitch`, `renderKeep`), and **mode** (`renderMode`, `chatBody`,
+`SINGLE_PERMISSIONS`, `sessionMode`, `answerWaitSec`). Three modules, not one — the
+next move is to split it that way rather than to move 466 lines with one name on it.
 
 **The event stream is not a module candidate.** It needs thirty-eight names from
 app.js because it is the thing that *is* the wiring: every event it receives belongs
@@ -235,11 +248,20 @@ page loaded, the module parsed, and the first call threw a `ReferenceError` — 
 a page that looked alive and was not. The script compares the names a module *calls*
 against what the other modules export, strips comments and strings first, and skips
 names a file wires at boot. Run it after every move; today it reports nothing across
-all 31 modules.
+all 33 modules.
 
-The question panel is the next move, and the measurement above says it is the easiest
-one left: four wires, and its own chat-geometry helpers go with it (the ask post has
-to size the box it sits in).
+It now checks the **other half** of the same mistake, because the rail move made it:
+`projects.js` declared `isBusy` with `const` and never exported it, so `app.js` asked
+for an export that did not exist and the browser refused the whole module graph with
+"does not provide an export named isBusy". A name can be missing in two directions.
+Proven by deleting one `export` and watching the check report it.
+
+That second check first produced thirteen false positives, all from one bug in its own
+comment/string stripper: a quote inside a template literal (`It's`) paired with the
+next apostrophe hundreds of lines away and swallowed the code between, so real exports
+were invisible. Templates are stripped first now and a quoted string may not cross a
+newline. **A checker that lies is worse than no checker** — it was believed for ten
+minutes.
 
 **Test that proves it.** After each step the suite is unchanged and green, and
 `tests/ui-layout.test.mjs` + a screenshot of the page still match. The structural
