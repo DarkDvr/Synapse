@@ -121,6 +121,11 @@ for (const file of targets) {
   const uses = [
     ...src.matchAll(/(?<![.\w$])([A-Za-z_$][\w$]*)\s*\(/g),
     ...src.matchAll(/(?<![.\w$])([A-Za-z_$][\w$]*)(?!\s*[:(])/g),
+    // A name spread into an object or a call (`{ ...AUTOMATION_DEFAULTS }`) sits
+    // right after a dot, so the value pass above reads it as a property and skips
+    // it. That is how run-menu.js lost this exact import and toasted "Could Not
+    // Change Auto-Permissions" on every toggle (7 Nov).
+    ...src.matchAll(/\.\.\.\s*([A-Za-z_$][\w$]*)/g),
     // And the calls written inside `${…}`, which the stripper removes with the literal.
     ...[...templateCalls(raw)].map((name) => [name, name]),
   ];

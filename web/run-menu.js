@@ -12,7 +12,7 @@ import { $ } from './dom.js';
 import { api } from './api.js';
 import { automationWaitSec } from './mode.js';
 import { toast } from './toast.js';
-import { anyAutomationOn, AUTOMATION_ROWS } from './automation.js';
+import { anyAutomationOn, AUTOMATION_ROWS, AUTOMATION_DEFAULTS } from './automation.js';
 import { findSession } from './projects.js';
 import { renderTranscript } from './transcript.js';
 

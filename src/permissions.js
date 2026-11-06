@@ -722,9 +722,15 @@ export function decide({ action, resources, cwd, projectRoot, harnessRoot, scrat
 /**
  * The ruleset every session carries.
  *
- * Four broad asks, then the credential denies. Everything else keeps the
- * engine's default agent permissions (allow), because a rule appended later
- * wins and we do not want to re-state the whole world here.
+ * One broad ask per tool family, then the credential denies. Everything else
+ * keeps the engine's default agent permissions (allow), because a rule appended
+ * later wins and we do not want to re-state the whole world here.
+ *
+ * `write` is a family of its own and it is the one that was missing (found by the
+ * smoke test, 7 Nov): the engine asks for `edit`, `shell`, `execute` and `read`
+ * because those rules exist, and for `write` it asks nobody — so a model could
+ * create a file anywhere on the machine without a card. The policy's decision for a
+ * write was always right; the engine was simply never asked to run it.
  *
  * Order matters: the asks come first so the denies still win on a match, and a
  * caller's own rules (Single's `subagent` deny, a role's folder rules) are
@@ -733,6 +739,9 @@ export function decide({ action, resources, cwd, projectRoot, harnessRoot, scrat
 export function rulesFor({ home = os.homedir() } = {}) {
   const rules = [
     { action: 'edit', resource: '*', effect: 'ask' },
+    // The write tool's own action. Without this line a write to the Desktop is not
+    // a permission request at all — there is nothing for the gate to answer.
+    { action: 'write', resource: '*', effect: 'ask' },
     { action: 'shell', resource: '*', effect: 'ask' },
     { action: 'execute', resource: '*', effect: 'ask' },
     // Reads too: the read tool would otherwise reach a relative `..\..\` path

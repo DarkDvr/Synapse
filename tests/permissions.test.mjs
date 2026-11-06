@@ -277,10 +277,20 @@ test('the ruleset asks for writes, shells, code and reads, and denies credential
   const has = (action, effect, needle = '') =>
     rules.some((r) => r.action === action && r.effect === effect && String(r.resource).includes(needle));
   assert.ok(has('edit', 'ask'));
+  // The write tool is a separate action, and it is the one that was missing until
+  // the smoke test found a file on the Desktop nobody was asked about (7 Nov).
+  assert.ok(has('write', 'ask'));
   assert.ok(has('shell', 'ask'));
   assert.ok(has('execute', 'ask'));
   assert.ok(has('read', 'ask'));
   assert.ok(has('read', 'deny', '.ssh'));
+});
+
+test('a write outside the project asks, and a write inside it does not', () => {
+  assert.equal(call('write', 'C:/Users/tester/Desktop/x.txt').effect, 'ask');
+  assert.equal(call('write', `${PROJECT}/notes.md`).effect, 'allow');
+  // The harness is refused outright, not asked about: it is the app itself.
+  assert.equal(call('write', `${HARNESS}/web/app.js`).effect, 'deny');
 });
 
 test('a newline separates two commands, so a read cannot excuse a write', () => {
