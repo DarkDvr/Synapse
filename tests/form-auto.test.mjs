@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 
 import { createFormAuto } from '../src/form-auto.js';
 
-const quiet = { channel: () => ({ info() {}, warn() {} }) };
+const quiet = { channel: () => ({ info() {}, warn() {}, error() {}, debug() {} }) };
 const form = () => ({
   id: 'f1',
   sessionID: 'ses_1',

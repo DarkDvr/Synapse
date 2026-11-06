@@ -12,7 +12,7 @@ import assert from 'node:assert/strict';
 import { createHarnessGuard } from '../src/harness.js';
 import { ROOT } from '../src/paths.js';
 
-const quiet = { channel: () => ({ info() {}, warn() {}, error() {} }) };
+const quiet = { channel: () => ({ info() {}, warn() {}, error() {}, debug() {} }) };
 
 const message = (id, part) => ({ id, parts: [part] });
 const shell = (id, command) => ({ id, type: 'tool', name: 'shell', input: { command } });

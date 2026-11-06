@@ -14,7 +14,7 @@ import { normalizeSession } from '../src/engines/base.js';
 
 const HOME = 'C:/Users/tester';
 const PROJECT = 'F:/dev/Synapse.Projects/demo';
-const quiet = { channel: () => ({ info() {}, warn() {}, error() {} }) };
+const quiet = { channel: () => ({ info() {}, warn() {}, error() {}, debug() {} }) };
 
 function setup({ directory = PROJECT, metadata = { synapse: { role: 'coder-1', task: 'Add CSV import' } }, desk = null, timeoutMs = 20_000 } = {}) {
   const replies = [];

@@ -4,7 +4,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { LOGS_DIR } from './paths.js';
 
-const LEVELS = { error: 0, warn: 1, info: 2, debug: 3 };
+// Lower is more severe. A configured level writes itself and everything above it
+// (so info writes error, warn and info, and drops debug).
+export const LEVELS = { error: 0, warn: 1, info: 2, debug: 3 };
 
 function ts() {
   return new Date().toISOString();

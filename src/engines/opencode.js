@@ -948,8 +948,12 @@ export class OpenCodeEngine extends Engine {
     const directory = ev?.location?.directory || ev?.data?.location?.directory || null;
     const kind = classifyEvent(type);
 
-    if (type.startsWith('session.')) this.sessionLog.info(`event ${type}${sessionId ? ' ' + sessionId : ''}`);
-    if (kind === 'tool') this.toolLog.info(`event ${type}${sessionId ? ' ' + sessionId : ''} :: ${JSON.stringify(ev).slice(0, 900)}`);
+    // The raw event stream is a firehose — 24,000 reasoning deltas in one day. It is
+    // the first thing to look at when something is wrong, and the last thing a log
+    // being read should be full of: debug, so it is there when the operator turns the
+    // level up, and out of the way otherwise.
+    if (type.startsWith('session.')) this.sessionLog.debug(`event ${type}${sessionId ? ' ' + sessionId : ''}`);
+    if (kind === 'tool') this.toolLog.debug(`event ${type}${sessionId ? ' ' + sessionId : ''} :: ${JSON.stringify(ev).slice(0, 900)}`);
     if (type === 'permission.asked') this.toolLog.info(`permission.asked ${sessionId ? sessionId + ' ' : ''}:: ${JSON.stringify(ev).slice(0, 600)}`);
 
     this.emit('event', { ts: Date.now(), type, kind, sessionId, directory, raw: ev });

@@ -519,13 +519,18 @@ export function createPermissionGate({
         decidedBy: forgiven ? 'operator' : 'harness',
         ...(forgiven ? { reason: 'You allowed this earlier in the session.' } : {}),
       });
-      log.info(
+      // Every allowed call used to land here at info: 9,131 lines in one day, all of
+      // them "this was fine". A refusal stays at info — the operator may want to know
+      // — but an allow is what the log looks like when nothing is wrong, so it is
+      // debug.
+      const allowLine =
         `permission ${forgiven ? 'allow' : verdict.effect}${forgiven ? ' (remembered)' : ''}${
           who ? ` (${who})` : ''
         }: ${request.action || 'tool call'} ${what} — ${
           forgiven ? 'you allowed this earlier' : verdict.reason
-        }`,
-      );
+        }`;
+      if (verdict.effect === 'allow' || forgiven) log.debug(allowLine);
+      else log.info(allowLine);
     } catch (err) {
       // The request stays pending when the reply fails, so the operator still
       // sees the card. That is the safe way for this to break.
