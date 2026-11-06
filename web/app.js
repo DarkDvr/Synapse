@@ -11,7 +11,8 @@
 import { renderMarkdown } from './md.js';
 import { EV, turnEnded, shortEvent } from './events.js';
 import { state } from './state.js';
-import { esc, relTime, hhmm, toolTarget, versionTag, shortSpan, fmtBytes, samePath } from './format.js';
+import { esc, relTime, hhmm, hhmmss, toolTarget, versionTag, shortSpan, fmtBytes, samePath, ago } from './format.js';
+import { loadPlan, renderPlan, updatePlanOverflow, planPaneWiring } from './plan-pane.js';
 import { readPath, writePath, maskSecret, slugify, modelLines, parseModelLines, isLocalServer, providerBadge } from './settings-data.js';
 import { providerLabel, providerOrderOf, hiddenProviderIds } from './provider-list.js';
 import {
@@ -697,14 +698,6 @@ function renderStatus() {
 }
 
 /** 10s, 2m, 3h: a unit that never makes you do arithmetic, rounded down. */
-/** HH:MM:SS, hours not padded — a stopwatch, read at a glance. */
-function hhmmss(ms) {
-  const total = Math.max(0, Math.floor(ms / 1000));
-  const h = Math.floor(total / 3600);
-  const m = Math.floor((total % 3600) / 60);
-  const s = total % 60;
-  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
-}
 
 function renderLastEventAge() {
   const label = $('lastEventLabel');
@@ -3994,228 +3987,6 @@ async function refreshPending() {
   }
 }
 
-// ── the project plan ────────────────────────────────────────────
-// `.synapse\plan.json` in the session's project folder, written by the Architect
-// and read here. The file is the source of truth: this pane only renders it, and
-// says so plainly when the file is malformed rather than hiding the problem.
-const PLAN_STATUS = {
-  todo: 'Todo',
-  doing: 'Doing',
-  // Not a plan file status: a step whose worker has reported and whose result the
-  // Architect has not judged yet. See renderPlan.
-  review: 'Reported, waiting for review',
-  done: 'Done',
-  blocked: 'Blocked',
-  failed: 'Failed',
-};
-
-function ago(ms) {
-  if (!ms) return '';
-  const s = Math.max(0, Math.round((Date.now() - ms) / 1000));
-  if (s < 45) return 'just now';
-  if (s < 3600) return `${Math.round(s / 60)}m ago`;
-  if (s < 86400) return `${Math.round(s / 3600)}h ago`;
-  return `${Math.round(s / 86400)}d ago`;
-}
-
-async function loadPlan() {
-  // Same rule as loadMessages: the chat can change while this is in flight, and
-  // the plan belongs to the chat. A late answer for the previous chat used to
-  // paint "No plan yet" over a project that has a plan.
-  const id = state.sessionId;
-  if (!id) {
-    state.planState = null;
-    renderPlan();
-    renderRoleActivity();
-    return;
-  }
-  try {
-    const loaded = await api('GET', `/api/sessions/${encodeURIComponent(id)}/plan`);
-    if (state.sessionId !== id) return;
-    state.planState = loaded;
-  } catch {
-    if (state.sessionId !== id) return;
-    state.planState = null;
-  }
-  renderPlan();
-  // The cards read the plan too: which roles have taken part, which are blocked,
-  // and whether the whole thing is finished. Without this a status change would
-  // only reach the dots on the next run or session event.
-  renderRoleActivity();
-  // The plan is half the answer to "is this chat done?": while it still had a task to
-  // do, the chime was held back. The moment it catches up, the sound is due.
-  noteWorking();
-}
-
-function renderPlan() {
-  const body = $('planBody');
-  if (!body) return;
-  paintPlan(body);
-  updatePlanOverflow();
-}
-
-/** The plan box is as tall as the role cards, so a long plan is routinely cut
- *  mid-row. Mark the panel while there is more below the fold, so its bottom
- *  edge fades instead of drawing a hard line through a card. */
-function updatePlanOverflow() {
-  const body = $('planBody');
-  const panel = body?.closest('.rail-plan');
-  if (!body || !panel) return;
-  const more = body.scrollHeight - body.scrollTop - body.clientHeight > 2;
-  panel.classList.toggle('is-clipped', more);
-}
-
-function paintPlan(body) {
-  const st = state.planState;
-  const rel = st?.relative || '.synapse\\plan.json';
-
-  // Single mode is a chat, not a run: there are no roles and no work list, so the
-  // panel says what the conversation is about and how long it has run, and nothing
-  // else. It is short on purpose — the card beside it is the subject.
-  if (state.mode === 'single') {
-    const goal = String(st?.plan?.goal || '').trim();
-    body.innerHTML =
-      `<p class="plan-goal plan-goal-single">${goal ? esc(goal) : 'A conversation with the Architect: it answers here, with no workers and no list.'}</p>` +
-      `<p class="rail-note plan-meta"><span></span>${planClockMarkup()}</p>`;
-    return;
-  }
-
-  // A file we cannot read is the Architect's to fix, so say exactly what is
-  // wrong and where, rather than showing an empty pane.
-  if (st?.error) {
-    body.innerHTML =
-      `<p class="plan-error">${esc(st.error)}</p>` +
-      `<p class="rail-note plan-meta"><span>${esc(rel)}</span>${planClockMarkup()}</p>`;
-    return;
-  }
-
-  const tasks = st?.plan?.tasks || [];
-  // A task with a worker on it is the step in hand whatever the file says. The
-  // Architect only writes the plan when it judges, so during the run the file
-  // still says todo and the pane showed the live step as a grey row. The run is
-  // the live truth; the file stays the plan.
-  const liveRun = currentRun();
-  if (!tasks.length) {
-    body.innerHTML =
-      `<p class="rail-note">No plan yet. Ask the Architect to plan this job - it owns ${esc(rel)}.</p>` +
-      `<p class="rail-note plan-meta"><span></span>${planClockMarkup()}</p>`;
-    return;
-  }
-
-  const counts = {};
-  for (const t of tasks) counts[t.status] = (counts[t.status] || 0) + 1;
-  // The line has to fit a 300px rail beside the session clock, so it carries the
-  // three facts that change and nothing else: how far the plan got, how much is
-  // running, how much is blocked. "done" rides on the fraction only when the
-  // plan is finished (it then says the job is closed); the plan's age moved into
-  // the tooltip, where it costs no width.
-  const done = counts.done || 0;
-  const meta = [done === tasks.length ? `${done}/${tasks.length} done` : `${done}/${tasks.length}`];
-  if (counts.doing) meta.push(`${counts.doing} running`);
-  if (counts.blocked) meta.push(`${counts.blocked} blocked`);
-  if (counts.failed) meta.push(`${counts.failed} failed`);
-  const metaTitle = `${done} of ${tasks.length} tasks done${st.mtime ? `; the plan changed ${ago(st.mtime)}` : ''}`;
-
-  // Work already spent on each step, from the harness's own run records. A step
-  // with a worker on it keeps counting from the live run's start.
-  const spent = st.spent || {};
-  // Steps whose worker has reported and whose result the Architect has not
-  // written back yet (see the plan route).
-  const reported = new Set(st.reported || []);
-  body.innerHTML =
-    (st.plan.goal ? `<p class="plan-goal">${esc(st.plan.goal)}</p>` : '') +
-    `<ol class="plan-list">${tasks
-      .map((t) => {
-        const status = liveRun && liveRun.task === t.id ? 'doing' : PLAN_STATUS[t.status] ? t.status : 'todo';
-        // Between the worker's result and the Architect's judgement the plan file
-        // still says `todo`, but the step is not untouched: it is in review. Shown
-        // as `review` so the row keeps a mark of its own instead of dropping back
-        // to grey, which read as a revert.
-        const shown = status === 'todo' && reported.has(t.id) ? 'review' : status;
-        // The result is not printed under the title: the row stays one line per
-        // task, and the detail is a hover away. A blocked note is the exception —
-        // that one is the reason the operator is being asked, so it shows.
-        //
-        // Only while it *is* the reason: a note on a task that is done, or back to
-        // todo, is the Architect having moved on without clearing its own note, and
-        // showing it made a finished plan look like it was still asking. The file
-        // keeps the text (the Architect owns it) — this is just what the pane shows.
-        const asking = status === 'blocked' || status === 'failed';
-        const tooltip = [t.title, t.result ? `Result: ${t.result}` : '', t.note ? `Note: ${t.note}` : '']
-          .filter(Boolean)
-          .join('\n\n');
-        // The step's own stopwatch: what the harness recorded for it, plus this
-        // run so far while it is in hand. Under the role badge, so the row is two
-        // lines tall whatever the title does.
-        const base = Number(spent[t.id]) || 0;
-        const since = liveRun && liveRun.task === t.id ? Number(liveRun.startedAt) || 0 : 0;
-        const total = base + (since ? Date.now() - since : 0);
-        // A finished row with no time was settled, not run: the QC cap, a task the
-        // Architect marked done itself. The zero-time rule hid the clock, which read
-        // as a timer that failed to appear; "not run" is the fact.
-        const settled = total === 0 && (shown === 'done' || shown === 'blocked' || shown === 'failed');
-        const spentText = settled ? 'not run' : hhmmss(total);
-        const spentClass = settled ? ' is-none' : total ? '' : ' is-zero';
-        const spentTitle = settled
-          ? 'No worker ran this step — the Architect settled it itself.'
-          : 'Time spent on this step so far';
-        return `<li class="plan-task" data-status="${shown}">
-          <span class="plan-node">
-            <span class="plan-dot" role="img" aria-label="${esc(PLAN_STATUS[shown])}"></span>
-            <span class="plan-id">${esc(t.id || '?')}</span>${
-              t.origin === 'found'
-                ? `<span class="plan-origin" title="Noticed during the work - this row was not in the list when the operator first saw it">NEW</span>`
-                : ''
-            }
-          </span>
-          <span class="plan-main">
-            <span class="plan-title" title="${esc(tooltip)}">${esc(t.title)}</span>
-            ${t.note && asking ? `<span class="plan-note">${esc(t.note)}</span>` : ''}
-          </span>
-          <span class="plan-side">
-            <span class="plan-role">${esc(t.role)}</span>
-            <span class="plan-spent${spentClass}" data-ms="${base}"${
-              since ? ` data-since="${since}"` : ''
-            }${settled ? ' data-settled="1"' : ''} title="${esc(spentTitle)}">${spentText}</span>
-          </span>
-        </li>`;
-      })
-      .join('')}</ol>` +
-    // The plan's complaints are for the Architect, not the operator: they name
-    // feature ids, task ids and file paths, and every one of them is something
-    // the Architect is already being told to fix in its own instruction block.
-    // Printing them here put four lines of housekeeping under the operator's
-    // plan and asked them to care about a job that was not theirs. The log keeps
-    // them (`logPlanState`), which is where a run is read afterwards.
-    `<p class="rail-note plan-meta"><span title="${esc(metaTitle)}">${esc(meta.join(' · '))}</span>${planClockMarkup()}</p>`;
-}
-
-/** The session's own stopwatch, in the plan footer: time spent working, paused
- *  whenever the cards show nobody working. It is rendered here so a plan poll
- *  repaints it with the right value instead of zeroing it. */
-function planClockMarkup() {
-  const c = state.clocks;
-  if (!c) return '';
-  const ms = c.session.ms + (c.session.since ? Date.now() - c.session.since : 0);
-  return `<span class="plan-clock" id="planClock" title="Time this chat has spent working — it pauses whenever no card is working, and whenever you are being waited on.">${hhmmss(ms)}</span>`;
-}
-
-/**
- * A popup opened from the rail's foot.
- *
- * The two tables used to render into panels under the conversation; the ids and
- * the renderers are unchanged, so opening one is: show the backdrop, then let the
- * caller refresh what is inside it. Closing is the same in reverse, and the
- * refresh is skipped when the panel is not on screen.
- */
-function openRailModal(id, refresh) {
-  const el = $(id);
-  if (!el) return;
-  el.hidden = false;
-  const focusable = el.querySelector('[data-close-modal], .close-x, button');
-  focusable?.focus?.();
-  Promise.resolve(refresh?.()).catch(() => {});
-}
 
 function closeRailModal(id) {
   const el = $(id);
@@ -6269,7 +6040,7 @@ async function boot() {
   providersWiring({ collectSettings, renderSettings, openDialog, toast });
   // The chat's non-message lines need the project on screen, the folder key, a
   // role's name and the lease clock.
-  chatNotesWiring({ currentProject, dirKey, roleLabel, hhmmss });
+  chatNotesWiring({ currentProject, dirKey, roleLabel });
   // The card's rate corner needs the run on screen, the model behind a ref and the
   // token formatter.
   rateViewWiring({ dirKey, currentRun, modelByRef, selectionFor, fmtTokens });
@@ -6287,6 +6058,9 @@ async function boot() {
   // The question post asks the app how long an answer waits, and tells it to refresh
   // the waiting cards and the rail.
   askPanelWiring({ answerWaitSec, refreshPending, renderTree });
+  // A plan row and a role card are two views of the same worker, so the pane asks for
+  // the cards' activity and the chime's "is more work coming?".
+  planPaneWiring({ noteWorking, renderRoleActivity });
   initShellChannel();
   // Before anything is measured: the cards need their role id and their
   // subtitle slot, and a card's height is what the wrapper is measured against.

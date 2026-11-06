@@ -6,18 +6,17 @@
 // same place, in the same order. One file because they answer one question: what did
 // the harness notice that the conversation does not say?
 import { state } from './state.js';
-import { esc } from './format.js';
+import { esc, hhmmss } from './format.js';
 
-// Four things this file needs from app.js: which project is on screen, the key that
-// identifies a folder, a role's display name, and the lease clock. Wired at boot.
+// Three things this file needs from app.js: which project is on screen, the key that
+// identifies a folder, and a role's display name. Wired at boot.
 const wired = {
   currentProject: () => null,
   dirKey: (dir) => String(dir || '').toLowerCase(),
   roleLabel: (role) => role,
-  hhmmss: (ms) => String(ms),
 };
 
-/** Hand this module the four things that live in app.js. Called once, at boot. */
+/** Hand this module the three things that live in app.js. Called once, at boot. */
 export function chatNotesWiring(fns) {
   Object.assign(wired, fns);
 }
@@ -99,8 +98,8 @@ export function renderLease(lease) {
       <span class="chat-lease-text">Lease ended for ${esc(role)} — asking whether it needs more${reason}</span>
     </div>`;
   }
-  const clock = wired.hhmmss(Math.max(0, lease.until - Date.now()));
-  const asked = wired.hhmmss(Math.max(0, lease.minutes * 60_000));
+  const clock = hhmmss(Math.max(0, lease.until - Date.now()));
+  const asked = hhmmss(Math.max(0, lease.minutes * 60_000));
   return `<div class="chat-lease" data-lease="${esc(`${lease.dir}|${lease.task}`)}">
     <span class="chat-lease-mark">⏱</span>
     <span class="chat-lease-text">${esc(role)} asked for ${lease.extended ? 'more' : `a ${asked} lease`} ·

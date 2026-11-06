@@ -29,6 +29,14 @@ export const hhmm = (ts) => {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 };
 
+/** HH:MM:SS, hours not padded — a stopwatch, read at a glance. */
+export function hhmmss(ms) {
+  const total = Math.max(0, Math.floor(ms / 1000));
+  const h = Math.floor(total / 3600);  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+}
+
 /** `2.1.0` -> `v2.1.0`; a value that already says v keeps its own. */
 export const versionTag = (v) => {
   const s = String(v || '').trim();
@@ -78,3 +86,14 @@ export const normDir = (value) =>
 
 /** Are these the same folder, however each was spelled? */
 export const samePath = (a, b) => normDir(a) === normDir(b);
+
+/** "3m ago", "just now": how long ago something happened, in the operator's words.
+ *  Shared by the plan pane, the updates card and the status line. */
+export function ago(ms) {
+  if (!ms) return '';
+  const s = Math.max(0, Math.round((Date.now() - ms) / 1000));
+  if (s < 45) return 'just now';
+  if (s < 3600) return `${Math.round(s / 60)}m ago`;
+  if (s < 86400) return `${Math.round(s / 3600)}h ago`;
+  return `${Math.round(s / 86400)}d ago`;
+}
