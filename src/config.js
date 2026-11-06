@@ -18,7 +18,7 @@ export const CHAT_TEXT_MAX = 16.5;
 
 /** The interface languages Synapse actually has strings for. English only until the
  *  Russian translation lands; `web/app.js` builds its selector from the same list. */
-export const UI_LANGUAGES = ['en'];
+const UI_LANGUAGES = ['en'];
 
 export const DEFAULTS = {
   server: {
@@ -261,7 +261,7 @@ export function providerApiKey(provider, env = process.env, stored = getProvider
 }
 
 /** Deep-merge user config over defaults (arrays are replaced, not merged). */
-export function merge(base, override) {
+function merge(base, override) {
   const out = Array.isArray(base) ? base.slice() : { ...base };
   if (!isPlainObject(override)) return out;
   for (const [key, value] of Object.entries(override)) {

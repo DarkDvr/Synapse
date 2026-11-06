@@ -13,7 +13,7 @@ import { SCRATCH_ROOT, scratchDir } from './paths.js';
 
 const idFor = (dir) => crypto.createHash('sha1').update(dir.toLowerCase()).digest('hex').slice(0, 12);
 
-export function normalizeDir(dir) {
+function normalizeDir(dir) {
   const resolved = path.resolve(String(dir ?? '').trim());
   // strip a trailing separator so comparisons are stable on Windows
   return resolved.replace(/[\\/]+$/, '');

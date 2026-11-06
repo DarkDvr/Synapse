@@ -12,7 +12,7 @@
 
 const ENTITIES = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
 
-export const escapeHtml = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ENTITIES[c]);
+const escapeHtml = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ENTITIES[c]);
 
 const LIST_ITEM = /^\s*([-*+]|\d+\.)\s+/;
 const TASK_ITEM = /^\[([ xX])\]\s+/;

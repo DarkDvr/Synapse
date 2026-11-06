@@ -15,15 +15,14 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { ROOT } from './paths.js';
+import { ROOT, normDir } from './paths.js';
 
 /** Forward slashes, no trailing separator, lower case: one spelling per path. */
-const key = (value) => String(value || '').replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
 
 /** Is `child` the same as, or under, `parent`? Case-insensitive, like Windows. */
 export function covers(parent, child) {
-  const p = key(parent);
-  const c = key(child);
+  const p = normDir(parent);
+  const c = normDir(child);
   if (!p || !c) return false;
   return c === p || c.startsWith(`${p}/`);
 }
@@ -53,7 +52,7 @@ export function builtinEntries(env = process.env) {
 }
 
 /** A browser profile folder is not merely protected: reading it resets the browser. */
-export const sealedPath = (value) => /bravesoftware/i.test(String(value || ''));
+const sealedPath = (value) => /bravesoftware/i.test(String(value || ''));
 
 /**
  * Every entry, built-in and added, in the order Settings shows them.
@@ -78,7 +77,7 @@ export function protectionEntries(config, { env = process.env } = {}) {
   const custom = (Array.isArray(config?.protection?.paths) ? config.protection.paths : [])
     .filter((entry) => entry && String(entry.path || '').trim())
     .map((entry) => ({
-      id: `added:${key(entry.path)}`,
+      id: `added:${normDir(entry.path)}`,
       path: String(entry.path),
       label: String(entry.label || path.basename(String(entry.path)) || entry.path),
       builtin: false,
@@ -128,7 +127,7 @@ export function braveEntries(config, { home = os.homedir() } = {}) {
     path.join(home, 'AppData', 'Local', 'BraveSoftware'),
     path.join(home, 'AppData', 'Roaming', 'BraveSoftware'),
   ];
-  const removed = new Set((config?.protection?.removed || []).map(key));
+  const removed = new Set((config?.protection?.removed || []).map(normDir));
   const known = protectionEntries(config).map((entry) => entry.path);
   const added = [];
   for (const candidate of candidates) {
@@ -137,7 +136,7 @@ export function braveEntries(config, { home = os.homedir() } = {}) {
     } catch {
       continue;
     }
-    const target = key(candidate);
+    const target = normDir(candidate);
     if (removed.has(target)) continue;
     if (known.some((entry) => covers(entry, candidate) || covers(candidate, entry))) continue;
     added.push({ path: candidate, label: 'Brave browser data', write: false, read: false });

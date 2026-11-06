@@ -91,7 +91,7 @@ export class Engine extends EventEmitter {
 
 // ── shared normalization helpers ───────────────────────────────
 
-export function modelRef(raw) {
+function modelRef(raw) {
   const provider = raw?.providerID || raw?.provider || 'unknown';
   const id = raw?.id || raw?.modelID || '';
   return `${provider}/${id}`;
@@ -176,7 +176,7 @@ export function normalizeModel(raw) {
  * while a default-agent session succeeded at 20:45:40). A permission ruleset on
  * an ordinary session behaves correctly instead.
  */
-export function isSingleSession(raw) {
+function isSingleSession(raw) {
   const p = raw?.permissions;
   const rules = Array.isArray(p) ? p : p ? [p] : [];
   return rules.some((r) => r?.action === 'subagent' && r?.effect === 'deny');

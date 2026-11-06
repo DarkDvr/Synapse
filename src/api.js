@@ -12,7 +12,7 @@ import { keepAttachments } from './keep-attachments.js';
 import { skillRules, describeSkills } from './skills.js';
 import { rulesFor, decide, resolvePath, refusalNote, SINGLE_RULES } from './permissions.js';
 import { stopTargets, createStopper } from './stop.js';
-import { PROJECTS_ROOT, SKILLS_DIR, ROOT, SCRATCH_ROOT, scratchDir } from './paths.js';
+import { PROJECTS_ROOT, SKILLS_DIR, ROOT, SCRATCH_ROOT, scratchDir, normDir } from './paths.js';
 import { braveEntries, entryBlockingWrite, protectionEntries, protectionFor } from './protection.js';
 import { mayRecycleFolder } from './projects.js';
 import { fetchProviderModels } from './providers.js';
@@ -274,7 +274,6 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
   // Who started the work in each directory. Used only for the sentence a refused
   // sender reads — "started from laptop" — never to decide anything.
   const drivers = new Map();
-  const normDir = (value) => String(value || '').replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
 
   /**
    * Is the project this session belongs to busy, and why.
@@ -454,14 +453,13 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
   }
 
   /** Directory comparison key: case-insensitive, no trailing separator. */
-  const dirKey = (d) => String(d ?? '').replace(/[\\/]+$/, '').toLowerCase();
 
   /** Probe scratch sessions and Synapse's own worker sessions are scaffolding,
    *  never the operator's work: they never appear in the rail. */
   const isScratchSession = (s) => {
     if (s?.internal) return true;
-    const key = dirKey(probeDir);
-    return Boolean(key) && dirKey(s?.directory) === key;
+    const key = normDir(probeDir);
+    return Boolean(key) && normDir(s?.directory) === key;
   };
 
   /**
@@ -474,7 +472,7 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
     const list = projects.list().map((p) => ({ ...p, sessions: [] }));
     if (!engine.status().ready) return list;
 
-    const byDir = new Map(list.map((p) => [dirKey(p.directory), p]));
+    const byDir = new Map(list.map((p) => [normDir(p.directory), p]));
     let sessions = [];
     try {
       sessions = await engine.listSessions();
@@ -483,7 +481,7 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
     }
     for (const s of sessions) {
       if (isScratchSession(s)) continue; // probe/model-check scaffolding
-      const owner = byDir.get(dirKey(s.directory));
+      const owner = byDir.get(normDir(s.directory));
       if (!owner) continue;
       owner.sessions.push(s);
     }

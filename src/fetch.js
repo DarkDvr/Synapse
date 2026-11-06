@@ -61,7 +61,7 @@ const ENTITIES = {
   trade: '™', middot: '·', bull: '•', deg: '°', times: '×', rarr: '→', larr: '←',
 };
 
-export function decodeEntities(text) {
+function decodeEntities(text) {
   return String(text)
     .replace(/&#x([0-9a-f]+);/gi, (_, hex) => safeChar(parseInt(hex, 16)))
     .replace(/&#(\d+);/g, (_, dec) => safeChar(Number(dec)))
@@ -140,7 +140,7 @@ export function htmlToText(html, base = '') {
 }
 
 /** The page's own title, for a reader that wants to know what it opened. */
-export function pageTitle(html) {
+function pageTitle(html) {
   const og = /<meta[^>]+property="og:title"[^>]+content="([^"]*)"/i.exec(html);
   if (og) return decodeEntities(og[1]).trim();
   const t = /<title[^>]*>([\s\S]*?)<\/title>/i.exec(html);

@@ -9,7 +9,7 @@
 // So the poll and every reconnect ask `GET /api/runs` and reconcile both ways.
 // `askedAt` guards the one race that matters: a run that started after the request
 // left cannot be in its answer, so it is kept rather than dropped mid-paint.
-export const STALE_GRACE_MS = 2000;
+const STALE_GRACE_MS = 2000;
 
 /**
  * @param {Map<string, {startedAt?: number}>} current what the page is painting

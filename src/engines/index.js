@@ -6,7 +6,7 @@ const REGISTRY = {
   opencode: (config, ctx) => new OpenCodeEngine(config, ctx),
 };
 
-export const KNOWN_ENGINES = Object.keys(REGISTRY);
+const KNOWN_ENGINES = Object.keys(REGISTRY);
 
 export function createEngine(config, ctx) {
   const type = config?.engine?.type || 'opencode';

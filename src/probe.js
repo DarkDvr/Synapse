@@ -18,6 +18,7 @@
 // per-tool aggregate.
 import fs from 'node:fs';
 import path from 'node:path';
+import { normDir } from './paths.js';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const CASE_TIMEOUT_MS = 150000;
@@ -30,7 +31,7 @@ const PROBE_FAILURES_TO_MARK = 3;
 
 // Each prompt is deliberately blunt: it names the tool and the exact argument.
 // A model that ignores it tells us something too — the case reports "missing".
-export const PROBE_CASES = [
+const PROBE_CASES = [
   {
     id: 'shell-ok',
     tool: 'shell',
@@ -128,7 +129,7 @@ function defaultAnswer(fields) {
 }
 
 /** Pull tool names out of a model's comma/newline-separated answer. */
-export function parseToolNames(text) {
+function parseToolNames(text) {
   return [
     ...new Set(
       String(text || '')
@@ -400,11 +401,10 @@ export function createProbe({ engine, logger, notify, scratchDir, file, modelCac
    * by a killed process.
    */
   async function sweep() {
-    const key = (d) => String(d || '').replace(/[\\/]+$/, '').toLowerCase();
     try {
       const sessions = await engine.listSessions();
       for (const s of sessions) {
-        if (key(s.directory) === key(scratchDir)) {
+        if (normDir(s.directory) === normDir(scratchDir)) {
           try { await engine.deleteSession(s.id); } catch { /* already gone */ }
         }
       }

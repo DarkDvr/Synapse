@@ -44,6 +44,7 @@ import {
   openDelegations,
 } from './plans.js';
 import { screenCallOver } from './desk.js';
+import { normDir } from './paths.js';
 import { skillRules, describeSkills, roleMustLoad } from './skills.js';
 import { rulesFor } from './permissions.js';
 import { configSavedAt } from './config.js';
@@ -393,10 +394,9 @@ function ranFor(ms) {
  * same folder in three spellings and a false "outside" is worse than none.
  */
 export function outsideProject(file, dir) {
-  const norm = (p) => String(p || '').replace(/\\/g, '/').toLowerCase();
-  const target = norm(file);
+  const target = normDir(file);
   if (!/^[a-z]:\//i.test(target)) return false;
-  const root = norm(dir).replace(/\/+$/, '');
+  const root = normDir(dir).replace(/\/+$/, '');
   return Boolean(root) && !target.startsWith(`${root}/`);
 }
 
@@ -429,7 +429,7 @@ export function outsideProject(file, dir) {
  * which is why the first delegation after an upgrade is never refused for history
  * it cannot identify.
  */
-export function sameAsk(record, goal, title) {
+function sameAsk(record, goal, title) {
   if (goal === null || goal === undefined) return true;
   return (
     String(record?.goal || '') === String(goal || '') && String(record?.title || '') === String(title || '')
@@ -595,7 +595,7 @@ export function compactionMessages(messages) {
  * replaced. Only text parts count; a tool call's output is already on disk.
  * Bounded: the handover must stay small enough to fit the fresh window.
  */
-export function lastAssistantText(messages) {
+function lastAssistantText(messages) {
   for (let i = (messages || []).length - 1; i >= 0; i -= 1) {
     const m = messages[i];
     if (!m || m.type !== 'assistant') continue;
@@ -729,7 +729,6 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
   // Projects the operator has stopped. Nothing is delegated and no reminder is
   // sent until they speak again: their next message is the answer to "what now".
   const stoppedByOperator = new Set();
-  const dirKey = (d) => String(d ?? '').replace(/[\\/]+$/, '').toLowerCase();
 
   /** The worker settings, read once per decision so a change lands next time. */
   function workerSettings(config) {
@@ -983,7 +982,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
   async function recoverLostReports(dirs = []) {
     let replayed = 0;
     for (const dir of dirs || []) {
-      if (!dir || running.has(dirKey(dir))) continue;
+      if (!dir || running.has(normDir(dir))) continue;
       const history = readRuns(dir);
       const recent = sinceRoundClosed(history);
       const done = new Set(
@@ -1066,9 +1065,9 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
       return 0;
     }
     for (const dir of dirs || []) {
-      if (!dir || running.has(dirKey(dir))) continue;
+      if (!dir || running.has(normDir(dir))) continue;
       const newest = sessions
-        .filter((s) => s && s.id && !s.internal && dirKey(s.directory) === dirKey(dir))
+        .filter((s) => s && s.id && !s.internal && normDir(s.directory) === normDir(dir))
         .sort((a, b) => (Number(b.created) || 0) - (Number(a.created) || 0))[0];
       if (!newest) continue;
       let messages = [];
@@ -1130,7 +1129,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
         // carrying on by itself, which is the one thing Stop exists to prevent.
         // Recorded rather than refused silently, and no wake: waking it would open
         // another turn to delegate in.
-        if (stoppedByOperator.has(dirKey(session.directory))) {
+        if (stoppedByOperator.has(normDir(session.directory))) {
           appendRun(session.directory, {
             kind: 'delegate',
             callId: request.callId,
@@ -1245,9 +1244,9 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     // The operator stopped the run. Nothing starts again, and nobody is nudged,
     // until they say what they want next: a reminder here is the "it retried on
     // its own" that made Stop mean nothing.
-    if (stoppedByOperator.has(dirKey(dir))) return;
+    if (stoppedByOperator.has(normDir(dir))) return;
     if (operatorSpokeSince(messages)) return;
-    if (running.has(dirKey(dir))) return;
+    if (running.has(normDir(dir))) return;
     const plan = readPlan(dir).plan;
     const tasks = Array.isArray(plan?.tasks) ? plan.tasks : [];
     if (!tasks.length) return;
@@ -1262,9 +1261,9 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     // the project sat for ten minutes with the plan claiming a task was running and
     // nothing running at all. A sentence about delegating is not a delegation, and
     // only the harness can tell the two apart.
-    const claimed = tasks.find((t) => t.status === 'doing' && !nudged.has(`${dirKey(dir)}|doing|${t.id}`));
+    const claimed = tasks.find((t) => t.status === 'doing' && !nudged.has(`${normDir(dir)}|doing|${t.id}`));
     if (claimed) {
-      nudged.add(`${dirKey(dir)}|doing|${claimed.id}`);
+      nudged.add(`${normDir(dir)}|doing|${claimed.id}`);
       out.info(`plan says ${claimed.id} (${claimed.role}) is doing, and nothing is running - waking the Architect`);
       await wake(session.id, dir, {
         description: `${claimed.id} is marked doing, but nothing is running`,
@@ -1280,12 +1279,12 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     const ready = tasks.find(
       (t) =>
         t.status === 'todo' &&
-        !nudged.has(`${dirKey(dir)}|${t.id}`) &&
+        !nudged.has(`${normDir(dir)}|${t.id}`) &&
         (Array.isArray(t.dependsOn) ? t.dependsOn : []).every((d) => done.has(d)),
     );
     if (!ready) return;
     if (roleMarked(ready.role, getConfig() || {})) return;
-    nudged.add(`${dirKey(dir)}|${ready.id}`);
+    nudged.add(`${normDir(dir)}|${ready.id}`);
     out.info(
       `plan step ${ready.id} (${ready.role}) is ready and was never asked for - reminding the Architect once`,
     );
@@ -1334,7 +1333,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
       // measured 5 Nov: three delegate calls in one turn bought three Architect
       // turns, two of them only to say "I'll hold" while the worker was still
       // working.
-      const holder = running.get(dirKey(dir));
+      const holder = running.get(normDir(dir));
       if (holder) {
         holder.deferred = holder.deferred || [];
         holder.deferred.push({ task: request.task, callId: request.callId });
@@ -1465,7 +1464,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     // what makes the run's report say the operator stopped it.
     let gracefulStop = false;
     let stopRequestedAt = 0;
-    controls.set(dirKey(dir), {
+    controls.set(normDir(dir), {
       role,
       abort: () => controller.abort(),
       // The operator changed this role's model while its run was asleep in a
@@ -1493,8 +1492,8 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
         gracefulStop = true;
         stopRequestedAt = Date.now();
         // Nothing new may be delegated from here, even while the last step runs.
-        stoppedByOperator.add(dirKey(dir));
-        const liveNow = running.get(dirKey(dir));
+        stoppedByOperator.add(normDir(dir));
+        const liveNow = running.get(normDir(dir));
         if (liveNow) {
           liveNow.stopping = true;
           liveNow.stopRequestedAt = stopRequestedAt;
@@ -1511,7 +1510,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
       resumeStop: () => {
         gracefulStop = false;
         stopRequestedAt = 0;
-        const liveNow = running.get(dirKey(dir));
+        const liveNow = running.get(normDir(dir));
         if (liveNow) {
           liveNow.stopping = false;
           liveNow.stopRequestedAt = 0;
@@ -1589,7 +1588,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
       // them to the Architect once, instead of a wake per ask.
       deferred: [],
     };
-    running.set(dirKey(dir), live);
+    running.set(normDir(dir), live);
     emit('run.started', live);
 
     // A restore point first, then a clean baseline: the harness is committed as it
@@ -1788,7 +1787,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
               onPoll: (messages) => {
                 const lease = desk?.holder?.();
                 if (!lease || !lease.callId) return;
-                if (dirKey(lease.dir) !== dirKey(dir)) return;
+                if (normDir(lease.dir) !== normDir(dir)) return;
                 if (screenCallOver(messages, lease.callId)) {
                   desk.release('the worker finished with the screen', dir);
                 }
@@ -2257,10 +2256,10 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
       log.warn(`worker for ${request.task} failed: ${err.message}`);
     } finally {
       busy.delete(dir);
-      controls.delete(dirKey(dir));
+      controls.delete(normDir(dir));
       // The card goes back to idle and the path is erased as soon as the worker
       // stops — before the Architect is woken, so the two never disagree.
-      running.delete(dirKey(dir));
+      running.delete(normDir(dir));
       // The worker's session is single-use, and the run is over. A note queued as
       // the last turn ended (a refusal, a nudge) can start a turn of its own with
       // nobody watching — on 4 Nov that turn ran for 27 minutes beside the
@@ -3499,7 +3498,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
    * the transcript — and later attempts just say "continue".
    */
   async function wake(architectId, dir, { description, text }, signal) {
-    const key = dirKey(dir);
+    const key = normDir(dir);
     const stop = new AbortController();
     wakeStops.set(key, stop);
     // One signal for both reasons to end: the run's own Stop, and the operator's
@@ -3518,7 +3517,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     // same wake a worker gets, on the loop that sends the report.
     let chatWake = newWake();
     let chatWaiting = false;
-    archWakes.set(dirKey(dir), {
+    archWakes.set(normDir(dir), {
       architectId,
       waiting: () => chatWaiting,
       fire: () => chatWake.fire(),
@@ -3601,7 +3600,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
           onPoll: (messages) => {
             const lease = desk?.holder?.();
             if (!lease || !lease.callId) return;
-            if (dirKey(lease.dir) !== dirKey(dir)) return;
+            if (normDir(lease.dir) !== normDir(dir)) return;
             if (screenCallOver(messages, lease.callId)) desk.release('the call finished with the screen', dir);
           },
         },
@@ -3701,7 +3700,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
    * provider backoff would start a turn of its own and race the retry.
    */
   async function steer(dir, { text, files, actor } = {}) {
-    const key = dirKey(dir);
+    const key = normDir(dir);
     const live = running.get(key);
     if (!live) return { ok: false, reason: 'Nothing is running in this project.' };
     if (!live.workerId) return { ok: false, reason: 'The worker is starting; try again in a moment.' };
@@ -3745,7 +3744,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
   /** Ask the live run to stop at the end of the step it is in. The second Stop
    *  is `cancel()` below; this one only sets the intention. */
   async function requestStop(dir) {
-    const key = dirKey(dir);
+    const key = normDir(dir);
     const control = controls.get(key);
     const live = running.get(key);
     if (!control?.requestStop || !live) return { ok: false };
@@ -3756,7 +3755,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
   /** Stop the Architect's wake loop now, and leave no retry behind. The report is
    *  in the transcript; the operator can read it when they choose to speak again. */
   function stopWake(dir) {
-    const key = dirKey(dir);
+    const key = normDir(dir);
     const stop = wakeStops.get(key);
     if (!stop) return false;
     wakeStops.delete(key);
@@ -3768,7 +3767,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
    *  there was anything to stop. The wait loops see the abort on their next poll
    *  (and a backoff sleep is cut short), so this is immediate even mid-retry. */
   function cancel(dir) {
-    const key = dirKey(dir);
+    const key = normDir(dir);
     // The wake belongs to a run whose control is already gone; end it too.
     stopWake(dir);
     const control = controls.get(key);
@@ -3791,7 +3790,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
 
   /** The operator has spoken. Whatever they stopped may run again. */
   function resume(dir) {
-    const key = dirKey(dir);
+    const key = normDir(dir);
     // A stop that has not taken effect yet is called off too: the operator spoke,
     // and their words outrank the button they pressed a moment earlier.
     controls.get(key)?.resumeStop?.();
@@ -3803,8 +3802,8 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
   /** Nothing was running, but the operator pressed Stop: hold the project so the
    *  Architect's next turn cannot delegate the work they just stopped. */
   function hold(dir, why = 'stopped by the operator') {
-    if (stoppedByOperator.has(dirKey(dir))) return false;
-    stoppedByOperator.add(dirKey(dir));
+    if (stoppedByOperator.has(normDir(dir))) return false;
+    stoppedByOperator.add(normDir(dir));
     log.warn(`run in ${dir} ${why} - nothing will be delegated until they speak`);
     return true;
   }
@@ -3820,7 +3819,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
   function stopWithReason(sessionId, reason) {
     const live = [...running.values()].find((r) => r.workerId === sessionId || r.architectId === sessionId);
     if (!live) return false;
-    const control = controls.get(dirKey(live.dir));
+    const control = controls.get(normDir(live.dir));
     if (!control) return false;
     if (typeof control.stop === 'function') control.stop(reason);
     else control.abort();
@@ -3891,4 +3890,3 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     closeRound,
   };
 }
-

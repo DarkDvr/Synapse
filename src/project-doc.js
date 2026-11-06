@@ -21,7 +21,7 @@ import path from 'node:path';
 
 /** Mirrors PLAN_DIR in plans.js — kept here so this module imports nothing. */
 const SYNAPSE_DIR = '.synapse';
-export const DOC_NAME = 'project.md';
+const DOC_NAME = 'project.md';
 export const DOC_RELATIVE = `${SYNAPSE_DIR}/${DOC_NAME}`;
 const LEGACY_REQUEST = 'requirement.md';
 const LEGACY_DECISIONS = 'decisions.md';
@@ -41,7 +41,7 @@ const MAX_DECISION_CHARS = 1400;
 const docPath = (dir) => path.join(String(dir || ''), SYNAPSE_DIR, DOC_NAME);
 
 /** "27 Oct 2026, 16:20" — the stamp every entry carries. */
-export function stampOf(at = Date.now()) {
+function stampOf(at = Date.now()) {
   const d = new Date(at);
   const month = d.toLocaleString('en-GB', { month: 'short' });
   return `${d.getDate()} ${month} ${d.getFullYear()}, ${String(d.getHours()).padStart(2, '0')}:${String(
@@ -169,7 +169,7 @@ export function writeDoc(dir, { current = '', handover = '', notes = '', log = '
 const ENTRY = /^### (request|chat|decision|compact) · (.+)$/;
 
 /** Split the Log into entries: a heading line plus the body under it. */
-export function parseLog(log) {
+function parseLog(log) {
   const out = [];
   let current = null;
   for (const line of String(log || '').split('\n')) {
@@ -203,7 +203,7 @@ function decisionsInForce(entries) {
 }
 
 /** The head the brief quotes: the current ask and the decisions still standing. */
-export function buildCurrent(log, { at = Date.now() } = {}) {
+function buildCurrent(log, { at = Date.now() } = {}) {
   const entries = parseLog(log);
   const requests = entries.filter((e) => e.kind === 'request');
   const chats = entries.filter((e) => e.kind === 'chat');

@@ -1,0 +1,39 @@
+# The suite, on every push. It is the same command the operator runs by hand, so a
+# commit that breaks something is found here instead of on their machine.
+#
+# Windows, because that is what the app is: the tests check Windows paths, drive
+# Edge through skills/visual-review, and read the WPF project file.
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  suite:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      # Edge is what visual-review drives; the runner image carries it, but say so
+      # out loud rather than failing 15 minutes in with "browser not found".
+      - name: Edge is here
+        shell: pwsh
+        run: |
+          $edge = @(
+            "$env:ProgramFiles\Microsoft\Edge\Application\msedge.exe",
+            "${env:ProgramFiles(x86)}\Microsoft\Edge\Application\msedge.exe"
+          ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if (-not $edge) { throw 'Edge is not installed on this runner' }
+          "Edge: $edge"
+
+      - name: suite
+        shell: pwsh
+        run: node --test "tests/*.test.mjs"

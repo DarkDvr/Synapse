@@ -12,6 +12,7 @@
 // its behaviour.
 import { autoAnswerFor, FULL_AUTO_MS, formPages, recommendedOptions } from './auto-answer.js';
 import { readAutomation } from './automation.js';
+import { normDir } from './paths.js';
 
 export function createFormAuto({
   engine,
@@ -46,7 +47,6 @@ export function createFormAuto({
     return Number.isFinite(ms) ? Math.max(0, ms) : fallback;
   };
 
-  const dirKey = (value) => String(value || '').replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
 
   function setAutoAnswer(sessionId, on, directory = '') {
     if (!sessionId && !directory) return false;
@@ -55,11 +55,11 @@ export function createFormAuto({
       else fullAuto.delete(sessionId);
     }
     const known = directory || dirOf.get(sessionId) || '';
-    if (known) fullAutoDirs.set(dirKey(known), Boolean(on));
+    if (known) fullAutoDirs.set(normDir(known), Boolean(on));
     // A worker that already read the switch on must not keep answering after the
     // operator turns it off: the project's answer is the later word.
     if (!on && known) {
-      for (const [id, dir] of dirOf) if (dirKey(dir) === dirKey(known)) fullAuto.delete(id);
+      for (const [id, dir] of dirOf) if (normDir(dir) === normDir(known)) fullAuto.delete(id);
     }
     return true;
   }
@@ -79,7 +79,7 @@ export function createFormAuto({
   async function enabledFor(sessionId) {
     const known = dirOf.get(sessionId);
     if (known) {
-      const chosen = fullAutoDirs.get(dirKey(known));
+      const chosen = fullAutoDirs.get(normDir(known));
       if (chosen !== undefined) return chosen;
     }
     if (fullAuto.has(sessionId)) return true;
@@ -94,7 +94,7 @@ export function createFormAuto({
       const directory = session?.directory || '';
       if (directory) {
         dirOf.set(sessionId, directory);
-        const chosen = fullAutoDirs.get(dirKey(directory));
+        const chosen = fullAutoDirs.get(normDir(directory));
         if (chosen !== undefined) return chosen;
       }
       // The session's own automation first, with the old `fullAuto` name as the

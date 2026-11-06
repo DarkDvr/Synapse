@@ -24,7 +24,7 @@ import { DATA_DIR } from './paths.js';
 export const PROVIDER_LOG = path.join(DATA_DIR, 'provider-errors.log');
 /** Days of history to keep. Deliberately not a setting: the point is to see
  *  months, and the file stays small because a line is ~140 characters. */
-export const PROVIDER_LOG_DAYS = 30;
+const PROVIDER_LOG_DAYS = 30;
 const MESSAGE_MAX = 180;
 const PRUNE_EVERY_MS = 6 * 60 * 60 * 1000;
 

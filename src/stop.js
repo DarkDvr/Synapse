@@ -35,6 +35,8 @@
 // the screen lease) happens here, once, so no caller has to remember it.
 
 /** How long a gentle Stop lets the step in flight run before cutting anyway. */
+import { normDir } from './paths.js';
+
 export const STOP_GRACE_MS = 45_000;
 /** Quiet ticks in a row before a stop is called done. */
 const QUIET_TICKS = 2;
@@ -56,11 +58,6 @@ const TICK_MS = 1_000;
 // in the same project as the session whose Stop was pressed, plus that session,
 // so a stale active list cannot leave the asked session un-interrupted.
 export function stopTargets({ sessionId, directory, active = [], sessions = [] }) {
-  const norm = (value) =>
-    String(value || '')
-      .replace(/\\/g, '/')
-      .replace(/\/+$/, '')
-      .toLowerCase();
 
   const targets = new Set();
   if (sessionId) targets.add(sessionId);
@@ -74,7 +71,7 @@ export function stopTargets({ sessionId, directory, active = [], sessions = [] }
     // different project's work because its directory is unknown is worse than
     // missing it.
     if (!session?.directory) continue;
-    if (norm(session.directory) !== norm(directory)) continue;
+    if (normDir(session.directory) !== normDir(directory)) continue;
     targets.add(id);
   }
   return [...targets];
@@ -101,11 +98,6 @@ export function createStopper({
   stuckMs = STUCK_MS,
   giveUpMs = GIVE_UP_MS,
 } = {}) {
-  const norm = (value) =>
-    String(value || '')
-      .replace(/\\/g, '/')
-      .replace(/\/+$/, '')
-      .toLowerCase();
 
   /** project key → the intent in force */
   const intents = new Map();
@@ -140,7 +132,7 @@ export function createStopper({
     for (const id of active) {
       if (!id) continue;
       const dir = await directoryOf(id);
-      if (!dir || norm(dir) !== norm(intent.dir)) continue;
+      if (!dir || normDir(dir) !== normDir(intent.dir)) continue;
       known.set(id, dir);
       intent.sessions.add(id);
       alive.push(id);
@@ -192,14 +184,14 @@ export function createStopper({
   }
 
   function stopTimer(intent) {
-    const timer = timers.get(norm(intent.dir));
+    const timer = timers.get(normDir(intent.dir));
     if (timer) clearInterval(timer);
-    timers.delete(norm(intent.dir));
+    timers.delete(normDir(intent.dir));
   }
 
   function finish(intent, why) {
     stopTimer(intent);
-    intents.delete(norm(intent.dir));
+    intents.delete(normDir(intent.dir));
     intent.phase = 'stopped';
     log?.info(`stop: ${intent.dir} is quiet — stopped${why ? ` (${why})` : ''}`);
     notify?.({ kind: 'stop', type: 'stop.done', dir: intent.dir, sessionId: intent.sessionId });
@@ -220,7 +212,7 @@ export function createStopper({
   }
 
   async function tick(intent) {
-    if (!intents.has(norm(intent.dir))) return;
+    if (!intents.has(normDir(intent.dir))) return;
     if (intent.phase === 'gave-up') return;
 
     const age = now() - intent.at;
@@ -276,7 +268,7 @@ export function createStopper({
       tick(intent).catch((err) => log?.warn(`stop: the watcher failed: ${err.message}`));
     }, tickMs);
     timer.unref?.();
-    timers.set(norm(intent.dir), timer);
+    timers.set(normDir(intent.dir), timer);
   }
 
   // ── the public surface ──────────────────────────────────
@@ -297,7 +289,7 @@ export function createStopper({
     }
     known.set(sessionId, dir);
 
-    let intent = intents.get(norm(dir));
+    let intent = intents.get(normDir(dir));
     if (intent) {
       intent.hard = true;
       intent.boundary = true;
@@ -311,7 +303,7 @@ export function createStopper({
       return { ok: true, stopping: true, phase: intent.phase, target: intent.target, already: true };
     }
 
-    const live = (runs?.active?.() || []).find((r) => norm(r.dir) === norm(dir)) || null;
+    const live = (runs?.active?.() || []).find((r) => normDir(r.dir) === normDir(dir)) || null;
     // Is the step already over? A turn that failed and is waiting out the engine's
     // own retry has nothing in flight — the engine will not read anything until its
     // timer fires. Treating that as "finish the step first" leaves the notice on
@@ -364,7 +356,7 @@ export function createStopper({
       intent.sessions.add(live.workerId);
       known.set(live.workerId, dir);
     }
-    intents.set(norm(dir), intent);
+    intents.set(normDir(dir), intent);
 
     // The harness side of a stop, once, here. A run that is cut now has its own
     // control aborted, so a worker asleep in a provider backoff wakes at once
@@ -405,10 +397,10 @@ export function createStopper({
    * next turn must not be interrupted by a stop they have moved on from.
    */
   function clear(dir) {
-    const intent = intents.get(norm(dir));
+    const intent = intents.get(normDir(dir));
     if (!intent) return false;
     stopTimer(intent);
-    intents.delete(norm(dir));
+    intents.delete(normDir(dir));
     log?.info(`stop: ${dir} was cleared — the operator spoke again`);
     notify?.({ kind: 'stop', type: 'stop.cleared', dir: intent.dir, sessionId: intent.sessionId });
     return true;
@@ -419,7 +411,7 @@ export function createStopper({
     if (!ev?.sessionId) return;
     const dir = known.get(ev.sessionId);
     if (!dir) return;
-    const intent = intents.get(norm(dir));
+    const intent = intents.get(normDir(dir));
     if (!intent) return;
     if (ev.type === 'session.step.started') intent.boundary = true;
     if (ev.type === 'session.retry.scheduled') {
@@ -432,13 +424,13 @@ export function createStopper({
 
   /** Is a stop in force for this project? */
   function stopping(dir) {
-    const intent = intents.get(norm(dir));
+    const intent = intents.get(normDir(dir));
     return Boolean(intent) && intent.phase !== 'gave-up';
   }
 
   /** What the pages show: one line per project that is stopping. */
   function state(dir) {
-    const intent = dir ? intents.get(norm(dir)) : null;
+    const intent = dir ? intents.get(normDir(dir)) : null;
     if (!intent) return null;
     return {
       dir: intent.dir,

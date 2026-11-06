@@ -30,7 +30,7 @@ const SHIPPED_TOOLS = {
 };
 
 /** The configured list for a role, or null when it was never set. */
-export function roleSkillList(config, role) {
+function roleSkillList(config, role) {
   const entry = config?.roles?.[role];
   if (!entry || !Array.isArray(entry.skills)) return null;
   return entry.skills.map((s) => String(s || '').trim()).filter(Boolean);

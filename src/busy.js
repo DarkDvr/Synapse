@@ -6,11 +6,7 @@
 //
 // A project is one conversation in one folder, so a project's busy state is its
 // own; two projects never block each other.
-const norm = (value) =>
-  String(value || '')
-    .replace(/\\/g, '/')
-    .replace(/\/+$/, '')
-    .toLowerCase();
+import { normDir } from './paths.js';
 
 const projectName = (directory) => {
   const parts = String(directory || '').split(/[\\/]/).filter(Boolean);
@@ -31,12 +27,12 @@ export function busyInfo({
   forms = [],
   driver = null,
 } = {}) {
-  const dir = norm(directory);
+  const dir = normDir(directory);
   if (!dir) return { busy: false };
 
   const base = { busy: true, directory, project: projectName(directory), driver: driver || null };
   const sessionIn = (id) => (sessions || []).find((s) => s.id === id) || null;
-  const sameDir = (value) => norm(value) === dir;
+  const sameDir = (value) => normDir(value) === dir;
 
   const run = (runs || []).find((r) => sameDir(r.dir || r.directory));
   if (run) {

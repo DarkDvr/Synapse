@@ -53,7 +53,7 @@ export function cleanAutomation(value) {
  * becomes Auto-Shutdown. An explicit `synapse.automation` always wins, so the first
  * toggle an operator flips settles that project for good.
  */
-export function resolveAutomation(synapse, { shutdownWhenDone = false } = {}) {
+function resolveAutomation(synapse, { shutdownWhenDone = false } = {}) {
   const block = synapse && typeof synapse === 'object' ? synapse : {};
   const stored = block.automation && typeof block.automation === 'object' ? block.automation : null;
   // A chat from before the four switches: `synapse.auto` was off unless the

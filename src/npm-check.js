@@ -41,7 +41,7 @@ const run = (file, args, timeout, env) =>
   });
 
 /** The node that travels with the app, if it is there. */
-export function localNode(root) {
+function localNode(root) {
   const exe = path.join(String(root || ''), 'bin', 'node', 'node.exe');
   try { return fs.existsSync(exe) ? exe : null; } catch { return null; }
 }
@@ -54,7 +54,7 @@ export function localNode(root) {
  * entirely, which also means a path with spaces needs no quoting and no path ever
  * reaches command text.
  */
-export function localNpm(root) {
+function localNpm(root) {
   const node = localNode(root);
   if (!node) return null;
   const dir = path.dirname(node);
@@ -88,7 +88,7 @@ export async function hasNpm({ root, comspec } = {}) {
 }
 
 /** The version of the node we are pairing npm with, from the file vendor-node.ps1 wrote. */
-export function localNodeVersion(nodeDir) {
+function localNodeVersion(nodeDir) {
   try {
     const text = fs.readFileSync(path.join(nodeDir, 'VERSION.txt'), 'utf8');
     const m = /^node\s+v?(\d+\.\d+\.\d+)/m.exec(text);

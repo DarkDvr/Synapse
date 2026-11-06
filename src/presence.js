@@ -13,7 +13,7 @@
 import os from 'node:os';
 import dns from 'node:dns/promises';
 
-export const LOCK_IDLE_MS = 15 * 60 * 1000;
+const LOCK_IDLE_MS = 15 * 60 * 1000;
 
 const local = (address) => {
   const value = String(address || '');

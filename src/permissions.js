@@ -80,7 +80,7 @@ const PATTERN_ARG =
 const isEnvFile = (p) => /(^|\/)\.env(\.[^/]+)?$/i.test(String(p || '')) && !/\.env\.example$/i.test(String(p || ''));
 
 /** Forward slashes, no trailing slash. The form the engine's rules use. */
-export const slash = (value) => String(value || '').replace(/\\/g, '/').replace(/\/+$/, '');
+const slash = (value) => String(value || '').replace(/\\/g, '/').replace(/\/+$/, '');
 const key = (value) => slash(value).toLowerCase();
 
 /** Is `child` the same as, or under, `parent`? Case-insensitive on Windows. */
@@ -166,7 +166,7 @@ export function resolvePath(value, cwd, { home = os.homedir() } = {}) {
  *  `Set-Content …` was one "read" segment: the first verb excused the second
  *  statement, and an outside write was allowed without asking. Measured live.
  */
-export function segmentsOf(command) {
+function segmentsOf(command) {
   const text = String(command || '');
   const out = [];
   let current = '';

@@ -57,7 +57,7 @@ export function compareVersions(a, b) {
 
 /** The npm package a binary belongs to, by walking up from it. Null when the
  *  engine came from somewhere else (a hand-built binary, a fork, a zip). */
-export function packageRoot(binary) {
+function packageRoot(binary) {
   let dir = path.dirname(String(binary || ''));
   for (let i = 0; i < 4 && dir && dir !== path.dirname(dir); i += 1) {
     const file = path.join(dir, 'package.json');
@@ -71,7 +71,7 @@ export function packageRoot(binary) {
 }
 
 /** OpenCode Desktop's bundled engine version, if the desktop is installed. */
-export function desktopVersion() {
+function desktopVersion() {
   const roots = [
     process.env.LOCALAPPDATA && path.join(process.env.LOCALAPPDATA, 'Programs', '@opencodedesktop', 'resources'),
     process.env.ProgramFiles && path.join(process.env.ProgramFiles, '@opencodedesktop', 'resources'),

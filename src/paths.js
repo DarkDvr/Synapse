@@ -30,7 +30,7 @@ export const REMOTE_TOKEN_FILE = path.join(DATA_DIR, 'remote-token');
 // A copy of the runtime that travels WITH Synapse. When it is present it is what
 // the app runs, so a machine with no npm and no global install still works: copy
 // the folder, and the engine comes along. `vendor-engine.ps1` puts it here.
-export const VENDOR_DIR = path.join(ROOT, 'bin', 'opencode');
+const VENDOR_DIR = path.join(ROOT, 'bin', 'opencode');
 export const VENDOR_ENGINE = path.join(VENDOR_DIR, process.platform === 'win32' ? 'opencode.exe' : 'opencode');
 
 // Where the operator's projects live: a SIBLING of the harness, never inside it.
@@ -119,3 +119,24 @@ export const PID_FILE = path.join(DATA_DIR, 'synapse.pid');
 // `*@opencode*` matches the operator's editor as well as the engine. Read the
 // pid from this file instead.
 export const ENGINE_PID_FILE = path.join(DATA_DIR, 'engine.pid');
+
+// ── one spelling per path ──────────────────────────────────────────────
+// Every "is this the same project" question in the codebase compares paths that
+// arrive with different separators, different case and sometimes a trailing slash:
+// the config, the engine's session records, a tool call's argument, the operator's
+// own typing. This used to be written out in fourteen places — `normDir`, `norm`,
+// `dirKey`, `key` — with two behaviours between them, which is how "the same
+// folder" became a bug class. There is one spelling now.
+
+/** Forward slashes, no trailing separator, lower case. For comparison only. */
+export function normDir(value) {
+  return String(value || '')
+    .replace(/\\/g, '/')
+    .replace(/\/+$/, '')
+    .toLowerCase();
+}
+
+/** The same spelling with the case kept, for a path shown to the operator. */
+function slash(value) {
+  return String(value || '').replace(/\\/g, '/').replace(/\/+$/, '');
+}

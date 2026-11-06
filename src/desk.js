@@ -13,7 +13,7 @@
 // It ends when the work that asked ends (the run), when the operator takes it back,
 // or when the worker says it is done with the screen. Every ending is announced:
 // the operator needs to know when their PC is theirs again.
-const norm = (dir) => String(dir || '').replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
+import { normDir } from './paths.js';
 
 /**
  * Has the tool call that took the screen finished?
@@ -74,7 +74,7 @@ export function createDesk({ log = null, notify = null, getMessages = null } = {
   };
 
   /** Is this project holding the screen right now? */
-  const holds = (dir) => Boolean(held) && held.key === norm(dir);
+  const holds = (dir) => Boolean(held) && held.key === normDir(dir);
 
   /** The project that holds it, or null. */
   const holder = () => (held ? { ...held } : null);
@@ -84,7 +84,7 @@ export function createDesk({ log = null, notify = null, getMessages = null } = {
    * operator can only be using one of them.
    */
   function take({ dir, role = null, task = null, sessionId = null, callId = null } = {}) {
-    const key = norm(dir);
+    const key = normDir(dir);
     if (!key) return { ok: false, reason: 'no directory' };
     if (held && held.key !== key) {
       return { ok: false, reason: `${held.dir} already has the screen`, held: { ...held } };
@@ -103,7 +103,7 @@ export function createDesk({ log = null, notify = null, getMessages = null } = {
    *  release to that project, so a run ending cannot take another project's lease. */
   function release(why = '', onlyDir = null) {
     if (!held) return { ok: false, released: false };
-    if (onlyDir && held.key !== norm(onlyDir)) return { ok: false, released: false };
+    if (onlyDir && held.key !== normDir(onlyDir)) return { ok: false, released: false };
     stopWatching();
     const was = held;
     held = null;

@@ -35,7 +35,7 @@ const sh = (cmd, args, timeout = 12000) =>
   });
 
 /** Every process, as `{ pid, parent, started, exe, cmd }`. Empty when it cannot tell. */
-export async function listProcesses() {
+async function listProcesses() {
   const out = await sh('powershell.exe', [
     '-NoProfile',
     '-NonInteractive',
@@ -62,7 +62,7 @@ export async function listProcesses() {
 }
 
 /** Listening TCP ports and the process holding each: `[{ port, pid }]`. */
-export async function listListeners() {
+async function listListeners() {
   const out = await sh('netstat.exe', ['-ano', '-p', 'TCP']);
   const found = [];
   for (const line of out.split(/\r?\n/)) {
@@ -168,7 +168,7 @@ export async function servesProject(port, dir) {
  * folder, or a listening port whose page really is the project's. The second
  * exists because `python -m http.server` names nothing at all.
  */
-export async function findForProject(dir, procs = null) {
+async function findForProject(dir, procs = null) {
   const key = String(dir || '').toLowerCase().replace(/\\/g, '/');
   if (!key) return [];
   const all = procs || (await listProcesses());

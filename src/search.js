@@ -63,7 +63,7 @@ function anchors(html, classRe) {
 }
 
 /** Exported for testing: the markup shape is the only fragile part. */
-export function parseResults(html, limit = 5) {
+function parseResults(html, limit = 5) {
   const out = [];
   const seen = new Set();
   // html.duckduckgo.com uses result__a; lite uses result-link.

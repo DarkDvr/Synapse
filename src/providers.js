@@ -15,7 +15,7 @@
  *  questions about itself (`/props` instead of LM Studio's `/api/v0/models`). It is
  *  named for the dialect rather than for one product, because any wrapper around
  *  llama.cpp speaks it: llama-server, KoboldCpp, and the game-PC MoE engines. */
-export const ADDABLE_PROVIDER_TYPES = ['local', 'llamacpp', 'openai'];
+const ADDABLE_PROVIDER_TYPES = ['local', 'llamacpp', 'openai'];
 
 /** Is this provider a server on this machine? `llamacpp` is one, and so is any
  *  address that points at localhost whatever it calls itself. */

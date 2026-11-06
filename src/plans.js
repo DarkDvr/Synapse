@@ -35,7 +35,7 @@ const LEGACY_ROLE = { hacker: 'qc' };
 
 // `blocked` is the one that matters: the work cannot proceed without the
 // operator, which is why it is the one painted red.
-export const STATUSES = ['todo', 'doing', 'done', 'blocked', 'failed'];
+const STATUSES = ['todo', 'doing', 'done', 'blocked', 'failed'];
 
 // A result with a "todo" status is the Architect's two writes landing one after
 // the other: it records the result, then flips the status later in the same turn.
@@ -54,9 +54,9 @@ const RESULT_STATUS_GRACE_MS = 10 * 60 * 1000;
 export const ORIGINS = ['plan', 'found', 'operator'];
 
 export const PLAN_DIR = '.synapse';
-export const PLAN_NAME = 'plan.json';
-export const RUNS_NAME = 'runs.jsonl';
-export const FEATURES_NAME = 'features.json';
+const PLAN_NAME = 'plan.json';
+const RUNS_NAME = 'runs.jsonl';
+const FEATURES_NAME = 'features.json';
 
 /** The instruction-entry key the brief is attached to, per session. */
 export const BRIEF_KEY = 'synapse.plan';
@@ -72,17 +72,17 @@ const sleepBriefly = (ms) => {
   } catch { /* no SharedArrayBuffer: take the retry with no pause */ }
 };
 
-export const planPath = (dir) => path.join(String(dir || ''), PLAN_DIR, PLAN_NAME);
-export const runsPath = (dir) => path.join(String(dir || ''), PLAN_DIR, RUNS_NAME);
-export const planRelPath = () => `${PLAN_DIR}\\${PLAN_NAME}`;
+const planPath = (dir) => path.join(String(dir || ''), PLAN_DIR, PLAN_NAME);
+const runsPath = (dir) => path.join(String(dir || ''), PLAN_DIR, RUNS_NAME);
+const planRelPath = () => `${PLAN_DIR}\\${PLAN_NAME}`;
 /** The same path for text the models read: forward slashes, because a lone
  *  backslash inside a JSON string is an invalid escape and models copy what
  *  they are shown. (A plan file once came back unreadable for exactly that.) */
-export const planRelPathPlain = () => `${PLAN_DIR}/${PLAN_NAME}`;
+const planRelPathPlain = () => `${PLAN_DIR}/${PLAN_NAME}`;
 
 /** The empty file a project starts with. Valid as it stands, so the first read
  *  is never an error and the Architect has the shape in front of it. */
-export const emptyPlan = () => ({ version: 1, goal: '', tasks: [] });
+const emptyPlan = () => ({ version: 1, goal: '', tasks: [] });
 
 /**
  * Create `.synapse\plan.json` when it is missing. This is the one write Synapse
@@ -136,7 +136,7 @@ export function setTaskStatus(dir, taskId, status) {
  * no task claims is a problem the Architect is told about, because the whole
  * point of the file is that the promise and the plan cannot quietly disagree.
  */
-export function readFeatures(dir, tasks = []) {
+function readFeatures(dir, tasks = []) {
   const base = {
     exists: false,
     relative: `${PLAN_DIR}/${FEATURES_NAME}`,

@@ -16,6 +16,7 @@
 import os from 'node:os';
 import { decide, grantKey, resolvePath, refusalNote } from './permissions.js';
 import { readAutomation } from './automation.js';
+import { normDir } from './paths.js';
 
 export function createPermissionGate({
   engine,
@@ -243,11 +244,10 @@ export function createPermissionGate({
     return info;
   }
 
-  const dirKey = (value) => String(value || '').replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
   const autoPermissionsEnabled = (sessionId, info) => {
     if (autoPermissionsOn.has(sessionId)) return true;
     if (info?.directory) {
-      const chosen = autoPermissionsDirs.get(dirKey(info.directory));
+      const chosen = autoPermissionsDirs.get(normDir(info.directory));
       if (chosen !== undefined) return chosen;
     }
     return info?.autoPermissions === true;
@@ -338,7 +338,7 @@ export function createPermissionGate({
    */
   function setAutoPermissions(sessionId, on, directory = '') {
     if (!sessionId && !directory) return false;
-    const key = dirKey(directory || sessions.get(sessionId)?.directory || '');
+    const key = normDir(directory || sessions.get(sessionId)?.directory || '');
     if (on) {
       if (sessionId) autoPermissionsOn.add(sessionId);
       if (key) autoPermissionsDirs.set(key, true);
@@ -347,7 +347,7 @@ export function createPermissionGate({
       if (key) autoPermissionsDirs.set(key, false);
     }
     for (const p of pendingAsks.values()) {
-      const sameProject = key && dirKey(p.info?.directory) === key;
+      const sameProject = key && normDir(p.info?.directory) === key;
       if (p.request.sessionId !== sessionId && !sameProject) continue;
       if (on) arm(p);
       else {

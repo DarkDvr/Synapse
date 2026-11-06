@@ -14,7 +14,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { DATA_DIR } from './paths.js';
 
-export const SECRETS_FILE = path.join(DATA_DIR, 'provider-keys.json');
+const SECRETS_FILE = path.join(DATA_DIR, 'provider-keys.json');
 
 function readAll() {
   try {
