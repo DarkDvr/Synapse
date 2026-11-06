@@ -18,7 +18,7 @@ fixed on the spot; a bug found on the way that is unrelated goes in
 | 3 — a catch that says nothing | **done** — baseline of 71, and it may only go down |
 | 4 — sync reads on the request path | **done** — the plan is parsed once per change |
 | 5 — the wake loop leaves `runs.js` | **half** — the report writer is out; the wake loop waits on `waitForIdle` moving first (measured, see below) |
-| 6 — `web/app.js` comes apart | **in progress** — out: `state.js`, `format.js`, `api.js`, `dom.js`, `console.js`, `settings-data.js`, `events.js`, `settings-form.js`, `settings-panes.js`, `ui-prefs.js`, `provider-list.js`, `providers.js`, `chat-notes.js`, `rate-view.js`, `chat-scroll.js`, `run-view.js`, `traces.js`, `transcript.js`, `composer.js`, `toast.js` (10,546 → 7,004). **Next:** the question panel (four wires) — see the table below |
+| 6 — `web/app.js` comes apart | **in progress** — out: 21 modules, from `state.js` to `ask-panel.js` (10,546 → 6,355). **Next:** the project plan, the model picker, projects + sessions — measured table below |
 
 ---
 
@@ -207,15 +207,17 @@ the operator. It took the renderers' need from 24 names to 10 — and the same m
 `dirKey`, `currentRun`, `roleLabel` and friends.
 
 **The composer is out too** (7 Nov): `web/composer.js` (796 lines, four wires) and
-`web/toast.js` (the page-wide one-liner the composer and app.js both need). `app.js`
-is 7,004 lines.
+`web/toast.js` (the page-wide one-liner the composer and app.js both need).
+
+**Then the chat geometry and the question panel** (7 Nov): `web/chat-geometry.js` (178
+lines — how tall the chat is, the 1359 breakpoint, and holding the reader's place while
+the box changes) and `web/ask-panel.js` (510 lines, three wires). `app.js` is 6,355
+lines, from 10,546.
 
 **What is left, measured rather than guessed:**
 
 | Block | Lines | What it needs from app.js |
 |---|---|---|
-| the question panel | 639 | **4** — `answerWaitSec`, `refreshPending`, `renderTree`, `wideLayout` |
-| the chat geometry (inside the question-panel section) | ~125 | its own two, and the ask panel would import `fitChatHeight` |
 | the project plan | 380 | not measured yet |
 | projects + sessions, role cards | ~365 | not measured yet |
 | the model picker | 465 | not measured yet |
@@ -226,6 +228,14 @@ app.js because it is the thing that *is* the wiring: every event it receives bel
 to some other part of the page, and its job is to hand it over. If it ever leaves, it
 leaves last, and it leaves as a router that each part registers with — not as a
 750-line file with a thirty-eight-name object at the top.
+
+**The tool this refactor was missing** (`scripts/check-imports.mjs`, 7 Nov). Two moves
+in a row shipped a missing import that the suite and `node --check` both passed: the
+page loaded, the module parsed, and the first call threw a `ReferenceError` — leaving
+a page that looked alive and was not. The script compares the names a module *calls*
+against what the other modules export, strips comments and strings first, and skips
+names a file wires at boot. Run it after every move; today it reports nothing across
+all 31 modules.
 
 The question panel is the next move, and the measurement above says it is the easiest
 one left: four wires, and its own chat-geometry helpers go with it (the ask post has
