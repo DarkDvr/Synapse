@@ -1016,9 +1016,13 @@ body.dark .sidebar-bottom,
 .upd-card-foot { display: flex; align-items: center; justify-content: flex-end; }
 .upd-notes summary { cursor: pointer; font-size: 11.5px; color: var(--yellow); }
 .upd-md {
-  /* The changelog gets the room the taller Updates page gives it, but never
-     more than the window can show without pushing the console off-screen. */
-  max-height: min(42vh, 420px); overflow: auto; margin-top: 6px; padding-left: 10px;
+  /* The changelog is opened by default when a release has notes, so it is the one
+     part of this page that decides how tall the page is. Measured 6 Nov with the
+     Settings footer back on the Updates page: at 42vh the two cards were 520px tall
+     and the pane overflowed its 678px body by 70. A quarter of the window keeps the
+     cards, the console and the footer inside one screen, and the changelog scrolls
+     inside its own box for the rest. */
+  max-height: min(26vh, 250px); overflow: auto; margin-top: 6px; padding-left: 10px;
   border-left: 2px solid var(--violet-line);
   font-size: 12px; line-height: 1.5; color: #b9bcc2;
 }
@@ -2704,7 +2708,12 @@ body.is-stopping .chat-dock { animation: stop-glow 0.7s ease-in-out infinite; }
 .prov-row.is-builtin { cursor: default; opacity: 0.72; }
 .prov-row.is-builtin:hover { border-color: var(--line); }
 .prov-type {
-  flex: none; font-family: var(--mono); font-size: 8.5px; font-weight: 700;
+  /* One width for every badge, so the provider names line up down the list. They
+     were sized by their text — 39px for "Local", 56px for "DeepSeek", and the two
+     engine rows at 39 and 45 — which left the name column ragged by up to 17px.
+     Measured 6 Nov. */
+  flex: none; min-width: 56px; text-align: center;
+  font-family: var(--mono); font-size: 8.5px; font-weight: 700;
   letter-spacing: 0.06em; text-transform: uppercase; color: #9a9ea6;
   border: 1px solid #3a3d43; border-radius: 4px; padding: 0 5px; line-height: 1.6;
 }

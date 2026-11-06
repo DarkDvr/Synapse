@@ -973,8 +973,17 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
       if (modelCache) {
         try { modelCache.record(list); } catch (err) { app.warn(`model cache update failed: ${err.message}`); }
       }
+      // A provider the operator removed in Settings is not offered any more. The
+      // engine keeps serving it and a role that already points at it keeps
+      // working — this is the menu, not the permission. Recorded above, so its
+      // context and variants are still known if it is put back.
+      const hidden = new Set((getConfig()?.engine?.opencode?.hiddenProviders || []).map(String));
+      const shown = hidden.size ? list.filter((m) => !hidden.has(String(m.provider))) : list;
+      if (hidden.size && shown.length !== list.length) {
+        app.debug(`models: ${list.length - shown.length} hidden by Settings (${[...hidden].join(', ')})`);
+      }
       return {
-        models: list.map((m) => {
+        models: shown.map((m) => {
           const known = modelCache?.get(m.ref);
           return { ...m, tools: known?.tools || null, issues: known?.issues || null };
         }),

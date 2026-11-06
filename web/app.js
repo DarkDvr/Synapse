@@ -1299,8 +1299,18 @@ const providerLabel = (p) => {
 // still grouped by label (4 Nov). Built-in catalog rows are in the same order:
 // "OpenCode Zen at the bottom" means the engine's own row can be moved too.
 function knownProviderIds(c) {
+  // An engine provider the operator removed in Settings is gone from this list, so
+  // its row goes and its models leave the menu (the server filters them). The
+  // engine still serves them, and Add Provider puts the row back.
+  const hidden = hiddenProviderIds(c);
   const custom = (c?.engine?.opencode?.providers || []).map((p) => String(p.id || slugify(p.name)));
-  return [...new Set([...ENGINE_PROVIDERS.map((p) => p.id), ...custom])];
+  const engine = ENGINE_PROVIDERS.map((p) => p.id).filter((id) => !hidden.has(id));
+  return [...new Set([...engine, ...custom])];
+}
+
+/** The engine providers this config has removed from the list, as a Set of ids. */
+function hiddenProviderIds(c = state.config) {
+  return new Set((c?.engine?.opencode?.hiddenProviders || []).map(String));
 }
 
 function providerOrderOf(c) {
@@ -1421,7 +1431,7 @@ function syncPickerInput(input) {
   input.title = m
     ? `${modelTitle(m)}${issues} · type to search`
     : ref
-      ? `${ref} is not in the engine's catalog right now · type to search`
+      ? `${ref} is ${hiddenProviderIds().has(String(ref).split('/')[0]) ? 'from a provider hidden in Settings' : "not in the engine's catalog right now"} · type to search`
       : 'Type to search models';
   input.classList.toggle('has-issues', Boolean(m?.issues?.length));
   input.classList.toggle('is-missing', Boolean(ref && !m));
@@ -2137,9 +2147,13 @@ function fillRoleModels() {
     const known = modelByRef(chosen);
     if (chosen && !known) {
       const id = String(chosen).split('/').pop();
+      // Two reasons a saved model is not in the list, and they read differently: it
+      // left the engine's catalog, or the operator removed its provider in Settings.
+      // Either way the ref is kept — the choice is not replaced by a neighbour.
+      const hidden = hiddenProviderIds().has(String(chosen).split('/')[0]);
       sel.insertAdjacentHTML(
         'beforeend',
-        `<option value="${esc(chosen)}">${esc(id)} — not in the catalog</option>`,
+        `<option value="${esc(chosen)}">${esc(id)} — ${hidden ? 'hidden in Settings' : 'not in the catalog'}</option>`,
       );
     }
     // Nothing saved at all is the only case where a model is offered: the first
@@ -2149,7 +2163,7 @@ function fillRoleModels() {
     sel.title = known
       ? modelTitle(known)
       : chosen
-        ? `${chosen} is not in the engine's catalog right now — the choice is kept, not replaced`
+        ? `${chosen} is ${hiddenProviderIds().has(String(chosen).split('/')[0]) ? 'from a provider hidden in Settings' : "not in the engine's catalog right now"} — the choice is kept, not replaced`
         : `Model for the ${role} role`;
     const p = pickers.get(role);
     if (p) syncPickerInput(p.input);
@@ -8010,12 +8024,20 @@ function settingsProviders(c) {
     const builtin = ENGINE_PROVIDERS.find((p) => p.id === id);
     if (builtin) {
       const count = countsByProvider[builtin.id] || 0;
+      // Engine rows are the engine's own catalog: its key and its URL are not ours
+      // to edit, but whether it is in this list is the operator's choice, so it can
+      // be removed like any other and put back from Add Provider. Nothing is
+      // unregistered — the models simply stop being offered.
       return `<div class="prov-row is-builtin" title="${esc(builtin.note)}">
         <span class="prov-type">${esc(builtin.label)}</span>
         <span class="prov-name">Engine catalog</span>
         <span class="prov-url">${esc(builtin.note)}</span>
         <span class="prov-meta">${count ? `${count} model${count === 1 ? '' : 's'}` : 'not connected'}</span>
-        <span class="prov-acts">${moves(id, at)}</span>
+        <span class="prov-acts">${moves(id, at)}
+          <button type="button" class="role-btn prov-del" data-prov-hide="${esc(builtin.id)}"
+                  title="Remove ${esc(builtin.label)} from the list — its models leave the model menu, and Add Provider puts it back"
+                  aria-label="Remove ${esc(builtin.label)} from the list">✕</button>
+        </span>
       </div>`;
     }
     const i = indexById.get(id);
@@ -8036,6 +8058,13 @@ function settingsProviders(c) {
       </div>`;
   };
   const rows = order.map((id, at) => rowFor(id, at)).join('');
+  // The engine's own providers are always registered, so "adding" one is putting a
+  // row the operator removed back into the list. Only the ones that are gone are
+  // offered, and the entry says where it comes from.
+  const hidden = hiddenProviderIds(c);
+  const restore = ENGINE_PROVIDERS.filter((p) => hidden.has(p.id))
+    .map((p) => `<button type="button" data-prov-show="${esc(p.id)}">${esc(p.label)} (engine)</button>`)
+    .join('');
 
   return `
     <section class="set-group"><h4>Providers <em class="set-restart">Restart</em></h4>
@@ -8045,7 +8074,7 @@ function settingsProviders(c) {
           <button type="button" data-prov-new="local">Local Provider</button>
           <button type="button" data-prov-new="llamacpp">Local Provider (llama.cpp)</button>
           <button type="button" data-prov-new="openai">OpenAI Compatible</button>
-          <button type="button" disabled title="The engine's own catalog is always registered. A second copy would list the same models twice.">OpenCode (built in)</button>
+          ${restore || '<button type="button" disabled title="The engine registers its own catalog, so OC Zen and OC Go are already in the list. Remove one here to offer it back.">Engine providers (in the list)</button>'}
         </div>
       </div>
       <div class="prov-list">
@@ -8104,9 +8133,14 @@ function renderSettings({ scrollTop } = {}) {
 function updateSettingsFoot() {
   const foot = document.querySelector('.set-foot');
   if (!foot) return;
-  const editable = state.settingsTab !== 'about' && state.settingsTab !== 'updates';
-  foot.hidden = !editable;
-  if (!editable || !state.setDraft || !state.config) return;
+  // About is the one page that keeps its own Close button inside the card: it is a
+  // credits page, not a form. Every other tab — Updates included — wears the same
+  // footer, because a page that is missing the buttons the window always has reads
+  // as a different window. On a page with nothing to save they sit in their resting
+  // state: Cancel and Revert are grey-red and disabled, Apply is disabled, Close is
+  // Close.
+  foot.hidden = state.settingsTab === 'about';
+  if (foot.hidden || !state.setDraft || !state.config) return;
   collectSettings();
   const dirty = JSON.stringify(state.setDraft) !== JSON.stringify(state.config);
   const needsRestart = dirty && restartNeeded(state.config, state.setDraft);
@@ -8117,6 +8151,9 @@ function updateSettingsFoot() {
   // button that only closes is a promise the window cannot keep.
   const cancel = $('cancelSettings');
   if (cancel) cancel.disabled = !dirty || busy;
+  // Revert is the same promise: with nothing typed there is nothing to put back.
+  const revert = $('revertSettings');
+  if (revert) revert.disabled = !dirty || busy;
   const primary = $('settingsPrimary');
   if (!primary) return;
   primary.disabled = busy;
@@ -8401,6 +8438,35 @@ async function onSettingsClick(e) {
     const menu = $('provAddMenu');
     if (menu) menu.hidden = true;
     addProvider(newProvider.dataset.provNew);
+    return;
+  }
+  // An engine provider removed from the list, put back. Nothing is registered: the
+  // engine never stopped serving it, so this only takes its id off the hidden list
+  // and the models return to the menu on the next load.
+  const restore = e.target.closest('[data-prov-show]');
+  if (restore) {
+    const menu = $('provAddMenu');
+    if (menu) menu.hidden = true;
+    const c = collectSettings();
+    if (!c) return;
+    c.engine.opencode = c.engine.opencode || {};
+    c.engine.opencode.hiddenProviders = (c.engine.opencode.hiddenProviders || []).filter(
+      (id) => String(id) !== String(restore.dataset.provShow),
+    );
+    renderSettings();
+    return;
+  }
+  const hide = e.target.closest('[data-prov-hide]');
+  if (hide) {
+    const c = collectSettings();
+    if (!c) return;
+    c.engine.opencode = c.engine.opencode || {};
+    const gone = new Set((c.engine.opencode.hiddenProviders || []).map(String));
+    gone.add(String(hide.dataset.provHide));
+    c.engine.opencode.hiddenProviders = [...gone];
+    // The row is about to disappear, so an editor open on it would point at nothing.
+    state.setProvSelected = null;
+    renderSettings();
     return;
   }
   // The order arrows come before the row handler: a click on one is a move, not

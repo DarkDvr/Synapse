@@ -361,6 +361,11 @@ test('the settings footer has one honest primary, not a Save Changes', () => {
   assert.match(js, /'Save & Restart'/);
   assert.match(js, /'Save & Close'/);
   assert.match(js, /primary\.dataset\.action =/);
+  // 6 Nov: the Updates page was the one tab without the footer, which read as a
+  // different window rather than a Settings page. Only About keeps its own Close
+  // inside the card; every other tab wears the same four buttons.
+  assert.match(js, /foot\.hidden = state\.settingsTab === 'about';/);
+  assert.doesNotMatch(js, /state\.settingsTab !== 'updates'/);
 });
 
 test('notices carry the yellow border and yellow text, and the work ring is twice as quick', () => {
@@ -378,7 +383,11 @@ test('the Updates page is content-sized, and its footer button cannot stretch', 
   const css = read('web/synapse.css');
   assert.match(css, /\.upd-card\s*\{[^}]*align-content: start/);
   assert.match(css, /\.upd-card-foot\s*\{[^}]*align-items: center/);
-  assert.match(css, /\.upd-md\s*\{[^}]*max-height: min\(42vh, 420px\)/);
+  // 6 Nov: the footer came back to this page, which cost it 46px, and the changelog
+  // is open by default whenever a release has notes — so its cap is what decides
+  // whether the page fits. Measured at 42vh: 520px cards, 70px of overflow. The cap
+  // is now a quarter of the window and the pane fits without scrolling.
+  assert.match(css, /\.upd-md\s*\{[^}]*max-height: min\(26vh, 250px\)/);
   assert.doesNotMatch(css, /#settingsModal \.modal\.is-updates/);
   assert.doesNotMatch(read('web/app.js'), /classList\.toggle\('is-updates'/);
 });

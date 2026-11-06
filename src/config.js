@@ -71,6 +71,12 @@ export const DEFAULTS = {
       // the model menu follows it. Empty means "catalog rows first, then the
       // servers in the order they were added".
       providerOrder: [],
+      // Engine providers the operator removed from the list, by id (`opencode`,
+      // `opencode-go`). The engine registers its own catalog and always will, so
+      // this cannot unregister anything — it takes those models out of the model
+      // menu and the Providers list, and Add Provider puts them back. Empty means
+      // "everything the engine serves is offered".
+      hiddenProviders: [],
       // How much conversation the engine carries over verbatim when it compacts.
       // The summary itself is the engine's own template and cannot be shortened,
       // but this can: it is the "keep the last N tokens" budget, 15,000 by
@@ -467,6 +473,14 @@ export function normalize(raw) {
   // and one added later appears at the end without being placed by hand.
   oc.providerOrder = Array.isArray(oc.providerOrder)
     ? oc.providerOrder.map((id) => String(id || '').trim()).filter(Boolean)
+    : [];
+
+  // Engine providers the operator took out of the list. Only engine ids make
+  // sense here: a provider of their own is removed from `providers`, not hidden.
+  // Ids are trimmed and deduped; an id that names no engine provider simply hides
+  // nothing, so there is nothing to validate against here (the page owns the list).
+  oc.hiddenProviders = Array.isArray(oc.hiddenProviders)
+    ? [...new Set(oc.hiddenProviders.map((id) => String(id || '').trim()).filter(Boolean))]
     : [];
 
   // The mode is applied at send now, and a conversation belongs to a project, so
