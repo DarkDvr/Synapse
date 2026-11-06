@@ -108,9 +108,11 @@ test('a permission card counts down to its automatic Allow Once', () => {
 // both clocks have to be reconciled — the HTTP Date header is the reconciler.
 test('every countdown runs on the server’s clock, not the page’s', () => {
   const js = read('web/app.js');
-  assert.match(js, /const serverNow = \(\) => Date\.now\(\) \+ \(Number\(state\.clockSkew\) \|\| 0\)/);
-  assert.match(js, /state\.clockSkew = server - Date\.now\(\)/);
-  assert.match(js, /res\.headers\.get\('date'\)/);
+  // serverNow moved to web/api.js with the fetch wrapper; it is still the same
+  // function, so the assertion follows it there.
+  assert.match(read('web/api.js'), /export const serverNow = \(\) => Date\.now\(\) \+ \(Number\(state\.clockSkew\) \|\| 0\)/);
+  assert.match(read('web/api.js'), /state\.clockSkew = server - Date\.now\(\)/);
+  assert.match(read('web/api.js'), /res\.headers\.get\('date'\)/);
   assert.match(js, /permissionNote\(due, serverNow\(\)\)/);
   assert.match(js, /permissionNote\(el\.dataset\.permDue, serverNow\(\)\)/);
   assert.match(js, /const now = serverNow\(\);/);

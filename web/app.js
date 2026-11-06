@@ -12,6 +12,7 @@ import { renderMarkdown } from './md.js';
 import { EV, turnEnded, shortEvent } from './events.js';
 import { state } from './state.js';
 import { esc, relTime, hhmm, toolTarget, versionTag, shortSpan, fmtBytes } from './format.js';
+import { api, serverNow } from './api.js';
 import { newStream, pushStream, slideTarget, nextOffset, takePending, freezeStream, STREAM_BUFFER } from './stream-view.js';
 import { addSample, rateOf } from './rate.js';
 import { DONE_SOUNDS, doneSoundName, workWillContinue } from './notify.js';
@@ -168,49 +169,11 @@ const ROLES = [
 
 
 // ── helpers ─────────────────────────────────────────────────────
-async function api(method, path, body) {
-  const res = await fetch(path, {
-    method,
-    headers: {
-      ...(body !== undefined ? { 'content-type': 'application/json' } : {}),
-      // Who is asking, as far as presence is concerned: the Settings lock and the
-      // name in "started from laptop" both come from this header.
-      ...(state.clientId ? { 'x-client-id': state.clientId } : {}),
-    },
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-  });
-  const text = await res.text();
-  // Two clocks. Every countdown here compares a timestamp the server wrote with
-  // "now" on this machine, and a remote PC's clock can be minutes off - which is
-  // why a countdown that had just started read "picked now" in the other room
-  // (4 Nov). The HTTP Date header is the server's own time; the difference is
-  // kept and added wherever a server timestamp is compared.
-  const date = res.headers.get('date');
-  if (date) {
-    const server = Date.parse(date);
-    if (Number.isFinite(server)) state.clockSkew = server - Date.now();
-  }
-  let json = null;
-  try { json = text ? JSON.parse(text) : null; } catch { /* non-JSON */ }
-  if (!res.ok) {
-    const err = new Error(json?.error || `${method} ${path} → ${res.status}`);
-    err.status = res.status;
-    err.body = json;
-    throw err;
-  }
-  return json;
-}
-
 function debounce(fn, ms) {
   let t;
   return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); };
 }
 
-/** "Now" on the server's clock, as this page understands it (see api()). */
-const serverNow = () => Date.now() + (Number(state.clockSkew) || 0);
-
-/** 24-hour HH:MM for message timestamps. */
-/** A tool call's one-line description: what it is actually running. */
 // The model's own name, whole.
 //
 // It used to have "free" stripped out and be cut at 28 characters, because a
