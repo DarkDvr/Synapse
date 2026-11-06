@@ -18,7 +18,7 @@ fixed on the spot; a bug found on the way that is unrelated goes in
 | 3 — a catch that says nothing | **done** — baseline of 71, and it may only go down |
 | 4 — sync reads on the request path | **done** — the plan is parsed once per change |
 | 5 — the wake loop leaves `runs.js` | **half** — the report writer is out; the wake loop waits on `waitForIdle` moving first (measured, see below) |
-| 6 — `web/app.js` comes apart | **started** — the store is `web/state.js`; five sub-steps left |
+| 6 — `web/app.js` comes apart | **in progress** — out: `state.js`, `format.js`, `api.js`, `dom.js`, `console.js`, `settings-data.js` (10,546 → 10,110). **Next:** the Settings block still calls ~24 things, and several are small helpers of their own — `isLocalServer`, `setIcon`, `providerBadge` — so they move before the block does |
 
 ---
 
