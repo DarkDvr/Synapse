@@ -37,7 +37,6 @@ const MARK = {
 const MAX_REQUEST = 800;
 const MAX_DECISIONS = 12;
 const MAX_DECISION_CHARS = 1400;
-const MAX_NOTE = 1000;
 
 const docPath = (dir) => path.join(String(dir || ''), SYNAPSE_DIR, DOC_NAME);
 
@@ -407,5 +406,3 @@ export function digest(dir) {
     log: legacy.log,
   };
 }
-
-export const LIMITS = { request: MAX_REQUEST, decisions: MAX_DECISION_CHARS, note: MAX_NOTE };

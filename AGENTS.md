@@ -171,7 +171,7 @@ an agent does not know to open is a document that does not exist:
 | `docs/notes/protection.md` | before touching `src/protection.js`, the prohibited list, or the Brave rule — what is refused without asking, and what the fence cannot see |
 
 Two rules: **a new lesson goes in `docs/notes/`, not here**; and a rule you move out
-leaves its invariant behind in one line, with the pointer.
+leaves its invariant behind in one line. Deferred work lives in `docs/notes/todo.md`.
 
 ## Running it
 

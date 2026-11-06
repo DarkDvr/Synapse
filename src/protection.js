@@ -107,12 +107,6 @@ export function protectionFor(config, { env = process.env } = {}) {
   }));
 }
 
-/** The first entry covering `target`, or null. */
-export function entryCovering(target, config, { env = process.env } = {}) {
-  const at = String(target || '');
-  return protectionFor(config, { env }).find((entry) => covers(entry.path, at)) || null;
-}
-
 /** The first entry covering `target` whose writes are refused, or null. */
 export function entryBlockingWrite(target, config, { env = process.env } = {}) {
   const at = String(target || '');

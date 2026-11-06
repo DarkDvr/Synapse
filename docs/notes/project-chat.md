@@ -343,9 +343,10 @@ folder went to the Recycle Bin, the registry has only Fever Tracker, and the
 open Fever Tracker stayed open. The `## Notes` duplicate in Fever Tracker's own
 document is left for its next write to repair, by design.
 
-Evidence: `data/qc/test1-doc-and-chat.png`, `test2-handover-open3.png` (the post
-open), `test3-settings-server.png` (the Settings tabs, caught when an occluded
-window returned a stale frame — see `docs/notes/ui-lessons.md`).
+Evidence: screenshots of the document and chat, the post-open handover, and the
+Settings tabs (that last one caught when an occluded window returned a stale
+frame — see `docs/notes/ui-lessons.md`). They were taken during the round and are
+not kept; `data\` is local and regenerable, so a path here would rot.
 
 ---
 

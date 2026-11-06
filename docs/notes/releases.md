@@ -17,10 +17,16 @@ tag on GitHub is what a bug report points at.
 ## Where the number lives
 
 `package.json` `version` is the single source. `src/version.js` reads it,
-`/api/status` returns it, and the title bar shows `1.0.2` beside the name — one
-place, not a copy at the foot of the status rail as well. The boot line in
+`/api/status` returns it, and the rail shows `v1.0.2` as a grey note at the right
+of the STATUS label — one place, and one that can be right. The boot line in
 `logs/app.log` carries the same number, so a stale server is visible before any
 behaviour is blamed.
+
+The window bar used to carry it, and that was the bug: the WPF frame read
+`package.json` once, at launch, so it kept showing the number the window started
+with while the server ran a newer one (6 Nov: 1.29.0 running, the bar on 1.28.3).
+The note is set from the server's own answer and re-read when the stream
+reconnects, so a restart moves it without closing the window.
 
 Two things mirror it and are bumped in the same commit:
 
@@ -57,14 +63,11 @@ Two things mirror it and are bumped in the same commit:
 ## Reading a version before debugging
 
 If a behaviour does not match the code in this checkout, the first question is
-"which Synapse is running?" — the title bar answers it. A server started before the
+"which Synapse is running?" — the rail answers it. A server started before the
 change is a stale build; restart it before blaming the rule. The console's boot
 line says `Synapse 1.0.2 starting`, and `/api/status` reports the same string.
 
-**An old number in the title bar is not a forgotten bump.** The window reads the
-version once, when it starts, and it is the number of the *exe that is running* —
-so after an update the panel still shows the previous version until the app
-restarts, while the folder on disk already holds the new one (31 Oct: 1.4.4 in the
-folder, v1.4.2 in the bar, two releases behind because the window had been open
-since morning). The suite's `tests/version.test.mjs` is what catches a bump that
-really was forgotten: the three places that carry the number must agree.
+**The note is the server, not the exe.** It is set from `/api/status`, so it says
+what is answering right now; the exe's own file properties are the version that
+was built, and `tests/version.test.mjs` is what catches a bump that was forgotten
+— the three places that carry the number must agree.

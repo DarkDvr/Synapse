@@ -87,11 +87,6 @@ export async function hasNpm({ root, comspec } = {}) {
   return { ok: false, how: '', pair: null };
 }
 
-/** Is there a runtime here at all — the vendored copy, or one installed globally? */
-export function runtimePresent(vendorPath) {
-  try { return fs.existsSync(vendorPath); } catch { return false; }
-}
-
 /** The version of the node we are pairing npm with, from the file vendor-node.ps1 wrote. */
 export function localNodeVersion(nodeDir) {
   try {
@@ -170,17 +165,4 @@ export async function installLocalNpm({ root, log = () => {}, fetchImpl = fetch 
   } finally {
     try { fs.rmSync(temp, { recursive: true, force: true }); } catch { /* a leftover temp dir is harmless */ }
   }
-}
-
-/**
- * Where this npm puts globally installed packages.
- *
- * Asked of npm rather than assumed: our own npm's prefix is `bin\node`, and a
- * machine npm's is `%APPDATA%\npm`. The old code hardcoded the second and would
- * not have found a binary installed by the first.
- */
-export async function npmGlobalRoot(pair) {
-  if (!pair) return '';
-  const r = await run(pair.node, [pair.cli, 'prefix', '-g'], 30000);
-  return r.ok ? r.out : '';
 }
