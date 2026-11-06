@@ -39,7 +39,7 @@ test('the composer is sized from its text by the browser, not measured in JS', (
 });
 
 test('autoGrow leaves the height alone where the browser can size it', () => {
-  const js = read('web/app.js');
+  const js = read('web/composer.js');
   const at = js.indexOf('function autoGrow(');
   assert.notEqual(at, -1, 'autoGrow is gone');
   const body = js.slice(at, js.indexOf('\n}', at));
@@ -51,7 +51,7 @@ test('autoGrow leaves the height alone where the browser can size it', () => {
 });
 
 test('the fallback measurement holds the chat’s offset across the transient', () => {
-  const js = read('web/app.js');
+  const js = read('web/composer.js');
   const at = js.indexOf('function autoGrow(');
   const body = js.slice(at, js.indexOf('\n}', at));
   assert.match(body, /const top = chat \? chat\.scrollTop : null/,

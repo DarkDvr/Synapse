@@ -30,6 +30,8 @@ const ui = () =>
     'web/providers.js',
     'web/provider-list.js',
     'web/transcript.js',
+    'web/composer.js',
+    'web/toast.js',
   ]
     .map(read)
     .join('\n');
@@ -107,7 +109,7 @@ test('an attached picture uses the same chip as a picture the model shows', () =
 });
 
 test('a sent message can be put back in the composer', () => {
-  const js = read('web/app.js');
+  const js = ui();
   assert.match(js, /data-reuse-msg/);
   assert.match(js, /function reuseMessage\(messageId\)/);
   assert.match(js, /function messageAttachments\(message\)/);
@@ -128,7 +130,7 @@ test('a You message keeps its parts on one vertical centre', () => {
 });
 
 test('the attachment budget is total size, with a count sanity cap', () => {
-  const js = read('web/app.js');
+  const js = ui();
   assert.match(js, /ATTACH_TOTAL_BYTES = 48 \* 1024 \* 1024/);
   assert.match(js, /ATTACH_MAX_COUNT = 24/);
   assert.match(js, /\.attach-total|attach-total/);
@@ -138,7 +140,7 @@ test('the attachment budget is total size, with a count sanity cap', () => {
 // minutes. The page paints the operator's own sentence at once, and keeps it
 // until the transcript carries it.
 test('a steer is on screen before the engine echoes it', () => {
-  const js = read('web/app.js');
+  const js = ui();
   assert.match(js, /local-steer-/);
   assert.match(js, /startsWith\('local-steer-'\)/);
   assert.match(js, /text: `\[steer\] \$\{text\}`/);
@@ -452,7 +454,8 @@ test('the composer reads the send button before it uses it', () => {
   // A line-edit put `sendBtn.disabled = …` above its own `const` and the whole page
   // died at boot with "Cannot access 'sendBtn' before initialization" — the rail
   // empty, no explanation on screen (3 Nov). Cheap guard, expensive bug.
-  const js = read('web/app.js');
+  // 6 Nov: the composer is its own module now.
+  const js = read('web/composer.js');
   const start = js.indexOf('function renderComposer');
   const body = js.slice(start, js.indexOf('\nfunction ', start + 10));
   const decl = body.indexOf("const sendBtn = $('sendBtn')");
@@ -462,7 +465,7 @@ test('the composer reads the send button before it uses it', () => {
 });
 
 test('a pending question takes the composer, and leaves Stop as the way out', () => {
-  const js = read('web/app.js');
+  const js = ui();
   const block = /for \(const id of \['attachBtn', 'modeToggle', 'runBtn'\]\) \{([\s\S]*?)\}/.exec(js);
   assert.ok(block, 'the composer controls are switched off together');
   // `blocked` is a question *or* a pending permission: both mean the turn cannot

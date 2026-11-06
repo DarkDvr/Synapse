@@ -390,7 +390,8 @@ test('the briefs explain a steer and an interrupted turn', () => {
 test('the first Stop says it is finishing the step', () => {
   const html = fs.readFileSync(path.join(process.cwd(), 'web', 'index.html'), 'utf8');
   const css = fs.readFileSync(path.join(process.cwd(), 'web', 'synapse.css'), 'utf8');
-  const app = fs.readFileSync(path.join(process.cwd(), 'web', 'app.js'), 'utf8');
+  // 6 Nov: the Stop request lives in the composer's own module.
+  const app = fs.readFileSync(path.join(process.cwd(), 'web', 'composer.js'), 'utf8');
   assert.match(html, /finish this step, then stop/);
   assert.match(html, /id="stopNotice"/);
   assert.match(css, /#stopBtn\.is-stopping/);
@@ -401,7 +402,7 @@ test('the first Stop says it is finishing the step', () => {
 test('the composer says what a steer will do', () => {
   // 6 Nov: the steer line is drawn by ./transcript.js and pinned by ./traces.js, so
   // "the page" is the three files.
-  const app = ['app.js', 'transcript.js', 'traces.js']
+  const app = ['app.js', 'transcript.js', 'traces.js', 'composer.js']
     .map((f) => fs.readFileSync(path.join(process.cwd(), 'web', f), 'utf8'))
     .join('\n');
   const css = fs.readFileSync(path.join(process.cwd(), 'web', 'synapse.css'), 'utf8');
