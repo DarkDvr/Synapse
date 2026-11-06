@@ -18,7 +18,7 @@ fixed on the spot; a bug found on the way that is unrelated goes in
 | 3 — a catch that says nothing | **done** — baseline of 71, and it may only go down |
 | 4 — sync reads on the request path | **done** — the plan is parsed once per change |
 | 5 — the wake loop leaves `runs.js` | **half** — the report writer is out; the wake loop waits on `waitForIdle` moving first (measured, see below) |
-| 6 — `web/app.js` comes apart | **in progress** — out: `state.js`, `format.js`, `api.js`, `dom.js`, `console.js`, `settings-data.js`, `events.js`, `settings-form.js`, `settings-panes.js`, `ui-prefs.js`, `provider-list.js`, `providers.js`, `chat-notes.js`, `rate-view.js`, `chat-scroll.js`, `run-view.js`, `traces.js` (10,546 → 8,173). **Next:** the renderers — the last piece, ten names to wire |
+| 6 — `web/app.js` comes apart | **transcript done** — out: `state.js`, `format.js`, `api.js`, `dom.js`, `console.js`, `settings-data.js`, `events.js`, `settings-form.js`, `settings-panes.js`, `ui-prefs.js`, `provider-list.js`, `providers.js`, `chat-notes.js`, `rate-view.js`, `chat-scroll.js`, `run-view.js`, `traces.js`, `transcript.js` (10,546 → 7,756). **Next:** the composer (5,074–5,835), then the rail |
 
 ---
 
@@ -191,18 +191,26 @@ to be next to each other, and they are tangled through the rest of the file.
 - **The trace** — **done**, `web/traces.js` (294 lines: the live line, the folds, the
   leases, the steer pins, the session's own panel). It turned out to be a fifth thing
   the first measurement missed, and it needed exactly one wire.
-- **What is drawn** — `renderMessage`, `renderTool`, `renderTranscript`. **Not
-  started**, and now the only piece left: 500 lines and — thanks to `run-view.js` —
-  ten names from app.js, of which five are the transcript's own helpers
-  (`fileTag`, `shortName`, `attachmentImage`, `compactPostHtml`, `compactPostOf`) and
-  five are genuinely the app's (`fitChatHeight`, `renderRoleActivity`, `mountAskPost`,
-  `startPermCountdown`, `stopPermCountdown`).
+- **What is drawn** — **done**, `web/transcript.js` (486 lines: `renderTranscript`,
+  `renderMessage`, `renderTool`, `questionSummary`, `permissionTip`, `toggleTool`, the
+  compact post and four chip helpers). Five wires, and the move was proved faithful
+  the only way that counts: the chat renders **601,269 characters of HTML before and
+  after**, with 32 messages, 96 tool cards, 74 reasoning folds and 16 answer panels.
 
-`web/run-view.js` was the unlock and is done: the seven roles, which model each has and
-what that model can do, which project and run are open, the turn merge and the form
-waiting on the operator. It took the renderers' need from 24 names to 10 — and the
-same module let `chat-notes`, `rate-view`, `chat-scroll` and `traces` stop being wired
-to app.js for `dirKey`, `currentRun`, `roleLabel` and friends.
+All five are out. `app.js` is 7,756 lines from 10,546, and the two big blocks — the
+Settings pages and the whole transcript — are no longer in it.
+
+`web/run-view.js` was the unlock: the seven roles, which model each has and what that
+model can do, which project and run are open, the turn merge and the form waiting on
+the operator. It took the renderers' need from 24 names to 10 — and the same module let
+`chat-notes`, `rate-view`, `chat-scroll` and `traces` stop being wired to app.js for
+`dirKey`, `currentRun`, `roleLabel` and friends.
+
+**What is left in app.js, by size:** the composer (5,074–5,835), the question panel
+(3,807–4,446), the live event stream (5,836–6,328), the project plan (4,629–5,012), the
+role cards (1,770–1,936), projects and sessions (2,352–2,550), the model picker
+(1,304–1,770) and the wiring at the bottom. The composer is the next one the plan
+named; the event stream is the one that would hurt most to break.
 
 **Test that proves it.** After each step the suite is unchanged and green, and
 `tests/ui-layout.test.mjs` + a screenshot of the page still match. The structural
