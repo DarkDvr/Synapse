@@ -39,6 +39,17 @@ function codeOnly(src) {
     .replace(/'(?:\\.|[^'\\\n])*'/g, "''");
 }
 
+/** The calls written inside `${…}`, which codeOnly drops with the literal around them.
+ *  Most of this UI is template strings, so a name used only there was invisible — twice
+ *  on 7 Nov, and both times the page was dead at boot. */
+function templateCalls(src) {
+  const names = [];
+  for (const m of src.matchAll(/\$\{([^{}]*)\}/g)) {
+    for (const call of m[1].matchAll(/(?<![.\w$])([A-Za-z_$][\w$]*)\s*\(/g)) names.push(call[1]);
+  }
+  return names;
+}
+
 const exportsOf = new Map();
 for (const f of fs.readdirSync(WEB).filter((f) => f.endsWith('.js'))) {
   const text = codeOnly(fs.readFileSync(path.join(WEB, f), 'utf8'));
@@ -90,6 +101,8 @@ for (const file of targets) {
   const uses = [
     ...src.matchAll(/(?<![.\w$])([A-Za-z_$][\w$]*)\s*\(/g),
     ...src.matchAll(/(?<![.\w$])([A-Za-z_$][\w$]*)(?!\s*[:(])/g),
+    // And the calls written inside `${…}`, which the stripper removes with the literal.
+    ...[...templateCalls(raw)].map((name) => [name, name]),
   ];
   for (const m of uses) {
     const name = m[1];

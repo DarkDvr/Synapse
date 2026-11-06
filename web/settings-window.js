@@ -16,7 +16,7 @@ import { esc } from './format.js';
 import { $ } from './dom.js';
 import { api } from './api.js';
 import { toast } from './toast.js';
-import { readPath, writePath, parseModelLines } from './settings-data.js';
+import { readPath, writePath, parseModelLines, slugify } from './settings-data.js';
 import { samePath } from './format.js';
 import { SETTINGS_TABS, PANES } from './settings-panes.js';
 import { settingsProviders, providersWiring, providerAt, moveProvider, addProvider, removeProvider, selectProvider, refreshProviderModels } from './providers.js';

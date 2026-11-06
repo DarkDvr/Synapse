@@ -10,7 +10,7 @@
 // Two things come from app.js and are wired at boot: the cards' layout (they move
 // when the stage does) and the desk badge.
 import { state } from './state.js';
-import { esc, shortSpan, fmtBytes } from './format.js';
+import { esc, shortSpan, fmtBytes, hhmm } from './format.js';
 import { $ } from './dom.js';
 import { api } from './api.js';
 import { toast } from './toast.js';

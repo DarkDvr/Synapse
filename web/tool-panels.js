@@ -7,7 +7,7 @@
 //
 // Nothing comes from app.js: these read state and draw.
 import { state } from './state.js';
-import { esc } from './format.js';
+import { esc, relTime } from './format.js';
 import { $ } from './dom.js';
 import { api } from './api.js';
 import { toast } from './toast.js';

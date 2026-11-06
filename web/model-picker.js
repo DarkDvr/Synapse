@@ -13,7 +13,7 @@ import { $ } from './dom.js';
 import { api } from './api.js';
 import { toast } from './toast.js';
 import { modelByRef } from './run-view.js';
-import { providerLabel, providerOrderOf } from './provider-list.js';
+import { providerLabel, providerOrderOf, hiddenProviderIds } from './provider-list.js';
 
 const missing = (name) => () => {
   throw new Error(`modelPicker.js: ${name} was not wired at boot`);

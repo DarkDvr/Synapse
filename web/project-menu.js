@@ -8,7 +8,7 @@
 // Four things come from app.js and are wired at boot: the dialog, opening a chat,
 // the empty view, and the slug a project name becomes.
 import { state } from './state.js';
-import { esc } from './format.js';
+import { esc, fmtBytes } from './format.js';
 import { $ } from './dom.js';
 import { api } from './api.js';
 import { toast } from './toast.js';

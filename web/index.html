@@ -550,6 +550,10 @@
 <!-- The project menu: one menu for the ⋯ button, right-click and Shift+F10. -->
 <div class="project-menu" id="projectMenu" hidden role="menu" aria-label="Project menu"></div>
 
+<!-- A page that dies at boot leaves no trace on screen: the rail draws, the chat does
+     not, and nothing says why. This keeps the first few errors where the console and a
+     `--eval` can find them; it changes nothing else. -->
+<script>window.__errs = []; addEventListener('error', (e) => window.__errs.push(`${e.message} @ ${e.filename}:${e.lineno}`)); addEventListener('unhandledrejection', (e) => window.__errs.push(`rejection: ${e.reason && (e.reason.stack || e.reason.message)}`));</script>
 <script type="module" src="/app.js"></script>
 </body>
 </html>

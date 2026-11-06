@@ -13,7 +13,7 @@ import { esc } from './format.js';
 import { $ } from './dom.js';
 import { api } from './api.js';
 import { toast } from './toast.js';
-import { modelByRef, selectionFor, topEfforts, variantsOf, ROLES, architectSelection, currentProject } from './run-view.js';
+import { modelByRef, selectionFor, topEfforts, variantsOf, ROLES, architectSelection, currentProject, dirKey } from './run-view.js';
 import { hiddenProviderIds } from './provider-list.js';
 import { renderTranscript } from './transcript.js';
 import { pickers, syncPickerInput } from './model-picker.js';
