@@ -99,16 +99,26 @@ Architect's wake loop, the report writer and the run ledger. The wake loop is th
 part with the worst incident history (stopping it, holding the project, a report that
 wakes it again) and the cleanest seam.
 
-**Plan.** `src/wake.js` takes `waitForIdle`, the retry ladder for a wake, and the
-loop itself. `runs.js` keeps `wake()` as a thin caller so its public surface does not
-move. No behaviour change: same retries, same stop handling, same report.
+**Done first — the report writer.** `report()` turned out to be the only one of the
+four with no runner state in it: a run's facts in, the sentence the Architect reads
+out. It is `src/report.js` now (191 lines, `runs.js` down to 3,714) and the tests
+that read its text (`run-rules`, `loop-run`, `provider-retry`, `run-stop`) pass
+untouched.
 
-**Test that proves it.** The existing wake tests must pass untouched (that is the
-point of a pure move), plus one new assertion that `runs.js` no longer contains the
-loop's internals — a structural check that the extraction happened.
+**Measured for the second half.** The wake loop is 180 lines and needs twenty things
+from the runner: `engine`, `log`, `out`, `notify`, `getConfig`, `workerSettings`,
+`newWake`, `archWakes`, `waitForIdle`, `contextWindow`, `classifyFailure`,
+`recordProviderError`, `backoffMs`, `sleep`, `turnErrorOf`, `markOf`, `desk`,
+`screenCallOver`, `normDir`, and two constants. A factory with twenty arguments is
+not obviously better than the function where it is — it trades file size for
+coupling surface. The better move is to take `waitForIdle` out first (it is used by
+both loops and owns the poll, the stall clock and the leases), then the wake loop
+needs five things instead of twenty.
 
-**Risk.** Medium-high. A pure move is safe only if it is really pure; the stop
-handling is subtle.
+**Test that proves it.** The existing wake tests pass untouched (that is the point of
+a pure move), plus one structural check that `runs.js` no longer contains the loop.
+
+**Risk.** Medium-high until `waitForIdle` moves; low after.
 
 ---
 
