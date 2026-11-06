@@ -1436,13 +1436,14 @@ and *what was the last thing it heard* — they are not the same field.
 
 **A stop wakes nobody, says nothing, and is two-stage.** The first Stop is
 graceful: the assistant message that is open at that moment is allowed to finish,
-and when a different assistant message begins — the next step — the runner cuts
-the turn there. No message is sent to the model, no report is requested, and
-nothing says "the operator stopped you". The model sees a turn cut at a boundary,
-which is exactly what a dropped connection looks like. The 45-second
-`STOP_GRACE_MS` cap catches a step that takes too long. The UI says what is
-happening in the top-right notice and rings the chat in a fast red glow; a second
-Stop calls `/interrupt` and cuts immediately, mid-token if that is where it is.
+and when a different assistant message begins — the next step — the turn is cut
+there. No message is sent to the model, no report is requested, and nothing says
+"the operator stopped you". The model sees a turn cut at a boundary, which is
+exactly what a dropped connection looks like. The 45-second `STOP_GRACE_MS` cap
+catches a step that takes too long. The UI says what is happening in the top-right
+notice and rings the chat in a fast red glow; a second Stop cuts immediately,
+mid-token if that is where it is. Since 6 Nov both stages are owned by
+`src/stop.js`, not by the runner — see "The engine retries on its own" below.
 
 No Architect turn follows, and no explanation is planted for one. The stop is
 recorded on disk for the audit and the UI, the task goes back to `todo`, and the
@@ -1458,6 +1459,56 @@ and therefore re-delegate — work the operator had stopped.
 
 A harness stop (the question-loop guard) still reports immediately: it is a
 failure the operator must see, not an operator decision.
+
+### The engine retries on its own, so Stop is one intent and a watch (6 Nov)
+
+Everything above was true and Stop still did not work, because one fact was
+missing from the model: **the engine runs its own retry loop inside the session.**
+When the provider answers 429 it schedules a retry and fires it about thirty
+seconds later, with no request from Synapse. An interrupt that arrives during that
+wait has no generation to abort, so it does nothing at all — and then the retry
+fires and the work carries on.
+
+Measured on the operator's machine: five Stops between 11:51:47 and 11:51:51 were
+each answered "1 session interrupted", and the engine retried at 11:52:05,
+11:52:36, 11:53:07, 11:53:38 and 11:54:08. The sixth Stop, at 11:54:10, landed 1.6 s
+after a step had started and worked. Then, after the eighth failure, the engine
+scheduled a retry for 11:58:00, never fired it, and left the session on the active
+list with nothing running — the state where Stop is enabled, the log says
+"interrupted", and the event list freezes on `session.retry.scheduled`.
+
+`session.retry.scheduled` is the engine's event, not ours. It is not a wake, not a
+schedule Synapse made, and not evidence that anything is about to happen: it is the
+provider's sentence ("the cell is at capacity; retry shortly") and a timer the
+engine owns.
+
+So Stop was rebuilt rather than patched again (`src/stop.js`):
+
+- **One intent per project, one timer, one owner.** The gentle press, the immediate
+  press and a stop from a card all call `stopper.stop()`. The harness side of a
+  stop — cancel the run, mark it stopped, kill the wake loop, hold the project,
+  release the screen — happens there, once. The runner's `requestStop` now only
+  marks the run so its report says the operator stopped it; its 45-second timer and
+  its step-boundary check are gone.
+- **Stopped means quiet, not "an interrupt was sent":** no session in the project
+  is active *and* every session touched ends its transcript with an `idle` message.
+  The idle marker is what separates "finished" from "waiting out a retry".
+- **It keeps cutting.** While a session is still active it interrupts again on every
+  tick. That is what makes a stop land on the retry that was scheduled before the
+  press.
+- **A retry is a boundary.** The gentle press cuts when the next step begins, and a
+  scheduled retry counts: the step failed, so there is nothing left to finish.
+- **A wedged session is recognised.** Not active, no idle marker, a failed
+  assistant turn: it is interrupted again, which is what clears it. (One interrupt
+  cleared the 11:58 wedge.)
+- **It says so when it cannot.** After sixty seconds still running, the page is told
+  `stop.stuck` with the provider's sentence; after five minutes it gives up and says
+  that too. It never reports "stopped" while a session is alive.
+- **The operator speaking clears it.** Their next message removes the intent, so a
+  stop that was still watching cannot cut the turn they just started.
+
+`node tests\stop-controller.test.mjs` pins the retry loop, the wedge, the boundary,
+the second press and the clear-on-speak.
 
 ## Talking to work in flight: steer, not stop
 

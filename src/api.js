@@ -11,7 +11,7 @@ import { AUTOMATION_DEFAULTS, AUTOMATION_KEYS, cleanAutomation, nextSynapse, rea
 import { keepAttachments } from './keep-attachments.js';
 import { skillRules, describeSkills } from './skills.js';
 import { rulesFor, decide, resolvePath, refusalNote, SINGLE_RULES } from './permissions.js';
-import { stopTargets } from './stop.js';
+import { stopTargets, createStopper } from './stop.js';
 import { PROJECTS_ROOT, SKILLS_DIR, ROOT, SCRATCH_ROOT, scratchDir } from './paths.js';
 import { braveEntries, entryBlockingWrite, protectionEntries, protectionFor } from './protection.js';
 import { mayRecycleFolder } from './projects.js';
@@ -24,7 +24,6 @@ import { setProviderKey, providerKeyState, maskKey } from './secrets.js';
 import { probeToolchain } from './toolchain.js';
 import { busyInfo, busyMessage } from './busy.js';
 import { APP_VERSION } from './version.js';
-import { STOP_GRACE_MS } from './runs.js';
 
 // What an attachment may be. The old rule was six files of up to 8 MB each, which
 // made twelve small screenshots impossible for no reason: the real cost is the
@@ -164,6 +163,18 @@ export function normalizeAttachments(list) {
 export function createApi({ getConfig, applyConfig, power, engine, logger, getBootError, projects, toolStats, probe, modelCache, inspectModel: inspectRef, probeDir, runs, desk, engineUpdate, synapseUpdate, restart, stopSelf, pcShutdown, notify, permissionLog, permissionGate, permissionMemory }) {
   const app = logger.channel('app');
 
+  // Stop lives in one place now. Every route that stops anything — the gentle
+  // press, the immediate one, a stop from a permission card — goes through this,
+  // and this is the only thing that interrupts a session. See src/stop.js for the
+  // engine behaviour that made the old arrangement fail.
+  const stopper = createStopper({
+    engine,
+    runs,
+    desk,
+    log: app,
+    notify,
+  });
+
   // ── the timed shutdown's clock ──────────────────────────────────────
   // Twenty seconds of warning, and both waits owned by the server. A hidden window's
   // timers are throttled by the browser — the tray is exactly when this feature is
@@ -263,17 +274,6 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
   // Who started the work in each directory. Used only for the sentence a refused
   // sender reads — "started from laptop" — never to decide anything.
   const drivers = new Map();
-  // Graceful stops of a session that is not a delegated run (the Architect's own
-  // turn): the poll watches for the next assistant message — the step boundary —
-  // and cuts there, saying nothing to the model.
-  const gracefulStops = new Map();
-  const clearGracefulStop = (sessionId) => {
-    const entry = gracefulStops.get(sessionId);
-    if (!entry) return;
-    clearInterval(entry.poll);
-    clearTimeout(entry.hard);
-    gracefulStops.delete(sessionId);
-  };
   const normDir = (value) => String(value || '').replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
 
   /**
@@ -1110,6 +1110,9 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
     resumeRuns: async ({ dir } = {}) => {
       const directory = String(dir || '').trim();
       if (!directory) return { ok: false, resumed: false };
+      // A run that is resumed must not be cut a moment later by a stop that is
+      // still watching the project.
+      stopper.clear(directory);
       return { ok: true, resumed: Boolean(runs?.resume?.(directory)) };
     },
 
@@ -1608,8 +1611,12 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
         if (written && written.ok === false) app.warn(`could not write to the project document: ${written.error}`);
       }
       // Speaking is the answer to "what now" after a stop: whatever they stopped
-      // may run again from here.
-      if (directory) runs?.resume?.(directory);
+      // may run again from here, and a stop still watching the project must not
+      // interrupt the turn they just started.
+      if (directory) {
+        stopper.clear(directory);
+        runs?.resume?.(directory);
+      }
       // "Keep" is a deliberate project file, written before the message goes. The
       // inline copy is still what the model reads now; this copy is what survives a
       // compact and what a later Architect or a worker can open. Not a temp file:
@@ -1933,93 +1940,23 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
     /** One form sweep, called on a timer by the server. Exposed for tests. */
     autoAnswerTick: async () => formAuto.tick(),
 
+    /** Stop now. One owner: src/stop.js decides, watches and reports. */
     interrupt: async (sessionId) => {
       requireReady();
-      clearGracefulStop(sessionId);
       // A compact is a request plus a wait; Stop must end that wait, or the page
       // sits on "Compacting…" until the three-minute timeout.
       if (cancelCompact(sessionId)) app.info(`compact cancelled for ${sessionId}`);
-      // Stop means stop, for the whole project. A delegated task runs in its own
-      // hidden session, and the session on screen (the Architect) is usually idle
-      // while a worker works — interrupting it did nothing, and the run's report
-      // woke the Architect to start the next task. Worse, a worker can outlive a
-      // run record that has already reported or been cancelled, which is the
-      // in-between state where Stop looked broken. The engine's active list is the
-      // authority, not the run record.
-      let directory = null;
-      try {
-        const session = await engine.getSession(sessionId);
-        directory = session?.directory || null;
-      } catch (err) {
-        app.warn(`could not look up the session before stopping it: ${err.message}`);
-      }
-
-      let stoppedRun = false;
-      if (directory) {
-        try {
-          stoppedRun = Boolean(runs?.cancel?.(directory));
-        } catch (err) {
-          app.warn(`could not cancel the run before stopping: ${err.message}`);
-        }
-        // The report to the Architect is delivered after the run's own control is
-        // gone, so `cancel` cannot reach that loop. Stop it here or every Stop is
-        // followed by another "(retry)" wake (measured 4 Nov, three stops, three
-        // retries). `hold` keeps the project quiet until the operator speaks.
-        const stoppedWake = (() => {
-          try {
-            return Boolean(runs?.stopWake?.(directory));
-          } catch (err) {
-            app.warn(`could not stop the Architect wake: ${err.message}`);
-            return false;
-          }
-        })();
-        if (stoppedWake) app.info('stop: the Architect report loop was stopped too');
-        // The screen goes back with the work: Stop means the operator has their
-        // machine again, whether or not the run that asked for it ever ended.
-        try {
-          desk?.release?.('the run was stopped', directory);
-        } catch (err) {
-          app.warn(`could not release the screen after a stop: ${err.message}`);
-        }
-        // No run in flight (the Architect was thinking): hold the project anyway,
-        // or the next turn delegates the work that was just stopped.
-        if (!stoppedRun) runs?.hold?.(directory);
-      }
-
-      let active = [];
-      try {
-        active = await engine.listActiveSessions();
-      } catch { /* an engine without the list gets the asked session only */ }
-      let sessions = [];
-      try {
-        sessions = await engine.listSessions();
-      } catch { /* the target itself is still stopped */ }
-
-      const targets = stopTargets({ sessionId, directory, active, sessions });
-      const stopped = [];
-      for (const id of targets) {
-        try {
-          await engine.interrupt(id);
-          stopped.push(id);
-        } catch (err) {
-          app.warn(`could not interrupt ${id}: ${err.message}`);
-        }
-      }
-      app.info(
-        `stop: ${stopped.length} session(s) interrupted${stoppedRun ? ', run cancelled' : ''} in ${
-          directory || 'an unknown directory'
-        }`,
-      );
-      return { ok: true, stoppedRun, stopped };
+      const out = await stopper.stop({ sessionId, hard: true });
+      return { ok: true, stoppedRun: false, stopped: [sessionId], stopping: out.stopping, phase: out.phase };
     },
 
     /**
-     * The first Stop: ask the work to finish the step it is in and end.
+     * The first Stop: finish the step in flight, then end the turn.
      *
-     * A delegated run gets the note through the runner, which sends it as a
-     * synthetic message and cuts the turn if it is ignored after 45 seconds. An
-     * Architect turn gets the same note directly. The second Stop is
-     * `interrupt()` — immediate, and it is the one that leaves nothing running.
+     * The second press cuts now. Both go through `stopper`, which keeps
+     * interrupting while the engine's own retry loop is still alive — an interrupt
+     * during its thirty-second backoff is a no-op, which is how five Stops in a
+     * row each said "interrupted" and changed nothing (6 Nov).
      */
     stop: async (sessionId) => {
       requireReady();
@@ -2035,58 +1972,13 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
         err.body = { waiting: true };
         throw err;
       }
-      const directory = busy.directory;
-      const live = (runs?.active?.() || []).find((r) => normDir(r.dir || r.directory) === normDir(directory));
-      if (live) {
-        const r = await runs?.requestStop?.(directory);
-        if (r?.ok) {
-          app.info(`graceful stop: ${live.task} (${live.role}) will finish its step`);
-          return { ok: true, stopping: true, target: 'worker', task: live.task, role: live.role };
-        }
-      }
-      const targetId = busy.sessionId || sessionId;
-      // A graceful Stop on the Architect also ends the report loop now, not at the
-      // step boundary: otherwise the cut turn looks like a failed wake and the loop
-      // sends the report again.
-      if (runs?.stopWake?.(directory)) app.info('graceful stop: the Architect report loop was stopped too');
-      // Stop means stop for the project, not only for the turn on screen. A cut
-      // Architect turn ends with no delegation, and the plan reminder
-      // (`remindSkippedWork`) wakes it again the moment it does — measured 5 Nov:
-      // Stop at the report line, the report loop died as it should, and a fresh
-      // turn started two seconds later from the reminder and marked the task done.
-      // The hold is what keeps every harness wake quiet until the operator speaks;
-      // their next message clears it. `interrupt()` has always held; this path did
-      // not, which is why the gentle Stop looked like it did not stick.
-      runs?.hold?.(directory);
-      // No note to the model: watch for the next assistant message, which is the
-      // step boundary, and cut there. If the turn ends first, the idle marker is
-      // the boundary and nothing needs cutting.
-      const before = await engine.getMessages(targetId).catch(() => []);
-      const stopAssistant = [...before].reverse().find((m) => m.type === 'assistant')?.id || null;
-      clearGracefulStop(targetId);
-      const poll = setInterval(async () => {
-        const now = await engine.getMessages(targetId).catch(() => null);
-        if (!now) return;
-        if (now[now.length - 1]?.type === 'idle') {
-          clearGracefulStop(targetId);
-          return;
-        }
-        const last = [...now].reverse().find((m) => m.type === 'assistant');
-        if (stopAssistant && last && last.id !== stopAssistant) {
-          clearGracefulStop(targetId);
-          try { await engine.interrupt(targetId); } catch { /* already gone */ }
-        }
-      }, 1000);
-      poll.unref?.();
-      const hard = setTimeout(async () => {
-        clearGracefulStop(targetId);
-        try { await engine.interrupt(targetId); } catch { /* already gone */ }
-      }, STOP_GRACE_MS);
-      hard.unref?.();
-      gracefulStops.set(targetId, { poll, hard, at: Date.now() });
-      app.info(`graceful stop: ${targetId} will cut at the next step boundary`);
-      return { ok: true, stopping: true, target: 'architect' };
+      const out = await stopper.stop({ sessionId: busy.sessionId || sessionId, hard: false });
+      return { ...out, task: out.target === 'worker' ? busy.task : undefined };
     },
+
+    /** The stop state for a page that reloaded mid-stop, and the boundary feed. */
+    stopState: (directory) => stopper.state(directory),
+    onEngineEvent: (ev) => stopper.handleEvent(ev),
 
     // ── the screen ──────────────────────────────────────────
     /** Who has the operator's screen, if anyone. Read by the page on load and
@@ -2212,7 +2104,7 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
      * only way to notice it after a reload.
      */
     pending: async (focusSessionId = null) => {
-      if (!engine.status().ready) return { permissions: [], forms: [], active: [] };
+      if (!engine.status().ready) return { permissions: [], forms: [], active: [], canStop: false, stopping: null };
       const [permissions, active] = await Promise.all([
         safe(() => engine.listPendingPermissions(), []),
         safe(() => engine.listActiveSessions(), []),
@@ -2224,10 +2116,12 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
       // working. Without this the button sat disabled while the project ran.
       let canStop = false;
       let activeHere = 0;
+      let focusDir = null;
       if (focusSessionId && active.length) {
         try {
           const focus = await engine.getSession(focusSessionId);
           const directory = focus?.directory || null;
+          focusDir = directory;
           if (directory) {
             const known = await engine.listSessions();
             const targets = stopTargets({ sessionId: focusSessionId, directory, active, sessions: known });
@@ -2236,6 +2130,9 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
           }
         } catch { /* the button stays off rather than guessing */ }
       }
+      // A stop in force outlives a page reload. Without this the notice and the
+      // red button vanished on refresh while the work was still stopping.
+      const stopping = focusDir ? stopper.state(focusDir) : null;
 
       // Forms have to be asked for per session. The engine's global list is
       // scoped to its *own* location (the workspace), so a form raised by a
@@ -2390,6 +2287,7 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
         active,
         canStop,
         activeHere,
+        stopping,
       };
     },
 

@@ -211,6 +211,11 @@ const state = {
   // Stop used to be disabled while the run was still working.
   canStop: false,
   activeHere: 0,
+  // A stop in force, as the server reports it. The page draws the notice from this
+  // and never decides for itself that a stop is over — see `stop.done`.
+  stopping: false,
+  stoppingPhase: null,
+  stoppingReason: null,
   // Delegated work in flight, keyed by directory: one worker per project, so a
   // project has at most one entry. The cards and the live path are drawn from
   // this, and `GET /api/runs` is what a page opened mid-run starts from.
@@ -6313,6 +6318,12 @@ async function refreshPending() {
   renderComposer();
   state.canStop = Boolean(p.canStop);
   state.activeHere = Number(p.activeHere) || 0;
+  // A stop outlives a reload: the server keeps the intent, so the notice and the
+  // red button come back with the page instead of vanishing on refresh while the
+  // engine is still retrying.
+  state.stopping = Boolean(p.stopping);
+  state.stoppingPhase = p.stopping?.phase || null;
+  state.stoppingReason = p.stopping?.reason || null;
   // A page opened, or reloaded, in the middle of a turn never saw the
   // `session.execution.started` that began it — so the composer showed no Stop and
   // the card looked idle while the engine was working. The engine's own list of
@@ -6892,8 +6903,9 @@ function renderComposer() {
   const awaitingPermission = (state.permissions || []).length > 0;
   const blocked = asking || awaitingPermission;
   const held = Boolean(state.busyInfo?.busy) || Boolean(currentRun());
-  // The graceful stop has landed: the notice and the glow go when the work does.
-  if (state.stopping && !held && !currentRun() && !state.busy) state.stopping = false;
+  // The stop's own life is the server's: it clears when the project is quiet (or
+  // when the operator speaks), not when this page guesses from the run cards. The
+  // old guess is what made the notice vanish while the engine kept retrying.
   const target = steerTarget();
   // Any pending question blocks this composer, whoever asked it: the operator's
   // attention is the thing the run is waiting on, and a worker's question is no
@@ -7566,9 +7578,11 @@ async function interrupt() {
   const hard = state.stopping || state.busyInfo?.state === 'waiting';
   try {
     if (hard) {
+      // Cut now. The page does not announce "Stopped" here: the server does, when
+      // the project is really quiet (`stop.done`). Saying it on the click is how a
+      // stop that did not take still looked successful.
       await api('POST', `/api/sessions/${encodeURIComponent(state.sessionId)}/interrupt`);
-      state.stopping = false;
-      toast('Stopped', 'The work was stopped immediately.');
+      state.stopping = true;
     } else {
       const r = await api('POST', `/api/sessions/${encodeURIComponent(state.sessionId)}/stop`);
       state.stopping = Boolean(r?.stopping);
@@ -7593,16 +7607,25 @@ async function interrupt() {
   }
 }
 
-/** The upper-right notice and the red glow while a graceful stop is running. */
+/** The upper-right notice and the red glow while a stop is running. The server
+ *  says whether one is in force, and whether it has stopped taking effect. */
 function renderStopState() {
   const notice = $('stopNotice');
   if (notice) notice.hidden = !state.stopping;
   document.body.classList.toggle('is-stopping', state.stopping);
+  const text = $('stopNoticeText');
+  if (text) {
+    text.textContent = state.stoppingReason
+      ? `Still running — ${state.stoppingReason}. Click Stop again to cut it now.`
+      : 'The AI will finish this step, then stop. Click Stop again to stop now.';
+  }
   const btn = $('stopBtn');
   if (btn) {
     btn.classList.toggle('is-stopping', state.stopping);
     btn.title = state.stopping
-      ? 'Stopping — the AI is finishing this step. Click again to stop immediately.'
+      ? state.stoppingReason
+        ? `Still running — ${state.stoppingReason}. Click again to cut it now.`
+        : 'Stopping — the AI is finishing this step. Click again to stop immediately.'
       : 'Stop the current run';
   }
 }
@@ -7790,6 +7813,46 @@ function connectStream() {
         if (String(ev.why || '') !== 'the operator took it back') playDoneSound();
       }
       return;
+    }
+
+    // Stop, from the server that owns it. The page does not decide when a stop is
+    // over any more: it hears `stop.done` when the project is really quiet, and
+    // `stop.stuck` when the engine will not let go — which is the state that used
+    // to look like a frozen event list and a Stop button that did nothing.
+    if (ev.kind === 'stop') {
+      if (ev.type === 'stop.started') {
+        state.stopping = true;
+        state.stoppingReason = null;
+        renderComposer();
+        return;
+      }
+      if (ev.type === 'stop.done') {
+        state.stopping = false;
+        state.stoppingReason = null;
+        renderComposer();
+        refreshPending();
+        // The confirmation the operator asked for: they can use the machine again.
+        toast('Stopped', 'The work has stopped.');
+        return;
+      }
+      if (ev.type === 'stop.stuck') {
+        state.stopping = true;
+        state.stoppingReason = ev.reason || null;
+        renderComposer();
+        toast(
+          'Still Running',
+          ev.reason
+            ? `The engine will not stop — ${ev.reason}`
+            : 'The engine will not stop. Press Stop again to cut it now.',
+        );
+        return;
+      }
+      if (ev.type === 'stop.failed') {
+        state.stopping = false;
+        renderComposer();
+        toast('Could Not Stop', ev.reason || 'The engine kept the session running.');
+        return;
+      }
     }
 
     // the chip on the tool call it belonged to is keyed by that call's id — not

@@ -218,8 +218,9 @@ const CONTEXT_NUDGE =
 
 // The first Stop is graceful: finish the step in flight, then cut the turn at
 // the boundary — like a dropped connection, with nothing said to the model. The
-// second Stop is the old hard abort. This is a cap, not the mechanism.
-export const STOP_GRACE_MS = 45_000;
+// second Stop cuts now. The timing belongs to `src/stop.js`, which owns Stop; this
+// file only marks the run so its report says the operator stopped it.
+export { STOP_GRACE_MS } from './stop.js';
 
 /** Sleep, but let Stop cut it short: a five-minute backoff must not be five
  *  minutes of the operator pressing a button that does nothing. `wake` is the
@@ -1460,10 +1461,10 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     let wakeUp = newWake();
     let stopReason = null;
     // The first Stop asks the worker to finish the step it is in and end the
-    // turn; the second (or the grace running out) aborts it. See requestStop().
+    // turn; the second cuts now. The cutting itself is `src/stop.js`; this flag is
+    // what makes the run's report say the operator stopped it.
     let gracefulStop = false;
     let stopRequestedAt = 0;
-    let stopTimer = null;
     controls.set(dirKey(dir), {
       role,
       abort: () => controller.abort(),
@@ -1499,23 +1500,10 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
           liveNow.stopRequestedAt = stopRequestedAt;
           emit('run.stopping', { dir, task: request.task, role, startedAt });
         }
-        // The step in flight is the assistant message that is open now. When a
-        // different one begins, that step is over: cut the turn there, exactly as
-        // a dropped connection would. Nothing is said to the model.
-        if (worker?.id) {
-          try {
-            const messages = await engine.getMessages(worker.id);
-            const last = [...messages].reverse().find((m) => m.type === 'assistant');
-            if (liveNow) liveNow.stopAssistant = last?.id || null;
-          } catch { /* the boundary check falls back to the grace timer */ }
-        }
-        stopTimer = setTimeout(() => {
-          if (!running.has(dirKey(dir))) return;
-          out.warn(`graceful stop for ${request.task} took too long; cutting the turn`);
-          try { controller.abort(); } catch { /* already gone */ }
-          if (worker?.id) engine.interrupt(worker.id).catch(() => { /* already gone */ });
-        }, STOP_GRACE_MS);
-        stopTimer.unref?.();
+        // Marking only. The cut itself belongs to `src/stop.js`: it watches the
+        // engine, cuts at the boundary, and keeps cutting while the engine's own
+        // retry loop is still alive. A timer here was a second owner of the same
+        // decision, and the two disagreed for days.
         return true;
       },
     });
@@ -1582,7 +1570,6 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
       skipped,
       stopping: false,
       stopRequestedAt: 0,
-      stopAssistant: null,
       // The operator's guidance for this run, newest last. Shared with the local
       // `steers` array so the report and the result line read the same record.
       steers,
@@ -1806,16 +1793,6 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
                   kind: 'lease',
                   ...lease,
                 });
-              },
-              // The graceful stop cuts at the step boundary, not mid-token.
-              stopCheck: (messages) => {
-                if (!gracefulStop) return false;
-                const last = [...messages].reverse().find((m) => m.type === 'assistant');
-                if (!live.stopAssistant) {
-                  if (last) live.stopAssistant = last.id;
-                  return false;
-                }
-                return Boolean(last && last.id !== live.stopAssistant);
               },
               // The first sign of life clears whatever the card was still saying
               // about the last failure or stall. It is not only the retry path:
@@ -2284,10 +2261,6 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
         try { await engine.interrupt(worker.id); } catch { /* already gone */ }
         retired.add(worker.id);
         if (retired.size > 50) retired.delete(retired.values().next().value);
-      }
-      if (stopTimer) {
-        clearTimeout(stopTimer);
-        stopTimer = null;
       }
       emit('run.finished', {
         dir,
@@ -2870,7 +2843,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
    * A pending question also pauses the clock: the operator may take hours, and
    * the transcript itself says so.
    */
-  async function waitForIdle(sessionId, before, stallMs, onTool, signal, { window = null, steer = false, onContext = null, onCompact = null, onActivity = null, stopCheck = null, loopGuard = false, maxSteps = 0, leaseGraceMs = 300_000, onLease = null, onPoll = null } = {}) {
+  async function waitForIdle(sessionId, before, stallMs, onTool, signal, { window = null, steer = false, onContext = null, onCompact = null, onActivity = null, loopGuard = false, maxSteps = 0, leaseGraceMs = 300_000, onLease = null, onPoll = null } = {}) {
     let lastActivity = Date.now();
     let lastCtx = 0;
     let compactions = 0;
@@ -2910,14 +2883,6 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
         // A poll that failed is not silence: the engine may be restarting. The
         // stall clock is left where it is and the next poll decides.
         continue;
-      }
-
-      // The graceful stop's boundary: the assistant message that was open when
-      // Stop was pressed has finished, and another has begun. Cut here, with
-      // nothing said to the model.
-      if (stopCheck?.(messages)) {
-        try { await engine.interrupt(sessionId); } catch { /* already gone */ }
-        return { stopped: true };
       }
 
       // Steps, and leases. Both are read from the transcript on this poll: the model

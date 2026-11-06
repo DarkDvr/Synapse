@@ -561,6 +561,10 @@ async function main() {
   engine.on('event', (ev) => {
     const type = ev?.type;
     if (!ev?.sessionId) return;
+    // Stop watches the stream for the boundary it cuts at: a new step, a retry the
+    // engine scheduled for itself, or a turn that ended. It is the only thing that
+    // knows an interrupt during the engine's backoff does nothing.
+    api.onEngineEvent?.(ev);
     // A blocking permission request is judged before anything else: the engine
     // is holding a tool until someone answers. The gate also sees the tool
     // events, because a shell ask carries no `source.id` and needs the call it
