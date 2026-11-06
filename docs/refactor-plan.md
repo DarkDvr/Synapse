@@ -18,7 +18,7 @@ fixed on the spot; a bug found on the way that is unrelated goes in
 | 3 — a catch that says nothing | **done** — baseline of 71, and it may only go down |
 | 4 — sync reads on the request path | **done** — the plan is parsed once per change |
 | 5 — the wake loop leaves `runs.js` | **half** — the report writer is out; the wake loop waits on `waitForIdle` moving first (measured, see below) |
-| 6 — `web/app.js` comes apart | **in progress** — out: 31 modules, from `state.js` to `live-runs.js` (10,546 → 4,162). **Next:** the blockers (344), the Prohibited handlers (605), the event stream (stays) |
+| 6 — `web/app.js` comes apart | **in progress** — out: 33 modules, from `state.js` to `tool-panels.js` (10,546 → 3,830). **Next:** the Prohibited handlers (605), then the small blocks |
 
 ---
 
