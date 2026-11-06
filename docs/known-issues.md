@@ -8,6 +8,18 @@ Newest first. When one is fixed, delete it here and say so in the commit.
 
 ---
 
+## The page knows two engine provider ids by name
+
+`ENGINE_PROVIDERS` in `web/app.js` hardcodes `opencode` and `opencode-go`, with the
+badge and the note each one shows ("OC Zen", "OC Go"). That is engine-specific
+knowledge in the page, and the pillar says the OpenCode adapter is the only place
+that should have it: a second engine, or a renamed provider, leaves the page
+labelling the wrong thing — or nothing.
+
+Where: `web/app.js`, `ENGINE_PROVIDERS` and `providerLabel`.
+Fix: the server knows its providers (`/api/providers`), so the label and the note
+could come from there. Not urgent while there is one engine.
+
 ## A stopped run can still be reported as completed if the cut lands before its first token
 
 Seen 6 Nov while testing Stop: a run cut at the very first step of a worker that had
