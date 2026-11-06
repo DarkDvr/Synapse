@@ -29,6 +29,7 @@ const ui = () =>
     'web/rate-view.js',
     'web/providers.js',
     'web/provider-list.js',
+    'web/transcript.js',
   ]
     .map(read)
     .join('\n');
@@ -99,7 +100,7 @@ test('the click that wakes the window cannot answer a fresh permission card', ()
 });
 
 test('an attached picture uses the same chip as a picture the model shows', () => {
-  const js = read('web/app.js');
+  const js = ui();
   assert.match(js, /class="chat-image" data-msg=/);
   assert.match(js, /function attachmentImage\(/);
   assert.match(js, /attachmentImage\(message, Number\(chip\.dataset\.file/);
@@ -287,7 +288,7 @@ test('a compact takes the discarded chat’s folds and alarms with it', () => {
 // so android\AGENTS.md (a hundred lines) landed in the chat the moment it was compacted.
 // It stays in the model's context; the chat shows one line.
 test('a file the engine loads is one collapsed line, not its whole text', () => {
-  const js = read('web/app.js');
+  const js = ui();
   assert.match(js, /\^loaded\\s\/i\.test/, 'the loaded-instructions message is recognised');
   assert.match(js, /Instructions from \$\{esc\(short\)\}/, 'the line names the file, not the whole path');
   assert.match(js, /data-k="\$\{esc\(key\)\}"/, 'each one keeps its own open state');
@@ -301,7 +302,7 @@ test('the final answer has its own rule, and work does not', () => {
   const css = read('web/synapse.css');
   assert.match(css, /\.msg\.assistant \.msg-answer\.is-answer\s*\{[^}]*margin-top: 20px/);
   assert.match(css, /\.msg\.assistant \.msg-answer\.is-answer::before\s*\{[^}]*background: var\(--surface\)/);
-  const js = read('web/app.js');
+  const js = ui();
   assert.match(js, /is-answer/);
   assert.match(js, /workBefore/);
   assert.match(js, /toolAfter/);
@@ -509,7 +510,8 @@ test('the question panel survives a transcript rebuild because the node is held'
 // Reported 2 Nov: a grey panel with its own "Architect · Thinking" head and its own
 // gap, reading as somebody else's message under a green one.
 test('the Architect’s live reasoning is drawn inside its own post', () => {
-  const js = read('web/app.js');
+  // 6 Nov: the renderer moved to ./transcript.js, the panel to ./traces.js.
+  const js = read('web/transcript.js');
   // 6 Nov: the panel itself moved to ./traces.js with the trace it draws.
   const traces = read('web/traces.js');
   // renderMessage takes the tail and puts it inside .msg-body, which carries the

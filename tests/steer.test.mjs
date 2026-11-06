@@ -399,7 +399,11 @@ test('the first Stop says it is finishing the step', () => {
 });
 
 test('the composer says what a steer will do', () => {
-  const app = fs.readFileSync(path.join(process.cwd(), 'web', 'app.js'), 'utf8');
+  // 6 Nov: the steer line is drawn by ./transcript.js and pinned by ./traces.js, so
+  // "the page" is the three files.
+  const app = ['app.js', 'transcript.js', 'traces.js']
+    .map((f) => fs.readFileSync(path.join(process.cwd(), 'web', f), 'utf8'))
+    .join('\n');
   const css = fs.readFileSync(path.join(process.cwd(), 'web', 'synapse.css'), 'utf8');
   assert.match(app, /seen at its next step/);
   assert.match(app, /seen mid-turn/);
