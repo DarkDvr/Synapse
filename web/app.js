@@ -8475,7 +8475,7 @@ function settingsLogging(c) {
           { v: 'error', l: 'Error' },
         ],
         {
-          hint: 'How much Synapse writes to its own logs. Debug is for diagnosing a problem; Info is the normal setting.',
+          hint: 'How much Synapse writes. Info and above go to the channel files (app, engine, session, tools); Debug adds a separate debug.log with everything, which is what to turn on to catch a problem.',
         },
       ) +
         setField(c, 'Retention (days)', 'logging.retentionDays', {

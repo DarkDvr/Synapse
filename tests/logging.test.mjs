@@ -14,10 +14,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { logger, LEVELS } from '../src/logger.js';
+import { logger, LEVELS, DEBUG_FILE } from '../src/logger.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
@@ -56,3 +57,48 @@ test('the milestones the operator reads are still info', () => {
   assert.match(read('src/stop.js'), /log\?\.info\(`stop: /, 'a stop');
   assert.match(read('src/plans.js'), /log\.info\(`plan \(\$\{dir\}\): /, 'the plan state at boot');
 });
+
+test('debug goes to its own file, and a channel file stays readable', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'synapse-log-'));
+  const level = logger.level;
+  const loggerDir = logger.dir;
+  try {
+    logger.configure({ level: 'debug', dir });
+    const app = logger.channel('app');
+    app.info('the operator can read this');
+    app.debug('the chatter nobody reads');
+    logger.channel('session').debug('a delta from the engine');
+
+    const appFile = path.join(dir, 'app.log');
+    const debugFile = path.join(dir, DEBUG_FILE);
+    assert.ok(fs.existsSync(appFile), 'the channel file exists');
+    assert.ok(fs.existsSync(debugFile), 'the debug file exists');
+
+    const readable = fs.readFileSync(appFile, 'utf8');
+    assert.match(readable, /the operator can read this/);
+    assert.doesNotMatch(readable, /the chatter nobody reads/, 'debug must not sit in the channel file');
+
+    const deep = fs.readFileSync(debugFile, 'utf8');
+    assert.match(deep, /the chatter nobody reads/);
+    assert.match(deep, /a delta from the engine/, 'one timeline for every channel');
+    assert.match(deep, /\[session\]/, 'and each line names its channel');
+  } finally {
+    logger.configure({ level, dir: loggerDir });
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('at info nothing reaches the debug file at all', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'synapse-log-'));
+  const level = logger.level;
+  const loggerDir = logger.dir;
+  try {
+    logger.configure({ level: 'info', dir });
+    logger.channel('session').debug('should never be written');
+    assert.equal(fs.existsSync(path.join(dir, DEBUG_FILE)), false, 'the deep file is not even created');
+  } finally {
+    logger.configure({ level, dir: loggerDir });
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+

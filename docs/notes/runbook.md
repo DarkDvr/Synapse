@@ -67,6 +67,32 @@ include something the engine or the server reads at start. Everything else
 (roles, worker timers, logging, the provider key) applies the moment Save returns,
 and the dialog would be noise.
 
+## Where the logs are, and what to open first
+
+`logs\` holds one file per channel — `app`, `engine`, `session`, `tools` — with
+**error, warn and info** in them. That is the readable story of what Synapse did,
+and it is the file to open first: a boot is about fifteen lines, a whole turn is
+one or two.
+
+The chatter lives apart. **`logs\debug.log`** holds every debug line from every
+channel in one timeline, each line naming its channel, because debugging a run
+means following one thing across the harness and the engine at once. It only
+exists while Settings → Logging → Level is **Debug**: at Info those lines are not
+written at all, and the file is not even created.
+
+The split is deliberate and it was measured (6 Nov): one day of `app.log` was
+13,480 lines, 9,131 of them "permission allow", and one day of `session.log` was
+36,255 lines, 24,381 of them reasoning deltas. A file where the normal case is 95%
+of the text is a file nobody reads, and the failure that matters is the line you
+have to find.
+
+Both files rotate: a channel file at 5 MB (`logging.maxFileMb`) into `.1.log`, and
+`debug.log` at 20 MB into its own `.1.log`. Cleanup deletes anything older than
+`logging.retentionDays` (7 by default) every six hours and at boot.
+
+To catch a problem: set the level to **Debug**, reproduce it, set it back to Info.
+The channel files keep the story; `debug.log` keeps the detail.
+
 A restart is **the app's job**: the window, the tray icon and the page all survive,
 because none of them was ever part of the server.
 
