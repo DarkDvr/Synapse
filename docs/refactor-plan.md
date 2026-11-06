@@ -18,7 +18,7 @@ fixed on the spot; a bug found on the way that is unrelated goes in
 | 3 — a catch that says nothing | **done** — baseline of 71, and it may only go down |
 | 4 — sync reads on the request path | **done** — the plan is parsed once per change |
 | 5 — the wake loop leaves `runs.js` | **half** — the report writer is out; the wake loop waits on `waitForIdle` moving first (measured, see below) |
-| 6 — `web/app.js` comes apart | **in progress** — out: 41 modules, from `state.js` to `engine-updates.js` (10,546 → 2,295). **Next:** messages (196), role cards (156), view state (83), and the small remainder |
+| 6 — `web/app.js` comes apart | **stopped, deliberately** — 10,546 → 2,296 lines, 41 modules. What is left is the event stream (492), the wiring (831) and nine small blocks — see "Where I stopped" below |
 
 ---
 
@@ -262,6 +262,32 @@ next apostrophe hundreds of lines away and swallowed the code between, so real e
 were invisible. Templates are stripped first now and a quoted string may not cross a
 newline. **A checker that lies is worse than no checker** — it was believed for ten
 minutes.
+
+**And a third pass, because most of this UI is template strings**: a call written inside
+`${…}` was invisible, which is exactly how `versionTag` and `relTime` went missing with
+the checker reporting "nothing missing". Reading inside `${…}` found **eight** modules
+carrying a missing import that had not been hit yet — `renderMarkdown` (the changelog),
+`hhmm`, `hiddenProviderIds`, `fmtBytes`, `dirKey`, `slugify`, `shortSpan`, `relTime`.
+Every one was a page that dies the first time its path runs. All fixed, one line each.
+
+### Where I stopped, and why (7 Nov)
+
+`app.js` is **2,296 lines from 10,546** — 41 modules out, 78% gone. What is left:
+
+| What | Lines | Why it stays |
+|---|---|---|
+| the live event stream | 492 | needs 38 names from app.js: it *is* the wiring. It goes last, as a router, or not at all |
+| the wiring + `boot()` | 831 | the app's assembly — the one file that is allowed to know every module |
+| messages | 196 | a small store with a poll; separable, but it would be the 42nd module for 196 lines |
+| role cards (static markup) | 156 | the seven cards' HTML and the Architect's |
+| view state | 83 | `setView`, `showNothing`, `openSession` |
+| chime, shutdown, permission countdown, reject-with-reason, models/modes, settings-live, helpers | ~290 | each is one behaviour of 13–70 lines |
+
+The remaining moves are all small, and each one costs a slice, a boundary check and a
+live test. The ratio has flipped: the file is now the app's spine plus a handful of
+small behaviours, which is a reasonable shape for it to be in. **Stopping here is a
+decision, not an unfinished move** — if it is picked up again, the honest next step is
+`messages.js`, then `view-state.js`, and after that there is nothing left worth a file.
 
 **Test that proves it.** After each step the suite is unchanged and green, and
 `tests/ui-layout.test.mjs` + a screenshot of the page still match. The structural
