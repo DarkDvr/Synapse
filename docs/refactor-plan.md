@@ -9,6 +9,17 @@ would fail if the change had not taken, run it, commit. A bug the change caused 
 fixed on the spot; a bug found on the way that is unrelated goes in
 `docs/known-issues.md` and waits.
 
+## Where it stands
+
+| Step | State |
+|---|---|
+| 1 — event names | **done** — `web/events.js`, and a scan that fails on a new literal |
+| 2 — one error shape | **done** — `src/errors.js`, 25 of 37 sites; the test counts the rest |
+| 3 — a catch that says nothing | **done** — baseline of 71, and it may only go down |
+| 4 — sync reads on the request path | **done** — the plan is parsed once per change |
+| 5 — the wake loop leaves `runs.js` | **half** — the report writer is out; the wake loop waits on `waitForIdle` moving first (measured, see below) |
+| 6 — `web/app.js` comes apart | **started** — the store is `web/state.js`; five sub-steps left |
+
 ---
 
 ## Step 1 — Event names are strings in six files (#6)
