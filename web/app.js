@@ -9,6 +9,7 @@
 // wired yet — the orchestration layer will drive them (stage 3+).
 
 import { renderMarkdown } from './md.js';
+import { EV, turnEnded, shortEvent } from './events.js';
 import { newStream, pushStream, slideTarget, nextOffset, takePending, freezeStream, STREAM_BUFFER } from './stream-view.js';
 import { addSample, rateOf } from './rate.js';
 import { DONE_SOUNDS, doneSoundName, workWillContinue } from './notify.js';
@@ -1548,7 +1549,7 @@ function setEventChip(type, sessionId) {
   const clear = !type;
   if (!clear && !sessionId) return;
   const el = $('lastEvent');
-  if (el) el.textContent = clear ? 'idle' : String(type).replace(/^session\./, '');
+  if (el) el.textContent = clear ? 'idle' : shortEvent(type);
   state.lastEventAt = clear ? 0 : Date.now();
   state.lastEventSessionId = clear ? null : sessionId;
   renderLastEventAge();
@@ -4918,11 +4919,11 @@ function traceForSession(sessionId) {
 function noteCompactionEvent(ev) {
   const trace = traceForSession(ev.sessionId);
   if (!trace) return;
-  if (ev.type === 'session.compaction.started') {
+  if (ev.type === EV.compactionStarted) {
     trace.compactingSince = Date.now();
   } else {
     trace.compactingSince = 0;
-    if (ev.type === 'session.compaction.ended') {
+    if (ev.type === EV.compactionEnded) {
       // Count it; do not guess its size. The runner reads the compaction's own
       // usage out of the transcript and sends it a moment later, and that is the
       // only number worth printing — `run.ctx` here is *this* poll's prompt, which
@@ -7920,12 +7921,12 @@ function connectStream() {
     // and plan pane follow it — a pending choice on this page is not overwritten
     // if it is the one that sent, because the event carries the same value.
     if (ev.kind === 'sessions') {
-      if (ev.type === 'session.mode' && ev.sessionId === state.sessionId && !state.busy) {
+      if (ev.type === EV.mode && ev.sessionId === state.sessionId && !state.busy) {
         applyMode(ev.mode);
       }
       // The four switches are per project: another view flipping one must move
       // this one's cog and the note on any open card.
-      if (ev.type === 'session.automation' && ev.sessionId === state.sessionId) {
+      if (ev.type === EV.automation && ev.sessionId === state.sessionId) {
         state.automation = { ...AUTOMATION_DEFAULTS, ...(ev.automation || {}) };
         const session = findSession(state.sessionId);
         if (session) session.automation = state.automation;
@@ -8064,12 +8065,12 @@ function connectStream() {
 
     // Only work moves the clock. A `session.deleted` or `session.named` is about
     // the rail, and the chip is about what a model is doing.
-    if (WORK_EVENT.test(String(ev.type || '').replace(/^session\./, ''))) setEventChip(ev.type, ev.sessionId);
+    if (WORK_EVENT.test(shortEvent(ev.type))) setEventChip(ev.type, ev.sessionId);
     // A compaction is the engine's own decision, and the chip has always said so
     // (`session.compaction.started`) while the chat said nothing at all. Taking it
     // from here is the honest source: whatever asked for it — the engine's rule or
     // our watchdog — this is the one event that proves one is happening.
-    if (ev.sessionId && /^session\.compaction\.(started|ended|failed)$/.test(ev.type)) {
+    if (ev.sessionId && [EV.compactionStarted, EV.compactionEnded, EV.compactionFailed].includes(ev.type)) {
       noteCompactionEvent(ev);
     }
     const mine = !ev.sessionId || ev.sessionId === state.sessionId;
@@ -8078,18 +8079,18 @@ function connectStream() {
     // become the one-line notes in the trace.
     const liveRun = currentRun();
     if (liveRun && ev.sessionId && ev.sessionId === liveRun.workerId) {
-      if (ev.type === 'session.text.delta') { noteDelta(ev); appendStream('word', ev.raw?.data?.delta); }
-      else if (ev.type === 'session.reasoning.delta') { noteDelta(ev); appendStream('think', ev.raw?.data?.delta); }
-      else if (ev.type === 'session.usage.updated') noteWorkerUsage(ev);
-      else if (ev.type === 'session.text.ended' || ev.type === 'session.reasoning.ended') endStream();
+      if (ev.type === EV.textDelta) { noteDelta(ev); appendStream('word', ev.raw?.data?.delta); }
+      else if (ev.type === EV.reasoningDelta) { noteDelta(ev); appendStream('think', ev.raw?.data?.delta); }
+      else if (ev.type === EV.usageUpdated) noteWorkerUsage(ev);
+      else if (ev.type === EV.textEnded || ev.type === EV.reasoningEnded) endStream();
     } else if (ev.sessionId && ev.sessionId === state.sessionId) {
       // The Architect's own step. Its deltas used to be dropped — only a delegated
       // run had a trace to put them in — so the panel sat empty and the whole wall
       // appeared when the step's message was rebuilt. Same panel, same code.
-      if (ev.type === 'session.text.delta') { noteDelta(ev); appendStream('word', ev.raw?.data?.delta); }
-      else if (ev.type === 'session.reasoning.delta') { noteDelta(ev); appendStream('think', ev.raw?.data?.delta); }
-      else if (ev.type === 'session.text.ended' || ev.type === 'session.reasoning.ended') endStream();
-      else if (/^session\.execution\.(succeeded|failed|interrupted)$/.test(ev.type)) {
+      if (ev.type === EV.textDelta) { noteDelta(ev); appendStream('word', ev.raw?.data?.delta); }
+      else if (ev.type === EV.reasoningDelta) { noteDelta(ev); appendStream('think', ev.raw?.data?.delta); }
+      else if (ev.type === EV.textEnded || ev.type === EV.reasoningEnded) endStream();
+      else if (turnEnded(ev.type)) {
         // The turn is over: nothing may stream into it any more.
         state.sessionTrace.stream = null;
         state.sessionTrace.key = '';
@@ -8097,19 +8098,19 @@ function connectStream() {
     }
     // The Architect's own card gets the same number from the same event. Its
     // session is never a worker's, so the two cannot both claim it.
-    if (ev.sessionId && ev.sessionId === state.sessionId && ev.type === 'session.usage.updated') noteArchitectUsage(ev);
+    if (ev.sessionId && ev.sessionId === state.sessionId && ev.type === EV.usageUpdated) noteArchitectUsage(ev);
     // any traffic from a session counts as progress against the stall timer
     if (ev.sessionId) state.busySince.set(ev.sessionId, Date.now());
 
     // A tool that is still executing is progress, even though it emits nothing.
     if (ev.sessionId) {
-      if (ev.type === 'session.tool.called' || ev.type === 'session.tool.input.ended') {
+      if (ev.type === EV.toolCalled || ev.type === EV.toolInputEnded) {
         state.toolsInFlight.add(ev.sessionId);
       } else if (
-        ev.type === 'session.tool.success' ||
-        ev.type === 'session.tool.failed' ||
+        ev.type === EV.toolSuccess ||
+        ev.type === EV.toolFailed ||
         ev.type === 'shell.exited' ||
-        /^session\.execution\.(succeeded|failed|interrupted)$/.test(ev.type)
+        turnEnded(ev.type)
       ) {
         state.toolsInFlight.delete(ev.sessionId);
       }
@@ -8121,8 +8122,8 @@ function connectStream() {
       let changed = false;
       if (ev.sessionId) {
         const busy = state.busySessions.has(ev.sessionId);
-        if (ev.type === 'session.execution.started' && !busy) { state.busySessions.add(ev.sessionId); changed = true; }
-        else if (/^session\.execution\.(succeeded|failed|interrupted)$/.test(ev.type) && busy) {
+        if (ev.type === EV.executionStarted && !busy) { state.busySessions.add(ev.sessionId); changed = true; }
+        else if (turnEnded(ev.type) && busy) {
           state.busySessions.delete(ev.sessionId);
           changed = true;
         }
@@ -8132,18 +8133,18 @@ function connectStream() {
         // provider failure is no longer the news. `role-error` clears this at the
         // end of a successful wake, but the card sat red through the whole turn
         // that proved the retry had worked.
-        if (ev.type === 'session.execution.started' && ev.sessionId === state.sessionId) {
+        if (ev.type === EV.executionStarted && ev.sessionId === state.sessionId) {
           const archKey = `${dirKey(currentProject()?.directory)}|architect`;
           if (state.roleErrors.delete(archKey)) {
             state.roleSig = '';
             renderRoleActivity();
           }
         }
-        if (ev.type === 'session.execution.started') state.busy = true;
-        else if (/^session\.execution\.(succeeded|failed|interrupted)$/.test(ev.type) || ev.type === 'session.idle') state.busy = false;
+        if (ev.type === EV.executionStarted) state.busy = true;
+        else if (turnEnded(ev.type) || ev.type === EV.idle) state.busy = false;
         // A turn that failed or was interrupted is not "done": the chime stays quiet
         // for it, so the sound always means the work finished.
-        if (/^session\.execution\.(failed|interrupted)$/.test(ev.type)) workEndQuiet = true;
+        if (ev.type === EV.executionFailed || ev.type === EV.executionInterrupted) workEndQuiet = true;
         renderComposer();
       }
       if (changed) {

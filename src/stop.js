@@ -36,6 +36,7 @@
 
 /** How long a gentle Stop lets the step in flight run before cutting anyway. */
 import { normDir } from './paths.js';
+import { EV, turnEnded } from '../web/events.js';
 
 export const STOP_GRACE_MS = 45_000;
 /** Quiet ticks in a row before a stop is called done. */
@@ -413,13 +414,13 @@ export function createStopper({
     if (!dir) return;
     const intent = intents.get(normDir(dir));
     if (!intent) return;
-    if (ev.type === 'session.step.started') intent.boundary = true;
-    if (ev.type === 'session.retry.scheduled') {
+    if (ev.type === EV.stepStarted) intent.boundary = true;
+    if (ev.type === EV.retryScheduled) {
       intent.boundary = true;
       const said = ev.raw?.properties?.error?.message || ev.message;
       if (said) intent.note = String(said).replace(/\s+/g, ' ').slice(0, 200);
     }
-    if (/^session\.execution\.(succeeded|failed|interrupted)$/.test(ev.type)) intent.boundary = true;
+    if (turnEnded(ev.type)) intent.boundary = true;
   }
 
   /** Is a stop in force for this project? */

@@ -17,6 +17,7 @@ import os from 'node:os';
 import { decide, grantKey, resolvePath, refusalNote } from './permissions.js';
 import { readAutomation } from './automation.js';
 import { normDir } from './paths.js';
+import { EV } from '../web/events.js';
 
 export function createPermissionGate({
   engine,
@@ -151,7 +152,7 @@ export function createPermissionGate({
    *  can still be pinned to the call it is blocking. */
   function observe(ev) {
     const type = String(ev?.type || '');
-    if (!/^session\.tool\.(input\.started|input\.ended|called)$/.test(type)) return;
+    if (![EV.toolInputStarted, EV.toolInputEnded, EV.toolCalled].includes(type)) return;
     const data = ev?.raw?.data || {};
     const sessionId = data.sessionID || ev?.sessionId || null;
     const id = data.id || data.callID || null;

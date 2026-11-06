@@ -6,6 +6,7 @@ import { DATA_DIR, LOGS_DIR, WORKSPACE_DIR, GENERAL_DIR, ENGINE_HOME, PID_FILE, 
 import { loadConfig, saveConfig, repairMachinePaths } from './config.js';
 import { logger } from './logger.js';
 import { createEngine } from './engines/index.js';
+import { EV, turnEnded } from '../web/events.js';
 import { createProjectStore, ensureProjectFolders } from './projects.js';
 import { createToolStats } from './toolstats.js';
 import { readPlan, logPlanState } from './plans.js';
@@ -489,7 +490,7 @@ async function main() {
       const messages = await engine.getMessages(sessionId);
       let session = null;
       try { session = await engine.getSession(sessionId); } catch { /* gone */ }
-      if (type === 'session.execution.succeeded' && session?.directory) {
+      if (type === EV.executionSucceeded && session?.directory) {
         ensureGitRepo(session.directory).catch(() => {});
       }
       const added = toolStats.recordMessages(messages, {
@@ -536,7 +537,7 @@ async function main() {
   const FIRST_TOKEN_WARN_MS = 20000;
   function watchFirstToken(ev) {
     const sid = ev.sessionId;
-    if (ev.type === 'session.step.started') {
+    if (ev.type === EV.stepStarted) {
       stepClock.set(sid, { at: Date.now(), told: false });
       return;
     }
@@ -553,7 +554,7 @@ async function main() {
       }
       return;
     }
-    if (/^session\.(step\.ended|execution\.(succeeded|failed|interrupted))$/.test(ev.type)) {
+    if (ev.type === EV.stepEnded || turnEnded(ev.type)) {
       stepClock.delete(sid);
     }
   }
@@ -577,11 +578,11 @@ async function main() {
     // its own with nobody watching — on 4 Nov it ran beside the Architect's next
     // run for 27 minutes, two conversations alternating on one local model. Cut it
     // the moment it starts.
-    if (type === 'session.execution.started' && runner.retired?.(ev.sessionId)) {
+    if (type === EV.executionStarted && runner.retired?.(ev.sessionId)) {
       engine.interrupt(ev.sessionId).catch(() => { /* already gone */ });
       app.warn(`cut a retired worker session that started again: ${ev.sessionId}`);
     }
-    if (/^session\.execution\.(succeeded|failed|interrupted)$/.test(type)) afterTurn(ev.sessionId, type);
+    if (turnEnded(type)) afterTurn(ev.sessionId, type);
   });
 
   // Two kinds of unfinished delegation survive a restart, and they need opposite

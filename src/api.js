@@ -13,6 +13,7 @@ import { skillRules, describeSkills } from './skills.js';
 import { rulesFor, decide, resolvePath, refusalNote, SINGLE_RULES } from './permissions.js';
 import { stopTargets, createStopper } from './stop.js';
 import { PROJECTS_ROOT, SKILLS_DIR, ROOT, SCRATCH_ROOT, scratchDir, normDir } from './paths.js';
+import { EV } from '../web/events.js';
 import { braveEntries, entryBlockingWrite, protectionEntries, protectionFor } from './protection.js';
 import { mayRecycleFolder } from './projects.js';
 import { fetchProviderModels } from './providers.js';
@@ -744,7 +745,7 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
     if (automation.keepBuilding && session?.directory) runs?.resume?.(session.directory);
     const on = AUTOMATION_KEYS.filter((key) => automation[key]);
     app.info(`automation ${on.length ? on.join(', ') : 'all off'} for ${sessionId}`);
-    notify?.({ kind: 'sessions', type: 'session.automation', sessionId, automation });
+    notify?.({ kind: 'sessions', type: EV.automation, sessionId, automation });
     return { ok: true, automation };
   }
 
@@ -1581,7 +1582,7 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
           // later turns of this session, which is exactly this one.
           await engine.updateSessionPermissions(sessionId, single ? SINGLE_RULES : []);
           app.info(`mode ${applied} -> ${asked} for ${sessionId} (applied at send)`);
-          notify?.({ kind: 'sessions', type: 'session.mode', sessionId, mode: asked });
+          notify?.({ kind: 'sessions', type: EV.mode, sessionId, mode: asked });
         }
         // A send into a finished plan starts a new round. Close it before the
         // brief, so the brief's QC allowance is this round's — and so the finished
