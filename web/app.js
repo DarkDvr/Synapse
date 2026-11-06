@@ -178,7 +178,7 @@ import {
   liveRunsWiring,
 } from './live-runs.js';
 import { refreshPending, schedulePendingRefresh, schedulePermissionRender, pendingWiring } from './pending.js';
-import { closeRailModal, renderToolUsage, renderProbe } from './tool-panels.js';
+import { openRailModal, closeRailModal, renderToolUsage, renderProbe } from './tool-panels.js';
 import { setIcon } from './icons.js';
 import { api, serverNow } from './api.js';
 import { $, debounce } from './dom.js';

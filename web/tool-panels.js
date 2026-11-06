@@ -13,6 +13,23 @@ import { api } from './api.js';
 import { toast } from './toast.js';
 import { renderTranscript } from './transcript.js';
 
+/**
+ * Show one of the rail panels, and let its caller refresh what is inside it.
+ *
+ * It was lost for one evening: the move that took the plan pane out of app.js cut a
+ * slice that ended at this function's first line, and nothing called it until the
+ * Tools in Use button was pressed. The panel then threw "openRailModal is not
+ * defined" into a page that otherwise looked perfect.
+ */
+export function openRailModal(id, refresh) {
+  const el = $(id);
+  if (!el) return;
+  el.hidden = false;
+  const focusable = el.querySelector('[data-close-modal], .close-x, button');
+  focusable?.focus?.();
+  Promise.resolve(refresh?.()).catch(() => {});
+}
+
 export function closeRailModal(id) {
   const el = $(id);
   if (el) el.hidden = true;
