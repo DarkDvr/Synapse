@@ -13,6 +13,9 @@ import { createApi } from '../src/api.js';
 import { normalize, DEFAULTS } from '../src/config.js';
 
 const read = (rel) => fs.readFileSync(path.join(process.cwd(), rel), 'utf8');
+// The page is several modules now (app.js plus the ones that left it), so "the page
+// says" reads them all: a move must not read as a deletion.
+const ui = () => ['web/app.js', 'web/settings-panes.js', 'web/settings-form.js', 'web/ui-prefs.js'].map(read).join('\n');
 
 function harness({ config = {}, live = [] } = {}) {
   const events = [];
@@ -214,7 +217,7 @@ test('a stop or a failure never arms the shutdown', () => {
 });
 
 test('Automation holds the four delays, and the old shutdown switch is gone', () => {
-  const app = read('web/app.js');
+  const app = ui();
   for (const path of [
     'automation.keepBuildingSec',
     'automation.permissionsSec',

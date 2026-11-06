@@ -14,6 +14,9 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
+// The page is several modules now (app.js plus the ones that left it), so "the page
+// says" reads them all: a move must not read as a deletion.
+const ui = () => ['web/app.js', 'web/settings-panes.js', 'web/settings-form.js', 'web/ui-prefs.js'].map(read).join('\n');
 
 test('index.html says nothing about sessions or General', () => {
   const html = read('web/index.html');
@@ -37,8 +40,8 @@ test('the old session controls and wording are gone from app.js', () => {
   // the interface's own settings — but it must be a *pane with a job*, not the old
   // placeholder that was retired. A tab that names itself and shows nothing is the
   // thing this file used to guard against.
-  assert.match(js, /function settingsGeneral\(c\)\s*\{/);
-  assert.match(js, /setField\(c, 'Chat Text Size', 'ui\.chatTextPx'/);
+  assert.match(ui(), /function settingsGeneral\(c\)\s*\{/);
+  assert.match(ui(), /setField\(c, 'Chat Text Size', 'ui\.chatTextPx'/);
 });
 
 test('the dead session-row styles are gone from the stylesheet', () => {
@@ -140,7 +143,7 @@ test('Something Else answers like the chat: Enter newline, Ctrl+Enter sends', ()
 
 // 4 Nov: the wake lock. Settings owns both halves; the cog has only the master.
 test('Keep PC Awake is in Settings and the cog, with the monitor as the second half', () => {
-  const js = read('web/app.js');
+  const js = ui();
   assert.match(js, /'Keep PC Awake'/);
   assert.match(js, /'Also Keep The Monitor On'/);
   assert.match(js, /async function togglePower/);
@@ -170,7 +173,7 @@ test('a role is only Blocked while the plan is genuinely stuck', () => {
 // 4 Nov: the PROHIBITED list is a table — the path, a Write box, a Read box, and
 // a delete button that is disabled for the ones Synapse ships.
 test('Prohibited is a table with a Write and a Read box per row', () => {
-  const js = read('web/app.js');
+  const js = ui();
   assert.match(js, /id: 'prohibited', label: 'Prohibited'/);
   assert.match(js, /function settingsProhibited/);
   assert.match(js, /data-prot-write=/);
@@ -188,7 +191,7 @@ test('Prohibited is a table with a Write and a Read box per row', () => {
 // 4 Nov: the guard no longer rewrites the effort; it counts loops and sets the
 // model aside at the limit. The setting is a number beside the switch.
 test('the loop setting is a count, and the card says what happened', () => {
-  const js = read('web/app.js');
+  const js = ui();
   assert.match(js, /worker\.loopLimit/);
   assert.match(js, /asking it to carry on/);
   assert.match(js, /marked ISSUES, next coder/);
@@ -320,7 +323,7 @@ test('prose and cards are separated wherever they meet, either way round', () =>
 // 30 Oct UI pass: the operator moved the update check into the Settings rail,
 // stopped the About page selling itself, and made notices easier to notice.
 test('Updates is a Settings page above About, and About is just the facts', () => {
-  const js = read('web/app.js');
+  const js = ui();
   assert.match(js, /\{ id: 'updates', label: 'Check for Updates', icon: 'refresh' \}/);
   assert.ok(
     js.indexOf("{ id: 'updates'") < js.indexOf("{ id: 'about', label: 'About'"),
@@ -338,7 +341,7 @@ test('every textual Close is the grey secondary button', () => {
   const classes = [...html.matchAll(/<button class="([^"]+)"[^>]*>Close<\/button>/g)].map((m) => m[1]);
   assert.ok(classes.length >= 6, `expected the six Close buttons, found ${classes.length}`);
   for (const cls of classes) assert.match(cls, /\bbtn-secondary\b/, `Close is not secondary: ${cls}`);
-  const js = read('web/app.js');
+  const js = read('web/settings-panes.js');
   assert.match(js, /data-close-about>Close<\/button>/);
   assert.match(js, /btn btn-secondary btn-sm[^>]*data-close-about/);
 });

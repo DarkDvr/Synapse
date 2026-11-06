@@ -60,21 +60,26 @@ test('the transcript is drawn from var(--chat-fs), not from a copy of 12.5px', (
 });
 
 test('General is the first Settings tab and the Windows tab is gone', () => {
-  const src = read('web/app.js');
-  const block = /const SETTINGS_TABS = \[([\s\S]*?)\n\];/.exec(src);
+  const src = read('web/settings-panes.js');
+  const block = /export const SETTINGS_TABS = \[([\s\S]*?)\n\];/.exec(src);
   assert.ok(block, 'the tab list is where it has always been');
   const ids = [...block[1].matchAll(/id: '([^']+)'/g)].map((m) => m[1]);
   assert.equal(ids[0], 'general', 'General is the tab the window opens on');
   assert.ok(!ids.includes('windows'), 'the Windows toolchain pane is retired');
   // A tab with no pane silently falls back to the first one, which reads as a tab
-  // that does nothing: every id must have a pane.
-  const panes = /const SETTINGS_PANES = \{([\s\S]*?)\n\};/.exec(src);
+  // that does nothing: every id must have a pane. Nine are in the panes module and
+  // Providers is added by app.js, because it is the one editor with its own state.
+  const panes = /export const PANES = \{([\s\S]*?)\n\};/.exec(src);
   assert.ok(panes, 'the pane map exists');
-  for (const id of ids) assert.match(panes[1], new RegExp(`\\b${id}:`), `Settings → ${id} has no pane`);
+  assert.match(read('web/app.js'), /const SETTINGS_PANES = \{ \.\.\.PANES, providers: settingsProviders \};/);
+  for (const id of ids) {
+    if (id === 'providers') continue;
+    assert.match(panes[1], new RegExp(`\\b${id}:`), `Settings → ${id} has no pane`);
+  }
 });
 
 test('the General pane edits the setting the page applies', () => {
-  const src = read('web/app.js');
+  const src = read('web/settings-panes.js') + read('web/ui-prefs.js');
   assert.match(src, /data-path="ui\.chatTextPx"|setField\(c, 'Chat Text Size', 'ui\.chatTextPx'/);
   assert.match(src, /function applyChatText\(/, 'there is one function that applies it');
   assert.match(src, /--chat-fs/, 'and it applies it through the transcript property');

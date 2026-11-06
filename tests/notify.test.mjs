@@ -18,6 +18,9 @@ import { DONE_SOUNDS as PAGE_SOUNDS, doneSoundName, workWillContinue } from '../
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
+// The page is several modules now (app.js plus the ones that left it), so "the page
+// says" reads them all: a move must not read as a deletion.
+const ui = () => ['web/app.js', 'web/settings-panes.js', 'web/settings-form.js', 'web/ui-prefs.js'].map(read).join('\n');
 const tasks = (...statuses) => statuses.map((status, i) => ({ id: `t${i + 1}`, status }));
 
 test('the config takes the four sounds and off, and refuses a name it does not have', () => {
@@ -35,14 +38,14 @@ test('the page offers exactly the sounds the server accepts', () => {
   assert.equal(PAGE_SOUNDS[0].v, 'off', 'Off is first, so the default answer is silence');
   assert.equal(doneSoundName('nonsense'), DEFAULTS.notify.doneSound, 'an unknown name falls back');
   assert.equal(doneSoundName('off'), 'off');
-  const js = read('web/app.js');
+  const js = ui();
   assert.match(js, /from '\.\/notify\.js'/, 'the page imports the rule instead of repeating it');
   // Notices' one setting moved into General on 2 Nov: a tab that holds a single
   // field is a place the operator forgets to look.
   assert.match(js, /{ id: 'automation', label: 'Automation'/, 'Automation took the Notices tab');
   assert.doesNotMatch(js, /id: 'notices'/, 'and the Notices tab is gone');
   assert.match(js, /'notify\.doneSound'/, 'the sound is still in Settings');
-  assert.match(read('web/app.js'), /function settingsGeneral\(c\)[\s\S]*?'notify\.doneSound'/, 'in General');
+  assert.match(read('web/settings-panes.js'), /function settingsGeneral\(c\)[\s\S]*?'notify\.doneSound'/, 'in General');
 });
 
 test('a gap between two pieces of work is not a finish', () => {
