@@ -29,6 +29,35 @@ script already writes a throwaway profile; a `.lock` in the temp dir, waited on,
 enough), or run those two files with `--test-concurrency=1` from a wrapper. Measure
 after: the full suite should be green five times in a row.
 
+## The screen badge may stay on screen after the desk is released — 7 Nov
+
+Seen once, while checking the page after a refactor move: the desk badge read "Screen
+in use — A worker may use your mouse and keyboard. Take Back" on a page that had just
+loaded, while `/api/desk` answered `{"desk":null}` a few minutes later. No run had
+started or finished in between, so either the badge was drawn from a state that was
+already stale, or something set it that does not clear it.
+
+Not reproduced: the page has been loaded a dozen times since and the badge was hidden
+each time. So this is a "watch for it" entry, not a diagnosis.
+
+Where: `web/desk.js` (`renderDesk`), whatever sets `state.desk` (boot's `/api/desk`
+read and the `desk.*` events), and `src/desk.js` on the server.
+Fix: when it happens again, read `/api/desk` at the same moment and compare. If the
+server says null the page is the bug (a missing clear); if the server says held, the
+server is (a lease that was never released).
+
+## The boot-error trap records but does not surface — 7 Nov
+
+`web/index.html` keeps the first page errors in `window.__errs`, and that is how every
+dead page in this refactor was found. But nothing *shows* them: the operator sees a
+rail with no chat and no message, exactly as before. The trap is for a `--eval` to
+read, not for the person in front of the screen.
+
+Where: `web/index.html` (the two-line trap), `web/app.js` (`boot()`).
+Fix: the last line of `boot()` checks `window.__errs` and, if it is not empty, says so
+— a toast or a line in the chat, with the first message. Worth doing at the same time:
+`connectStream()` first, so a half-dead page at least has its identity.
+
 ## A local name shadows an imported function (`askHost`) — 7 Nov
 
 In `web/app.js`'s wiring there is `const askHost = $('askHost');` inside a function,
