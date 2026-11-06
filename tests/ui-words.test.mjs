@@ -32,6 +32,9 @@ const ui = () =>
     'web/transcript.js',
     'web/composer.js',
     'web/toast.js',
+    'web/model-picker.js',
+    'web/run-menu.js',
+    'web/mode.js',
   ]
     .map(read)
     .join('\n');
@@ -235,7 +238,8 @@ test('the rail and the model menu follow the order the operator arranged', () =>
   // The order itself moved to ./provider-list.js (6 Nov) — it is one answer three
   // parts of the page need — so the rule is read where it lives now.
   assert.match(read('web/provider-list.js'), /function providerOrderOf\(/);
-  assert.match(js, /rankOf\(a\.provider\) - rankOf\(b\.provider\)/);
+  // 7 Nov: the menu itself is its own module now.
+  assert.match(read('web/model-picker.js'), /rankOf\(a\.provider\) - rankOf\(b\.provider\)/);
   assert.match(read('web/providers.js'), /data-prov-up=|data-prov-down=/);
   assert.match(read('web/providers.js'), /function moveProvider\(/);
   assert.match(js, /data-menu-action="up"|data-menu-action="down"/);

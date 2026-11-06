@@ -11,6 +11,7 @@
 // One thing comes from app.js: a redraw of the transcript, because a trace that ends
 // has to be re-rendered where it stands. Wired at boot.
 import { state } from './state.js';
+import { EV } from './events.js';
 import { esc, shortSpan } from './format.js';
 import { fmtTokens, dirKey, roleLabel } from './run-view.js';
 

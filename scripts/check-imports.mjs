@@ -81,9 +81,22 @@ for (const file of targets) {
   }
 
   const missing = [];
-  for (const m of src.matchAll(/(?<![.\w$])([A-Za-z_$][\w$]*)\s*\(/g)) {
+  // Two shapes of use: a call (`name(`) and a bare value (`AUTOMATION_ROWS.map`, a
+  // constant passed to a function). The value pass is the one that matters most — a
+  // missing *function* import throws on the line that calls it, but a missing
+  // constant throws wherever it is first touched, which is usually deep in a render
+  // (7 Nov: `AUTOMATION_ROWS` in run-menu.js, which the call-only pass could not see).
+  // Property accesses are excluded by the lookbehind, object keys by the `:` guard.
+  const uses = [
+    ...src.matchAll(/(?<![.\w$])([A-Za-z_$][\w$]*)\s*\(/g),
+    ...src.matchAll(/(?<![.\w$])([A-Za-z_$][\w$]*)(?!\s*[:(])/g),
+  ];
+  for (const m of uses) {
     const name = m[1];
     if (known.has(name)) continue;
+    // `$` is a one-character name that also appears inside template expressions and
+    // regexes; it is imported where it is used, and flagging it is pure noise.
+    if (name === '$') continue;
     // A wired name is imported nowhere on purpose: app.js hands it over at boot.
     if (new RegExp(`\\b${name}: missing\\(`).test(raw)) continue;
     for (const [f, names] of exportsOf) {
