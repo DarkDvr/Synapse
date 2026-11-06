@@ -71,7 +71,7 @@ test('General is the first Settings tab and the Windows tab is gone', () => {
   // Providers is added by app.js, because it is the one editor with its own state.
   const panes = /export const PANES = \{([\s\S]*?)\n\};/.exec(src);
   assert.ok(panes, 'the pane map exists');
-  assert.match(read('web/app.js'), /const SETTINGS_PANES = \{ \.\.\.PANES, providers: settingsProviders \};/);
+  assert.match(read('web/settings-window.js'), /const SETTINGS_PANES = \{ \.\.\.PANES, providers: settingsProviders \};/);
   for (const id of ids) {
     if (id === 'providers') continue;
     assert.match(panes[1], new RegExp(`\\b${id}:`), `Settings → ${id} has no pane`);

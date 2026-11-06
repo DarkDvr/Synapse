@@ -389,7 +389,8 @@ test('the settings footer has one honest primary, not a Save Changes', () => {
   assert.match(html, /id="settingsPrimary"/);
   assert.doesNotMatch(html, /id="closeSettings"/);
   assert.doesNotMatch(html, /id="saveSettings"/);
-  const js = read('web/app.js');
+  // 7 Nov: the Settings window's controller is its own module.
+  const js = read('web/settings-window.js');
   assert.match(js, /'Save & Restart'/);
   assert.match(js, /'Save & Close'/);
   assert.match(js, /primary\.dataset\.action =/);
