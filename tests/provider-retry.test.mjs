@@ -270,7 +270,12 @@ expect(
   retried.events.some((e) => e.kind === 'role-error' && e.retrying),
 );
 expect('rate limit: report delivered to the Architect', retried.woke.some((t) => /finished/.test(t)), `woke=${retried.woke.length}`);
-expect('rate limit: logged to the provider diary', fs.readFileSync(PROVIDER_LOG, 'utf8').includes(`rate-limit`));
+// The diary is deliberately silent under `node --test` (provider-errors.js says
+// why: the ladder tests wrote their fake failures beside a real usage cap). So the
+// assertion is about the sentence the diary would file, not the file: the same
+// classifier the diary uses must call this a rate limit. Reading the log here only
+// passed on a machine that already had one from a real run.
+expect('rate limit: classified as a rate limit', classifyFailure(RATE).reason === 'rate-limit', classifyFailure(RATE).reason);
 // The worker session is single-use: at the end of the run it is interrupted, and
 // remembered as retired, so a note queued as the turn ended cannot start an
 // unwatched turn (4 Nov: 27 minutes of two conversations alternating).
@@ -292,7 +297,9 @@ const stalled = await runCase({ name: 'stalled', script: [{ silent: true }, {}] 
 expect('silence: run completes after resume', stalled.result?.outcome === 'completed', stalled.result?.outcome);
 expect('silence: one resume recorded', stalled.result?.resumes === 1, String(stalled.result?.resumes));
 expect('silence: the worker was interrupted', stalled.interrupts.length >= 1);
-expect('silence: logged as stalled', fs.readFileSync(PROVIDER_LOG, 'utf8').includes('stalled'));
+// The diary is silent under test (see the note above), so this is the event the
+// page and the card read: the run said it was restarting, and why.
+expect('silence: reported as a stall', stalled.events.some((e) => e.kind === 'role-error' && /nothing happened|restarting/i.test(String(e.reason || e.message || ''))), JSON.stringify(stalled.events.filter((e) => e.kind === 'role-error').map((e) => e.reason || e.message)));
 // The red "nothing happened — restarting" line must go when the worker starts
 // doing something, not when the whole turn ends. One clear is the resume, one is
 // the clean turn; before 30 Oct there was only the second.

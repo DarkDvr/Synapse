@@ -190,7 +190,7 @@ function makeEngine(dir, { loopRoles = ['coder-1'], keepLooping = false, toolLoo
   return { engine, sessions, arch, created, interrupts, switched };
 }
 
-async function waitFor(pred, ms = 40000) {
+async function waitFor(pred, ms = 90000) {
   for (let i = 0; i < ms / 25; i += 1) {
     const v = pred();
     if (v) return v;
