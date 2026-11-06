@@ -18,7 +18,7 @@ fixed on the spot; a bug found on the way that is unrelated goes in
 | 3 — a catch that says nothing | **done** — baseline of 71, and it may only go down |
 | 4 — sync reads on the request path | **done** — the plan is parsed once per change |
 | 5 — the wake loop leaves `runs.js` | **half** — the report writer is out; the wake loop waits on `waitForIdle` moving first (measured, see below) |
-| 6 — `web/app.js` comes apart | **in progress** — out: `state.js`, `format.js`, `api.js`, `dom.js`, `console.js`, `settings-data.js`, `events.js`, `settings-form.js`, `settings-panes.js`, `ui-prefs.js`, `provider-list.js`, `providers.js` (10,546 → 9,177). **Next:** the transcript |
+| 6 — `web/app.js` comes apart | **in progress** — out: `state.js`, `format.js`, `api.js`, `dom.js`, `console.js`, `settings-data.js`, `events.js`, `settings-form.js`, `settings-panes.js`, `ui-prefs.js`, `provider-list.js`, `providers.js`, `chat-notes.js`, `rate-view.js` (10,546 → 8,917). **Next:** the transcript — see "The transcript is four things" below |
 
 ---
 
@@ -152,8 +152,10 @@ settings pages, update dialog, ask panel, desk badge, SSE handler, over one muta
 `api.js`, `dom.js`, `console.js`, `settings-data.js`, `events.js`, `settings-form.js`
 (the four form primitives), `settings-panes.js` (the tab list and nine panes),
 `ui-prefs.js` (the chat's text size and the language), `provider-list.js` (which
-providers exist, their names and order) and `providers.js` (the Providers pane and
-its editor). app.js is 9,177 lines, down from 10,546. **The Settings block is now
+providers exist, their names and order), `providers.js` (the Providers pane and its
+editor), `chat-notes.js` (the alarms, leases and kept errors that are drawn in a chat
+but are not messages) and `rate-view.js` (the tokens-per-second and window corner of
+a role card). app.js is 8,917 lines, down from 10,546. **The Settings block is now
 entirely out.**
 
 The Settings block is what proved the order matters: the panes could not leave until
@@ -173,6 +175,27 @@ anchors silently does nothing on a CRLF file, and a missing `wiring` call or a
 function left un-exported fails *quietly*: the pane still draws, the row still
 clicks, nothing happens. Both were caught by clicking through the page afterwards,
 not by the suite. Move it, run the suite, then **use it**.
+
+### The transcript is four things, not one (measured 6 Nov)
+
+The plan said "the transcript" as one step. It is not one block: the 1,147 lines
+between `renderTranscript` and the scrolling section are four subsystems that happen
+to be next to each other, and they are tangled through the rest of the file.
+
+- **What is drawn** — `renderMessage`, `renderTool`, `renderTrace`, `renderAlarm`,
+  `renderLease`, `renderChatError`. Needs 24 things from app.js, because a message's
+  parts reach into the run, the plan, the permission cards and the ask panel.
+- **The streaming panel** — `appendStream`, `pumpStream`, `measureStream`,
+  `endStream`, `liveTrace` and their timers. Movable; needs about six names.
+- **The rates and the window** — **done**, `web/rate-view.js`.
+- **The non-message lines** — **done**, `web/chat-notes.js`.
+
+Two of the four are out. The streaming panel is next (it is the other clean seam),
+and "what is drawn" comes last: it is the one that would need a twenty-name wiring
+object, which is not a boundary, it is a shard. Before that move, the names it needs
+(`dirKey`, `currentRun`, `roleLabel`, `modelByRef`, `selectionFor`, `fmtTokens`,
+`groupTurns`, …) want to live in a module of their own — call it `web/run-view.js` —
+and then both it and the transcript read from there instead of being wired together.
 
 **Test that proves it.** After each step the suite is unchanged and green, and
 `tests/ui-layout.test.mjs` + a screenshot of the page still match. The structural
