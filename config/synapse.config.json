@@ -318,7 +318,8 @@
       "focus": "app"
     },
     "architect": {
-      "ref": "polystrata/qwen3.8-flash-next-IQ2_XS-GSQ-200k",
+      "ref": "opencode-go/deepseek-v4.1-flash",
+      "variant": "high",
       "skills": [
         "app-check",
         "find-skills",

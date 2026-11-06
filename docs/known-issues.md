@@ -14,25 +14,32 @@ Switching a role's model from one local model to another — 126k to 200k — le
 old window in place: the card's "Nk/Mk ctx" corner and the point where the watchdog
 compacts keep the first model's number until Synapse restarts.
 
-Where it comes from, so far as it is known without reproducing it: a local provider's
-window is *measured*, not typed — `measureLocalWindows()` in `src/providers.js` runs
-once at boot (`src/index.js`), writes `context` into the config, and the engine's own
-config is written from that same pass. `contextWindow()` in `src/runs.js` then reads
-`modelLimits` → the provider's `models[].context` → the model cache, all of which were
-filled at boot. A model switch changes which entry is read, not when the entries were
-measured.
+**Found the cause while filing this, in the config itself.** All four polystrata
+models carry the same window — `126976` — including the two whose names say 200k:
 
-Shows: the rate corner says 126K after the switch; a run budgets and compacts for 126k
-on a 200k model (the safe direction, but the operator sees a number that is not true).
-`noteLoadedWindow()` already re-asks a local server once per run — that is the hook the
-fix probably wants, extended to a model switch rather than a run start.
+```
+qwen3.8-flash-next-IQ2_XS-GSQ-126k   ctx=126976
+qwen3.8-flash-next-IQ2_XS-GSQ-200k   ctx=126976
+tiel-coder-35b-a3b-Q5_K_XL-131k      ctx=126976
+tiel-coder-35b-a3b-Q5_K_XL-200k      ctx=126976
+```
 
-Where: `src/providers.js` (`measureLocalWindows`), `src/runs.js` (`contextWindow`,
-`noteLoadedWindow`), `web/app.js` (`loadModels`, and the card's corner in
-`web/rate-view.js`).
-Fix: re-measure the selected model's window when the model changes, and tell the page
-the new number; confirm first whether the engine's own config needs the same update or
-whether it reads the window per turn.
+The mechanism is the `*` fallback in `probeLoadedWindows`/`measureLocalWindows`
+(`src/providers.js`). A llama.cpp-family server answers `/props` for the **one** model
+it has loaded, and that window is recorded under `*` as well as under its own id "so a
+model whose id differs from the alias still gets the right number". `measureLocalWindows`
+then writes `windows.get(id) || windows.get('*')` into **every** model of that provider,
+so whichever model happened to be loaded stamps its window onto all of them. Load the
+126k model once, and the 200k one is now 126k forever.
+
+Shows, live: the Architect's corner read `150K/127K ctx` after the switch — a prompt
+larger than the "limit" — and a run budgets and compacts for 126k on a 200k model.
+
+Where: `src/providers.js` (`measureLocalWindows`, `probeLoadedWindows`),
+`src/runs.js` (`contextWindow`, `noteLoadedWindow`), `web/rate-view.js` (the corner).
+Fix: apply the `*` window only to the model the server says it has loaded (its
+`model_alias`), never to ids that differ; and re-measure the selected model when the
+model changes rather than only at boot. The `*` entry is the bug, not the symptom.
 
 ## OC provider fixes — details to come (6 Nov)
 

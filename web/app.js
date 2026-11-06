@@ -60,6 +60,22 @@ import {
   stopFollowingChat,
   chatScrollWiring,
 } from './chat-scroll.js';
+import {
+  ROLES,
+  modelByRef,
+  topEfforts,
+  selectionFor,
+  architectSelection,
+  fmtTokens,
+  projectOf,
+  currentProject,
+  dirKey,
+  runIn,
+  currentRun,
+  roleLabel,
+  groupTurns,
+  currentForm,
+} from './run-view.js';
 import { setIcon } from './icons.js';
 import { api, serverNow } from './api.js';
 import { $, debounce } from './dom.js';
@@ -72,20 +88,6 @@ import { AUTOMATION_DEFAULTS, AUTOMATION_ROWS, anyAutomationOn } from './automat
 import { reconcileRuns } from './runs-sync.js';
 import { SETTINGS_TABS, PANES, panesWiring } from './settings-panes.js';
 import { applyChatText, applyLanguage } from './ui-prefs.js';
-
-
-// Orchestration roles. These ids key the per-role model choices in the config
-// file and label the cards. Every chat message goes to the Architect — the
-// composer has no target picker; the philosophy is one interface, one lead.
-const ROLES = [
-  { id: 'architect', name: 'Architect' },
-  { id: 'inventor', name: 'Inventor' },
-  { id: 'designer', name: 'Designer' },
-  { id: 'coder-1', name: 'Coder 1' },
-  { id: 'coder-2', name: 'Coder 2' },
-  { id: 'coder-3', name: 'Coder 3' },
-  { id: 'qc', name: 'QC' },
-];
 
 
 // ── helpers ─────────────────────────────────────────────────────
@@ -1249,49 +1251,6 @@ async function loadModels() {
   fillRoleModels();
 }
 
-// Every role — the Architect included — stores its own selection as
-// { ref, variant } under `roles[id]` in the config file. An empty variant means
-// the engine's own default (recorded as "default"). Selecting a model does not
-// imply an effort: the operator picks that with the chevron button.
-const asSelection = (spec) => {
-  if (!spec) return null;
-  if (typeof spec === 'string') return { ref: spec, variant: '' };
-  if (typeof spec === 'object' && typeof spec.ref === 'string') {
-    return { ref: spec.ref, variant: String(spec.variant || '') };
-  }
-  return null;
-};
-
-const modelByRef = (ref) => state.models.find((m) => m.ref === ref) || null;
-const variantsOf = (model) =>
-  Array.isArray(model?.variants)
-    ? model.variants
-        .map((v) => (typeof v === 'string' ? { id: v, label: v } : { id: String(v?.id ?? ''), label: String(v?.label ?? v?.id ?? '') }))
-        .filter((v) => v.id)
-    : [];
-// The chevron button exposes the three highest efforts a model allows, in
-// ascending order: Cat Jam Free → high, xhigh, max; DeepSeek → low, high, max.
-const topEfforts = (model) => variantsOf(model).slice(-3);
-
-function selectionFor(roleId) {
-  return asSelection(state.config?.roles?.[roleId]) || { ref: '', variant: '' };
-}
-
-/** The Architect is a role like any other — no "default model" exists. */
-function architectSelection() {
-  const sel = selectionFor('architect');
-  if (!sel.ref) return null;
-  // The chevron control only expresses the three highest efforts, so a stored
-  // value it cannot show is dropped here too — the session must not run an
-  // effort the button claims is not set.
-  const model = modelByRef(sel.ref);
-  const variant = topEfforts(model).some((v) => v.id === sel.variant) ? sel.variant : '';
-  return { ref: sel.ref, variant };
-}
-
-const fmtTokens = (n) =>
-  !n ? '' : n >= 1000000 ? `${(n / 1000000).toFixed(n % 1000000 ? 1 : 0)}M` : n >= 1000 ? `${Math.round(n / 1000)}K` : String(n);
-
 const modelTitle = (m) => {
   if (!m) return '';
   const bits = [m.name];
@@ -2423,7 +2382,6 @@ const findSession = (id) => {
   return null;
 };
 
-const projectOf = (sessionId) => state.projects.find((p) => p.sessions.some((s) => s.id === sessionId)) || null;
 
 const isBusy = (sessionId) => state.busySessions.has(sessionId);
 /**
@@ -2908,9 +2866,6 @@ function setView() {
   requestAnimationFrame(drawActivePath);
 }
 
-function currentProject() {
-  return projectOf(state.sessionId);
-}
 
 async function openSession(id) {
   state.view = 'session';
@@ -2967,10 +2922,6 @@ function showNothing() {
 // `run.finished`) and serves the same shape at `GET /api/runs`, so a page opened
 // mid-run starts from the truth rather than from an idle screen. One worker per
 // project at a time, so a project has at most one live run.
-const dirKey = (d) => String(d ?? '').replace(/[\\/]+$/, '').toLowerCase();
-const runIn = (project) => (project ? state.runs.get(dirKey(project.directory)) || null : null);
-const currentRun = () => runIn(currentProject());
-const roleLabel = (id) => ROLES.find((r) => r.id === id)?.name || String(id || '');
 
 /** The first sentence of a provider error, short enough for one card line. The
  *  full sentence rides the slot's tooltip, like every other card text. */
@@ -3698,28 +3649,6 @@ function updateBusyFromMessages() {
   renderComposer();
 }
 
-/**
- * The engine emits one assistant message per *step* — a reasoning turn, a tool
- * call, another reasoning turn — not one per conversational turn. Rendering
- * them raw gave a three-question chat fourteen "Architect" headers. Consecutive
- * assistant messages belong to the same turn, so merge them into one block: one
- * header, the steps in order, and the answer panels amongst them.
- */
-function groupTurns(messages) {
-  const out = [];
-  for (const m of messages) {
-    const prev = out[out.length - 1];
-    if (m.type === 'assistant' && prev?.type === 'assistant') {
-      prev.parts = [...(prev.parts || []), ...(m.parts || [])];
-      prev.text = `${prev.text || ''}${m.text || ''}`;
-      prev.error = prev.error || m.error;
-      prev.completed = m.completed || prev.completed;
-      continue;
-    }
-    out.push({ ...m, parts: m.parts ? [...m.parts] : m.parts });
-  }
-  return out;
-}
 
 // ── transcript ──────────────────────────────────────────────────
 function renderTranscript() {
@@ -4525,17 +4454,6 @@ function stopPermCountdown() {
 // it grows it can never change the chat's size: it only ever covers what is
 // already there.
 
-/** The form waiting on the operator.
- *
- *  The open session's own form wins, but any pending form is shown: a hidden
- *  worker session has the same toolset, and if one of those asks something the
- *  operator has to be able to answer it — otherwise the worker sits there until
- *  its timeout reports a failure nobody could see coming. The head says which.
- */
-const currentForm = () => {
-  const forms = state.forms || [];
-  return forms.find((f) => f.sessionId === state.sessionId) || forms[0] || null;
-};
 
 /**
  * The chat's geometry, in one place and one rule.
