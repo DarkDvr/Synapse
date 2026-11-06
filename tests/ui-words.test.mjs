@@ -268,7 +268,8 @@ test('the rail names LAN clients under the address, not a Views row', () => {
   assert.doesNotMatch(html, /Views:/);
   assert.doesNotMatch(html, /id="viewsRow"/);
   assert.match(html, /id="remoteClients"/);
-  const js = read('web/app.js');
+  // 7 Nov: the LAN rail is its own module.
+  const js = read('web/remote-access.js');
   assert.match(js, /function renderClients\(/);
   assert.match(js, /clients: \$\{names\.length\}/);
   // 4 Nov: the second line "or http://192.168.1.38:8700/" went, and the names of
