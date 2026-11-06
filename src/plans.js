@@ -80,6 +80,20 @@ const planRelPath = () => `${PLAN_DIR}\\${PLAN_NAME}`;
  *  they are shown. (A plan file once came back unreadable for exactly that.) */
 const planRelPathPlain = () => `${PLAN_DIR}/${PLAN_NAME}`;
 
+// One parse per change, not one per poll: the parsed plan keyed by file, with the
+// stat that proves it is still the same file. Every writer clears its entry.
+const planCache = new Map();
+
+/** Forget a project's cached plan. Called by every write, and by the tests. */
+export function invalidatePlan(dir) {
+  planCache.delete(planPath(dir));
+}
+
+/** Drop everything. For a test that wants a cold read. */
+export function clearPlanCache() {
+  planCache.clear();
+}
+
 /** The empty file a project starts with. Valid as it stands, so the first read
  *  is never an error and the Architect has the shape in front of it. */
 const emptyPlan = () => ({ version: 1, goal: '', tasks: [] });
@@ -121,6 +135,7 @@ export function setTaskStatus(dir, taskId, status) {
     if (!task || task.status === status) return false;
     task.status = status;
     fs.writeFileSync(file, `${JSON.stringify(plan, null, 2)}\n`, 'utf8');
+    planCache.delete(file);
     return true;
   } catch {
     return false;
@@ -267,6 +282,22 @@ export function readPlan(dir) {
   let stat;
   try {
     stat = fs.statSync(target);
+  } catch (err) {
+    // Missing is the normal case for a folder nobody has planned in yet.
+    if (err.code === 'ENOENT') {
+      planCache.delete(target);
+      return base;
+    }
+    return { ...base, error: `could not read the plan file: ${err.message}` };
+  }
+  // The plan pane asks for this while a run streams: the file is small, but the
+  // parse is not free and it happens on the thread that serves the stream. A stat
+  // is cheap, and a match means nothing has changed since the last parse.
+  const cached = planCache.get(target);
+  if (cached && cached.mtime === stat.mtimeMs && cached.size === stat.size) {
+    return { ...cached.result };
+  }
+  try {
     raw = fs.readFileSync(target, 'utf8');
   } catch (err) {
     // Missing is the normal case for a folder nobody has planned in yet.
@@ -457,7 +488,7 @@ export function readPlan(dir) {
   for (const p of features.problems) problems.push(`features.json: ${p}`);
   if (features.error) problems.push(`features.json: ${features.error}`);
 
-  return {
+  const result = {
     ...base,
     exists: true,
     mtime: stat.mtimeMs,
@@ -465,7 +496,10 @@ export function readPlan(dir) {
     problems,
     features,
     plan: { version: Number(parsed.version) || 1, goal, summary: asText(parsed.summary), tasks },
-  };}
+  };
+  planCache.set(target, { mtime: stat.mtimeMs, size: stat.size, result });
+  return { ...result };
+}
 
 /** A cheap change fingerprint, so the harness can tell that something wrote to
  *  the plan when it should not have. */
