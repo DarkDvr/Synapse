@@ -113,11 +113,11 @@ the cards and the commits, not the code. One reason per sentence, not a chain.
 
 ### Versioning
 
-`package.json` holds `major.minor.patch` (fix = patch, feature = minor, break = major).
-Every pushed update bumps it, tags `vX.Y.Z` and — minor or major — gets a GitHub release
-with the zip: `docs/notes/releases.md`; `tests/version.test.mjs` keeps the exe and README
-in step. A bump lands only on restart: after a change that needs a full restart of the
-window, the tray and the server, restart `Synapse.exe` yourself with no run live.
+`package.json` holds `major.minor.patch` (fix = patch, feature = minor, break = major); every
+pushed update bumps it, tags `vX.Y.Z` and — minor or major — gets a GitHub release with the
+zip (`docs/notes/releases.md`). **When your changes are done and no real run is live (test
+projects do not count), restart the whole app: stop it, then launch `Synapse.exe` — window,
+tray and server.** A server-only restart leaves the page on the old build; check the version.
 
 ### Destructive commands — verify before you act
 

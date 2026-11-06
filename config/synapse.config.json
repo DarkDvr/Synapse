@@ -3,7 +3,7 @@
     "host": "127.0.0.1",
     "port": 8700,
     "openBrowser": false,
-    "remote": true
+    "remote": false
   },
   "engine": {
     "type": "opencode",
@@ -254,22 +254,22 @@
             {
               "id": "qwen3.8-flash-next-IQ2_XS-GSQ-126k",
               "name": "qwen3.8-flash-next-IQ2_XS-GSQ-126k",
-              "context": 204800
+              "context": 126976
             },
             {
               "id": "qwen3.8-flash-next-IQ2_XS-GSQ-200k",
               "name": "qwen3.8-flash-next-IQ2_XS-GSQ-200k",
-              "context": 204800
+              "context": 126976
             },
             {
               "id": "tiel-coder-35b-a3b-Q5_K_XL-131k",
               "name": "tiel-coder-35b-a3b-Q5_K_XL-131k",
-              "context": 204800
+              "context": 126976
             },
             {
               "id": "tiel-coder-35b-a3b-Q5_K_XL-200k",
               "name": "tiel-coder-35b-a3b-Q5_K_XL-200k",
-              "context": 204800
+              "context": 126976
             }
           ]
         }
@@ -317,8 +317,7 @@
       "focus": "app"
     },
     "architect": {
-      "ref": "polystrata/tiel-coder-35b-a3b-Q5_K_XL-200k",
-      "variant": "medium",
+      "ref": "opencode-go/deepseek-v4.1-flash",
       "skills": [
         "app-check",
         "find-skills",
@@ -326,7 +325,7 @@
       ]
     },
     "coder-1": {
-      "ref": "opencode-go/deepseek-v4.1-flash",
+      "ref": "polystrata/tiel-coder-35b-a3b-Q5_K_XL-200k",
       "variant": "high",
       "skills": [
         "code-craft",

@@ -7719,6 +7719,10 @@ function connectStream() {
       // would have carried it died first. Ask what is actually running.
       syncRuns().catch(() => {});
       loadDesk().catch(() => {});
+      // The same is true of the version: a reconnect usually means the server was
+      // restarted onto a new build, and the About page would otherwise keep the
+      // number it read when the tab was opened.
+      refreshStatus().catch(() => {});
       return;
     }
 

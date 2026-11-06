@@ -93,7 +93,14 @@ export function createServer({ api, engine, logger, config, remote, onRemote }) 
 
   const sendJson = (res, code, obj) => {
     const body = JSON.stringify(obj);
-    res.writeHead(code, { 'content-type': 'application/json; charset=utf-8', 'content-length': Buffer.byteLength(body) });
+    // Every answer here is live state, and a browser is allowed to keep a JSON
+    // response that carries no cache header — so a refresh after an update still
+    // showed the old version (6 Nov: 1.29.0 running, the About page said 1.28.3).
+    res.writeHead(code, {
+      'content-type': 'application/json; charset=utf-8',
+      'cache-control': 'no-store',
+      'content-length': Buffer.byteLength(body),
+    });
     res.end(body);
   };
 
