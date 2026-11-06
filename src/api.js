@@ -14,6 +14,7 @@ import { rulesFor, decide, resolvePath, refusalNote, SINGLE_RULES } from './perm
 import { stopTargets, createStopper } from './stop.js';
 import { PROJECTS_ROOT, SKILLS_DIR, ROOT, SCRATCH_ROOT, scratchDir, normDir } from './paths.js';
 import { EV } from '../web/events.js';
+import { fail, refuseBusy } from './errors.js';
 import { braveEntries, entryBlockingWrite, protectionEntries, protectionFor } from './protection.js';
 import { mayRecycleFolder } from './projects.js';
 import { fetchProviderModels } from './providers.js';
@@ -23,7 +24,7 @@ import { providerApiKey } from './config.js';
 import { questionSignature, guardDecision, readableAnswer } from './question-loop.js';
 import { setProviderKey, providerKeyState, maskKey } from './secrets.js';
 import { probeToolchain } from './toolchain.js';
-import { busyInfo, busyMessage } from './busy.js';
+import { busyInfo } from './busy.js';
 import { APP_VERSION } from './version.js';
 
 // What an attachment may be. The old rule was six files of up to 8 MB each, which
@@ -315,13 +316,6 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
       driver: drivers.get(sessionId) || drivers.get(normDir(directory)) || null,
     });
   }
-
-  const refuseBusy = (info) => {
-    const err = new Error(busyMessage(info));
-    err.status = 409;
-    err.busy = info;
-    return err;
-  };
 
   /**
    * Which roles this *session* has used, ever.
@@ -993,9 +987,7 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
     clearModelIssues: async (body) => {
       const ref = String(body?.ref || '').trim();
       if (!ref) {
-        const err = new Error('a provider/model ref is required');
-        err.status = 400;
-        throw err;
+        throw fail(400, 'a provider/model ref is required');
       }
       const cleared = modelCache ? modelCache.clearIssues(ref) : false;
       app.info(`model issues cleared: ${ref}${cleared ? '' : ' (there were none)'}`);
@@ -1018,9 +1010,7 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
       if (!inspectRef) return { started: false, reason: 'model checks are unavailable' };
       const ref = String(body?.ref || '').trim();
       if (!ref.includes('/')) {
-        const err = new Error('a provider/model ref is required');
-        err.status = 400;
-        throw err;
+        throw fail(400, 'a provider/model ref is required');
       }
       return inspectRef(ref);
     },
@@ -1093,9 +1083,7 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
     cancelRun: async ({ dir } = {}) => {
       const directory = String(dir || '').trim();
       if (!directory) {
-        const err = new Error('a directory is needed to stop a run');
-        err.status = 400;
-        throw err;
+        throw fail(400, 'a directory is needed to stop a run');
       }
       return { ok: Boolean(runs?.cancel?.(directory)) };
     },
@@ -1157,14 +1145,10 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
     openProject: async (id, what) => {
       const project = projects.find(id);
       if (!project) {
-        const err = new Error('project not found');
-        err.status = 404;
-        throw err;
+        throw fail(404, 'project not found');
       }
       if (!fs.existsSync(project.directory)) {
-        const err = new Error(`the folder does not exist: ${project.directory}`);
-        err.status = 400;
-        throw err;
+        throw fail(400, `the folder does not exist: ${project.directory}`);
       }
       // Array args, never a shell string: the directory is the operator's, and
       // it must not be able to turn into a command.
@@ -1204,9 +1188,7 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
     inspectProjectDir: async (body) => {
       const dir = String(body?.directory || '').trim();
       if (!dir) {
-        const err = new Error('a directory is required');
-        err.status = 400;
-        throw err;
+        throw fail(400, 'a directory is required');
       }
       const state = readPlan(dir);
       let files = 0;
@@ -1239,21 +1221,15 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
     wipeProjectDir: async (body) => {
       const dir = String(body?.directory || '').trim();
       if (!dir) {
-        const err = new Error('a directory is required');
-        err.status = 400;
-        throw err;
+        throw fail(400, 'a directory is required');
       }
       const guarded = entryBlockingWrite(dir, getConfig() || {});
       if (guarded) {
-        const err = new Error(`${dir} is protected (${guarded.label}) and cannot be deleted`);
-        err.status = 403;
-        throw err;
+        throw fail(403, `${dir} is protected (${guarded.label}) and cannot be deleted`);
       }
       const rel = path.relative(PROJECTS_ROOT, path.resolve(dir));
       if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) {
-        const err = new Error(`refusing to wipe ${dir}: it is not inside ${PROJECTS_ROOT}`);
-        err.status = 400;
-        throw err;
+        throw fail(400, `refusing to wipe ${dir}: it is not inside ${PROJECTS_ROOT}`);
       }
       try {
         await engine.evictLocation?.(dir);
@@ -1292,9 +1268,7 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
     projectDeleteInfo: async (id) => {
       const current = projects.find(id);
       if (!current) {
-        const err = new Error('project not found');
-        err.status = 404;
-        throw err;
+        throw fail(404, 'project not found');
       }
       const withSessions = (await projectsWithSessions()).find((p) => p.id === id);
       return {
@@ -1321,9 +1295,7 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
     deleteProject: async (id, body) => {
       const current = projects.find(id);
       if (!current) {
-        const err = new Error('project not found');
-        err.status = 404;
-        throw err;
+        throw fail(404, 'project not found');
       }
       const withSessions = (await projectsWithSessions()).find((p) => p.id === id);
       const sessions = withSessions?.sessions || [];
@@ -1353,9 +1325,7 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
         }
         const allowed = mayRecycleFolder(current.directory, { projectsRoot: PROJECTS_ROOT, harness: ROOT });
         if (!allowed.ok) {
-          const err = new Error(`refusing to delete the folder: ${allowed.reason}`);
-          err.status = 400;
-          throw err;
+          throw fail(400, `refusing to delete the folder: ${allowed.reason}`);
         }
         const guarded = entryBlockingWrite(current.directory, getConfig() || {});
         if (guarded) {
@@ -1455,9 +1425,7 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
       // chat in, so a create without one is a caller bug, not a default.
       const project = body?.projectId ? projects.find(body.projectId) : null;
       if (!project) {
-        const err = new Error('choose a project first');
-        err.status = 400;
-        throw err;
+        throw fail(400, 'choose a project first');
       }
       const location = project.directory;
       const session = await engine.createSession({
@@ -1505,9 +1473,7 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
       requireReady();
       const model = body?.model;
       if (!model || (typeof model === 'string' && !model.includes('/'))) {
-        const err = new Error('a model reference is required');
-        err.status = 400;
-        throw err;
+        throw fail(400, 'a model reference is required');
       }
       await engine.switchModel(sessionId, model);
       return { ok: true };
@@ -1553,9 +1519,7 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
       // the harness being pedantic about the shape of a sentence.
       const attachments = normalizeAttachments(body?.files);
       if (!text && !attachments.length) {
-        const err = new Error('message text is required');
-        err.status = 400;
-        throw err;
+        throw fail(400, 'message text is required');
       }
       // One project, one conversation. The rule is the same for both views — a
       // second prompt into a working project would interleave with a plan that is
@@ -1671,9 +1635,7 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
       const text = String(body?.text ?? '').trim();
       const attachments = normalizeAttachments(body?.files);
       if (!text && !attachments.length) {
-        const err = new Error('a steer needs at least a sentence');
-        err.status = 400;
-        throw err;
+        throw fail(400, 'a steer needs at least a sentence');
       }
       if (text.length > STEER_MAX_CHARS) {
         const err = new Error(
@@ -1697,9 +1659,7 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
       }
       const directory = busy.directory;
       if (!directory) {
-        const err = new Error('could not find the project for this session');
-        err.status = 409;
-        throw err;
+        throw fail(409, 'could not find the project for this session');
       }
       // A delegated worker is the thing working; the Architect is idle and would
       // only start a competing turn. `runs.steer` is the one place that knows the
@@ -1770,23 +1730,17 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
     compactSession: async (sessionId, { timeoutMs = 180000 } = {}) => {
       requireReady();
       if (compacting.has(sessionId)) {
-        const err = new Error('this conversation is already being compacted');
-        err.status = 409;
-        throw err;
+        throw fail(409, 'this conversation is already being compacted');
       }
       const busy = await busyFor(sessionId);
       if (busy.busy) throw refuseBusy(busy);
       const session = await engine.getSession(sessionId);
       if (!session?.directory) {
-        const err = new Error('this conversation is not in a project folder');
-        err.status = 400;
-        throw err;
+        throw fail(400, 'this conversation is not in a project folder');
       }
       const before = await engine.getMessages(sessionId).catch(() => []);
       if (!before.length) {
-        const err = new Error('there is nothing to compact yet');
-        err.status = 400;
-        throw err;
+        throw fail(400, 'there is nothing to compact yet');
       }
       compacting.add(sessionId);
       compactCancels.delete(sessionId);
@@ -1806,9 +1760,7 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
         const handover = await waitForHandover(sessionId, before, timeoutMs, compactCancels);
         if (compactCancels.has(sessionId)) throw cancelled();
         if (!handover) {
-          const err = new Error('the engine did not write a handover in time; nothing was deleted');
-          err.status = 504;
-          throw err;
+          throw fail(504, 'the engine did not write a handover in time; nothing was deleted');
         }
         if (handover.failed) {
           const err = new Error(`${handover.reason || 'the compaction failed'}; nothing was deleted`);
@@ -1817,9 +1769,7 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
         }
         const at = handover.at || Date.now();
         if (!setHandover(session.directory, handover.text, { at })) {
-          const err = new Error('the handover could not be written to the project document; nothing was deleted');
-          err.status = 500;
-          throw err;
+          throw fail(500, 'the handover could not be written to the project document; nothing was deleted');
         }
         if (compactCancels.has(sessionId)) throw cancelled();
         const marker = appendEntry(
@@ -1846,9 +1796,7 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
           metadata: { ...meta, synapse },
         });
         if (!created?.id) {
-          const err = new Error('the engine did not return a new conversation; nothing was deleted');
-          err.status = 502;
-          throw err;
+          throw fail(502, 'the engine did not return a new conversation; nothing was deleted');
         }
         if (compactCancels.has(sessionId)) {
           // Stop landed while the replacement was being made: remove the orphan
@@ -1929,9 +1877,7 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
       });
       const state = power?.apply?.(saved.automation) || { awake: false, display: false, error: null };
       if (awake && state.error) {
-        const err = new Error(`the wake lock could not be held: ${state.error}`);
-        err.status = 500;
-        throw err;
+        throw fail(500, `the wake lock could not be held: ${state.error}`);
       }
       notify?.({
         kind: 'config',
@@ -1973,9 +1919,7 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
       if (cancelCompact(sessionId)) app.info(`compact cancelled for ${sessionId}`);
       const busy = await busyFor(sessionId);
       if (!busy.busy) {
-        const err = new Error('Nothing is running now.');
-        err.status = 409;
-        throw err;
+        throw fail(409, 'Nothing is running now.');
       }
       if (busy.state === 'waiting') {
         const err = new Error('A question or permission card is waiting; stopping now is immediate.');
