@@ -308,14 +308,24 @@ rather than for a bigger window.
 ### A vendor's own API (DeepSeek, and any other)
 
 **The way in is Settings > Providers**, not this file by hand: the tab lists the
-engine's built-in catalog as a read-only row and every registered provider below
-it, and offers *Local Provider* and *OpenAI Compatible* (the two ids differ only
-by where they point — see `providerType()` in `src/providers.js`). `OpenCode` is
-in the add menu but disabled: the engine's catalog is always registered, and a
-second copy would be the same models twice. A row can be added, renamed, given a
-server URL and a key, and *Refresh List* asks that server what it serves. Saving
-writes the same `providers` array documented here, so a hand-written entry and a
-clicked one are the same thing.
+engine's built-in catalog as its own rows and every registered provider below it, and
+offers *Local Provider* and *OpenAI Compatible* (the two ids differ only by where they
+point — see `providerType()` in `src/providers.js`). A row can be added, renamed,
+given a server URL and a key, and *Refresh List* asks that server what it serves.
+Saving writes the same `providers` array documented here, so a hand-written entry and
+a clicked one are the same thing.
+
+**The engine's own two providers can be removed, and put back (6 Nov).** They are
+`opencode` (OC Zen) and `opencode-go` (OC Go), registered by the engine itself — no
+key or URL of theirs is Synapse's to edit — and until 6 Nov their rows were read-only.
+The operator's argument was the pillar: the harness needs the engine, not its models,
+so nothing about those two should be a special case. The ✕ on an engine row adds its
+id to `engine.opencode.hiddenProviders`, and `api.models()` filters that provider's
+models out of what the page is offered. **Nothing is unregistered**: the engine keeps
+serving them, the catalog is still recorded in `data\model-cache.json`, and a role
+that already points at one of those models keeps working — its card says "hidden in
+Settings" instead of "not in the catalog". Add Provider lists the hidden ones and
+puts the row back. Empty (the default) offers everything the engine serves.
 
 **The address decides whether a provider is local, not the type it was saved
 as.** A custom runtime added as *OpenAI Compatible* with a `localhost`/`127.0.0.1`

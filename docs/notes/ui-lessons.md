@@ -2000,3 +2000,25 @@ has **at most one short visible line**, and only for the thing that would bite i
 it were missed — a restart, where keys are stored, what a limit does. A group
 heading can carry the rest in its own tooltip. "Running 2.2.5 from …" stays,
 because it is a fact, not an explanation.
+
+## A Settings page wears the footer (6 Nov)
+
+Every tab of the Settings window ends with the same four buttons — Cancel, Revert,
+Apply, Close — and one tab did not: **Check for Updates** hid them, because "the
+footer has nothing to save here". The operator's report was not about the buttons
+being useless; it was that the page *read as a different window*. A window that
+keeps its furniture everywhere except one room makes that room look like a
+screenshot.
+
+So the footer is on every tab, and on a page with nothing to save the buttons sit in
+their resting state: Cancel and Revert are disabled (there is nothing to throw
+away), Apply is disabled, and the primary says Close. About is the one exception,
+and it is a real one: it is a credits card with its own Close inside it, not a form.
+
+The cost was height, and it is worth knowing how it was paid. That footer is 46px,
+and the Updates page had been sized to the last pixel without it: the changelog is
+*open by default* whenever a release has notes, so the cards were 520px and the pane
+overflowed its body by 70px. The cap on the changelog went from `min(42vh, 420px)` to
+`min(26vh, 250px)`. Measured after: 376px cards, no overflow, the window 778 of the
+852 it may be. **When a page has a scroll box, measure the box, not the page** —
+`scrollHeight - clientHeight` is the number, and it was 70.

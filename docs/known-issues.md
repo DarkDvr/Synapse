@@ -33,7 +33,10 @@ labelling the wrong thing — or nothing.
 
 Where: `web/app.js`, `ENGINE_PROVIDERS` and `providerLabel`.
 Fix: the server knows its providers (`/api/providers`), so the label and the note
-could come from there. Not urgent while there is one engine.
+could come from there. Not urgent while there is one engine. (6 Nov: the two rows can
+now be removed and restored, which makes the page own a little more of that knowledge
+— it is also the list of ids `hiddenProviders` accepts — so this got slightly worse,
+not better.)
 
 ## A stopped run can still be reported as completed if the cut lands before its first token
 
