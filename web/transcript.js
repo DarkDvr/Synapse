@@ -11,7 +11,7 @@
 // and the compact post's metadata. Wired at boot; a missing one throws.
 import { state } from './state.js';
 import { $ } from './dom.js';
-import { esc, hhmm, toolTarget } from './format.js';
+import { esc, hhmm, toolTarget, fileChip, shortName } from './format.js';
 import { renderMarkdown } from './md.js';
 import { serverNow } from './api.js';
 import { permissionNote } from './ask-note.js';
@@ -170,26 +170,12 @@ export function renderMessage(m, tail = '') {
     // asked about a file, and a transcript that shows the sentence and hides the
     // file cannot be read later.
     const files = Array.isArray(m.files) ? m.files : [];
+    // One chip, drawn by the one function that draws chips (web/format.js), so a
+    // message, a model's answer and a steer cannot drift apart. A picture is a chip
+    // only when the bytes are still on the message: `attachmentImage` is the test.
     const chips = files.length
       ? `<span class="msg-files">${files
-          .map((f, index) => {
-            const name = esc(shortName(f.name));
-            const tag = fileTag(f.name, f.mime);
-            // A picture the operator attached is the same chip the models get:
-            // one line, and the bytes on hover. The bytes stay in the message's
-            // raw record — the chip carries the message and index, not a second
-            // copy of the base64. Any other file uses the chip without a hover.
-            const image = (/^image\//i.test(f.mime || '') || /\.(png|jpe?g|webp|gif)$/i.test(f.name || '')) &&
-              Boolean(attachmentImage(m, index));
-            if (image) {
-              return `<span class="chat-image" data-msg="${esc(m.id || '')}" data-file="${index}" data-alt="${esc(f.name)}" title="${name}">` +
-                `<span class="chat-image-tag" aria-hidden="true">${esc(tag)}</span>` +
-                `<span class="chat-image-name">${name}</span></span>`;
-            }
-            return `<span class="chat-image is-file" title="${esc(f.name)}">` +
-              `<span class="chat-image-tag" aria-hidden="true">${esc(tag)}</span>` +
-              `<span class="chat-image-name">${name}</span></span>`;
-          })
+          .map((f, index) => fileChip(f, { msgId: attachmentImage(m, index) ? m.id : '', index }))
           .join('')}</span>`
       : '';
     // A sent message can become a new one: this puts its words and attachments
@@ -435,16 +421,6 @@ export function compactPostHtml(post) {
 
 /** The tag a chip carries: the file's extension, not a generic word. PNG says
  *  more than IMG about what the operator is about to open. */
-export function fileTag(name, mime) {
-  const clean = String(name || '').split(/[?#]/)[0];
-  const dot = clean.lastIndexOf('.');
-  const ext = dot > 0 ? clean.slice(dot + 1).toLowerCase() : '';
-  if (ext) return ext === 'jpg' || ext === 'jpeg' ? 'JPEG' : ext.toUpperCase();
-  const sub = String(mime || '').split('/')[1] || '';
-  if (sub) return sub === 'jpeg' ? 'JPEG' : sub.toUpperCase();
-  return 'FILE';
-}
-
 /**
  * The bytes of one attached picture, when the message still carries them.
  *
@@ -479,8 +455,3 @@ export function attachmentImage(message, index) {
   return { mime, data };
 }
 
-/** A file name that fits a chip: the last 14 characters, with an ellipsis. */
-export function shortName(name) {
-  const s = String(name || '');
-  return s.length <= 14 ? s : `${s.slice(0, 13)}…`;
-}

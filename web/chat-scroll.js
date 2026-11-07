@@ -219,16 +219,17 @@ function pumpStream(now) {
   const dt = streamFrameAt ? (now - streamFrameAt) / 1000 : 1 / 60;
   streamFrameAt = now;
   const was = s.offset;
-  const offset = nextOffset(s, s.target || 0, dt, { reduced: reducedMotion });
-  // The slide is damped, so a fast model outruns it: the target grows faster than
-  // the spring arrives, and the newest lines sit below the panel's edge until it
-  // catches up — text the operator is watching arrive but cannot read. When the
-  // chat is following, the lag is capped at a sliver, so the last line is always
-  // readable and the easing only shows when the writing slows down.
-  const bounded = follow ? Math.max(offset, (s.target || 0) - STREAM_MAX_LAG) : offset;
-  if (bounded !== was) {
-    s.offset = bounded;
-    streamEl.body.style.transform = `translate3d(0, ${-bounded}px, 0)`;
+  const offset = nextOffset(s, s.target || 0, dt, {
+    reduced: reducedMotion,
+    // While the chat follows, the newest line may not sit more than a sliver below
+    // the edge. That cap is closed over frames by the slide itself, so a fast model
+    // reads as a steady scroll instead of a line landing and the panel jumping by
+    // that line (the stutter the operator heard as choppiness, 7 Nov).
+    maxLag: follow ? STREAM_MAX_LAG : 0,
+  });
+  if (offset !== was) {
+    s.offset = offset;
+    streamEl.body.style.transform = `translate3d(0, ${-offset}px, 0)`;
   }
   if (follow) {
     const scroller = chatScroller();

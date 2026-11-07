@@ -214,6 +214,16 @@ check('a {models:[]} answer is accepted too', lm.ok && lm.models[0].id === 'qwen
 check('a keyless server sends no Authorization', !calls[0].opts.headers.authorization);
 check('max_context_length is read as the window', lm.models[0].context === 262144, String(lm.models[0].context));
 
+// OpenRouter and OpenCode Zen put the window in `limit: { context, output }`, and
+// nowhere else. Miss it and a 1M model is read as whatever the engine's shipped
+// catalog remembers — measured 7 Nov on oc-go's deepseek-v4.1-flash: 1M at the
+// provider, 200k in the binary, so the Architect was budgeted 200k.
+const limited = await fetchProviderModels(
+  { baseURL: 'https://opencode.ai/zen/go/v1', apiKey: 'sk-secret-123456' },
+  { fetchImpl: stub(JSON.stringify({ data: [{ id: 'big', limit: { context: 1000000, output: 384000 } }] })) },
+);
+check('limit.context is read as the window', limited.models[0].context === 1000000, String(limited.models[0].context));
+
 const refused = await fetchProviderModels(
   { baseURL: 'https://api.example.com/v1', apiKey: 'sk-secret-123456' },
   { fetchImpl: stub(JSON.stringify({ error: { message: 'Authentication Fails (no such user)' } }), { ok: false, status: 401 }) },

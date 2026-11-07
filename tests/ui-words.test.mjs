@@ -11,6 +11,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { fileChip } from '../web/format.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
@@ -19,6 +20,7 @@ const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
 const ui = () =>
   [
     'web/app.js',
+    'web/format.js',
     'web/settings-panes.js',
     'web/settings-form.js',
     'web/ui-prefs.js',
@@ -105,9 +107,27 @@ test('the click that wakes the window cannot answer a fresh permission card', ()
   assert.match(js, /addEventListener\('focus', \(\) => \{ state\.focusAt = Date\.now\(\); \}\)/);
 });
 
+test('a file chip is one function, and its source says where the picture is', () => {
+  // A message's own bytes, a file in the project (a kept attachment, a steer's
+  // picture), or no picture at all — one chip, three sources (7 Nov).
+  const attached = fileChip({ name: 'shot.png', mime: 'image/png' }, { msgId: 'msg_1', index: 2 });
+  assert.match(attached, /class="chat-image" data-msg="msg_1" data-file="2"/);
+  const saved = fileChip({ name: 'shot.png', mime: 'image/png' }, { src: '.synapse/attachments/shot.png' });
+  assert.match(saved, /class="chat-image" data-src="\.synapse\/attachments\/shot\.png"/);
+  const plain = fileChip({ name: 'notes.txt', mime: 'text/plain' });
+  assert.match(plain, /class="chat-image is-file"/);
+  assert.match(plain, />TXT</, 'the tag is the extension');
+});
+
 test('an attached picture uses the same chip as a picture the model shows', () => {
   const js = ui();
+  // One chip function, three places it is drawn: a message, a model's answer and a
+  // steer's picture (7 Nov). The steer's bytes are a file in the project, so its
+  // chip names the path and `/api/image` reads it — the same chip, not a second one.
+  assert.match(js, /export function fileChip\(/);
   assert.match(js, /class="chat-image" data-msg=/);
+  assert.match(js, /class="chat-image" data-src=/);
+  assert.match(js, /fileChip\(f, \{ src: f\.path \}\)/, 'a steer shows its picture');
   assert.match(js, /function attachmentImage\(/);
   assert.match(js, /attachmentImage\(message, Number\(chip\.dataset\.file/);
 });

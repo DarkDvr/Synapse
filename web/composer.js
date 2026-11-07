@@ -8,14 +8,14 @@
 // Four things come from app.js and are wired at boot: reload the messages, refresh the
 // cards that are waiting, redraw the compact chip and the project rail.
 import { state } from './state.js';
-import { esc, fmtBytes } from './format.js';
+import { esc, fmtBytes, shortName } from './format.js';
 import { $ } from './dom.js';
 import { api } from './api.js';
 import { toast } from './toast.js';
 import { addChatError } from './chat-notes.js';
 import { chatScroller, animateScroll } from './chat-scroll.js';
 import { currentProject, currentRun, roleLabel, currentForm } from './run-view.js';
-import { renderTranscript, attachmentImage, shortName } from './transcript.js';
+import { renderTranscript, attachmentImage } from './transcript.js';
 
 const missing = (name) => () => {
   throw new Error(`composer.js: ${name} was not wired at boot`);
@@ -266,6 +266,10 @@ async function sendSteer(text, files, target) {
         type: 'user',
         text: `[steer] ${text}`,
         created: Date.now(),
+        // The picture is part of the sentence here too: the chip is drawn from the
+        // same files the send carried, so a steer reads exactly like a message.
+        files: files.map((f) => ({ name: f.name, mime: f.mime })),
+        _files: files.map((f) => ({ name: f.name, mime: f.mime, data: f.data })),
       });
       renderTranscript();
       scrollChatToEnd();

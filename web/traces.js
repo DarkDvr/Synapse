@@ -12,7 +12,7 @@
 // has to be re-rendered where it stands. Wired at boot.
 import { state } from './state.js';
 import { EV } from './events.js';
-import { esc, shortSpan } from './format.js';
+import { esc, shortSpan, fileChip } from './format.js';
 import { fmtTokens, dirKey, roleLabel } from './run-view.js';
 
 const missing = (name) => () => {
@@ -68,7 +68,13 @@ export function renderTrace(t) {
     // and the sentence can be centred against each other and the sentence wraps
     // instead of being cut with the steps.
     if (steer) {
-      return `<div class="trace-line is-steer"><span class="msg-steer">STEER:</span><span class="trace-steer-text">${esc(text)}</span></div>`;
+      // A steer that carried a file shows it the way the chat shows any attachment:
+      // the same chip, the same picture on hover. The bytes are in the project
+      // (`.synapse/attachments/`), because a worker's own session is not the chat
+      // and its message is the one place the operator cannot see.
+      const files = Array.isArray(n?.files) ? n.files : [];
+      const chips = files.map((f) => fileChip(f, { src: f.path })).join('');
+      return `<div class="trace-line is-steer"><span class="msg-steer">STEER:</span><span class="trace-steer-text">${esc(text)}</span>${chips}</div>`;
     }
     return `<div class="trace-line">${esc(text)}</div>`;
   };
@@ -159,9 +165,14 @@ export function tracesFor(dir) {
 
 export const traceKeyOf = (run) => `${dirKey(run.dir)}|${run.task}|${Number(run.startedAt) || 0}`;
 // A steer is a note on the run, and it must survive a reload: `/api/runs` carries
-// the list, so a page opened mid-run can rebuild the yellow STEER lines.
+// the list, so a page opened mid-run can rebuild the yellow STEER lines — with the
+// picture that came with them, which the runner saved in the project.
 export const steerNotes = (run) =>
-  (Array.isArray(run?.steers) ? run.steers : []).map((s) => ({ steer: true, text: s.text }));
+  (Array.isArray(run?.steers) ? run.steers : []).map((s) => ({
+    steer: true,
+    text: s.text,
+    ...(Array.isArray(s.files) && s.files.length ? { files: s.files } : {}),
+  }));
 export function traceOf(run) {
   return run ? state.traces.get(traceKeyOf(run)) || null : null;
 }

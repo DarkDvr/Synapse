@@ -1461,6 +1461,9 @@ body[data-mode="single"] #runAuto { display: none; }
 }
 .trace-line.is-steer .msg-steer { flex: none; margin-right: 0; }
 .trace-steer-text { min-width: 0; overflow-wrap: anywhere; }
+/* The picture a steer carried is the chat's chip, on the steer's own line: it does
+   not shrink with the sentence, and it keeps its own height. */
+.trace-line.is-steer .chat-image { flex: none; }
 /* A compaction is the one line in a worker's trace that is not a step: it explains
    why the next step is slower and why the window is empty again, so it is amber,
    pinned above the four-line tail, and never trimmed away with the steps. A loop

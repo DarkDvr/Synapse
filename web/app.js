@@ -11,7 +11,7 @@
 import { renderMarkdown } from './md.js';
 import { EV, turnEnded, shortEvent } from './events.js';
 import { state } from './state.js';
-import { esc, relTime, hhmm, hhmmss, toolTarget, versionTag, shortSpan, fmtBytes, samePath, ago } from './format.js';
+import { esc, relTime, hhmm, hhmmss, toolTarget, versionTag, shortSpan, fmtBytes, samePath, ago, shortName } from './format.js';
 import { loadPlan, renderPlan, updatePlanOverflow, planPaneWiring } from './plan-pane.js';
 import {
   loadProjects,
@@ -109,7 +109,6 @@ import {
   renderTranscript,
   toggleTool,
   attachmentImage,
-  shortName,
   transcriptWiring,
 } from './transcript.js';
 import { toast } from './toast.js';

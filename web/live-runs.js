@@ -500,7 +500,13 @@ export function handleRunEvent(ev) {
         if (at >= 0) trace.notes.splice(at, 1);
         toast('Steer Not Delivered', ev.error || 'The worker never took it.');
       } else {
-        trace.notes.push({ steer: true, text: line });
+        // The picture rides the line: the runner saved it in the project, so the
+        // chip names the file and the same hover that shows any attachment shows it.
+        trace.notes.push({
+          steer: true,
+          text: line,
+          ...(Array.isArray(ev.files) && ev.files.length ? { files: ev.files } : {}),
+        });
         if (trace.notes.length > 60) trace.notes.splice(0, trace.notes.length - 60);
       }
       renderTranscript();

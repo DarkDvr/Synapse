@@ -26,6 +26,28 @@ const DAMPING = 18; // resistance, 1/s
 const SUB_STEP = 0.008; // s; the integrator never takes a longer step than this
 const SNAP_PX = 0.35; // closer than this, and slow, is arrived
 const SNAP_V = 6; // px/s
+// How long the slide takes to believe that the writing changed speed. A line
+// landing is a step, not a speed: eased, it becomes an acceleration over a third of
+// a second instead of a jump. This is the whole of "smooth when the model is fast",
+// and it is deliberately slower than a frame: one chunk of text must not look like
+// a change of pace.
+const SPEED_EASE = 0.35; // s
+// The fastest the text may travel, whatever the model does: about a line every
+// 12ms, which is faster than any model writes. Past this the newest lines are
+// unreadable anyway, and a burst of text would be thrown at the panel as a jump.
+const MAX_SPEED = 1400; // px/s
+// How quickly a lagging slide may close a gap: at least a line every 70ms, and at
+// most a line every 19ms. A cap that is jumped to in one frame is the stutter this
+// replaces; a cap that is never reached is a line sitting out of sight.
+const CATCH_UP_MIN = 240; // px/s
+const CATCH_UP_MAX = 900; // px/s
+// How close the slide must be for the writing's speed to be fed forward, in px:
+// about four lines. Inside it the slide tracks the writing; outside it is catching
+// up, and a catch-up is the spring's job, not the writing's speed.
+const FEED_RANGE = 64; // px
+// The fastest a single frame may report as a speed, in px/s: about two lines at
+// 60fps. Above it the text arrived in a chunk, which is not a pace.
+const MAX_STEP_SPEED = 2000; // px/s
 
 /** A fresh block: nothing written, nothing scrolled. */
 export function newStream(kind) {
@@ -41,6 +63,10 @@ export function newStream(kind) {
     // screen. The next block starts a fresh stream.
     ended: false,
     offset: 0, velocity: 0, dirty: false, settled: true,
+    // Where the target was last frame, and how fast it is moving, in px/s. The
+    // speed is eased and fed forward into the spring, so a model writing steadily
+    // is tracked instead of dragged behind.
+    goal: 0, goalSpeed: 0,
   };
 }
 
@@ -106,22 +132,65 @@ export function slideTarget(contentHeight, viewHeight) {
  *
  * Returns the offset; `s.offset`, `s.velocity` and `s.settled` are updated.
  */
-export function nextOffset(s, target, dt, { reduced = false } = {}) {
+export function nextOffset(s, target, dt, { reduced = false, maxLag = 0 } = {}) {
   const goal = Math.max(0, Number(target) || 0);
   if (reduced) {
     s.offset = goal;
     s.velocity = 0;
+    s.goal = goal;
+    s.goalSpeed = 0;
     s.settled = true;
     return s.offset;
   }
   // A tab that was hidden comes back with seconds of debt. Never integrate it: the
   // slide is a look, not a simulation, and arriving is the honest answer.
   const left = Math.min(0.25, Math.max(0, Number(dt) || 0));
+  // The speed the writing is moving the target at, eased, fed forward into the
+  // spring. Without it a spring sits a fixed distance behind a moving target
+  // (velocity × damping ÷ stiffness) and that lag is what a fast model turns into
+  // a stutter: every line arrives late, all at once.
+  const before = Number(s.goal) || 0;
+  s.goal = goal;
+  // One frame cannot report a speed faster than this: anything above it is a chunk
+  // of text arriving at once, not the pace the writing is moving at. Without the
+  // cap a burst (or a tab that was hidden for twelve seconds) reads as a model
+  // writing at thousands of pixels a second, and the slide is thrown at the wall.
+  const raw = left > 0 ? Math.max(-MAX_STEP_SPEED, Math.min(MAX_STEP_SPEED, (goal - before) / left)) : 0;
+  const eased = Number(s.goalSpeed) || 0;
+  s.goalSpeed = Math.max(
+    -MAX_SPEED,
+    Math.min(MAX_SPEED, eased + (raw - eased) * (1 - Math.exp(-left / SPEED_EASE))),
+  );
+  const startOffset = s.offset;
+  // Fed forward into the spring: it cancels the lag a moving target always leaves
+  // behind (velocity × damping ÷ stiffness). Eased over a third of a second, so a
+  // chunk of text that lands at once is not mistaken for a change of pace.
+  const feed = s.goalSpeed;
   for (let t = left; t > 0; t -= SUB_STEP) {
     const h = Math.min(SUB_STEP, t);
-    const accel = (goal - s.offset) * STIFFNESS - s.velocity * DAMPING;
+    const accel = (goal - s.offset) * STIFFNESS - (s.velocity - feed) * DAMPING;
     s.velocity += accel * h;
     s.offset += s.velocity * h;
+  }
+  // How far behind the newest line may sit while the chat is following. Closed
+  // over frames, not in one: jumping to the cap was the visible stutter whenever
+  // the model was fastest, because the cap moved a whole line the moment the text
+  // did. The frame's whole movement is capped, spring included — adding a catch-up
+  // on top of the spring is how a burst moved two lines in one frame.
+  if (maxLag > 0 && s.offset < goal - maxLag) {
+    const rate = Math.min(CATCH_UP_MAX, Math.max(CATCH_UP_MIN, Math.abs(s.goalSpeed)));
+    const room = Math.max(0, rate * left - (s.offset - startOffset));
+    const step = Math.min(goal - maxLag - s.offset, room);
+    if (step > 0) {
+      s.offset += step;
+      s.velocity = Math.max(s.velocity, (s.offset - startOffset) / Math.max(left, 1e-3));
+    }
+  }
+  // Never past the last line: the spring leads a target that is still moving, and
+  // an offset ahead of it would show blank space under the newest words.
+  if (s.offset > goal) {
+    s.offset = goal;
+    s.velocity = Math.min(s.velocity, 0);
   }
   if (Math.abs(goal - s.offset) < SNAP_PX && Math.abs(s.velocity) < SNAP_V) {
     s.offset = goal;

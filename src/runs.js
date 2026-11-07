@@ -3583,7 +3583,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
    * Refused while the worker is between attempts: a steer admitted during a
    * provider backoff would start a turn of its own and race the retry.
    */
-  async function steer(dir, { text, files, actor } = {}) {
+  async function steer(dir, { text, files, saved, actor } = {}) {
     const key = normDir(dir);
     const live = running.get(key);
     if (!live) return { ok: false, reason: 'Nothing is running in this project.' };
@@ -3594,7 +3594,15 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     const said = String(text || '').trim();
     if (!said) return { ok: false, reason: 'The steer is empty.' };
     const at = Date.now();
-    const entry = { at, by: actor?.name || null, text: said.slice(0, 1200) };
+    // The saved copies, not the base64: the run card and the project record point at
+    // `.synapse/attachments/`, and a steer is small enough that the bytes belong in
+    // the project rather than in every `/api/runs` answer.
+    const entry = {
+      at,
+      by: actor?.name || null,
+      text: said.slice(0, 1200),
+      ...(Array.isArray(saved) && saved.length ? { files: saved } : {}),
+    };
     // On screen at once. `delivery: "steer"` does not come back until the worker
     // reads it at its next step — minutes on a long tool call — so waiting for the
     // engine made the operator's sentence appear long after they pressed the

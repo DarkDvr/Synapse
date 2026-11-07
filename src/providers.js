@@ -103,6 +103,18 @@ function contextFrom(m, { loadedOnly = false } = {}) {
   };
   const top = pick(m);
   if (top) return top;
+  // OpenRouter and OpenCode Zen describe the window as `limit: { context, output }`,
+  // and it is the only place they say it. Miss it and a 1M model is read as
+  // whatever the engine's shipped catalog remembers — measured 7 Nov: oc-go's
+  // `deepseek-v4.1-flash` is 1M at the provider and 200k in the binary, so the
+  // Architect was budgeted 200k while the model it was talking to had 1M.
+  //
+  // Not in `loadedOnly`: that probe asks what a local server has *reserved*, and
+  // this key is a ceiling.
+  if (!loadedOnly && m.limit && typeof m.limit === 'object') {
+    const n = Number.parseInt(m.limit.context, 10);
+    if (Number.isFinite(n) && n > 0) return n;
+  }
   for (const nested of [m.meta, m.status, m.default_generation_settings]) {
     if (!nested || typeof nested !== 'object') continue;
     const n = pick(nested);

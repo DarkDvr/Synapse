@@ -1747,7 +1747,14 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
       stopper.clear(directory);
       runs?.resume?.(directory);
       if (busy.kind === 'run') {
-        const result = await runs?.steer?.(directory, { text, files: attachments, actor });
+        // The worker's session is not the chat, so the run card is the only place
+        // the operator's picture can be seen after they send it. The bytes go into
+        // the project — the folder "Keep" already uses — and the card reads them
+        // from there; the engine gets the bytes on the prompt as before.
+        const saved = attachments.length
+          ? keepAttachments(directory, attachments.map((f) => ({ ...f, keep: true })))
+          : [];
+        const result = await runs?.steer?.(directory, { text, files: attachments, saved, actor });
         if (!result?.ok) {
           const err = new Error(result?.reason || 'the worker could not be reached');
           err.status = 409;

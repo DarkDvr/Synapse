@@ -87,6 +87,55 @@ export const normDir = (value) =>
 /** Are these the same folder, however each was spelled? */
 export const samePath = (a, b) => normDir(a) === normDir(b);
 
+/** The tag a chip carries: the file's extension, not a generic word. PNG says
+ *  more than IMG about what the operator is about to open. */
+export function fileTag(name, mime) {
+  const clean = String(name || '').split(/[?#]/)[0];
+  const dot = clean.lastIndexOf('.');
+  const ext = dot > 0 ? clean.slice(dot + 1).toLowerCase() : '';
+  if (ext) return ext === 'jpg' || ext === 'jpeg' ? 'JPEG' : ext.toUpperCase();
+  const sub = String(mime || '').split('/')[1] || '';
+  if (sub) return sub === 'jpeg' ? 'JPEG' : sub.toUpperCase();
+  return 'FILE';
+}
+
+/** A file name that fits a chip: the last 14 characters, with an ellipsis. */
+export function shortName(name) {
+  const s = String(name || '');
+  return s.length <= 14 ? s : `${s.slice(0, 13)}…`;
+}
+
+/**
+ * One attachment, drawn the one way Synapse draws attachments.
+ *
+ * This is the chat's chip — the tag, the short name, the picture on hover — and it
+ * is here so that every place an attachment can appear uses the same one: a
+ * message, a model's answer, and the operator's steer to a worker (7 Nov). A
+ * picture is a chip only when there is something behind it: `msgId` reads the
+ * bytes off a message's own record, `src` a file in the project.
+ */
+export function fileChip(file, { src = '', msgId = '', index = 0 } = {}) {
+  const f = file || {};
+  const tag = fileTag(f.name, f.mime);
+  const name = esc(shortName(f.name));
+  const alt = esc(f.name || '');
+  const inner =
+    `<span class="chat-image-tag" aria-hidden="true">${esc(tag)}</span>` +
+    `<span class="chat-image-name">${name}</span>`;
+  const image = /^image\//i.test(f.mime || '') || /\.(png|jpe?g|webp|gif)$/i.test(f.name || '');
+  if (image && msgId) {
+    // The bytes are on the message's own record: the chip carries the message and
+    // the file's index, not a second copy of the base64.
+    return `<span class="chat-image" data-msg="${esc(msgId)}" data-file="${Number(index) || 0}" data-alt="${alt}" title="${name}">${inner}</span>`;
+  }
+  if (image && src) {
+    // The bytes are a file in the project — a kept attachment, a steer's picture —
+    // and `/api/image` reads it. Same chip, different place to look.
+    return `<span class="chat-image" data-src="${esc(src)}" data-alt="${alt}" title="${name}">${inner}</span>`;
+  }
+  return `<span class="chat-image is-file" title="${alt}">${inner}</span>`;
+}
+
 /** "3m ago", "just now": how long ago something happened, in the operator's words.
  *  Shared by the plan pane, the updates card and the status line. */
 export function ago(ms) {
