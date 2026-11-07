@@ -1085,10 +1085,11 @@ function connectStream() {
       state.desk = ev.desk || null;
       renderDesk();
       if (ev.type === 'desk.released') {
+        // No chime. It used to play one here as a "you can come back" signal, and
+        // the operator heard it mid-run and read it as the job being finished (7 Nov)
+        // — the same sound, two meanings. The chime is the finish and nothing else;
+        // the toast already says the screen is free.
         toast('Screen Released', 'The AI is not using your mouse or keyboard any more.');
-        // A chime is the "you can come back" signal — unless they took it back
-        // themselves, which needs no announcement: they were right there.
-        if (String(ev.why || '') !== 'the operator took it back') playDoneSound();
       }
       return;
     }
