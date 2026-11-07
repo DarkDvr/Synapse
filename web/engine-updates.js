@@ -57,24 +57,13 @@ export function renderUpdateChip() {
   }
 }
 
-export function openUpdateDialog() {
-  $('updateModal').hidden = false;
-  state.updateLog = [];
-  renderUpdateDialog();
-  // Opening the dialog is the operator asking: both feeds may be checked now,
-  // the GitHub release and npm. Boot checks only the release, cached.
-  checkUpdates();
-}
-
-export function closeUpdateDialog() {
-  // A click-away must not hide the one operation that restarts the engine, and
-  // Escape must not either: an update in flight keeps the dialog.
-  if (state.updateBusy) return;
-  $('updateModal').hidden = true;
-}
-
-/** The sentence above the two update cards. Shared by the chip's popup and the
- *  Settings page so the two cannot describe the same state differently. */
+/**
+ * The sentence above the two update cards.
+ *
+ * One surface draws it: Settings > Check for Updates. The chip used to open a popup
+ * of its own with the same two cards, which meant two places to keep in step for a
+ * screen the operator reaches through Settings anyway (7 Nov).
+ */
 export function updateSubText() {
   const e = state.update || {};
   const s = state.synapseUpdate || {};
@@ -146,30 +135,9 @@ export function updateBodyHtml() {
   );
 }
 
-/** The chip's popup. The Settings page reuses updateBodyHtml and adds its own
- *  Check Again; only this surface has a footer. */
-export function renderUpdateDialog() {
-  const body = $('updateBody');
-  if (!body) return;
-  const sub = $('updateSub');
-  if (sub) sub.textContent = updateSubText();
-  body.innerHTML = updateBodyHtml();
-
-  const check = $('checkUpdate');
-  if (check) {
-    check.disabled = Boolean(state.updateBusy) || updateChecking;
-    check.textContent = updateChecking ? 'Checking…' : 'Check Again';
-  }
-  const close = $('closeUpdate');
-  const closeFoot = $('closeUpdateFoot');
-  for (const el of [close, closeFoot]) if (el) el.disabled = Boolean(state.updateBusy);
-  renderUpdateConsole();
-}
-
-/** Repaint every surface that shows update state: the popup when it is open,
- *  and the Settings Updates page when that is the visible tab. */
+/** Repaint the one surface that shows update state: Settings > Check for Updates,
+ *  when that is the visible tab. */
 export function renderUpdateViews() {
-  if (!$('updateModal').hidden) renderUpdateDialog();
   if (!$('settingsModal').hidden && state.settingsTab === 'updates') {
     renderSettings({ scrollTop: $('settingsBody')?.scrollTop || 0 });
   }

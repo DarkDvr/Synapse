@@ -222,8 +222,6 @@ import { renderStatus, renderLastEventAge, renderLlmStatus, refreshStatus } from
 import {
   refreshUpdates,
   renderUpdateChip,
-  openUpdateDialog,
-  closeUpdateDialog,
   updateSubText,
   updateBodyHtml,
   renderUpdateViews,
@@ -1818,16 +1816,13 @@ document.addEventListener('keydown', (e) => {
     if (literal && !state.setKeyRevealed) renderSettings();
   });
 
-  // The engine's own version: the chip, its dialog, and the two buttons.
-  $('updateChip').addEventListener('click', openUpdateDialog);
-  $('closeUpdate').addEventListener('click', closeUpdateDialog);
-  $('closeUpdateFoot').addEventListener('click', closeUpdateDialog);
-  $('checkUpdate').addEventListener('click', checkUpdates);
-  $('updateBody').addEventListener('click', (e) => {
-    const btn = e.target.closest('[data-update]');
-    if (!btn || btn.disabled) return;
-    if (btn.dataset.update === 'engine') applyEngineUpdate();
-    if (btn.dataset.update === 'synapse') applySynapseUpdate();
+  // The engine's own version. The chip opens Settings > Check for Updates, which is
+  // the one page that shows both feeds and the console: it used to open a popup with
+  // the same two cards, a second surface to keep in step for a screen that already
+  // exists (7 Nov).
+  $('updateChip').addEventListener('click', () => {
+    state.settingsTab = 'updates';
+    openSettings();
   });
 
   // The two reference tables open from the rail's foot. They are rendered on
@@ -2089,7 +2084,6 @@ document.addEventListener('keydown', (e) => {
       else e.preventDefault();
     }
     else if (!$('errorModal').hidden) closeError();
-    else if (!$('updateModal').hidden) closeUpdateDialog();
     else if (!$('settingsModal').hidden) closeSettings();
   });
 
