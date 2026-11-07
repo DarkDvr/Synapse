@@ -179,9 +179,9 @@ export async function fetchProviderModels({ baseURL, apiKey, format, type } = {}
         const windows = await probeLoadedWindows(root, fetchImpl, timeoutMs);
         if (windows.size) {
           for (const m of models) {
-            // `*` is the single loaded model a /props server reports; it applies to
-            // any id, because that server can only have the one loaded.
-            const known = windows.get(m.id) || windows.get('*') || 0;
+            // `*` is the single loaded model a /props server reports; loadedFor
+            // decides whether it can be about *this* id (see its comment).
+            const known = loadedFor(windows, String(m.id || '').trim(), models.length);
             if (known) m.context = known;
             else delete m.context;
           }
@@ -264,9 +264,12 @@ async function probeLoadedWindows(root, fetchImpl, timeoutMs) {
   if (Number.isFinite(ctx) && ctx > 0) {
     if (alias) windows.set(alias, ctx);
     // A /props server has loaded exactly one model and has told us its window.
-    // Recorded under `*` as well, so a model whose id differs from the alias still
-    // gets the right number rather than none.
+    // Recorded under `*` as well, for the case where it did not name the model.
+    // `alias` rides along on the map so a caller can tell "this is the model the
+    // server has" from "this is some other id in the same list" — the difference
+    // that matters at the call sites, and the bug when it is ignored (6 Nov).
     windows.set('*', ctx);
+    windows.alias = alias;
   }
   if (windows.size) return windows;
 
@@ -279,6 +282,29 @@ async function probeLoadedWindows(root, fetchImpl, timeoutMs) {
     if (id && n > 0) windows.set(id, n);
   }
   return windows;
+}
+
+/**
+ * The window this provider has loaded for one of its models, or 0.
+ *
+ * `*` is a fact about the single model a /props server has loaded. It may stand in
+ * for that model when the server did not name it (and the provider offers one
+ * model, so there is nothing else it could be about), or when the id *is* the name
+ * it gave. It may never stand in for a different id in the same list: applied to
+ * all four PolyStrata rows it stamped the loaded 126k onto the 200k model, the
+ * corner read "150K/127K ctx" and every run on that model budgeted and compacted
+ * for a window it did not have (6 Nov).
+ */
+function loadedFor(windows, id, count) {
+  const exact = windows.get(id);
+  if (exact) return exact;
+  // One model in the list: the server's loaded model *is* that model, whatever it
+  // calls it, so `*` is the right answer.
+  if (count <= 1) return windows.get('*') || 0;
+  // Several: `*` is a fact about the one the server named, and it is already in the
+  // map under that name. Any other id is a different model whose loaded window
+  // nobody has measured — and guessing it is the bug.
+  return 0;
 }
 
 /**
@@ -303,11 +329,14 @@ export async function providerLoadedWindows({ baseURL } = {}, { fetchImpl = fetc
  * context in LM Studio to 16k while Synapse still believed the 39k in its config,
  * and a 17.7k request was refused by the server mid-task.
  */
-export async function providerLoadedWindow({ baseURL, model }, opts = {}) {
+export async function providerLoadedWindow({ baseURL, model, models = 1 }, opts = {}) {
   const windows = await providerLoadedWindows({ baseURL }, opts);
   const wanted = String(model || '').trim();
-  // `*` is the one model a /props server has loaded, whichever name it gives it.
-  return windows.get(wanted) || windows.get('*') || 0;
+  // `models` is how many the provider offers. A caller that does not know says 1,
+  // which keeps the lenient answer: a server with one model can only have that one
+  // loaded, whatever it calls it. A caller that knows there are several gets the
+  // strict one — the window belongs to the model the server named (see loadedFor).
+  return loadedFor(windows, wanted, Number(models) || 1);
 }
 
 /**
@@ -354,7 +383,7 @@ export async function measureLocalWindows(config, { fetchImpl = fetch, timeoutMs
     const windows = await providerLoadedWindows(p, { fetchImpl, timeoutMs });
     if (!windows.size) continue;
     for (const m of Array.isArray(p.models) ? p.models : []) {
-      const loaded = windows.get(String(m.id || '').trim()) || windows.get('*') || 0;
+      const loaded = loadedFor(windows, String(m.id || '').trim(), (p.models || []).length);
       if (!loaded) continue;
       const from = Number(m.context) || 0;
       if (from === loaded) continue;

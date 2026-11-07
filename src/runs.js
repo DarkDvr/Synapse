@@ -2712,7 +2712,14 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     if (!providerId || !modelId) return;
     const provider = (getConfig()?.engine?.opencode?.providers || []).find((p) => p.id === providerId);
     if (!provider || providerType(provider) !== 'local') return;
-    const loaded = await providerLoadedWindow({ baseURL: provider.baseURL, model: modelId }).catch(() => 0);
+    const loaded = await providerLoadedWindow({
+      baseURL: provider.baseURL,
+      model: modelId,
+      // The list is what makes the answer honest: with several models behind one
+      // server, the window it reports belongs to the one it loaded, and this run is
+      // about a different one (6 Nov).
+      models: (provider.models || []).length,
+    }).catch(() => 0);
     if (!loaded) return;
     loadedWindows.set(ref, loaded);
     // The same lookup as contextWindow: the operator's `modelLimits` may use the

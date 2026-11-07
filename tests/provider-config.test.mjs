@@ -401,6 +401,14 @@ const notFound = { ok: false, status: 404, text: async () => 'Not Found' };
     { fetchImpl: async (url) => (url.endsWith('/props') ? strataProps : notFound) },
   );
   check('an id that differs from the alias still gets the window', aliased === 131072, String(aliased));
+
+  // …unless the caller says the provider offers several models. Then that server's
+  // one loaded model is a different model, and its window is not this one's.
+  const strict = await providerLoadedWindow(
+    { baseURL: 'http://127.0.0.1:8080/v1', model: 'some-other-id', models: 4 },
+    { fetchImpl: async (url) => (url.endsWith('/props') ? strataProps : notFound) },
+  );
+  check('but a different model among several gets none of it', strict === 0, String(strict));
 }
 
 // meta.n_ctx on /v1/models is the third shape, and the list carries it too.
@@ -467,6 +475,45 @@ const notFound = { ok: false, status: 404, text: async () => 'Not Found' };
   const changes = await measureLocalWindows(cfg, { fetchImpl: async (url) => (url.endsWith('/props') ? strataProps : notFound) });
   check('a llama.cpp provider is measured at boot', changes.length === 1 && changes[0].to === 131072, JSON.stringify(changes));
   check('and the number lands on the model', cfg.engine.opencode.providers[0].models[0].context === 131072);
+}
+
+// Several models behind one /props server: the window it reports belongs to the one
+// model it named, not to the whole list. Applied to every row it stamped the loaded
+// 126k onto the 200k model, the corner read "150K/127K ctx", and every run on that
+// model budgeted and compacted for a window it did not have (6 Nov).
+{
+  const cfg = {
+    engine: {
+      opencode: {
+        providers: [
+          {
+            id: 'strata',
+            type: 'llamacpp',
+            baseURL: 'http://127.0.0.1:8080/v1',
+            models: [
+              { id: 'qwen3.8-flash-next-iq2_xs', context: 99000 },
+              { id: 'tiel-coder-35b-131k', context: 131072 },
+              { id: 'tiel-coder-35b-200k', context: 204800 },
+            ],
+          },
+        ],
+      },
+    },
+  };
+  const changes = await measureLocalWindows(cfg, {
+    fetchImpl: async (url) => (url.endsWith('/props') ? strataProps : notFound),
+  });
+  const models = cfg.engine.opencode.providers[0].models;
+  check(
+    'a /props server measures the model it named',
+    models[0].context === 131072 && changes.length === 1 && changes[0].ref === 'strata/qwen3.8-flash-next-iq2_xs',
+    JSON.stringify({ changes, contexts: models.map((m) => m.context) }),
+  );
+  check(
+    'and leaves the models it did not load alone',
+    models[1].context === 131072 && models[2].context === 204800,
+    JSON.stringify(models.map((m) => m.context)),
+  );
 }
 
 calls.length = 0;

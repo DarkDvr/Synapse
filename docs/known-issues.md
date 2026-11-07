@@ -59,38 +59,26 @@ Fix: measure the row and set one height for both buttons; give inline `code` a
 `vertical-align` that matches its line box. Do it as its own change with a screenshot
 before and after, not inside a refactor.
 
-## The window does not refresh when the model is switched (6 Nov)
+## The corner cannot refresh a window until the engine restarts (6 Nov)
 
-Switching a role's model from one local model to another — 126k to 200k — leaves the
-old window in place: the card's "Nk/Mk ctx" corner and the point where the watchdog
-compacts keep the first model's number until Synapse restarts.
+The stamping that caused this is fixed (7 Nov): `measureLocalWindows` and the per-run
+`noteLoadedWindow` now apply a `/props` server's window only to the model it named, so
+one load no longer overwrites every model in the provider. What is left is smaller and
+is a property of the engine, not a bug in it: the catalog's `context` is fixed when the
+engine starts, and there is no route to change one model's window mid-life. So the
+card's "Nk/Mk ctx" corner still shows the number the engine was started with, and a
+model whose context was corrected during a run shows the new number only after a
+restart — which `noteLoadedWindow` already warns about in the log.
 
-**Found the cause while filing this, in the config itself.** All four polystrata
-models carry the same window — `126976` — including the two whose names say 200k:
+One consequence worth knowing: the four polystrata rows in the config still say
+`126976` from the old stamping, and nothing can measure them while that server is
+down. Each one corrects itself the first time it is loaded and a run starts on it,
+because `noteLoadedWindow` writes the measured number back.
 
-```
-qwen3.8-flash-next-IQ2_XS-GSQ-126k   ctx=126976
-qwen3.8-flash-next-IQ2_XS-GSQ-200k   ctx=126976
-tiel-coder-35b-a3b-Q5_K_XL-131k      ctx=126976
-tiel-coder-35b-a3b-Q5_K_XL-200k      ctx=126976
-```
-
-The mechanism is the `*` fallback in `probeLoadedWindows`/`measureLocalWindows`
-(`src/providers.js`). A llama.cpp-family server answers `/props` for the **one** model
-it has loaded, and that window is recorded under `*` as well as under its own id "so a
-model whose id differs from the alias still gets the right number". `measureLocalWindows`
-then writes `windows.get(id) || windows.get('*')` into **every** model of that provider,
-so whichever model happened to be loaded stamps its window onto all of them. Load the
-126k model once, and the 200k one is now 126k forever.
-
-Shows, live: the Architect's corner read `150K/127K ctx` after the switch — a prompt
-larger than the "limit" — and a run budgets and compacts for 126k on a 200k model.
-
-Where: `src/providers.js` (`measureLocalWindows`, `probeLoadedWindows`),
-`src/runs.js` (`contextWindow`, `noteLoadedWindow`), `web/rate-view.js` (the corner).
-Fix: apply the `*` window only to the model the server says it has loaded (its
-`model_alias`), never to ids that differ; and re-measure the selected model when the
-model changes rather than only at boot. The `*` entry is the bug, not the symptom.
+Where: `web/rate-view.js` (the corner reads the engine's catalog), `src/index.js`
+(what the engine is told at boot).
+Fix: either accept the restart as the boundary, or give the engine a route that
+changes a model's window without one. Not worth either while a restart is a click.
 
 ## OC provider fixes — details to come (6 Nov)
 
