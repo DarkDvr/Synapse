@@ -8,27 +8,6 @@ Newest first. When one is fixed, delete it here and say so in the commit.
 
 ---
 
-## The window is measured at boot, but the server swaps its loaded model on demand — 7 Nov
-
-PolyStrata loads a 126k model at boot and keeps it. When Synapse asks for a 200k
-model it unloads the 126k one and loads the 200k one — the swap happens on the
-request, not before it. So the window Synapse knows is only true for the model the
-server happened to have loaded when it was measured. Today the per-model list covers
-the usual case (each model's `meta.n_ctx` is declared, so all four read correctly),
-and `/props` still answers for whichever model is loaded; what is missing is asking
-*again* when the model in use changes, so a swap that changes the number is seen
-rather than assumed.
-
-Where: `src/providers.js` (`probeLoadedWindows` — `/props` should override the list's
-entry for the model it names, since the loaded window is the real one), `src/api.js`
-(`switchModel` — measure the provider after a switch), `web/rate-view.js` (the corner
-reads the engine's catalog, which is fixed at engine start).
-Fix: ask on switch and on each run start (the run start already does), write the
-answer into the config, and let the page read the config rather than the catalog for
-the corner. Then a swap is one measurement away from being displayed, not a restart.
-
----
-
 ## The screen badge may stay on screen after the desk is released — 7 Nov
 
 Seen once, while checking the page after a refactor move: the desk badge read "Screen
@@ -45,27 +24,6 @@ read and the `desk.*` events), and `src/desk.js` on the server.
 Fix: when it happens again, read `/api/desk` at the same moment and compare. If the
 server says null the page is the bug (a missing clear); if the server says held, the
 server is (a lease that was never released).
-
-## A window reloaded mid-session shows only after a restart (6 Nov, narrowed 7 Nov)
-
-The two causes are fixed. `measureLocalWindows` and `noteLoadedWindow` no longer apply
-a `/props` server's window to every model in the provider, and the probe now asks the
-server's own list — which carries `meta.n_ctx` per model — before `/props`, which only
-ever knows the one model it has loaded. The operator's four PolyStrata rows measured
-126976 / 204800 / 131072 / 204800 from the server itself, and the picker and the
-card's corner read them correctly.
-
-What is left is a property of the engine, not a bug in it: the catalog's `context` is
-fixed when the engine starts and there is no route to change one model's window
-mid-life. So if a model is *reloaded in its own app* with a different context while
-Synapse runs, the next run measures it and writes the config, but the page keeps
-showing the number the engine was started with until a restart — which
-`noteLoadedWindow` warns about in the log.
-
-Where: `web/rate-view.js` (the corner reads the engine's catalog), `src/index.js`
-(what the engine is told at boot).
-Fix: accept the restart as the boundary, or give the engine a route that changes a
-model's window without one. Not worth either while a restart is a click.
 
 ## OC provider fixes — details to come (6 Nov)
 

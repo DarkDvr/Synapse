@@ -54,7 +54,7 @@ import { AUTOMATION_DEFAULTS, readAutomation } from './automation.js';
 import { keepBuildingDelayMs } from './auto-answer.js';
 import { sweepProject, sweepScratch } from './cleanup.js';
 import { classifyFailure, recordProviderError, pruneProviderLog } from './provider-errors.js';
-import { providerLoadedWindow, providerType } from './providers.js';
+import { providerLoadedWindow, providerLoadedWindows, providerType } from './providers.js';
 
 const POLL_MS = 1500;
 const RESULT_MAX = 4000;
@@ -1743,6 +1743,10 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
 
         before = markOf(await engine.getMessages(worker.id));
         await engine.prompt(worker.id, workerPrompt({ task, note: request.note, goal: plan.plan?.goal }));
+        // The measurement above ran before the prompt, so a server that swaps its
+        // loaded model on demand still reported the old one. This asks again once it
+        // has had time to finish, in the background.
+        measureAfterSwap(modelRef, signal);
 
         // Rescue loop: one turn at a time, with the whole session kept between
         // them. Nothing is restarted from scratch, so the work already on disk and
@@ -2707,6 +2711,9 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
    * operator meant; the loaded length is what the server will do.
    */
   const loadedWindows = new Map();
+  // Models whose swap is already being waited on, so a task that goes through
+  // several rungs does not start a waiter per rung.
+  const swapWaits = new Set();
   async function noteLoadedWindow(ref) {
     const [providerId, modelId] = String(ref || '').split('/');
     if (!providerId || !modelId) return;
@@ -2743,6 +2750,52 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     );
     // Keep the file in step, so the next boot starts from the truth.
     try { onModelWindow?.(ref, loaded); } catch { /* the run does not depend on it */ }
+  }
+
+  /**
+   * Ask again, once the server has had time to swap its loaded model.
+   *
+   * `noteLoadedWindow` runs before the prompt, so a server that loads models on
+   * demand still reports the one it had *before* — PolyStrata unloads its 126k model
+   * and loads the 200k one when a turn asks for it, and the first measurement always
+   * saw the old one. This waits for the server to name the model this run is using,
+   * then records its window. Background on purpose: a run must never wait for it,
+   * and a server that never swaps simply costs a few cheap requests.
+   */
+  function measureAfterSwap(ref, signal) {
+    const [providerId, modelId] = String(ref || '').split('/');
+    const want = String(modelId || '').toLowerCase();
+    if (!providerId || !want) return;
+    const provider = (getConfig()?.engine?.opencode?.providers || []).find((p) => p.id === providerId);
+    if (!provider || providerType(provider) !== 'local') return;
+    // One waiter per model, however many rungs a task goes through.
+    if (swapWaits.has(ref)) return;
+    swapWaits.add(ref);
+    (async () => {
+      try {
+        for (let i = 0; i < 12; i += 1) {
+          await sleep(5000, signal?.aborted ? undefined : signal);
+          if (signal?.aborted) return;
+          const windows = await providerLoadedWindows({ baseURL: provider.baseURL }).catch(() => null);
+          if (!windows) return;
+          const alias = String(windows.alias || '').toLowerCase();
+          if (!alias || alias !== want) continue;
+          const loaded = windows.get(modelId) || windows.get(windows.alias) || 0;
+          if (!loaded) return;
+          const declared = Number((provider.models || []).find((m) => m.id === modelId)?.context) || 0;
+          if (declared === loaded) return;
+          loadedWindows.set(ref, loaded);
+          log.warn(
+            `${ref}: the server finished loading it with ${loaded} tokens (the config said ${declared}); ` +
+              `this run budgets for ${loaded} from here on`,
+          );
+          try { onModelWindow?.(ref, loaded); } catch { /* the run does not depend on it */ }
+          return;
+        }
+      } finally {
+        swapWaits.delete(ref);
+      }
+    })().catch(() => { /* a background measurement never fails a run */ });
   }
 
   // One entry per session: the last turn's prompt size, whether the watchdog is

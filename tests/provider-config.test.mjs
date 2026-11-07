@@ -421,6 +421,40 @@ const fourModels = {
     JSON.stringify([...windows]),
   );
 
+  // The loaded window is the true one for the model it names: a server started with
+  // a smaller `-c` than the model file declares is running with the smaller one, and
+  // that has to win over the list's declaration.
+  const startedSmall = {
+    ok: true,
+    status: 200,
+    text: async () =>
+      JSON.stringify({
+        default_generation_settings: { n_ctx: 40960 },
+        model_alias: 'qwen3.8-flash-next-IQ2_XS-GSQ-200k',
+      }),
+  };
+  const narrow = await providerLoadedWindows(
+    { baseURL: 'http://127.0.0.1:8080/v1' },
+    {
+      fetchImpl: async (url) => {
+        if (url.endsWith('/props')) return startedSmall;
+        if (url.endsWith('/models')) return fourModels;
+        return notFound;
+      },
+    },
+  );
+  check(
+    'the loaded window beats the size the model file declares',
+    narrow.get('qwen3.8-flash-next-IQ2_XS-GSQ-200k') === 40960,
+    String(narrow.get('qwen3.8-flash-next-IQ2_XS-GSQ-200k')),
+  );
+  check(
+    'and the models it did not load keep their declared size',
+    narrow.get('qwen3.8-flash-next-IQ2_XS-GSQ-126k') === 126976 &&
+      narrow.get('tiel-coder-35b-a3b-Q5_K_XL-200k') === 204800,
+    JSON.stringify([...narrow]),
+  );
+
   const cfg = {
     engine: {
       opencode: {

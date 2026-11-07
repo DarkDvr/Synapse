@@ -26,7 +26,7 @@ import { rulesFor, SINGLE_RULES } from './permissions.js';
 import { skillRules } from './skills.js';
 import { createProbe, discoverToolsetForModel } from './probe.js';
 import { createModelCache, MAX_TOOL_ASKS } from './modelcache.js';
-import { createApi } from './api.js';
+import { createApi, toClientConfig } from './api.js';
 import { createServer } from './server.js';
 import { pruneProviderLog } from './provider-errors.js';
 import { measureLocalWindows } from './providers.js';
@@ -351,6 +351,18 @@ async function main() {
       if (!model || Number(model.context) === Number(loaded)) return;
       model.context = Number(loaded) || model.context;
       currentConfig = applyConfig(currentConfig);
+      // The page draws the window from the catalog, which the engine was told when
+      // it started. This measurement has just changed what Synapse budgets with, so
+      // the page is told: it re-reads the catalog and the corner stops showing a
+      // window nobody is using (7 Nov).
+      http?.broadcast({
+        kind: 'config',
+        type: 'config.saved',
+        config: toClientConfig(currentConfig),
+        by: null,
+        byId: null,
+        ts: Date.now(),
+      });
     },
   });
 

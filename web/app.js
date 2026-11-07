@@ -384,6 +384,19 @@ function noteShutdownDone() {
 }
 
 // ── models / modes ──────────────────────────────────────────────
+
+/**
+ * What the config says each model's window is, as one string.
+ *
+ * Only used to notice that a window *changed* — a run measuring the server's real
+ * one, or the operator typing it. The catalog the corner draws from is built when
+ * the engine starts, so a changed window means the catalog has to be read again.
+ */
+const windowSignature = (c) =>
+  (c?.engine?.opencode?.providers || [])
+    .map((p) => `${p.id}:${(p.models || []).map((m) => `${m.id}=${m.context}`).join(',')}`)
+    .join('|');
+
 async function loadModels() {
   try { state.models = (await api('GET', '/api/models')).models; } catch { state.models = []; }
   fillRoleModels();
@@ -1034,8 +1047,13 @@ function connectStream() {
     // view that saved them itself is not told anything: it has the saved copy in
     // hand, and "Saved on another computer" for your own click is a lie the page
     // told itself (measured 31 Oct, from the role pickers).
-    if (ev.kind === 'config') {
+    if (ev.kind === 'config') {      // A run can save the config too: it measures the server's real window for the
+      // model it used. The catalog the corner draws from was built when the engine
+      // started, so a window that changed has to be re-read — otherwise the page
+      // keeps showing a number nobody budgets for (7 Nov).
+      const windowsBefore = windowSignature(state.config);
       state.config = ev.config || state.config;
+      if (windowSignature(state.config) !== windowsBefore) loadModels().catch(() => {});
       const mine = Boolean(ev.byId) && ev.byId === state.clientId;
       if (!$('settingsModal').hidden && !mine) {
         toast('Settings Changed', 'Saved on another computer. Close and reopen Settings to load it.');

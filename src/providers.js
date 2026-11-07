@@ -257,12 +257,12 @@ async function probeLoadedWindows(root, fetchImpl, timeoutMs) {
   }
   if (windows.size) return windows;
 
-  // Then the server's own list, which may carry a window for *every* model it
-  // serves. That is the most precise answer there is, and it used to be asked last:
-  // a /props server answers for the one model it has loaded, the code returned
-  // there, and a provider serving four models had all four measured as the loaded
-  // one (7 Nov — the 200k model read 127K in the picker while the server's own list
-  // said 204800).
+  // The server's own list, which may carry a window for *every* model it serves.
+  // This is the most precise answer for the models that are not loaded, and it used
+  // to be asked last: a /props server answers for the one model it has loaded, the
+  // code returned there, and a provider serving four models had all four measured as
+  // the loaded one (7 Nov — the 200k model read 127K in the picker while the
+  // server's own list said 204800).
   const list = await get('/v1/models');
   const entries = Array.isArray(list?.data) ? list.data : Array.isArray(list?.models) ? list.models : [];
   for (const m of entries) {
@@ -270,19 +270,19 @@ async function probeLoadedWindows(root, fetchImpl, timeoutMs) {
     const n = contextFrom(m, { loadedOnly: true });
     if (id && n > 0) windows.set(id, n);
   }
-  if (windows.size) return windows;
 
-  // Last, llama.cpp's own endpoint: one loaded model, named by its alias. Only
-  // reached when the list carried no window at all, which is the case it exists for.
+  // Then llama.cpp's own endpoint, asked even when the list answered: it names the
+  // model the server has *loaded* and the window it is really running with. That can
+  // differ from the size the model file declares — a server started with a smaller
+  // `-c` — and when it does, the loaded number is the true one for that model.
   const props = await get('/props');
   const alias = String(props?.model_alias || '').trim();
   const ctx = Number.parseInt(props?.default_generation_settings?.n_ctx, 10);
   if (Number.isFinite(ctx) && ctx > 0) {
     if (alias) windows.set(alias, ctx);
-    // A /props server has loaded exactly one model and has told us its window.
-    // Recorded under `*` as well, for the case where it did not name the model.
-    // `alias` rides along on the map so a caller can tell "this is the model the
-    // server has" from "this is some other id in the same list" — the difference
+    // Recorded under `*` as well, for the case where the server did not name the
+    // model. `alias` rides along on the map so a caller can tell "this is the model
+    // the server has" from "this is some other id in the same list" — the difference
     // that matters at the call sites, and the bug when it is ignored (6 Nov).
     windows.set('*', ctx);
     windows.alias = alias;

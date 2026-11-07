@@ -162,6 +162,61 @@ export function normalizeAttachments(list) {
   return out;
 }
 
+/**
+ * The window Synapse believes one model has, from the config alone.
+ *
+ * The operator's `modelLimits` override first — either spelling, because the engine
+ * takes the bare model id while a ref here is `provider/model` — then the provider's
+ * own entry, which is what a measurement writes and what the operator can type. Zero
+ * when the config says nothing, and the caller then keeps the engine's catalog
+ * number.
+ *
+ * This is the same precedence the watchdog's `contextWindow()` uses, which is the
+ * point: the corner and the budget must not disagree about how big a window is.
+ */
+function configuredWindow(config, ref) {
+  const bare = String(ref || '').split('/').pop();
+  const limits = config?.modelLimits || {};
+  const override = limits[ref] || limits[bare] || {};
+  const fromLimit = Number(override.context);
+  if (Number.isFinite(fromLimit) && fromLimit > 0) return fromLimit;
+  const providerId = String(ref || '').split('/')[0];
+  const provider = (config?.engine?.opencode?.providers || []).find((p) => p.id === providerId);
+  const model = (provider?.models || []).find((m) => m.id === bare);
+  const n = Number(model?.context);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
+/**
+ * The config as the browser may see it: no password, no provider key — a mask and
+ * "one exists" instead. Exported because the runner can change the config too (a run
+ * measures a model's real window and writes it), and the page has to be told that
+ * without being handed the secrets.
+ */
+export function toClientConfig(cfg) {
+  const c = structuredClone(cfg);
+  if (c.engine?.opencode) {
+    const pw = c.engine.opencode.password || '';
+    c.engine.opencode.password = '';
+    c.engine.opencode.passwordSet = Boolean(pw);
+    // A provider's key is never sent to the browser. The screen shows a mask
+    // and knows whether one exists; the value itself stays on this side.
+    c.engine.opencode.providers = (c.engine.opencode.providers || []).map((p) => {
+      const stored = providerKeyState(p.id);
+      const literal = String(p.apiKey || '');
+      const fromEnv = /^env:/i.test(literal);
+      return {
+        ...p,
+        apiKey: fromEnv ? literal : '',
+        apiKeySet: stored.set || Boolean(literal && !fromEnv),
+        apiKeyMasked: stored.set ? stored.masked : literal && !fromEnv ? maskKey(literal) : '',
+        apiKeyFrom: stored.set ? 'stored' : fromEnv ? literal : literal ? 'config' : '',
+      };
+    });
+  }
+  return c;
+}
+
 export function createApi({ getConfig, applyConfig, power, engine, logger, getBootError, projects, toolStats, probe, modelCache, inspectModel: inspectRef, probeDir, runs, desk, engineUpdate, synapseUpdate, restart, stopSelf, pcShutdown, notify, permissionLog, permissionGate, permissionMemory }) {
   const app = logger.channel('app');
 
@@ -497,30 +552,6 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
     }
     return list;
   }
-
-  const toClientConfig = (cfg) => {
-    const c = structuredClone(cfg);
-    if (c.engine?.opencode) {
-      const pw = c.engine.opencode.password || '';
-      c.engine.opencode.password = '';
-      c.engine.opencode.passwordSet = Boolean(pw);
-      // A provider's key is never sent to the browser. The screen shows a mask
-      // and knows whether one exists; the value itself stays on this side.
-      c.engine.opencode.providers = (c.engine.opencode.providers || []).map((p) => {
-        const stored = providerKeyState(p.id);
-        const literal = String(p.apiKey || '');
-        const fromEnv = /^env:/i.test(literal);
-        return {
-          ...p,
-          apiKey: fromEnv ? literal : '',
-          apiKeySet: stored.set || Boolean(literal && !fromEnv),
-          apiKeyMasked: stored.set ? stored.masked : literal && !fromEnv ? maskKey(literal) : '',
-          apiKeyFrom: stored.set ? 'stored' : fromEnv ? literal : literal ? 'config' : '',
-        };
-      });
-    }
-    return c;
-  };
 
   // When the UI saves config with an empty password, keep the existing one — and
   // a typed provider key moves to data\provider-keys.json instead of the config
@@ -995,10 +1026,22 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
       if (hidden.size && shown.length !== list.length) {
         app.debug(`models: ${list.length - shown.length} hidden by Settings (${[...hidden].join(', ')})`);
       }
+      // The engine's catalog is what it was *told* when it started. The config is
+      // what Synapse budgets with — measured at boot, corrected by a run, typed in
+      // Settings — and after any of those the two disagree until the engine
+      // restarts. The page shows the config's number, because that is the one the
+      // watchdog uses, and a corner reading a window nobody budgets for is worse
+      // than one that lags a restart.
+      const cfg = getConfig();
       return {
         models: shown.map((m) => {
           const known = modelCache?.get(m.ref);
-          return { ...m, tools: known?.tools || null, issues: known?.issues || null };
+          return {
+            ...m,
+            context: configuredWindow(cfg, m.ref) || m.context,
+            tools: known?.tools || null,
+            issues: known?.issues || null,
+          };
         }),
       };
     },
