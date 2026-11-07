@@ -285,6 +285,11 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
    * have their own directory, so the same comparison locks only themselves.
    */
   async function busyFor(sessionId) {
+    // No session, no work. Without this the engine is asked about `null`, answers
+    // 400, and the catch below reads that as "the engine is down" — so a caller
+    // with no session was told the engine had stopped while it was answering every
+    // other route (7 Nov).
+    if (!sessionId) return { busy: false };
     let directory = '';
     try {
       directory = (await engine.getSession(sessionId))?.directory || '';

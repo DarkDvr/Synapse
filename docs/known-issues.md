@@ -25,23 +25,6 @@ the project's directory and skip a project that is not a repository. If it is th
 harness's, it must refuse to commit a dirty tree and say so — taking someone else's
 in-progress work under a generated message is worse than not snapshotting.
 
-## `/api/busy` with no session says the engine is down — 7 Nov
-
-`GET /api/busy` without `?session=` asks the engine for `GET /api/session/null`,
-gets a 400, and answers
-`{"busy":false,"engineDown":true,"reason":"GET /api/session/null -> 400 …"}`. The
-page never calls it that way — it passes `state.sessionId` and skips the call when
-there is none — so nothing shows this today. Anything else that asks (a stale tab, a
-script, a future caller) is told the engine is down while it is answering every
-other route.
-
-Where: `busyFor()` in `src/api.js`; the `catch` around `engine.getSession()` reads
-any failure as "not answering".
-Fix: return `{ busy: false }` when there is no session id, before the engine is
-asked. Then a failure there can only mean the engine is really unwell.
-
----
-
 ## The screen badge may stay on screen after the desk is released — 7 Nov
 
 Seen once, while checking the page after a refactor move: the desk badge read "Screen

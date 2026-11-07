@@ -69,3 +69,42 @@ test('another project never makes this one busy', () => {
   });
   assert.equal(out.busy, false);
 });
+
+// The route, not the arithmetic: `GET /api/busy` with no `?session=` used to ask the
+// engine about the string "null", get a 400, and answer `engineDown: true` — telling
+// a caller the engine had stopped while it was answering everything else (7 Nov).
+test('the route with no session does not ask the engine, and does not call it down', async () => {
+  const { createApi } = await import('../src/api.js');
+  let asked = 0;
+  const engine = {
+    status: () => ({ ready: true, kind: 'stub' }),
+    getSession: async () => {
+      asked += 1;
+      throw new Error('GET /api/session/null -> 400');
+    },
+  };
+  const api = createApi({
+    getConfig: () => ({}),
+    applyConfig: async () => {},
+    engine,
+    logger: { channel: () => ({ info() {}, debug() {}, warn() {}, error() {} }) },
+    getBootError: () => null,
+    projects: {},
+    toolStats: null,
+    probe: null,
+    modelCache: null,
+    inspectModel: null,
+    probeDir: null,
+    runs: null,
+    engineUpdate: null,
+    restart: null,
+    notify: () => {},
+    guard: null,
+  });
+  const out = await api.busy(null);
+  assert.deepEqual(out, { busy: false });
+  assert.equal(asked, 0, 'the engine is never asked about a session that does not exist');
+  // A real session that the engine cannot answer is still a dead engine.
+  const down = await api.busy('ses_a');
+  assert.equal(down.engineDown, true);
+});
