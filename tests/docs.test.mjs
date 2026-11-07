@@ -13,7 +13,11 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
-const lines = (rel) => read(rel).replace(/^\uFEFF/, '').split(/\r?\n/).length;
+// A file that ends with a newline is not one line longer than it looks. Splitting
+// on the newline leaves an empty string after the last one, so a 300-line document
+// counted as 301 and the ceiling silently meant 299 — the handover commit added one
+// true line and tripped it. The budget is a line count, and this is that count.
+const lines = (rel) => read(rel).replace(/^\uFEFF/, '').replace(/\r?\n$/, '').split(/\r?\n/).length;
 // Roughly 3.6 characters per token on prose this dense. An estimate is enough:
 // the budget is a ceiling, not an accounting exercise.
 const tokens = (rel) => Math.round(read(rel).length / 3.6);

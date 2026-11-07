@@ -238,8 +238,7 @@ web/
 skills/               shipped WITH Synapse, always on the engine's skill path
   visual-review/      render a page to PNG, then read it (the agents' eyes)
   app-check/          launch a desktop app, photograph its window, report if it lived
-  win-app/            the Windows shell a new app is copied from (WPF + WebView2),
-                      plus the build steps — there is no `templates/` folder any more
+  win-app/            the Windows shell (WPF + WebView2) and its build steps
   ui-design/ frontend-design/ aesthetic-foundations/ code-craft/ web-guidelines/
                       the craft briefs: direction, tokens, states, colour, hierarchy
 data/                 runtime state (projects, census, probe results, engine home)
