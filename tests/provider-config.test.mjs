@@ -223,6 +223,7 @@ const limited = await fetchProviderModels(
   { fetchImpl: stub(JSON.stringify({ data: [{ id: 'big', limit: { context: 1000000, output: 384000 } }] })) },
 );
 check('limit.context is read as the window', limited.models[0].context === 1000000, String(limited.models[0].context));
+check('limit.output is carried too', limited.models[0].output === 384000, String(limited.models[0].output));
 
 const refused = await fetchProviderModels(
   { baseURL: 'https://api.example.com/v1', apiKey: 'sk-secret-123456' },

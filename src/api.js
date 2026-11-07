@@ -188,6 +188,27 @@ function configuredWindow(config, ref) {
 }
 
 /**
+ * The output ceiling Synapse believes one model has, from the config alone.
+ *
+ * The same precedence as the window, and for the same reason: a provider that says
+ * `limit: { context, output }` is the authority, and the engine's catalog can be
+ * older than the model. Measured 7 Nov: oc-go's `deepseek-v4.1-flash` is 1M in /
+ * 384K out at the provider, and the shipped catalog said 200K / 32K.
+ */
+function configuredOutput(config, ref) {
+  const bare = String(ref || '').split('/').pop();
+  const limits = config?.modelLimits || {};
+  const override = limits[ref] || limits[bare] || {};
+  const fromLimit = Number(override.output);
+  if (Number.isFinite(fromLimit) && fromLimit > 0) return fromLimit;
+  const providerId = String(ref || '').split('/')[0];
+  const provider = (config?.engine?.opencode?.providers || []).find((p) => p.id === providerId);
+  const model = (provider?.models || []).find((m) => m.id === bare);
+  const n = Number(model?.output);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
+/**
  * The config as the browser may see it: no password, no provider key — a mask and
  * "one exists" instead. Exported because the runner can change the config too (a run
  * measures a model's real window and writes it), and the page has to be told that
@@ -1037,6 +1058,7 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
           return {
             ...m,
             context: configuredWindow(cfg, m.ref) || m.context,
+            output: configuredOutput(cfg, m.ref) || m.output,
             tools: known?.tools || null,
             issues: known?.issues || null,
           };

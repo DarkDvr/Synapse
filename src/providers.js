@@ -433,7 +433,11 @@ function normaliseList(body) {
       // A bare string entry names a model and nothing else.
       const name = String(typeof m === 'string' ? '' : m?.name || m?.display_name || '').trim();
       const context = typeof m === 'string' ? 0 : contextFrom(m);
-      return { id, name: name || id, context };
+      // The output ceiling rides in the same shape (`limit.output`), and the model
+      // editor has a field for it — so a provider that states it is recorded rather
+      // than left to the engine's catalog. Only what the server said, never a guess.
+      const output = typeof m === 'string' ? 0 : Number.parseInt(m?.limit?.output, 10) || 0;
+      return { id, name: name || id, context, ...(output > 0 ? { output } : {}) };
     })
     .filter(Boolean)
     .sort((a, b) => a.id.localeCompare(b.id));

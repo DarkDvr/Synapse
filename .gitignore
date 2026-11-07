@@ -4,6 +4,12 @@ logs/
 .synapse/
 # (the projects root is a sibling of this folder, so it needs no entry here)
 
+# The operator's own config: providers, role choices, measured windows. It is
+# created from config.default.json on first launch and never travels - the seed
+# ships, and this file is one machine's answers. A key is never in it either, but
+# its provider list is nobody else's business.
+config/synapse.config.json
+
 # Local design references and mockups - kept on the machine, not in the repository
 /references/
 docs/*.pdf
