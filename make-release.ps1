@@ -22,7 +22,7 @@ if (-not $version) { throw 'package.json has no version' }
 $required = @(
     'Synapse.exe', 'package.json', 'update-apply.ps1', 'update-apply.mjs',
     'config.default.json', 'LICENSE', 'NOTICE', 'THIRD-PARTY.md',
-    'src', 'web', 'skills', 'templates', 'bin\node', 'bin\opencode'
+    'src', 'web', 'skills', 'bin\node', 'bin\opencode'
 )
 foreach ($rel in $required) {
     if (-not (Test-Path -LiteralPath (Join-Path $root $rel))) { throw "missing $rel - build it first (.\shell\build.ps1)" }
@@ -39,7 +39,9 @@ $files = @(
     'config.default.json', 'LICENSE', 'NOTICE', 'THIRD-PARTY.md'
 )
 foreach ($file in $files) { Copy-Item -LiteralPath (Join-Path $root $file) -Destination $stage }
-foreach ($dir in @('src', 'web', 'skills', 'templates')) {
+# skills carries the shell a Windows app is copied from (skills/win-app/template);
+# there is no separate templates folder any more, and the harness refuses one.
+foreach ($dir in @('src', 'web', 'skills')) {
     Copy-Item -LiteralPath (Join-Path $root $dir) -Destination $stage -Recurse
 }
 
