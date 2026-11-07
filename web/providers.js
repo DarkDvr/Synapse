@@ -69,6 +69,9 @@ function providerEditor(providers, index) {
       <label class="set-field" title="The name on the badge beside this provider's models in every role's menu.">
         <span>Name</span>
         <input data-prov="name" value="${esc(p.name || '')}" placeholder="DeepSeek" />
+        <small class="prov-hint">Model prefix: <code>${esc(previewId)}</code> — the word before the slash in
+          <code>${esc(previewId)}/model</code>. It comes from the name, and a provider the engine already serves
+          keeps its models only when the two match (name it <code>OpenCode</code> for <code>opencode</code>).</small>
       </label>
       <label class="set-field wide" title="The server's address, including /v1 when it needs one. Nothing is contacted until you press Refresh List or run a turn.">
         <span>Server URL</span>
