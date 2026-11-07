@@ -42,23 +42,6 @@ Fix: when it happens again, read `/api/desk` at the same moment and compare. If 
 server says null the page is the bug (a missing clear); if the server says held, the
 server is (a lease that was never released).
 
-## The chat page's layout audit reports five standing nits — 7 Nov
-
-`skills/visual-review` with `--audit` reports the same five findings on the chat page
-every time it is run, and they are real but small: the Send button is 39px tall
-against the run button's 36 (tops 1.5px apart), and four baselines sit apart on one
-line (two `code` runs 19.8px apart, `tool-name` against `tool-chev` 0.9px, two `em`
-41.8px, two `strong` 20.9px).
-
-Shows: a composer row that is a hair out of line, and inline code or emphasis that
-does not sit on the text's baseline. Nobody has reported them; the tool sees them.
-
-Where: `web/synapse.css` — the composer's button row and the inline-code/emphasis
-rules in the transcript.
-Fix: measure the row and set one height for both buttons; give inline `code` a
-`vertical-align` that matches its line box. Do it as its own change with a screenshot
-before and after, not inside a refactor.
-
 ## The corner cannot refresh a window until the engine restarts (6 Nov)
 
 The stamping that caused this is fixed (7 Nov): `measureLocalWindows` and the per-run

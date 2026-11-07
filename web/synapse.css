@@ -1741,7 +1741,10 @@ body[data-mode="single"] #runAuto { display: none; }
   flex: none; margin-left: auto; cursor: help; white-space: nowrap;
 }
 .tool-chev {
-  flex: none; width: 10px; color: #9aa0a8; font-size: calc(var(--chat-fs) * 0.88); line-height: 1;
+  /* The same size and line box as `.tool-name` beside it: the chevron was 0.88 of
+     the chat size with `line-height: 1`, so a flex row centred two different boxes
+     and the two runs sat 0.9px apart on one line (7 Nov). */
+  flex: none; width: 10px; color: #9aa0a8; font-size: 12px; line-height: normal;
   text-align: center; transition: transform 0.15s ease;
 }
 .tool-card.open .tool-chev { transform: rotate(90deg); }
@@ -1994,6 +1997,16 @@ body[data-mode="single"] #runAuto { display: none; }
   border-top: 1px solid var(--line); padding: 9px 11px; background: #1a1c20;
 }
 .composer-row { display: flex; gap: 8px; align-items: center; min-width: 0; }
+/* One height for the row's buttons. Send was 39px — a `.btn`'s own padding — beside
+   a 36px attach, stop and run: same row, tops 1.5px apart, which reads as "not
+   quite in a line" without being obvious (7 Nov). The label is centred rather than
+   padded, so the button keeps its shape at any font size. */
+.composer-row .btn {
+  /* The baseline sets `min-height: 39px` on `.btn`, and a minimum outranks a height:
+     setting only `height` left Send at 39px and the finding standing. */
+  height: 36px; min-height: 36px; padding-top: 0; padding-bottom: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+}
 /* The text box is the only flexible thing in the row: every control keeps its own
    width, and the box makes room for them however many are shown. */
 .composer-row > * { flex: none; }
