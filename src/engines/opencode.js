@@ -16,6 +16,7 @@ import {
 } from './base.js';
 import { ROOT, SEARCH_SERVER, DELEGATE_SERVER, LEASE_SERVER, ENGINE_PID_FILE, SKILLS_DIR, VENDOR_ENGINE } from '../paths.js';
 import { providerApiKey } from '../config.js';
+import { vacuumStore } from '../engine-store.js';
 
 const ENGINE_USERNAME = 'opencode';
 // What the engine reports as a model's output limit when a provider entry carries
@@ -378,6 +379,11 @@ export class OpenCodeEngine extends Engine {
     this.password = this.resolvePassword(home);
     this.base = `http://${this.cfg.host}:${this.cfg.port}`;
     this.ensureEngineConfig(home);
+    // The one moment the engine's database is closed and therefore rewritable: it is
+    // about to be started, so nothing has it open. A rewrite is what gives back the
+    // space that forgetting old conversations freed — SQLite would otherwise keep
+    // those pages for reuse and the file would never come down (7 Nov).
+    vacuumStore(path.join(home.data, 'opencode', 'opencode.db'), { log: this.log });
 
     const args = ['serve', '--port', String(this.cfg.port), '--hostname', this.cfg.host, ...(this.cfg.args || [])];
     // The vendored NuGet cache, if vendor-nuget.ps1 has been run. Workers build with
@@ -577,7 +583,11 @@ export class OpenCodeEngine extends Engine {
   // ── sessions ─────────────────────────────────────────────────
 
   async listSessions() {
-    const r = await this.request('GET', '/api/session');
+    // The engine answers 50 by default. Synapse's own housekeeping — the permission
+    // pass at boot and forgetting conversations whose project is gone — was therefore
+    // looking at a tenth of the store: the database held 449 sessions and the list
+    // said 50 (measured 7 Nov). Ask for the lot.
+    const r = await this.request('GET', '/api/session?limit=1000');
     const data = Array.isArray(r?.data) ? r.data : [];
     return data.map(normalizeSession);
   }

@@ -313,6 +313,10 @@ async function main() {
         let n = 0;
         for (const s of sessions) {
           if (!s?.id || s.internal) continue;
+          // A conversation whose folder is gone cannot run: the pass below deletes it,
+          // so there is nothing to bring under the policy — and with the whole store
+          // listed now, patching those would be hundreds of requests for nothing.
+          if (!s.directory || !fs.existsSync(s.directory)) continue;
           await engine.updateSessionPermissions(s.id, [
             ...rulesFor(),
             ...(s.single ? SINGLE_RULES : []),
@@ -336,24 +340,32 @@ async function main() {
   // 430 MB database). Only a folder that is *gone* is pruned: a project the operator
   // unregistered but kept on disk is left alone, because re-adding it should find
   // its chat.
-  {
-    const t = setTimeout(async () => {
-      try {
-        const sessions = await engine.listSessions();
-        const active = new Set(await engine.listActiveSessions().catch(() => []));
-        let n = 0;
-        for (const s of sessions) {
-          if (!s?.id || !s.directory || active.has(s.id)) continue;
-          if (fs.existsSync(s.directory)) continue;
-          await engine.deleteSession(s.id).catch(() => {});
-          n += 1;
-        }
-        if (n) app.info(`housekeeping: forgot ${n} conversation(s) whose folder no longer exists`);
-      } catch (err) {
-        app.warn(`could not forget old conversations: ${err.message}`);
+  //
+  // Deleting a project from the rail already deletes its conversations, so this is
+  // for the other case — a folder removed outside Synapse — and it runs daily as
+  // well as at boot: an instance left running for a month never reboots, and the
+  // operator's rule is that a deleted project is cleansed, not remembered.
+  const forgetDeadConversations = async () => {
+    try {
+      const sessions = await engine.listSessions();
+      const active = new Set(await engine.listActiveSessions().catch(() => []));
+      let n = 0;
+      for (const s of sessions) {
+        if (!s?.id || !s.directory || active.has(s.id)) continue;
+        if (fs.existsSync(s.directory)) continue;
+        await engine.deleteSession(s.id).catch(() => {});
+        n += 1;
       }
-    }, 6000);
+      if (n) app.info(`housekeeping: forgot ${n} conversation(s) whose folder no longer exists`);
+    } catch (err) {
+      app.warn(`could not forget old conversations: ${err.message}`);
+    }
+  };
+  {
+    const t = setTimeout(forgetDeadConversations, 6000);
     t.unref?.();
+    const daily = setInterval(forgetDeadConversations, 24 * 60 * 60 * 1000);
+    daily.unref?.();
   }
 
   // Per-model knowledge. Created before the runner because a run that fails
