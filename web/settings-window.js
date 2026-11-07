@@ -306,7 +306,7 @@ export async function onSettingsClick(e) {
     if (upd.dataset.update === 'synapse') wired.applySynapseUpdate();
     return;
   }
-  // The Runtime pane's own button now lands on the Updates page instead of
+  // The Engine pane's own button now lands on the Updates page instead of
   // opening the chip's popup over the settings window.
   if (e.target.closest('[data-check-update]')) { switchSettingsTab('updates'); return; }
   // Prohibited: the tick and the two add buttons. A tick is a draft change, saved

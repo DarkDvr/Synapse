@@ -131,7 +131,7 @@ export async function renderLlmStatus() {
     // Asking failed, so the row must not guess. Grey and "unknown" is the honest
     // reading: it is what a server that cannot answer the question looks like,
     // and it is not a claim about any model server.
-    paint('idle', 'unknown', 'Cannot ask Synapse which local servers are answering right now. The Runtime row says whether the engine itself is up.');
+    paint('idle', 'unknown', 'Cannot ask Synapse which local servers are answering right now. The Engine row says whether the engine is answering right now.');
     return;
   }
   const up = servers.filter((s) => s.up);

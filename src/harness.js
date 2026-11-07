@@ -12,10 +12,11 @@
 //              before happened while nobody was looking, however it happened — a
 //              shell redirect, a tool the ruleset does not cover.
 //
-// Neither can undo a write. The restore points are ordinary git commits in
-// the harness repository (`snapshot()` before each delegation), which is the other
-// reason a project never lives inside the harness: a `git add -u` here can never
-// stage a project's deliverables, because none of them are in this repository.
+// Neither can undo a write. The restore point is the harness repository's own
+// HEAD — `snapshot()` no longer commits, because a run must not sweep the
+// operator's uncommitted work into a generated commit (7 Nov) — and that is the
+// other reason a project never lives inside the harness: nothing a project
+// delivers is in this repository, so nothing here can be mistaken for it.
 import { execFile } from 'node:child_process';
 
 const WRITE_TOOLS = /^(write|edit)$/;
@@ -224,21 +225,30 @@ export function createHarnessGuard({ root, logger, notify }) {
     });
 
   /**
-   * A restore point, and the baseline for the post-run comparison.
+   * The restore point, and the baseline for the post-run comparison.
    *
-   * `add -u` stages tracked modifications only — never `-A`, so an untracked file
-   * of the operator's is never swept into a commit. Nothing to commit is the
-   * normal case and is not an error.
+   * It does not commit. It used to: `git add -u` and a commit with a generated
+   * message, meant as a restore point before a worker ran. On 7 Nov that swept
+   * three half-finished edits into `snapshot: before t1 (coder-1)` — the work was
+   * safe but landed under a name nobody wrote, and a run in an unrelated project
+   * should never touch this repository. The restore point is HEAD, and HEAD is only
+   * the truth when the tree is clean, so that is what this checks and says.
+   *
+   * `state()` below is the baseline the post-run comparison uses; nothing here is
+   * on the worker's critical path.
    */
   async function snapshot(label) {
     try {
-      const staged = async () => (await git(['diff', '--cached', '--name-only'])).trim();
-      await git(['add', '-u']);
-      const files = await staged();
-      if (!files) return { committed: false };
-      await git(['commit', '-m', `snapshot: ${label}`]);
-      log.info(`harness snapshot committed (${label}) — ${files.split('\n').length} file(s)`);
-      return { committed: true, files: files.split('\n').length };
+      const dirty = (await git(['status', '--porcelain'])).trim();
+      if (dirty) {
+        const n = dirty.split('\n').length;
+        log.warn(
+          `harness snapshot skipped (${label}): ${n} uncommitted change(s) in the harness — ` +
+            `HEAD is the restore point, and it does not include them`,
+        );
+        return { committed: false, dirty: true, files: n };
+      }
+      return { committed: false, clean: true };
     } catch (err) {
       log.warn(`harness snapshot skipped (${label}): ${err.message}`);
       return { committed: false, error: err.message };

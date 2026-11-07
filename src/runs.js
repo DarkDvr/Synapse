@@ -1586,8 +1586,8 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     // A restore point first, then a clean baseline: the harness is committed as it
     // stands, so anything it shows once the worker has stopped is the worker's
     // doing and can be put back. Both calls are cheap and neither is on the
-    // worker's critical path — the snapshot is one `git add -u` + commit in the
-    // harness repository, which a project never lives inside.
+    // worker's critical path — the snapshot is one `git status` in the harness
+    // repository, which a project never lives inside, and it commits nothing.
     await (guard?.snapshot?.(`before ${task.id} (${role})`) || Promise.resolve()).catch(() => {});
     const harnessBefore = await (guard?.state?.() || Promise.resolve(null)).catch(() => null);
 

@@ -8,6 +8,10 @@
 // Run: node tests\harness-guard.test.mjs
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { spawnSync } from 'node:child_process';
 
 import { createHarnessGuard } from '../src/harness.js';
 import { ROOT } from '../src/paths.js';
@@ -43,4 +47,46 @@ test('a read naming the harness is logged, not alarmed', () => {
     label: 'turn 1',
   });
   assert.equal(alarms.length, 0);
+});
+
+// A run must never commit the harness. The snapshot used to `git add -u` and commit
+// with a generated message, and on 7 Nov that swept three half-finished edits into
+// `snapshot: before t1 (coder-1)`. Now it reports a dirty tree and commits nothing —
+// HEAD is the restore point, and HEAD does not include work in progress.
+test('a run reports a dirty harness and commits nothing', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'synapse-snapshot-'));
+  const git = (...args) => spawnSync('git', ['-C', dir, ...args], { encoding: 'utf8' });
+  try {
+    git('init');
+    git('config', 'user.email', 'test@example.com');
+    git('config', 'user.name', 'Test');
+    fs.writeFileSync(path.join(dir, 'a.txt'), 'one\n');
+    git('add', 'a.txt');
+    git('commit', '-m', 'first');
+
+    const warned = [];
+    const guard = createHarnessGuard({
+      root: dir,
+      logger: { channel: () => ({ info() {}, debug() {}, warn: (m) => warned.push(m), error() {} }) },
+      notify: () => {},
+    });
+
+    // Work in progress: the operator's own edit.
+    fs.writeFileSync(path.join(dir, 'a.txt'), 'two\n');
+    const dirty = await guard.snapshot('before t1 (coder-1)');
+    assert.equal(dirty.committed, false);
+    assert.equal(dirty.dirty, true);
+    assert.match(warned.join('\n'), /uncommitted change/);
+    assert.equal(git('rev-list', '--count', 'HEAD').stdout.trim(), '1', 'nothing was committed');
+    assert.equal(git('log', '-1', '--format=%s').stdout.trim(), 'first', 'HEAD is still the operator’s');
+
+    // A clean tree: nothing to say, and still nothing to commit.
+    git('checkout', '--', 'a.txt');
+    const clean = await guard.snapshot('before t2 (coder-1)');
+    assert.equal(clean.committed, false);
+    assert.equal(clean.clean, true);
+    assert.equal(git('rev-list', '--count', 'HEAD').stdout.trim(), '1');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });

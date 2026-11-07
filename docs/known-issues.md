@@ -8,23 +8,6 @@ Newest first. When one is fixed, delete it here and say so in the commit.
 
 ---
 
-## A run's snapshot commits whatever is uncommitted in the Synapse repo — 7 Nov
-
-Starting a delegation writes a `snapshot: before t1 (coder-1)` commit, and it takes
-the harness repository's whole working tree with it. During the smoke test that
-swept up half-finished edits to `web/` and `src/` into three commits with a message
-nobody wrote. The work was safe, but it landed under the wrong name: `git log` said
-"snapshot: before t1 (coder-1)" for a fix to the permission policy.
-
-Shows: `git status` clean in the middle of an editing session, and two or three
-commits with the same generated message.
-
-Where: the harness snapshot in `src/runs.js` (`harness snapshot committed …`).
-Fix: decide what the snapshot is *for*. If it is the project's state, it must run in
-the project's directory and skip a project that is not a repository. If it is the
-harness's, it must refuse to commit a dirty tree and say so — taking someone else's
-in-progress work under a generated message is worse than not snapshotting.
-
 ## The screen badge may stay on screen after the desk is released — 7 Nov
 
 Seen once, while checking the page after a refactor move: the desk badge read "Screen
@@ -89,19 +72,18 @@ now be removed and restored, which makes the page own a little more of that know
 — it is also the list of ids `hiddenProviders` accepts — so this got slightly worse,
 not better.)
 
-## The engine home never shrinks below its snapshots
+## The engine home is mostly one database nobody prunes (6 Nov, measured 7 Nov)
 
-`data/engine/opencode` is 574 MB after three weeks. `src/housekeeping.js` reclaims
-snapshots at boot, but only the ones it knows about; the engine keeps its own
-storage. Worth a look at what the 574 MB actually is before deleting anything.
+The entry said 574 MB and blamed snapshots. Measured: **575 MB, and 430 MB of it is
+`data/engine/opencode/data/opencode/opencode.db`** — the engine's own store of every
+session and message it has ever kept. The rest is 62 MB of snapshots, 48 MB of logs,
+22 MB of temp and 3 MB of config. `src/housekeeping.js` already reclaims the
+snapshots it knows about; the database is not Synapse's to rewrite.
 
-Where: `src/housekeeping.js`, `data/engine/opencode`.
-Fix: measure first — a listing by subfolder, then a retention rule.
+Shows: a `data/` folder that grows with every conversation and never comes down.
 
-## The Updates page still calls the engine "Runtime" in one place
-
-The page says "Runtime" everywhere, but the engine update dialog's title says
-"Engine update". Two names for one thing in the same panel.
-
-Where: `web/app.js`, the update card.
-Fix: one word, decided by the operator.
+Where: `data/engine/opencode/data/opencode/opencode.db`, `src/housekeeping.js`.
+Fix: two honest options, and it is the operator's data, so the decision is theirs —
+(a) leave it to the engine, which owns the file and its schema; or (b) a housekeeping
+pass that asks the engine to forget sessions older than N days, through its own API
+rather than by deleting rows. Measure again after either. Do not delete the file.

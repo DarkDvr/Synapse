@@ -52,7 +52,7 @@ export function renderUpdateChip() {
   if (show) {
     const parts = [];
     if (synapse?.newer) parts.push(`Synapse ${synapse.current || ''} → ${synapse.latest}`);
-    if (engine?.newer) parts.push(`runtime ${engine.current || '?'} → ${engine.latest}`);
+    if (engine?.newer) parts.push(`engine ${engine.current || '?'} → ${engine.latest}`);
     chip.title = `Update available: ${parts.join('; ')}. Click to review.`;
   }
 }
@@ -82,11 +82,11 @@ export function updateSubText() {
   if (busy) {
     return busy === 'synapse'
       ? 'Updating Synapse. It will close, replace its program files and reopen. Your projects and settings are not touched.'
-      : 'Updating the runtime. It is stopped, replaced and started again — about a minute.';
+      : 'Updating the engine. It is stopped, replaced and started again — about a minute.';
   }
   return e.newer || s.newer
-    ? 'The two update separately: Synapse is the harness, the runtime is the engine and its model catalog.'
-    : 'Synapse and the runtime are both up to date, or nothing could be checked.';
+    ? 'The two update separately: Synapse is the harness, the engine carries the model catalog and the tools.'
+    : 'Synapse and the engine are both up to date, or nothing could be checked.';
 }
 
 /** The two cards and the console. One builder for the popup and the Settings
@@ -119,10 +119,10 @@ export function updateBodyHtml() {
   const engNote = e.onlineError
     ? `<p class="upd-note is-warn">npm could not be asked: ${esc(e.onlineError)}</p>`
     : !e.managedByNpm && !e.vendored
-      ? '<p class="upd-note is-warn">This runtime was not installed with npm, so Synapse will not replace it.</p>'
+      ? '<p class="upd-note is-warn">This engine was not installed with npm, so Synapse will not replace it.</p>'
       : e.blocked
         ? `<p class="upd-note is-warn">${esc(e.blocked)}</p>`
-        : '<p class="upd-note">The runtime carries the model catalog, tools and API. npm publishes no release notes — the version number is all it tells us.</p>';
+        : '<p class="upd-note">The engine carries the model catalog, tools and API. npm publishes no release notes — the version number is all it tells us.</p>';
   const engCan = Boolean(e.newer && e.canUpdate && !busy && !updateChecking);
 
   return (
@@ -135,10 +135,10 @@ export function updateBodyHtml() {
     `${busy === 'synapse' ? 'Updating…' : s.newer && s.asset ? 'Update Synapse' : s.error ? 'Unavailable' : 'Up to Date'}</button></div>` +
     `</section>` +
     `<section class="upd-card">` +
-    `<div class="upd-card-head"><span class="upd-name">Runtime</span><span class="upd-vers">${engVersion}</span></div>` +
+    `<div class="upd-card-head"><span class="upd-name">Engine</span><span class="upd-vers">${engVersion}</span></div>` +
     engNote +
     `<div class="upd-card-foot"><button class="btn btn-primary btn-sm" type="button" data-update="engine" ${engCan ? '' : 'disabled'}>` +
-    `${busy === 'engine' ? 'Updating…' : e.newer ? 'Update Runtime' : 'Up to Date'}</button></div>` +
+    `${busy === 'engine' ? 'Updating…' : e.newer ? 'Update Engine' : 'Up to Date'}</button></div>` +
     `</section>` +
     '</div>' +
     '<div class="upd-console-wrap"><div class="upd-console-head">Update console</div>' +
@@ -217,7 +217,7 @@ export async function applyEngineUpdate() {
   state.updateLog = [];
   renderUpdateChip();
   renderUpdateViews();
-  pushUpdateLog(`Updating the runtime ${u.current || ''} → ${u.latest || ''}…`);
+  pushUpdateLog(`Updating the engine ${u.current || ''} → ${u.latest || ''}…`);
   let r;
   try {
     r = await api('POST', '/api/engine/update');
@@ -225,11 +225,11 @@ export async function applyEngineUpdate() {
     r = { ok: false, error: err.message };
   }
   state.updateBusy = null;
-  pushUpdateLog(r.ok ? `Runtime updated to ${r.to || 'the new version'}.` : `Update failed: ${r.error || 'unknown error'}`);
+  pushUpdateLog(r.ok ? `Engine updated to ${r.to || 'the new version'}.` : `Update failed: ${r.error || 'unknown error'}`);
   if (r.ok) {
-    toast('Runtime Updated', `${r.from || 'previous'} → ${r.to || 'new'}. The model list has been re-read.`);
+    toast('Engine Updated', `${r.from || 'previous'} → ${r.to || 'new'}. The model list has been re-read.`);
   } else {
-    toast('Update Failed', r.error || 'The runtime was not updated.');
+    toast('Update Failed', r.error || 'The engine was not updated.');
   }
   await refreshStatus();
   await refreshRemote();

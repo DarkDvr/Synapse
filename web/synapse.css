@@ -1726,7 +1726,7 @@ body[data-mode="single"] #runAuto { display: none; }
 }
 .tool-head:hover { background: #212429; }
 .tool-head:focus-visible { outline: 2px solid var(--orange); outline-offset: -2px; }
-.tool-head .tool-name { color: var(--text); font-weight: 600; flex: none; }
+.tool-head .tool-name { color: var(--text); font-weight: 600; flex: none; font-size: calc(var(--chat-fs) * 0.888); }
 /* a small, flat dot: the status is carried by the colour and the pill, so the
    9px dot ring used elsewhere in the app is too heavy here */
 .tool-head .status-dot { width: 7px; height: 7px; box-shadow: none; }
@@ -1741,10 +1741,12 @@ body[data-mode="single"] #runAuto { display: none; }
   flex: none; margin-left: auto; cursor: help; white-space: nowrap;
 }
 .tool-chev {
-  /* The same size and line box as `.tool-name` beside it: the chevron was 0.88 of
-     the chat size with `line-height: 1`, so a flex row centred two different boxes
-     and the two runs sat 0.9px apart on one line (7 Nov). */
-  flex: none; width: 10px; color: #9aa0a8; font-size: 12px; line-height: normal;
+  /* The same size and line box as the tool's name beside it — both follow the chat
+     text size, because a fixed px here would not scale with the setting. The chevron
+     was 0.88 of the chat size with `line-height: 1` against a 12px name with the
+     normal box, so a flex row centred two different boxes and the two runs sat 0.9px
+     apart on one line (7 Nov). */
+  flex: none; width: 10px; color: #9aa0a8; font-size: calc(var(--chat-fs) * 0.888); line-height: inherit;
   text-align: center; transition: transform 0.15s ease;
 }
 .tool-card.open .tool-chev { transform: rotate(90deg); }

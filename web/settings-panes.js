@@ -56,7 +56,7 @@ function skillsSummary() {
 export const SETTINGS_TABS = [
   { id: 'general', label: 'General', icon: 'general' },
   { id: 'server', label: 'Server', icon: 'sliders' },
-  { id: 'engine', label: 'Runtime', icon: 'engine' },
+  { id: 'engine', label: 'Engine', icon: 'engine' },
   { id: 'providers', label: 'Providers', icon: 'plug' },
   { id: 'workers', label: 'Workers', icon: 'nodes' },
   { id: 'tools', label: 'Tools', icon: 'tools' },
@@ -103,15 +103,15 @@ function settingsEngine(c) {
   const homeValue = readPath(c, 'engine.opencode.home') || detected.home || '';
   return [
     setGroup(
-      'Runtime',
+      'Engine',
       setSelect(
         c,
-        'Runtime',
+        'Engine type',
         'engine.type',
         [{ v: 'opencode', l: 'OpenCode' }],
         { hint: 'Which agent engine Synapse drives. Only OpenCode is implemented.', restart: true },
       ) +
-        setField(c, 'Runtime port', 'engine.opencode.port', {
+        setField(c, 'Engine port', 'engine.opencode.port', {
           type: 'number',
           restart: true,
           hint: 'The port Synapse asks the engine to listen on. It must differ from the Synapse port.',
@@ -126,7 +126,7 @@ function settingsEngine(c) {
           type: 'password',
           restart: true,
           attr: 'placeholder="unchanged"',
-          hint: "Password for the runtime's local API. Leave it blank to keep the password already saved.",
+          hint: "Password for the engine's local API. Leave it blank to keep the password already saved.",
         }) +
         setField(c, 'Start timeout (seconds)', 'engine.opencode.startTimeoutMs', {
           type: 'number',
@@ -134,7 +134,7 @@ function settingsEngine(c) {
           restart: true,
           hint: 'How long Synapse waits for the engine to report ready when it starts. Seconds.',
         }) +
-        setField(c, 'Runtime home (blank = data\\engine\\opencode)', 'engine.opencode.home', {
+        setField(c, 'Engine home (blank = data\\engine\\opencode)', 'engine.opencode.home', {
           wide: true,
           restart: true,
           value: homeValue,
@@ -142,7 +142,7 @@ function settingsEngine(c) {
         }) +
         `<p class="set-note">Running <strong>${esc(detected.version || 'not started')}</strong> from ` +
         `<code>${esc(detected.binary || 'auto-detected')}</code>.</p>` +
-        `<div class="set-field wide" title="The model catalog ships inside the engine binary, so a stale model list means a stale copy. A copy inside bin\\opencode wins over a global install; Check for Updates fetches the newest from npm."><span>Runtime version</span>` +
+        `<div class="set-field wide" title="The model catalog ships inside the engine binary, so a stale model list means a stale copy. A copy inside bin\\opencode wins over a global install; Check for Updates fetches the newest from npm."><span>Engine version</span>` +
         `<button type="button" class="btn btn-secondary btn-sm" data-check-update>Check for Updates</button></div>`,
     ),
     setGroup(
