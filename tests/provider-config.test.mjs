@@ -386,6 +386,69 @@ const strataProps = {
 };
 const notFound = { ok: false, status: 404, text: async () => 'Not Found' };
 
+// A server that answers both shapes: /props for the one model it has loaded, and a
+// list that carries a window for every model it serves. The list is the more precise
+// answer and has to win — it used to be asked last, so a four-model provider had all
+// four measured as the loaded one (7 Nov: the 200k model read 127K in the picker
+// while this list said 204800).
+const fourModels = {
+  ok: true,
+  status: 200,
+  text: async () =>
+    JSON.stringify({
+      object: 'list',
+      data: [
+        { id: 'qwen3.8-flash-next-IQ2_XS-GSQ-126k', meta: { n_ctx: 126976 } },
+        { id: 'qwen3.8-flash-next-IQ2_XS-GSQ-200k', meta: { n_ctx: 204800 } },
+        { id: 'tiel-coder-35b-a3b-Q5_K_XL-131k', meta: { n_ctx: 131072 } },
+        { id: 'tiel-coder-35b-a3b-Q5_K_XL-200k', meta: { n_ctx: 204800 } },
+      ],
+    }),
+};
+
+{
+  const answersBoth = async (url) => {
+    if (url.endsWith('/props')) return strataProps;
+    if (url.endsWith('/models')) return fourModels;
+    return notFound;
+  };
+  const windows = await providerLoadedWindows({ baseURL: 'http://127.0.0.1:8080/v1' }, { fetchImpl: answersBoth });
+  check(
+    'a list with a window per model is read for every model',
+    windows.get('qwen3.8-flash-next-IQ2_XS-GSQ-200k') === 204800 &&
+      windows.get('tiel-coder-35b-a3b-Q5_K_XL-131k') === 131072 &&
+      windows.get('qwen3.8-flash-next-IQ2_XS-GSQ-126k') === 126976,
+    JSON.stringify([...windows]),
+  );
+
+  const cfg = {
+    engine: {
+      opencode: {
+        providers: [
+          {
+            id: 'polystrata',
+            type: 'openai',
+            baseURL: 'http://127.0.0.1:8080/v1',
+            models: [
+              { id: 'qwen3.8-flash-next-IQ2_XS-GSQ-126k' },
+              { id: 'qwen3.8-flash-next-IQ2_XS-GSQ-200k' },
+              { id: 'tiel-coder-35b-a3b-Q5_K_XL-131k' },
+              { id: 'tiel-coder-35b-a3b-Q5_K_XL-200k' },
+            ],
+          },
+        ],
+      },
+    },
+  };
+  await measureLocalWindows(cfg, { fetchImpl: answersBoth });
+  const ctx = cfg.engine.opencode.providers[0].models.map((m) => m.context);
+  check(
+    'and the boot measurement writes each model its own number',
+    JSON.stringify(ctx) === '[126976,204800,131072,204800]',
+    JSON.stringify(ctx),
+  );
+}
+
 // /props names the one loaded model, and knows its window.
 {
   const props = await providerLoadedWindow(

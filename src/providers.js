@@ -257,7 +257,23 @@ async function probeLoadedWindows(root, fetchImpl, timeoutMs) {
   }
   if (windows.size) return windows;
 
-  // Then llama.cpp's own endpoint: one loaded model, named by its alias.
+  // Then the server's own list, which may carry a window for *every* model it
+  // serves. That is the most precise answer there is, and it used to be asked last:
+  // a /props server answers for the one model it has loaded, the code returned
+  // there, and a provider serving four models had all four measured as the loaded
+  // one (7 Nov — the 200k model read 127K in the picker while the server's own list
+  // said 204800).
+  const list = await get('/v1/models');
+  const entries = Array.isArray(list?.data) ? list.data : Array.isArray(list?.models) ? list.models : [];
+  for (const m of entries) {
+    const id = String(m?.id || m?.model || m?.name || '').trim();
+    const n = contextFrom(m, { loadedOnly: true });
+    if (id && n > 0) windows.set(id, n);
+  }
+  if (windows.size) return windows;
+
+  // Last, llama.cpp's own endpoint: one loaded model, named by its alias. Only
+  // reached when the list carried no window at all, which is the case it exists for.
   const props = await get('/props');
   const alias = String(props?.model_alias || '').trim();
   const ctx = Number.parseInt(props?.default_generation_settings?.n_ctx, 10);
@@ -270,16 +286,6 @@ async function probeLoadedWindows(root, fetchImpl, timeoutMs) {
     // that matters at the call sites, and the bug when it is ignored (6 Nov).
     windows.set('*', ctx);
     windows.alias = alias;
-  }
-  if (windows.size) return windows;
-
-  // Last, a wrapper's own list: meta.n_ctx and friends, read by contextFrom.
-  const list = await get('/v1/models');
-  const entries = Array.isArray(list?.data) ? list.data : Array.isArray(list?.models) ? list.models : [];
-  for (const m of entries) {
-    const id = String(m?.id || m?.model || m?.name || '').trim();
-    const n = contextFrom(m, { loadedOnly: true });
-    if (id && n > 0) windows.set(id, n);
   }
   return windows;
 }
