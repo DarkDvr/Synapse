@@ -69,9 +69,10 @@ function providerEditor(providers, index) {
       <label class="set-field" title="The name on the badge beside this provider's models in every role's menu.">
         <span>Name</span>
         <input data-prov="name" value="${esc(p.name || '')}" placeholder="DeepSeek" />
-        <small class="prov-hint">Model prefix: <code>${esc(previewId)}</code> — the word before the slash in
-          <code>${esc(previewId)}/model</code>. It comes from the name, and a provider the engine already serves
-          keeps its models only when the two match (name it <code>OpenCode</code> for <code>opencode</code>).</small>
+      </label>
+      <label class="set-field" title="The word before the slash in every model name this provider serves — opencode/deepseek. Filled from the name until you change it here, and two providers cannot share one: a provider the engine already serves keeps its models only when the two match.">
+        <span>Model prefix</span>
+        <input data-prov="id" value="${esc(p.id || '')}" placeholder="${esc(previewId)}" spellcheck="false" autocomplete="off" />
       </label>
       <label class="set-field wide" title="The server's address, including /v1 when it needs one. Nothing is contacted until you press Refresh List or run a turn.">
         <span>Server URL</span>
@@ -214,6 +215,10 @@ export function addProvider(type) {
   const list = Array.isArray(c.engine.opencode.providers) ? c.engine.opencode.providers : (c.engine.opencode.providers = []);
   list.push({
     id: '',
+    // A new provider's prefix follows its name until the operator types one, so
+    // naming it "OpenCode" is enough to land on `opencode` — the id the engine
+    // already serves that provider under.
+    idTouched: false,
     type,
     // Three kinds, two behaviours: a `llamacpp` server *is* a local server, it just
     // answers /props rather than LM Studio's /api/v0/models. Named for the dialect

@@ -581,6 +581,9 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
         delete p.apiKeyMasked;
         delete p.apiKeyFrom;
         delete p.apiKeyRemoved;
+        // The page's own flag for "the operator typed this prefix themselves"; it
+        // decides whether the prefix follows the name, and has no place in the file.
+        delete p.idTouched;
         const key = p.apiKey;
         if (key === null) {
           if (p.id) setProviderKey(p.id, '');

@@ -280,12 +280,23 @@ export function onSettingsInput(e) {
   p[field] = el.value;
   // A hand-typed key is no longer the mask, and the hint under the field says so
   // — but re-rendering on every keystroke would take the caret with it.
+  if (field === 'id') {
+    // The prefix is the word before the slash in every model name this provider
+    // serves, so it is slugged as it is typed. Typing one stops it following the
+    // name: the operator has said what they want.
+    p.id = slugify(el.value);
+    p.idTouched = true;
+    el.value = p.id;
+    return;
+  }
   if (field === 'name') {
     const row = $('settingsBody').querySelector(`[data-prov-row="${state.setProvSelected}"] .prov-name`);
     if (row) row.textContent = el.value.trim() || 'Untitled provider';
-    if (!p.id) {
-      const code = $('settingsBody').querySelector('.prov-badge-line code');
-      if (code) code.textContent = `${slugify(el.value)}/…`;
+    // A new provider's prefix follows its name until it is typed by hand.
+    if (p.idTouched === false) {
+      p.id = slugify(el.value);
+      const prefix = $('settingsBody').querySelector('[data-prov="id"]');
+      if (prefix) prefix.value = p.id;
     }
   }
 }
@@ -385,6 +396,25 @@ export async function saveSettings({ close = false, restart = false } = {}) {
     draft.engine.opencode.providers = providers.filter(
       (p) => String(p.name || '').trim() || String(p.baseURL || '').trim(),
     );
+  }
+  // Two providers cannot share a model prefix: it is the word before the slash in
+  // every model name they serve, so a duplicate would make one provider's models
+  // unreachable and the other's ambiguous. Refused here rather than saved and
+  // puzzled over later.
+  {
+    const seen = new Map();
+    for (const p of draft.engine?.opencode?.providers || []) {
+      const id = String(p.id || '').trim().toLowerCase();
+      if (!id) continue;
+      if (seen.has(id)) {
+        toast(
+          'Two Providers Share A Prefix',
+          `"${seen.get(id)}" and "${p.name || p.id}" both use "${id}". Give one of them its own.`,
+        );
+        return;
+      }
+      seen.set(id, p.name || p.id);
+    }
   }
   // A model change can strand a thinking effort the new model does not offer
   // (or that the chevron control cannot express). Clear it rather than let the
