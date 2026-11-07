@@ -26,11 +26,18 @@ const SHELL_ACTIONS = new Set(['shell', 'bash']);
 const EXECUTE_ACTIONS = new Set(['execute']);
 const READ_ACTIONS = new Set(['read']);
 
-// Inside the harness, this is what a model may read. The list is short on
-// purpose: `data/` holds provider keys and session records, `config/` is the
-// operator's, and nothing under `bin/` is a document.
-const HARNESS_READABLE = ['skills/', 'docs/', 'logs/', 'src/', 'web/', 'templates/', 'AGENTS.md', 'README.md'];
-const HARNESS_DENIED = ['data/', 'config/', 'bin/', '.git/', 'vendor/'];
+// Inside the harness, this is what a model may **not** read: the folders that hold
+// keys and state rather than documents. `data/` has the provider keys and the engine's
+// store, `config/` is the operator's own file, `bin/` and `vendor/` are binaries, and
+// `.git/` is history nobody needs.
+//
+// It is a denylist on purpose. It used to be the other way round — a short list of
+// readable folders — and that means every folder Synapse gains is refused by default
+// until somebody remembers to add it. `templates/` was refused that way, two reads in
+// one step were declined, and the engine ended the turn as interrupted: the operator
+// saw a run "stop" for reading a file that is not a secret (7 Nov). Reads inside the
+// harness are allowed unless they land in one of these.
+const HARNESS_DENIED = ['data/', 'config/', 'bin/', '.git/', 'vendor/', 'node_modules/'];
 
 // Credential stores. Reading these is never part of building a project, and the
 // operator allowed reads outside the workspace — this is the exception that
@@ -636,14 +643,17 @@ function decideShell(resources, ctx) {
   );
 }
 
-/** The harness paths a model may read: documents and logs, not state or keys. */
+/**
+ * The harness paths a model may read: everything except the folders that hold keys
+ * and state. A folder Synapse gains tomorrow is readable without anyone remembering
+ * to add it — which is the difference between a rule and a trap.
+ */
 function harnessReadable(target, ctx) {
   const suffix = key(target).slice(key(ctx.harnessRoot).length);
   // Listing the harness root shows folder names, not content.
   if (!suffix) return true;
   const rel = `${suffix}/`.replace(/^\/+/, '');
-  if (HARNESS_DENIED.some((part) => rel.startsWith(key(part)))) return false;
-  return HARNESS_READABLE.some((part) => rel.startsWith(key(part)));
+  return !HARNESS_DENIED.some((part) => rel.startsWith(key(part)));
 }
 
 function decideRead(resources, ctx) {

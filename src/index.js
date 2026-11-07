@@ -291,6 +291,19 @@ async function main() {
       permissionLog.record(entry);
       if (entry.decided) {
         http?.broadcast({ kind: 'permission', type: 'permission.decided', decision: entry, ts: Date.now() });
+        // A refusal ends the turn: the engine fails the step when a tool call is
+        // declined, and the chat then simply stops. The operator should never have to
+        // read the logs to find out what was refused and why (7 Nov — two reads of a
+        // template ended a run, and the screen said nothing).
+        if (entry.effect === 'deny' && entry.asked === false && entry.scope !== 'prohibited') {
+          const what = [entry.action, ...(entry.resources || []).slice(0, 2)].filter(Boolean).join(' ');
+          http?.broadcast({
+            kind: 'note',
+            title: 'Refused',
+            body: `${what} — ${entry.reason} A refused call ends the turn.`,
+            ts: Date.now(),
+          });
+        }
         // A worker's session cannot be opened from the rail, so a red line only in
         // the worker's own chat would be one the operator never sees. The alarm
         // carries the project so it lands in the chat they are looking at.

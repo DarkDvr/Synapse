@@ -5,6 +5,8 @@
 // Run: node tests\permissions.test.mjs
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
 
 import { decide, grantKey, rulesFor, zoneOf, inside, isSecret, analyzeCommand, refusalNote, screenTaking } from '../src/permissions.js';
 
@@ -248,16 +250,34 @@ test('reading outside is allowed, except a credential store', () => {
   assert.equal(call('read', 'C:/Users/tester/.aws/credentials').effect, 'deny');
 });
 
-test('reading the harness is limited to the parts that help', () => {
+test('reading the harness is allowed except where keys and state live', () => {
+  // Documents, source and scaffolds are all readable.
   assert.equal(call('read', `${HARNESS}/logs/app.log`).effect, 'allow');
   assert.equal(call('read', `${HARNESS}/docs/notes/engine-notes.md`).effect, 'allow');
-  // The scaffold a project may be built from is source, like `src/` and `web/`:
-  // a model designing a Windows app reads it, and refusing it ended a run (7 Nov).
   assert.equal(call('read', `${HARNESS}/templates/win-app/README.md`).effect, 'allow');
-  assert.equal(call('read', `${HARNESS}/templates/win-app/App.csproj`).effect, 'allow');
+  assert.equal(call('read', `${HARNESS}/AGENTS.md`).effect, 'allow');
+  // Keys and state are not.
   assert.equal(call('read', `${HARNESS}/data/provider-keys.json`).effect, 'deny');
   assert.equal(call('read', `${HARNESS}/config/synapse.config.json`).effect, 'deny');
   assert.equal(call('read', `${HARNESS}/bin/node/node.exe`).effect, 'deny');
+  assert.equal(call('read', `${HARNESS}/.git/HEAD`).effect, 'deny');
+});
+
+// The list is a denylist, and that is the point: it used to be an allowlist, so every
+// folder Synapse gained was refused until someone remembered to add it. `templates/`
+// was refused that way, two reads in one step were declined, and the engine ended the
+// turn as interrupted — the operator saw a run stop for reading a file that is not a
+// secret (7 Nov).
+test('a folder added to the harness later is readable without being listed', () => {
+  assert.equal(call('read', `${HARNESS}/some-folder-added-later/notes.md`).effect, 'allow');
+  assert.equal(call('read', `${HARNESS}/another one/file.txt`).effect, 'allow');
+});
+
+test('the folders that hold keys and state stay refused, and they are the ones on disk', () => {
+  for (const rel of ['data/provider-keys.json', 'config/synapse.config.json']) {
+    if (!fs.existsSync(path.join(process.cwd(), rel))) continue;
+    assert.equal(call('read', `${HARNESS}/${rel.replace(/\//g, '\\')}`).effect, 'deny', `${rel} must stay refused`);
+  }
 });
 
 test('a relative climb into the harness is judged as the harness', () => {
