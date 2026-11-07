@@ -25,26 +25,26 @@ Fix: when it happens again, read `/api/desk` at the same moment and compare. If 
 server says null the page is the bug (a missing clear); if the server says held, the
 server is (a lease that was never released).
 
-## The corner cannot refresh a window until the engine restarts (6 Nov)
+## A window reloaded mid-session shows only after a restart (6 Nov, narrowed 7 Nov)
 
-The stamping that caused this is fixed (7 Nov): `measureLocalWindows` and the per-run
-`noteLoadedWindow` now apply a `/props` server's window only to the model it named, so
-one load no longer overwrites every model in the provider. What is left is smaller and
-is a property of the engine, not a bug in it: the catalog's `context` is fixed when the
-engine starts, and there is no route to change one model's window mid-life. So the
-card's "Nk/Mk ctx" corner still shows the number the engine was started with, and a
-model whose context was corrected during a run shows the new number only after a
-restart — which `noteLoadedWindow` already warns about in the log.
+The two causes are fixed. `measureLocalWindows` and `noteLoadedWindow` no longer apply
+a `/props` server's window to every model in the provider, and the probe now asks the
+server's own list — which carries `meta.n_ctx` per model — before `/props`, which only
+ever knows the one model it has loaded. The operator's four PolyStrata rows measured
+126976 / 204800 / 131072 / 204800 from the server itself, and the picker and the
+card's corner read them correctly.
 
-One consequence worth knowing: the four polystrata rows in the config still say
-`126976` from the old stamping, and nothing can measure them while that server is
-down. Each one corrects itself the first time it is loaded and a run starts on it,
-because `noteLoadedWindow` writes the measured number back.
+What is left is a property of the engine, not a bug in it: the catalog's `context` is
+fixed when the engine starts and there is no route to change one model's window
+mid-life. So if a model is *reloaded in its own app* with a different context while
+Synapse runs, the next run measures it and writes the config, but the page keeps
+showing the number the engine was started with until a restart — which
+`noteLoadedWindow` warns about in the log.
 
 Where: `web/rate-view.js` (the corner reads the engine's catalog), `src/index.js`
 (what the engine is told at boot).
-Fix: either accept the restart as the boundary, or give the engine a route that
-changes a model's window without one. Not worth either while a restart is a click.
+Fix: accept the restart as the boundary, or give the engine a route that changes a
+model's window without one. Not worth either while a restart is a click.
 
 ## OC provider fixes — details to come (6 Nov)
 
