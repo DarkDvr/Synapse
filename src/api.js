@@ -805,6 +805,14 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
       };
     },
 
+    /**
+     * The providers the engine serves itself, with the names the page shows.
+     *
+     * The page asks once at boot and keeps the answer: the list is a property of the
+     * installed engine, not of the config, and it only changes when the engine does.
+     */
+    engineProviders: () => ({ providers: engine.engineProviders?.() || [] }),
+
     providerModels: async (body) => {
       const id = String(body?.id || '').trim();
       const key = id ? providerApiKey({ id, apiKey: body?.apiKey }, process.env).key : String(body?.apiKey || '').trim();

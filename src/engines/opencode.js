@@ -533,6 +533,22 @@ export class OpenCodeEngine extends Engine {
 
   // ── capabilities ─────────────────────────────────────────────
 
+  /**
+   * The providers this engine serves itself, and what to call them.
+   *
+   * The page used to carry this list — two ids, two labels, two sentences — which
+   * is engine knowledge in a file that must work with any engine. It lives here now,
+   * beside the only other place that knows what OpenCode calls its own providers.
+   * The ids are also the ones `engine.opencode.hiddenProviders` accepts, so a
+   * renamed provider is one edit in this file rather than a hunt through `web/`.
+   */
+  engineProviders() {
+    return [
+      { id: 'opencode', label: 'OC Zen', note: 'Free models need no key; a Zen key unlocks the paid ones.' },
+      { id: 'opencode-go', label: 'OC Go', note: 'Paid plan — its key lives in the engine.' },
+    ];
+  }
+
   async listModels() {
     const r = await this.request('GET', '/api/model');
     const data = Array.isArray(r?.data) ? r.data : [];

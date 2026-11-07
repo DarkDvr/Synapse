@@ -6,13 +6,34 @@
 // the model menu sorting by label instead of the operator's order was a real bug
 // (4 Nov). So the answer lives in one module.
 import { state } from './state.js';
+import { api } from './api.js';
 import { slugify, providerBadge } from './settings-data.js';
 
-export const ENGINE_PROVIDERS = [
-  { id: 'opencode', label: 'OC Zen', note: 'Free models need no key; a Zen key unlocks the paid ones.' },
-  { id: 'opencode-go', label: 'OC Go', note: 'Paid plan — its key lives in the engine.' },
-];
-const ENGINE_BADGES = Object.fromEntries(ENGINE_PROVIDERS.map((p) => [p.id, p.label]));
+/**
+ * The rows the engine serves itself, and what it calls them.
+ *
+ * This used to be a literal in this file — two OpenCode ids, two labels and two
+ * sentences — which is engine knowledge inside a module that has to work with any
+ * engine. The adapter declares them now (`engineProviders()` in
+ * `src/engines/opencode.js`), the server hands them over once at boot, and the page
+ * only draws them. An engine that declares nothing gets an empty list, and the
+ * operator's own providers are all that is shown.
+ */
+export let ENGINE_PROVIDERS = [];
+
+/** Ask the server which providers its engine serves. Called once, from boot. */
+export async function loadEngineProviders() {
+  try {
+    const r = await api('GET', '/api/providers');
+    ENGINE_PROVIDERS = Array.isArray(r?.providers) ? r.providers : [];
+  } catch {
+    // The engine could not say: the config's own providers still list, and an id
+    // falls back to its own words rather than to a name this file invented.
+    ENGINE_PROVIDERS = [];
+  }
+  return ENGINE_PROVIDERS;
+}
+
 export const providerLabel = (p) => {
   const id = String(p || 'unknown');
   const configured = (state.config?.engine?.opencode?.providers || []).find((x) => x.id === id);
@@ -20,7 +41,8 @@ export const providerLabel = (p) => {
   // be running it: the next machine's may be Ollama or vLLM, and a badge naming
   // one of them would be wrong everywhere else.
   if (configured) return providerBadge(configured) || id;
-  if (ENGINE_BADGES[id]) return ENGINE_BADGES[id];
+  const engine = ENGINE_PROVIDERS.find((x) => x.id === id);
+  if (engine) return engine.label;
   return id
     .split(/[-_]/)
     .filter(Boolean)

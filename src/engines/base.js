@@ -21,6 +21,16 @@ export class Engine extends EventEmitter {
 
   // ── capabilities ─────────────────────────────────────────────
   async listModels() { return []; }
+  /**
+   * The providers this engine serves itself: [{ id, label, note }], in the order the
+   * page should offer them. Empty is the honest default — an engine whose providers
+   * all come from the operator's config has nothing to declare here, and the page
+   * then shows only what the config holds.
+   *
+   * It exists because the page used to hardcode OpenCode's two rows: a second
+   * engine, or a renamed provider, would have left it labelling the wrong thing.
+   */
+  engineProviders() { return []; }
   // The model the engine uses when a session has no explicit selection.
   async getDefaultModel() { return null; }
   async listAgents() { return []; }

@@ -8,6 +8,27 @@ Newest first. When one is fixed, delete it here and say so in the commit.
 
 ---
 
+## The window is measured at boot, but the server swaps its loaded model on demand — 7 Nov
+
+PolyStrata loads a 126k model at boot and keeps it. When Synapse asks for a 200k
+model it unloads the 126k one and loads the 200k one — the swap happens on the
+request, not before it. So the window Synapse knows is only true for the model the
+server happened to have loaded when it was measured. Today the per-model list covers
+the usual case (each model's `meta.n_ctx` is declared, so all four read correctly),
+and `/props` still answers for whichever model is loaded; what is missing is asking
+*again* when the model in use changes, so a swap that changes the number is seen
+rather than assumed.
+
+Where: `src/providers.js` (`probeLoadedWindows` — `/props` should override the list's
+entry for the model it names, since the loaded window is the real one), `src/api.js`
+(`switchModel` — measure the provider after a switch), `web/rate-view.js` (the corner
+reads the engine's catalog, which is fixed at engine start).
+Fix: ask on switch and on each run start (the run start already does), write the
+answer into the config, and let the page read the config rather than the catalog for
+the corner. Then a swap is one measurement away from being displayed, not a restart.
+
+---
+
 ## The screen badge may stay on screen after the desk is released — 7 Nov
 
 Seen once, while checking the page after a refactor move: the desk badge read "Screen
@@ -52,25 +73,18 @@ The operator has a list of fixes for the OpenCode providers — the two engine r
 (`opencode` / OC Zen, `opencode-go` / OC Go) and what Synapse does with them. Held
 here on purpose so the list is not lost between sessions; the detail arrives later.
 
-Where: `web/provider-list.js` (`ENGINE_PROVIDERS`, `providerLabel`), `web/providers.js`
-(the pane and the editor), `src/engines/opencode.js` (what is registered with the
-engine) — depending on what the list turns out to be.
+One concrete symptom for that list, found while moving the names into the adapter
+(7 Nov): a provider the engine serves *and* the config also holds is rendered twice
+differently. The config has a row `opencode-go` named "OpenCode Go" pointing at
+`https://opencode.ai/zen/go/v1`; the Providers pane shows the engine's own row
+("OC Go", "Engine catalog") and hides the config's, because it checks the engine list
+first — while the model menu labels that provider from the config ("OpenCode Go").
+Two names for one provider, in two places that are supposed to agree.
+
+Where: `web/provider-list.js` (`providerLabel`), `web/providers.js` (`rowFor` — the
+builtin check comes before the config row), `src/engines/opencode.js` (what the
+engine registers), `config/synapse.config.json` (the row that duplicates it).
 Fix: wait for the operator's notes. Do not guess at them.
-
-## The page knows two engine provider ids by name
-
-`ENGINE_PROVIDERS` in `web/app.js` hardcodes `opencode` and `opencode-go`, with the
-badge and the note each one shows ("OC Zen", "OC Go"). That is engine-specific
-knowledge in the page, and the pillar says the OpenCode adapter is the only place
-that should have it: a second engine, or a renamed provider, leaves the page
-labelling the wrong thing — or nothing.
-
-Where: `web/app.js`, `ENGINE_PROVIDERS` and `providerLabel`.
-Fix: the server knows its providers (`/api/providers`), so the label and the note
-could come from there. Not urgent while there is one engine. (6 Nov: the two rows can
-now be removed and restored, which makes the page own a little more of that knowledge
-— it is also the list of ids `hiddenProviders` accepts — so this got slightly worse,
-not better.)
 
 ## The engine home is mostly one database nobody prunes (6 Nov, measured 7 Nov)
 

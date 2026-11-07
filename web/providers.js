@@ -191,7 +191,7 @@ export function settingsProviders(c) {
           <button type="button" data-prov-new="local">Local Provider</button>
           <button type="button" data-prov-new="llamacpp">Local Provider (llama.cpp)</button>
           <button type="button" data-prov-new="openai">OpenAI Compatible</button>
-          ${restore || '<button type="button" disabled title="The engine registers its own catalog, so OC Zen and OC Go are already in the list. Remove one here to offer it back.">Engine providers (in the list)</button>'}
+          ${restore || '<button type="button" disabled title="The engine registers its own providers, so they are already in the list. Remove one here to offer it back.">Engine providers (in the list)</button>'}
         </div>
       </div>
       <div class="prov-list">

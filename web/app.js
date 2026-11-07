@@ -26,7 +26,7 @@ import {
   projectsWiring,
 } from './projects.js';
 import { readPath, writePath, maskSecret, slugify, modelLines, parseModelLines, isLocalServer, providerBadge } from './settings-data.js';
-import { providerLabel, providerOrderOf, hiddenProviderIds } from './provider-list.js';
+import { providerLabel, providerOrderOf, hiddenProviderIds, loadEngineProviders } from './provider-list.js';
 import {
   settingsProviders,
   providersWiring,
@@ -2244,6 +2244,10 @@ async function bootPage() {
   // this a resize left the old height in place and the page grew a scrollbar.
   window.addEventListener('resize', fitStageHeight);
   state.config = await api('GET', '/api/config').catch(() => null);
+  // Which providers the engine serves itself, and what it calls them: the server
+  // asks the adapter, so the page does not have to know OpenCode's two ids. Before
+  // the rail and the panes draw, because they order and label by this.
+  await loadEngineProviders();
   applyChatText();
   applyLanguage();
   renderLlmStatus();
