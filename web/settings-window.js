@@ -335,35 +335,6 @@ export async function onSettingsClick(e) {
     addProvider(newProvider.dataset.provNew);
     return;
   }
-  // An engine provider removed from the list, put back. Nothing is registered: the
-  // engine never stopped serving it, so this only takes its id off the hidden list
-  // and the models return to the menu on the next load.
-  const restore = e.target.closest('[data-prov-show]');
-  if (restore) {
-    const menu = $('provAddMenu');
-    if (menu) menu.hidden = true;
-    const c = collectSettings();
-    if (!c) return;
-    c.engine.opencode = c.engine.opencode || {};
-    c.engine.opencode.hiddenProviders = (c.engine.opencode.hiddenProviders || []).filter(
-      (id) => String(id) !== String(restore.dataset.provShow),
-    );
-    renderSettings();
-    return;
-  }
-  const hide = e.target.closest('[data-prov-hide]');
-  if (hide) {
-    const c = collectSettings();
-    if (!c) return;
-    c.engine.opencode = c.engine.opencode || {};
-    const gone = new Set((c.engine.opencode.hiddenProviders || []).map(String));
-    gone.add(String(hide.dataset.provHide));
-    c.engine.opencode.hiddenProviders = [...gone];
-    // The row is about to disappear, so an editor open on it would point at nothing.
-    state.setProvSelected = null;
-    renderSettings();
-    return;
-  }
   // The order arrows come before the row handler: a click on one is a move, not
   // a request to open the provider for editing.
   const move = e.target.closest('[data-prov-up],[data-prov-down]');

@@ -328,6 +328,34 @@ async function main() {
     t.unref?.();
   }
 
+  // ── conversations whose project is gone ──────────────────────
+  // The engine keeps every session it was ever given, and that is what its database
+  // is made of. A session whose folder no longer exists can never be opened again:
+  // no project points at it, so its transcript is unreachable — and they are a lot
+  // of it (measured 7 Nov: 19 of 50 sessions, from two deleted test projects, in a
+  // 430 MB database). Only a folder that is *gone* is pruned: a project the operator
+  // unregistered but kept on disk is left alone, because re-adding it should find
+  // its chat.
+  {
+    const t = setTimeout(async () => {
+      try {
+        const sessions = await engine.listSessions();
+        const active = new Set(await engine.listActiveSessions().catch(() => []));
+        let n = 0;
+        for (const s of sessions) {
+          if (!s?.id || !s.directory || active.has(s.id)) continue;
+          if (fs.existsSync(s.directory)) continue;
+          await engine.deleteSession(s.id).catch(() => {});
+          n += 1;
+        }
+        if (n) app.info(`housekeeping: forgot ${n} conversation(s) whose folder no longer exists`);
+      } catch (err) {
+        app.warn(`could not forget old conversations: ${err.message}`);
+      }
+    }, 6000);
+    t.unref?.();
+  }
+
   // Per-model knowledge. Created before the runner because a run that fails
   // leaves a mark on the model it ran on — that is the picker's badge of shame,
   // and it is also why the cache outlives a model leaving the catalog.

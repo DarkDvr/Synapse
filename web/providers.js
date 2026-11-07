@@ -12,7 +12,7 @@ import { $ } from './dom.js';
 import { api } from './api.js';
 import { setIcon } from './icons.js';
 import { slugify, maskSecret, modelLines, isLocalServer, providerBadge } from './settings-data.js';
-import { ENGINE_PROVIDERS, providerOrderOf, hiddenProviderIds } from './provider-list.js';
+import { providerOrderOf } from './provider-list.js';
 
 const wired = {
   collectSettings: () => null,
@@ -126,10 +126,6 @@ function providerEditor(providers, index) {
 export function settingsProviders(c) {
   const providers = c.engine?.opencode?.providers || [];
   const selected = Number.isInteger(state.setProvSelected) ? state.setProvSelected : -1;
-  const countsByProvider = (state.models || []).reduce((acc, m) => {
-    acc[m.provider] = (acc[m.provider] || 0) + 1;
-    return acc;
-  }, {});
   const order = providerOrderOf(c);
   const indexById = new Map(providers.map((p, i) => [String(p.id || slugify(p.name)), i]));
   const moves = (id, at) => `
@@ -138,25 +134,6 @@ export function settingsProviders(c) {
           <button type="button" class="role-btn ic-move" data-prov-down="${esc(id)}" title="Move Down"
                   aria-label="Move ${esc(id)} down"${at === order.length - 1 ? ' disabled' : ''}>↓</button>`;
   const rowFor = (id, at) => {
-    const builtin = ENGINE_PROVIDERS.find((p) => p.id === id);
-    if (builtin) {
-      const count = countsByProvider[builtin.id] || 0;
-      // Engine rows are the engine's own catalog: its key and its URL are not ours
-      // to edit, but whether it is in this list is the operator's choice, so it can
-      // be removed like any other and put back from Add Provider. Nothing is
-      // unregistered — the models simply stop being offered.
-      return `<div class="prov-row is-builtin" title="${esc(builtin.note)}">
-        <span class="prov-type">${esc(builtin.label)}</span>
-        <span class="prov-name">Engine catalog</span>
-        <span class="prov-url">${esc(builtin.note)}</span>
-        <span class="prov-meta">${count ? `${count} model${count === 1 ? '' : 's'}` : 'not connected'}</span>
-        <span class="prov-acts">${moves(id, at)}
-          <button type="button" class="role-btn prov-del" data-prov-hide="${esc(builtin.id)}"
-                  title="Remove ${esc(builtin.label)} from the list — its models leave the model menu, and Add Provider puts it back"
-                  aria-label="Remove ${esc(builtin.label)} from the list">✕</button>
-        </span>
-      </div>`;
-    }
     const i = indexById.get(id);
     if (i === undefined) return '';
     const p = providers[i];
@@ -175,13 +152,6 @@ export function settingsProviders(c) {
       </div>`;
   };
   const rows = order.map((id, at) => rowFor(id, at)).join('');
-  // The engine's own providers are always registered, so "adding" one is putting a
-  // row the operator removed back into the list. Only the ones that are gone are
-  // offered, and the entry says where it comes from.
-  const hidden = hiddenProviderIds(c);
-  const restore = ENGINE_PROVIDERS.filter((p) => hidden.has(p.id))
-    .map((p) => `<button type="button" data-prov-show="${esc(p.id)}">${esc(p.label)} (engine)</button>`)
-    .join('');
 
   return `
     <section class="set-group"><h4>Providers <em class="set-restart">Restart</em></h4>
@@ -191,7 +161,6 @@ export function settingsProviders(c) {
           <button type="button" data-prov-new="local">Local Provider</button>
           <button type="button" data-prov-new="llamacpp">Local Provider (llama.cpp)</button>
           <button type="button" data-prov-new="openai">OpenAI Compatible</button>
-          ${restore || '<button type="button" disabled title="The engine registers its own providers, so they are already in the list. Remove one here to offer it back.">Engine providers (in the list)</button>'}
         </div>
       </div>
       <div class="prov-list">

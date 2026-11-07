@@ -387,12 +387,6 @@ export function createServer({ api, engine, logger, config, remote, onRemote }) 
     if (seg[0] === 'providers' && seg[1] === 'models' && method === 'POST') {
       return sendJson(res, 200, await api.providerModels(await readBody(req)));
     }
-    // GET /api/providers — the rows the engine serves itself, and what it calls
-    // them. Asked once at boot: the page used to carry this list, which is engine
-    // knowledge in a file that has to work with any engine.
-    if (seg[0] === 'providers' && seg.length === 1 && method === 'GET') {
-      return sendJson(res, 200, await api.engineProviders());
-    }
     if (seg[0] === 'models' && seg.length === 1 && method === 'GET') return sendJson(res, 200, await api.models());
     if (seg[0] === 'skills' && seg.length === 1 && method === 'GET') return sendJson(res, 200, await api.skills());
     if (seg[0] === 'models' && seg[1] === 'cache' && method === 'GET') return sendJson(res, 200, await api.modelCache());

@@ -25,25 +25,6 @@ Fix: when it happens again, read `/api/desk` at the same moment and compare. If 
 server says null the page is the bug (a missing clear); if the server says held, the
 server is (a lease that was never released).
 
-## OC provider fixes — details to come (6 Nov)
-
-The operator has a list of fixes for the OpenCode providers — the two engine rows
-(`opencode` / OC Zen, `opencode-go` / OC Go) and what Synapse does with them. Held
-here on purpose so the list is not lost between sessions; the detail arrives later.
-
-One concrete symptom for that list, found while moving the names into the adapter
-(7 Nov): a provider the engine serves *and* the config also holds is rendered twice
-differently. The config has a row `opencode-go` named "OpenCode Go" pointing at
-`https://opencode.ai/zen/go/v1`; the Providers pane shows the engine's own row
-("OC Go", "Engine catalog") and hides the config's, because it checks the engine list
-first — while the model menu labels that provider from the config ("OpenCode Go").
-Two names for one provider, in two places that are supposed to agree.
-
-Where: `web/provider-list.js` (`providerLabel`), `web/providers.js` (`rowFor` — the
-builtin check comes before the config row), `src/engines/opencode.js` (what the
-engine registers), `config/synapse.config.json` (the row that duplicates it).
-Fix: wait for the operator's notes. Do not guess at them.
-
 ## The engine home is mostly one database nobody prunes (6 Nov, measured 7 Nov)
 
 The entry said 574 MB and blamed snapshots. Measured: **575 MB, and 430 MB of it is

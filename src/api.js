@@ -836,14 +836,6 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
       };
     },
 
-    /**
-     * The providers the engine serves itself, with the names the page shows.
-     *
-     * The page asks once at boot and keeps the answer: the list is a property of the
-     * installed engine, not of the config, and it only changes when the engine does.
-     */
-    engineProviders: () => ({ providers: engine.engineProviders?.() || [] }),
-
     providerModels: async (body) => {
       const id = String(body?.id || '').trim();
       const key = id ? providerApiKey({ id, apiKey: body?.apiKey }, process.env).key : String(body?.apiKey || '').trim();
@@ -1017,14 +1009,18 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
       if (modelCache) {
         try { modelCache.record(list); } catch (err) { app.warn(`model cache update failed: ${err.message}`); }
       }
-      // A provider the operator removed in Settings is not offered any more. The
-      // engine keeps serving it and a role that already points at it keeps
-      // working — this is the menu, not the permission. Recorded above, so its
-      // context and variants are still known if it is put back.
-      const hidden = new Set((getConfig()?.engine?.opencode?.hiddenProviders || []).map(String));
-      const shown = hidden.size ? list.filter((m) => !hidden.has(String(m.provider))) : list;
-      if (hidden.size && shown.length !== list.length) {
-        app.debug(`models: ${list.length - shown.length} hidden by Settings (${[...hidden].join(', ')})`);
+      // Only the providers this config holds are offered. Every provider is the
+      // operator's now — OC Zen and OC Go are ordinary OpenAI-compatible rows, added
+      // with Add Provider and removed by deleting the row — so the engine serving a
+      // model is not a reason to show it. The engine keeps serving whatever a role
+      // already points at; this is the menu, not the permission. Recorded above, so
+      // a model's context and variants are known if its provider is added back.
+      const cfg = getConfig();
+      const configured = new Set((cfg?.engine?.opencode?.providers || []).map((p) => String(p.id || '')).filter(Boolean));
+      const hidden = new Set((cfg?.engine?.opencode?.hiddenProviders || []).map(String));
+      const shown = list.filter((m) => configured.has(String(m.provider)) && !hidden.has(String(m.provider)));
+      if (shown.length !== list.length) {
+        app.debug(`models: ${list.length - shown.length} not offered — no provider row for them`);
       }
       // The engine's catalog is what it was *told* when it started. The config is
       // what Synapse budgets with — measured at boot, corrected by a run, typed in
@@ -1032,7 +1028,6 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
       // restarts. The page shows the config's number, because that is the one the
       // watchdog uses, and a corner reading a window nobody budgets for is worse
       // than one that lags a restart.
-      const cfg = getConfig();
       return {
         models: shown.map((m) => {
           const known = modelCache?.get(m.ref);
