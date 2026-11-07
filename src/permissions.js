@@ -80,6 +80,18 @@ const REDIRECT = /(?:^|[^0-9&>])>>?\s*("[^"]*"|'[^']*'|[^\s;&|]+)/g;
 // command, not just a path under `skills/`.
 const INTERPRETERS = new Set(['node', 'nodejs', 'python', 'python3', 'py', 'pwsh', 'powershell', 'deno', 'bun', 'cmd', 'sh', 'bash']);
 
+// Copying is the one verb that reads shipped assets and writes only where it is
+// told. `Copy-Item` and its aliases (`cp`, `copy`, `cpi`) are what a coder uses to
+// take the Windows-app scaffold out of a skill; `Move-Item` is deliberately absent,
+// because a move deletes the skill it names.
+const COPY_VERBS = new Set(['copy-item', 'cp', 'copy', 'cpi']);
+// Flags that take the next word as their value. Without this, `-Destination X`
+// would read `-destination` as a source and X as a second source.
+const COPY_VALUE_FLAGS = new Set([
+  'path', 'literalpath', 'destination', 'filter', 'include', 'exclude',
+  'credential', 'fromsession', 'tosession', 'container',
+]);
+
 // Arguments that are patterns, not paths. `Where-Object { $_.FullName -notmatch
 // '\\(obj|publish|tests)\\' }` resolved that regex to the drive root and made a
 // completely read-only verification ask the operator (28 Oct). The flag names
@@ -461,7 +473,62 @@ function decideShell(resources, ctx) {
     ? info.segments
     : [{ paths: info.paths, redirects: info.redirects, readsOnly: info.readsOnly }];
 
-  const zones = info.paths.map((p) => zoneOf(p, ctx));
+  const skillsRoot = `${slash(ctx.harnessRoot)}/skills`;
+
+  // Copying a shipped skill's assets into a project is the toolbox working, not a
+  // change to Synapse. `Copy-Item` is not a read verb, so a source under `skills/`
+  // counted as a write into the harness and the built-in PROHIBITED entry refused
+  // it: a coder had to read every file of the scaffold and write it again (8 Nov).
+  //
+  // The carve-out is narrow on purpose. The verb must be a copy — a move would
+  // delete the skill. Every source must resolve inside `skills/`, so a `..` that
+  // climbs back into `src/` is not a skill copy. The destination must be outside
+  // the harness, because a copy into Synapse is still a change to Synapse; and the
+  // destination keeps being judged as the write it is, so copying to the Desktop
+  // asks and copying into the project is allowed.
+  const analyzeCopy = (part) => {
+    const words = part.words || [];
+    const head = String(words[0] || '').toLowerCase().replace(/\.exe$/i, '');
+    if (!COPY_VERBS.has(head)) return null;
+    const positional = [];
+    let destination = null;
+    for (let i = 1; i < words.length; i += 1) {
+      const word = words[i];
+      if (/^[-/][A-Za-z]/.test(word)) {
+        const flag = word.replace(/^[-/]+/, '').toLowerCase();
+        if (COPY_VALUE_FLAGS.has(flag) && i + 1 < words.length) {
+          const value = words[i + 1];
+          if (flag === 'destination') destination = value;
+          else if (flag === 'path' || flag === 'literalpath') positional.push(value);
+          i += 1;
+        }
+        continue;
+      }
+      positional.push(word.includes('=') ? word.slice(word.indexOf('=') + 1) : word);
+    }
+    if (!destination && positional.length >= 2) destination = positional.pop();
+    if (!destination || !positional.length) return null;
+    const dest = resolvePath(destination, ctx.cwd, { home: ctx.home });
+    if (!dest || dest.unknown || !dest.path) return null;
+    if (inside(dest.path, ctx.harnessRoot)) return null;
+    const sources = positional.map((word) => resolvePath(word, ctx.cwd, { home: ctx.home }));
+    if (!sources.every((source) => source && !source.unknown && source.path && inside(source.path, skillsRoot))) return null;
+    return { sources: sources.map((source) => source.path), destination: dest.path };
+  };
+
+  const copies = new Map();
+  for (const part of segments) {
+    const copy = analyzeCopy(part);
+    if (copy) copies.set(part, copy);
+  }
+  // Per statement, never per command: `Copy-Item skills\a proj\b; Remove-Item
+  // skills\a` still deletes a skill, and the second statement must be judged as
+  // the write it is.
+  const copySource = (p, part) => Boolean(copies.get(part)?.sources.includes(p));
+
+  const decisionPaths = segments.flatMap((part) => part.paths.filter((p) => !copySource(p, part)));
+
+  const zones = decisionPaths.map((p) => zoneOf(p, ctx));
   const redirectZones = info.redirects.map((p) => zoneOf(p, ctx));
   // The scratch zone is ours and is meant to be written: it counts as "inside"
   // for the decision, and the sentence at the end says which zone it was.
@@ -475,8 +542,7 @@ function decideShell(resources, ctx) {
   const anySecret = [...info.paths, ...info.redirects].some((p) => isSecret(p, ctx));
   if (anySecret) return deny('The harness never opens saved-password folders.', true, 'secret');
 
-  const harnessPaths = info.paths.filter((p) => zoneOf(p, ctx) === 'harness');
-  const skillsRoot = `${slash(ctx.harnessRoot)}/skills`;
+  const harnessPaths = decisionPaths.filter((p) => zoneOf(p, ctx) === 'harness');
   // A shipped tool runs from the harness's own `skills/` folder, and that is what
   // this allows — statement by statement, never for the whole command, so a second
   // statement that deletes a skill is still judged as the write it is.
@@ -557,7 +623,7 @@ function decideShell(resources, ctx) {
   const toolPath = (p, part) => toolParts.has(part) && inside(p, skillsRoot);
   const guardedWrite = segments
     .flatMap((part) => [
-      ...(part.readsOnly ? [] : part.paths.filter((p) => !toolPath(p, part) && !programInTool(p, part))),
+      ...(part.readsOnly ? [] : part.paths.filter((p) => !toolPath(p, part) && !programInTool(p, part) && !copySource(p, part))),
       ...part.redirects,
     ])
     .find((p) => prohibitedWrite(p, ctx));
@@ -566,8 +632,9 @@ function decideShell(resources, ctx) {
     return deny(`PROHIBITED: ${entry.label} is on the protected list.`, true, 'prohibited');
   }
   // A write with no path of its own runs in the statement's directory: `cd
-  // C:\Windows` then `del x` names nothing and still lands in Windows.
-  const guardedDir = segments.find((part) => !part.readsOnly && part.dir && prohibitedWrite(part.dir, ctx));
+  // C:\Windows` then `del x` names nothing and still lands in Windows. A copy is
+  // not that: it runs where it is, and both paths it names are judged already.
+  const guardedDir = segments.find((part) => !part.readsOnly && !copies.has(part) && part.dir && prohibitedWrite(part.dir, ctx));
   if (guardedDir) {
     const entry = prohibitedWrite(guardedDir.dir, ctx);
     return deny(`PROHIBITED: ${entry.label} is on the protected list.`, true, 'prohibited');
@@ -590,6 +657,14 @@ function decideShell(resources, ctx) {
       .find(Boolean);
     if (sealed) return deny(`PROHIBITED: ${sealed.label} is not read either.`, true, 'prohibited');
   }
+  // A copy's source is a read, and it is judged like one: an entry whose Read is
+  // unticked still refuses it, and so does a source the harness would not let a
+  // model read at all.
+  const copySources = [...copies.values()].flatMap((copy) => copy.sources);
+  const sealedCopy = copySources.map((p) => prohibitedRead(p, ctx)).find(Boolean);
+  if (sealedCopy) return deny(`PROHIBITED: ${sealedCopy.label} is not read either.`, true, 'prohibited');
+  const unreadableCopy = copySources.find((p) => !harnessReadable(p, ctx));
+  if (unreadableCopy) return deny("These are Synapse's private files.", true, 'harness');
   const writesHarness =
     redirectZones.includes('harness') || (harnessPaths.length > 0 && !info.readsOnly && !runsShippedTool);
   if (writesHarness) {
@@ -632,6 +707,14 @@ function decideShell(resources, ctx) {
     );
   }
 
+  if (copies.size && !outside) {
+    const toScratch = zones.length > 0 && zones.every((z) => z === 'scratch');
+    return allow(
+      toScratch ? 'This copies a shipped skill into the scratch folder.' : 'This copies a shipped skill into the project.',
+      false,
+      toScratch ? 'scratch' : 'project',
+    );
+  }
   if (zones.length === 0 && redirectZones.length === 0) {
     return allow('This runs in the project folder.', false, 'project');
   }

@@ -36,19 +36,26 @@ roles, measured windows. A clone starts from the seed.
 
 ## Open work
 
-1. **A copy out of `skills/` is still refused.** The carve-out is written up in
-   `docs/notes/todo.md`. It changes the fence, so it waits for a quiet run and for
-   the permission tests — not for a moment in the middle of one.
-2. **The debris cleanup has not happened.** The operator wants an inventory first,
+1. **The debris cleanup has not happened.** The operator wants an inventory first,
    then a decision per file: archive, recycle, or delete. Candidates:
    `docs/refactor-plan.md`, `docs/pipeline-plan.md`, `docs/chaos-test-plan.md`,
    `docs/audit-2026-11-06.md`, the `stage-*.pdf` mockups, and the old projects and
    `_scratch` folders under `..\Synapse.Projects`. Already gone: the empty
    `templates/` folder and the 1.29.2 release zip.
-3. **SysMoninor is mid-build.** t1 (design) is done; t2 (the widget shell) finished
+2. **SysMoninor is mid-build.** t1 (design) is done; t2 (the widget shell) finished
    twice and was never judged — the operator stopped the run. `bin\app\dist\SysMonitor.exe`
    builds and starts, and the plan still says t2 is todo.
-4. **Known issues: nothing open.**
+3. **Known issues: nothing open.**
+
+## Done since this handover
+
+- **A copy out of `skills/` is allowed** (8 Nov). The fence treats a copy whose
+  sources are under `skills/` and whose destination is outside Synapse as a read,
+  so a coder can take the Windows-app scaffold instead of reading every file and
+  writing it again. A move, a source that climbs out of `skills/`, a destination
+  inside Synapse and a second statement that deletes the skill are all still
+  refused. The rule is in `docs/notes/protection.md`; the tests are in
+  `tests/permissions.test.mjs`.
 
 ## Things that cost time and are not in the notes
 

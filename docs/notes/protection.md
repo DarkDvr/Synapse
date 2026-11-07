@@ -62,6 +62,30 @@ config, and deleting the row is a deliberate act that lasts.
   the chat shows a bright-red `Synapse · PROHIBITED` line. Workers and the
   Architect both get it: "something tried to change Windows" is news.
 
+## Copying a skill's assets
+
+A shipped skill carries files a project is meant to receive — the Windows app
+scaffold is the one that surfaced it. `Copy-Item` is not a read verb, so the source
+under `skills/` counted as a write into the harness and the built-in entry refused
+the copy: a coder had to read every file of the scaffold and write it again (8 Nov).
+
+The carve-out is a **copy** (`Copy-Item`, `cp`, `copy`, `cpi`) whose sources all
+resolve inside `skills/` and whose destination is outside Synapse. That statement's
+source is a read. It is narrow on purpose:
+
+- **a move is not a copy.** `Move-Item` would delete the skill, so it is refused as
+  the harness write it is;
+- **the source must really be a skill.** A `..` that climbs back into `src/`, or a
+  file elsewhere in the harness, is not under `skills/` and is refused as before;
+- **a destination inside Synapse is still a change to Synapse**, and is refused;
+- **the destination keeps being judged as the write it is.** Copying into the
+  project or the scratch folder is allowed; copying to the Desktop asks; copying
+  into Windows is refused;
+- **the exemption is per statement.** `Copy-Item …; Remove-Item skills\…` still
+  deletes a skill, and the second statement is refused;
+- **a sealed entry still seals.** A prohibited entry whose Read is unticked refuses
+  the source like any other read.
+
 ## The limit, said plainly
 
 The gate sees the paths the command names. A shell one-liner that builds a path at

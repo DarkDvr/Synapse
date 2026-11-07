@@ -211,6 +211,59 @@ test('the shipped toolbox may run', () => {
   assert.equal(shell('& "F:\\dev\\Synapse\\src\\build.ps1"').effect, 'deny');
 });
 
+// A skill's assets are made to be copied into a project. `Copy-Item` is not a read
+// verb, so the source under `skills/` counted as a write into the harness and the
+// built-in PROHIBITED entry refused the scaffold: a coder had to read every file
+// and write it again (8 Nov). The carve-out is a copy whose sources are all under
+// `skills/` and whose destination is outside Synapse.
+test('a skill may copy its assets into a project', () => {
+  const scaffold = 'F:\\dev\\Synapse\\skills\\win-app\\template';
+  const copy = shell(`Copy-Item "${scaffold}" ".\\bin" -Recurse`);
+  assert.equal(copy.effect, 'allow');
+  assert.equal(copy.outside, false);
+  assert.equal(copy.scope, 'project');
+  assert.match(copy.reason, /copies a shipped skill/);
+  // The aliases, a wildcard and the flag forms are the same command.
+  assert.equal(shell(`cp -Recurse "${scaffold}\\*" "bin\\app"`).effect, 'allow');
+  assert.equal(shell(`Copy-Item -Path "${scaffold}" -Destination "bin\\app" -Recurse`).effect, 'allow');
+  assert.equal(shell(`Copy-Item -LiteralPath "${scaffold}" -Destination ".\\app" -Recurse`).effect, 'allow');
+  // A second statement is judged on its own: a copy beside a project write is fine.
+  assert.equal(
+    shell(`Copy-Item "${scaffold}" ".\\bin" -Recurse\nSet-Content .\\bin\\README.txt hi`).effect,
+    'allow',
+  );
+});
+
+test('the copy carve-out is a copy, not a way into the harness', () => {
+  const scaffold = 'F:\\dev\\Synapse\\skills\\win-app\\template';
+  // A move would delete the skill it names.
+  assert.equal(shell(`Move-Item "${scaffold}" ".\\bin"`).effect, 'deny');
+  // A copy into Synapse is still a change to Synapse.
+  assert.equal(shell(`Copy-Item "${scaffold}" "F:\\dev\\Synapse\\skills\\other" -Recurse`).effect, 'deny');
+  // A source elsewhere in the harness is not a skill.
+  assert.equal(shell('Copy-Item "F:\\dev\\Synapse\\src\\permissions.js" ".\\bin"').effect, 'deny');
+  // A `..` that climbs out of skills/ resolves out of it.
+  assert.equal(shell('Copy-Item "F:\\dev\\Synapse\\skills\\..\\src\\permissions.js" ".\\bin"').effect, 'deny');
+  // A copy is not an excuse for a statement that deletes the skill.
+  assert.equal(
+    shell(`Copy-Item "${scaffold}" ".\\bin" -Recurse\nRemove-Item "${scaffold}" -Recurse`).effect,
+    'deny',
+  );
+  // The destination is still judged as the write it is: the Desktop asks, and a
+  // protected folder is refused.
+  const away = shell(`Copy-Item "${scaffold}" "C:\\Users\\tester\\Desktop\\app" -Recurse`);
+  assert.equal(away.effect, 'ask');
+  assert.equal(away.scope, 'outside');
+  const windows = [
+    { path: HARNESS, label: 'Synapse', write: false, read: true },
+    { path: 'C:/Windows', label: 'Windows', write: false, read: true },
+  ];
+  assert.equal(
+    shell(`Copy-Item "${scaffold}" "C:\\Windows\\System32\\evil" -Recurse`, { protection: windows }).effect,
+    'deny',
+  );
+});
+
 test('changing directory out of the workspace turns a write into a question', () => {
   assert.equal(shell('cd D:\\projects; del x').effect, 'ask');
   // A read of another folder stays allowed even through a cd.
