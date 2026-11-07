@@ -206,7 +206,13 @@ test('controls either side of a dialog are not a row, but controls inside it are
     );
     const r = run(page, '--widths', '700', '--height', '800', '--no-sheet', '--audit', '--out', dir);
     assert.equal(r.status, 1, r.stderr || r.stdout);
-    const { findings } = JSON.parse(r.stdout.split('\n').find((l) => l.includes('"layout"'))).report.layout;
+    // Status 1 means "findings" and also means "the shot failed", so the report is
+    // what tells them apart. Without this line a failed shot read as
+    // "Unexpected token u in JSON at position 0" — a parse error about a report
+    // that was never printed, and no clue why (7 Nov).
+    const line = r.stdout.split('\n').find((l) => l.includes('"layout"'));
+    assert.ok(line, `the audit printed no report: ${r.stderr || r.stdout}`);
+    const { findings } = JSON.parse(line).report.layout;
     const rows = findings.filter((f) => f.check === 'controls-row');
     assert.equal(rows.length, 1, 'only the pair inside the dialog is a row');
     const names = [rows[0].el, rows[0].vs].join(' ');

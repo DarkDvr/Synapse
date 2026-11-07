@@ -715,10 +715,12 @@ function withPage(width, job, url = target) {
   return new Promise((resolve, reject) => {
     let child = null;
     let release = null;
+    let timer = null;
     let settled = false;
     const finish = (fn, value) => {
       if (settled) return;
       settled = true;
+      if (timer) clearTimeout(timer);
       try { child?.kill(); } catch { /* already gone */ }
       try { release?.(); } catch { /* already released */ }
       setTimeout(() => {
@@ -747,7 +749,7 @@ function withPage(width, job, url = target) {
         ],
         { windowsHide: true, stdio: 'ignore' },
       );
-      const timer = setTimeout(() => finish(reject, new Error('the browser did not answer within 60s')), 60000);
+      timer = setTimeout(() => finish(reject, new Error('the browser did not answer within 60s')), 60000);
       timer.unref?.();
       // The port the browser actually chose is written into the profile; polling
       // for it is the only honest way to know when it is ready.
@@ -819,10 +821,8 @@ function withPage(width, job, url = target) {
 
       const out = await job(send, ws);
       try { ws.close(); } catch { /* closing */ }
-      clearTimeout(timer);
       finish(resolve, out);
     })().catch((err) => {
-      clearTimeout(timer);
       finish(reject, err);
     });
   });
