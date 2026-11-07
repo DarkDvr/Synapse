@@ -2147,7 +2147,21 @@ document.addEventListener('keydown', (e) => {
   setInterval(() => { if (state.view !== 'none') loadPlan(); }, 30000);
 }
 
-async function boot() {
+/**
+ * Everything the page does to come up, with no guard of its own.
+ *
+ * Split from `boot()` for one reason: the guard has to cover the *whole* page, not
+ * just the loads at the end. A throw in `wire()` leaves the same dead screen as a
+ * throw in a fetch, and that is the one place a try around the loads would not have
+ * reached.
+ */
+async function bootPage() {
+  // The stream is the page's identity — a client id, the live feed, and the "this
+  // view is connected" answer the Settings button needs. It goes first because
+  // everything after it can fail, and a page that failed half way must still be
+  // able to say so (7 Nov: a missing import left a rail with no chat and no
+  // message, and the only way to find out was a --eval).
+  connectStream();
   wire();
   // The console panel draws the rail's status dots, and they are drawn in this
   // file: the module asks for the function rather than importing it.
@@ -2245,10 +2259,72 @@ async function boot() {
   await loadRuns();
   await loadDesk();
   renderTranscript();
-  connectStream();
   refreshPending();
   renderProbe();
 }
+
+/**
+ * The page's one entry point.
+ *
+ * `bootPage()` is the work; this is the promise that a failure in it is *said*.
+ * Before this, a throw anywhere in the chain left a rail, no chat and no message —
+ * the operator's only clue was that nothing worked.
+ */
+async function boot() {
+  try {
+    await bootPage();
+  } catch (err) {
+    bootFailed(err);
+  } finally {
+    // The page started, whatever else happened: this is what tells index.html's
+    // ten-second fallback to stay quiet. It is set even when boot failed, because
+    // that failure has already been said by then. A boot slower than the fallback
+    // takes the warning back rather than leaving it on a page that works.
+    window.__booted = true;
+    for (const box of document.querySelectorAll('[data-boot-alert]')) box.remove();
+    reportBootErrors();
+  }
+}
+
+/** The page did not finish loading: say it, and keep what did load. */
+function bootFailed(err) {
+  console.error('boot failed:', err);
+  try {
+    openError('This page did not finish loading', String((err && (err.stack || err.message)) || err), {
+      lead: 'Part of the page is missing or out of date. Reload it; if it comes back, the console has the detail.',
+      note: 'Nothing was sent anywhere: this is the page, not the server.',
+    });
+  } catch { /* a dialog that cannot open is not worth crashing over */ }
+}
+
+/**
+ * Whatever the trap in index.html caught while this page was coming up, said once.
+ *
+ * The trap exists so a `--eval` can find a dead page; this is the half that tells
+ * the person in front of the screen. It only fires when there is something to say,
+ * and it never replaces a dialog that is already open.
+ */
+function reportBootErrors() {
+  const errs = Array.isArray(window.__errs) ? window.__errs : [];
+  if (!errs.length) return;
+  if (!$('errorModal').hidden) return;
+  openError('This page has an error', errs.slice(0, 5).join('\n'), {
+    lead: errs.length === 1 ? 'One error was raised while the page loaded.' : `${errs.length} errors were raised while the page loaded.`,
+    note: 'Reload the page. If it comes back, Copy this and put it in a note.',
+  });
+}
+
+// After boot, an uncaught error is a bug in a handler rather than a dead page: one
+// toast per message, never a modal over what the operator is doing.
+const pageErrorsSeen = new Set();
+function notePageError(text) {
+  const said = String(text || '').replace(/\s+/g, ' ').trim().slice(0, 240);
+  if (!said || pageErrorsSeen.has(said) || pageErrorsSeen.size >= 3) return;
+  pageErrorsSeen.add(said);
+  toast('Page Error', said, 12000);
+}
+window.addEventListener('error', (e) => notePageError(e.message));
+window.addEventListener('unhandledrejection', (e) => notePageError(e.reason && (e.reason.message || e.reason)));
 
 /** Where the operator was when they last had this page open.
  *

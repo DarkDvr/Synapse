@@ -552,8 +552,36 @@
 
 <!-- A page that dies at boot leaves no trace on screen: the rail draws, the chat does
      not, and nothing says why. This keeps the first few errors where the console and a
-     `--eval` can find them; it changes nothing else. -->
-<script>window.__errs = []; addEventListener('error', (e) => window.__errs.push(`${e.message} @ ${e.filename}:${e.lineno}`)); addEventListener('unhandledrejection', (e) => window.__errs.push(`rejection: ${e.reason && (e.reason.stack || e.reason.message)}`));</script>
+     `--eval` can find them; it changes nothing else.
+
+     The ten-second fallback is the half that cannot live in app.js: when the module
+     graph itself will not parse — an import of a name that is not exported, the exact
+     bug this refactor shipped twice — app.js never runs, so nothing inside it can
+     report. Ten seconds is well past a normal boot. `window.__booted` is set by boot()
+     even when a load failed, because by then that failure has been said properly. -->
+<script>
+window.__errs = [];
+addEventListener('error', (e) => window.__errs.push(`${e.message} @ ${e.filename}:${e.lineno}`));
+addEventListener('unhandledrejection', (e) => window.__errs.push(`rejection: ${e.reason && (e.reason.stack || e.reason.message)}`));
+setTimeout(() => {
+  if (window.__booted) return;
+  const first = String(
+    window.__errs[0] || 'no error was recorded — the scripts may not have loaded at all',
+  ).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const box = document.createElement('div');
+  box.setAttribute('role', 'alert');
+  box.dataset.bootAlert = '1';
+  box.style.cssText =
+    'position:fixed;left:16px;right:16px;bottom:16px;z-index:9999;padding:14px 16px;' +
+    'border:1px solid #c2622e;border-radius:10px;background:#1d1f24;color:#f2f3f5;' +
+    'font:13px/1.5 system-ui,sans-serif;box-shadow:0 8px 30px rgba(0,0,0,.5)';
+  box.innerHTML =
+    '<strong style="color:#ff9d5c">This page did not start.</strong><br>' +
+    'The scripts never ran, so nothing here is live. Reload it; if it comes back, this is the first error:' +
+    '<code style="display:block;margin-top:8px;white-space:pre-wrap;word-break:break-word">' + first + '</code>';
+  document.body.appendChild(box);
+}, 10000);
+</script>
 <script type="module" src="/app.js"></script>
 </body>
 </html>

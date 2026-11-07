@@ -80,18 +80,6 @@ Fix: when it happens again, read `/api/desk` at the same moment and compare. If 
 server says null the page is the bug (a missing clear); if the server says held, the
 server is (a lease that was never released).
 
-## The boot-error trap records but does not surface — 7 Nov
-
-`web/index.html` keeps the first page errors in `window.__errs`, and that is how every
-dead page in this refactor was found. But nothing *shows* them: the operator sees a
-rail with no chat and no message, exactly as before. The trap is for a `--eval` to
-read, not for the person in front of the screen.
-
-Where: `web/index.html` (the two-line trap), `web/app.js` (`boot()`).
-Fix: the last line of `boot()` checks `window.__errs` and, if it is not empty, says so
-— a toast or a line in the chat, with the first message. Worth doing at the same time:
-`connectStream()` first, so a half-dead page at least has its identity.
-
 ## A local name shadows an imported function (`askHost`) — 7 Nov
 
 In `web/app.js`'s wiring there is `const askHost = $('askHost');` inside a function,
@@ -165,21 +153,6 @@ Where: `web/provider-list.js` (`ENGINE_PROVIDERS`, `providerLabel`), `web/provid
 (the pane and the editor), `src/engines/opencode.js` (what is registered with the
 engine) — depending on what the list turns out to be.
 Fix: wait for the operator's notes. Do not guess at them.
-
-## A boot error leaves a page that looks alive and is not
-
-`boot()` in `web/app.js` is one long `await` chain: `wire()` binds the handlers, then
-a dozen loads run in order, then `connectStream()` — which is what gives the page its
-identity and its live feed — is the *last* line. One rejection anywhere in the middle
-(the 6 Nov pane split put a `ReferenceError` there for ten minutes) and everything
-before it stays: the project rail draws, the chat size is applied, the page looks
-finished. What is missing is silent — no console message the operator would see, no
-toast, and the Settings button answers "this view is not connected" because the page
-never got a client id.
-
-Where: `web/app.js`, `boot()`.
-Fix: `connectStream()` first, and a `window.onerror` / `unhandledrejection` trap that
-puts a line in the chat or a toast. Found by accident; it will be found again.
 
 ## The page knows two engine provider ids by name
 
