@@ -402,7 +402,14 @@ function decideWrite(resources, ctx) {
 // one (app-check does it only when PrintWindow is refused), and input injection is
 // the other.
 const SCREEN_APIS = /\b(?:setforegroundwindow|sendinput|sendkeys|mouse_event|setcursorpos|keybd_event|appactivate)\b/i;
-const WINDOW_TOOL = /app-check[\\/]+bin[\\/]+window\.ps1/i;
+// Both of the skill's entry points, not just the PowerShell one. `app-check.mjs` is
+// the launcher the skill's own instructions suggest first: it starts an app, brings
+// its window forward and photographs it, and only `window.ps1` was recognised — so a
+// worker could take the screen without a card by using the other file (7 Nov).
+const WINDOW_TOOL = /app-check[\\/]+bin[\\/]+(?:window\.ps1|app-check\.mjs)/i;
+// Asking what a window is called is not taking it, and neither is asking the tool
+// what its options are.
+const SCREEN_QUERY = /(?:-\s*action\s+"?query"?|--help\b|\s-h\b)/i;
 
 /**
  * Would this command take the operator's screen?
@@ -415,9 +422,9 @@ export function screenTaking(command) {
   const text = String(command || '');
   if (!text) return false;
   if (SCREEN_APIS.test(text)) return true;
-  // The shipped window tool: every action but `query` may put a window in front,
+  // The shipped window tools: every action but `query` may put a window in front,
   // because the screenshot falls back to the screen when PrintWindow is refused.
-  if (WINDOW_TOOL.test(text) && !/-\s*action\s+"?query"?/i.test(text)) return true;
+  if (WINDOW_TOOL.test(text) && !SCREEN_QUERY.test(text)) return true;
   return false;
 }
 

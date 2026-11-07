@@ -468,6 +468,14 @@ test('a command that takes the screen is recognised', () => {
   assert.equal(screenTaking('& "F:\\dev\\Synapse\\skills\\app-check\\bin\\window.ps1" -Action launch -Exe calc.exe'), true);
   // Reading a window's size and title is not taking it.
   assert.equal(screenTaking('& "F:\\dev\\Synapse\\skills\\app-check\\bin\\window.ps1" -Action query -TargetPid 1'), false);
+  // The skill's other entry point is the launcher, and it starts an app, brings its
+  // window forward and photographs it: that is the screen too. Only `window.ps1`
+  // was recognised, so a worker could take it without a card by using this file
+  // (7 Nov — the operator's first test prompt produced no request at all).
+  assert.equal(screenTaking('node "F:\\dev\\Synapse\\skills\\app-check\\bin\\app-check.mjs" --exe "C:\\Windows\\System32\\notepad.exe" --out ".synapse/shots"'), true);
+  assert.equal(screenTaking('node "F:\\dev\\Synapse\\skills\\app-check\\bin\\app-check.mjs" --pid 1234 --out shots'), true);
+  // Asking the tool what its options are is not taking anything.
+  assert.equal(screenTaking('node "F:\\dev\\Synapse\\skills\\app-check\\bin\\app-check.mjs" --help'), false);
   assert.equal(screenTaking('Add-Type -MemberDefinition "SetForegroundWindow" -Name W'), true);
   assert.equal(screenTaking('[System.Windows.Forms.SendKeys]::SendWait("x")'), true);
   // Ordinary work is not the screen.
