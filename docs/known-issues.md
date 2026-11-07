@@ -42,27 +42,6 @@ asked. Then a failure there can only mean the engine is really unwell.
 
 ---
 
-## The suite fails intermittently on its two browser tests — 7 Nov
-
-`node --test "tests/*.test.mjs"` runs test *files* in parallel. Two of them launch
-Edge through `skills/visual-review/bin/shot.mjs` and take 15–31 seconds each:
-`tests/baseline-layer.test.mjs` (the cascade-layer behaviour) and
-`tests/visual-review.test.mjs` (`--diff`). Run together with everything else they
-fail — measured 7 Nov: `baseline-layer` failed twice in one evening (once at 15.4 s,
-once at 5.3 s with empty stdout, which is Edge never starting) and passed every time
-it was run alone, and `--diff` timed out at 21 s once and passed alone at 31 s.
-
-Shows: a red suite that is not red, which is worse than a slow one — it trains you to
-ignore the failure. The 5.3 s failure is the tell: not a slow assertion, a browser
-that never launched.
-
-Where: `tests/baseline-layer.test.mjs`, `tests/visual-review.test.mjs`, and whatever
-serialisation `skills/visual-review/bin/shot.mjs` does not do.
-Fix: one lock file around the browser launch so only one Edge runs at a time (the
-script already writes a throwaway profile; a `.lock` in the temp dir, waited on, is
-enough), or run those two files with `--test-concurrency=1` from a wrapper. Measure
-after: the full suite should be green five times in a row.
-
 ## The screen badge may stay on screen after the desk is released — 7 Nov
 
 Seen once, while checking the page after a refactor move: the desk badge read "Screen

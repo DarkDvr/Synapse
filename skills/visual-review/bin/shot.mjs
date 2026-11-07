@@ -658,40 +658,97 @@ const REPORT_JS = `(() => {
   return out;
 })()`;
 
-/** One browser, one width, one job. Resolves with whatever `job(send)` returns. */function withPage(width, job, url = target) {
+// ── one browser at a time, across processes ─────────────────────────────
+// `node --test` runs test *files* in parallel, and two of them photograph pages
+// through this script. Two headless Edges starting at once on a busy machine
+// starved each other: on 7 Nov one test failed at 5.3 s with empty stdout (the
+// browser never launched) and another timed out at 21 s, and both passed every
+// time they ran alone. A red suite that is not red is worse than a slow one.
+//
+// The lock is a file because the two tests are separate processes; the pid and the
+// time inside it are what let a crashed run's lock be recognised as stale rather
+// than waited on forever.
+const BROWSER_LOCK = path.join(os.tmpdir(), 'visual-review-browser.lock');
+const LOCK_WAIT_MS = 120000;
+const LOCK_STALE_MS = 90000;
+
+const pidAlive = (pid) => {
+  if (!Number.isFinite(pid) || pid <= 0) return false;
+  try { process.kill(pid, 0); return true; } catch { return false; }
+};
+
+/** Take the browser lock. Resolves with the release function. */
+async function lockBrowser() {
+  const started = Date.now();
+  for (;;) {
+    try {
+      const fd = fs.openSync(BROWSER_LOCK, 'wx');
+      fs.writeSync(fd, `${process.pid}\n${Date.now()}\n`);
+      fs.closeSync(fd);
+      return () => {
+        try { fs.unlinkSync(BROWSER_LOCK); } catch { /* already gone */ }
+      };
+    } catch (err) {
+      if (err.code !== 'EEXIST') throw err;
+      // A crashed run leaves the file behind. Age, or a pid that no longer exists,
+      // means nobody is holding it — remove it and try again at once.
+      try {
+        const [pid, at] = String(fs.readFileSync(BROWSER_LOCK, 'utf8')).split('\n');
+        const age = Date.now() - Number(at || 0);
+        if (age > LOCK_STALE_MS || !pidAlive(Number(pid))) {
+          fs.unlinkSync(BROWSER_LOCK);
+          continue;
+        }
+      } catch { /* the holder is writing it; wait for it */ }
+      if (Date.now() - started > LOCK_WAIT_MS) {
+        throw new Error('another visual-review run held the browser for two minutes');
+      }
+      await sleep(150 + Math.floor(Math.random() * 200));
+    }
+  }
+}
+
+/** One browser, one width, one job. Resolves with whatever `job(send)` returns. */
+function withPage(width, job, url = target) {
   const profile = path.join(os.tmpdir(), `visual-review-${process.pid}-${width}-${Date.now()}`);
   const portFile = path.join(profile, 'DevToolsActivePort');
   return new Promise((resolve, reject) => {
-    const child = spawn(
-      browser,
-      [
-        '--headless=new',
-        '--disable-gpu',
-        '--hide-scrollbars',
-        '--no-first-run',
-        '--no-default-browser-check',
-        '--disable-extensions',
-        `--user-data-dir=${profile}`,
-        '--remote-debugging-port=0',
-        `--window-size=${width},${args.height}`,
-        'about:blank',
-      ],
-      { windowsHide: true, stdio: 'ignore' },
-    );
+    let child = null;
+    let release = null;
     let settled = false;
     const finish = (fn, value) => {
       if (settled) return;
       settled = true;
-      try { child.kill(); } catch { /* already gone */ }
+      try { child?.kill(); } catch { /* already gone */ }
+      try { release?.(); } catch { /* already released */ }
       setTimeout(() => {
         try { fs.rmSync(profile, { recursive: true, force: true }); } catch { /* locked temp dir */ }
       }, 300);
       fn(value);
     };
-    const timer = setTimeout(() => finish(reject, new Error('the browser did not answer within 60s')), 60000);
-    timer.unref?.();
 
     (async () => {
+      // Wait for the browser before starting the clock: a test that spent its
+      // minute queued behind another would report a slow browser that never ran.
+      release = await lockBrowser();
+      child = spawn(
+        browser,
+        [
+          '--headless=new',
+          '--disable-gpu',
+          '--hide-scrollbars',
+          '--no-first-run',
+          '--no-default-browser-check',
+          '--disable-extensions',
+          `--user-data-dir=${profile}`,
+          '--remote-debugging-port=0',
+          `--window-size=${width},${args.height}`,
+          'about:blank',
+        ],
+        { windowsHide: true, stdio: 'ignore' },
+      );
+      const timer = setTimeout(() => finish(reject, new Error('the browser did not answer within 60s')), 60000);
+      timer.unref?.();
       // The port the browser actually chose is written into the profile; polling
       // for it is the only honest way to know when it is ready.
       let port = 0;
