@@ -10,9 +10,9 @@ app cannot: it is a **window**, and a window is not in the DOM. This skill is th
 missing half — it starts the exe, waits for a window to appear, photographs that
 window, and tells you what a reviewer needs.
 
-The interface inside the window is still a web page (the template renders `ui/`
-in WebView2), so **review both**: the page with visual-review, the window with
-this.
+The interface inside the window is still a web page (the win-app skill's shell
+renders `ui/` in WebView2), so **review both**: the page with visual-review, the
+window with this. To *build* one, that is the win-app skill.
 
 ## Run it
 

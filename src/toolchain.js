@@ -16,7 +16,7 @@ import path from 'node:path';
 
 import { ROOT } from './paths.js';
 
-const TEMPLATE = path.join(ROOT, 'templates', 'win-app');
+const TEMPLATE = path.join(ROOT, 'skills', 'win-app', 'template');
 const APP_CHECK = path.join(ROOT, 'skills', 'app-check', 'bin', 'app-check.mjs');
 
 // One call, one JSON object: spawning PowerShell five times for five versions is

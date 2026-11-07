@@ -2,8 +2,11 @@
 
 A window (WPF) around a web page (WebView2). Copy this folder to start an app.
 
+This folder lives inside the `win-app` skill, which carries the build steps and the
+rules: `..\SKILL.md` beside it. Synapse's own folders are not the source.
+
 ```
-copy /Y   F:\dev\Synapse\templates\win-app   <project>\app     (or copy in Explorer)
+copy /Y   <this skill>\template   <project>\app     (or copy in Explorer)
 cd <project>\app
 .\build.ps1
 ```

@@ -37,7 +37,11 @@ const READ_ACTIONS = new Set(['read']);
 // one step were declined, and the engine ended the turn as interrupted: the operator
 // saw a run "stop" for reading a file that is not a secret (7 Nov). Reads inside the
 // harness are allowed unless they land in one of these.
-const HARNESS_DENIED = ['data/', 'config/', 'bin/', '.git/', 'vendor/', 'node_modules/'];
+//
+// `templates/` stays here even though the Windows shell moved into the `win-app`
+// skill: a scaffold is an asset for projects, and the skill is where it belongs. The
+// harness is not a folder a model digs in (7 Nov).
+const HARNESS_DENIED = ['data/', 'config/', 'bin/', '.git/', 'vendor/', 'node_modules/', 'templates/'];
 
 // Credential stores. Reading these is never part of building a project, and the
 // operator allowed reads outside the workspace — this is the exception that

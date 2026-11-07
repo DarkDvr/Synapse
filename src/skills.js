@@ -103,16 +103,18 @@ export function describeSkills(config, role, { chat = false } = {}) {
         `the skill says. It is the only copy: do not search the disk for another one.`,
     );
   }
-  // A Windows app is copied from the shell that ships here, not hand-rolled: the
-  // parts that are easy to get wrong (DPI, the dark frame, the https origin for the
-  // UI, the single-file publish) are already right in it. Only mentioned to a role
-  // that can check a window, because that is the role that builds one.
-  if (all.includes('app-check')) {
+  // A Windows app is built from the `win-app` skill, which ships the shell (WPF +
+  // WebView2) and the build steps. It used to be `templates/win-app` — Synapse's own
+  // folder — so a model building an app had to read the harness, which is off limits
+  // by design (7 Nov). The skill is the source now, and the only one.
+  if (all.includes('win-app')) {
     parts.push(
-      `A Windows app is copied from the shell that ships with Synapse, at ` +
-        `${path.join(ROOT, 'templates', 'win-app')} — copy that folder into the project and work in ` +
-        `its ui\\ folder. Do not write a new WPF project from scratch.`,
+      `A Windows app is built from the win-app skill: it carries the shell to copy into the project ` +
+        `(its template folder) and the build steps. Do not write a new WPF project from scratch, and ` +
+        `do not go looking for the shell in Synapse's own folders.`,
     );
+  } else if (all.includes('app-check')) {
+    parts.push(`A Windows app's window is verified with the app-check skill once it is built.`);
   }
   parts.push(
     chat ? 'Any other skill is refused. Say which ones you loaded.' : 'Any other skill is refused. Say in your report which ones you loaded.',
