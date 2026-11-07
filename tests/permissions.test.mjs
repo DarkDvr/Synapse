@@ -251,8 +251,13 @@ test('reading outside is allowed, except a credential store', () => {
 test('reading the harness is limited to the parts that help', () => {
   assert.equal(call('read', `${HARNESS}/logs/app.log`).effect, 'allow');
   assert.equal(call('read', `${HARNESS}/docs/notes/engine-notes.md`).effect, 'allow');
+  // The scaffold a project may be built from is source, like `src/` and `web/`:
+  // a model designing a Windows app reads it, and refusing it ended a run (7 Nov).
+  assert.equal(call('read', `${HARNESS}/templates/win-app/README.md`).effect, 'allow');
+  assert.equal(call('read', `${HARNESS}/templates/win-app/App.csproj`).effect, 'allow');
   assert.equal(call('read', `${HARNESS}/data/provider-keys.json`).effect, 'deny');
   assert.equal(call('read', `${HARNESS}/config/synapse.config.json`).effect, 'deny');
+  assert.equal(call('read', `${HARNESS}/bin/node/node.exe`).effect, 'deny');
 });
 
 test('a relative climb into the harness is judged as the harness', () => {

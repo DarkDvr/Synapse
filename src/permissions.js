@@ -29,7 +29,7 @@ const READ_ACTIONS = new Set(['read']);
 // Inside the harness, this is what a model may read. The list is short on
 // purpose: `data/` holds provider keys and session records, `config/` is the
 // operator's, and nothing under `bin/` is a document.
-const HARNESS_READABLE = ['skills/', 'docs/', 'logs/', 'src/', 'web/', 'AGENTS.md', 'README.md'];
+const HARNESS_READABLE = ['skills/', 'docs/', 'logs/', 'src/', 'web/', 'templates/', 'AGENTS.md', 'README.md'];
 const HARNESS_DENIED = ['data/', 'config/', 'bin/', '.git/', 'vendor/'];
 
 // Credential stores. Reading these is never part of building a project, and the
