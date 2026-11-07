@@ -169,6 +169,7 @@ an agent does not know to open is a document that does not exist:
 | `docs/notes/i18n.md` | before starting the Russian interface — scope, plurals, what must never be translated |
 | `docs/notes/project-chat.md` | before changing how a project, a chat or a compaction works — the one-chat-per-project scope, its phases and what is still open |
 | `docs/notes/protection.md` | before touching `src/protection.js`, the prohibited list, or the Brave rule — what is refused without asking, and what the fence cannot see |
+| `docs/handover.md` | picking the work up cold — where the build stands, what is open, and the traps that are not in these notes |
 
 Two rules: **a new lesson goes in `docs/notes/`, not here**; and a rule you move out
 leaves its invariant behind in one line. Deferred work lives in `docs/notes/todo.md`.
@@ -237,9 +238,10 @@ web/
 skills/               shipped WITH Synapse, always on the engine's skill path
   visual-review/      render a page to PNG, then read it (the agents' eyes)
   app-check/          launch a desktop app, photograph its window, report if it lived
+  win-app/            the Windows shell a new app is copied from (WPF + WebView2),
+                      plus the build steps — there is no `templates/` folder any more
   ui-design/ frontend-design/ aesthetic-foundations/ code-craft/ web-guidelines/
                       the craft briefs: direction, tokens, states, colour, hierarchy
-templates/win-app/    the Windows shell a new app is copied from (WPF + WebView2)
 data/                 runtime state (projects, census, probe results, engine home)
 logs/                 one file per channel: app, engine, session, tools
 bin/opencode/         a copy of the runtime that travels with the app (not in git;
