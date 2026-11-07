@@ -42,19 +42,6 @@ Fix: when it happens again, read `/api/desk` at the same moment and compare. If 
 server says null the page is the bug (a missing clear); if the server says held, the
 server is (a lease that was never released).
 
-## A local name shadows an imported function (`askHost`) — 7 Nov
-
-In `web/app.js`'s wiring there is `const askHost = $('askHost');` inside a function,
-while the module also imports `askHost` (the accessor the ask panel uses, from
-`web/ask-panel.js`). Legal JavaScript, and harmless today because nothing in that
-function calls `askHost()` — but it is a trap: a later line in that scope that means
-the accessor gets the DOM element instead, and the failure would be "cannot read
-properties of undefined" a long way from the cause.
-
-Where: `web/app.js`, the wiring function that binds the ask panel's input events.
-Fix: rename the local (`askHostBox`), one line, no behaviour change. Filed rather than
-fixed because it sits inside the file the refactor is still taking apart.
-
 ## The chat page's layout audit reports five standing nits — 7 Nov
 
 `skills/visual-review` with `--audit` reports the same five findings on the chat page
@@ -131,16 +118,6 @@ now be removed and restored, which makes the page own a little more of that know
 — it is also the list of ids `hiddenProviders` accepts — so this got slightly worse,
 not better.)
 
-## A stopped run can still be reported as completed if the cut lands before its first token
-
-Seen 6 Nov while testing Stop: a run cut at the very first step of a worker that had
-not produced a token yet ends with `outcome: stopped`, but the report's body is the
-generic "ended with reasoning only" sentence, which reads like a failure. It is not
-wrong, it is just confusing next to "stopped by the operator".
-
-Where: `src/runs.js`, the `if (!stopReason && !text && !files.length)` branch.
-Fix: when `gracefulStop` is set, say the turn was cut before it produced anything.
-
 ## The engine home never shrinks below its snapshots
 
 `data/engine/opencode` is 574 MB after three weeks. `src/housekeeping.js` reclaims
@@ -157,13 +134,3 @@ The page says "Runtime" everywhere, but the engine update dialog's title says
 
 Where: `web/app.js`, the update card.
 Fix: one word, decided by the operator.
-
-## `data/chaos-test-plan.md` is the only copy of a record
-
-It is the pass record of the chaos run, it is 23 KB of good evidence, and it lives
-in `data/`, which is gitignored and regenerable by definition. A clean install loses
-it.
-
-Where: `data/chaos-test-plan.md`.
-Fix: move it to `docs/` (it is a record, like the release notes) or delete it and
-accept the loss.

@@ -396,6 +396,23 @@ expect(
   String(empty.result?.text).slice(0, 120),
 );
 
+// 6d. A stop that lands before the worker's first token is not the worker's fault.
+// The report used to say "its last step was reasoning only. Treat the task as not
+// done" — true of a model that thought and stopped, and a lie about a run the
+// operator ended at once (6 Nov).
+const cut = await runCase({ name: 'cut-before-token', script: [{ silent: true }], cancelAfter: 150 });
+expect('cut before a token: outcome stopped', cut.result?.outcome === 'stopped', cut.result?.outcome);
+expect(
+  'cut before a token: the report says it was cut, not that it failed',
+  /stopped this run before it produced anything/.test(cut.result?.text || ''),
+  String(cut.result?.text).slice(0, 140),
+);
+expect(
+  'cut before a token: it is not blamed for reasoning',
+  !/reasoning only/.test(cut.result?.text || ''),
+  String(cut.result?.text).slice(0, 140),
+);
+
 // 7. a failed compaction replaces the worker session with a handover
 const reset = await runCase({
   name: 'compaction-reset',

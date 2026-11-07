@@ -1671,17 +1671,22 @@ document.addEventListener('keydown', (e) => {
   }, { passive: true });
   // The question panel. Its answer changes what is required and what other
   // fields even exist, so every keystroke and every pick re-checks the panel.
-  const askHost = $('askHost');
-  if (askHost) {
-    askHost.addEventListener('input', (e) => {
+  //
+  // The box is `askHostBox`, not `askHost`: `askHost` is the accessor this module
+  // imports from ask-panel.js, and a local of the same name hid it inside this
+  // function. Harmless while nothing here called the accessor — which is exactly
+  // the kind of trap that costs an hour the day someone does.
+  const askHostBox = $('askHost');
+  if (askHostBox) {
+    askHostBox.addEventListener('input', (e) => {
       syncAskCustoms(e.target);
       refreshAskPanel();
     });
-    askHost.addEventListener('change', (e) => {
+    askHostBox.addEventListener('change', (e) => {
       syncAskCustoms(e.target);
       refreshAskPanel();
     });
-    askHost.addEventListener('click', (e) => {
+    askHostBox.addEventListener('click', (e) => {
       const btn = e.target.closest('[data-form-reply]');
       if (btn) { replyForm(btn.dataset.formReply); return; }
       if (e.target.closest('[data-ask-next]')) { moveAskPage(1); return; }
@@ -1690,32 +1695,32 @@ document.addEventListener('keydown', (e) => {
     // The "Something Else" box is prose, not a one-line field: Enter starts a new
     // line there and Ctrl+Enter sends, the same as the chat composer. Every other
     // field keeps Enter-to-move-on.
-    askHost.addEventListener('keydown', (e) => {
+    askHostBox.addEventListener('keydown', (e) => {
       if (e.target.closest?.('.ask-other-text')) {
         if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
           e.preventDefault();
-          const next = askHost.querySelector('[data-ask-next]');
+          const next = askHostBox.querySelector('[data-ask-next]');
           if (next && !next.hidden) {
             if (!next.disabled) moveAskPage(1);
             return;
           }
-          const btn = askHost.querySelector('[data-form-reply]');
+          const btn = askHostBox.querySelector('[data-form-reply]');
           if (btn && !btn.disabled) replyForm(btn.dataset.formReply);
         }
         return;
       }
       if (e.key !== 'Enter' || e.target.tagName !== 'INPUT') return;
       e.preventDefault();
-      const next = askHost.querySelector('[data-ask-next]');
+      const next = askHostBox.querySelector('[data-ask-next]');
       if (next && !next.hidden) {
         if (!next.disabled) moveAskPage(1);
         return;
       }
-      const btn = askHost.querySelector('[data-form-reply]');
+      const btn = askHostBox.querySelector('[data-form-reply]');
       if (btn && !btn.disabled) replyForm(btn.dataset.formReply);
     });
     // A multi-line answer grows instead of hiding its own text.
-    askHost.addEventListener('input', (e) => {
+    askHostBox.addEventListener('input', (e) => {
       if (e.target.classList?.contains('ask-other-text')) autoGrow(e.target);
     });
   }

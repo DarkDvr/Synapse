@@ -2194,10 +2194,21 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
         // The Architect then received "completed" with an empty body (4 Nov, t7) and
         // had to work out that nothing had happened. Say it in the report.
         if (!stopReason && !text && !files.length) {
-          out.warn(`worker ${request.task} (${role}) ended with reasoning only - no file, no report`);
-          text =
-            'The worker ended its turn without writing a file, calling a tool or saying anything: its last ' +
-            'step was reasoning only. Treat the task as not done.';
+          // A stop that lands before the first token is not the same thing: the
+          // worker produced nothing because the operator ended it, and telling the
+          // Architect "reasoning only, treat the task as not done" read as a fault
+          // next to "stopped by the operator" (6 Nov).
+          if (gracefulStop || signal?.aborted || outcome === 'stopped') {
+            out.info(`worker ${request.task} (${role}) was stopped before it produced anything`);
+            text =
+              'The operator stopped this run before it produced anything: no file, no tool call and no ' +
+              'report. Nothing here is a verdict on the task or the model.';
+          } else {
+            out.warn(`worker ${request.task} (${role}) ended with reasoning only - no file, no report`);
+            text =
+              'The worker ended its turn without writing a file, calling a tool or saying anything: its last ' +
+              'step was reasoning only. Treat the task as not done.';
+          }
         }
         // A file written outside the project is odd enough to say out loud: a coder
         // ran a scratch script out of %TEMP% through `shell`, where no path rule can
