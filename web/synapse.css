@@ -1583,7 +1583,7 @@ body[data-mode="single"] #runAuto { display: none; }
   display: flex; align-items: center; gap: 6px;
   font-size: calc(var(--chat-fs) * 0.92); line-height: 1.5; color: #6a6f77; font-style: italic;
 }
-.think-line .think-toggle { position: static; font-style: italic; color: #8b8f97; padding: 0; }
+.think-line .think-toggle { position: static; padding: 0; font: inherit; font-size: calc(var(--chat-fs) * 0.92); font-style: italic; color: #6a6f77; }
 .think-line .status-dot.live { width: 6px; height: 6px; }
 /* A pane that has been full stays full until the run ends: the words swap between
    steps, the box does not, so the chat is not dropped by ten lines twice a step

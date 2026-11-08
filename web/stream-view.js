@@ -8,6 +8,7 @@ export function newStream(kind) {
   return {
     kind,
     text: '',
+    block: '',
     shown: 0,
     offset: 0,
     target: 0,

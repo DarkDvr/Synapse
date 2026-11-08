@@ -286,3 +286,14 @@ test('the pane controls are visible', () => {
   assert.match(css, /\.trace-flow \{[^}]*border: 2px solid/, 'the pane border is 2px');
   assert.match(css, /streamEl\.scrolling|is-scrolling/, 'the fade still tracks overflow');
 });
+
+// The fold is the step's own words, not the whole log. Reading the log made every
+// fold start with the same sentence: three identical reasoning lines (9 Nov).
+test('a fold is the step, not the log', () => {
+  const scroll = read('web/chat-scroll.js');
+  const pane = read('web/thinking-pane.js');
+  assert.match(scroll, /stream\.block \|\| stream\.text/, 'the fold reads the block');
+  assert.match(scroll, /stream\.block = ''/, 'and clears it after folding');
+  assert.match(pane, /s\.block = /, 'the pane adds each block to it');
+  assert.match(read('web/stream-view.js'), /block: ''/, 'a new stream starts with an empty block');
+});

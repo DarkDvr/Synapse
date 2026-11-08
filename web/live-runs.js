@@ -70,16 +70,32 @@ export function runPhrase(tool) {
     case 'webfetch': return 'fetching a page';
     case 'skill': return file ? `using ${file}` : 'loading a skill';
     case 'subagent': return 'delegating';
+    // The harness's own delegate tool is named after the function it registers;
+    // the card should say what the Architect is doing, not the tool's id (9 Nov).
+    case 'synapse-delegate_delegate': return 'delegating';
     case 'question': return 'asking the operator';
     default: return name || 'working';
   }
 }
 
-/** The newest tool call in the open transcript — the Architect's own activity
- *  while its turn is running (a worker's comes from the runner instead). */
+/** The newest tool call in the *running* turn — the Architect's own activity while
+ *  its turn is running (a worker's comes from the runner instead).
+ *
+ *  Only the turn after the newest `idle` boundary counts. Reading the whole
+ *  transcript put the previous turn's delegate call on the card while the Architect
+ *  was already thinking again, so the status read "synapse-delegate_delegate" for a
+ *  turn that had called nothing yet (9 Nov). */
 export function latestToolIn(messages) {
+  const list = messages || [];
+  let from = 0;
+  for (let i = list.length - 1; i >= 0; i -= 1) {
+    if (list[i]?.type === 'idle') {
+      from = i + 1;
+      break;
+    }
+  }
   let found = null;
-  for (const m of messages || []) {
+  for (const m of list.slice(from)) {
     for (const p of m?.parts || []) {
       if (p?.type === 'tool' && p.name) found = { name: String(p.name), target: toolTarget(p) };
     }

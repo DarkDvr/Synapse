@@ -69,7 +69,16 @@ export function paneMarkup(trace) {
 /** New words. The frame loop picks them up; nothing is rendered here. */
 export function paneAdd(trace, text) {
   if (!trace?.stream) return;
-  trace.stream.text = paneTrim(trace.stream.text + String(text ?? ''));
+  const s = trace.stream;
+  const before = s.text.length;
+  s.text = paneTrim(s.text + String(text ?? ''));
+  // The block's own words, for the fold. The log keeps everything since the pane
+  // appeared; a fold that read the log would repeat the same first sentence on
+  // every step (9 Nov).
+  s.block = (String(s.block || '') + String(text ?? '')).slice(-PANE_MAX);
+  // A trim cut the top away, so the offset is past the end of the text and the pane
+  // would look empty while it slid back. Snap once instead.
+  if (s.text.length < before) s.snap = true;
   trace.stream.ended = false;
   active = trace;
   schedule();

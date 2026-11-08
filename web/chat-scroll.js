@@ -155,12 +155,14 @@ export function foldStream(trace) {
   // The Architect's message carries its folds; there is no reason list to fill.
   if (!isWorker(trace)) return;
   stream.folded = true;
-  const text = String(stream.text || '').trim();
+  // The block's own words, not the log: the log holds every step since the pane
+  // appeared, so reading it repeated the same first sentence on every fold (9 Nov).
+  const text = String(stream.block || stream.text || '').trim();
   if (!text) return;
   trace.reasons = [...(trace.reasons || []), { text, at: Date.now() }];
+  stream.block = '';
 }
 
-/** The step ended: keep the words and the height, dim the pane. */
 export function endStream() {
   const trace = liveTrace();
   if (!trace) return;
