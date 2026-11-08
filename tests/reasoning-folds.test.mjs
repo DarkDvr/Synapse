@@ -120,3 +120,35 @@ test('a long run folds its early thinking into one line, like the chat', () => {
   const archive = html.slice(html.indexOf('is-archive'), html.indexOf('</details>', html.indexOf('is-archive')));
   assert.equal((archive.match(/<pre>/g) || []).length, 3, 'the archive holds exactly the older three');
 });
+
+test('a steer and a compaction sit just above the live reasoning', () => {
+  const html = renderTrace({
+    key: 'k',
+    role: 'coder-1',
+    task: 't6',
+    startedAt: 1,
+    notes: [{ steer: true, text: 'PawnIO is running here' }, 'ran the probe'],
+    reasons: [{ text: 'The PDH counter returns invalid data.', at: 9 }],
+    compactingSince: Date.now(),
+    compactions: 1,
+    compactFrom: 47000,
+    compactLimit: 204800,
+    stream: { kind: 'think', text: 'currently thinking', ended: false },
+  });
+  const fold = html.indexOf('class="reasoning is-trace"');
+  const compact = html.indexOf('Compacting');
+  const steer = html.indexOf('STEER:');
+  const panel = html.indexOf('trace-flow is-think');
+  assert.ok(fold > 0 && panel > 0, 'both the fold and the live panel are rendered');
+  assert.ok(compact > fold, 'the compaction is after the folds, not at the top');
+  assert.ok(steer > compact, 'the steer is the line nearest the panel');
+  assert.ok(steer < panel, 'and it is above the live reasoning');
+  // With no panel, the same lines are the bottom of the trace.
+  const quiet = renderTrace({
+    key: 'k', role: 'coder-1', task: 't6', startedAt: 1,
+    notes: [{ steer: true, text: 'still here' }],
+    reasons: [{ text: 'a thought', at: 1 }],
+    stream: null,
+  });
+  assert.ok(quiet.lastIndexOf('STEER:') > quiet.indexOf('class="reasoning is-trace"'));
+});

@@ -143,6 +143,9 @@ export function renderAskPanel() {
   // turns the page when its countdown runs out and the reply goes at the last one.
   state.askNote = {
     here: form.sessionId === state.sessionId,
+    // A worker's question has no chat to open: it is answered here, over the
+    // Architect's conversation (8 Nov).
+    worker: [...(state.runs?.values?.() || [])].some((r) => r?.workerId && r.workerId === form.sessionId),
     // The asking chat's own switch when the server said so; the open chat's when it
     // did not (an older snapshot).
     autoAnswer: (form.autoAnswer ?? state.automation?.autoAnswer) === true,
@@ -248,19 +251,24 @@ export function paintAskNote() {
       applyAskPage();
     }
     const end = n.firstAt + (page + 1) * Math.max(1, n.wait) * 1000;
-    note.textContent = askHeadNote({ here: n.here, autoAnswer: true, seconds: Math.max(0, Math.ceil((end - now) / 1000)) });
+    note.textContent = askHeadNote({
+      here: n.here,
+      worker: n.worker,
+      autoAnswer: true,
+      seconds: Math.max(0, Math.ceil((end - now) / 1000)),
+    });
     return;
   }
-  note.textContent = askHeadNote({ here: n.here, autoAnswer: false });
+  note.textContent = askHeadNote({ here: n.here, worker: n.worker, autoAnswer: false });
 }
 
 /** The same sentence, without touching the DOM — for the first render. */
 function paintAskNoteText() {
   const n = state.askNote;
   if (!n) return '';
-  if (!n.autoAnswer || !n.firstAt) return askHeadNote({ here: n.here, autoAnswer: n.autoAnswer });
+  if (!n.autoAnswer || !n.firstAt) return askHeadNote({ here: n.here, worker: n.worker, autoAnswer: n.autoAnswer });
   const timeline = answerTimeline({ firstAt: n.firstAt, wait: n.wait, pages: n.pages, now: serverNow() });
-  return askHeadNote({ here: n.here, autoAnswer: true, seconds: timeline.seconds });
+  return askHeadNote({ here: n.here, worker: n.worker, autoAnswer: true, seconds: timeline.seconds });
 }
 
 /**

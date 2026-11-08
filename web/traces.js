@@ -83,13 +83,18 @@ export function renderTrace(t) {
   // a worker ten minutes in has done forty things, and forty lines of it is the
   // whole chat. This is the shape an editor's agent uses, for the same reason.
   //
-  // A steer is not a step. The four-line tail is for steps, and folding the
-  // operator's own instruction into "N earlier steps" hid it while the run went
-  // on (30 Oct), so every steer stays in the open tail whatever has happened since.
+  // A steer is not a step, and it is not history either: it is the operator talking
+  // to the work that is happening now. It used to sit in the tail, which put it at
+  // the *top* of a long trace — above sixty earlier steps and ten folds, off the
+  // screen the operator is watching — so it looked as if it had not been sent
+  // (8 Nov). It is pinned just above the live panel instead, with the compaction
+  // line, and when there is no panel those lines are simply the bottom.
   const isSteer = (n) => typeof n === 'object' && n?.steer === true;
-  const cut = Math.max(0, notes.length - 4);
-  const tail = notes.filter((n, i) => i >= cut || isSteer(n));
-  const older = notes.filter((n, i) => i < cut && !isSteer(n));
+  const steps = notes.filter((n) => !isSteer(n));
+  const cut = Math.max(0, steps.length - 4);
+  const tail = steps.slice(cut);
+  const older = steps.slice(0, cut);
+  const steers = notes.filter(isSteer);
   const archive = older.length
     ? `<details class="trace-archive"><summary>${older.length} earlier step${older.length === 1 ? '' : 's'}</summary>${older
         .map(note)
@@ -158,7 +163,12 @@ export function renderTrace(t) {
         : ` of ${loopLimit} — asking it to carry on`) +
       '</div>'
     : '';
-  const body = `${archive}${compactLine}${loopLine}${tail.map(note).join('')}${reasonFolds}${streaming}`;
+  // Pinned lines: the compaction that emptied the window, the loop rescue that
+  // shortened the thinking, and the operator's own steers. All three explain or
+  // steer what is happening *now*, so they sit just above the panel — and at the
+  // bottom of the trace when no panel is showing.
+  const pinned = `${compactLine}${loopLine}${steers.map(note).join('')}`;
+  const body = `${archive}${tail.map(note).join('')}${reasonFolds}${pinned}${streaming}`;
   if (!t.finishedAt) {
     return `<div class="trace is-live" data-trace="${esc(t.key)}">
       <div class="trace-head" title="${esc(head.join(' · '))}">${esc(head.join(' · '))}</div>

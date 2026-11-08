@@ -40,12 +40,16 @@ export function answerTimeline({ firstAt, wait = 0, pages = 1, now = Date.now() 
  *   the number left on this page (see answerTimeline).
  * @returns {string} the note, ready to render (no markup, no escaping needed).
  */
-export function askHeadNote({ here = true, autoAnswer = false, seconds = 0 } = {}) {
+export function askHeadNote({ here = true, autoAnswer = false, worker = false, seconds = 0 } = {}) {
+  // A worker has no chat in the rail to open: its question is posted here, over the
+  // Architect's conversation, and answered here. Saying "another chat" sent the
+  // operator looking for one that does not exist (8 Nov).
+  const from = worker ? 'a worker is waiting — ' : 'another chat — ';
   if (!autoAnswer) {
-    return here ? 'waiting for your answer' : 'asked in another chat — open that chat to answer';
+    return here ? 'waiting for your answer' : `${from}answer here to continue`;
   }
   const left = Math.max(0, Math.ceil(Number(seconds) || 0));
-  const place = here ? '' : 'another chat — ';
+  const place = here ? '' : from;
   return left > 0 ? `${place}Auto-Answering in ${left} seconds…` : `${place}Auto-Answering now…`;
 }
 

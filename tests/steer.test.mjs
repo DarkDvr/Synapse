@@ -423,8 +423,12 @@ test('a steer is pinned in the trace, centred and bright', () => {
   // 6 Nov: the trace moved to ./traces.js, so its half of this rule is read there.
   const app = fs.readFileSync(path.join(process.cwd(), 'web', 'traces.js'), 'utf8');
   const css = fs.readFileSync(path.join(process.cwd(), 'web', 'synapse.css'), 'utf8');
-  assert.match(app, /const tail = notes\.filter\(\(n, i\) => i >= cut \|\| isSteer\(n\)\)/);
-  assert.match(app, /const older = notes\.filter\(\(n, i\) => i < cut && !isSteer\(n\)\)/);
+  // 8 Nov: a steer is pinned just above the live reasoning, not in the tail — at the
+  // top of a long trace it was off the screen the operator was watching.
+  assert.match(app, /const steps = notes\.filter\(\(n\) => !isSteer\(n\)\)/);
+  assert.match(app, /const steers = notes\.filter\(isSteer\)/);
+  assert.match(app, /const pinned = .*steers\.map\(note\)\.join/);
+  assert.match(app, /\$\{reasonFolds\}\$\{pinned\}\$\{streaming\}/);
   assert.match(app, /trace-steer-text/);
   assert.match(css, /\.trace-line\.is-steer \{[^}]*align-items: center/);
   assert.match(css, /\.trace-line\.is-steer \{[^}]*white-space: normal/);

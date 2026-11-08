@@ -23,7 +23,9 @@ test('a question in the open chat says what it wants, plainly', () => {
 });
 
 test('a question from another chat says where it is and what to do', () => {
-  assert.equal(askHeadNote({ here: false }), 'asked in another chat — open that chat to answer');
+  assert.equal(askHeadNote({ here: false }), 'another chat — answer here to continue');
+  // A worker has no chat to open: its question is answered here (8 Nov).
+  assert.equal(askHeadNote({ here: false, worker: true }), 'a worker is waiting — answer here to continue');
 });
 
 test('under Auto-Answer the note is one short countdown', () => {
@@ -34,6 +36,10 @@ test('under Auto-Answer the note is one short countdown', () => {
   assert.equal(
     askHeadNote({ here: false, autoAnswer: true, seconds: 7 }),
     'another chat — Auto-Answering in 7 seconds…',
+  );
+  assert.equal(
+    askHeadNote({ here: false, worker: true, autoAnswer: true, seconds: 7 }),
+    'a worker is waiting — Auto-Answering in 7 seconds…',
   );
   // No quantity, no options, no explanation — the operator asked for exactly this.
   assert.doesNotMatch(askHeadNote({ here: true, autoAnswer: true, seconds: 5 }), /question|recommended/i);

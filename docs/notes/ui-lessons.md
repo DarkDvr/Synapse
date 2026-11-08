@@ -1504,7 +1504,16 @@ reasoning panel jumped the moment a step ended.
   reasoning. The steps are also posted to `/api/runs/reason`, so a reload and a
   second view get them back from `/api/runs` the way the notes already did; the file
   is `data/trace-reasons.json`, pruned at boot, forty runs at most.
-- **The streaming panel is one node, so a new block has to reconcile with it.**
+- **A steer and a compaction sit where the work is.** Both used to render at the top
+  of the trace, above the earlier-steps fold and the reasoning folds — off the screen
+  while the operator watched the live panel, so a steer looked unsent. They are pinned
+  just above the panel now (compaction, loop, then the operator's steers), and at the
+  bottom when there is no panel. The line is painted from `run.steer`, which the runner
+  emits *before* it delivers the prompt, so the feedback does not wait for the engine.
+- **A worker's question is answered here.** The head note said "asked in another chat —
+  open that chat to answer", and there is no such chat for a worker: its question is
+  posted over the Architect's conversation. It says "a worker is waiting — answer here
+  to continue" (`askHeadNote({ worker })`).- **The streaming panel is one node, so a new block has to reconcile with it.**
   `adoptStream()` compares what the node holds with what the stream holds: a
   different block is replaced, a prefix gets only its tail, an identical string
   writes nothing. Two bugs came from skipping that: a new block *appended* to the
