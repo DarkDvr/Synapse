@@ -874,7 +874,7 @@ async function main() {
   // asks before the engine starts, and a runtime that was still waking up answered
   // nothing — the config, the card and the picker then keep the number from the last
   // time that model was loaded smaller. One request per server (8 Nov).
-  setTimeout(() => {
+  const correctWindows = () =>
     api
       .refreshWindows()
       .then((changes) => {
@@ -883,7 +883,14 @@ async function main() {
         }
       })
       .catch((err) => app.warn(`could not re-measure the local models: ${err.message}`));
-  }, 1500).unref?.();
+  setTimeout(correctWindows, 1500).unref?.();
+  // And once a minute after that. A model reloaded in LM Studio (or whatever serves
+  // it) is the one thing that changes a window while Synapse runs, and the numbers
+  // have to follow it without anyone re-picking a model — which is exactly the case
+  // five fixes kept missing. A server that is off answers nothing, so this is silent
+  // by default; it speaks only when a number actually changed (8 Nov).
+  const windowWatch = setInterval(correctWindows, 60_000);
+  windowWatch.unref?.();
 
   // Disk housekeeping, once the page is up so it never delays a boot: an applied
   // update leaves ~1.1 GB of staging behind, and `dist` keeps every release zip
