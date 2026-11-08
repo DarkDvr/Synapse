@@ -260,3 +260,16 @@ test('a full reasoning pane keeps its height and its words between steps', () =>
     'and keeps eleven lines of height',
   );
 });
+
+// 9 Nov: the pane became the run's thinking log — it appends across steps instead of
+// resetting, trims to a tail, and can be collapsed to one breathing line.
+test('the thinking pane is a log, and it can be collapsed', () => {
+  const js = read('web/chat-scroll.js');
+  assert.match(js, /pushStream\(trace\.stream, '\\n\\n'\)/, 'a new block starts with a blank line');
+  assert.match(js, /trace\.thinkCollapsed = false/, 'a new pane is drawn open');
+  assert.match(js, /if \(trace\?\.thinkCollapsed\)/, 'nothing is drawn while collapsed');
+  assert.match(read('web/traces.js'), /function streamPane/, 'one pane, two states');
+  assert.match(read('web/traces.js'), /Thinking…/, 'the collapsed line says it is thinking');
+  assert.match(read('web/stream-view.js'), /THINK_BUFFER/, 'the log trims to a tail');
+  assert.match(read('web/app.js'), /toggleThinking/, 'the click is wired');
+});

@@ -1569,6 +1569,22 @@ body[data-mode="single"] #runAuto { display: none; }
    the panel never reads as words still arriving. It keeps its space on purpose:
    removing it is what made the chat jump at every step boundary. */
 .trace-flow.is-idle { opacity: 0.7; }
+/* The thinking pane's controls: one small chevron in its corner when open, one
+   breathing line when collapsed. The flag lives on the trace, not in the page, so a
+   rebuild keeps the operator's choice for the pane they are reading (9 Nov). */
+.think-wrap { position: relative; }
+.think-toggle {
+  position: absolute; right: 2px; top: 0; border: 0; background: none; padding: 0 3px;
+  font: inherit; font-size: calc(var(--chat-fs) * 0.8); line-height: 1.4;
+  color: #6f747c; cursor: pointer;
+}
+.think-toggle:hover { color: var(--muted); }
+.think-line {
+  display: flex; align-items: center; gap: 6px;
+  font-size: calc(var(--chat-fs) * 0.92); line-height: 1.5; color: #6a6f77; font-style: italic;
+}
+.think-line .think-toggle { position: static; font-style: italic; color: #8b8f97; padding: 0; }
+.think-line .status-dot.live { width: 6px; height: 6px; }
 /* A pane that has been full stays full until the run ends: the words swap between
    steps, the box does not, so the chat is not dropped by ten lines twice a step
    (9 Nov). */

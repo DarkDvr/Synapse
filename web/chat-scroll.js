@@ -145,7 +145,10 @@ function measureStream(s) {
  */
 function liveTrace() {
   const run = wired.traceOf(wired.currentRun());
-  if (run) return run;
+  // A run that has finished keeps its trace for the report, but it is no longer the
+  // place new words go: the Architect's own step starts right after the report, and
+  // sending its thinking into the folded worker trace lost it (9 Nov).
+  if (run && !run.finishedAt) return run;
   const own = state.sessionTrace;
   if (!own) return null;
   if (!own.key && state.sessionId) own.key = `sess:${state.sessionId}`;
@@ -155,19 +158,33 @@ function liveTrace() {
 export function appendStream(kind, delta) {
   const trace = liveTrace();
   if (!trace || !delta) return;
-  if (!trace.stream || trace.stream.kind !== kind || trace.stream.ended) {
-    // A new block (thinking, then speech). Its class differs, so the panel is
-    // replaced on the next frame rather than patched; nothing is on screen between
-    // the two, because the previous block was frozen when its step ended.
-    foldStream(trace);
-    trace.stream = newStream(kind);
-    streamEl = null;
-    // A new block is a fresh start: whatever the reader did with the last one does
-    // not hold this one hostage.
-    chatFollowArmed = true;
-    lastChatTop = chatScroller()?.scrollTop || 0;
+  // A worker's thinking is one log for the run: a new block continues it after a
+  // blank line instead of resetting the pane. The folds above are the record, so
+  // the pane can be a tail (9 Nov).
+  if (kind === 'think' && trace !== state.sessionTrace && trace.stream?.kind === 'think') {
+    if (trace.stream.ended) {
+      trace.stream.ended = false;
+      trace.stream.folded = false;
+      pushStream(trace.stream, '\n\n');
+    }
+    pushStream(trace.stream, delta);
+  } else {
+    if (!trace.stream || trace.stream.kind !== kind || trace.stream.ended) {
+      // A new block (thinking after speech, or speech after thinking). Its class
+      // differs, so the panel is replaced on the next frame rather than patched.
+      foldStream(trace);
+      trace.stream = newStream(kind);
+      // A new pane is drawn open: the operator's collapse is for the pane they were
+      // reading, not for every one after it (9 Nov).
+      trace.thinkCollapsed = false;
+      streamEl = null;
+      // A new block is a fresh start: whatever the reader did with the last one does
+      // not hold this one hostage.
+      chatFollowArmed = true;
+      lastChatTop = chatScroller()?.scrollTop || 0;
+    }
+    pushStream(trace.stream, delta);
   }
-  pushStream(trace.stream, delta);
   if (!streamRaf) {
     streamFrameAt = 0;
     streamRaf = requestAnimationFrame(pumpStream);
@@ -178,6 +195,12 @@ function pumpStream(now) {
   streamRaf = 0;
   const trace = liveTrace();
   const s = trace?.stream;
+  // Collapsed: the log keeps filling in state, but there is nothing to draw. The next
+  // expand renders the whole tail at once.
+  if (trace?.thinkCollapsed) {
+    streamEl = null;
+    return;
+  }
   if (!s || !s.text) {
     streamEl = null;
     return;
@@ -312,6 +335,9 @@ export function endStream() {
         text,
       }).catch(() => {});
     }
+    // The fold is the record; the pane is the tail that keeps going.
+    foldStream(trace);
+    stream.folded = false;
     stream.ended = true;
   } else if (stream.kind === 'word' && trace !== state.sessionTrace) {
     // What the worker said between tools, kept as a paragraph instead of a panel
@@ -345,6 +371,13 @@ export function restoreStreamView() {
   const el = findStreamEl(trace.key);
   if (!el) return;
   streamEl = el;
+  // Expanding after a collapse: the text has grown while nothing was drawn, so the
+  // remembered offset is stale. Snap to the newest line once, then slide as usual.
+  measureStream(s);
+  if (s.snap) {
+    s.snap = false;
+    s.offset = Number(s.target) || 0;
+  }
   streamEl.body.style.transform = `translate3d(0, ${-(Number(s.offset) || 0)}px, 0)`;
   const scrolling = (Number(s.target) || 0) > 0.5;
   streamEl.scrolling = scrolling;

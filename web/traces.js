@@ -50,6 +50,20 @@ export function forgetConversation(dir, oldSessionId) {
 }
 
 /**
+ * The live pane: the thinking log while it is open, one breathing line while it is
+ * collapsed. Both carry the trace key, so a click can find the trace it belongs to.
+ */
+function streamPane(t) {
+  const key = esc(t.key);
+  if (t.thinkCollapsed && t.stream?.kind === 'think') {
+    return `<div class="think-line"><span class="status-dot live" role="img" aria-label="thinking"></span><button type="button" class="think-toggle" data-think-toggle="${key}" title="Show what it is thinking">Thinking…</button></div>`;
+  }
+  return `<div class="think-wrap"><div class="trace-flow${t.stream.kind === 'think' ? ' is-think' : ''}${t.stream.ended ? ' is-idle' : ''}${t.reserved ? ' is-reserved' : ''}"><div class="trace-flow-view"><div class="trace-flow-body">${esc(
+    t.stream.text,
+  )}</div></div></div><button type="button" class="think-toggle" data-think-toggle="${key}" title="Hide the thinking" aria-label="Hide the thinking">▾</button></div>`;
+}
+
+/**
  * What a worker is doing, in the chat, while it does it.
  *
  * A worker's session is its own, so its turns never reach this transcript — the
@@ -122,11 +136,7 @@ export function renderTrace(t) {
   // fast model does several times a second. The whole block is rendered and the
   // panel keeps its window; nothing is sliced here, so a re-render never changes a
   // line break.
-  const streaming = t.stream && t.stream.text
-    ? `<div class="trace-flow${t.stream.kind === 'think' ? ' is-think' : ''}${t.stream.ended ? ' is-idle' : ''}${t.reserved ? ' is-reserved' : ''}"><div class="trace-flow-view"><div class="trace-flow-body">${esc(
-        t.stream.text,
-      )}</div></div></div>`
-    : '';
+  const streaming = t.stream && t.stream.text ? streamPane(t) : '';
   // What the worker finished thinking: the chat's rule exactly — the newest ten as
   // folds of their own, everything older as one "N earlier reasoning" fold. The
   // trace is the only record of a worker's reasoning, so the words are kept behind
@@ -348,7 +358,11 @@ export function noteCompactionEvent(ev, { used = 0, limit = 0 } = {}) {
  *  in the chat. */
 export function traceSig() {
   const own = state.sessionTrace;
-  const sessionPart = own?.stream ? `own:${own.key}:${own.stream.text.length}:${own.stream.ended ? 1 : 0}` : '';
+  const sessionPart = own?.stream
+    ? `own:${own.key}:${own.stream.text.length}:${own.stream.ended ? 1 : 0}:${own.thinkCollapsed ? 1 : 0}:${own.reserved ? 1 : 0}`
+    : own?.thinkCollapsed
+      ? `own:none:${own.thinkCollapsed ? 1 : 0}`
+      : '';
   return [
     [...state.traces.values()]
       .map(
@@ -357,7 +371,7 @@ export function traceSig() {
           `${t.stream?.ended ? 1 : 0}:${Number(t.compactions) || 0}:${Number(t.compactingSince) || 0}:` +
           `${Number(t.compactFrom) || 0}:${Number(t.compactAt) || 0}:${Number(t.compactLimit) || 0}:` +
           `${(t.reasons || []).length}:${(t.reasons || []).map((r) => String(r.text || '').length).join('.')}:` +
-          `${Number(t.loops) || 0}:${Number(t.loopLimit) || 0}:${t.loopStop ? 1 : 0}:${t.reserved ? 1 : 0}`,
+          `${Number(t.loops) || 0}:${Number(t.loopLimit) || 0}:${t.loopStop ? 1 : 0}:${t.reserved ? 1 : 0}:${t.thinkCollapsed ? 1 : 0}`,
       )
       .join(';'),
     sessionPart,
@@ -384,6 +398,6 @@ export function renderSessionStream() {
   // post, so the post's green line is the only rule and the reasoning keeps its
   // grey. `is-own` is the whole difference from a worker's trace.
   return `<div class="trace is-live is-own" data-trace="${esc(t.key)}">
-    <div class="trace-flow${t.stream.kind === 'think' ? ' is-think' : ''}${t.stream.ended ? ' is-idle' : ''}${t.reserved ? ' is-reserved' : ''}"><div class="trace-flow-view"><div class="trace-flow-body">${esc(text)}</div></div></div>
+    ${streamPane(t)}
   </div>`;
 }

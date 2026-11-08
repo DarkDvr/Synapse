@@ -17,6 +17,12 @@ export const STREAM_BUFFER = 20000; // characters allowed before a trim
 // reasoning block reaches in under a minute on a fast model. Dropping a quarter
 // of it at a time turns thousands of rewrites into one every few seconds.
 export const STREAM_KEEP = 15000;
+// A continuous thinking log is a tail, not a record: the folds above it hold the whole
+// of what was thought, so the pane keeps about a dozen lines and drops the rest. The
+// cap is larger than that so a trim happens every few hundred characters, not every
+// frame, and it cuts on a line boundary so a half-line never appears at the top.
+export const THINK_BUFFER = 4000;
+export const THINK_KEEP = 2500;
 // A damped spring, not a straight line to the target: the text is dragged along by
 // the writing rather than commanded by it, which is what makes it look like a
 // scroll instead of a page refilling. Stiffness 90 and damping 18 give ζ ≈ 0.95 —
@@ -81,9 +87,17 @@ export function pushStream(s, delta) {
   s.total += piece.length;
   // The cap is a memory guard, not a window: it fires after twenty thousand
   // characters in one step, and the one re-wrap it causes is invisible next to a
-  // frame-by-frame version of the same thing.
-  if (s.text.length > STREAM_BUFFER) {
-    s.text = s.text.slice(-STREAM_KEEP);
+  // frame-by-frame version of the same thing. A thinking log is a tail by design,
+  // so it trims sooner and on a line boundary (9 Nov).
+  const cap = s.kind === 'think' ? THINK_BUFFER : STREAM_BUFFER;
+  if (s.text.length > cap) {
+    const keep = s.kind === 'think' ? THINK_KEEP : STREAM_KEEP;
+    let at = s.text.length - keep;
+    if (s.kind === 'think') {
+      const nl = s.text.indexOf('\n', at);
+      if (nl >= 0) at = nl + 1;
+    }
+    s.text = s.text.slice(at);
     s.trimmed = true;
   }
   s.dirty = true;

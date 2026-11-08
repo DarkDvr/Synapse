@@ -1765,6 +1765,19 @@ document.addEventListener('keydown', (e) => {
     });
   }
 
+  // Collapse or open one trace's thinking pane. The flag lives on the trace, so it
+  // survives a re-render; a new pane is drawn open, because the operator's choice
+  // was about the pane they were reading (9 Nov).
+  function toggleThinking(key) {
+    const trace = state.sessionTrace?.key === key ? state.sessionTrace : state.traces.get(key);
+    if (!trace) return;
+    trace.thinkCollapsed = !trace.thinkCollapsed;
+    if (!trace.thinkCollapsed && trace.stream) trace.stream.snap = true;
+    renderTranscript();
+    const el = $('transcript');
+    if (el) el.scrollTop = el.scrollHeight;
+  }
+
   $('transcript').addEventListener('click', (e) => {
     // The ask panel is *inside* the transcript while a question is up, and it has
     // its own handler above: letting the click through here sent the answer twice
@@ -1773,6 +1786,8 @@ document.addEventListener('keydown', (e) => {
     const formBtn = e.target.closest('[data-form-reply]');
     if (formBtn) { replyForm(formBtn.dataset.formReply); return; }
     if (e.target.closest('[data-error]')) return; // the error button is not a toggle
+    const think = e.target.closest('[data-think-toggle]');
+    if (think) { toggleThinking(think.dataset.thinkToggle); return; }
     const head = e.target.closest('[data-tool-toggle]');
     if (head) toggleTool(head.dataset.toolToggle);
   });
