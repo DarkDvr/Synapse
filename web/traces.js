@@ -14,6 +14,7 @@ import { state } from './state.js';
 import { EV } from './events.js';
 import { esc, shortSpan, fileChip, reasoningGist } from './format.js';
 import { renderMarkdown } from './md.js';
+import { paneMarkup } from './thinking-pane.js';
 import { fmtTokens, dirKey, roleLabel } from './run-view.js';
 
 const missing = (name) => () => {
@@ -49,19 +50,6 @@ export function forgetConversation(dir, oldSessionId) {
   });
 }
 
-/**
- * The live pane: the thinking log while it is open, one breathing line while it is
- * collapsed. Both carry the trace key, so a click can find the trace it belongs to.
- */
-function streamPane(t) {
-  const key = esc(t.key);
-  if (t.thinkCollapsed && t.stream?.kind === 'think') {
-    return `<div class="think-line"><span class="status-dot live" role="img" aria-label="thinking"></span><button type="button" class="think-toggle" data-think-toggle="${key}" title="Show what it is thinking">Thinking…</button></div>`;
-  }
-  return `<div class="think-wrap"><div class="trace-flow${t.stream.kind === 'think' ? ' is-think' : ''}${t.stream.ended ? ' is-idle' : ''}${t.reserved ? ' is-reserved' : ''}"><div class="trace-flow-view"><div class="trace-flow-body">${esc(
-    t.stream.text,
-  )}</div></div></div><button type="button" class="think-toggle" data-think-toggle="${key}" title="Hide the thinking" aria-label="Hide the thinking">▾</button></div>`;
-}
 
 /**
  * What a worker is doing, in the chat, while it does it.
@@ -136,7 +124,7 @@ export function renderTrace(t) {
   // fast model does several times a second. The whole block is rendered and the
   // panel keeps its window; nothing is sliced here, so a re-render never changes a
   // line break.
-  const streaming = t.stream && t.stream.text ? streamPane(t) : '';
+  const streaming = t.stream && t.stream.text ? paneMarkup(t) : '';
   // What the worker finished thinking: the chat's rule exactly — the newest ten as
   // folds of their own, everything older as one "N earlier reasoning" fold. The
   // trace is the only record of a worker's reasoning, so the words are kept behind
@@ -398,6 +386,6 @@ export function renderSessionStream() {
   // post, so the post's green line is the only rule and the reasoning keeps its
   // grey. `is-own` is the whole difference from a worker's trace.
   return `<div class="trace is-live is-own" data-trace="${esc(t.key)}">
-    ${streamPane(t)}
+    ${paneMarkup(t)}
   </div>`;
 }

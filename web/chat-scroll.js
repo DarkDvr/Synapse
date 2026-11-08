@@ -10,7 +10,8 @@
 import { state } from './state.js';
 import { api } from './api.js';
 import { $ } from './dom.js';
-import { newStream, pushStream, slideTarget, nextOffset, takePending, freezeStream, adoptStream } from './stream-view.js';
+import { newStream } from './stream-view.js';
+import { paneAdd, paneEnded, paneAfterRender } from './thinking-pane.js';
 
 // Four things this file needs from app.js: a redraw of the transcript, the trace a
 // piece of writing belongs to, the run on screen, and the question post (which is a
@@ -41,23 +42,10 @@ export function chatScrollWiring(fns) {
 // thought. The one-line note of the tool call is what survives.
 // Streaming text, inside a panel that slides.
 //
-// Two costs had to stay out of this. It must not rebuild the transcript — that is
-// an innerHTML of every message. And it must not rewrite the text each frame: the
-// old window replaced the *front* of the paragraph sixty times a second, which
-// re-broke every line and forced a layout of the whole chat. So the text node is
-// written once per delta and never touched in between, and a frame does one thing
-// only — move the block by a few pixels with `transform`, which the compositor
-// handles without laying anything out. Frames stop as soon as the slide settles.
-//
-// The travel itself is `nextOffset` in ./stream-view.js: a damped spring, so the
-// text is dragged along by the writing and eases to a stop when the model pauses.
-let streamRaf = 0;
-let streamEl = null; // { mask, view, body, node, scrolling } once the panel is on screen
-let streamFrameAt = 0; // performance.now() of the last frame, for the real dt
-// How much of the newest line the damped slide may hide while the chat follows.
-// Under a line's height, so nothing readable is ever behind the edge.
-const STREAM_MAX_LAG = 8;
-const reducedMotion = Boolean(window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches);
+// The pane lives in ./thinking-pane.js — the text tail, the slide, the two states.
+// This file keeps only what a pane cannot know: which trace the newest words belong
+// to, what happens when a thought's step ends (a fold, posted to the server, so a
+// reload keeps the record), and speech, which never takes the thinking pane.
 
 // Is the chat still being carried along by the writing?
 //
@@ -72,11 +60,7 @@ let chatFollowArmed = true;
 let lastChatTop = 0;
 const CHAT_FOLLOW_SLACK = 48; // two lines
 // The last time the operator themselves moved the conversation: a wheel, a key, a
-// finger. A scroll *event* cannot tell their move from ours, and that was the bug:
-// a rebuild resets the scroller and our own follow fires an event, so a declining
-// scrollTop read as "the reader took over" and the follow let go in the middle of a
-// stream. It came back when the block folded and the next render re-armed it, which
-// is why it looked intermittent and why it only happened while thinking streamed.
+// finger. A scroll *event* cannot tell their move from ours.
 let chatUserMovedAt = 0;
 const CHAT_USER_WINDOW_MS = 1500;
 
@@ -89,13 +73,9 @@ export function noteChatScroll() {
   else if (fromEnd <= CHAT_FOLLOW_SLACK) chatFollowArmed = true;
   lastChatTop = el.scrollTop;
   // The reader's place, kept from the end of the conversation: the one value that
-  // survives the box changing size under them (see restoreChatSlack).
-  //
-  // Only when the *reader* put the conversation there. Our own writes fire this
-  // event too, and a scroll event is dispatched after the frame's layout: by then the
-  // box has already changed size again, so measuring here records the next frame's
-  // height against this frame's offset. Every such reading is a little bigger than
-  // the last, and one switch compounded 300px into 496px that way.
+  // survives the box changing size under them (see restoreChatSlack). Only when the
+  // *reader* put the conversation there: our own writes fire this event too, after
+  // the frame's layout, by which time the box has changed again.
   const ours = chatScrollWritten !== null && Math.abs(el.scrollTop - chatScrollWritten) <= 1;
   chatScrollWritten = null;
   if (!ours) chatSlack = fromEnd;
@@ -105,8 +85,7 @@ export function noteChatScroll() {
  *  mistaken for the reader moving. */
 let chatScrollWritten = null;
 
-/** Stop following the writing. The question post calls this: it moves the chat to
- *  the top on purpose, and a follow that was armed would drag the reader back down. */
+/** Stop following the writing. The question post calls this. */
 export function stopFollowingChat() {
   chatFollowArmed = false;
 }
@@ -118,36 +97,14 @@ export function noteUserScrollIntent(deltaY) {
   else chatUserMovedAt = Date.now();
 }
 
-/** The panel's parts, or null if it is not on screen yet. */
-function findStreamEl(key) {
-  const mask = document.querySelector(`.trace.is-live[data-trace="${CSS.escape(key)}"] .trace-flow`);
-  const view = mask?.querySelector('.trace-flow-view');
-  const body = view?.firstElementChild;
-  const node = body?.firstChild;
-  if (!body || !node || node.nodeType !== Node.TEXT_NODE) return null;
-  return { mask, view, body, node, scrolling: null };
-}
-
-/** How far the text has to move up for its last line to sit at the bottom edge. */
-function measureStream(s) {
-  if (!streamEl) return 0;
-  s.target = slideTarget(streamEl.body.offsetHeight, streamEl.view.clientHeight);
-  return s.target;
-}
-
 /**
- * The trace the newest writing belongs to: a delegated run's while one is live,
- * and otherwise the open session's own step.
- *
- * The Architect had no trace at all, which is why its reasoning panel stayed empty
- * until the step ended and then showed the entire wall at once: the deltas were
- * arriving and being dropped, because only a run had somewhere to put them.
+ * The trace the newest writing belongs to: a delegated run's while one is live, and
+ * otherwise the open session's own step.
  */
 function liveTrace() {
   const run = wired.traceOf(wired.currentRun());
-  // A run that has finished keeps its trace for the report, but it is no longer the
-  // place new words go: the Architect's own step starts right after the report, and
-  // sending its thinking into the folded worker trace lost it (9 Nov).
+  // A finished run keeps its trace for the report, but new words do not go there:
+  // the Architect's own step starts right after the report (9 Nov).
   if (run && !run.finishedAt) return run;
   const own = state.sessionTrace;
   if (!own) return null;
@@ -155,204 +112,64 @@ function liveTrace() {
   return own.key ? own : null;
 }
 
+/** A worker's step, as opposed to the Architect's own turn. */
+const isWorker = (trace) => trace !== state.sessionTrace;
+
+/**
+ * New writing. Thinking continues the pane's log; speech is collected and becomes a
+ * paragraph when its block ends.
+ */
 export function appendStream(kind, delta) {
   const trace = liveTrace();
   if (!trace || !delta) return;
-  // Speech is not thinking and does not take the thinking pane: it is collected
-  // here and becomes the paragraph when the block ends. Streaming it into the pane
-  // first showed speech in a thinking box, then emptied the box, then put the
-  // speech in the chat (9 Nov).
-  if (kind === 'word' && trace !== state.sessionTrace) {
+  if (kind === 'word' && isWorker(trace)) {
     trace.proseBuf = String(trace.proseBuf || '') + delta;
     return;
   }
-  // Thinking is one log per turn: a new block continues it after a blank line
-  // instead of resetting the pane. The folds above are the record, so the pane can
-  // be a tail. The Architect's pane works the same way (9 Nov).
   if (kind === 'think' && trace.stream?.kind === 'think') {
     if (trace.stream.ended) {
       trace.stream.ended = false;
       trace.stream.folded = false;
-      pushStream(trace.stream, '\n\n');
+      paneAdd(trace, '\n\n');
     }
-    pushStream(trace.stream, delta);
-  } else {
-    if (!trace.stream || trace.stream.kind !== kind || trace.stream.ended) {
-      // A new block (the first thought, or the Architect speaking). Its class may
-      // differ, so the panel is replaced on the next frame rather than patched.
-      foldStream(trace);
-      trace.stream = newStream(kind);
-      // A new pane is drawn open: the operator's collapse is for the pane they were
-      // reading, not for every one after it (9 Nov).
-      trace.thinkCollapsed = false;
-      streamEl = null;
-      // A new block is a fresh start: whatever the reader did with the last one does
-      // not hold this one hostage.
-      chatFollowArmed = true;
-      lastChatTop = chatScroller()?.scrollTop || 0;
-    }
-    pushStream(trace.stream, delta);
-  }
-  if (!streamRaf) {
-    streamFrameAt = 0;
-    streamRaf = requestAnimationFrame(pumpStream);
-  }
-}
-
-function pumpStream(now) {
-  streamRaf = 0;
-  const trace = liveTrace();
-  const s = trace?.stream;
-  // Collapsed: the log keeps filling in state, but there is nothing to draw. The next
-  // expand renders the whole tail at once.
-  if (trace?.thinkCollapsed) {
-    streamEl = null;
+    paneAdd(trace, delta);
     return;
   }
-  if (!s || !s.text) {
-    streamEl = null;
-    return;
-  }
-  if (!streamEl || !streamEl.mask.isConnected) {
-    streamEl = findStreamEl(trace.key);
-    if (!streamEl) {
-      // Not on screen — the first delta of a run, or a rebuild in between. One
-      // render puts it there; the next frame finds it.
-      wired.renderTranscript();
-      return;
-    }
-    // The node may hold the previous block's words, or exactly what this block has
-    // already shown. Reconcile before measuring: appending the whole block into the
-    // old one was the "teleports to the beginning, then scrolls to the bottom"
-    // report, and a transform left over from the last block was the empty panel
-    // that grew with nothing in it (8 Nov).
-    const adopted = adoptStream(s, streamEl.node.data);
-    if (adopted.reset) streamEl.node.data = adopted.text;
-    else if (adopted.text) streamEl.node.data += adopted.text;
-    // A rebuild mid-stream used to snap the panel to its newest line, because the
-    // offset was taken from the measure every time the node was adopted. With a log
-    // that lives across steps, that is a jump on every step boundary and the slide
-    // never gets to run (9 Nov). Only a real reset — a different block, a trim —
-    // earns a fresh offset; otherwise the slide keeps the position it earned.
-    if (adopted.reset || !Number(s.offset)) {
-      s.velocity = 0;
-      s.offset = measureStream(s);
-    } else {
-      measureStream(s);
-    }
-    reserveIfFull(trace, s);
-    // Start where the words already are: the newest line, not the block's first.
-    streamEl.body.style.transform = `translate3d(0, ${-s.offset}px, 0)`;
-    streamEl.scrolling = (Number(s.target) || 0) > 0.5;
-    streamEl.mask.classList.toggle('is-scrolling', streamEl.scrolling);
-  }
-  let follow = false;
-  if (s.dirty) {
-    // Read the chat's position *before* the text grows, the same rule the
-    // transcript uses for new messages, and only on a frame that writes.
-    const scroller = chatScroller();
-    follow = Boolean(scroller && chatFollowArmed && chatAtBottom(CHAT_FOLLOW_SLACK));
-    // Append, never rewrite: the block can be twenty thousand characters and
-    // replacing its text re-breaks every line of it, once per frame.
-    const piece = takePending(s);
-    if (piece.reset) streamEl.node.data = piece.text;
-    else if (piece.text) streamEl.node.data += piece.text;
-    s.dirty = false;
-    measureStream(s);
-    reserveIfFull(trace, s);
-  }
-  // The fade at the top edge only belongs there while text is leaving through it.
-  // The threshold has hysteresis: a spring settling on 0.5px used to toggle the
-  // class — and with it the mask — several times in a row, which read as the chat
-  // blinking once the thinking stopped (9 Nov).
-  const target = Number(s.target) || 0;
-  const scrolling = streamEl.scrolling === null ? target > 0.5 : streamEl.scrolling ? target > 0.5 : target > 4;
-  if (scrolling !== streamEl.scrolling) {
-    // A short block sits in the same panel unclipped.
-    streamEl.scrolling = scrolling;
-    streamEl.mask.classList.toggle('is-scrolling', scrolling);
-  }
-  const dt = streamFrameAt ? (now - streamFrameAt) / 1000 : 1 / 60;
-  streamFrameAt = now;
-  const was = s.offset;
-  const offset = nextOffset(s, s.target || 0, dt, {
-    reduced: reducedMotion,
-    // While the chat follows, the newest line may not sit more than a sliver below
-    // the edge. That cap is closed over frames by the slide itself, so a fast model
-    // reads as a steady scroll instead of a line landing and the panel jumping by
-    // that line (the stutter the operator heard as choppiness, 7 Nov).
-    maxLag: follow ? STREAM_MAX_LAG : 0,
-  });
-  if (offset !== was) {
-    s.offset = offset;
-    streamEl.body.style.transform = `translate3d(0, ${-offset}px, 0)`;
-  }
-  if (follow) {
-    const scroller = chatScroller();
-    if (scroller) {
-      scroller.scrollTop = scroller.scrollHeight;
-      // The follow's own move is not the reader scrolling: keep the comparison
-      // baseline in step, or the next frame reads it as an upward scroll.
-      chatScrollWritten = scroller.scrollTop;
-      lastChatTop = scroller.scrollTop;
-    }
-  }
-  const left = Math.abs((Number(s.target) || 0) - (Number(s.offset) || 0));
-  if (!s.settled || s.dirty || left > 0.5) streamRaf = requestAnimationFrame(pumpStream);
+  // The first block of a turn, or the Architect speaking: a new pane, drawn open.
+  foldStream(trace);
+  trace.stream = newStream(kind);
+  trace.thinkCollapsed = false;
+  chatFollowArmed = true;
+  lastChatTop = chatScroller()?.scrollTop || 0;
+  wired.renderTranscript();
+  paneAdd(trace, delta);
 }
 
 /**
- * Once the panel has been full, it stays full for the rest of the run.
- *
- * A step's thinking fills eleven lines and the next one starts at one, so a pane
- * that shrank back would drop the chat by ten lines between every two steps. The
- * height is reserved instead: the words swap, the box does not move (9 Nov).
- */
-function reserveIfFull(trace, s) {
-  if (!trace || trace.reserved) return;
-  if ((Number(s.target) || 0) <= 0.5) return;
-  trace.reserved = true;
-  // The class alone is enough: the view is the same height it already had, so
-  // rebuilding the transcript here (mid-frame, inside the pump) only killed the
-  // frame that was about to move the text.
-  streamEl?.mask.classList.add('is-reserved');
-}
-
-/**
- * The ended block becomes a fold, once, and is kept on the server.
- *
- * Called when the next block replaces it, and when the run ends — not when the step
- * ends, because the panel keeps showing the words in the gap and a fold line beside
- * them would say the same thing twice (9 Nov).
+ * The ended block becomes a fold, once, and is kept. A worker's fold is posted to
+ * the server too: the trace is the only record of what it thought.
  */
 export function foldStream(trace) {
   const stream = trace?.stream;
   if (!stream || stream.folded || stream.kind !== 'think') return;
-  // The Architect's message carries its folds; there is no reason list to fill here.
-  if (trace === state.sessionTrace) return;
+  // The Architect's message carries its folds; there is no reason list to fill.
+  if (!isWorker(trace)) return;
   stream.folded = true;
   const text = String(stream.text || '').trim();
   if (!text) return;
-  // Kept whole for the run: the trace draws the newest ten and folds the rest into
-  // one line, so the count in that line stays true (8 Nov).
   trace.reasons = [...(trace.reasons || []), { text, at: Date.now() }];
-  // The server already has the words: they were posted when the step ended, so a
-  // reload during the gap still shows the step even if the fold never came.
 }
 
+/** The step ended: keep the words and the height, dim the pane. */
 export function endStream() {
   const trace = liveTrace();
   if (!trace) return;
   if (!trace.stream) {
-    // Speech never took the pane, so the block's end is the first moment its words
-    // can be drawn — as the paragraph in the chat (9 Nov).
     flushProse(trace);
     return;
   }
-  const stream = trace.stream;
-  if (stream.kind === 'think' && trace !== state.sessionTrace) {
-    // The server records the step now, so a reload in the gap keeps it.
-    const text = String(stream.text || '').trim();
+  if (trace.stream.kind === 'think' && isWorker(trace)) {
+    const text = String(trace.stream.text || '').trim();
     if (text) {
       api('POST', '/api/runs/reason', {
         dir: trace.dir,
@@ -361,16 +178,10 @@ export function endStream() {
         text,
       }).catch(() => {});
     }
-    // The fold is the record; the pane is the tail that keeps going.
     foldStream(trace);
-    stream.folded = false;
-    stream.ended = true;
-  } else {
-    // The Architect's thinking folds into its own message, so its pane only dims and
-    // waits; the log continues if another thought follows.
-    freezeStream(stream);
+    trace.stream.folded = false;
   }
-  streamEl = null;
+  paneEnded(trace);
   wired.renderTranscript();
 }
 
@@ -384,34 +195,9 @@ function flushProse(trace) {
   wired.renderTranscript();
 }
 
-/**
- * Put the panel back where its slide left it, after `renderTranscript()` rebuilt it.
- *
- * The slide is a `transform` on the text node, and a rebuild is new markup: the old
- * node, and its offset, are gone. Every render therefore has to re-apply it, not
- * just the frames that are writing.
- */
+/** After any transcript render: hand the new node to the pane. */
 export function restoreStreamView() {
-  const trace = liveTrace();
-  const s = trace?.stream;
-  if (!trace || !s || !s.text) return;
-  const el = findStreamEl(trace.key);
-  if (!el) return;
-  streamEl = el;
-  // Expanding after a collapse: the text has grown while nothing was drawn, so the
-  // remembered offset is stale. Snap to the newest line once, then slide as usual.
-  measureStream(s);
-  if (s.snap) {
-    s.snap = false;
-    s.offset = Number(s.target) || 0;
-  }
-  streamEl.body.style.transform = `translate3d(0, ${-(Number(s.offset) || 0)}px, 0)`;
-  const scrolling = (Number(s.target) || 0) > 0.5;
-  streamEl.scrolling = scrolling;
-  streamEl.mask.classList.toggle('is-scrolling', scrolling);
-  // The render that rebuilt this node stopped the pump with the old frame; start it
-  // again so the restored offset eases to where the new text ends.
-  if (!streamRaf) streamRaf = requestAnimationFrame(pumpStream);
+  paneAfterRender();
 }
 
 // ── scrolling: the transcript when it scrolls, the page when it does not ──

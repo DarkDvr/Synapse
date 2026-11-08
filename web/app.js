@@ -112,6 +112,7 @@ import {
   transcriptWiring,
 } from './transcript.js';
 import { toast } from './toast.js';
+import { paneWiring, paneToggle } from './thinking-pane.js';
 import {
   renderComposer,
   send,
@@ -238,7 +239,6 @@ import { setIcon } from './icons.js';
 import { api, serverNow } from './api.js';
 import { $, debounce } from './dom.js';
 import { initShellChannel, openConsole, closeConsole, consoleWiring } from './console.js';
-import { newStream, pushStream, slideTarget, nextOffset, takePending, freezeStream, STREAM_BUFFER } from './stream-view.js';
 import { addSample, rateOf } from './rate.js';
 import { doneSoundName, workWillContinue } from './notify.js';
 import { askHeadNote, answerTimeline, permissionNote } from './ask-note.js';
@@ -1770,12 +1770,7 @@ document.addEventListener('keydown', (e) => {
   // was about the pane they were reading (9 Nov).
   function toggleThinking(key) {
     const trace = state.sessionTrace?.key === key ? state.sessionTrace : state.traces.get(key);
-    if (!trace) return;
-    trace.thinkCollapsed = !trace.thinkCollapsed;
-    if (!trace.thinkCollapsed && trace.stream) trace.stream.snap = true;
-    renderTranscript();
-    const el = $('transcript');
-    if (el) el.scrollTop = el.scrollHeight;
+    if (trace) paneToggle(trace);
   }
 
   $('transcript').addEventListener('click', (e) => {
@@ -2255,6 +2250,7 @@ async function bootPage() {
   // A plan row and a role card are two views of the same worker, so the pane asks for
   // the cards' activity and the chime's "is more work coming?".
   planPaneWiring({ noteWorking, renderRoleActivity });
+  paneWiring({ renderTranscript });
   // The rail asks the app to make a chat, open one, set the status chip and show the
   // empty view.
   projectsWiring({ createChat, openSession, setEventChip, showNothing });

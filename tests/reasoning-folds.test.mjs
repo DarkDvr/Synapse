@@ -245,33 +245,28 @@ test('an empty reasoning part is not a fold', () => {
   assert.match(src, /p\.type === 'reasoning' && String\(p\.text \|\| ''\)\.trim\(\)/);
 });
 
-// 9 Nov: a full reasoning pane vanished at every step boundary and the chat dropped
-// by ten lines, then climbed back when the next thought started. It now keeps its
-// height for the run, keeps the words in the gap, and folds when replaced.
-test('a full reasoning pane keeps its height and its words between steps', () => {
-  const js = read('web/chat-scroll.js');
-  assert.match(js, /export function foldStream/);
-  assert.match(js, /trace\.reserved = true/, 'the height is reserved once full');
-  assert.match(js, /stream\.ended = true/, 'the step dims instead of clearing');
-  assert.match(read('web/traces.js'), /is-reserved/, 'the panel says so in its class');
+// 9 Nov, the rewrite: the pane lives in ./thinking-pane.js — one text tail, one
+// ease, two states. chat-scroll keeps only the data decisions around it.
+test('the pane is its own module: a tail, an ease, two states', () => {
+  const pane = read('web/thinking-pane.js');
+  const scroll = read('web/chat-scroll.js');
+  assert.match(pane, /export function paneMarkup/, 'the pane draws itself');
+  assert.match(pane, /export const paneEase/, 'the slide is one ease');
+  assert.match(pane, /export function paneTrim/, 'and the text is a tail');
+  assert.match(pane, /trace\.reserved = true/, 'the height is reserved once full');
+  assert.match(pane, /Thinking…/, 'the collapsed line is here');
+  assert.match(pane, /classList\.toggle\('is-idle'/, 'the step dims the node, not a render');
+  assert.match(scroll, /paneAdd\(trace, '\\n\\n'\)/, 'a new block starts with a blank line');
+  assert.match(scroll, /trace\.thinkCollapsed = false/, 'a new pane is drawn open');
+  assert.match(scroll, /export function foldStream/);
+  assert.doesNotMatch(scroll, /pumpStream|streamEl|nextOffset/, 'the old pump is gone');
+  assert.match(read('web/traces.js'), /paneMarkup/, 'the trace asks the module for markup');
+  assert.match(read('web/app.js'), /paneToggle/, 'the click goes through the module');
   assert.match(
     read('web/synapse.css'),
     /\.trace-flow\.is-reserved \.trace-flow-view \{ height: calc\(11 \* 1\.45em\)/,
-    'and keeps eleven lines of height',
+    'eleven lines reserved',
   );
-});
-
-// 9 Nov: the pane became the run's thinking log — it appends across steps instead of
-// resetting, trims to a tail, and can be collapsed to one breathing line.
-test('the thinking pane is a log, speech stays out of it, and it can be collapsed', () => {
-  const js = read('web/chat-scroll.js');
-  assert.match(js, /pushStream\(trace\.stream, '\\n\\n'\)/, 'a new block starts with a blank line');
-  assert.match(js, /trace\.thinkCollapsed = false/, 'a new pane is drawn open');
-  assert.match(js, /if \(trace\?\.thinkCollapsed\)/, 'nothing is drawn while collapsed');
-  assert.match(read('web/traces.js'), /function streamPane/, 'one pane, two states');
-  assert.match(read('web/traces.js'), /Thinking…/, 'the collapsed line says it is thinking');
-  assert.match(read('web/stream-view.js'), /THINK_BUFFER/, 'the log trims to a tail');
-  assert.match(read('web/app.js'), /toggleThinking/, 'the click is wired');
 });
 
 // 9 Nov: speech was streaming into the thinking pane, then the pane emptied and the

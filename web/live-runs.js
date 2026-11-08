@@ -19,7 +19,7 @@ import { findSession, isBusy, renderTree } from './projects.js';
 import { renderPlan } from './plan-pane.js';
 import { renderTranscript } from './transcript.js';
 import { chatScroller, foldStream, renderChatNav } from './chat-scroll.js';
-import { freezeStream } from './stream-view.js';
+import { paneEnded } from './thinking-pane.js';
 import { noteCompaction, noteLoop, steerNotes, traceFor, traceKeyOf, traceOf } from './traces.js';
 import { noteLease } from './chat-notes.js';
 import { paintRates, resetRate } from './rate-view.js';
@@ -588,7 +588,7 @@ export function handleRunEvent(ev) {
       // left in place, dimmed and still — removing it made the chat shrink by
       // eleven lines and grow again at every step, which a fast model does several
       // times a second.
-      if (trace.stream) freezeStream(trace.stream);
+      if (trace.stream) paneEnded(trace);
     }
     // Every progress tick carries the run's own compaction tally, which was read
     // from the transcript by the runner. Taking it here is what makes the count

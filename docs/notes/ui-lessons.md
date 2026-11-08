@@ -1839,6 +1839,24 @@ And a block with content behind it (`<details>`) needs its open state keyed in
 `state.open`, or the next render shuts it — the compact post was rebuilt closed
 by every poll because only Reasoning blocks were remembered.
 
+## The thinking pane, rewritten
+
+The pane that shows a worker's thoughts arriving was patched four times and never
+trusted: a feed-forward spring, an adoption pass that re-anchored its text node to
+the newest line on every rebuild, a height reservation that rebuilt the transcript
+from inside the animation frame (dropping the node the frame held), and a fade mask
+whose 0.5px threshold the settling spring could sit on and flap. The slide never
+looked right and the chat blinked.
+
+It is now `web/thinking-pane.js`, and it is small on purpose: one text tail (cut on
+a line boundary), one exponential ease (`paneEase`, τ = 120ms), and two states
+(open, or one breathing "Thinking…" line). Classes are set by the frame, never by a
+render, so no frame is ever thrown away mid-flight; the transcript is rebuilt only
+when the pane appears, is collapsed, or the trace around it changes. `chat-scroll.js`
+keeps only the data decisions — which trace the words belong to, the fold when a step
+ends, and the paragraph speech becomes. The pure halves are tested; the rest is
+looked at in the page, which is the part the four patches kept skipping.
+
 ## The finished-work chime
 
 The operator asked for "a small sound effect when the Architect has finished work and says
