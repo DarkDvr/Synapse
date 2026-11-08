@@ -870,6 +870,22 @@ async function main() {
   }
   app.info('----------------------------------------------');
 
+  // The models the roles already point at, measured again now that the page is up.
+  // Boot asks before the engine starts, and a local runtime that was still waking
+  // up answered nothing — the card then keeps the number from the last time that
+  // model was loaded smaller. Same path as a selection: measure, write the entry,
+  // tell every view (8 Nov).
+  setTimeout(() => {
+    api
+      .refreshWindows()
+      .then((changes) => {
+        for (const c of changes) {
+          app.info(`${c.ref}: ${c.to} tokens loaded by the server (was ${c.from || 'nothing'}) - the window has been corrected`);
+        }
+      })
+      .catch((err) => app.warn(`could not re-measure the role models: ${err.message}`));
+  }, 1500).unref?.();
+
   // Disk housekeeping, once the page is up so it never delays a boot: an applied
   // update leaves ~1.1 GB of staging behind, and `dist` keeps every release zip
   // (196 MB each). See housekeeping.js for exactly what it may and may not touch.

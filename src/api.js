@@ -1016,6 +1016,33 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
       return shown;
     },
 
+    /**
+     * Measure the windows of the models the roles already point at.
+     *
+     * Boot measures every local provider before the engine starts, and a runtime
+     * that is still waking up answers nothing — which leaves the card showing the
+     * number from the last time that model was loaded smaller. This is the second
+     * chance, run once the page is up, and the same path a selection takes: measure,
+     * write the provider entry, tell every view (8 Nov).
+     */
+    refreshWindows: async () => {
+      const cfg = getConfig();
+      const refs = new Set(
+        Object.values(cfg?.roles || {})
+          .map((entry) => String(entry?.ref || ''))
+          .filter(Boolean),
+      );
+      const changes = [];
+      for (const ref of refs) {
+        const measured = await windows.refreshWindow(cfg, ref, { cache: modelCache });
+        if (!measured.changed) continue;
+        if (windows.writeIntoConfig(cfg, ref, measured)) applyConfig(cfg);
+        changes.push({ ref, from: measured.previous, to: measured.context });
+        notify?.({ kind: 'model', type: 'window', ref, context: measured.context, source: measured.source });
+      }
+      return changes;
+    },
+
     models: async () => {
       requireReady();
       const list = await engine.listModels();
