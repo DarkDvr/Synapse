@@ -200,7 +200,7 @@ test("a worker's words are a paragraph, with the chat's markdown", () => {
   state.config = null;
   // The stream becomes a paragraph when its step ends, not a frozen panel.
   assert.match(read('web/chat-scroll.js'), /prose: true/);
-  assert.match(read('web/chat-scroll.js'), /stream\.kind === 'word'/);
+  assert.match(read('web/chat-scroll.js'), /trace\.proseBuf/, 'speech is collected, not streamed into the pane');
 });
 
 // 8 Nov: the tool said "Queued: t12… you will be told the outcome", the runner
@@ -263,7 +263,7 @@ test('a full reasoning pane keeps its height and its words between steps', () =>
 
 // 9 Nov: the pane became the run's thinking log — it appends across steps instead of
 // resetting, trims to a tail, and can be collapsed to one breathing line.
-test('the thinking pane is a log, and it can be collapsed', () => {
+test('the thinking pane is a log, speech stays out of it, and it can be collapsed', () => {
   const js = read('web/chat-scroll.js');
   assert.match(js, /pushStream\(trace\.stream, '\\n\\n'\)/, 'a new block starts with a blank line');
   assert.match(js, /trace\.thinkCollapsed = false/, 'a new pane is drawn open');
@@ -272,4 +272,22 @@ test('the thinking pane is a log, and it can be collapsed', () => {
   assert.match(read('web/traces.js'), /Thinking…/, 'the collapsed line says it is thinking');
   assert.match(read('web/stream-view.js'), /THINK_BUFFER/, 'the log trims to a tail');
   assert.match(read('web/app.js'), /toggleThinking/, 'the click is wired');
+});
+
+// 9 Nov: speech was streaming into the thinking pane, then the pane emptied and the
+// speech appeared in the chat. Speech is collected and becomes a paragraph only.
+test('speech never takes the thinking pane', () => {
+  const js = read('web/chat-scroll.js');
+  assert.match(js, /trace\.proseBuf = String\(trace\.proseBuf \|\| ''\) \+ delta/);
+  assert.match(js, /function flushProse/);
+  assert.match(js, /if \(!trace\.stream\) \{/, 'a speech block with no pane flushes at its end');
+  // The Architect's pane is the same log: no session-only reset branch.
+  assert.doesNotMatch(js, /if \(kind === 'think' && trace !== state\.sessionTrace && trace\.stream\?\.kind === 'think'\)/);
+});
+
+test('the pane controls are visible', () => {
+  const css = read('web/synapse.css');
+  assert.match(css, /\.think-toggle \{[^}]*font-size: calc\(var\(--chat-fs\) \* 1\.05\)/, 'the chevron is readable');
+  assert.match(css, /\.trace-flow \{[^}]*border: 2px solid/, 'the pane border is 2px');
+  assert.match(css, /streamEl\.scrolling|is-scrolling/, 'the fade still tracks overflow');
 });

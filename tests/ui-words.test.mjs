@@ -568,7 +568,7 @@ test('the Architect’s live reasoning is drawn inside its own post', () => {
   // Reported 2 Nov: the panel also lost its *box*, so a long reasoning turn was a
   // wall of italic text with no edge to it. It is the same bordered, clipped window
   // the workers get — only the head line and the left rule are dropped.
-  assert.match(css, /\.trace-flow \{[^}]*border:\s*1px solid/, 'the scrolling panel keeps its hairline box');
+  assert.match(css, /\.trace-flow \{[^}]*border:\s*2px solid/, 'the scrolling panel keeps its hairline box');
   assert.doesNotMatch(css, /\.trace\.is-own \.trace-flow \{[^}]*border:\s*0/, 'the embedded panel does not strip it again');
 });
 

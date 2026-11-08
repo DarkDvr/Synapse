@@ -158,10 +158,18 @@ function liveTrace() {
 export function appendStream(kind, delta) {
   const trace = liveTrace();
   if (!trace || !delta) return;
-  // A worker's thinking is one log for the run: a new block continues it after a
-  // blank line instead of resetting the pane. The folds above are the record, so
-  // the pane can be a tail (9 Nov).
-  if (kind === 'think' && trace !== state.sessionTrace && trace.stream?.kind === 'think') {
+  // Speech is not thinking and does not take the thinking pane: it is collected
+  // here and becomes the paragraph when the block ends. Streaming it into the pane
+  // first showed speech in a thinking box, then emptied the box, then put the
+  // speech in the chat (9 Nov).
+  if (kind === 'word' && trace !== state.sessionTrace) {
+    trace.proseBuf = String(trace.proseBuf || '') + delta;
+    return;
+  }
+  // Thinking is one log per turn: a new block continues it after a blank line
+  // instead of resetting the pane. The folds above are the record, so the pane can
+  // be a tail. The Architect's pane works the same way (9 Nov).
+  if (kind === 'think' && trace.stream?.kind === 'think') {
     if (trace.stream.ended) {
       trace.stream.ended = false;
       trace.stream.folded = false;
@@ -170,8 +178,8 @@ export function appendStream(kind, delta) {
     pushStream(trace.stream, delta);
   } else {
     if (!trace.stream || trace.stream.kind !== kind || trace.stream.ended) {
-      // A new block (thinking after speech, or speech after thinking). Its class
-      // differs, so the panel is replaced on the next frame rather than patched.
+      // A new block (the first thought, or the Architect speaking). Its class may
+      // differ, so the panel is replaced on the next frame rather than patched.
       foldStream(trace);
       trace.stream = newStream(kind);
       // A new pane is drawn open: the operator's collapse is for the pane they were
@@ -221,8 +229,17 @@ function pumpStream(now) {
     const adopted = adoptStream(s, streamEl.node.data);
     if (adopted.reset) streamEl.node.data = adopted.text;
     else if (adopted.text) streamEl.node.data += adopted.text;
-    s.velocity = 0;
-    s.offset = measureStream(s);
+    // A rebuild mid-stream used to snap the panel to its newest line, because the
+    // offset was taken from the measure every time the node was adopted. With a log
+    // that lives across steps, that is a jump on every step boundary and the slide
+    // never gets to run (9 Nov). Only a real reset — a different block, a trim —
+    // earns a fresh offset; otherwise the slide keeps the position it earned.
+    if (adopted.reset || !Number(s.offset)) {
+      s.velocity = 0;
+      s.offset = measureStream(s);
+    } else {
+      measureStream(s);
+    }
     reserveIfFull(trace, s);
     // Start where the words already are: the newest line, not the block's first.
     streamEl.body.style.transform = `translate3d(0, ${-s.offset}px, 0)`;
@@ -244,10 +261,14 @@ function pumpStream(now) {
     measureStream(s);
     reserveIfFull(trace, s);
   }
-  const scrolling = (s.target || 0) > 0.5;
+  // The fade at the top edge only belongs there while text is leaving through it.
+  // The threshold has hysteresis: a spring settling on 0.5px used to toggle the
+  // class — and with it the mask — several times in a row, which read as the chat
+  // blinking once the thinking stopped (9 Nov).
+  const target = Number(s.target) || 0;
+  const scrolling = streamEl.scrolling === null ? target > 0.5 : streamEl.scrolling ? target > 0.5 : target > 4;
   if (scrolling !== streamEl.scrolling) {
-    // The fade at the top edge only belongs there while text is leaving through
-    // it; a short block sits in the same panel unclipped.
+    // A short block sits in the same panel unclipped.
     streamEl.scrolling = scrolling;
     streamEl.mask.classList.toggle('is-scrolling', scrolling);
   }
@@ -304,6 +325,8 @@ function reserveIfFull(trace, s) {
 export function foldStream(trace) {
   const stream = trace?.stream;
   if (!stream || stream.folded || stream.kind !== 'think') return;
+  // The Architect's message carries its folds; there is no reason list to fill here.
+  if (trace === state.sessionTrace) return;
   stream.folded = true;
   const text = String(stream.text || '').trim();
   if (!text) return;
@@ -316,16 +339,16 @@ export function foldStream(trace) {
 
 export function endStream() {
   const trace = liveTrace();
-  if (!trace || !trace.stream) return;
+  if (!trace) return;
+  if (!trace.stream) {
+    // Speech never took the pane, so the block's end is the first moment its words
+    // can be drawn — as the paragraph in the chat (9 Nov).
+    flushProse(trace);
+    return;
+  }
   const stream = trace.stream;
-  // A worker's thinking does not fold here. The panel keeps its words on screen —
-  // dimmed, and at its reserved height — through the gap between two steps, and the
-  // fold is written when the next block replaces them or the run ends (`foldStream`).
-  // The Architect's own step is different: its message will carry the words as folds
-  // of its own, so the panel waits, frozen, until that message lands.
   if (stream.kind === 'think' && trace !== state.sessionTrace) {
-    // The server records the step now, so a reload in the gap keeps it even though
-    // the local fold is deferred (see foldStream). The panel keeps the words.
+    // The server records the step now, so a reload in the gap keeps it.
     const text = String(stream.text || '').trim();
     if (text) {
       api('POST', '/api/runs/reason', {
@@ -339,21 +362,22 @@ export function endStream() {
     foldStream(trace);
     stream.folded = false;
     stream.ended = true;
-  } else if (stream.kind === 'word' && trace !== state.sessionTrace) {
-    // What the worker said between tools, kept as a paragraph instead of a panel
-    // that vanishes: the trace is the only place its words can live, and a run that
-    // only shows tool calls reads as silence with activity (8 Nov). It is drawn with
-    // the same markdown as an Architect answer, behind the same switch.
-    const text = String(stream.text || '').trim();
-    if (text) {
-      trace.notes.push({ at: Date.now(), text, prose: true });
-      if (trace.notes.length > 60) trace.notes.splice(0, trace.notes.length - 60);
-    }
-    trace.stream = null;
   } else {
+    // The Architect's thinking folds into its own message, so its pane only dims and
+    // waits; the log continues if another thought follows.
     freezeStream(stream);
   }
   streamEl = null;
+  wired.renderTranscript();
+}
+
+/** The words a worker said between tools: a paragraph, once, when the block ends. */
+function flushProse(trace) {
+  const text = String(trace.proseBuf || '').trim();
+  trace.proseBuf = '';
+  if (!text) return;
+  trace.notes.push({ at: Date.now(), text, prose: true });
+  if (trace.notes.length > 60) trace.notes.splice(0, trace.notes.length - 60);
   wired.renderTranscript();
 }
 
