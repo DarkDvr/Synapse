@@ -16,7 +16,7 @@ import { renderMarkdown } from './md.js';
 import { serverNow } from './api.js';
 import { permissionNote } from './ask-note.js';
 import { alarmsHere, renderAlarm, leasesHere, renderLease, chatErrorsHere, renderChatError } from './chat-notes.js';
-import { chatAtBottom, scrollChatToBottom, renderChatNav, captureChatSlack } from './chat-scroll.js';
+import { chatAtBottom, scrollChatToBottom, renderChatNav, captureChatSlack, restoreStreamView } from './chat-scroll.js';
 import { currentProject, roleLabel, groupTurns, currentForm } from './run-view.js';
 import { renderTrace, tracesFor, traceSig, renderSessionStream } from './traces.js';
 
@@ -150,6 +150,9 @@ export function renderTranscript() {
   while (next < items.length) html += items[next++].html;
   html += leasesHere().map(renderLease).join('');
   el.innerHTML = html + pending;
+  // The live panel's slide is a transform on a node this rebuild just replaced, so
+  // the offset has to be put back or the text snaps to its first line.
+  restoreStreamView();
   // The question is the conversation's last post, not an overlay over it.
   wired.mountAskPost();
   if (stick) scrollChatToBottom();
@@ -260,6 +263,16 @@ export function renderMessage(m, tail = '') {
       lastText !== undefined &&
       parts.slice(0, lastText).some((p) => p.type === 'reasoning' || p.type === 'tool');
     const toolAfter = lastText !== undefined && parts.slice(lastText + 1).some((p) => p.type === 'tool');
+    // A long turn is a dozen reasoning blocks — one per step — and a dozen
+    // one-line folds interleaved with the tool rows read as a wall. The newest two
+    // stay folds of their own (the operator watched that thinking arrive), and
+    // everything older is one fold that opens, the same shape the worker trace uses
+    // for its older steps (8 Nov).
+    const REASONING_KEEP = 2;
+    const reasoningAt = parts.map((p, i) => (p.type === 'reasoning' ? i : -1)).filter((i) => i >= 0);
+    const olderReasoning = reasoningAt.length > REASONING_KEEP ? reasoningAt.slice(0, -REASONING_KEEP) : [];
+    const recentReasoning = new Set(reasoningAt.slice(-REASONING_KEEP));
+    const archiveKey = `reasoning:${m.id}`;
     for (const [i, part] of parts.entries()) {
       // The model's actual answer goes in its own panel, rendered as markdown,
       // so it is visually separate from reasoning and tool noise. The separator
@@ -268,11 +281,23 @@ export function renderMessage(m, tail = '') {
         const answer = i === lastText && workBefore && !toolAfter ? ' is-answer' : '';
         body.push(`<div class="msg-answer${answer}">${renderMarkdown(part.text)}</div>`);
       }
-      else if (part.type === 'reasoning')
-        body.push(
-          `<details class="reasoning" data-k="${esc(part._k)}"${state.open.has(part._k) ? ' open' : ''}>` +
-            `<summary>Reasoning</summary><pre>${esc(part.text)}</pre></details>`,
-        );
+      else if (part.type === 'reasoning') {
+        // The archive takes the place of the oldest block, so the turn still reads
+        // in order: the early thinking folded, the recent thinking where it happened.
+        if (i === olderReasoning[0]) {
+          body.push(
+            `<details class="reasoning is-archive" data-k="${esc(archiveKey)}"${state.open.has(archiveKey) ? ' open' : ''}>` +
+              `<summary>${olderReasoning.length} earlier reasoning</summary>` +
+              olderReasoning.map((n) => `<pre>${esc(parts[n].text)}</pre>`).join('') +
+              `</details>`,
+          );
+        } else if (recentReasoning.has(i)) {
+          body.push(
+            `<details class="reasoning" data-k="${esc(part._k)}"${state.open.has(part._k) ? ' open' : ''}>` +
+              `<summary>Reasoning</summary><pre>${esc(part.text)}</pre></details>`,
+          );
+        }
+      }
       else if (part.type === 'tool') body.push(renderTool(part));
     }
     if (parts.length === 0 && !m.error) body.push('<span class="msg-text">…</span>');

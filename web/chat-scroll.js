@@ -257,6 +257,26 @@ export function endStream() {
   wired.renderTranscript();
 }
 
+/**
+ * Put the panel back where its slide left it, after `renderTranscript()` rebuilt it.
+ *
+ * The slide is a `transform` on the text node, and a rebuild is new markup: the old
+ * node, and its offset, are gone. Every render therefore has to re-apply it, not
+ * just the frames that are writing.
+ */
+export function restoreStreamView() {
+  const trace = liveTrace();
+  const s = trace?.stream;
+  if (!trace || !s || !s.text) return;
+  const el = findStreamEl(trace.key);
+  if (!el) return;
+  streamEl = el;
+  streamEl.body.style.transform = `translate3d(0, ${-(Number(s.offset) || 0)}px, 0)`;
+  const scrolling = (Number(s.target) || 0) > 0.5;
+  streamEl.scrolling = scrolling;
+  streamEl.mask.classList.toggle('is-scrolling', scrolling);
+}
+
 // ── scrolling: the transcript when it scrolls, the page when it does not ──
 // In the wide layout the stage has a definite height and the transcript scrolls
 // inside itself; in the stacked layout the page scrolls instead. Every scroll

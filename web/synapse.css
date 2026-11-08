@@ -1717,6 +1717,11 @@ body[data-mode="single"] #runAuto { display: none; }
   font-family: var(--mono); font-size: calc(var(--chat-fs) * 0.88); line-height: 1.45;
   color: #a9adb5; white-space: pre-wrap; overflow-wrap: anywhere;
 }
+/* The early reasoning of a long turn, folded to one line the way the worker trace
+   folds its older steps. Dimmer and smaller than a current block: it is history,
+   not something to read now. */
+.reasoning.is-archive summary { color: #6a6f77; font-size: calc(var(--chat-fs) * 0.82); letter-spacing: 0.04em; }
+.reasoning.is-archive pre { margin-top: 6px; }
 
 /* tool calls: one compact line until you ask for the detail. Kept deliberately
    short vertically — a busy turn emits dozens of them, so the dot, the type and

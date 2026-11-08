@@ -1477,6 +1477,29 @@ whether a given paragraph is "the answer".
   several times a second. The window now stays, dimmed (`.is-idle`), until the
   next block replaces it or the run folds to its one-line summary.
 
+### A turn's reasoning folds, and the slide survives a rebuild (8 Nov)
+
+Two reports about one turn. The operator saw a long Architect turn as a wall of
+"Reasoning" lines — one per step, **105 of them in a 35-message chat** — and the
+reasoning panel jumped the moment a step ended.
+
+- **The early reasoning is one line.** A turn keeps its newest **two** reasoning
+  blocks as folds of their own; everything older is a single
+  `<details class="reasoning is-archive">` whose summary is "N earlier reasoning".
+  This is the shape the worker trace already uses for its older steps ("N earlier
+  steps"), for the same reason: the newest thinking is what is being read, the rest
+  is context. Measured after the change on the Fever Tracker chat: 105 folds became
+  31, plus 12 archives. The archive takes the oldest block's place, so the turn
+  still reads in order.
+- **A rebuild must put the slide back.** The panel's position is a `transform` on
+  the text node, and `renderTranscript()` replaces the node: the offset went with
+  it, so the panel showed the *first* line of the reasoning at the moment the step
+  ended. That is the "scrolls abruptly, can't tell up or down" report — the text did
+  not scroll, it teleported to the top. `restoreStreamView()` re-applies the offset
+  (and the `is-scrolling` fade) after every render, not only on frames that write.
+  The general rule: **a transform is DOM, not state — anything that rebuilds the
+  node has to restore it.**
+
 ## Reading a mockup: it is a shape record, not a pixel source
 
 A mockup may arrive as a PDF, and there is no PDF renderer on this machine
