@@ -167,13 +167,13 @@ test('a worker tool note is a card, and the switch brings the old line back', ()
   };
   state.config = { ui: { workerCards: true } };
   const on = renderTrace(trace);
-  assert.match(on, /class="trace-tool"/);
+  assert.match(on, /class="tool-card trace-card"/);
   assert.match(on, /<span class="tool-name">shell<\/span>/);
   assert.match(on, /class="trace-role">Coder 1</, 'the role is the bright word in the head');
 
   state.config = { ui: { workerCards: false } };
   const off = renderTrace(trace);
-  assert.doesNotMatch(off, /class="trace-tool"/);
+  assert.doesNotMatch(off, /class="tool-card trace-card"/);
   assert.match(off, /class="trace-line">shell cd/);
   state.config = null;
 });

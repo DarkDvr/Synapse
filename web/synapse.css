@@ -1430,20 +1430,18 @@ body[data-mode="single"] #runAuto { display: none; }
   border-left: 2px solid #3a3d43; padding-left: 10px;
 }
 .trace-head, .trace summary {
-  font-size: calc(var(--chat-fs) * 1); font-weight: 400; letter-spacing: 0.01em; line-height: 1.45;
+  font-size: calc(var(--chat-fs) * 0.92); font-weight: 400; letter-spacing: 0.01em; line-height: 1.45;
   color: #8b8f97;
 }
 /* The role wears the Architect's own header type — upper case, spaced, bold — in
    white instead of the speaker's green; the rest of the line stays sentence case and
    grey. One header grammar, two colours (8 Nov). */
 .trace-role {
-  color: #f2f4f7; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
 }
-/* A worker's tool call in the Architect's card vocabulary, flat: dot, name, target. */
-.trace-tool { position: relative; padding-left: 16px; display: flex; align-items: baseline; gap: 5px; min-width: 0; font-size: calc(var(--chat-fs) * 0.96); line-height: 1.5; color: #8b8f97; }
-.trace-tool .tool-name { font-weight: 600; color: #a9adb5; flex: none; }
-.trace-tool .tool-target { color: #7d828a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
-.trace-tool .status-dot { position: absolute; left: 6px; top: 5px; flex: none; width: 5px; height: 5px; box-shadow: 0 0 0 2px rgba(53, 192, 138, 0.14); }
+  color: #f2f4f7; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; font-size: calc(var(--chat-fs) * 0.76);
+/* A worker's tool call is the Architect's card, reused as-is. The only addition is
+   a little air from the thinking around it. */
+.trace-card { margin: 2px 0; }
 /* The worker's own words, in the chat's answer type: same markdown, same size, one
    step dimmer than the Architect's. The paragraph is the step's speech, so it sits
    with the tool lines rather than in a panel of its own (8 Nov). Tighter leading and
@@ -1494,7 +1492,7 @@ body[data-mode="single"] #runAuto { display: none; }
    pinned above the four-line tail, and never trimmed away with the steps. A loop
    rescue is the same kind of line: news about the run, not a step in it. */
 .trace-line.is-compact,
-.trace-line.is-loop { color: var(--amber); font-weight: 600; position: relative; padding-left: 16px; }
+.trace-line.is-loop { color: var(--amber); font-weight: 600; position: relative; padding-left: 16px; margin: 5px 0; }
 .trace-mark { position: absolute; left: 0; top: 0; width: 16px; text-align: center; font-weight: 400; }
 
 /* Something a model did to Synapse itself — naming it in a shell command, or a

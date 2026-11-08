@@ -70,7 +70,11 @@ export function renderTrace(t) {
     const name = String(tool?.name || '').trim();
     const target = String(tool?.target || '').trim() || fallback;
     if (!name) return `<div class="trace-line">${esc(fallback)}</div>`;
-    return `<div class="trace-tool" title="${esc(target)}"><span class="status-dot ok" role="img" aria-label="tool call"></span><span class="tool-name">${esc(name)}</span><span class="tool-target">${esc(target)}</span></div>`;
+    // The Architect's tool card, exactly: the same classes, the same 9px dot in the
+    // same flex head, the same type. A worker's call arrives as a name and a target
+    // with no detail to open, so the head stands alone — but it is one component in
+    // one place, not a lookalike (8 Nov).
+    return `<div class="tool-card trace-card"><div class="tool-head"><span class="status-dot ok" role="img" aria-label="tool call"></span><span class="tool-name">${esc(name)}</span><span class="tool-target" title="${esc(target)}">${esc(target)}</span></div></div>`;
   };
   const note = (n) => {
     const text = typeof n === 'string' ? n : String(n?.text || '');
