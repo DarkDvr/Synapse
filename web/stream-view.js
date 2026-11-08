@@ -118,6 +118,32 @@ export function freezeStream(s) {
   return s;
 }
 
+/**
+ * Make the panel's text node hold exactly what the stream holds.
+ *
+ * The panel is one DOM node for the whole run, and two things went wrong because of
+ * that. A new block starts in the node the previous one left behind, so the new
+ * words were appended to the old ones — the panel then slid from the top of both to
+ * the bottom, which is the "teleports to the beginning and scrolls" report. And a
+ * rebuild writes the whole block into the node while `shown` still lags, so the tail
+ * was appended twice. One function, one truth: return what still has to be written
+ * (`reset` means replace the node, not append).
+ */
+export function adoptStream(s, domText) {
+  const dom = String(domText ?? '');
+  if (dom === s.text) {
+    s.shown = s.text.length;
+    return { text: '', reset: false };
+  }
+  if (s.text.startsWith(dom)) {
+    s.shown = dom.length;
+    return takePending(s);
+  }
+  // A different block, or a node that holds more than the stream does.
+  s.shown = s.text.length;
+  return { text: s.text, reset: true };
+}
+
 /** How far the text has to move up for its last line to sit at the bottom edge. */
 export function slideTarget(contentHeight, viewHeight) {
   return Math.max(0, (Number(contentHeight) || 0) - (Number(viewHeight) || 0));

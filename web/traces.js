@@ -12,7 +12,7 @@
 // has to be re-rendered where it stands. Wired at boot.
 import { state } from './state.js';
 import { EV } from './events.js';
-import { esc, shortSpan, fileChip } from './format.js';
+import { esc, shortSpan, fileChip, reasoningGist } from './format.js';
 import { fmtTokens, dirKey, roleLabel } from './run-view.js';
 
 const missing = (name) => () => {
@@ -106,6 +106,18 @@ export function renderTrace(t) {
         t.stream.text,
       )}</div></div></div>`
     : '';
+  // What the worker finished thinking: one fold per step, the way the chat folds the
+  // Architect's own. The trace is the only record of a worker's reasoning, so the
+  // words are kept behind the line rather than thrown away with the panel (8 Nov).
+  // Capped like the notes: twelve is more than anyone reads back through.
+  const reasons = Array.isArray(t.reasons) ? t.reasons : [];
+  const reasonFolds = reasons
+    .map(
+      (r) =>
+        `<details class="reasoning is-trace" data-k="${esc(t.key)}:r${Number(r.at) || 0}">` +
+        `<summary>${esc(reasoningGist(r.text))}</summary><pre>${esc(r.text)}</pre></details>`,
+    )
+    .join('');
   // A compaction line is pinned: the four-line tail is for steps, and this is not
   // a step — it is the reason the next step is slower and the window is empty
   // again. It stays for the whole run, and the folded summary counts it.
@@ -140,7 +152,7 @@ export function renderTrace(t) {
         : ` of ${loopLimit} — asking it to carry on`) +
       '</div>'
     : '';
-  const body = `${archive}${compactLine}${loopLine}${tail.map(note).join('')}${streaming}`;
+  const body = `${archive}${compactLine}${loopLine}${tail.map(note).join('')}${reasonFolds}${streaming}`;
   if (!t.finishedAt) {
     return `<div class="trace is-live" data-trace="${esc(t.key)}">
       <div class="trace-head" title="${esc(head.join(' · '))}">${esc(head.join(' · '))}</div>
@@ -288,6 +300,7 @@ export function traceSig() {
           `${t.key}:${t.finishedAt || 0}:${(t.notes || []).length}:${t.stream ? t.stream.text.length : 0}:` +
           `${t.stream?.ended ? 1 : 0}:${Number(t.compactions) || 0}:${Number(t.compactingSince) || 0}:` +
           `${Number(t.compactFrom) || 0}:${Number(t.compactAt) || 0}:${Number(t.compactLimit) || 0}:` +
+          `${(t.reasons || []).length}:${(t.reasons || []).map((r) => String(r.text || '').length).join('.')}:` +
           `${Number(t.loops) || 0}:${Number(t.loopLimit) || 0}:${t.loopStop ? 1 : 0}`,
       )
       .join(';'),

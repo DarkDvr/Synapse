@@ -1727,6 +1727,11 @@ body[data-mode="single"] #runAuto { display: none; }
    not something to read now. */
 .reasoning.is-archive summary { color: #6a6f77; font-size: calc(var(--chat-fs) * 0.82); letter-spacing: 0.04em; }
 .reasoning.is-archive pre { margin-top: 6px; }
+/* A worker's completed thinking, folded inside its trace: the chat's fold shape,
+   smaller and without the panel's box — the trace is already a panel. */
+.reasoning.is-trace { margin: 3px 0; }
+.reasoning.is-trace summary { font-size: calc(var(--chat-fs) * 0.82); color: #6a6f77; }
+.reasoning.is-trace pre { background: transparent; border: 0; padding: 2px 0 6px; }
 
 /* tool calls: one compact line until you ask for the detail. Kept deliberately
    short vertically — a busy turn emits dozens of them, so the dot, the type and

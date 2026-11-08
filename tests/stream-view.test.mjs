@@ -16,6 +16,7 @@ import {
   nextOffset,
   takePending,
   freezeStream,
+  adoptStream,
   STREAM_BUFFER,
   STREAM_KEEP,
 } from '../web/stream-view.js';
@@ -210,3 +211,30 @@ test('a frozen block adds nothing and asks for no frames', () => {
   assert.equal(pushStream(s, 'more') && s.text.endsWith('more'), true, 'the text is still there to be replaced');
 });
 
+
+// The panel is one node for the whole run, so a new block has to reconcile with
+// whatever the last one left there. Appending into the old words was the "teleports
+// to the beginning, then scrolls to the bottom" report; a rebuild that writes the
+// whole block while `shown` lags appended the tail twice.
+test('a panel adopts what the old block left, instead of appending to it', () => {
+  const s = newStream('think');
+  pushStream(s, 'the new thought');
+
+  // The node still holds the previous block: replace, never append.
+  assert.deepEqual(adoptStream(s, 'an old thought'), { text: 'the new thought', reset: true });
+  assert.equal(s.shown, s.text.length);
+
+  // A rebuild wrote the whole block: nothing left to write, and no duplicate.
+  assert.deepEqual(adoptStream(s, 'the new thought'), { text: '', reset: false });
+  assert.equal(s.shown, s.text.length);
+
+  // The node holds a prefix (a render between two deltas): write only the tail.
+  s.shown = 0;
+  assert.deepEqual(adoptStream(s, 'the new'), { text: ' thought', reset: false });
+  assert.equal(s.shown, s.text.length, 'the tail counts as written, because the caller writes it now');
+
+  // An empty node is a fresh block: the whole text goes in.
+  const fresh = newStream('think');
+  pushStream(fresh, 'first words');
+  assert.deepEqual(adoptStream(fresh, ''), { text: 'first words', reset: false });
+});

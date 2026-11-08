@@ -9,7 +9,7 @@
 // reach back for it.
 import { state } from './state.js';
 import { $ } from './dom.js';
-import { newStream, pushStream, slideTarget, nextOffset, takePending, freezeStream } from './stream-view.js';
+import { newStream, pushStream, slideTarget, nextOffset, takePending, freezeStream, adoptStream } from './stream-view.js';
 
 // Four things this file needs from app.js: a redraw of the transcript, the trace a
 // piece of writing belongs to, the run on screen, and the question post (which is a
@@ -188,12 +188,20 @@ function pumpStream(now) {
       wired.renderTranscript();
       return;
     }
-    // A panel that appears mid-block is already showing its last line: start it
-    // there rather than sliding the whole block up from the beginning. A *fresh*
-    // block starts at its own top — the panel still holds the previous block's
-    // words, and measuring those would start this block scrolled by their height.
+    // The node may hold the previous block's words, or exactly what this block has
+    // already shown. Reconcile before measuring: appending the whole block into the
+    // old one was the "teleports to the beginning, then scrolls to the bottom"
+    // report, and a transform left over from the last block was the empty panel
+    // that grew with nothing in it (8 Nov).
+    const adopted = adoptStream(s, streamEl.node.data);
+    if (adopted.reset) streamEl.node.data = adopted.text;
+    else if (adopted.text) streamEl.node.data += adopted.text;
     s.velocity = 0;
-    s.offset = s.shown > 0 ? measureStream(s) : 0;
+    s.offset = measureStream(s);
+    // Start where the words already are: the newest line, not the block's first.
+    streamEl.body.style.transform = `translate3d(0, ${-s.offset}px, 0)`;
+    streamEl.scrolling = (Number(s.target) || 0) > 0.5;
+    streamEl.mask.classList.toggle('is-scrolling', streamEl.scrolling);
   }
   let follow = false;
   if (s.dirty) {
@@ -247,12 +255,22 @@ function pumpStream(now) {
 export function endStream() {
   const trace = liveTrace();
   if (!trace || !trace.stream) return;
-  // The last window stays on screen, still, until the next block replaces it or
-  // the run folds. Taking it away here pulled eleven lines out of the chat at every
-  // step boundary and put them back at the next one — a fast model does that
-  // several times a second. Let any frame already queued finish the slide, then
-  // stop: the text is frozen, so nothing new arrives.
-  freezeStream(trace.stream);
+  const stream = trace.stream;
+  // A worker's completed thinking becomes a fold line in its trace. That trace is
+  // the only record of what the worker thought — its session never reaches the
+  // chat — and a frozen eleven-line panel was both a lie (it read as still
+  // arriving) and the reason a new block started inside the old one's node (8 Nov).
+  // The Architect's own step is different: its message will carry the words as
+  // folds of its own, so the panel waits, frozen, until that message lands.
+  if (stream.kind === 'think' && trace !== state.sessionTrace) {
+    const text = String(stream.text || '').trim();
+    if (text) {
+      trace.reasons = [...(trace.reasons || []), { text, at: Date.now() }].slice(-12);
+    }
+    trace.stream = null;
+  } else {
+    freezeStream(stream);
+  }
   streamEl = null;
   wired.renderTranscript();
 }

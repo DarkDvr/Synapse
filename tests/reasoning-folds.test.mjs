@@ -87,3 +87,19 @@ test('a compaction with no size says nothing it cannot support', () => {
   assert.match(bare, /Compacting ×1/);
   assert.doesNotMatch(bare, /context at/);
 });
+
+test('a finished worker step folds into one line in its trace', () => {
+  const html = renderTrace({
+    key: 'k',
+    role: 'coder-1',
+    task: 't6',
+    title: 'Build the revised tooltip',
+    startedAt: 1,
+    reasons: [{ text: 'The bar is drawn by Taskbar.cs. I should change its fill to the value.', at: 5 }],
+    notes: [],
+  });
+  assert.match(html, /class="reasoning is-trace"/);
+  assert.match(html, /Reasoning · The bar is drawn by Taskbar\.cs\./);
+  assert.match(html, /<pre>The bar is drawn by Taskbar\.cs\./);
+  assert.match(html, /data-k="k:r5"/, 'the fold remembers whether it was opened');
+});
