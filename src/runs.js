@@ -2995,17 +2995,21 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
       // empty — and every one of them shared the empty target. That produced two
       // "loop" strikes three seconds apart on a worker that had only started to
       // read its files. No target, no signature.
-      if (loopGuard) for (const message of afterMark(messages, before)) {
+      //
+      // `onTool` is the operator's view of the work, not part of the guard: it used
+      // to sit inside the `loopGuard` branch, so with the guard off (the default)
+      // the trace was told about no tool call at all and a busy run read as pure
+      // thinking (8 Nov). It is called for every call, with or without a target.
+      for (const message of afterMark(messages, before)) {
         for (const part of message?.parts || []) {
           const tool = toolOfPart(part);
           if (!tool) continue;
           // Identity is the call id: without one, every poll would count the same
           // call again and the guard would fire on a worker doing nothing wrong.
-          if (!tool.id) continue;
-          if (!tool.target) continue;
-          if (toolSeen.has(tool.id)) continue;
+          if (!tool.id || toolSeen.has(tool.id)) continue;
           toolSeen.add(tool.id);
           onTool?.(tool);
+          if (!loopGuard || !tool.target) continue;
           const sig = `${tool.name}\u0000${tool.target}`;
           toolWindow.push(sig);
           while (toolWindow.length > 8) toolWindow.shift();

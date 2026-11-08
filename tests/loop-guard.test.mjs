@@ -8,6 +8,8 @@
 // without a model, a network or a ten-second wait.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
 
 import { repeatedTailUnit, createLoopDetector } from '../src/runs.js';
 import { DEFAULTS, normalize } from '../src/config.js';
@@ -63,4 +65,18 @@ test('the loop limit is clamped to 1–20', () => {
   assert.equal(normalize({ worker: { loopLimit: 99 } }).worker.loopLimit, 20);
   assert.equal(normalize({ worker: { loopLimit: 0 } }).worker.loopLimit, 1);
   assert.equal(normalize({ worker: { loopLimit: 'x' } }).worker.loopLimit, 3);
+});
+
+// 8 Nov: the operator saw no tool calls in a worker's chat at all. `onTool` — which
+// feeds the trace's tool line — sat inside the `loopGuard` branch, so with the guard
+// off (the operator's setting) the page was told about no call, ever. The call must
+// happen before the guard decides whether to count it.
+test('every tool call is reported, whether or not the loop guard is on', () => {
+  const src = fs.readFileSync(path.join(process.cwd(), 'src', 'runs.js'), 'utf8');
+  assert.doesNotMatch(src, /if \(loopGuard\) for \(const message of afterMark/, 'no longer gated');
+  assert.match(
+    src,
+    /toolSeen\.add\(tool\.id\);\r?\n\s+onTool\?\.\(tool\);\r?\n\s+if \(!loopGuard \|\| !tool\.target\) continue;/,
+    'onTool fires before the guard checks the target',
+  );
 });

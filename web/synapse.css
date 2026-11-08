@@ -1430,12 +1430,15 @@ body[data-mode="single"] #runAuto { display: none; }
   border-left: 2px solid #3a3d43; padding-left: 10px;
 }
 .trace-head, .trace summary {
-  font-size: calc(var(--chat-fs) * 0.76); font-weight: 600; letter-spacing: 0.02em;
-  color: #6f747c;
+  font-size: calc(var(--chat-fs) * 0.76); font-weight: 400; letter-spacing: 0.02em;
+  color: #8b8f97;
 }
-/* The role is the one bright word in a trace head: the same weight the Architect's
-   name carries, so one speaker grammar covers both (8 Nov). */
-.trace-role { color: #c6cad1; font-weight: 700; }
+/* The role wears the Architect's own header type — upper case, spaced, bold — in
+   white instead of the speaker's green; the rest of the line stays sentence case and
+   grey. One header grammar, two colours (8 Nov). */
+.trace-role {
+  color: #f2f4f7; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+}
 /* A worker's tool call in the Architect's card vocabulary, flat: dot, name, target. */
 .trace-tool { display: flex; align-items: baseline; gap: 6px; min-width: 0; font-size: calc(var(--chat-fs) * 0.92); line-height: 1.45; color: #8b8f97; }
 .trace-tool .tool-name { font-weight: 600; color: #a9adb5; flex: none; }
@@ -1443,8 +1446,11 @@ body[data-mode="single"] #runAuto { display: none; }
 .trace-tool .status-dot { flex: none; }
 /* The worker's own words, in the chat's answer type: same markdown, same size, one
    step dimmer than the Architect's. The paragraph is the step's speech, so it sits
-   with the tool lines rather than in a panel of its own (8 Nov). */
-.trace-prose { color: #c6cad1; margin: 6px 0; }
+   with the tool lines rather than in a panel of its own (8 Nov). Tighter leading and
+   paragraph gaps than an answer: a run says short things often, and 1.55 with 7px
+   gaps spent a line's worth of space per sentence (8 Nov). */
+.trace-prose { color: #c6cad1; margin: 4px 0; line-height: 1.45; }
+.trace-prose p { margin: 0 0 4px; }
 .trace-prose > :first-child { margin-top: 0; }
 .trace-prose > :last-child { margin-bottom: 0; }
 /* One line, cut where the column ends: the fold's whole job is to be small. */
