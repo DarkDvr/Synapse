@@ -1714,6 +1714,10 @@ body[data-mode="single"] #runAuto { display: none; }
 .reasoning { margin: 5px 0; }
 .reasoning summary {
   cursor: pointer; color: var(--muted); font-size: calc(var(--chat-fs) * 0.92); list-style: none;
+  /* One font for reasoning everywhere: the chat's own. A fold inside a trace used to
+     inherit the trace header's smaller, spaced, upper-case type, so the same
+     component read as a different font in the two places (8 Nov). */
+  font-family: inherit; font-weight: 400; letter-spacing: normal; line-height: 1.45;
   /* One line, however long the sentence is: the fold is a label, and a label that
      wraps is no longer a line. The ellipsis is the honest end of it, and it is what
      shortens the label to the pane's real width. */
@@ -1726,22 +1730,24 @@ body[data-mode="single"] #runAuto { display: none; }
 .reasoning summary::-webkit-details-marker { display: none; }
 .reasoning summary::before { content: "▸ "; color: #6d717a; }
 .reasoning[open] summary::before { content: "▾ "; }
+/* The opened text is the reason the scrolling panel already looks the way it does:
+   the same font, size, colour, italics and line spacing as the panel, with no box of
+   its own. One look for reasoning, whether it is arriving or read back (8 Nov). */
 .reasoning pre {
-  margin: 5px 0 0; padding: 7px 9px; border-radius: 8px;
-  background: #191b1f; border: 1px solid #2a2d33;
-  font-family: var(--mono); font-size: calc(var(--chat-fs) * 0.88); line-height: 1.45;
-  color: #a9adb5; white-space: pre-wrap; overflow-wrap: anywhere;
+  margin: 4px 0 0; padding: 0; border: 0; border-radius: 0;
+  background: none;
+  font-family: inherit; font-size: calc(var(--chat-fs) * 0.92); line-height: 1.45;
+  color: #6a6f77; font-style: italic;
+  white-space: pre-wrap; overflow-wrap: anywhere;
 }
 /* The early reasoning of a long turn, folded to one line the way the worker trace
    folds its older steps. Dimmer and smaller than a current block: it is history,
    not something to read now. */
 .reasoning.is-archive summary { color: #6a6f77; font-size: calc(var(--chat-fs) * 0.82); letter-spacing: 0.04em; }
 .reasoning.is-archive pre { margin-top: 6px; }
-/* A worker's completed thinking, folded inside its trace: the chat's fold shape,
-   smaller and without the panel's box — the trace is already a panel. */
+/* A worker's completed thinking, folded inside its trace: the chat's fold exactly,
+   only its margin tighter — the trace is already a panel. */
 .reasoning.is-trace { margin: 3px 0; }
-.reasoning.is-trace summary { font-size: calc(var(--chat-fs) * 0.82); color: #6a6f77; }
-.reasoning.is-trace pre { background: transparent; border: 0; padding: 2px 0 6px; }
 
 /* tool calls: one compact line until you ask for the detail. Kept deliberately
    short vertically — a busy turn emits dozens of them, so the dot, the type and
