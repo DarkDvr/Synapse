@@ -146,3 +146,20 @@ export function ago(ms) {
   if (s < 86400) return `${Math.round(s / 3600)}h ago`;
   return `${Math.round(s / 86400)}d ago`;
 }
+
+/**
+ * The one-line gist of a reasoning block: its first sentence, clipped.
+ *
+ * A fold that says only "Reasoning" makes the operator open it to learn whether it
+ * was worth opening. The first sentence is what the model was about to do, so it is
+ * the honest label — flattened to one line because the summary is one line, and
+ * clipped at a length that survives the chat's narrowest column.
+ */
+export function reasoningGist(text, max = 110) {
+  const flat = String(text || '').replace(/\s+/g, ' ').trim();
+  if (!flat) return 'Reasoning';
+  const end = flat.search(/[.!?](?:\s|$)/);
+  const first = end > 0 ? flat.slice(0, end + 1) : flat;
+  const gist = first.length > max ? `${first.slice(0, max - 1).trimEnd()}…` : first;
+  return `Reasoning · ${gist}`;
+}

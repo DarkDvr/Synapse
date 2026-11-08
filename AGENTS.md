@@ -111,13 +111,17 @@ the cards and the commits, not the code. One reason per sentence, not a chain.
 - **Check `git status` before and after**; no build junk, no filled-in config.
 - **Remote: `origin` → `github.com/DarkDvr/Synapse` (private).** Push `main`; never force-push or rewrite history.
 
-### Versioning
+### Versioning: commit, bump, tag, push
 
-`package.json` holds `major.minor.patch` (fix = patch, feature = minor, break = major); every
-pushed update bumps it, tags `vX.Y.Z` and — minor or major — gets a GitHub release with the
-zip (`docs/notes/releases.md`). **When your changes are done and no real run is live (test
-projects do not count), restart the whole app: stop it, then launch `Synapse.exe` — window,
-tray and server.** A server-only restart leaves the page on the old build; check the version.
+`package.json` holds `major.minor.patch` (fix = patch, feature = minor, break = major).
+**Finished work is delivered, not left local**: when it passes the suite and no real run
+is live, bump the version, commit, tag `vX.Y.Z`, and push `main` and the tag — do not
+wait to be asked. A minor or major also gets a GitHub release with the zip and
+`SHA256SUMS` (`docs/notes/releases.md`). A commit that stays local is not delivered: the
+operator reads the version to know which build is answering.
+
+**Then restart the whole app**: stop it, launch `Synapse.exe` — window, tray and server. A
+server-only restart leaves the page on the old build; check the version.
 
 ### Destructive commands — verify before you act
 
@@ -173,6 +177,7 @@ an agent does not know to open is a document that does not exist:
 
 Two rules: **a new lesson goes in `docs/notes/`, not here**; and a rule you move out
 leaves its invariant behind in one line. Deferred work lives in `docs/notes/todo.md`.
+**A past session's constraint is history, not a rule**: this file wins a disagreement.
 
 ## Running it
 
@@ -187,16 +192,12 @@ vendor-engine.ps1  # copies the runtime into bin\opencode so it travels with the
 tray is where the server is stopped and started, and Exit is the only way to stop
 both. To work on the server on its own: `bin\node\node.exe src\index.js`.
 
-`server.openBrowser` is off here: a restart should not hijack a tab, and the app ignores it.
-
 Gotchas:
-- **Nothing here matches on a process name** — the desktop app, the rule and the
-  incident that earned it are in "Destructive commands" above. The app stops the
-  process it holds a handle to, and `Kill(entireProcessTree)` is the fallback.
-- The console lives in the window: the app captures the server's stdout into
-  `logs\console.log` and serves it, so it still works when the server is stopped.
-  `logger` mirrors the `app` channel **and every warning or error** from any channel;
-  the runner's milestones go there too. The `tools` *info* census is left out.
+- **Nothing here matches on a process name** (see "Destructive commands"): the app
+  stops the process it holds, and `Kill(entireProcessTree)` is the fallback after 8s.
+- The console lives in the window: the server's stdout is captured into
+  `logs\console.log` and served, so it works when the server is stopped. `logger`
+  mirrors `app` and every warning or error; the runner's milestones go there too.
 - Ports: **UI 8700, engine 8720**. Ports 1174–1273 are reserved by
   Hyper-V/WSL on this machine — do not pick one (1235 and 1240 both fail with
   `EACCES`; 8701 and 4343 are fine).
@@ -227,13 +228,12 @@ src/
   engines/opencode.js the OpenCode adapter
 web/
   index.html          the shell
-  app.js              all UI logic (ES module)
-  md.js               the markdown renderer (escape-first, no dependencies;
-                        fenced code, GFM tables, task lists)
-  rate.js             tokens per second, measured from the stream (not per turn)
-  synapse.css         theme + shell (Summit baseline stays locked)
-  vendor/summit.css   LOCKED baseline — one deliberate edit, see below
-  vendor/fonts.css    vendored DM Sans + Manrope (offline)
+  app.js              boot, the event stream and the wiring (ES module; the rest is
+                      modules beside it)
+  md.js               the markdown renderer (escape-first, fenced code, GFM tables)
+  rate.js             tokens per second, measured from the stream
+  synapse.css         theme + shell; vendor/summit.css is the locked baseline
+  vendor/             fonts (offline) and the baseline stylesheet
   favicon.ico         the same, packed as a multi-size icon
 skills/               shipped WITH Synapse, always on the engine's skill path
   visual-review/      render a page to PNG, then read it (the agents' eyes)

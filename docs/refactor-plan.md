@@ -1,8 +1,13 @@
 # Refactor plan — the audit items that are left
 
+> **History.** The plan below describes sessions in early November. Its "no push
+> until the operator says so" was a constraint of those sessions, not a standing
+> rule: delivery is `AGENTS.md`'s "Versioning: commit, bump, tag, push". Read this
+> for the reasoning, not for policy.
+
 The audit (`docs/audit-2026-11-06.md`) listed ten things. #2, #4, #9 and #10 are
 done. This is the plan for the rest, one step at a time, each with the test that
-proves it took. No push to GitHub until the operator says so.
+proves it took.
 
 The rule for every step: change it, run the suite, add or adjust the test that
 would fail if the change had not taken, run it, commit. A bug the change caused is

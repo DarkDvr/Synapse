@@ -1339,7 +1339,11 @@ function connectStream() {
     // from here is the honest source: whatever asked for it — the engine's rule or
     // our watchdog — this is the one event that proves one is happening.
     if (ev.sessionId && [EV.compactionStarted, EV.compactionEnded, EV.compactionFailed].includes(ev.type)) {
-      noteCompactionEvent(ev);
+      // The size that caused it, from the run on screen: the compaction's own usage
+      // is only readable once the summary is written, and the operator wants the
+      // number while it runs (8 Nov).
+      const run = currentRun();
+      noteCompactionEvent(ev, { used: run?.ctx, limit: run?.ctxLimit });
     }
     const mine = !ev.sessionId || ev.sessionId === state.sessionId;
     // A worker's session is not the open one, so nothing of it renders through

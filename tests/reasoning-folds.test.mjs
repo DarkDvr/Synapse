@@ -1,0 +1,89 @@
+// What a fold says, and what a compaction says while it runs.
+//
+// Two reports from the operator (8 Nov): a compaction line that only said
+// "Compacting ×3" and not how full the window was, and reasoning folds that were
+// one per step and all called "Reasoning".
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+import { reasoningGist } from '../web/format.js';
+import { renderTrace } from '../web/traces.js';
+
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
+
+test('a fold carries the first sentence, flattened and clipped', () => {
+  assert.equal(
+    reasoningGist('The menu is drawn by MainWindow. I should move it into its own file.'),
+    'Reasoning · The menu is drawn by MainWindow.',
+  );
+  // Newlines and runs of spaces are one line, because the summary is one line.
+  assert.equal(reasoningGist('First line\n\n  second   line'), 'Reasoning · First line second line');
+  // A block with no sentence end is clipped with an ellipsis, on the same line.
+  const long = reasoningGist('word '.repeat(60));
+  assert.ok(long.length <= 122, `${long.length} characters`);
+  assert.match(long, /…$/);
+  assert.doesNotMatch(long, /\n/);
+  // Nothing to say still names the thing.
+  assert.equal(reasoningGist('   '), 'Reasoning');
+  assert.equal(reasoningGist(''), 'Reasoning');
+});
+
+test('the fold summary is the gist, and the last ten blocks keep their own', () => {
+  const source = read('web/transcript.js');
+  assert.match(source, /const REASONING_KEEP = 10;/, 'ten recent blocks stay folds of their own');
+  assert.match(source, /<summary>\$\{esc\(reasoningGist\(part\.text\)\)\}<\/summary>/, 'each fold names its own sentence');
+  assert.match(source, /class="reasoning is-archive"/, 'the older ones still fold into one');
+});
+
+test('a compaction in flight says how full the window was', () => {
+  const live = renderTrace({
+    key: 'k',
+    role: 'coder-1',
+    task: 't4',
+    title: 'Pin the widget',
+    startedAt: 1,
+    compactingSince: Date.now(),
+    compactions: 2,
+    compactFrom: 47000,
+    compactLimit: 204800,
+    notes: [],
+  });
+  assert.match(live, /Compacting ×3/);
+  assert.match(live, /context at 47K\/205K/);
+  // The worker's own words are not needed for the line to be a line.
+  assert.match(live, /is-compact/);
+});
+
+test('a finished compaction keeps the size the engine actually sent', () => {
+  const done = renderTrace({
+    key: 'k',
+    role: 'coder-1',
+    task: 't4',
+    title: 'Pin the widget',
+    startedAt: 1,
+    finishedAt: 2,
+    compactions: 2,
+    compactAt: 165000,
+    compactLimit: 204800,
+    notes: [],
+  });
+  assert.match(done, /Compacted ×2 · context at 165K\/205K/);
+});
+
+test('a compaction with no size says nothing it cannot support', () => {
+  const bare = renderTrace({
+    key: 'k',
+    role: 'coder-1',
+    task: 't4',
+    startedAt: 1,
+    compactingSince: Date.now(),
+    compactions: 0,
+    notes: [],
+  });
+  assert.match(bare, /Compacting ×1/);
+  assert.doesNotMatch(bare, /context at/);
+});

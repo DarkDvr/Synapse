@@ -109,17 +109,25 @@ export function renderTrace(t) {
   // A compaction line is pinned: the four-line tail is for steps, and this is not
   // a step — it is the reason the next step is slower and the window is empty
   // again. It stays for the whole run, and the folded summary counts it.
-    const packed = Number(t.compactions) || 0;
+  const packed = Number(t.compactions) || 0;
   const compacting = Number(t.compactingSince) || 0;
+  // How full the window was when it fired. While it runs, that is the last prompt
+  // the run reported (`compactFrom`); afterwards it is the size the engine sent to
+  // write the summary, read from the compaction's own usage. The operator wants the
+  // pair while it is happening — "Compacting ×3" alone says nothing about why
+  // (8 Nov).
+  const compactSize = compacting ? Number(t.compactFrom) || 0 : Number(t.compactAt) || 0;
+  const compactLimit = Number(t.compactLimit) || 0;
+  const compactWhere = compactSize
+    ? ` · context at ${fmtTokens(compactSize)}${compactLimit ? `/${fmtTokens(compactLimit)}` : ''}`
+    : '';
   // While one is in flight the count is "the ones that have finished, plus this
   // one" — `compactions` only ever counts finished compactions, so the number here
   // is the number of the one being written.
   const compactLine = compacting
-    ? `<div class="trace-line is-compact">⏳ Compacting ×${packed + 1}</div>`
+    ? `<div class="trace-line is-compact">⏳ Compacting ×${packed + 1}${compactWhere}</div>`
     : packed
-      ? `<div class="trace-line is-compact">⏳ Compacted ×${packed}` +
-        (t.compactAt ? ` · context at ${fmtTokens(t.compactAt)}${t.compactLimit ? `/${fmtTokens(t.compactLimit)}` : ''}` : '') +
-        '</div>'
+      ? `<div class="trace-line is-compact">⏳ Compacted ×${packed}${compactWhere}</div>`
       : '';
   // A loop rescue is pinned for the same reason: it is not a step, and it is the
   // one line that explains why the next thinking is shorter.
@@ -237,11 +245,17 @@ export function traceForSession(sessionId) {
  * counts it; `failed` clears the line and counts nothing. The size beside it is the
  * prompt the run last reported, which is the size that caused it.
  */
-export function noteCompactionEvent(ev) {
+export function noteCompactionEvent(ev, { used = 0, limit = 0 } = {}) {
   const trace = traceForSession(ev.sessionId);
   if (!trace) return;
   if (ev.type === EV.compactionStarted) {
     trace.compactingSince = Date.now();
+    // The size that caused it: the last prompt this run reported, taken from the
+    // run on screen. The compaction message's own usage is only readable once the
+    // summary is written, and waiting for it means the line says nothing while it
+    // runs — which is exactly when the operator wants the number (8 Nov).
+    if (Number(used)) trace.compactFrom = Number(used);
+    if (Number(limit)) trace.compactLimit = Number(limit);
   } else {
     trace.compactingSince = 0;
     if (ev.type === EV.compactionEnded) {
@@ -273,6 +287,7 @@ export function traceSig() {
         (t) =>
           `${t.key}:${t.finishedAt || 0}:${(t.notes || []).length}:${t.stream ? t.stream.text.length : 0}:` +
           `${t.stream?.ended ? 1 : 0}:${Number(t.compactions) || 0}:${Number(t.compactingSince) || 0}:` +
+          `${Number(t.compactFrom) || 0}:${Number(t.compactAt) || 0}:${Number(t.compactLimit) || 0}:` +
           `${Number(t.loops) || 0}:${Number(t.loopLimit) || 0}:${t.loopStop ? 1 : 0}`,
       )
       .join(';'),

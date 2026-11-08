@@ -1707,7 +1707,12 @@ body[data-mode="single"] #runAuto { display: none; }
 }
 
 .reasoning { margin: 5px 0; }
-.reasoning summary { cursor: pointer; color: var(--muted); font-size: calc(var(--chat-fs) * 0.92); list-style: none; }
+.reasoning summary {
+  cursor: pointer; color: var(--muted); font-size: calc(var(--chat-fs) * 0.92); list-style: none;
+  /* One line, however long the sentence is: the fold is a label, and a label that
+     wraps is no longer a line. The ellipsis is the honest end of it. */
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
 .reasoning summary::-webkit-details-marker { display: none; }
 .reasoning summary::before { content: "▸ "; color: #6d717a; }
 .reasoning[open] summary::before { content: "▾ "; }

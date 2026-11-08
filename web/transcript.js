@@ -11,7 +11,7 @@
 // and the compact post's metadata. Wired at boot; a missing one throws.
 import { state } from './state.js';
 import { $ } from './dom.js';
-import { esc, hhmm, toolTarget, fileChip, shortName } from './format.js';
+import { esc, hhmm, toolTarget, fileChip, shortName, reasoningGist } from './format.js';
 import { renderMarkdown } from './md.js';
 import { serverNow } from './api.js';
 import { permissionNote } from './ask-note.js';
@@ -263,12 +263,13 @@ export function renderMessage(m, tail = '') {
       lastText !== undefined &&
       parts.slice(0, lastText).some((p) => p.type === 'reasoning' || p.type === 'tool');
     const toolAfter = lastText !== undefined && parts.slice(lastText + 1).some((p) => p.type === 'tool');
-    // A long turn is a dozen reasoning blocks — one per step — and a dozen
-    // one-line folds interleaved with the tool rows read as a wall. The newest two
-    // stay folds of their own (the operator watched that thinking arrive), and
-    // everything older is one fold that opens, the same shape the worker trace uses
-    // for its older steps (8 Nov).
-    const REASONING_KEEP = 2;
+    // A long turn is forty reasoning blocks — one per step — and a fold each reads
+    // as a wall. The newest ten keep their own folds (the operator watched that
+    // thinking arrive, and ten is about a screenful of work), and everything older
+    // is one fold that opens, the same shape the worker trace uses for its older
+    // steps. Each fold carries its first sentence, so the line says what the block
+    // was about instead of only that it exists (8 Nov).
+    const REASONING_KEEP = 10;
     const reasoningAt = parts.map((p, i) => (p.type === 'reasoning' ? i : -1)).filter((i) => i >= 0);
     const olderReasoning = reasoningAt.length > REASONING_KEEP ? reasoningAt.slice(0, -REASONING_KEEP) : [];
     const recentReasoning = new Set(reasoningAt.slice(-REASONING_KEEP));
@@ -294,7 +295,7 @@ export function renderMessage(m, tail = '') {
         } else if (recentReasoning.has(i)) {
           body.push(
             `<details class="reasoning" data-k="${esc(part._k)}"${state.open.has(part._k) ? ' open' : ''}>` +
-              `<summary>Reasoning</summary><pre>${esc(part.text)}</pre></details>`,
+              `<summary>${esc(reasoningGist(part.text))}</summary><pre>${esc(part.text)}</pre></details>`,
           );
         }
       }

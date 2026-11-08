@@ -1483,14 +1483,23 @@ Two reports about one turn. The operator saw a long Architect turn as a wall of
 "Reasoning" lines — one per step, **105 of them in a 35-message chat** — and the
 reasoning panel jumped the moment a step ended.
 
-- **The early reasoning is one line.** A turn keeps its newest **two** reasoning
+- **The early reasoning is one line.** A turn keeps its newest **ten** reasoning
   blocks as folds of their own; everything older is a single
   `<details class="reasoning is-archive">` whose summary is "N earlier reasoning".
   This is the shape the worker trace already uses for its older steps ("N earlier
   steps"), for the same reason: the newest thinking is what is being read, the rest
-  is context. Measured after the change on the Fever Tracker chat: 105 folds became
-  31, plus 12 archives. The archive takes the oldest block's place, so the turn
-  still reads in order.
+  is context. Each fold's summary carries the block's **first sentence**, clipped to
+  one line (`reasoningGist`), so it says what the block was about instead of only
+  that it exists — "Reasoning · The menu is drawn by MainWindow." rather than ten
+  identical "Reasoning" lines. Measured after the change on the Fever Tracker chat:
+  105 folds became 31, plus 12 archives. The archive takes the oldest block's place,
+  so the turn still reads in order.
+- **A compaction says how full the window was while it runs.** The line was
+  "⏳ Compacting ×3" until the summary finished and the runner could read the
+  compaction's own usage — one moment too late. The size that caused it is the last
+  prompt the run reported, handed to the trace with `session.compaction.started`:
+  "⏳ Compacting ×3 · context at 47K/205K". The finished line keeps the engine's own
+  number, which is the one worth keeping.
 - **A rebuild must put the slide back.** The panel's position is a `transform` on
   the text node, and `renderTranscript()` replaces the node: the offset went with
   it, so the panel showed the *first* line of the reasoning at the moment the step
