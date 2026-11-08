@@ -133,6 +133,22 @@ lease (`src/desk.js`) rather than a rule.
   refused, and a cmd-style switch (`/c`) is a switch, not a path — it used to
   resolve to `F:/c` and make `cmd /c dir` look like an outside write.
 
-What this does not cover: a project's own test that launches a GUI app directly
-(`& .\bin\app.exe`) names no window call, so the gate cannot see it. It is a fence
-around the shipped tools and the obvious API names, not a desktop sandbox.
+- **A script is read, because the mouse can hide inside one.** On 8 Nov the coder
+  wrote `capture.ps1` — `SetCursorPos` + `SendInput` + `Start-Process` — and ran
+  `.\capture.ps1 -Exe …`. The command named nothing the gate knew, and the cursor
+  moved. A statement that *runs* a script (the script is the head, or follows an
+  interpreter: `pwsh -File x.ps1`, `node x.mjs`, `cmd /c x.bat`) is now read,
+  bounded to 256 KB and only from the project or the scratch root, and the script's
+  text goes through the same `screenTaking()` test. Reading a script is still a
+  read: `Get-Content capture.ps1` does not ask.
+- **The project's own program asks too.** A GUI program takes the screen from the
+  inside, where no command text can be read — the SysMonitor widget calls
+  `SetForegroundWindow` itself when its menu opens. Running an `.exe`/`.com` that
+  lives in the project (`& .\bin\App.exe`, `Start-Process …`, `cmd /c …`) therefore
+  asks for the screen; `Get-Item` on the same file does not.
+- The managed cursor is the same API: `[System.Windows.Forms.Cursor]::Position`.
+
+What this still does not cover: a program from *outside* the project that takes the
+screen itself, and a runtime that builds a path to `SetCursorPos` before calling it.
+It is a fence around the shipped tools, the obvious API names, the scripts a command
+runs and the programs a project builds — not a desktop sandbox.

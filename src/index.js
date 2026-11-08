@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn, execFile } from 'node:child_process';
-import { DATA_DIR, LOGS_DIR, WORKSPACE_DIR, GENERAL_DIR, ENGINE_HOME, PID_FILE, PROJECTS_FILE, TOOL_STATS_FILE, PROBE_DIR, PROBE_FILE, MODEL_CACHE_FILE, NPM_ATTEMPT_FILE, PERMISSION_MEMORY_FILE, REMOTE_TOKEN_FILE, ROOT, SCRATCH_ROOT, scratchDir } from './paths.js';
+import { DATA_DIR, LOGS_DIR, WORKSPACE_DIR, GENERAL_DIR, ENGINE_HOME, PID_FILE, PROJECTS_FILE, TOOL_STATS_FILE, PROBE_DIR, PROBE_FILE, MODEL_CACHE_FILE, TRACE_REASONS_FILE, NPM_ATTEMPT_FILE, PERMISSION_MEMORY_FILE, REMOTE_TOKEN_FILE, ROOT, SCRATCH_ROOT, scratchDir } from './paths.js';
 import { loadConfig, saveConfig, repairMachinePaths } from './config.js';
 import { logger } from './logger.js';
 import { createEngine } from './engines/index.js';
@@ -27,6 +27,7 @@ import { skillRules } from './skills.js';
 import { createProbe, discoverToolsetForModel } from './probe.js';
 import { createModelCache, MAX_TOOL_ASKS } from './modelcache.js';
 import { createApi, toClientConfig } from './api.js';
+import { createTraceReasons } from './trace-reasons.js';
 import { createServer } from './server.js';
 import { pruneProviderLog } from './provider-errors.js';
 import { measureLocalWindows } from './providers.js';
@@ -389,6 +390,9 @@ async function main() {
   // leaves a mark on the model it ran on — that is the picker's badge of shame,
   // and it is also why the cache outlives a model leaving the catalog.
   const modelCache = createModelCache({ logger, file: MODEL_CACHE_FILE });
+  // The words a worker finished thinking, so a reload and a second view keep them.
+  const traceReasons = createTraceReasons(TRACE_REASONS_FILE, { log: app });
+  traceReasons.prune();
 
   const runner = createRunner({
     engine,
@@ -781,6 +785,7 @@ async function main() {
     toolStats,
     probe,
     modelCache,
+    traceReasons,
     inspectModel,
     probeDir: PROBE_DIR,
     runs: runner,

@@ -16,6 +16,7 @@
 //
 // The cost is one local round trip per write, shell or read call. The benefit is
 // one policy instead of a wall of globs that each need a relative twin.
+import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -433,6 +434,14 @@ const WINDOW_TOOL = /app-check[\\/]+bin[\\/]+(?:window\.ps1|app-check\.mjs)/i;
 // Asking what a window is called is not taking it, and neither is asking the tool
 // what its options are.
 const SCREEN_QUERY = /(?:-\s*action\s+"?query"?|--help\b|\s-h\b)/i;
+// The managed way to the same API: `[System.Windows.Forms.Cursor]::Position`.
+// Only the type's own member, never the word "cursor" — a CSS file full of
+// `cursor: pointer` must not read as a mouse grab (8 Nov).
+const MANAGED_CURSOR = /\[\s*[^\]]*\bcursor\s*\]\s*::\s*position/i;
+// Scripts a statement may be *running*, as opposed to reading: a path ending in a
+// script extension, named by the head or after an interpreter.
+const SCRIPT_FILE = /\.(?:ps1|psm1|bat|cmd|mjs|cjs|js|py|sh)$/i;
+const SCRIPT_MAX_BYTES = 256 * 1024;
 
 /**
  * Would this command take the operator's screen?
@@ -444,10 +453,101 @@ const SCREEN_QUERY = /(?:-\s*action\s+"?query"?|--help\b|\s-h\b)/i;
 export function screenTaking(command) {
   const text = String(command || '');
   if (!text) return false;
-  if (SCREEN_APIS.test(text)) return true;
+  if (SCREEN_APIS.test(text) || MANAGED_CURSOR.test(text)) return true;
   // The shipped window tools: every action but `query` may put a window in front,
   // because the screenshot falls back to the screen when PrintWindow is refused.
   if (WINDOW_TOOL.test(text) && !SCREEN_QUERY.test(text)) return true;
+  return false;
+}
+
+/**
+ * The scripts a statement *runs*, resolved. Reading a script is not running it, so
+ * only the shapes that execute one count: the script is the head, or an interpreter
+ * is the head and the script follows it (`pwsh -File x.ps1`, `node x.mjs`,
+ * `cmd /c x.bat`).
+ */
+function scriptsRun(part) {
+  const words = part.words || [];
+  let at = 0;
+  while (at < words.length && (words[at] === '&' || words[at] === '.')) at += 1;
+  const head = words[at];
+  if (!head) return [];
+  if (SCRIPT_FILE.test(head)) return [head];
+  const base = String(head).toLowerCase().replace(/\.exe$/i, '');
+  if (!INTERPRETERS.has(base)) return [];
+  for (let i = at + 1; i < words.length; i += 1) {
+    const word = words[i];
+    if (word === '-File' || word === '-f') return words[i + 1] ? [words[i + 1]] : [];
+    if (/^[-/][A-Za-z]/.test(word) || word.includes('=')) continue;
+    if (SCRIPT_FILE.test(word)) return [word];
+  }
+  return [];
+}
+
+/**
+ * Does a script this command runs do something only the screen allows?
+ *
+ * The hole this closes was found by the coder and the designer on 8 Nov: the
+ * screen rules read the command line, so they wrote the mouse movement into
+ * `capture.ps1` and ran the script — `.\capture.ps1 -Exe …` names nothing and took
+ * the mouse anyway. The file is read here, bounded, and only when it is about to be
+ * executed.
+ */
+function scriptTakesScreen(segments, ctx) {
+  for (const part of segments) {
+    for (const raw of scriptsRun(part)) {
+      const target = resolvePath(raw, part.dir || ctx.cwd, { home: ctx.home });
+      if (!target || target.unknown || !target.path) continue;
+      if (zoneOf(target.path, ctx) !== 'project' && zoneOf(target.path, ctx) !== 'scratch') continue;
+      try {
+        const stat = fs.statSync(target.path);
+        if (!stat.isFile() || stat.size > SCRIPT_MAX_BYTES) continue;
+        if (screenTaking(fs.readFileSync(target.path, 'utf8'))) return true;
+      } catch {
+        // A script that is not there cannot be inspected; running it will fail.
+        continue;
+      }
+    }
+  }
+  return false;
+}
+
+/**
+ * Does this statement run a program the project built?
+ *
+ * A GUI program takes the screen from the inside, where no command text can be
+ * read: the SysMonitor widget calls `SetForegroundWindow` itself when its tray menu
+ * opens. Running the project's own executable is therefore the one program launch
+ * that asks for the screen (8 Nov).
+ */
+function runsProjectProgram(segments, ctx) {
+  const program = /\.(?:exe|com)$/i;
+  const mine = (target) =>
+    Boolean(target && !target.unknown && target.path) &&
+    program.test(target.path) &&
+    zoneOf(target.path, ctx) === 'project';
+  const launchers = new Set(['start-process', 'start', 'cmd', 'explorer']);
+  for (const part of segments) {
+    if (part.readsOnly) continue;
+    const words = part.words || [];
+    let at = 0;
+    while (at < words.length && (words[at] === '&' || words[at] === '.')) at += 1;
+    const head = String(words[at] || '');
+    if (!head) continue;
+    const cwd = part.dir || ctx.cwd;
+    const base = head.toLowerCase().replace(/\.exe$/i, '');
+    if (launchers.has(base)) {
+      // `Start-Process x.exe`, `start x.exe`, `cmd /c x.exe`: the program is an
+      // argument, and running it is the thing that takes the screen.
+      for (let i = at + 1; i < words.length; i += 1) {
+        const word = words[i];
+        if (/^[-/][A-Za-z]/.test(word) || word.includes('=')) continue;
+        if (mine(resolvePath(word, cwd, { home: ctx.home }))) return true;
+      }
+      continue;
+    }
+    if (mine(resolvePath(head, cwd, { home: ctx.home }))) return true;
+  }
   return false;
 }
 
@@ -643,7 +743,14 @@ function decideShell(resources, ctx) {
   // using it. A command that takes it must be their decision, not a policy default —
   // after PROHIBITED, which still outranks every rule here. `deskHeld` is the lease
   // they gave for this run (src/desk.js).
-  if (screenTaking(command) && !ctx.deskHeld) {
+  //
+  // Three shapes now, and the second and third were the 8 Nov hole: a call named in
+  // the command, a **script** the command runs whose text does it (`.\capture.ps1`
+  // moved the mouse and named nothing), and a **program the project built**, whose
+  // insides nobody can read (the widget takes the foreground itself).
+  const takesScreen =
+    screenTaking(command) || scriptTakesScreen(segments, ctx) || runsProjectProgram(segments, ctx);
+  if (takesScreen && !ctx.deskHeld) {
     return ask(
       'This would take your screen: the mouse, the keyboard and the focus of whatever you are doing.',
       true,

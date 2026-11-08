@@ -1440,7 +1440,12 @@ body[data-mode="single"] #runAuto { display: none; }
 .trace summary::before { content: '▸ '; font-size: calc(var(--chat-fs) * 0.72); }
 .trace[open] summary::before { content: '▾ '; }
 .trace summary:hover { color: var(--muted); }
-.trace-lines { margin-top: 3px; display: flex; flex-direction: column; gap: 1px; }
+/* The trace is a flex column, so each child is a flex item with `min-width: auto` —
+   and a nowrap summary's min-content width is the whole sentence, which let the fold
+   run past the pane's edge instead of ellipsising at it. Zero lets the text shrink to
+   the space there is. */
+.trace-lines { margin-top: 3px; display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.trace-lines > * { min-width: 0; }
 .trace-line {
   font-size: calc(var(--chat-fs) * 0.92); line-height: 1.45; color: #8b8f97;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
@@ -1710,8 +1715,13 @@ body[data-mode="single"] #runAuto { display: none; }
 .reasoning summary {
   cursor: pointer; color: var(--muted); font-size: calc(var(--chat-fs) * 0.92); list-style: none;
   /* One line, however long the sentence is: the fold is a label, and a label that
-     wraps is no longer a line. The ellipsis is the honest end of it. */
+     wraps is no longer a line. The ellipsis is the honest end of it, and it is what
+     shortens the label to the pane's real width. */
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  /* A reasoning sentence is sentence case. The trace's own summaries are upper case,
+     and a fold inside a trace inherited that — "REASONING · LET'S START…" is not a
+     sentence, it is a shout (8 Nov). */
+  text-transform: none;
 }
 .reasoning summary::-webkit-details-marker { display: none; }
 .reasoning summary::before { content: "▸ "; color: #6d717a; }

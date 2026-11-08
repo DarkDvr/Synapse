@@ -6,6 +6,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 
 import { decide, grantKey, rulesFor, zoneOf, inside, isSecret, analyzeCommand, refusalNote, screenTaking } from '../src/permissions.js';
@@ -605,4 +606,48 @@ test('a program a shipped tool runs is not a write into Windows', () => {
   assert.equal(shell('Remove-Item C:\\Windows\\System32\\cmd.exe', { protection: windows }).effect, 'deny');
   // A cmd-style switch is a switch, not a path: `/c` used to resolve to `F:/c`.
   assert.equal(shell('& "C:\\Windows\\System32\\cmd.exe" /c dir', { protection: windows }).effect, 'allow');
+});
+// The screen rules read the command line, so on 8 Nov the coder and the designer
+// wrote the mouse movement into a script and ran the script: the command named
+// nothing, and the cursor moved anyway. The script is read now, but only when it is
+// about to be executed.
+test('a script the command runs is read, because the mouse lives inside it', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'synapse-perm-'));
+  try {
+    const project = dir.replace(/\\/g, '/');
+    const base = { cwd: dir, projectRoot: project, harnessRoot: HARNESS, home: HOME };
+    fs.writeFileSync(
+      path.join(dir, 'capture.ps1'),
+      'Add-Type -AssemblyName System.Windows.Forms\n[System.Windows.Forms.Cursor]::Position = New-Object System.Drawing.Point(4,4)\n',
+    );
+    const asked = decide({ ...base, action: 'shell', resources: ['pwsh -NoProfile -File capture.ps1'] });
+    assert.equal(asked.effect, 'ask');
+    assert.equal(asked.scope, 'desk');
+
+    // Reading a script is not running it, even when the script takes the screen.
+    assert.equal(decide({ ...base, action: 'shell', resources: ['Get-Content capture.ps1'] }).effect, 'allow');
+
+    // A script with nothing to hide is allowed.
+    fs.writeFileSync(path.join(dir, 'quiet.ps1'), 'Get-ChildItem .\n');
+    assert.equal(decide({ ...base, action: 'shell', resources: ['pwsh -File quiet.ps1'] }).effect, 'allow');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('the managed cursor call is the mouse too', () => {
+  const asked = shell('Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.Cursor]::Position = New-Object System.Drawing.Point(10,10)');
+  assert.equal(asked.effect, 'ask');
+  assert.equal(asked.scope, 'desk');
+});
+
+test('running the project\'s own program asks for the screen', () => {
+  const exe = `${PROJECT}/bin/app/App.exe`;
+  for (const command of [`& "${exe}"`, `Start-Process "${exe}"`, `cmd /c "${exe}"`]) {
+    const asked = shell(command);
+    assert.equal(asked.effect, 'ask', command);
+    assert.equal(asked.scope, 'desk', command);
+  }
+  // Looking at the program is not running it.
+  assert.equal(shell(`Get-Item "${exe}"`).effect, 'allow');
 });

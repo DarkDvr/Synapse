@@ -414,6 +414,11 @@ export function createServer({ api, engine, logger, config, remote, onRemote }) 
 
     // GET /api/runs — delegated work in flight (the live path + role cards)
     if (seg[0] === 'runs' && method === 'GET') return sendJson(res, 200, await api.runs());
+    // POST /api/runs/reason — one finished reasoning step, so the trace survives a
+    // reload the way its notes already do.
+    if (seg[0] === 'runs' && seg[1] === 'reason' && method === 'POST') {
+      return sendJson(res, 200, await api.traceReason(await readBody(req)));
+    }
     if (seg[0] === 'runs' && seg[1] === 'cancel' && method === 'POST') {
       return sendJson(res, 200, await api.cancelRun(await readBody(req)));
     }

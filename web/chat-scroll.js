@@ -8,6 +8,7 @@
 // newest line stays readable. Split any one of those out and the other two have to
 // reach back for it.
 import { state } from './state.js';
+import { api } from './api.js';
 import { $ } from './dom.js';
 import { newStream, pushStream, slideTarget, nextOffset, takePending, freezeStream, adoptStream } from './stream-view.js';
 
@@ -266,6 +267,13 @@ export function endStream() {
     const text = String(stream.text || '').trim();
     if (text) {
       trace.reasons = [...(trace.reasons || []), { text, at: Date.now() }].slice(-12);
+      // Kept server-side too, so a reload and a second view show the same steps.
+      api('POST', '/api/runs/reason', {
+        dir: trace.dir,
+        task: trace.task,
+        startedAt: trace.startedAt,
+        text,
+      }).catch(() => {});
     }
     trace.stream = null;
   } else {

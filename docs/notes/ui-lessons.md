@@ -1493,7 +1493,24 @@ reasoning panel jumped the moment a step ended.
   that it exists — "Reasoning · The menu is drawn by MainWindow." rather than ten
   identical "Reasoning" lines. Measured after the change on the Fever Tracker chat:
   105 folds became 31, plus 12 archives. The archive takes the oldest block's place,
-  so the turn still reads in order.
+  so the turn still reads in order. The summary is **sentence case** even inside a
+  trace: `.trace summary` is upper case, and a fold that inherited it shouted
+  "REASONING · LET'S START…" (8 Nov). It is also bounded by the pane, not by the
+  gist's length: a flex item's `min-width: auto` is the whole nowrap sentence, so
+  `.trace-lines > * { min-width: 0 }` is what lets the ellipsis land at the edge.
+- **A worker's finished thinking is a fold too, and it is kept.** `endStream()`
+  pushes a `think` block into `trace.reasons` (last twelve) and the trace draws it as
+  `<details class="reasoning is-trace">` — the trace is the only record of a worker's
+  reasoning. The steps are also posted to `/api/runs/reason`, so a reload and a
+  second view get them back from `/api/runs` the way the notes already did; the file
+  is `data/trace-reasons.json`, pruned at boot, forty runs at most.
+- **The streaming panel is one node, so a new block has to reconcile with it.**
+  `adoptStream()` compares what the node holds with what the stream holds: a
+  different block is replaced, a prefix gets only its tail, an identical string
+  writes nothing. Two bugs came from skipping that: a new block *appended* to the
+  old words (the panel slid from the top of both to the bottom), and the old
+  block's `transform` stayed on the node (the empty pane that grew). Every acquire
+  also re-applies the offset — a rebuild is a new element with no transform.
 - **A compaction says how full the window was while it runs.** The line was
   "⏳ Compacting ×3" until the summary finished and the runner could read the
   compaction's own usage — one moment too late. The size that caused it is the last

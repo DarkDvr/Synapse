@@ -140,3 +140,4 @@ export function normDir(value) {
 function slash(value) {
   return String(value || '').replace(/\\/g, '/').replace(/\/+$/, '');
 }
+export const TRACE_REASONS_FILE = path.join(DATA_DIR, 'trace-reasons.json');

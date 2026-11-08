@@ -205,7 +205,7 @@ function windowMap(config) {
   return out;
 }
 
-export function createApi({ getConfig, applyConfig, power, engine, logger, getBootError, projects, toolStats, probe, modelCache, inspectModel: inspectRef, probeDir, runs, desk, engineUpdate, synapseUpdate, restart, stopSelf, pcShutdown, notify, permissionLog, permissionGate, permissionMemory }) {
+export function createApi({ getConfig, applyConfig, power, engine, logger, getBootError, projects, toolStats, probe, modelCache, traceReasons, inspectModel: inspectRef, probeDir, runs, desk, engineUpdate, synapseUpdate, restart, stopSelf, pcShutdown, notify, permissionLog, permissionGate, permissionMemory }) {
   const app = logger.channel('app');
 
   // Stop lives in one place now. Every route that stops anything — the gentle
@@ -1180,7 +1180,24 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
     /** Delegated work in flight, one entry per project. The live path and the
      *  role cards are drawn from this; the SSE events are the fast path and
      *  this is what a page opened mid-run starts from. */
-    runs: async () => ({ runs: runs?.active() || [] }),
+    // What is running, with the reasoning each worker has finished. The steps are
+    // kept server-side so a reload and a second view show the same trace instead of
+    // an empty one (8 Nov).
+    runs: async () => ({
+      runs: (runs?.active() || []).map((run) => ({ ...run, reasons: traceReasons?.get?.(run) || [] })),
+    }),
+
+    /** One finished reasoning step from a worker's trace. */
+    traceReason: async (body = {}) => {
+      const run = {
+        dir: String(body?.dir || ''),
+        task: String(body?.task || ''),
+        startedAt: Number(body?.startedAt) || 0,
+      };
+      const text = String(body?.text || '');
+      if (!run.dir || !run.task || !text) throw fail(400, 'a run and the text it thought are needed');
+      return { ok: true, count: traceReasons?.add?.(run, text) || 0 };
+    },
 
     // POST /api/runs/cancel - stop the delegated run in a project. The UI's Stop
     // button uses this when the open session is idle and a worker is not: the

@@ -389,6 +389,9 @@ export async function loadRuns() {
           startedAt: Number(run.startedAt) || Date.now(),
           finishedAt: 0,
           notes: steerNotes(run),
+          // The steps it thought before this page opened: the server keeps them so a
+          // reload does not lose the trace's reasoning (8 Nov).
+          reasons: Array.isArray(run.reasons) ? run.reasons : [],
           stream: null,
           // Runs already compacted before this page was opened. Without it the
           // count starts at nothing and the chat says nothing about a run that is
