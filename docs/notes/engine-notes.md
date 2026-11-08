@@ -1152,7 +1152,7 @@ that gap: it starts the exe, waits for a window, photographs it (`PrintWindow`
 first, the screen only as a fallback), and reports title, size, DPI scale, whether
 the process is **alive and responding after the shot** — a window that dies on its
 first paint looks exactly like a working one in a picture — and whether the app
-exited before showing anything. `templates/win-app` is the shell a project is
+exited before showing anything. `skills/win-app/template` is the shell a project is
 copied from: WPF, WebView2, `PerMonitorV2` DPI awareness, a dark title bar (Windows
 10 draws white chrome otherwise, which reads as unfinished next to a dark page),
 and `ui/` served over a **virtual https host**, not `file://`, so localStorage,

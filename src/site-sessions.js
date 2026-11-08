@@ -3,8 +3,8 @@
 // Why this and not "read the browser's cookies": measured on 2 Nov on this machine,
 // every Edge cookie is `v20` (Chromium's app-bound encryption) and its key will not
 // unwrap for a normal process; Brave's store is locked while Brave is running, so
-// even a copy fails. A WebView2 sign-in window would work but is a day of shell work
-// (see docs/notes/todo.md). Pasting a Cookie header is minutes of work, works on any
+// even a copy fails. A WebView2 sign-in window would work but is a day of shell work.
+// Pasting a Cookie header is minutes of work, works on any
 // PC whatever browser is installed, and is explicit: the operator can see exactly
 // what Synapse may send, site by site.
 //

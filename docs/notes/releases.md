@@ -1,8 +1,8 @@
 # Releases and versioning
 
 Synapse is versioned `major.minor.patch`, and the number is not decoration: the
-operator reads it in the title bar to know which build is answering, and the
-tag on GitHub is what a bug report points at.
+operator reads it in the rail to know which build is answering, and the tag on
+GitHub is what a bug report points at.
 
 ## The three numbers
 
@@ -37,27 +37,27 @@ That is the whole list: `version.test.mjs` fails when the three disagree.
 
 ## The release checklist
 
-1. Bump `package.json` and `shell/Synapse.csproj` to the new number.
-2. Update the `README.md` version line.
-3. A minor or major release gets `docs/release-notes-vX.Y.Z.md`; a patch gets
-   its note in the commit message and the GitHub release page.
-4. Run the suite: `bin\node\node.exe --test "tests\*.test.mjs"`.
-5. Build the app and the update asset:
+1. Bump `package.json`, `shell/Synapse.csproj` and `README.md`.
+2. Run the suite: `bin\node\node.exe --test "tests\*.test.mjs"`.
+3. **Read the live state immediately before you stop anything**: `/api/runs` and
+   `/api/pending`, now. Not the reading you took when you started, not the one
+   from the last restart — the check that matters is the one a second before the
+   stop. Building locks the running exe and a restart kills a turn, and a run can
+   begin between two checks (8 Nov: a t5 run started four minutes after one check
+   and died at the next restart).
+4. Build the app and the update asset:
    ```
    .\shell\build.ps1
    .\make-release.ps1
    ```
    `dist\Synapse-<version>-win-x64.zip` carries program files only and
-   `dist\SHA256SUMS` is its checksum. Attach both to the GitHub release.
-6. Commit, tag, push — all three:
-   ```
-   git tag v1.0.2
-   git push origin main --tags
-   ```
-7. A patch may be a tag alone; a **minor or major is a GitHub release**, with its
-   notes and both assets (the zip and `SHA256SUMS`) attached — that is what the
-   operator links to in a report. The tag is the release: a commit without one is a
-   draft nobody can point at later.
+   `dist\SHA256SUMS` is its checksum.
+5. Commit, tag, push — all three. The push is the delivery and does not wait.
+6. **A GitHub release is the operator's call.** When they ask for one, write
+   `docs/release-notes-vX.Y.Z.md`, attach the zip and `SHA256SUMS`, publish — and
+   then **delete the local note**. The release page is the record; the folder
+   stays clean. A release with no notes is a page with nothing to say, and a note
+   left behind is a second copy that goes stale.
 
 ## Reading a version before debugging
 

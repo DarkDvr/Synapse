@@ -2030,7 +2030,7 @@ text between the operator and the one number they came to change.
 The rule now: every control carries a plain-English tooltip (`title`), and a pane
 has **at most one short visible line**, and only for the thing that would bite if
 it were missed — a restart, where keys are stored, what a limit does. A group
-heading can carry the rest in its own tooltip. "Running 2.2.5 from …" stays,
+heading can carry the rest in its own tooltip. "Running <engine version> from …" stays,
 because it is a fact, not an explanation.
 
 ## A Settings page wears the footer (6 Nov)

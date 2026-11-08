@@ -50,12 +50,10 @@ const NOTES = [
   'docs/notes/desktop-app.md',
   'docs/notes/remote-access.md',
   'docs/notes/multi-user.md',
-  'docs/notes/i18n.md',
   'docs/notes/web-reading.md',
   'docs/notes/project-chat.md',
   'docs/notes/protection.md',
   'docs/notes/releases.md',
-  'docs/notes/todo.md',
 ];
 const agents = read('AGENTS.md');
 const slashed = (rel) => [rel, rel.replace(/\//g, '\\')];

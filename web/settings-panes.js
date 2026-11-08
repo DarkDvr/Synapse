@@ -276,8 +276,8 @@ function settingsTools(c) {
  * Two settings today. The chat's text size is one number, and the transcript is
  * drawn from it (web/synapse.css multiplies every size in the chat by `--chat-fs`);
  * the bounds are enforced here and again in the config, because a number typed into
- * a box is not a promise. The language list holds English alone until the Russian
- * translation lands — see docs/notes/todo.md.
+ * a box is not a promise. The language list holds English alone until a
+ * translation exists.
  */
 function settingsGeneral(c) {
   const px = chatTextPx(readPath(c, 'ui.chatTextPx'));

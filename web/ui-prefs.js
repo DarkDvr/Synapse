@@ -10,9 +10,8 @@ export const CHAT_TEXT_DEFAULT = 12.5;
 export const CHAT_TEXT_MIN = 10.5;
 export const CHAT_TEXT_MAX = 16.5;
 
-// The languages the interface has strings for. English only for now: the Russian
-// translation is on the deferred list (docs/notes/todo.md), and an entry with no
-// strings behind it would be a switch that does nothing.
+// The languages the interface has strings for. English only for now: an entry with
+// no strings behind it would be a switch that does nothing.
 export const LANGUAGES = [{ v: 'en', l: 'English' }];
 
 export function chatTextPx(value) {

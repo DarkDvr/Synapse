@@ -345,9 +345,9 @@ export function normalize(raw) {
       ? Math.min(CHAT_TEXT_MAX, Math.max(CHAT_TEXT_MIN, Math.round(n * 2) / 2))
       : DEFAULTS.ui.chatTextPx;
   }
-  // The language list holds English only until the Russian translation lands (see
-  // docs/notes/todo.md). An unknown value falls back rather than leaving the page
-  // asking for strings that do not exist.
+  // The language list holds English only until a translation exists: an unknown
+  // value falls back rather than leaving the page asking for strings that do not
+  // exist.
   {
     const picked = String(cfg.ui.language ?? '').trim().toLowerCase();
     cfg.ui.language = UI_LANGUAGES.includes(picked) ? picked : DEFAULTS.ui.language;

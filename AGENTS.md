@@ -118,10 +118,14 @@ the cards and the commits, not the code. One reason per sentence, not a chain.
 is live, bump, commit, tag `vX.Y.Z`, and push `main` and the tag — do not wait to be
 asked; the version is how the operator knows which build is answering. **A GitHub
 release is their call** (`docs/notes/releases.md`): the zip, `SHA256SUMS` and the
-release page happen only when they ask. The push is not the release.
+release page happen only when they ask. The push is not the release. Once a
+release is published with notes, **the local note is deleted** — the release page
+is the record.
 
 **Then restart the whole app**: stop it, launch `Synapse.exe` — window, tray and server. A
-server-only restart leaves the page on the old build; check the version.
+server-only restart leaves the page on the old build; check the version. **Read
+`/api/runs` and `/api/pending` immediately before the stop** — a reading from earlier
+in the session is stale; a run can start in between (8 Nov: a t5 died that way).
 
 ### Destructive commands — verify before you act
 
@@ -170,13 +174,11 @@ an agent does not know to open is a document that does not exist:
 | `docs/notes/remote-access.md` | the LAN switch, the token or the login page, or changing what the HTTP listener binds |
 | `docs/notes/multi-user.md` | two views at once — what "busy" means, who may send, Stop as the takeover, and the Settings lock |
 | `docs/notes/web-reading.md` | before promising to read a signed-in site, or touching any browser — every cookie route was measured, one destroyed the operator's browser data, and Brave is never touched |
-| `docs/notes/i18n.md` | before starting the Russian interface — scope, plurals, what must never be translated |
 | `docs/notes/project-chat.md` | before changing how a project, a chat or a compaction works — the one-chat-per-project scope, its phases and what is still open |
 | `docs/notes/protection.md` | before touching `src/protection.js`, the prohibited list, or the Brave rule — what is refused without asking, and what the fence cannot see |
-| `docs/handover.md` | picking the work up cold — where the build stands, what is open, and the traps that are not in these notes |
 
 Two rules: **a new lesson goes in `docs/notes/`, not here**; and a rule you move out
-leaves its invariant behind in one line. Deferred work lives in `docs/notes/todo.md`.
+leaves its invariant behind in one line. Deferred work lives in the note that owns it.
 **A past session's constraint is history, not a rule**: this file wins a disagreement.
 
 ## Running it
@@ -245,8 +247,7 @@ data/                 runtime state (projects, census, probe results, engine hom
 logs/                 one file per channel: app, engine, session, tools
 bin/opencode/         a copy of the runtime that travels with the app (not in git;
                       vendor-engine.ps1 puts it there, ~210 MB, with its licence)
-docs/                 the detail behind this file
-  notes/              one per topic; the index is in "Where the rest lives"
+docs/notes/           the detail behind this file; the index is in "Where the rest lives"
 ```
 
 **`web/vendor/summit.css` is a locked baseline.** The only edit ever made to it
@@ -263,14 +264,13 @@ of some earlier engine, and on 25 Oct it described an attachment shape that 2.1.
 refuses outright (`Missing key at ["files"][0]["uri"]` — it wants `{uri}`, not
 `{data, mime, source}`). Read the dump to know what to try, then **probe the live
 engine once before building on it**: send the body you expect and read the 400.
-Minutes spent probing beat a feature that only fails when the operator uses it.
 
-**The engine is 2.2.5.** The table below was measured on 2.0.30
-unless it says otherwise, and each upgrade is re-verified on the routes Synapse
-depends on: 2.2.5 carried a full 148-turn run on 2 Nov with no route refused. **The model catalog ships inside the engine binary, not in Synapse** —
-so a stale model list means a stale *binary*, never a stale cache. The console
-prints `catalog: N model(s) from engine X` at every boot, which is the check; the
-update dialog (see `docs/notes/models-and-tools.md`) is the fix.
+**The engine is 2.2.6.** The table below was measured on 2.0.30 unless it says
+otherwise; each upgrade is re-verified on the routes Synapse depends on. **The model
+catalog ships inside the engine binary, not in Synapse** — so a stale model list means
+a stale *binary*, never a stale cache. The console prints `catalog: N model(s) from
+engine X` at every boot, which is the check; the update dialog (see
+`docs/notes/models-and-tools.md`) is the fix.
 
 | Thing | Reality |
 |---|---|
