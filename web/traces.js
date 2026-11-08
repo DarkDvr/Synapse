@@ -183,16 +183,16 @@ export function renderTrace(t) {
   // one" — `compactions` only ever counts finished compactions, so the number here
   // is the number of the one being written.
   const compactLine = compacting
-    ? `<div class="trace-line is-compact">⏳ Compacting ×${packed + 1}${compactWhere}</div>`
+    ? `<div class="trace-line is-compact"><span class="trace-mark">⏳</span>Compacting ×${packed + 1}${compactWhere}</div>`
     : packed
-      ? `<div class="trace-line is-compact">⏳ Compacted ×${packed}${compactWhere}</div>`
+      ? `<div class="trace-line is-compact"><span class="trace-mark">⏳</span>Compacted ×${packed}${compactWhere}</div>`
       : '';
   // A loop rescue is pinned for the same reason: it is not a step, and it is the
   // one line that explains why the next thinking is shorter.
   const looped = Number(t.loops) || 0;
   const loopLimit = Number(t.loopLimit) || 3;
   const loopLine = looped
-    ? `<div class="trace-line is-loop">↻ Loop detected ×${looped}` +
+    ? `<div class="trace-line is-loop"><span class="trace-mark">↻</span>Loop detected ×${looped}` +
       (looped >= loopLimit
         ? ` — marked ISSUES, next coder`
         : ` of ${loopLimit} — asking it to carry on`) +
