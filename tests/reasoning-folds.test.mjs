@@ -202,3 +202,16 @@ test("a worker's words are a paragraph, with the chat's markdown", () => {
   assert.match(read('web/chat-scroll.js'), /prose: true/);
   assert.match(read('web/chat-scroll.js'), /stream\.kind === 'word'/);
 });
+
+// 8 Nov: the tool said "Queued: t12… you will be told the outcome", the runner
+// refused the delegation silently (Keep Building off), and the Architect answered
+// the operator's "continue" with "t12 is already running". The receipt now says
+// what it can keep.
+test('the delegate receipt does not promise a run it cannot guarantee', () => {
+  const src = read('src/mcp/delegate-server.js');
+  assert.doesNotMatch(src, /Queued: /, 'no word that reads as already running');
+  assert.doesNotMatch(src, /You will be told the outcome when it finishes/, 'no promise of a report');
+  assert.match(src, /was never started/, 'the plan is named as the record of what is running');
+  assert.match(src, /Keep Building off/, 'and the condition is named up front');
+  assert.match(read('src/plans.js'), /if the plan still says the task is todo, it never/, 'the brief says the same');
+});

@@ -1072,6 +1072,33 @@ export function briefSession({ dir, role = 'architect', auto = false, single = f
           `and carry on with the rows that are still open.`,
       );
     }
+    // A delegation the harness refused is silent by design (waking the Architect to
+    // say "stop" would start another turn it could delegate in). But the tool's
+    // reply says "Requested", not "running", and the plan is the record: without
+    // this line the Architect's own transcript ends on a delegate call it answered
+    // "Queued", and it tells the operator "it is already running" (8 Nov).
+    const refused = ledger.filter((r) => r.kind === 'delegate' && r.outcome && r.outcome !== 'completed').pop();
+    const startedAfter = refused
+      ? ledger.some((r) => r.kind === 'delegate' && !r.outcome && Number(r.at) >= Number(refused.at))
+      : false;
+    if (isArchitect && refused && !startedAfter) {
+      const open = (state.plan?.tasks || []).find((t) => t.id === refused.task && t.status === 'todo');
+      if (open) {
+        const why =
+          refused.outcome === 'keep-building-off'
+            ? 'Keep Building is off and the operator had not asked for work since the last report'
+            : refused.outcome === 'stopped-by-operator'
+              ? 'the operator stopped the run'
+              : refused.outcome === 'single-mode'
+                ? 'Single mode does not delegate'
+                : 'the harness refused it';
+        lines.push(
+          `${refused.task} was delegated but never started: ${why}. Nothing is running and it is still ` +
+            `todo - the delegate reply was a request, not a start. When the operator says go on, delegate ` +
+            `it again.`,
+        );
+      }
+    }
   } catch { /* a run log we cannot read is not a reason to fail the brief */ }
   lines.push(
     isArchitect
@@ -1439,7 +1466,9 @@ export function briefSession({ dir, role = 'architect', auto = false, single = f
             `dependencies are done. Continue until every task is done or one is blocked - do not stop to ` +
             `ask between tasks.`
         : `Keep building is OFF: run one task at a time. After a report, judge it and stop, waiting for ` +
-            `the operator to say go on.`,
+            `the operator to say go on. The operator's message is the go. A delegation is only started if ` +
+            `they have spoken since the last report: if the plan still says the task is todo, it never ` +
+            `started - delegate it on their word, do not assume it is running.`,
     );
     lines.push(
       `Write paths inside the file with forward slashes (bin/, src/) so the JSON stays valid, ` +

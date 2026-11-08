@@ -23,7 +23,8 @@ const TOOL = {
     'Hand one task of the project plan to the role that owns it, and let that role do the work. ' +
     'Call it once per task, using the task id from the plan file, and then stop: the task runs ' +
     'asynchronously in its own session on that role\'s own model, and you will be told the outcome ' +
-    'in a later message. Never mark a delegated task done yourself — wait for the report, judge it, ' +
+    'in a later message — unless the harness refused to start it, in which case no report comes and ' +
+    'the task stays todo. Never mark a delegated task done yourself — wait for the report, judge it, ' +
     'and only then update the plan.',
   inputSchema: {
     type: 'object',
@@ -92,12 +93,21 @@ async function handle(msg) {
         );
       }
       process.stderr.write(`delegate ${task}${args.note ? ' (with a note)' : ''}\n`);
+      // The harness decides whether it starts when this turn ends, not this tool:
+      // with Keep Building off it refuses silently rather than waking the Architect
+      // to say stop. So the reply promises nothing it cannot keep — an earlier
+      // "Queued… you will be told" left the Architect believing a refused task was
+      // running, and the operator's "continue" was answered with "it is already
+      // running" (8 Nov).
       return toolText(
         id,
-        `Queued: ${task}.\n` +
-          `It runs in its own session, on the model configured for its role (${ROLES.join(', ')}). ` +
-          `You will be told the outcome when it finishes — do not wait, do not do the work yourself, ` +
-          `and do not change the task's status until you have the report.`,
+        `Requested: ${task}.\n` +
+          `The harness starts it after this turn ends, on the model configured for its role ` +
+          `(${ROLES.join(', ')}), if the mode and the switches allow it. With Keep Building off that ` +
+          `means the operator has asked for work since the last report; if it does not start, no report ` +
+          `comes and the task stays in the plan. A task the plan still shows as todo was never started — ` +
+          `delegate it again when the operator says go on. Do not do the work yourself, and do not mark ` +
+          `the task done: the report is the only thing that ends it.`,
       );
     }
 
