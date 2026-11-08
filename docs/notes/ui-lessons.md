@@ -1847,9 +1847,8 @@ keyboard plays screen-in — four bright, thin notes rising, a toy-piano timbre 
 over in four tenths of a second; giving them back plays screen-out, the same four
 falling. They are not in the finished-work dropdown because they are not that sound:
 the chime means the job is done, these mean the machine is borrowed or returned. One
-checkbox (
-otify.screenSounds, on by default) turns the pair off and leaves the badge
-and the toast, which say the same thing in words.
+checkbox — **AI screen usage alerts** (`notify.screenSounds`, on by default) — turns the
+pair off and leaves the badge and the toast, which say the same thing in words.
 
 The generator had one bug worth its note: the envelope is `(1 − e^(−t/attack)) · e^(−t/tau)`,
 which is **exactly zero at t = 0**, so a loop that stops when the envelope falls below 1e-4

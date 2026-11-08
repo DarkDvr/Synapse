@@ -998,6 +998,21 @@ async function shutdown(signal, code = 0) {
 
 process.on('SIGINT', () => shutdown('SIGINT'));
 process.on('SIGTERM', () => shutdown('SIGTERM'));
+// The console is a pipe the shell owns, and it closes it when it stops this server.
+// A log line written into the closed pipe raises EPIPE, which arrived here as an
+// uncaught exception at every restart ("broken pipe, write"). Nobody is listening by
+// then and the file log already has the line, so the pipe's error is swallowed; a
+// real console failure is logged instead of thrown (8 Nov).
+for (const stream of [process.stdout, process.stderr]) {
+  stream.on('error', (err) => {
+    if (err?.code === 'EPIPE') return;
+    try {
+      logger.channel('app').warn(`console write failed: ${err.message}`);
+    } catch {
+      /* the logger has nowhere left to write either */
+    }
+  });
+}
 process.on('uncaughtException', (err) => logger.channel('app').error(`uncaught exception: ${err.stack || err.message}`));
 process.on('unhandledRejection', (reason) => logger.channel('app').error(`unhandled rejection: ${reason}`));
 

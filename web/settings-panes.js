@@ -319,7 +319,7 @@ function settingsGeneral(c) {
         `<button type="button" class="btn btn-secondary btn-sm" data-test-sound>Play It</button></div>` +
         setCheck(
           c,
-          'Screen sounds',
+          'AI screen usage alerts',
           'notify.screenSounds',
           'A rising chime when the AI takes your mouse and keyboard, a falling one when it gives them back. Off leaves the badge and the toast, which say the same thing in words.',
         ),

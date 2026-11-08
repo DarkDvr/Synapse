@@ -122,7 +122,7 @@ test('the screen sounds exist, are quiet, and have one switch', () => {
   // One checkbox, in the same group as the finished-work sound.
   const panes = read('web/settings-panes.js');
   assert.match(panes, /'notify\.screenSounds'/, 'the switch is in Settings');
-  assert.match(panes, /setCheck\(\s*c,\s*'Screen sounds'/, 'it is a single checkbox');
+  assert.match(panes, /setCheck\(\s*c,\s*'AI screen usage alerts'/, 'it is a single checkbox');
   assert.match(ui(), /playSound\('screen-in'\)/, 'taking the screen rises');
   assert.match(ui(), /playSound\('screen-out'\)/, 'releasing it falls');
   assert.match(ui(), /notify\?\.screenSounds !== false/, 'and the switch is read before playing');
