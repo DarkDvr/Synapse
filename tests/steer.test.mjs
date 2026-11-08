@@ -428,7 +428,7 @@ test('a steer is pinned in the trace, centred and bright', () => {
   assert.match(app, /const steps = notes\.filter\(\(n\) => !isSteer\(n\)\)/);
   assert.match(app, /const steers = notes\.filter\(isSteer\)/);
   assert.match(app, /const pinned = .*steers\.map\(note\)\.join/);
-  assert.match(app, /\$\{reasonFolds\}\$\{pinned\}\$\{streaming\}/);
+  assert.match(app, /const body = `\$\{timeline\}\$\{pinned\}\$\{streaming\}`/);
   assert.match(app, /trace-steer-text/);
   assert.match(css, /\.trace-line\.is-steer \{[^}]*align-items: center/);
   assert.match(css, /\.trace-line\.is-steer \{[^}]*white-space: normal/);

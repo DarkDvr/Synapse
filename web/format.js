@@ -161,5 +161,5 @@ export function reasoningGist(text, max = 110) {
   const end = flat.search(/[.!?](?:\s|$)/);
   const first = end > 0 ? flat.slice(0, end + 1) : flat;
   const gist = first.length > max ? `${first.slice(0, max - 1).trimEnd()}…` : first;
-  return `Reasoning · ${gist}`;
+  return `Reasoning • ${gist}`;
 }

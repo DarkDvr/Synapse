@@ -506,6 +506,7 @@ export function handleRunEvent(ev) {
         // The picture rides the line: the runner saved it in the project, so the
         // chip names the file and the same hover that shows any attachment shows it.
         trace.notes.push({
+          at: Date.now(),
           steer: true,
           text: line,
           ...(Array.isArray(ev.files) && ev.files.length ? { files: ev.files } : {}),
@@ -576,6 +577,7 @@ export function handleRunEvent(ev) {
         // one-line card; `text` is the floor when the operator turns the cards off
         // (ui.workerCards), and the archive/fold helpers read it either way.
         trace.notes.push({
+          at: Date.now(),
           text: line,
           tool: { name: String(run.tool.name || ''), target: String(run.tool.target || '') },
         });

@@ -109,15 +109,10 @@ export function renderTrace(t) {
   // line, and when there is no panel those lines are simply the bottom.
   const isSteer = (n) => typeof n === 'object' && n?.steer === true;
   const steps = notes.filter((n) => !isSteer(n));
-  const cut = Math.max(0, steps.length - 4);
-  const tail = steps.slice(cut);
-  const older = steps.slice(0, cut);
   const steers = notes.filter(isSteer);
-  const archive = older.length
-    ? `<details class="trace-archive"><summary>${older.length} earlier step${older.length === 1 ? '' : 's'}</summary>${older
-        .map(note)
-        .join('')}</details>`
-    : '';
+  const cut = Math.max(0, steps.length - 4);
+  const olderSteps = steps.slice(0, cut);
+  const tail = steps.slice(cut);
   // What it is saying *now*. The words stream in as they are written, and the last
   // window stays on screen when the step ends — still, and dimmed. Removing it took
   // eleven lines out of the chat and put them back at every step boundary, which a
@@ -140,13 +135,35 @@ export function renderTrace(t) {
   const reasonFold = (r) =>
     `<details class="reasoning is-trace" data-k="${esc(t.key)}:r${Number(r.at) || 0}">` +
     `<summary>${esc(reasoningGist(r.text))}</summary><pre>${esc(r.text)}</pre></details>`;
-  const reasonFolds =
-    (olderReasons.length
-      ? `<details class="reasoning is-trace is-archive" data-k="${esc(t.key)}:older">` +
+  // Steps and thinking are one timeline: a tool call belongs between the thought
+  // that asked for it and the thought after it. They used to be two lists — every
+  // tool line above every fold — so a long run read as "all the tools, then all the
+  // thinking" (8 Nov). Each entry carries its own `at`; an entry without one sorts
+  // first, which is where its line already was.
+  const when = (x) => Number(x?.at) || 0;
+  const entries = [];
+  if (olderSteps.length) {
+    entries.push({
+      at: when(olderSteps[0]),
+      html:
+        `<details class="trace-archive"><summary>${olderSteps.length} earlier step${olderSteps.length === 1 ? '' : 's'}</summary>` +
+        `${olderSteps.map(note).join('')}</details>`,
+    });
+  }
+  if (olderReasons.length) {
+    entries.push({
+      at: when(olderReasons[0]),
+      html:
+        `<details class="reasoning is-trace is-archive" data-k="${esc(t.key)}:older">` +
         `<summary>${olderReasons.length} earlier reasoning</summary>` +
         olderReasons.map((r) => `<pre>${esc(r.text)}</pre>`).join('') +
-        `</details>`
-      : '') + recentReasons.map(reasonFold).join('');
+        `</details>`,
+    });
+  }
+  for (const n of tail) entries.push({ at: when(n), html: note(n) });
+  for (const r of recentReasons) entries.push({ at: when(r), html: reasonFold(r) });
+  entries.sort((a, b) => a.at - b.at || (a.html < b.html ? -1 : a.html > b.html ? 1 : 0));
+  const timeline = entries.map((e) => e.html).join('');
   // A compaction line is pinned: the four-line tail is for steps, and this is not
   // a step — it is the reason the next step is slower and the window is empty
   // again. It stays for the whole run, and the folded summary counts it.
@@ -186,7 +203,7 @@ export function renderTrace(t) {
   // steer what is happening *now*, so they sit just above the panel — and at the
   // bottom of the trace when no panel is showing.
   const pinned = `${compactLine}${loopLine}${steers.map(note).join('')}`;
-  const body = `${archive}${tail.map(note).join('')}${reasonFolds}${pinned}${streaming}`;
+  const body = `${timeline}${pinned}${streaming}`;
   const rest = [t.task, t.title].filter(Boolean).join(' · ');
   if (!t.finishedAt) {
     return `<div class="trace is-live" data-trace="${esc(t.key)}">

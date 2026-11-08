@@ -1430,7 +1430,7 @@ body[data-mode="single"] #runAuto { display: none; }
   border-left: 2px solid #3a3d43; padding-left: 10px;
 }
 .trace-head, .trace summary {
-  font-size: calc(var(--chat-fs) * 0.76); font-weight: 400; letter-spacing: 0.02em;
+  font-size: calc(var(--chat-fs) * 0.85); font-weight: 400; letter-spacing: 0.02em;
   color: #8b8f97;
 }
 /* The role wears the Architect's own header type — upper case, spaced, bold — in
@@ -1443,7 +1443,7 @@ body[data-mode="single"] #runAuto { display: none; }
 .trace-tool { display: flex; align-items: baseline; gap: 6px; min-width: 0; font-size: calc(var(--chat-fs) * 0.92); line-height: 1.45; color: #8b8f97; }
 .trace-tool .tool-name { font-weight: 600; color: #a9adb5; flex: none; }
 .trace-tool .tool-target { color: #7d828a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
-.trace-tool .status-dot { flex: none; }
+.trace-tool .status-dot { flex: none; width: 5px; height: 5px; box-shadow: 0 0 0 2px rgba(53, 192, 138, 0.14); }
 /* The worker's own words, in the chat's answer type: same markdown, same size, one
    step dimmer than the Architect's. The paragraph is the step's speech, so it sits
    with the tool lines rather than in a panel of its own (8 Nov). Tighter leading and
@@ -1457,7 +1457,7 @@ body[data-mode="single"] #runAuto { display: none; }
 .trace-head, .trace summary { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .trace summary { cursor: pointer; list-style: none; }
 .trace summary::-webkit-details-marker { display: none; }
-.trace summary::before { content: '▸ '; font-size: calc(var(--chat-fs) * 0.72); }
+.trace summary::before { content: '▸ '; font-size: 1.44em; vertical-align: -0.06em; }
 .trace[open] summary::before { content: '▾ '; }
 .trace summary:hover { color: var(--muted); }
 /* The trace is a flex column, so each child is a flex item with `min-width: auto` —
@@ -1577,7 +1577,7 @@ body[data-mode="single"] #runAuto { display: none; }
   font-size: calc(var(--chat-fs) * 0.8); color: #6a6f77; letter-spacing: 0.04em;
 }
 .trace-archive > summary::-webkit-details-marker { display: none; }
-.trace-archive > summary::before { content: '▸ '; font-size: calc(var(--chat-fs) * 0.72); }
+.trace-archive > summary::before { content: '▸ '; font-size: 1.44em; vertical-align: -0.06em; }
 .trace-archive[open] > summary::before { content: '▾ '; }
 .trace-archive > summary:hover { color: var(--muted); }
 /* The live rule breathes, the way the sidebar's live dot does: something is
@@ -1731,7 +1731,7 @@ body[data-mode="single"] #runAuto { display: none; }
   font-size: calc(var(--chat-fs) * 0.96); white-space: pre-wrap; overflow-wrap: anywhere;
 }
 
-.reasoning { margin: 5px 0; }
+.reasoning { margin: 3px 0; }
 .reasoning summary {
   cursor: pointer; color: var(--muted); font-size: calc(var(--chat-fs) * 0.92); list-style: none;
   /* One font for reasoning everywhere: the chat's own. A fold inside a trace used to
@@ -1748,13 +1748,13 @@ body[data-mode="single"] #runAuto { display: none; }
   text-transform: none;
 }
 .reasoning summary::-webkit-details-marker { display: none; }
-.reasoning summary::before { content: "▸ "; color: #6d717a; }
+.reasoning summary::before { content: "▸ "; color: #6d717a; font-size: 1.44em; vertical-align: -0.06em; }
 .reasoning[open] summary::before { content: "▾ "; }
 /* The opened text is the reason the scrolling panel already looks the way it does:
    the same font, size, colour, italics and line spacing as the panel, with no box of
    its own. One look for reasoning, whether it is arriving or read back (8 Nov). */
 .reasoning pre {
-  margin: 4px 0 0; padding: 0; border: 0; border-radius: 0;
+  margin: 4px 0 0 20px; padding: 0; border: 0; border-radius: 0;
   background: none;
   font-family: inherit; font-size: calc(var(--chat-fs) * 0.92); line-height: 1.45;
   color: #6a6f77; font-style: italic;
@@ -1767,7 +1767,7 @@ body[data-mode="single"] #runAuto { display: none; }
 .reasoning.is-archive pre { margin-top: 6px; }
 /* A worker's completed thinking, folded inside its trace: the chat's fold exactly,
    only its margin tighter — the trace is already a panel. */
-.reasoning.is-trace { margin: 3px 0; }
+.reasoning.is-trace { margin: 2px 0; }
 
 /* tool calls: one compact line until you ask for the detail. Kept deliberately
    short vertically — a busy turn emits dozens of them, so the dot, the type and

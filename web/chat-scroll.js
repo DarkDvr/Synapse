@@ -285,7 +285,7 @@ export function endStream() {
     // the same markdown as an Architect answer, behind the same switch.
     const text = String(stream.text || '').trim();
     if (text) {
-      trace.notes.push({ text, prose: true });
+      trace.notes.push({ at: Date.now(), text, prose: true });
       if (trace.notes.length > 60) trace.notes.splice(0, trace.notes.length - 60);
     }
     trace.stream = null;

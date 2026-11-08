@@ -20,10 +20,10 @@ const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
 test('a fold carries the first sentence, flattened and clipped', () => {
   assert.equal(
     reasoningGist('The menu is drawn by MainWindow. I should move it into its own file.'),
-    'Reasoning · The menu is drawn by MainWindow.',
+    'Reasoning • The menu is drawn by MainWindow.',
   );
   // Newlines and runs of spaces are one line, because the summary is one line.
-  assert.equal(reasoningGist('First line\n\n  second   line'), 'Reasoning · First line second line');
+  assert.equal(reasoningGist('First line\n\n  second   line'), 'Reasoning • First line second line');
   // A block with no sentence end is clipped with an ellipsis, on the same line.
   const long = reasoningGist('word '.repeat(60));
   assert.ok(long.length <= 122, `${long.length} characters`);
@@ -101,7 +101,7 @@ test('a finished worker step folds into one line in its trace', () => {
     notes: [],
   });
   assert.match(html, /class="reasoning is-trace"/);
-  assert.match(html, /Reasoning · The bar is drawn by Taskbar\.cs\./);
+  assert.match(html, /Reasoning • The bar is drawn by Taskbar\.cs\./);
   assert.match(html, /<pre>The bar is drawn by Taskbar\.cs\./);
   assert.match(html, /data-k="k:r5"/, 'the fold remembers whether it was opened');
 });
@@ -214,4 +214,25 @@ test('the delegate receipt does not promise a run it cannot guarantee', () => {
   assert.match(src, /was never started/, 'the plan is named as the record of what is running');
   assert.match(src, /Keep Building off/, 'and the condition is named up front');
   assert.match(read('src/plans.js'), /if the plan still says the task is todo, it never/, 'the brief says the same');
+});
+
+test('a tool call sits between the thoughts that surround it', () => {
+  const html = renderTrace({
+    key: 'k', role: 'coder-1', task: 't12', startedAt: 1,
+    notes: [
+      { at: 10, text: 'read MainWindow.xaml.cs', tool: { name: 'read', target: 'MainWindow.xaml.cs' } },
+      { at: 30, text: 'read Autostart.cs', tool: { name: 'read', target: 'Autostart.cs' } },
+    ],
+    reasons: [
+      { text: 'First I need the window code.', at: 5 },
+      { text: 'Now the older half of the file.', at: 20 },
+      { text: 'The startup shortcut lives here.', at: 40 },
+    ],
+    stream: null,
+  });
+  const at = (s) => html.indexOf(s);
+  assert.ok(at('First I need the window code.') < at('MainWindow.xaml.cs'), 'thought before its call');
+  assert.ok(at('MainWindow.xaml.cs') < at('Now the older half of the file.'), 'call before the next thought');
+  assert.ok(at('Now the older half of the file.') < at('Autostart.cs'), 'and the second call after it');
+  assert.ok(at('Autostart.cs') < at('The startup shortcut lives here.'), 'closing thought last');
 });
