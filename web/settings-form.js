@@ -39,9 +39,9 @@ export function setSelect(c, label, path, options, opts = {}) {
     </label>`;
 }
 
-export const setCheck = (c, label, path, hint = '') => `
+export const setCheck = (c, label, path, hint = '', on) => `
     <label class="set-check" title="${esc(hint)}">
-      <input data-path="${path}" type="checkbox" ${readPath(c, path) ? 'checked' : ''} />
+      <input data-path="${path}" type="checkbox" ${(on ?? readPath(c, path)) ? 'checked' : ''} />
       <span>${esc(label)}</span>
     </label>`;
 

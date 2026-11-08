@@ -61,6 +61,16 @@ export function forgetConversation(dir, oldSessionId) {
 export function renderTrace(t) {
   const name = roleLabel(t.role);
   const head = [name, t.task, t.title].filter(Boolean);
+  // A tool call drawn the way the Architect draws one: a dot, the tool, its target
+  // on one line, with the whole command in the tooltip. The switch is
+  // `ui.workerCards`; off returns the plain note the trace used to show (8 Nov).
+  const cardsOn = () => state.config?.ui?.workerCards !== false;
+  const toolLine = (tool, fallback) => {
+    const name = String(tool?.name || '').trim();
+    const target = String(tool?.target || '').trim() || fallback;
+    if (!name) return `<div class="trace-line">${esc(fallback)}</div>`;
+    return `<div class="trace-tool" title="${esc(target)}"><span class="status-dot ok" role="img" aria-label="tool call"></span><span class="tool-name">${esc(name)}</span><span class="tool-target">${esc(target)}</span></div>`;
+  };
   const note = (n) => {
     const text = typeof n === 'string' ? n : String(n?.text || '');
     const steer = typeof n === 'object' && n?.steer === true;
@@ -76,6 +86,7 @@ export function renderTrace(t) {
       const chips = files.map((f) => fileChip(f, { src: f.path })).join('');
       return `<div class="trace-line is-steer"><span class="msg-steer">STEER:</span><span class="trace-steer-text">${esc(text)}</span>${chips}</div>`;
     }
+    if (cardsOn() && n?.tool) return toolLine(n.tool, text);
     return `<div class="trace-line">${esc(text)}</div>`;
   };
   const notes = t.notes || [];
@@ -169,9 +180,10 @@ export function renderTrace(t) {
   // bottom of the trace when no panel is showing.
   const pinned = `${compactLine}${loopLine}${steers.map(note).join('')}`;
   const body = `${archive}${tail.map(note).join('')}${reasonFolds}${pinned}${streaming}`;
+  const rest = [t.task, t.title].filter(Boolean).join(' · ');
   if (!t.finishedAt) {
     return `<div class="trace is-live" data-trace="${esc(t.key)}">
-      <div class="trace-head" title="${esc(head.join(' · '))}">${esc(head.join(' · '))}</div>
+      <div class="trace-head" title="${esc(head.join(' · '))}"><span class="trace-role">${esc(name)}</span>${rest ? esc(` · ${rest}`) : ''}</div>
       <div class="trace-lines">${body || '<div class="trace-line">starting…</div>'}</div>
     </div>`;
   }
@@ -188,7 +200,7 @@ export function renderTrace(t) {
   // not what. It ellipsizes when the column is short, and the tooltip has the lot.
   const foldHead = [name, t.task, t.title].filter(Boolean).join(' · ');
   return `<details class="trace is-fold" data-trace="${esc(t.key)}">
-    <summary title="${esc(foldHead)}">${esc(foldHead)}${took}${written}${packedNote}${loopedNote}${steeredNote}</summary>
+    <summary title="${esc(foldHead)}"><span class="trace-role">${esc(name)}</span>${rest ? esc(` · ${rest}`) : ''}${took}${written}${packedNote}${loopedNote}${steeredNote}</summary>
     <div class="trace-lines">${body}</div>
   </details>`;
 }

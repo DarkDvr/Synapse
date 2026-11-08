@@ -11,6 +11,8 @@ import { fileURLToPath } from 'node:url';
 
 import { reasoningGist } from '../web/format.js';
 import { renderTrace } from '../web/traces.js';
+import { state } from '../web/state.js';
+import { normalize } from '../src/config.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
@@ -151,4 +153,34 @@ test('a steer and a compaction sit just above the live reasoning', () => {
     stream: null,
   });
   assert.ok(quiet.lastIndexOf('STEER:') > quiet.indexOf('class="reasoning is-trace"'));
+});
+
+// The worker's tool calls are drawn as the Architect's one-line cards, and one
+// switch puts the old plain line back. Rendered from the same notes either way.
+test('a worker tool note is a card, and the switch brings the old line back', () => {
+  const trace = {
+    key: 'k',
+    role: 'coder-1',
+    task: 't11',
+    startedAt: 1,
+    notes: [{ text: 'shell cd .\\sysmoninor; .\\probe.exe', tool: { name: 'shell', target: 'cd .\\sysmoninor; .\\probe.exe' } }],
+  };
+  state.config = { ui: { workerCards: true } };
+  const on = renderTrace(trace);
+  assert.match(on, /class="trace-tool"/);
+  assert.match(on, /<span class="tool-name">shell<\/span>/);
+  assert.match(on, /class="trace-role">Coder 1</, 'the role is the bright word in the head');
+
+  state.config = { ui: { workerCards: false } };
+  const off = renderTrace(trace);
+  assert.doesNotMatch(off, /class="trace-tool"/);
+  assert.match(off, /class="trace-line">shell cd/);
+  state.config = null;
+});
+
+test('the worker-card switch is on unless it was turned off', () => {
+  assert.equal(normalize({}).ui.workerCards, true);
+  assert.equal(normalize({ ui: { workerCards: false } }).ui.workerCards, false);
+  assert.equal(normalize({ ui: { workerCards: 'off' } }).ui.workerCards, true);
+  assert.match(read('web/settings-panes.js'), /'ui\.workerCards'/, 'the switch is in Settings');
 });

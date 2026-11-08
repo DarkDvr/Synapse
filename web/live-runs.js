@@ -564,14 +564,21 @@ export function handleRunEvent(ev) {
       // engine reports the target a moment after the call starts.
       const said = runPhrase(run.tool);
       const last = trace.notes[trace.notes.length - 1];
-      const lastText = typeof last === 'string' ? last : '';
+      const lastText = typeof last === 'string' ? last : String(last?.text || '');
       const generic = !String(run.tool.target || '').trim();
       const repeated = generic && lastText && lastText.split(' ')[0] === said.split(' ')[0];
       // A shell note carries the whole command, quotes and all. One line of the
       // trace is not the place to read it; the card's tooltip and the report are.
       const line = said.length > 300 ? `${said.slice(0, 299)}…` : said;
-      if (!repeated && !trace.notes.includes(line)) {
-        trace.notes.push(line);
+      const seen = trace.notes.some((n) => (typeof n === 'string' ? n : n?.text) === line);
+      if (!repeated && !seen) {
+        // The tool object rides the note so the trace can draw the Architect's
+        // one-line card; `text` is the floor when the operator turns the cards off
+        // (ui.workerCards), and the archive/fold helpers read it either way.
+        trace.notes.push({
+          text: line,
+          tool: { name: String(run.tool.name || ''), target: String(run.tool.target || '') },
+        });
         if (trace.notes.length > 60) trace.notes.splice(0, trace.notes.length - 60);
       }
       // The step is over: whatever it was saying belonged to the step that just

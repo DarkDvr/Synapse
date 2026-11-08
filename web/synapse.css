@@ -1430,9 +1430,17 @@ body[data-mode="single"] #runAuto { display: none; }
   border-left: 2px solid #3a3d43; padding-left: 10px;
 }
 .trace-head, .trace summary {
-  font-size: calc(var(--chat-fs) * 0.76); font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+  font-size: calc(var(--chat-fs) * 0.76); font-weight: 600; letter-spacing: 0.02em;
   color: #6f747c;
 }
+/* The role is the one bright word in a trace head: the same weight the Architect's
+   name carries, so one speaker grammar covers both (8 Nov). */
+.trace-role { color: #c6cad1; font-weight: 700; }
+/* A worker's tool call in the Architect's card vocabulary, flat: dot, name, target. */
+.trace-tool { display: flex; align-items: baseline; gap: 6px; min-width: 0; font-size: calc(var(--chat-fs) * 0.92); line-height: 1.45; color: #8b8f97; }
+.trace-tool .tool-name { font-weight: 600; color: #a9adb5; flex: none; }
+.trace-tool .tool-target { color: #7d828a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.trace-tool .status-dot { flex: none; }
 /* One line, cut where the column ends: the fold's whole job is to be small. */
 .trace-head, .trace summary { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .trace summary { cursor: pointer; list-style: none; }

@@ -140,6 +140,10 @@ export const DEFAULTS = {
   ui: {
     chatTextPx: 12.5,
     language: 'en',
+    // A worker's tool calls drawn as the same one-line cards the Architect uses.
+    // Off returns the old plain-text note; it is a rendering switch, so changing it
+    // takes effect on the next render, not a restart.
+    workerCards: true,
   },
   // Turning the machine off when the Architect has finished and said so. Off by
   // default, because a PC going down is the one action Synapse must never take on
@@ -353,6 +357,9 @@ export function normalize(raw) {
       ? Math.min(CHAT_TEXT_MAX, Math.max(CHAT_TEXT_MIN, Math.round(n * 2) / 2))
       : DEFAULTS.ui.chatTextPx;
   }
+  // A worker's tool calls drawn as the same one-line cards the Architect uses;
+  // off returns the plain-text note. On unless the operator turned it off.
+  cfg.ui.workerCards = cfg.ui.workerCards !== false;
   // The language list holds English only until a translation exists: an unknown
   // value falls back rather than leaving the page asking for strings that do not
   // exist.

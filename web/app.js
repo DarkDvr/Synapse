@@ -1071,6 +1071,10 @@ function connectStream() {
         renderStatus();
         renderKeep();
         schedulePermissionRender();
+        // A save can change how the transcript is drawn — the worker tool cards are
+        // one — and a rendering switch that waits for the next event looks broken on
+        // a quiet project (8 Nov).
+        renderTranscript();
       }
       return;
     }

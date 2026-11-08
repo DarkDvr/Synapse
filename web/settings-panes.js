@@ -301,6 +301,13 @@ function settingsGeneral(c) {
             value: String(readPath(c, 'ui.language') || 'en'),
             hint: 'English for now; Russian is planned. Model output is never translated — it answers in the language you write to it.',
           },
+        ) +
+        setCheck(
+          c,
+          'Worker tool cards',
+          'ui.workerCards',
+          "Draw a worker's tool calls as the same one-line cards the Architect uses, instead of a plain grey sentence. Off restores the old notes; the switch takes effect on the next render.",
+          readPath(c, 'ui.workerCards') !== false,
         ),
       undefined,
       'Scales the whole conversation, headings and code included. The smallest that still reads is ' +
