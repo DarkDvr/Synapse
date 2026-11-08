@@ -149,7 +149,12 @@ public sealed class ConsoleStore : IDisposable
         {
             if (File.Exists(_path))
             {
-                var old = _path + ".1";
+                // `.1.log`, not `.log.1`: the rest of the log folder is `app.1.log`
+                // and `debug.1.log`, and one file sorted under "1" instead of
+                // "log" breaks every listing that looks for *.log (8 Nov).
+                var old = _path.EndsWith(".log", StringComparison.OrdinalIgnoreCase)
+                    ? _path[..^4] + ".1.log"
+                    : _path + ".1";
                 if (File.Exists(old)) File.Delete(old);
                 File.Move(_path, old);
             }

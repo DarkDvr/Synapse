@@ -33,8 +33,7 @@ Two things mirror it and are bumped in the same commit:
 - `shell/Synapse.csproj` `<Version>` — the exe's file properties.
 - `README.md` — the line under the title.
 
-`make-deliverable.ps1` stamps the travel copy's README and zip from
-`package.json`, so a released folder and its source cannot disagree.
+That is the whole list: `version.test.mjs` fails when the three disagree.
 
 ## The release checklist
 

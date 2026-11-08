@@ -243,15 +243,12 @@ with the **.NET 10 Desktop Runtime**, which is the one thing it does not install
 itself. The exe is a small framework-dependent app on purpose; when the runtime is
 missing, Windows says so before Synapse has run a line.
 
-For a copy that can leave this machine — no `data\`, `logs\`, projects, provider
-keys, tests, docs, references, shell sources or git history — run
-`create_deliverable.bat`. It prompts for a destination (or takes one as its first
-argument). It refuses the Synapse folder, anything inside it, any folder that
-contains it, and the projects root. The PowerShell worker stages the copy beside
-the destination and replaces an existing folder only when that folder carries its
-own `.synapse-deliverable` marker and the operator confirms; it has no `rmdir` for
-anything else. The destination is the only thing it writes, and the staging folder
-is removed only on success.
+Two ways a copy leaves this machine, and they are different things. **The release
+zip** (`make-release.ps1`, published with each version) is the program: `Synapse.exe`,
+`package.json`, the updater, `src\`, `web\`, `skills\` and the seed config — no `data\`,
+no `logs\`, no projects, no keys, no tests, no docs, no git. **Copying the folder**
+moves everything, including this machine's answers, which is what makes it a clone
+rather than a delivery.
 
 The rule that makes the rest true: **a path that names a place on this machine is a
 hint, never an instruction.** The config and the runtime state travel with the folder,

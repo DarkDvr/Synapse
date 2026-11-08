@@ -115,10 +115,10 @@ the cards and the commits, not the code. One reason per sentence, not a chain.
 
 `package.json` holds `major.minor.patch` (fix = patch, feature = minor, break = major).
 **Finished work is delivered, not left local**: when it passes the suite and no real run
-is live, bump the version, commit, tag `vX.Y.Z`, and push `main` and the tag — do not
-wait to be asked. A minor or major also gets a GitHub release with the zip and
-`SHA256SUMS` (`docs/notes/releases.md`). A commit that stays local is not delivered: the
-operator reads the version to know which build is answering.
+is live, bump, commit, tag `vX.Y.Z`, and push `main` and the tag — do not wait to be
+asked; the version is how the operator knows which build is answering. **A GitHub
+release is their call** (`docs/notes/releases.md`): the zip, `SHA256SUMS` and the
+release page happen only when they ask. The push is not the release.
 
 **Then restart the whole app**: stop it, launch `Synapse.exe` — window, tray and server. A
 server-only restart leaves the page on the old build; check the version.
