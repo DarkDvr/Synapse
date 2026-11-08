@@ -297,7 +297,8 @@ function pumpStream(now) {
       lastChatTop = scroller.scrollTop;
     }
   }
-  if (!s.settled || s.dirty) streamRaf = requestAnimationFrame(pumpStream);
+  const left = Math.abs((Number(s.target) || 0) - (Number(s.offset) || 0));
+  if (!s.settled || s.dirty || left > 0.5) streamRaf = requestAnimationFrame(pumpStream);
 }
 
 /**
@@ -311,8 +312,10 @@ function reserveIfFull(trace, s) {
   if (!trace || trace.reserved) return;
   if ((Number(s.target) || 0) <= 0.5) return;
   trace.reserved = true;
-  streamEl = null;
-  wired.renderTranscript();
+  // The class alone is enough: the view is the same height it already had, so
+  // rebuilding the transcript here (mid-frame, inside the pump) only killed the
+  // frame that was about to move the text.
+  streamEl?.mask.classList.add('is-reserved');
 }
 
 /**
@@ -406,6 +409,9 @@ export function restoreStreamView() {
   const scrolling = (Number(s.target) || 0) > 0.5;
   streamEl.scrolling = scrolling;
   streamEl.mask.classList.toggle('is-scrolling', scrolling);
+  // The render that rebuilt this node stopped the pump with the old frame; start it
+  // again so the restored offset eases to where the new text ends.
+  if (!streamRaf) streamRaf = requestAnimationFrame(pumpStream);
 }
 
 // ── scrolling: the transcript when it scrolls, the page when it does not ──

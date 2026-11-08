@@ -287,7 +287,7 @@ test('speech never takes the thinking pane', () => {
 
 test('the pane controls are visible', () => {
   const css = read('web/synapse.css');
-  assert.match(css, /\.think-toggle \{[^}]*font-size: calc\(var\(--chat-fs\) \* 1\.05\)/, 'the chevron is readable');
+  assert.match(css, /\.think-toggle \{[^}]*font-size: calc\(var\(--chat-fs\) \* 2\)/, 'the chevron is readable');
   assert.match(css, /\.trace-flow \{[^}]*border: 2px solid/, 'the pane border is 2px');
   assert.match(css, /streamEl\.scrolling|is-scrolling/, 'the fade still tracks overflow');
 });
