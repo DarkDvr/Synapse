@@ -266,18 +266,18 @@ const slug = (s) => String(s || '').trim().toLowerCase().replace(/[^a-z0-9._-]+/
 // the operator can look away while a long turn runs. The files are in web/sounds and
 // are ours (scripts/make-sounds.mjs); the names, and the rule for when a *gap* is not a
 // finish, live in ./notify.js so they can be tested without a browser.
-const doneAudio = new Map();
-/** Play the chosen sound once. Any failure is silence: a missing audio device or a
- *  browser that wants a gesture first must never surface as an error in the chat. */
-function playDoneSound(value = state.config?.notify?.doneSound) {
-  const name = doneSoundName(String(value ?? 'off'));
-  if (String(value ?? 'off') === 'off' || name === 'off') return;
+const soundCache = new Map();
+/** Play one file from `web/sounds` once. Any failure is silence: a missing audio
+ *  device, or a browser that wants a gesture first, must never surface as an error
+ *  in the chat. */
+function playSound(name) {
+  if (!name || name === 'off') return;
   try {
-    let el = doneAudio.get(name);
+    let el = soundCache.get(name);
     if (!el) {
       el = new Audio(`/sounds/${name}.wav`);
       el.preload = 'auto';
-      doneAudio.set(name, el);
+      soundCache.set(name, el);
     }
     // Rewind: two turns can end a few seconds apart, and a rewind before play is what
     // makes the second one audible instead of a no-op.
@@ -287,6 +287,12 @@ function playDoneSound(value = state.config?.notify?.doneSound) {
   } catch {
     /* silence */
   }
+}
+
+/** Play the chosen finished-work sound, if the operator wants one. */
+function playDoneSound(value = state.config?.notify?.doneSound) {
+  if (String(value ?? 'off') === 'off') return;
+  playSound(doneSoundName(String(value ?? 'off')));
 }
 
 // One chime per finished piece of work, and none for a stop or a failure: the sound
@@ -1083,11 +1089,19 @@ function connectStream() {
     if (ev.kind === 'desk') {
       state.desk = ev.desk || null;
       renderDesk();
+      // The lease has its own two sounds — rising when the AI takes the mouse and
+      // keyboard, falling when it gives them back — so the finished-work chime keeps
+      // its one meaning. Off with one checkbox (Settings → General → Screen sounds);
+      // the badge and the toast still say it in words.
+      if (state.config?.notify?.screenSounds !== false) {
+        if (ev.type === 'desk.taken') playSound('screen-in');
+        else if (ev.type === 'desk.released') playSound('screen-out');
+      }
       if (ev.type === 'desk.released') {
-        // No chime. It used to play one here as a "you can come back" signal, and
-        // the operator heard it mid-run and read it as the job being finished (7 Nov)
-        // — the same sound, two meanings. The chime is the finish and nothing else;
-        // the toast already says the screen is free.
+        // No finished-work chime here: it used to play one as a "you can come back"
+        // signal, and the operator heard it mid-run and read it as the job being
+        // finished (7 Nov) — the same sound, two meanings. The toast says the screen
+        // is free; the falling chime says the machine is theirs again.
         toast('Screen Released', 'The AI is not using your mouse or keyboard any more.');
       }
       return;

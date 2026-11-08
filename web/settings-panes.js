@@ -316,9 +316,15 @@ function settingsGeneral(c) {
         hint: 'Played when the chat you are looking at goes quiet after the Architect worked — its last words already on screen and nothing else running. Not on Stop, and not when the turn failed.',
       }) +
         `<div class="set-field" title="Hear the sound before you save it."><span>Preview</span>` +
-        `<button type="button" class="btn btn-secondary btn-sm" data-test-sound>Play It</button></div>`,
+        `<button type="button" class="btn btn-secondary btn-sm" data-test-sound>Play It</button></div>` +
+        setCheck(
+          c,
+          'Screen sounds',
+          'notify.screenSounds',
+          'A rising chime when the AI takes your mouse and keyboard, a falling one when it gives them back. Off leaves the badge and the toast, which say the same thing in words.',
+        ),
       undefined,
-      "Four short sounds, built into the app. Only the chat you are looking at chimes; a run elsewhere shows its dot in the rail.",
+      "Six short sounds, built into the app — four for finished work and two for the screen lease. Only the chat you are looking at chimes; a run elsewhere shows its dot in the rail.",
     ),
   ].join('');
 }

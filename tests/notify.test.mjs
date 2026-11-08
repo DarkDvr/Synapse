@@ -97,3 +97,33 @@ test('a WAV is served as audio, not as an opaque file', () => {
   // silence — the one symptom that looks exactly like "the setting does nothing".
   assert.match(read('src/server.js'), /'\.wav': 'audio\/wav'/);
 });
+
+// The screen lease has its own two sounds: rising when the AI takes the mouse and
+// keyboard, falling when it gives them back. They are not the finished-work chime and
+// must not be in its dropdown; one checkbox turns the pair off.
+test('the screen sounds exist, are quiet, and have one switch', () => {
+  for (const name of ['screen-in', 'screen-out']) {
+    const file = path.join(ROOT, 'web', 'sounds', `${name}.wav`);
+    assert.ok(fs.existsSync(file), `${name}.wav is in the folder`);
+    const buf = fs.readFileSync(file);
+    assert.equal(buf.toString('ascii', 0, 4), 'RIFF', `${name}: RIFF`);
+    const samples = (buf.length - 44) / 2;
+    const seconds = samples / buf.readUInt32LE(24);
+    assert.ok(seconds > 0.1 && seconds <= 1.5, `${name} lasts ${seconds.toFixed(2)}s — short`);
+    let peak = 0;
+    for (let i = 0; i < samples; i++) peak = Math.max(peak, Math.abs(buf.readInt16LE(44 + i * 2)));
+    const dbfs = 20 * Math.log10(peak / 32768);
+    assert.ok(dbfs < -10 && dbfs > -28, `${name} peaks at ${dbfs.toFixed(1)} dBFS — quiet, audible`);
+  }
+  // The pair is on by default, and only `false` turns it off.
+  assert.equal(normalize({}).notify.screenSounds, true);
+  assert.equal(normalize({ notify: { screenSounds: false } }).notify.screenSounds, false);
+  assert.equal(normalize({ notify: { screenSounds: 'off' } }).notify.screenSounds, true);
+  // One checkbox, in the same group as the finished-work sound.
+  const panes = read('web/settings-panes.js');
+  assert.match(panes, /'notify\.screenSounds'/, 'the switch is in Settings');
+  assert.match(panes, /setCheck\(\s*c,\s*'Screen sounds'/, 'it is a single checkbox');
+  assert.match(ui(), /playSound\('screen-in'\)/, 'taking the screen rises');
+  assert.match(ui(), /playSound\('screen-out'\)/, 'releasing it falls');
+  assert.match(ui(), /notify\?\.screenSounds !== false/, 'and the switch is read before playing');
+});

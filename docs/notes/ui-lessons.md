@@ -1842,6 +1842,15 @@ written by `scripts/make-sounds.mjs` into `web/sounds/`, which means they travel
 folder, play on a fresh PC, and carry no licence but ours. All are mono 16-bit, 0.3–1.2s,
 peaking between −14 and −18 dBFS: loud enough to notice, quiet enough to talk over.
 
+**The screen lease has its own pair, and its own switch.** Taking the mouse and
+keyboard plays screen-in — four bright, thin notes rising, a toy-piano timbre that is
+over in four tenths of a second; giving them back plays screen-out, the same four
+falling. They are not in the finished-work dropdown because they are not that sound:
+the chime means the job is done, these mean the machine is borrowed or returned. One
+checkbox (
+otify.screenSounds, on by default) turns the pair off and leaves the badge
+and the toast, which say the same thing in words.
+
 The generator had one bug worth its note: the envelope is `(1 − e^(−t/attack)) · e^(−t/tau)`,
 which is **exactly zero at t = 0**, so a loop that stops when the envelope falls below 1e-4
 stopped on the first sample and wrote three completely silent files. The check is

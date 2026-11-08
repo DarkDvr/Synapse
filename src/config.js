@@ -125,8 +125,13 @@ export const DEFAULTS = {
   },
   // The sound when the Architect has finished and said so. The files live in
   // web\sounds (see scripts\make-sounds.mjs); 'off' is a choice, not an absence.
+  // `screenSounds` is the pair for the screen lease — one rising when the AI takes
+  // the mouse and keyboard, one falling when it gives them back. They are not in
+  // the dropdown because they are not the finished-work chime: they mean a state
+  // change, and the badge and the toast say the same thing in words.
   notify: {
     doneSound: 'chime',
+    screenSounds: true,
   },
   // The interface's own choices. They do not touch the models or the work: the
   // chat's text size is the first, and it is a size in pixels because that is the
@@ -332,6 +337,9 @@ export function normalize(raw) {
   {
     const picked = String(cfg.notify.doneSound ?? '').trim();
     cfg.notify.doneSound = DONE_SOUNDS.includes(picked) ? picked : DEFAULTS.notify.doneSound;
+    // On unless the operator turned it off. A config from an older build has no key,
+    // and the pair is part of the feature, not an extra.
+    cfg.notify.screenSounds = cfg.notify.screenSounds !== false;
   }
   // The chat's text size. The whole transcript is drawn from this one number
   // (web/synapse.css multiplies its sizes by --chat-fs), so it is clamped here as

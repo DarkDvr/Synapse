@@ -142,8 +142,45 @@ function ripple() {
   return finish(buf, 0.13);
 }
 
+// ── the screen lease ────────────────────────────────────────────
+// A different job needs a different sound: these two say "the AI has your mouse and
+// keyboard" and "it has given them back", and the finished-work chime must never be
+// mistaken for either. Plastic on purpose — a thin, bright, very short note like a
+// toy piano key, so it reads as a state change and not as music.
+
+/** The "toy piano" voice: bright partials and a fast decay, no body. */
+const PLASTIC = [[1, 1], [2, 0.34], [3, 0.2], [4, 0.09], [5.4, 0.05]];
+
+/** Up: four notes, fast, rising. The screen is the AI's for now. */
+function screenIn() {
+  const len = seconds(0.42);
+  const buf = new Float32Array(len);
+  const notes = [
+    [0.0, 1046.5], // C6
+    [0.055, 1318.51], // E6
+    [0.11, 1567.98], // G6
+    [0.165, 2093.0], // C7
+  ];
+  for (const [at, f] of notes) add(buf, note(len, at, f, { amp: 0.9, tau: 0.075, attack: 0.002, harmonics: PLASTIC }));
+  return finish(buf, 0.17);
+}
+
+/** Down: the same four notes falling. The screen is yours again. */
+function screenOut() {
+  const len = seconds(0.52);
+  const buf = new Float32Array(len);
+  const notes = [
+    [0.0, 2093.0],
+    [0.06, 1567.98],
+    [0.12, 1318.51],
+    [0.18, 1046.5],
+  ];
+  for (const [at, f] of notes) add(buf, note(len, at, f, { amp: 0.85, tau: 0.1, attack: 0.002, harmonics: PLASTIC }));
+  return finish(buf, 0.15);
+}
+
 fs.mkdirSync(OUT, { recursive: true });
-for (const [name, make] of Object.entries({ chime, bell, wood, ripple })) {
+for (const [name, make] of Object.entries({ chime, bell, wood, ripple, 'screen-in': screenIn, 'screen-out': screenOut })) {
   const file = path.join(OUT, `${name}.wav`);
   const data = wav(make());
   fs.writeFileSync(file, data);
