@@ -11,8 +11,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-const MAX_PER_RUN = 12;
-const MAX_RUNS = 40;
+const MAX_PER_RUN = 24;
+const MAX_RUNS = 20;
 const MAX_TEXT = 20000;
 
 export function createTraceReasons(file, { log } = {}) {

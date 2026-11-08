@@ -266,7 +266,9 @@ export function endStream() {
   if (stream.kind === 'think' && trace !== state.sessionTrace) {
     const text = String(stream.text || '').trim();
     if (text) {
-      trace.reasons = [...(trace.reasons || []), { text, at: Date.now() }].slice(-12);
+      // Kept whole for the run: the trace draws the newest ten and folds the rest into
+      // one line, so the count in that line stays true (8 Nov).
+      trace.reasons = [...(trace.reasons || []), { text, at: Date.now() }];
       // Kept server-side too, so a reload and a second view show the same steps.
       api('POST', '/api/runs/reason', {
         dir: trace.dir,

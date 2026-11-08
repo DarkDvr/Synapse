@@ -103,3 +103,20 @@ test('a finished worker step folds into one line in its trace', () => {
   assert.match(html, /<pre>The bar is drawn by Taskbar\.cs\./);
   assert.match(html, /data-k="k:r5"/, 'the fold remembers whether it was opened');
 });
+
+test('a long run folds its early thinking into one line, like the chat', () => {
+  const reasons = Array.from({ length: 13 }, (_, i) => ({ text: `Thought number ${i} about the bar.`, at: i + 1 }));
+  const html = renderTrace({
+    key: 'k',
+    role: 'coder-1',
+    task: 't6',
+    startedAt: 1,
+    reasons,
+    notes: [],
+  });
+  assert.equal((html.match(/class="reasoning is-trace"/g) || []).length, 10, 'the newest ten are their own folds');
+  assert.match(html, /3 earlier reasoning/, 'the rest is one line');
+  assert.match(html, /<pre>Thought number 0 about the bar\.<\/pre>/, 'and it opens to the text');
+  const archive = html.slice(html.indexOf('is-archive'), html.indexOf('</details>', html.indexOf('is-archive')));
+  assert.equal((archive.match(/<pre>/g) || []).length, 3, 'the archive holds exactly the older three');
+});

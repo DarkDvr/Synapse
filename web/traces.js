@@ -106,18 +106,24 @@ export function renderTrace(t) {
         t.stream.text,
       )}</div></div></div>`
     : '';
-  // What the worker finished thinking: one fold per step, the way the chat folds the
-  // Architect's own. The trace is the only record of a worker's reasoning, so the
-  // words are kept behind the line rather than thrown away with the panel (8 Nov).
-  // Capped like the notes: twelve is more than anyone reads back through.
+  // What the worker finished thinking: the chat's rule exactly — the newest ten as
+  // folds of their own, everything older as one "N earlier reasoning" fold. The
+  // trace is the only record of a worker's reasoning, so the words are kept behind
+  // the line rather than thrown away with the panel. Twelve open lines was the
+  // first cut and it read as a wall: the operator counted them (8 Nov).
   const reasons = Array.isArray(t.reasons) ? t.reasons : [];
-  const reasonFolds = reasons
-    .map(
-      (r) =>
-        `<details class="reasoning is-trace" data-k="${esc(t.key)}:r${Number(r.at) || 0}">` +
-        `<summary>${esc(reasoningGist(r.text))}</summary><pre>${esc(r.text)}</pre></details>`,
-    )
-    .join('');
+  const recentReasons = reasons.slice(-10);
+  const olderReasons = reasons.slice(0, Math.max(0, reasons.length - 10));
+  const reasonFold = (r) =>
+    `<details class="reasoning is-trace" data-k="${esc(t.key)}:r${Number(r.at) || 0}">` +
+    `<summary>${esc(reasoningGist(r.text))}</summary><pre>${esc(r.text)}</pre></details>`;
+  const reasonFolds =
+    (olderReasons.length
+      ? `<details class="reasoning is-trace is-archive" data-k="${esc(t.key)}:older">` +
+        `<summary>${olderReasons.length} earlier reasoning</summary>` +
+        olderReasons.map((r) => `<pre>${esc(r.text)}</pre>`).join('') +
+        `</details>`
+      : '') + recentReasons.map(reasonFold).join('');
   // A compaction line is pinned: the four-line tail is for steps, and this is not
   // a step — it is the reason the next step is slower and the window is empty
   // again. It stays for the whole run, and the folded summary counts it.

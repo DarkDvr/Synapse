@@ -12,27 +12,27 @@ import { createTraceReasons } from '../src/trace-reasons.js';
 
 const quiet = { warn() {} };
 
-test('a run keeps its last twelve steps, and a reload finds them', () => {
+test('a run keeps its last twenty-four steps, and a reload finds them', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'synapse-traces-'));
   try {
     const file = path.join(dir, 'trace-reasons.json');
     const store = createTraceReasons(file, { log: quiet });
     const run = { dir: 'F:\\dev\\Projects\\demo', task: 't6', startedAt: 1 };
-    for (let i = 0; i < 15; i += 1) store.add(run, `step ${i}`);
+    for (let i = 0; i < 30; i += 1) store.add(run, `step ${i}`);
     const kept = store.get(run);
-    assert.equal(kept.length, 12, 'twelve is the cap');
-    assert.equal(kept[0].text, 'step 3', 'the oldest are the ones dropped');
-    assert.equal(kept[11].text, 'step 14');
+    assert.equal(kept.length, 24, 'twenty-four is the cap');
+    assert.equal(kept[0].text, 'step 6', 'the oldest are the ones dropped');
+    assert.equal(kept[23].text, 'step 29');
 
     // Another run is another list, and a run nobody wrote has none.
     assert.deepEqual(store.get({ ...run, task: 't7' }), []);
     assert.deepEqual(store.get({ dir: 'elsewhere', task: 'x', startedAt: 2 }), []);
 
     // A second store on the same file sees what the first wrote.
-    assert.equal(createTraceReasons(file, { log: quiet }).get(run).length, 12);
+    assert.equal(createTraceReasons(file, { log: quiet }).get(run).length, 24);
 
     // Empty text is not a step.
-    assert.equal(store.add(run, '   '), 12);
+    assert.equal(store.add(run, '   '), 24);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
