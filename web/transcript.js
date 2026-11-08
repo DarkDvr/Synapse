@@ -270,7 +270,12 @@ export function renderMessage(m, tail = '') {
     // steps. Each fold carries its first sentence, so the line says what the block
     // was about instead of only that it exists (8 Nov).
     const REASONING_KEEP = 10;
-    const reasoningAt = parts.map((p, i) => (p.type === 'reasoning' ? i : -1)).filter((i) => i >= 0);
+    // A reasoning part with no text is a step that has not thought yet: the engine
+    // opens the part before the first token, and it sat in the chat as an empty fold
+    // labelled "Reasoning" while the tools ran (8 Nov). Empty parts are not folds.
+    const reasoningAt = parts
+      .map((p, i) => (p.type === 'reasoning' && String(p.text || '').trim() ? i : -1))
+      .filter((i) => i >= 0);
     const olderReasoning = reasoningAt.length > REASONING_KEEP ? reasoningAt.slice(0, -REASONING_KEEP) : [];
     const recentReasoning = new Set(reasoningAt.slice(-REASONING_KEEP));
     const archiveKey = `reasoning:${m.id}`;

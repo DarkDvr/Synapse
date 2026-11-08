@@ -129,7 +129,7 @@ test('a steer and a compaction sit just above the live reasoning', () => {
     role: 'coder-1',
     task: 't6',
     startedAt: 1,
-    notes: [{ steer: true, text: 'PawnIO is running here' }, 'ran the probe'],
+    notes: [{ at: 20, steer: true, text: 'PawnIO is running here' }, { at: 5, text: 'ran the probe' }],
     reasons: [{ text: 'The PDH counter returns invalid data.', at: 9 }],
     compactingSince: Date.now(),
     compactions: 1,
@@ -142,13 +142,13 @@ test('a steer and a compaction sit just above the live reasoning', () => {
   const steer = html.indexOf('STEER:');
   const panel = html.indexOf('trace-flow is-think');
   assert.ok(fold > 0 && panel > 0, 'both the fold and the live panel are rendered');
-  assert.ok(compact > fold, 'the compaction is after the folds, not at the top');
-  assert.ok(steer > compact, 'the steer is the line nearest the panel');
-  assert.ok(steer < panel, 'and it is above the live reasoning');
+  assert.ok(steer > fold, 'the steer is after the thought it answered');
+  assert.ok(steer < panel, 'and stays in its place above the live reasoning');
+  assert.ok(compact > steer && compact < panel, 'the compaction is the pinned line above the panel');
   // With no panel, the same lines are the bottom of the trace.
   const quiet = renderTrace({
     key: 'k', role: 'coder-1', task: 't6', startedAt: 1,
-    notes: [{ steer: true, text: 'still here' }],
+    notes: [{ at: 20, steer: true, text: 'still here' }],
     reasons: [{ text: 'a thought', at: 1 }],
     stream: null,
   });
@@ -235,4 +235,12 @@ test('a tool call sits between the thoughts that surround it', () => {
   assert.ok(at('MainWindow.xaml.cs') < at('Now the older half of the file.'), 'call before the next thought');
   assert.ok(at('Now the older half of the file.') < at('Autostart.cs'), 'and the second call after it');
   assert.ok(at('Autostart.cs') < at('The startup shortcut lives here.'), 'closing thought last');
+});
+
+// An empty reasoning part is a step that has not thought yet: the engine opens the
+// part before the first token, and it showed in the chat as a fold labelled
+// "Reasoning" with nothing in it while the tools ran (8 Nov).
+test('an empty reasoning part is not a fold', () => {
+  const src = read('web/transcript.js');
+  assert.match(src, /p\.type === 'reasoning' && String\(p\.text \|\| ''\)\.trim\(\)/);
 });

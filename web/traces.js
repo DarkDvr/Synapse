@@ -105,12 +105,11 @@ export function renderTrace(t) {
   // a worker ten minutes in has done forty things, and forty lines of it is the
   // whole chat. This is the shape an editor's agent uses, for the same reason.
   //
-  // A steer is not a step, and it is not history either: it is the operator talking
-  // to the work that is happening now. It used to sit in the tail, which put it at
-  // the *top* of a long trace — above sixty earlier steps and ten folds, off the
-  // screen the operator is watching — so it looked as if it had not been sent
-  // (8 Nov). It is pinned just above the live panel instead, with the compaction
-  // line, and when there is no panel those lines are simply the bottom.
+  // A steer is not a step and it is not pinned: it is the operator speaking at a
+  // moment, so it keeps that moment. It used to be dragged to the bottom with the
+  // compaction line, which meant an hour-old instruction sat beside the live
+  // thinking as if it had just been said (8 Nov). It is merged into the timeline by
+  // its own time, so the newest step stays below it and it never moves again.
   const isSteer = (n) => typeof n === 'object' && n?.steer === true;
   const steps = notes.filter((n) => !isSteer(n));
   const steers = notes.filter(isSteer);
@@ -166,6 +165,7 @@ export function renderTrace(t) {
   }
   for (const n of tail) entries.push({ at: when(n), html: note(n) });
   for (const r of recentReasons) entries.push({ at: when(r), html: reasonFold(r) });
+  for (const s of steers) entries.push({ at: when(s), html: note(s) });
   entries.sort((a, b) => a.at - b.at || (a.html < b.html ? -1 : a.html > b.html ? 1 : 0));
   const timeline = entries.map((e) => e.html).join('');
   // A compaction line is pinned: the four-line tail is for steps, and this is not
@@ -202,11 +202,11 @@ export function renderTrace(t) {
         : ` of ${loopLimit} — asking it to carry on`) +
       '</div>'
     : '';
-  // Pinned lines: the compaction that emptied the window, the loop rescue that
-  // shortened the thinking, and the operator's own steers. All three explain or
-  // steer what is happening *now*, so they sit just above the panel — and at the
-  // bottom of the trace when no panel is showing.
-  const pinned = `${compactLine}${loopLine}${steers.map(note).join('')}`;
+  // The two lines that are about the run rather than a step in it: the compaction
+  // that emptied the window and the loop rescue that shortened the thinking. They
+  // sit just above the panel, where the operator is looking, and at the bottom of
+  // the trace when no panel is showing.
+  const pinned = `${compactLine}${loopLine}`;
   const body = `${timeline}${pinned}${streaming}`;
   const rest = [t.task, t.title].filter(Boolean).join(' · ');
   if (!t.finishedAt) {
