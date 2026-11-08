@@ -870,11 +870,10 @@ async function main() {
   }
   app.info('----------------------------------------------');
 
-  // The models the roles already point at, measured again now that the page is up.
-  // Boot asks before the engine starts, and a local runtime that was still waking
-  // up answered nothing — the card then keeps the number from the last time that
-  // model was loaded smaller. Same path as a selection: measure, write the entry,
-  // tell every view (8 Nov).
+  // Every local server's loaded windows, asked again now that the page is up. Boot
+  // asks before the engine starts, and a runtime that was still waking up answered
+  // nothing — the config, the card and the picker then keep the number from the last
+  // time that model was loaded smaller. One request per server (8 Nov).
   setTimeout(() => {
     api
       .refreshWindows()
@@ -883,7 +882,7 @@ async function main() {
           app.info(`${c.ref}: ${c.to} tokens loaded by the server (was ${c.from || 'nothing'}) - the window has been corrected`);
         }
       })
-      .catch((err) => app.warn(`could not re-measure the role models: ${err.message}`));
+      .catch((err) => app.warn(`could not re-measure the local models: ${err.message}`));
   }, 1500).unref?.();
 
   // Disk housekeeping, once the page is up so it never delays a boot: an applied

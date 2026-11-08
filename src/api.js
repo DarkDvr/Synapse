@@ -1017,29 +1017,22 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
     },
 
     /**
-     * Measure the windows of the models the roles already point at.
+     * Measure every local provider once, now that the page is up.
      *
-     * Boot measures every local provider before the engine starts, and a runtime
-     * that is still waking up answers nothing — which leaves the card showing the
-     * number from the last time that model was loaded smaller. This is the second
-     * chance, run once the page is up, and the same path a selection takes: measure,
-     * write the provider entry, tell every view (8 Nov).
+     * Boot measures before the engine starts, and a runtime that is still waking up
+     * answers nothing — which leaves the config, the card and the picker showing the
+     * number from the last time that model was loaded smaller. One request per
+     * server, the same numbers a selection would find, written into the provider
+     * entries and announced (8 Nov).
      */
     refreshWindows: async () => {
       const cfg = getConfig();
-      const refs = new Set(
-        Object.values(cfg?.roles || {})
-          .map((entry) => String(entry?.ref || ''))
-          .filter(Boolean),
-      );
-      const changes = [];
-      for (const ref of refs) {
-        const measured = await windows.refreshWindow(cfg, ref, { cache: modelCache });
-        if (!measured.changed) continue;
-        if (windows.writeIntoConfig(cfg, ref, measured)) applyConfig(cfg);
-        changes.push({ ref, from: measured.previous, to: measured.context });
-        notify?.({ kind: 'model', type: 'window', ref, context: measured.context, source: measured.source });
+      const changes = await windows.refreshLocalProviders(cfg);
+      for (const change of changes) {
+        windows.writeIntoConfig(cfg, change.ref, { context: change.to });
+        notify?.({ kind: 'model', type: 'window', ref: change.ref, context: change.to, source: 'loaded' });
       }
+      if (changes.length) applyConfig(cfg);
       return changes;
     },
 
