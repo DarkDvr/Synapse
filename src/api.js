@@ -21,6 +21,7 @@ import { fetchProviderModels } from './providers.js';
 import { providerId } from './providers.js';
 import { isLocalProvider, providerUp } from './providers.js';
 import { providerApiKey } from './config.js';
+import * as windows from './windows.js';
 import { questionSignature, guardDecision, readableAnswer } from './question-loop.js';
 import { setProviderKey, providerKeyState, maskKey } from './secrets.js';
 import { probeToolchain } from './toolchain.js';
@@ -163,52 +164,6 @@ export function normalizeAttachments(list) {
 }
 
 /**
- * The window Synapse believes one model has, from the config alone.
- *
- * The operator's `modelLimits` override first — either spelling, because the engine
- * takes the bare model id while a ref here is `provider/model` — then the provider's
- * own entry, which is what a measurement writes and what the operator can type. Zero
- * when the config says nothing, and the caller then keeps the engine's catalog
- * number.
- *
- * This is the same precedence the watchdog's `contextWindow()` uses, which is the
- * point: the corner and the budget must not disagree about how big a window is.
- */
-function configuredWindow(config, ref) {
-  const bare = String(ref || '').split('/').pop();
-  const limits = config?.modelLimits || {};
-  const override = limits[ref] || limits[bare] || {};
-  const fromLimit = Number(override.context);
-  if (Number.isFinite(fromLimit) && fromLimit > 0) return fromLimit;
-  const providerId = String(ref || '').split('/')[0];
-  const provider = (config?.engine?.opencode?.providers || []).find((p) => p.id === providerId);
-  const model = (provider?.models || []).find((m) => m.id === bare);
-  const n = Number(model?.context);
-  return Number.isFinite(n) && n > 0 ? n : 0;
-}
-
-/**
- * The output ceiling Synapse believes one model has, from the config alone.
- *
- * The same precedence as the window, and for the same reason: a provider that says
- * `limit: { context, output }` is the authority, and the engine's catalog can be
- * older than the model. Measured 7 Nov: oc-go's `deepseek-v4.1-flash` is 1M in /
- * 384K out at the provider, and the shipped catalog said 200K / 32K.
- */
-function configuredOutput(config, ref) {
-  const bare = String(ref || '').split('/').pop();
-  const limits = config?.modelLimits || {};
-  const override = limits[ref] || limits[bare] || {};
-  const fromLimit = Number(override.output);
-  if (Number.isFinite(fromLimit) && fromLimit > 0) return fromLimit;
-  const providerId = String(ref || '').split('/')[0];
-  const provider = (config?.engine?.opencode?.providers || []).find((p) => p.id === providerId);
-  const model = (provider?.models || []).find((m) => m.id === bare);
-  const n = Number(model?.output);
-  return Number.isFinite(n) && n > 0 ? n : 0;
-}
-
-/**
  * The config as the browser may see it: no password, no provider key — a mask and
  * "one exists" instead. Exported because the runner can change the config too (a run
  * measures a model's real window and writes it), and the page has to be told that
@@ -236,6 +191,18 @@ export function toClientConfig(cfg) {
     });
   }
   return c;
+}
+
+/** Every model's configured window, keyed by ref — what a save is compared against. */
+function windowMap(config) {
+  const out = {};
+  for (const provider of config?.engine?.opencode?.providers || []) {
+    for (const model of provider?.models || []) {
+      if (!provider.id || !model?.id) continue;
+      out[`${provider.id}/${model.id}`] = Number(model.context) || 0;
+    }
+  }
+  return out;
 }
 
 export function createApi({ getConfig, applyConfig, power, engine, logger, getBootError, projects, toolStats, probe, modelCache, inspectModel: inspectRef, probeDir, runs, desk, engineUpdate, synapseUpdate, restart, stopSelf, pcShutdown, notify, permissionLog, permissionGate, permissionMemory }) {
@@ -980,7 +947,16 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
       const beforeRefs = new Map(
         Object.entries(getConfig()?.roles || {}).map(([role, entry]) => [role, String(entry?.ref || '')]),
       );
+      // Every model's configured window, before and after: a number the operator
+      // typed replaces whatever measurement was remembered for that model, and a
+      // role that just changed model is measured straight away.
+      const beforeWindows = windowMap(getConfig());
       const saved = applyConfig(reconcile(body));
+      const afterWindows = windowMap(saved);
+      for (const [ref, context] of Object.entries(afterWindows)) {
+        if (beforeWindows[ref] !== context) windows.forget(ref);
+      }
+      const selected = new Set();
       // The wake lock is a config answer too: Settings' checkboxes take effect on
       // Save, not at the next restart.
       power?.apply?.(saved.automation);
@@ -990,6 +966,7 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
       for (const [role, entry] of Object.entries(saved.roles || {})) {
         const ref = String(entry?.ref || '');
         if (!ref || ref === beforeRefs.get(role)) continue;
+        selected.add(ref);
         // The operator chose a model for this role: the harness's loop marks on it
         // are about a different run, and must not greet the choice as ISSUES. The
         // task attempt counts for this role reset lazily as well — a run on the old
@@ -1014,6 +991,20 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
         } catch (err) {
           app.warn(`could not wake ${role} after its model change: ${err.message}`);
         }
+      }
+      // A role that just changed model is measured now, not at the next run: the
+      // card must show the window the server really has *before* the model is used,
+      // and the answer arrives on the stream so every view repaints (8 Nov).
+      for (const ref of selected) {
+        windows
+          .refreshWindow(saved, ref, { cache: modelCache })
+          .then((r) => {
+            if (!r.changed) return;
+            if (windows.writeIntoConfig(saved, ref, r)) applyConfig(saved);
+            notify?.({ kind: 'model', type: 'window', ref, context: r.context, source: r.source });
+            app.info(`${ref}: ${r.previous || 'nothing'} -> ${r.context} tokens, measured from the server`);
+          })
+          .catch(() => { /* a server that cannot answer changes nothing */ });
       }
       app.info('config saved via UI');
       const shown = toClientConfig(saved);
@@ -1055,10 +1046,16 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
       return {
         models: shown.map((m) => {
           const known = modelCache?.get(m.ref);
+          // One resolver for the card and the watchdog: the config's number, the
+          // measurement remembered for this model, and the catalog, in that
+          // module's order. A stale provider entry is why a 128k local model read
+          // 60k on the card (8 Nov).
+          const window = windows.knownWindow(cfg, m.ref, { cache: modelCache });
           return {
             ...m,
-            context: configuredWindow(cfg, m.ref) || m.context,
-            output: configuredOutput(cfg, m.ref) || m.output,
+            context: window.context || m.context,
+            output: window.output || m.output,
+            contextSource: window.source,
             tools: known?.tools || null,
             issues: known?.issues || null,
           };

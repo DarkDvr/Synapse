@@ -54,7 +54,13 @@ import { AUTOMATION_DEFAULTS, readAutomation } from './automation.js';
 import { keepBuildingDelayMs } from './auto-answer.js';
 import { sweepProject, sweepScratch } from './cleanup.js';
 import { classifyFailure, recordProviderError, pruneProviderLog } from './provider-errors.js';
-import { providerLoadedWindow, providerLoadedWindows, providerType } from './providers.js';
+import { providerType } from './providers.js';
+import { knownWindow, declaredWindow, refreshWindow, resolveWindow, splitRef } from './windows.js';
+
+// Which window a model has is `windows.js`'s question now; the runner only turns
+// the number into a budget. Re-exported so the tests that pin the precedence keep
+// reading the same name from the module they always did.
+export { resolveWindow };
 
 const POLL_MS = 1500;
 const RESULT_MAX = 4000;
@@ -492,36 +498,6 @@ export function redeemModel({ outcome, modelRef, modelCache, notify, log } = {})
   } catch {
     return false; // the badge is not worth failing a run over
   }
-}
-
-/**
- * Which number a model's window is, given four claims about it.
- *
- * The order is the whole rule, and every step of it was earned:
- *  1. **loaded** — what a local runtime has actually reserved. A measurement, so
- *     it beats every claim, in both directions (Bionic: 42k in the config, 60,160
- *     loaded, and the smaller number was used for weeks).
- *  2. **override** — the operator's own `modelLimits` entry. It exists because a
- *     catalog can be wrong on the low side and was boundary-tested by hand: the
- *     engine's config takes `limit.context` per model, and DeepSeek V4.1 Flash
- *     Free serves 1,048,576 where the catalog says 200k. A refusal must NOT undo
- *     this one — the override is a deliberate test, and a provider's bad minute is
- *     not a verdict on it.
- *  3. **refused** — the size of a prompt the provider actually rejected. That is
- *     the only measurement a hosted model gives, and it beats a catalog claim that
- *     is larger than it.
- *  4. **catalog** — what the engine says, which is what we started with.
- */
-export function resolveWindow({ override = 0, loaded = 0, refused = 0, catalog = 0 } = {}) {
-  const n = (v) => Number(v) || 0;
-  const o = n(override);
-  const l = n(loaded);
-  const r = n(refused);
-  const c = n(catalog);
-  if (l) return l;
-  if (o) return o;
-  if (r && (!c || r < c)) return r;
-  return c;
 }
 
 /**
@@ -2671,36 +2647,19 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
   }
 
   /**
-   * The room a model has, if the catalog actually knows it.
-   *
-   * Never guessed. A worker's window is 1M on most hosted models, 200k on a few
-   * free ones and ~62k on a local LLM, so any single number baked in here is wrong
-   * for most runs — 200k was the old assumption and it was only ever right by
-   * accident. `modelCache.get()` is the engine's own catalog, recorded at boot;
-   * the operator's `modelLimits` override wins when they have set one.
+   * The room a model has. `windows.js` decides the number; this only turns it into
+   * a budget, so the card, the watchdog and the engine cannot disagree again.
    */
   function contextWindow(ref) {
     if (!ref) return null;
-    const cached = (() => {
-      try { return modelCache?.get?.(ref); } catch { return null; }
-    })();
-    // The operator's override may be keyed either way: the engine's config takes
-    // the BARE model id under its provider (`providers.opencode.models.<id>.limit`),
-    // while a ref here is `provider/model`. Honouring only the ref spelling meant
-    // the engine and the watchdog could disagree about the same model.
-    const limits = getConfig()?.modelLimits || {};
-    const bare = String(ref).split('/').pop();
-    const override = limits[ref] || limits[bare] || {};
-    const context = resolveWindow({
-      override: override.context,
-      loaded: loadedWindows.get(ref) || 0,
-      refused: cached?.refusedAt,
-      catalog: cached?.context,
-    });
-    const output = Number(override.output) || Number(cached?.output) || 0;
-    if (!context) return null;
-    return { context, output, room: watchdogRoom({ context, output }) };
+    const known = knownWindow(getConfig(), ref, { cache: modelCache });
+    if (!known.context) return null;
+    return { context: known.context, output: known.output, room: watchdogRoom({ context: known.context, output: known.output }) };
   }
+
+  // Models whose swap is already being waited on, so a task that goes through
+  // several rungs does not start a waiter per rung.
+  const swapWaits = new Set();
 
   /**
    * Ask a local server what window it has loaded for this model, once per run.
@@ -2710,41 +2669,21 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
    * room and the server refused a 17.7k request mid-task. The config is what the
    * operator meant; the loaded length is what the server will do.
    */
-  const loadedWindows = new Map();
-  // Models whose swap is already being waited on, so a task that goes through
-  // several rungs does not start a waiter per rung.
-  const swapWaits = new Set();
   async function noteLoadedWindow(ref) {
-    const [providerId, modelId] = String(ref || '').split('/');
-    if (!providerId || !modelId) return;
-    const provider = (getConfig()?.engine?.opencode?.providers || []).find((p) => p.id === providerId);
-    if (!provider || providerType(provider) !== 'local') return;
-    const loaded = await providerLoadedWindow({
-      baseURL: provider.baseURL,
-      model: modelId,
-      // The list is what makes the answer honest: with several models behind one
-      // server, the window it reports belongs to the one it loaded, and this run is
-      // about a different one (6 Nov).
-      models: (provider.models || []).length,
-    }).catch(() => 0);
-    if (!loaded) return;
-    loadedWindows.set(ref, loaded);
-    // The same lookup as contextWindow: the operator's `modelLimits` may use the
-    // bare model id, which is what the engine config takes.
-    const limits = getConfig()?.modelLimits || {};
-    const bare = String(ref || '').split('/').pop();
-    const override = limits[ref] || limits[bare] || {};
-    const declared = Number(override.context) || Number((provider.models || []).find((m) => m.id === modelId)?.context) || 0;
-    if (declared === loaded) return;
-    // Boot keeps these two in step, so a difference here means the model was
-    // reloaded in its own app while Synapse was running. This run budgets for the
-    // real window either way; the engine keeps the old compaction point until it
-    // is restarted, because reloading its config would cancel every open form.
+    const before = knownWindow(getConfig(), ref, { cache: modelCache });
+    const measured = await refreshWindow(getConfig(), ref, { cache: modelCache }).catch(() => null);
+    if (!measured || !measured.changed) return;
+    // A difference means the model was reloaded in its own app while Synapse was
+    // running, or the config held an old measurement. The run budgets for the real
+    // window either way; the engine keeps its own compaction point until restart,
+    // because reloading its config would cancel every open form.
+    const declared = declaredWindow(getConfig(), ref).context;
     const reserve = Math.max(Math.floor(declared * 0.15), declared >= 32000 ? 16000 : 0);
+    const loaded = measured.context;
     log.warn(
       declared
         ? `${ref}: the server now has ${loaded} tokens loaded, the config says ${declared}. This run budgets for ` +
-          `${loaded}, but the engine still compacts at ${declared - reserve} - restart Synapse to hand it ${loaded}.`
+          `${loaded}, but the engine still compacts at ${Math.max(0, declared - reserve)} - restart Synapse to hand it ${loaded}.`
         : `${ref}: the server has ${loaded} tokens loaded and nothing is configured. This run budgets for ${loaded}; ` +
           `set its context in Settings > Providers so the engine compacts on the same number.`,
     );
@@ -2763,9 +2702,8 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
    * and a server that never swaps simply costs a few cheap requests.
    */
   function measureAfterSwap(ref, signal) {
-    const [providerId, modelId] = String(ref || '').split('/');
-    const want = String(modelId || '').toLowerCase();
-    if (!providerId || !want) return;
+    const { providerId, modelId } = splitRef(ref);
+    if (!providerId || !modelId) return;
     const provider = (getConfig()?.engine?.opencode?.providers || []).find((p) => p.id === providerId);
     if (!provider || providerType(provider) !== 'local') return;
     // One waiter per model, however many rungs a task goes through.
@@ -2776,20 +2714,16 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
         for (let i = 0; i < 12; i += 1) {
           await sleep(5000, signal?.aborted ? undefined : signal);
           if (signal?.aborted) return;
-          const windows = await providerLoadedWindows({ baseURL: provider.baseURL }).catch(() => null);
-          if (!windows) return;
-          const alias = String(windows.alias || '').toLowerCase();
-          if (!alias || alias !== want) continue;
-          const loaded = windows.get(modelId) || windows.get(windows.alias) || 0;
-          if (!loaded) return;
-          const declared = Number((provider.models || []).find((m) => m.id === modelId)?.context) || 0;
-          if (declared === loaded) return;
-          loadedWindows.set(ref, loaded);
+          // `refreshWindow` answers only for the model the server names; until the
+          // swap finishes it finds nothing and the loop waits another tick.
+          const measured = await refreshWindow(getConfig(), ref, { cache: modelCache }).catch(() => null);
+          if (!measured || !measured.changed) continue;
+          const declared = declaredWindow(getConfig(), ref).context;
           log.warn(
-            `${ref}: the server finished loading it with ${loaded} tokens (the config said ${declared}); ` +
-              `this run budgets for ${loaded} from here on`,
+            `${ref}: the server finished loading it with ${measured.context} tokens (the config said ${declared || 'nothing'}); ` +
+              `this run budgets for ${measured.context} from here on`,
           );
-          try { onModelWindow?.(ref, loaded); } catch { /* the run does not depend on it */ }
+          try { onModelWindow?.(ref, measured.context); } catch { /* the run does not depend on it */ }
           return;
         }
       } finally {

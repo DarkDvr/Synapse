@@ -169,12 +169,19 @@ told us was logged at INFO on the `tools` channel, which is not mirrored to the
 console: it read *"using 60160 for this run"*, and sounded like good news. That is
 now a boot-time measurement instead of a warning nobody reads.
 
-**Where the number comes from, and which source wins.** Three answers can disagree,
-and the rule is *measurement beats claim*:
+**Where the number comes from, and which source wins.** One module owns this now:
+`src/windows.js`. It was worked out in four places before — the API, the runner,
+the boot measurement and the page — from four sources that could disagree, and
+five rounds of fixes never ended because each fix corrected one copy while another
+kept the old number. The report that ended it: a local model loaded at **128k**,
+the card saying **60k**, because the config still held the number measured the
+last time that model was loaded smaller.
 
-1. **What a local server has loaded** (`providerLoadedWindow`) — asked once per run,
-   per model. Three dialects exist and a server has whichever it has, all tried
-   against one deadline at boot:
+The rule is *measurement beats claim*:
+
+1. **What a local server has loaded** (`providerLoadedWindow`) — asked at boot, when
+   a role's model is chosen, and once per run, per model. Three dialects exist and a
+   server has whichever it has, all tried against one deadline:
 
    | endpoint | who answers | where the window is |
    |---|---|---|
@@ -202,18 +209,29 @@ and the rule is *measurement beats claim*:
    later reports a different window clears the refusal, so the two cannot fight.
 3. **The operator's `modelLimits` override.** A deliberate, boundary-tested
    number, not a claim — see "The override is a documented field" below.
-4. **The claim**: the engine catalog's `limit.context`, which is where all these
-   numbers came from in the first place.
+4. **The config's provider entry**, which is what Settings holds and what a
+   measurement writes, and last the engine catalog's `limit.context`.
 
-That order is one function now, `resolveWindow()` in `src/runs.js`, because the
+That order is one function, `resolveWindow()` in `src/windows.js`, because the
 order *is* the rule and it needs to be readable and tested in one place:
 
 | | beats | loses to |
 |---|---|---|
 | loaded | everything | nothing |
-| override | refused, catalog | loaded |
+| override | refused, provider entry, catalog | loaded |
 | refused | a catalog larger than it | loaded, override |
-| catalog | nothing | all three |
+| provider entry | catalog | the three above |
+| catalog | nothing | all four |
+
+**The number is remembered, and that is half the fix.** `knownWindow()` answers
+from one resolved value per model ref, not by re-deriving from whichever source
+answered this poll. It changes when a measurement says so, when the operator edits
+the model, or when the model changes — never because a lookup happened to miss. A
+selection is measured immediately (`POST /api/config` kicks `refreshWindow`, and
+the answer arrives as a `kind:'model'` broadcast), so the card shows the window the
+server really has *before* the model is used, not after the next run. The
+measurement is also written into the provider entry, so the engine is started with
+the same number and compacts at the same point.
 
 Loaded beats everything, which fixes the old `min(declared, loaded)`: that kept the
 **smaller** number, so raising a local window from 42,240 to 60,160 (Bionic,
@@ -228,7 +246,7 @@ window — the Fever Tracker mistake again, with a different cause.
 
 **Both spellings of the key are honoured.** The engine config takes the **bare**
 model id (`providers.opencode.models.<id>.limit`), while a ref in Synapse is
-`provider/model`. `modelLimits` may be written either way and `contextWindow()`
+`provider/model`. `modelLimits` may be written either way and `declaredWindow()`
 finds it either way; when only the ref was checked, the engine could be serving 1M
 while the watchdog believed 200k.
 

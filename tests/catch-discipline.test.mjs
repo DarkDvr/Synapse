@@ -45,7 +45,7 @@ const BASELINE = {
   'src/provider-errors.js': 2,
   'src/providers.js': 4,
   'src/remote.js': 1,
-  'src/runs.js': 7,
+  'src/runs.js': 6,
   'src/secrets.js': 1,
   'src/server.js': 2,
   'src/site-sessions.js': 1,

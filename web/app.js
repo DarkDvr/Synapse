@@ -1204,9 +1204,11 @@ function connectStream() {
     }
 
     // A model earned itself a mark while a run was failing: re-read the catalog
-    // so the picker shows it now rather than after the next reload.
+    // so the picker shows it now rather than after the next reload. A window that
+    // was just measured arrives the same way, so the card's corner is repainted
+    // from the catalog it has just re-read (8 Nov).
     if (ev.kind === 'model') {
-      refreshModels();
+      refreshModels().then(() => paintRates());
       return;
     }
 

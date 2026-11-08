@@ -30,6 +30,7 @@ import { createApi, toClientConfig } from './api.js';
 import { createServer } from './server.js';
 import { pruneProviderLog } from './provider-errors.js';
 import { measureLocalWindows } from './providers.js';
+import { remember as rememberWindow } from './windows.js';
 import { sweepOrphans } from './cleanup.js';
 import { createHousekeeping } from './housekeeping.js';
 import { hasNpm, installLocalNpm } from './npm-check.js';
@@ -202,6 +203,9 @@ async function main() {
   const measured = await measureLocalWindows(currentConfig).catch(() => []);
   if (measured.length) {
     for (const m of measured) {
+      // The same number the config now holds, remembered for the resolver: the
+      // card and the watchdog read one answer, not two copies of one (8 Nov).
+      rememberWindow(m.ref, { context: m.to, source: 'loaded' });
       app.info(`${m.ref}: ${m.to} tokens loaded by the server (was ${m.from || 'nothing'}) - the engine will compact on ${m.to}`);
     }
     currentConfig = applyConfig(currentConfig);
@@ -403,6 +407,8 @@ async function main() {
       const model = (provider?.models || []).find((m) => m.id === modelId);
       if (!model || Number(model.context) === Number(loaded)) return;
       model.context = Number(loaded) || model.context;
+      // The resolver's memory and the file agree, so the card reads one number.
+      rememberWindow(ref, { context: Number(loaded), source: 'loaded' });
       currentConfig = applyConfig(currentConfig);
       // The page draws the window from the catalog, which the engine was told when
       // it started. This measurement has just changed what Synapse budgets with, so
