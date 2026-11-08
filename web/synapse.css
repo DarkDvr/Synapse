@@ -1441,6 +1441,12 @@ body[data-mode="single"] #runAuto { display: none; }
 .trace-tool .tool-name { font-weight: 600; color: #a9adb5; flex: none; }
 .trace-tool .tool-target { color: #7d828a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .trace-tool .status-dot { flex: none; }
+/* The worker's own words, in the chat's answer type: same markdown, same size, one
+   step dimmer than the Architect's. The paragraph is the step's speech, so it sits
+   with the tool lines rather than in a panel of its own (8 Nov). */
+.trace-prose { color: #c6cad1; margin: 6px 0; }
+.trace-prose > :first-child { margin-top: 0; }
+.trace-prose > :last-child { margin-bottom: 0; }
 /* One line, cut where the column ends: the fold's whole job is to be small. */
 .trace-head, .trace summary { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .trace summary { cursor: pointer; list-style: none; }

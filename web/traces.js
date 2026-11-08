@@ -13,6 +13,7 @@
 import { state } from './state.js';
 import { EV } from './events.js';
 import { esc, shortSpan, fileChip, reasoningGist } from './format.js';
+import { renderMarkdown } from './md.js';
 import { fmtTokens, dirKey, roleLabel } from './run-view.js';
 
 const missing = (name) => () => {
@@ -85,6 +86,12 @@ export function renderTrace(t) {
       const files = Array.isArray(n?.files) ? n.files : [];
       const chips = files.map((f) => fileChip(f, { src: f.path })).join('');
       return `<div class="trace-line is-steer"><span class="msg-steer">STEER:</span><span class="trace-steer-text">${esc(text)}</span>${chips}</div>`;
+    }
+    if (n?.prose) {
+      // The worker's own words, drawn exactly like an Architect answer: same
+      // markdown, same type. Off with the same switch, so the old silent trace is
+      // one click away (8 Nov).
+      return cardsOn() ? `<div class="trace-prose msg-answer">${renderMarkdown(String(n.text || ''))}</div>` : '';
     }
     if (cardsOn() && n?.tool) return toolLine(n.tool, text);
     return `<div class="trace-line">${esc(text)}</div>`;

@@ -184,3 +184,21 @@ test('the worker-card switch is on unless it was turned off', () => {
   assert.equal(normalize({ ui: { workerCards: 'off' } }).ui.workerCards, true);
   assert.match(read('web/settings-panes.js'), /'ui\.workerCards'/, 'the switch is in Settings');
 });
+
+test("a worker's words are a paragraph, with the chat's markdown", () => {
+  const trace = {
+    key: 'k', role: 'coder-1', task: 't11', startedAt: 1,
+    notes: [{ text: 'The **PDH** counter returns invalid data.\n\nSecond thought.', prose: true }],
+  };
+  state.config = { ui: { workerCards: true } };
+  const on = renderTrace(trace);
+  assert.match(on, /class="trace-prose msg-answer"/);
+  assert.match(on, /<strong>PDH<\/strong>/, 'markdown, not escaped text');
+  assert.match(on, /<p>/, 'a paragraph');
+  state.config = { ui: { workerCards: false } };
+  assert.doesNotMatch(renderTrace(trace), /trace-prose/, 'the switch hides it too');
+  state.config = null;
+  // The stream becomes a paragraph when its step ends, not a frozen panel.
+  assert.match(read('web/chat-scroll.js'), /prose: true/);
+  assert.match(read('web/chat-scroll.js'), /stream\.kind === 'word'/);
+});

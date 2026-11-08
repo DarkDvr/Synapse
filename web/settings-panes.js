@@ -304,9 +304,9 @@ function settingsGeneral(c) {
         ) +
         setCheck(
           c,
-          'Worker tool cards',
+          'Worker messages',
           'ui.workerCards',
-          "Draw a worker's tool calls as the same one-line cards the Architect uses, instead of a plain grey sentence. Off restores the old notes; the switch takes effect on the next render.",
+          "Draw a worker's tool calls as the Architect's one-line cards, and its prose as a paragraph, instead of grey sentences that vanish. Off restores the silent trace; the switch takes effect on the next render.",
           readPath(c, 'ui.workerCards') !== false,
         ),
       undefined,

@@ -278,6 +278,17 @@ export function endStream() {
       }).catch(() => {});
     }
     trace.stream = null;
+  } else if (stream.kind === 'word' && trace !== state.sessionTrace) {
+    // What the worker said between tools, kept as a paragraph instead of a panel
+    // that vanishes: the trace is the only place its words can live, and a run that
+    // only shows tool calls reads as silence with activity (8 Nov). It is drawn with
+    // the same markdown as an Architect answer, behind the same switch.
+    const text = String(stream.text || '').trim();
+    if (text) {
+      trace.notes.push({ text, prose: true });
+      if (trace.notes.length > 60) trace.notes.splice(0, trace.notes.length - 60);
+    }
+    trace.stream = null;
   } else {
     freezeStream(stream);
   }
