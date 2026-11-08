@@ -159,6 +159,7 @@ export function appendStream(kind, delta) {
     // A new block (thinking, then speech). Its class differs, so the panel is
     // replaced on the next frame rather than patched; nothing is on screen between
     // the two, because the previous block was frozen when its step ended.
+    foldStream(trace);
     trace.stream = newStream(kind);
     streamEl = null;
     // A new block is a fresh start: whatever the reader did with the last one does
@@ -199,6 +200,7 @@ function pumpStream(now) {
     else if (adopted.text) streamEl.node.data += adopted.text;
     s.velocity = 0;
     s.offset = measureStream(s);
+    reserveIfFull(trace, s);
     // Start where the words already are: the newest line, not the block's first.
     streamEl.body.style.transform = `translate3d(0, ${-s.offset}px, 0)`;
     streamEl.scrolling = (Number(s.target) || 0) > 0.5;
@@ -217,6 +219,7 @@ function pumpStream(now) {
     else if (piece.text) streamEl.node.data += piece.text;
     s.dirty = false;
     measureStream(s);
+    reserveIfFull(trace, s);
   }
   const scrolling = (s.target || 0) > 0.5;
   if (scrolling !== streamEl.scrolling) {
@@ -253,23 +256,55 @@ function pumpStream(now) {
   if (!s.settled || s.dirty) streamRaf = requestAnimationFrame(pumpStream);
 }
 
+/**
+ * Once the panel has been full, it stays full for the rest of the run.
+ *
+ * A step's thinking fills eleven lines and the next one starts at one, so a pane
+ * that shrank back would drop the chat by ten lines between every two steps. The
+ * height is reserved instead: the words swap, the box does not move (9 Nov).
+ */
+function reserveIfFull(trace, s) {
+  if (!trace || trace.reserved) return;
+  if ((Number(s.target) || 0) <= 0.5) return;
+  trace.reserved = true;
+  streamEl = null;
+  wired.renderTranscript();
+}
+
+/**
+ * The ended block becomes a fold, once, and is kept on the server.
+ *
+ * Called when the next block replaces it, and when the run ends — not when the step
+ * ends, because the panel keeps showing the words in the gap and a fold line beside
+ * them would say the same thing twice (9 Nov).
+ */
+export function foldStream(trace) {
+  const stream = trace?.stream;
+  if (!stream || stream.folded || stream.kind !== 'think') return;
+  stream.folded = true;
+  const text = String(stream.text || '').trim();
+  if (!text) return;
+  // Kept whole for the run: the trace draws the newest ten and folds the rest into
+  // one line, so the count in that line stays true (8 Nov).
+  trace.reasons = [...(trace.reasons || []), { text, at: Date.now() }];
+  // The server already has the words: they were posted when the step ended, so a
+  // reload during the gap still shows the step even if the fold never came.
+}
+
 export function endStream() {
   const trace = liveTrace();
   if (!trace || !trace.stream) return;
   const stream = trace.stream;
-  // A worker's completed thinking becomes a fold line in its trace. That trace is
-  // the only record of what the worker thought — its session never reaches the
-  // chat — and a frozen eleven-line panel was both a lie (it read as still
-  // arriving) and the reason a new block started inside the old one's node (8 Nov).
-  // The Architect's own step is different: its message will carry the words as
-  // folds of its own, so the panel waits, frozen, until that message lands.
+  // A worker's thinking does not fold here. The panel keeps its words on screen —
+  // dimmed, and at its reserved height — through the gap between two steps, and the
+  // fold is written when the next block replaces them or the run ends (`foldStream`).
+  // The Architect's own step is different: its message will carry the words as folds
+  // of its own, so the panel waits, frozen, until that message lands.
   if (stream.kind === 'think' && trace !== state.sessionTrace) {
+    // The server records the step now, so a reload in the gap keeps it even though
+    // the local fold is deferred (see foldStream). The panel keeps the words.
     const text = String(stream.text || '').trim();
     if (text) {
-      // Kept whole for the run: the trace draws the newest ten and folds the rest into
-      // one line, so the count in that line stays true (8 Nov).
-      trace.reasons = [...(trace.reasons || []), { text, at: Date.now() }];
-      // Kept server-side too, so a reload and a second view show the same steps.
       api('POST', '/api/runs/reason', {
         dir: trace.dir,
         task: trace.task,
@@ -277,7 +312,7 @@ export function endStream() {
         text,
       }).catch(() => {});
     }
-    trace.stream = null;
+    stream.ended = true;
   } else if (stream.kind === 'word' && trace !== state.sessionTrace) {
     // What the worker said between tools, kept as a paragraph instead of a panel
     // that vanishes: the trace is the only place its words can live, and a run that

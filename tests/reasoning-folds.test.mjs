@@ -244,3 +244,19 @@ test('an empty reasoning part is not a fold', () => {
   const src = read('web/transcript.js');
   assert.match(src, /p\.type === 'reasoning' && String\(p\.text \|\| ''\)\.trim\(\)/);
 });
+
+// 9 Nov: a full reasoning pane vanished at every step boundary and the chat dropped
+// by ten lines, then climbed back when the next thought started. It now keeps its
+// height for the run, keeps the words in the gap, and folds when replaced.
+test('a full reasoning pane keeps its height and its words between steps', () => {
+  const js = read('web/chat-scroll.js');
+  assert.match(js, /export function foldStream/);
+  assert.match(js, /trace\.reserved = true/, 'the height is reserved once full');
+  assert.match(js, /stream\.ended = true/, 'the step dims instead of clearing');
+  assert.match(read('web/traces.js'), /is-reserved/, 'the panel says so in its class');
+  assert.match(
+    read('web/synapse.css'),
+    /\.trace-flow\.is-reserved \.trace-flow-view \{ height: calc\(11 \* 1\.45em\)/,
+    'and keeps eleven lines of height',
+  );
+});

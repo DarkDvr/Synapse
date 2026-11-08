@@ -123,7 +123,7 @@ export function renderTrace(t) {
   // panel keeps its window; nothing is sliced here, so a re-render never changes a
   // line break.
   const streaming = t.stream && t.stream.text
-    ? `<div class="trace-flow${t.stream.kind === 'think' ? ' is-think' : ''}${t.stream.ended ? ' is-idle' : ''}"><div class="trace-flow-view"><div class="trace-flow-body">${esc(
+    ? `<div class="trace-flow${t.stream.kind === 'think' ? ' is-think' : ''}${t.stream.ended ? ' is-idle' : ''}${t.reserved ? ' is-reserved' : ''}"><div class="trace-flow-view"><div class="trace-flow-body">${esc(
         t.stream.text,
       )}</div></div></div>`
     : '';
@@ -357,7 +357,7 @@ export function traceSig() {
           `${t.stream?.ended ? 1 : 0}:${Number(t.compactions) || 0}:${Number(t.compactingSince) || 0}:` +
           `${Number(t.compactFrom) || 0}:${Number(t.compactAt) || 0}:${Number(t.compactLimit) || 0}:` +
           `${(t.reasons || []).length}:${(t.reasons || []).map((r) => String(r.text || '').length).join('.')}:` +
-          `${Number(t.loops) || 0}:${Number(t.loopLimit) || 0}:${t.loopStop ? 1 : 0}`,
+          `${Number(t.loops) || 0}:${Number(t.loopLimit) || 0}:${t.loopStop ? 1 : 0}:${t.reserved ? 1 : 0}`,
       )
       .join(';'),
     sessionPart,
@@ -384,6 +384,6 @@ export function renderSessionStream() {
   // post, so the post's green line is the only rule and the reasoning keeps its
   // grey. `is-own` is the whole difference from a worker's trace.
   return `<div class="trace is-live is-own" data-trace="${esc(t.key)}">
-    <div class="trace-flow${t.stream.kind === 'think' ? ' is-think' : ''}${t.stream.ended ? ' is-idle' : ''}"><div class="trace-flow-view"><div class="trace-flow-body">${esc(text)}</div></div></div>
+    <div class="trace-flow${t.stream.kind === 'think' ? ' is-think' : ''}${t.stream.ended ? ' is-idle' : ''}${t.reserved ? ' is-reserved' : ''}"><div class="trace-flow-view"><div class="trace-flow-body">${esc(text)}</div></div></div>
   </div>`;
 }

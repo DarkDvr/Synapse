@@ -18,7 +18,7 @@ import { dirKey, currentRun, currentProject, roleLabel, modelByRef, selectionFor
 import { findSession, isBusy, renderTree } from './projects.js';
 import { renderPlan } from './plan-pane.js';
 import { renderTranscript } from './transcript.js';
-import { chatScroller, renderChatNav } from './chat-scroll.js';
+import { chatScroller, foldStream, renderChatNav } from './chat-scroll.js';
 import { freezeStream } from './stream-view.js';
 import { noteCompaction, noteLoop, steerNotes, traceFor, traceKeyOf, traceOf } from './traces.js';
 import { noteLease } from './chat-notes.js';
@@ -615,6 +615,8 @@ export function handleRunEvent(ev) {
     const done = state.runs.get(key);
     const trace = done ? traceOf(done) : null;
     if (trace) {
+      // The last block of thinking has no next block to replace it, so it folds now.
+      foldStream(trace);
       // Folded, not deleted: the report is the thing to read, but the evidence of
       // what the worker actually did stays one click away.
       trace.finishedAt = Date.now();
