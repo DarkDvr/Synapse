@@ -54,6 +54,7 @@ const NOTES = [
   'docs/notes/project-chat.md',
   'docs/notes/protection.md',
   'docs/notes/releases.md',
+  'docs/notes/tests.md',
 ];
 const agents = read('AGENTS.md');
 const slashed = (rel) => [rel, rel.replace(/\//g, '\\')];
@@ -67,11 +68,11 @@ for (const rel of NOTES) {
 const onDisk = fs.existsSync(path.join(ROOT, 'docs/notes'))
   ? fs.readdirSync(path.join(ROOT, 'docs/notes')).filter((f) => f.endsWith('.md'))
   : [];
-check(
-  onDisk.every((f) => NOTES.some((n) => n.endsWith(`/${f}`))),
-  'every file in docs/notes/ is linked from AGENTS.md',
-  onDisk.join(' '),
-);
+// Name the orphans, not the whole folder. This printed every file it found, so a
+// single new note read as thirteen missing ones and the name to add was the only
+// thing not in the message.
+const orphans = onDisk.filter((f) => !NOTES.some((n) => n.endsWith(`/${f}`)));
+check(orphans.length === 0, 'every file in docs/notes/ is linked from AGENTS.md', orphans.join(' '));
 
 // ── the rules that must never be dropped ────────────────────────
 // A compression pass is exactly how one of these disappears. They are the lines

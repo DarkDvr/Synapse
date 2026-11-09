@@ -109,7 +109,7 @@ the cards and the commits, not the code. One reason per sentence, not a chain.
 - **`data/`, `logs/` and the projects root stay out of git** — PIDs, probe output,
   session logs and scratch projects, all local and regenerable.
 - **Check `git status` before and after**; no build junk, no filled-in config.
-- **Remote: `origin` → `github.com/DarkDvr/Synapse` (private).** Push `main`; never force-push or rewrite history.
+- **Remote: `origin` → `github.com/DarkDvr/Synapse` (private).** Push `main`; never force-push or rewrite history. The suite, and the run it triggers there, is `docs/notes/tests.md`.
 
 ### Versioning: commit, bump, tag, push
 
@@ -169,7 +169,6 @@ an agent does not know to open is a document that does not exist:
 | `docs/notes/models-and-tools.md` | touching model choice, the catalog cache, the probe or the engine update — context limits, variants, marks, ask counters |
 | `docs/notes/runtime-scope.md` | before starting work on Synapse's own runtime (independence from OpenCode) — what the runtime does, what a replacement costs, the staged path |
 | `docs/notes/ui-lessons.md` | touching `web/` — layout invariants, the chat dock, the ask panel, the cards and the picker, with the measurements that prove them |
-| `docs/notes/tests.md` | writing a test, or reading a red run on GitHub — what the runner has, and the one rule that keeps the suite honest there |
 | `docs/notes/runbook.md` | running, restarting or debugging it; anything that kills a process |
 | `docs/notes/desktop-app.md` | touching `shell\`, `Synapse.exe`, `bin\node`, npm or any dependency — the good-tenant rule, the process model, exit codes, where the console lives |
 | `docs/notes/remote-access.md` | the LAN switch, the token or the login page, or changing what the HTTP listener binds |
