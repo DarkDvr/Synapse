@@ -19,3 +19,11 @@ function read() {
 }
 
 export const APP_VERSION = read();
+
+/**
+ * The version on disk *now*, which may be newer than the running server's: the
+ * server reads APP_VERSION once at boot, so a page reload can never change the
+ * version it reports. The status line uses this to say a restart is pending
+ * (9 Nov: Ctrl+F5 kept showing the old version and it looked broken).
+ */
+export const sourceVersion = () => read();

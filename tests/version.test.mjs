@@ -26,3 +26,15 @@ test('package.json, the exe and the README carry one version', () => {
   const line = new RegExp(`\\*\\*Version ${pkg.version.replace(/\./g, '\\.')}\\*\\*`);
   assert.match(read('README.md'), line, 'README.md states the same version');
 });
+
+// The running version is read once at boot, so Ctrl+F5 can never change it. The
+// status now carries the version on disk too, and the rail says a restart is
+// pending when they differ (9 Nov: the version "would not refresh" after changes).
+test('the status carries the running version and the one on disk', () => {
+  const api = read('src/api.js');
+  assert.match(api, /sourceVersion: sourceVersion\(\)/);
+  assert.match(read('src/version.js'), /export const sourceVersion/);
+  const line = read('web/status-line.js');
+  assert.match(line, /state\.status\?\.sourceVersion/, 'the rail reads the pair');
+  assert.match(line, /Restart Synapse to run v/, 'and says what to do about it');
+});

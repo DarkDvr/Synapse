@@ -52,8 +52,16 @@ export function renderStatus() {
   // answer, not from anything the window read at launch, so a restart moves it
   // without closing the window.
   const version = String(state.status?.version || '').trim();
+  const onDisk = String(state.status?.sourceVersion || '').trim();
   const note = $('statusVersion');
-  if (note) note.textContent = version ? `v${version}` : '';
+  if (note) {
+    // The server reads its version once at boot, so a page reload cannot change it.
+    // When the files are newer than the process, say so: otherwise Ctrl+F5 looks
+    // like it did nothing (9 Nov).
+    const pending = onDisk && version && onDisk !== version;
+    note.textContent = version ? `v${version}${pending ? ` → v${onDisk}` : ''}` : '';
+    note.title = pending ? `A newer build is on disk. Restart Synapse to run v${onDisk}.` : '';
+  }
 
   // There is no separate "Event stream" row any more: this dot is the stream's
   // state, and the age on its label is the evidence. A row that said "connected"
