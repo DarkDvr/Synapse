@@ -1468,18 +1468,18 @@ body[data-mode="single"] #runAuto { display: none; }
   font-size: calc(var(--chat-fs) * 0.96); line-height: 1.5; color: #8b8f97;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-/* A steer is the operator speaking into the run, not another tool call: it keeps
-   the yellow marker and is slightly warmer than the step lines. It is a flex row
+/* A steer is the operator speaking into the run, not another tool call: it wears
+   the operator's violet, because it is the operator's own words. It is a flex row
    so the tag sits on the sentence's centre line rather than a baseline nudge, and
    it wraps: the operator's sentence is never cut short or folded away.
-   The bright yellow rule is the same mark the permission log carries in the chat:
-   a steer turns the run's own grey rule yellow for its line, by reaching back over
-   the trace's 2px border and 10px padding (-12px), so there is one rule, not two. */
+   The violet rule turns the run's own grey rule violet for its line, by reaching
+   back over the trace's 2px border and 10px padding (-12px), so there is one rule,
+   not two. Yellow would be wrong here: yellow is the harness speaking (9 Nov). */
 .trace-line.is-steer {
   color: #e6e0cc;
   display: flex; align-items: center; gap: 6px;
   white-space: normal; overflow: visible;
-  border-left: 2px solid #ffd60a;
+  border-left: 2px solid var(--violet-bright);
   margin-left: -12px; padding-left: 10px;
 }
 .trace-line.is-steer .msg-steer { flex: none; margin-right: 0; }
@@ -1487,15 +1487,11 @@ body[data-mode="single"] #runAuto { display: none; }
 /* The picture a steer carried is the chat's chip, on the steer's own line: it does
    not shrink with the sentence, and it keeps its own height. */
 .trace-line.is-steer .chat-image { flex: none; }
-/* A compaction is the one line in a worker's trace that is not a step: it explains
-   why the next step is slower and why the window is empty again, so it is amber,
-   pinned above the four-line tail, and never trimmed away with the steps. A loop
-   rescue is the same kind of line: news about the run, not a step in it. */
-.trace-line.is-compact,
-.trace-line.is-loop { color: var(--amber); font-weight: 600; position: relative; padding-left: 16px; margin: 5px 0; }
-.trace-mark { position: absolute; left: 0; top: 0; width: 16px; text-align: center; font-weight: 400; }
-
-/* Something a model did to Synapse itself — naming it in a shell command, or a
+/* A compaction is a Synapse event, so it wears the harness yellow; a loop rescue is
+   a problem the harness had to fix, so it keeps the amber of trouble. */
+.trace-line.is-compact, .trace-line.is-loop { font-weight: 600; position: relative; padding-left: 16px; margin: 5px 0; }
+.trace-line.is-compact { color: var(--yellow); }
+.trace-line.is-loop { color: var(--amber); }
    write shaped at it. Amber like a compaction, for the same reason: news about the
    run rather than a step in it. It was a modal once; a modal for a thing the
    operator cannot act on is a click and a distraction, so it is a line here and
@@ -1614,7 +1610,7 @@ body[data-mode="single"] #runAuto { display: none; }
 .msg-steer {
   display: inline-block; margin-right: 5px;
   font-size: calc(var(--chat-fs) * 0.76); font-weight: 800; letter-spacing: 0.08em; line-height: 1;
-  color: #ffd60a; vertical-align: middle;
+  color: var(--violet-bright); vertical-align: middle;
 }
 /* the rule between speakers, with room to breathe above and below it */
 .msg + .msg { border-top: 1px solid #2b2e35; padding-top: 15px; }
@@ -3333,16 +3329,16 @@ body { overflow-anchor: none; }
 
 .mode-toggle[disabled] { opacity: 0.45; cursor: not-allowed; }
 .btn[disabled], #sendBtn[disabled] { opacity: 0.45; cursor: not-allowed; }
-/* While work is running the same button is Steer. Yellow is the live path's
-   colour: a border, not a fill, so it is still the primary action and the label
-   stays white. The operator asked for exactly this on 30 Oct. */
+/* While work is running the same button is Steer. Violet, because a steer is the
+   operator's own action; a border, not a fill, so it is still the primary button
+   and the label stays white (9 Nov: yellow here read as another harness notice). */
 #sendBtn.is-steer {
-  border-color: var(--yellow);
-  box-shadow: 0 0 0 1px rgba(237, 194, 90, 0.28), 0 4px 10px rgba(237, 194, 90, 0.10);
+  border-color: var(--violet-bright);
+  box-shadow: 0 0 0 1px rgba(139, 123, 255, 0.28), 0 4px 10px rgba(139, 123, 255, 0.12);
 }
 #sendBtn.is-steer:hover:not(:disabled) {
   background: var(--primary-dark);
-  border-color: var(--yellow);
+  border-color: var(--violet-bright);
 }
 
 /* A page that lost its server is a snapshot. It is covered, dimmed, and inert —

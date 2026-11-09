@@ -432,7 +432,7 @@ test('a steer is pinned in the trace, centred and bright', () => {
   assert.match(app, /trace-steer-text/);
   assert.match(css, /\.trace-line\.is-steer \{[^}]*align-items: center/);
   assert.match(css, /\.trace-line\.is-steer \{[^}]*white-space: normal/);
-  assert.match(css, /\.trace-line\.is-steer \{[^}]*border-left: 2px solid #ffd60a/, 'the steer carries the permission log’s rule');
-  assert.match(css, /\.msg-steer \{[^}]*#ffd60a/);
+  assert.match(css, /\.trace-line\.is-steer \{[^}]*border-left: 2px solid var\(--violet-bright\)/, 'the steer wears the operator colour');
+  assert.match(css, /\.msg-steer \{[^}]*var\(--violet-bright\)/);
   assert.match(css, /\.msg-steer \{[^}]*vertical-align: middle/);
 });
