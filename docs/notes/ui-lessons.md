@@ -2106,3 +2106,60 @@ overflowed its body by 70px. The cap on the changelog went from `min(42vh, 420px
 `min(26vh, 250px)`. Measured after: 376px cards, no overflow, the window 778 of the
 852 it may be. **When a page has a scroll box, measure the box, not the page** —
 `scrollHeight - clientHeight` is the number, and it was 70.
+
+## The main panel, rebuilt (9 Nov 2026)
+
+The role cards had been above the chat since the first build, and the chat's height
+was whatever was left under them — measured every frame, because its bottom edge
+was pinned to the window and its top edge moved with the cards. The operator's
+complaint was simple and right: the cards cost the conversation height, and height
+is the only axis a conversation uses.
+
+**What it is now.** The stage is the same two-column grid at every window size: the
+conversation, and a 360px rail holding the Architect, the five roles and the work
+list. Single is that grid with the rail at zero — the Architect as one bar across
+the top, the chat under it. Multi opens the rail and the chat gives up width, never
+a line of height.
+
+**The measurement machinery went with the layout.** `fitChatHeight`,
+`setChatHeight`, `watchChatGeometry` and the `requestAnimationFrame` loop that ran
+for the whole life of the page are deleted, not disabled: the chat is a cell with a
+definite box, so there is nothing to fit and nothing to watch. The layout's shape is
+the rule; a measurement that reproduces it is a second, worse copy of the rule.
+
+**A mode switch animates one property.** `grid-template-columns` over 240ms —
+measured 747 → 1107 in fifteen frames, the rail 360 → 0 in step. Two things had to
+be true for that to work: the chat sits in column 1 in *both* modes (spanning both
+columns pinned its right edge, so the text re-laid out in one frame while only the
+rail moved), and the rail's contents are right-anchored while the column shrinks, so
+the chat's edge sweeps over the cards rather than clipping them from the wrong end.
+
+**The last line stays put.** A switch re-wraps the text, so the same `scrollTop`
+lands on different words. `applyMode` remembers the *element* at the bottom edge and
+the gap beneath it, and re-applies that on every frame of the transition — reading
+the element's place in the *content* (`rect.top - box.top + scrollTop`), never its
+viewport position, because writing `scrollTop` from a viewport reading makes the next
+frame's reading depend on this frame's write and the line flickers between two
+messages for the length of the switch.
+
+**No dashes. Ever.** The delegation trunk went through three shapes in one evening:
+CSS gradients at a corner (beads from two patterns never line up), a stroke
+`dasharray` (beads are placed by distance along each piece, so a trunk and a stub
+drift apart), and grid-placed 2px squares (still smeared, because the layer does not
+begin on a whole pixel). What ships is a **solid 1px hairline** drawn from the cards'
+own boxes — and the same geometry in yellow with ants for a live run. A dotted line
+is a hundred small judgements the renderer can round differently.
+
+**Two traps worth keeping.**
+
+- A mock that writes text into a label the app repaints on a timer makes that label
+  flicker between the two writers. Placeholders belong in CSS (`:empty::after`),
+  which loses the moment the app writes.
+- A fixed grid row is the honest way to make cards the same height: the readouts are
+  one line and ellipsize, so a `13px` row cannot clip them, where a `min-height` is a
+  guess about the type's leading.
+
+**Migration, not deletion.** Removing Coder 3 meant the cards, both configs, the
+ladder defaults, `ROLES`, the chat's role labels and three brief sentences that
+called the coders three — plus a filter in `normalize()` so a saved config that still
+names it cannot delegate to a role with no card.
