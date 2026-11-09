@@ -1663,9 +1663,11 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
       const asked = body?.mode === 'single' ? 'single' : body?.mode === 'multi' ? 'multi' : null;
       let directory = '';
       let single = false;
+      let sessionModel = '';
       try {
         const session = await engine.getSession(sessionId);
         directory = session?.directory || '';
+        sessionModel = String(session?.model || '');
         const applied = session?.single === true ? 'single' : 'multi';
         single = asked ? asked === 'single' : applied === 'single';
         if (asked && asked !== applied) {
@@ -1744,6 +1746,24 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
       // the run (Test project, 3 Nov: "Single color" came back Red for a turn that
       // had asked for Yellow as the recommended option).
       questionHistory.delete(sessionId);
+      // The chat is the Architect's, so the Architect's configured model is what the
+      // next turn must run on. The session also carries a model of its own — the one
+      // the engine last stored — and that can go stale: a provider renamed since
+      // leaves a ref the engine refuses, and no amount of picking in the UI reaches
+      // it, because picking saves the config and only a switch changes the session.
+      // (9 Nov: `opencode-go/deepseek-v4.1-flash`, from before the provider became
+      // `oc-go`.) One comparison per message, and the stale case repairs itself.
+      const architectRef = String(getConfig()?.roles?.architect?.ref || '');
+      if (architectRef && sessionModel !== architectRef) {
+        try {
+          await engine.switchModel(sessionId, architectRef);
+          app.info(`model repaired for ${sessionId}: ${sessionModel || 'none'} -> ${architectRef}`);
+        } catch (err) {
+          // A switch that fails must not swallow the message: the prompt below is the
+          // operator's actual request, and it will report the model it could not use.
+          app.warn(`could not set the Architect's model for ${sessionId}: ${err.message}`);
+        }
+      }
       // The operator's words are the message. A stop before this one is just a cut:
       // no note explains it, the same way a dropped connection is not explained. If
       // they want the work resumed or changed, they say so here.
