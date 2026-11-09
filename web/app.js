@@ -2199,8 +2199,12 @@ async function bootPage() {
   paneWiring({
     renderTranscript,
     atBottom: () => chatAtBottom(48),
+    // `$` takes an id, not a selector. Written as `$('#transcript')` this returned
+    // null, so the follow was a no-op from the day it was wired: the thinking pane
+    // could grow the trace for minutes while the chat stayed put, and the newest
+    // line sat under the composer (operator, 9 Nov).
     follow: () => {
-      const el = $('#transcript');
+      const el = $('transcript');
       if (el) el.scrollTop = el.scrollHeight;
     },
   });
