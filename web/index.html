@@ -13,6 +13,10 @@
        rules beat it whatever their specificity. See web/baseline.css. -->
   <link rel="stylesheet" href="/baseline.css" />
   <link rel="stylesheet" href="/synapse.css" />
+  <!-- The main panel — the stage's two columns, the rail, the Architect bar and the
+       role cards' two rows. Kept apart from the theme so the layout is one file to
+       read. -->
+  <link rel="stylesheet" href="/panel.css" />
 </head>
 <body class="dark" data-view="none">
 <!-- The first Stop is graceful: the AI finishes the step, then ends. This says so
@@ -146,7 +150,10 @@
               </article>
             </div>
 
-            <!-- row 1 · Inventor ↔ Coder 1 -->
+            <!-- The stack, in the operator's fixed order: Inventor, Designer, QC,
+                 Coder 1, Coder 2. Two coders, not three — Coder 3 is gone. The
+                 connectors that used to sit between these are gone too: the trunk
+                 is drawn by drawActivePath from the card boxes. -->
             <article class="role-card">
               <header class="role-head">
                 <span class="status-dot idle" role="img" aria-label="idle"></span>
@@ -159,7 +166,29 @@
               </header>
             </article>
 
-            <div class="link" aria-hidden="true"><span class="link-line"></span></div>
+            <article class="role-card">
+              <header class="role-head">
+                <span class="status-dot idle" role="img" aria-label="idle"></span>
+                <h3>Designer</h3>
+                <div class="role-tools">
+                  <select class="role-model" data-role="designer" aria-label="Model for the Designer role" title="Model for the Designer role"></select>
+                  <button class="role-btn role-effort" type="button" data-role="designer" title="Thinking effort" aria-label="Thinking effort for the Designer role"></button>
+                  <button class="role-btn ic-edit" title="Settings for this role" aria-label="Settings for this role"><span class="role-glyph">✎</span></button>
+                </div>
+              </header>
+            </article>
+
+            <article class="role-card">
+              <header class="role-head">
+                <span class="status-dot idle" role="img" aria-label="idle"></span>
+                <h3>QC</h3>
+                <div class="role-tools">
+                  <select class="role-model" data-role="qc" aria-label="Model for the QC role" title="Model for the QC role"></select>
+                  <button class="role-btn role-effort" type="button" data-role="qc" title="Thinking effort" aria-label="Thinking effort for the QC role"></button>
+                  <button class="role-btn ic-edit" title="Settings for this role" aria-label="Settings for this role"><span class="role-glyph">✎</span></button>
+                </div>
+              </header>
+            </article>
 
             <article class="role-card">
               <header class="role-head">
@@ -173,21 +202,6 @@
               </header>
             </article>
 
-            <!-- row 2 · Designer ↔ Coder 2 -->
-            <article class="role-card">
-              <header class="role-head">
-                <span class="status-dot idle" role="img" aria-label="idle"></span>
-                <h3>Designer</h3>
-                <div class="role-tools">
-                  <select class="role-model" data-role="designer" aria-label="Model for the Designer role" title="Model for the Designer role"></select>
-                  <button class="role-btn role-effort" type="button" data-role="designer" title="Thinking effort" aria-label="Thinking effort for the Designer role"></button>
-                  <button class="role-btn ic-edit" title="Settings for this role" aria-label="Settings for this role"><span class="role-glyph">✎</span></button>
-                </div>
-              </header>
-            </article>
-
-            <div class="link rtl" aria-hidden="true"><span class="link-line"></span></div>
-
             <article class="role-card">
               <header class="role-head">
                 <span class="status-dot idle" role="img" aria-label="idle"></span>
@@ -195,33 +209,6 @@
                 <div class="role-tools">
                   <select class="role-model" data-role="coder-2" aria-label="Model for Coder 2" title="Model for Coder 2"></select>
                   <button class="role-btn role-effort" type="button" data-role="coder-2" title="Thinking effort" aria-label="Thinking effort for Coder 2"></button>
-                  <button class="role-btn ic-edit" title="Settings for this role" aria-label="Settings for this role"><span class="role-glyph">✎</span></button>
-                </div>
-              </header>
-            </article>
-
-            <!-- row 3 · QC ↔ Coder 3 -->
-            <article class="role-card">
-              <header class="role-head">
-                <span class="status-dot idle" role="img" aria-label="idle"></span>
-                <h3>QC</h3>
-                <div class="role-tools">
-                  <select class="role-model" data-role="qc" aria-label="Model for the QC role" title="Model for the QC role"></select>
-                  <button class="role-btn role-effort" type="button" data-role="qc" title="Thinking effort" aria-label="Thinking effort for the QC role"></button>
-                  <button class="role-btn ic-edit" title="Settings for this role" aria-label="Settings for this role"><span class="role-glyph">✎</span></button>
-                </div>
-              </header>
-            </article>
-
-            <div class="link is-last" aria-hidden="true"><span class="link-line"></span></div>
-
-            <article class="role-card">
-              <header class="role-head">
-                <span class="status-dot idle" role="img" aria-label="idle"></span>
-                <h3>Coder 3</h3>
-                <div class="role-tools">
-                  <select class="role-model" data-role="coder-3" aria-label="Model for Coder 3" title="Model for Coder 3"></select>
-                  <button class="role-btn role-effort" type="button" data-role="coder-3" title="Thinking effort" aria-label="Thinking effort for Coder 3"></button>
                   <button class="role-btn ic-edit" title="Settings for this role" aria-label="Settings for this role"><span class="role-glyph">✎</span></button>
                 </div>
               </header>

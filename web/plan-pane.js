@@ -146,7 +146,8 @@ export function paintPlan(body) {
   // written back yet (see the plan route).
   const reported = new Set(st.reported || []);
   body.innerHTML =
-    (st.plan.goal ? `<p class="plan-goal">${esc(st.plan.goal)}</p>` : '') +
+    // The goal paragraph is gone: the operator never read it, and the list is
+    // what the rail is for. The goal still lives in the project document.
     `<ol class="plan-list">${tasks
       .map((t) => {
         const status = liveRun && liveRun.task === t.id ? 'doing' : PLAN_STATUS[t.status] ? t.status : 'todo';

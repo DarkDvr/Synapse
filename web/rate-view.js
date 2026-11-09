@@ -149,7 +149,10 @@ export function paintRates(now = Date.now()) {
         `Prompt ${run.ctx} tokens of ${run.ctxLimit || 'an unknown window'}` +
         (run.ctxRoom ? `; Synapse compacts near ${run.ctxRoom}` : '');
     }
-    const text = bits.join(' · ');
+    // Two readings on one line, separated by air rather than a dot: "128 tok/s
+    // 27k/60k ctx" reads as two values, where a dot between them read as the
+    // punctuation of a sentence.
+    const text = bits.join('   ');
     if (el.textContent !== text) el.textContent = text;
     if (el.title !== tip) el.title = tip;
   }

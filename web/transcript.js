@@ -24,7 +24,6 @@ const missing = (name) => () => {
   throw new Error(`transcript.js: ${name} was not wired at boot`);
 };
 const wired = {
-  fitChatHeight: missing('fitChatHeight'),
   renderRoleActivity: missing('renderRoleActivity'),
   mountAskPost: missing('mountAskPost'),
   renderPermissions: missing('renderPermissions'),
@@ -41,10 +40,10 @@ export function renderTranscript() {
   const el = $('transcript');
   if (!el) return;
   toolSeq = 0;
-  // Read the reader's intent BEFORE anything resizes the dock. `wired.fitChatHeight()`
-  // below can shrink it, and a shrunken dock makes the transcript look "scrolled
-  // up" even though nobody moved — which is why new reasoning and tool lines
-  // arrived without the chat following them.
+  // Read the reader's intent BEFORE anything below can move the box. A dock that
+  // shrinks makes the transcript look "scrolled up" even though nobody moved —
+  // which is why new reasoning and tool lines once arrived without the chat
+  // following them.
   //
   // And then follow only if the reader was already at the end. This used to stick
   // unconditionally while a turn was running, which meant a report arriving under
@@ -95,7 +94,6 @@ export function renderTranscript() {
   $('chatDock')?.classList.toggle('has-history', hasHistory);
   // An empty dock sits at the bottom of the page, a full one starts under the
   // cards — so the room left for it has to be re-measured on every change.
-  wired.fitChatHeight();
 
   // Nothing in the conversation changed since the last render: leave the DOM —
   // and whatever the operator has open — exactly as it is.

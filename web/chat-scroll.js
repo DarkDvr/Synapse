@@ -58,7 +58,7 @@ export function chatScrollWiring(fns) {
 // hand-off, and the hand comes back.
 let chatFollowArmed = true;
 let lastChatTop = 0;
-const CHAT_FOLLOW_SLACK = 48; // two lines
+export const CHAT_FOLLOW_SLACK = 48; // two lines
 // The last time the operator themselves moved the conversation: a wheel, a key, a
 // finger. A scroll *event* cannot tell their move from ours.
 let chatUserMovedAt = 0;

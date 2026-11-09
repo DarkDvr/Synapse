@@ -109,7 +109,7 @@ const LOOP_AFTER_MS = 20_000;
 // because the first thing it ever learns about a refused model is a report saying
 // nothing happened. Configurable as `worker.ladder`; a role not in it is tried on
 // its own.
-const DEFAULT_LADDER = ['coder-1', 'coder-2', 'coder-3'];
+const DEFAULT_LADDER = ['coder-1', 'coder-2'];
 
 // What a role is called in the chat's header. The ids stay in the plan, the run
 // log and every model ref; only the sentence the operator reads is translated.
@@ -120,7 +120,6 @@ const ROLE_NAMES = {
   qc: 'QC',
   'coder-1': 'Coder 1',
   'coder-2': 'Coder 2',
-  'coder-3': 'Coder 3',
 };
 
 /**

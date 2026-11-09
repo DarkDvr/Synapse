@@ -216,8 +216,9 @@ try {
 }
 
 // ── the coder ladder moves only when a coder failed ──────────────
+// Two rungs since 9 Nov 2026: coder-1, then coder-2, and that is the floor.
 {
-  const same = JSON.stringify(['coder-1', 'coder-2', 'coder-3']);
+  const same = JSON.stringify(['coder-1', 'coder-2']);
   expect('first attempt starts on coder-1', JSON.stringify(nextRung('coder-1', 1)) === same);
   // The case that cost 136k prompt tokens in Shift Test 6: a *completed* task,
   // sent back with a one-character change, moved to a fresh coder-2 session.
@@ -227,20 +228,20 @@ try {
   );
   expect(
     'a failed attempt steps one rung down',
-    JSON.stringify(nextRung('coder-1', 2, { stepDown: true })) === JSON.stringify(['coder-2', 'coder-3']),
+    JSON.stringify(nextRung('coder-1', 2, { stepDown: true })) === JSON.stringify(['coder-2']),
   );
   expect(
-    'two failures reach coder-3',
-    JSON.stringify(nextRung('coder-1', 3, { stepDown: true })) === JSON.stringify(['coder-3']),
+    'two failures reach the last coder',
+    JSON.stringify(nextRung('coder-1', 3, { stepDown: true })) === JSON.stringify(['coder-2']),
   );
   expect(
     'the ladder floors at its last rung',
-    JSON.stringify(nextRung('coder-1', 9, { stepDown: true })) === JSON.stringify(['coder-3']),
+    JSON.stringify(nextRung('coder-1', 9, { stepDown: true })) === JSON.stringify(['coder-2']),
   );
   expect('a role off the ladder is tried alone', JSON.stringify(nextRung('designer', 2, { stepDown: true })) === '["designer"]');
   expect(
     'a task written for coder-2 starts there',
-    JSON.stringify(nextRung('coder-2', 1)) === JSON.stringify(['coder-2', 'coder-3']),
+    JSON.stringify(nextRung('coder-2', 1)) === JSON.stringify(['coder-2']),
   );
 }
 

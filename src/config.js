@@ -5,6 +5,7 @@ import path from 'node:path';
 import { CONFIG_FILE, CONFIG_DIR, SEED_CONFIG_FILE } from './paths.js';
 import { providerType, providerId, declaredProviderType } from './providers.js';
 import { getProviderKey } from './secrets.js';
+import { ROLES } from './plans.js';
 
 /** The finished-work sounds that exist in `web\sounds`, plus "off". The list is here
  *  so the config can refuse an unknown name instead of silently playing nothing. */
@@ -217,7 +218,7 @@ export const DEFAULTS = {
     // written for one role; when that coder cannot do the job the harness moves
     // the same task down this list (see src/runs.js candidatesFor). A role not in
     // it is tried on its own.
-    ladder: ['coder-1', 'coder-2', 'coder-3'],
+    ladder: ['coder-1', 'coder-2'],
   },
   logging: {
     level: 'info',
@@ -390,10 +391,14 @@ export function normalize(raw) {
   // 0 is a real value: no step limit.
   cfg.worker.maxTurns = clampInt(cfg.worker.maxTurns, 0, 1000, DEFAULTS.worker.maxTurns);
   cfg.worker.leaseGraceSec = clampInt(cfg.worker.leaseGraceSec, 5, 3600, DEFAULTS.worker.leaseGraceSec);
-  // The peer ladder is a list of role ids; anything unknown is dropped rather than
-  // left to confuse a delegation with a role that has no card and no model.
+  // The peer ladder is a list of role ids, and every one of them has to be a role
+  // that exists — a card to show and a model to run. A saved config can still name
+  // one that has left (coder-3, 9 Nov 2026): the delegation would work and the panel
+  // would have nowhere to put it, so an unknown id is dropped here rather than
+  // carried into the next run.
+  const knownRoles = new Set(ROLES);
   cfg.worker.ladder = Array.isArray(cfg.worker.ladder)
-    ? cfg.worker.ladder.map((r) => String(r || '').trim()).filter(Boolean)
+    ? cfg.worker.ladder.map((r) => String(r || '').trim()).filter((r) => r && knownRoles.has(r))
     : [...DEFAULTS.worker.ladder];
 
   cfg.engine.type = String(cfg.engine.type || 'opencode');

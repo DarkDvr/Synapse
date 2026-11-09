@@ -15,10 +15,9 @@ export const ROLES = [
   { id: 'architect', name: 'Architect' },
   { id: 'inventor', name: 'Inventor' },
   { id: 'designer', name: 'Designer' },
+  { id: 'qc', name: 'QC' },
   { id: 'coder-1', name: 'Coder 1' },
   { id: 'coder-2', name: 'Coder 2' },
-  { id: 'coder-3', name: 'Coder 3' },
-  { id: 'qc', name: 'QC' },
 ];
 
 // Every role — the Architect included — stores its own selection as

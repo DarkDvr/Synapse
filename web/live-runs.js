@@ -664,10 +664,15 @@ export function handleRunEvent(ev) {
   renderComposer();
 }
 
-// The live path: one solid arrow from the requester down the spine and across
-// into the worker, with yellow ants travelling it. It is measured from the real
-// boxes at full precision (the spine's exact centreline, the dotted band's exact
-// centre) so the arrow covers the dots it replaces instead of stepping past them.
+// The rail's delegation trunk: one dotted line down the gutter under the
+// Architect, with a dash into every role's card, and — while a run is live — the
+// yellow arrow with ants on the segment that leads to that role.
+//
+// Drawn as SVG from the real card boxes, not as CSS borders. Two independent dash
+// patterns meeting at a corner leave a notch and a cross that reads as a
+// rendering bug: the CSS version had a vertical line whose beads did not line up
+// with the horizontal stubs, and the stub stopped a pixel short of the trunk.
+// One path, one dash pattern, exact coordinates.
 export function drawActivePath() {
   const layer = $('pathLayer');
   const topo = $('topology');
@@ -675,56 +680,78 @@ export function drawActivePath() {
   layer.innerHTML = '';
   if (!topo.offsetParent || topo.clientWidth === 0) return; // hidden view
 
-  const run = currentRun();
   const arch = topo.querySelector('.topo-architect .role-card');
-  const dest = run ? cardFor(run.role) : null;
-  if (!run || !arch || !dest) return;
-
-  // The row's connector cell owns the band the path runs along, and the spine is
-  // that cell's exact centre. The cell is a sibling of the row's two cards —
-  // before the right-hand one, after the left-hand one.
-  const sibling = (el) => (el && el.classList.contains('link') ? el : null);
-  const cell = sibling(dest.previousElementSibling) || sibling(dest.nextElementSibling);
-  const spineCell = topo.querySelector('.link') || cell;
-  const band = cell?.querySelector('.link-line')?.getBoundingClientRect();
-  if (!band || !spineCell) return;
+  // Single mode hides the workers, so there is no trunk to draw: a hidden card
+  // has no box, and the layer is empty rather than stale.
+  const cards = [...topo.querySelectorAll(':scope > .role-card')].filter((c) => c.offsetParent);
+  if (!arch || !arch.offsetParent || !cards.length) return;
 
   const box = topo.getBoundingClientRect();
-  const a = arch.getBoundingClientRect();
-  const d = dest.getBoundingClientRect();
-  const s = spineCell.getBoundingClientRect();
-  // A card hidden by Single mode has no box: there is nothing to draw a path to.
-  if (!d.width || !a.width || !s.width) return;
   const n = (v) => Math.round(v * 1000) / 1000;
+  const a = arch.getBoundingClientRect();
+  const first = cards[0].getBoundingClientRect();
 
-  const spineX = n(s.left + s.width / 2 - box.left);
-  const y0 = n(a.bottom - box.top);                 // the requester's bottom edge
-  const y1 = n(band.top + band.height / 2 - box.top); // exactly the dot centre
-  const right = d.left + d.width / 2 > box.left + box.width / 2;
-  const x1 = n((right ? d.left : d.right) - box.left); // touches the worker
-  const path = `M ${spineX} ${y0} L ${spineX} ${y1} L ${x1} ${y1}`;
+  // The gutter is the space between the rail's edge and the cards; the trunk runs
+  // down its centre. The Architect spans the gutter (its left edge is the rail's),
+  // the workers start after it, which is why the trunk's x is measured from the
+  // first worker card rather than from the top.
+  const x = n((first.left - box.left) / 2);
+  const y0 = n(a.bottom - box.top);
+  const mid = (r) => n(r.top + r.height / 2 - box.top);
+  const edge = (r) => n(r.left - box.left);
 
-  layer.setAttribute('viewBox', `0 0 ${box.width} ${box.height}`);
+  layer.setAttribute('viewBox', `0 0 ${n(box.width)} ${n(box.height)}`);
   layer.setAttribute('preserveAspectRatio', 'none');
 
-  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  // Even pitch rather than a fixed count: a long path gets more ants, so the
-  // beads read as one dotted line the whole way, and the speed stays constant
-  // instead of the ants sprinting down a short path and crawling down a long one.
-  const len = Math.abs(y1 - y0) + Math.abs(x1 - spineX);
-  const COUNT = Math.max(5, Math.round(len / 16));
-  // Half the speed of the first version (2.2s/90 was a sprint at 1200px). The
-  // `begin` offsets are fractions of DUR, so the pitch scales with it.
-  const DUR = Math.max(4.4, len / 45);
-  const ants = reduce
-    ? ''
-    : Array.from({ length: COUNT }, (_, i) =>
-        `<circle r="2.8"><animateMotion dur="${DUR.toFixed(2)}s" begin="${(i * DUR / COUNT).toFixed(2)}s" repeatCount="indefinite" path="${path}"></animateMotion></circle>`,
-      ).join('');
+  // A hairline, not dots. Two attempts at dashes failed for the same reason: a
+  // dotted line is a hundred small judgements about where a bead starts, and the
+  // layer does not begin on a whole pixel. A solid 1px line has no beads to place
+  // and antialiases evenly along its whole length.
+  const yLast = mid(cards[cards.length - 1].getBoundingClientRect());
+  const lines = cards
+    .map((card) => {
+      const r = card.getBoundingClientRect();
+      const m = mid(r);
+      return `M ${x} ${m} L ${edge(r)} ${m}`;
+    })
+    .join(' ');
+  let markup =
+    `<g class="trunk" shape-rendering="crispEdges">` +
+    `<path d="M ${x} ${y0} L ${x} ${yLast}"></path>` +
+    `<path d="${lines}"></path>` +
+    `</g>`;
 
-  layer.innerHTML =
-    `<defs><marker id="synArrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto">` +
-    `<path d="M0 0 L10 5 L0 10 Z"></path></marker></defs>` +
-    `<path class="flow" d="${path}" marker-end="url(#synArrow)"></path>` +
-    ants;
+  const run = currentRun();
+  const dest = run ? cardFor(run.role) : null;
+  if (run && dest && dest.offsetParent) {
+    const d = dest.getBoundingClientRect();
+    const y1 = mid(d);
+    const x1 = edge(d);
+    // The same L the trunk already draws to that card, in the live colour: down
+    // from the Architect, then across into the worker's edge.
+    const path = `M ${x} ${y0} L ${x} ${y1} L ${x1} ${y1}`;
+
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    // Even pitch rather than a fixed count: a long path gets more ants, so the
+    // beads read as one dotted line the whole way, and the speed stays constant
+    // instead of the ants sprinting down a short path and crawling down a long one.
+    const len = Math.abs(y1 - y0) + Math.abs(x1 - x);
+    const COUNT = Math.max(5, Math.round(len / 16));
+    // Twice the original speed (operator's call, 9 Nov): fast enough to read as
+    // moving, slow enough to follow. The `begin` offsets are fractions of DUR, so
+    // the pitch still scales with it and a longer path keeps the same apparent
+    // speed.
+    const DUR = Math.max(2.2, len / 90);
+    const ants = reduce
+      ? ''
+      : Array.from({ length: COUNT }, (_, i) =>
+          `<circle r="2.8"><animateMotion dur="${DUR.toFixed(2)}s" begin="${(i * DUR / COUNT).toFixed(2)}s" repeatCount="indefinite" path="${path}"></animateMotion></circle>`,
+        ).join('');
+
+    // No arrowhead: the moving beads already say which way the work is flowing,
+    // and a second mark at the card's edge read as clutter against the border.
+    markup += `<path class="flow" d="${path}"></path>` + ants;
+  }
+
+  layer.innerHTML = markup;
 }

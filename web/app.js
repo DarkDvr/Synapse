@@ -70,6 +70,7 @@ import {
   jumpMessage,
   captureChatSlack,
   restoreChatSlack,
+  CHAT_FOLLOW_SLACK,
   stopFollowingChat,
   chatScrollWiring,
 } from './chat-scroll.js';
@@ -128,7 +129,6 @@ import {
   autoGrow,
   composerWiring,
 } from './composer.js';
-import { fitChatHeight, settleChatBox, watchChatGeometry, wideLayout } from './chat-geometry.js';
 import {
   renderAskPanel,
   askHost,
@@ -438,13 +438,9 @@ const issuesTitle = (m) =>
 // in Single — and Multi reveals the workers around it. Height is measured, not
 // guessed, so the cards are never cut off mid-card.
 let revealTimer = 0;
-let workersPendingOff = false;
-// While a card transition is in flight, re-measures wait (see applyRoleCardsLayout).
-// The chat needs nothing from this: its height follows the cards through the
-// ResizeObserver in watchChatGeometry.
-let revealUntil = 0;
-// The plan's fade needs asking again once a mode switch has settled. This is not a
-// chat fit: the chat follows the cards every frame (see watchChatGeometry).
+
+
+// The plan's fade needs asking again once a mode switch has settled.
 let planFadeTimer = 0;
 
 
@@ -455,110 +451,20 @@ function topologyTarget() {
 }
 
 /**
- * How much vertical room the role-card wrapper may take. In the wide layout the
- * stage has a definite height (viewport minus the frame); below the breakpoint it
- * is content-sized and the page scrolls. There, using the stage's own height would
- * collapse the reveal to the Architect alone, so the breakpoint itself is the test
- * — `getComputedStyle().height` reports the used height, never `auto`. The chat
- * visibly slides down as the workers reveal.
- */
-function stageBudget(stage) {
-  const composerH = $('composer')?.getBoundingClientRect().height || 58;
-  const basis = wideLayout() && stage ? stage.getBoundingClientRect().height : window.innerHeight - 40;
-  // composer row + its borders + the stage gap
-  return Math.max(0, basis - composerH - 2 - 14);
-}
-
-function measureReveal(topo, stage) {
-  // Use the real box height, rounded UP: scrollHeight rounds down, and a
-  // 241.06px topology under a 241px cap clipped the last card's bottom border
-  // and made `overflow: auto` grow a hairline scrollbar.
-  const content = Math.ceil(topo.getBoundingClientRect().height);
-  return Math.min(content, Math.round(stageBudget(stage)));
-}
-
-/**
- * Single: Architect only, wrapper at the Architect's height. Multi: the whole
- * topology, measured. The wrapper is always open in a session, so switching
- * modes is a height animation, not a show/hide.
+ * The cards are no longer sized: the stage's grid gives each part its own cell, so
+ * the chat sits under the bar in Single and beside the stack in Multi without
+ * anything here measuring a height or animating one.
  *
- * Single never trusts a measurement for its resting state: the wrapper ends at
- * `max-height: none`, i.e. exactly the Architect card, so a stale measure can
- * never clip the card or grow a scrollbar (and `overflow: clip` in CSS means
- * not even a transient one can scroll). The measured height is used only for
- * the 320ms Multi→Single collapse animation.
+ * What is left is the two jobs that were never about height — showing the workers
+ * at all (Settings > Worker cards), and letting the plan ask for its fade again
+ * once a switch has settled.
  */
-function applyRoleCardsLayout({ animate = true, from = null, remeasure = false } = {}) {
-  const els = topologyTarget();
-  if (!els || state.view !== 'session') return;
-  // A re-measure landing mid-slide restarts the wrapper's transition while the
-  // chat's own curve keeps going, and the two fall out of step — that is the
-  // ~29px bounce the composer did while the cards were revealing. The observer
-  // fires exactly then (adding `workers-on` resizes the topology), so it waits
-  // for the slide to finish; a mode switch is never a re-measure and always runs.
-  if (remeasure && performance.now() < revealUntil) {
-    requestAnimationFrame(drawActivePath);
-    return;
-  }
-  const { wrap, topo } = els;
-  clearTimeout(revealTimer);
+function applyRoleCardsLayout() {
+  if (state.view !== 'session') return;
+  if (state.workersOn !== false) document.body.classList.add('workers-on');
   clearTimeout(planFadeTimer);
-  workersPendingOff = false;
-  wrap.classList.add('is-open');
-  // The chat's height is no longer fitted here: the wrapper is observed (see
-  // watchChatGeometry), so every frame of this animation fits it from the height
-  // the cards actually have. Only the plan's fade needs asking again once
-  // everything has settled.
   planFadeTimer = setTimeout(() => { updatePlanOverflow(); }, 340);
-
-  if (state.mode === 'multi') {
-    // `max-height: none` does not interpolate, so growing straight out of the
-    // Single resting state would snap instead of sliding. Pin the current
-    // height first, force a reflow, then grow to the measured target.
-    //
-    // `from` is the height to animate from when the caller already changed the
-    // content: a card that just gained a subtitle is taller by the time this
-    // runs, and pinning *that* would snap instead of sliding. The chat's top
-    // edge is what moves; its bottom is pinned by the stage's definite height.
-    const fromH = from ?? Math.ceil(wrap.getBoundingClientRect().height);
-    document.body.classList.add('workers-on');
-    wrap.style.setProperty('--reveal-h', `${fromH}px`);
-    // the reflow is what makes the reveal animate instead of snapping
-    void wrap.offsetHeight;
-    wrap.style.setProperty('--reveal-h', `${measureReveal(topo, $('stage'))}px`);
-    revealUntil = performance.now() + 300;
-    requestAnimationFrame(drawActivePath);
-    return;
-  }
-
-  // Everything above the first worker, including the 12px top margin the
-  // Architect row gets from `.topology > * + *` (the absolute path layer is a
-  // preceding child, so the selector matches it). Only used to animate the
-  // collapse; the resting state below does not depend on it.
-  const topoRect = topo.getBoundingClientRect();
-  const arch = topo.querySelector('.topo-architect');
-  const archBottom = arch?.getBoundingClientRect().bottom ?? topoRect.top;
-  const singleH = Math.ceil(archBottom - topoRect.top);
-  const collapseH = Math.min(singleH, Math.round(stageBudget($('stage'))));
-
-  if (!animate || !document.body.classList.contains('workers-on')) {
-    // Fresh open or re-measure: settle exact immediately, no animation.
-    document.body.classList.remove('workers-on');
-    wrap.style.setProperty('--reveal-h', 'none');
-    return;
-  }
-  // Collapsing from Multi: shrink through the measured height, then settle
-  // exact and hide the workers only once the height has fallen.
-  wrap.style.setProperty('--reveal-h', `${collapseH}px`);
-  revealUntil = performance.now() + 300;
-  workersPendingOff = true;
-  revealTimer = setTimeout(() => {
-    if (workersPendingOff && state.mode === 'single') {
-      document.body.classList.remove('workers-on');
-      wrap.style.setProperty('--reveal-h', 'none');
-    }
-    workersPendingOff = false;
-  }, 320);
+  requestAnimationFrame(drawActivePath);
 }
 
 // Which mode the composer is set to. It is a choice about the *next message*,
@@ -569,15 +475,80 @@ function applyRoleCardsLayout({ animate = true, from = null, remeasure = false }
 function applyMode(mode) {
   if (mode !== 'single' && mode !== 'multi') return;
   if (state.mode === mode) return;
-  // The reader's place, settled once before anything moves: a chat that was a
-  // line short of the end is put at the end here, where it is a small nudge,
-  // instead of being held a line short through the switch.
-  captureChatSlack();
-  restoreChatSlack();
+  // Keep the last line showing. Not the scroll offset: the chat's width and height
+  // both change across a switch, so the text re-wraps and the same offset lands on
+  // different words. What is remembered is the *element* at the bottom edge and
+  // how far its bottom sits above the scroller's bottom — put back after the reflow
+  // and that same line is again the last one you can see.
+  const scroller = $('transcript');
+  const anchor = bottomAnchor(scroller);
+  let interfered = false;
+  // If the reader scrolls during the quarter second of the switch, their place
+  // wins: the restore is cancelled rather than yanking them back.
+  const cancel = () => { interfered = true; };
+  scroller?.addEventListener('wheel', cancel, { passive: true, once: true });
+  scroller?.addEventListener('touchmove', cancel, { passive: true, once: true });
   state.mode = mode;
   renderMode();
   renderPlan();
   setView();
+  settleBottomLine(scroller, anchor, () => interfered);
+}
+
+/** The last transcript element whose bottom edge is inside the scroller, and the
+ *  gap under it. Null when the chat is empty or nothing is fully visible. */
+function bottomAnchor(scroller) {
+  if (!scroller) return null;
+  const box = scroller.getBoundingClientRect();
+  for (let i = scroller.children.length - 1; i >= 0; i--) {
+    const el = scroller.children[i];
+    const r = el.getBoundingClientRect();
+    if (r.height && r.bottom <= box.bottom + 1) return { el, gap: box.bottom - r.bottom };
+  }
+  return null;
+}
+
+function settleBottomLine(scroller, anchor, interfered) {
+  if (!scroller || !anchor) return;
+  let done = false;
+  let raf = 0;
+  // Hold the line on every frame of the switch, not at the end of it: the text is
+  // re-wrapping the whole time (the chat is getting wider or narrower), so a single
+  // correction when the columns stop would show the bottom edge drifting for a
+  // quarter of a second and then jumping back.
+  const hold = () => {
+    if (done) return;
+    if (interfered() || !anchor.el.isConnected) return finish();
+    const r = anchor.el.getBoundingClientRect();
+    const box = scroller.getBoundingClientRect();
+    // The element's place in the *content*, which scrolling cannot change. Reading
+    // the viewport position and adding a delta to `scrollTop` made the next frame's
+    // reading depend on this frame's write — the bottom line then flickered between
+    // two elements for the length of the switch, which is worse than the drift.
+    const contentTop = r.top - box.top + scroller.scrollTop;
+    const target = contentTop + r.height + anchor.gap - scroller.clientHeight;
+    if (Math.abs(target - scroller.scrollTop) > 0.5) scroller.scrollTop = target;
+    raf = requestAnimationFrame(hold);
+  };
+  const finish = () => {
+    if (done) return;
+    done = true;
+    cancelAnimationFrame(raf);
+    stage.removeEventListener('transitionend', onEnd);
+    clearTimeout(timer);
+    if (interfered() || !anchor.el.isConnected) return;
+    // Within two lines of the end is the end — the app's own rule for following a
+    // run, and what stops the chat settling a hair short of the newest message.
+    const end = scroller.scrollHeight - scroller.clientHeight;
+    if (end - scroller.scrollTop <= CHAT_FOLLOW_SLACK) scroller.scrollTop = end;
+  };
+  const onEnd = (event) => { if (event.propertyName === 'grid-template-columns') finish(); };
+  const stage = $('stage');
+  stage?.addEventListener('transitionend', onEnd);
+  // Fallback for reduced motion and for a switch with no transition running at
+  // all: the same settle, once, a little after the click.
+  const timer = setTimeout(finish, 400);
+  raf = requestAnimationFrame(hold);
 }
 
 function switchMode() {
@@ -613,7 +584,6 @@ function setView() {
   $('modeToggle').hidden = state.view !== 'session';
   renderKeep();
   applyRoleCardsLayout();
-  fitChatHeight();
   renderComposer();
   renderAskPanel();
   renderRoleActivity();
@@ -2124,7 +2094,6 @@ document.addEventListener('keydown', (e) => {
   window.addEventListener('resize', () => requestAnimationFrame(() => {
     fitStageHeight();
     if (state.view === 'session') applyRoleCardsLayout({ animate: false });
-    fitChatHeight();
     updatePlanOverflow();
     drawActivePath();
     renderChatNav();
@@ -2147,35 +2116,12 @@ document.addEventListener('keydown', (e) => {
       });
     }).observe($('topology'));
   }
-  // The composer grows as the operator types or attaches a file, and the dock's
-  // height is measured from the composer's (see fitChatHeight: on a narrow window
-  // the chat is given whatever room is left under the cards). Measured 27 Oct at
-  // 1076px wide: with the note gone and the eight-second poll no longer repainting,
-  // a long draft left the transcript's bottom 112px behind the composer — the dock
-  // kept the height it had before the box grew. Watching the composer is the event
-  // that actually means "the floor moved"; a poll was only ever an approximation
-  // of it, eight seconds late and once per run for no reason.
-  if (window.ResizeObserver) {
-    let composerRaf = 0;
-    new ResizeObserver(() => {
-      if (composerRaf) return;
-      composerRaf = requestAnimationFrame(() => {
-        composerRaf = 0;
-        if (state.view === 'session') fitChatHeight();
-      });
-    }).observe($('composer'));
-  }
   // Fonts settle a tick after first paint; measure once more when they do.
   if (document.fonts?.ready) {
     document.fonts.ready.then(() => {
       if (state.view === 'session') applyRoleCardsLayout({ animate: false, remeasure: true });
     }).catch(() => {});
   }
-
-  // The chat's geometry is watched by reading it every frame (see
-  // watchChatGeometry), which is what keeps the conversation still while the box
-  // around it moves — in either layout, for any reason the box moves.
-  watchChatGeometry();
 
   setInterval(refreshStatus, 10000);
 
@@ -2240,7 +2186,7 @@ async function bootPage() {
   tracesWiring({ renderTranscript });
   // The transcript asks the app for its height, the cards' activity, the question
   // post, the permission cards and the compact post's metadata.
-  transcriptWiring({ fitChatHeight, renderRoleActivity, mountAskPost, renderPermissions, compactPostOf });
+  transcriptWiring({ renderRoleActivity, mountAskPost, renderPermissions, compactPostOf });
   // The dock asks the app to reload the conversation, the cards that are waiting, the
   // compact chip and the rail.
   composerWiring({ loadMessages, refreshPending, renderCompactChip, renderTree });

@@ -26,7 +26,11 @@ import { scratchDir } from './paths.js';
 // disk, so a second confirmation was redundant. The adversary slot is now **QC**
 // (quality control): the role that reads the build the way a non-technical person
 // will, and says where it confuses, clips or lies.
-export const ROLES = ['architect', 'inventor', 'coder-1', 'designer', 'coder-2', 'qc', 'coder-3'];
+// The roles a plan may name, in the order the operator sees them. Two coders: the
+// third rung was removed on 9 Nov 2026 — the ladder is coder-1 then coder-2, and a
+// third coder cost a card, a model choice and a sentence in every brief for a
+// fallback that was reached twice in four months of runs.
+export const ROLES = ['architect', 'inventor', 'designer', 'qc', 'coder-1', 'coder-2'];
 
 /** Role ids that existed before a rename, mapped to the id that replaced them.
  *  A plan file is the Architect's, not ours, so old plans are translated as they
@@ -384,21 +388,21 @@ export function readPlan(dir) {
     }
     // The coders are a ladder, not a pool. Every build task is written for
     // coder-1 and the harness escalates on its own when that coder cannot do the
-    // work (see candidatesFor in runs.js). A plan that names coder-2 or coder-3 is
-    // spending a fallback rung on work the first coder could have done - in Shift
-    // Test 4 the Architect spread six build tasks across all three coders.
+    // work (see candidatesFor in runs.js). A plan that names coder-2 is spending
+    // the fallback rung on work the first coder could have done - in Shift Test 4
+    // the Architect spread six build tasks across three coders.
     //
     // The exception is the operator's own instruction: "use coder 2" is a request,
     // and quietly overruling it is worse than spending the rung - the operator
     // then believes coder-2 is doing the work (30 Oct). Such a row carries
     // origin "operator"; the task's role is still its first rung, so the harness
-    // moves it down to coder-3 if coder-2 cannot do it.
+    // moves it down to the last rung if the first cannot do it.
     const operatorNamed = asText(source.origin).toLowerCase() === 'operator';
-    if ((role === 'coder-2' || role === 'coder-3') && !operatorNamed) {
+    if (role === 'coder-2' && !operatorNamed) {
       problems.push(
         `${where} is written for ${role}; build tasks are written for coder-1, and the harness moves a task to ` +
-          `coder-2 then coder-3 by itself when the coder before it cannot do the job - unless the operator named ` +
-          `that coder, in which case set origin "operator"`,
+          `coder-2 by itself when the first coder cannot do the job - unless the operator named that coder, in ` +
+          `which case set origin "operator"`,
       );
     }
 
@@ -1215,7 +1219,7 @@ export function briefSession({ dir, role = 'architect', auto = false, single = f
   }
 
   // A worker knows what its job is *in general*; the message tells it which
-  // specific task. Coders share one mandate, including coder-2 and coder-3.
+  // specific task. Coders share one mandate, including coder-2.
   const mandate = isArchitect ? null : ROLE_MANDATES[role] || ROLE_MANDATES['coder-1'];
   if (mandate) lines.push(mandate);
   // Every role, at the end of the job: the run ends when the deliverable exists
@@ -1344,7 +1348,7 @@ export function briefSession({ dir, role = 'architect', auto = false, single = f
     // to know they are peers: the ladder is the harness's business (it is the one
     // that can see a model refuse a turn).
     lines.push(
-      `coder-1, coder-2 and coder-3 are peers - three coders, which may each be on a different model. Write ` +
+      `coder-1 and coder-2 are peers - two coders, which may each be on a different model. Write ` +
         `coding work for one of them; if that coder cannot do it, Synapse moves the task down the line ` +
         `itself and the report tells you which role actually ran it.`,
     );
@@ -1418,10 +1422,10 @@ export function briefSession({ dir, role = 'architect', auto = false, single = f
     lines.push(
       `build: one task that builds the shell from the design with no wiring, then one that wires it. The titles ` +
         `say which is which. A shell task must not wire; a wiring task must not redesign. Every build task is ` +
-        `written for coder-1: the coders are a ladder, not a pool, and the harness moves a task to coder-2 and ` +
-        `then coder-3 by itself when the coder before it cannot do the work. Do not pick coder-2 or coder-3 ` +
+        `written for coder-1: the coders are a ladder, not a pool, and the harness moves a task to coder-2 ` +
+        `by itself when the first coder cannot do the work. Do not pick coder-2 ` +
         `yourself - that spends the fallback on work the first coder could have done. The one exception is the ` +
-        `operator: when they name a coder in the request ("use coder 2", "coder 3 builds it"), write that task ` +
+        `operator: when they name a coder in the request ("use coder 2", "coder 2 builds it"), write that task ` +
         `for the coder they named, set its origin to "operator", and say in your reply which coder you used - ` +
         `never quietly overrule them. If a task will take more than about forty turns or touch more than one ` +
         `subsystem, split it into two tasks joined by a handoff - a worker that runs a hundred turns is slower on ` +

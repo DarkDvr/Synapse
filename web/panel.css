@@ -1,0 +1,267 @@
+/* ══ the main panel, rebuilt ════════════════════════════════════════════════
+   The operator's mock, 9 Nov 2026. The main panel stops being "cards above the
+   chat" and becomes two columns: the conversation on the left, a rail on the
+   right that holds the Architect, the role cards and the project plan.
+
+   The stage is the same grid in both modes — two columns and two rows — and a
+   mode switch only changes two numbers: the rail's width, and the grid areas of
+   the bar and the chat. In Single the rail is 0 wide, the Architect is a bar
+   across the top and the chat has everything under it.
+
+   Nothing here measures anything. The bar sets row 1 and the chat takes what is
+   left, so the chat's box is definite at every window size; the fitted height
+   and the per-frame watcher that the old bottom-anchored dock needed have
+   nothing left to do.
+
+   Measured against the mock at a 1411px window (main panel 1086): bar 38 tall,
+   chat 1086 wide. */
+
+/* The working area used to be capped at 1240px and left-anchored, so on a big
+   window a third of the panel was empty to the right of the chat. The
+   conversation is what expands: the rail is a fixed 360, the bar is a row, and
+   everything else the window gives is the chat's. */
+body[data-view="session"] .room { max-width: none; }
+/* The wrap had a cap of its own — 1580px at a wide window — so clearing the room's
+   cap only ever got the chat as wide as its parent allowed. The conversation is the
+   thing that should use a big screen, so in a session the wrap has no cap either. */
+body[data-view="session"] .content-wrap { max-width: none; }
+
+/* While the columns animate, the rail's contents are still a full 360 wide inside a
+   narrower column, so they overflow their cell for a quarter of a second. `clip` on
+   the stage stops that reaching the document without making a scroll container of
+   the stage (which `hidden` would, and that changes what sticks and what the scroll
+   arithmetic sees). */
+body[data-view="session"] .stage { overflow-x: clip; }
+
+/* Nothing open: the empty state belongs to the whole stage, not to the first row of
+   a grid that has two. */
+body[data-view="none"] .stage-empty { grid-area: 1 / 1 / -1 / -1; }
+
+/* A session with no messages yet: the panel is one big empty box, so it says what it
+   is for, quietly, above the composer. Gone the moment there is a line to show. */
+body[data-view="session"] .chat-dock:not(.has-history)::after {
+  content: "Type below — this is the project's conversation with the Architect.";
+  position: absolute;
+  left: 0; right: 0; bottom: 50%;
+  text-align: center;
+  font-size: 12.5px;
+  color: #6c7079;
+  pointer-events: none;
+}
+
+body[data-mode="single"] .stage {
+  grid-template-columns: minmax(0, 1fr) 0;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 8px 0;
+}
+
+body[data-mode="single"] .topology-wrap {
+  /* Column 1, not 1 / -1. The rail is 0 wide in Single, so column 1 is the whole
+     panel anyway — but spanning both columns pinned the chat's right edge to the
+     stage's edge whatever the columns were doing, and the switch then re-laid the
+     text out in one frame while only the rail animated. One column means the
+     chat's right edge travels with the columns. */
+  grid-column: 1;
+  grid-row: 1;
+  max-height: none;
+  overflow: visible;
+  padding: 0;
+}
+
+/* The cards' own 3-column topology (two cards around a spine) belongs to Multi;
+   in Single it collapses to the Architect, which is a bar. */
+body[data-mode="single"] .topology { display: block; padding: 0; }
+body[data-mode="single"] .topology > .role-card,
+body[data-mode="single"] .topology > .link,
+body[data-mode="single"] .topology > .path-layer { display: none; }
+
+body[data-mode="single"] .topo-architect { display: block; width: 100%; margin: 0; padding: 0; }
+
+body[data-mode="single"] .topo-architect .role-card {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 5px 12px;
+}
+
+/* The head's three children join the bar's row, so the order can be the mock's:
+   dot, name, stats, then the selector and the buttons at the right end. An
+   `order` on a container's children cannot reach inside it, which is why the
+   head is dissolved rather than restyled. */
+body[data-mode="single"] .topo-architect .role-head { display: contents; }
+body[data-mode="single"] .topo-architect .status-dot { order: 1; }
+body[data-mode="single"] .topo-architect h3 { order: 2; }
+/* The two readouts live in the card's bottom corners as absolutely positioned
+   9.5px labels. In a one-row bar there are no corners: they join the row, and
+   the gap between the name and them is what grows with the window. */
+body[data-mode="single"] .topo-architect .role-rate {
+  order: 3;
+  position: static;
+  font-size: 10px;
+  color: #8f939b;
+  margin-left: auto;
+}
+body[data-mode="single"] .topo-architect .role-clock {
+  order: 4;
+  position: static;
+  font-size: 10px;
+  color: #8f939b;
+}
+body[data-mode="single"] .topo-architect .role-tools {
+  order: 5;
+  /* One gap, not two: the base rule pushes the tools away from the name, and
+     with the stats' own `margin-left: auto` that split the slack in half and
+     left a hole between the clock and the picker. */
+  margin-left: 0;
+  padding-left: 0;
+}
+/* A name that does not fit is ellipsised in the middle of a wide bar, which
+   tells the operator nothing. The picker takes the room it needs. */
+body[data-mode="single"] .topo-architect .model-search {
+  width: 300px; max-width: 300px; flex: 0 1 300px;
+}
+
+/* The step line and the chip are what the cards lose to become small; the bar
+   has the conversation underneath it for the same information. */
+body[data-mode="single"] .topo-architect .role-task,
+body[data-mode="single"] .topo-architect .role-chip { display: none; }
+
+/* The old dock was pinned to the bottom of the window and sized by hand
+   (`align-self: end` plus a fitted height). In this layout the row above it says
+   where its top edge is and the stage says where its bottom edge is, so it simply
+   fills the cell: no fitted height, nothing to watch. */
+
+body[data-mode="single"] .chat-dock {
+  grid-column: 1;
+  grid-row: 2;
+  align-self: stretch;
+  height: auto;
+}
+/* An empty chat hides its scroller, so the composer would fall into the tall
+   first row and float at the top. It names its row instead. */
+body[data-mode="single"] .chat-dock > .composer { grid-row: 2; }
+
+/* Single has no plan: it is a plain conversation, and the work list is a Multi
+   thing. The pane stays in the DOM so the switch is a class, not a re-render. */
+body[data-mode="single"] .rail-plan { display: none; }
+
+/* Two readings on one line want air between them, not a dot. */
+.role-rate { white-space: pre; }
+
+/* ══ Multi: the rail ══════════════════════════════════════════════════════
+   The same two columns and two rows as Single, with the rail open. The chat
+   keeps the whole height and gives up 360 of width; the Architect sits at the
+   top of the rail, the five roles stack under it, and the work list takes what
+   is left below them. */
+
+body[data-view="session"] .stage {
+  --rail-w: 360px;
+  /* The one property that animates. The bar's own move between its two homes is
+     a re-layout in a single frame; what the eye follows is this column closing
+     and opening. */
+  transition: grid-template-columns 240ms ease;
+}
+
+body[data-mode="multi"] .stage {
+  grid-template-columns: minmax(0, 1fr) var(--rail-w, 360px);
+  grid-template-rows: auto minmax(0, 1fr);
+  column-gap: 24px;
+  row-gap: 8px;
+}
+body[data-mode="multi"] .chat-dock {
+  grid-column: 1;
+  grid-row: 1 / -1;
+  align-self: stretch;
+  height: auto;
+}
+body[data-mode="multi"] .chat-dock > .composer { grid-row: 2; }
+body[data-mode="multi"] .topology-wrap {
+  grid-column: 2;
+  grid-row: 1;
+  max-height: none;
+  /* Clipped to the rail and a fixed 360 wide inside it, so the cards are
+     uncovered by the closing column rather than re-laid-out on every frame of
+     the switch. */
+  overflow: hidden;
+}
+body[data-mode="multi"] .topology { width: var(--rail-w, 360px); }
+/* Right-anchored while the column shrinks: the cards then stay where they are and
+   the chat's edge sweeps over them — "hidden behind the chat" — instead of being
+   clipped away from their right side, which reads as a wipe from the wrong end. */
+body[data-mode="multi"] .topology,
+body[data-mode="multi"] .rail-plan { margin-left: auto; }
+body[data-mode="multi"] .rail-plan {
+  grid-column: 2;
+  grid-row: 2;
+  display: flex;
+  max-height: none;
+  contain: none;
+  align-self: stretch;
+  width: var(--rail-w, 360px);
+  /* The gap the old breakpoint block used to give it: the plan is a panel under the
+     cards, not flush against the last one. */
+  margin-top: var(--row-gap);
+}
+
+/* One column of roles, with a gutter on the left for the delegation trunk. */
+body[data-mode="multi"] .topology > * { margin-top: 0; }
+body[data-mode="multi"] .topology {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  row-gap: 12px;
+  align-content: start;
+}
+/* The Architect spans the gutter as well as the cards, so its left edge is the
+   rail's edge — the same X as the plan below it, as in the mock. Only the
+   workers are inset, which is what makes the trunk's gutter read as a gutter. */
+body[data-mode="multi"] .topology > .topo-architect { grid-column: 1 / -1; }
+body[data-mode="multi"] .topology > .topo-architect .role-card { width: 100%; }
+body[data-mode="multi"] .topology > .role-card { grid-column: 2; }
+/* The old connectors were two cards either side of a spine: each `.link` is a
+   cell holding a dotted horizontal band and a dotted vertical band. The stack has
+   no spine, so they are hidden — and they have to be, not merely ignored: a
+   hidden-looking link still lays out in the grid and its beads sit exactly behind
+   the new hairline, which is the "beads hiding behind the lines" the operator
+   spotted. */
+body[data-mode="multi"] .topology > .link { display: none; }
+
+/* The trunk is a solid hairline drawn by drawActivePath from the card boxes: one
+   line down the gutter, one into each card. Two dash attempts failed the same
+   way — beads are placed by distance along each piece and the layer does not
+   start on a whole pixel — so there are no beads any more. */
+.path-layer .trunk path {
+  fill: none;
+  stroke: #4a505a;
+  stroke-width: 1;
+}
+
+/* Two rows on a card: who it is and which model — with the effort and edit
+   buttons beside the picker, where they have always been — then what it costs.
+   The step line is gone. */
+body[data-mode="multi"] .topology .role-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: auto auto;
+  gap: 9px 10px;
+  padding: 7px 12px 6px;
+}
+body[data-mode="multi"] .topology .role-head { grid-column: 1 / -1; grid-row: 1; min-width: 0; }
+body[data-mode="multi"] .topology .role-task,
+body[data-mode="multi"] .topology .role-chip { display: none; }
+body[data-mode="multi"] .topology .role-rate {
+  grid-column: 1;
+  grid-row: 2;
+  position: static;
+  font-size: 9.5px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+body[data-mode="multi"] .topology .role-clock {
+  grid-column: 2;
+  grid-row: 2;
+  position: static;
+  font-size: 9.5px;
+  justify-self: end;
+}

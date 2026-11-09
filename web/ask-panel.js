@@ -14,7 +14,6 @@ import { serverNow } from './api.js';
 import { api } from './api.js';
 import { toast } from './toast.js';
 import { askHeadNote, answerTimeline } from './ask-note.js';
-import { fitChatHeight, wideLayout } from './chat-geometry.js';
 import { stopFollowingChat } from './chat-scroll.js';
 import { currentForm } from './run-view.js';
 import { renderTranscript } from './transcript.js';
