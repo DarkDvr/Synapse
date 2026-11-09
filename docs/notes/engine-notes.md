@@ -1645,11 +1645,11 @@ Get-Process python | ForEach-Object { Stop-Process -Id $_.Id -Force }
 ```
 
 The first clause stops the app it was testing. The second stops **every python on
-the machine**, and the local model server answering that worker's own run is
-python too. It died at 00:07:45; the engine's first retry logged 433 ms later; the
-run then retried against a closed port for eight minutes until the server was
-started again, and still reported "completed". Nothing in the harness knew the
-model had gone.
+the machine**, and the local model server answering that worker's own run ran as
+`python.exe` at the time. It died at 00:07:45; the engine's first retry logged
+433 ms later; the run then retried against a closed port for eight minutes until
+the server was started again, and still reported "completed". Nothing in the
+harness knew the model had gone.
 
 Nothing about it looked wrong. The worker asked permission, which is the tidy
 thing to do. Synapse allowed it 26 ms later because Auto-Permissions was on, so no
@@ -1665,9 +1665,37 @@ never by its name**, because a name matches every process that carries it and th
 run may depend on one of them. `run-rules.test.mjs` holds the sentence, and
 separately that the sentence names no language, runtime or product.
 
-That is one more way to say the right thing, not a fence. If it recurs, the
-question is which port the model server holds and whether a name sweep would reach
-it — a policy, and a policy has to be decided before the night starts.
+That is one more way to say the right thing, not a fence.
+
+### The other side of it, changed the same night
+
+The operator fixed this where the collision actually lived. The server no longer
+answers to the name `python.exe`: it runs as `polyhost.exe`, and it restarts
+itself when its process dies. So a name sweep cannot reach it any more, and the
+same kill now costs a few seconds of retries instead of eight minutes.
+
+That cuts both ways, and the second way is the trap: **a self-restarting server
+makes this failure quiet**. Eight minutes of a dead port announced itself in the
+logs; a three-second gap mid-turn does not, and the turn that lost its model looks
+like an ordinary retry. When a run stalls for no reason, read the provider port's
+pid at the start of the turn before reading anything else.
+
+Synapse's own cleanup cannot reach it either, and that part is by design rather
+than luck: `mayStop()` in `src/cleanup.js` stops only the runtimes that can serve a
+page (`node`, `python`, `pwsh`, `deno`, `bun`), because cleanup exists for a
+worker's leftovers and a worker does not start the model server. A model server's
+program is not on that list, and adding it would be the wrong repair.
+
+The rule is not about python, and that is why it stays. The next service will be
+called something else, the next worker will tidy up with a sweep by name, and a
+name still matches every process that carries it. Nothing in `src/` names the
+runtime or the server: the brief states the rule, `run-rules.test.mjs` keeps the
+rule free of any product's name, and the rename on the other side is a fact about
+one machine, not a fact the harness knows.
+
+If it recurs, the question is which port held the model at the start of the turn
+and whether a name sweep would reach it. That is a policy, and a policy is decided
+before the night starts, not during it.
 
 ## A restart is not a pause
 
