@@ -1259,6 +1259,19 @@ export function briefSession({ dir, role = 'architect', auto = false, single = f
         'and it stays in the conversation.',
     );
   }
+  // How a process gets stopped. Tidying up after a test means stopping the server
+  // you started, and the tidy-looking version of that is a sweep by name - "stop
+  // the python process". The name is a language or a runtime, not the program: on
+  // 10 Nov a coder ended its task that way and killed the local model server that
+  // was answering the run, which then retried against a closed port for eight
+  // minutes. It asked permission, was allowed instantly, and had no idea it had
+  // done anything wrong - nothing anywhere had told it that a name matches more
+  // than its own process. One id, never a name.
+  lines.push(
+    'Stop a process you started by its id, never by its name. A name matches every process that carries it, ' +
+      'and a service the run depends on may carry the same one - a sweep by name has already stopped the ' +
+      'server that was answering a run.',
+  );
   if (role === 'qc') {
     lines.push(QC_FOCUS[focus === 'security' ? 'security' : 'app']);
     lines.push(QC_PROPORTION);

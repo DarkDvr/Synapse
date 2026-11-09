@@ -1634,6 +1634,41 @@ The test suite also stays out of `data\provider-errors.log` now
 "opencode/one … Invalid request: text is required" lines beside a real usage cap,
 and that file is supposed to be evidence.
 
+## A worker stops what it started, by id (10 Nov)
+
+A coder finished its task and tidied up. It had started the project's own
+`bin/start_server.py` in a background shell, so it ran one command:
+
+```
+Stop-Process -Id 26232 -Force
+Get-Process python | ForEach-Object { Stop-Process -Id $_.Id -Force }
+```
+
+The first clause stops the app it was testing. The second stops **every python on
+the machine**, and the local model server answering that worker's own run is
+python too. It died at 00:07:45; the engine's first retry logged 433 ms later; the
+run then retried against a closed port for eight minutes until the server was
+started again, and still reported "completed". Nothing in the harness knew the
+model had gone.
+
+Nothing about it looked wrong. The worker asked permission, which is the tidy
+thing to do. Synapse allowed it 26 ms later because Auto-Permissions was on, so no
+card appeared. And the command is two words from the ordinary form: the other 121
+kill commands in the same logs are `Stop-Process -Name SysMonitor`, the project's
+own app, which harms nothing.
+
+A refusal is not available. Refusing a kill-by-name means a question on every
+cleanup, and a question at 3 a.m. stalls an unattended night run instead of
+protecting it — the operator's call, and the right one. So the rule went into the
+brief every role re-reads on every step: **stop a process you started by its id,
+never by its name**, because a name matches every process that carries it and the
+run may depend on one of them. `run-rules.test.mjs` holds the sentence, and
+separately that the sentence names no language, runtime or product.
+
+That is one more way to say the right thing, not a fence. If it recurs, the
+question is which port the model server holds and whether a name sweep would reach
+it — a policy, and a policy has to be decided before the night starts.
+
 ## A restart is not a pause
 
 Measured 26 Oct: a worker was running t3 and waiting on a permission request when

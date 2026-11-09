@@ -167,6 +167,16 @@ try {
   // architect itself. Checking a fix is QC's job whoever wrote it.
   expect('verification is routed to qc', architect.includes('The task that checks a fix belongs to qc'));
   expect('and self-verification is named as not a check', architect.includes('judging its own') && architect.includes('standing in for one'));
+  // 10 Nov: a coder finished by stopping "the python process" it had started, and
+  // killed the local model server answering its own run - the server retried against
+  // a closed port for eight minutes. The harness cannot refuse that shape without a
+  // question, and an unattended night run must not wait on one, so the rule is in
+  // the brief: the id you were given, never the name.
+  expect('a worker stops a process by its id', coder.includes('Stop a process you started by its id'));
+  expect('and is told what a name really matches', coder.includes('A name matches every process that carries it'));
+  expect('the architect hears the same rule', architect.includes('never by its name'));
+  const stopRule = coder.split('\n').find((l) => l.includes('Stop a process you started by its id')) || '';
+  expect('the rule names no language or runtime of its own', stopRule.length > 0 && !/\bpython\b|\bnode\b|\.exe/i.test(stopRule), stopRule);
   expect('a worker is not told who does what', !coder.includes('Who does what'));
   expect('a worker is not told to judge anything', !coder.includes('You judge; you do not build'));
   // The brief is sent to every project this harness will ever run, so it may not
@@ -177,7 +187,7 @@ try {
     ['the model a role was given', /model its role/i],
     ['a warm cache', /no cache/i],
     ['a second opinion', /second opinion/i],
-    ['a named model or project', /fever|tracker|bionic|qwen|deepseek|opencode-go/i],
+    ['a named model or project', /fever|tracker|bionic|qwen|deepseek|opencode-go|polystrata/i],
   ]) {
     expect(`the brief does not assume ${label}`, !pattern.test(architect), 'brief mentions it');
   }
