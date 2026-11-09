@@ -122,6 +122,9 @@ function schedule() {
 
 function paneFrame(now) {
   raf = 0;
+  // Is the reader at the end? Asked before the pane grows, so a growing pane is
+  // followed down the page and a reader who scrolled up is left where they are
+  // (9 Nov).
   const trace = active;
   const s = trace?.stream;
   if (!trace || !s || !s.text || trace.thinkCollapsed) return;
@@ -130,6 +133,7 @@ function paneFrame(now) {
   if (!body) return; // a render will bring it back; this frame draws nothing
   const node = body.firstChild;
   if (!node || node.nodeType !== Node.TEXT_NODE) return;
+  const following = wired.atBottom ? wired.atBottom() : false;
   // Append only what is missing: rewriting the whole text re-breaks every line.
   if (node.data !== s.text) {
     if (s.text.startsWith(node.data)) node.data += s.text.slice(node.data.length);
@@ -158,5 +162,8 @@ function paneFrame(now) {
     trace.reserved = true;
     panel.classList.add('is-reserved');
   }
+  // The pane is the last thing in the chat: without this, its growth pushed the
+  // newest lines under the composer and the chat looked stuck (9 Nov).
+  if (following) wired.follow?.();
   if (Math.abs(target - (Number(s.offset) || 0)) > SNAP) schedule();
 }

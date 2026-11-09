@@ -1562,13 +1562,9 @@ body[data-mode="single"] #runAuto { display: none; }
   transform: translate3d(0, 0, 0);
   will-change: transform;
 }
-/* Thinking is the quietest of the three: no quotes, dimmer, so a model's
-   deliberation never reads as something it told the operator. */
-.trace-flow.is-think .trace-flow-body { color: #6a6f77; font-style: italic; }
-/* The step has ended and its last window is waiting for the next one. Dimmed, so
-   the panel never reads as words still arriving. It keeps its space on purpose:
-   removing it is what made the chat jump at every step boundary. */
-.trace-flow.is-idle { opacity: 0.7; }
+/* No dimming while paused: a paused pane is the same text, and the class toggle
+   only cost a repaint. Its space is kept on purpose — removing it is what made the
+   chat jump at every step boundary. */
 /* The thinking pane's controls: one small chevron in its corner when open, one
    breathing line when collapsed. The flag lives on the trace, not in the page, so a
    rebuild keeps the operator's choice for the pane they are reading (9 Nov). */

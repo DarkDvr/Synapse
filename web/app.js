@@ -2250,7 +2250,14 @@ async function bootPage() {
   // A plan row and a role card are two views of the same worker, so the pane asks for
   // the cards' activity and the chime's "is more work coming?".
   planPaneWiring({ noteWorking, renderRoleActivity });
-  paneWiring({ renderTranscript });
+  paneWiring({
+    renderTranscript,
+    atBottom: () => chatAtBottom(48),
+    follow: () => {
+      const el = $('#transcript');
+      if (el) el.scrollTop = el.scrollHeight;
+    },
+  });
   // The rail asks the app to make a chat, open one, set the status chip and show the
   // empty view.
   projectsWiring({ createChat, openSession, setEventChip, showNothing });

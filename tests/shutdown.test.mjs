@@ -251,3 +251,13 @@ test('the shutdown subtitle is scoped past the baseline modal rule, and centred'
   assert.match(rule[1], /margin:\s*16px auto 22px/, 'breathing room above and below');
   assert.doesNotMatch(css, /^\.shutdown-lead\s*\{/m, 'an unscoped rule loses to `.modal p` and reads off-centre');
 });
+
+// The countdown fired eight times between 05:32 and 07:56 on 9 Nov and the PC
+// stayed on: `shutdown /s /t 0` was vetoed by an app on Windows' "preventing
+// shutdown" screen, and the silent spawn reported success. The command forces it.
+test('the real shutdown command forces the machine down and reports a refusal', () => {
+  const src = read('src/index.js');
+  assert.match(src, /spawn\('shutdown', \['\/s', '\/t', '0', '\/f'\]/, 'the force flag is not optional');
+  assert.match(src, /child\.on\('exit', \(code\) =>/, 'a refused shutdown is logged');
+  assert.match(src, /stdio: \['ignore', 'ignore', 'pipe'\]/, 'so its stderr can be read');
+});

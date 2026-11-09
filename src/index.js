@@ -807,9 +807,29 @@ async function main() {
         return { ok: false, error: 'Only a Windows PC can be turned off from here.' };
       }
       try {
-        // Detached and ignored: the machine is going away, so nothing here waits
-        // for an answer that will never arrive.
-        const child = spawn('shutdown', ['/s', '/t', '0'], { windowsHide: true, stdio: 'ignore', detached: true });
+        // `/f` is deliberate. Without it, one application that vetoes its
+        // WM_QUERYENDSESSION — a browser with a half-filled form, an editor with
+        // unsaved work — puts Windows on the "these apps are preventing shutdown"
+        // screen, and an unattended machine simply stays on. On 9 Nov the countdown
+        // ran eight times between 05:32 and 07:56 and every one was vetoed. The
+        // operator asked for the machine to go off when the work is done; that is
+        // worth more than another app's unsaved buffer, and they can turn the
+        // feature off if it is not.
+        const child = spawn('shutdown', ['/s', '/t', '0', '/f'], {
+          windowsHide: true,
+          stdio: ['ignore', 'ignore', 'pipe'],
+          detached: true,
+        });
+        let stderr = '';
+        child.stderr?.on('data', (buf) => {
+          stderr += String(buf);
+        });
+        child.on('error', (err) => app.warn(`could not ask Windows to shut down: ${err.message}`));
+        child.on('exit', (code) => {
+          // A refused shutdown exits non-zero and says why; silence from this line
+          // is how the countdown "succeeded" for two hours without the PC going off.
+          if (code) app.warn(`shutdown exited ${code}${stderr.trim() ? `: ${stderr.trim()}` : ''}`);
+        });
         child.unref();
         app.info('powering the PC off: the Architect finished and the timer ran out');
         return { ok: true };
