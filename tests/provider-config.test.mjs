@@ -3,7 +3,7 @@
 //
 // Worth a test because both mistakes are silent: a key that never reaches the
 // engine is a 401 on the first turn, hours into a project, and a secret left in
-// `config/synapse.config.json` is one `git add -A` away from the repository.
+// `config.default.json` is one `git add -A` away from the repository.
 // The env form is the one that keeps it out of the file, so it is the one that
 // must not fail quietly.
 import fs from 'node:fs';
@@ -166,18 +166,24 @@ check(
   clash2.engine.opencode.providers[1]?.id,
 );
 
-// And the repo's own config: DeepSeek is registered, and its key is a variable
-// name — never a key.
-const repoConfig = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, '..', 'config', 'synapse.config.json'), 'utf8'));
-const repoDs = (repoConfig.engine?.opencode?.providers || []).find((p) => p.id === 'deepseek');
-check('the shipped config registers DeepSeek', Boolean(repoDs));
+// And the seed every fresh install is created from: DeepSeek is registered, and
+// its key is a variable name — never a key.
+//
+// It reads the seed and not the operator's config, which is gitignored on
+// purpose. This check used to read `config/synapse.config.json`, so it passed
+// here and could never pass on CI: 33 runs failed on one missing file from 8 Nov
+// to 9 Nov while the suite was green on this machine. The seed is the file that
+// travels, so it is the file a test may read.
+const seed = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, '..', 'config.default.json'), 'utf8'));
+const repoDs = (seed.engine?.opencode?.providers || []).find((p) => p.id === 'deepseek');
+check('the shipped seed registers DeepSeek', Boolean(repoDs));
 check(
-  'the shipped config holds no key',
+  'the shipped seed holds no key',
   !String(repoDs?.apiKey || '').trim() || /^env:/i.test(String(repoDs.apiKey)),
   String(repoDs?.apiKey || '').slice(0, 3),
 );
 check(
-  'the shipped config names the two official models',
+  'the shipped seed names the two official models',
   JSON.stringify(repoDs?.models?.map((m) => m.id)) === JSON.stringify(['deepseek-flash', 'deepseek-v4-pro']),
   JSON.stringify(repoDs?.models?.map((m) => m.id)),
 );
