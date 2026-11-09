@@ -1603,12 +1603,16 @@ body[data-mode="single"] #runAuto { display: none; }
   letter-spacing: 0.08em; text-transform: uppercase;
   color: var(--speaker); margin-right: 7px; vertical-align: 1.5px;
 }
-/* The operator's mid-run guidance, same line as the purple You: the yellow word
-   is the only thing that distinguishes it, which is what was asked for. Bright
-   yellow on purpose — the operator asked for it to be unmistakable, and it is the
-   one label in the transcript that is a standing instruction. */
+/* The operator's mid-run guidance: violet, like everything that is theirs — the
+   same colour as the You role, so the tag and the sentence read as one voice and
+   not as a harness notice (yellow was wrong here; yellow is Synapse speaking). */
 .msg-steer {
-  display: inline-block; margin-right: 5px;
+  /* A small-caps label beside a full-size sentence: give it the sentence's own
+     line height as a flex box and centre the glyph inside it, so the tag's middle
+     sits on the sentence's middle in both places it appears — the trace row and the
+     You message (9 Nov: it read a few pixels high). */
+  display: inline-flex; align-items: center;
+  height: calc(var(--chat-fs) * 1.5); margin-right: 5px;
   font-size: calc(var(--chat-fs) * 0.76); font-weight: 800; letter-spacing: 0.08em; line-height: 1;
   color: var(--violet-bright); vertical-align: middle;
 }
