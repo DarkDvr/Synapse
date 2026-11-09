@@ -20,8 +20,11 @@ import { esc } from './format.js';
 
 const TAU = 0.12; // seconds for ~63% of the remaining distance
 const SNAP = 0.5; // px: closer than this and it has arrived
-export const PANE_MAX = 4000; // characters kept; the pane is a tail, not a record
-export const PANE_KEEP = 2500;
+// A tail, not a record: the visible window is eleven lines, so ten times that is
+// plenty of context and cuts the top three times less often than the first guess —
+// every trim is one discontinuity, however small (9 Nov).
+export const PANE_MAX = 12000;
+export const PANE_KEEP = 9000;
 
 let wired = { renderTranscript: () => {} };
 /** Hand this module the one thing that lives in app.js. Called once, at boot. */
@@ -134,6 +137,11 @@ function paneFrame(now) {
   }
   const view = body.parentElement;
   const target = Math.max(0, body.offsetHeight - view.clientHeight);
+  // Never be past the end. A trim cuts the top away and the old offset would point
+  // beyond the new text, which draws an empty box for a frame (seen in a 40ms screen
+  // recording: one frame blank, then the text back further along). The clamp makes
+  // that impossible whatever the trim did (9 Nov).
+  if ((Number(s.offset) || 0) > target) s.offset = target;
   const dt = frameAt ? (now - frameAt) / 1000 : 1 / 60;
   frameAt = now;
   if (s.snap) {
