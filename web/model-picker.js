@@ -128,8 +128,22 @@ export async function refreshModels() {
 export function syncPickerInput(input) {
   const p = pickers.get(input.dataset.role);
   if (!p) return;
-  const ref = p.sel.value;
-  const m = modelByRef(ref);
+  let ref = p.sel.value;
+  let m = modelByRef(ref);
+  // A chat can hold a provider id that has since been renamed: this project's
+  // session still says `opencode-go/deepseek-v4.1-flash` where the catalog offers
+  // `oc-go/deepseek-v4.1-flash`. One model, one match — repair the ref rather than
+  // telling the operator that a model they can see in the menu is missing. The
+  // repair is in the select, so the next send switches the session to it.
+  if (!m && ref) {
+    const id = String(ref).split('/').pop();
+    const same = state.models.filter((x) => x.id === id);
+    if (same.length === 1) {
+      p.sel.value = same[0].ref;
+      ref = same[0].ref;
+      m = same[0];
+    }
+  }
   // The name of the model the operator chose, or the ref itself when the catalog
   // is not offering it at the moment. Never another model's name: two providers
   // can serve the same name, and that is exactly how a card lies.
