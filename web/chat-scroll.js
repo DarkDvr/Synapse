@@ -122,8 +122,11 @@ const isWorker = (trace) => trace !== state.sessionTrace;
 export function appendStream(kind, delta) {
   const trace = liveTrace();
   if (!trace || !delta) return;
-  if (kind === 'word' && isWorker(trace)) {
-    trace.proseBuf = String(trace.proseBuf || '') + delta;
+  // Speech never takes the thinking pane — not a worker's (it becomes the paragraph
+  // when the block ends) and not the Architect's either: its words land with the
+  // message, and showing them in the pane cleared the thoughts above (9 Nov).
+  if (kind === 'word') {
+    if (isWorker(trace)) trace.proseBuf = String(trace.proseBuf || '') + delta;
     return;
   }
   if (kind === 'think' && trace.stream?.kind === 'think') {
@@ -167,7 +170,9 @@ export function endStream() {
   const trace = liveTrace();
   if (!trace) return;
   if (!trace.stream) {
-    flushProse(trace);
+    // A speech block that never took the pane: only a worker's is drawn back, as a
+    // paragraph. The Architect's words arrive with its message (9 Nov).
+    if (isWorker(trace)) flushProse(trace);
     return;
   }
   if (trace.stream.kind === 'think' && isWorker(trace)) {
