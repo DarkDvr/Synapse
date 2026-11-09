@@ -238,15 +238,20 @@ body[data-mode="multi"] .topology > .link { display: none; }
 
 /* Two rows on a card: who it is and which model — with the effort and edit
    buttons beside the picker, where they have always been — then what it costs.
-   The step line is gone. */
+   The step line is gone.
+
+   Both rows are a fixed height, so a card is the same size whether its readouts
+   have anything in them or not: an empty span is zero high, and a rail whose cards
+   grew and shrank as runs came and went would make the plan jump under the
+   pointer. The second row is 13px — a line of 9.5px type plus its leading. */
 body[data-mode="multi"] .topology .role-card {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  grid-template-rows: auto auto;
+  grid-template-rows: 22px 13px;
   gap: 9px 10px;
   padding: 7px 12px 6px;
 }
-body[data-mode="multi"] .topology .role-head { grid-column: 1 / -1; grid-row: 1; min-width: 0; }
+body[data-mode="multi"] .topology .role-head { grid-column: 1 / -1; grid-row: 1; min-width: 0; align-items: center; }
 body[data-mode="multi"] .topology .role-task,
 body[data-mode="multi"] .topology .role-chip { display: none; }
 body[data-mode="multi"] .topology .role-rate {
@@ -254,6 +259,7 @@ body[data-mode="multi"] .topology .role-rate {
   grid-row: 2;
   position: static;
   font-size: 9.5px;
+  line-height: 13px;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -263,5 +269,6 @@ body[data-mode="multi"] .topology .role-clock {
   grid-row: 2;
   position: static;
   font-size: 9.5px;
+  line-height: 13px;
   justify-self: end;
 }

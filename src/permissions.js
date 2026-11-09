@@ -522,10 +522,22 @@ function scriptTakesScreen(segments, ctx) {
  */
 function runsProjectProgram(segments, ctx) {
   const program = /\.(?:exe|com)$/i;
-  const mine = (target) =>
+  const built = (p) => {
+    try { return fs.statSync(p).isFile(); } catch {
+      // Not there, or not statable: it is not a program this project built.
+      return false;
+    }
+  };
+  // A *bare* name is only the project's program if the file is really there: `curl.exe`
+  // resolves against the working directory and so looked exactly like a program the
+  // project had built — every download asked for the operator's screen while it ran,
+  // which is the bother they reported on 9 Nov. A name with a path in it is taken at
+  // its word, because the model has said where it means.
+  const mine = (target, named) =>
     Boolean(target && !target.unknown && target.path) &&
     program.test(target.path) &&
-    zoneOf(target.path, ctx) === 'project';
+    zoneOf(target.path, ctx) === 'project' &&
+    (/[\\/]/.test(String(named || '')) || built(target.path));
   const launchers = new Set(['start-process', 'start', 'cmd', 'explorer']);
   for (const part of segments) {
     if (part.readsOnly) continue;
@@ -542,11 +554,11 @@ function runsProjectProgram(segments, ctx) {
       for (let i = at + 1; i < words.length; i += 1) {
         const word = words[i];
         if (/^[-/][A-Za-z]/.test(word) || word.includes('=')) continue;
-        if (mine(resolvePath(word, cwd, { home: ctx.home }))) return true;
+        if (mine(resolvePath(word, cwd, { home: ctx.home }), word)) return true;
       }
       continue;
     }
-    if (mine(resolvePath(head, cwd, { home: ctx.home }))) return true;
+    if (mine(resolvePath(head, cwd, { home: ctx.home }), head)) return true;
   }
   return false;
 }
