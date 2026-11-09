@@ -53,6 +53,11 @@ A worktree is the CI checkout exactly: no `config/`, no `data/`, no `bin/`, no
 `Synapse.exe`. Green here and red there has only ever meant one thing — a test is
 reading something this machine happens to have.
 
+Copy the **whole** change into it, not the file you were editing. A worktree
+holding half a commit answers a question nobody asked: on 9 Nov it went green
+because the new note was absent in both trees, and CI failed on the note the
+commit actually added. Run `git status` first, and mirror every path it names.
+
 ## Emails
 
 The operator is the repository owner, so GitHub mails every failed run of a watched
