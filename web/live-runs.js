@@ -21,7 +21,7 @@ import { renderPlan } from './plan-pane.js';
 import { renderTranscript } from './transcript.js';
 import { chatScroller, foldStream, renderChatNav } from './chat-scroll.js';
 import { paneEnded } from './thinking-pane.js';
-import { noteCompaction, noteLoop, steerNotes, traceFor, traceKeyOf, traceOf } from './traces.js';
+import { noteCompaction, noteLoop, steerLine, steerNotes, traceFor, traceKeyOf, traceOf } from './traces.js';
 import { noteLease } from './chat-notes.js';
 import { paintRates, resetRate } from './rate-view.js';
 import { reconcileRuns } from './runs-sync.js';
@@ -572,24 +572,33 @@ export function handleRunEvent(ev) {
   if (ev.type === 'run.steer') {
     const trace = traceFor(ev);
     if (trace) {
-      const said = String(ev.text || '').replace(/\s+/g, ' ').trim();
-      const line = said.length > 300 ? `${said.slice(0, 299)}…` : said;
+      const line = steerLine(ev.text);
       if (ev.failed) {
-        // The line was painted when the operator pressed Steer; the engine then
+        // The line was painted the moment the operator pressed Steer; the runner then
         // refused it, so the line comes back off and the toast says why.
         const at = trace.notes.findIndex((n) => n?.steer && n.text === line);
         if (at >= 0) trace.notes.splice(at, 1);
         toast('Steer Not Delivered', ev.error || 'The worker never took it.');
       } else {
-        // The picture rides the line: the runner saved it in the project, so the
-        // chip names the file and the same hover that shows any attachment shows it.
-        trace.notes.push({
-          at: Date.now(),
-          steer: true,
-          text: line,
-          ...(Array.isArray(ev.files) && ev.files.length ? { files: ev.files } : {}),
-        });
-        if (trace.notes.length > 60) trace.notes.splice(0, trace.notes.length - 60);
+        // The operator's own line is already in the trace, pending, from the second
+        // they pressed Steer. This is the worker taking it: the note stays where they
+        // sent it, stops being pending, and picks up the saved pictures. Pushing a
+        // second copy is what used to happen — one "sent" line and one "delivered"
+        // line, a minute apart, saying the same sentence (10 Nov).
+        const existing = trace.notes.find((n) => n?.steer && n.text === line);
+        if (existing) {
+          delete existing.pending;
+          if (Array.isArray(ev.files) && ev.files.length) existing.files = ev.files;
+        } else {
+          // A steer sent from another view, or one whose page never painted it.
+          trace.notes.push({
+            at: Date.now(),
+            steer: true,
+            text: line,
+            ...(Array.isArray(ev.files) && ev.files.length ? { files: ev.files } : {}),
+          });
+          if (trace.notes.length > 60) trace.notes.splice(0, trace.notes.length - 60);
+        }
       }
       renderTranscript();
     }

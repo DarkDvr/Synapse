@@ -62,6 +62,18 @@ export function forgetConversation(dir, oldSessionId) {
  * so the chat is visibly alive, and the whole thing folds to a single line once
  * the run ends: the report is the thing to read, not the transcript behind it.
  */
+/**
+ * The line a steer is shown as: one spacing, capped at a paragraph's worth.
+ *
+ * Shared, because two places paint the same steer — the page when the operator presses
+ * Steer, and the runner's report when the worker has taken it — and they have to be the
+ * same string or the second one arrives as a duplicate (10 Nov).
+ */
+export function steerLine(text) {
+  const said = String(text || '').replace(/\s+/g, ' ').trim();
+  return said.length > 300 ? `${said.slice(0, 299)}…` : said;
+}
+
 export function renderTrace(t) {
   const name = roleLabel(t.role);
   const head = [name, t.task, t.title].filter(Boolean);
@@ -93,7 +105,13 @@ export function renderTrace(t) {
       // and its message is the one place the operator cannot see.
       const files = Array.isArray(n?.files) ? n.files : [];
       const chips = files.map((f) => fileChip(f, { src: f.path })).join('');
-      return `<div class="trace-line is-steer"><span class="msg-steer">STEER:</span><span class="trace-steer-text">${esc(text)}</span>${chips}</div>`;
+      // `pending` is the operator's own line, painted the moment they pressed Steer,
+      // before the server has confirmed the worker took it (10 Nov). It keeps the
+      // place they sent it from, and the state stops being pending when the run
+      // reports it, or the line comes off if it failed.
+      const state = n.pending ? ' is-pending' : '';
+      const tip = n.pending ? 'Sent — the worker reads it at its next step.' : '';
+      return `<div class="trace-line is-steer${state}"${tip ? ` title="${esc(tip)}"` : ''}><span class="msg-steer">STEER:</span><span class="trace-steer-text">${esc(text)}</span>${chips}</div>`;
     }
     if (n?.prose) {
       // The worker's own words, drawn exactly like an Architect answer: same

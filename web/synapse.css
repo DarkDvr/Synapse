@@ -1427,6 +1427,11 @@ body[data-mode="single"] #runAuto { display: none; }
   margin-left: -12px; padding-left: 10px;
 }
 .trace-line.is-steer .msg-steer { flex: none; margin-right: 0; }
+/* Sent, not yet taken. The line is painted the instant the operator presses Steer, so
+   it has to be honestly distinguishable from one the worker has read: the violet edge
+   goes faint and the text keeps full weight. The tooltip says the same in words. */
+.trace-line.is-steer.is-pending { border-left-color: var(--violet-line); }
+.trace-line.is-steer.is-pending .trace-steer-text { color: #cdc8b4; }
 .trace-steer-text { min-width: 0; overflow-wrap: anywhere; }
 /* The picture a steer carried is the chat's chip, on the steer's own line: it does
    not shrink with the sentence, and it keeps its own height. */

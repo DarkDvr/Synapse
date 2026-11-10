@@ -16,6 +16,7 @@ import { addChatError } from './chat-notes.js';
 import { chatScroller, animateScroll } from './chat-scroll.js';
 import { currentProject, currentRun, roleLabel, currentForm } from './run-view.js';
 import { renderTranscript, attachmentImage } from './transcript.js';
+import { traceOf, steerLine } from './traces.js';
 
 const missing = (name) => () => {
   throw new Error(`composer.js: ${name} was not wired at boot`);
@@ -241,6 +242,29 @@ export async function send() {
  */
 async function sendSteer(text, files, target) {
   const input = $('promptInput');
+  // A worker steer goes to a session the operator cannot see, so the only place it can
+  // appear is that run's trace — and it appears *now*, before the request is even sent.
+  // Waiting for the runner to report it took it meant the operator pressed Steer, got a
+  // toast, and watched an unchanged chat for a minute: no evidence their words had gone
+  // anywhere (10 Nov). The note is `pending` until the run confirms, and comes off if
+  // the server refuses it.
+  let painted = null;
+  if (target?.kind === 'worker') {
+    const trace = traceOf(currentRun());
+    if (trace) {
+      painted = {
+        at: Date.now(),
+        steer: true,
+        text: steerLine(text),
+        pending: true,
+        files: (files || []).map((f) => ({ name: f.name, mime: f.mime })),
+      };
+      trace.notes.push(painted);
+      if (trace.notes.length > 60) trace.notes.splice(0, trace.notes.length - 60);
+      renderTranscript();
+      scrollChatToEnd();
+    }
+  }
   try {
     const sent = await api('POST', `/api/sessions/${encodeURIComponent(state.sessionId)}/steer`, {
       text,
@@ -251,6 +275,13 @@ async function sendSteer(text, files, target) {
     // Only after the server took them: a failed steer must not eat the files.
     state.attachments = [];
     renderAttachments();
+    if (painted) {
+      // Taken: the line stops being pending, and the pictures the runner saved in the
+      // project replace the name-only chips, so the hover works as it does anywhere.
+      delete painted.pending;
+      if (Array.isArray(sent?.files) && sent.files.length) painted.files = sent.files;
+      renderTranscript();
+    }
     toast(
       'Steer Sent',
       sent?.target === 'worker'
@@ -277,6 +308,14 @@ async function sendSteer(text, files, target) {
       scrollChatToEnd();
     }
   } catch (err) {
+    // The line was a promise, and the promise was refused: take it back off rather
+    // than leave a sentence in the trace that no worker ever read.
+    if (painted) {
+      const trace = traceOf(currentRun());
+      const at = trace ? trace.notes.indexOf(painted) : -1;
+      if (at >= 0) trace.notes.splice(at, 1);
+      renderTranscript();
+    }
     if (err.status === 409 && err.body?.notBusy) {
       toast('Nothing Is Running', 'Press Send again to send it as a message.');
       return;

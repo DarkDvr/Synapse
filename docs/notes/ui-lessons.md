@@ -2348,3 +2348,20 @@ a line of the conversation, so it now takes the chat's own type at the size ever
 fold uses (0.96), and the marker is the reasoning fold's, to the letter: `▸`/`▾` at
 1.3em in its own box. Measured after: summary, label and note all 12.48px DM Sans with
 normal letter-spacing, chevron 16.22px — identical to `.reasoning summary::before`.
+
+### A steer has to appear when it is sent (10 Nov)
+
+The operator pressed Steer during a worker's turn and watched an unchanged chat. The only
+line was the runner's, which arrives when the worker takes the words at its next step — a
+minute later. A toast is not feedback about *this* chat: what the operator needs is to see
+their own sentence where it will be read.
+
+So the page paints it: a steer note goes into the run's trace **before** the request is
+sent, marked `pending` — a faint violet edge and a tooltip saying "the worker reads it at
+its next step". If the server refuses it, the line comes back off and the toast says why.
+When the runner confirms, it *adopts* that line instead of pushing a second one: one
+sentence, one place, and the place is where the operator was when they typed it.
+
+The line's text is built by `steerLine()` in `traces.js`, shared by the page and the
+runner, because two builders are how a "sent" line and a "delivered" line end up half a
+character apart and read as duplicates.
