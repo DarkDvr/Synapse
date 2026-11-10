@@ -655,6 +655,14 @@ list" below). Roles are identities plus one mandate each (`ROLE_MANDATES` in
 | designer | `.synapse/design/` | `design.md` (the spec) + `mock-N.html` |
 | qc | `.synapse/qc_findings/` | `qc-N.md`: ids `Q1…`, severity, exact repro |
 | coders | the project | `bin/` |
+| every role | `.synapse/reports/`, `.synapse/shots/` | evidence (a proof, a log) and the renders it took |
+
+**Evidence and screenshots are shared on purpose.** The brief tells every role to
+keep its proof and logs in `.synapse/reports/`, so the write rules allow that folder
+to every role, and the stray-write check ignores it — a rule that denied it made the
+brief a lie, and on 10 Nov a coder wrote there by shell and the tamper alarm reported
+its compliance as tampering. The cleanup mover marks the files it moves into
+`.synapse` as the harness's own writes for the same reason.
 
 **The file contract is the point.** `.synapse/` holds `project.md` — the project's
 living document, written by the harness, never by a model: a `## Current` head

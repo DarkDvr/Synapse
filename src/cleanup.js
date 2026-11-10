@@ -21,6 +21,7 @@ import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
 import { scratchDir } from './paths.js';
+import { markWritten } from './synapse-writes.js';
 
 /** Never, whatever the evidence says. */
 const DENY = /@opencodedesktop|ai\.opencode\.desktop/i;
@@ -427,6 +428,11 @@ export function tidyProjectRoot(dir, { log = null, dryRun = false, at = Date.now
         target = path.join(into, `${path.basename(entry.name, ext)}-${n++}${ext}`);
       }
       fs.renameSync(from, target);
+      // Ours, not the worker's: a move that lands in .synapse while a turn is being
+      // judged must not be reported as the worker writing outside its folder
+      // (11 Nov — a proof file the harness moved was reported as tampering). The
+      // target, not `to`: a name that had to become `-2` is the file that exists.
+      markWritten(target);
       moved.push({ from, to: target });
     } catch (err) {
       log?.warn?.(`cleanup: could not move ${entry.name} out of the project root: ${err.message}`);

@@ -40,6 +40,7 @@ import {
   fingerprintDiff,
   ownedFolder,
   SHARED_DIR,
+  EVIDENCE_DIR,
   setTaskStatus,
   releaseDoing,
   openDelegations,
@@ -2283,11 +2284,12 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     // an absolute path can still land, so the folder is compared around the turn
     // the way the harness repository is.
     const synapseAfter = synapseFingerprint(dir);
-    const shared = SHARED_DIR.split('/').pop();
+    // Two folders in .synapse are nobody's in particular: the screenshots a render
+    // leaves, and the evidence every role is told to keep. A write there is the
+    // brief being followed, not a stray write.
+    const sharedDirs = [SHARED_DIR, EVIDENCE_DIR].map((d) => d.split('/').pop());
     const strayWrites = fingerprintDiff(synapseBefore, synapseAfter, ownedFolder(role))
-      // Screenshots are everyone's folder: the visual-review skill writes there
-      // from whichever role is looking at the page.
-      .filter((p) => !(p === shared || p.startsWith(`${shared}/`)))
+      .filter((p) => !sharedDirs.some((d) => p === d || p.startsWith(`${d}/`)))
       .filter((p) => !HARNESS_FILES.has(p))
       // Ours are not the worker's. A kept attachment and an answer to a question
       // both land in this folder while the worker's turn is open, and both were

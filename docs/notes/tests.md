@@ -1,6 +1,6 @@
 # The suite, and the run on GitHub
 
-`node --test "tests/*.test.mjs"` from the project root. 627 tests, one skipped by
+`node --test "tests/*.test.mjs"` from the project root. 633 tests, one skipped by
 design: `engine-contract.test.mjs` needs `SYNAPSE_E2E=1` and a live engine, so the
 suite stays offline.
 

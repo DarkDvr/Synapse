@@ -868,6 +868,12 @@ const OWNED_DIR = {
  *  coder that rendered the page tripped the write rules and the harness alarm. */
 export const SHARED_DIR = `${PLAN_DIR}/shots`;
 
+/** The folder every role keeps evidence in, and the brief says so to every role. It
+ *  is a shared folder for the same reason `shots` is: the worker that produced the
+ *  proof owns it, not the role's own directory. A rule that denied it made the
+ *  brief a lie — see roleWriteRules. */
+export const EVIDENCE_DIR = `${PLAN_DIR}/reports`;
+
 /** The folder inside .synapse that a role owns, or '' for none. */
 export function ownedFolder(role) {
   const dir = OWNED_DIR[role];
@@ -902,6 +908,11 @@ export function roleWriteRules(dir, role) {
     // Screenshots are everyone's: the visual-review skill writes them, and a role
     // that renders a page must not need another role's folder to keep one.
     rules.push({ action: 'edit', resource: `${base}/shots/**`, effect: 'allow' });
+    // Evidence is everyone's too. The brief tells every role to put its proof and
+    // logs in `.synapse/reports/`, so denying exactly that folder made the brief a
+    // lie: a coder's `write` was refused, it fell back to a shell redirect, and the
+    // tamper check then reported its own compliance as tampering (11 Nov).
+    rules.push({ action: 'edit', resource: `${base}/reports/**`, effect: 'allow' });
   }
   return rules;
 }
