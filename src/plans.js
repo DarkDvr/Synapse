@@ -1037,7 +1037,8 @@ export function briefSession({ dir, role = 'architect', auto = false, single = f
     lines.push(
       `Write your proof, logs and notes into .synapse/reports/ — that is where evidence belongs, and where ` +
         `the operator looks for it. Anything of that shape left at the project root is moved there when your ` +
-        `run ends, so put it there yourself and it keeps its place.`,
+        `run ends, so put it there yourself and it keeps its place. Evidence is not a deliverable: a file that ` +
+        `records what you checked belongs in .synapse/reports/ even when it is about something in bin/.`,
     );
   }
 
@@ -1599,6 +1600,14 @@ export function briefSession({ dir, role = 'architect', auto = false, single = f
         `and keep the file valid JSON - Synapse reads it on every turn.`,
     );
     lines.push(`Deliverables go in bin/ inside the project folder; everything else there is scratch.`);
+    // The first live strength test found the two lines pulling apart: a task detail that
+    // said "write the proof into the project" sent the file to bin/, which the brief also
+    // calls the place for deliverables. The Architect writes the task detail, so the
+    // distinction has to be in its brief, not only in the worker's (10 Nov).
+    lines.push(
+      `A task that produces evidence - a proof, a log, a capture - says where it goes: ${PLAN_DIR}/reports/. ` +
+        `bin/ is for what the project ships; a file that records what was checked is not shipped.`,
+    );
   }
 
   return lines.join('\n');

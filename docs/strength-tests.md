@@ -185,3 +185,15 @@ pattern is a pid read back from a file: `Stop-Process -Id $serverPid` would have
 refused while `taskkill /PID $pid` slipped through. The refusal now covers the shapes that
 carry a *list* — `(` and `$_` — and allows a plain variable, which is exactly what the brief
 asks a model to use.
+
+**F4 — where the proof went: a finding, fixed the same day.** The task said *"write the
+proof into the project"*, and the coder put it in **`bin\server-proof.md`** — the folder the
+Architect's brief calls the place for deliverables. The worker's brief says evidence goes to
+`.synapse/reports/`, but the task detail outranked it. Two lines were pulling apart, so the
+Architect's brief now says it too: *a task that produces evidence says `reports/`; `bin/` is
+for what the project ships.* The mover cannot help here — it guards the project root, and
+`bin\` is where real deliverables live, so nothing may move a file out of it.
+
+**One more observation, not a fault:** the plan file is read by the harness with a retry,
+because the Architect writes it while a turn runs; a plain external read can catch a partial
+file (the probe did, and reported invalid JSON for one second). The harness never saw it.
