@@ -4,11 +4,11 @@
 // change at boot, after Save and on every keystroke) need them.
 import { state } from './state.js';
 
-// The chat's text size, in pixels. The same bounds live in src/config.js and both
-// are enforced: the form is a convenience, the config file is the truth.
-export const CHAT_TEXT_DEFAULT = 12.5;
-export const CHAT_TEXT_MIN = 10.5;
-export const CHAT_TEXT_MAX = 18.5;
+// The chat's text size, in whole pixels. The same bounds live in src/config.js and
+// both are enforced: the form is a convenience, the config file is the truth.
+export const CHAT_TEXT_DEFAULT = 13;
+export const CHAT_TEXT_MIN = 10;
+export const CHAT_TEXT_MAX = 20;
 // One notch of the slider, the keyboard and the wheel. It was half a point, which
 // is a change nobody can see; a whole point is one the operator can judge (10 Nov).
 export const CHAT_TEXT_STEP = 1;
@@ -17,10 +17,11 @@ export const CHAT_TEXT_STEP = 1;
 // no strings behind it would be a switch that does nothing.
 export const LANGUAGES = [{ v: 'en', l: 'English' }];
 
+/** The size, clamped, on the whole-pixel grid the setting is defined on. */
 export function chatTextPx(value) {
   const n = Number(value);
   if (!Number.isFinite(n)) return CHAT_TEXT_DEFAULT;
-  return Math.min(CHAT_TEXT_MAX, Math.max(CHAT_TEXT_MIN, Math.round(n * 2) / 2));
+  return Math.min(CHAT_TEXT_MAX, Math.max(CHAT_TEXT_MIN, Math.round(n)));
 }
 
 /**

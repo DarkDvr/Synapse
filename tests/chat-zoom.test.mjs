@@ -18,10 +18,12 @@ test('one notch is one whole point, inside the same bounds as the slider', () =>
   assert.equal(CHAT_TEXT_STEP, 1, 'the step is a point, not the half point it was');
   assert.equal(CONFIG_STEP, 1, 'and the config says the same');
   assert.equal(CHAT_TEXT_MAX, CONFIG_MAX, 'the ceiling is one number, in one place');
-  assert.equal(CHAT_TEXT_MAX, 18.5, 'the ceiling went up by two points on 10 Nov');
-  assert.equal(nextChatText(CHAT_TEXT_DEFAULT, 1), 13.5);
-  assert.equal(nextChatText(CHAT_TEXT_DEFAULT, -1), 11.5);
+  assert.equal(CHAT_TEXT_MAX, 20, 'the ceiling is 20: whole pixels, and room to read at the back of a desk');
+  assert.equal(CHAT_TEXT_DEFAULT, 13, 'the designed size is a whole number now');
+  assert.equal(nextChatText(CHAT_TEXT_DEFAULT, 1), 14);
+  assert.equal(nextChatText(CHAT_TEXT_DEFAULT, -1), 12);
   assert.equal(nextChatText(14, 1), 15);
+  assert.equal(nextChatText(14.5, 1), 16, 'an older half point steps to the nearest whole size');
   // A hand-edited config can hold a value off the whole-step grid; the notch moves it
   // to the next half point rather than refusing to move.
   assert.equal(nextChatText(13, 1), 14);

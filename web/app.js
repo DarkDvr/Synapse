@@ -1729,8 +1729,13 @@ document.addEventListener('keydown', (e) => {
   });
 
   let navRaf = 0;
-  // A real gesture, before the scroll it causes arrives.
-  $('transcript').addEventListener('wheel', (e) => noteUserScrollIntent(-e.deltaY), { passive: true });
+  // A real gesture, before the scroll it causes arrives. Ctrl is not a scroll: that
+  // wheel is the chat's text size (web/chat-zoom.js), and counting it as "the reader
+  // scrolled away" would stop the chat following its own turn for no reason.
+  $('transcript').addEventListener('wheel', (e) => {
+    if (e.ctrlKey) return;
+    noteUserScrollIntent(-e.deltaY);
+  }, { passive: true });
   $('transcript').addEventListener('touchmove', () => noteUserScrollIntent(-1), { passive: true });
   $('transcript').addEventListener('keydown', (e) => {
     if (['PageUp', 'ArrowUp', 'Home'].includes(e.key)) noteUserScrollIntent(-1);

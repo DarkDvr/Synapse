@@ -952,8 +952,8 @@ clear it: a test is not work.
   The operator meant vertical alignment, not a centred block: `YOU` sat high, the
   text low, and `REUSE`/the clock higher again, because inline `vertical-align`
   values and a float did not agree. `.msg.user .msg-body` is now a flex row with
-  `align-items: flex-start`; the role and clock are 18.75px boxes (12.5px × 1.5)
-  with their contents centred, so their glyphs share the text's centre line.
+  `align-items: flex-start`; the role and clock are 1.5em boxes (one line of chat
+  text) with their contents centred, so their glyphs share the text's centre line.
   `order: 99` puts the clock after `REUSE` even though it is first in the markup.
   Long messages keep the role on the first line instead of centring it down the
   block; the message stays left-aligned and the 2px rule stays at the left edge.
@@ -1955,11 +1955,12 @@ the vertical rules and the scrolling. The implementation is one custom property,
   families (`msg`, `chat-post`, `trace`, `reasoning`, `tool-card`, `perm-card`,
   `state-pill`, `chat-alarm`) carries a `font-size` in px again. That is the
   invariant, not a style preference.
-- **The bounds are in two places on purpose.** 10.5–16.5 px in half steps: the form
-  (`web/app.js`) and the config (`src/config.js`) both clamp, because a hand-edited
-  file must not make the chat unreadable or push the composer off a 900px window.
-  10.5 is the floor the operator asked for (12.5 − 2); 16.5 is the largest that
-  still leaves a full answer above the composer.
+- **The bounds are in two places on purpose.** 10–20 px in whole pixels since 10 Nov
+  (they were 10.5–16.5 in half steps before that): the form (`web/settings-panes.js`)
+  and the config (`src/config.js`) both clamp, because a hand-edited file must not
+  make the chat unreadable or push the composer off a 900px window. 10 is the floor
+  the operator asked for; 20 is the largest that still leaves a full answer above the
+  composer.
 - **Growing the text steals the scroll position, and that is the real defect.**
   Measured at 1280px on a 32-message transcript: going 16.5 → 10.5 → 16.5 left the
   view **6,895px above the newest line**, because the browser keeps the scroll
@@ -2198,9 +2199,10 @@ never matches look identical from the sofa, and this one was the class.
 The size was a number box with two arrows and a half-point step. Two things were
 wrong with it: half a point is a change nobody can see, and a box with arrows says
 nothing about where you are in the range. It is a slider now — violet fill behind
-the thumb, the value in tabular figures beside it, one whole point per notch — and
-the ceiling went from 16.5px to 18.5px because the largest size was not large
-enough for the operator's screen.
+the thumb, the value in tabular figures beside it, one notch per step — and the
+range is whole pixels, 10 to 20, defaulting to 13. The half points went first, then
+the half-pixel grid under them: an operator reading at the back of a desk wants 20,
+and nobody ever wanted 13.5.
 
 The gesture is the same setting. Ctrl + wheel and Ctrl + plus/minus used to be
 WebView2's own zoom, which grew the entire interface — rail, cards, composer — while
@@ -2208,7 +2210,15 @@ WebView2's own zoom, which grew the entire interface — rail, cards, composer �
 had chosen losing. The page now owns all three gestures (`web/chat-zoom.js`), steps
 the setting inside the same bounds, and `IsZoomControlEnabled = false` in the shell
 turns the browser's zoom off so the two can never both answer. Ctrl + 0 returns to
-the designed 12.5px.
+the designed 13px.
+
+**The one thing that did not scale was a table.** `web/vendor/summit.css` sets
+`th { font-size: 9px }` and `td { font-size: 10px }` for its own data tables, and a
+direct element rule beats the size a table would inherit — so a table in a chat kept
+its cells at 9 and 10px while every word around it followed the setting. The
+operator asked whether tables scaled; that question is the whole reason to check
+rather than assume. `#transcript th, #transcript td { font-size: inherit }` puts them
+back on the chat's own size, and `chat-text.test.mjs` now holds it.
 
 Two details worth keeping:
 

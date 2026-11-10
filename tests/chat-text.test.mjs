@@ -18,7 +18,8 @@ test('the chat text size is clamped to the range the form offers', () => {
   assert.equal(normalize({}).ui.chatTextPx, DEFAULTS.ui.chatTextPx, 'a config without it gets the designed size');
   assert.equal(normalize({ ui: { chatTextPx: 5 } }).ui.chatTextPx, CHAT_TEXT_MIN, 'too small is the floor, not a 5px chat');
   assert.equal(normalize({ ui: { chatTextPx: 40 } }).ui.chatTextPx, CHAT_TEXT_MAX, 'too large is the ceiling');
-  assert.equal(normalize({ ui: { chatTextPx: 13.3 } }).ui.chatTextPx, 13.5, 'half-pixel steps, rounded');
+  assert.equal(normalize({ ui: { chatTextPx: 13.3 } }).ui.chatTextPx, 13, 'whole pixels only');
+  assert.equal(normalize({ ui: { chatTextPx: 14.5 } }).ui.chatTextPx, 15, 'a saved half point moves to the nearest whole size');
   assert.equal(normalize({ ui: { chatTextPx: 'nope' } }).ui.chatTextPx, DEFAULTS.ui.chatTextPx, 'junk falls back');
   assert.equal(normalize({ ui: { chatTextPx: 14 } }).ui.chatTextPx, 14, 'a legal choice is kept as chosen');
   // The old `ui` block was dropped on sight (panel colours); it must not be dropped
@@ -35,7 +36,7 @@ const CHAT_SELECTOR =
 
 test('every size in the transcript is a multiple of the chat text size', () => {
   const css = read('web/synapse.css').replace(/\/\*[\s\S]*?\*\//g, '');
-  assert.match(css, /--chat-fs:\s*12\.5px/, 'the transcript has one base size to multiply');
+  assert.match(css, /--chat-fs:\s*13px/, 'the transcript has one base size to multiply');
   const rules = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)];
   const fixed = [];
   for (const [, selector, body] of rules) {
@@ -57,6 +58,21 @@ test('the transcript is drawn from var(--chat-fs), not from a copy of 12.5px', (
   // cards and the permission cards: the count only ever goes up, and a rule that
   // stopped using it would show up above.
   assert.ok(uses >= 40, `only ${uses} declarations follow --chat-fs`);
+});
+
+// The baseline sets `th { font-size: 9px }` and `td { font-size: 10px }`, and a direct
+// element rule beats the size a table inherits — so a table in the chat kept its cells
+// at 9 and 10px while the prose around them followed the setting. The operator asked
+// whether tables scaled; they did not (10 Nov).
+test('a table in the conversation takes the size of the conversation', () => {
+  const css = read('web/synapse.css').replace(/\/\*[\s\S]*?\*\//g, '');
+  assert.match(css, /#transcript th,\s*#transcript td\s*\{\s*font-size:\s*inherit;?\s*\}/, 'the chat cells do not inherit');
+  // And the size they inherit is the chat's own, not a literal.
+  assert.match(
+    css,
+    /\.msg-answer table\.md-table\s*\{[^}]*font-size:\s*calc\(var\(--chat-fs\)/,
+    'the table itself is not on the chat grid',
+  );
 });
 
 test('General is the first Settings tab and the Windows tab is gone', () => {

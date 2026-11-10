@@ -11,13 +11,13 @@ import { ROLES } from './plans.js';
  *  so the config can refuse an unknown name instead of silently playing nothing. */
 export const DONE_SOUNDS = ['off', 'chime', 'bell', 'wood', 'ripple'];
 
-/** The chat's text size, in pixels — the same bounds web/ui-prefs.js shows in the
- *  form. Below the floor the prose stops being readable at 100%; above the ceiling a
- *  full answer no longer fits above the composer on a 900px-tall window. The slider
- *  and the Ctrl+wheel zoom move in whole points, and the ceiling went up by two on
- *  10 Nov because the largest was not large enough for the operator's screen. */
-export const CHAT_TEXT_MIN = 10.5;
-export const CHAT_TEXT_MAX = 18.5;
+/** The chat's text size, in whole pixels — the same bounds web/ui-prefs.js shows in
+ *  the form. Below the floor the prose stops being readable at 100%; above the ceiling
+ *  a full answer no longer fits above the composer on a 900px-tall window. Whole
+ *  pixels only: the half-point grid the setting used until 10 Nov was a change nobody
+ *  could see, and 13.5px is a size no design here ever asked for. */
+export const CHAT_TEXT_MIN = 10;
+export const CHAT_TEXT_MAX = 20;
 /** One notch of the slider, and one notch of Ctrl+wheel or Ctrl+plus. */
 export const CHAT_TEXT_STEP = 1;
 
@@ -143,7 +143,7 @@ export const DEFAULTS = {
   // unit the operator sees and the one the CSS multiplies. English is the default
   // language and the fallback for any string that has no translation.
   ui: {
-    chatTextPx: 12.5,
+    chatTextPx: 13,
     language: 'en',
     // A worker's tool calls drawn as the same one-line cards the Architect uses.
     // Off returns the old plain-text note; it is a rendering switch, so changing it
@@ -353,13 +353,13 @@ export function normalize(raw) {
   // The chat's text size. The whole transcript is drawn from this one number
   // (web/synapse.css multiplies its sizes by --chat-fs), so it is clamped here as
   // well as in the form: a hand-edited config must not make the chat unreadable or
-  // push the composer off a short window. Half-pixel steps, because that is what
-  // the form offers and a stored 13.37 would read back as 13.5 anyway.
+  // push the composer off a short window. Whole pixels: a saved 14.5 from an older
+  // build reads back as 15, which is the size on the grid nearest to what it showed.
   cfg.ui = isPlainObject(cfg.ui) ? cfg.ui : {};
   {
     const n = Number(cfg.ui.chatTextPx);
     cfg.ui.chatTextPx = Number.isFinite(n)
-      ? Math.min(CHAT_TEXT_MAX, Math.max(CHAT_TEXT_MIN, Math.round(n * 2) / 2))
+      ? Math.min(CHAT_TEXT_MAX, Math.max(CHAT_TEXT_MIN, Math.round(n)))
       : DEFAULTS.ui.chatTextPx;
   }
   // A worker's tool calls drawn as the same one-line cards the Architect uses;

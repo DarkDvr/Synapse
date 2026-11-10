@@ -60,7 +60,7 @@
      code span and a table stay in proportion at every size the operator can pick.
      `ui.chatTextPx` in the config owns it (10.5–16px); the page applies it as an
      inline custom property, which is why nothing outside the chat moves. */
-  --chat-fs: 12.5px;
+  --chat-fs: 13px;
 }
 
 body.dark {
@@ -1628,6 +1628,13 @@ body[data-mode="single"] #runAuto { display: none; }
   white-space: normal; overflow-wrap: anywhere; word-break: break-word;
   vertical-align: top; padding: 5px 7px;
 }
+/* The baseline sets 9px on `th` and 10px on `td` for its own data tables, and a
+   direct element rule beats the size a table would inherit. That is how a table in
+   the chat kept its cells at 9 and 10px while every word around them followed
+   --chat-fs: the operator asked whether tables scaled, and they did not (10 Nov). A
+   table in the conversation is prose, so its cells take the size of the text around
+   them — all of them, wherever in the chat the table is drawn. */
+#transcript th, #transcript td { font-size: inherit; }
 .msg-answer p { margin: 0 0 7px; }
 .msg-answer h1, .msg-answer h2, .msg-answer h3,
 .msg-answer h4, .msg-answer h5, .msg-answer h6 {

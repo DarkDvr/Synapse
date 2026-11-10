@@ -23,10 +23,10 @@ let saving = false;
 export function nextChatText(current, delta) {
   const from = chatTextPx(current);
   const raw = from + Number(delta || 0) * CHAT_TEXT_STEP;
-  // The grid is half points and the step is a whole one: a config that holds 13.0
-  // (hand-edited, or saved by an older build) steps to 14.0, not 13.5.
-  const to = Math.min(CHAT_TEXT_MAX, Math.max(CHAT_TEXT_MIN, Math.round(raw * 2) / 2));
-  return Number(to.toFixed(2));
+  // Whole pixels, like the slider: a config that still holds 14.5 from an older build
+  // steps to the nearest whole size rather than through half points.
+  const to = Math.min(CHAT_TEXT_MAX, Math.max(CHAT_TEXT_MIN, Math.round(raw)));
+  return to;
 }
 
 /** "Chat text 15 px", and at an end of the range, which end it is. */
