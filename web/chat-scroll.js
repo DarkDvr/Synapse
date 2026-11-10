@@ -63,17 +63,59 @@ export const CHAT_FOLLOW_SLACK = 48; // two lines
 // finger. A scroll *event* cannot tell their move from ours.
 let chatUserMovedAt = 0;
 const CHAT_USER_WINDOW_MS = 1500;
+// Which way the last gesture went: +1 towards the end, -1 away, 0 nothing yet.
+//
+// This is the whole difference between "the reader is coming back" and "the reader is
+// leaving and the box happens to be near the end". Re-arming on geometry alone was
+// the fight: Chromium animates a wheel scroll and fires a scroll event per animation
+// frame, so every step of an upward gesture still measured within two lines of the
+// end and re-armed the follow that the gesture had just released — one notch up, pin,
+// one notch up, pin. Only a fast stream of notches got out ahead of it (10 Nov).
+let chatUserIntent = 0;
+
+/**
+ * The follow's decision after a scroll event, as a pure function.
+ *
+ * It lives here, apart from the DOM, because this one rule has been wrong three times
+ * in a day and every time it looked right: the follow was released by a gesture and
+ * then taken back by the geometry that followed it. Stated this way it can be tested
+ * without a page, a run or a pane (see tests/chat-follow.test.mjs).
+ *
+ * - A reader's upward move always releases it.
+ * - Only a reader's *downward* gesture, or their scrollbar landing exactly at the end,
+ *   re-arms it. `fromEnd <= slack` alone is not evidence: our own pin makes it true,
+ *   and so does every animation frame of an upward wheel.
+ * - Our own writes (`byReader` false) never change it.
+ */
+export function followAfterScroll({
+  armed = true,
+  byReader = false,
+  movedUp = false,
+  intent = 0,
+  fromEnd = 0,
+  slack = CHAT_FOLLOW_SLACK,
+} = {}) {
+  if (byReader && movedUp) return false;
+  // `fromEnd <= 1` is the scrollbar dragged to the very end with no gesture to say so.
+  // It must not apply to an upward wheel: that gesture starts at the end, so the first
+  // scroll event it causes still measures zero from the end and would re-arm the follow
+  // the gesture had just released — the original fight, one line further down.
+  if (byReader && fromEnd <= slack && (Number(intent) > 0 || (Number(intent) === 0 && fromEnd <= 1))) return true;
+  return Boolean(armed);
+}
 
 export function noteChatScroll() {
   const el = chatScroller();
   if (!el) return;
   const fromEnd = el.scrollHeight - el.scrollTop - el.clientHeight;
   const byReader = Date.now() - chatUserMovedAt < CHAT_USER_WINDOW_MS;
-  if (byReader && el.scrollTop < lastChatTop - 4) chatFollowArmed = false;
-  // Only the reader's own arrival re-arms it. This used to re-arm on any scroll event
-  // near the end, which included the ones our own pin caused — so a reader who had
-  // taken over was re-armed by the very write they were trying to escape (10 Nov).
-  else if (byReader && fromEnd <= CHAT_FOLLOW_SLACK) chatFollowArmed = true;
+  chatFollowArmed = followAfterScroll({
+    armed: chatFollowArmed,
+    byReader,
+    movedUp: el.scrollTop < lastChatTop - 4,
+    intent: chatUserIntent,
+    fromEnd,
+  });
   lastChatTop = el.scrollTop;
   // The reader's place, kept from the end of the conversation: the one value that
   // survives the box changing size under them (see restoreChatSlack). Only when the
@@ -107,18 +149,20 @@ export function chatFollows() {
 
 /** The operator moved the conversation. Only this may release the follow. */
 export function noteUserScrollIntent(deltaY) {
-  // A wheel down at the end is them coming back, not leaving.
-  if (deltaY > 0 && chatAtBottom(CHAT_FOLLOW_SLACK)) {
-    chatFollowArmed = true;
+  chatUserMovedAt = Date.now();
+  if (deltaY > 0) {
+    chatUserIntent = 1;
+    // A wheel down at the end is them coming back, not leaving.
+    if (chatAtBottom(CHAT_FOLLOW_SLACK)) chatFollowArmed = true;
     return;
   }
-  // An upward gesture lets go *now*, not when the scroll event arrives. The frame
-  // loop that grows the thinking pane is pinned every animation frame, and it can put
-  // the box back at the end before the event that would have said "the reader moved"
-  // is even dispatched — so the event reported no movement, re-armed the follow and
-  // the reader could not escape while a turn was streaming (10 Nov, twice reported).
-  chatUserMovedAt = Date.now();
-  if (deltaY < 0) chatFollowArmed = false;
+  if (deltaY < 0) {
+    // An upward gesture lets go *now*, and nothing about the geometry that follows may
+    // take it back: the wheel scrolls in animation steps, and each one is still near
+    // the end while the gesture is young.
+    chatUserIntent = -1;
+    chatFollowArmed = false;
+  }
 }
 
 /**
@@ -435,7 +479,11 @@ export function captureChatSlack() {
 export function restoreChatSlack() {
   const el = $('transcript');
   if (!el || chatSlack === null) return;
-  const slack = chatSlack <= CHAT_FOLLOW_SLACK ? 0 : chatSlack;
+  // "Within two lines is at the end" only while the chat is following. Once the reader
+  // has taken over, their two lines are two lines: snapping them flush would be the
+  // same pin under another name, and a dock that changes height mid-turn would do it
+  // to them (10 Nov).
+  const slack = chatSlack <= CHAT_FOLLOW_SLACK && chatFollowArmed ? 0 : chatSlack;
   const want = el.scrollHeight - el.clientHeight - slack;
   if (Math.abs(el.scrollTop - want) < 0.5) return;
   el.scrollTop = Math.max(0, want);

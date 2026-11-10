@@ -1709,6 +1709,10 @@ document.addEventListener('keydown', (e) => {
   $('navPrev').addEventListener('click', () => jumpMessage(-1));
   $('navNext').addEventListener('click', () => jumpMessage(1));
   $('navBottom').addEventListener('click', () => {
+    // Pressing "to the end" is a downward intent: without saying so, the follow would
+    // stay released after an upward scroll and the chat would stop following its own
+    // turn until the next wheel notch (10 Nov).
+    noteUserScrollIntent(1);
     const el = chatScroller();
     if (el) animateScroll(el, el.scrollHeight);
     else scrollChatToBottom();

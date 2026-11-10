@@ -2295,3 +2295,32 @@ boxes — two line boxes of different heights, so two baselines about a pixel ap
 bold white name already reads as the name; a second type size only broke the row. One
 size, and the name's baseline is the target's to the pixel (measured: both 10.92px in
 a 16.38px box, same top).
+
+### Why it took four tries (10 Nov, fourth report)
+
+Every version released the follow correctly and then let something put it back. The
+list, in the order they were found:
+
+1. the wheel passed `-deltaY`, so wheel-up *was* "coming back to the end";
+2. the release waited for a scroll event the pin had already outrun;
+3. `renderTranscript` re-pinned from geometry alone on every message and tool event;
+4. **the re-arm itself**: `noteChatScroll` armed the follow whenever the box measured
+   within two lines of the end. Chromium animates a wheel scroll and fires a scroll
+   event per frame, so each step of an upward gesture still measured "at the end" and
+   re-armed the follow the gesture had just released. One notch up, pin, one notch up,
+   pin — and only spamming the wheel outran it.
+
+The rule is now a pure function, `followAfterScroll()`, with one sentence: an upward
+gesture releases it, and only a reader's *downward* gesture (or the scrollbar landing
+exactly at the end) may re-arm it. Geometry alone is never evidence, because the pin
+makes geometry true. It has its own test, with the failing case written down: armed
+false, an upward intent, 30px from the end, and every frame of that gesture still
+saying "near the end".
+
+Two more things came out of the same clue. The Ctrl+wheel listener was on `window` with
+`passive: false`, which makes *every* wheel in the page wait for the main thread — and
+during a turn the main thread is painting a pane sixty times a second. The shell
+already disables WebView2's zoom, so inside it the listener is passive now; a browser
+(a remote view) still gets `preventDefault`, because there it is the page zoom that has
+to be stopped. And `restoreChatSlack` snapped a reader within two lines to flush with
+the bottom on any dock resize; it now only does that while the chat is following.

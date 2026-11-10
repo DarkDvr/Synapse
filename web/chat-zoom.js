@@ -121,21 +121,30 @@ export function resetChatText(opts = {}) {
 /**
  * Install the three gestures.
  *
- * Both are `preventDefault`ed: the browser's own zoom is off in the shell as well
- * (`IsZoomControlEnabled`), but a page that relies on the shell to stop a keystroke
- * is a page that zooms when someone runs it in a browser.
+ * The keys are `preventDefault`ed anywhere: a page that relies on the shell to stop a
+ * keystroke is a page that zooms when someone runs it in a browser.
+ *
+ * The wheel is a different matter, and it is the one the operator's report changed:
+ * a **non-passive** wheel listener on `window` makes every wheel in the page wait for
+ * the main thread, which during a turn is busy painting a growing thinking pane. The
+ * shell already turns WebView2's own zoom off (`IsZoomControlEnabled = false`), so
+ * inside the shell this listener needs no `preventDefault` at all — it is registered
+ * passive, and the scroll stays on the compositor. In a browser (remote access) it
+ * stays non-passive, because there the `preventDefault` is what stops the page zooming
+ * instead of the chat resizing (10 Nov).
  */
 export function installChatZoom() {
+  const inShell = Boolean(window.chrome?.webview);
   window.addEventListener(
     'wheel',
     (e) => {
       // Ctrl is the whole signal. A plain wheel belongs to the chat's scrolling, and
       // the browser's pinch-zoom sends ctrlKey with a fractional deltaY.
       if (!e.ctrlKey || !e.deltaY) return;
-      e.preventDefault();
+      if (!inShell) e.preventDefault();
       chatTextBy(e.deltaY < 0 ? 1 : -1);
     },
-    { passive: false },
+    { passive: inShell },
   );
   window.addEventListener('keydown', (e) => {
     if (!e.ctrlKey || e.altKey || e.metaKey) return;
