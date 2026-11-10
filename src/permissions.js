@@ -563,6 +563,75 @@ function runsProjectProgram(segments, ctx) {
   return false;
 }
 
+/**
+ * A shell statement that stops processes it did not start.
+ *
+ * The incident (10 Nov): a worker finished its task, tidied up, and ran
+ * `Get-Process python | ForEach-Object { Stop-Process -Id $_.Id -Force }`. That is not a
+ * name and not a path — it is "whatever the list happens to hold" — and the list held
+ * the local model server answering the run, which then retried against a closed port for
+ * eight minutes. No path rule can see it: nothing in the command names a file.
+ *
+ * Three shapes are refused, and nothing else is touched:
+ *
+ *  * **a sweep** — processes piped (or looked up) into a stop with no name: it stops the
+ *    whole list, whatever is on it;
+ *  * **a family** — `-Name python`, `taskkill /IM python.exe`, a wildcard, `pkill`: a
+ *    name reaches every process that carries it, and a runtime's name is shared by every
+ *    other program written in that language;
+ *  * **a discovered id** — `-Id (Get-NetTCPConnection …)`, `-Id $pid`: an id the command
+ *    found rather than one it was given is no safer than a name.
+ *
+ * A by-name stop of a project's own program (`Stop-Process -Name SysMonitor`) stays
+ * allowed: measured against a day of logs, 121 of the 122 kill commands were exactly
+ * that, and refusing them would break the way a project tests its own app. Stopping by
+ * `-Id <a number>` stays allowed too — that is the shape the brief asks for.
+ *
+ * A refusal, not a question: an unattended night run must not stop to wait for an answer
+ * (the operator's rule), and a refusal tells the model what to do instead.
+ */
+const SWEEP_TEXT =
+  'This stops every process the list holds, and the services running this work are on that list. ' +
+  'Stop the one process you started, by its id: Stop-Process -Id <pid>.';
+const FAMILY_TEXT =
+  'A name stops every process that carries it, and a language runtime\'s name is shared by every other ' +
+  'program written in it - one of them may be a service this run depends on. Stop the one process you ' +
+  'started, by its id: Stop-Process -Id <pid>.';
+
+function stopsOtherProcesses(segments = []) {
+  // A pipe is its own separator (segmentsOf splits on `;`, `&&`, newlines and `|`), so
+  // "list then stop" is two statements to this analyzer and has to be read across them:
+  // `Get-NetTCPConnection … | Stop-Process` used to slip through for exactly that reason.
+  const all = segments.map((part) => (part.words || []).map((word) => String(word)));
+  const heads = all.map((words) => String(words[0] || '').toLowerCase().replace(/\.exe$/, ''));
+  const text = all.map((words) => words.join(' ')).join('\n').toLowerCase();
+  if (!/\b(stop-process|taskkill|pkill|killall|kill)\b/.test(text)) return null;
+  const lists = heads.some((head) => LIST_VERBS.has(head));
+  for (const words of all) {
+    const at = words.findIndex((word) => /^(stop-process|taskkill|pkill|killall|kill)$/i.test(String(word).replace(/\.exe$/i, '')));
+    if (at < 0) continue;
+    const verb = String(words[at]).toLowerCase().replace(/\.exe$/, '');
+    const rest = words.slice(at + 1).join(' ').toLowerCase();
+    // A family, by name: `-Name python`, `/IM python.exe`, a wildcard.
+    const named = /(?:-name|--name|\/im)\s+["']?([\w.*-]+)/i.exec(rest);
+    if (named) {
+      const name = named[1].replace(/\.exe$/i, '').toLowerCase();
+      if (name.includes('*') || INTERPRETERS.has(name)) return FAMILY_TEXT;
+      continue;
+    }
+    // pkill/killall always answer to a name and never to an id.
+    if (verb === 'pkill' || verb === 'killall') return FAMILY_TEXT;
+    // An id it was given is fine; an id it found is not.
+    if (/-id\s+"?\d+/i.test(rest) || /\/pid\s+"?\d+/i.test(rest)) continue;
+    if (/-id\s+(?:\(|\$)/i.test(rest)) return SWEEP_TEXT;
+    // A stop with nothing to name, after something listed processes: a sweep.
+    if (lists) return SWEEP_TEXT;
+  }
+  return null;
+}
+
+const LIST_VERBS = new Set(['get-process', 'ps', 'tasklist', 'get-nettcpconnection', 'netstat', 'wmic', 'pgrep']);
+
 function decideShell(resources, ctx) {
   // A shell command may arrive as one string or as its lines, one resource per
   // line. Joining with a space merged them into a single statement: measured
@@ -653,6 +722,12 @@ function decideShell(resources, ctx) {
       : 'project';
   const anySecret = [...info.paths, ...info.redirects].some((p) => isSecret(p, ctx));
   if (anySecret) return deny('The harness never opens saved-password folders.', true, 'secret');
+
+  // Processes, after PROHIBITED (which outranks everything) and before any allow: a
+  // command that stops processes it did not start is refused, not questioned. See
+  // stopsOtherProcesses above for the three shapes and the day that earned them.
+  const stopsOthers = stopsOtherProcesses(segments);
+  if (stopsOthers) return deny(stopsOthers, true, 'processes');
 
   const harnessPaths = decisionPaths.filter((p) => zoneOf(p, ctx) === 'harness');
   // A shipped tool runs from the harness's own `skills/` folder, and that is what

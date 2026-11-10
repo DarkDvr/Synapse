@@ -152,3 +152,35 @@ What this still does not cover: a program from *outside* the project that takes 
 screen itself, and a runtime that builds a path to `SetCursorPos` before calling it.
 It is a fence around the shipped tools, the obvious API names, the scripts a command
 runs and the programs a project builds — not a desktop sandbox.
+
+## Processes: one id you started (10 Nov)
+
+The path fence cannot see a kill. `Get-Process python | ForEach-Object { Stop-Process -Id
+$_.Id -Force }` names no file, so every path rule passes it, and on 10 Nov a worker tidying
+up after its task stopped the local model server that was answering its own run — eight
+minutes of retries against a closed port.
+
+So the shell gets one more shape it refuses, in the same tier as PROHIBITED: no card, no
+countdown, a sentence the model can act on. Three shapes are refused, and nothing else:
+
+- **a sweep** — processes from a list piped into a stop with no name of its own: it stops
+  whatever the list happens to hold;
+- **a family** — `Stop-Process -Name python`, `taskkill /IM python.exe`, a wildcard,
+  `pkill`: a runtime's name is shared by every other program written in that language;
+- **an id it found** — `-Id (Get-NetTCPConnection …)`, `-Id $pid`: an id the command
+  looked up is no safer than a name.
+
+Stopping a **specific id** stays allowed, and so does stopping a project's own app **by
+name** (`Stop-Process -Name SysMonitor`): measured over a day of logs, 121 of the 122 kill
+commands were exactly that, and refusing them would break how a project tests itself. The
+list of names treated as shared runtimes is the same `INTERPRETERS` set the shell analysis
+already uses for "a program that hosts other work" — no new list to maintain.
+
+A refusal rather than a question is deliberate: an unattended night run must not stop and
+wait (the operator's rule, 10 Nov), and the refusal names the fix — "stop the one process
+you started, by its id: Stop-Process -Id <pid>" — so the model can carry on.
+
+**What it still cannot see:** a command that builds the name or the id at runtime
+(`$n = 'py'+'thon'; Get-Process $n | Stop-Process`), a script that does it inside, and an
+interpreter that is not in `INTERPRETERS`. This is a fence on the shapes that reach beyond
+the project, not a kernel.

@@ -651,3 +651,45 @@ test('running the project\'s own program asks for the screen', () => {
   // Looking at the program is not running it.
   assert.equal(shell(`Get-Item "${exe}"`).effect, 'allow');
 });
+
+// ── processes ───────────────────────────────────────────────────
+// A shell command that stops processes it did not start is refused, not questioned: an
+// unattended run must not wait for an answer, and the model can act on a refusal. The
+// day that earned it (10 Nov): a worker tidied up with
+// `Get-Process python | ForEach-Object { Stop-Process -Id $_.Id -Force }` and stopped the
+// local model server answering its own run. Measured against a day of logs, 121 of the
+// 122 kill commands were the project's own app by name, and those stay allowed.
+test('one process it started, by its id: allowed', () => {
+  for (const command of [
+    'Stop-Process -Id 26232 -Force',
+    'Stop-Process -Name SysMonitor -Force -ErrorAction SilentlyContinue',
+    'Get-Process SysMonitor | Select-Object Id,Path | Stop-Process -Name SysMonitor',
+    'Stop-Process -Name SysMonitor; Start-Sleep -Milliseconds 500; .\\build.ps1',
+  ]) {
+    const decision = shell(command);
+    assert.equal(decision.effect, 'allow', `${command} was ${decision.effect}: ${decision.reason}`);
+  }
+});
+
+test('a sweep, a family, or an id it found: refused', () => {
+  const cases = [
+    'Get-Process python | ForEach-Object { Stop-Process -Id $_.Id -Force }',
+    'Get-Process | Stop-Process -Force',
+    'Get-NetTCPConnection -LocalPort 8080 | Stop-Process -Force',
+    'Stop-Process -Id (Get-NetTCPConnection -LocalPort 8080).OwningProcess',
+    'Stop-Process -Id $pid -Force',
+    'Stop-Process -Name python -Force',
+    'Stop-Process -Name python* -Force',
+    'taskkill /IM python.exe /F',
+    'pkill -f python',
+  ];
+  for (const command of cases) {
+    const decision = shell(command);
+    assert.equal(decision.effect, 'deny', `${command} was ${decision.effect}: ${decision.reason}`);
+    assert.equal(decision.scope, 'processes', `${command} was denied for the wrong reason`);
+    // The refusal has to say what to do instead, or the model retries the same command.
+    assert.match(decision.reason, /by its id/, `${command}'s refusal does not name the fix`);
+  }
+  // A pipeline that only reads is untouched by any of this.
+  assert.equal(shell('npm run build 2>&1 | Select-Object -Last 5').effect, 'allow');
+});
