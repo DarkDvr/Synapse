@@ -2346,8 +2346,18 @@ body.is-stopping .chat-dock { animation: stop-glow 0.7s ease-in-out infinite; }
      border took, so the row keeps its size. */
   border: 2px solid transparent; background: rgba(255, 255, 255, 0.02);
 }
-/* display: inline-block — as an inline span the dot ignores width and height
-   and paints as a 4px square (cost an hour once; it is in AGENTS.md) */
+/* A part of a row sits under its whole, indented one step behind a hairline that runs
+   from the parent's dot to the last of its children. One indent, never two: `t2ab` is
+   shown under `t2` like any other part (see web/plan-order.js), because a third level
+   in a 300px rail is a table. The hairline is the row's own left edge, so the children
+   read as a block rather than as four rows that happen to be adjacent. */
+.plan-task.is-child {
+  margin-left: 14px;
+  padding-left: 6px;
+  border-left: 1px solid var(--line-2);
+  border-radius: 0 8px 8px 0;
+}
+.plan-task.is-child .plan-id { color: #9aa0aa; }
 /* The node: the state's dot with the step id under it, both centred on the same
    axis. The id used to ride inline in front of the title, which made the title
    wrap around a mark that had nothing to do with it. Five pixels between the three

@@ -1911,3 +1911,41 @@ Measured: the same sweep pointed at the form's own directory answered immediatel
 forms and de-duplicates by form id. Anything else that lists engine objects by
 directory — sessions are fine, they are listed by project — has to be checked the
 same way, because an empty list looks exactly like a quiet machine.
+
+
+## A plan row can own other rows (10 Nov)
+
+The Architect already reached for this: asked for a fix after `t2`, it wrote `t2a`
+(Multi, 10 Nov), and one project before that `t3b` and `t3c` to insert work between
+items. What was missing was not the naming — it was that **nobody put the row under
+its parent**. Rows were drawn in the order the file listed them, so an appended `t2a`
+sat at the bottom after the finished work and read as an afterthought, which is the
+"the plan is out of order and messy" the operator kept seeing.
+
+The fix is ordering, in the harness, and it is one sentence: **a root keeps its own
+place and its children follow it.**
+
+- A **root** is an id no other id owns (`t2`).
+- A **child** is a root's id followed by letters (`t2a`, `t2b`, `t2aa`). Letters only:
+  `t2-1`, `t2_1` and `t21` are ordinary ids, because a rule that guesses is worse than
+  one that does not.
+- Where the Architect *wrote* the child does not matter at all: it is drawn directly
+  under its root, and its root is where the root was.
+- One level of indentation only. `t2ab` is shown under `t2` like any other part — a
+  third level in a 300px rail is a table.
+- An id named like a part whose whole is missing (`t2a` with no `t2`) is a **plan
+  problem**, reported in the Architect's own "Plan problems to fix" line, because the
+  alternative is a row that quietly sits at the bottom.
+
+**A part waits for its whole.** `t2a` needs no `dependsOn`: it is not ready while `t2`
+is not done. That is what makes the naming worth something — the Architect describes
+the shape of the work instead of maintaining a second dependency list by hand — and it
+has to be in three places, or the card offers a part before its whole: the rail's
+"Waiting on you" line, the blocked-card rule, and the server's "this step is ready and
+was never asked for" reminder. All three call `taskReady()` now.
+
+**Nothing is renumbered, ever, and the file is never rewritten.** Ordering is a view.
+`t2a` is already a legal id everywhere it appears — `runs.jsonl`, notes, `dependsOn`,
+the project document — so this needed no migration and breaks no history. The rule
+lives in `web/plan-order.js`, imported by the page and by `src/plans.js`/`src/runs.js`,
+so both runtimes answer the same way.

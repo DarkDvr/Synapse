@@ -12,6 +12,7 @@ import { esc, hhmmss, ago } from './format.js';
 import { $ } from './dom.js';
 import { api } from './api.js';
 import { currentRun } from './run-view.js';
+import { orderPlan, parentOf } from './plan-order.js';
 
 const missing = (name) => () => {
   throw new Error(`plan-pane.js: ${name} was not wired at boot`);
@@ -113,6 +114,11 @@ export function paintPlan(body) {
   }
 
   const tasks = st?.plan?.tasks || [];
+  // Read in the plan's own shape: a root keeps its place and its `t2a`/`t2b` children
+  // follow it, wherever the Architect appended them. Counts still use the file's own
+  // list — ordering is a view, not a rewrite.
+  const shownTasks = orderPlan(tasks);
+  const planIds = tasks.map((t) => String(t.id || '')).filter(Boolean);
   // A task with a worker on it is the step in hand whatever the file says. The
   // Architect only writes the plan when it judges, so during the run the file
   // still says todo and the pane showed the live step as a grey row. The run is
@@ -148,7 +154,7 @@ export function paintPlan(body) {
   body.innerHTML =
     // The goal paragraph is gone: the operator never read it, and the list is
     // what the rail is for. The goal still lives in the project document.
-    `<ol class="plan-list">${tasks
+    `<ol class="plan-list">${shownTasks
       .map((t) => {
         const status = liveRun && liveRun.task === t.id ? 'doing' : PLAN_STATUS[t.status] ? t.status : 'todo';
         // Between the worker's result and the Architect's judgement the plan file
@@ -183,7 +189,8 @@ export function paintPlan(body) {
         const spentTitle = settled
           ? 'No worker ran this step — the Architect settled it itself.'
           : 'Time spent on this step so far';
-        return `<li class="plan-task" data-status="${shown}">
+        const child = parentOf(t.id, planIds) ? ' is-child' : '';
+        return `<li class="plan-task${child}" data-status="${shown}">
           <span class="plan-node">
             <span class="plan-dot" role="img" aria-label="${esc(PLAN_STATUS[shown])}"></span>
             <span class="plan-id">${esc(t.id || '?')}</span>${

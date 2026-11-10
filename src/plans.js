@@ -20,6 +20,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { digest as projectDigest, DOC_RELATIVE } from './project-doc.js';
 import { scratchDir } from './paths.js';
+// The plan's shape (a `t2a` belongs to its `t2`) is one rule, shared with the page that
+// draws the rail: web/plan-order.js. Same file, same answer in both runtimes.
+import { parentOf } from '../web/plan-order.js';
 
 // The roles the topology has cards for, in card order. The `auditor` and the
 // `critic` were retired: the Architect verifies its own delegations against the
@@ -475,6 +478,25 @@ export function readPlan(dir) {
   // the brief's one-line announcement of each addition, not a rule that the list be
   // complete before anything starts. A task's `origin` is what records the
   // difference, and unknown values are read as `plan`: tolerance, as everywhere.
+
+  // A `t2a` belongs to a `t2`. The pane orders children under their parent by itself,
+  // so the one thing the Architect can get wrong is naming a part whose whole is not
+  // in the list — and that row then sits at the bottom, which is the mess this naming
+  // was meant to end. Said here, in the block it already reads each turn.
+  {
+    const planIds = tasks.map((t) => String(t.id || '')).filter(Boolean);
+    for (const t of tasks) {
+      const id = String(t.id || '');
+      const stem = id.replace(/[a-z]+$/, '');
+      // No trailing letters, or all letters (`qa`): not a part of anything.
+      if (!stem || stem === id) continue;
+      if (parentOf(id, planIds)) continue;
+      problems.push(
+        `"${id}" is named like a part of "${stem}", which is not in the plan - add "${stem}" or rename the row, ` +
+          `or it stays a row of its own at the bottom`,
+      );
+    }
+  }
 
   // A finished plan owes the operator a customer-facing summary: the Architect's
   // card shows it once the work is done, instead of only a DONE chip. The Architect
@@ -1386,6 +1408,16 @@ export function briefSession({ dir, role = 'architect', auto = false, single = f
     lines.push(
       `In Multi, every piece of work goes through the plan - even a single file: write the row, delegate it, ` +
         `and judge the report. Do not write the product yourself; Single is the mode where you answer and act alone.`,
+    );
+    // Where a row belongs. Measured 10 Nov: the Architect appended every fix and every
+    // second half to the end of the list, so the operator's plan read as a pile -
+    // finished rows, then new work, in the order things occurred to the model. The
+    // naming was already happening (t2a, t2b); only the placement was missing, and
+    // placement is the harness's job, not the model's.
+    lines.push(
+      `A row that follows on from another row - a fix to t2, the second half of t2, a test of t2 - is named t2a, ` +
+        `t2b and so on. It appears directly under t2 wherever you write it, and it is not ready until t2 is done, ` +
+        `so write the dependency into the name and leave "dependsOn" for what the name cannot say.`,
     );
     lines.push(
       `invent: when the operator wants something built but the features are open, delegate to inventor, which ` +

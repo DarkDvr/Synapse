@@ -10,6 +10,7 @@
 // Two things come from app.js and are wired at boot: the cards' layout (they move
 // when the stage does) and the desk badge.
 import { state } from './state.js';
+import { taskReady, nextReady } from './plan-order.js';
 import { esc, shortSpan, fmtBytes, hhmm } from './format.js';
 import { $ } from './dom.js';
 import { api } from './api.js';
@@ -188,9 +189,9 @@ export function renderRoleActivity() {
     // state — during the Architect's turn the red used to stay up for the whole turn
     // (4 Nov: "it's doing other work").
     const doneTaskIds = new Set(tasks.filter((t) => t.status === 'done').map((t) => t.id));
-    const anyReady = tasks.some(
-      (t) => t.status === 'todo' && (Array.isArray(t.dependsOn) ? t.dependsOn : []).every((d) => doneTaskIds.has(d)),
-    );
+    // Ready means ready to *run*, which includes the plan's own shape: a `t2a` waits
+    // for `t2` even though it names no dependency (see web/plan-order.js).
+    const anyReady = tasks.some((t) => taskReady(t, tasks));
     const blocked = blockedTasks.length > 0 && !archBusy && !run && !anyReady;
     // A role whose *current* model the provider has already refused keeps its mark
     // after the run: the run is over, the dead model is still selected. It clears
@@ -232,12 +233,10 @@ export function renderRoleActivity() {
       // Keep Building rule read as "waiting on you" for no stated reason — and
       // the Architect's own last line said it had queued the task (28 Oct).
       else if (unfinished) {
-        const doneIds = new Set(tasks.filter((t) => t.status === 'done').map((t) => t.id));
-        const ready = tasks.find(
-          (t) =>
-            t.status === 'todo' &&
-            (Array.isArray(t.dependsOn) ? t.dependsOn : []).every((d) => doneIds.has(d)),
-        );
+        // The first ready row in the plan's own reading order, so a part is never
+        // offered before its whole and a plan written out of order still names the
+        // task that actually comes next (`nextReady`, web/plan-order.js).
+        const ready = nextReady(tasks);
         // Nothing ready but something blocked: the move is still the operator's,
         // and naming the blocked task is the difference between "waiting on you"
         // and a list they can act on.

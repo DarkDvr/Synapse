@@ -53,6 +53,7 @@ import { configSavedAt } from './config.js';
 import { AUTOMATION_DEFAULTS, readAutomation } from './automation.js';
 import { keepBuildingDelayMs } from './auto-answer.js';
 import { wroteIt } from './synapse-writes.js';
+import { orderPlan, taskReady } from '../web/plan-order.js';
 import { sweepProject, sweepScratch } from './cleanup.js';
 import { classifyFailure, recordProviderError, pruneProviderLog } from './provider-errors.js';
 import { providerType } from './providers.js';
@@ -1218,7 +1219,6 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     const plan = readPlan(dir).plan;
     const tasks = Array.isArray(plan?.tasks) ? plan.tasks : [];
     if (!tasks.length) return;
-    const done = new Set(tasks.filter((t) => t.status === 'done').map((t) => t.id));
 
     // A step the Architect claimed and never started.
     //
@@ -1244,11 +1244,10 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
       return;
     }
 
-    const ready = tasks.find(
-      (t) =>
-        t.status === 'todo' &&
-        !nudged.has(`${normDir(dir)}|${t.id}`) &&
-        (Array.isArray(t.dependsOn) ? t.dependsOn : []).every((d) => done.has(d)),
+    // The same rule the page uses: a part (`t2a`) is not ready before its whole, and
+    // "the next step" is the first ready row in the plan's reading order.
+    const ready = orderPlan(tasks).find(
+      (t) => !nudged.has(`${normDir(dir)}|${t.id}`) && taskReady(t, tasks),
     );
     if (!ready) return;
     if (roleMarked(ready.role, getConfig() || {})) return;
