@@ -110,6 +110,10 @@ function makeEngine({ dir, script, turnDelay = 15 }) {
 }
 
 function runnerFor({ engine, ladder, retryBaseSec = 1, retryCapSec = 2 }) {
+  // The product ships two coders, so its own ladder is `coder-1 → coder-2`. The
+  // mechanism takes any role ids, and a walk longer than the product's is where the
+  // off-by-one bugs lived — so the third rung here is a role that exists (qc) rather
+  // than a coder the product no longer has.
   return createRunner({
     engine,
     logger: { channel: () => quiet },
@@ -117,7 +121,7 @@ function runnerFor({ engine, ladder, retryBaseSec = 1, retryCapSec = 2 }) {
       roles: {
         'coder-1': { ref: 'opencode/one' },
         'coder-2': { ref: 'opencode/two' },
-        'coder-3': { ref: 'opencode/three' },
+        'qc': { ref: 'opencode/three' },
       },
       worker: { ladder, stallSec: 30, resumeMax: 0, retryBaseSec, retryCapSec },
     }),
@@ -156,7 +160,7 @@ function delegate(runner, arch, callId) {
 async function startCase(name, { script, cancelAfter = 0 }) {
   const dir = project(name);
   const stub = makeEngine({ dir, script });
-  const runner = runnerFor({ engine: stub.engine, ladder: ['coder-1', 'coder-2', 'coder-3'] });
+  const runner = runnerFor({ engine: stub.engine, ladder: ['coder-1', 'coder-2', 'qc'] });
   await delegate(runner, stub.arch, `call_${name}_a`);
   if (cancelAfter) setTimeout(() => runner.cancel(dir), cancelAfter);
   const first = await waitFor(() => readRuns(dir).find((r) => r.kind === 'result'));
@@ -166,14 +170,14 @@ async function startCase(name, { script, cancelAfter = 0 }) {
 const checks = [];
 const expect = (label, ok, detail) => checks.push({ label, ok, detail });
 
-// 1. a refused model escalates inside the run: coder-1 -> coder-2 -> coder-3
+// 1. a refused model escalates inside the run: coder-1 -> coder-2 -> qc
 {
   const { dir, stub, first } = await startCase('refused', { script: [{ error: TERMINAL }] });
   expect('the delegation starts on coder-1', readRuns(dir).find((r) => r.kind === 'delegate')?.role === 'coder-1');
-  expect('a refused model is not a dead end: the task lands on coder-3', first?.role === 'coder-3', first?.role);
+  expect('a refused model is not a dead end: the task lands on qc', first?.role === 'qc', first?.role);
   expect('three worker sessions were tried', stub.created.length === 3, String(stub.created.length));
   expect('the run is still a failure the Architect must judge', first?.outcome === 'error', first?.outcome);
-  expect('the report says who it really ran on', /moved/.test(first?.text || '') || first?.role === 'coder-3');
+  expect('the report says who it really ran on', /moved/.test(first?.text || '') || first?.role === 'qc');
 }
 
 // 2. the next delegation starts one rung down from the plan's role
@@ -207,7 +211,7 @@ const expect = (label, ok, detail) => checks.push({ label, ok, detail });
   const stub = makeEngine({ dir, script: [{ error: FREE_LIMIT }, {}] });
   const runner = runnerFor({
     engine: stub.engine,
-    ladder: ['coder-1', 'coder-2', 'coder-3'],
+    ladder: ['coder-1', 'coder-2', 'qc'],
     retryBaseSec: 60,
     retryCapSec: 3600,
   });
@@ -231,7 +235,7 @@ const expect = (label, ok, detail) => checks.push({ label, ok, detail });
 {
   const dir = project('operator-coder', 'coder-2');
   const stub = makeEngine({ dir, script: [{}] });
-  const runner = runnerFor({ engine: stub.engine, ladder: ['coder-1', 'coder-2', 'coder-3'] });
+  const runner = runnerFor({ engine: stub.engine, ladder: ['coder-1', 'coder-2', 'qc'] });
   await delegate(runner, stub.arch, 'call_operator-coder_a');
   const first = await waitFor(() => readRuns(dir).find((r) => r.kind === 'result'));
   const row = readRuns(dir).find((r) => r.kind === 'delegate');
@@ -251,7 +255,7 @@ const expect = (label, ok, detail) => checks.push({ label, ok, detail });
     ].join('\n') + '\n',
   );
   const stub = makeEngine({ dir, script: [{}] });
-  const runner = runnerFor({ engine: stub.engine, ladder: ['coder-1', 'coder-2', 'coder-3'] });
+  const runner = runnerFor({ engine: stub.engine, ladder: ['coder-1', 'coder-2', 'qc'] });
   const n = await runner.recoverLostReports([dir]);
   expect('a result newer than the Architect last heard is replayed', n === 1, String(n));
   expect(

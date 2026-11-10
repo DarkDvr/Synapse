@@ -226,7 +226,7 @@ async function startCase(name, variant, { ladder = ['coder-1'], ids = ['t1'], lo
       roles: {
         'coder-1': { ref: 'polystrata/model', variant },
         'coder-2': { ref: 'opencode/two' },
-        'coder-3': { ref: 'opencode/three' },
+        'qc': { ref: 'opencode/three' },
       },
       worker: { ladder, stallSec: 30, resumeMax: 0, retryBaseSec: 1, retryCapSec: 2, loopGuard: true, loopLimit },
       cleanup: { onFinish: false },
@@ -332,7 +332,7 @@ test('a tool loop — the same call four times — is caught without any thinkin
 // the coder that is marked, never the one that took over.
 test('a looped coder moves the task to coder-2, and the report names coder-1', async () => {
   const { stub, marks, result } = await startCase('loop-ladder', 'medium', {
-    ladder: ['coder-1', 'coder-2', 'coder-3'],
+    ladder: ['coder-1', 'coder-2', 'qc'],
     keepLooping: true,
     loopLimit: 1,
   });
@@ -354,7 +354,7 @@ test('a looped coder moves the task to coder-2, and the report names coder-1', a
 
 test('once coder-1 is marked, the next task starts on coder-2', async () => {
   const { stub, delegate, result } = await startCase('loop-next-task', 'medium', {
-    ladder: ['coder-1', 'coder-2', 'coder-3'],
+    ladder: ['coder-1', 'coder-2', 'qc'],
     ids: ['t1', 't2'],
     keepLooping: true,
     loopLimit: 1,

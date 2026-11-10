@@ -397,9 +397,9 @@ export function normalize(raw) {
   cfg.worker.leaseGraceSec = clampInt(cfg.worker.leaseGraceSec, 5, 3600, DEFAULTS.worker.leaseGraceSec);
   // The peer ladder is a list of role ids, and every one of them has to be a role
   // that exists — a card to show and a model to run. A saved config can still name
-  // one that has left (coder-3, 9 Nov 2026): the delegation would work and the panel
-  // would have nowhere to put it, so an unknown id is dropped here rather than
-  // carried into the next run.
+  // one that has left (a coder was removed on 9 Nov 2026): the delegation would work
+  // and the panel would have nowhere to put it, so an unknown id is dropped here
+  // rather than carried into the next run.
   const knownRoles = new Set(ROLES);
   cfg.worker.ladder = Array.isArray(cfg.worker.ladder)
     ? cfg.worker.ladder.map((r) => String(r || '').trim()).filter((r) => r && knownRoles.has(r))

@@ -317,16 +317,6 @@
         "code-craft"
       ]
     },
-    "coder-3": {
-      "ref": "opencode-go/deepseek-v4.1-flash",
-      "skills": [
-        "code-craft",
-        "visual-review"
-      ],
-      "mustLoad": [
-        "code-craft"
-      ]
-    },
     "inventor": {
       "ref": "opencode-go/deepseek-v4.1-flash",
       "skills": [
@@ -357,8 +347,7 @@
     "retryCapSec": 300,
     "ladder": [
       "coder-1",
-      "coder-2",
-      "coder-3"
+      "coder-2"
     ]
   },
   "logging": {

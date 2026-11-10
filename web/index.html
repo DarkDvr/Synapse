@@ -151,9 +151,8 @@
             </div>
 
             <!-- The stack, in the operator's fixed order: Inventor, Designer, QC,
-                 Coder 1, Coder 2. Two coders, not three — Coder 3 is gone. The
-                 connectors that used to sit between these are gone too: the trunk
-                 is drawn by drawActivePath from the card boxes. -->
+                 Coder 1, Coder 2. The connectors that used to sit between these are
+                 gone too: the trunk is drawn by drawActivePath from the card boxes. -->
             <article class="role-card">
               <header class="role-head">
                 <span class="status-dot idle" role="img" aria-label="idle"></span>
@@ -303,11 +302,11 @@
               </div>
             </form>
 
-            <!-- The question panel. It is a child of the dock so the browser keeps
-                 the two in step: it is placed at -2px on every side, which is a
-                 larger box than the chat's own, covering its border, its jump
-                 buttons and its composer. Measured from outside the dock instead,
-                 it lagged a frame behind the chat during the mode switch. -->
+            <!-- The question panel. It is created here so the page has one host, and
+                 `mountAskPost()` moves this same node to the end of the transcript when a
+                 question arrives: it is a post, not an overlay, so the reply that raised
+                 the question stays readable above it. Its answers live in the DOM, so it
+                 is moved and never rebuilt. -->
             <div class="ask-host" id="askHost" hidden></div>
           </section>
         </section>

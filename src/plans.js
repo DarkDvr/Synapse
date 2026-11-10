@@ -29,7 +29,7 @@ import { parentOf } from '../web/plan-order.js';
 // disk, so a second confirmation was redundant. The adversary slot is now **QC**
 // (quality control): the role that reads the build the way a non-technical person
 // will, and says where it confuses, clips or lies.
-// The roles a plan may name, in the order the operator sees them. Two coders: the
+// The roles a plan may name, in the order the operator sees them. Two coders: a
 // third rung was removed on 9 Nov 2026 — the ladder is coder-1 then coder-2, and a
 // third coder cost a card, a model choice and a sentence in every brief for a
 // fallback that was reached twice in four months of runs.
@@ -407,7 +407,7 @@ export function readPlan(dir) {
     // coder-1 and the harness escalates on its own when that coder cannot do the
     // work (see candidatesFor in runs.js). A plan that names coder-2 is spending
     // the fallback rung on work the first coder could have done - in Shift Test 4
-    // the Architect spread six build tasks across three coders.
+    // the Architect spread six build tasks across the coders.
     //
     // The exception is the operator's own instruction: "use coder 2" is a request,
     // and quietly overruling it is worse than spending the rung - the operator
