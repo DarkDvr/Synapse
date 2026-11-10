@@ -8,6 +8,7 @@
 //
 // Kept apart from app.js so both are testable without a page: no DOM, no state.
 // tests/ask-note.test.mjs calls them directly.
+import { esc } from './format.js';
 import { roleLabel } from './run-view.js';
 
 /**
@@ -120,3 +121,18 @@ export function permissionTip(d) {
 }
 
 
+
+/**
+ * The permission chip itself: the one the Architect's tool card wears.
+ *
+ * Amber when the operator had to answer, green when the policy allowed it without
+ * asking, red when it was refused — and the whole sentence, a refusal's reason
+ * included, in the title. It is here rather than in the transcript so a worker's
+ * trace can wear the same chip: two places, one component, exactly as the operator
+ * asked ("the same exact format as for architect") (10 Nov).
+ */
+export function permissionChip(d) {
+  if (!d || !d.effect) return '';
+  const cls = d.effect === 'deny' ? 'err' : d.asked ? 'warn' : 'ok';
+  return `<span class="tool-perm state-pill ${cls}" title="${esc(permissionTip(d))}">permission</span>`;
+}

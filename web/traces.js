@@ -12,7 +12,7 @@
 // has to be re-rendered where it stands. Wired at boot.
 import { state } from './state.js';
 import { EV } from './events.js';
-import { permissionTip } from './ask-note.js';
+import { permissionChip } from './ask-note.js';
 import { esc, shortSpan, fileChip, reasoningGist } from './format.js';
 import { renderMarkdown } from './md.js';
 import { paneMarkup } from './thinking-pane.js';
@@ -104,36 +104,22 @@ export function renderTrace(t) {
     if (cardsOn() && n?.tool) return toolLine(n.tool, text);
     return `<div class="trace-line">${esc(text)}</div>`;
   };
-  // A permission this worker asked for, and the harness's answer — the record the
-  // operator asked for. The Architect's own asks are chips on its tool cards; a
-  // worker's calls arrive in the trace as a name and a target with no call id to hang
-  // one on, so the answer is its own line in the same place, at the moment it was
-  // given. The sentence, including a refusal's reason, is the same `permissionTip`
-  // the Architect's chip shows (10 Nov).
+  // A permission the worker asked for and the harness's answer — the Architect's
+  // component, not a lookalike: the same tool card with the same chip in the same
+  // place. The operator asked for "the same exact format", and a second row shape is
+  // how the two drift apart (10 Nov). The card has no detail to open because a
+  // worker's answer is the whole record; the tool name is the action and the target
+  // is what it named.
   const permLine = (d) => {
-    const kind = d.effect === 'deny' ? 'err' : d.asked ? 'warn' : 'ok';
-    const said =
-      d.effect === 'deny'
-        ? d.decidedBy === 'operator'
-          ? 'rejected'
-          : 'refused'
-        : d.asked
-          ? 'you allowed'
-          : 'allowed';
-    const action = String(d.action || '').toLowerCase();
-    const what = /^(edit|write|patch|create)$/.test(action)
-      ? 'a change'
-      : action === 'read'
-        ? 'a read'
-        : action === 'shell' || action === 'bash'
-          ? 'a command'
-          : action === 'execute'
-            ? 'code'
-            : 'a tool call';
-    return `<div class="trace-line is-perm" title="${esc(permissionTip(d))}">
-      <span class="status-dot ${kind}" role="img" aria-label="${esc(said)}"></span>
-      <span class="trace-perm-said">${esc(said)} ${esc(what)}</span>
-      <span class="state-pill ${kind}">permission</span></div>`;
+    const action = String(d.action || 'tool').toLowerCase();
+    const target = (d.resolved && d.resolved.length ? d.resolved : d.resources || []).join(' ');
+    const cls = d.effect === 'deny' ? 'err' : d.asked ? 'warn' : 'ok';
+    return `<div class="tool-card trace-card"><div class="tool-head">` +
+      `<span class="status-dot ${cls}" role="img" aria-label="${esc(d.effect === 'deny' ? 'refused' : 'allowed')}"></span>` +
+      `<span class="tool-name">${esc(action)}</span>` +
+      `<span class="tool-target" title="${esc(target)}">${esc(target)}</span>` +
+      permissionChip(d) +
+      `</div></div>`;
   };
   const notes = t.notes || [];
   // Only the last few steps stay open. Everything before is one line that opens:

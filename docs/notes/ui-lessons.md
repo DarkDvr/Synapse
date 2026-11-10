@@ -2260,3 +2260,19 @@ for one idea — the run's history — and which header a line landed under was 
 accident of what the line was rather than when it happened. Both are one
 `Older entries (N)` fold now, in time order, with the older thinking as grey text
 inside it.
+
+### The same scroll, once more (10 Nov, second report)
+
+Passing the intent was half of it. The other half was *when* the follow lets go: the
+release waited for the scroll event to say "the reader moved", and the frame loop's
+pin runs before that event is dispatched — so the box was already back at the end when
+the event arrived, it reported no movement, and `noteChatScroll` re-armed the follow
+on the very write the reader was trying to escape. Twice: the intent now releases it
+(`chatFollowArmed = false` the moment an upward gesture arrives), and only the
+reader's own scroll re-arms it — our writes never do.
+
+The permission row was also wrong the first time: I drew a new row for a worker's
+answer ("allowed a read · permission") when the operator wanted the Architect's own
+component. `permissionChip()` lives with `permissionTip()` in `web/ask-note.js`, and a
+worker's answer is now the same `.tool-card` the Architect wears — head, action,
+target, chip — one component in one place rather than a lookalike that drifts.

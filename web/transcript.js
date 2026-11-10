@@ -14,7 +14,7 @@ import { $ } from './dom.js';
 import { esc, hhmm, toolTarget, fileChip, shortName, reasoningGist } from './format.js';
 import { renderMarkdown } from './md.js';
 import { serverNow } from './api.js';
-import { permissionNote, permissionTip } from './ask-note.js';
+import { permissionNote, permissionChip } from './ask-note.js';
 import { alarmsHere, renderAlarm, leasesHere, renderLease, chatErrorsHere, renderChatError } from './chat-notes.js';
 import { chatAtBottom, scrollChatToBottom, renderChatNav, captureChatSlack, restoreStreamView } from './chat-scroll.js';
 import { currentProject, roleLabel, groupTurns, currentForm } from './run-view.js';
@@ -357,13 +357,10 @@ export function renderTool(part) {
 
   // A chip only when the call reached outside the project: green when the policy
   // allowed it without asking, amber when the operator had to, red when it was
-  // refused. A write inside the workspace has nothing to report.
+  // refused. A write inside the workspace has nothing to report. The chip itself is
+  // one component (`permissionChip`), so a worker's trace wears the same one.
   const decision = part.id ? state.permissionDecisions?.get(part.id) : null;
-  const permChip = decision?.outside
-    ? `<span class="tool-perm state-pill ${
-        decision.effect === 'deny' ? 'err' : decision.asked ? 'warn' : 'ok'
-      }" title="${esc(permissionTip(decision))}">permission</span>`
-    : '';
+  const permChip = decision?.outside ? permissionChip(decision) : '';
 
   return `<div class="tool-card${open ? ' open' : ''}" data-tool-card="${esc(id)}">
     <div class="tool-head" role="button" tabindex="0" data-tool-toggle="${esc(id)}" aria-expanded="${open}" aria-controls="${esc(id)}-detail">

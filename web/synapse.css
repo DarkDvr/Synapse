@@ -3380,14 +3380,7 @@ body.is-disconnected .app-shell { filter: blur(2px) brightness(0.45); pointer-ev
    The Architect's answers live on its tool cards as a chip. A worker's calls reach
    the trace as a name and a target with no call id to hang a chip on, so the answer
    is its own line where the work is: the same dot, the same pill, and the whole
-   sentence — a refusal's reason included — in the tooltip. */
-.trace-line.is-perm {
-  display: flex; align-items: center; gap: 6px;
-  color: #b9bdc4;
-}
-.trace-line.is-perm .state-pill { flex: none; }
-.trace-perm-said { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-/* The one fold of a worker's history: its older thinking is text, not a fold inside
+   sentence — a refusal's reason included — in the tooltip. *//* The one fold of a worker's history: its older thinking is text, not a fold inside
    a fold, so it takes the trace's own grey rather than the reasoning block's. */
 .trace-archive pre.trace-old {
   margin: 2px 0 4px; padding: 0 0 0 10px;

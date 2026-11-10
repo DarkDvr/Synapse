@@ -70,7 +70,10 @@ export function noteChatScroll() {
   const fromEnd = el.scrollHeight - el.scrollTop - el.clientHeight;
   const byReader = Date.now() - chatUserMovedAt < CHAT_USER_WINDOW_MS;
   if (byReader && el.scrollTop < lastChatTop - 4) chatFollowArmed = false;
-  else if (fromEnd <= CHAT_FOLLOW_SLACK) chatFollowArmed = true;
+  // Only the reader's own arrival re-arms it. This used to re-arm on any scroll event
+  // near the end, which included the ones our own pin caused — so a reader who had
+  // taken over was re-armed by the very write they were trying to escape (10 Nov).
+  else if (byReader && fromEnd <= CHAT_FOLLOW_SLACK) chatFollowArmed = true;
   lastChatTop = el.scrollTop;
   // The reader's place, kept from the end of the conversation: the one value that
   // survives the box changing size under them (see restoreChatSlack). Only when the
@@ -105,8 +108,17 @@ export function chatFollows() {
 /** The operator moved the conversation. Only this may release the follow. */
 export function noteUserScrollIntent(deltaY) {
   // A wheel down at the end is them coming back, not leaving.
-  if (deltaY > 0 && chatAtBottom(CHAT_FOLLOW_SLACK)) chatFollowArmed = true;
-  else chatUserMovedAt = Date.now();
+  if (deltaY > 0 && chatAtBottom(CHAT_FOLLOW_SLACK)) {
+    chatFollowArmed = true;
+    return;
+  }
+  // An upward gesture lets go *now*, not when the scroll event arrives. The frame
+  // loop that grows the thinking pane is pinned every animation frame, and it can put
+  // the box back at the end before the event that would have said "the reader moved"
+  // is even dispatched — so the event reported no movement, re-armed the follow and
+  // the reader could not escape while a turn was streaming (10 Nov, twice reported).
+  chatUserMovedAt = Date.now();
+  if (deltaY < 0) chatFollowArmed = false;
 }
 
 /**

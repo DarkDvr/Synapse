@@ -385,6 +385,9 @@ export function renderRoleActivity() {
 export function noteWorkerPermission(decision) {
   const sessionId = String(decision?.sessionId || '');
   if (!sessionId) return false;
+  // The same rule the Architect's chip keeps: a call that stayed inside the project
+  // is not news, and a run makes hundreds of them. A refusal is always worth the line.
+  if (!decision.outside && decision.effect !== 'deny') return false;
   const run = [...(state.runs?.values?.() || [])].find((r) => r?.workerId === sessionId);
   if (!run) return false;
   const trace = traceOf(run);
@@ -407,7 +410,9 @@ function seedWorkerPermissions(run) {
   if (!trace || !run?.workerId) return;
   api('GET', `/api/permissions?session=${encodeURIComponent(run.workerId)}`)
     .then((d) => {
-      const rows = (d?.decisions || []).filter((x) => x && x.effect && x.sessionId === run.workerId);
+      const rows = (d?.decisions || []).filter(
+        (x) => x && x.effect && x.sessionId === run.workerId && (x.outside || x.effect === 'deny'),
+      );
       if (!rows.length) return;
       const keyOf = (x) => `${Number(x?.at) || 0}:${x?.toolCallId || ''}`;
       const have = new Set((trace.notes || []).filter((n) => n?.perm).map((n) => keyOf(n.perm)));

@@ -112,10 +112,16 @@ check(
       },
     ],
   });
-  check('a denied permission is named as rejected', /is-perm/.test(html) && /rejected a command/.test(html), html.slice(0, 200));
-  check('an allowed one says so', /allowed a read/.test(html));
-  check('the reason rides the tooltip', /could take the machine down/.test(html), 'the refusal reason is not in the title');
-  check('and it is the shared sentence, not a second one', /asked to run this command/.test(html));
+  // The same card and the same chip the Architect's tool call wears, not a second
+  // row shape: a tool head, the action as the name, what it named as the target, and
+  // the shared chip with the sentence — refusal reason included — in its title.
+  check('the answer is the Architect\'s tool card', /<div class="tool-card trace-card"><div class="tool-head">/.test(html), html.slice(0, 240));
+  check('the action is the tool name', /class="tool-name">shell</.test(html));
+  check('and what it named is the target', /class="tool-target"[^>]*>Stop-Process -Name python</.test(html));
+  check('it wears the shared permission chip', /class="tool-perm state-pill err" title="/.test(html), 'no chip, or the wrong colour');
+  check('the reason rides the chip\'s tooltip', /could take the machine down/.test(html), 'the refusal reason is not in the title');
+  check('an allowed one is a green chip', /class="tool-perm state-pill ok"/.test(html));
+  check('and the second row shape is gone', !/trace-line is-perm/.test(html));
 }
 
 console.log(`\n${pass}/${pass + fails.length} passed`);
