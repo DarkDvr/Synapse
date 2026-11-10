@@ -9,6 +9,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { paneMarkup } from '../web/thinking-pane.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
@@ -58,6 +59,27 @@ check(
 );
 check('and the working class is still what the animation hangs on', /classList\.toggle\('is-working', working\)/.test(live));
 check('the single-mode bar is the same card, so it gets the same class', /body\[data-mode="single"\] \.topo-architect \.role-card/.test(read('web/panel.css')));
+
+// ── the panel is drawn from its text, so the text comes first ─────
+// This is the second half of the same report: the post opened on the first token and
+// then sat on its placeholder, because a pane with no text draws nothing and the
+// render happened before the first delta was added. The deltas after the first one
+// only append — the frame loop paints them — so that render was the one chance.
+check('an empty pane draws nothing, which is why order matters', paneMarkup({ key: 'k', stream: null }) === '');
+check('a stream with no words draws nothing', paneMarkup({ key: 'k', stream: { kind: 'think', text: '' } }) === '');
+check(
+  'a stream with words draws the panel',
+  /reading the files/.test(paneMarkup({ key: 'k', stream: { kind: 'think', text: 'reading the files' }, thinkCollapsed: false })),
+);
+{
+  const src = read('web/chat-scroll.js');
+  const fn = /export function appendStream[\s\S]*?\n\}/.exec(src);
+  check('appendStream is where it always was', Boolean(fn));
+  const body = fn ? fn[0] : '';
+  const added = body.indexOf('paneAdd(trace, delta);');
+  const drawn = body.lastIndexOf('wired.renderTranscript();');
+  check('the first words are added before the render that draws them', added > -1 && drawn > -1 && added < drawn, `added@${added} drawn@${drawn}`);
+}
 
 console.log(`\n${pass}/${pass + fails.length} passed`);
 for (const f of fails) console.log(`  ${f}`);

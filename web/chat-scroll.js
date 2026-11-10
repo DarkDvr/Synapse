@@ -144,8 +144,15 @@ export function appendStream(kind, delta) {
   trace.thinkCollapsed = false;
   chatFollowArmed = true;
   lastChatTop = chatScroller()?.scrollTop || 0;
-  wired.renderTranscript();
+  // The first words go in BEFORE the render. A pane is only markup once it has text
+  // to draw (`paneMarkup` returns nothing for an empty stream), so rendering first
+  // opened a post with no panel in it — and this is the only render the block gets:
+  // the deltas after it just append, by design, for the frame loop to paint. The
+  // Architect's opening reasoning therefore landed nowhere and the chat sat on its
+  // placeholder until a tool call forced a render (10 Nov, the second report of it).
+  // A worker's trace was saved by its tool events re-rendering every few seconds.
   paneAdd(trace, delta);
+  wired.renderTranscript();
 }
 
 /**
