@@ -664,7 +664,15 @@ function scanForStop(text) {
   if (/invoke-cimmethod[^;|]*\bterminate\b/.test(t)) return FAMILY_TEXT;
   if (/wmic[^;|]*\bcall\s+terminate\b/.test(t)) return FAMILY_TEXT;
   // An id it looked up is no safer than a name; an id it was given is fine.
-  if (/-id\s+(?:\(|\$)/.test(t)) return SWEEP_TEXT;
+  //
+  // "Looked up" means a subexpression (`-Id (Get-NetTCPConnection …)`) or the pipeline's
+  // own object (`-Id $_.Id`) — the things that carry a list. A plain variable is the
+  // *good* pattern: the strength tests watched a worker start a server, write its pid to
+  // a file, read it back and stop that one (`taskkill /PID $pid`), which is what the
+  // brief asks for, and refusing `-Id $anything` would refuse it whenever the model
+  // reached for `Stop-Process` instead (10 Nov).
+  if (/-id\s+\(/i.test(t) || /-id\s+\$_/i.test(t)) return SWEEP_TEXT;
+  if (/\/pid\s+\(/i.test(t) || /\/pid\s+\$_/i.test(t)) return SWEEP_TEXT;
   if (/\.kill\s*\(/.test(t) && !/-id\s+"?\d+/.test(t)) return SWEEP_TEXT;
   // A stop with nothing to name after something listed processes. The statement walk
   // applies this too, but a nested shell's payload is one quoted word and never reaches

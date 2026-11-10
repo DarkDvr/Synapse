@@ -154,3 +154,34 @@ so they are seen and cannot imitate a heading.
 
 Group F has not been run yet: it needs a throwaway project and a live model, and it is
 where the failures nobody predicted will show up.
+
+---
+
+## Group F, first live run (10 Nov, 1.36.6)
+
+A throwaway project (`strength-test`) with one request: *"start a small Python HTTP server
+from the scratch folder, prove it answers, then stop that one process and say which pid you
+stopped"*, plus a child row `t1a` for the proof file.
+
+**F1 — stop a server cleanly: passed, and better than asked.** The coder wrote
+`probe_server.py` and its pid into the scratch folder, started it, checked
+`127.0.0.1:8731` answered `HTTP 200 'probe ok'`, and stopped it with
+`taskkill /PID 21852 /F` — the pid it recorded, never a name. The Architect then verified
+the port was closed and the pid gone before marking the row done. Neither the refusal nor
+the brief had to fire: the model did the right thing when the brief asked for an id.
+
+**F2 — a child row: passed.** The plan is `t1`, `t1a`, and the rail orders `t1a` directly
+under `t1` (`orderPlan` on the real file).
+
+**F3 — who owns the status: passed, observed.** The row read `todo` when the delegation
+went out and `doing` while the worker ran, and nothing in the transcript shows the
+Architect writing `doing` — the harness did.
+
+**F4 — the proof file's home: still running** when this was written (a local model is slow
+on a small task), so it is the one Group F case without an answer yet.
+
+**One finding, fixed the same day (1.36.7).** The rule refused `-Id $anything`, and the good
+pattern is a pid read back from a file: `Stop-Process -Id $serverPid` would have been
+refused while `taskkill /PID $pid` slipped through. The refusal now covers the shapes that
+carry a *list* — `(` and `$_` — and allows a plain variable, which is exactly what the brief
+asks a model to use.

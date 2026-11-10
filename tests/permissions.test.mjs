@@ -665,6 +665,8 @@ test('one process it started, by its id: allowed', () => {
     'Stop-Process -Name SysMonitor -Force -ErrorAction SilentlyContinue',
     'Get-Process SysMonitor | Select-Object Id,Path | Stop-Process -Name SysMonitor',
     'Stop-Process -Name SysMonitor; Start-Sleep -Milliseconds 500; .\\build.ps1',
+    // A pid it recorded and read back is the pattern the brief asks for, not a sweep.
+    'Stop-Process -Id $serverPid -Force',
   ]) {
     const decision = shell(command);
     assert.equal(decision.effect, 'allow', `${command} was ${decision.effect}: ${decision.reason}`);
@@ -677,7 +679,7 @@ test('a sweep, a family, or an id it found: refused', () => {
     'Get-Process | Stop-Process -Force',
     'Get-NetTCPConnection -LocalPort 8080 | Stop-Process -Force',
     'Stop-Process -Id (Get-NetTCPConnection -LocalPort 8080).OwningProcess',
-    'Stop-Process -Id $pid -Force',
+    'Stop-Process -Id $_.Id -Force',
     'Stop-Process -Name python -Force',
     'Stop-Process -Name python* -Force',
     'taskkill /IM python.exe /F',
