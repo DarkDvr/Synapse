@@ -1184,20 +1184,25 @@ body[data-view="session"] .chat-dock:not(.has-history) .composer { border-top-co
 .chat-post > summary {
   display: flex; align-items: baseline; gap: 9px;
   list-style: none; cursor: pointer;
+  /* The chat's own type, at the size a fold uses. It was monospace, letter-spaced and
+     0.8 of the chat — a code label in the middle of a conversation (10 Nov). */
+  font-size: calc(var(--chat-fs) * 0.96); line-height: 1.5; color: var(--muted);
 }
 .chat-post > summary::-webkit-details-marker { display: none; }
-/* The post opens to the handover, so it has to look openable. */
+/* The marker is the reasoning fold's marker, to the letter: `▸`/`▾` at 1.3em of the
+   line in its own box, not a 0.8em triangle rotated in place — that one read as a
+   speck at the end of the line, and the operator could not see it was a control. */
 .chat-post > summary::after {
   content: '▸';
-  color: #82868e;
-  font-size: calc(var(--chat-fs) * 0.8);
-  transition: transform 120ms ease;
+  flex: none; margin-left: auto;
+  color: #6d717a; font-size: 1.3em; line-height: 1.15;
 }
-.chat-post[open] > summary::after { transform: rotate(90deg); }
-.chat-post-mark { font-family: var(--mono); font-size: calc(var(--chat-fs) * 0.8); letter-spacing: 0.04em; color: var(--yellow); }
+.chat-post[open] > summary::after { content: '▾'; }
+.chat-post-mark { font-family: inherit; font-size: inherit; font-weight: 600; letter-spacing: normal; color: var(--yellow); }
 /* One line, whatever is in it: a loaded file's path is long, and a summary that wraps
-   to three lines is not a summary. The full path is in the title. */
-.chat-post-note { font-size: calc(var(--chat-fs) * 0.84); color: #82868e; flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+   to three lines is not a summary. The full path is in the title. The note shares the
+   summary's size now — one sentence, one size, the label doing the emphasis. */
+.chat-post-note { font-size: inherit; color: #82868e; flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .chat-post-body { margin: 8px 0 0; font-size: calc(var(--chat-fs) * 0.96); line-height: 1.5; color: #b6bac1; }
 .chat-post-body h2 { font-size: calc(var(--chat-fs) * 0.96); margin: 10px 0 4px; color: #d7dae0; }
 .chat-post-body ul { margin: 3px 0 8px; padding-left: 18px; }

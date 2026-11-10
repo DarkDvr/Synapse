@@ -75,6 +75,24 @@ test('a table in the conversation takes the size of the conversation', () => {
   );
 });
 
+// A fold is a line of the conversation, not a label in a different typeface. The
+// compacted post was monospace, letter-spaced and 0.8 of the chat, with a chevron at
+// 0.8 that read as a speck; the operator asked for the type and the marker the
+// reasoning fold uses (10 Nov).
+test('the compacted line wears the chat type, and the reasoning fold marker', () => {
+  const css = read('web/synapse.css').replace(/\/\*[\s\S]*?\*\//g, '');
+  assert.match(css, /\.chat-post > summary \{[^}]*font-size:\s*calc\(var\(--chat-fs\) \* 0\.96\)/, 'the summary is not on the chat scale');
+  assert.match(css, /\.chat-post-mark \{[^}]*font-family:\s*inherit/, 'the label is still a code font');
+  assert.match(css, /\.chat-post-mark \{[^}]*letter-spacing:\s*normal/, 'the label is still letter-spaced');
+  // The marker: the reasoning fold's 1.3em, and the same two glyphs rather than a
+  // rotated speck.
+  const marker = /\.chat-post > summary::after \{[^}]*\}/.exec(css);
+  assert.ok(marker, 'the chevron rule is gone');
+  assert.match(marker[0], /font-size:\s*1\.3em/, 'the chevron is not the reasoning size');
+  assert.match(marker[0], /content:\s*'▸'/, 'the chevron is not the reasoning glyph');
+  assert.match(css, /\.chat-post\[open\] > summary::after \{ content: '▾'; \}/, 'it has no open state');
+});
+
 test('General is the first Settings tab and the Windows tab is gone', () => {
   const src = read('web/settings-panes.js');
   const block = /export const SETTINGS_TABS = \[([\s\S]*?)\n\];/.exec(src);

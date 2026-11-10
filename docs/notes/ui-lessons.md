@@ -2338,3 +2338,13 @@ Also, a clean-up pass on the four scroll fixes: every one of them is load-bearin
 the intent's sign, the release on the gesture, the render and the frame loop asking
 `chatFollows()` — so nothing was removed but the four-attempt history in the comments,
 which now states the rule once: **geometry is not a gesture.**
+
+### The compacted line was a code label in a conversation (10 Nov)
+
+The fold that says a chat was compacted wore `font-family: mono`, `letter-spacing:
+0.04em` and 0.8 of the chat size, and its chevron was the same 0.8 rotated 90° — which
+at a 14px chat is an 11px triangle reading as a speck at the end of the line. A fold is
+a line of the conversation, so it now takes the chat's own type at the size every other
+fold uses (0.96), and the marker is the reasoning fold's, to the letter: `▸`/`▾` at
+1.3em in its own box. Measured after: summary, label and note all 12.48px DM Sans with
+normal letter-spacing, chevron 16.22px — identical to `.reasoning summary::before`.
