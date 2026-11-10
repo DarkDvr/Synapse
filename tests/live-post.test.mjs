@@ -46,11 +46,9 @@ check(
 check('and it goes when the turn ends', /if \(dropLivePost\(\)\) renderTranscript\(\);/.test(app));
 
 // ── the placeholder is a post, not an error ───────────────────────
-check(
-  'an empty live post does not print a placeholder ellipsis over its thinking',
-  /!\(m\.live && tail\)/.test(transcript),
-  'the arrow is back on the label',
-);
+// The placeholder-ellipsis rule is a render now, in page-render.test.mjs: it asks the
+// renderer what a live post with and without a panel looks like, instead of searching
+// this file's neighbour for `!(m.live && tail)`.
 
 // ── the Architect's card shows the work in Single too ─────────────
 check(

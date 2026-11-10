@@ -91,3 +91,19 @@ test('a message renders its own text even when a picture is attached', () => {
   assert.match(html, /shot\.png/, 'the attachment chip is missing');
   assert.ok(traceKeyOf({ dir: 'F:\\x', task: 't1' }), 'the trace key helper is usable from a test');
 });
+
+test('a post with no parts says "…" only when there is nothing to show yet', () => {
+  // The page opens an assistant post on the turn's first token, before the engine has
+  // written any part of it. The ellipsis tells the operator "this is coming"; once the
+  // live thinking panel is in the post, the ellipsis would sit above the words it is
+  // waiting for. This was a phrase test ("the source must contain `!(m.live && tail)`");
+  // it is a render now (10 Nov).
+  const waiting = renderMessage({ id: 'live', type: 'assistant', live: true, parts: [], created: Date.now() }, '');
+  assert.match(waiting, /…/, 'an empty post with nothing below it lost its ellipsis');
+  const streaming = renderMessage(
+    { id: 'live', type: 'assistant', live: true, parts: [], created: Date.now() },
+    '<div class="trace is-live is-own">thinking…</div>',
+  );
+  assert.match(streaming, /thinking…/, 'the live panel is missing from the post');
+  assert.doesNotMatch(streaming, /class="msg-text">…</, 'the ellipsis is still above the live panel');
+});

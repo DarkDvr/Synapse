@@ -1949,3 +1949,18 @@ was never asked for" reminder. All three call `taskReady()` now.
 the project document — so this needed no migration and breaks no history. The rule
 lives in `web/plan-order.js`, imported by the page and by `src/plans.js`/`src/runs.js`,
 so both runtimes answer the same way.
+
+## A done row owes a result (10 Nov)
+
+`done` is the Architect's judgement, and the harness does not second-guess it. What it can
+ask for is the evidence line: a row marked `done` with no `result` is now a **plan
+problem** — *"one line saying what proved it, or it is a claim with nothing behind it"* —
+said in the block the Architect already reads each turn.
+
+It is a problem, not a repair: the judgement stays the model's, and a row the Architect
+settled itself (the QC cap, a check it ran) simply says so in its result, which the pane
+already shows on hover. The rule waits for the file to stand still, like the mirror rule
+(`result` with a `todo` status), because the two fields land in two writes.
+
+Measured before adding it: every done row in the operator's active projects carries a
+result; the two that did not were old plans nobody could read afterwards.

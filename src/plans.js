@@ -445,6 +445,15 @@ export function readPlan(dir) {
         `${where} has a result but its status is "${status}" - mark it done, or clear the result`,
       );
     }
+    // The mirror, and the whole point of "done": a finished row owes one line saying what
+    // proved it. The operator's own projects all carry it; the two that did not were the
+    // ones nobody could read afterwards. It is a problem, not a repair — the Architect
+    // owns the judgement, the harness only asks for the evidence (10 Nov).
+    if (!result && settled && status === 'done') {
+      problems.push(
+        `${where} is "done" and records no result - one line saying what proved it, or it is a claim with nothing behind it`,
+      );
+    }
 
     // Where the row came from. Tolerant on purpose: an unknown value is read as
     // `plan` rather than complained about, because the field exists to tell the

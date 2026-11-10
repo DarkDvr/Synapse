@@ -64,3 +64,32 @@ test('the laws are at the top, where a reader looks first', () => {
   const round = brief.slice(at(brief, '## This round'));
   assert.match(round, /Current plan:|The plan file does not exist yet|The plan is empty/, 'the round carries no plan state');
 });
+
+// ── the brief has a ceiling ─────────────────────────────────────
+// "Keep it short" is a promise; a ceiling is a mechanism. The Architect's brief is
+// re-sent on every turn of every project, so its size is a bill paid forever: 14.7k
+// characters is about 3.9k tokens per turn. These numbers have roughly 5% of headroom,
+// so a new rule fits — and the one after that has to be paid for by removing another, or
+// by raising the number here in a commit that says why (10 Nov).
+const CEILING = { architect: 15500, qc: 7300, designer: 5300, inventor: 4800, 'coder-1': 4100, 'coder-2': 4100, single: 2000 };
+
+test('no role brief outgrows its ceiling', () => {
+  const dir = 'F:/dev/Synapse.Projects/__no_such_project__';
+  for (const [role, max] of Object.entries(CEILING)) {
+    const brief =
+      role === 'single' ? briefSession({ dir, role: 'architect', single: true }) : briefSession({ dir, role });
+    assert.ok(
+      brief.length <= max,
+      `${role}'s brief is ${brief.length} characters, ceiling ${max} — a rule added without one removed`,
+    );
+  }
+});
+
+test('the Architect’s brief is the expensive one, and the layers are in it', () => {
+  const dir = 'F:/dev/Synapse.Projects/__no_such_project__';
+  const architect = briefSession({ dir, role: 'architect' });
+  const worker = briefSession({ dir, role: 'coder-1' });
+  // The Architect re-reads its whole conversation each turn; a worker does one task. If
+  // the worker's brief ever approached the Architect's, the roles have drifted.
+  assert.ok(worker.length < architect.length / 2, `worker ${worker.length} vs architect ${architect.length}`);
+});

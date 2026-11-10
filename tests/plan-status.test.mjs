@@ -62,3 +62,35 @@ test('the brief tells the Architect not to write it, and the runner does', () =>
   assert.match(runs, /setTaskStatus\(dir, task\.id, 'doing'\)/, 'the runner does not start the row');
   assert.match(runs, /releaseDoing\(dir, task\.id\)/, 'the runner does not release it');
 });
+
+test('a row marked done owes a result, and a fresh write is not judged yet', () => {
+  // The operator's own projects all carry a result on every done row; the two that did
+  // not were the ones nobody could read afterwards (10 Nov).
+  const project = (tasks) => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'synapse-plan-result-'));
+    fs.mkdirSync(path.join(dir, '.synapse'), { recursive: true });
+    const file = path.join(dir, '.synapse', 'plan.json');
+    fs.writeFileSync(file, JSON.stringify({ version: 1, goal: 'g', tasks }, null, 2));
+    // The rule waits for the file to stand still: `result` and `status` land in two
+    // writes, and judging between them flagged six of six finished runs on the clock
+    // project. Backdate the file so this test is past that grace.
+    const old = new Date(Date.now() - 11 * 60 * 1000);
+    fs.utimesSync(file, old, old);
+    clearPlanCache();
+    return dir;
+  };
+  const withResult = project([{ id: 't1', title: 'one', role: 'coder-1', status: 'done', result: 'the check passed' }]);
+  assert.equal(readPlan(withResult).problems.filter((p) => /records no result/.test(p)).length, 0);
+
+  const bare = project([{ id: 't1', title: 'one', role: 'coder-1', status: 'done' }]);
+  const problems = readPlan(bare).problems;
+  assert.equal(problems.filter((p) => /records no result/.test(p)).length, 1, problems.join(' | '));
+  assert.match(problems.join(' '), /claim with nothing behind it/, 'the sentence does not say why it matters');
+
+  // A fresh write is not judged: the two-step save is not a fault.
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'synapse-plan-fresh-'));
+  fs.mkdirSync(path.join(dir, '.synapse'), { recursive: true });
+  fs.writeFileSync(path.join(dir, '.synapse', 'plan.json'), JSON.stringify({ version: 1, tasks: [{ id: 't1', title: 'one', role: 'coder-1', status: 'done' }] }));
+  clearPlanCache();
+  assert.equal(readPlan(dir).problems.filter((p) => /records no result/.test(p)).length, 0, 'a fresh write was judged');
+});
