@@ -150,6 +150,20 @@ export function setTaskStatus(dir, taskId, status) {
 }
 
 /**
+ * Put a row back to `todo` if the harness still has it `doing`.
+ *
+ * The second half of "the harness keeps the score" (10 Nov): the runner writes `doing`
+ * when a worker starts, and this releases it whatever the outcome — a stop, a failure,
+ * a crash and a restart. What is left is unjudged work, which is exactly what `todo`
+ * means, and the Architect's next turn decides. Returns true when the row moved.
+ */
+export function releaseDoing(dir, taskId) {
+  const task = (readPlan(dir).plan?.tasks || []).find((t) => t.id === taskId);
+  if (!task || task.status !== 'doing') return false;
+  return setTaskStatus(dir, taskId, 'todo');
+}
+
+/**
  * The feature contract: what was asked for, what was rejected, and which task
  * delivers each confirmed item.
  *
@@ -1367,6 +1381,16 @@ export function briefSession({ dir, role = 'architect', auto = false, single = f
         `"detail":"...","reads":[],"dependsOn":[],"result":null,"note":null}]} - ` +
         `statuses: ${STATUSES.join(', ')}. Keep ids short and unique, titles under ${TITLE_MAX} characters, ` +
         `and mark a task "blocked" only when it needs the operator.`,
+    );
+    // Who keeps the score. The operator's rule (10 Nov): the model decides and judges,
+    // the harness records what mechanically happens. "A worker is on this row" is a fact
+    // only the harness can see, so the Architect is told not to write it — the less a
+    // model has to keep true, the less of the plan can be quietly wrong.
+    lines.push(
+      `Do not write "doing": the harness marks a row doing the moment a worker starts on it, and puts it back to ` +
+        `todo when the run ends. Your word is the judgement — "done" when you have verified it, "blocked" or ` +
+        `"failed" when it is not, "todo" while it is still to do — and that is the only status the file needs ` +
+        `from you.`,
     );
     // The pane is an index of the work, not a list of files. The specific file
     // names, commands and formats belong in `detail`, which the row shows on

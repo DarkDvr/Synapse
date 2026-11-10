@@ -41,6 +41,7 @@ import {
   ownedFolder,
   SHARED_DIR,
   setTaskStatus,
+  releaseDoing,
   openDelegations,
 } from './plans.js';
 import { screenCallOver } from './desk.js';
@@ -1347,6 +1348,13 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
       return;
     }
     busy.add(dir);
+    // The row is "doing" from here, and the harness writes it — not the Architect.
+    //
+    // This is the first half of the operator's rule (10 Nov): the model decides *what*
+    // happens and judges it, the harness records what mechanically happens. "A worker is
+    // on this row" is a fact only the harness can know, so it is no longer a status the
+    // model has to keep true, and a row cannot say "doing" while nothing runs.
+    setTaskStatus(dir, task.id, 'doing');
 
     // Which role gets this attempt, before anything is created: the plan's role is
     // the first rung of its ladder. See candidatesFor().
@@ -2336,9 +2344,12 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     if (outcome === 'completed' && !stopReason) removeTaskScratch(dir, task.id, { log });
     tidyProjectRoot(dir, { log });
 
-    // A stop puts the task back in todo: nothing is running, and a task left
-    // `doing` reports "1 running" on the plan for the rest of the day.
-    if (outcome === 'stopped' && stoppedBy === 'operator') setTaskStatus(dir, task.id, 'todo');
+    // And the other half of the rule: the harness releases `doing` when the run ends,
+    // whatever the outcome. The row goes back to `todo` — unjudged — and the Architect's
+    // next turn either accepts it (`done`), sends it back, or marks it blocked. A row
+    // that kept `doing` after a stop, a failure or a restart is what told the pane "1
+    // running" for the rest of the day; now nothing can.
+    releaseDoing(dir, task.id);
 
     // The operator's screen is theirs again the moment the work that asked for it
     // ends. A lease that outlived its run would leave the badge up, and the next
