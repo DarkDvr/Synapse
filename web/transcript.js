@@ -14,7 +14,7 @@ import { $ } from './dom.js';
 import { esc, hhmm, toolTarget, fileChip, shortName, reasoningGist } from './format.js';
 import { renderMarkdown } from './md.js';
 import { serverNow } from './api.js';
-import { permissionNote } from './ask-note.js';
+import { permissionNote, permissionTip } from './ask-note.js';
 import { alarmsHere, renderAlarm, leasesHere, renderLease, chatErrorsHere, renderChatError } from './chat-notes.js';
 import { chatAtBottom, scrollChatToBottom, renderChatNav, captureChatSlack, restoreStreamView } from './chat-scroll.js';
 import { currentProject, roleLabel, groupTurns, currentForm } from './run-view.js';
@@ -380,51 +380,6 @@ export function renderTool(part) {
       ${part.error ? `<div class="tool-body"><pre class="is-error">${esc(part.error)}</pre></div>` : ''}
     </div>
   </div>`;
-}
-
-/** The chip's tooltip, as a sentence rather than a list of labels. */
-export function permissionTip(d) {
-  const actor = d.role ? roleLabel(d.role) : 'The Architect';
-  const action = String(d.action || '').toLowerCase();
-  const target = (d.resolved && d.resolved.length ? d.resolved : d.resources || []).join(' ');
-  const short = target.length > 220 ? `${target.slice(0, 217)}…` : target;
-  const asks =
-    action === 'read'
-      ? short
-        ? `read ${short}`
-        : 'read a file'
-      : /^(edit|write|patch|create)$/.test(action)
-        ? short
-          ? `change ${short}`
-          : 'change a file'
-        : action === 'shell' || action === 'bash'
-          ? 'run a command'
-          : action === 'execute'
-            ? 'run code'
-            : 'use a tool';
-  const sentence =
-    action === 'shell' && short ? `${actor} asked to run this command:\n${short}` : `${actor} asked to ${asks}.`;
-  const decision =
-    d.effect === 'deny'
-      ? d.decidedBy === 'operator'
-        ? 'You rejected it.'
-        : 'The harness refused it.'
-      : d.decidedBy === 'timeout'
-        ? 'Full auto allowed it after the wait.'
-        : d.decidedBy === 'full-auto'
-          ? 'Full auto allowed it without asking.'
-          : d.asked
-            ? 'You allowed it.'
-            : d.decidedBy === 'operator'
-              ? 'You allowed this exact request earlier.'
-              : 'The harness allowed it without asking.';
-  // The policy sentence explains a refusal; on an allow it is usually just
-  // "Reading is allowed", which says nothing the decision line does not. The
-  // operator's own words, when they gave a reason, come before both — they are
-  // the thing a reader is looking for after "you rejected it".
-  const reason = d.effect === 'deny' && d.reason ? d.reason : '';
-  const told = d.effect === 'deny' && d.note ? `You told ${actor}: ${d.note}` : '';
-  return [sentence, reason, told, decision].filter(Boolean).join('\n');
 }
 
 export function toggleTool(id) {

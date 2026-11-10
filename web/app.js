@@ -60,6 +60,7 @@ import {
 import {
   noteChatScroll,
   noteUserScrollIntent,
+  chatFollows,
   appendStream,
   endStream,
   chatScroller,
@@ -176,6 +177,7 @@ import {
   loadDesk,
   handleRunEvent,
   drawActivePath,
+  noteWorkerPermission,
   liveRunsWiring,
 } from './live-runs.js';
 import { refreshPending, schedulePendingRefresh, schedulePermissionRender, pendingWiring } from './pending.js';
@@ -1184,6 +1186,9 @@ function connectStream() {
         state.decisionSeq += 1;
         if (state.view === 'session' && decided.sessionId === state.sessionId) schedulePermissionRender();
       }
+      // A worker's answer belongs in its trace, where the work is, and it goes in
+      // now — not on the next poll. The Architect's sits on its own tool card.
+      noteWorkerPermission(decided);
       refreshPending();
       return;
     }
@@ -1732,9 +1737,16 @@ document.addEventListener('keydown', (e) => {
   // A real gesture, before the scroll it causes arrives. Ctrl is not a scroll: that
   // wheel is the chat's text size (web/chat-zoom.js), and counting it as "the reader
   // scrolled away" would stop the chat following its own turn for no reason.
+  //
+  // The sign is the intent, not the event: `noteUserScrollIntent` reads positive as
+  // "towards the end" (the keys above say +1 for PageDown). A wheel's own deltaY is
+  // positive when scrolling *down*, so passing `-e.deltaY` told the follow that
+  // wheel-up was the reader coming back to the end — it re-armed on every tick, and
+  // while the thinking pane grew each frame there was no way to scroll away from it
+  // (10 Nov).
   $('transcript').addEventListener('wheel', (e) => {
     if (e.ctrlKey) return;
-    noteUserScrollIntent(-e.deltaY);
+    noteUserScrollIntent(e.deltaY > 0 ? 1 : -1);
   }, { passive: true });
   $('transcript').addEventListener('touchmove', () => noteUserScrollIntent(-1), { passive: true });
   $('transcript').addEventListener('keydown', (e) => {
@@ -2267,7 +2279,7 @@ async function bootPage() {
   planPaneWiring({ noteWorking, renderRoleActivity });
   paneWiring({
     renderTranscript,
-    atBottom: () => chatAtBottom(48),
+    atBottom: () => chatAtBottom(48) && chatFollows(),
     // `$` takes an id, not a selector. Written as `$('#transcript')` this returned
     // null, so the follow was a no-op from the day it was wired: the thinking pane
     // could grow the trace for minutes while the chat stayed put, and the newest

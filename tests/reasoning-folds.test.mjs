@@ -106,7 +106,10 @@ test('a finished worker step folds into one line in its trace', () => {
   assert.match(html, /data-k="k:r5"/, 'the fold remembers whether it was opened');
 });
 
-test('a long run folds its early thinking into one line, like the chat', () => {
+test('a long run folds its early history into one "Older entries" line', () => {
+  // One fold, not two. "12 earlier steps" over "9 earlier reasoning" was two headers
+  // for one idea — the run's history — and which one a line fell into was an accident
+  // of what it was rather than when it happened (10 Nov).
   const reasons = Array.from({ length: 13 }, (_, i) => ({ text: `Thought number ${i} about the bar.`, at: i + 1 }));
   const html = renderTrace({
     key: 'k',
@@ -114,13 +117,23 @@ test('a long run folds its early thinking into one line, like the chat', () => {
     task: 't6',
     startedAt: 1,
     reasons,
-    notes: [],
+    notes: [
+      { at: 0.1, text: 'ran the probe' },
+      { at: 0.2, text: 'read the file' },
+      { at: 0.3, text: 'wrote the patch' },
+      { at: 0.4, text: 'ran the check' },
+      { at: 0.5, text: 'looked at the shot' },
+      { at: 0.6, text: 'summarised' },
+    ],
   });
   assert.equal((html.match(/class="reasoning is-trace"/g) || []).length, 10, 'the newest ten are their own folds');
-  assert.match(html, /3 earlier reasoning/, 'the rest is one line');
-  assert.match(html, /<pre>Thought number 0 about the bar\.<\/pre>/, 'and it opens to the text');
-  const archive = html.slice(html.indexOf('is-archive'), html.indexOf('</details>', html.indexOf('is-archive')));
-  assert.equal((archive.match(/<pre>/g) || []).length, 3, 'the archive holds exactly the older three');
+  assert.match(html, /Older entries \(5\)/, 'the rest is one line, thinking and steps together');
+  assert.doesNotMatch(html, /earlier reasoning|earlier step/, 'the two old headers are gone');
+  assert.match(html, /<pre class="trace-old">Thought number 0 about the bar\.<\/pre>/, 'and it opens to the text');
+  const at = html.indexOf('Older entries');
+  const archive = html.slice(at, html.indexOf('</details>', at));
+  assert.equal((archive.match(/<pre class="trace-old">/g) || []).length, 3, 'the archive holds exactly the older three thoughts');
+  assert.match(archive, /ran the probe/, 'and the older steps in the same fold');
 });
 
 test('a steer and a compaction sit just above the live reasoning', () => {

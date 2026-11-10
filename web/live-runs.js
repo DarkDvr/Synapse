@@ -372,6 +372,59 @@ export function renderRoleActivity() {
   requestAnimationFrame(drawActivePath);
 }
 
+/**
+ * A permission the running worker asked for, and the harness's answer: one line in
+ * that worker's trace, at the moment the answer was given.
+ *
+ * The Architect's asks arrive as cards in its own chat and their answers sit on its
+ * tool cards. A worker's ask has no card of its own and its calls reach the trace as
+ * a name and a target, so the answer is recorded where the work is — same place, same
+ * second, and the same sentence in the tooltip, a refusal's reason included. Called
+ * from the `permission.decided` event, which is the moment that answer exists (10 Nov).
+ */
+export function noteWorkerPermission(decision) {
+  const sessionId = String(decision?.sessionId || '');
+  if (!sessionId) return false;
+  const run = [...(state.runs?.values?.() || [])].find((r) => r?.workerId === sessionId);
+  if (!run) return false;
+  const trace = traceOf(run);
+  if (!trace) return false;
+  const keyOf = (x) => `${Number(x?.at) || 0}:${x?.toolCallId || ''}`;
+  if ((trace.notes || []).some((n) => n?.perm && keyOf(n.perm) === keyOf(decision))) return false;
+  trace.notes.push({ at: Number(decision.at) || Date.now(), perm: decision });
+  if (trace.notes.length > 60) trace.notes.splice(0, trace.notes.length - 60);
+  trace.notes.sort((a, b) => (Number(a.at) || 0) - (Number(b.at) || 0));
+  renderTranscript();
+  return true;
+}
+
+/**
+ * The same record for a page opened mid-run: a worker's answered permissions are on
+ * the server, so its trace asks for them once instead of starting blank.
+ */
+function seedWorkerPermissions(run) {
+  const trace = traceOf(run);
+  if (!trace || !run?.workerId) return;
+  api('GET', `/api/permissions?session=${encodeURIComponent(run.workerId)}`)
+    .then((d) => {
+      const rows = (d?.decisions || []).filter((x) => x && x.effect && x.sessionId === run.workerId);
+      if (!rows.length) return;
+      const keyOf = (x) => `${Number(x?.at) || 0}:${x?.toolCallId || ''}`;
+      const have = new Set((trace.notes || []).filter((n) => n?.perm).map((n) => keyOf(n.perm)));
+      let added = false;
+      for (const row of rows) {
+        if (have.has(keyOf(row))) continue;
+        trace.notes.push({ at: Number(row.at) || Date.now(), perm: row });
+        have.add(keyOf(row));
+        added = true;
+      }
+      if (!added) return;
+      trace.notes.sort((a, b) => (Number(a.at) || 0) - (Number(b.at) || 0));
+      renderTranscript();
+    })
+    .catch(() => {});
+}
+
 /** Ask what is running. The SSE stream is the fast path; this is what a page
  *  reloaded in the middle of a run starts from. */
 export async function loadRuns() {
@@ -579,6 +632,9 @@ export function handleRunEvent(ev) {
         loopLimit: 3,
         loopStop: false,
       });
+      // A run that is already answering asks have their answers on the server; the
+      // trace starts with them instead of showing the work without its permissions.
+      seedWorkerPermissions(run);
     } else if (trace && run.tool) {
       // One note per new tool call, not one per event: the runner repeats the
       // same call on every progress tick. A call with no target ("reading") is

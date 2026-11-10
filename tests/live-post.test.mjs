@@ -10,6 +10,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { paneMarkup } from '../web/thinking-pane.js';
+import { renderTrace } from '../web/traces.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
@@ -79,6 +80,42 @@ check(
   const added = body.indexOf('paneAdd(trace, delta);');
   const drawn = body.lastIndexOf('wired.renderTranscript();');
   check('the first words are added before the render that draws them', added > -1 && drawn > -1 && added < drawn, `added@${added} drawn@${drawn}`);
+}
+
+// ── a worker's answered permission is a line where the work is ────
+// The Architect's answers sit on its tool cards. A worker's call has no card of its
+// own, so the answer is its own line in the trace, with the same sentence in the
+// tooltip — a refusal's reason included (10 Nov).
+{
+  const html = renderTrace({
+    key: 'k',
+    role: 'coder-1',
+    task: 't6',
+    startedAt: 1,
+    notes: [
+      { at: 5, text: 'read the file' },
+      {
+        at: 6,
+        perm: {
+          effect: 'deny',
+          action: 'shell',
+          role: 'coder-1',
+          asked: true,
+          decidedBy: 'operator',
+          reason: 'Outside the project, and this command could take the machine down.',
+          resolved: ['Stop-Process -Name python'],
+        },
+      },
+      {
+        at: 7,
+        perm: { effect: 'allow', action: 'read', role: 'coder-1', asked: false, decidedBy: 'policy', resolved: ['README.md'] },
+      },
+    ],
+  });
+  check('a denied permission is named as rejected', /is-perm/.test(html) && /rejected a command/.test(html), html.slice(0, 200));
+  check('an allowed one says so', /allowed a read/.test(html));
+  check('the reason rides the tooltip', /could take the machine down/.test(html), 'the refusal reason is not in the title');
+  check('and it is the shared sentence, not a second one', /asked to run this command/.test(html));
 }
 
 console.log(`\n${pass}/${pass + fails.length} passed`);

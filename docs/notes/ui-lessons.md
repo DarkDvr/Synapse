@@ -2232,3 +2232,31 @@ immediately; the config is written once, 600ms after the last notch, because a w
 produces a dozen a second and each save rewrites the file. A gesture while the
 Settings window is open also moves the draft, or pressing Save would put the old
 number back and the setting would undo itself.
+
+
+## Three from the run that followed (10 Nov, later)
+
+**Wheel-up could not escape the follow.** `noteUserScrollIntent` reads positive as
+"towards the end" — the keys already said +1 for PageDown — and the wheel handler
+passed `-e.deltaY`, which told the follow that wheel-up was the reader coming *back*
+to the end. It re-armed on every tick, and once the thinking pane grows every frame
+there is no way to scroll away from it. Two changes: the wheel passes the intent
+(`e.deltaY > 0 ? 1 : -1`), and the frame loop's pin now asks `chatFollows()` as well
+as the geometry. Geometry alone meant "within two lines of the end" was pinned every
+frame, however hard the reader scrolled; the pane grows sixty times a second and the
+wheel is one notch per gesture, so the pin always won.
+
+**A worker's permissions now have a record where the work is.** The Architect's asks
+are cards in its chat and the answers sit on its tool cards as a chip. A worker's
+call reaches the trace as a name and a target with no call id, so the answer is its
+own line in that trace — a dot, the action, the pill — drawn the moment
+`permission.decided` arrives rather than on the next poll, and carrying the same
+`permissionTip` sentence in its tooltip, so a refusal's reason is one hover away. The
+sentence moved to `web/ask-note.js` so the chip and the line cannot drift. A page
+opened mid-run asks the server for the decisions it missed.
+
+**One fold, not two.** "9 earlier steps" above "12 earlier reasoning" was two headers
+for one idea — the run's history — and which header a line landed under was an
+accident of what the line was rather than when it happened. Both are one
+`Older entries (N)` fold now, in time order, with the older thinking as grey text
+inside it.

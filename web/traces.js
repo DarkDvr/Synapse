@@ -12,6 +12,7 @@
 // has to be re-rendered where it stands. Wired at boot.
 import { state } from './state.js';
 import { EV } from './events.js';
+import { permissionTip } from './ask-note.js';
 import { esc, shortSpan, fileChip, reasoningGist } from './format.js';
 import { renderMarkdown } from './md.js';
 import { paneMarkup } from './thinking-pane.js';
@@ -79,6 +80,7 @@ export function renderTrace(t) {
     return `<div class="tool-card trace-card"><div class="tool-head"><span class="status-dot ok" role="img" aria-label="tool call"></span><span class="tool-name">${esc(name)}</span><span class="tool-target" title="${esc(target)}">${esc(target)}</span></div></div>`;
   };
   const note = (n) => {
+    if (n?.perm) return permLine(n.perm);
     const text = typeof n === 'string' ? n : String(n?.text || '');
     const steer = typeof n === 'object' && n?.steer === true;
     // A steer is the operator's own instruction: its own line shape, so the tag
@@ -101,6 +103,37 @@ export function renderTrace(t) {
     }
     if (cardsOn() && n?.tool) return toolLine(n.tool, text);
     return `<div class="trace-line">${esc(text)}</div>`;
+  };
+  // A permission this worker asked for, and the harness's answer — the record the
+  // operator asked for. The Architect's own asks are chips on its tool cards; a
+  // worker's calls arrive in the trace as a name and a target with no call id to hang
+  // one on, so the answer is its own line in the same place, at the moment it was
+  // given. The sentence, including a refusal's reason, is the same `permissionTip`
+  // the Architect's chip shows (10 Nov).
+  const permLine = (d) => {
+    const kind = d.effect === 'deny' ? 'err' : d.asked ? 'warn' : 'ok';
+    const said =
+      d.effect === 'deny'
+        ? d.decidedBy === 'operator'
+          ? 'rejected'
+          : 'refused'
+        : d.asked
+          ? 'you allowed'
+          : 'allowed';
+    const action = String(d.action || '').toLowerCase();
+    const what = /^(edit|write|patch|create)$/.test(action)
+      ? 'a change'
+      : action === 'read'
+        ? 'a read'
+        : action === 'shell' || action === 'bash'
+          ? 'a command'
+          : action === 'execute'
+            ? 'code'
+            : 'a tool call';
+    return `<div class="trace-line is-perm" title="${esc(permissionTip(d))}">
+      <span class="status-dot ${kind}" role="img" aria-label="${esc(said)}"></span>
+      <span class="trace-perm-said">${esc(said)} ${esc(what)}</span>
+      <span class="state-pill ${kind}">permission</span></div>`;
   };
   const notes = t.notes || [];
   // Only the last few steps stay open. Everything before is one line that opens:
@@ -143,22 +176,20 @@ export function renderTrace(t) {
   // first, which is where its line already was.
   const when = (x) => Number(x?.at) || 0;
   const entries = [];
-  if (olderSteps.length) {
+  // Everything older is ONE fold, not two. "12 earlier steps" above "9 earlier
+  // reasoning" was two headers for one idea — the run's history — and which of them
+  // a line fell into was an accident of what it was, not of when it happened (10 Nov).
+  const older = [
+    ...olderSteps.map((n) => ({ at: when(n), html: note(n) })),
+    ...olderReasons.map((r) => ({ at: when(r), html: `<pre class="trace-old">${esc(r.text)}</pre>` })),
+  ].sort((a, b) => a.at - b.at);
+  if (older.length) {
     entries.push({
-      at: when(olderSteps[0]),
+      at: older[0].at,
       html:
-        `<details class="trace-archive"><summary>${olderSteps.length} earlier step${olderSteps.length === 1 ? '' : 's'}</summary>` +
-        `${olderSteps.map(note).join('')}</details>`,
-    });
-  }
-  if (olderReasons.length) {
-    entries.push({
-      at: when(olderReasons[0]),
-      html:
-        `<details class="reasoning is-trace is-archive" data-k="${esc(t.key)}:older">` +
-        `<summary>${olderReasons.length} earlier reasoning</summary>` +
-        olderReasons.map((r) => `<pre>${esc(r.text)}</pre>`).join('') +
-        `</details>`,
+        `<details class="trace-archive" data-k="${esc(t.key)}:older">` +
+        `<summary>Older entries (${older.length})</summary>` +
+        `${older.map((e) => e.html).join('')}</details>`,
     });
   }
   for (const n of tail) entries.push({ at: when(n), html: note(n) });

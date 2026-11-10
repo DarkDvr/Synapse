@@ -90,6 +90,18 @@ export function stopFollowingChat() {
   chatFollowArmed = false;
 }
 
+/**
+ * Is the chat still following the writing?
+ *
+ * The frame loop that grows the thinking pane asks this before it pins the box to the
+ * end. Geometry alone was the old rule, and it meant a reader within two lines of the
+ * end was pinned every frame however hard they scrolled: the pane grows 60 times a
+ * second and the wheel is one notch every 100ms, so the pin always won (10 Nov).
+ */
+export function chatFollows() {
+  return chatFollowArmed;
+}
+
 /** The operator moved the conversation. Only this may release the follow. */
 export function noteUserScrollIntent(deltaY) {
   // A wheel down at the end is them coming back, not leaving.
