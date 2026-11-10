@@ -2276,3 +2276,22 @@ answer ("allowed a read · permission") when the operator wanted the Architect's
 component. `permissionChip()` lives with `permissionTip()` in `web/ask-note.js`, and a
 worker's answer is now the same `.tool-card` the Architect wears — head, action,
 target, chip — one component in one place rather than a lookalike that drifts.
+
+### The pin that was left (10 Nov, third report)
+
+The gesture and the frame loop had both been taught to let go; the *render* had not.
+`renderTranscript` decided "follow the end" from geometry alone (`chatAtBottom()`), and
+during a turn the transcript is re-rendered on every message and tool event — so each
+of those renders put the box back at the end a moment after the reader had scrolled
+away. One wheel notch lost the fight and only spamming the wheel got out. The render
+now asks `chatFollows()` as well: the same hand-off, in the third and last place that
+pinned.
+
+### Two type sizes in one row
+
+"The text sits a little higher than the tool name" was arithmetic: the tool head is
+0.84 of the chat size, the tool's *name* was 0.888, and `align-items: center` centres
+boxes — two line boxes of different heights, so two baselines about a pixel apart. A
+bold white name already reads as the name; a second type size only broke the row. One
+size, and the name's baseline is the target's to the pixel (measured: both 10.92px in
+a 16.38px box, same top).

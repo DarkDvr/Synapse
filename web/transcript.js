@@ -16,7 +16,7 @@ import { renderMarkdown } from './md.js';
 import { serverNow } from './api.js';
 import { permissionNote, permissionChip } from './ask-note.js';
 import { alarmsHere, renderAlarm, leasesHere, renderLease, chatErrorsHere, renderChatError } from './chat-notes.js';
-import { chatAtBottom, scrollChatToBottom, renderChatNav, captureChatSlack, restoreStreamView } from './chat-scroll.js';
+import { chatAtBottom, chatFollows, scrollChatToBottom, renderChatNav, captureChatSlack, restoreStreamView } from './chat-scroll.js';
 import { currentProject, roleLabel, groupTurns, currentForm } from './run-view.js';
 import { renderTrace, tracesFor, traceSig, renderSessionStream } from './traces.js';
 
@@ -51,7 +51,13 @@ export function renderTranscript() {
   // message. Being pulled away from what you are reading is worse than missing
   // the end of a long turn: the scroll button and the rail already say something
   // arrived.
-  const stick = chatAtBottom();
+  //
+  // And a render obeys the same hand-off as the frame loop: `chatAtBottom()` alone is
+  // geometry, and geometry is exactly what the pin keeps true. While the thinking pane
+  // grows, a render that re-pinned on it put the box back at the end a moment after
+  // the reader had scrolled away — one wheel notch lost the fight and only spamming
+  // the wheel got out (10 Nov, third report). `chatFollows()` is the reader's answer.
+  const stick = chatAtBottom() && chatFollows();
   // The Architect's card shows what its own turn is doing, read from this same
   // transcript, so it is refreshed wherever the transcript is.
   wired.renderRoleActivity();

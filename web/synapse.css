@@ -1744,7 +1744,13 @@ body[data-mode="single"] #runAuto { display: none; }
 }
 .tool-head:hover { background: #212429; }
 .tool-head:focus-visible { outline: 2px solid var(--orange); outline-offset: -2px; }
-.tool-head .tool-name { color: var(--text); font-weight: 600; flex: none; font-size: calc(var(--chat-fs) * 0.888); }
+/* One size for the whole head. The name was 0.888 of the chat size while the target
+   was 0.84 — two type sizes and two line boxes in one row, so `align-items: center`
+   centred the boxes and left the baselines a pixel apart: that is the "the text sits
+   a little higher than the tool name" the operator kept seeing, on the Architect's
+   cards and the worker's alike (10 Nov). Weight and colour keep the name distinct; a
+   different size is not needed to do it. */
+.tool-head .tool-name { color: var(--text); font-weight: 600; flex: none; font-size: inherit; }
 /* a small, flat dot: the status is carried by the colour and the pill, so the
    9px dot ring used elsewhere in the app is too heavy here */
 .tool-head .status-dot { width: 7px; height: 7px; box-shadow: none; }
