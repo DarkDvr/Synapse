@@ -1069,6 +1069,12 @@ export function briefSession({ dir, role = 'architect', auto = false, single = f
     // campaign: they apply to a one-off request too. The stored requests do not.
     if (doc.notes) lines.push(`The operator's standing notes for this project:\n${capped(doc.notes, 800)}`);
     if (skills) lines.push(skills);
+    // The same law as the harness brief carries, because Single can run commands too:
+    // a chat that starts a server must stop that one, by its id.
+    lines.push(
+      'Stop a process you started by its id, never by its name. A name matches every process that carries it, ' +
+        'and something the operator is using may carry the same one.',
+    );
     lines.push(
       `If you need a decision from the operator, ask with the question tool: give the question a short human ` +
         `title, put your recommended option first and end its label with " (Recommended)".`,
@@ -1076,6 +1082,50 @@ export function briefSession({ dir, role = 'architect', auto = false, single = f
     return lines.join('\n');
   }
 
+
+  // ── the brief in three layers ────────────────────────────────────────
+  //
+  // It had become one pile: the rules that never bend, the habits of this harness, and
+  // whatever this round happens to be. A rule that mattered sat somewhere in the middle
+  // of three thousand tokens, and a project's own situation buried it further. Three
+  // sections now, in the order a reader needs them (10 Nov, the operator's call):
+  //
+  //   What never changes - few, absolute, the same in every project.
+  //   How we work        - the habits that keep a project sane: the bill, reads, edits,
+  //                        stops, rendering, reports.
+  //   This round         - the plan, the features, the operator's instructions, skills.
+  //
+  // A law is not a habit with a louder adjective: it is a rule whose breach costs
+  // something that cannot be undone, so the list stays short and every line earns it.
+  const laws = [];
+  if (isArchitect) {
+    laws.push(
+      'You judge; you do not build. Reading files, running the checks and looking at what a worker produced is ' +
+        'your job - that is how a report gets verified. What a task produces is not yours to change: any edit to ' +
+        'it, however small, is a task. Put it in the plan and delegate it.',
+    );
+    laws.push(
+      'When a delegation cannot run - refused, blocked, or the loop it belongs to is capped - never do that ' +
+        'work yourself and never wait on it. Record the task as blocked, or as done if you verified it ' +
+        'yourself, put the reason in its note, say it in your reply, and carry on with the rest of the plan.',
+    );
+    laws.push(
+      `In Multi, every piece of work goes through the plan - even a single file: write the row, delegate it, ` +
+        `and judge the report. Do not write the product yourself; Single is the mode where you answer and act alone.`,
+    );
+    laws.push(
+      `Do not write "doing": the harness marks a row doing the moment a worker starts on it, and puts it back to ` +
+        `todo when the run ends. Your word is the judgement — "done" when you have verified it, "blocked" or ` +
+        `"failed" when it is not, "todo" while it is still to do — and that is the only status the file needs ` +
+        `from you.`,
+    );
+  }
+  laws.push(
+    'Stop a process you started by its id, never by its name. A name matches every process that carries it, ' +
+      'and a service the run depends on may carry the same one - a sweep by name has already stopped the ' +
+      'server that was answering a run.',
+  );
+  lines.push('## What never changes', ...laws, '## How we work');
 
   // The project's document, in the three parts the brief needs: where it stands
   // (the latest request and the decisions still in force), the operator's own
@@ -1177,11 +1227,6 @@ export function briefSession({ dir, role = 'architect', auto = false, single = f
   // the operator configured, and Synapse runs any project on any model. State the
   // rule; leave the arrangement to the config.
   if (isArchitect) {
-    lines.push(
-      'You judge; you do not build. Reading files, running the checks and looking at what a worker produced is ' +
-        'your job - that is how a report gets verified. What a task produces is not yours to change: any edit to ' +
-        'it, however small, is a task. Put it in the plan and delegate it.',
-    );
     // The lease has to be in the task, not only in the worker's brief: a worker
     // that is never told, and does not find the tool, runs the download and is cut
     // by the stall clock (measured 5 Nov: Tiel ignored it in two tasks).
@@ -1191,11 +1236,6 @@ export function briefSession({ dir, role = 'architect', auto = false, single = f
         'lease tool (synapse-lease_lease) with your estimate in minutes and a one-line reason BEFORE you ' +
         'start it, or the harness will treat the silence as a stall and stop the run." A worker that is ' +
         'not told may be interrupted in the middle of the download.',
-    );
-    lines.push(
-      'When a delegation cannot run - refused, blocked, or the loop it belongs to is capped - never do that ' +
-        'work yourself and never wait on it. Record the task as blocked, or as done if you verified it ' +
-        'yourself, put the reason in its note, say it in your reply, and carry on with the rest of the plan.',
     );
     // Two operator actions used to read as failures to the model: a steer arriving
     // mid-turn looked like a new request, and a Stop looked like an error to retry.
@@ -1315,12 +1355,7 @@ export function briefSession({ dir, role = 'architect', auto = false, single = f
   // was answering the run, which then retried against a closed port for eight
   // minutes. It asked permission, was allowed instantly, and had no idea it had
   // done anything wrong - nothing anywhere had told it that a name matches more
-  // than its own process. One id, never a name.
-  lines.push(
-    'Stop a process you started by its id, never by its name. A name matches every process that carries it, ' +
-      'and a service the run depends on may carry the same one - a sweep by name has already stopped the ' +
-      'server that was answering a run.',
-  );
+  // than its own process. One id, never a name. It is a law now, said at the top.
   if (role === 'qc') {
     lines.push(QC_FOCUS[focus === 'security' ? 'security' : 'app']);
     lines.push(QC_PROPORTION);
@@ -1334,6 +1369,12 @@ export function briefSession({ dir, role = 'architect', auto = false, single = f
   // turn on a refusal it could have seen coming.
   if (skills) lines.push(skills);
 
+  // ── this round ──────────────────────────────────────────────────────
+  // Everything from here is about the work in hand rather than about the harness: the
+  // features the operator confirmed, the plan's state, and anything that changes as the
+  // plan moves. It is the only part of the brief that grows with a project, and the part
+  // the model reads last, which is where a reader wants the situation.
+  lines.push('## This round');
   // What the operator actually approved. A worker that sees this cannot quietly
   // build a rejected idea back in; the rejected ones are never listed here.
   if (state.features?.confirmed?.length) {
@@ -1385,13 +1426,8 @@ export function briefSession({ dir, role = 'architect', auto = false, single = f
     // Who keeps the score. The operator's rule (10 Nov): the model decides and judges,
     // the harness records what mechanically happens. "A worker is on this row" is a fact
     // only the harness can see, so the Architect is told not to write it — the less a
-    // model has to keep true, the less of the plan can be quietly wrong.
-    lines.push(
-      `Do not write "doing": the harness marks a row doing the moment a worker starts on it, and puts it back to ` +
-        `todo when the run ends. Your word is the judgement — "done" when you have verified it, "blocked" or ` +
-        `"failed" when it is not, "todo" while it is still to do — and that is the only status the file needs ` +
-        `from you.`,
-    );
+    // model has to keep true, the less of the plan can be quietly wrong. A law, said
+    // at the top with the rest.
     // The pane is an index of the work, not a list of files. The specific file
     // names, commands and formats belong in `detail`, which the row shows on
     // hover — so a title stays readable to someone who has not read the project.
@@ -1441,11 +1477,7 @@ export function briefSession({ dir, role = 'architect', auto = false, single = f
     // The plan is the record of the work, so a worker does the work. On 28 Oct a
     // one-file request ("create hello.txt") was written by the Architect itself,
     // in Multi, and the plan pane stayed "No plan yet" — the operator's list did
-    // not mention the work that had just happened.
-    lines.push(
-      `In Multi, every piece of work goes through the plan - even a single file: write the row, delegate it, ` +
-        `and judge the report. Do not write the product yourself; Single is the mode where you answer and act alone.`,
-    );
+    // not mention the work that had just happened. A law now, said at the top.
     // Where a row belongs. Measured 10 Nov: the Architect appended every fix and every
     // second half to the end of the list, so the operator's plan read as a pile -
     // finished rows, then new work, in the order things occurred to the model. The
