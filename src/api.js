@@ -607,9 +607,28 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
    * throw because one engine route is unhappy — and the form lookup after a
    * reply must not throw either, or the reply never gets sent (it lived inside
    * `pending` once, which is exactly how `safe is not defined` stopped a run).
+   *
+   * One warning per cause per minute. While the engine restarts, the page keeps
+   * polling this route and every poll logged eight identical warnings: 2,077 of
+   * them in `app.log` by 10 Nov, in a file whose whole point is that the one line
+   * that matters is findable. The first still says what broke; the repeats go to
+   * `debug.log`, where the detail belongs.
    */
+  const warnedAt = new Map();
   const safe = async (fn, fallback) => {
-    try { return await fn(); } catch (err) { app.warn(`pending: ${err.message}`); return fallback; }
+    try {
+      return await fn();
+    } catch (err) {
+      const msg = `pending: ${err.message}`;
+      const now = Date.now();
+      if (now - (warnedAt.get(msg) || 0) > 60_000) {
+        warnedAt.set(msg, now);
+        app.warn(msg);
+      } else {
+        app.debug?.(msg);
+      }
+      return fallback;
+    }
   };
 
   const formSignature = questionSignature;

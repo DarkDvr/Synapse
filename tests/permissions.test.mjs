@@ -667,6 +667,12 @@ test('one process it started, by its id: allowed', () => {
     'Stop-Process -Name SysMonitor; Start-Sleep -Milliseconds 500; .\\build.ps1',
     // A pid it recorded and read back is the pattern the brief asks for, not a sweep.
     'Stop-Process -Id $serverPid -Force',
+    // …and the same id inside a loop over two pid files, with a *read* of the process
+    // list in the same command. Refused on 10 Nov: the "something listed processes"
+    // test only excused a literal number, so a worker's own cleanup was denied and the
+    // model had to find another way to stop the app it had started.
+    'foreach($f in "app.pid","app3.pid"){ $p=[int](Get-Content $f); if($p){ Stop-Process -Id $p -Force } }; ' +
+      'Get-Process | Where-Object { $_.ProcessName -eq "Demo App" } | Select-Object Id,Title',
   ]) {
     const decision = shell(command);
     assert.equal(decision.effect, 'allow', `${command} was ${decision.effect}: ${decision.reason}`);

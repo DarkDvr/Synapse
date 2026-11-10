@@ -197,3 +197,36 @@ for what the project ships.* The mover cannot help here — it guards the projec
 **One more observation, not a fault:** the plan file is read by the harness with a retry,
 because the Architect writes it while a turn runs; a plain external read can catch a partial
 file (the probe did, and reported invalid JSON for one second). The harness never saw it.
+
+---
+
+## A live run found the opposite hole (11 Nov, 1.36.12)
+
+The strength tests hunt for kills that should be refused. A real QC run found the kill that
+should have been **allowed**, and the rule refused it:
+
+```powershell
+foreach ($f in 'app.pid','app3.pid') {
+  $p = [int](Get-Content $f); if ($p) { Stop-Process -Id $p -Force; "stopped $p" }
+}
+Get-Process | Where-Object { $_.ProcessName -eq '<the app>' } | Select-Object Id,Title
+```
+
+That is the pattern the brief asks for — a pid recorded in a file, read back, stopped by id —
+with a *read* of the process list in the same command. The rule saw "something listed
+processes" plus "something stopped a process" and refused the lot, because the escape hatch
+in that branch only accepted a literal number. `-Id $p` is a plain variable, which 1.36.7
+had already decided is the good shape.
+
+So the "listed processes + a stop" test now excuses an explicit id that is **not a list**: a
+number or a plain `$variable`, never `(` or `$_`. The refused shapes are unchanged —
+`Get-Process python | Stop-Process`, `-Id $_.Id`, `-Id (Get-NetTCPConnection …)`, `-Id @(…)`
+no longer reaching a sweep, the family names and the wildcards all still go.
+
+Two rules learned from it, both general:
+
+- **A fence that over-matches costs a run a rewrite.** The worker had to find another way to
+  stop the app it started, and "the harness refused my cleanup" is indistinguishable from
+  tampering to the model reading the refusal.
+- **A strength test set only proves the refusals.** Every group here asks "can this get
+  past?"; the allowed shape needs its own list, and the pid-file loop belongs on it.

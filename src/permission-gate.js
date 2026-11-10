@@ -535,7 +535,13 @@ export function createPermissionGate({
       // The request stays pending when the reply fails, so the operator still
       // sees the card. That is the safe way for this to break.
       onDecision?.({ ...entry, effect: 'ask', asked: true, decided: false, decidedBy: null });
-      log.warn(`could not answer a ${request.action || 'tool'} request for ${request.sessionId}: ${err.message}`);
+      // A request the engine has already closed is not a failure to answer: when two
+      // shell calls from one step are asked together, resolving one can close the
+      // other, and its reply lands on a 404 (measured 11 Nov, a worker's cleanup).
+      // Only a genuine failure to answer is worth a warning.
+      const line = `could not answer a ${request.action || 'tool'} request for ${request.sessionId}: ${err.message}`;
+      if (/not found/i.test(String(err.message || ''))) log.debug(line);
+      else log.warn(line);
     }
     return verdict;
     } finally {

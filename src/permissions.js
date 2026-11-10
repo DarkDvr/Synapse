@@ -647,6 +647,28 @@ function nestedPayloads(text) {
   return out;
 }
 
+/**
+ * An explicit id a stop was *given*: `-Id 1234`, `-Id $pid`, `/PID $p`.
+ *
+ * Anything else is a list of processes, not one: a subexpression
+ * (`-Id (Get-NetTCPConnection …)`), the pipeline's own object (`-Id $_.Id`), an
+ * array, or no id at all. The brief asks a model to read its pid back from a file
+ * and stop that, so a plain variable is the *good* shape and has to survive the
+ * "something also listed processes" test below. On 10 Nov a worker's cleanup was
+ * refused for exactly that reason: `Stop-Process -Id $p` inside a loop over two pid
+ * files, with `Get-Process … | Select-Object` in the same command — a read that is
+ * not a stop, excused only when the id happened to be a literal number.
+ */
+function plainId(text) {
+  const m = /(?:-id|\/pid)\s+(\([^)]*\)|\$[A-Za-z_][\w.]*|\d+)/i.exec(String(text || ''));
+  if (!m) return false;
+  const arg = m[1];
+  if (arg.startsWith('(')) return false;
+  if (/^\$_/.test(arg)) return false;
+  if (/^\d+$/.test(arg)) return true;
+  return /^\$[A-Za-z_]/.test(arg);
+}
+
 /** The verdict for one piece of command text, or null when it stops nothing it should not. */
 function scanForStop(text) {
   const t = String(text || '').toLowerCase();
@@ -680,7 +702,7 @@ function scanForStop(text) {
   // until the strength tests found it (10 Nov).
   if (LIST_ANYWHERE.test(t) && STOP_ANYWHERE.test(t)) {
     if (/(?:-name|--name|\/im|\/fi)\b/.test(t)) return null;
-    if (/-id\s+"?\d+/i.test(t) || /\/pid\s+"?\d+/i.test(t)) return null;
+    if (plainId(t)) return null;
     return SWEEP_TEXT;
   }
   return null;
@@ -714,7 +736,7 @@ function stopsOtherProcesses(segments = [], command = '') {
       if (at < 0) continue;
       const rest = words.slice(at + 1).join(' ').toLowerCase();
       if (/(?:-name|--name|\/im|\/fi)\b/.test(rest)) continue;
-      if (/-id\s+"?\d+/i.test(rest) || /\/pid\s+"?\d+/i.test(rest)) continue;
+      if (plainId(rest)) continue;
       return SWEEP_TEXT;
     }
   }
