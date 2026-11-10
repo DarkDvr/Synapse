@@ -2355,7 +2355,11 @@ body.is-stopping .chat-dock { animation: stop-glow 0.7s ease-in-out infinite; }
   margin-left: 14px;
   padding-left: 6px;
   border-left: 1px solid var(--line-2);
-  border-radius: 0 8px 8px 0;
+  /* Square on every corner. The left edge has no fillet — it is where the hairline to
+     the parent meets the row — and a rounded right edge beside it made the child read
+     as a normal card that had merely been nudged sideways. Straight edges on both ends
+     make the shape say "part of the row above" at a glance (10 Nov). */
+  border-radius: 0;
 }
 .plan-task.is-child .plan-id { color: #9aa0aa; }
 /* The node: the state's dot with the step id under it, both centred on the same
