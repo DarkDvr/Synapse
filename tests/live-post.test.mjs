@@ -124,6 +124,18 @@ check(
   check('and the second row shape is gone', !/trace-line is-perm/.test(html));
 }
 
+// ── a picture preview closes when the chip moves out from under the pointer ──
+// It is shown on mouseenter and hidden on mouseleave, and a mouseleave is only
+// dispatched when the pointer moves. Scrolling with the wheel leaves the pointer still
+// and moves the chip, so the preview stayed open with its chip long gone (10 Nov).
+{
+  const composer = read('web/composer.js');
+  check('a scroll closes it, and it captures the transcript scroller', /addEventListener\('scroll', hideAttachPreview, \{ capture: true, passive: true \}\)/.test(composer));
+  check('a wheel closes it', /addEventListener\('wheel', hideAttachPreview, \{ passive: true \}\)/.test(composer));
+  check('and a resize does too', /addEventListener\('resize', hideAttachPreview/.test(composer));
+  check('it is installed at boot', /installPreviewDismiss\(\)/.test(read('web/app.js')));
+}
+
 console.log(`\n${pass}/${pass + fails.length} passed`);
 for (const f of fails) console.log(`  ${f}`);
 process.exit(fails.length ? 1 : 0);

@@ -50,12 +50,16 @@ export function chatScrollWiring(fns) {
 // Is the chat still being carried along by the writing?
 //
 // A distance test alone cannot answer that. Within any slack at all, every written
-// frame snapped the chat back to the end, so a reader who scrolled up was fighting
-// the page for the width of the slack — and the wheel always lost, because the snap
-// ran sixty times a second. So the rule is now: two lines from the end is "following",
-// and an upward scroll is a reader who has taken over — the follow lets go at once
-// and stays let go until they are back at the end. Nothing is disabled; it is a
-// hand-off, and the hand comes back.
+// frame snapped the chat back to the end, so a reader who scrolled up fought the page
+// for the width of the slack — and the wheel always lost, because the snap runs sixty
+// times a second. So the rule is a hand-off: an upward gesture lets go at once and
+// stays let go, and only the reader sending it back to the end picks it up again.
+//
+// The subtlety that took four tries, and the reason the two flags below are both here:
+// **geometry is not a gesture.** Chromium animates a wheel and fires a scroll event per
+// animation frame, so every step of an upward wheel still measures "two lines from the
+// end" — arming on that re-pinned the reader on the very next frame. The arm may only
+// be restored by an explicit downward intent, or by the scrollbar landing at the end.
 let chatFollowArmed = true;
 let lastChatTop = 0;
 export const CHAT_FOLLOW_SLACK = 48; // two lines
@@ -64,27 +68,18 @@ export const CHAT_FOLLOW_SLACK = 48; // two lines
 let chatUserMovedAt = 0;
 const CHAT_USER_WINDOW_MS = 1500;
 // Which way the last gesture went: +1 towards the end, -1 away, 0 nothing yet.
-//
-// This is the whole difference between "the reader is coming back" and "the reader is
-// leaving and the box happens to be near the end". Re-arming on geometry alone was
-// the fight: Chromium animates a wheel scroll and fires a scroll event per animation
-// frame, so every step of an upward gesture still measured within two lines of the
-// end and re-armed the follow that the gesture had just released — one notch up, pin,
-// one notch up, pin. Only a fast stream of notches got out ahead of it (10 Nov).
 let chatUserIntent = 0;
 
 /**
  * The follow's decision after a scroll event, as a pure function.
  *
- * It lives here, apart from the DOM, because this one rule has been wrong three times
- * in a day and every time it looked right: the follow was released by a gesture and
- * then taken back by the geometry that followed it. Stated this way it can be tested
- * without a page, a run or a pane (see tests/chat-follow.test.mjs).
+ * Apart from the DOM so it can be tested without a page, a run or a growing pane —
+ * this rule was wrong three times in one day and every version looked right
+ * (tests/chat-follow.test.mjs writes the failing case down).
  *
  * - A reader's upward move always releases it.
- * - Only a reader's *downward* gesture, or their scrollbar landing exactly at the end,
- *   re-arms it. `fromEnd <= slack` alone is not evidence: our own pin makes it true,
- *   and so does every animation frame of an upward wheel.
+ * - Only an explicit downward intent, or the scrollbar landing exactly at the end,
+ *   re-arms it. `fromEnd <= slack` alone is not evidence: our own pin makes it true.
  * - Our own writes (`byReader` false) never change it.
  */
 export function followAfterScroll({
@@ -96,10 +91,6 @@ export function followAfterScroll({
   slack = CHAT_FOLLOW_SLACK,
 } = {}) {
   if (byReader && movedUp) return false;
-  // `fromEnd <= 1` is the scrollbar dragged to the very end with no gesture to say so.
-  // It must not apply to an upward wheel: that gesture starts at the end, so the first
-  // scroll event it causes still measures zero from the end and would re-arm the follow
-  // the gesture had just released — the original fight, one line further down.
   if (byReader && fromEnd <= slack && (Number(intent) > 0 || (Number(intent) === 0 && fromEnd <= 1))) return true;
   return Boolean(armed);
 }
@@ -138,10 +129,9 @@ export function stopFollowingChat() {
 /**
  * Is the chat still following the writing?
  *
- * The frame loop that grows the thinking pane asks this before it pins the box to the
- * end. Geometry alone was the old rule, and it meant a reader within two lines of the
- * end was pinned every frame however hard they scrolled: the pane grows 60 times a
- * second and the wheel is one notch every 100ms, so the pin always won (10 Nov).
+ * Every automatic pin asks this first — the frame loop that grows the thinking pane,
+ * and the render that follows a message. Geometry alone was the old rule, and it put a
+ * reader inside two lines of the end back there every frame however hard they scrolled.
  */
 export function chatFollows() {
   return chatFollowArmed;
@@ -157,9 +147,8 @@ export function noteUserScrollIntent(deltaY) {
     return;
   }
   if (deltaY < 0) {
-    // An upward gesture lets go *now*, and nothing about the geometry that follows may
-    // take it back: the wheel scrolls in animation steps, and each one is still near
-    // the end while the gesture is young.
+    // Released here, on the gesture, and not left to a scroll event: the event can
+    // arrive after a frame has already re-pinned the box.
     chatUserIntent = -1;
     chatFollowArmed = false;
   }

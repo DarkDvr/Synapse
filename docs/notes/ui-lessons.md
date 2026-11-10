@@ -2324,3 +2324,17 @@ already disables WebView2's zoom, so inside it the listener is passive now; a br
 (a remote view) still gets `preventDefault`, because there it is the page zoom that has
 to be stopped. And `restoreChatSlack` snapped a reader within two lines to flush with
 the bottom on any dock resize; it now only does that while the chat is following.
+
+### A preview anchored to a chip that is no longer there (10 Nov)
+
+The image preview opens on `mouseenter` and closes on `mouseleave` — and Chromium only
+dispatches a mouseleave when the *pointer* moves. A wheel scroll leaves the pointer
+exactly where it is and moves the chip instead, so the picture stayed open with its chip
+long gone, until the operator happened to hover another one. Any scroll, wheel or resize
+closes it now. The scroll listener is on `window` with `capture: true`, because the
+transcript is its own scroller and a scroll event does not bubble.
+
+Also, a clean-up pass on the four scroll fixes: every one of them is load-bearing —
+the intent's sign, the release on the gesture, the render and the frame loop asking
+`chatFollows()` — so nothing was removed but the four-attempt history in the comments,
+which now states the rule once: **geometry is not a gesture.**

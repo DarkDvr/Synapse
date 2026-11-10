@@ -614,6 +614,25 @@ export function hideAttachPreview() {
   if (img) img.onload = null;
 }
 
+/**
+ * Close the preview the moment anything moves under it.
+ *
+ * It is shown on `mouseenter` and hidden on `mouseleave`, and a mouseleave is only
+ * dispatched when the pointer *moves*. Scrolling with the wheel does not move the
+ * pointer — the chip moves instead — so the picture stayed open with the chip long
+ * gone, until the operator happened to hover another one (10 Nov). Any scroll or wheel
+ * closes it; both listeners are passive and the call is cheap when it is already shut.
+ *
+ * Capture on the scroll listener because the transcript is its own scroller: scroll
+ * does not bubble, so a listener on `window` would miss the one scroller that matters.
+ */
+export function installPreviewDismiss() {
+  window.addEventListener('scroll', hideAttachPreview, { capture: true, passive: true });
+  window.addEventListener('wheel', hideAttachPreview, { passive: true });
+  // A resize or a layout change moves the chip without a scroll event at all.
+  window.addEventListener('resize', hideAttachPreview, { passive: true });
+}
+
 /** Where the route reads a chat chip's picture from: inside the open project,
  *  never a path the page made up. The server checks the folder again. */
 function chatImageUrl(chip) {

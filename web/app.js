@@ -124,6 +124,7 @@ import {
   renderAttachments,
   showAttachPreview,
   hideAttachPreview,
+  installPreviewDismiss,
   showChatImagePreview,
   interrupt,
   interruptSession,
@@ -1566,6 +1567,9 @@ function wire() {
   // Ctrl + wheel and Ctrl + plus/minus move the chat's text size instead of the
   // window's own zoom: one setting, one number, the same bounds as the slider.
   installChatZoom();
+  // A picture preview is anchored to a chip, and a scroll moves the chip without moving
+  // the pointer — so nothing closes it. Any scroll, wheel or resize does now.
+  installPreviewDismiss();
   $('composer').addEventListener('submit', (e) => { e.preventDefault(); send(); });
   // The paperclip opens the system picker; the picker's own change event is what
   // adds the files, so a cancelled dialog adds nothing.
@@ -1738,16 +1742,11 @@ document.addEventListener('keydown', (e) => {
   });
 
   let navRaf = 0;
-  // A real gesture, before the scroll it causes arrives. Ctrl is not a scroll: that
-  // wheel is the chat's text size (web/chat-zoom.js), and counting it as "the reader
-  // scrolled away" would stop the chat following its own turn for no reason.
-  //
-  // The sign is the intent, not the event: `noteUserScrollIntent` reads positive as
-  // "towards the end" (the keys above say +1 for PageDown). A wheel's own deltaY is
-  // positive when scrolling *down*, so passing `-e.deltaY` told the follow that
-  // wheel-up was the reader coming back to the end — it re-armed on every tick, and
-  // while the thinking pane grew each frame there was no way to scroll away from it
-  // (10 Nov).
+  // The gesture, before the scroll it causes arrives. Ctrl is not a scroll: that wheel
+  // is the chat's text size (web/chat-zoom.js). The argument is the *intent*, not the
+  // event: positive means "towards the end" (the keys below say +1 for PageDown), and a
+  // wheel's deltaY is positive scrolling down — so `-e.deltaY` would call a wheel-up
+  // "coming back to the end" and the follow would never let go.
   $('transcript').addEventListener('wheel', (e) => {
     if (e.ctrlKey) return;
     noteUserScrollIntent(e.deltaY > 0 ? 1 : -1);
