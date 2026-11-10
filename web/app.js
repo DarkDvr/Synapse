@@ -626,6 +626,44 @@ async function openSession(id) {
   loadPlan();
 }
 
+// ── the Architect's post, opened on its first token ─────────────
+//
+// The engine creates the assistant message on its own schedule, and until it does
+// the page had nowhere to put the turn: the card said "Thinking" while the chat sat
+// still, and the post appeared when the step ended — the operator's "harness just
+// sits there without even opening Architect's post, then it eventually appears"
+// (10 Nov). So the page opens the post itself, on the first delta of any kind, and
+// the engine's own message replaces it on the next transcript load. It is the same
+// promise a steer makes, kept in the same place: a `local-` message that lives
+// until the engine echoes it.
+function ensureLivePost() {
+  if (!state.sessionId) return false;
+  const msgs = state.messages || [];
+  const last = msgs[msgs.length - 1];
+  // A turn that already has its post, or a placeholder from a moment ago, and there
+  // is nothing to open. `completed` is the engine's own word for a message it will
+  // not add to any more.
+  if (last && last.type === 'assistant' && !last.completed) return false;
+  msgs.push({
+    id: `local-live-${state.sessionId}-${Date.now()}`,
+    type: 'assistant',
+    created: Date.now(),
+    completed: false,
+    live: true,
+    parts: [],
+  });
+  return true;
+}
+
+/** The placeholder goes when the turn does, so a ghost post cannot outlive it. */
+function dropLivePost() {
+  const msgs = state.messages || [];
+  const last = msgs[msgs.length - 1];
+  if (!last || !String(last.id || '').startsWith('local-live-')) return false;
+  state.messages = msgs.slice(0, -1);
+  return true;
+}
+
 function showNothing() {
   state.view = 'none';
   state.sessionId = null;
@@ -661,8 +699,15 @@ async function loadMessages() {
     const pending = (state.messages || []).filter(
       (m) => String(m?.id || '').startsWith('local-steer-') && Date.now() - Number(m.created || 0) < 10 * 60 * 1000,
     );
+    // The post the page opened for a turn the engine has not written yet. It stays
+    // until the transcript ends with an assistant message — the engine's own record
+    // of that turn — and no longer (see ensureLivePost).
+    const tail = loaded[loaded.length - 1];
+    const live = tail && tail.type === 'assistant'
+      ? []
+      : (state.messages || []).filter((m) => String(m?.id || '').startsWith('local-live-'));
     const echoed = new Set(loaded.map((m) => String(m.text || '')));
-    state.messages = [...loaded, ...pending.filter((m) => !echoed.has(String(m.text || '')))];
+    state.messages = [...loaded, ...live, ...pending.filter((m) => !echoed.has(String(m.text || '')))];
     // The chips on tool calls are a record that outlives the request, so a
     // transcript opened after the fact asks once. While the session is open they
     // arrive on the stream; this is only the catch-up.
@@ -1347,10 +1392,19 @@ function connectStream() {
       // The Architect's own step. Its deltas used to be dropped — only a delegated
       // run had a trace to put them in — so the panel sat empty and the whole wall
       // appeared when the step's message was rebuilt. Same panel, same code.
-      if (ev.type === EV.textDelta) { noteDelta(ev); appendStream('word', ev.raw?.data?.delta); }
-      else if (ev.type === EV.reasoningDelta) { noteDelta(ev); appendStream('think', ev.raw?.data?.delta); }
-      else if (ev.type === EV.textEnded || ev.type === EV.reasoningEnded) endStream();
-      else if (turnEnded(ev.type)) {
+      // The post is opened here, on the first byte of any kind, so the thinking has
+      // somewhere to land the moment it starts arriving (10 Nov).
+      if (ev.type === EV.textDelta) {
+        ensureLivePost();
+        noteDelta(ev);
+        appendStream('word', ev.raw?.data?.delta);
+      } else if (ev.type === EV.reasoningDelta) {
+        ensureLivePost();
+        noteDelta(ev);
+        appendStream('think', ev.raw?.data?.delta);
+      } else if (ev.type === EV.textEnded || ev.type === EV.reasoningEnded) {
+        endStream();
+      } else if (turnEnded(ev.type)) {
         // The turn is over: nothing may stream into it any more.
         state.sessionTrace.stream = null;
         state.sessionTrace.key = '';
@@ -1401,7 +1455,13 @@ function connectStream() {
           }
         }
         if (ev.type === EV.executionStarted) state.busy = true;
-        else if (turnEnded(ev.type) || ev.type === EV.idle) state.busy = false;
+        else if (turnEnded(ev.type) || ev.type === EV.idle) {
+          state.busy = false;
+          // A turn that ended without the engine ever writing its message would
+          // leave the page's placeholder as an empty "Architect" post, so it goes
+          // with the turn. The reload below puts the real one back when there is one.
+          if (dropLivePost()) renderTranscript();
+        }
         // A turn that failed or was interrupted is not "done": the chime stays quiet
         // for it, so the sound always means the work finished.
         if (ev.type === EV.executionFailed || ev.type === EV.executionInterrupted) state.workEndQuiet = true;

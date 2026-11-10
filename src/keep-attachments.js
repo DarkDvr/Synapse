@@ -8,6 +8,7 @@
 // file the operator asked to keep, and deleting the project deletes it.
 import fs from 'node:fs';
 import path from 'node:path';
+import { markWritten } from './synapse-writes.js';
 
 /** A filename that cannot escape the folder, keeps the extension, and is short. */
 export function safeAttachmentName(name) {
@@ -38,7 +39,11 @@ export function keepAttachments(dir, files, { at = Date.now() } = {}) {
       let name = `${stamp}-${safe}`;
       let n = 2;
       while (fs.existsSync(path.join(folder, name))) name = `${stamp}-${n++}-${safe}`;
-      fs.writeFileSync(path.join(folder, name), bytes);
+      const full = path.join(folder, name);
+      fs.writeFileSync(full, bytes);
+      // Ours, not a worker's: the operator attached it. Without this the tamper
+      // check reports it as a stray write by whichever worker was running (10 Nov).
+      markWritten(full);
       kept.push({
         name,
         path: `.synapse/attachments/${name}`,

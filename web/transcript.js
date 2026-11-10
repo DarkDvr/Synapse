@@ -304,7 +304,10 @@ export function renderMessage(m, tail = '') {
       }
       else if (part.type === 'tool') body.push(renderTool(part));
     }
-    if (parts.length === 0 && !m.error) body.push('<span class="msg-text">…</span>');
+    // A post the page opened on the turn's first token has no parts yet; its
+    // thinking is the live tail underneath, so the placeholder ellipsis would sit
+    // above the words it is waiting for (10 Nov).
+    if (parts.length === 0 && !m.error && !(m.live && tail)) body.push('<span class="msg-text">…</span>');
     if (m.error) body.push(`<div class="msg-error">${esc(m.error)}</div>`);
     return `<div class="msg assistant" data-msg="assistant"><div class="msg-body">${body.join('')}${tail}</div></div>`;
   }

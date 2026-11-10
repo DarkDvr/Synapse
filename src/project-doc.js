@@ -18,6 +18,7 @@
 // operator's own prose: a `##` heading inside it must not be read as a section.
 import fs from 'node:fs';
 import path from 'node:path';
+import { markWritten } from './synapse-writes.js';
 
 /** Mirrors PLAN_DIR in plans.js — kept here so this module imports nothing. */
 const SYNAPSE_DIR = '.synapse';
@@ -158,6 +159,11 @@ export function writeDoc(dir, { current = '', handover = '', notes = '', log = '
       fs.writeFileSync(target, text, 'utf8');
       try { fs.unlinkSync(tmp); } catch { /* nothing to clean */ }
     }
+    // The document is Synapse's own file even when it is carrying the operator's
+    // words: their answer to a question is written here while a worker's turn may
+    // be open, and that satisfies the tamper check. Saying so is what keeps their
+    // click from being reported as a worker's stray write (10 Nov).
+    markWritten(target);
     return true;
   } catch {
     return false;

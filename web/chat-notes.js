@@ -38,6 +38,25 @@ export function alarmsHere() {
  * line and the full text is in the tooltip and the log — the operator cannot act on
  * it, so what they need is to know it happened, not to read it.
  */
+/**
+ * What an alarm is called, in the operator's words.
+ *
+ * It used to be one sentence chosen by testing `what` for "write" or "edit", so
+ * every alarm whose text was not literally that — "WROTE INSIDE .synapse OUTSIDE ITS
+ * FOLDER", "CHANGED DURING A WORKER RUN" — was titled "A model named Synapse in a
+ * tool call". Beside a file name it read as nonsense, and on 10 Nov the operator
+ * asked what these strange white errors were. Each kind now says what it is, and an
+ * unknown kind still gets a sentence rather than a shouted constant.
+ */
+export function alarmTitle(what) {
+  const kind = String(what || '').trim();
+  if (/^WRITE INSIDE THE HARNESS$/i.test(kind)) return 'Something tried to write inside Synapse';
+  if (/OUTSIDE ITS FOLDER/i.test(kind)) return 'A worker wrote outside its own folder';
+  if (/CHANGED DURING A WORKER RUN/i.test(kind)) return "Synapse's own files changed while a worker ran";
+  if (/shell command naming/i.test(kind)) return 'A model named Synapse in a tool call';
+  return kind ? 'The harness noticed something' : 'The harness noticed something';
+}
+
 export function renderAlarm(a) {
   if (a.prohibited) {
     const target = (a.paths || []).join(' | ');
@@ -48,8 +67,8 @@ export function renderAlarm(a) {
     <span class="chat-alarm-text">PROHIBITED · ${esc(a.action)}${shown ? ` ${esc(shown)}` : ''}${who ? ` · ${esc(who)}` : ''}</span>
   </div>`;
   }
-  const title = /write|edit/i.test(a.what) ? 'Something tried to write inside Synapse' : 'A model named Synapse in a tool call';
-  const detail = a.paths.join(' | ');
+  const title = alarmTitle(a.what);
+  const detail = (a.paths || []).join(' | ');
   const shown = detail.length > 150 ? `${detail.slice(0, 149)}…` : detail;
   return `<div class="chat-alarm" title="${esc(`${title}: ${detail}${a.note ? ` — ${a.note}` : ''}`)}">
     <span class="chat-alarm-mark">⚠</span>

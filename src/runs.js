@@ -52,6 +52,7 @@ import { rulesFor } from './permissions.js';
 import { configSavedAt } from './config.js';
 import { AUTOMATION_DEFAULTS, readAutomation } from './automation.js';
 import { keepBuildingDelayMs } from './auto-answer.js';
+import { wroteIt } from './synapse-writes.js';
 import { sweepProject, sweepScratch } from './cleanup.js';
 import { classifyFailure, recordProviderError, pruneProviderLog } from './provider-errors.js';
 import { providerType } from './providers.js';
@@ -2280,7 +2281,13 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
       // Screenshots are everyone's folder: the visual-review skill writes there
       // from whichever role is looking at the page.
       .filter((p) => !(p === shared || p.startsWith(`${shared}/`)))
-      .filter((p) => !HARNESS_FILES.has(p));
+      .filter((p) => !HARNESS_FILES.has(p))
+      // Ours are not the worker's. A kept attachment and an answer to a question
+      // both land in this folder while the worker's turn is open, and both were
+      // reported as the worker's stray writes on 10 Nov — twice, about the
+      // operator's own clicks. Only what Synapse said it wrote is excused, so a
+      // worker writing project.md is still news (see src/synapse-writes.js).
+      .filter((p) => !wroteIt(`${dir}/.synapse/${p}`, startedAt));
     if (strayWrites.length) {
       if (guard?.alarm) {
         guard.alarm({

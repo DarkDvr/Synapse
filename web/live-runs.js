@@ -158,7 +158,12 @@ export function initRoleCards() {
  */
 export function renderRoleActivity() {
   const run = currentRun();
-  const archBusy = isBusy(state.sessionId);
+  // `isBusy` is the engine's own list, which the pending poll rewrites every few
+  // seconds; `state.busy` is this page's own word for "this session's turn is
+  // running", set on executionStarted and cleared when the turn ends. The bar needs
+  // both: in Single the Architect's card is the only thing that can show the work,
+  // and it sat still through every turn because the list had not caught up (10 Nov).
+  const archBusy = isBusy(state.sessionId) || state.busy;
   const archTool = archBusy ? latestToolIn(state.messages) : null;
   const form = (state.forms || [])[0] || null;
   const tasks = state.planState?.plan?.tasks || [];

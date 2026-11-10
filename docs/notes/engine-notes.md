@@ -875,6 +875,21 @@ thinking**; 13% of the time in tools, the rest in generation.
   ambiguous, and kept on the loud side). The one "CHANGED DURING A WORKER RUN"
   alarm was the operator's own Settings save, and `configSavedAt()` now excuses
   exactly that: a config change no save of ours explains is still reported.
+- **Our writes are not a worker's (10 Nov).** Two alarms blamed a worker for the
+  operator's own two clicks. A kept attachment lands in `.synapse/attachments/`
+  while a turn is open, and an answer to a question is appended to `project.md`
+  while one is open, so the before/after comparison found both and reported "the
+  worker wrote outside its folder" — once about a steer's image, once about
+  "Approve manual window". Same precedent as the Settings save, applied to both:
+  `src/synapse-writes.js` records what Synapse itself wrote, `keepAttachments` and
+  `writeDoc` mark their files, and the comparison excuses only those, and only in
+  the window they were written. Exempting the file *names* would have been shorter
+  and would have let a worker edit `project.md` unnoticed.
+  The heading was a second bug of the same alarm: it was chosen by testing the
+  text for "write", so every other kind — "WROTE INSIDE .synapse…", "CHANGED
+  DURING A WORKER RUN" — read "A model named Synapse in a tool call" beside a file
+  name, which is the operator's "strange white errors". `alarmTitle()` now maps
+  each kind to a sentence of its own.
 
 ### What the engine actually does with a permission rule (measured, 2.0.30)
 

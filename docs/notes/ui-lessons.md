@@ -2163,3 +2163,31 @@ is a hundred small judgements the renderer can round differently.
 ladder defaults, `ROLES`, the chat's role labels and three brief sentences that
 called the coders three — plus a filter in `normalize()` so a saved config that still
 names it cannot delegate to a role with no card.
+
+
+## The post opens on the first token, and the bar shows the work (10 Nov)
+
+Two page behaviours the operator met on the same evening, both of them "nothing
+happens, then everything happens".
+
+**The Architect's post.** The engine writes the assistant message on its own
+schedule, and the page can only draw messages it has. So a turn that had already
+started — the card said "Thinking", tokens were arriving — had nowhere to go: the
+chat sat still until the step ended, and then the whole wall appeared at once. The
+page now opens the post itself on the first delta of any kind (`ensureLivePost`),
+puts the live thinking panel in it, and hands over to the engine's message on the
+next transcript load. The rule is the one a steer already keeps: a `local-` message
+lives until the engine echoes it and goes when the turn does, so it cannot become a
+ghost post at the end of a turn that never wrote one.
+
+**The single-mode bar.** In Single the Architect's card is the only thing that can
+show work happening, and it sat still through every turn while Multi's cards
+animated. The wash and the turning ring hang on `.is-working`, computed from
+`isBusy(sessionId)` — the engine's active list, which the pending poll rewrites
+every few seconds — so the class was not there for the frames that matter. It now
+also reads `state.busy`, the page's own word for "this session's turn is running",
+set on `executionStarted` and cleared when the turn ends.
+
+The stylesheet was never the problem: rendered still, in `data-mode="single"`, the
+bar draws both the wash and the ring. A class that is never applied and a rule that
+never matches look identical from the sofa, and this one was the class.
