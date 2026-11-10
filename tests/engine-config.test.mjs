@@ -5,10 +5,10 @@
 // catalog's conservative number; a compaction keep budget that never reaches
 // `compaction.keep.tokens` is a setting the operator believes is on and is not.
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { OpenCodeEngine } from '../src/engines/opencode.js';
 import { normalize } from '../src/config.js';
+import { tmpdir } from './tmpdir.mjs';
 
 const checks = [];
 const check = (name, ok, detail = '') => {
@@ -18,7 +18,7 @@ const check = (name, ok, detail = '') => {
 
 // A throwaway engine home, so nothing here can touch data\engine.
 const home = () => {
-  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'synapse-engine-'));
+  const base = tmpdir('synapse-engine-');
   const dirs = { base, config: path.join(base, 'config'), data: path.join(base, 'data'), state: path.join(base, 'state'), tmp: path.join(base, 'tmp'), passwordFile: path.join(base, 'password.txt') };
   fs.mkdirSync(path.join(dirs.config, 'opencode'), { recursive: true });
   return dirs;

@@ -9,13 +9,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 
 import { createApi } from '../src/api.js';
+import { tmpdir } from './tmpdir.mjs';
 
 function harness({ active = ['ses_arch'] } = {}) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'synapse-stop-hold-'));
+  const dir = tmpdir('synapse-stop-hold-');
   const held = [];
   const calls = [];
   const engine = {

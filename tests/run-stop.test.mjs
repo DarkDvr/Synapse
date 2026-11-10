@@ -8,10 +8,10 @@
 // These checks drive the runner's own stop/resume with a stub engine: the latch is
 // what the delegation gate reads, so it is the latch that has to hold.
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { createRunner } from '../src/runs.js';
 import { setTaskStatus, readPlan } from '../src/plans.js';
+import { tmpdir } from './tmpdir.mjs';
 
 const checks = [];
 const check = (name, ok, detail = '') => {
@@ -19,7 +19,7 @@ const check = (name, ok, detail = '') => {
   console.log(`${ok ? 'ok  ' : 'FAIL'}  ${name}${ok || !detail ? '' : ` — ${detail}`}`);
 };
 
-const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'synapse-stop-'));
+const dir = tmpdir('synapse-stop-');
 fs.mkdirSync(path.join(dir, '.synapse'), { recursive: true });
 const planFile = path.join(dir, '.synapse', 'plan.json');
 fs.writeFileSync(planFile, JSON.stringify({

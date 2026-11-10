@@ -14,14 +14,14 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { createHousekeeping } from '../src/housekeeping.js';
 import { reclaimSnapshotStore } from '../src/engines/opencode.js';
+import { tmpdir } from './tmpdir.mjs';
 
 function root() {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'synapse-house-'));
+  const dir = tmpdir('synapse-house-');
   fs.mkdirSync(path.join(dir, 'data', 'update'), { recursive: true });
   fs.mkdirSync(path.join(dir, 'data', 'backups'), { recursive: true });
   fs.mkdirSync(path.join(dir, 'dist'), { recursive: true });
@@ -224,7 +224,7 @@ test('orphaned project scratch goes, a live project’s and a fresh one stay', (
 
 // 5: the engine's undo store is dropped before the engine starts.
 test('the engine snapshot store is emptied before start and its folder kept', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'synapse-snap-'));
+  const dir = tmpdir('synapse-snap-');
   try {
     const dataHome = path.join(dir, 'data');
     const globalDir = path.join(dataHome, 'opencode', 'snapshot', 'global');

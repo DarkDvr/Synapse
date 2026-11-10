@@ -12,14 +12,14 @@
 // is named only to be refused, and nothing in the Single brief calls it an
 // Architect, a role, or a report. Multi must be untouched by all of it.
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 
 import { briefSession } from '../src/plans.js';
 import { describeSkills } from '../src/skills.js';
 import { createApi } from '../src/api.js';
+import { tmpdir } from './tmpdir.mjs';
 
-const ROOT = path.join(os.tmpdir(), `synapse-single-brief-${process.pid}`);
+const ROOT = tmpdir('synapse-single-brief-');
 const DIR = path.join(ROOT, 'project');
 const quiet = { info() {}, debug() {}, warn() {}, error() {} };
 

@@ -7,17 +7,17 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import http from 'node:http';
-import os from 'node:os';
 import path from 'node:path';
 
 import { servesProject, mayStop, findScratch, sweepScratch } from '../src/cleanup.js';
+import { tmpdir } from './tmpdir.mjs';
 
 const node = (pid, cmd = 'node x.js') => ({ pid, exe: 'C:/Program Files/nodejs/node.exe', cmd });
 
 /** Two folders with the *same* file names and different content — the hard case. */
 const twoProjects = () => {
-  const a = fs.mkdtempSync(path.join(os.tmpdir(), 'synapse-a-'));
-  const b = fs.mkdtempSync(path.join(os.tmpdir(), 'synapse-b-'));
+  const a = tmpdir('synapse-a-');
+  const b = tmpdir('synapse-b-');
   for (const [dir, mark] of [
     [a, 'page A'],
     [b, 'page B'],
@@ -101,7 +101,7 @@ test('a port that is not answering is not proof of anything', async () => {
 // narrow on purpose: scripts and temp files inside .synapse only, never a plan
 // file, never something the plan names, and it can be asked what it would do.
 test('the scratch sweep takes scripts and the doubled .synapse, and nothing else', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'synapse-scratch-'));
+  const dir = tmpdir('synapse-scratch-');
   try {
     const syn = path.join(dir, '.synapse');
     fs.mkdirSync(path.join(syn, 'design'), { recursive: true });

@@ -5,18 +5,18 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { repairMachinePaths } from '../src/config.js';
 import { createProjectStore } from '../src/projects.js';
 import { OpenCodeEngine } from '../src/engines/opencode.js';
 import { VENDOR_ENGINE, PROJECTS_ROOT, SCRATCH_ROOT, scratchDir } from '../src/paths.js';
+import { tmpdir } from './tmpdir.mjs';
 
 const quiet = { channel: () => ({ info() {}, warn() {}, error() {}, debug() {} }) };
 
 /** A temp folder that cleans up after itself. */
 function scratch() {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'synapse-portable-'));
+  const dir = tmpdir('synapse-portable-');
   return { dir, done: () => fs.rmSync(dir, { recursive: true, force: true }) };
 }
 

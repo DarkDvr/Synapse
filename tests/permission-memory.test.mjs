@@ -6,13 +6,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 
 import { createPermissionMemory } from '../src/permission-memory.js';
+import { tmpdir } from './tmpdir.mjs';
 
 const tempFile = () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'synapse-perm-'));
+  const dir = tmpdir('synapse-perm-');
   return path.join(dir, 'permission-memory.json');
 };
 

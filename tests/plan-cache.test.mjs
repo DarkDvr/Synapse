@@ -11,10 +11,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 
 import { readPlan, setTaskStatus, invalidatePlan, clearPlanCache } from '../src/plans.js';
+import { tmpdir } from './tmpdir.mjs';
 
 const plan = (tasks) => ({ version: 1, goal: 'a test', summary: '', tasks });
 
@@ -22,7 +22,7 @@ function project(tasks = [
   { id: 't1', title: 'First', role: 'coder-1', status: 'doing' },
   { id: 't2', title: 'Second', role: 'coder-1', status: 'todo' },
 ]) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'synapse-plan-cache-'));
+  const dir = tmpdir('synapse-plan-cache-');
   fs.mkdirSync(path.join(dir, '.synapse'), { recursive: true });
   fs.writeFileSync(path.join(dir, '.synapse', 'plan.json'), `${JSON.stringify(plan(tasks), null, 2)}\n`, 'utf8');
   return dir;

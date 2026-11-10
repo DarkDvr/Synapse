@@ -14,11 +14,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { logger, LEVELS, DEBUG_FILE } from '../src/logger.js';
+import { tmpdir } from './tmpdir.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
@@ -59,7 +59,7 @@ test('the milestones the operator reads are still info', () => {
 });
 
 test('debug goes to its own file, and a channel file stays readable', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'synapse-log-'));
+  const dir = tmpdir('synapse-log-');
   const level = logger.level;
   const loggerDir = logger.dir;
   try {
@@ -89,7 +89,7 @@ test('debug goes to its own file, and a channel file stays readable', () => {
 });
 
 test('with the debug switch off nothing reaches the deep file', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'synapse-log-'));
+  const dir = tmpdir('synapse-log-');
   const level = logger.level;
   const loggerDir = logger.dir;
   try {

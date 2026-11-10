@@ -8,11 +8,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 
 import { mayRecycleFolder } from '../src/projects.js';
 import { binContents } from '../src/api.js';
+import { tmpdir } from './tmpdir.mjs';
 
 const harness = 'F:\\dev\\Synapse';
 const projectsRoot = 'F:\\dev\\Synapse.Projects';
@@ -55,7 +55,7 @@ test('a sibling whose name merely starts with the harness name is not the harnes
 });
 
 test('bin\\ is measured, not assumed', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'synapse-del-'));
+  const dir = tmpdir('synapse-del-');
   const bin = path.join(dir, 'bin');
 
   // No bin at all: nothing to consent to.

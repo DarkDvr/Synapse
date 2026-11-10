@@ -10,13 +10,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 
 import { appendRun, briefSession, readRuns } from '../src/plans.js';
 import { closeRound, countedAttempts, qcRoundsUsed } from '../src/runs.js';
+import { tmpdir } from './tmpdir.mjs';
 
-const project = () => fs.mkdtempSync(path.join(os.tmpdir(), 'synapse-round-'));
+const project = () => tmpdir('synapse-round-');
 const task = (id, status) => ({ id, title: `task ${id}`, role: 'coder-1', status });
 
 function writePlan(dir, { tasks, summary = 'It works.' }) {

@@ -11,14 +11,14 @@
 // loop takes about a quarter of a minute. A tool loop (the same call four times in
 // eight) is caught in about three seconds, which is the point of the second half.
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { createRunner } from '../src/runs.js';
+import { tmpdir } from './tmpdir.mjs';
 
-const ROOT = path.join(os.tmpdir(), 'synapse-loop-run-test');
+const ROOT = tmpdir('synapse-loop-run-test-');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const quiet = { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} };
 

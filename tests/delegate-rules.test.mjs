@@ -9,11 +9,11 @@
 // runner with a stubbed engine.
 import fs from 'node:fs';
 import path from 'node:path';
-import os from 'node:os';
 import { createRunner } from '../src/runs.js';
 import { readPlan, ORIGINS } from '../src/plans.js';
+import { tmpdir } from './tmpdir.mjs';
 
-const ROOT = path.join(os.tmpdir(), `synapse-delegate-rules-${process.pid}`);
+const ROOT = tmpdir('synapse-delegate-rules-');
 const DIR = path.join(ROOT, 'project');
 const quiet = { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} };
 

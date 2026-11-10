@@ -8,8 +8,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
+import { tmpdir } from './tmpdir.mjs';
 
 import {
   appendRequest,
@@ -22,7 +22,7 @@ import {
   writeDoc,
 } from '../src/project-doc.js';
 
-const project = () => fs.mkdtempSync(path.join(os.tmpdir(), 'synapse-doc-'));
+const project = () => tmpdir('synapse-doc-');
 const docFile = (dir) => path.join(dir, '.synapse', 'project.md');
 
 test('the first request creates the document and the head quotes it', () => {

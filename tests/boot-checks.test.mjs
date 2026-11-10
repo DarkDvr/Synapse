@@ -6,10 +6,10 @@
 //    the new binary *there*, or the app keeps starting the old one and the update
 //    silently does nothing.
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { npmPlan } from '../src/npm-check.js';
 import { copyRuntimeOver } from '../src/engine-update.js';
+import { tmpdir } from './tmpdir.mjs';
 
 const checks = [];
 const check = (name, ok, detail = '') => {
@@ -23,7 +23,7 @@ check('no npm but a runtime present only warns', npmPlan({ npmFound: false, runt
 check('no npm and no runtime blocks the start', npmPlan({ npmFound: false, runtimeFound: false }) === 'block');
 
 // ── the update copies over the vendored binary, keeping the old ─
-const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'synapse-vendor-'));
+const dir = tmpdir('synapse-vendor-');
 const vendored = path.join(dir, 'opencode.exe');
 const fresh = path.join(dir, 'fresh-opencode.exe');
 fs.writeFileSync(vendored, 'old binary', 'utf8');

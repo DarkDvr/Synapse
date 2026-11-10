@@ -9,12 +9,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { decide } from '../src/permissions.js';
 import { normalize } from '../src/config.js';
+import { tmpdir } from './tmpdir.mjs';
 import {
   braveEntries,
   builtinEntries,
@@ -91,7 +91,7 @@ test('an added path keeps its own answers, and old ones migrate', () => {
 });
 
 test('Brave is an added entry, seeded once, refused for both answers', () => {
-  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'synapse-brave-'));
+  const home = tmpdir('synapse-brave-');
   try {
     const brave = path.join(home, 'AppData', 'Local', 'BraveSoftware');
     fs.mkdirSync(brave, { recursive: true });

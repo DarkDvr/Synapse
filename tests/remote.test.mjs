@@ -6,10 +6,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 
 import { isLoopback, isPrivateAddress, parseCookies, tokenMatches, createRemoteToken, loginPage, machineName } from '../src/remote.js';
+import { tmpdir } from './tmpdir.mjs';
 
 test('loopback is only this machine', () => {
   assert.equal(isLoopback('127.0.0.1'), true);
@@ -42,7 +42,7 @@ test('the token compare is exact', () => {
 });
 
 test('a token is generated once and then read back from disk', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'synapse-remote-'));
+  const dir = tmpdir('synapse-remote-');
   const file = path.join(dir, 'remote-token');
   const first = createRemoteToken({ file });
   const second = createRemoteToken({ file });

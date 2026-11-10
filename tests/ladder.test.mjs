@@ -11,10 +11,10 @@
 //  - a Stop must not push the task down the ladder.
 import fs from 'node:fs';
 import path from 'node:path';
-import os from 'node:os';
 import { createRunner } from '../src/runs.js';
+import { tmpdir } from './tmpdir.mjs';
 
-const ROOT = path.join(os.tmpdir(), 'synapse-ladder-test');
+const ROOT = tmpdir('synapse-ladder-test-');
 const TERMINAL = 'Invalid request: text is required';
 const FREE_LIMIT =
   'Free usage limit reached. Connect a provider or subscribe to OpenCode Go to keep going, or switch models.';

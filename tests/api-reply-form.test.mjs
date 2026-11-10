@@ -8,8 +8,8 @@
 // stop it.
 import { createApi } from '../src/api.js';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
+import { tmpdir } from './tmpdir.mjs';
 
 const checks = [];
 const check = (name, ok, detail = '') => {
@@ -102,7 +102,7 @@ function harness({ listFormsThrows = false, directory = null } = {}) {
 
 // ── the answer is written where a deleted conversation cannot reach it ─
 {
-  const dir = path.join(os.tmpdir(), `synapse-reply-${process.pid}`, 'project');
+  const dir = path.join(tmpdir('synapse-reply-'), 'project');
   fs.rmSync(dir, { recursive: true, force: true });
   fs.mkdirSync(dir, { recursive: true });
   const { api, warnings } = harness({ directory: dir });

@@ -10,12 +10,12 @@
 //    in exactly that hole, with the report delivered and nobody reading it.
 import fs from 'node:fs';
 import path from 'node:path';
-import os from 'node:os';
 import { createRunner } from '../src/runs.js';
 import { briefSession } from '../src/plans.js';
 import { classifyFailure, PROVIDER_LOG } from '../src/provider-errors.js';
+import { tmpdir } from './tmpdir.mjs';
 
-const ROOT = path.join(os.tmpdir(), 'synapse-provider-test');
+const ROOT = tmpdir('synapse-provider-test-');
 const RATE = 'Rate limit exceeded. Please try again later.';
 const FREE_LIMIT =
   'Free usage limit reached. Connect a provider or subscribe to OpenCode Go to keep going, or switch models.';

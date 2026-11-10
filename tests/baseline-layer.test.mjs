@@ -10,8 +10,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
+import { tmpdir } from './tmpdir.mjs';
 
 const read = (rel) => fs.readFileSync(path.join(process.cwd(), rel), 'utf8');
 const SHOT = path.resolve('skills/visual-review/bin/shot.mjs');
@@ -29,7 +29,7 @@ test('the shell loads the baseline through a layer, and Synapse is unlayered', (
 // The behaviour, not the markup: a (0,1,0) rule of ours must beat the library's
 // (0,1,1) rule, which is exactly what the cascade does not do without layers.
 test('an unlayered rule of ours beats the baseline even when the baseline is more specific', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'synapse-layer-'));
+  const dir = tmpdir('synapse-layer-');
   try {
     // The library and the layer wrapper, exactly as the app serves them.
     fs.copyFileSync(path.resolve('web/vendor/summit.css'), path.join(dir, 'summit.css'));

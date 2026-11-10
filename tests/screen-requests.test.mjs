@@ -7,11 +7,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { decide } from '../src/permissions.js';
+import { tmpdir } from './tmpdir.mjs';
 
-const root = fs.mkdtempSync(path.join(os.tmpdir(), 'synapse-screen-'));
+const root = tmpdir('synapse-screen-');
 const project = path.join(root, 'proj');
 fs.mkdirSync(project, { recursive: true });
 

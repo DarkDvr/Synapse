@@ -5,15 +5,15 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 
 import { createTraceReasons } from '../src/trace-reasons.js';
+import { tmpdir } from './tmpdir.mjs';
 
 const quiet = { warn() {} };
 
 test('a run keeps its last twenty-four steps, and a reload finds them', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'synapse-traces-'));
+  const dir = tmpdir('synapse-traces-');
   try {
     const file = path.join(dir, 'trace-reasons.json');
     const store = createTraceReasons(file, { log: quiet });
@@ -39,7 +39,7 @@ test('a run keeps its last twenty-four steps, and a reload finds them', () => {
 });
 
 test('runs older than a day are pruned at boot', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'synapse-traces-'));
+  const dir = tmpdir('synapse-traces-');
   try {
     const file = path.join(dir, 'trace-reasons.json');
     const store = createTraceReasons(file, { log: quiet });

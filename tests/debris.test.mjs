@@ -8,13 +8,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { taskScratchDir, removeTaskScratch, tidyProjectRoot } from '../src/cleanup.js';
 import { createHousekeeping } from '../src/housekeeping.js';
 import { scratchDir } from '../src/paths.js';
+import { tmpdir } from './tmpdir.mjs';
 
-const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'synapse-debris-'));
+const tmp = () => tmpdir('synapse-debris-');
 
 test('a task id cannot build a path outside its own scratch folder', () => {
   const dir = path.join('F:', 'dev', 'Projects', 'demo');

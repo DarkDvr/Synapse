@@ -8,10 +8,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { validHost, readSessions, writeSessions, cookieFor } from '../src/site-sessions.js';
 import { webFetch, FetchError } from '../src/fetch.js';
+import { tmpdir } from './tmpdir.mjs';
 
 test('a host is a host, not a URL and not a path', () => {
   assert.equal(validHost('4pda.to'), '4pda.to');
@@ -33,7 +33,7 @@ test('a cookie goes to its host and its subdomains, never to a lookalike', () =>
 });
 
 test('sessions round-trip through the file, and an invalid host is dropped', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'synapse-sessions-'));
+  const dir = tmpdir('synapse-sessions-');
   try {
     const file = path.join(dir, 'site-sessions.json');
     writeSessions({ '4pda.to': { cookie: 'bb_session=secret' }, bad: { cookie: 'x' } }, file);

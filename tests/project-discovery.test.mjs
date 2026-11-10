@@ -8,15 +8,15 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { createProjectStore, ensureProjectFolders } from '../src/projects.js';
 import { scratchDir } from '../src/paths.js';
+import { tmpdir } from './tmpdir.mjs';
 
 const quiet = { channel: () => ({ info() {}, warn() {}, error() {}, debug() {} }) };
 
 function arena() {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'synapse-discovery-'));
+  const dir = tmpdir('synapse-discovery-');
   const root = path.join(dir, 'projects');
   const scratchRoot = path.join(dir, 'scratch');
   fs.mkdirSync(root, { recursive: true });

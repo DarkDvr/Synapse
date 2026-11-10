@@ -9,12 +9,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 
 import { createHarnessGuard } from '../src/harness.js';
 import { ROOT } from '../src/paths.js';
+import { tmpdir } from './tmpdir.mjs';
 
 const quiet = { channel: () => ({ info() {}, warn() {}, error() {}, debug() {} }) };
 
@@ -54,7 +54,7 @@ test('a read naming the harness is logged, not alarmed', () => {
 // `snapshot: before t1 (coder-1)`. Now it reports a dirty tree and commits nothing —
 // HEAD is the restore point, and HEAD does not include work in progress.
 test('a run reports a dirty harness and commits nothing', async () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'synapse-snapshot-'));
+  const dir = tmpdir('synapse-snapshot-');
   const git = (...args) => spawnSync('git', ['-C', dir, ...args], { encoding: 'utf8' });
   try {
     git('init');

@@ -6,10 +6,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 
 import { decide, grantKey, rulesFor, zoneOf, inside, isSecret, analyzeCommand, refusalNote, screenTaking } from '../src/permissions.js';
+import { tmpdir } from './tmpdir.mjs';
 
 const HOME = 'C:/Users/tester';
 const PROJECT = 'F:/dev/Synapse.Projects/demo';
@@ -612,7 +612,7 @@ test('a program a shipped tool runs is not a write into Windows', () => {
 // nothing, and the cursor moved anyway. The script is read now, but only when it is
 // about to be executed.
 test('a script the command runs is read, because the mouse lives inside it', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'synapse-perm-'));
+  const dir = tmpdir('synapse-perm-');
   try {
     const project = dir.replace(/\\/g, '/');
     const base = { cwd: dir, projectRoot: project, harnessRoot: HARNESS, home: HOME };
@@ -700,7 +700,7 @@ test('a sweep, a family, or an id it found: refused', () => {
 // Each of these was found by the strength tests (docs/strength-tests.md) trying to get a
 // kill past the rule, and each is refused now.
 test('a kill reached by another route is still a kill', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'synapse-kill-'));
+  const dir = tmpdir('synapse-kill-');
   fs.writeFileSync(path.join(dir, 'sweep.ps1'), 'Get-Process python | ForEach-Object { Stop-Process -Id $_.Id -Force }');
   fs.writeFileSync(path.join(dir, 'safe.ps1'), 'Stop-Process -Name SysMonitor -Force');
   const from = (command) => call('shell', command, { cwd: dir, projectRoot: dir });

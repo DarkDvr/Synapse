@@ -7,12 +7,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { readPlan, setTaskStatus, releaseDoing, clearPlanCache, invalidatePlan } from '../src/plans.js';
+import { tmpdir } from './tmpdir.mjs';
 
 const project = (tasks) => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'synapse-plan-status-'));
+  const dir = tmpdir('synapse-plan-status-');
   fs.mkdirSync(path.join(dir, '.synapse'), { recursive: true });
   fs.writeFileSync(
     path.join(dir, '.synapse', 'plan.json'),
@@ -67,7 +67,7 @@ test('a row marked done owes a result, and a fresh write is not judged yet', () 
   // The operator's own projects all carry a result on every done row; the two that did
   // not were the ones nobody could read afterwards (10 Nov).
   const project = (tasks) => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'synapse-plan-result-'));
+    const dir = tmpdir('synapse-plan-result-');
     fs.mkdirSync(path.join(dir, '.synapse'), { recursive: true });
     const file = path.join(dir, '.synapse', 'plan.json');
     fs.writeFileSync(file, JSON.stringify({ version: 1, goal: 'g', tasks }, null, 2));
@@ -88,7 +88,7 @@ test('a row marked done owes a result, and a fresh write is not judged yet', () 
   assert.match(problems.join(' '), /claim with nothing behind it/, 'the sentence does not say why it matters');
 
   // A fresh write is not judged: the two-step save is not a fault.
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'synapse-plan-fresh-'));
+  const dir = tmpdir('synapse-plan-fresh-');
   fs.mkdirSync(path.join(dir, '.synapse'), { recursive: true });
   fs.writeFileSync(path.join(dir, '.synapse', 'plan.json'), JSON.stringify({ version: 1, tasks: [{ id: 't1', title: 'one', role: 'coder-1', status: 'done' }] }));
   clearPlanCache();

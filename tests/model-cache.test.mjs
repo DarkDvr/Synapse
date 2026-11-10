@@ -3,11 +3,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 
 import { createModelCache } from '../src/modelcache.js';
 import { toolTarget } from '../src/runs.js';
+import { tmpdir } from './tmpdir.mjs';
 
 const logger = { channel: () => ({ info() {}, warn() {}, error() {}, debug() {} }) };
 
@@ -32,7 +32,7 @@ test('a read slice is part of what a tool call acted on', () => {
 });
 
 test('a role model change clears loop marks, not provider facts', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'synapse-mc-'));
+  const dir = tmpdir('synapse-mc-');
   try {
     const file = path.join(dir, 'model-cache.json');
     fs.writeFileSync(

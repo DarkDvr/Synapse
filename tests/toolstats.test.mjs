@@ -14,12 +14,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { createToolStats } from '../src/toolstats.js';
+import { tmpdir } from './tmpdir.mjs';
 
 function fixture() {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'synapse-census-'));
+  const dir = tmpdir('synapse-census-');
   const file = path.join(dir, 'tool-stats.json');
   const lines = [];
   const logger = {

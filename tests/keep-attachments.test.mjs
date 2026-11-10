@@ -4,13 +4,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 
 import { keepAttachments, safeAttachmentName } from '../src/keep-attachments.js';
+import { tmpdir } from './tmpdir.mjs';
 
 const b64 = (text) => Buffer.from(text).toString('base64');
-const temp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'synapse-keep-'));
+const temp = () => tmpdir('synapse-keep-');
 
 test('a kept file lands in .synapse/attachments with its bytes', () => {
   const dir = temp();

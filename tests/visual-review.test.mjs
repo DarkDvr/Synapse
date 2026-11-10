@@ -9,8 +9,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
+import { tmpdir } from './tmpdir.mjs';
 
 const SHOT = path.resolve('skills/visual-review/bin/shot.mjs');
 const run = (...args) => spawnSync(process.execPath, [SHOT, ...args], { encoding: 'utf8', timeout: 60000 });
@@ -112,7 +112,7 @@ const FIXTURE = `<!doctype html><meta charset="utf-8"><style>
 </div>`;
 
 test('the layout audit names the three defects that were pointed at by hand', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'synapse-audit-'));
+  const dir = tmpdir('synapse-audit-');
   try {
     const page = path.join(dir, 'page.html');
     fs.writeFileSync(page, FIXTURE, 'utf8');
@@ -134,7 +134,7 @@ test('the layout audit names the three defects that were pointed at by hand', ()
 });
 
 test('a page that is aligned reports nothing and exits 0', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'synapse-audit-ok-'));
+  const dir = tmpdir('synapse-audit-ok-');
   try {
     const page = path.join(dir, 'ok.html');
     fs.writeFileSync(
@@ -177,7 +177,7 @@ test('a page that is aligned reports nothing and exits 0', () => {
 // hit test, so no page has to name its overlay. Two buttons *inside* the dialog still
 // compare with each other, which is the half that must not be lost.
 test('controls either side of a dialog are not a row, but controls inside it are', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'synapse-audit-modal-'));
+  const dir = tmpdir('synapse-audit-modal-');
   try {
     const page = path.join(dir, 'modal.html');
     fs.writeFileSync(
@@ -237,7 +237,7 @@ const DIFF_PAGE = (css = '', words = 'Two of five files are on disk.') => `<!doc
 </style><div class="card"><h1>Download</h1><p>${words}</p><button>Start</button></div>`;
 
 test('--diff on an unchanged build reports nothing and exits 0', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'synapse-diff-same-'));
+  const dir = tmpdir('synapse-diff-same-');
   try {
     const page = path.join(dir, 'page.html');
     fs.writeFileSync(page, DIFF_PAGE(), 'utf8');
@@ -259,7 +259,7 @@ test('--diff on an unchanged build reports nothing and exits 0', () => {
 });
 
 test('--diff finds a moved control, keeps the mock intact, and can gate on it', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'synapse-diff-moved-'));
+  const dir = tmpdir('synapse-diff-moved-');
   try {
     const page = path.join(dir, 'page.html');
     fs.writeFileSync(page, DIFF_PAGE(), 'utf8');
@@ -289,7 +289,7 @@ test('--diff finds a moved control, keeps the mock intact, and can gate on it', 
 });
 
 test('--diff refuses a bad argument before any browser starts', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'synapse-diff-bad-'));
+  const dir = tmpdir('synapse-diff-bad-');
   try {
     const page = path.join(dir, 'page.html');
     fs.writeFileSync(page, DIFF_PAGE(), 'utf8');

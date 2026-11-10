@@ -6,14 +6,14 @@
 // record keeps, and what the Architect reads afterwards.
 import fs from 'node:fs';
 import path from 'node:path';
-import os from 'node:os';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createRunner } from '../src/runs.js';
 import { briefSession, appendRun } from '../src/plans.js';
 import { OpenCodeEngine } from '../src/engines/opencode.js';
+import { tmpdir } from './tmpdir.mjs';
 
-const ROOT = path.join(os.tmpdir(), 'synapse-steer-test');
+const ROOT = tmpdir('synapse-steer-test-');
 const quiet = { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 

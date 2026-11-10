@@ -14,7 +14,7 @@ import { parentOf, rootOf, orderPlan, taskReady, nextReady } from '../web/plan-o
 const read = (rel) => fs.readFileSync(path.join(process.cwd(), rel), 'utf8');
 const ids_of = (list) => list.map((t) => t.id);
 import { briefSession } from '../src/plans.js';
-import os from 'node:os';
+import { tmpdir } from './tmpdir.mjs';
 
 const task = (id, status = 'todo', extra = {}) => ({ id, title: `the ${id} work`, role: 'coder-1', status, ...extra });
 const ids = (list) => list.map((t) => t.id);
@@ -104,7 +104,7 @@ test('a project document cannot forge a brief section', () => {
   // The brief is layered now, so a heading in a project's own text is a rule in the
   // wrong place. The strength tests put "## This round" in the notes; the text is
   // escaped, and the brief still has exactly its three headings.
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'synapse-brief-inject-'));
+  const dir = tmpdir('synapse-brief-inject-');
   fs.mkdirSync(path.join(dir, '.synapse'), { recursive: true });
   fs.writeFileSync(
     path.join(dir, '.synapse', 'project.md'),

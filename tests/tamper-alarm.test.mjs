@@ -5,12 +5,12 @@
 // outside its folder, and every one of those alarms was titled "A model named
 // Synapse in a tool call" whatever it had actually noticed.
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { markWritten, wroteIt, forgetWrites } from '../src/synapse-writes.js';
 import { keepAttachments } from '../src/keep-attachments.js';
 import { writeDoc } from '../src/project-doc.js';
 import { alarmTitle, renderAlarm } from '../web/chat-notes.js';
+import { tmpdir } from './tmpdir.mjs';
 
 let pass = 0;
 const fails = [];
@@ -22,7 +22,7 @@ const check = (label, ok, detail = '') => {
   console.log(`${ok ? 'ok  ' : 'FAIL'}  ${label}${ok || !detail ? '' : ` — ${detail}`}`);
 };
 
-const ROOT = fs.mkdtempSync(path.join(os.tmpdir(), 'synapse-writes-'));
+const ROOT = tmpdir('synapse-writes-');
 try {
   const dir = path.join(ROOT, 'project');
   fs.mkdirSync(path.join(dir, '.synapse'), { recursive: true });

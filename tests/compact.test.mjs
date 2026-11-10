@@ -4,13 +4,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 
 import { createApi } from '../src/api.js';
 import { SINGLE_RULES } from '../src/permissions.js';
+import { tmpdir } from './tmpdir.mjs';
 
-const project = () => fs.mkdtempSync(path.join(os.tmpdir(), 'synapse-compact-'));
+const project = () => tmpdir('synapse-compact-');
 
 function harness({
   dir,

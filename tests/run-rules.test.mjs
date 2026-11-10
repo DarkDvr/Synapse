@@ -13,18 +13,18 @@
 //    were all alarms, and a worker's would still be one.
 import fs from 'node:fs';
 import path from 'node:path';
-import os from 'node:os';
 import { readPlan, briefSession } from '../src/plans.js';
 import { appendDecision as appendAnswers } from '../src/project-doc.js';
 import { contextStats, windowRoom, windowAction, steerDue, nextRung, countedAttempts, attemptFailed, modelChangedSinceAttempt, redeemModel, promptSize, compactionEvents, compactionMessages, resolveWindow, engineCompactAt, watchdogRoom, wroteToolCall } from '../src/runs.js';
 import { createHarnessGuard } from '../src/harness.js';
+import { tmpdir } from './tmpdir.mjs';
 
 const checks = [];
 const expect = (label, ok, detail) =>
   checks.push(`${ok ? 'PASS' : 'FAIL'}  ${label}${detail ? `  <- ${detail}` : ''}`);
 
 // ── the plan ────────────────────────────────────────────────────
-const ROOT = path.join(os.tmpdir(), `synapse-run-rules-${process.pid}`);
+const ROOT = tmpdir('synapse-run-rules-');
 const DIR = path.join(ROOT, 'project');
 const PLAN = path.join(DIR, '.synapse', 'plan.json');
 const write = (plan, ageMs = 0) => {

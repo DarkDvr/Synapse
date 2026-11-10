@@ -8,11 +8,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 
 import { createApi } from '../src/api.js';
 import { SINGLE_RULES } from '../src/permissions.js';
+import { tmpdir } from './tmpdir.mjs';
 
 function harness({ applied = 'multi', dir = null } = {}) {
   const calls = [];
@@ -58,7 +58,7 @@ function harness({ applied = 'multi', dir = null } = {}) {
   return { api, calls, briefs, prompts, notes, mode: () => mode };
 }
 
-const project = () => fs.mkdtempSync(path.join(os.tmpdir(), 'synapse-mode-'));
+const project = () => tmpdir('synapse-mode-');
 const asks = (rules, action) => (rules || []).some((r) => r.action === action && r.effect === 'ask');
 
 test('a Single send applies the ruleset once, before the prompt', async () => {
