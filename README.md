@@ -55,15 +55,15 @@ holds a handle to.
 
 ## What you see
 
-- **Sidebar** — projects, each with its sessions, plus **Browse** (Explorer),
+- **Sidebar** — projects, plus **Browse** (Explorer),
   **Cmd** (a prompt in that folder), Settings, and a STATUS block: remote access,
   the runtime, the last event, the local LLM.
 - **Stage** — the role cards, then the chat. The Architect is always on screen;
-  **Multi** reveals the six workers.
+  **Multi** reveals the five workers.
 - **Rail** — the Project Plan on the left, the live tool census on the right.
 
 A card is a control as well as a status: its model and thinking effort are chosen
-there, its dot says whether that role has been used in this session, and while a
+there, its dot says whether that role has been used in this chat, and while a
 delegation runs a yellow arrow with travelling beads joins the two cards taking
 part. The chat can chime when the Architect finishes — four sounds, or off, in
 **Settings → Notices**.
@@ -111,7 +111,7 @@ invent, design, build and review, a one-file script pays for two tasks:
 | Inventor | ranked ideas, each with a one-line why and an effort |
 | Architect | the plan, the decisions, the judgement after every worker |
 | Designer | a design spec, and mock pages to choose from |
-| Coders 1–3 | the code |
+| Coders 1–2 | the code |
 | QC | what a real person would break or misread, then a fix round |
 
 Two decisions are yours, and the Architect asks for them with a form: **which of

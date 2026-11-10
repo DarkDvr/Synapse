@@ -347,8 +347,8 @@ Non-obvious, all verified on 2.0.30:
   invent a new task. The harness did not spend those attempts; the operator
   cancelled them, or Synapse died under the worker. For the same reason a stop or
   a restart does not move the task down the ladder (`attemptFailed`): t3 dropped
-  from coder-2 to coder-3 because a restart interrupted it, and no change to
-  coder-2's model could bring it back.
+  a rung because a restart interrupted it, and no change to that role's model
+  could bring it back.
 - **A free-plan usage cap gets ten minutes, not for ever.** "Free usage limit
   reached. Connect a provider or subscribe … switch models" classified as
   `unknown` and was retried indefinitely: on 27 Oct t9 sat on it for 13 retries
@@ -382,8 +382,8 @@ Non-obvious, all verified on 2.0.30:
   had read the previous handover's "three rounds spent", refused to delegate t7
   at all, and wrote "the delegation was refused" into the plan — a refusal that
   never happened, so the round was self-verified for no reason.
-- **A coder that cannot do the job hands it down the line.** The three coder roles
-  are peers (`worker.ladder`, default `coder-1 → coder-2 → coder-3`), and the
+- **A coder that cannot do the job hands it down the line.** The two coder roles
+  are peers (`worker.ladder`, default `coder-1 → coder-2`), and the
   harness moves the *same task* between them — the Architect cannot, because the
   first thing it learns about a refused model is a report saying nothing happened.
   `candidatesFor()` decides the rungs for an attempt, on two rules: **a provider
@@ -411,12 +411,12 @@ Non-obvious, all verified on 2.0.30:
   work on its merits"*, and `runs.jsonl` records `role`, `plannedRole` and `ladder`.
   **The operator's own choice overrides the "write it for coder-1" rule** (30 Oct:
   "tell coder 2 to create…" was silently rewritten to coder-1): a row they asked
-  for carries `origin: "operator"`, the plan check accepts `coder-2`/`coder-3` on
+  for carries `origin: "operator"`, the plan check accepts `coder-2` on
   that row, and the brief tells the Architect to use the named coder, mark the row
   and say so in its reply. The invariant is unchanged — the task's role is its
   *first rung*, and the ladder only ever moves down from there (`nextRung` slices
-  from the role's own index), so a coder-2 task runs on coder-2 and falls to
-  coder-3, never back to coder-1.
+  from the role's own index), so a coder-2 task runs on coder-2 and never falls
+  back to coder-1.
   **Changing a role's model mid-run also ends its backoff.** `wakeRole(role,
   {ref, variant})` fires the run's wake signal (separate from Stop's controller),
   switches that session to the new model and lets the retry happen at once; the
@@ -429,8 +429,8 @@ Non-obvious, all verified on 2.0.30:
   attempt 2 starts a rung down, a marked model is skipped, a clean turn stays on
   coder-1, and a role outside the ladder still reports a plain `error`.
   **Re-verified 29 Oct** (`tests/ladder.test.mjs`): a terminal refusal really does
-  walk coder-1 → coder-2 → coder-3 inside one delegation (three sessions, the
-  result names coder-3), a re-delegation starts on coder-2, and an operator Stop
+  walk the ladder inside one delegation (the result names the rung it landed on),
+  a re-delegation starts on coder-2, and an operator Stop
   stays on coder-1. The one failure that does **not** move at once is a usage cap:
   it is retried in place for up to ten minutes because it can clear (it did on 27
   and 29 Oct), and only an `outcome=error` after that grace hands the work to the
@@ -445,12 +445,12 @@ Non-obvious, all verified on 2.0.30:
   exactly that way: 1.8s refusal → `coder-2` in 87s, with the move written into
   `runs.jsonl` as `role=coder-2 plannedRole=coder-1`.
 - **Build tasks are planned for coder-1, and only coder-1.** The ladder is the
-  harness's, not the Architect's, so a plan that names coder-2 or coder-3 starts on
+  harness's, not the Architect's, so a plan that names coder-2 starts on
   that rung immediately (`candidatesFor` slices from the role's own rung) and spends
   the fallback on work the first coder could have done — the operator pays for it. The
   brief's `build:` rule now says so in those words, and `validatePlan` reports any
-  task written for coder-2 or coder-3 as a problem with the reason attached. Shift
-  Test 4 was the evidence: the Architect spread six build tasks across all three
+  task written for coder-2 as a problem with the reason attached. Shift
+  Test 4 was the evidence: the Architect spread six build tasks across the
   coders while coder-1 was idle, and the cheap model was never tried.
 - **Single mode refuses.** Tool rulesets cannot hide an MCP tool, so the promise
   is kept in the runner: a delegation request in a Single session is refused out
@@ -634,8 +634,7 @@ Non-obvious, all verified on 2.0.30:
 
 ## The pipeline: ideas, design, a build, and an adversary
 
-The seven cards are `architect, inventor, coder-1, designer, coder-2, qc,
-coder-3`. `auditor` and `critic` are retired: the Architect verifies its own
+The six cards are `architect, inventor, coder-1, designer, coder-2, qc`. `auditor` and `critic` are retired: the Architect verifies its own
 delegations against the disk, so a second confirmation was redundant. The
 adversary slot is **QC** (quality control) — the role that judges the build the
 way an ordinary person meets it. A config written before a rename is migrated once
@@ -1146,7 +1145,7 @@ and lists it in Settings → Skills; the role picker shows such a name as *"not
 installed on this machine — the reference is kept, but nothing loads"*, so
 unticking it is deliberate rather than a silent loss. Verified live: a role set to
 `nope-skill` produced the toast, named the role, and Settings read
-`not installed: nope-skill (coder-3)`.
+`not installed: nope-skill (coder-2)`.
 
 **Eyes are a skill, not a tool, and it ships with Synapse.** `visual-review`
 (`skills\visual-review`, `bin\shot.mjs`) renders a file or URL with the machine's
@@ -1313,18 +1312,20 @@ one.
 
 Multi is untouched: the same brief it always had.
 
-## The tool census double-counts after a restart
+## The tool census, and the restart it used to double-count
 
 `recordMessages` is called with the **whole transcript** on every turn and
-de-duplicates with an in-memory `seen` set of tool-part ids — which is not
-persisted, while the aggregates are. So the first turn in a session that predates
-a restart re-adds that session's entire tool history. Reproduced: 2 calls →
-restart → re-scan the same transcript → 4.
+de-duplicates with a set of tool-part ids. Those ids ride along with the totals now
+(`seen` in `data/tool-stats.json`, capped at 4000), so the first turn after a restart
+resumes from where the previous process stopped instead of re-adding a session's
+entire tool history — the old failure was an in-memory set with totals on disk:
+2 calls → restart → re-scan the same transcript → 4.
 
-A naive test **looks clean**, because `flush()` is debounced by 2s: call `flush()`
-before "restarting", or the first run never reaches disk. The fix is small
-(persist the ids, or a per-session high-water mark); do it before trusting the
-census for anything.
+Two things remain true. A census written **before** ids were kept cannot be
+repaired, so it says so once and is wrong for one more scan. And a test looks clean
+unless it calls `flush()`: the write is debounced by 2s. `tests/toolstats.test.mjs`
+pins the restart, the warning and the clearing (a `clear()` that kept its ids would
+make the next scan silently count nothing).
 
 ## There is no session naming any more (27 Oct)
 

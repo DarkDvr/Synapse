@@ -230,11 +230,10 @@ src/
   engines/opencode.js the OpenCode adapter
 web/
   index.html          the shell
-  app.js              boot, the event stream and the wiring (ES module; the rest is
-                      modules beside it)
+  app.js              boot, the event stream and the wiring (modules beside it)
   md.js               the markdown renderer (escape-first, fenced code, GFM tables)
   rate.js             tokens per second, measured from the stream
-  synapse.css         theme + shell; vendor/summit.css is the locked baseline
+  synapse.css         theme + shell; panel.css the main-panel grid
   vendor/             fonts (offline) and the baseline stylesheet
   favicon.ico         the same, packed as a multi-size icon
 skills/               shipped WITH Synapse, always on the engine's skill path
@@ -252,7 +251,8 @@ docs/notes/           the detail behind this file; the index is in "Where the re
 
 **`web/vendor/summit.css` is a locked baseline.** The only edit ever made to it
 is line 1: the Google Fonts `@import` was replaced with a comment, because
-fonts must be local. Do not restyle it — put changes in `synapse.css`.
+fonts must be local. Do not restyle it — put changes in `synapse.css` (theme and
+components) or `panel.css` (the main panel's grid).
 
 ---
 

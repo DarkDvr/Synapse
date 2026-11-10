@@ -842,7 +842,7 @@ clear it: a test is not work.
   for part of the cards' row.
   **Beside the cards the plan is as tall as they are.** `contain: size` keeps the
   row sized by the cards, and `max-height: none` (in that band only) lets the plan
-  stretch to it — the panel's bottom edge is the Coder 3 row's bottom edge. The
+  stretch to it — the panel's bottom edge is the last worker row's bottom edge. The
   420 cap belongs to the row of three under the chat, where every panel is the
   same fixed height. A 420 cap beside the cards left the plan 35px short of the
   cards and the operator spotted it immediately.
@@ -2160,10 +2160,10 @@ is a hundred small judgements the renderer can round differently.
   one line and ellipsize, so a `13px` row cannot clip them, where a `min-height` is a
   guess about the type's leading.
 
-**Migration, not deletion.** Removing Coder 3 meant the cards, both configs, the
-ladder defaults, `ROLES`, the chat's role labels and three brief sentences that
-called the coders three — plus a filter in `normalize()` so a saved config that still
-names it cannot delegate to a role with no card.
+**Migration, not deletion.** Removing a role means the cards, both configs, the
+ladder defaults, `ROLES`, the chat's role labels and the brief sentences that
+named it — plus a filter in `normalize()` so a saved config that still names it
+cannot delegate to a role with no card.
 
 
 ## The post opens on the first token, and the bar shows the work (10 Nov)
@@ -2365,3 +2365,101 @@ sentence, one place, and the place is where the operator was when they typed it.
 The line's text is built by `steerLine()` in `traces.js`, shared by the page and the
 runner, because two builders are how a "sent" line and a "delivered" line end up half a
 character apart and read as duplicates.
+
+---
+
+## The layout as built (10 Nov, evening) — measured on the running build
+
+The sections above are a record, and a record accumulates claims that later work
+replaced. This section is what the page actually is now. Every number here was read
+off the running app at 1600×900 and 1360×900 on 10 Nov, with one project open, and
+checked against the stylesheet that owns it.
+
+**Which file owns what.** `web/synapse.css` is the theme and the shell, the chat's
+internals and every component. **`web/panel.css` is the main panel** — the whole
+two-column stage, added with the 9 Nov rebuild; nothing in it measures anything. The
+earlier sections of this file describe the layout as "cards above the chat", which is
+what `panel.css` replaced.
+
+**The shape.** The stage is the same grid in both modes: two columns, two rows.
+
+| | Single | Multi |
+|---|---|---|
+| columns | `minmax(0,1fr) 0` | `minmax(0,1fr) 360px` |
+| the Architect | one bar across the top, ~38 tall | the top of the rail |
+| the workers | hidden | stacked under the Architect, one column, in a 22px gutter |
+| the plan | hidden | the rail's second row, under the cards |
+| the chat | everything under the bar | column 1, both rows |
+
+Measured in Multi at 1600×900: stage 1296 wide (x 280→1576); columns **912 + 360**
+with a **24px** gap; the card stack **414** tall; the plan **360×440** at y 448; the
+chat **910** wide with an **815**-tall transcript; `--chat-fs` **13px**. Single keeps
+the same grid and simply closes the rail — the switch animates one property,
+`grid-template-columns`, **240ms**.
+
+**Six cards, not seven.** The Architect plus five workers — Inventor, Designer, QC,
+Coder 1, Coder 2 — and the order is fixed. In Multi a card is two fixed rows, `22px`
+and `13px`, with `7px 12px 6px` padding, so a card does not grow or shrink as runs
+come and go (an empty readout is zero high). The connector the old layout drew between
+cards is a **solid 1px `#4a505a` hairline**, one line down the gutter and one into each
+card, drawn by `drawActivePath()` in `live-runs.js` from the real card boxes. There are
+no beads at rest: two dash attempts failed because the layer does not start on a whole
+pixel. **A live run** replaces that L with the same path in yellow plus travelling
+beads — the count from the path's length, `DUR = len / 90` with a 2.2s floor, twice the
+old speed (9 Nov), and no arrowhead, because the beads already say which way the work
+flows.
+
+**Nothing is fitted any more.** `fitChatHeight`, `setChatHeight`, `watchChatGeometry`
+and the measured dock height are deleted (`web/chat-geometry.js` keeps only the slack
+helpers). The dock is a grid cell with a definite box and simply fills it; there is no
+`70vh`/`720px` ceiling and no height transition. That is why the bottom edge is stable
+for free, and why the earlier sections about a cap, a `max-height` transition and a
+per-frame watcher describe a page that no longer exists.
+
+**The question panel is a post, not an overlay.** `#askHost` is created in the dock,
+and `mountAskPost()` moves that same node to the end of the transcript after every
+render. It is in plain flow: no `max-height`, nothing scrolls inside it, and if it is
+taller than the chat the transcript scrolls as it does for a long message. Its head is
+**flush** (`padding-right: 0`) — the 104px reserve for the jump buttons is long gone.
+Type: question **15px** bold, title **12.5px**, option label **12.5px**, description
+**10.5px** muted, Recommended chip **9px**.
+
+**Settings has eleven tabs**: General, Server, Engine, Providers, Workers, Tools,
+Automation, Prohibited, Logging, Check for Updates, About. There is no "Runtime" tab —
+it is **Engine** — and Updates/About are those last two, not extra screens.
+
+**Composer placeholders**: `Message` in Single, `Message the Architect…` in Multi,
+`Answer the question to continue` while a form waits, `Resolve the permission to
+continue` while a card waits.
+
+**The cog has four switches**: Keep Building, Auto-Permissions, Auto-Answer,
+Auto-Shutdown. "Keep running" and "Full auto" are the names before the 3 Nov split.
+
+**The audit, on this build**: zero layout findings at both widths (`shot.mjs --audit`
+checks controls-in-a-row, label centring, baselines and column starts). What it still
+reports is its known noise: `code`/`em` inline boxes pair up as "baselines" 18–20px
+apart, and the same three rail controls are under 44px — the `⋯` at 18×18 (faded 0.6),
+the add button at 28×16, and the project row at 175×34. Contrast flags the faded `⋯`
+at 2.62:1, a message time at 3.37:1 and the faded `Reuse` at 2.48:1; all three are
+deliberate secondary text, not a mistake to "fix".
+
+**The contradictions above, settled.** Where two sections disagree, this is the answer
+now, and the older sentence is history:
+
+| the file says both | what is true now |
+|---|---|
+| the ask panel has no inner scroll (34–41) **vs** its fields scroll inside it (104, 804) | no inner scroll; it posts whole |
+| the panel is an overlay at `-3px`/`-2px` (162–175) **vs** the last post in the transcript (1863–1868 of `synapse.css`) | a post in flow |
+| the panel's head reserves 104px (54–56) **vs** it is flush (2021–2025) | flush |
+| a `min(70vh,720px)` chat ceiling (558–562) **vs** there is no ceiling (785–789) | no ceiling; the dock fills its cell |
+| description 10.5px (50) **vs** 11px (178–180) | 10.5px |
+| eight/nine Settings tabs (1353, 1371) | eleven, and Engine is not "Runtime" |
+| the dock transitions `max-height` 260ms (790–791) | the stage transitions `grid-template-columns` 240ms |
+| the cog says "Keep running"/"Full auto" (1223–1232) | four switches, named above |
+| the disabled composer says "Answer the question above" (137) | "Answer the question to continue" |
+
+Two of these are worth more than the table: **the ask panel's move from overlay to
+post** (an overlay covered the very answer the operator needed in order to answer) and
+**the deletion of the fitting machinery** (a measured height only ever approximated a
+box the grid can make definite). Everything else is a number that moved.
+
