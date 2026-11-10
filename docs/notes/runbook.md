@@ -368,3 +368,42 @@ down (that is the drive's own idle timer), and it does not stop the operator pre
 Sleep. Settings owns both halves; the cog in the chat toggles only the master
 (`automation.keepAwake`), because the PC is one PC and the four switches beside it
 are per project.
+
+## The debris rules (10 Nov)
+
+The operator's decision: this is automatic. A cleanup task at the end of a plan spends a
+worker run on files the harness can name by rule, and the model that made the mess is the
+one deciding what the mess is.
+
+**A finished task's scratch goes.** `<project>-<hash>\<task>` under
+`F:\dev\Synapse.Projects\_scratch` is where the work was built; nobody reopens it. One
+task folder measured 1.3 GB. A task that **failed or was stopped** keeps its folder: the
+wreckage is evidence. (`src/cleanup.js`, `removeTaskScratch`.)
+
+**Anything in the scratch root that no live project claims is deleted — now.** Not after
+a week: the folder is Synapse's own, so a folder in it that is not a project's is debris.
+What was there on the day: 494 MB a worker wrote at the root, 258 MB of dotnet temp,
+240 MB of an editor download, 29 MB under a name with no hash. Two exceptions, both
+named rather than guessed: `opencode` (the engine's temp root, in use while the engine
+runs) and anything written in the last ten minutes (a render or a download may be inside
+it). It runs at boot and every half hour, because this app stays up for days.
+(`src/housekeeping.js`, `sweepUnclaimedScratch`.)
+
+**Deleting a project deletes its scratch**, already: `api.deleteProject` removes
+`scratchDir(dir)` after the folder goes to the Recycle Bin.
+
+**A stray file in the project root is moved, never deleted.** Only names the harness can
+prove are debris: its own files at the wrong level (`plan.json`, `features.json`,
+`project.md`, `runs.jsonl`), a log, or a proof file. They go to
+`.synapse\reports\<date>\`, one line in the log, and a second one of the same name gets
+`-2` rather than overwriting a proof. The project root is where a real deliverable lives,
+and a rule that guesses would move one. (`src/cleanup.js`, `tidyProjectRoot`, called at
+the end of every run.)
+
+**The brief sends evidence to `.synapse/reports/`**, so most of that move is empty by
+construction: a worker that writes there keeps its own place.
+
+**The .NET toolchain keeps its temp inside `data\toolchain\dotnet`** (`DOTNET_CLI_HOME`,
+plus `NUGET_PACKAGES` pointed at `vendor\nuget-packages` when it exists). Unset, a
+worker's `dotnet build` wrote a 258 MB `.net` tree wherever HOME pointed. The operator
+expects more .NET projects, so this is the normal case rather than an edge one.

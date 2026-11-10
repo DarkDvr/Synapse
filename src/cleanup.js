@@ -20,6 +20,7 @@ import { execFile } from 'node:child_process';
 import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
+import { scratchDir } from './paths.js';
 
 /** Never, whatever the evidence says. */
 const DENY = /@opencodedesktop|ai\.opencode\.desktop/i;
@@ -332,4 +333,110 @@ export function sweepScratch(dir, { log = null, named = [], dryRun = false } = {
   }
   if (stopped.length) log?.info?.(`cleanup: stopped orphaned helper(s) ${stopped.join(', ')}`);
   return { found: orphans.length, stopped };
+}
+
+// ── debris on disk ─────────────────────────────────────────────────────────
+//
+// Two things pile up beside the work, and both are the harness's to clear because it
+// named them:
+//
+//   * a task's scratch (`<project>-<hash>\<task>`) — where the work was built, which
+//     nobody reopens once that task is done;
+//   * a file in the project's *root* that is not the project's — a proof file, a log,
+//     or a harness file written to the wrong path.
+//
+// The operator's rule (10 Nov): this is automatic, never a plan task. A worker run to
+// move files the harness can name by rule spends a turn and tokens on it, and the
+// model that made the mess is the one deciding what the mess is.
+//
+// Nothing here deletes project work. A task's scratch goes only when the task finished
+// cleanly (a failed or stopped one keeps its wreckage), a root file is *moved*, and
+// both are logged with the paths they touched.
+
+/** A task's scratch folder for one project — never a path built from a model's text. */
+export function taskScratchDir(projectDir, taskId, { root = null } = {}) {
+  const id = String(taskId || '').trim();
+  if (!id || /[\\/]/.test(id) || id === '.' || id === '..') return null;
+  const project = root ? scratchDir(projectDir, root) : scratchDir(projectDir);
+  const target = path.join(project, id);
+  // The id is a name from a plan, so the join is checked rather than trusted.
+  return path.resolve(target).startsWith(path.resolve(project) + path.sep) ? target : null;
+}
+
+/** Remove one finished task's scratch. Returns the path removed, or null. */
+export function removeTaskScratch(projectDir, taskId, { log = null, dryRun = false, root = null } = {}) {
+  const target = taskScratchDir(projectDir, taskId, { root });
+  if (!target || !fs.existsSync(target)) return null;
+  if (dryRun) return target;
+  try {
+    fs.rmSync(target, { recursive: true, force: true });
+    log?.info?.(`cleanup: removed ${path.basename(projectDir)} scratch for ${taskId}`);
+    return target;
+  } catch (err) {
+    log?.warn?.(`cleanup: could not remove the scratch for ${taskId}: ${err.message}`);
+    return null;
+  }
+}
+
+/**
+ * Files a worker left in the project's root that are not the project's.
+ *
+ * Only names the harness can prove are debris: its own files at the wrong level
+ * (`plan.json`, `features.json`, `project.md`, `runs.jsonl` belong in `.synapse`), a
+ * report or a log (`*.log`, `*-proof.txt`, `*_proof.txt`, `proof.txt`), and nothing
+ * else. They are **moved** to `.synapse/reports/<date>/`, never deleted — a proof file
+ * is evidence until the operator says otherwise — and every move is logged.
+ *
+ * Deliberately narrow: the project root is where a real deliverable lives
+ * (`index.html`, a `.csproj`, a README), and a rule that guesses would move one.
+ */
+const STRAY_ROOT = [
+  /^(?:plan\.json|features\.json|project\.md|runs\.jsonl|requirement\.md|decisions\.md)$/i,
+  /\.log$/i,
+  /(?:^|[-_.])proof(?:[-_.]|$)/i,
+];
+
+export function tidyProjectRoot(dir, { log = null, dryRun = false, at = Date.now() } = {}) {
+  const moved = [];
+  let entries = [];
+  try {
+    entries = fs.readdirSync(dir, { withFileTypes: true });
+  } catch {
+    // A project folder that cannot be listed has no root to tidy — the run is over
+    // either way, and this must never be the thing that fails it.
+    return moved;
+  }
+  const day = new Date(at).toISOString().slice(0, 10);
+  const into = path.join(dir, '.synapse', 'reports', day);
+  for (const entry of entries) {
+    if (!entry.isFile()) continue;
+    if (!STRAY_ROOT.some((re) => re.test(entry.name))) continue;
+    const from = path.join(dir, entry.name);
+    const to = path.join(into, entry.name);
+    if (dryRun) {
+      moved.push({ from, to, dryRun: true });
+      continue;
+    }
+    try {
+      fs.mkdirSync(into, { recursive: true });
+      let target = to;
+      let n = 2;
+      // A second run of the same task must not overwrite the first one's proof.
+      while (fs.existsSync(target)) {
+        const ext = path.extname(entry.name);
+        target = path.join(into, `${path.basename(entry.name, ext)}-${n++}${ext}`);
+      }
+      fs.renameSync(from, target);
+      moved.push({ from, to: target });
+    } catch (err) {
+      log?.warn?.(`cleanup: could not move ${entry.name} out of the project root: ${err.message}`);
+    }
+  }
+  if (moved.length && !dryRun) {
+    log?.info?.(
+      `cleanup: moved ${moved.length} file(s) out of ${path.basename(dir)} into ${path.relative(dir, into).replace(/\\/g, '/')}: ` +
+        moved.map((m) => path.basename(m.from)).join(', '),
+    );
+  }
+  return moved;
 }

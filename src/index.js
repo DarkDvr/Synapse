@@ -937,6 +937,26 @@ async function main() {
     }
   }, 2000).unref?.();
 
+  // And the scratch root again, every half hour. The operator's rule is that anything
+  // in it no project claims goes *now*, not after a week — a task's build debris, a
+  // worker's proof folder at the root, a dotnet temp tree. It cannot run at boot only:
+  // this app stays up for days. The sweep reads a directory and stats it; the folders a
+  // live project owns are never touched, so a running task's scratch is safe.
+  const scratchWatch = setInterval(() => {
+    try {
+      const keepScratch = projects
+        .list()
+        .map((p) => path.basename(scratchDir(p.directory)));
+      const r = housekeeping.sweepUnclaimedScratch({ keep: keepScratch });
+      if (r.removed) {
+        app.info(`housekeeping: ${r.removed} folder(s) no project claims, ${Math.round(r.bytes / (1024 * 1024))} MB`);
+      }
+    } catch (err) {
+      app.warn(`scratch sweep failed: ${err.message}`);
+    }
+  }, 30 * 60 * 1000);
+  scratchWatch.unref?.();
+
   if (currentConfig.server.openBrowser && process.env.SYNAPSE_SUPERVISED !== '1') openBrowser(url);
 }
 

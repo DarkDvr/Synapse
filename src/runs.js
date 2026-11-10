@@ -54,7 +54,7 @@ import { AUTOMATION_DEFAULTS, readAutomation } from './automation.js';
 import { keepBuildingDelayMs } from './auto-answer.js';
 import { wroteIt } from './synapse-writes.js';
 import { orderPlan, taskReady } from '../web/plan-order.js';
-import { sweepProject, sweepScratch } from './cleanup.js';
+import { sweepProject, sweepScratch, removeTaskScratch, tidyProjectRoot } from './cleanup.js';
 import { classifyFailure, recordProviderError, pruneProviderLog } from './provider-errors.js';
 import { providerType } from './providers.js';
 import { knownWindow, declaredWindow, refreshWindow, resolveWindow, splitRef } from './windows.js';
@@ -2324,6 +2324,17 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
         note: `${request.task} (${role})`,
       });
     }
+
+    // The debris of the run, cleared while the run is still a run.
+    //
+    // A finished task's scratch is where it built everything, and nobody reopens it —
+    // it was 1.3 GB for one task folder on 10 Nov. A failed or stopped task keeps its
+    // folder, because the wreckage is evidence. And a proof file, a log or a harness
+    // file written to the project's *root* is moved into `.synapse/reports/<date>/`,
+    // never deleted: the operator's words were "automated", and a report is evidence
+    // until they say otherwise.
+    if (outcome === 'completed' && !stopReason) removeTaskScratch(dir, task.id, { log });
+    tidyProjectRoot(dir, { log });
 
     // A stop puts the task back in todo: nothing is running, and a task left
     // `doing` reports "1 running" on the plan for the rest of the day.

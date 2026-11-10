@@ -1007,6 +1007,19 @@ export function briefSession({ dir, role = 'architect', auto = false, single = f
         `and the picture full size when the operator hovers it. Never paste image data into a message.`,
     );
   }
+  // Where evidence lives while a worker works. Said to every role, because every role
+  // writes a proof or a log at some point, and the ones written at the project root
+  // were the debris the operator kept finding: a 47 KB log named plan.json, a
+  // `-proof.txt` beside the product. The harness moves those into `.synapse/reports/`
+  // at the end of a run; a worker that writes them there in the first place needs no
+  // moving, and the operator has one folder to look in (10 Nov).
+  if (!isArchitect) {
+    lines.push(
+      `Write your proof, logs and notes into .synapse/reports/ — that is where evidence belongs, and where ` +
+        `the operator looks for it. Anything of that shape left at the project root is moved there when your ` +
+        `run ends, so put it there yourself and it keeps its place.`,
+    );
+  }
 
   // Single mode is not this harness at all: it is a chat that can use tools. No
   // roles, no work list, no delegation - the operator answers everything in one

@@ -399,6 +399,13 @@ export class OpenCodeEngine extends Engine {
     // not touched.
     const nodeDir = path.join(ROOT, 'bin', 'node');
     const nodeThere = fs.existsSync(path.join(nodeDir, process.platform === 'win32' ? 'node.exe' : 'node'));
+    // Where the .NET toolchain keeps its own debris: the first-run sentinel, the
+    // CLI's home, its temp. Left unset, a `dotnet build` a worker runs writes them
+    // wherever HOME pointed — on 10 Nov that was 258 MB of `.net` sitting in the
+    // scratch root, which then looked like debris nobody owned. Inside `data\` it is
+    // ours, it is one folder, and it is never mistaken for a project's. The operator
+    // expects more .NET projects, so this is the normal case, not an edge one.
+    const dotnetHome = path.join(ROOT, 'data', 'toolchain', 'dotnet');
     const env = {
       ...process.env,
       OPENCODE_SERVER_PASSWORD: this.password,
@@ -408,6 +415,10 @@ export class OpenCodeEngine extends Engine {
       TMPDIR: home.tmp,
       ...(nodeThere ? { PATH: `${nodeDir}${path.delimiter}${process.env.PATH || ''}` } : {}),
       ...(fs.existsSync(nugetCache) ? { NUGET_PACKAGES: nugetCache } : {}),
+      DOTNET_CLI_HOME: dotnetHome,
+      DOTNET_NOLOGO: '1',
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1',
+      DOTNET_SKIP_FIRST_TIME_EXPERIENCE: '1',
     };
 
     this.log.info(`engine binary: ${binary}`);

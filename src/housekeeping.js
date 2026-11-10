@@ -228,6 +228,55 @@ export function createHousekeeping({ root = ROOT, scratchRoot = SCRATCH_ROOT, lo
     return report;
   }
 
+  /**
+   * Everything in the scratch root that no live project claims, gone now.
+   *
+   * The operator's rule (10 Nov): the scratch root is Synapse's own folder, so a
+   * folder in it that does not belong to a project is debris — not after a week, now.
+   * What it found on the day: 494 MB a worker wrote at the root, 258 MB of dotnet
+   * temp, a 240 MB editor download, 29 MB under a name with no hash, and a task folder
+   * of 1.3 GB that belonged to nobody. `keep` is the live projects' folder names; the
+   * engine's own temp (`opencode`) and a render being written this minute are the only
+   * two exceptions, and both are named rather than guessed.
+   */
+  function sweepUnclaimedScratch({ keep = [], graceMs = 10 * 60 * 1000 } = {}) {
+    const report = { removed: 0, bytes: 0, skipped: null, names: [] };
+    if (!scratchRoot || !fs.existsSync(scratchRoot)) return { ...report, skipped: 'no scratch root' };
+    const keepSet = new Set((keep || []).map((n) => String(n || '').toLowerCase()));
+    const cutoff = now() - Math.max(0, Number(graceMs) || 0);
+    let entries = [];
+    try {
+      entries = fs.readdirSync(scratchRoot, { withFileTypes: true });
+    } catch {
+      // Reported, not swallowed: a scratch root that cannot be read is a fact about
+      // the machine, and the sweep saying why is how it stops looking like nothing to do.
+      return { ...report, skipped: 'the scratch root cannot be read' };
+    }
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      const name = String(entry.name || '');
+      if (keepSet.has(name.toLowerCase())) continue;
+      // The engine's temp root: ours, but in use while the engine runs.
+      if (/^opencode$/i.test(name)) continue;
+      const target = path.join(scratchRoot, name);
+      let at = 0;
+      try {
+        at = fs.statSync(target).mtimeMs;
+      } catch {
+        // Gone between the listing and the stat: on a machine that is using this
+        // folder, that is the sweep already having won, not an error.
+        continue;
+      }
+      // Written in the last few minutes: a render or a download may be inside it. This
+      // is not a grace period for debris, it is the only way to avoid pulling a folder
+      // out from under a process that is still writing.
+      if (at > cutoff) continue;
+      report.names.push(name);
+      drop(target, report);
+    }
+    return report;
+  }
+
   /** Everything, in the order that keeps the record of an update. */
   function run({ update = true, releases = true, scratch = true, keepScratch = [] } = {}) {
     const result = { removed: 0, bytes: 0, update: null, releases: null, scratch: null };
@@ -270,11 +319,21 @@ export function createHousekeeping({ root = ROOT, scratchRoot = SCRATCH_ROOT, lo
             `projects that no longer exist, ${mb(orphans.bytes)}`,
         );
       }
+      const unclaimed = sweepUnclaimedScratch({ keep: keepScratch });
+      result.scratchUnclaimed = unclaimed;
+      result.removed += unclaimed.removed;
+      result.bytes += unclaimed.bytes;
+      if (unclaimed.removed) {
+        say(
+          `housekeeping: ${dryRun ? 'would remove' : 'removed'} ${unclaimed.removed} folder(s) in the scratch root ` +
+            `that no project claims, ${mb(unclaimed.bytes)}`,
+        );
+      }
     }
     return result;
   }
 
-  return { run, sweepUpdate, pruneReleases, sweepScratchProfiles, sweepOrphanScratch };
+  return { run, sweepUpdate, pruneReleases, sweepScratchProfiles, sweepOrphanScratch, sweepUnclaimedScratch };
 }
 
 const mb = (bytes) => `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
