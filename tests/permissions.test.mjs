@@ -693,3 +693,33 @@ test('a sweep, a family, or an id it found: refused', () => {
   // A pipeline that only reads is untouched by any of this.
   assert.equal(shell('npm run build 2>&1 | Select-Object -Last 5').effect, 'allow');
 });
+
+// ── the shapes a hostile command uses ───────────────────────────
+// Each of these was found by the strength tests (docs/strength-tests.md) trying to get a
+// kill past the rule, and each is refused now.
+test('a kill reached by another route is still a kill', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'synapse-kill-'));
+  fs.writeFileSync(path.join(dir, 'sweep.ps1'), 'Get-Process python | ForEach-Object { Stop-Process -Id $_.Id -Force }');
+  fs.writeFileSync(path.join(dir, 'safe.ps1'), 'Stop-Process -Name SysMonitor -Force');
+  const from = (command) => call('shell', command, { cwd: dir, projectRoot: dir });
+  const refused = [
+    '(Get-Process python).Kill()',
+    'Get-CimInstance Win32_Process -Filter "name=\'python.exe\'" | Invoke-CimMethod -MethodName Terminate',
+    'wmic process where "name=\'python.exe\'" call terminate',
+    'taskkill /F /FI "IMAGENAME eq python.exe"',
+    'Stop-Process -Name p?thon -Force',
+    'powershell -Command "Get-Process python | Stop-Process"',
+    'cmd /c "taskkill /IM python.exe /F"',
+    '.\\sweep.ps1',
+  ];
+  for (const command of refused) {
+    const decision = from(command);
+    assert.equal(decision.effect, 'deny', `${command} was ${decision.effect}: ${decision.reason}`);
+    assert.equal(decision.scope, 'processes', `${command} was denied for the wrong reason`);
+  }
+  // And the two forms that must keep working: a specific id, and a project's own app —
+  // including one stopped from inside a script.
+  assert.equal(from('taskkill /PID 1234 /T /F').effect, 'allow', 'a by-id taskkill asks for a zone');
+  assert.equal(from('.\\safe.ps1').effect, 'allow', 'a script that stops the project app was refused');
+  fs.rmSync(dir, { recursive: true, force: true });
+});

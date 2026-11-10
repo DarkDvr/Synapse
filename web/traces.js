@@ -105,13 +105,16 @@ export function renderTrace(t) {
       // and its message is the one place the operator cannot see.
       const files = Array.isArray(n?.files) ? n.files : [];
       const chips = files.map((f) => fileChip(f, { src: f.path })).join('');
+      // The cap belongs at render as well as at insertion: a note from a replay or a
+      // hand-edited trace must not become a wall either (10 Nov, strength tests).
+      const said = steerLine(text);
       // `pending` is the operator's own line, painted the moment they pressed Steer,
       // before the server has confirmed the worker took it (10 Nov). It keeps the
       // place they sent it from, and the state stops being pending when the run
       // reports it, or the line comes off if it failed.
       const state = n.pending ? ' is-pending' : '';
       const tip = n.pending ? 'Sent — the worker reads it at its next step.' : '';
-      return `<div class="trace-line is-steer${state}"${tip ? ` title="${esc(tip)}"` : ''}><span class="msg-steer">STEER:</span><span class="trace-steer-text">${esc(text)}</span>${chips}</div>`;
+      return `<div class="trace-line is-steer${state}"${tip ? ` title="${esc(tip)}"` : ''}><span class="msg-steer">STEER:</span><span class="trace-steer-text">${esc(said)}</span>${chips}</div>`;
     }
     if (n?.prose) {
       // The worker's own words, drawn exactly like an Architect answer: same

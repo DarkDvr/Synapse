@@ -288,8 +288,12 @@ export function analyzeCommand(command, cwd, { home = os.homedir() } = {}) {
         continue;
       }
       // A cmd-style switch (/c, -k) is a letter after a slash, not a path: it
-      // resolved to F:/c and made cmd /c dir look like an outside write.
+      // resolved to F:/c and made cmd /c dir look like an outside write. The same is
+      // true of a Windows tool's own multi-letter switch: `taskkill /PID 1234` was
+      // resolved to F:/PID and asked for a zone, which a by-id stop must not do
+      // (10 Nov, found by the strength tests).
       if (/^[-/][A-Za-z]$/.test(word)) continue;
+      if (/^\/[A-Za-z]{2,}$/.test(word) && SLASH_SWITCH_TOOLS.has(head)) continue;
       const candidate = word.includes('=') ? word.slice(word.indexOf('=') + 1) : word;
       if (!looksLikePath(candidate)) continue;
       const target = resolvePath(candidate, dir, { home });
@@ -513,6 +517,36 @@ function scriptTakesScreen(segments, ctx) {
 }
 
 /**
+ * The same rule, one level down: a script the command runs.
+ *
+ * A worker that knows the shell is judged will put the sweep in a file — `.\sweep.ps1`
+ * names nothing in the command itself. The screen rule already reads scripts for exactly
+ * that reason, so the text is read once, bounded, and scanned with the same shapes: a
+ * project's own app by name stays allowed; a family or a sweep does not (10 Nov, found
+ * by the strength tests).
+ */
+function scriptStopsProcesses(segments, ctx) {
+  for (const part of segments) {
+    for (const raw of scriptsRun(part)) {
+      const target = resolvePath(raw, part.dir || ctx.cwd, { home: ctx.home });
+      if (!target || target.unknown || !target.path) continue;
+      const zone = zoneOf(target.path, ctx);
+      if (zone !== 'project' && zone !== 'scratch') continue;
+      try {
+        const stat = fs.statSync(target.path);
+        if (!stat.isFile() || stat.size > SCRIPT_MAX_BYTES) continue;
+        const verdict = scanForStop(fs.readFileSync(target.path, 'utf8'));
+        if (verdict) return verdict;
+      } catch {
+        // A script that is not there cannot be inspected; running it will fail.
+        continue;
+      }
+    }
+  }
+  return null;
+}
+
+/**
  * Does this statement run a program the project built?
  *
  * A GUI program takes the screen from the inside, where no command text can be
@@ -598,39 +632,91 @@ const FAMILY_TEXT =
   'program written in it - one of them may be a service this run depends on. Stop the one process you ' +
   'started, by its id: Stop-Process -Id <pid>.';
 
-function stopsOtherProcesses(segments = []) {
+/** Anything in a command that can end a process, including the forms with no verb. */
+const STOP_ANYWHERE =
+  /\b(stop-process|taskkill|pkill|killall|kill|kill\.exe)\b|\.kill\s*\(|invoke-cimmethod[^;|]*\bterminate\b|wmic[^;|]*\bcall\s+terminate\b|call\s+terminate\b/i;
+
+/** Something that lists processes or ports, so a stop next to it is a sweep. */
+const LIST_ANYWHERE = /\b(get-process|tasklist|get-nettcpconnection|netstat|wmic|pgrep|ps)\b/i;
+
+/** A nested shell's payload: `powershell -Command "…"`, `cmd /c "…"`, `bash -c '…'`. */
+function nestedPayloads(text) {
+  const out = [];
+  const re = /(?:powershell|pwsh|cmd|bash|sh)(?:\.exe)?\s+(?:-command|-c|\/c|\/k)\s+(["'])([\s\S]+?)\1/gi;
+  for (const match of String(text || '').matchAll(re)) out.push(match[2]);
+  return out;
+}
+
+/** The verdict for one piece of command text, or null when it stops nothing it should not. */
+function scanForStop(text) {
+  const t = String(text || '').toLowerCase();
+  if (!STOP_ANYWHERE.test(t)) return null;
+  // A family, by name or by filter: `-Name python`, `/IM python.exe`, `/FI "IMAGENAME eq …"`.
+  const named =
+    /(?:-name|--name|\/im)\s+["']?([\w.*?[\]]+)/i.exec(t) ||
+    /\/fi\s+"?imagename\s+eq\s+["']?([\w.*?[\]]+)/i.exec(t);
+  if (named) {
+    const name = named[1].replace(/\.exe$/i, '').replace(/["']/g, '');
+    if (/[*?[\]]/.test(name) || INTERPRETERS.has(name)) return FAMILY_TEXT;
+  }
+  // These never answer to an id.
+  if (/\b(pkill|killall)\b/.test(t)) return FAMILY_TEXT;
+  if (/invoke-cimmethod[^;|]*\bterminate\b/.test(t)) return FAMILY_TEXT;
+  if (/wmic[^;|]*\bcall\s+terminate\b/.test(t)) return FAMILY_TEXT;
+  // An id it looked up is no safer than a name; an id it was given is fine.
+  if (/-id\s+(?:\(|\$)/.test(t)) return SWEEP_TEXT;
+  if (/\.kill\s*\(/.test(t) && !/-id\s+"?\d+/.test(t)) return SWEEP_TEXT;
+  // A stop with nothing to name after something listed processes. The statement walk
+  // applies this too, but a nested shell's payload is one quoted word and never reaches
+  // the walk: `powershell -Command "Get-Process python | Stop-Process"` slipped through
+  // until the strength tests found it (10 Nov).
+  if (LIST_ANYWHERE.test(t) && STOP_ANYWHERE.test(t)) {
+    if (/(?:-name|--name|\/im|\/fi)\b/.test(t)) return null;
+    if (/-id\s+"?\d+/i.test(t) || /\/pid\s+"?\d+/i.test(t)) return null;
+    return SWEEP_TEXT;
+  }
+  return null;
+}
+
+function stopsOtherProcesses(segments = [], command = '') {
   // A pipe is its own separator (segmentsOf splits on `;`, `&&`, newlines and `|`), so
-  // "list then stop" is two statements to this analyzer and has to be read across them:
-  // `Get-NetTCPConnection … | Stop-Process` used to slip through for exactly that reason.
+  // "list then stop" has to be read across the statements: `Get-NetTCPConnection … |
+  // Stop-Process` used to slip through for exactly that reason. The raw command is
+  // scanned as well, because a nested shell is one quoted word and hides its own text.
   const all = segments.map((part) => (part.words || []).map((word) => String(word)));
   const heads = all.map((words) => String(words[0] || '').toLowerCase().replace(/\.exe$/, ''));
-  const text = all.map((words) => words.join(' ')).join('\n').toLowerCase();
-  if (!/\b(stop-process|taskkill|pkill|killall|kill)\b/.test(text)) return null;
   const lists = heads.some((head) => LIST_VERBS.has(head));
-  for (const words of all) {
-    const at = words.findIndex((word) => /^(stop-process|taskkill|pkill|killall|kill)$/i.test(String(word).replace(/\.exe$/i, '')));
-    if (at < 0) continue;
-    const verb = String(words[at]).toLowerCase().replace(/\.exe$/, '');
-    const rest = words.slice(at + 1).join(' ').toLowerCase();
-    // A family, by name: `-Name python`, `/IM python.exe`, a wildcard.
-    const named = /(?:-name|--name|\/im)\s+["']?([\w.*-]+)/i.exec(rest);
-    if (named) {
-      const name = named[1].replace(/\.exe$/i, '').toLowerCase();
-      if (name.includes('*') || INTERPRETERS.has(name)) return FAMILY_TEXT;
-      continue;
+  const texts = [...all.map((words) => words.join(' ')), String(command || '')].filter(Boolean);
+
+  for (const text of texts) {
+    const direct = scanForStop(text);
+    if (direct) return direct;
+    for (const payload of nestedPayloads(text)) {
+      const inner = scanForStop(payload);
+      if (inner) return inner;
     }
-    // pkill/killall always answer to a name and never to an id.
-    if (verb === 'pkill' || verb === 'killall') return FAMILY_TEXT;
-    // An id it was given is fine; an id it found is not.
-    if (/-id\s+"?\d+/i.test(rest) || /\/pid\s+"?\d+/i.test(rest)) continue;
-    if (/-id\s+(?:\(|\$)/i.test(rest)) return SWEEP_TEXT;
-    // A stop with nothing to name, after something listed processes: a sweep.
-    if (lists) return SWEEP_TEXT;
+  }
+
+  // A stop with nothing to name, after something in the same command listed processes.
+  if (lists) {
+    for (const words of all) {
+      const at = words.findIndex((word) =>
+        /^(stop-process|taskkill|kill)$/i.test(String(word).replace(/\.exe$/i, '')),
+      );
+      if (at < 0) continue;
+      const rest = words.slice(at + 1).join(' ').toLowerCase();
+      if (/(?:-name|--name|\/im|\/fi)\b/.test(rest)) continue;
+      if (/-id\s+"?\d+/i.test(rest) || /\/pid\s+"?\d+/i.test(rest)) continue;
+      return SWEEP_TEXT;
+    }
   }
   return null;
 }
 
 const LIST_VERBS = new Set(['get-process', 'ps', 'tasklist', 'get-nettcpconnection', 'netstat', 'wmic', 'pgrep']);
+
+/** Windows tools whose /Switch is a switch, never a path. */
+const SLASH_SWITCH_TOOLS = new Set(['taskkill', 'wmic', 'sc', 'net', 'reg', 'shutdown', 'robocopy', 'icacls', 'schtasks']);
 
 function decideShell(resources, ctx) {
   // A shell command may arrive as one string or as its lines, one resource per
@@ -726,7 +812,7 @@ function decideShell(resources, ctx) {
   // Processes, after PROHIBITED (which outranks everything) and before any allow: a
   // command that stops processes it did not start is refused, not questioned. See
   // stopsOtherProcesses above for the three shapes and the day that earned them.
-  const stopsOthers = stopsOtherProcesses(segments);
+  const stopsOthers = stopsOtherProcesses(segments, command) || scriptStopsProcesses(segments, ctx);
   if (stopsOthers) return deny(stopsOthers, true, 'processes');
 
   const harnessPaths = decisionPaths.filter((p) => zoneOf(p, ctx) === 'harness');

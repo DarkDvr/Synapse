@@ -976,6 +976,12 @@ export function briefSession({ dir, role = 'architect', auto = false, single = f
     const s = String(text || '').trim();
     return s.length > n ? `${s.slice(0, n).trimEnd()} […]` : s;
   };
+  // Text the project or the operator supplies, safe to drop into the brief. A line that
+  // starts with `#` is one of OUR section headings; from a project document it is a
+  // forged one, and the brief is layered now, so a forged section is a rule in the wrong
+  // place (10 Nov, found by the strength tests: the notes could add a second
+  // "## This round"). Escaped, not stripped: the reader still sees what was said.
+  const plain = (text) => String(text || '').replace(/^(\s*)#/gm, '$1\\#');
 
   lines.push(`Synapse project: ${path.basename(String(dir || '')) || 'unknown'}`);
 
@@ -1064,10 +1070,10 @@ export function briefSession({ dir, role = 'architect', auto = false, single = f
           `the operator asks here is the whole job.`,
       );
     }
-    if (instructions) lines.push(`The operator adds: ${instructions}`);
+    if (instructions) lines.push(`The operator adds: ${plain(instructions)}`);
     // The operator's own standing rules are about this project, not about the old
     // campaign: they apply to a one-off request too. The stored requests do not.
-    if (doc.notes) lines.push(`The operator's standing notes for this project:\n${capped(doc.notes, 800)}`);
+    if (doc.notes) lines.push(`The operator's standing notes for this project:\n${plain(capped(doc.notes, 800))}`);
     if (skills) lines.push(skills);
     // The same law as the harness brief carries, because Single can run commands too:
     // a chat that starts a server must stop that one, by its id.
@@ -1134,10 +1140,10 @@ export function briefSession({ dir, role = 'architect', auto = false, single = f
   // the model reads that file when it needs the detail.
   if (doc.current) {
     const origin = doc.exists ? ` (from ${DOC_RELATIVE}; the Log holds every request and answer)` : '';
-    lines.push(`Where this project stands${origin}:\n${capped(doc.current, 1800)}`);
+    lines.push(`Where this project stands${origin}:\n${plain(capped(doc.current, 1800))}`);
   }
-  if (doc.notes) lines.push(`The operator's standing notes for this project:\n${capped(doc.notes, 900)}`);
-  if (doc.handover) lines.push(`The handover from the last compact:\n${capped(doc.handover, 2000)}`);
+  if (doc.notes) lines.push(`The operator's standing notes for this project:\n${plain(capped(doc.notes, 900))}`);
+  if (doc.handover) lines.push(`The handover from the last compact:\n${plain(capped(doc.handover, 2000))}`);
   // A stopped run has no report, so a steer sent during it would otherwise be
   // invisible to the Architect. The result line kept it; the brief carries it
   // forward without waking anyone or explaining the stop.
@@ -1363,7 +1369,7 @@ export function briefSession({ dir, role = 'architect', auto = false, single = f
   // The operator's own words for this role. Anything typed here is what the
   // role is told on every turn, which is the cheapest way to correct a habit
   // without editing what the role is for.
-  if (instructions) lines.push(`The operator adds, for this role: ${instructions}`);
+  if (instructions) lines.push(`The operator adds, for this role: ${plain(instructions)}`);
   // Which skills this role may load. Synapse enforces the same list through the
   // session's permission ruleset; saying it here is what stops a model wasting a
   // turn on a refusal it could have seen coming.

@@ -21,7 +21,7 @@
 // No DOM, no state: both runtimes get the same answer, which is the point.
 
 /** The letters that make an id a child rather than a root. */
-const CHILD_SUFFIX = /^[a-z]+$/;
+const CHILD_SUFFIX = /^[a-z][a-z0-9]*$/;
 
 /**
  * Who owns this id, among `ids`?
