@@ -11,11 +11,15 @@ import { ROLES } from './plans.js';
  *  so the config can refuse an unknown name instead of silently playing nothing. */
 export const DONE_SOUNDS = ['off', 'chime', 'bell', 'wood', 'ripple'];
 
-/** The chat's text size, in pixels — the same bounds web/app.js shows in the form.
- *  Below the floor the prose stops being readable at 100%; above the ceiling a full
- *  answer no longer fits above the composer on a 900px-tall window. */
+/** The chat's text size, in pixels — the same bounds web/ui-prefs.js shows in the
+ *  form. Below the floor the prose stops being readable at 100%; above the ceiling a
+ *  full answer no longer fits above the composer on a 900px-tall window. The slider
+ *  and the Ctrl+wheel zoom move in whole points, and the ceiling went up by two on
+ *  10 Nov because the largest was not large enough for the operator's screen. */
 export const CHAT_TEXT_MIN = 10.5;
-export const CHAT_TEXT_MAX = 16.5;
+export const CHAT_TEXT_MAX = 18.5;
+/** One notch of the slider, and one notch of Ctrl+wheel or Ctrl+plus. */
+export const CHAT_TEXT_STEP = 1;
 
 /** The interface languages Synapse actually has strings for. English only until the
  *  Russian translation lands; `web/app.js` builds its selector from the same list. */

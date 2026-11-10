@@ -205,7 +205,9 @@ export function collectSettings() {
   for (const el of $('settingsBody').querySelectorAll('[data-path]')) {
     const path = el.dataset.path;
     let value = el.type === 'checkbox' ? el.checked : el.value;
-    if (el.type === 'number') value = Number(value);
+    // A slider hands back a string like a text box; it is a number like the box it
+    // replaced, so the two are collected the same way.
+    if (el.type === 'number' || el.type === 'range') value = Number(value);
     if (el.type === 'number' && !Number.isFinite(value)) continue;
     // A field shown in seconds or minutes but stored in the base unit: the
     // conversion belongs with the setting, not in the operator's head.
@@ -253,8 +255,17 @@ export function onSettingsInput(e) {
   // The chat's size is the one setting whose effect is worth seeing while it is
   // being chosen: a number in a box says nothing about whether a full answer still
   // fits above the composer. The draft is not touched — Save is still the write.
+  // The slider's own readout follows the thumb, so the number and the size are never
+  // a step apart (10 Nov).
   if (e.target?.dataset?.path === 'ui.chatTextPx') {
     applyChatText(e.target.value);
+    // The filled part of the track follows the thumb, so the bar and the number are
+    // the same answer.
+    const min = Number(e.target.min);
+    const max = Number(e.target.max);
+    e.target.style.setProperty('--fill', `${((Number(e.target.value) - min) / (max - min || 1)) * 100}%`);
+    const says = $('settingsBody')?.querySelector('[data-says="ui.chatTextPx"]');
+    if (says) says.textContent = `${e.target.value} px`;
     return;
   }
   const el = e.target.closest('[data-prov]');

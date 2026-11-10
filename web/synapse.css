@@ -2591,6 +2591,58 @@ body.is-stopping .chat-dock { animation: stop-glow 0.7s ease-in-out infinite; }
   font-size: 11px; color: var(--muted);
 }
 .set-field.wide { grid-column: 1 / -1; }
+/* ── the slider (10 Nov) ────────────────────────────────────────────────────
+   The chat's text size is a range, so it is drawn as one: a 4px track with the part
+   behind the thumb filled violet, a round thumb, and the value in tabular figures
+   beside it. The number box it replaced had two arrows, a half-point step and no
+   sense of where in the range you were. `--fill` is set on the input itself (in the
+   markup for the first paint, on input as the thumb moves), so the gradient never
+   needs a second element. */
+.set-slider .slider-row { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.set-slider input[type='range'] {
+  -webkit-appearance: none; appearance: none;
+  flex: 1 1 auto; width: auto; min-width: 90px; height: 22px;
+  background: transparent; border: 0; padding: 0; min-height: 0;
+  cursor: pointer;
+}
+.set-slider input[type='range']::-webkit-slider-runnable-track {
+  height: 4px; border-radius: 999px;
+  background: linear-gradient(to right,
+    var(--violet) 0 var(--fill, 0%),
+    #32353b var(--fill, 0%) 100%);
+}
+.set-slider input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 14px; height: 14px; margin-top: -5px; border-radius: 50%;
+  background: var(--violet-bright);
+  border: 1px solid #cfc9ff;
+  box-shadow: 0 0 0 3px rgba(98, 91, 246, 0.2);
+  transition: box-shadow 0.15s ease, background-color 0.15s ease;
+}
+.set-slider input[type='range']:hover::-webkit-slider-thumb { background: #a294ff; }
+.set-slider input[type='range']:focus-visible::-webkit-slider-thumb {
+  box-shadow: 0 0 0 4px rgba(98, 91, 246, 0.38);
+}
+.set-slider input[type='range']:focus-visible { outline: none; }
+.set-slider .slider-value {
+  flex: 0 0 auto; min-width: 64px; text-align: right;
+  color: var(--text); font-size: 12px; font-variant-numeric: tabular-nums;
+}
+/* ── the size chip ──────────────────────────────────────────────────────────
+   Ctrl + wheel and Ctrl + plus/minus move the chat's text size. A gesture with no
+   answer is a guess, so the number appears over the top of the conversation for a
+   moment and says which end of the range you are at. It is a surface the operator
+   set, so it is violet, and it never takes a click. */
+.chat-zoom-chip {
+  position: fixed; top: 10px; left: 50%; z-index: 90;
+  transform: translate(-50%, -6px);
+  padding: 6px 13px; border-radius: 999px;
+  background: var(--violet-soft); border: 1px solid var(--violet-line);
+  color: #fff; font-size: 12px; letter-spacing: 0.01em;
+  opacity: 0; pointer-events: none;
+  transition: opacity 0.16s ease, transform 0.16s ease;
+}
+.chat-zoom-chip.is-on { opacity: 1; transform: translate(-50%, 0); }
 /* A button inside a field is an action, not a control: it takes its own width
    rather than stretching to the column like an input. */
 .set-field > .btn { justify-self: start; }

@@ -10,7 +10,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { normalize, DEFAULTS, CHAT_TEXT_MIN, CHAT_TEXT_MAX } from '../src/config.js';
+import { normalize, DEFAULTS, CHAT_TEXT_MIN, CHAT_TEXT_MAX, CHAT_TEXT_STEP } from '../src/config.js';
 
 const read = (rel) => fs.readFileSync(path.join(process.cwd(), rel), 'utf8');
 
@@ -80,7 +80,10 @@ test('General is the first Settings tab and the Windows tab is gone', () => {
 
 test('the General pane edits the setting the page applies', () => {
   const src = read('web/settings-panes.js') + read('web/ui-prefs.js');
-  assert.match(src, /data-path="ui\.chatTextPx"|setField\(c, 'Chat Text Size', 'ui\.chatTextPx'/);
+  // A slider with its value beside it, since 10 Nov: a number box with two arrows
+  // and a half-point step was a change the eye could not see.
+  assert.match(src, /setSlider\(c, 'Chat Text Size', 'ui\.chatTextPx'/);
+  assert.match(src, /data-path="ui\.chatTextPx"|setSlider\(c, 'Chat Text Size', 'ui\.chatTextPx'/);
   assert.match(src, /function applyChatText\(/, 'there is one function that applies it');
   assert.match(src, /--chat-fs/, 'and it applies it through the transcript property');
   // The form must offer the same bounds the config enforces, or one of them lies.
@@ -88,4 +91,8 @@ test('the General pane edits the setting the page applies', () => {
   const max = new RegExp(`CHAT_TEXT_MAX = ${String(CHAT_TEXT_MAX).replace('.', '\\.')}`);
   assert.match(src, min);
   assert.match(src, max);
+  // One notch is a whole point, and both the slider and the gesture step use it.
+  assert.equal(CHAT_TEXT_STEP, 1, 'a step smaller than a point is a change nobody can see');
+  assert.match(src, /CHAT_TEXT_STEP = 1/);
+  assert.match(read('web/settings-panes.js'), /step: CHAT_TEXT_STEP/);
 });

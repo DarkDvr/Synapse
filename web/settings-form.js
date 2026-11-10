@@ -24,6 +24,40 @@ export function setField(c, label, path, opts = {}) {
     </label>`;
 }
 
+/**
+ * A slider with its value written beside the track.
+ *
+ * The chat's size used to be a number box with two arrows and a half-point step: a
+ * change the eye cannot see, and a control that asks the operator to type a quantity
+ * they do not know. A slider says where in the range you are, the value sits where
+ * the eye already is, and the step is a whole point (10 Nov).
+ *
+ * The value is an `<output>` rather than a second input: it is the same number the
+ * control already holds, said once, and `onSettingsInput` keeps it in step.
+ */
+export function setSlider(c, label, path, opts = {}) {
+  const min = Number(opts.min);
+  const max = Number(opts.max);
+  const step = Number(opts.step) || 1;
+  const unit = String(opts.unit || '');
+  const raw = opts.value !== undefined ? opts.value : readPath(c, path);
+  const n = Number(raw);
+  const at = Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : min;
+  const say = (v) => `${v}${unit ? ` ${unit}` : ''}`;
+  // The filled part of the track: the thumb says where you are, and this says how
+  // much of the range is behind you, which is what makes a slider read at a glance.
+  const fill = Math.min(100, Math.max(0, ((at - min) / (max - min || 1)) * 100));
+  return `
+    <label class="set-field set-slider${opts.wide ? ' wide' : ''}" title="${esc(opts.hint || '')}">
+      <span>${esc(label)}${opts.restart ? ' <em class="set-restart">Restart</em>' : ''}</span>
+      <span class="slider-row">
+        <input data-path="${path}" type="range" min="${min}" max="${max}" step="${step}" value="${esc(at)}"
+          style="--fill:${fill}%" aria-label="${esc(label)}" aria-valuetext="${esc(say(at))}" />
+        <output class="slider-value" data-says="${path}">${esc(say(at))}</output>
+      </span>
+    </label>`;
+}
+
 export function setSelect(c, label, path, options, opts = {}) {
   const badge = opts.restart ? ' <em class="set-restart">Restart</em>' : '';
   // `opts.value` is for a setting the saved config may not hold yet (a key added in a

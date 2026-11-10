@@ -7,9 +7,9 @@
 import { state } from './state.js';
 import { esc } from './format.js';
 import { readPath } from './settings-data.js';
-import { setField, setSelect, setCheck, setGroup } from './settings-form.js';
+import { setField, setSlider, setSelect, setCheck, setGroup } from './settings-form.js';
 import { DONE_SOUNDS, DONE_SOUND_DEFAULT, doneSoundName } from './notify.js';
-import { CHAT_TEXT_DEFAULT, CHAT_TEXT_MIN, CHAT_TEXT_MAX, chatTextPx, LANGUAGES } from './ui-prefs.js';
+import { CHAT_TEXT_DEFAULT, CHAT_TEXT_MIN, CHAT_TEXT_MAX, CHAT_TEXT_STEP, chatTextPx, LANGUAGES } from './ui-prefs.js';
 
 // Three things in this module come from app.js: the two halves of the update page,
 // and whether an update check is running. They are wired once at boot rather than
@@ -284,13 +284,16 @@ function settingsGeneral(c) {
   return [
     setGroup(
       'Interface',
-      setField(c, 'Chat Text Size', 'ui.chatTextPx', {
-        type: 'number',
+      setSlider(c, 'Chat Text Size', 'ui.chatTextPx', {
+        min: CHAT_TEXT_MIN,
+        max: CHAT_TEXT_MAX,
+        step: CHAT_TEXT_STEP,
+        unit: 'px',
         value: px,
-        attr: `min="${CHAT_TEXT_MIN}" max="${CHAT_TEXT_MAX}" step="0.5"`,
         hint:
           'The size of the conversation — nothing else, not the rail, the cards or the composer. ' +
-          `${CHAT_TEXT_MIN} to ${CHAT_TEXT_MAX} px, in half steps; ${CHAT_TEXT_DEFAULT} is the size the interface was designed around.`,
+          `${CHAT_TEXT_MIN} to ${CHAT_TEXT_MAX} px in whole points. Ctrl + wheel, Ctrl + plus and Ctrl + minus ` +
+          `move the same setting, and Ctrl + 0 puts it back to ${CHAT_TEXT_DEFAULT}px.`,
       }) +
         setSelect(
           c,

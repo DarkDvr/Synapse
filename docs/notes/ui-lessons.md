@@ -2191,3 +2191,34 @@ set on `executionStarted` and cleared when the turn ends.
 The stylesheet was never the problem: rendered still, in `data-mode="single"`, the
 bar draws both the wash and the ring. A class that is never applied and a rule that
 never matches look identical from the sofa, and this one was the class.
+
+
+## The chat's size is a slider, and Ctrl + wheel moves it (10 Nov)
+
+The size was a number box with two arrows and a half-point step. Two things were
+wrong with it: half a point is a change nobody can see, and a box with arrows says
+nothing about where you are in the range. It is a slider now — violet fill behind
+the thumb, the value in tabular figures beside it, one whole point per notch — and
+the ceiling went from 16.5px to 18.5px because the largest size was not large
+enough for the operator's screen.
+
+The gesture is the same setting. Ctrl + wheel and Ctrl + plus/minus used to be
+WebView2's own zoom, which grew the entire interface — rail, cards, composer — while
+`ui.chatTextPx` stayed where it was: two sizes fighting, and the one the operator
+had chosen losing. The page now owns all three gestures (`web/chat-zoom.js`), steps
+the setting inside the same bounds, and `IsZoomControlEnabled = false` in the shell
+turns the browser's zoom off so the two can never both answer. Ctrl + 0 returns to
+the designed 12.5px.
+
+Two details worth keeping:
+
+**The gesture says what it did.** A chip over the top of the conversation reads
+`Chat text 15 px`, and at an end of the range `· largest` or `· smallest`. Without
+it a wheel spin is a guess about whether anything happened, and pressing again at
+the ceiling has to answer "this is the largest" rather than nothing.
+
+**The write is debounced, the picture is not.** Every notch applies to the page
+immediately; the config is written once, 600ms after the last notch, because a wheel
+produces a dozen a second and each save rewrites the file. A gesture while the
+Settings window is open also moves the draft, or pressing Save would put the old
+number back and the setting would undo itself.

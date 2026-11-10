@@ -8,7 +8,10 @@ import { state } from './state.js';
 // are enforced: the form is a convenience, the config file is the truth.
 export const CHAT_TEXT_DEFAULT = 12.5;
 export const CHAT_TEXT_MIN = 10.5;
-export const CHAT_TEXT_MAX = 16.5;
+export const CHAT_TEXT_MAX = 18.5;
+// One notch of the slider, the keyboard and the wheel. It was half a point, which
+// is a change nobody can see; a whole point is one the operator can judge (10 Nov).
+export const CHAT_TEXT_STEP = 1;
 
 // The languages the interface has strings for. English only for now: an entry with
 // no strings behind it would be a switch that does nothing.

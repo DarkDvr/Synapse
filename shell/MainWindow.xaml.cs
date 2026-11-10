@@ -251,6 +251,10 @@ public partial class MainWindow : Window
         core.Settings.AreDevToolsEnabled = true;
         core.Settings.IsStatusBarEnabled = false;
         core.Settings.AreDefaultContextMenusEnabled = true;
+        // Ctrl + wheel and Ctrl + plus/minus are the chat's text size, handled by the
+        // page (web/chat-zoom.js). The browser's own zoom is off so the two never
+        // fight: one gesture, one setting, and the rail and cards keep their size.
+        core.Settings.IsZoomControlEnabled = false;
         // The page is a page, not a file: modules, fetch and storage behave the
         // way the app expects, and nothing leaves the machine.
         core.SetVirtualHostNameToFolderMapping("synapse.shell", web, CoreWebView2HostResourceAccessKind.Allow);

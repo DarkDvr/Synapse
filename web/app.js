@@ -246,6 +246,7 @@ import { AUTOMATION_DEFAULTS, AUTOMATION_ROWS, anyAutomationOn } from './automat
 import { reconcileRuns } from './runs-sync.js';
 import { SETTINGS_TABS, PANES, panesWiring } from './settings-panes.js';
 import { applyChatText, applyLanguage } from './ui-prefs.js';
+import { installChatZoom } from './chat-zoom.js';
 
 
 // ── helpers ─────────────────────────────────────────────────────
@@ -1557,6 +1558,9 @@ function wire() {
     }
   }
   setInterval(tickClocks, 1000);
+  // Ctrl + wheel and Ctrl + plus/minus move the chat's text size instead of the
+  // window's own zoom: one setting, one number, the same bounds as the slider.
+  installChatZoom();
   $('composer').addEventListener('submit', (e) => { e.preventDefault(); send(); });
   // The paperclip opens the system picker; the picker's own change event is what
   // adds the files, so a cancelled dialog adds nothing.

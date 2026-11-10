@@ -64,7 +64,7 @@ test('the old session controls and wording are gone from app.js', () => {
   // placeholder that was retired. A tab that names itself and shows nothing is the
   // thing this file used to guard against.
   assert.match(ui(), /function settingsGeneral\(c\)\s*\{/);
-  assert.match(ui(), /setField\(c, 'Chat Text Size', 'ui\.chatTextPx'/);
+  assert.match(ui(), /setSlider\(c, 'Chat Text Size', 'ui\.chatTextPx'/);
 });
 
 test('the dead session-row styles are gone from the stylesheet', () => {
