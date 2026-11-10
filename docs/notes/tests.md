@@ -64,3 +64,16 @@ The operator is the repository owner, so GitHub mails every failed run of a watc
 workflow. The setting is per user, not per repository: GitHub → Settings →
 Notifications → Actions, or Watch → "Participate and @mentions" on the repository.
 A red run is not made quieter by that; it is made quieter by being green.
+
+## The suite leaves its temp folders behind (10 Nov)
+
+`node --test "tests/*.test.mjs"` runs each file in its own process, and the files that build
+a fixture with `fs.mkdtempSync(path.join(os.tmpdir(), 'synapse-…'))` clean up in a `finally`
+— unless the test throws before it, or the file never reaches the cleanup at all. Counted on
+10 Nov: **15,638 folders, 61 MB** under `%TEMP%`, about 145 more per full run, with names
+like `synapse-doc-*`, `synapse-perm-*`, `synapse-round-*`. That is clutter, not a fault in
+the app, and it was cleared.
+
+It is not fixed: the durable fix is one shared helper — `tmpdir(prefix)` that registers its
+folder on a process-exit hook — and every test file using it instead of `mkdtempSync`. Worth
+doing the next time this suite is touched; until then, a full run adds ~145 folders.
