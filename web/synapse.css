@@ -2930,6 +2930,9 @@ body.is-stopping .chat-dock { animation: stop-glow 0.7s ease-in-out infinite; }
    Three datums and the row's own ✕, so "which site, when did I sign in, when was it
    last used" is one glance. */
 .prot-row.is-sites { grid-template-columns: minmax(0, 1fr) 110px 100px 26px; }
+/* A table inside a set-group's two-column grid takes the whole row: a host, a date and
+   a ✕ in a 300px column is a table that reads as a list of abbreviations. */
+.set-grid > .prot-table { grid-column: 1 / -1; }
 .site-when {
   font-family: var(--mono); font-size: 10px; color: #8b8f97; text-align: center;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
