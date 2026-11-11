@@ -12,6 +12,7 @@ import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { tmpdir } from './tmpdir.mjs';
 import { findEdge } from '../src/browser/browser.js';
+import { artifactDir } from '../src/browser/artifacts.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SERVER = path.join(ROOT, 'src', 'mcp', 'browser-server.js');
@@ -160,4 +161,21 @@ test('the server refuses everything when it is switched off', async (t) => {
     try { child.kill(); } catch { /* gone */ }
     try { fs.rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 }); } catch { /* swept at exit */ }
   }
+});
+
+// Where a project's browsing leaves its files. The engine gives a project's server that
+// project's folder as its working directory (measured 11 Nov), so the artifacts live in
+// the project: deleted with it, and never shared between two projects.
+test('a project server writes inside the project, anything else in the harness', () => {
+  const root = 'F:\\dev\\Synapse.Projects';
+  assert.equal(
+    artifactDir('F:\\dev\\Synapse.Projects\\demo', root),
+    'F:\\dev\\Synapse.Projects\\demo\\.synapse\\browser',
+  );
+  // The projects root is the "all projects" context, not a project.
+  assert.match(artifactDir(root, root), /data.*browser.*shots$/);
+  // The harness's own folder is not a project either.
+  assert.match(artifactDir('F:\\dev\\Synapse', root), /data.*browser.*shots$/);
+  // A sibling whose name starts with the root's name is not inside it.
+  assert.match(artifactDir('F:\\dev\\Synapse.Projects2\\x', root), /data.*browser.*shots$/);
 });

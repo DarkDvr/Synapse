@@ -9,20 +9,21 @@
 //   - a page must be an http(s) address — no file://, nothing that reaches past a URL;
 //   - nothing here reads a cookie, exports a session or runs an arbitrary script: the
 //     toolset is a fixed list of operations;
-//   - a screenshot or a strip of frames is written under `data\browser\shots\` and
-//     answered with its path, so the model can look at it and the operator can find it.
+//   - a screenshot or a strip of frames is written under the **project** (`.synapse\browser\`),
+//     so it is deleted with the project and never mixes two projects' browsing; the path is
+//     answered, so the model can look at it.
 //
 // stdout carries JSON-RPC and nothing else. All logging goes to stderr.
 import fs from 'node:fs';
 import path from 'node:path';
 import { DATA_DIR, WEB_DIR } from '../paths.js';
+import { artifactDir } from '../browser/artifacts.js';
 import { createBrowser, findEdge } from '../browser/browser.js';
 import { checkUrl, hostOf } from '../browser/allow.js';
 import { askOperator } from '../browser/handoff.js';
 import { watchForSignIn } from '../browser/session-watch.js';
 
 const PROTOCOL_VERSION = '2024-11-05';
-const SHOTS = path.join(DATA_DIR, 'browser', 'shots');
 const CHIME = path.join(WEB_DIR, 'sounds', 'chime.wav');
 
 /** The browser settings, read once: the operator edits the config file, not a UI here. */
@@ -159,7 +160,8 @@ const TOOLS = [
   {
     name: 'screenshot',
     description:
-      'Take a picture of the page — the viewport, or the whole document — and answer its path. ' +
+      'Take a picture of the page — the viewport, or the whole document — and answer its path, ' +
+      'in the project under .synapse\\browser\\. ' +
       'Read the image to see what a person would see.',
     inputSchema: {
       type: 'object',
@@ -170,7 +172,7 @@ const TOOLS = [
   {
     name: 'watch',
     description:
-      'Watch movement for a moment: answers a strip of frames as image paths, for an animation, ' +
+      'Watch movement for a moment: answers a strip of frames as image paths (project .synapse\\browser\\), for an animation, ' +
       'a spinner, a menu that slides. A still cannot show what changed.',
     inputSchema: {
       type: 'object',
@@ -343,12 +345,12 @@ async function handle(msg) {
             return toolText(id, `Scrolled to ${y}.`);
           }
           case 'screenshot': {
-            const file = path.join(SHOTS, `shot-${stamp()}.png`);
+            const file = path.join(artifactDir(), 'shots', `shot-${stamp()}.png`);
             const png = await browser.screenshot({ full: args.full === true, file });
             return toolText(id, `Screenshot: ${file} (${Math.round(png.length / 1024)} KB, ${args.full ? 'whole page' : 'viewport'}). Read it to see the page.`);
           }
           case 'watch': {
-            const dir = path.join(SHOTS, `watch-${stamp()}`);
+            const dir = path.join(artifactDir(), 'shots', `watch-${stamp()}`);
             const frames = await browser.watch({ ms: Math.min(5000, Math.max(200, Number(args.ms) || 1200)), dir });
             const span = frames.length > 1
               ? ` over ${Math.round(((frames.at(-1).at || 0) - (frames[0].at || 0)) * 1000)} ms`

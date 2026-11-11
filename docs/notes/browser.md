@@ -124,6 +124,19 @@ The sign-in button says what it is doing: **Opening…** while the browser start
   brief points at `webfetch` and the tools go unread — a tool a model does not know it
   has is a tool that does not exist.
 
+## Project artifacts, not a shared folder
+
+The engine gives each project's MCP server that project's folder as its working directory —
+measured 11 Nov, the server for `test` starts with cwd `F:\dev\Synapse.Projects\test`.
+So screenshots and frame strips go to `<project>\.synapse\browser\shots\`:
+
+- they are deleted with the project, and picked up by the project's own cleanup;
+- two projects browsing the same site keep their own pictures;
+- nothing under the harness has to be forgiven — `src/browser/artifacts.js` decides, and the
+  harness folder is only the fallback for a server whose cwd is not a project (the projects
+  root, which is the "all projects" context). That fallback is why
+  `data\browser\shots\` stays on the read exceptions.
+
 ## RAM
 
 The browser is ~300 MB of the operator's RAM while it runs, and a local model lives in
