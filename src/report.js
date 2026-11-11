@@ -186,6 +186,11 @@ export function report({ task, role, insteadOf, startedBelow = false, skipped, o
           `tell the operator what is still open, with the issue ids, and let them decide.`,
       );
     }
+    // The sentence that hands the judgement back is its own paragraph. Run together
+    // with the facts above it read as one stream of text, and this is the line the
+    // Architect acts on: a blank line is what the chat's markdown turns into a break,
+    // and it separates "what happened" from "what to do about it" (11 Nov).
+    lines.push('');
     lines.push(
       `You are the only writer of the plan: judge this yourself. Mark ${task.id} done if it holds, ` +
         `send it back with what is wrong if it does not, or mark it blocked if it needs the operator.`,

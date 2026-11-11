@@ -31,6 +31,9 @@ test('a completed run says what it did, how big it got and what is next', () => 
   assert.match(text, /Effort: 4 turns; the context peaked at 9k\./);
   assert.match(text, /Reported:\nSlept and wrote out\.txt\./);
   assert.match(text, /Keep building is ON/);
+  // The sentence that hands the judgement back starts its own paragraph: run into
+  // the facts above it, it read as one stream (11 Nov).
+  assert.match(text, /\n\nYou are the only writer of the plan: judge this yourself\./);
 });
 
 test('a run that was summarised says how many times', () => {
