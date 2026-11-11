@@ -17,7 +17,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { connect, waitForPort, readPort } from './cdp.js';
-import { screenState, restoreFocus } from './handoff.js';
+import { screenState, restoreFocus, hideBrowserWindow } from './handoff.js';
 
 const EDGE_CANDIDATES = [
   'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
@@ -38,6 +38,9 @@ const HIDDEN_FLAGS = [
   '--no-first-run',
   '--no-default-browser-check',
   '--disable-session-crashed-bubble',
+  // The bubble the operator met at the top-left of the primary screen after a kill:
+  // "Restore pages". It is a window of its own, and it is not ours to show (12 Nov).
+  '--hide-crash-restore-bubble',
   '--disable-features=Translate,CalculateNativeWinOcclusion',
   // A background window has no timers and renders no frames without these.
   '--disable-background-timer-throttling',
@@ -182,21 +185,13 @@ export function createBrowser({ profile, log = null, startMinimized = true, widt
       // Edge ignores --start-minimized when a window is created through the DevTools port:
       // it came up restored and visible on every launch (12 Nov). So the window is placed
       // and minimized through the protocol, before anyone can see it.
-      // The window stays **off-screen and normal**, never minimized: a minimized Chromium
-      // window stops compositing, so Page.captureScreenshot never answers (measured 12 Nov)
-      // — that is the "it is still running doing who-knows-what" after a sign-in. Off-screen
-      // it is invisible and still renders.
-      try {
-        if (!existing) {
-          const { windowId } = await conn.send('Browser.getWindowForTarget', { targetId: conn.target.id });
-          await conn.send('Browser.setWindowBounds', {
-            windowId,
-            bounds: { windowState: 'normal', left: -32000, top: -32000, width, height },
-          });
-          pageWindowId = windowId;
-        }
-      } catch (err) {
-        note(`browser: could not place the window: ${err.message}`);
+      // The window is hidden properly: a tool window (no taskbar button, no Alt-Tab), parked
+      // off-screen and left *normal* so it still renders. The "Restore pages" bubble Edge
+      // shows after a kill is suppressed by a flag; it used to appear at the top-left of the
+      // primary and was mistaken for our window (12 Nov).
+      if (!existing) {
+        const hidden = await hideBrowserWindow({ profile }).catch(() => null);
+        if (hidden) note(`browser: window hidden (tool window ${hidden.toolWindow ? 'yes' : 'no'})`);
       }
       note(`browser: ${existing ? 'attached to' : 'started'} Edge on port ${port}`);
       return page;
@@ -541,19 +536,8 @@ export function createBrowser({ profile, log = null, startMinimized = true, widt
    * reaper closes the browser when nobody needs it.
    */
   async function hideWindow() {
-    const p = await start();
-    const target = p.target?.id;
-    if (!target) return false;
-    try {
-      const { windowId } = await p.send('Browser.getWindowForTarget', { targetId: target });
-      // Off-screen and normal: invisible to the operator, and still rendering, so the model's
-      // next screenshot answers instead of waiting out its timeout.
-      await p.send('Browser.setWindowBounds', { windowId, bounds: { windowState: 'normal', left: -32000, top: -32000 } });
-      return true;
-    } catch (err) {
-      log?.info?.(`browser: could not hide the window: ${err.message}`);
-      return false;
-    }
+    const hidden = await hideBrowserWindow({ profile }).catch(() => null);
+    return Boolean(hidden && hidden.state === 'hidden');
   }
 
   /** The tabs this browser has open. */

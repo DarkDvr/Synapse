@@ -81,7 +81,9 @@ export function askOperator({ profile, restore = false, focus = false, sound = n
       // Showing a window can take the foreground — SW_SHOWNOACTIVATE on a minimized window
       // still activated it on this machine (11 Nov). The operator's window gets it back, so
       // the hand-off never interrupts what they were typing in.
-      if (parsed?.stoleFocus && parsed.fgBefore) {
+      // A sign-in window is meant to take the foreground: the operator allowed it and is
+      // about to type into it. Only a hand-off (or a minimise) gives the focus back.
+      if (!focus && parsed?.stoleFocus && parsed.fgBefore) {
         const back = await restoreFocus(parsed.fgBefore).catch(() => null);
         parsed.focusReturned = Boolean(back?.ok);
       }
@@ -96,5 +98,25 @@ export function askOperator({ profile, restore = false, focus = false, sound = n
       clearTimeout(timer);
       resolve({ ok: false, code: null, window: null, error: error.message });
     });
+  });
+}
+
+/**
+ * Hide the browser: no taskbar button, no Alt-Tab entry, parked off-screen — and still
+ * rendering, because a minimized window stops compositing and screenshots then hang.
+ * Answers what Windows reports, so a caller can prove it.
+ */
+export function hideBrowserWindow({ profile, sound = '' } = {}) {
+  return new Promise((resolve) => {
+    let out = '';
+    const child = spawn('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', SCRIPT, '-Marker', profile, '-Hide', '-Sound', sound], { windowsHide: true });
+    const timer = setTimeout(() => { try { child.kill(); } catch { /* gone */ } }, 15000);
+    child.stdout.on('data', (d) => { out += d; });
+    child.on('close', () => {
+      clearTimeout(timer);
+      const line = String(out).trim().split(/\r?\n/).filter(Boolean).pop() || '';
+      try { resolve(JSON.parse(line)); } catch { resolve(null); /* no report is no state */ }
+    });
+    child.on('error', () => { clearTimeout(timer); resolve(null); });
   });
 }

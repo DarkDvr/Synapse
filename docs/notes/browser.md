@@ -101,6 +101,25 @@ Only an Allow opens a window, and then it is an ordinary window:
 The two hollow knocks play when the card appears, so an operator looking elsewhere looks up.
 Nothing is minimized for a sign-in, and nothing takes the foreground uninvited.
 
+## Being invisible, exactly
+
+A hidden browser must be invisible *and* still render, and those two pull apart:
+
+- **No taskbar button, no Alt-Tab.** The window is given `WS_EX_TOOLWINDOW` and loses
+  `WS_EX_APPWINDOW` (`show.ps1 -Hide`). Without it, a window parked off-screen still puts a
+  button on the taskbar, and clicking that button focuses a window nobody can see — which is
+  what the operator met (12 Nov).
+- **Off-screen and normal, never minimized.** A minimized Chromium window stops compositing,
+  so `Page.captureScreenshot` never answers; off-screen, it is invisible and still renders.
+  Measured both ways: minimized → no answer in 15 s; off-screen → 55 ms.
+- **No "Restore pages" bubble.** Edge shows it as a window of its own at the top-left of the
+  primary after a kill, and it was mistaken for ours. `--hide-crash-restore-bubble` and
+  `--disable-session-crashed-bubble` suppress it, and the window search ignores it by title.
+- **A sign-in window is the exception.** On Allow the tool-window bit is cleared, the window
+  is placed on the monitor the operator is looking at, restored, and brought forward with the
+  attach-to-foreground-thread trick — because they asked for it and are about to type. After
+  the session lands it is hidden again.
+
 ## Sites: a record, not a permission list
 
 `src/browser/sites.js`, shown as the **Signed In** table in Settings → Browser.

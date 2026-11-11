@@ -19,7 +19,8 @@ param(
     [string]$Marker = 'Synapse\data\browser\profile',
     [string]$Sound = 'F:\dev\Synapse\web\sounds\hollow.wav',
     [switch]$Restore,
-    [switch]$Focus
+    [switch]$Focus,
+    [switch]$Hide
 )
 
 $ErrorActionPreference = 'Stop'
@@ -28,6 +29,13 @@ if (-not ('W.U' -as [type])) {
     Add-Type -Namespace W -Name U -MemberDefinition @'
 [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int cmd);
 [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr hWnd, IntPtr after, int x, int y, int cx, int cy, uint flags);
+[DllImport("user32.dll")] public static extern int GetWindowLong(IntPtr hWnd, int index);
+[DllImport("user32.dll")] public static extern int SetWindowLong(IntPtr hWnd, int index, int value);
+[DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
+[DllImport("user32.dll")] public static extern bool BringWindowToTop(IntPtr hWnd);
+[DllImport("user32.dll")] public static extern bool AttachThreadInput(uint attach, uint to, bool on);
+[DllImport("kernel32.dll")] public static extern uint GetCurrentThreadId();
+[DllImport("user32.dll")] public static extern bool IsWindow(IntPtr hWnd);
 [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
 [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr hWnd);
 [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr hWnd);
@@ -76,6 +84,11 @@ $callback = [W.U+EnumProc]{
     $title = New-Object System.Text.StringBuilder 512
     [void][W.U]::GetWindowTextW($hWnd, $title, 512)
     if (-not $title.ToString()) { return $true }
+    # Edge shows a "Restore pages" bubble as its own window, and it is not ours to touch.
+    if ($title.ToString() -match 'Restore pages') { return $true }
+    $box = New-Object 'W.U+RECT'
+    [void][W.U]::GetWindowRect($hWnd, [ref]$box)
+    if (($box.Right - $box.Left) -lt 300) { return $true }
     [void]$found.Add($hWnd)
     return $true
 }
@@ -83,9 +96,22 @@ $callback = [W.U+EnumProc]{
 if ($found.Count -eq 0) { '{"error":"no SynaBrowse window"}' | Write-Output; exit 1 }
 $hwnd = $found[0]
 
-# Where the window goes. A hand-off waits on the second monitor; a sign-in the operator has
-# just allowed opens where they are looking — the monitor of the window that had the
-# foreground when they clicked Allow (12 Nov).
+# How the window behaves.
+#
+# -Hide: no taskbar button and no Alt-Tab entry (WS_EX_TOOLWINDOW), parked off-screen but
+# left *normal* — a minimized window stops compositing, and every screenshot then waits out
+# its timeout (measured 12 Nov). Invisible, unlisted, still rendering.
+#
+# -Focus: the operator allowed a sign-in, so the window is an ordinary one again: no tool
+# window, placed on the monitor they are looking at, and brought forward with the
+# attach-to-foreground-thread trick Windows requires.
+$GWL_EXSTYLE = -20
+$WS_EX_TOOLWINDOW = 0x80
+$WS_EX_APPWINDOW = 0x40000
+$SWP_NOZORDER = 0x0004
+$SWP_NOACTIVATE = 0x0010
+$SWP_FRAMECHANGED = 0x0020
+
 $screens = [System.Windows.Forms.Screen]::AllScreens
 $screen = $null
 if ($Focus) {
@@ -104,37 +130,32 @@ $h = [Math]::Min(860, [int]($area.Height * 0.86))
 $x = $area.X + [int](($area.Width - $w) / 2)
 $y = $area.Y + [int](($area.Height - $h) / 2)
 
-# Restore without activating (SW_SHOWNOACTIVATE), move the restored window to the second
-# monitor, then choose the final state. A minimized window restores to the rectangle it had
-# when it was restored, so this is what decides where it comes back — SetWindowPos alone
-# never moved that, and SetWindowPlacement through PowerShell's struct marshalling wrote
-# garbage (measured 11 Nov: asked for 1200x860 at 685,-990, got 500x127 at 0,0).
-# Only move it when it is not already where it belongs. The launch places the window on
-# the second monitor now, so in the common case this is a no-op — and the restore-to-move
-# step, which the operator saw as "edge opened non-minimized, then minimized a second
-# later", does not happen at all (11 Nov).
-$here = New-Object 'W.U+WINDOWPLACEMENT'
-$here.length = [Runtime.InteropServices.Marshal]::SizeOf($here)
-[void][W.U]::GetWindowPlacement($hwnd, [ref]$here)
-$placed = $here.rcNormalPosition.Left -ge $area.X -and $here.rcNormalPosition.Top -ge $area.Y -and
-    $here.rcNormalPosition.Right -le ($area.X + $area.Width) -and $here.rcNormalPosition.Bottom -le ($area.Y + $area.Height)
-if (-not $placed) {
-    [void][W.U]::ShowWindow($hwnd, 4)   # SW_SHOWNOACTIVATE: restore, and not the foreground
-    $SWP_NOZORDER = 0x0004
-    $SWP_NOACTIVATE = 0x0010
-    [void][W.U]::SetWindowPos($hwnd, [IntPtr]::Zero, $x, $y, $w, $h, $SWP_NOZORDER -bor $SWP_NOACTIVATE)
-}
-
-if ($Focus) {
-    # The operator allowed this window: it takes the foreground, because they are about to
-    # type into it. Nothing here is a surprise any more — they asked for it.
+$ex = [W.U]::GetWindowLong($hwnd, $GWL_EXSTYLE)
+if ($Hide) {
+    [void][W.U]::SetWindowLong($hwnd, $GWL_EXSTYLE, (($ex -bor $WS_EX_TOOLWINDOW) -band (-bnot $WS_EX_APPWINDOW)))
+    [void][W.U]::ShowWindow($hwnd, 4)   # SW_SHOWNOACTIVATE: normal, so it keeps rendering
+    [void][W.U]::SetWindowPos($hwnd, [IntPtr]::Zero, -32000, -32000, $w, $h, $SWP_NOZORDER -bor $SWP_NOACTIVATE -bor $SWP_FRAMECHANGED)
+    $state = 'hidden'
+} else {
+    [void][W.U]::SetWindowLong($hwnd, $GWL_EXSTYLE, (($ex -bor $WS_EX_APPWINDOW) -band (-bnot $WS_EX_TOOLWINDOW)))
+    [void][W.U]::SetWindowPos($hwnd, [IntPtr]::Zero, $x, $y, $w, $h, $SWP_NOZORDER -bor $SWP_NOACTIVATE -bor $SWP_FRAMECHANGED)
     [void][W.U]::ShowWindow($hwnd, 9)   # SW_RESTORE
     [void][W.U]::ShowWindow($hwnd, 4)   # SW_SHOWNOACTIVATE
-    [void][W.U]::SetForegroundWindow($hwnd) | Out-Null
-} elseif ($Restore) {
-    [void][W.U]::ShowWindow($hwnd, 4)   # SW_SHOWNOACTIVATE: up for the sign-in, not the foreground
-} else {
-    [void][W.U]::ShowWindow($hwnd, 7)   # SW_SHOWMINNOACTIVE: on the taskbar, waiting
+    if ($Focus) {
+        $current = [W.U]::GetCurrentThreadId()
+        $fgThread = 0
+        $fgWin = [W.U]::GetForegroundWindow()
+        if ($fgWin -ne [IntPtr]::Zero) {
+            $ignored = [uint32]0
+            $fgThread = [W.U]::GetWindowThreadProcessId($fgWin, [ref]$ignored)
+        }
+        $attached = $false
+        if ($fgThread -ne 0 -and $fgThread -ne $current) { $attached = [W.U]::AttachThreadInput($current, $fgThread, $true) }
+        [void][W.U]::SetForegroundWindow($hwnd)
+        [void][W.U]::BringWindowToTop($hwnd)
+        if ($attached) { [void][W.U]::AttachThreadInput($current, $fgThread, $false) }
+    }
+    $state = 'shown'
 }
 
 # Blink the taskbar button so the operator notices without a sound alone.
@@ -163,7 +184,8 @@ $fgAfter = [W.U]::GetForegroundWindow()
     screens    = ($screens | ForEach-Object { $_.DeviceName }) -join ','
     asked      = @($x, $y, $w, $h)
     rect       = @($rect.Left, $rect.Top, ($rect.Right - $rect.Left), ($rect.Bottom - $rect.Top))
-    moved      = (-not $placed)
+    state      = $state
+    toolWindow = ((([W.U]::GetWindowLong($hwnd, $GWL_EXSTYLE)) -band $WS_EX_TOOLWINDOW) -ne 0)
     normal     = @($placeNow.rcNormalPosition.Left, $placeNow.rcNormalPosition.Top, ($placeNow.rcNormalPosition.Right - $placeNow.rcNormalPosition.Left), ($placeNow.rcNormalPosition.Bottom - $placeNow.rcNormalPosition.Top))
     onScreen   = ($rect.Left -ge $area.X -and $rect.Top -ge $area.Y -and $rect.Right -le ($area.X + $area.Width))
     minimized  = [W.U]::IsIconic($hwnd)
