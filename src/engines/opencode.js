@@ -86,6 +86,9 @@ export class OpenCodeEngine extends Engine {
     this.toolLog = ctx.logger.channel('tools');
     this.workspaceDir = ctx.workspaceDir;
     this.dataDir = ctx.dataDir;
+    // The whole Synapse config, for the few decisions that are the harness's rather than
+    // the engine's (SynaBrowse being switched on, for one).
+    this.whole = ctx.whole || null;
     this.proc = null;
     this.password = '';
     this.base = '';
@@ -183,6 +186,7 @@ export class OpenCodeEngine extends Engine {
     delete servers['synapse-search'];
     delete servers['synapse-delegate'];
     delete servers['synapse-lease'];
+    delete servers['synapse-browser'];
     // A server that no longer exists: the plan became a file the Architect owns
     // (src/plans.js), so the entry must not linger pointing at a deleted file.
     delete servers['synapse-plan'];
@@ -221,7 +225,7 @@ export class OpenCodeEngine extends Engine {
     // SynaBrowse: the harness's own browser, hidden until a human is needed. Only
     // registered when the operator has switched it on — the tools can act as them, so
     // the absence of the switch is the off state rather than a tool that refuses.
-    if (cfg.browser?.enabled) {
+    if (this.whole?.browser?.enabled) {
       servers['synapse-browser'] = {
         type: 'local',
         command: [process.execPath, BROWSER_SERVER],

@@ -15,5 +15,8 @@ export function createEngine(config, ctx) {
     throw new Error(`Unknown engine type "${type}". Known engines: ${KNOWN_ENGINES.join(', ')}`);
   }
   const engineConfig = config.engine?.[type] || {};
-  return factory(engineConfig, ctx);
+  // The adapter's own settings, plus the whole config under `whole`: a few decisions
+  // belong to the harness, not the engine — whether SynaBrowse is switched on, for one —
+  // and reaching back into a file to find that answer would be a second source of truth.
+  return factory(engineConfig, { ...ctx, whole: config });
 }
