@@ -587,7 +587,7 @@ function settingsBrowser(c) {
       undefined,
       'Signing in is the one thing only you can do: a bot check or a password. The window goes to the second monitor, minimized and without taking focus, and the session is kept.',
     ),
-  ];
+  ].join('');
 }
 
 // The pane map: the tab id is the key, so a tab with no pane is impossible and a
