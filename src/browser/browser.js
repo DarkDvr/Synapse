@@ -69,10 +69,14 @@ const KEYS = {
  * `start()` is idempotent: two tools calling it at once get the same browser, because
  * an Edge profile cannot be open twice and the second launch would fail on the lock.
  */
-export function createBrowser({ profile, log = null, startMinimized = true, width = 1280, height = 800 } = {}) {
+export function createBrowser({ profile, log = null, startMinimized = true, width = 1280, height = 800, idleMs = 5 * 60 * 1000 } = {}) {
   let child = null;
   let page = null;
   let starting = null;
+  let lastUsed = Date.now();
+
+  /** Every action says "still in use", so the idle clock follows the work, not the clock. */
+  const used = () => { lastUsed = Date.now(); };
 
   const note = (msg) => log?.info?.(msg);
 
@@ -143,6 +147,7 @@ export function createBrowser({ profile, log = null, startMinimized = true, widt
   /** Go somewhere and wait for the page to settle, not for a guessed sleep. */
   async function goto(url, { settle = 900, timeoutMs = 30000 } = {}) {
     const p = await start();
+    used();
     const loaded = p.waitEvent('Page.loadEventFired', timeoutMs);
     const nav = await p.send('Page.navigate', { url });
     // The protocol answers a *user-visible* failure here rather than throwing: a host
@@ -157,15 +162,68 @@ export function createBrowser({ profile, log = null, startMinimized = true, widt
   }
 
   /**
-   * What the page says, as a person would read it: headings and text, plus the links a
-   * model can act on. Deliberately not the HTML — a DOM dump is thousands of tokens of
-   * markup and the model needs the words and the affordances.
+   * What the page says, as a person would read it.
+   *
+   * Not the HTML: a DOM dump is thousands of tokens of markup. Instead the main content is
+   * chosen (the element with paragraphs and little link furniture — the article, not the
+   * page around it) and emitted as Markdown-ish lines, so a model spends its context on
+   * the words. `mode: 'text'` keeps the old whole-page text for a page the picker gets
+   * wrong.
+   *
+   * It also answers whether the page is a **sign-in wall** — a password box, or a form
+   * that says sign in — because a model reading a login page as if it were content is the
+   * expensive mistake, and the wall is visible right here.
    */
-  async function read({ maxChars = 6000, links = 60 } = {}) {
+  async function read({ maxChars = 6000, links = 60, mode = 'article' } = {}) {
     const p = await start();
-    return p.evaluate(`(() => {
+    used();
+    const page = await p.evaluate(`(() => {
       const clean = (s) => String(s || '').replace(/\\s+/g, ' ').trim();
-      const text = clean(document.body?.innerText || '').slice(0, ${Number(maxChars)});
+      const body = document.body || document.documentElement;
+      const textOf = (el) => (el && el.innerText ? String(el.innerText) : '').replace(/\\u00a0/g, ' ');
+      const limit = ${Number(maxChars)};
+
+      // A wall, as the page shows it.
+      const passwords = document.querySelectorAll('input[type=password]').length;
+      const opening = clean(textOf(body)).slice(0, 4000);
+      const saysSignIn = /(sign in|log in|login|create an account|sign up)/i.test(opening);
+      const form = document.querySelector('form');
+      let wall = '';
+      if (passwords > 0) wall = 'a password box';
+      else if (form && saysSignIn) wall = 'a sign-in form';
+
+      // The article: paragraphs weigh, link furniture costs.
+      let best = null;
+      let bestScore = 0;
+      for (const el of document.querySelectorAll('article, main, [role=main], .post, .entry-content, #content, .content, div')) {
+        const t = textOf(el);
+        if (t.length < 300) continue;
+        const paras = el.querySelectorAll('p,li,pre,blockquote').length;
+        const linkChars = [...el.querySelectorAll('a')].reduce((n, a) => n + clean(textOf(a)).length, 0);
+        const density = linkChars / Math.max(t.length, 1);
+        const score = paras * 30 + t.length * (1 - Math.min(density, 0.9));
+        if (score > bestScore) { bestScore = score; best = el; }
+      }
+      const root = best || body;
+      const lines = [];
+      const push = (s) => { const v = clean(s); if (v) lines.push(v); };
+      for (const el of root.querySelectorAll('h1,h2,h3,h4,p,li,pre,blockquote,td,th,figcaption')) {
+        if (el.closest('nav, header, footer, aside, form, script, style, [aria-hidden=true]')) continue;
+        if (el.parentElement && el.parentElement.closest('p, li')) continue;
+        const tag = el.tagName.toLowerCase();
+        const value = textOf(el);
+        if (tag === 'h1') push('# ' + clean(value));
+        else if (tag === 'h2') push('## ' + clean(value));
+        else if (tag === 'h3' || tag === 'h4') push('### ' + clean(value));
+        else if (tag === 'li') push('- ' + clean(value));
+        else if (tag === 'blockquote') push('> ' + clean(value));
+        else if (tag === 'pre') lines.push('\\u0060\\u0060\\u0060\\n' + value.trim() + '\\n\\u0060\\u0060\\u0060');
+        else push(value);
+      }
+      const article = lines.join('\\n').slice(0, limit);
+      const plain = clean(textOf(body)).slice(0, limit);
+      const text = ${JSON.stringify(String(mode))} === 'text' || article.trim().length < 40 ? plain : article;
+
       const seen = new Set();
       const anchor = [...document.querySelectorAll('a[href]')].map((a) => {
         const label = clean(a.innerText || a.getAttribute('aria-label') || a.getAttribute('title') || '').slice(0, 80);
@@ -177,13 +235,16 @@ export function createBrowser({ profile, log = null, startMinimized = true, widt
         seen.add(key);
         return { text: label, href, at: [Math.round(box.x + box.width / 2), Math.round(box.y + box.height / 2)] };
       }).filter(Boolean).slice(0, ${Number(links)});
-      return { url: location.href, title: document.title, text, links: anchor };
+
+      return { url: location.href, title: document.title, text, links: anchor, wall, chars: text.length };
     })()`);
+    return page;
   }
 
   /** Click by selector, by visible text, or by coordinates. */
   async function click({ selector = null, text = null, at = null, settle = 700 } = {}) {
     const p = await start();
+    used();
     let point = at;
     if (!point) {
       const found = await p.evaluate(`(() => {
@@ -216,6 +277,7 @@ export function createBrowser({ profile, log = null, startMinimized = true, widt
   /** Type into whatever has focus (or into a selector first). */
   async function type({ text, selector = null, submit = false } = {}) {
     const p = await start();
+    used();
     if (selector) await p.evaluate(`document.querySelector(${JSON.stringify(selector)})?.focus()`);
     await p.send('Input.insertText', { text: String(text ?? '') });
     if (submit) await press('Enter');
@@ -225,6 +287,7 @@ export function createBrowser({ profile, log = null, startMinimized = true, widt
   /** A key press, for the keys that end a form or move a page. */
   async function press(name) {
     const p = await start();
+    used();
     const key = KEYS[String(name || '').toLowerCase()];
     if (!key) throw new Error(`unknown key: ${name}`);
     for (const type of ['keyDown', 'keyUp']) {
@@ -242,6 +305,7 @@ export function createBrowser({ profile, log = null, startMinimized = true, widt
   /** Wait for text, for a selector, or for a fixed time — whichever was asked for. */
   async function wait({ text = null, selector = null, ms = null, timeoutMs = 20000 } = {}) {
     const p = await start();
+    used();
     if (ms) {
       await new Promise((r) => setTimeout(r, Number(ms)));
       return true;
@@ -260,6 +324,7 @@ export function createBrowser({ profile, log = null, startMinimized = true, widt
   /** Scrolling, because a page that is 4,000 pixels tall is read in pieces. */
   async function scroll({ dy = 600 } = {}) {
     const p = await start();
+    used();
     await p.evaluate(`window.scrollBy(0, ${Number(dy)})`);
     await new Promise((r) => setTimeout(r, 200));
     return p.evaluate('window.scrollY');
@@ -268,6 +333,7 @@ export function createBrowser({ profile, log = null, startMinimized = true, widt
   /** A picture of the page: viewport, or the whole document. */
   async function screenshot({ full = false, file } = {}) {
     const p = await start();
+    used();
     const png = await p.screenshot({ full });
     if (file) {
       fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -284,6 +350,7 @@ export function createBrowser({ profile, log = null, startMinimized = true, widt
    */
   async function watch({ ms = 1200, dir, everyNthFrame = 1 } = {}) {
     const p = await start();
+    used();
     fs.mkdirSync(dir, { recursive: true });
     const frames = [];
     const onFrame = async (params) => {
@@ -313,6 +380,7 @@ export function createBrowser({ profile, log = null, startMinimized = true, widt
    */
   async function clearOrigin(origin) {
     const p = await start();
+    used();
     await p.send('Storage.clearDataForOrigin', {
       origin: String(origin || ''),
       storageTypes: 'all',
@@ -323,6 +391,7 @@ export function createBrowser({ profile, log = null, startMinimized = true, widt
   /** The tabs this browser has open. */
   async function tabs() {
     const p = await start();
+    used();
     const list = await (await fetch(`http://127.0.0.1:${p.port}/json/list`)).json();
     return list.filter((t) => t.type === 'page').map((t) => ({ url: t.url, title: t.title, id: t.id }));
   }
@@ -352,6 +421,18 @@ export function createBrowser({ profile, log = null, startMinimized = true, widt
     }
     return exited.length;
   }
+
+  // Idle reaper: this is ~300 MB of the operator's RAM, and a model that browsed once two
+  // hours ago must not still be paying for it. Only the instance that launched the browser
+  // closes it, and only when *its* work has been quiet — the profile keeps the sessions,
+  // so a later call simply starts it again.
+  const reaper = setInterval(() => {
+    if (!child || !page) return;
+    if (Date.now() - lastUsed < idleMs) return;
+    log?.info?.(`browser: idle for ${Math.round(idleMs / 60000)} min — closing it to free the memory`);
+    stop().catch(() => {});
+  }, 30000);
+  reaper.unref?.();
 
   return { start, running, alive, goto, read, click, type, press, wait, scroll, screenshot, watch, tabs, clearOrigin, stop, profile };
 }

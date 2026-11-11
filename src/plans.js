@@ -982,7 +982,7 @@ export function fingerprintDiff(before = {}, after = {}, allowFolder = '') {
  * skimmed. Facts first (what the plan currently says), then the one rule that
  * cannot be guessed (the Architect owns the file; nobody else writes it).
  */
-export function briefSession({ dir, role = 'architect', auto = false, single = false, skills = '', focus = '', instructions = '' } = {}) {
+export function briefSession({ dir, role = 'architect', auto = false, single = false, skills = '', focus = '', instructions = '', browser = false } = {}) {
   const state = readPlan(dir);
   // The project's own document: what was asked, what was decided, the operator's
   // standing notes and the last compact's handover. This is what makes a long
@@ -1019,6 +1019,14 @@ export function briefSession({ dir, role = 'architect', auto = false, single = f
   lines.push(
     `Attachments the operator chose to keep are in .synapse/attachments/ — list that folder when a task may need one.`,
   );
+  // The browser is in the toolset and a model will not reach for it unprompted: the
+  // engine's own webfetch is described as *the* way to read a page, so without this line
+  // "read that site" means "webfetch it", and a signed-in page answers a wall (11 Nov).
+  if (browser) {
+    lines.push(
+      'Browsing: `open`, `read`, `click`, `type`, `screenshot` reach pages webfetch cannot — signed in, behind a bot check, drawn by script. A page that asks you to sign in needs `handoff`.',
+    );
+  }
   // The app's own data is part of the project, not the machine. This is one rule
   // for every project this harness will ever build; the operator does not keep
   // anything in AppData, and scratch is temporary by definition.

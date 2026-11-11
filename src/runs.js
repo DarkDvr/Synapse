@@ -1658,6 +1658,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
             skills: describeSkills(config, role),
             focus: roleConfig.focus,
             instructions: roleConfig.instructions,
+            browser: config?.browser?.enabled === true,
           }),
         );
       } catch (err) {

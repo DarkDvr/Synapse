@@ -118,6 +118,10 @@ export const DEFAULTS = {
     enabled: false,
     profile: '',
     sites: [],
+    // Close the browser after this many minutes with no tool call: it is ~300 MB of RAM,
+    // and a run that browsed once must not keep paying for it. The profile keeps the
+    // logins, so the next call simply starts it again.
+    idleMinutes: 5,
   },
   automation: {
     // The four switches in Settings → Automation, in seconds (and minutes for the
@@ -341,6 +345,7 @@ export function normalize(raw) {
   cfg.browser.enabled = cfg.browser.enabled === true;
   cfg.browser.profile = String(cfg.browser.profile || '').trim();
   cfg.browser.sites = normalizeSites(cfg.browser.sites);
+  cfg.browser.idleMinutes = Math.min(60, Math.max(1, Number(cfg.browser.idleMinutes) || DEFAULTS.browser.idleMinutes));
   delete cfg.browser.allow;
   // Full auto's wait. 0 is accepted and means "answer at once, no card"; a
   // negative or unreadable value falls back to the 20-second default.

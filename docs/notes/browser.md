@@ -100,6 +100,32 @@ one.
 The sign-in button says what it is doing: **Opening…** while the browser starts, then
 **Saving…** while the address is checked, both breathing (`waiting-breathe`).
 
+## What a model receives
+
+- **The article, not the page.** `read` scores the DOM for the element that carries
+  paragraphs and little link furniture, then emits Markdown-ish lines — headings, list
+  items, quotes, code. A nav or a footer is dropped. `mode: "text"` keeps the whole page
+  for the rare site the picker gets wrong.
+- **A sign-in wall, named.** A page with a password box, or a form that says sign in,
+  comes back with a sentence: *"This page needs a sign-in only the operator can give (a
+  password box), and <host> is not in the Signed In table. Call `handoff` …"* — and if
+  the host *is* in the table, the sentence says the session has expired instead. The
+  model does not have to infer it from the prose, and does not scrape around a login.
+- **A line in the brief.** When the switch is on, every role's brief says the browser
+  tools reach pages `webfetch` cannot, and that a wall needs `handoff`. Without it the
+  brief points at `webfetch` and the tools go unread — a tool a model does not know it
+  has is a tool that does not exist.
+
+## RAM
+
+The browser is ~300 MB of the operator's RAM while it runs, and a local model lives in
+the same memory. Three rules keep that honest:
+
+- it starts on demand and never at boot;
+- it is closed after `idleMinutes` (default 5, Settings → Browser) with no tool call —
+  the profile keeps every session, so the next call pays a launch, not a login;
+- the text it returns is the article, not the page, so what it spends is content: tokens
+  in the model's context are memory too.
 ## Limits, stated
 
 - **Expiry is the site's.** The table shows when a session was made, never "good for N

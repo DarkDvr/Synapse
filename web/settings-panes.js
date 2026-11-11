@@ -602,6 +602,12 @@ function settingsBrowser(c) {
         setField(c, 'Profile folder (blank = data\\browser\\profile)', 'browser.profile', {
           wide: true,
           hint: 'Where the browser keeps its own cookies and logins. Never the operator’s Edge profile, and never Brave. Blank uses data\\browser\\profile.',
+        }) +
+        setField(c, 'Close the browser after (minutes with no browsing)', 'browser.idleMinutes', {
+          type: 'number',
+          value: c.browser?.idleMinutes ?? 5,
+          attr: 'min="1" max="60" step="1"',
+          hint: 'The browser is about 300 MB of RAM. After this long with no tool call it is closed; the profile keeps every sign-in, so the next call starts it again. 1 to 60 minutes.',
         }),
       undefined,
       'A browser the harness owns, on its own profile. One switch, one profile, one session per site — no host list to maintain.',

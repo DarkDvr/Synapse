@@ -17,7 +17,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { DATA_DIR, WEB_DIR } from '../paths.js';
 import { createBrowser, findEdge } from '../browser/browser.js';
-import { checkUrl } from '../browser/allow.js';
+import { checkUrl, hostOf } from '../browser/allow.js';
 import { askOperator } from '../browser/handoff.js';
 
 const PROTOCOL_VERSION = '2024-11-05';
@@ -45,12 +45,14 @@ function settings() {
     // One chime when the window is put on the second monitor; the operator's switch,
     // beside the screen sounds in Settings > General.
     sounds: raw?.notify?.browserSounds !== false,
+    idleMinutes: Number(raw?.browser?.idleMinutes) || 5,
   };
 }
 
 const cfg = settings();
 const browser = createBrowser({
   profile: cfg.profile,
+  idleMs: cfg.idleMinutes * 60 * 1000,
   log: { info: (m) => process.stderr.write(`${m}\n`) },
 });
 
@@ -82,6 +84,7 @@ const TOOLS = [
       properties: {
         maxChars: { type: 'integer', description: 'Characters of text (1000-30000, default 6000).', minimum: 1000, maximum: 30000 },
         links: { type: 'integer', description: 'How many links to list (0-120, default 60).', minimum: 0, maximum: 120 },
+        mode: { type: 'string', enum: ['article', 'text'], description: 'article (default) picks the main content and drops the page around it; text is the whole page.' },
       },
       additionalProperties: false,
     },
@@ -237,6 +240,37 @@ function guard(url) {
   return verdict;
 }
 
+/**
+ * Say it plainly when the page is a sign-in wall.
+ *
+ * The wall is visible to the page itself (a password box, a sign-in form), so the model
+ * does not have to infer it from the prose; and the answer names the tool that fixes it.
+ * A model that scrapes around a login page burns a turn and returns junk.
+ */
+function wallNote(page) {
+  if (!page?.wall) return '';
+  const host = hostOf(page.url) || 'this site';
+  const known = (cfg.sites || []).some((site) => host === site.host || host.endsWith(`.${site.host}`));
+  if (known) {
+    return `\n\nThis page is asking you to sign in again (${page.wall}) — the saved session for ${host} has expired. ` +
+      `Call \`handoff\` with what="sign in to ${host}", wait for the operator, then read again.`;
+  }
+  return `\n\nThis page needs a sign-in only the operator can give (${page.wall}), and ${host} is not in the Signed In table. ` +
+    `Call \`handoff\` with what="sign in to ${host}", wait for them to finish, then read again. ` +
+    'Do not scrape around it or guess at the content.';
+}
+
+/** Record that the profile opened a host it has a session for (best effort). */
+function noteUsed(url) {
+  const host = hostOf(url);
+  if (!host || !(cfg.sites || []).some((site) => host === site.host || host.endsWith(`.${site.host}`))) return;
+  fetch('http://127.0.0.1:8700/api/browser/used', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ host }),
+  }).catch(() => { /* the app may not be listening; a date is not worth an error */ });
+}
+
 async function handle(msg) {
   const { id, method, params } = msg;
   switch (method) {
@@ -268,15 +302,18 @@ async function handle(msg) {
             const verdict = guard(args.url);
             const url = await browser.goto(args.url, { settle: Number(args.settleMs ?? 900) });
             const page = await browser.read({});
+            noteUsed(page.url);
             process.stderr.write(`open ${verdict.host} -> ${url}\n`);
-            return toolText(id, `Opened ${url}\n\n${outline(page)}`);
+            return toolText(id, `Opened ${url}\n\n${outline(page)}${wallNote(page)}`);
           }
           case 'read': {
             const page = await browser.read({
               maxChars: Math.min(30000, Math.max(1000, Number(args.maxChars) || 6000)),
               links: Math.min(120, Math.max(0, Number(args.links ?? 60))),
+              mode: args.mode === 'text' ? 'text' : 'article',
             });
-            return toolText(id, outline(page));
+            noteUsed(page.url);
+            return toolText(id, `${outline(page)}${wallNote(page)}`);
           }
           case 'click': {
             const at = Number.isFinite(args.x) && Number.isFinite(args.y) ? [Number(args.x), Number(args.y)] : null;

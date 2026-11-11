@@ -436,6 +436,7 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
         // Single is a chat, not this harness: its skills line may not say "this
         // role" or "your report", because there is neither.
         skills: describeSkills(getConfig(), role, { chat: single }),
+        browser: getConfig()?.browser?.enabled === true,
         focus: getConfig()?.roles?.[role]?.focus,
         instructions: getConfig()?.roles?.[role]?.instructions,
       });
@@ -846,6 +847,18 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
     }
   }
 
+  /** The browser opened a host with a session: move "Last used" and nothing else. */
+  async function browserUsed(host) {
+    const key = String(host || '').trim().toLowerCase();
+    if (!key) return { ok: false };
+    const cfg = getConfig();
+    const sites = cfg.browser?.sites || [];
+    if (!sites.some((site) => site.host === key)) return { ok: true, changed: false };
+    const { touchSite } = await import('./browser/sites.js');
+    applyConfig({ ...cfg, browser: { ...cfg.browser, sites: touchSite(sites, key) } });
+    return { ok: true, changed: true };
+  }
+
   /** Forget a site: the row goes, and the browser drops what it keeps for that host. */
   async function browserForget(host) {
     const key = String(host || '').trim().toLowerCase();
@@ -873,6 +886,7 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
   return {
     browserSignin,
     browserForget,
+    browserUsed,
     status: async () => ({
       version: APP_VERSION,
       // The files on disk may be newer than this process — a page reload cannot

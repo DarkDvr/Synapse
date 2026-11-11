@@ -338,6 +338,11 @@ export function createServer({ api, engine, logger, config, remote, onRemote }) 
     if (seg[0] === 'browser' && seg[1] === 'forget' && method === 'POST') {
       return sendJson(res, 200, await api.browserForget((await readBody(req))?.host));
     }
+    // POST /api/browser/used — the browser opened a host the profile has a session for.
+    // "Last used" is a date the operator reads, so it has to move (11 Nov).
+    if (seg[0] === 'browser' && seg[1] === 'used' && method === 'POST') {
+      return sendJson(res, 200, await api.browserUsed((await readBody(req))?.host));
+    }
 
     // POST /api/browser/waiting — SynaBrowse has put its window on the second monitor
     // and needs the operator: a login, or a check only a person can pass. The MCP server

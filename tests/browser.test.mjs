@@ -122,3 +122,46 @@ test('a page that still asks for a sign-in is not confirmed', () => {
   assert.equal(looksUnconfirmed('https://example.com/', 0), false);
   assert.equal(looksUnconfirmed('https://example.com/account/logins'), false, 'a path that merely starts with "login" is not a login page');
 });
+
+// The page a model reads is the article, not the furniture: a nav and a footer are the
+// two things every site has and no model needs, and they cost the same tokens as prose.
+test('read() returns the article and says when a page is a sign-in wall', async (t) => {
+  const edge = findEdge();
+  if (!edge) {
+    t.skip('no Edge on this machine');
+    return;
+  }
+  const dir = tmpdir('synabrowse-read-');
+  const profile = path.join(dir, 'profile');
+  const article = path.join(dir, 'article.html');
+  const login = path.join(dir, 'login.html');
+  fs.writeFileSync(article, `<!doctype html><title>Article page</title>
+    <nav><a href="/a">Products</a><a href="/b">Pricing</a><a href="/c">Careers</a></nav>
+    <main><article><h1>The real story</h1>
+      <p>First paragraph of the article, with the substance in it.</p>
+      <h2>A heading</h2>
+      <p>Second paragraph, also substance rather than chrome.</p>
+      <ul><li>one point</li><li>another point</li></ul>
+    </article></main>
+    <footer><a href="/x">Privacy</a><a href="/y">Terms</a></footer>`);
+  fs.writeFileSync(login, `<!doctype html><title>Sign in</title>
+    <main><h1>Sign in to continue</h1>
+    <form><input type="text" name="user" /><input type="password" name="pass" /><button>Sign in</button></form></main>`);
+
+  const browser = createBrowser({ profile, startMinimized: true });
+  try {
+    await browser.goto(`file:///${article.replace(/\\/g, '/')}`);
+    const page = await browser.read({});
+    assert.match(page.text, /First paragraph of the article/);
+    assert.match(page.text, /one point/);
+    assert.doesNotMatch(page.text, /Careers|Privacy|Terms/, 'the nav and footer should not be in the article');
+    assert.equal(page.wall, '');
+
+    await browser.goto(`file:///${login.replace(/\\/g, '/')}`);
+    const wall = await browser.read({});
+    assert.equal(wall.wall, 'a password box');
+  } finally {
+    await browser.stop();
+    try { fs.rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 }); } catch { /* swept at exit */ }
+  }
+});
