@@ -46,6 +46,9 @@ const HIDDEN_FLAGS = [
   // What a bot check actually looks at, measured 11 Nov: without it the interstitial
   // sat on "Verifying…" for ever; with it the same window cleared in 2.6 s.
   '--disable-blink-features=AutomationControlled',
+  // Chromium prints an "unsupported command-line flag" bar for the line above. It is a
+  // dev flag, and the bar is what the operator photographed in the page (11 Nov).
+  '--test-type',
 ];
 
 /** Key names a model may press, mapped to the protocol's own. */
@@ -149,6 +152,9 @@ export function createBrowser({ profile, log = null, startMinimized = true, widt
           ? `${area.workX + Math.round((area.workW - width) / 2)},${area.workY + Math.round((area.workH - height) / 2)}`
           : '-32000,-32000';
         child = spawn(edge, launchArgs({ position }), { stdio: 'ignore', detached: false });
+        // Immediately, not after the port is ready: the operator must not lose the caret for
+        // the two seconds a browser takes to open (11 Nov).
+        if (before?.foreground) restoreFocus(before.foreground).catch(() => {});
         port = await waitForPort(profile, { timeoutMs: 30000 });
         if (!port) throw new Error('the browser did not open a debugging port');
         child.port = port;
@@ -469,6 +475,28 @@ export function createBrowser({ profile, log = null, startMinimized = true, widt
     return removed;
   }
 
+  /**
+   * Take the window off the screen without closing the browser.
+   *
+   * Closing it was the wrong tool: the model is often still mid-turn (a read after the
+   * sign-in), and killing the process left it talking to about:blank — "the tab is empty,
+   * this is strange" (11 Nov). Minimizing keeps the page and the session, and the idle
+   * reaper closes the browser when nobody needs it.
+   */
+  async function hideWindow() {
+    const p = await start();
+    const target = p.target?.id;
+    if (!target) return false;
+    try {
+      const { windowId } = await p.send('Browser.getWindowForTarget', { targetId: target });
+      await p.send('Browser.setWindowBounds', { windowId, bounds: { windowState: 'minimized' } });
+      return true;
+    } catch (err) {
+      log?.info?.(`browser: could not hide the window: ${err.message}`);
+      return false;
+    }
+  }
+
   /** The tabs this browser has open. */
   async function tabs() {
     const p = await start();
@@ -515,5 +543,5 @@ export function createBrowser({ profile, log = null, startMinimized = true, widt
   }, 30000);
   reaper.unref?.();
 
-  return { start, running, alive, pageState, goto, read, click, type, press, wait, scroll, screenshot, watch, tabs, clearSite, stop, profile };
+  return { start, running, alive, pageState, goto, read, click, type, press, wait, scroll, screenshot, watch, tabs, clearSite, hideWindow, stop, profile };
 }

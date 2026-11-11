@@ -12,7 +12,7 @@ const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 /** A browser whose page state follows a script, and which records what it was asked. */
 function fakeBrowser(states) {
   let i = 0;
-  const calls = { stopped: 0 };
+  const calls = { stopped: 0, hidden: 0 };
   return {
     calls,
     async pageState() {
@@ -22,6 +22,7 @@ function fakeBrowser(states) {
       return next;
     },
     async stop() { calls.stopped += 1; },
+    async hideWindow() { calls.hidden += 1; return true; },
   };
 }
 
@@ -48,7 +49,8 @@ test('the window is closed once the sign-in lands, and the caller is told once',
   await wait(120);
   assert.equal(signedIn, 1, 'exactly one sign-in');
   assert.equal(gone, 0, 'a sign-in is not a disappearance');
-  assert.equal(browser.calls.stopped, 1, 'the window is taken away');
+  assert.equal(browser.calls.hidden, 1, 'the window is taken away without closing the browser');
+  assert.equal(browser.calls.stopped, 0, 'the page must survive: closing it left the model reading about:blank');
 });
 
 test('a two-step sign-in is not cut short between its steps', async () => {
@@ -69,7 +71,7 @@ test('a window that goes away is an ending, not a sign-in', async () => {
   await wait(100);
   assert.equal(signedIn, 0);
   assert.equal(why, 'closed');
-  assert.equal(browser.calls.stopped, 0, 'nothing to close');
+  assert.equal(browser.calls.hidden, 0, 'nothing to hide');
 });
 
 test('a wait that runs out ends quietly', async () => {

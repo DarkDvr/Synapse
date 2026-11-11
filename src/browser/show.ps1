@@ -97,12 +97,25 @@ $y = $area.Y + [int](($area.Height - $h) / 2)
 # when it was restored, so this is what decides where it comes back — SetWindowPos alone
 # never moved that, and SetWindowPlacement through PowerShell's struct marshalling wrote
 # garbage (measured 11 Nov: asked for 1200x860 at 685,-990, got 500x127 at 0,0).
-[void][W.U]::ShowWindow($hwnd, 4)   # SW_SHOWNOACTIVATE: restore, and not the foreground
-$SWP_NOZORDER = 0x0004
-$SWP_NOACTIVATE = 0x0010
-[void][W.U]::SetWindowPos($hwnd, [IntPtr]::Zero, $x, $y, $w, $h, $SWP_NOZORDER -bor $SWP_NOACTIVATE)
+# Only move it when it is not already where it belongs. The launch places the window on
+# the second monitor now, so in the common case this is a no-op — and the restore-to-move
+# step, which the operator saw as "edge opened non-minimized, then minimized a second
+# later", does not happen at all (11 Nov).
+$here = New-Object 'W.U+WINDOWPLACEMENT'
+$here.length = [Runtime.InteropServices.Marshal]::SizeOf($here)
+[void][W.U]::GetWindowPlacement($hwnd, [ref]$here)
+$placed = $here.rcNormalPosition.Left -ge $area.X -and $here.rcNormalPosition.Top -ge $area.Y -and
+    $here.rcNormalPosition.Right -le ($area.X + $area.Width) -and $here.rcNormalPosition.Bottom -le ($area.Y + $area.Height)
+if (-not $placed) {
+    [void][W.U]::ShowWindow($hwnd, 4)   # SW_SHOWNOACTIVATE: restore, and not the foreground
+    $SWP_NOZORDER = 0x0004
+    $SWP_NOACTIVATE = 0x0010
+    [void][W.U]::SetWindowPos($hwnd, [IntPtr]::Zero, $x, $y, $w, $h, $SWP_NOZORDER -bor $SWP_NOACTIVATE)
+}
 
-if (-not $Restore) {
+if ($Restore) {
+    [void][W.U]::ShowWindow($hwnd, 4)   # SW_SHOWNOACTIVATE: up for the sign-in, not the foreground
+} else {
     [void][W.U]::ShowWindow($hwnd, 7)   # SW_SHOWMINNOACTIVE: on the taskbar, waiting
 }
 
@@ -132,6 +145,7 @@ $fgAfter = [W.U]::GetForegroundWindow()
     screens    = ($screens | ForEach-Object { $_.DeviceName }) -join ','
     asked      = @($x, $y, $w, $h)
     rect       = @($rect.Left, $rect.Top, ($rect.Right - $rect.Left), ($rect.Bottom - $rect.Top))
+    moved      = (-not $placed)
     normal     = @($placeNow.rcNormalPosition.Left, $placeNow.rcNormalPosition.Top, ($placeNow.rcNormalPosition.Right - $placeNow.rcNormalPosition.Left), ($placeNow.rcNormalPosition.Bottom - $placeNow.rcNormalPosition.Top))
     onScreen   = ($rect.Left -ge $area.X -and $rect.Top -ge $area.Y -and $rect.Right -le ($area.X + $area.Width))
     minimized  = [W.U]::IsIconic($hwnd)

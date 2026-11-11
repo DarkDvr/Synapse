@@ -55,8 +55,9 @@ export function watchForSignIn(browser, { intervalMs = 2000, timeoutMs = 10 * 60
       stopped = true;
       clearInterval(timer);
       clearTimeout(deadline);
-      log?.info?.(`browser: signed in at ${state.url} — closing the window for the operator`);
-      try { await browser.stop(); } catch { /* it may already be gone */ }
+      log?.info?.(`browser: signed in at ${state.url} — hiding the window for the operator`);
+      // Hide, do not close: the model is usually still mid-turn and its page must survive.
+      try { await browser.hideWindow(); } catch { /* the window may already be gone */ }
       try { onSignedIn?.(state.url); } catch { /* a listener must not break the page */ }
       return;
     }

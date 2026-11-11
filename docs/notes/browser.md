@@ -44,6 +44,20 @@ concurrent callers.
 
 The window is found again by the command line naming that profile — never by process name.
 
+## The launch is quiet, and the window does not flash
+
+- **No unsupported-flag bar.** `--disable-blink-features=AutomationControlled` makes Chromium
+  print "You're using an unsupported command-line flag…" across the top of the page. It was
+  in a screenshot the operator sent. `--test-type` suppresses the bar; the profile is a
+  disposable automation profile, so the trade is right.
+- **Focus comes back within the second.** The launch restores the operator's window as soon
+  as the process exists, not when the debugging port opens, so the caret does not leave for
+  the two seconds an Edge start takes.
+- **No visible flash.** The hand-off used to restore the window, move it and minimize it
+  again — a window that appeared and vanished. It now moves only when the window is not
+  already inside the target monitor, and the launch already places it there, so the common
+  path is one call: minimize.
+
 ## The tools (`src/mcp/browser-server.js`)
 
 `open`, `read`, `click`, `type`, `press`, `wait`, `scroll`, `screenshot`, `watch`, `tabs`,
@@ -88,8 +102,10 @@ DISPLAY2, and the hand-off left it minimized there with `stoleFocus: false`.
 
 **Then nobody has to close anything.** `session-watch.js` polls the page the window is
 standing on every two seconds, and when it stops asking to be signed into — no password
-box, no sign-in route, loaded — twice in a row, the window is closed and the site is
-recorded. The operator looks up, the window is gone and the chat says the session was
+box, no sign-in route, loaded — twice in a row, the window is **hidden** and the site is
+recorded. Hidden, not closed: the model is usually still mid-turn, and closing the browser
+left it reading `about:blank` and apologising (11 Nov). The idle reaper closes the browser
+when nobody needs it. The operator looks up, the window is gone and the chat says the session was
 kept. Two polls rather than one, because a two-step sign-in hides the password box
 between its steps and closing the window in that gap would be sabotage. If they close the
 window first, that is an ending, not a sign-in, and nothing is recorded.

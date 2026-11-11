@@ -72,11 +72,18 @@ export function askOperator({ profile, restore = false, sound = null, timeoutMs 
     }, timeoutMs);
     child.stdout.on('data', (d) => { out += d; });
     child.stderr.on('data', (d) => { err += d; });
-    child.on('close', (code) => {
+    child.on('close', async (code) => {
       clearTimeout(timer);
       const line = String(out).trim().split(/\r?\n/).filter(Boolean).pop() || '';
       let parsed = null;
       try { parsed = JSON.parse(line); } catch { parsed = null; /* not JSON: a report we cannot read */ }
+      // Showing a window can take the foreground — SW_SHOWNOACTIVATE on a minimized window
+      // still activated it on this machine (11 Nov). The operator's window gets it back, so
+      // the hand-off never interrupts what they were typing in.
+      if (parsed?.stoleFocus && parsed.fgBefore) {
+        const back = await restoreFocus(parsed.fgBefore).catch(() => null);
+        parsed.focusReturned = Boolean(back?.ok);
+      }
       resolve({
         ok: Boolean(parsed && !parsed.error),
         code,
