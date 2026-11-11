@@ -3,6 +3,31 @@
 Restarting the app, protecting the harness's own files, and how to look at the UI
 without breaking anything else. Split out of `AGENTS.md` verbatim.
 
+### Is a turn live? — the check before a restart
+
+`/api/runs` lists **delegations**, not the Architect reading, thinking or calling a tool.
+On 11 Nov a restart was done with `runs: 0` and killed the operator's own turn mid-sentence:
+the run list was empty because it is not a run, and `/api/pending` said `active: []` because
+there was no card to show. The turn was still live.
+
+A turn is live when the project's chat ends in an assistant message that is not
+`completed`, or when `/api/pending` says `canStop`. Both are cheap:
+
+```js
+const pending = await (await fetch('http://127.0.0.1:8700/api/pending')).json();
+const projects = (await (await fetch('http://127.0.0.1:8700/api/projects')).json()).projects || [];
+const live = [];
+for (const p of projects) for (const s of p.sessions || []) {
+  const m = await (await fetch(`http://127.0.0.1:8700/api/sessions/${s.id}/messages`)).json();
+  const last = (m.messages || []).at(-1);
+  if (last?.type === 'assistant' && last.completed === false) live.push(p.name);
+}
+console.log('live turns:', live, 'canStop:', pending.canStop);
+```
+
+Wait for `live: []` and `canStop: false`. A restart is a stop, and a stop mid-turn is a
+killed turn with nothing to show for it.
+
 ## Protecting the harness's own files
 
 The engine's `edit`, `write` and `shell` tools are **not confined to a session's
