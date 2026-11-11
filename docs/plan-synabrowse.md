@@ -157,3 +157,26 @@ doing better than `webfetch`; what is left is whether a **signed-in session** cl
 routes. That is exactly what the hand-off window is for, so stage 2 moves up: sign in once
 in the hidden browser, then re-test the depth.
 
+### Stage 2 — the hand-off, proved (11 Nov 2026)
+
+The window went to the secondary monitor, the operator signed in once, and the depth
+question answered itself:
+
+- **Placement**: `DISPLAY2`, `(685, −990)`, `1200×860`, visible — and the *show step* did
+  not change the foreground window (`fgBefore == fgAfter`), so presenting the window does
+  not steal focus.
+- **Sign-in took 5.2 minutes**, once, in a window the operator could use. Nothing was
+  copied and no cookie was read: the session lives in the profile, which grew to 500 MB
+  with it.
+- **Depth is a login question**: `https://www.nexusmods.com/games/skyrimspecialedition/mods`
+  now loads as *"Skyrim Special Edition Mods"* with the authenticated header (avatar,
+  messages, Upload). The same route returned "Something went wrong." for an anonymous
+  session an hour earlier.
+
+**One flaw to fix in the product**, found by measuring instead of trusting: the *launch*
+can take the foreground even though the show step does not — `show.ps1` saw our own window
+already in front when it measured. The fix is to capture the foreground handle **before**
+spawning the browser and restore it after, and to start the browser minimized until the
+hand-off actually needs it. The operator's rule stands: a run may never interrupt what they
+are doing.
+
