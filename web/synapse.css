@@ -2933,6 +2933,23 @@ body.is-stopping .chat-dock { animation: stop-glow 0.7s ease-in-out infinite; }
 /* A table inside a set-group's two-column grid takes the whole row: a host, a date and
    a ✕ in a 300px column is a table that reads as a list of abbreviations. */
 .set-grid > .prot-table { grid-column: 1 / -1; }
+/* The table's last row is the form: an address in the site column, Sign In in place of
+   "last used". The input is borderless so the row reads as a row, not a widget parked
+   under a table. */
+.site-add-input {
+  width: 100%; min-width: 0; padding: 3px 6px; background: transparent;
+  border: 1px solid transparent; border-radius: 5px; color: var(--fg);
+  font-family: var(--mono); font-size: 11px; line-height: 18px;
+}
+.site-add-input::placeholder { color: #6d7178; font-style: italic; }
+.site-add-input:hover { border-color: rgba(255, 255, 255, 0.07); }
+.site-add-input:focus { outline: none; border-color: var(--line); background: #1b1d21; }
+.site-add-btn {
+  justify-self: stretch; padding: 1px 6px; font-size: 11px; line-height: 18px;
+  white-space: nowrap; height: auto;
+}
+.site-signin-note { grid-column: 1 / -1; margin: 6px 0 0; }
+.site-signin-note:empty { display: none; }
 .site-when {
   font-family: var(--mono); font-size: 10px; color: #8b8f97; text-align: center;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;

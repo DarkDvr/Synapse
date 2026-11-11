@@ -815,13 +815,24 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
         profile,
         log: app,
         sound,
-        onDone: (opened) => {
-          const host = String(opened || '').replace(/^[a-z]+:\/\//i, '').split(/[/?#]/)[0].toLowerCase();
+        // The operator closed the window: that is "done". Before the row is written, the
+        // address is opened once more, hidden, to see whether the site still asks for a
+        // password — a session that did not take must not become a row that says it did.
+        onDone: async (opened) => {
+          const { confirmSession } = await import('./browser/signin.js');
+          const check = await confirmSession({ url: opened, profile, log: app })
+            .catch((err) => ({ ok: false, url: opened, why: err.message }));
+          const host = String(check.url || opened || '').replace(/^[a-z]+:\/\//i, '').split(/[/?#]/)[0].toLowerCase();
+          if (!check.ok) {
+            app.info(`SynaBrowse: ${host} not confirmed — ${check.why}`);
+            notify?.({ kind: 'browser-session-unconfirmed', host, why: check.why, ts: Date.now() });
+            return;
+          }
           const next = getConfig();
-          next.browser = { ...next.browser, sites: addSite(next.browser?.sites, host) };
+          next.browser = { ...next.browser, sites: addSite(next.browser?.sites, host, Date.now(), check.url) };
           applyConfig(next);
-          app.info(`SynaBrowse: ${host} closed after sign-in; the session stays in its profile`);
-          notify?.({ kind: 'browser-session-kept', host, ts: Date.now() });
+          app.info(`SynaBrowse: ${host} signed in and confirmed; the session stays in its profile`);
+          notify?.({ kind: 'browser-session-kept', host, url: check.url, ts: Date.now() });
         },
       });
       if (answer.ok) app.info(`SynaBrowse: sign-in window asked for ${answer.url}`);

@@ -2427,14 +2427,17 @@ Type: question **15px** bold, title **12.5px**, option label **12.5px**, descrip
 **Settings has twelve tabs**: General, Server, Engine, **Browser**, Providers, Workers,
 Tools, Automation, Prohibited, Logging, Check for Updates, About. There is no "Runtime"
 tab — it is **Engine** — and Updates/About are those last two, not extra screens. Browser
-is SynaBrowse: the enable switch, its profile folder, and **Sign In…** — the one control
-that acts without Save, which puts that browser on the second monitor so a person can log
-in. Beside it is a **Sites** table in the Prohibited table's own shape (site, signed in,
-last used, ✕): a *record* of the sessions, not a permission list, because the operator's
-answer to "which sites may it open" was "the ones I am logged into". It shows an age, not
-a countdown — when a session expires is the site's decision — and ✕ clears that host's
-cookies from the profile as it removes the row. The click on Sign In says where it is in
-the launch ("Starting the browser…", "Loading the page…", "Waiting for you at <host>"),
+is SynaBrowse: the enable switch, its profile folder, and a **Signed In** table in the
+Prohibited table's own shape (site, signed in, last used, ✕). It is a *record* of the
+sessions, not a permission list, because the operator's answer to "which sites may it
+open" was "the ones I am logged into". **The table's last row is the form**: an address
+typed in the site column, and `Sign In…` in place of "last used", so there is no separate
+Sign In section to find. The row only becomes a real entry after the operator closes the
+window and the address is opened once more, hidden, to confirm it no longer asks for a
+password — a session that did not take must not become a row that says it did. It shows
+an age, not a countdown (when a session expires is the site's decision), and ✕ clears that
+host's cookies from the profile as it removes the row. The click says where it is in the
+launch ("Starting the browser…", "Loading the page…", "Waiting for you at <host>"),
 because a button that answers only when a browser is up reads as ignored.
 
 **Composer placeholders**: `Message` in Single, `Message the Architect…` in Multi,

@@ -253,6 +253,13 @@ export function switchSettingsTab(id) {
 // The editor's fields write straight into the selected draft provider: there is
 // no data-path for them because a provider is an object in a list, not a path.
 export function onSettingsInput(e) {
+  // The Sites table's last row is the form, so Enter in its address is the same as
+  // pressing Sign In beside it — a person types an address and presses Enter.
+  if (e.target?.id === 'browserSigninUrl' && e.key === 'Enter') {
+    e.preventDefault();
+    $('settingsBody')?.querySelector('#browserSignin')?.click();
+    return;
+  }
   // The chat's size is the one setting whose effect is worth seeing while it is
   // being chosen: a number in a box says nothing about whether a full answer still
   // fits above the composer. The draft is not touched — Save is still the write.
@@ -326,7 +333,7 @@ export async function onSettingsClick(e) {
     const note = $('settingsBody')?.querySelector('#browserSigninNote');
     const say = (text) => { if (note) note.textContent = text; };
     if (!url) {
-      say('Type the site to sign in to — an address is enough.');
+      say('Type an address in the table’s last row first.');
       field?.focus();
       return;
     }
@@ -341,8 +348,9 @@ export async function onSettingsClick(e) {
     try {
       const answer = await api('POST', '/api/browser/signin', { url });
       if (answer?.ok) {
-        say(`Waiting for you at ${answer.host || url} — sign in, then close the window. The session is kept.`);
+        say(`Waiting for you at ${answer.host || url} — sign in, then close the window. The row appears once the session is confirmed.`);
         toast('SynaBrowse Is Waiting', 'It is on the second monitor — sign in, then close the window.');
+        if (field) field.value = '';
       } else {
         say(answer?.error || 'The browser did not start.');
         toast('Could Not Open SynaBrowse', answer?.error || 'The browser did not start.');

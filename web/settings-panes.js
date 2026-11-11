@@ -580,20 +580,18 @@ function ago(at) {
 
 function settingsBrowser(c) {
   const sites = Array.isArray(c.browser?.sites) ? c.browser.sites : [];
-  const rows = sites.length
-    ? sites.map((site) => `
-        <div class="prot-row is-sites">
-          <span class="prot-path" title="${esc(site.host)}"><span class="prot-name">${esc(site.host)}</span></span>
-          <span class="site-when">${esc(ago(site.signedInAt) || '—')}</span>
-          <span class="site-when">${esc(site.lastUsedAt ? ago(site.lastUsedAt) : 'never')}</span>
-          <button type="button" class="prot-x" data-site-forget="${esc(site.host)}"
-                  title="Forget ${esc(site.host)}: remove the row and clear its cookies from the profile"
-                  aria-label="Forget ${esc(site.host)}">✕</button>
-        </div>`).join('')
-    : `<div class="prot-row is-sites">
-         <span class="prot-path"><span class="prot-name">No site signed in yet — Sign In below.</span></span>
-         <span class="site-when"></span><span class="site-when"></span><span></span>
-       </div>`;
+  // One row per session, and a last row that is the form: type an address in the site
+  // column, press Sign In in the "last used" column. The table is the whole control — no
+  // separate Sign In section to find (the operator asked for exactly this shape).
+  const rows = sites.map((site) => `
+    <div class="prot-row is-sites">
+      <span class="prot-path" title="${esc(site.url || site.host)}"><span class="prot-name">${esc(site.host)}</span></span>
+      <span class="site-when">${esc(ago(site.signedInAt) || '—')}</span>
+      <span class="site-when">${esc(site.lastUsedAt ? ago(site.lastUsedAt) : 'never')}</span>
+      <button type="button" class="prot-x" data-site-forget="${esc(site.host)}"
+              title="Forget ${esc(site.host)}: remove the row and clear its cookies from the profile"
+              aria-label="Forget ${esc(site.host)}">✕</button>
+    </div>`).join('');
 
   return [
     setGroup(
@@ -618,22 +616,17 @@ function settingsBrowser(c) {
           <span></span>
         </div>
         ${rows}
-      </div>`,
+        <div class="prot-row is-sites is-add">
+          <input id="browserSigninUrl" class="site-add-input" type="text" spellcheck="false"
+                 placeholder="type an address, then Sign In" aria-label="Address to sign in to" />
+          <span class="site-when"></span>
+          <button class="btn btn-secondary btn-sm site-add-btn" type="button" id="browserSignin">Sign In…</button>
+          <span></span>
+        </div>
+      </div>
+      <p class="set-note site-signin-note" id="browserSigninNote" role="status" aria-live="polite"></p>`,
       undefined,
-      'A session lives in the browser’s own profile until the site expires it — that is the site’s decision, so the table shows an age rather than a countdown. Sign In again to refresh a site; Forget clears its cookies.',
-    ),
-    setGroup(
-      'Sign in',
-      `<label class="set-field wide" title="The browser opens on the second monitor so a person can log in; the session stays in its profile for every project.">` +
-        `<span>Site to sign in to</span>` +
-        `<input id="browserSigninUrl" type="text" placeholder="reddit.com, мос.ру, or 192.168.1.20:8080" spellcheck="false" />` +
-        `</label>` +
-        `<div class="set-field wide site-signin">` +
-        `<button class="btn btn-secondary btn-sm" type="button" id="browserSignin">Sign In…</button>` +
-        `<span class="set-note" id="browserSigninNote" role="status" aria-live="polite"></span>` +
-        `</div>`,
-      undefined,
-      'Signing in is the one thing only you can do: a bot check or a password. The window goes to the second monitor, without taking focus; close it when you are done and the session is kept.',
+      'A session lives in the browser’s own profile until the site expires it — that is the site’s decision, so the table shows an age rather than a countdown. Type an address in the last row and press Sign In; the row becomes a real entry once the sign-in is confirmed.',
     ),
   ].join('');
 }

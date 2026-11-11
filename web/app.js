@@ -1140,11 +1140,23 @@ function connectStream() {
       return;
     }
 
-    // The operator closed the SynaBrowse window after signing in. That is the only honest
-    // "done" a harness can take, and saying so is what closes the loop: the session is in
-    // the profile, and the Sites table now has a row with a date.
+    // The operator closed the SynaBrowse window after signing in, and the address was
+    // opened once more to confirm it no longer asks for a password. Only then does the
+    // row exist: a session that did not take must not become a row that says it did.
     if (ev.kind === 'browser-session-kept') {
       toast('Session Kept', `${ev.host || 'That site'} — your sign-in stays in SynaBrowse's profile.`);
+      const sites = state.config?.browser?.sites;
+      if (Array.isArray(sites)) {
+        if (!sites.some((site) => site.host === ev.host)) {
+          sites.unshift({ host: ev.host, url: ev.url || '', signedInAt: ev.ts || Date.now(), lastUsedAt: ev.ts || Date.now() });
+        }
+        if (state.setDraft?.browser) state.setDraft.browser.sites = sites;
+        if (!$('settingsModal')?.hidden && state.settingsTab === 'browser') renderSettings();
+      }
+      return;
+    }
+    if (ev.kind === 'browser-session-unconfirmed') {
+      toast('Sign-In Not Confirmed', `${ev.host || 'That site'} — ${ev.why || 'the page still asks to be signed in'}. Nothing was added.`);
       return;
     }
 
@@ -1902,6 +1914,9 @@ document.addEventListener('keydown', (e) => {
   // per-element listeners would have to be re-attached each time.
   $('settingsBody').addEventListener('click', onSettingsClick);
   $('settingsBody').addEventListener('input', onSettingsInput);
+  // Enter in the Sites table's last row means Sign In, which is a key event, not an
+  // input one (11 Nov).
+  $('settingsBody').addEventListener('keydown', onSettingsInput);
   // Every edit moves the footer: Apply and the primary are only honest while
   // they know whether the form differs from the file.
   $('settingsBody').addEventListener('input', () => updateSettingsFoot());

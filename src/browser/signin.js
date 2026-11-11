@@ -28,6 +28,50 @@ export function addressCandidates(input) {
   return [`https://${raw}`, `http://${raw}`];
 }
 
+/** A URL that still means "you are not signed in". */
+const LOGIN_ROUTE = /\/(?:log-?in|sign-?in|signin|auth|sso|session\/new)(?:[/?#]|$)/i;
+
+/**
+ * Does a page still ask to be signed into?
+ *
+ * Two signals, both visible on the page and neither a guess about the site: the address
+ * is a sign-in route, or a password box is on it. A page that passes both is taken as
+ * signed in — which is what the operator saw when they closed the window.
+ */
+export function looksUnconfirmed(url, passwordInputs = 0) {
+  return LOGIN_ROUTE.test(String(url || '')) || Number(passwordInputs) > 0;
+}
+
+/**
+ * Confirm a session after the operator closed the window: open the address again — hidden
+ * this time — and see whether the site still asks for a password.
+ *
+ * `ok` means "the page came up without a sign-in", not "the server proved a cookie"; the
+ * sentence says which. A host that answers with an error is unconfirmed, never recorded.
+ */
+export async function confirmSession({ url, profile, log = null } = {}) {
+  const browser = createBrowser({ profile, log });
+  try {
+    const opened = await browser.goto(url, { settle: 1200 });
+    const passwordInputs = await browser
+      .start()
+      .then((page) => page.evaluate("document.querySelectorAll('input[type=password]').length"))
+      .catch(() => 0);
+    if (looksUnconfirmed(opened, passwordInputs)) {
+      return {
+        ok: false,
+        url: opened,
+        why: passwordInputs > 0 ? 'the page still asks for a password' : 'the site still sends you to its sign-in page',
+      };
+    }
+    return { ok: true, url: opened, why: '' };
+  } catch (err) {
+    return { ok: false, url: String(url || ''), why: err.message };
+  } finally {
+    await browser.stop();
+  }
+}
+
 /**
  * Show the browser on a site and ask the operator to sign in.
  *

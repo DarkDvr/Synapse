@@ -12,7 +12,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { hostOf, hostAllowed, checkUrl } from '../src/browser/allow.js';
 import { createBrowser, findEdge } from '../src/browser/browser.js';
-import { addressCandidates } from '../src/browser/signin.js';
+import { addressCandidates, looksUnconfirmed } from '../src/browser/signin.js';
 import { tmpdir } from './tmpdir.mjs';
 
 // ── the fence ───────────────────────────────────────────────────
@@ -110,4 +110,15 @@ test('the tools drive a local page: read, click, type, screenshot, watch', async
     // tmpdir() and would be swept anyway, so a locked file is not a test failure.
     try { fs.rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 }); } catch { /* swept at exit */ }
   }
+});
+
+// A session is "confirmed" only when the page comes up without asking to be signed into.
+// Two signals, both visible: a sign-in route, or a password box. Anything else is a page.
+test('a page that still asks for a sign-in is not confirmed', () => {
+  assert.equal(looksUnconfirmed('https://example.com/login'), true);
+  assert.equal(looksUnconfirmed('https://example.com/sign-in?next=/x'), true);
+  assert.equal(looksUnconfirmed('https://example.com/auth/sso'), true);
+  assert.equal(looksUnconfirmed('https://example.com/', 1), true);
+  assert.equal(looksUnconfirmed('https://example.com/', 0), false);
+  assert.equal(looksUnconfirmed('https://example.com/account/logins'), false, 'a path that merely starts with "login" is not a login page');
 });

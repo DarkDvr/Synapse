@@ -8,10 +8,10 @@ import assert from 'node:assert/strict';
 import { cleanHost, normalizeSites, addSite, touchSite, forgetSite } from '../src/browser/sites.js';
 
 test('a host is a host, whatever was typed', () => {
-  assert.equal(cleanHost('https://www.Reddit.com/r/x?y=1'), 'www.reddit.com');
-  assert.equal(cleanHost('reddit.com'), 'reddit.com');
-  assert.equal(cleanHost('reddit.com:8080'), 'reddit.com');
-  assert.equal(cleanHost('.example.com.'), 'example.com');
+  assert.equal(cleanHost('https://www.Example.test/r/x?y=1'), 'www.example.test');
+  assert.equal(cleanHost('example.test'), 'example.test');
+  assert.equal(cleanHost('example.test:8080'), 'example.test');
+  assert.equal(cleanHost('.example.test.'), 'example.test');
   assert.equal(cleanHost(''), '');
   assert.equal(cleanHost('not a host'), '', 'a space is not a host');
 });
@@ -29,17 +29,23 @@ test('a saved list is de-duplicated and newest first', () => {
   assert.equal(list.find((entry) => entry.host === 'a.test').signedInAt, 200, 'the newer sign-in wins');
 });
 
-test('signing in adds or refreshes exactly one row', () => {
-  const first = addSite([], 'reddit.com', 1000);
-  assert.deepEqual(first, [{ host: 'reddit.com', signedInAt: 1000, lastUsedAt: 0 }]);
-  const again = addSite(first, 'https://reddit.com/', 2000);
+test('signing in adds or refreshes exactly one row, with its address', () => {
+  const first = addSite([], 'example.test', 1000, 'https://www.example.test/');
+  assert.deepEqual(first, [{
+    host: 'example.test',
+    url: 'https://www.example.test/',
+    signedInAt: 1000,
+    lastUsedAt: 1000,
+  }]);
+  const again = addSite(first, 'https://example.test/', 2000);
   assert.equal(again.length, 1, 'one row per host');
   assert.equal(again[0].signedInAt, 2000);
+  assert.equal(again[0].url, 'https://www.example.test/', 'a refresh keeps the address it was confirmed at');
 });
 
 test('opening a site the profile has a session for moves "last used" only', () => {
-  const list = addSite([], 'example.com', 1000);
-  const used = touchSite(list, 'example.com', 5000);
+  const list = addSite([], 'example.test', 1000);
+  const used = touchSite(list, 'example.test', 5000);
   assert.equal(used[0].signedInAt, 1000, 'a visit is not a sign-in');
   assert.equal(used[0].lastUsedAt, 5000);
   // A host that was never signed in does not appear from a visit.

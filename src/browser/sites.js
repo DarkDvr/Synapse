@@ -30,9 +30,11 @@ export function normalizeSites(list) {
     if (!host) continue;
     const signedInAt = Number(entry?.signedInAt) || 0;
     const lastUsedAt = Number(entry?.lastUsedAt) || 0;
+    const url = String(entry?.url || '').trim();
     const prior = seen.get(host);
     seen.set(host, {
       host,
+      url: url || prior?.url || '',
       signedInAt: Math.max(signedInAt, prior?.signedInAt || 0),
       lastUsedAt: Math.max(lastUsedAt, prior?.lastUsedAt || 0),
     });
@@ -41,12 +43,16 @@ export function normalizeSites(list) {
 }
 
 /** Record a sign-in: the host is added or refreshed, and stays one row. */
-export function addSite(sites, host, at = Date.now()) {
+export function addSite(sites, host, at = Date.now(), url = '') {
   const key = cleanHost(host);
   if (!key) return normalizeSites(sites);
-  const rest = normalizeSites(sites).filter((entry) => entry.host !== key);
-  const prior = normalizeSites(sites).find((entry) => entry.host === key);
-  return normalizeSites([{ host: key, signedInAt: at, lastUsedAt: prior?.lastUsedAt || 0 }, ...rest]);
+  const list = normalizeSites(sites);
+  const rest = list.filter((entry) => entry.host !== key);
+  const prior = list.find((entry) => entry.host === key);
+  return normalizeSites([
+    { host: key, url: String(url || '').trim() || prior?.url || '', signedInAt: at, lastUsedAt: at },
+    ...rest,
+  ]);
 }
 
 /** Note that the browser opened a host this profile has a session for. */
