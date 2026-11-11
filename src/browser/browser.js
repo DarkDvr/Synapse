@@ -100,6 +100,7 @@ export function createBrowser({ profile, log = null, startMinimized = true, widt
   let child = null;
   let page = null;
   let starting = null;
+  let pageWindowId = null;
   let lastUsed = Date.now();
 
   /** Every action says "still in use", so the idle clock follows the work, not the clock. */
@@ -139,6 +140,9 @@ export function createBrowser({ profile, log = null, startMinimized = true, widt
       // cannot be open twice, and the session is the point.
       const existing = await waitForPort(profile, { timeoutMs: 1200 });
       let port = existing;
+      // Where the window belongs, decided before the spawn: the second monitor's centre.
+      let placeX = null;
+      let placeY = null;
       if (!port) {
         // A port file from an earlier instance names a port that is gone.
         try { fs.rmSync(path.join(profile, 'DevToolsActivePort'), { force: true }); } catch { /* fine */ }
@@ -148,9 +152,11 @@ export function createBrowser({ profile, log = null, startMinimized = true, widt
         // off-screen, Windows put the button on the primary (11 Nov).
         const before = startMinimized ? await screenState().catch(() => null) : null;
         const area = before?.screens?.find((s) => !s.primary) || before?.screens?.[0] || null;
-        const position = area
-          ? `${area.workX + Math.round((area.workW - width) / 2)},${area.workY + Math.round((area.workH - height) / 2)}`
-          : '-32000,-32000';
+        placeX = area ? area.workX + Math.round((area.workW - width) / 2) : null;
+        placeY = area ? area.workY + Math.round((area.workH - height) / 2) : null;
+        // Off-screen for the moment it exists, so nothing is visible; the protocol puts it on
+        // the right monitor and minimizes it a second later.
+        const position = '-32000,-32000';
         // cwd outside the project: a process whose working directory is a folder keeps that folder
         // undeletable, and Edge is long-lived (11 Nov).
         child = spawn(edge, launchArgs({ position }), { stdio: 'ignore', detached: false, cwd: path.dirname(profile) });
@@ -173,6 +179,25 @@ export function createBrowser({ profile, log = null, startMinimized = true, widt
       // The tab must be the active one or a challenge that runs on a timer never ends.
       try { await conn.send('Page.bringToFront'); } catch { /* a hidden window may refuse */ }
       try { await conn.send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false }); } catch { /* fine */ }
+      // Edge ignores --start-minimized when a window is created through the DevTools port:
+      // it came up restored and visible on every launch (12 Nov). So the window is placed
+      // and minimized through the protocol, before anyone can see it.
+      // The window stays **off-screen and normal**, never minimized: a minimized Chromium
+      // window stops compositing, so Page.captureScreenshot never answers (measured 12 Nov)
+      // — that is the "it is still running doing who-knows-what" after a sign-in. Off-screen
+      // it is invisible and still renders.
+      try {
+        if (!existing) {
+          const { windowId } = await conn.send('Browser.getWindowForTarget', { targetId: conn.target.id });
+          await conn.send('Browser.setWindowBounds', {
+            windowId,
+            bounds: { windowState: 'normal', left: -32000, top: -32000, width, height },
+          });
+          pageWindowId = windowId;
+        }
+      } catch (err) {
+        note(`browser: could not place the window: ${err.message}`);
+      }
       note(`browser: ${existing ? 'attached to' : 'started'} Edge on port ${port}`);
       return page;
     })();
@@ -384,11 +409,39 @@ export function createBrowser({ profile, log = null, startMinimized = true, widt
     return p.evaluate('window.scrollY');
   }
 
+  /**
+   * A minimized window does not render, so a capture waits for ever. If the hand-off left it
+   * minimized, bring it back off-screen for the length of the capture and minimize it again.
+   */
+  async function renderable() {
+    const p = page;
+    if (!p) return null;
+    try {
+      const { windowId } = await p.send('Browser.getWindowForTarget', { targetId: p.target.id });
+      const { bounds } = await p.send('Browser.getWindowBounds', { windowId });
+      if (bounds.windowState !== 'minimized') return null;
+      await p.send('Browser.setWindowBounds', { windowId, bounds: { windowState: 'normal', left: -32000, top: -32000 } });
+      return async () => {
+        try { await p.send('Browser.setWindowBounds', { windowId, bounds: { windowState: 'minimized' } }); } catch { /* gone */ }
+      };
+    } catch {
+      // No window to ask about, or the protocol refused: either way a capture goes ahead
+      // unchanged rather than failing on the question.
+      return null;
+    }
+  }
+
   /** A picture of the page: viewport, or the whole document. */
   async function screenshot({ full = false, file } = {}) {
     const p = await start();
     used();
-    const png = await p.screenshot({ full });
+    const back = await renderable();
+    let png;
+    try {
+      png = await p.screenshot({ full });
+    } finally {
+      if (back) await back();
+    }
     if (file) {
       fs.mkdirSync(path.dirname(file), { recursive: true });
       fs.writeFileSync(file, png);
@@ -405,6 +458,7 @@ export function createBrowser({ profile, log = null, startMinimized = true, widt
   async function watch({ ms = 1200, dir, everyNthFrame = 1 } = {}) {
     const p = await start();
     used();
+    const back = await renderable();
     fs.mkdirSync(dir, { recursive: true });
     const frames = [];
     const onFrame = async (params) => {
@@ -422,6 +476,7 @@ export function createBrowser({ profile, log = null, startMinimized = true, widt
       if (ev) await onFrame(ev);
     }
     await p.send('Page.stopScreencast').catch(() => {});
+    if (back) await back();
     return frames;
   }
 
@@ -491,7 +546,9 @@ export function createBrowser({ profile, log = null, startMinimized = true, widt
     if (!target) return false;
     try {
       const { windowId } = await p.send('Browser.getWindowForTarget', { targetId: target });
-      await p.send('Browser.setWindowBounds', { windowId, bounds: { windowState: 'minimized' } });
+      // Off-screen and normal: invisible to the operator, and still rendering, so the model's
+      // next screenshot answers instead of waiting out its timeout.
+      await p.send('Browser.setWindowBounds', { windowId, bounds: { windowState: 'normal', left: -32000, top: -32000 } });
       return true;
     } catch (err) {
       log?.info?.(`browser: could not hide the window: ${err.message}`);

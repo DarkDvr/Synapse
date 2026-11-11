@@ -333,6 +333,12 @@ export function createServer({ api, engine, logger, config, remote, onRemote }) 
     if (seg[0] === 'browser' && seg[1] === 'signin' && method === 'POST') {
       return sendJson(res, 200, await api.browserSignin((await readBody(req))?.url));
     }
+    // POST /api/browser/ask — ask the operator for a sign-in window. The card is the
+    // question; only an Allow opens a window, and the answer waits for what happens in it.
+    if (seg[0] === 'browser' && seg[1] === 'ask' && method === 'POST') {
+      return sendJson(res, 200, await api.browserSignInAsk(await readBody(req)));
+    }
+
     // POST /api/browser/signed-in — the watcher saw the page stop asking for a sign-in,
     // closed the window, and the site is now part of the record.
     if (seg[0] === 'browser' && seg[1] === 'signed-in' && method === 'POST') {
@@ -591,6 +597,10 @@ export function createServer({ api, engine, logger, config, remote, onRemote }) 
       else res.end();
     }
   });
+  // A sign-in ask waits for the operator, and they may take an hour: no request timeout.
+  // The default is five minutes, which would cut the answer off mid-wait.
+  server.requestTimeout = 0;
+
 
   const listen = (host) => new Promise((resolve, reject) => {
     const onError = (err) => {

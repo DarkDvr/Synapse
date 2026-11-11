@@ -46,6 +46,7 @@ import {
   openDelegations,
 } from './plans.js';
 import { screenCallOver } from './desk.js';
+import { browserAskHolding } from './browser/ask.js';
 import { normDir } from './paths.js';
 import { report } from './report.js';
 import { tokens, ranFor } from './words.js';
@@ -3109,9 +3110,11 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
       if (steer) await steerIfLong(sessionId, messages);
 
       const last = messages[messages.length - 1];
+      // A question card and a sign-in ask are both waits on a person, not stalls: that
+      // clock is the operator's to spend, not the model's (12 Nov).
       const waiting = (last?.parts || []).some(
         (p) => p?.type === 'tool' && /^question$/.test(String(p.name || '')) && /run|pend|progress/i.test(String(p.status || '')),
-      );
+      ) || browserAskHolding();
       if (waiting) {
         lastActivity = Date.now();
         if (!asking) log.info(`${sessionId} is waiting on an answer; its stall clock is paused`);

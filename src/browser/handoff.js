@@ -52,13 +52,14 @@ export function restoreFocus(hwnd) {
   return askPowerShell(['-Mode', 'restore', '-Hwnd', String(hwnd)]);
 }
 
-export function askOperator({ profile, restore = false, sound = null, timeoutMs = 15000 } = {}) {
+export function askOperator({ profile, restore = false, focus = false, sound = null, timeoutMs = 15000 } = {}) {
   const args = [
     '-NoProfile',
     '-ExecutionPolicy', 'Bypass',
     '-File', SCRIPT,
     '-Marker', profile,
     ...(restore ? ['-Restore'] : []),
+    ...(focus ? ['-Focus'] : []),
     // Sound is passed when the caller decided: a path, or '' for silence. Omitted means
     // the script's own default, which is the chime.
     ...(sound === null || sound === undefined ? [] : ['-Sound', sound]),

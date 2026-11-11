@@ -18,7 +18,8 @@
 param(
     [string]$Marker = 'Synapse\data\browser\profile',
     [string]$Sound = 'F:\dev\Synapse\web\sounds\hollow.wav',
-    [switch]$Restore
+    [switch]$Restore,
+    [switch]$Focus
 )
 
 $ErrorActionPreference = 'Stop'
@@ -82,9 +83,20 @@ $callback = [W.U+EnumProc]{
 if ($found.Count -eq 0) { '{"error":"no SynaBrowse window"}' | Write-Output; exit 1 }
 $hwnd = $found[0]
 
-# The second monitor if there is one; a laptop without a second screen falls back.
+# Where the window goes. A hand-off waits on the second monitor; a sign-in the operator has
+# just allowed opens where they are looking — the monitor of the window that had the
+# foreground when they clicked Allow (12 Nov).
 $screens = [System.Windows.Forms.Screen]::AllScreens
-$screen = $screens | Where-Object { -not $_.Primary } | Select-Object -First 1
+$screen = $null
+if ($Focus) {
+    $fg = New-Object 'W.U+RECT'
+    if ($fgBefore -ne [IntPtr]::Zero -and [W.U]::GetWindowRect($fgBefore, [ref]$fg)) {
+        $cx = [int](($fg.Left + $fg.Right) / 2)
+        $cy = [int](($fg.Top + $fg.Bottom) / 2)
+        $screen = $screens | Where-Object { $cx -ge $_.Bounds.X -and $cx -le ($_.Bounds.X + $_.Bounds.Width) -and $cy -ge $_.Bounds.Y -and $cy -le ($_.Bounds.Y + $_.Bounds.Height) } | Select-Object -First 1
+    }
+}
+if (-not $screen) { $screen = $screens | Where-Object { -not $_.Primary } | Select-Object -First 1 }
 if (-not $screen) { $screen = [System.Windows.Forms.Screen]::PrimaryScreen }
 $area = $screen.WorkingArea
 $w = [Math]::Min(1200, [int]($area.Width * 0.72))
@@ -113,7 +125,13 @@ if (-not $placed) {
     [void][W.U]::SetWindowPos($hwnd, [IntPtr]::Zero, $x, $y, $w, $h, $SWP_NOZORDER -bor $SWP_NOACTIVATE)
 }
 
-if ($Restore) {
+if ($Focus) {
+    # The operator allowed this window: it takes the foreground, because they are about to
+    # type into it. Nothing here is a surprise any more — they asked for it.
+    [void][W.U]::ShowWindow($hwnd, 9)   # SW_RESTORE
+    [void][W.U]::ShowWindow($hwnd, 4)   # SW_SHOWNOACTIVATE
+    [void][W.U]::SetForegroundWindow($hwnd) | Out-Null
+} elseif ($Restore) {
     [void][W.U]::ShowWindow($hwnd, 4)   # SW_SHOWNOACTIVATE: up for the sign-in, not the foreground
 } else {
     [void][W.U]::ShowWindow($hwnd, 7)   # SW_SHOWMINNOACTIVE: on the taskbar, waiting

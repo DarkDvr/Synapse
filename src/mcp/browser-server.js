@@ -370,45 +370,39 @@ async function handle(msg) {
             return toolText(id, list.map((t) => `- ${t.title} — ${t.url}`).join('\n') || 'No pages open.');
           }
           case 'handoff': {
-            if (args.url) {
-              guard(args.url);
-              await browser.goto(args.url, { settle: 900 });
-            }
-            // The chime is the operator's own switch: on unless they turned it off.
-            const asked = await askOperator({ profile: cfg.profile, sound: cfg.sounds ? CHIME : '' });
-            if (!asked.ok) return toolText(id, `Could not reach the operator's screen: ${asked.error}`, true);
-            // Tell the page too: the chime is the window's, the notice is Synapse's, and
-            // an operator away from the screen still sees why the run is waiting when
-            // they come back. Best effort — the app may not be running.
+            // A sign-in is a permission, not a window that appears: the operator is asked
+            // on a card, and only their Allow opens one. The call waits for the outcome —
+            // there is no timeout, because the wait is theirs (12 Nov).
+            if (args.url) guard(args.url);
+            let answer = null;
             try {
-              await fetch('http://127.0.0.1:8700/api/browser/waiting', {
+              const res = await fetch('http://127.0.0.1:8700/api/browser/ask', {
                 method: 'POST',
                 headers: { 'content-type': 'application/json' },
-                body: JSON.stringify({ what: args.what || '', url: args.url || '' }),
+                body: JSON.stringify({
+                  url: args.url || (await browser.tabs())[0]?.url || '',
+                  host: args.host || '',
+                  what: args.what || '',
+                }),
               });
-            } catch { /* no app listening; the chime and the window still stand */ }
-            // Nobody has to close anything: the watch takes the window away the moment
-            // the page stops asking for a sign-in, and the app records the site.
-            watchForSignIn(browser, {
-              log: { info: (m) => process.stderr.write(`${m}\n`) },
-              onSignedIn: (signedUrl) => {
-                fetch('http://127.0.0.1:8700/api/browser/signed-in', {
-                  method: 'POST',
-                  headers: { 'content-type': 'application/json' },
-                  body: JSON.stringify({ url: signedUrl }),
-                }).catch(() => { /* the app may not be listening; the session is still kept */ });
-              },
-            });
-            const w = asked.window || {};
-            process.stderr.write(`handoff: window ${w.hwnd} on ${w.screen}, minimized=${w.minimized}, stoleFocus=${w.stoleFocus}\n`);
+              answer = await res.json();
+            } catch (err) {
+              return toolText(id, `Could not ask the operator: ${err.message}`, true);
+            }
+            if (!answer?.allowed) {
+              return toolText(
+                id,
+                `The operator did not allow a sign-in window. ${answer?.message || ''} Treat the page as unavailable and carry on without it.`.trim(),
+                true,
+              );
+            }
+            if (!answer.signedIn) {
+              return toolText(id, `A window was opened but no session appeared. ${answer.reason || ''} Treat the site as unavailable.`.trim(), true);
+            }
             return toolText(
               id,
-              [
-                `The browser is waiting on the taskbar of the second monitor, minimized, and a chime played.`,
-                w.stoleFocus ? 'Warning: the window took the foreground; tell the operator.' : 'It did not take focus.',
-                args.what ? `It needs: ${args.what}` : '',
-                'The operator has to sign in or pass the check. Call `wait` and then `read` again; do not click blindly while they work.',
-              ].filter(Boolean).join(' '),
+              `Signed in to ${answer.host || 'the site'}; the window is gone and the session is kept in SynaBrowse's profile. ` +
+                'Read the page again — it should be the signed-in one.',
             );
           }
           case 'close':

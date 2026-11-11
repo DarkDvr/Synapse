@@ -155,6 +155,9 @@ export async function refreshPending() {
     title: x.title || null,
     directory: x.directory || null,
     files: x.files || [],
+    // A sign-in ask is the harness's own card; these two fields let it say which site.
+    browserHost: x.browserHost || '',
+    browserUrl: x.browserUrl || '',
   }));
   state.forms = p.forms || [];
 
@@ -165,6 +168,12 @@ export async function refreshPending() {
   for (const perm of state.permissions) {
     if (previousPermissions.has(perm.requestId) || state.announcedPermissions.has(perm.requestId)) continue;
     state.announcedPermissions.add(perm.requestId);
+    // A sign-in card is the one that asks to open a window: it has its own sound, the two
+    // hollow knocks, and it is always on screen — the operator is the one who must act.
+    if (perm.scope === 'browser') {
+      wired.playSound?.('hollow');
+      continue;
+    }
     if (state.view === 'session' && perm.sessionId === state.sessionId) continue;
     const who = [perm.role, perm.task].filter(Boolean).join(' · ') || perm.title || 'A chat';
     toast('Permission Needed', `${who} is waiting on ${perm.action}. Open it in the rail to answer.`);

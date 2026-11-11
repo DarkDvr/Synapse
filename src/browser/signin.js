@@ -52,7 +52,7 @@ export function looksUnconfirmed(url, passwordInputs = 0) {
  * `onSignedIn` is called once the page stops asking for a sign-in; by then the window has
  * already been closed, so the operator never has to guess what to do next.
  */
-export async function askToSignIn({ url, profile, log = null, restore = true, sound = null, onSignedIn = null } = {}) {
+export async function askToSignIn({ url, profile, log = null, restore = true, focus = false, sound = null, onSignedIn = null, onGone = null } = {}) {
   if (!findEdge()) return { ok: false, error: 'no Edge on this machine' };
   const candidates = addressCandidates(url);
   if (!candidates.length) return { ok: false, error: 'there is no address to open' };
@@ -75,6 +75,7 @@ export async function askToSignIn({ url, profile, log = null, restore = true, so
   const asked = await askOperator({
     profile: browser.profile,
     restore,
+    focus,
     // '' silences it; null keeps the script's own default.
     ...(sound === null ? {} : { sound }),
   });
@@ -84,6 +85,7 @@ export async function askToSignIn({ url, profile, log = null, restore = true, so
   watchForSignIn(browser, {
     log,
     onSignedIn: (finalUrl) => { try { onSignedIn?.(finalUrl); } catch { /* a listener must not break the page */ } },
+    onGone: (why) => { try { onGone?.(why); } catch { /* a listener must not break the page */ } },
   });
 
   return {

@@ -784,6 +784,12 @@ function permissionLead(p) {
   // The screen is not a file, and the sentence has to say so: this card is the
   // "may I use your PC" question, and it is the only one that takes the mouse.
   if (p.scope === 'desk') return `${actor} wants to use your screen.`;
+  // A sign-in is a window on the operator's own desktop, so the sentence names the site
+  // and says what the window is for (12 Nov).
+  if (p.scope === 'browser') {
+    const site = String(p.browserHost || p.browserUrl || '').replace(/^https?:\/\//i, '').split('/')[0];
+    return `${actor} wants to open a browser window so you can sign in${site ? ` to ${site}` : ''}.`;
+  }
   const action = String(p.action || '').toLowerCase();
   const verb =
     action === 'read'
@@ -837,10 +843,11 @@ function renderPermissions() {
       // keyboard and focus, and the answer lasts for the run rather than for one
       // command — so it has its own two buttons and no "Always Allow".
       const screen = p.scope === 'desk';
+      const browserAsk = p.scope === 'browser';
       return `<div class="perm-card${screen ? ' is-screen' : ''}">
         <div class="perm-head"><span class="status-dot warn" role="img" aria-label="waiting"></span><span class="perm-head-text">${esc(
           actor,
-        )} needs your ${screen ? 'screen' : 'permission'}</span>${
+        )} needs your ${browserAsk ? 'sign-in' : screen ? 'screen' : 'permission'}</span>${
           // The switch is on for the asking project: count down to the moment it is
           // allowed, in the head's right corner like the question's own note (3 Nov).
           due ? `<span class="perm-head-note" data-perm-due="${due}">${esc(permissionNote(due, serverNow()))}</span>` : ''
@@ -855,10 +862,12 @@ function renderPermissions() {
           )}" title="${
             screen
               ? 'Let it use your mouse, keyboard and focus for the rest of this run. You can take the screen back from the badge at any time.'
-              : 'Do it this time only.'
-          }">${screen ? 'Allow Screen' : 'Allow Once'}</button>
+              : browserAsk
+                ? 'Open a window on the monitor you are looking at. It waits as long as you need; close it without signing in and this counts as a rejection.'
+                : 'Do it this time only.'
+          }">${screen ? 'Allow Screen' : browserAsk ? 'Allow Sign-In' : 'Allow Once'}</button>
           ${
-            screen
+            screen || browserAsk
               ? ''
               : `<button class="btn btn-warn btn-sm" data-perm="always" data-perm-id="${esc(
                   p.requestId,
@@ -2365,7 +2374,7 @@ async function bootPage() {
   // The run's cards need their layout (they move with the stage) and the desk badge.
   liveRunsWiring({ applyRoleCardsLayout, renderDesk });
   // The poll for waiting cards needs the chime's answer and the status chip.
-  pendingWiring({ noteWorking, settleEventChip });
+  pendingWiring({ noteWorking, settleEventChip, playSound });
   // The Settings window asks for the update actions, the model reload, the skills read,
   // the dialog, the status line and the preview sound.
   settingsWindowWiring({

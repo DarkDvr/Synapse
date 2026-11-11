@@ -12,7 +12,7 @@ import { keepAttachments } from './keep-attachments.js';
 import { skillRules, describeSkills } from './skills.js';
 import { rulesFor, decide, resolvePath, refusalNote, SINGLE_RULES } from './permissions.js';
 import { stopTargets, createStopper } from './stop.js';
-import { PROJECTS_ROOT, SKILLS_DIR, ROOT, SCRATCH_ROOT, scratchDir, normDir, BROWSER_DIR } from './paths.js';
+import { PROJECTS_ROOT, SKILLS_DIR, ROOT, SCRATCH_ROOT, scratchDir, normDir, BROWSER_DIR, WEB_DIR } from './paths.js';
 import { EV } from '../web/events.js';
 import { fail, refuseBusy } from './errors.js';
 import { braveEntries, entryBlockingWrite, protectionEntries, protectionFor } from './protection.js';
@@ -21,6 +21,7 @@ import { fetchProviderModels } from './providers.js';
 import { providerId } from './providers.js';
 import { isLocalProvider, providerUp } from './providers.js';
 import { providerApiKey } from './config.js';
+import { configureBrowserAsks } from './browser/ask.js';
 import * as windows from './windows.js';
 import { questionSignature, guardDecision, readableAnswer } from './question-loop.js';
 import { setProviderKey, providerKeyState, maskKey } from './secrets.js';
@@ -207,6 +208,10 @@ function windowMap(config) {
 
 export function createApi({ getConfig, applyConfig, power, engine, logger, getBootError, projects, toolStats, probe, modelCache, traceReasons, inspectModel: inspectRef, probeDir, runs, desk, engineUpdate, synapseUpdate, restart, stopSelf, pcShutdown, notify, permissionLog, permissionGate, permissionMemory }) {
   const app = logger.channel('app');
+
+  // A sign-in is a permission: the card is the ask, and only an Allow opens a window.
+  // The registry is shared with the runner, which pauses the stall clock while it waits.
+  const browserAsks = configureBrowserAsks({ notify, log: app });
 
   // Stop lives in one place now. Every route that stops anything — the gentle
   // press, the immediate one, a stop from a permission card — goes through this,
@@ -824,7 +829,7 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
           const next = getConfig();
           next.browser = { ...next.browser, sites: addSite(next.browser?.sites, host, Date.now(), opened) };
           applyConfig(next);
-          app.info(`SynaBrowse: ${host} signed in; the window was closed and the session kept`);
+          app.info(`SynaBrowse: ${host} signed in; the window was hidden and the session kept`);
           notify?.({ kind: 'browser-session-kept', host, url: opened, ts: Date.now() });
         },
       });
@@ -834,6 +839,64 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
     } catch (err) {
       return { ok: false, error: err.message };
     }
+  }
+
+  /**
+   * Ask the operator for a sign-in window, and wait for what happens in it.
+   *
+   * The card comes first — Allow, Reject, Reject With Reason, Stop Run — and only an
+   * Allow opens a window: normal, focused, on the monitor the operator is looking at,
+   * with **no time limit**. A session created there is recorded and the window goes;
+   * a window closed without one is a rejection.
+   */
+  async function browserSignInAsk({ host = '', url = '', what = '' } = {}) {
+    const target = String(url || '').trim();
+    if (!/^https?:\/\//i.test(target)) return { ok: false, error: 'there is no address to open' };
+    const answer = await browserAsks.ask({ host: String(host || '').replace(/^https?:\/\//i, '').split('/')[0], url: target, what });
+    if (!answer.allow) {
+      return {
+        ok: false,
+        allowed: false,
+        message: answer.message || '',
+        reason: answer.message
+          ? `The operator refused a sign-in window: ${answer.message}`
+          : 'The operator refused a sign-in window.',
+      };
+    }
+    const cfg = getConfig();
+    const profile = String(cfg.browser?.profile || '').trim() || `${BROWSER_DIR}\\profile`;
+    const { askToSignIn } = await import('./browser/signin.js');
+    const { addSite } = await import('./browser/sites.js');
+    const outcome = await new Promise((resolve) => {
+      askToSignIn({
+        url: target,
+        profile,
+        log: app,
+        restore: true,
+        focus: true,
+        sound: `${WEB_DIR}\\sounds\\hollow.wav`,
+        onSignedIn: (finalUrl) => {
+          const signedHost = String(finalUrl || '').replace(/^[a-z]+:\/\//i, '').split(/[/?#]/)[0].toLowerCase();
+          const next = getConfig();
+          applyConfig({ ...next, browser: { ...next.browser, sites: addSite(next.browser?.sites, signedHost, Date.now(), finalUrl) } });
+          app.info(`SynaBrowse: ${signedHost} signed in; the window was hidden and the session kept`);
+          notify?.({ kind: 'browser-session-kept', host: signedHost, url: finalUrl, ts: Date.now() });
+          resolve({ signedIn: true, host: signedHost, url: finalUrl });
+        },
+        onGone: (why) => resolve({ signedIn: false, why }),
+      }).catch((err) => resolve({ signedIn: false, why: err.message }));
+    });
+    if (!outcome.signedIn) {
+      return {
+        ok: false,
+        allowed: true,
+        signedIn: false,
+        reason: outcome.why === 'closed'
+          ? 'The operator closed the sign-in window without a session; treat this as a refusal.'
+          : 'No session appeared in the sign-in window; treat this as a refusal.',
+      };
+    }
+    return { ok: true, allowed: true, signedIn: true, host: outcome.host, url: outcome.url };
   }
 
   /** The watcher saw the page stop asking for a sign-in: record the site and say so. */
@@ -890,6 +953,7 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
     browserForget,
     browserUsed,
     browserSignedIn,
+    browserSignInAsk,
     status: async () => ({
       version: APP_VERSION,
       // The files on disk may be newer than this process — a page reload cannot
@@ -2243,6 +2307,14 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
       return out;
     },
     permission: async (sessionId, body, actor = null) => {
+      // A sign-in ask is the harness's own card, not the engine's: its id is answered here,
+      // and nothing is sent to the engine for it (12 Nov).
+      const browserAnswer = browserAsks.answer(body?.requestId, {
+        allow: ['once', 'always', 'allow'].includes(String(body?.decision || '')),
+        message: String(body?.reason || '').trim(),
+      });
+      if (browserAnswer.ok) return { ok: true, browser: true };
+
       requireReady();
       const wanted = body?.decision || 'once';
       // The operator's own sentence, when a rejection carried one. Bounded and
@@ -2455,8 +2527,9 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
         }),
       );
 
-      return {
-        permissions: allPermissions.map((p) => {
+      // The engine's asks and the harness's own: a sign-in card is not the engine's and
+      // never will be, so the two lists are joined where the page looks (12 Nov).
+      const enginePermissions = allPermissions.map((p) => {
           const s = sessionInfo.get(p.sessionID);
           const meta = s?.metadata?.synapse || {};
           const directory = s?.directory || null;
@@ -2506,7 +2579,10 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
                 }))
               : [],
           };
-        }),
+        });
+
+      return {
+        permissions: [...enginePermissions, ...browserAsks.list()],
         forms: await Promise.all(
           open.map(async (f) => {
             // Whether *this chat* answers its own questions (Auto-Answer is on for
