@@ -56,7 +56,7 @@ export function createBrowserAsks({ notify = null, log = null } = {}) {
       task: entry.task,
       resources: entry.url ? [entry.url] : [],
       reason: entry.what
-        ? `${entry.what} Opening the window is your decision, and a sign-in you finish is kept in SynaBrowse's own profile.`
+        ? `${String(entry.what).replace(/\.?$/, '.')} Opening the window is your decision, and a sign-in you finish is kept in SynaBrowse's own profile.`
         : 'Sign in to this site in a window of your own. A sign-in you finish is kept in SynaBrowse\'s own profile.',
       browserHost: entry.host,
       browserUrl: entry.url,
