@@ -796,6 +796,10 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
   // SynaBrowse's sign-in: open the harness's own browser on a site and put it where the
   // operator can log in. One browser per process, because a profile cannot be open twice
   // and the session is the whole point of it.
+  //
+  // The site is recorded when the operator *closes* that window — their own "done" — and
+  // the page is told, because the previous version left them guessing whether the login
+  // had been kept (11 Nov).
   async function browserSignin(url) {
     const target = String(url || '').trim();
     if (!target) return { ok: false, error: 'there is no address to open' };
@@ -805,7 +809,21 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
     const sound = cfg.notify?.browserSounds === false ? '' : undefined;
     try {
       const { askToSignIn } = await import('./browser/signin.js');
-      const answer = await askToSignIn({ url: target, profile, log: app, sound });
+      const { addSite } = await import('./browser/sites.js');
+      const answer = await askToSignIn({
+        url: target,
+        profile,
+        log: app,
+        sound,
+        onDone: (opened) => {
+          const host = String(opened || '').replace(/^[a-z]+:\/\//i, '').split(/[/?#]/)[0].toLowerCase();
+          const next = getConfig();
+          next.browser = { ...next.browser, sites: addSite(next.browser?.sites, host) };
+          applyConfig(next);
+          app.info(`SynaBrowse: ${host} closed after sign-in; the session stays in its profile`);
+          notify?.({ kind: 'browser-session-kept', host, ts: Date.now() });
+        },
+      });
       if (answer.ok) app.info(`SynaBrowse: sign-in window asked for ${answer.url}`);
       else app.warn(`SynaBrowse: could not show the sign-in window for ${target}: ${answer.error}`);
       return answer;
@@ -814,8 +832,33 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
     }
   }
 
+  /** Forget a site: the row goes, and the browser drops what it keeps for that host. */
+  async function browserForget(host) {
+    const key = String(host || '').trim().toLowerCase();
+    if (!key) return { ok: false, error: 'there is no site to forget' };
+    const cfg = getConfig();
+    const { forgetSite } = await import('./browser/sites.js');
+    const next = { ...cfg, browser: { ...cfg.browser, sites: forgetSite(cfg.browser?.sites, key) } };
+    applyConfig(next);
+    // Deleting is not reading: the browser drops its own storage for the origin, and
+    // Synapse never looks at a value.
+    try {
+      const { createBrowser } = await import('./browser/browser.js');
+      const profile = String(cfg.browser?.profile || '').trim() || `${BROWSER_DIR}\\profile`;
+      const browser = createBrowser({ profile });
+      for (const origin of [`https://${key}`, `http://${key}`]) {
+        try { await browser.clearOrigin(origin); } catch { /* the host may have no data */ }
+      }
+      app.info(`SynaBrowse: forgot ${key} — its cookies and storage are gone from the profile`);
+    } catch (err) {
+      app.warn(`SynaBrowse: forgot ${key} in the list, but could not clear its data: ${err.message}`);
+    }
+    return { ok: true, host: key, sites: next.browser.sites };
+  }
+
   return {
     browserSignin,
+    browserForget,
     status: async () => ({
       version: APP_VERSION,
       // The files on disk may be newer than this process — a page reload cannot

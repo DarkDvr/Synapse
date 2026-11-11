@@ -2427,9 +2427,15 @@ Type: question **15px** bold, title **12.5px**, option label **12.5px**, descrip
 **Settings has twelve tabs**: General, Server, Engine, **Browser**, Providers, Workers,
 Tools, Automation, Prohibited, Logging, Check for Updates, About. There is no "Runtime"
 tab — it is **Engine** — and Updates/About are those last two, not extra screens. Browser
-is SynaBrowse: the enable switch, its profile folder, the allowlist (one host per line)
-and the one control that acts without Save, **Sign In…**, which puts that browser on the
-second monitor so a person can log in.
+is SynaBrowse: the enable switch, its profile folder, and **Sign In…** — the one control
+that acts without Save, which puts that browser on the second monitor so a person can log
+in. Beside it is a **Sites** table in the Prohibited table's own shape (site, signed in,
+last used, ✕): a *record* of the sessions, not a permission list, because the operator's
+answer to "which sites may it open" was "the ones I am logged into". It shows an age, not
+a countdown — when a session expires is the site's decision — and ✕ clears that host's
+cookies from the profile as it removes the row. The click on Sign In says where it is in
+the launch ("Starting the browser…", "Loading the page…", "Waiting for you at <host>"),
+because a button that answers only when a browser is up reads as ignored.
 
 **Composer placeholders**: `Message` in Single, `Message the Architect…` in Multi,
 `Answer the question to continue` while a form waits, `Resolve the permission to

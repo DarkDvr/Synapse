@@ -333,6 +333,11 @@ export function createServer({ api, engine, logger, config, remote, onRemote }) 
     if (seg[0] === 'browser' && seg[1] === 'signin' && method === 'POST') {
       return sendJson(res, 200, await api.browserSignin((await readBody(req))?.url));
     }
+    // POST /api/browser/forget — drop a site from the list and clear its session from
+    // the profile. The row and the cookies go together, or the table would lie.
+    if (seg[0] === 'browser' && seg[1] === 'forget' && method === 'POST') {
+      return sendJson(res, 200, await api.browserForget((await readBody(req))?.host));
+    }
 
     // POST /api/browser/waiting — SynaBrowse has put its window on the second monitor
     // and needs the operator: a login, or a check only a person can pass. The MCP server

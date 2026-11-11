@@ -2926,6 +2926,16 @@ body.is-stopping .chat-dock { animation: stop-glow 0.7s ease-in-out infinite; }
   border: 1px solid #3a3d43; border-radius: 3px; padding: 0 4px; line-height: 1.5;
 }
 .prot-tag.is-builtin { color: #b9a1f6; border-color: #4b3f74; }
+/* The Sites table: the Prohibited table's shape with dates instead of tick boxes.
+   Three datums and the row's own ✕, so "which site, when did I sign in, when was it
+   last used" is one glance. */
+.prot-row.is-sites { grid-template-columns: minmax(0, 1fr) 110px 100px 26px; }
+.site-when {
+  font-family: var(--mono); font-size: 10px; color: #8b8f97; text-align: center;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.site-signin { display: flex; align-items: center; gap: 10px; }
+.site-signin .set-note { margin: 0; }
 .prot-x {
   justify-self: center; width: 18px; height: 18px; padding: 0; display: grid; place-items: center;
   border: 1px solid transparent; border-radius: 5px; background: transparent;

@@ -222,15 +222,7 @@ export function collectSettings() {
       writePath(c, path, String(value).split(',').map((r) => r.trim()).filter(Boolean));
       continue;
     }
-    // SynaBrowse's allowlist is one host per line in the form, an array in the config.
-    if (path === 'browser.allow') {
-      writePath(
-        c,
-        path,
-        String(value).split(/[\n,;]+/).map((h) => h.trim()).filter(Boolean),
-      );
-      continue;
-    }
+
     writePath(c, path, value);
   }
   return c;
@@ -326,31 +318,61 @@ export async function onSettingsClick(e) {
   if (e.target.closest('[data-check-updates]')) { wired.checkUpdates(); return; }
   if (e.target.closest('#browserSignin')) {
     // SynaBrowse's sign-in is the one control in Settings that acts now rather than at
-    // Save: the browser is opened on that address and put on the second monitor's
-    // taskbar, minimized, without taking focus. The session is the browser's, not this
-    // form's. The address is not validated — a browser resolves `reddit.com`, `мос.ру` or
-    // a LAN address, and refusing what the browser accepts is the harness showing off.
+    // Save: the browser is opened on that address and put on the second monitor, without
+    // taking focus. The session is the browser's, not this form's. The address is not
+    // validated — a browser resolves `reddit.com`, `мос.ру` or a LAN address.
     const field = $('settingsBody')?.querySelector('#browserSigninUrl');
     const url = String(field?.value || '').trim();
+    const note = $('settingsBody')?.querySelector('#browserSigninNote');
+    const say = (text) => { if (note) note.textContent = text; };
     if (!url) {
-      toast('Sign In', 'Type the site to sign in to — an address is enough.');
+      say('Type the site to sign in to — an address is enough.');
+      field?.focus();
       return;
     }
     const button = e.target.closest('#browserSignin');
     button.disabled = true;
     button.textContent = 'Opening…';
+    // The launch takes a few seconds and the request answers only when the window is up:
+    // say what is happening meanwhile, or the click reads as ignored (11 Nov).
+    say('Starting the browser…');
+    const stage2 = setTimeout(() => say('Loading the page…'), 1500);
+    const stage3 = setTimeout(() => say('Waiting for the window — it appears on the second monitor.'), 6000);
     try {
       const answer = await api('POST', '/api/browser/signin', { url });
       if (answer?.ok) {
-        toast('SynaBrowse Is Waiting', 'It is on the second monitor’s taskbar — sign in, then close it or leave it.');
+        say(`Waiting for you at ${answer.host || url} — sign in, then close the window. The session is kept.`);
+        toast('SynaBrowse Is Waiting', 'It is on the second monitor — sign in, then close the window.');
       } else {
+        say(answer?.error || 'The browser did not start.');
         toast('Could Not Open SynaBrowse', answer?.error || 'The browser did not start.');
       }
     } catch (err) {
+      say(err.message);
       toast('Could Not Open SynaBrowse', err.message);
     } finally {
+      clearTimeout(stage2);
+      clearTimeout(stage3);
       button.disabled = false;
       button.textContent = 'Sign In…';
+    }
+    return;
+  }
+  const forget = e.target.closest('[data-site-forget]');
+  if (forget) {
+    const host = forget.dataset.siteForget;
+    forget.disabled = true;
+    try {
+      const answer = await api('POST', '/api/browser/forget', { host });
+      if (answer?.ok) {
+        state.setDraft.browser = { ...(state.setDraft.browser || {}), sites: answer.sites || [] };
+        renderSettings();
+        toast('Site Forgotten', `${host} — its row and its cookies are gone.`);
+      } else {
+        toast('Could Not Forget Site', answer?.error || 'It is still in the list.');
+      }
+    } catch (err) {
+      toast('Could Not Forget Site', err.message);
     }
     return;
   }

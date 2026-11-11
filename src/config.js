@@ -6,6 +6,7 @@ import { CONFIG_FILE, CONFIG_DIR, SEED_CONFIG_FILE } from './paths.js';
 import { providerType, providerId, declaredProviderType } from './providers.js';
 import { getProviderKey } from './secrets.js';
 import { ROLES } from './plans.js';
+import { normalizeSites } from './browser/sites.js';
 
 /** The finished-work sounds that exist in `web\sounds`, plus "off". The list is here
  *  so the config can refuse an unknown name instead of silently playing nothing. */
@@ -111,12 +112,12 @@ export const DEFAULTS = {
   browser: {
     // SynaBrowse: a browser the harness owns, with its own profile under
     // data\browser\profile. Off by default — it can act as the operator, so it is
-    // switched on deliberately. `allow` is the fence: only these hosts may be opened
-    // (a listed host covers its subdomains; `*` allows everything). `profile` empty
-    // means the default under data\.
+    // switched on deliberately. `profile` empty means the default under data\.
+    // `sites` is a record, not a permission: the hosts the operator has signed into,
+    // written by the sign-in flow only (src/browser/sites.js).
     enabled: false,
     profile: '',
-    allow: [],
+    sites: [],
   },
   automation: {
     // The four switches in Settings → Automation, in seconds (and minutes for the
@@ -334,17 +335,13 @@ export function normalize(raw) {
   cfg.server.remote = cfg.server.remote === true;
   cfg.tools = cfg.tools || {};
   cfg.tools.resetOnBoot = cfg.tools.resetOnBoot !== false;
-  // SynaBrowse. The allowlist is a list of host names; anything that is not a host —
-  // a URL with a path, a scheme, an empty string — is dropped rather than kept as a
-  // value nothing matches. `profile` is a path or empty for the default.
+  // SynaBrowse. `sites` is a record of the hosts the operator signed into, written by
+  // the sign-in flow; it is normalised here so a hand-edited file cannot break the table.
   cfg.browser = isPlainObject(cfg.browser) ? cfg.browser : {};
   cfg.browser.enabled = cfg.browser.enabled === true;
   cfg.browser.profile = String(cfg.browser.profile || '').trim();
-  cfg.browser.allow = (Array.isArray(cfg.browser.allow) ? cfg.browser.allow : [])
-    .map((entry) => String(entry || '').trim().toLowerCase())
-    .map((entry) => (entry === '*' ? entry : entry.replace(/^https?:\/\//, '').replace(/\/.*$/, '').replace(/^\.+|\.+$/g, '')))
-    .filter(Boolean)
-    .filter((entry, index, all) => all.indexOf(entry) === index);
+  cfg.browser.sites = normalizeSites(cfg.browser.sites);
+  delete cfg.browser.allow;
   // Full auto's wait. 0 is accepted and means "answer at once, no card"; a
   // negative or unreadable value falls back to the 20-second default.
   cfg.fullAuto = isPlainObject(cfg.fullAuto) ? cfg.fullAuto : {};

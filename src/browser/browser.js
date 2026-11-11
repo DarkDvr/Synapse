@@ -125,6 +125,18 @@ export function createBrowser({ profile, log = null, startMinimized = true, widt
     }
   }
 
+  /** Is the browser up and still answering? A dead process keeps no page. */
+  async function alive() {
+    if (!page) return false;
+    try {
+      const res = await fetch(`http://127.0.0.1:${page.port}/json/version`);
+      return res.ok;
+    } catch {
+      // The port is gone: the process died, which is exactly the question asked.
+      return false;
+    }
+  }
+
   /** Is the browser up and still answering? */
   const running = () => Boolean(page);
 
@@ -292,6 +304,22 @@ export function createBrowser({ profile, log = null, startMinimized = true, widt
     return frames;
   }
 
+  /**
+   * Forget a site: clear everything this profile keeps for one origin.
+   *
+   * Deleting is not reading. Synapse never looks at a cookie's value; this asks the
+   * browser to drop what it holds for that origin, which is exactly what "Forget" means
+   * and the only way to make the row in Settings true.
+   */
+  async function clearOrigin(origin) {
+    const p = await start();
+    await p.send('Storage.clearDataForOrigin', {
+      origin: String(origin || ''),
+      storageTypes: 'all',
+    });
+    return true;
+  }
+
   /** The tabs this browser has open. */
   async function tabs() {
     const p = await start();
@@ -325,5 +353,5 @@ export function createBrowser({ profile, log = null, startMinimized = true, widt
     return exited.length;
   }
 
-  return { start, running, goto, read, click, type, press, wait, scroll, screenshot, watch, tabs, stop, profile };
+  return { start, running, alive, goto, read, click, type, press, wait, scroll, screenshot, watch, tabs, clearOrigin, stop, profile };
 }

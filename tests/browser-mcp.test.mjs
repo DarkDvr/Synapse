@@ -122,10 +122,11 @@ test('the server answers the protocol and its tools work on a local page', async
     const file = /Screenshot: (.*) \(/.exec(shot.result.content[0].text)?.[1];
     assert.ok(file && fs.existsSync(file), 'the screenshot was not written');
 
-    // The fence: a host that is not on the list is refused, in words.
-    const blocked = await rpc.call('tools/call', { name: 'open', arguments: { url: 'https://example.com/' } });
-    assert.equal(blocked.result.isError, true);
-    assert.match(blocked.result.content[0].text, /allowlist/);
+    // The fence is the switch, not a host list — but a page must still be an http(s)
+    // address: `file://` would be a way around the harness's own rules.
+    const blocked = await rpc.call('tools/call', { name: 'open', arguments: { url: `file:///${process.execPath.replace(/\\/g, '/')}` } });
+    assert.equal(blocked.result.isError, true, 'a file:// address was accepted');
+    assert.match(blocked.result.content[0].text, /http/);
 
     const closed = await rpc.call('tools/call', { name: 'close', arguments: {} });
     assert.match(closed.result.content[0].text, /closed/i);

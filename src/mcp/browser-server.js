@@ -6,7 +6,7 @@
 // flag is there.
 //
 // Rules this server keeps, because a tool is a promise:
-//   - a page may only be opened on a host the operator put on the allowlist;
+//   - a page must be an http(s) address — no file://, nothing that reaches past a URL;
 //   - nothing here reads a cookie, exports a session or runs an arbitrary script: the
 //     toolset is a fixed list of operations;
 //   - a screenshot or a strip of frames is written under `data\browser\shots\` and
@@ -26,7 +26,7 @@ const CHIME = path.join(WEB_DIR, 'sounds', 'chime.wav');
 
 /** The browser settings, read once: the operator edits the config file, not a UI here. */
 function settings() {
-  // A test seam: the suite drives this server against a throwaway profile and allowlist
+  // A test seam: the suite drives this server against a throwaway profile
   // rather than the operator's config, so the tools can be proved without touching it.
   const file = process.env.SYNAPSE_BROWSER_CONFIG
     || path.join(DATA_DIR, '..', 'config', 'synapse.config.json');
@@ -41,7 +41,6 @@ function settings() {
   return {
     enabled: b.enabled === true,
     profile: String(b.profile || '').trim() || path.join(DATA_DIR, 'browser', 'profile'),
-    allow: Array.isArray(b.allow) ? b.allow : [],
     headless: b.headless === true,
     // One chime when the window is put on the second monitor; the operator's switch,
     // beside the screen sounds in Settings > General.
@@ -61,7 +60,7 @@ const TOOLS = [
     description:
       'Open a web page in the harness\'s own browser and answer its address, title, a readable ' +
       'outline of its text and the links on it. The browser is hidden; a host the operator has ' +
-      'not allowed is refused with a sentence. Use this instead of webfetch when a page is behind ' +
+      'a browser refuses. Use this instead of webfetch when a page is behind ' +
       'a sign-in or a bot check, then click and read like a person would.',
     inputSchema: {
       type: 'object',
@@ -224,9 +223,16 @@ const outline = (page) => {
   return lines.join('\n');
 };
 
-/** Refuse a URL that is not on the allowlist, in words the model can act on. */
+/**
+ * Refuse what is not an http(s) address, in words the model can act on.
+ *
+ * There is no host list any more: the operator's short answer was "the sites I am logged
+ * into", so the fence is the master switch, and the Sites table is a record of the
+ * sessions rather than a permission list. What is still refused is a scheme a browser
+ * would not treat as a page — `file://` would be a way around the harness's own rules.
+ */
 function guard(url) {
-  const verdict = checkUrl(url, cfg.allow);
+  const verdict = checkUrl(url, ['*']);
   if (!verdict.ok) throw new Error(verdict.reason);
   return verdict;
 }

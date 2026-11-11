@@ -1140,6 +1140,14 @@ function connectStream() {
       return;
     }
 
+    // The operator closed the SynaBrowse window after signing in. That is the only honest
+    // "done" a harness can take, and saying so is what closes the loop: the session is in
+    // the profile, and the Sites table now has a row with a date.
+    if (ev.kind === 'browser-session-kept') {
+      toast('Session Kept', `${ev.host || 'That site'} — your sign-in stays in SynaBrowse's profile.`);
+      return;
+    }
+
     // Stop, from the server that owns it. The page does not decide when a stop is
     // over any more: it hears `stop.done` when the project is really quiet, and
     // `stop.stuck` when the engine will not let go — which is the state that used

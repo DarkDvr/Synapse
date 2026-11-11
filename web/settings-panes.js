@@ -564,8 +564,37 @@ function settingsUpdates() {
 // can act as them — and fenced by a list of hosts. The sign-in row is the one control
 // here that does something immediately instead of at Save: it puts that browser on the
 // second monitor so a person can log in, which is the only part a person must do.
+// "2 days ago" for the Sites table: an age, because how long a session lasts is the
+// site's decision and a countdown would be a number the harness invented.
+function ago(at) {
+  const ms = Date.now() - Number(at || 0);
+  if (!at || ms < 0) return '';
+  const min = Math.floor(ms / 60000);
+  if (min < 1) return 'just now';
+  if (min < 60) return `${min} min ago`;
+  const hours = Math.floor(min / 60);
+  if (hours < 24) return hours === 1 ? '1 hour ago' : `${hours} hours ago`;
+  const days = Math.floor(hours / 24);
+  return days === 1 ? 'yesterday' : `${days} days ago`;
+}
+
 function settingsBrowser(c) {
-  const allow = Array.isArray(c.browser?.allow) ? c.browser.allow : [];
+  const sites = Array.isArray(c.browser?.sites) ? c.browser.sites : [];
+  const rows = sites.length
+    ? sites.map((site) => `
+        <div class="prot-row is-sites">
+          <span class="prot-path" title="${esc(site.host)}"><span class="prot-name">${esc(site.host)}</span></span>
+          <span class="site-when">${esc(ago(site.signedInAt) || '—')}</span>
+          <span class="site-when">${esc(site.lastUsedAt ? ago(site.lastUsedAt) : 'never')}</span>
+          <button type="button" class="prot-x" data-site-forget="${esc(site.host)}"
+                  title="Forget ${esc(site.host)}: remove the row and clear its cookies from the profile"
+                  aria-label="Forget ${esc(site.host)}">✕</button>
+        </div>`).join('')
+    : `<div class="prot-row is-sites">
+         <span class="prot-path"><span class="prot-name">No site signed in yet — Sign In below.</span></span>
+         <span class="site-when"></span><span class="site-when"></span><span></span>
+       </div>`;
+
   return [
     setGroup(
       'SynaBrowse',
@@ -575,23 +604,36 @@ function settingsBrowser(c) {
         setField(c, 'Profile folder (blank = data\\browser\\profile)', 'browser.profile', {
           wide: true,
           hint: 'Where the browser keeps its own cookies and logins. Never the operator’s Edge profile, and never Brave. Blank uses data\\browser\\profile.',
-        }) +
-        `<label class="set-field wide" title="Only these hosts may be opened. A host covers its own subdomains; * allows everything.">` +
-        `<span>Sites it may open — one host per line</span>` +
-        `<textarea data-path="browser.allow" rows="5" spellcheck="false" placeholder="example.com">${esc(allow.join('\n'))}</textarea>` +
-        `</label>`,
+        }),
       undefined,
-      'A page on a host that is not listed is refused with a sentence, not a card: an unattended run must not wait on a question nobody asked.',
+      'A browser the harness owns, on its own profile. One switch, one profile, one session per site — no host list to maintain.',
+    ),
+    setGroup(
+      'Signed In',
+      `<div class="prot-table">
+        <div class="prot-row is-sites is-head" aria-hidden="true">
+          <span class="prot-path">Site</span>
+          <span class="prot-head">Signed in</span>
+          <span class="prot-head">Last used</span>
+          <span></span>
+        </div>
+        ${rows}
+      </div>`,
+      undefined,
+      'A session lives in the browser’s own profile until the site expires it — that is the site’s decision, so the table shows an age rather than a countdown. Sign In again to refresh a site; Forget clears its cookies.',
     ),
     setGroup(
       'Sign in',
       `<label class="set-field wide" title="The browser opens on the second monitor so a person can log in; the session stays in its profile for every project.">` +
         `<span>Site to sign in to</span>` +
-        `<input id="browserSigninUrl" type="text" placeholder="nexusmods.com, or 192.168.1.20:8080" spellcheck="false" />` +
+        `<input id="browserSigninUrl" type="text" placeholder="reddit.com, мос.ру, or 192.168.1.20:8080" spellcheck="false" />` +
         `</label>` +
-        `<div class="set-field wide"><button class="btn btn-secondary btn-sm" type="button" id="browserSignin">Sign In…</button></div>`,
+        `<div class="set-field wide site-signin">` +
+        `<button class="btn btn-secondary btn-sm" type="button" id="browserSignin">Sign In…</button>` +
+        `<span class="set-note" id="browserSigninNote" role="status" aria-live="polite"></span>` +
+        `</div>`,
       undefined,
-      'Signing in is the one thing only you can do: a bot check or a password. The window goes to the second monitor, minimized and without taking focus, and the session is kept.',
+      'Signing in is the one thing only you can do: a bot check or a password. The window goes to the second monitor, without taking focus; close it when you are done and the session is kept.',
     ),
   ].join('');
 }
