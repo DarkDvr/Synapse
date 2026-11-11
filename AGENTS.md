@@ -195,14 +195,14 @@ tray is where the server is stopped and started, and Exit is the only way to sto
 both. To work on the server on its own: `bin\node\node.exe src\index.js`.
 
 Gotchas:
+- **Auto-Shutdown must be off before any test, build or restart.** It powers the PC off
+  when every plan is done and nothing is running; on 11 Nov it shut this machine down
+  twice mid-session. The switch is the project's cog, not the number in Settings.
 - **Nothing here matches on a process name** (see "Destructive commands"): the app
   stops the process it holds, and `Kill(entireProcessTree)` is the fallback after 8s.
-- The console lives in the window: the server's stdout is captured into
-  `logs\console.log` and served, so it works when the server is stopped. `logger`
-  mirrors `app` and every warning or error; the runner's milestones go there too.
-- Ports: **UI 8700, engine 8720**. Ports 1174–1273 are reserved by
-  Hyper-V/WSL on this machine — do not pick one (1235 and 1240 both fail with
-  `EACCES`; 8701 and 4343 are fine).
+- The console is in the window: stdout is captured into `logs\console.log` and served,
+  so it works when the server is stopped; `logger` mirrors `app`, warnings and errors.
+- Ports: **UI 8700, engine 8720**; 1174–1273 belong to Hyper-V/WSL — do not pick one.
 
 ---
 
