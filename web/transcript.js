@@ -317,9 +317,13 @@ export function renderMessage(m, tail = '') {
     // prompt: an empty green-headed box read as "nothing is happening", so it says
     // what it is doing (11 Nov).
     if (parts.length === 0 && !m.error && !(m.live && tail)) {
+      // A tool that is running says what it is doing, not just "Thinking…": a page load
+      // can take twenty seconds and emits nothing while it does, and the operator could
+      // not tell wait from dead (11 Nov).
+      const doing = m.live ? state.liveTool : null;
       body.push(
         m.live
-          ? '<div class="trace-line is-waiting">Thinking…</div>'
+          ? `<div class="trace-line is-waiting">${esc(doing || 'Thinking…')}</div>`
           : '<span class="msg-text">…</span>',
       );
     }
@@ -333,6 +337,49 @@ export function renderMessage(m, tail = '') {
 }
 
 let toolSeq = 0;
+
+// The MCP tools arrive named `synapse-browser_open`, which is a machine's word for it.
+// The card says what the model is doing instead, so a reader does not have to translate.
+const BROWSER_VERBS = {
+  open: 'SynaBrowse · Open',
+  read: 'SynaBrowse · Read',
+  click: 'SynaBrowse · Click',
+  type: 'SynaBrowse · Type',
+  press: 'SynaBrowse · Key',
+  wait: 'SynaBrowse · Wait',
+  scroll: 'SynaBrowse · Scroll',
+  screenshot: 'SynaBrowse · Screenshot',
+  watch: 'SynaBrowse · Watch',
+  tabs: 'SynaBrowse · Tabs',
+  handoff: 'SynaBrowse · Handoff',
+  close: 'SynaBrowse · Close',
+};
+
+/** A tool's name as the operator reads it. */
+export function toolLabel(part) {
+  const name = String(part?.name || 'tool');
+  const browser = /^synapse-browser[._]([a-z]+)$/i.exec(name);
+  if (browser) return BROWSER_VERBS[browser[1].toLowerCase()] || 'SynaBrowse';
+  return name;
+}
+
+/** The live line while a browser tool runs: "SynaBrowse · Opening www.example.test…". */
+export function browserLine(input) {
+  const i = input && typeof input === 'object' ? input : {};
+  const host = (url) => {
+    try { return new URL(String(url)).host.replace(/^www\./, ''); } catch { return ''; }
+  };
+  // A handoff carries its URL too, but the news is that it is waiting for the operator.
+  if (i.what) return 'SynaBrowse is asking you to sign in…';
+  if (i.url) return `SynaBrowse is opening ${host(i.url) || 'a page'}…`;
+  if (i.text && (i.selector === undefined)) return `SynaBrowse is clicking “${String(i.text).slice(0, 40)}”…`;
+  if (i.selector) return `SynaBrowse is clicking ${String(i.selector).slice(0, 40)}…`;
+  if (i.links !== undefined || i.maxChars !== undefined) return 'SynaBrowse is reading the page…';
+  if (i.full !== undefined) return 'SynaBrowse is taking a picture…';
+  if (i.ms !== undefined) return 'SynaBrowse is watching the page…';
+  if (i.host) return 'SynaBrowse is waiting for you…';
+  return '';
+}
 
 /** A `question` tool call is answered in the panel above the composer, so its
  *  card is the record rather than the interface: it says what was asked, and the
@@ -380,7 +427,7 @@ export function renderTool(part) {
   return `<div class="tool-card${open ? ' open' : ''}" data-tool-card="${esc(id)}">
     <div class="tool-head" role="button" tabindex="0" data-tool-toggle="${esc(id)}" aria-expanded="${open}" aria-controls="${esc(id)}-detail">
       <span class="status-dot ${cls}" role="img" aria-label="${esc(label)}"></span>
-      <span class="tool-name">${esc(part.name)}</span>
+      <span class="tool-name">${esc(toolLabel(part))}</span>
       <span class="tool-target" title="${esc(target)}">${esc(target)}</span>
       ${permChip}
       <span class="tool-state state-pill ${cls}">${esc(label)}</span>

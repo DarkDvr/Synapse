@@ -60,6 +60,10 @@ export const state = {
   busySessions: new Set(),
   busySince: new Map(),
   toolsInFlight: new Set(),
+  // What a tool is doing right now, in words, while it runs. A tool call emits nothing
+  // until it finishes, so a 20-second page load in the chat looked like a dead turn — the
+  // operator could not tell whether to wait (11 Nov). Set from the call's own input.
+  liveTool: null,
   // Whether the engine reports any live session in the open session's project.
   // A hidden worker counts: that is the state where the Architect looks idle and
   // Stop used to be disabled while the run was still working.

@@ -111,6 +111,7 @@ import {
   renderTranscript,
   toggleTool,
   attachmentImage,
+  browserLine,
   transcriptWiring,
 } from './transcript.js';
 import { toast } from './toast.js';
@@ -1466,6 +1467,17 @@ function connectStream() {
     if (ev.sessionId) {
       if (ev.type === EV.toolCalled || ev.type === EV.toolInputEnded) {
         state.toolsInFlight.add(ev.sessionId);
+        // Say what a running tool is doing while it does it. A page load emits nothing
+        // until it ends, and "Thinking…" for twenty seconds reads as a dead turn (11 Nov).
+        if (ev.sessionId === state.sessionId) {
+          const input = ev.data?.input ?? ev.input ?? null;
+          const line = browserLine(input);
+          if (line) {
+            state.liveTool = line;
+            ensureLivePost();
+            renderTranscript();
+          }
+        }
       } else if (
         ev.type === EV.toolSuccess ||
         ev.type === EV.toolFailed ||
@@ -1473,6 +1485,10 @@ function connectStream() {
         turnEnded(ev.type)
       ) {
         state.toolsInFlight.delete(ev.sessionId);
+        if (state.liveTool && ev.sessionId === state.sessionId) {
+          state.liveTool = null;
+          renderTranscript();
+        }
       }
     }
 
