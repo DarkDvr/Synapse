@@ -9,6 +9,19 @@ It exists because a wrong answer here is not a bad file in a project. It is the
 Windows folder, `Program Files`, `ProgramData`, the Synapse install, or a browser
 profile whose loss resets everything the operator has.
 
+## Specificity: a narrow entry beats a broad one
+
+The list is not "any match refuses". The **most specific** covering entry decides, by path
+length: `…\Synapse\data\browser\shots` beats `…\Synapse\data` and `…\Synapse`. That is
+how the operator says "this folder is protected, except this subfolder" — the broad entry
+carries the refusal, a narrower added entry carries the permission (11 Nov).
+
+One exception is built in, because the harness writes the file itself: **reads** under
+`data\browser\shots\` are allowed. The browser takes a screenshot, answers the model with
+its path, and the model has to be able to look at it; before this, every screenshot was a
+refused read ("These are Synapse's private files") and the tool was pointless. Nothing
+else under `data\` opened, and the exception is read-only.
+
 ## What is on the list
 
 The list is a table of **two permissions per path**, because they are independent:

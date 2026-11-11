@@ -44,6 +44,11 @@ const READ_ACTIONS = new Set(['read']);
 // harness is not a folder a model digs in (7 Nov).
 const HARNESS_DENIED = ['data/', 'config/', 'bin/', '.git/', 'vendor/', 'node_modules/', 'templates/'];
 
+// What the harness writes *for* the model, inside a folder that is otherwise closed.
+// It is a read exception, never a write one: the harness makes these files, the model
+// only looks at them.
+const HARNESS_READABLE = ['data/browser/shots/'];
+
 // Credential stores. Reading these is never part of building a project, and the
 // operator allowed reads outside the workspace — this is the exception that
 // makes that safe to say.
@@ -322,18 +327,35 @@ const ask = (reason, outside = false, scope = 'project') => ({ effect: 'ask', re
 const deny = (reason, outside = false, scope = 'project') => ({ effect: 'deny', reason, outside: Boolean(outside), scope });
 
 /**
- * The enabled protected entry covering this path, if any.
+ * The protected entry that decides this path, if any.
  *
- * `ctx.protection` is the list Settings > Prohibited keeps — `{ path, sealed }`
- * entries, built-in and added. It is read per request, so ticking a box applies to
- * the next tool call without a restart.
+ * The **most specific** covering entry wins, not the first one found: a rule about a
+ * folder can be narrowed by a rule about one of its subfolders, which is how an operator
+ * says "this folder is protected, except this part of it" (11 Nov). Specificity is the
+ * length of the path, so `…\Synapse\data\browser\shots` beats `…\Synapse\data` and
+ * `…\Synapse`; an entry with the same path as another cannot be created twice.
+ *
+ * `ctx.protection` is the list Settings > Prohibited keeps — `{ path, write, read }`
+ * entries, built-in and added. It is read per request, so ticking a box applies to the
+ * next tool call without a restart.
  */
+function decidingEntry(target, ctx) {
+  let best = null;
+  for (const entry of ctx.protection || []) {
+    if (!covers(entry.path, target)) continue;
+    if (!best || key(entry.path).length > key(best.path).length) best = entry;
+  }
+  return best;
+}
+
 function prohibitedWrite(target, ctx) {
-  return (ctx.protection || []).find((entry) => entry.write === false && covers(entry.path, target)) || null;
+  const entry = decidingEntry(target, ctx);
+  return entry && entry.write === false ? entry : null;
 }
 
 function prohibitedRead(target, ctx) {
-  return (ctx.protection || []).find((entry) => entry.read === false && covers(entry.path, target)) || null;
+  const entry = decidingEntry(target, ctx);
+  return entry && entry.read === false ? entry : null;
 }
 
 /**
@@ -1098,6 +1120,11 @@ function harnessReadable(target, ctx) {
   // Listing the harness root shows folder names, not content.
   if (!suffix) return true;
   const rel = `${suffix}/`.replace(/^\/+/, '');
+  // An exception is part of the harness that exists *for* the model. The browser writes
+  // a screenshot under data\browser\shots and answers with its path; refusing the read
+  // made the tool pointless — the model took a picture it could not look at (11 Nov).
+  // The rule stays: data\ is closed, except the one folder the harness fills for them.
+  if (HARNESS_READABLE.some((part) => rel.startsWith(key(part)))) return true;
   return !HARNESS_DENIED.some((part) => rel.startsWith(key(part)));
 }
 

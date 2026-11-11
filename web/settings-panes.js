@@ -463,7 +463,7 @@ function settingsProhibited(c) {
   ].join('');
   return `
     <section class="set-group prot-pane">
-      <h4 title="Built-in entries can be switched off but not removed; paths you add can be deleted. Each box is a permission: a cleared Write refuses every change to that path; a cleared Read refuses reading it too.">Prohibited</h4>
+      <h4 title="Built-in entries can be switched off but not removed; paths you add can be deleted. Each box is a permission: a cleared Write refuses every change to that path; a cleared Read refuses reading it too. The most specific entry wins, so a subfolder can be allowed inside a protected folder.">Prohibited</h4>
       <div class="prot-top">
         <p class="set-note">Tick the checkboxes to allow that action.</p>
         <div class="prov-add">

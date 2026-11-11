@@ -759,3 +759,34 @@ test('a kill reached by another route is still a kill', () => {
   assert.equal(from('.\\safe.ps1').effect, 'allow', 'a script that stops the project app was refused');
   fs.rmSync(dir, { recursive: true, force: true });
 });
+
+// ── specificity: a narrow rule beats a broad one ─────────────────
+//
+// The operator asked for this in their own words: "this folder is prohibited, except
+// this subfolder, which is permitted". The most specific covering entry decides, so a
+// rule about one path can be narrowed by a rule about a path inside it (11 Nov).
+test('a permitted subfolder inside a prohibited folder wins', () => {
+  const protection = [
+    { path: HARNESS, label: 'Synapse', write: false, read: true },
+    { path: `${HARNESS}/data/browser/shots`, label: 'shots', write: false, read: true },
+  ];
+  // The broad entry refuses writes; the narrow one also refuses them, but this proves
+  // the narrow entry is the one consulted at all.
+  assert.equal(call('read', `${HARNESS}/data/browser/shots/a.png`, { protection }).effect, 'allow');
+  // A narrower entry that *permits* writes is the case the operator wanted.
+  const permitted = [
+    { path: HARNESS, label: 'Synapse', write: false, read: true },
+    { path: `${HARNESS}/data/output`, label: 'output', write: true, read: true },
+  ];
+  assert.notEqual(call('write', `${HARNESS}/data/output/a.txt`, { protection: permitted }).scope, 'prohibited');
+  // Outside that subfolder the broad refusal still holds.
+  assert.equal(call('write', `${HARNESS}/data/other/a.txt`, { protection: permitted }).scope, 'prohibited');
+});
+
+// The browser writes a screenshot for the model and answers with its path; refusing the
+// read made the tool pointless. data\ stays closed except for that one folder.
+test('the harness gives the model its own screenshots, and nothing else under data', () => {
+  assert.equal(call('read', `${HARNESS}/data/browser/shots/shot-1.png`).effect, 'allow');
+  assert.equal(call('read', `${HARNESS}/data/browser/profile/Cookies`).effect, 'deny');
+  assert.equal(call('read', `${HARNESS}/data/engine/opencode/opencode.json`).effect, 'deny');
+});
