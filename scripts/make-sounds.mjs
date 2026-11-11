@@ -1,4 +1,5 @@
-// The four "the Architect has finished" chimes, synthesised here.
+// Every sound Synapse makes, synthesised here: four "the Architect has finished" chimes,
+// the screen lease pair, and the browser's two hollow knocks.
 //
 //   node scripts\make-sounds.mjs
 //
@@ -179,8 +180,46 @@ function screenOut() {
   return finish(buf, 0.15);
 }
 
+// ── SynaBrowse ──────────────────────────────────────────────────
+// One job needs a voice of its own, and it is not music: a plastic cup struck twice.
+// Hollow, because the body is two close partials (a tube's second mode at 1.59×) with
+// almost nothing above them; short, because a hit has no sustain; and two notes because
+// the second one is the "and it is still waiting" half of the sentence.
+//
+// It must be unmistakable next to the finished-work chime (A5/E6, bell-like) and the
+// screen pair (bright toy piano): this one is duller and lower, so it reads as a knock.
+
+/** Two hollow knocks, rising a fourth: G4 then C5. */
+function hollow() {
+  const len = seconds(0.55);
+  const buf = new Float32Array(len);
+  // A cup's body: the fundamental and two near-modes, the odd one strongest.
+  const CUP = [[1, 1], [1.59, 0.55], [2.13, 0.18]];
+  const hits = [[0.0, 392.0], [0.17, 523.25]];
+  for (const [at, f] of hits) {
+    add(buf, note(len, at, f, { amp: 1, tau: 0.075, attack: 0.0015, harmonics: CUP }));
+    // The hit itself: a band-limited tick, gone in four milliseconds, so the knock has
+    // an edge without a "tss" that would make it a drum instead of a cup.
+    let low = 0;
+    let high = 0;
+    const lp = 1 - Math.exp((-TAU * 1400) / RATE);
+    const hp = 1 - Math.exp((-TAU * 500) / RATE);
+    let seed = 24601 + Math.round(at * 1000);
+    const start = Math.round(at * RATE);
+    for (let i = 0; i < seconds(0.02); i++) {
+      seed = (seed * 1664525 + 1013904223) >>> 0;
+      const noise = (seed / 0xffffffff) * 2 - 1;
+      low += lp * (noise - low);
+      high += hp * (low - high);
+      const tick = (low - high) * Math.exp(-(i / RATE) / 0.004);
+      if (start + i < len) buf[start + i] += tick * 0.5;
+    }
+  }
+  return finish(buf, 0.16);
+}
+
 fs.mkdirSync(OUT, { recursive: true });
-for (const [name, make] of Object.entries({ chime, bell, wood, ripple, 'screen-in': screenIn, 'screen-out': screenOut })) {
+for (const [name, make] of Object.entries({ chime, bell, wood, ripple, hollow, 'screen-in': screenIn, 'screen-out': screenOut })) {
   const file = path.join(OUT, `${name}.wav`);
   const data = wav(make());
   fs.writeFileSync(file, data);

@@ -24,7 +24,8 @@ import { askOperator } from '../browser/handoff.js';
 import { watchForSignIn } from '../browser/session-watch.js';
 
 const PROTOCOL_VERSION = '2024-11-05';
-const CHIME = path.join(WEB_DIR, 'sounds', 'chime.wav');
+// Its own sound: two hollow knocks on a plastic cup, not the finished-work chime.
+const CHIME = path.join(WEB_DIR, 'sounds', 'hollow.wav');
 
 /** The browser settings, read once: the operator edits the config file, not a UI here. */
 function settings() {
