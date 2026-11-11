@@ -92,6 +92,14 @@ export function createBrowser({ profile, log = null, startMinimized = true, widt
 
   /** Start the browser if it is not running, and attach to its page. */
   async function start() {
+    // The page we hold may be gone: the operator closed the window after signing in, or
+    // the idle reaper closed it from another process. A dead page is not an error to
+    // report — it is a browser to open again (11 Nov).
+    if (page && !(await alive())) {
+      log?.info?.('browser: the page is gone — starting again');
+      page = null;
+      child = null;
+    }
     if (page) return page;
     if (starting) return starting;
     starting = (async () => {

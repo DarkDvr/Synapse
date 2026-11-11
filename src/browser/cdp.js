@@ -80,14 +80,27 @@ export async function connect(port, { preferUrl = null } = {}) {
     if (events.length > 400) events.splice(0, 200);
   };
 
-  const send = (method, params = {}) =>
+  // Every request answers or fails in this long. Without it a half-open socket — the
+  // operator closed the window between two tool calls — made `read` wait for ever: the
+  // tool never returned, the model never spoke, and the run sat there until it was
+  // stopped (11 Nov, twice, seven minutes each).
+  const SEND_TIMEOUT_MS = 30000;
+  const send = (method, params = {}, timeoutMs = SEND_TIMEOUT_MS) =>
     new Promise((resolve, reject) => {
       const id = ++seq;
-      pending.set(id, { resolve, reject });
+      const timer = setTimeout(() => {
+        pending.delete(id);
+        reject(new Error(`the browser did not answer ${method} in ${Math.round(timeoutMs / 1000)} s`));
+      }, timeoutMs);
+      pending.set(id, {
+        resolve: (value) => { clearTimeout(timer); resolve(value); },
+        reject: (err) => { clearTimeout(timer); reject(err); },
+      });
       try {
         ws.send(JSON.stringify({ id, method, params }));
       } catch (err) {
         pending.delete(id);
+        clearTimeout(timer);
         reject(err);
       }
     });

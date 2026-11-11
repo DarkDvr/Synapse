@@ -316,14 +316,16 @@ export function renderMessage(m, tail = '') {
     // turn has neither a tail nor parts for a few seconds while the model reads its
     // prompt: an empty green-headed box read as "nothing is happening", so it says
     // what it is doing (11 Nov).
-    if (parts.length === 0 && !m.error && !(m.live && tail)) {
-      // A tool that is running says what it is doing, not just "Thinking…": a page load
-      // can take twenty seconds and emits nothing while it does, and the operator could
-      // not tell wait from dead (11 Nov).
-      const doing = m.live ? state.liveTool : null;
+    // A tool that is running says what it is doing, above whatever text came before it:
+    // a page load can take twenty seconds and emits nothing while it does, and the
+    // operator could not tell "wait" from "dead" (11 Nov). It is shown even when the
+    // model already said something this turn — which is the usual shape of a tool call.
+    if (m.live && state.liveTool) {
+      body.push(`<div class="trace-line is-waiting">${esc(state.liveTool)}</div>`);
+    } else if (parts.length === 0 && !m.error && !(m.live && tail)) {
       body.push(
         m.live
-          ? `<div class="trace-line is-waiting">${esc(doing || 'Thinking…')}</div>`
+          ? '<div class="trace-line is-waiting">Thinking…</div>'
           : '<span class="msg-text">…</span>',
       );
     }

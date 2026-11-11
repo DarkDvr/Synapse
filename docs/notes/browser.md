@@ -126,6 +126,15 @@ the same memory. Three rules keep that honest:
   the profile keeps every session, so the next call pays a launch, not a login;
 - the text it returns is the article, not the page, so what it spends is content: tokens
   in the model's context are memory too.
+## When the page is gone
+
+Every protocol request answers or fails within 30 seconds, and `start()` checks that the
+page it holds is still alive before using it. Both were added after a real wound: the
+operator signed in, closed the hand-off window, and the next `read` sat on a half-open
+socket for seven minutes — the tool never returned, the model never spoke, and the run
+was stopped twice (11 Nov). A closed window is now a browser to open again, and a
+refusing one is an error the model can report.
+
 ## Limits, stated
 
 - **Expiry is the site's.** The table shows when a session was made, never "good for N
