@@ -816,27 +816,16 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
         profile,
         log: app,
         sound,
-        // The operator closed the window: that is "done". Before the row is written, the
-        // address is opened once more, hidden, to see whether the site still asks for a
-        // password — a session that did not take must not become a row that says it did.
-        onDone: async (opened) => {
-          const { confirmSession } = await import('./browser/signin.js');
+        // The watcher inside askToSignIn has *already closed the window* by the time this
+        // fires: the page stopped asking to be signed into, so the session is real and the
+        // operator has nothing left to do (11 Nov).
+        onSignedIn: async (opened) => {
           const host = String(opened || '').replace(/^[a-z]+:\/\//i, '').split(/[/?#]/)[0].toLowerCase();
-          // The window is closed and the address is about to be checked: the page turns
-          // the button into "Saving…" for this gap, so the wait is visible (11 Nov).
-          notify?.({ kind: 'browser-signin-closed', host, ts: Date.now() });
-          const check = await confirmSession({ url: opened, profile, log: app })
-            .catch((err) => ({ ok: false, url: opened, why: err.message }));
-          if (!check.ok) {
-            app.info(`SynaBrowse: ${host} not confirmed — ${check.why}`);
-            notify?.({ kind: 'browser-session-unconfirmed', host, why: check.why, ts: Date.now() });
-            return;
-          }
           const next = getConfig();
-          next.browser = { ...next.browser, sites: addSite(next.browser?.sites, host, Date.now(), check.url) };
+          next.browser = { ...next.browser, sites: addSite(next.browser?.sites, host, Date.now(), opened) };
           applyConfig(next);
-          app.info(`SynaBrowse: ${host} signed in and confirmed; the session stays in its profile`);
-          notify?.({ kind: 'browser-session-kept', host, url: check.url, ts: Date.now() });
+          app.info(`SynaBrowse: ${host} signed in; the window was closed and the session kept`);
+          notify?.({ kind: 'browser-session-kept', host, url: opened, ts: Date.now() });
         },
       });
       if (answer.ok) app.info(`SynaBrowse: sign-in window asked for ${answer.url}`);
@@ -845,6 +834,19 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
     } catch (err) {
       return { ok: false, error: err.message };
     }
+  }
+
+  /** The watcher saw the page stop asking for a sign-in: record the site and say so. */
+  async function browserSignedIn(url) {
+    const opened = String(url || '').trim();
+    const host = opened.replace(/^[a-z]+:\/\//i, '').split(/[/?#]/)[0].toLowerCase();
+    if (!host) return { ok: false, error: 'there is no address to record' };
+    const { addSite } = await import('./browser/sites.js');
+    const cfg = getConfig();
+    applyConfig({ ...cfg, browser: { ...cfg.browser, sites: addSite(cfg.browser?.sites, host, Date.now(), opened) } });
+    app.info(`SynaBrowse: ${host} signed in; the window was closed and the session kept`);
+    notify?.({ kind: 'browser-session-kept', host, url: opened, ts: Date.now() });
+    return { ok: true, host };
   }
 
   /** The browser opened a host with a session: move "Last used" and nothing else. */
@@ -887,6 +889,7 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
     browserSignin,
     browserForget,
     browserUsed,
+    browserSignedIn,
     status: async () => ({
       version: APP_VERSION,
       // The files on disk may be newer than this process — a page reload cannot

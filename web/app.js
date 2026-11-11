@@ -191,7 +191,6 @@ import {
   switchSettingsTab,
   onSettingsInput,
   onSettingsClick,
-  browserSigninClosed,
   browserSigninSettled,
   openSettings,
   closeSettings,
@@ -1143,17 +1142,12 @@ function connectStream() {
       return;
     }
 
-    // The operator closed the SynaBrowse window: the address is being checked, so the
-    // Sign In button turns into a breathing "Saving…" until the answer arrives.
-    if (ev.kind === 'browser-signin-closed') {
-      browserSigninClosed();
-      return;
-    }
-    // The check is over, and only then does the row exist: a session that did not take
-    // must not become a row that says it did.
+    // The session is real and the window is already closed by the watcher, so the operator
+    // has nothing left to do. A session that did not take never becomes a row that says it
+    // did: the row is written only after the page stopped asking to be signed into.
     if (ev.kind === 'browser-session-kept') {
       browserSigninSettled();
-      toast('Session Kept', `${ev.host || 'That site'} — your sign-in stays in SynaBrowse's profile.`);
+      toast('Session Kept', `${ev.host || 'That site'} — signed in, and the window was closed for you.`);
       const sites = state.config?.browser?.sites;
       if (Array.isArray(sites)) {
         if (!sites.some((site) => site.host === ev.host)) {

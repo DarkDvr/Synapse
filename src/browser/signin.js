@@ -12,6 +12,7 @@ import path from 'node:path';
 import { createBrowser, findEdge } from './browser.js';
 import { askOperator } from './handoff.js';
 import { hostOf } from './allow.js';
+import { watchForSignIn } from './session-watch.js';
 import { WEB_DIR } from '../paths.js';
 
 /**
@@ -43,45 +44,15 @@ export function looksUnconfirmed(url, passwordInputs = 0) {
 }
 
 /**
- * Confirm a session after the operator closed the window: open the address again — hidden
- * this time — and see whether the site still asks for a password.
- *
- * `ok` means "the page came up without a sign-in", not "the server proved a cookie"; the
- * sentence says which. A host that answers with an error is unconfirmed, never recorded.
- */
-export async function confirmSession({ url, profile, log = null } = {}) {
-  const browser = createBrowser({ profile, log });
-  try {
-    const opened = await browser.goto(url, { settle: 1200 });
-    const passwordInputs = await browser
-      .start()
-      .then((page) => page.evaluate("document.querySelectorAll('input[type=password]').length"))
-      .catch(() => 0);
-    if (looksUnconfirmed(opened, passwordInputs)) {
-      return {
-        ok: false,
-        url: opened,
-        why: passwordInputs > 0 ? 'the page still asks for a password' : 'the site still sends you to its sign-in page',
-      };
-    }
-    return { ok: true, url: opened, why: '' };
-  } catch (err) {
-    return { ok: false, url: String(url || ''), why: err.message };
-  } finally {
-    await browser.stop();
-  }
-}
-
-/**
  * Show the browser on a site and ask the operator to sign in.
  *
  * `restore` shows the window (on the second monitor) instead of leaving it minimized:
  * a fresh sign-in needs a page on screen, and it is the operator's choice to swing it up.
  * `sound` is the chime path, or '' for silence (the Settings switch).
- * `onDone` is called once when that window closes — the operator's own "I am finished" —
- * so the caller can record the site and say the session is kept.
+ * `onSignedIn` is called once the page stops asking for a sign-in; by then the window has
+ * already been closed, so the operator never has to guess what to do next.
  */
-export async function askToSignIn({ url, profile, log = null, restore = true, sound = null, onDone = null } = {}) {
+export async function askToSignIn({ url, profile, log = null, restore = true, sound = null, onSignedIn = null } = {}) {
   if (!findEdge()) return { ok: false, error: 'no Edge on this machine' };
   const candidates = addressCandidates(url);
   if (!candidates.length) return { ok: false, error: 'there is no address to open' };
@@ -108,20 +79,12 @@ export async function askToSignIn({ url, profile, log = null, restore = true, so
     ...(sound === null ? {} : { sound }),
   });
 
-  // The operator closes the window when they are done; that is the only signal a harness
-  // can honestly take for "finished", and it is the one the toast is built on.
-  if (onDone) {
-    const began = Date.now();
-    const timer = setInterval(async () => {
-      const still = await browser.alive().catch(() => false);
-      if (still && Date.now() - began < 20 * 60 * 1000) return;
-      clearInterval(timer);
-      if (!still) {
-        try { onDone(opened); } catch { /* a listener must not break the page */ }
-      }
-    }, 2000);
-    timer.unref?.();
-  }
+  // Nobody has to close anything: the page is watched, and the moment it stops asking
+  // to be signed into, the window is taken away and the caller is told (11 Nov).
+  watchForSignIn(browser, {
+    log,
+    onSignedIn: (finalUrl) => { try { onSignedIn?.(finalUrl); } catch { /* a listener must not break the page */ } },
+  });
 
   return {
     ok: Boolean(asked.ok),

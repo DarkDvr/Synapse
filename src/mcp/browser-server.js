@@ -19,6 +19,7 @@ import { DATA_DIR, WEB_DIR } from '../paths.js';
 import { createBrowser, findEdge } from '../browser/browser.js';
 import { checkUrl, hostOf } from '../browser/allow.js';
 import { askOperator } from '../browser/handoff.js';
+import { watchForSignIn } from '../browser/session-watch.js';
 
 const PROTOCOL_VERSION = '2024-11-05';
 const SHOTS = path.join(DATA_DIR, 'browser', 'shots');
@@ -376,6 +377,18 @@ async function handle(msg) {
                 body: JSON.stringify({ what: args.what || '', url: args.url || '' }),
               });
             } catch { /* no app listening; the chime and the window still stand */ }
+            // Nobody has to close anything: the watch takes the window away the moment
+            // the page stops asking for a sign-in, and the app records the site.
+            watchForSignIn(browser, {
+              log: { info: (m) => process.stderr.write(`${m}\n`) },
+              onSignedIn: (signedUrl) => {
+                fetch('http://127.0.0.1:8700/api/browser/signed-in', {
+                  method: 'POST',
+                  headers: { 'content-type': 'application/json' },
+                  body: JSON.stringify({ url: signedUrl }),
+                }).catch(() => { /* the app may not be listening; the session is still kept */ });
+              },
+            });
             const w = asked.window || {};
             process.stderr.write(`handoff: window ${w.hwnd} on ${w.screen}, minimized=${w.minimized}, stoleFocus=${w.stoleFocus}\n`);
             return toolText(

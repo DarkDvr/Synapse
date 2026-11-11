@@ -333,6 +333,11 @@ export function createServer({ api, engine, logger, config, remote, onRemote }) 
     if (seg[0] === 'browser' && seg[1] === 'signin' && method === 'POST') {
       return sendJson(res, 200, await api.browserSignin((await readBody(req))?.url));
     }
+    // POST /api/browser/signed-in — the watcher saw the page stop asking for a sign-in,
+    // closed the window, and the site is now part of the record.
+    if (seg[0] === 'browser' && seg[1] === 'signed-in' && method === 'POST') {
+      return sendJson(res, 200, await api.browserSignedIn((await readBody(req))?.url));
+    }
     // POST /api/browser/forget — drop a site from the list and clear its session from
     // the profile. The row and the cookies go together, or the table would lie.
     if (seg[0] === 'browser' && seg[1] === 'forget' && method === 'POST') {

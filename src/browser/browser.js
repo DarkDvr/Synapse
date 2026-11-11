@@ -380,6 +380,19 @@ export function createBrowser({ profile, log = null, startMinimized = true, widt
   }
 
   /**
+   * The page as the sign-in watcher needs it: where it is, and whether it still asks for
+   * a password. It answers in a few seconds or not at all — the window it asks about may
+   * have just been closed, and the watcher must not wait a minute to find that out.
+   */
+  async function pageState() {
+    if (!page) throw new Error('the window is gone');
+    return page.evaluate(
+      "(() => ({ url: location.href, passwords: document.querySelectorAll('input[type=password]').length, ready: document.readyState }))()",
+      { timeoutMs: 5000 },
+    );
+  }
+
+  /**
    * Forget a site: clear everything this profile keeps for one origin.
    *
    * Deleting is not reading. Synapse never looks at a cookie's value; this asks the
@@ -442,5 +455,5 @@ export function createBrowser({ profile, log = null, startMinimized = true, widt
   }, 30000);
   reaper.unref?.();
 
-  return { start, running, alive, goto, read, click, type, press, wait, scroll, screenshot, watch, tabs, clearOrigin, stop, profile };
+  return { start, running, alive, pageState, goto, read, click, type, press, wait, scroll, screenshot, watch, tabs, clearOrigin, stop, profile };
 }

@@ -76,6 +76,14 @@ When a page needs a person (`handoff`, or Settings → Browser → Sign In…), 
 4. blinks the taskbar button and plays one chime;
 5. the page shows the toast (`browser-waiting`), so an operator who was away sees why.
 
+**Then nobody has to close anything.** `session-watch.js` polls the page the window is
+standing on every two seconds, and when it stops asking to be signed into — no password
+box, no sign-in route, loaded — twice in a row, the window is closed and the site is
+recorded. The operator looks up, the window is gone and the chat says the session was
+kept. Two polls rather than one, because a two-step sign-in hides the password box
+between its steps and closing the window in that gap would be sabotage. If they close the
+window first, that is an ending, not a sign-in, and nothing is recorded.
+
 The chime has its own switch under **AI screen usage alerts** in General
 (`notify.browserSounds`), because it is neither the finished-work sound nor a screen-lease
 one.
@@ -128,7 +136,7 @@ the same memory. Three rules keep that honest:
   in the model's context are memory too.
 ## When the page is gone
 
-Every protocol request answers or fails within 30 seconds, and `start()` checks that the
+Every protocol request answers or fails within 60 seconds — a minute, because fetching a password from a manager takes one — and `start()` checks that the
 page it holds is still alive before using it. Both were added after a real wound: the
 operator signed in, closed the hand-off window, and the next `read` sat on a half-open
 socket for seven minutes — the tool never returned, the model never spoke, and the run

@@ -84,7 +84,7 @@ export async function connect(port, { preferUrl = null } = {}) {
   // operator closed the window between two tool calls — made `read` wait for ever: the
   // tool never returned, the model never spoke, and the run sat there until it was
   // stopped (11 Nov, twice, seven minutes each).
-  const SEND_TIMEOUT_MS = 30000;
+  const SEND_TIMEOUT_MS = 60000;
   const send = (method, params = {}, timeoutMs = SEND_TIMEOUT_MS) =>
     new Promise((resolve, reject) => {
       const id = ++seq;
@@ -116,13 +116,13 @@ export async function connect(port, { preferUrl = null } = {}) {
   };
 
   /** Evaluate an expression in the page and return its value. */
-  const evaluate = async (expression, { awaitPromise = true } = {}) => {
+  const evaluate = async (expression, { awaitPromise = true, timeoutMs } = {}) => {
     const { result } = await send('Runtime.evaluate', {
       expression,
       returnByValue: true,
       awaitPromise,
       userGesture: true,
-    });
+    }, timeoutMs);
     if (result?.subtype === 'error') throw new Error(result.description || 'the page threw');
     return result?.value;
   };

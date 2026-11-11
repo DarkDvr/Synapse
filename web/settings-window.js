@@ -331,15 +331,6 @@ export function browserSigninOpened(host) {
   browserSigninHost = String(host || '');
 }
 
-/** The operator closed it: the address is being checked, so the button says "Saving…". */
-export function browserSigninClosed() {
-  if (!browserSigninHost) return;
-  const button = $('settingsBody')?.querySelector('#browserSignin');
-  if (!button) return;
-  button.classList.add('is-working');
-  button.textContent = 'Saving…';
-}
-
 /** The check is over, either way: the button is Sign In… again. */
 export function browserSigninSettled() {
   browserSigninHost = null;
