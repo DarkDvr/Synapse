@@ -312,8 +312,17 @@ export function renderMessage(m, tail = '') {
     }
     // A post the page opened on the turn's first token has no parts yet; its
     // thinking is the live tail underneath, so the placeholder ellipsis would sit
-    // above the words it is waiting for (10 Nov).
-    if (parts.length === 0 && !m.error && !(m.live && tail)) body.push('<span class="msg-text">…</span>');
+    // above the words it is waiting for (10 Nov). A post opened at the *start* of the
+    // turn has neither a tail nor parts for a few seconds while the model reads its
+    // prompt: an empty green-headed box read as "nothing is happening", so it says
+    // what it is doing (11 Nov).
+    if (parts.length === 0 && !m.error && !(m.live && tail)) {
+      body.push(
+        m.live
+          ? '<div class="trace-line is-waiting">Thinking…</div>'
+          : '<span class="msg-text">…</span>',
+      );
+    }
     if (m.error) body.push(`<div class="msg-error">${esc(m.error)}</div>`);
     return `<div class="msg assistant" data-msg="assistant"><div class="msg-body">${body.join('')}${tail}</div></div>`;
   }

@@ -323,8 +323,15 @@ Non-obvious, all verified on 2.0.30:
   boot scan found it "unread" and started it: on 27 Oct a restart started t5 from a
   round the operator had stopped because of permission friction. The busy branch now
   records `outcome: 'deferred'`, and every refusal path (`single-mode`,
-  `unknown-task`, `qc-cap`, `keep-building-off`, `stopped-by-operator`, `deferred`)
-  is a line in `runs.jsonl`, which is what makes "unread" mean unread.
+  `unknown-task`, `qc-cap`, `keep-building-off`, `stopped-by-operator`,
+  `self-delegation`, `deferred`) is a line in `runs.jsonl`, which is what makes
+  "unread" mean unread.
+  **A row whose role is the Architect is its own work** (11 Nov). Delegating it asked
+  for a second Architect: the runner spawned a worker with the architect role, and the
+  page drew a delegation from the Architect's card back to itself — a yellow loop on
+  its own left edge. It is refused now, journalled, and woken with "do it here with
+  your own tools", because the row is still the Architect's to settle and silence
+  would leave it waiting for a report that cannot come.
   **A deferral is reported with the run, not woken on its own.** The busy branch
   used to wake the Architect with "ask again when it reports back", which cost a
   whole turn per duplicate ask: three delegate calls in one turn bought three

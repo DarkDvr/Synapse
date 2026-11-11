@@ -49,6 +49,23 @@ test('a read naming the harness is logged, not alarmed', () => {
   assert.equal(alarms.length, 0);
 });
 
+// A toolbox run whose page is a `file:///` URL inside the harness's own skills
+// folder is still the toolbox: the URL names the same file as the path. It used to
+// be reported as "naming the harness" because the token began with the scheme, and
+// the operator got a second alarm beside the real one (11 Nov).
+test('a shipped tool run from a file URL is not "naming the harness"', () => {
+  const alarms = [];
+  const guard = createHarnessGuard({ root: ROOT, logger: quiet, notify: (event) => alarms.push(event) });
+  const shot = `${ROOT}\\skills\\visual-review\\bin\\shot.mjs`;
+  const page = `file:///${ROOT.replace(/\\/g, '/')}/skills/visual-review/template/mock-2.html`;
+  guard.checkTurn({
+    sessionId: 'ses_3',
+    messages: [message('m1', shell('p1', `node "${shot}" --url "${page}" 2>&1`))],
+    label: 'turn 1',
+  });
+  assert.equal(alarms.length, 0, `a toolbox run was alarmed: ${JSON.stringify(alarms)}`);
+});
+
 // A run must never commit the harness. The snapshot used to `git add -u` and commit
 // with a generated message, and on 7 Nov that swept three half-finished edits into
 // `snapshot: before t1 (coder-1)`. Now it reports a dirty tree and commits nothing —

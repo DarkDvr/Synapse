@@ -607,6 +607,34 @@ test('a program a shipped tool runs is not a write into Windows', () => {
   // A cmd-style switch is a switch, not a path: `/c` used to resolve to `F:/c`.
   assert.equal(shell('& "C:\\Windows\\System32\\cmd.exe" /c dir', { protection: windows }).effect, 'allow');
 });
+
+// …and the same is true when a *launcher* names the program: `Start-Process
+// …\powershell.exe` puts the path in an argument, where the head-program rule could
+// not see it. A worker reading a temperature sensor was refused as "PROHIBITED:
+// Windows is on the protected list" (11 Nov) — nothing was going to be written.
+test('a program a launcher names is a run, and elevation is refused as itself', () => {
+  const windows = [
+    { path: HARNESS, label: 'Synapse', write: false, read: true },
+    { path: 'C:/Windows', label: 'Windows', write: false, read: true },
+  ];
+  const ps = 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe';
+  assert.equal(
+    shell(`Start-Process ${ps} -NoProfile -File .\\x.ps1`, { protection: windows }).effect,
+    'allow',
+  );
+  // Asking Windows for administrator rights is a different thing, and says so: an
+  // unattended run cannot answer the UAC prompt.
+  const elevated = shell(`Start-Process ${ps} -Verb RunAs -ArgumentList '-NoProfile','Bypass'`, { protection: windows });
+  assert.equal(elevated.effect, 'deny');
+  assert.equal(elevated.scope, 'elevation', 'elevation must not be called a prohibited write');
+  assert.match(elevated.reason, /administrator rights/);
+  assert.doesNotMatch(elevated.reason, /PROHIBITED/);
+  // What the analyser can still see: a write named outside the argument list.
+  assert.equal(
+    shell(`Start-Process ${ps} -Out C:\\Windows\\evil.txt`, { protection: windows }).effect,
+    'deny',
+  );
+});
 // The screen rules read the command line, so on 8 Nov the coder and the designer
 // wrote the mouse movement into a script and ran the script: the command named
 // nothing, and the cursor moved anyway. The script is read now, but only when it is

@@ -770,6 +770,31 @@ function decideShell(resources, ctx) {
     ? info.segments
     : [{ paths: info.paths, redirects: info.redirects, readsOnly: info.readsOnly }];
 
+  // Elevation is neither a path nor a kill: `Start-Process … -Verb RunAs` asks
+  // Windows for administrator rights, and the UAC prompt is a thing only the
+  // operator can answer. It used to be judged as a write into Windows and refused
+  // as "Windows is on the protected list", which was untrue — nothing was going to
+  // be written there — and unhelpful to a model that could just as well read the
+  // sensor without admin (11 Nov). An unattended run must not sit on a prompt it
+  // cannot answer, so it is a refusal with the real reason.
+  const asksElevation = segments.some((part) => {
+    if (part.readsOnly) return false;
+    const words = part.words || [];
+    let at = 0;
+    while (at < words.length && (words[at] === '&' || words[at] === '.')) at += 1;
+    const head = String(words[at] || '').toLowerCase().replace(/^.*[\\/]/, '').replace(/\.exe$/, '');
+    if (!/^(start-process|start)$/.test(head)) return false;
+    return /(?:^|\s)[-/]verb\s+["']?runas\b/i.test(words.join(' '));
+  });
+  if (asksElevation) {
+    return deny(
+      'This asks Windows for administrator rights, and an unattended run cannot answer the UAC prompt. ' +
+        'Do the same work without elevation; if it truly needs admin, ask the operator to do that one step.',
+      true,
+      'elevation',
+    );
+  }
+
   const skillsRoot = `${slash(ctx.harnessRoot)}/skills`;
 
   // Copying a shipped skill's assets into a project is the toolbox working, not a
@@ -913,12 +938,35 @@ function decideShell(resources, ctx) {
     const target = resolvePath(word, ctx.cwd, { home: ctx.home });
     return target && !target.unknown && PROGRAM_EXT.test(target.path) ? target.path : null;
   };
+  // A program a launcher verb names is *run*, not written — the same rule as the
+  // head of a statement below. `Start-Process …\powershell.exe` puts the program in
+  // an argument, so `headProgram` only saw the verb `Start-Process` and the path was
+  // judged a write into Windows: a worker reading a temperature sensor was refused
+  // as PROHIBITED (11 Nov). Only the launcher's own target is exempt — a second
+  // path in the arguments is still judged for what it is.
+  const LAUNCHER_VERBS = new Set(['start-process', 'start', 'explorer']);
+  const launcherProgram = (part) => {
+    const words = part.words || [];
+    let at = 0;
+    while (at < words.length && (words[at] === '&' || words[at] === '.')) at += 1;
+    const head = String(words[at] || '').toLowerCase().replace(/^.*[\\/]/, '').replace(/\.exe$/, '');
+    if (!LAUNCHER_VERBS.has(head)) return null;
+    for (let i = at + 1; i < words.length; i += 1) {
+      const word = words[i];
+      if (/^[-/]/.test(word)) continue;
+      const target = resolvePath(word, ctx.cwd, { home: ctx.home });
+      if (target && !target.unknown && PROGRAM_EXT.test(target.path)) return target.path;
+    }
+    return null;
+  };
   // The harness keeps its stricter rule: only a shipped tool under skills/ may run,
   // so & "…\src\build.ps1" is still the app changing itself. Everything else may
   // be run by its own path — running a program is not writing to it.
   const programInTool = (p, part) =>
     PROGRAM_EXT.test(String(p || '')) &&
-    (toolParts.has(part) || (p === headProgram(part) && zoneOf(p, ctx) !== 'harness'));
+    (toolParts.has(part) ||
+      (p === headProgram(part) && zoneOf(p, ctx) !== 'harness') ||
+      (p === launcherProgram(part) && zoneOf(p, ctx) !== 'harness'));
   // PROHIBITED: a statement that is not read-only may not name a protected path,
   // and neither may a redirect. Running a shipped script is the exception — it is
   // execution, not a change — so the script words that statement names are not

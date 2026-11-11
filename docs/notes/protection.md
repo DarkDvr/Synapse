@@ -132,6 +132,18 @@ lease (`src/desk.js`) rather than a rule.
   protected folder (`-Out C:\Windows\…`) and deleting a binary there are still
   refused, and a cmd-style switch (`/c`) is a switch, not a path — it used to
   resolve to `F:/c` and make `cmd /c dir` look like an outside write.
+  **A launcher's target counts too** (11 Nov): `Start-Process …\powershell.exe` puts
+  the program in an argument, where the head-of-statement rule could not see it, so a
+  worker reading a CPU temperature sensor was refused as a write into Windows. The
+  launcher's own target is the exemption; a second path in the arguments is judged
+  as what it is.
+- **Elevation is refused, and says so** (11 Nov). `Start-Process … -Verb RunAs` asks
+  Windows for administrator rights, and the UAC prompt is a thing only the operator
+  can answer — an unattended run would sit on it. That refusal used to be
+  "PROHIBITED: Windows is on the protected list", which was untrue: nothing was
+  going to be written there. It is now a plain refusal with the real reason, telling
+  the model to do the work without elevation or ask the operator for that one step.
+  The chat shows it as an ordinary refused call, not as the red prohibited line.
 
 - **A script is read, because the mouse can hide inside one.** On 8 Nov the coder
   wrote `capture.ps1` — `SetCursorPos` + `SendInput` + `Start-Process` — and ran

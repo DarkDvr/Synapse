@@ -1441,17 +1441,36 @@ body[data-mode="single"] #runAuto { display: none; }
 .trace-line.is-compact, .trace-line.is-loop { font-weight: 600; position: relative; padding-left: 16px; margin: 5px 0; }
 .trace-line.is-compact { color: var(--yellow); }
 .trace-line.is-loop { color: var(--amber); }
-   write shaped at it. Amber like a compaction, for the same reason: news about the
+/* The turn has started and the model has said nothing yet: one quiet line that
+   breathes, so the chat cannot be mistaken for a dead one (11 Nov). */
+.trace-line.is-waiting {
+  color: #8b8f97;
+  animation: waiting-breathe 1.6s ease-in-out infinite;
+}
+@keyframes waiting-breathe {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .trace-line.is-waiting { animation: none; opacity: 0.8; }
+}
+/* An alarm is a line in the chat, never a modal: something about the run the
+   operator cannot act on — a model that wrote at the harness, a worker that went
+   outside its folder. Amber like a compaction, for the same reason: news about the
    run rather than a step in it. It was a modal once; a modal for a thing the
    operator cannot act on is a click and a distraction, so it is a line here and
-   the detail stays in the log. */
+   the detail stays in the log.
+   (This comment had lost its opening marker, so the browser parsed the sentence as
+   CSS and dropped the whole `.chat-alarm` rule with it — which is why the line ran
+   off the edge instead of ending in "…" until 11 Nov.) */
 .chat-alarm {
-  display: flex; gap: 7px; align-items: baseline;
+  display: block;
   margin: 15px 0 0; padding-left: 13px;
   border-left: 2px solid var(--amber);
   font-size: calc(var(--chat-fs) * 0.92); line-height: 1.45; color: var(--amber);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.chat-alarm-mark { font-size: calc(var(--chat-fs) * 0.88); }
+.chat-alarm-mark { font-size: calc(var(--chat-fs) * 0.88); margin-right: 7px; }
 /* The one alarm in bright red: a tool tried to change something on the prohibited
    list. It is louder than the amber "touched Synapse" line on purpose — that one
    is news, this one is the machine saying no. */
@@ -1459,6 +1478,16 @@ body[data-mode="single"] #runAuto { display: none; }
 .chat-alarm.is-prohibited .chat-alarm-mark { color: var(--red); }
 .chat-alarm-text {
   min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* A steer's "You" sits beside the STEER: tag, and the tag is a flex box centred on
+   the sentence's line height — so the role label uses the same box rather than the
+   baseline nudge that suits a normal message header. Without this the word sat a
+   couple of pixels high beside the tag (reported 11 Nov, and again after the first
+   attempt on 9 Nov: the two labels are different shapes). */
+.msg.user.is-steer .msg-role {
+  display: inline-flex; align-items: center;
+  height: calc(var(--chat-fs) * 1.5);
+  vertical-align: middle;
 }
 /* A worker's lease: the one chat line with a clock. Yellow, the same as Synapse's
    own messages — the line is the harness speaking, not the operator. It counts

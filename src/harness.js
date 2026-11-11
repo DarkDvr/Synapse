@@ -96,7 +96,12 @@ const RUNS_HARNESS_CODE = /\b(?:node|nodejs|pwsh|powershell|python|python3|deno|
 
 export function createHarnessGuard({ root, logger, notify }) {
   const log = logger.channel('app');
-  const asKey = (p) => String(p || '').replace(/\\/g, '/').toLowerCase();
+  // A `file:///F:/…` URL names the same file as `F:/…`, and the toolbox exemption
+  // compares paths. A render started from a file URL used to be reported as "naming
+  // the harness" because the token began with the scheme rather than with the skills
+  // folder, and the operator saw a second alarm for a tool that was being used
+  // correctly (11 Nov).
+  const asKey = (p) => String(p || '').replace(/^file:\/{2,3}/i, '').replace(/\\/g, '/').toLowerCase();
   const rootKey = asKey(root);
 
   /** Is this path (or this command text) inside the harness? */

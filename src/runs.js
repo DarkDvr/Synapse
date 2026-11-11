@@ -1148,6 +1148,32 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
         // finding one more issue until the quota is gone; the third report says so
         // too, and this is what makes it true if the model ignores it.
         const asked = (currentPlan?.tasks || []).find((t) => t.id === request.task);
+
+        // A row the plan gives to the Architect is its own work — research, a
+        // decision, a check it does in this conversation. Delegating it asks for a
+        // second Architect, and the harness used to oblige: it spawned a worker with
+        // the architect role, and the page drew a delegation from the Architect's
+        // card back to itself (11 Nov, sysmoninor's t1a "Find a real source …",
+        // role=architect). Refused with a wake, because the row is still the
+        // Architect's to settle and it must not wait for a report that cannot come.
+        if (asked?.role === 'architect') {
+          appendRun(session.directory, {
+            kind: 'delegate',
+            callId: request.callId,
+            task: request.task,
+            outcome: 'self-delegation',
+          });
+          log.info(`delegation refused: ${request.task} is the Architect's own row`);
+          await wake(sessionId, session.directory, {
+            description: `delegate ${request.task} refused: that row is yours`,
+            text:
+              `Nothing was run: ${request.task} is a row whose role is architect, so it is your own work. ` +
+              `Do it here, with your own tools, and settle the row yourself. Delegate only to a role that ` +
+              `has a card — inventor, designer, coder-1, coder-2, qc — and if the row is genuinely ` +
+              `someone else's work, change its role in the plan first.`,
+          });
+          continue;
+        }
         if (asked?.role === 'qc' && qcRoundsUsed(session.directory) >= QC_ROUNDS) {
           appendRun(session.directory, {
             kind: 'delegate',

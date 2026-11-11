@@ -138,6 +138,27 @@ try {
     expect('a whole plan lets the work start', ran.includes('prompt'), ran.join(',') + ' warns=' + warns.join(' | '));
     expect('and nothing is refused', woke.length === 0);
   }
+
+  // 2b. a row whose role is the Architect is its own work, not a delegation
+  // 11 Nov, sysmoninor: the Architect delegated a role=architect row, the runner
+  // spawned a worker with that role, and the page drew a delegation from the
+  // Architect's card back to itself. The row is still the Architect's to settle, so
+  // the refusal has to say so out loud — silence would leave it waiting for a report
+  // that can never come.
+  writePlan(plan(['build'], [task('t9', 'architect')]));
+  {
+    const { runner, woke, ran } = makeRunner();
+    await runner.handleTurn('ses_arch', delegate('t9', 'call_self'));
+    await settle();
+    const run = fs.readFileSync(path.join(DIR, '.synapse', 'runs.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+    expect('a row for the Architect is not delegated', !ran.includes('prompt') && !ran.includes('createSession'), ran.join(','));
+    expect('the refusal is recorded', run.some((r) => r.outcome === 'self-delegation'), JSON.stringify(run.slice(-2)));
+    expect(
+      'and the Architect is told to do it itself',
+      woke.some((t) => /your own work/i.test(t)),
+      woke[0]?.slice(0, 120),
+    );
+  }
   // 3. a delegation no turn ever read: picked up once, at boot
   // Fever Tracker, 22 Oct: the Architect delegated t8 inside a turn that ended in
   // a question, Synapse restarted, the engine cancelled the question, the turn

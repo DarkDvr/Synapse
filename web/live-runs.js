@@ -797,7 +797,11 @@ export function drawActivePath() {
 
   const run = currentRun();
   const dest = run ? cardFor(run.role) : null;
-  if (run && dest && dest.offsetParent) {
+  // A delegation to the Architect itself is not a thing any more (src/runs.js
+  // refuses the row), but a stale run record from before that rule would draw the
+  // path from the Architect's card back into its own edge — the little yellow loop
+  // the operator saw and asked about (11 Nov). The card is not a destination.
+  if (run && dest && dest.offsetParent && String(run.role) !== 'architect') {
     const d = dest.getBoundingClientRect();
     const y1 = mid(d);
     const x1 = edge(d);

@@ -1461,7 +1461,14 @@ function connectStream() {
             renderRoleActivity();
           }
         }
-        if (ev.type === EV.executionStarted) state.busy = true;
+        if (ev.type === EV.executionStarted) {
+          state.busy = true;
+          // Open the post now, not on the first delta: the model can spend many
+          // seconds reading its prompt before it says anything, and the chat used to
+          // sit empty for that whole time (11 Nov). The placeholder says "Thinking…"
+          // until the first reasoning or tool arrives.
+          if (ensureLivePost()) renderTranscript();
+        }
         else if (turnEnded(ev.type) || ev.type === EV.idle) {
           state.busy = false;
           // A turn that ended without the engine ever writing its message would

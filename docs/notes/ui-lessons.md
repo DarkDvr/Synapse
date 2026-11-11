@@ -2463,3 +2463,56 @@ post** (an overlay covered the very answer the operator needed in order to answe
 **the deletion of the fitting machinery** (a measured height only ever approximated a
 box the grid can make definite). Everything else is a number that moved.
 
+---
+
+## The turn that was invisible, and a rule a comment ate (11 Nov)
+
+Five things came from one screenshot of one run, and two of them had the same cause at
+different depths.
+
+**One alarm, one line.** The operator's chat showed a red PROHIBITED line that fit, and
+a second warning that ran off the edge and wrapped. The ellipsis was written years
+before — `.chat-alarm-text { white-space: nowrap; text-overflow: ellipsis }` — and it
+had **never applied**: the comment above `.chat-alarm` had lost its opening `/*`
+somewhere in an earlier edit, so the browser parsed those four prose lines as CSS and
+dropped the rule that followed. Every declaration in `.chat-alarm` was dead, including
+the flex row that held the mark and the text together, which is why the mark sat on its
+own line and the sentence overflowed. So:
+
+- **a comment is code**: an unclosed one silently deletes the next rule, and the way to
+  find it is to ask the browser which selectors it actually has, not to read the file
+  (`.chat-alarm { … }` was missing from `document.styleSheets` while
+  `.chat-alarm-mark` was present);
+- the line is a **block** now with the ellipsis on the block, not a flex row with it on
+  a child — `.msg-answer` makes its children blocks, and that was the fragile part;
+- a CSS file is worth a structural check: 920 `{` against 920 `}` in `synapse.css` after
+  the fix, comment delimiters balanced.
+
+**The warning that should not have been there.** Beside it sat a second, white alarm:
+"a model named Synapse in a tool call" for `node …\skills\visual-review\bin\shot.mjs
+--url "file:///F:/dev/Synapse/skills/…/mock-2.html"`. The toolbox exemption compares
+*paths*, and the URL token began with `file:///`, so it did not start with the skills
+folder. One `asKey` strips the scheme; the shipped tool you are told to use is no
+longer "naming the harness".
+
+**The invisible turn.** The Architect's post was opened on the **first delta**, so from
+the moment the turn started until the first token arrived — many seconds, on a long
+prompt — the chat was an empty box with a green head. It opens on
+`execution.started` now and says `Thinking…` (a `.trace-line.is-waiting`, breathing
+gently, still under `prefers-reduced-motion`) until reasoning or a tool arrives. The
+same rule as the 10 Nov steer: **the operator must never have to guess whether the
+machine is working.**
+
+**"You" beside "STEER:".** The role label is an inline-block with a `1.5px` baseline
+nudge that suits a normal header; the STEER tag is a flex box centred on the sentence's
+line height. Two shapes, one line, so the word sat high — the second report of the same
+thing. In a steer message the role label uses the tag's box.
+
+**A delegation to itself.** The Architect delegated a row whose `role` was `architect`.
+The runner spawned a worker with that role, and the page drew the live path from the
+Architect's card back into its own edge — a small yellow loop inside the card's left
+border, which is what the operator photographed. Two fixes, at both ends: the runner
+refuses a row whose role is the architect (journalled, and woken with "do it here with
+your own tools"), and the page will not draw a path whose destination is the Architect
+even if an old run record says so. **A card is never its own destination.**
+
