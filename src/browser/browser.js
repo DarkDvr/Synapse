@@ -71,10 +71,10 @@ const KEYS = {
  */
 /**
  * The cookie domains that belong to a site: the host itself, its `www.` twin, and the
- * parent domain its session usually lives on (`.reddit.com` for `www.reddit.com`).
+ * parent domain its session usually lives on (`.example.com` for `www.example.com`).
  *
  * Pure and exported: the matching rule is the part worth testing, and it is the part that
- * was wrong — an origin clear reached `www.reddit.com` and left seven cookies on the
+ * was wrong — an origin clear reached `www.example.com` and left seven cookies on the
  * parent, so a "forgotten" site stayed signed in (11 Nov).
  */
 export function siteDomains(host) {
@@ -418,8 +418,8 @@ export function createBrowser({ profile, log = null, startMinimized = true, widt
   /**
    * Forget a site — the whole site, not one host label.
    *
-   * Measured 11 Nov: clearing the origin `https://www.reddit.com` left seven cookies on
-   * `.reddit.com`, because they are set for the parent domain and an origin clear does not
+   * Measured 11 Nov: clearing the origin `https://www.example.com` left seven cookies on
+   * `.example.com`, because they are set for the parent domain and an origin clear does not
    * reach them. The operator stays signed in and the table lies. So the cookies are listed
    * by name and domain to delete them, and the parent domain is included.
    *
@@ -452,23 +452,6 @@ export function createBrowser({ profile, log = null, startMinimized = true, widt
     }
     note(`browser: forgot ${key} — ${removed} cookie(s) and its storage removed`);
     return removed;
-  }
-
-  /**
-   * Forget a site: clear everything this profile keeps for one origin.
-   *
-   * Deleting is not reading. Synapse never looks at a cookie's value; this asks the
-   * browser to drop what it holds for that origin, which is exactly what "Forget" means
-   * and the only way to make the row in Settings true.
-   */
-  async function clearOrigin(origin) {
-    const p = await start();
-    used();
-    await p.send('Storage.clearDataForOrigin', {
-      origin: String(origin || ''),
-      storageTypes: 'all',
-    });
-    return true;
   }
 
   /** The tabs this browser has open. */
@@ -517,5 +500,5 @@ export function createBrowser({ profile, log = null, startMinimized = true, widt
   }, 30000);
   reaper.unref?.();
 
-  return { start, running, alive, pageState, goto, read, click, type, press, wait, scroll, screenshot, watch, tabs, clearOrigin, clearSite, stop, profile };
+  return { start, running, alive, pageState, goto, read, click, type, press, wait, scroll, screenshot, watch, tabs, clearSite, stop, profile };
 }

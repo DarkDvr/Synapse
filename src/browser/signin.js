@@ -1,6 +1,6 @@
 // The one thing only a person can do: sign in.
 //
-// Opens SynaBrowse on whatever the operator typed — `reddit.com`, `мос.ру`, a LAN address
+// Opens SynaBrowse on whatever the operator typed — a bare host, a name in another script, a LAN address
 // like `192.168.1.5:8080` — and puts it on the second monitor so they can log in. The
 // address is *not* validated against a format: a browser resolves what a person types,
 // and a harness that insists on `https://` is refusing addresses the browser accepts.

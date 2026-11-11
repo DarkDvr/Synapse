@@ -360,5 +360,11 @@
       "session": true,
       "tools": true
     }
+  },
+  "browser": {
+    "enabled": false,
+    "profile": "",
+    "idleMinutes": 5,
+    "sites": []
   }
 }

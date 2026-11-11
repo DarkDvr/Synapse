@@ -12,7 +12,7 @@
 import path from 'node:path';
 import { DATA_DIR, PROJECTS_ROOT } from '../paths.js';
 
-export const HARNESS_SHOTS = path.join(DATA_DIR, 'browser', 'shots');
+const HARNESS_SHOTS = path.join(DATA_DIR, 'browser', 'shots');
 
 /**
  * The folder this process should write browsing artifacts into, from its working

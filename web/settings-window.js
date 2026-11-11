@@ -347,7 +347,7 @@ export async function onSettingsClick(e) {
     // SynaBrowse's sign-in is the one control in Settings that acts now rather than at
     // Save: the browser is opened on that address and put on the second monitor, without
     // taking focus. The session is the browser's, not this form's. The address is not
-    // validated — a browser resolves `reddit.com`, `мос.ру` or a LAN address.
+    // validated — a browser resolves a bare host, a name in another script, or a LAN address.
     const field = $('settingsBody')?.querySelector('#browserSigninUrl');
     const url = String(field?.value || '').trim();
     const note = $('settingsBody')?.querySelector('#browserSigninNote');

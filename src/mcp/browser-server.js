@@ -43,7 +43,6 @@ function settings() {
   return {
     enabled: b.enabled === true,
     profile: String(b.profile || '').trim() || path.join(DATA_DIR, 'browser', 'profile'),
-    headless: b.headless === true,
     // One chime when the window is put on the second monitor; the operator's switch,
     // beside the screen sounds in Settings > General.
     sounds: raw?.notify?.browserSounds !== false,

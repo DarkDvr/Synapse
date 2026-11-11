@@ -176,11 +176,13 @@ refusing one is an error the model can report.
 
 | | |
 |---|---|
-| `src/browser/cdp.js` | the protocol client (Node's own `WebSocket`, no dependencies) |
-| `src/browser/browser.js` | Edge by full path, the flags, the toolset, `clearOrigin` |
+| `src/browser/cdp.js` | the protocol client: requests that answer or fail in 60 s, events, evaluate, screenshot |
+| `src/browser/browser.js` | Edge by full path, the launch flags, the toolset, `clearSite`, the idle reaper |
 | `src/browser/allow.js` | the http(s) check (`hostOf`, `checkUrl`) |
+| `src/browser/artifacts.js` | where a project's screenshots live (`<project>\.synapse\browser\`) |
 | `src/browser/sites.js` | the sites record: add, touch, forget, de-duplicate |
-| `src/browser/signin.js` | address candidates, the confirmation check, the sign-in flow |
+| `src/browser/session-watch.js` | polls the sign-in window and closes it when the session lands |
+| `src/browser/signin.js` | address candidates, `looksUnconfirmed`, the sign-in flow |
 | `src/browser/handoff.js` + `show.ps1` | the window, the chime, `stoleFocus` |
-| `src/mcp/browser-server.js` | the twelve tools |
-| `tests/browser.test.mjs`, `tests/browser-mcp.test.mjs`, `tests/sites.test.mjs` | the fence, the tools against a local page, the server over real stdio, the record |
+| `src/mcp/browser-server.js` | the twelve tools, the wall sentence, the waiting notice |
+| `tests/browser.test.mjs`, `tests/browser-mcp.test.mjs`, `tests/browser-watch.test.mjs`, `tests/browser-chat.test.mjs`, `tests/sites.test.mjs` | the fence, the tools against a local page, the server over real stdio, the watcher, the chat labels, the record |
