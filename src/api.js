@@ -869,16 +869,16 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
     const { forgetSite } = await import('./browser/sites.js');
     const next = { ...cfg, browser: { ...cfg.browser, sites: forgetSite(cfg.browser?.sites, key) } };
     applyConfig(next);
-    // Deleting is not reading: the browser drops its own storage for the origin, and
-    // Synapse never looks at a value.
+    // Deleting is not reading: the browser lists its own cookies by name and domain to
+    // delete them, and Synapse never stores, logs or returns a value. It must clear the
+    // **parent domain** too, or a site's session survives the row (measured 11 Nov:
+    // clearing the origin left seven cookies on `.reddit.com`).
     try {
       const { createBrowser } = await import('./browser/browser.js');
       const profile = String(cfg.browser?.profile || '').trim() || `${BROWSER_DIR}\\profile`;
       const browser = createBrowser({ profile });
-      for (const origin of [`https://${key}`, `http://${key}`]) {
-        try { await browser.clearOrigin(origin); } catch { /* the host may have no data */ }
-      }
-      app.info(`SynaBrowse: forgot ${key} — its cookies and storage are gone from the profile`);
+      const removed = await browser.clearSite(key);
+      app.info(`SynaBrowse: forgot ${key} — ${removed} cookie(s) and its storage are gone from the profile`);
     } catch (err) {
       app.warn(`SynaBrowse: forgot ${key} in the list, but could not clear its data: ${err.message}`);
     }

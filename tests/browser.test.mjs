@@ -11,7 +11,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { hostOf, hostAllowed, checkUrl } from '../src/browser/allow.js';
-import { createBrowser, findEdge } from '../src/browser/browser.js';
+import { createBrowser, findEdge, siteDomains, cookieBelongsTo } from '../src/browser/browser.js';
 import { addressCandidates, looksUnconfirmed } from '../src/browser/signin.js';
 import { tmpdir } from './tmpdir.mjs';
 
@@ -164,4 +164,17 @@ test('read() returns the article and says when a page is a sign-in wall', async 
     await browser.stop();
     try { fs.rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 }); } catch { /* swept at exit */ }
   }
+});
+
+// Forgetting a site has to reach the parent domain its session actually lives on.
+// Measured 11 Nov: clearing the origin www.reddit.com left seven cookies on .reddit.com,
+// and the operator stayed signed in after the row had been removed.
+test('a site\'s cookies include the parent domain, and nothing else', () => {
+  assert.deepEqual(siteDomains('www.reddit.com'), ['www.reddit.com', '.www.reddit.com', 'reddit.com', '.reddit.com']);
+  assert.deepEqual(siteDomains('https://www.reddit.com/r/x'), ['www.reddit.com', '.www.reddit.com', 'reddit.com', '.reddit.com']);
+  assert.equal(cookieBelongsTo('.reddit.com', 'www.reddit.com'), true);
+  assert.equal(cookieBelongsTo('www.reddit.com', 'www.reddit.com'), true);
+  assert.equal(cookieBelongsTo('.example.test', 'www.reddit.com'), false);
+  assert.equal(cookieBelongsTo('notreddit.com', 'www.reddit.com'), false, 'a lookalike is not a subdomain');
+  assert.deepEqual(siteDomains(''), []);
 });

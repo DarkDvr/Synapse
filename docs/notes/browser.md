@@ -102,8 +102,11 @@ one.
   box or sits on a sign-in route; nothing is added and the toast says why.
 - A confirmed row keeps the address it was confirmed at, and shows ages, not countdowns:
   when a session expires is the site's decision.
-- ✕ forgets a site: the row goes and the browser drops that origin's storage
-  (`Storage.clearDataForOrigin`). Deleting is not reading.
+- ✕ forgets a site: the row goes and the browser drops that site's cookies **and its
+  storage**. The parent domain matters: measured 11 Nov, clearing the origin
+  `www.reddit.com` left seven cookies on `.reddit.com`, so the operator stayed signed in
+  after deleting the row. Cookies are listed by name and domain to delete them; a value is
+  never stored, logged or returned.
 
 The sign-in button says what it is doing: **Opening…** while the browser starts, then
 **Saving…** while the address is checked, both breathing (`waiting-breathe`).

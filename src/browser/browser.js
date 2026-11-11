@@ -69,6 +69,29 @@ const KEYS = {
  * `start()` is idempotent: two tools calling it at once get the same browser, because
  * an Edge profile cannot be open twice and the second launch would fail on the lock.
  */
+/**
+ * The cookie domains that belong to a site: the host itself, its `www.` twin, and the
+ * parent domain its session usually lives on (`.reddit.com` for `www.reddit.com`).
+ *
+ * Pure and exported: the matching rule is the part worth testing, and it is the part that
+ * was wrong — an origin clear reached `www.reddit.com` and left seven cookies on the
+ * parent, so a "forgotten" site stayed signed in (11 Nov).
+ */
+export function siteDomains(host) {
+  const key = String(host || '').trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+  if (!key) return [];
+  const base = key.replace(/^www\./, '');
+  return [...new Set([key, `.${key}`, base, `.${base}`])];
+}
+
+/** Does a cookie set for `domain` belong to `host`? */
+export function cookieBelongsTo(domain, host) {
+  const d = String(domain || '').toLowerCase();
+  if (!d) return false;
+  const base = String(host || '').toLowerCase().replace(/^www\./, '');
+  return siteDomains(host).includes(d) || (base ? d.endsWith(`.${base}`) : false);
+}
+
 export function createBrowser({ profile, log = null, startMinimized = true, width = 1280, height = 800, idleMs = 5 * 60 * 1000 } = {}) {
   let child = null;
   let page = null;
@@ -393,6 +416,45 @@ export function createBrowser({ profile, log = null, startMinimized = true, widt
   }
 
   /**
+   * Forget a site — the whole site, not one host label.
+   *
+   * Measured 11 Nov: clearing the origin `https://www.reddit.com` left seven cookies on
+   * `.reddit.com`, because they are set for the parent domain and an origin clear does not
+   * reach them. The operator stays signed in and the table lies. So the cookies are listed
+   * by name and domain to delete them, and the parent domain is included.
+   *
+   * **Values are never read out.** The protocol hands them over with the list; nothing here
+   * stores, logs or returns one — only `{name, domain, path}` is used, to delete.
+   */
+  async function clearSite(host) {
+    const p = await start();
+    const key = String(host || '').trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+    if (!key) return false;
+    const base = key.replace(/^www\./, '');
+    const domains = new Set(siteDomains(key));
+    let removed = 0;
+    try {
+      const listed = await p.send('Network.getCookies', { urls: [`https://${key}/`, `https://${base}/`] });
+      for (const cookie of listed.cookies || []) {
+        const domain = String(cookie.domain || '').toLowerCase();
+        const match = domains.has(domain) || cookieBelongsTo(domain, key);
+        if (!match) continue;
+        try {
+          await p.send('Network.deleteCookies', { name: cookie.name, domain: cookie.domain, path: cookie.path });
+          removed += 1;
+        } catch { /* one stubborn cookie must not stop the rest */ }
+      }
+    } catch (err) {
+      log?.warn?.(`browser: could not list cookies for ${key}: ${err.message}`);
+    }
+    for (const origin of [`https://${key}`, `http://${key}`, `https://${base}`, `http://${base}`]) {
+      try { await p.send('Storage.clearDataForOrigin', { origin, storageTypes: 'all' }); } catch { /* nothing there */ }
+    }
+    note(`browser: forgot ${key} — ${removed} cookie(s) and its storage removed`);
+    return removed;
+  }
+
+  /**
    * Forget a site: clear everything this profile keeps for one origin.
    *
    * Deleting is not reading. Synapse never looks at a cookie's value; this asks the
@@ -455,5 +517,5 @@ export function createBrowser({ profile, log = null, startMinimized = true, widt
   }, 30000);
   reaper.unref?.();
 
-  return { start, running, alive, pageState, goto, read, click, type, press, wait, scroll, screenshot, watch, tabs, clearOrigin, stop, profile };
+  return { start, running, alive, pageState, goto, read, click, type, press, wait, scroll, screenshot, watch, tabs, clearOrigin, clearSite, stop, profile };
 }
