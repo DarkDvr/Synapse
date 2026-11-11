@@ -326,12 +326,14 @@ export async function onSettingsClick(e) {
   if (e.target.closest('[data-check-updates]')) { wired.checkUpdates(); return; }
   if (e.target.closest('#browserSignin')) {
     // SynaBrowse's sign-in is the one control in Settings that acts now rather than at
-    // Save: the browser is opened on that URL and put on the second monitor's taskbar,
-    // minimized, without taking focus. The session is the browser's, not this form's.
+    // Save: the browser is opened on that address and put on the second monitor's
+    // taskbar, minimized, without taking focus. The session is the browser's, not this
+    // form's. The address is not validated — a browser resolves `reddit.com`, `мос.ру` or
+    // a LAN address, and refusing what the browser accepts is the harness showing off.
     const field = $('settingsBody')?.querySelector('#browserSigninUrl');
     const url = String(field?.value || '').trim();
-    if (!/^https?:\/\//i.test(url)) {
-      toast('Sign In', 'Type the site to sign in to first — for example https://example.com/.');
+    if (!url) {
+      toast('Sign In', 'Type the site to sign in to — an address is enough.');
       return;
     }
     const button = e.target.closest('#browserSignin');

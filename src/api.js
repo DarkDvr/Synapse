@@ -798,13 +798,15 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
   // and the session is the whole point of it.
   async function browserSignin(url) {
     const target = String(url || '').trim();
-    if (!/^https?:\/\//i.test(target)) return { ok: false, error: 'that is not an http(s) address' };
+    if (!target) return { ok: false, error: 'there is no address to open' };
     const cfg = getConfig();
     const profile = String(cfg.browser?.profile || '').trim() || `${BROWSER_DIR}\\profile`;
+    // The operator's own switch, beside the screen sounds: one chime, or none.
+    const sound = cfg.notify?.browserSounds === false ? '' : undefined;
     try {
       const { askToSignIn } = await import('./browser/signin.js');
-      const answer = await askToSignIn({ url: target, profile, log: app });
-      if (answer.ok) app.info(`SynaBrowse: sign-in window asked for ${target}`);
+      const answer = await askToSignIn({ url: target, profile, log: app, sound });
+      if (answer.ok) app.info(`SynaBrowse: sign-in window asked for ${answer.url}`);
       else app.warn(`SynaBrowse: could not show the sign-in window for ${target}: ${answer.error}`);
       return answer;
     } catch (err) {

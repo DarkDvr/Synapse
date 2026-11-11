@@ -72,7 +72,7 @@ $flash.uCount = 3
 $flash.dwTimeout = 0
 [void][W.U]::FlashWindowEx([ref]$flash)
 
-try { $player = New-Object System.Media.SoundPlayer $Sound; $player.Play() } catch { }
+try { if ($Sound) { $player = New-Object System.Media.SoundPlayer $Sound; $player.Play() } } catch { }
 Start-Sleep -Milliseconds 900
 
 $fgAfter = [W.U]::GetForegroundWindow()

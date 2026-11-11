@@ -12,6 +12,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { hostOf, hostAllowed, checkUrl } from '../src/browser/allow.js';
 import { createBrowser, findEdge } from '../src/browser/browser.js';
+import { addressCandidates } from '../src/browser/signin.js';
 import { tmpdir } from './tmpdir.mjs';
 
 // ── the fence ───────────────────────────────────────────────────
@@ -40,6 +41,22 @@ test('a URL parses to its host and keeps no lookalike', () => {
   assert.equal(hostOf('https://WWW.Example.COM./x'), 'www.example.com');
   assert.equal(hostOf('not a url'), '');
   assert.equal(hostOf('javascript:alert(1)'), '');
+});
+
+// The sign-in field takes what a person types. A browser resolves it; the harness only
+// decides which scheme to try first, because a typed address usually has none, and a
+// local box usually speaks http.
+test('an address with no scheme is tried as https, then http', () => {
+  assert.deepEqual(addressCandidates('reddit.com'), ['https://reddit.com', 'http://reddit.com']);
+  assert.deepEqual(addressCandidates('мос.ру'), ['https://мос.ру', 'http://мос.ру']);
+  assert.deepEqual(addressCandidates('192.168.1.20:8080'), ['https://192.168.1.20:8080', 'http://192.168.1.20:8080']);
+});
+
+test('an address that states its scheme is taken at its word', () => {
+  assert.deepEqual(addressCandidates('http://192.168.1.5:9000/x'), ['http://192.168.1.5:9000/x']);
+  assert.deepEqual(addressCandidates('  "https://example.com/" '), ['https://example.com/']);
+  assert.deepEqual(addressCandidates('file:///F:/dev/Synapse/AGENTS.md'), ['file:///F:/dev/Synapse/AGENTS.md']);
+  assert.deepEqual(addressCandidates(''), []);
 });
 
 // ── the browser ─────────────────────────────────────────────────

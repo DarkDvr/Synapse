@@ -333,9 +333,15 @@ function settingsGeneral(c) {
           'AI screen usage alerts',
           'notify.screenSounds',
           'A rising chime when the AI takes your mouse and keyboard, a falling one when it gives them back. Off leaves the badge and the toast, which say the same thing in words.',
+        ) +
+        setCheck(
+          c,
+          'SynaBrowse is waiting',
+          'notify.browserSounds',
+          'One chime when SynaBrowse puts its window on the second monitor for you — a sign-in, or a check only you can pass. Off leaves the toast and the blinking taskbar button.',
         ),
       undefined,
-      "Six short sounds, built into the app — four for finished work and two for the screen lease. Only the chat you are looking at chimes; a run elsewhere shows its dot in the rail.",
+      'Seven short sounds, built into the app — four for finished work, two for the screen lease and one for SynaBrowse. Only the chat you are looking at chimes; a run elsewhere shows its dot in the rail.',
     ),
   ].join('');
 }
@@ -581,7 +587,7 @@ function settingsBrowser(c) {
       'Sign in',
       `<label class="set-field wide" title="The browser opens on the second monitor so a person can log in; the session stays in its profile for every project.">` +
         `<span>Site to sign in to</span>` +
-        `<input id="browserSigninUrl" type="text" placeholder="https://example.com/" spellcheck="false" />` +
+        `<input id="browserSigninUrl" type="text" placeholder="nexusmods.com, or 192.168.1.20:8080" spellcheck="false" />` +
         `</label>` +
         `<div class="set-field wide"><button class="btn btn-secondary btn-sm" type="button" id="browserSignin">Sign In…</button></div>`,
       undefined,

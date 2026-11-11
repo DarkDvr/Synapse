@@ -43,6 +43,9 @@ function settings() {
     profile: String(b.profile || '').trim() || path.join(DATA_DIR, 'browser', 'profile'),
     allow: Array.isArray(b.allow) ? b.allow : [],
     headless: b.headless === true,
+    // One chime when the window is put on the second monitor; the operator's switch,
+    // beside the screen sounds in Settings > General.
+    sounds: raw?.notify?.browserSounds !== false,
   };
 }
 
@@ -317,7 +320,8 @@ async function handle(msg) {
               guard(args.url);
               await browser.goto(args.url, { settle: 900 });
             }
-            const asked = await askOperator({ profile: cfg.profile, sound: CHIME });
+            // The chime is the operator's own switch: on unless they turned it off.
+            const asked = await askOperator({ profile: cfg.profile, sound: cfg.sounds ? CHIME : '' });
             if (!asked.ok) return toolText(id, `Could not reach the operator's screen: ${asked.error}`, true);
             // Tell the page too: the chime is the window's, the notice is Synapse's, and
             // an operator away from the screen still sees why the run is waiting when

@@ -147,6 +147,10 @@ export const DEFAULTS = {
   notify: {
     doneSound: 'chime',
     screenSounds: true,
+    // The one chime SynaBrowse plays when it puts its window on the second monitor for
+    // the operator. Its own switch, beside the screen pair, because it is neither the
+    // finished-work sound nor a lease.
+    browserSounds: true,
   },
   // The interface's own choices. They do not touch the models or the work: the
   // chat's text size is the first, and it is a size in pixels because that is the
@@ -370,6 +374,8 @@ export function normalize(raw) {
     // On unless the operator turned it off. A config from an older build has no key,
     // and the pair is part of the feature, not an extra.
     cfg.notify.screenSounds = cfg.notify.screenSounds !== false;
+    // The same rule for SynaBrowse's one chime.
+    cfg.notify.browserSounds = cfg.notify.browserSounds !== false;
   }
   // The chat's text size. The whole transcript is drawn from this one number
   // (web/synapse.css multiplies its sizes by --chat-fs), so it is clamped here as

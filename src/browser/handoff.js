@@ -24,7 +24,9 @@ export function askOperator({ profile, restore = false, sound = null, timeoutMs 
     '-File', SCRIPT,
     '-Marker', profile,
     ...(restore ? ['-Restore'] : []),
-    ...(sound ? ['-Sound', sound] : []),
+    // Sound is passed when the caller decided: a path, or '' for silence. Omitted means
+    // the script's own default, which is the chime.
+    ...(sound === null || sound === undefined ? [] : ['-Sound', sound]),
   ];
   return new Promise((resolve) => {
     let out = '';

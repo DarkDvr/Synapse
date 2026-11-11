@@ -132,7 +132,11 @@ export function createBrowser({ profile, log = null, startMinimized = true, widt
   async function goto(url, { settle = 900, timeoutMs = 30000 } = {}) {
     const p = await start();
     const loaded = p.waitEvent('Page.loadEventFired', timeoutMs);
-    await p.send('Page.navigate', { url });
+    const nav = await p.send('Page.navigate', { url });
+    // The protocol answers a *user-visible* failure here rather than throwing: a host
+    // that does not resolve, a refused connection. A caller that means "did it open?"
+    // needs to know, so this is an error like any other.
+    if (nav?.errorText) throw new Error(nav.errorText);
     await loaded;
     // Sub-resources and a client-side render happen after load; the page is not readable
     // the instant the event fires. This is a settle, not a wait-for-the-work.
