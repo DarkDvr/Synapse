@@ -51,6 +51,14 @@ function settings() {
   };
 }
 
+// The engine starts this server with the *project* as its working directory, which is how
+// the artifacts folder is found — and a process whose cwd is inside a folder keeps that
+// folder undeletable on Windows: deleting the project then failed with "The directory is
+// not empty" from the Recycle Bin (11 Nov, reproduced: EPERM). So the path is taken once,
+// and then the process steps out of the project and holds nothing of the operator's.
+const ARTIFACTS = artifactDir();
+try { process.chdir(DATA_DIR); } catch { /* the harness folder exists; nothing to do */ }
+
 const cfg = settings();
 const browser = createBrowser({
   profile: cfg.profile,
@@ -345,12 +353,12 @@ async function handle(msg) {
             return toolText(id, `Scrolled to ${y}.`);
           }
           case 'screenshot': {
-            const file = path.join(artifactDir(), 'shots', `shot-${stamp()}.png`);
+            const file = path.join(ARTIFACTS, 'shots', `shot-${stamp()}.png`);
             const png = await browser.screenshot({ full: args.full === true, file });
             return toolText(id, `Screenshot: ${file} (${Math.round(png.length / 1024)} KB, ${args.full ? 'whole page' : 'viewport'}). Read it to see the page.`);
           }
           case 'watch': {
-            const dir = path.join(artifactDir(), 'shots', `watch-${stamp()}`);
+            const dir = path.join(ARTIFACTS, 'shots', `watch-${stamp()}`);
             const frames = await browser.watch({ ms: Math.min(5000, Math.max(200, Number(args.ms) || 1200)), dir });
             const span = frames.length > 1
               ? ` over ${Math.round(((frames.at(-1).at || 0) - (frames[0].at || 0)) * 1000)} ms`

@@ -179,3 +179,25 @@ test('a project server writes inside the project, anything else in the harness',
   // A sibling whose name starts with the root's name is not inside it.
   assert.match(artifactDir('F:\\dev\\Synapse.Projects2\\x', root), /data.*browser.*shots$/);
 });
+
+// A process whose working directory is a folder keeps that folder undeletable on Windows.
+// The engine starts this server with the project as its cwd, so the server takes the path
+// it needs and then steps out — otherwise deleting the project fails in the Recycle Bin
+// with "The directory is not empty" (11 Nov, reproduced: EPERM).
+test('the server does not keep the project folder locked', async () => {
+  const dir = tmpdir('synabrowse-cwd-');
+  const config = path.join(dir, 'config.json');
+  fs.writeFileSync(config, JSON.stringify({ browser: { enabled: false } }));
+  const child = spawn(process.execPath, [SERVER], {
+    cwd: dir,
+    env: { ...process.env, SYNAPSE_BROWSER_CONFIG: config },
+    stdio: ['pipe', 'pipe', 'pipe'],
+  });
+  try {
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    assert.doesNotThrow(() => fs.rmSync(dir, { recursive: true, force: true }), 'the folder was still held');
+  } finally {
+    try { child.kill(); } catch { /* gone */ }
+    try { fs.rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 }); } catch { /* swept at exit */ }
+  }
+});

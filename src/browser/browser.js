@@ -151,7 +151,9 @@ export function createBrowser({ profile, log = null, startMinimized = true, widt
         const position = area
           ? `${area.workX + Math.round((area.workW - width) / 2)},${area.workY + Math.round((area.workH - height) / 2)}`
           : '-32000,-32000';
-        child = spawn(edge, launchArgs({ position }), { stdio: 'ignore', detached: false });
+        // cwd outside the project: a process whose working directory is a folder keeps that folder
+        // undeletable, and Edge is long-lived (11 Nov).
+        child = spawn(edge, launchArgs({ position }), { stdio: 'ignore', detached: false, cwd: path.dirname(profile) });
         // Immediately, not after the port is ready: the operator must not lose the caret for
         // the two seconds a browser takes to open (11 Nov).
         if (before?.foreground) restoreFocus(before.foreground).catch(() => {});

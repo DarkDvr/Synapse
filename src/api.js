@@ -1577,17 +1577,33 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
           err.status = 403;
           throw err;
         }
-        try {
-          await recycleFolder(current.directory);
-          recycled = true;
-        } catch (err) {
+        // Windows releases a handle a moment after the process that held it lets go, so a
+        // delete that fails on the first attempt is retried rather than reported. The
+        // common holder is a process whose working directory is the project — which is why
+        // the browser server steps out of it at start-up (11 Nov).
+        let lastError = null;
+        for (let attempt = 0; attempt < 4; attempt += 1) {
+          try {
+            await recycleFolder(current.directory);
+            lastError = null;
+            break;
+          } catch (err) {
+            lastError = err;
+            if (attempt < 3) await new Promise((r) => setTimeout(r, 700));
+          }
+        }
+        if (lastError) {
           // The project stays registered. A folder still on disk with its registry
           // entry gone is the worse half of a failed delete: the operator can see the
           // folder but Synapse no longer knows it is there.
-          const e = new Error(`could not move ${current.directory} to the Recycle Bin: ${err.message}`);
+          const e = new Error(
+            `could not move ${current.directory} to the Recycle Bin: ${lastError.message} ` +
+              "Something is still using the folder — close this project's chat, then try again.",
+          );
           e.status = 423; // locked
           throw e;
         }
+        recycled = true;
         app.info(`deleted project folder to the Recycle Bin: ${current.directory}`);
       }
       // The project's scratch folder lives beside the projects, not inside the
