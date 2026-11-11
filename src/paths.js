@@ -108,6 +108,11 @@ export const SEARCH_SERVER = path.join(ROOT, 'src', 'mcp', 'search-server.js');
 export const DELEGATE_SERVER = path.join(ROOT, 'src', 'mcp', 'delegate-server.js');
 export const LEASE_SERVER = path.join(ROOT, 'src', 'mcp', 'lease-server.js');
 
+// SynaBrowse: the tools that drive the harness's own browser. Registered only when the
+// operator has switched it on — a browser that can act as them is not a default.
+export const BROWSER_SERVER = path.join(ROOT, 'src', 'mcp', 'browser-server.js');
+export const BROWSER_DIR = path.join(DATA_DIR, 'browser');
+
 export const PID_FILE = path.join(DATA_DIR, 'synapse.pid');
 
 // The engine's own PID, so a restart can stop exactly the engine and nothing

@@ -1,0 +1,96 @@
+// SynaBrowse, offline: the allowlist as a rule, and the browser as a tool.
+//
+// The allowlist half is pure and always runs. The browser half starts a real Edge with a
+// throwaway profile and drives a local page — no network — so the tools are proved the
+// way the suite proves everything else: by asking the thing itself, not the source.
+//
+// It skips cleanly on a machine without Edge (and says why), because a missing browser is
+// not a broken harness.
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import { hostOf, hostAllowed, checkUrl } from '../src/browser/allow.js';
+import { createBrowser, findEdge } from '../src/browser/browser.js';
+import { tmpdir } from './tmpdir.mjs';
+
+// ── the fence ───────────────────────────────────────────────────
+test('a listed host covers itself and its subdomains, and nothing that looks like it', () => {
+  assert.equal(hostAllowed('example.com', ['example.com']), true);
+  assert.equal(hostAllowed('www.example.com', ['example.com']), true);
+  assert.equal(hostAllowed('example.com.evil.test', ['example.com']), false);
+  assert.equal(hostAllowed('notexample.com', ['example.com']), false);
+  assert.equal(hostAllowed('example.com', ['*']), true);
+  assert.equal(hostAllowed('example.com', []), false);
+  assert.equal(hostAllowed('example.com', ['www.example.com']), false, 'a subdomain does not cover its parent');
+});
+
+test('a refused URL says why, and where to fix it', () => {
+  const blocked = checkUrl('https://example.com/some/page', ['allowed.test']);
+  assert.equal(blocked.ok, false);
+  assert.equal(blocked.host, 'example.com');
+  assert.match(blocked.reason, /not on SynaBrowse's allowlist/);
+  assert.match(blocked.reason, /Settings > Browser/);
+
+  const odd = checkUrl('file:///F:/dev/Synapse/AGENTS.md', ['*']);
+  assert.equal(odd.ok, false, 'only http(s) is a page');
+});
+
+test('a URL parses to its host and keeps no lookalike', () => {
+  assert.equal(hostOf('https://WWW.Example.COM./x'), 'www.example.com');
+  assert.equal(hostOf('not a url'), '');
+  assert.equal(hostOf('javascript:alert(1)'), '');
+});
+
+// ── the browser ─────────────────────────────────────────────────
+const PAGE = (body) => `<!doctype html><meta charset="utf-8"><title>SynaBrowse test</title>
+<body style="font:16px system-ui;background:#0d1117;color:#eee">${body}</body>`;
+
+test('the tools drive a local page: read, click, type, screenshot, watch', async (t) => {
+  const edge = findEdge();
+  if (!edge) {
+    t.skip('no Edge on this machine');
+    return;
+  }
+  const dir = tmpdir('synabrowse-');
+  const profile = path.join(dir, 'profile');
+  const page = path.join(dir, 'page.html');
+  fs.writeFileSync(
+    page,
+    PAGE(`
+      <h1 id="head">first</h1>
+      <button id="go" onclick="document.getElementById('head').textContent='clicked'">Go</button>
+      <input id="field" placeholder="type here" />
+      <div id="out">nothing yet</div>
+      <div style="width:60px;height:60px;background:#ff7d1a;animation:spin 1s linear infinite"></div>
+    `).replace('</body>', '<style>@keyframes spin{to{transform:rotate(360deg)}}</style></body>'),
+  );
+
+  const browser = createBrowser({ profile, startMinimized: true });
+  try {
+    await browser.goto(`file:///${page.replace(/\\/g, '/')}`);
+    const read = await browser.read({});
+    assert.equal(read.title, 'SynaBrowse test');
+    assert.match(read.text, /first/);
+
+    await browser.click({ selector: '#go' });
+    assert.match((await browser.read({})).text, /clicked/, 'the click did not run the page');
+
+    await browser.type({ text: 'hello', selector: '#field' });
+    const typed = await browser.start().then((p) => p.evaluate("document.getElementById('field').value"));
+    assert.equal(typed, 'hello');
+
+    const png = await browser.screenshot({ full: false });
+    assert.ok(png.length > 1000, 'a screenshot is a picture');
+    assert.equal(png.subarray(1, 4).toString(), 'PNG');
+
+    const frames = await browser.watch({ ms: 500, dir: path.join(dir, 'frames') });
+    assert.ok(frames.length >= 1, 'a screencast produced no frames');
+    assert.ok(fs.existsSync(frames[0].file));
+  } finally {
+    await browser.stop();
+    // Edge lets go of its profile a moment after the process exits; the folder is a
+    // tmpdir() and would be swept anyway, so a locked file is not a test failure.
+    try { fs.rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 }); } catch { /* swept at exit */ }
+  }
+});

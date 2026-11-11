@@ -327,6 +327,22 @@ export function createServer({ api, engine, logger, config, remote, onRemote }) 
       }
     }
 
+    // POST /api/browser/waiting — SynaBrowse has put its window on the second monitor
+    // and needs the operator: a login, or a check only a person can pass. The MCP server
+    // is a separate process, so this is how it tells the page; the page shows it with the
+    // same notice it uses for the screen ("SynaBrowse Is Waiting"), beside the chime the
+    // window itself played. No tool waits on this answer.
+    if (seg[0] === 'browser' && seg[1] === 'waiting' && method === 'POST') {
+      const body = await readBody(req);
+      broadcast({
+        kind: 'browser-waiting',
+        what: String(body?.what || '').slice(0, 300),
+        url: String(body?.url || '').slice(0, 500),
+        ts: Date.now(),
+      });
+      return sendJson(res, 200, { ok: true });
+    }
+
     // POST /api/restart — relaunch Synapse (Settings > Save Changes).
     if (seg[0] === 'restart' && method === 'POST') return sendJson(res, 200, await api.restart());
     // POST /api/shutdown — stop the server (tray > Stop Server). The app reads

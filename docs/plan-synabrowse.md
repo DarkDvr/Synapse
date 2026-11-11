@@ -13,23 +13,27 @@ Decided with the operator, 11 Nov 2026:
   project inherits the session. The live Edge profile is *not* used: it can only be used
   from inside Edge (visible windows), and copying or attaching to it destroyed cookies
   on 2 Nov. This is the trade: sign in once, be invisible afterwards.
+  **The operator never uses Edge** — Brave and Firefox are theirs, and untouchable (rule
+  9) — so the harness's Edge is nobody's but the harness's: no interference is possible.
 - **Headed but off-screen** by default — a real browser, which is Cloudflare's best
   case — positioned off the desktop and never activated. `--headless=new` stays for
   renders, where nothing needs to pass a bot check.
 - **No extension required.** The browser is driven over CDP. The client already exists:
   `skills/visual-review/bin/shot.mjs` speaks CDP with Node's own `WebSocket`, no
   dependencies, and has been rendering every audit in this project.
-- **The hand-off window is the only thing the operator sees**, and only when a human is
-  genuinely needed: a login, a bot check, a "which of these did you mean".
+- **The hand-off is a minimized window and a chime**, and only when a human is genuinely
+  needed: a login, a bot check, a "which of these did you mean". It is moved into the
+  second monitor's place, **shown minimized on the taskbar**, its button blinked, and one
+  chime played — it never takes focus, so it can wait for as long as the operator is busy.
 
 ## What it looks like in use
 
 The Architect, mid-task: *"Check whether the modlist page lists the new version."* The
-model calls `browse_open` on nexusmods.com. Nothing appears. It reads the page, returns
-a compact outline and a screenshot. If the site asks for a sign-in, a small window
-appears on the secondary monitor — header `SynaBrowse needs you: sign in to Nexus Mods`
-— with a chime, **without taking focus**. The model's tool call waits. The operator signs
-in, presses Done, and the run continues; the session is kept for next time.
+model calls `open` on nexusmods.com. Nothing appears. It reads the page, returns a compact
+outline and a screenshot. If the site asks for a sign-in, the browser appears **minimized
+on the second monitor's taskbar**, one chime plays, and the page's notice line says
+SynaBrowse is waiting. The model's tool call waits. The operator restores the window when
+they are ready, signs in, and the run continues; the session is kept for next time.
 
 ## Architecture
 
@@ -95,13 +99,22 @@ the operator's browser.
 
 ## Stages, each shippable
 
-| # | what | effort |
-|---|---|---|
-| 0 | **Proof.** Hidden profile, open nexusmods.com, read it, screenshot it, click one thing, screencast a CSS animation; show the frames and timings | half a day |
-| 1 | **Tools.** The server, the lifecycle, the eight tools, offline tests against local pages | one day |
-| 2 | **Hand-off.** The window, the chime, the secondary monitor, the blocking call, Done | half a day |
-| 3 | **Settings and arming.** Enable, sign-in per site, allowlist, per-project arm, audit lines | half a day |
-| 4 | **Notes.** `docs/notes/browser.md`, the AGENTS row, the what-we-are-changing row | an hour |
+| # | what | effort | state |
+|---|---|---|---|
+| 0 | **Proof.** Hidden profile, open nexusmods.com, read it, screenshot it, click one thing, screencast a CSS animation; show the frames and timings | half a day | **done** |
+| 1 | **Tools.** The server, the lifecycle, the eight tools, offline tests against local pages | one day | **done** (`src/browser/`, `src/mcp/browser-server.js`) |
+| 2 | **Hand-off.** The window, the chime, the secondary monitor, minimized on the taskbar, no focus steal | half a day | **done** (`src/browser/handoff.js`, `show.ps1`) |
+| 3 | **Settings and arming.** Enable, sign-in per site, allowlist editor, per-project arm, audit lines | half a day | next |
+| 4 | **Notes.** `docs/notes/browser.md`, the AGENTS row, the what-we-are-changing row | an hour | partly |
+
+**What stage 1 and 2 shipped.** `src/browser/cdp.js` (the protocol client, shared with the
+renderer's ancestor in `shot.mjs`), `src/browser/browser.js` (Edge by full path, the hidden
+flags, the settle-and-read toolset), `src/browser/allow.js` (the host fence),
+`src/browser/handoff.js` + `show.ps1` (the minimized window and the chime), and
+`src/mcp/browser-server.js` (the twelve tools). The engine registers it only when
+`browser.enabled` is true, so the off state is the *absence* of the tools rather than a
+refusal. Three test files' worth of proof: the allowlist as a rule, the tools driving a
+local page, and the server answering real JSON-RPC over stdio.
 
 ## Risks
 

@@ -108,6 +108,16 @@ export const DEFAULTS = {
     // boot unless the operator turns that off. Settings also clears it by hand.
     resetOnBoot: true,
   },
+  browser: {
+    // SynaBrowse: a browser the harness owns, with its own profile under
+    // data\browser\profile. Off by default — it can act as the operator, so it is
+    // switched on deliberately. `allow` is the fence: only these hosts may be opened
+    // (a listed host covers its subdomains; `*` allows everything). `profile` empty
+    // means the default under data\.
+    enabled: false,
+    profile: '',
+    allow: [],
+  },
   automation: {
     // The four switches in Settings → Automation, in seconds (and minutes for the
     // shutdown). They are global: how patient the harness is does not change from
@@ -320,6 +330,17 @@ export function normalize(raw) {
   cfg.server.remote = cfg.server.remote === true;
   cfg.tools = cfg.tools || {};
   cfg.tools.resetOnBoot = cfg.tools.resetOnBoot !== false;
+  // SynaBrowse. The allowlist is a list of host names; anything that is not a host —
+  // a URL with a path, a scheme, an empty string — is dropped rather than kept as a
+  // value nothing matches. `profile` is a path or empty for the default.
+  cfg.browser = isPlainObject(cfg.browser) ? cfg.browser : {};
+  cfg.browser.enabled = cfg.browser.enabled === true;
+  cfg.browser.profile = String(cfg.browser.profile || '').trim();
+  cfg.browser.allow = (Array.isArray(cfg.browser.allow) ? cfg.browser.allow : [])
+    .map((entry) => String(entry || '').trim().toLowerCase())
+    .map((entry) => (entry === '*' ? entry : entry.replace(/^https?:\/\//, '').replace(/\/.*$/, '').replace(/^\.+|\.+$/g, '')))
+    .filter(Boolean)
+    .filter((entry, index, all) => all.indexOf(entry) === index);
   // Full auto's wait. 0 is accepted and means "answer at once, no card"; a
   // negative or unreadable value falls back to the 20-second default.
   cfg.fullAuto = isPlainObject(cfg.fullAuto) ? cfg.fullAuto : {};

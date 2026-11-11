@@ -14,7 +14,7 @@ import {
   normalizeSession,
   parseModelRef,
 } from './base.js';
-import { ROOT, SEARCH_SERVER, DELEGATE_SERVER, LEASE_SERVER, ENGINE_PID_FILE, SKILLS_DIR, VENDOR_ENGINE } from '../paths.js';
+import { ROOT, SEARCH_SERVER, DELEGATE_SERVER, LEASE_SERVER, BROWSER_SERVER, ENGINE_PID_FILE, SKILLS_DIR, VENDOR_ENGINE } from '../paths.js';
 import { providerApiKey } from '../config.js';
 import { vacuumStore } from '../engine-store.js';
 
@@ -217,6 +217,17 @@ export class OpenCodeEngine extends Engine {
       command: [process.execPath, LEASE_SERVER],
       codemode: false,
     };
+
+    // SynaBrowse: the harness's own browser, hidden until a human is needed. Only
+    // registered when the operator has switched it on — the tools can act as them, so
+    // the absence of the switch is the off state rather than a tool that refuses.
+    if (cfg.browser?.enabled) {
+      servers['synapse-browser'] = {
+        type: 'local',
+        command: [process.execPath, BROWSER_SERVER],
+        codemode: false,
+      };
+    }
 
     const legacyMcp = { ...(cfg.mcp || {}) };
     delete legacyMcp['synapse-search'];
