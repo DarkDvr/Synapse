@@ -79,6 +79,13 @@ When a page needs a person (`handoff`, or Settings → Browser → Sign In…), 
 4. blinks the taskbar button and plays one chime;
 5. the page shows the toast (`browser-waiting`), so an operator who was away sees why.
 
+**The launch itself is placed and polite.** Edge takes the foreground even with
+`--start-minimized`, so the launch reads the screen state first (`screen.ps1`), starts the
+window centred on the **second** monitor rather than off-screen (off-screen, Windows put its
+taskbar button on the primary), and gives the foreground back to whichever window had it.
+Measured 11 Nov: foreground before and after identical, the window's normal rectangle on
+DISPLAY2, and the hand-off left it minimized there with `stoleFocus: false`.
+
 **Then nobody has to close anything.** `session-watch.js` polls the page the window is
 standing on every two seconds, and when it stops asking to be signed into — no password
 box, no sign-in route, loaded — twice in a row, the window is closed and the site is
@@ -127,6 +134,9 @@ The sign-in button says what it is doing: **Opening…** while the browser start
   password box), and <host> is not in the Signed In table. Call `handoff` …"* — and if
   the host *is* in the table, the sentence says the session has expired instead. The
   model does not have to infer it from the prose, and does not scrape around a login.
+- **One card per intention.** Consecutive browser calls fold into a single card
+  ("SynaBrowse · 3 calls") with the calls listed inside, because a sign-in is open → read →
+  handoff → read and four full cards read as four things happening (11 Nov).
 - **A line in the brief.** When the switch is on, every role's brief says the browser
   tools reach pages `webfetch` cannot, and that a wall needs `handoff`. Without it the
   brief points at `webfetch` and the tools go unread — a tool a model does not know it

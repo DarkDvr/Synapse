@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const SCRIPT = path.join(HERE, 'show.ps1');
+const SCREEN = path.join(HERE, 'screen.ps1');
 
 /**
  * Ask the operator for a moment of their time.
@@ -17,6 +18,40 @@ const SCRIPT = path.join(HERE, 'show.ps1');
  * Answers what happened, measured: the window's handle, where it was put, whether it is
  * minimized, and whether the foreground window changed (it must not).
  */
+
+/** Run a PowerShell helper and read its one JSON line. */
+function askPowerShell(args, timeoutMs = 8000) {
+  return new Promise((resolve) => {
+    let out = '';
+    const child = spawn('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', SCREEN, ...args], { windowsHide: true });
+    const timer = setTimeout(() => { try { child.kill(); } catch { /* gone */ } }, timeoutMs);
+    child.stdout.on('data', (d) => { out += d; });
+    child.on('close', () => {
+      clearTimeout(timer);
+      try { resolve(JSON.parse(String(out).trim().split(/\r?\n/).filter(Boolean).pop() || 'null')); } catch { resolve(null); /* no answer is no state */ }
+    });
+    child.on('error', () => { clearTimeout(timer); resolve(null); });
+  });
+}
+
+/**
+ * The screen state before a launch: the window that has the foreground, and where the
+ * monitors are. One PowerShell call, about a fifth of a second.
+ */
+export function screenState() {
+  return askPowerShell(['-Mode', 'state']);
+}
+
+/**
+ * Give the foreground back to the window that had it. A process that does not own the
+ * foreground cannot take it by itself; screen.ps1 attaches to the foreground thread to do
+ * it. Answers whether it worked, measured.
+ */
+export function restoreFocus(hwnd) {
+  if (!hwnd) return Promise.resolve(null);
+  return askPowerShell(['-Mode', 'restore', '-Hwnd', String(hwnd)]);
+}
+
 export function askOperator({ profile, restore = false, sound = null, timeoutMs = 15000 } = {}) {
   const args = [
     '-NoProfile',

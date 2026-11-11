@@ -6,7 +6,7 @@
 // and a line while the call is running.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { toolLabel, browserLine } from '../web/transcript.js';
+import { toolLabel, browserLine, isBrowserTool, renderBrowserGroup } from '../web/transcript.js';
 
 test('a browser tool is named in the operator’s words', () => {
   assert.equal(toolLabel({ name: 'synapse-browser_open' }), 'SynaBrowse · Open');
@@ -35,4 +35,22 @@ test('a call that is not the browser is not given a browser line', () => {
   assert.equal(browserLine({ filePath: 'a.txt' }), '');
   assert.equal(browserLine(null), '');
   assert.equal(browserLine({ url: 'not a url' }), 'SynaBrowse is opening a page…', 'a bad address still says what is happening');
+});
+
+test('a run of browser calls is one card, and a single call is itself', () => {
+  assert.equal(isBrowserTool({ name: 'synapse-browser_open' }), true);
+  assert.equal(isBrowserTool({ name: 'shell' }), false);
+
+  const group = renderBrowserGroup([
+    { name: 'synapse-browser_open', status: 'completed', input: { url: 'https://www.example.test/a' } },
+    { name: 'synapse-browser_read', status: 'completed', input: { maxChars: 6000 } },
+    { name: 'synapse-browser_handoff', status: 'error', input: { url: 'https://www.example.test/a' } },
+  ]);
+  assert.match(group, /SynaBrowse/);
+  assert.match(group, /3 calls/);
+  assert.match(group, /1 failed/, 'the group says how many failed');
+  assert.match(group, /SynaBrowse · Open/);
+  assert.match(group, /SynaBrowse · Read/);
+  assert.match(group, /example\.test/, 'the address is in the row');
+  assert.equal((group.match(/tool-group-row/g) || []).length, 3);
 });

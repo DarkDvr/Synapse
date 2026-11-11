@@ -1803,6 +1803,19 @@ body[data-mode="single"] #runAuto { display: none; }
   flex: 1 1 auto; min-width: 0;
   color: #8a8e96; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
+/* One card for a run of SynaBrowse calls: a sign-in is open → read → handoff → read, and
+   four separate cards for one intention read as four things happening (11 Nov). The rows
+   inside are the calls, in order. */
+.tool-group-row {
+  display: grid; grid-template-columns: 10px 120px minmax(0, 1fr); align-items: center;
+  gap: 6px; padding: 2px 8px;
+  font-family: var(--mono); font-size: calc(var(--chat-fs) * 0.8);
+  border-top: 1px solid rgba(255, 255, 255, 0.045);
+}
+.tool-group-row:first-child { border-top: none; }
+.tool-group-row .status-dot { width: 6px; height: 6px; box-shadow: none; }
+.tool-group-name { color: var(--text); }
+.tool-group-target { color: #8a8e96; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tool-head .tool-state { flex: none; margin-left: auto; }
 /* The permission chip sits immediately left of the state pill, and only exists
    when the call reached outside the project. */

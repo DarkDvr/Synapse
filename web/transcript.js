@@ -308,7 +308,16 @@ export function renderMessage(m, tail = '') {
           );
         }
       }
-      else if (part.type === 'tool') body.push(renderTool(part));
+      else if (part.type === 'tool') {
+        if (isBrowserTool(part)) {
+          // A run of browser calls is one intention; the first one draws the group.
+          const previous = parts[i - 1];
+          if (previous && previous.type === 'tool' && isBrowserTool(previous)) continue;
+          const group = [];
+          for (let j = i; j < parts.length && parts[j].type === 'tool' && isBrowserTool(parts[j]); j += 1) group.push(parts[j]);
+          body.push(group.length > 1 ? renderBrowserGroup(group) : renderTool(part));
+        } else body.push(renderTool(part));
+      }
     }
     // A post the page opened on the turn's first token has no parts yet; its
     // thinking is the live tail underneath, so the placeholder ellipsis would sit
@@ -356,6 +365,45 @@ const BROWSER_VERBS = {
   handoff: 'SynaBrowse · Handoff',
   close: 'SynaBrowse · Close',
 };
+
+/** Is this part one of SynaBrowse's tools? */
+export function isBrowserTool(part) {
+  return /^synapse-browser[._]/i.test(String(part?.name || ''));
+}
+
+/**
+ * Consecutive browser calls, folded into one card.
+ *
+ * A sign-in is open → read → handoff → read: four full cards for one intention, which the
+ * operator met as "4 chat entries and I didn't even log in yet" (11 Nov). One card that
+ * says how many, with the calls inside it, keeps the turn readable — and a single call
+ * still renders as itself.
+ */
+export function renderBrowserGroup(items) {
+  const id = `browser-group-${toolSeq++}`;
+  const open = state.open.has(id);
+  const failed = items.filter((p) => Boolean(p.failed) || /error|fail/.test(String(p.status || '')));
+  const running = items.some((p) => /run|stream|pend|progress/.test(String(p.status || '')));
+  const cls = running ? 'warn' : failed.length ? 'err' : 'ok';
+  const label = running ? 'working' : failed.length ? `${failed.length} failed` : `${items.length} calls`;
+  const rows = items.map((part) => {
+    const state = /error|fail/.test(String(part.status || '')) ? 'err' : 'ok';
+    const target = toolTarget(part);
+    return `<div class="tool-group-row"><span class="status-dot ${state}" role="img" aria-label="${esc(state)}"></span>` +
+      `<span class="tool-group-name">${esc(toolLabel(part))}</span>` +
+      `<span class="tool-group-target" title="${esc(target)}">${esc(target || '—')}</span></div>`;
+  }).join('');
+  return `<div class="tool-card tool-group${open ? ' open' : ''}" data-tool-card="${esc(id)}">
+    <div class="tool-head" role="button" tabindex="0" data-tool-toggle="${esc(id)}" aria-expanded="${open}" aria-controls="${esc(id)}-detail">
+      <span class="status-dot ${cls}" role="img" aria-label="${esc(label)}"></span>
+      <span class="tool-name">SynaBrowse</span>
+      <span class="tool-target">${items.length} call${items.length === 1 ? '' : 's'}</span>
+      <span class="tool-state state-pill ${cls}">${esc(label)}</span>
+      <span class="tool-chev" aria-hidden="true">›</span>
+    </div>
+    <div class="tool-detail" id="${esc(id)}-detail"${open ? '' : ' hidden'}>${rows}</div>
+  </div>`;
+}
 
 /** A tool's name as the operator reads it. */
 export function toolLabel(part) {

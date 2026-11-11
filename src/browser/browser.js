@@ -17,6 +17,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { connect, waitForPort, readPort } from './cdp.js';
+import { screenState, restoreFocus } from './handoff.js';
 
 const EDGE_CANDIDATES = [
   'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
@@ -138,10 +139,24 @@ export function createBrowser({ profile, log = null, startMinimized = true, widt
       if (!port) {
         // A port file from an earlier instance names a port that is gone.
         try { fs.rmSync(path.join(profile, 'DevToolsActivePort'), { force: true }); } catch { /* fine */ }
-        child = spawn(edge, launchArgs({ position: '-32000,-32000' }), { stdio: 'ignore', detached: false });
+        // Edge takes the foreground even with --start-minimized, so the launch captures the
+        // operator's window first and gives it back afterwards. The window is positioned on
+        // the second monitor rather than off-screen, so its taskbar button appears there —
+        // off-screen, Windows put the button on the primary (11 Nov).
+        const before = startMinimized ? await screenState().catch(() => null) : null;
+        const area = before?.screens?.find((s) => !s.primary) || before?.screens?.[0] || null;
+        const position = area
+          ? `${area.workX + Math.round((area.workW - width) / 2)},${area.workY + Math.round((area.workH - height) / 2)}`
+          : '-32000,-32000';
+        child = spawn(edge, launchArgs({ position }), { stdio: 'ignore', detached: false });
         port = await waitForPort(profile, { timeoutMs: 30000 });
         if (!port) throw new Error('the browser did not open a debugging port');
         child.port = port;
+        if (before?.foreground) {
+          // Measured, not assumed: the answer says which window has the focus now.
+          const back = await restoreFocus(before.foreground).catch(() => null);
+          if (back) note(`browser: launch placed on ${area?.device || 'the primary'}; focus restored ${back.ok ? 'yes' : 'no'}`);
+        }
       }
       const conn = await connect(port);
       page = { ...conn, port, profile };
