@@ -327,6 +327,13 @@ export function createServer({ api, engine, logger, config, remote, onRemote }) 
       }
     }
 
+    // POST /api/browser/signin — Settings > Browser > Sign In…: open the harness's own
+    // browser on a site and put it on the second monitor so a person can log in. The
+    // session stays in that profile; nothing is copied and no cookie is read here.
+    if (seg[0] === 'browser' && seg[1] === 'signin' && method === 'POST') {
+      return sendJson(res, 200, await api.browserSignin((await readBody(req))?.url));
+    }
+
     // POST /api/browser/waiting — SynaBrowse has put its window on the second monitor
     // and needs the operator: a login, or a check only a person can pass. The MCP server
     // is a separate process, so this is how it tells the page; the page shows it with the

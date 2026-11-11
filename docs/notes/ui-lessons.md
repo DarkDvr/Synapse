@@ -2424,9 +2424,12 @@ taller than the chat the transcript scrolls as it does for a long message. Its h
 Type: question **15px** bold, title **12.5px**, option label **12.5px**, description
 **10.5px** muted, Recommended chip **9px**.
 
-**Settings has eleven tabs**: General, Server, Engine, Providers, Workers, Tools,
-Automation, Prohibited, Logging, Check for Updates, About. There is no "Runtime" tab —
-it is **Engine** — and Updates/About are those last two, not extra screens.
+**Settings has twelve tabs**: General, Server, Engine, **Browser**, Providers, Workers,
+Tools, Automation, Prohibited, Logging, Check for Updates, About. There is no "Runtime"
+tab — it is **Engine** — and Updates/About are those last two, not extra screens. Browser
+is SynaBrowse: the enable switch, its profile folder, the allowlist (one host per line)
+and the one control that acts without Save, **Sign In…**, which puts that browser on the
+second monitor so a person can log in.
 
 **Composer placeholders**: `Message` in Single, `Message the Architect…` in Multi,
 `Answer the question to continue` while a form waits, `Resolve the permission to

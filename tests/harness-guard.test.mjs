@@ -66,6 +66,45 @@ test('a shipped tool run from a file URL is not "naming the harness"', () => {
   assert.equal(alarms.length, 0, `a toolbox run was alarmed: ${JSON.stringify(alarms)}`);
 });
 
+// The alarm is for a **write shape**, not for a command the reader did not recognise.
+// On 11 Nov a QC run's own transcript raised the popup: a multi-line block of
+// `git grep`, `Get-Item` and `Select-Object` that happened to name the harness. A
+// false popup costs more than a missed read, because it teaches the operator to skip
+// the line.
+test('a multi-line block of reads that names the harness is a read, not an alarm', () => {
+  const alarms = [];
+  const logged = [];
+  const guard = createHarnessGuard({
+    root: ROOT,
+    logger: { channel: () => ({ info: (m) => logged.push(m), warn() {}, error: (m) => logged.push(m), debug() {} }) },
+    notify: (event) => alarms.push(event),
+  });
+  const command = [
+    `$clone='${ROOT}\\bin'`,
+    `git -C $clone grep -n -E "something" -- '*.js' | Select-Object -First 20`,
+    `(Get-Item "${ROOT}\\package.json").VersionInfo | Select-Object FileVersion`,
+    `if (Test-Path "${ROOT}\\AGENTS.md") { Get-Content "${ROOT}\\AGENTS.md" -TotalCount 5 }`,
+  ].join('\n');
+  guard.checkTurn({ sessionId: 'ses_4', messages: [message('m1', shell('p1', command))], label: 'turn 1' });
+  assert.equal(alarms.length, 0, `reads were alarmed: ${JSON.stringify(alarms)}`);
+  assert.ok(logged.some((line) => /read the harness/.test(line)), 'a read should still be written down');
+});
+
+test('a write shape naming the harness still alarms', () => {
+  for (const command of [
+    `Set-Content -Path ${ROOT}\\logs\\x.txt -Value hi`,
+    `git -C ${ROOT} checkout -- AGENTS.md`,
+    `Copy-Item ${ROOT}\\AGENTS.md ${ROOT}\\logs\\copy.md`,
+    `[System.IO.File]::WriteAllText('${ROOT}\\logs\\x.txt', 'hi')`,
+    `Get-Content ${ROOT}\\AGENTS.md > ${ROOT}\\logs\\swept.txt`,
+  ]) {
+    const alarms = [];
+    const guard = createHarnessGuard({ root: ROOT, logger: quiet, notify: (event) => alarms.push(event) });
+    guard.checkTurn({ sessionId: 'ses_5', messages: [message('m1', shell('p1', command))], label: 'turn 1' });
+    assert.equal(alarms.length, 1, `${command} was not alarmed`);
+  }
+});
+
 // A run must never commit the harness. The snapshot used to `git add -u` and commit
 // with a generated message, and on 7 Nov that swept three half-finished edits into
 // `snapshot: before t1 (coder-1)`. Now it reports a dirty tree and commits nothing —

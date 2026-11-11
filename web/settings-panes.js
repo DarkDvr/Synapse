@@ -57,6 +57,7 @@ export const SETTINGS_TABS = [
   { id: 'general', label: 'General', icon: 'general' },
   { id: 'server', label: 'Server', icon: 'sliders' },
   { id: 'engine', label: 'Engine', icon: 'engine' },
+  { id: 'browser', label: 'Browser', icon: 'globe' },
   { id: 'providers', label: 'Providers', icon: 'plug' },
   { id: 'workers', label: 'Workers', icon: 'nodes' },
   { id: 'tools', label: 'Tools', icon: 'tools' },
@@ -553,12 +554,49 @@ function settingsUpdates() {
     </section>`;
 }
 
+// SynaBrowse: the browser the harness owns. Off until the operator says so — the tools
+// can act as them — and fenced by a list of hosts. The sign-in row is the one control
+// here that does something immediately instead of at Save: it puts that browser on the
+// second monitor so a person can log in, which is the only part a person must do.
+function settingsBrowser(c) {
+  const allow = Array.isArray(c.browser?.allow) ? c.browser.allow : [];
+  return [
+    setGroup(
+      'SynaBrowse',
+      `<label class="set-check" title="A browser the harness owns, with its own profile. Off means the tools do not exist for a model at all.">` +
+        `<input data-path="browser.enabled" type="checkbox" ${c.browser?.enabled === true ? 'checked' : ''} />` +
+        `<span>Let models browse with SynaBrowse</span></label>` +
+        setField(c, 'Profile folder (blank = data\\browser\\profile)', 'browser.profile', {
+          wide: true,
+          hint: 'Where the browser keeps its own cookies and logins. Never the operator’s Edge profile, and never Brave. Blank uses data\\browser\\profile.',
+        }) +
+        `<label class="set-field wide" title="Only these hosts may be opened. A host covers its own subdomains; * allows everything.">` +
+        `<span>Sites it may open — one host per line</span>` +
+        `<textarea data-path="browser.allow" rows="5" spellcheck="false" placeholder="example.com">${esc(allow.join('\n'))}</textarea>` +
+        `</label>`,
+      undefined,
+      'A page on a host that is not listed is refused with a sentence, not a card: an unattended run must not wait on a question nobody asked.',
+    ),
+    setGroup(
+      'Sign in',
+      `<label class="set-field wide" title="The browser opens on the second monitor so a person can log in; the session stays in its profile for every project.">` +
+        `<span>Site to sign in to</span>` +
+        `<input id="browserSigninUrl" type="text" placeholder="https://example.com/" spellcheck="false" />` +
+        `</label>` +
+        `<div class="set-field wide"><button class="btn btn-secondary btn-sm" type="button" id="browserSignin">Sign In…</button></div>`,
+      undefined,
+      'Signing in is the one thing only you can do: a bot check or a password. The window goes to the second monitor, minimized and without taking focus, and the session is kept.',
+    ),
+  ];
+}
+
 // The pane map: the tab id is the key, so a tab with no pane is impossible and a
 // pane with no tab is unused. app.js adds `providers` to this object.
 export const PANES = {
   general: settingsGeneral,
   server: settingsServer,
   engine: settingsEngine,
+  browser: settingsBrowser,
   workers: settingsWorkers,
   tools: settingsTools,
   automation: settingsAutomation,

@@ -37,59 +37,36 @@ const REDIRECT_INTO = /(?:^|[^0-9&])>>?\s*("[^"]+"|'[^']+'|[^\s;&|]+)/g;
 // worker could not find the renderer its skill named, so it listed Synapse's own
 // folders to find it — `Get-ChildItem … F:\dev\Synapse\skills -Recurse` — and that
 // harmless read raised the alarm the operator sees as a popup. Every model that
-// cannot find a tool does this first, so the popup was guaranteed. A command made
-// only of read verbs is logged and not raised; anything else that names the
-// harness still rings, because the safe default is to over-report a rare thing
-// rather than to miss the write that matters.
+// cannot find a tool does this first, so the popup was guaranteed.
 //
-// Judged **piece by piece**, because a command is a list of them: `cd <project>;
-// Get-Content F:\dev\Synapse\logs\app.log -Tail 5` is a read of the harness's own
-// log, and reading that log is how the Architect diagnoses its own runs. The old
-// rule matched the whole string against a list of verbs starting at character one,
-// so `cd` in front of a `Get-Content` was enough to turn a read into a popup — on
-// every delegation, since every worker starts by changing directory.
-const READ_VERBS = new RegExp(
-  '^(?:get|test|resolve|select|where|measure|sort|format|out-string|' +
-    'findstr|type|cat|ls|dir|head|tail|more|echo|' +
-    'cd|chdir|set-location|push-location|pop-location|sl|pwd)\\b',
+// This used to ask "is every piece a read verb?", which made every *unfamiliar* shape
+// a write: a multi-line PowerShell block, an `if` around a `Get-Content`, `git grep`, a
+// `Set-Location` in front of a read. On 11 Nov a QC run's own `git grep` transcript
+// raised the popup, and by then the alarm had the wrong reputation — a false positive is
+// worse than the rare missed read, because the operator stops reading the line.
+//
+// So the question is now the opposite one: **does the command have a write shape?** A
+// write verb, a redirect into the harness, a .NET write call, or a harness script being
+// run. A command that names the harness and carries none of those is a read, and reads
+// are logged. What still catches a real write: the permission ruleset refuses it before
+// it runs, the run-long `git status` comparison sees whatever got through, and the
+// snapshot is the restore point. The alarm is for the shape, not for the suspicion.
+const WRITE_SHAPE = new RegExp(
+  // A shell verb, at the start of a statement — a line, after `;`, `|`, `&` or a `{`.
+  // Anchored on purpose: unanchored, `md` (the mkdir alias) matched the `.md` of
+  // `AGENTS.md` and turned a read into an alarm, which is exactly the class of false
+  // positive this rule exists to stop.
+  '(?:^|[;|&\\n{]\\s*)(?:set-content|add-content|out-file|new-item|remove-item|move-item|' +
+    'copy-item|rename-item|clear-content|set-itemproperty|remove-itemproperty|' +
+    'del|erase|rmdir|mkdir|md|rm|mv|cp|copy|move|touch|tee|patch|truncate|' +
+    'git(?:\\s+-C\\s+\\S+)?\\s+(?:checkout|apply|reset|clean|restore|rm|mv|commit|stash|pull|merge|rebase|init|add)|' +
+    'npm|pnpm|yarn|pip|pip3|winget|choco|dotnet\\s+add|' +
+    'curl[^;|&]*\\s-o\\b|wget|invoke-webrequest[^;|&]*\\s-outfile)\\b|' +
+    // A .NET write is a write wherever it appears; nothing in a read is spelled this way.
+    '\\[system\\.io\\.(?:file|directory)\\]\\s*::\\s*(?:write|append|create|delete|move|copy|replace)|' +
+    '\\[io\\.file\\]\\s*::\\s*(?:write|append|create|delete|move|copy|replace)',
   'i',
 );
-
-/** The pieces a shell would run in sequence. Quote-aware: a `;` inside a string is
- *  part of an argument, not a second command. */
-function segmentsOf(command) {
-  const text = String(command || '');
-  const out = [];
-  let current = '';
-  let quote = '';
-  for (let i = 0; i < text.length; i += 1) {
-    const char = text[i];
-    if (quote) {
-      current += char;
-      if (char === quote) quote = '';
-      continue;
-    }
-    if (char === '"' || char === "'") { quote = char; current += char; continue; }
-    if (char === ';' || char === '|') { out.push(current); current = ''; continue; }
-    if (char === '&' && text[i + 1] === '&') { out.push(current); current = ''; i += 1; continue; }
-    current += char;
-  }
-  out.push(current);
-  return out.map((s) => s.trim()).filter(Boolean);
-}
-
-/** Does every piece of this command only look? */
-function onlyReads(command) {
-  for (let piece of segmentsOf(command)) {
-    piece = piece.replace(/^\(\s*/, '').replace(/\)+$/, '').trim();
-    // `$a = Get-Content …` is the same read, and `$a` on its own reads the variable.
-    const assigned = piece.match(/^\$\w+\s*=\s*(.*)$/);
-    if (assigned) piece = assigned[1].trim();
-    if (!piece || /^\$[\w.:]+$/.test(piece)) continue;
-    if (!READ_VERBS.test(piece)) return false;
-  }
-  return true;
-}
 
 /** Could a script inside the harness be running, whatever it is named? */
 const RUNS_HARNESS_CODE = /\b(?:node|nodejs|pwsh|powershell|python|python3|deno|bun|cmd|sh)\b[^;&|]*\.(?:js|mjs|cjs|ps1|py|bat|cmd)\b/i;
@@ -145,16 +122,19 @@ export function createHarnessGuard({ root, logger, notify }) {
   /**
    * Could this command change the harness, or run its code?
    *
-   * A read of the harness is worth a log line and not an alarm: `Get-ChildItem`,
-   * `Get-Content`, `Select-String` and their like cannot write, whatever they
-   * name. Everything else — a redirect, a script inside the harness, any verb not
-   * on the read list — is treated as a write risk, which is the safe way round.
+   * A read of the harness is worth a log line and not an alarm. The question is
+   * whether the command has a **write shape** — a write verb, a redirect into the
+   * harness, a .NET write call, or a harness script being run — because the old
+   * question ("is every piece a read verb?") made every unfamiliar shape look like a
+   * write: a multi-line PowerShell block, an `if` around a `Get-Content`, a `git grep`.
+   * What still catches a real write is the permission ruleset, the run-long status
+   * comparison and the snapshot; the alarm names the shape, not a suspicion.
    */
   const couldWriteHarness = (command) => {
     const text = String(command || '');
     if (redirectsInto(text)) return true;
     if (RUNS_HARNESS_CODE.test(text)) return true;
-    return !onlyReads(text);
+    return WRITE_SHAPE.test(text);
   };
 
   /**
@@ -180,7 +160,11 @@ export function createHarnessGuard({ root, logger, notify }) {
           // A toolbox run is tool use and is not reported. A command that only
           // *looks* at the toolbox is a read, and is written down: the distinction
           // is `onlyReads`, not which folder it named.
-          if (runsTheToolbox(input.command) && !onlyReads(input.command)) continue;
+          // Using the toolbox is ordinary tool use: the renderer, the craft briefs. It is
+          // already in the transcript, the census and the session log, so it is not even
+          // written down here — but *listing* the toolbox is a read, and reads are worth a
+          // line, which is how an operator sees a model searching for a tool it lost.
+          if (runsTheToolbox(input.command) && RUNS_HARNESS_CODE.test(String(input.command))) continue;
           if (couldWriteHarness(input.command)) shells.add(shown);
           else reads.add(shown);
         }

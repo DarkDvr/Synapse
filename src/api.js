@@ -12,7 +12,7 @@ import { keepAttachments } from './keep-attachments.js';
 import { skillRules, describeSkills } from './skills.js';
 import { rulesFor, decide, resolvePath, refusalNote, SINGLE_RULES } from './permissions.js';
 import { stopTargets, createStopper } from './stop.js';
-import { PROJECTS_ROOT, SKILLS_DIR, ROOT, SCRATCH_ROOT, scratchDir, normDir } from './paths.js';
+import { PROJECTS_ROOT, SKILLS_DIR, ROOT, SCRATCH_ROOT, scratchDir, normDir, BROWSER_DIR } from './paths.js';
 import { EV } from '../web/events.js';
 import { fail, refuseBusy } from './errors.js';
 import { braveEntries, entryBlockingWrite, protectionEntries, protectionFor } from './protection.js';
@@ -793,7 +793,27 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
     return { ok: true, automation };
   }
 
+  // SynaBrowse's sign-in: open the harness's own browser on a site and put it where the
+  // operator can log in. One browser per process, because a profile cannot be open twice
+  // and the session is the whole point of it.
+  async function browserSignin(url) {
+    const target = String(url || '').trim();
+    if (!/^https?:\/\//i.test(target)) return { ok: false, error: 'that is not an http(s) address' };
+    const cfg = getConfig();
+    const profile = String(cfg.browser?.profile || '').trim() || `${BROWSER_DIR}\\profile`;
+    try {
+      const { askToSignIn } = await import('./browser/signin.js');
+      const answer = await askToSignIn({ url: target, profile, log: app });
+      if (answer.ok) app.info(`SynaBrowse: sign-in window asked for ${target}`);
+      else app.warn(`SynaBrowse: could not show the sign-in window for ${target}: ${answer.error}`);
+      return answer;
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
+  }
+
   return {
+    browserSignin,
     status: async () => ({
       version: APP_VERSION,
       // The files on disk may be newer than this process — a page reload cannot

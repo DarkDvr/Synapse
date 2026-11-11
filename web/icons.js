@@ -25,6 +25,8 @@ export const ICONS = {
     '<rect x="2.4" y="2.9" width="11.2" height="10.2" rx="2"/><path d="M2.4 6.2h11.2"/><path d="M5 4.6h.01M6.6 4.6h.01"/>',
   automation: '<path d="M8.6 1.6 3.2 9h3.4l-.8 5.4L11.2 7H7.8z"/>',
   shield: '<path d="M8 1.9 13 3.7v4.1c0 3.2-2.1 5.5-5 6.5-2.9-1-5-3.3-5-6.5V3.7z"/><path d="M5.9 7.9 7.4 9.4l2.8-2.9"/>',
+  globe:
+    '<circle cx="8" cy="8" r="6.1"/><path d="M1.9 8h12.2"/><path d="M8 1.9c1.7 1.7 2.6 3.8 2.6 6.1S9.7 12.4 8 14.1C6.3 12.4 5.4 10.3 5.4 8S6.3 3.6 8 1.9z"/>',
 };
 
 export const setIcon = (name) =>

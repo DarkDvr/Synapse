@@ -222,6 +222,15 @@ export function collectSettings() {
       writePath(c, path, String(value).split(',').map((r) => r.trim()).filter(Boolean));
       continue;
     }
+    // SynaBrowse's allowlist is one host per line in the form, an array in the config.
+    if (path === 'browser.allow') {
+      writePath(
+        c,
+        path,
+        String(value).split(/[\n,;]+/).map((h) => h.trim()).filter(Boolean),
+      );
+      continue;
+    }
     writePath(c, path, value);
   }
   return c;
@@ -315,6 +324,34 @@ export function onSettingsInput(e) {
 export async function onSettingsClick(e) {
   if (e.target.closest('[data-close-about]')) { closeSettings(); return; }
   if (e.target.closest('[data-check-updates]')) { wired.checkUpdates(); return; }
+  if (e.target.closest('#browserSignin')) {
+    // SynaBrowse's sign-in is the one control in Settings that acts now rather than at
+    // Save: the browser is opened on that URL and put on the second monitor's taskbar,
+    // minimized, without taking focus. The session is the browser's, not this form's.
+    const field = $('settingsBody')?.querySelector('#browserSigninUrl');
+    const url = String(field?.value || '').trim();
+    if (!/^https?:\/\//i.test(url)) {
+      toast('Sign In', 'Type the site to sign in to first — for example https://example.com/.');
+      return;
+    }
+    const button = e.target.closest('#browserSignin');
+    button.disabled = true;
+    button.textContent = 'Opening…';
+    try {
+      const answer = await api('POST', '/api/browser/signin', { url });
+      if (answer?.ok) {
+        toast('SynaBrowse Is Waiting', 'It is on the second monitor’s taskbar — sign in, then close it or leave it.');
+      } else {
+        toast('Could Not Open SynaBrowse', answer?.error || 'The browser did not start.');
+      }
+    } catch (err) {
+      toast('Could Not Open SynaBrowse', err.message);
+    } finally {
+      button.disabled = false;
+      button.textContent = 'Sign In…';
+    }
+    return;
+  }
   if (e.target.closest('[data-test-sound]')) {
     // The pane renders from a draft; the select itself is the live choice.
     const sel = $('settingsBody')?.querySelector('select[data-path="notify.doneSound"]');
