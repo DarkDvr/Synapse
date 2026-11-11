@@ -122,6 +122,8 @@ test('the server answers the protocol and its tools work on a local page', async
     const shot = await rpc.call('tools/call', { name: 'screenshot', arguments: {} });
     const file = /Screenshot: (.*) \(/.exec(shot.result.content[0].text)?.[1];
     assert.ok(file && fs.existsSync(file), 'the screenshot was not written');
+    assert.match(shot.result.content[0].text, /cite it exactly as !\[\]\(/, 'the answer must give a path the chat can render');
+    assert.match(shot.result.content[0].text, /shot-\d/, 'the answer names the file');
 
     // The fence is the switch, not a host list — but a page must still be an http(s)
     // address: `file://` would be a way around the harness's own rules.
@@ -170,7 +172,7 @@ test('a project server writes inside the project, anything else in the harness',
   const root = 'F:\\dev\\Synapse.Projects';
   assert.equal(
     artifactDir('F:\\dev\\Synapse.Projects\\demo', root),
-    'F:\\dev\\Synapse.Projects\\demo\\.synapse\\browser',
+    'F:\\dev\\Synapse.Projects\\demo\\.synapse\\browser\\shots',
   );
   // The projects root is the "all projects" context, not a project.
   assert.match(artifactDir(root, root), /data.*browser.*shots$/);

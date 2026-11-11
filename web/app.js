@@ -1141,16 +1141,6 @@ function connectStream() {
       return;
     }
 
-    // SynaBrowse is waiting for the operator: its window is minimized on the second
-    // monitor's taskbar, the window itself played one chime, and this is the notice that
-    // says why — the same shape as the screen notice, because it is the same kind of
-    // news: the work cannot continue without them.
-    if (ev.kind === 'browser-waiting') {
-      const need = String(ev.what || '').trim() || 'a sign-in, or a check only you can pass';
-      toast('SynaBrowse Is Waiting', `${need} — its window is on the second monitor's taskbar.`);
-      return;
-    }
-
     // The session is real and the window is already closed by the watcher, so the operator
     // has nothing left to do. A session that did not take never becomes a row that says it
     // did: the row is written only after the page stopped asking to be signed into.
@@ -1167,11 +1157,7 @@ function connectStream() {
       }
       return;
     }
-    if (ev.kind === 'browser-session-unconfirmed') {
-      browserSigninSettled();
-      toast('Sign-In Not Confirmed', `${ev.host || 'That site'} — ${ev.why || 'the page still asks to be signed in'}. Nothing was added.`);
-      return;
-    }
+
 
     // Stop, from the server that owns it. The page does not decide when a stop is
     // over any more: it hears `stop.done` when the project is really quiet, and

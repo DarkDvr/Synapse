@@ -57,6 +57,7 @@ function settings() {
 // not empty" from the Recycle Bin (11 Nov, reproduced: EPERM). So the path is taken once,
 // and then the process steps out of the project and holds nothing of the operator's.
 const ARTIFACTS = artifactDir();
+const START_DIR = process.cwd();
 try { process.chdir(DATA_DIR); } catch { /* the harness folder exists; nothing to do */ }
 
 const cfg = settings();
@@ -353,12 +354,17 @@ async function handle(msg) {
             return toolText(id, `Scrolled to ${y}.`);
           }
           case 'screenshot': {
-            const file = path.join(ARTIFACTS, 'shots', `shot-${stamp()}.png`);
+            const file = path.join(ARTIFACTS, `shot-${stamp()}.png`);
             const png = await browser.screenshot({ full: args.full === true, file });
-            return toolText(id, `Screenshot: ${file} (${Math.round(png.length / 1024)} KB, ${args.full ? 'whole page' : 'viewport'}). Read it to see the page.`);
+            const rel = path.relative(START_DIR, file).replace(/\\/g, '/');
+            return toolText(
+              id,
+              `Screenshot: ${file} (${Math.round(png.length / 1024)} KB, ${args.full ? 'whole page' : 'viewport'}).` +
+                ` Read it to see the page. In the chat, cite it exactly as ![](${rel}) — it is already inside the project, so there is nothing to copy.`,
+            );
           }
           case 'watch': {
-            const dir = path.join(ARTIFACTS, 'shots', `watch-${stamp()}`);
+            const dir = path.join(ARTIFACTS, `watch-${stamp()}`);
             const frames = await browser.watch({ ms: Math.min(5000, Math.max(200, Number(args.ms) || 1200)), dir });
             const span = frames.length > 1
               ? ` over ${Math.round(((frames.at(-1).at || 0) - (frames[0].at || 0)) * 1000)} ms`

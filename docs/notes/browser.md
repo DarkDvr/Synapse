@@ -105,6 +105,11 @@ Nothing is minimized for a sign-in, and nothing takes the foreground uninvited.
 
 A hidden browser must be invisible *and* still render, and those two pull apart:
 
+- **The hide starts before the browser is ready.** `show.ps1 -Hide -WaitMs` is started the moment
+the process exists and grabs the window within 40 ms of its creation, so the button is not
+there for the second or two a DevTools handshake takes. Edge creates that first window only
+when it is ready, so a sub-second button can still be seen on a cold start — the window
+itself never appears.
 - **No taskbar button, no Alt-Tab.** The window is given `WS_EX_TOOLWINDOW` and loses
   `WS_EX_APPWINDOW` (`show.ps1 -Hide`). Without it, a window parked off-screen still puts a
   button on the taskbar, and clicking that button focuses a window nobody can see — which is

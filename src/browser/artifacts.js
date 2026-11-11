@@ -15,12 +15,11 @@ import { DATA_DIR, PROJECTS_ROOT } from '../paths.js';
 const HARNESS_SHOTS = path.join(DATA_DIR, 'browser', 'shots');
 
 /**
- * The folder this process should write browsing artifacts into, from its working
- * directory. Pure: both arguments are given, so the rule can be tested without a server.
+ * The folder this process should write a screenshot into, from its working directory. Pure: both arguments are given, so the rule can be tested without a server.
  */
 export function artifactDir(cwd = process.cwd(), projectsRoot = PROJECTS_ROOT) {
   const here = path.resolve(String(cwd || '.'));
   const root = path.resolve(String(projectsRoot || '.'));
   const inside = here.toLowerCase().startsWith(`${root.toLowerCase()}${path.sep.toLowerCase()}`);
-  return inside ? path.join(here, '.synapse', 'browser') : HARNESS_SHOTS;
+  return inside ? path.join(here, '.synapse', 'browser', 'shots') : HARNESS_SHOTS;
 }

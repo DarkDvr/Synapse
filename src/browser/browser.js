@@ -146,6 +146,7 @@ export function createBrowser({ profile, log = null, startMinimized = true, widt
       // Where the window belongs, decided before the spawn: the second monitor's centre.
       let placeX = null;
       let placeY = null;
+      let early = null;
       if (!port) {
         // A port file from an earlier instance names a port that is gone.
         try { fs.rmSync(path.join(profile, 'DevToolsActivePort'), { force: true }); } catch { /* fine */ }
@@ -163,6 +164,9 @@ export function createBrowser({ profile, log = null, startMinimized = true, widt
         // cwd outside the project: a process whose working directory is a folder keeps that folder
         // undeletable, and Edge is long-lived (11 Nov).
         child = spawn(edge, launchArgs({ position }), { stdio: 'ignore', detached: false, cwd: path.dirname(profile) });
+        // Before the port is even open: the window is grabbed the instant it exists, so the
+        // taskbar button it wears for those first seconds is gone (12 Nov).
+        early = hideBrowserWindow({ profile, waitMs: 15000 }).catch(() => null);
         // Immediately, not after the port is ready: the operator must not lose the caret for
         // the two seconds a browser takes to open (11 Nov).
         if (before?.foreground) restoreFocus(before.foreground).catch(() => {});
@@ -182,16 +186,13 @@ export function createBrowser({ profile, log = null, startMinimized = true, widt
       // The tab must be the active one or a challenge that runs on a timer never ends.
       try { await conn.send('Page.bringToFront'); } catch { /* a hidden window may refuse */ }
       try { await conn.send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false }); } catch { /* fine */ }
-      // Edge ignores --start-minimized when a window is created through the DevTools port:
-      // it came up restored and visible on every launch (12 Nov). So the window is placed
-      // and minimized through the protocol, before anyone can see it.
       // The window is hidden properly: a tool window (no taskbar button, no Alt-Tab), parked
       // off-screen and left *normal* so it still renders. The "Restore pages" bubble Edge
       // shows after a kill is suppressed by a flag; it used to appear at the top-left of the
       // primary and was mistaken for our window (12 Nov).
       if (!existing) {
-        const hidden = await hideBrowserWindow({ profile }).catch(() => null);
-        if (hidden) note(`browser: window hidden (tool window ${hidden.toolWindow ? 'yes' : 'no'})`);
+        const hidden = await early;
+        if (hidden?.toolWindow) note('browser: window hidden (tool window yes)');
       }
       note(`browser: ${existing ? 'attached to' : 'started'} Edge on port ${port}`);
       return page;

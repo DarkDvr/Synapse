@@ -1,5 +1,10 @@
 # SynaBrowse — the invisible browser (1.38)
 
+> **Superseded, in part.** The hand-off described here — a window that appears minimized on the
+> second monitor — became a **permission card** in 1.49.0: the model asks, the operator allows,
+> and only then does a normal window open on their monitor. The measurements below still hold,
+> and `docs/notes/browser.md` is the reference for how it works now.
+
 Synapse gets a browser of its own: running hidden, signed in where the operator is, able
 to read a page, click, type, take a screenshot and watch an animation — without touching
 their Edge, their mouse or their keyboard. When it cannot do something alone, one small

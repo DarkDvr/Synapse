@@ -20,7 +20,8 @@ param(
     [string]$Sound = 'F:\dev\Synapse\web\sounds\hollow.wav',
     [switch]$Restore,
     [switch]$Focus,
-    [switch]$Hide
+    [switch]$Hide,
+    [int]$WaitMs = 0
 )
 
 $ErrorActionPreference = 'Stop'
@@ -91,6 +92,17 @@ $callback = [W.U+EnumProc]{
     if (($box.Right - $box.Left) -lt 300) { return $true }
     [void]$found.Add($hWnd)
     return $true
+}
+# The window appears a moment after the process does, and until it is a tool window it
+# has a taskbar button. -WaitMs lets the caller start this before the browser is ready and
+# have it grab the window the instant it exists (12 Nov).
+if ($WaitMs -gt 0) {
+    $deadline = (Get-Date).AddMilliseconds($WaitMs)
+    while ($found.Count -eq 0 -and (Get-Date) -lt $deadline) {
+        Start-Sleep -Milliseconds 40
+        [void]$found.Clear()
+        [void][W.U]::EnumWindows($callback, [IntPtr]::Zero)
+    }
 }
 [void][W.U]::EnumWindows($callback, [IntPtr]::Zero)
 if ($found.Count -eq 0) { '{"error":"no SynaBrowse window"}' | Write-Output; exit 1 }

@@ -106,10 +106,10 @@ export function askOperator({ profile, restore = false, focus = false, sound = n
  * rendering, because a minimized window stops compositing and screenshots then hang.
  * Answers what Windows reports, so a caller can prove it.
  */
-export function hideBrowserWindow({ profile, sound = '' } = {}) {
+export function hideBrowserWindow({ profile, sound = '', waitMs = 0 } = {}) {
   return new Promise((resolve) => {
     let out = '';
-    const child = spawn('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', SCRIPT, '-Marker', profile, '-Hide', '-Sound', sound], { windowsHide: true });
+    const child = spawn('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', SCRIPT, '-Marker', profile, '-Hide', '-Sound', sound, ...(waitMs ? ['-WaitMs', String(waitMs)] : [])], { windowsHide: true });
     const timer = setTimeout(() => { try { child.kill(); } catch { /* gone */ } }, 15000);
     child.stdout.on('data', (d) => { out += d; });
     child.on('close', () => {
