@@ -820,9 +820,12 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
         // password — a session that did not take must not become a row that says it did.
         onDone: async (opened) => {
           const { confirmSession } = await import('./browser/signin.js');
+          const host = String(opened || '').replace(/^[a-z]+:\/\//i, '').split(/[/?#]/)[0].toLowerCase();
+          // The window is closed and the address is about to be checked: the page turns
+          // the button into "Saving…" for this gap, so the wait is visible (11 Nov).
+          notify?.({ kind: 'browser-signin-closed', host, ts: Date.now() });
           const check = await confirmSession({ url: opened, profile, log: app })
             .catch((err) => ({ ok: false, url: opened, why: err.message }));
-          const host = String(check.url || opened || '').replace(/^[a-z]+:\/\//i, '').split(/[/?#]/)[0].toLowerCase();
           if (!check.ok) {
             app.info(`SynaBrowse: ${host} not confirmed — ${check.why}`);
             notify?.({ kind: 'browser-session-unconfirmed', host, why: check.why, ts: Date.now() });

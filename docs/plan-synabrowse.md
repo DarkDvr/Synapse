@@ -104,8 +104,8 @@ the operator's browser.
 | 0 | **Proof.** Hidden profile, open nexusmods.com, read it, screenshot it, click one thing, screencast a CSS animation; show the frames and timings | half a day | **done** |
 | 1 | **Tools.** The server, the lifecycle, the eight tools, offline tests against local pages | one day | **done** (`src/browser/`, `src/mcp/browser-server.js`) |
 | 2 | **Hand-off.** The window, the chime, the secondary monitor, minimized on the taskbar, no focus steal | half a day | **done** (`src/browser/handoff.js`, `show.ps1`) |
-| 3 | **Settings and arming.** Enable, sign-in per site, allowlist editor, per-project arm, audit lines | half a day | next |
-| 4 | **Notes.** `docs/notes/browser.md`, the AGENTS row, the what-we-are-changing row | an hour | partly |
+| 3 | **Settings and arming.** Enable, the Sites table (a record, not a list), sign-in in the table's last row, confirmation before a row is written | half a day | **done** (1.40–1.42) |
+| 4 | **Notes.** `docs/notes/browser.md`, the AGENTS row, the what-we-are-changing row | an hour | **done** |
 
 **What stage 1 and 2 shipped.** `src/browser/cdp.js` (the protocol client, shared with the
 renderer's ancestor in `shot.mjs`), `src/browser/browser.js` (Edge by full path, the hidden

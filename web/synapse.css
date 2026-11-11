@@ -1451,6 +1451,12 @@ body[data-mode="single"] #runAuto { display: none; }
   0%, 100% { opacity: 0.55; }
   50% { opacity: 1; }
 }
+/* A button that is working, not merely disabled: it breathes, so "Opening…" and
+   "Saving…" read as progress rather than as a dead control (11 Nov). */
+.btn.is-working {
+  animation: waiting-breathe 1.6s ease-in-out infinite;
+  cursor: progress;
+}
 @media (prefers-reduced-motion: reduce) {
   .trace-line.is-waiting { animation: none; opacity: 0.8; }
 }

@@ -16,7 +16,6 @@ wrapper around the OpenCode desktop app — it drives the genuine `opencode.exe`
 over its HTTP + SSE API and rebuilds the interface from scratch.
 
 Everything lives in `F:\dev\Synapse`; nothing is written outside it but the engine binary it locates.
-
 **It is a harness for any project, and any model.** No project, product or model
 may be named in its code, its briefs or its config: the briefs are sent to every
 project this harness will ever run, so a rule shaped around one project's incident
@@ -97,8 +96,8 @@ the cards and the commits, not the code. One reason per sentence, not a chain.
 
 ### Working style rules
 
-- **The review pane is how the operator is shown anything** (measured 2 Nov 2026).
-  A screenshot in the chat reaches only you; `browser.preview` puts it on their screen.
+- **The review pane is how the operator is shown anything.** A screenshot in the chat
+  reaches only you; `browser.preview` puts it on their screen (measured 2 Nov 2026).
 - **Use Edge, but surgically** — one session, reused; few screenshots.
 - **Stage the delivery.** Each stage is reviewed before the next starts.
 
@@ -174,6 +173,7 @@ an agent does not know to open is a document that does not exist:
 | `docs/notes/remote-access.md` | the LAN switch, the token or the login page, or changing what the HTTP listener binds |
 | `docs/notes/multi-user.md` | two views at once — what "busy" means, who may send, Stop as the takeover, and the Settings lock |
 | `docs/notes/web-reading.md` | before promising to read a signed-in site, or touching any browser — every cookie route was measured, one destroyed the operator's browser data, and Brave is never touched |
+| `docs/notes/browser.md` | before touching `src/browser/`, `src/mcp/browser-server.js` or the Browser tab — SynaBrowse's flags, its profile, the Sites record and the hand-off |
 | `docs/notes/project-chat.md` | before changing how a project, a chat or a compaction works — the one-chat-per-project scope, its phases and what is still open |
 | `docs/notes/protection.md` | before touching `src/protection.js`, the prohibited list, or the Brave rule — what is refused without asking, and what the fence cannot see |
 

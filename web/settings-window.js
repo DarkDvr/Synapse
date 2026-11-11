@@ -320,6 +320,35 @@ export function onSettingsInput(e) {
   }
 }
 
+// The sign-in row's own state: which host a sign-in is waiting on, and whether the
+// operator has closed the window (so the address is being checked). The button is the
+// one control in Settings that stays busy across two answers — the window opening, and
+// the session being confirmed — so it says which one it is in (11 Nov).
+let browserSigninHost = null;
+
+/** The window is up: the click has been answered, and the button is free again. */
+export function browserSigninOpened(host) {
+  browserSigninHost = String(host || '');
+}
+
+/** The operator closed it: the address is being checked, so the button says "Saving…". */
+export function browserSigninClosed() {
+  if (!browserSigninHost) return;
+  const button = $('settingsBody')?.querySelector('#browserSignin');
+  if (!button) return;
+  button.classList.add('is-working');
+  button.textContent = 'Saving…';
+}
+
+/** The check is over, either way: the button is Sign In… again. */
+export function browserSigninSettled() {
+  browserSigninHost = null;
+  const button = $('settingsBody')?.querySelector('#browserSignin');
+  if (!button) return;
+  button.classList.remove('is-working');
+  button.textContent = 'Sign In…';
+}
+
 export async function onSettingsClick(e) {
   if (e.target.closest('[data-close-about]')) { closeSettings(); return; }
   if (e.target.closest('[data-check-updates]')) { wired.checkUpdates(); return; }
@@ -339,6 +368,7 @@ export async function onSettingsClick(e) {
     }
     const button = e.target.closest('#browserSignin');
     button.disabled = true;
+    button.classList.add('is-working');
     button.textContent = 'Opening…';
     // The launch takes a few seconds and the request answers only when the window is up:
     // say what is happening meanwhile, or the click reads as ignored (11 Nov).
@@ -350,6 +380,7 @@ export async function onSettingsClick(e) {
       if (answer?.ok) {
         say(`Waiting for you at ${answer.host || url} — sign in, then close the window. The row appears once the session is confirmed.`);
         toast('SynaBrowse Is Waiting', 'It is on the second monitor — sign in, then close the window.');
+        browserSigninOpened(answer.host || url);
         if (field) field.value = '';
       } else {
         say(answer?.error || 'The browser did not start.');
@@ -362,6 +393,7 @@ export async function onSettingsClick(e) {
       clearTimeout(stage2);
       clearTimeout(stage3);
       button.disabled = false;
+      button.classList.remove('is-working');
       button.textContent = 'Sign In…';
     }
     return;

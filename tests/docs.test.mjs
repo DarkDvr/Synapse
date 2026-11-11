@@ -51,6 +51,7 @@ const NOTES = [
   'docs/notes/remote-access.md',
   'docs/notes/multi-user.md',
   'docs/notes/web-reading.md',
+  'docs/notes/browser.md',
   'docs/notes/project-chat.md',
   'docs/notes/protection.md',
   'docs/notes/releases.md',

@@ -190,6 +190,8 @@ import {
   switchSettingsTab,
   onSettingsInput,
   onSettingsClick,
+  browserSigninClosed,
+  browserSigninSettled,
   openSettings,
   closeSettings,
   revertSettings,
@@ -1140,10 +1142,16 @@ function connectStream() {
       return;
     }
 
-    // The operator closed the SynaBrowse window after signing in, and the address was
-    // opened once more to confirm it no longer asks for a password. Only then does the
-    // row exist: a session that did not take must not become a row that says it did.
+    // The operator closed the SynaBrowse window: the address is being checked, so the
+    // Sign In button turns into a breathing "Saving…" until the answer arrives.
+    if (ev.kind === 'browser-signin-closed') {
+      browserSigninClosed();
+      return;
+    }
+    // The check is over, and only then does the row exist: a session that did not take
+    // must not become a row that says it did.
     if (ev.kind === 'browser-session-kept') {
+      browserSigninSettled();
       toast('Session Kept', `${ev.host || 'That site'} — your sign-in stays in SynaBrowse's profile.`);
       const sites = state.config?.browser?.sites;
       if (Array.isArray(sites)) {
@@ -1156,6 +1164,7 @@ function connectStream() {
       return;
     }
     if (ev.kind === 'browser-session-unconfirmed') {
+      browserSigninSettled();
       toast('Sign-In Not Confirmed', `${ev.host || 'That site'} — ${ev.why || 'the page still asks to be signed in'}. Nothing was added.`);
       return;
     }
