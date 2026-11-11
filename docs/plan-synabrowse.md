@@ -120,3 +120,40 @@ the operator's browser.
 Reading or importing cookies. Driving the operator's own Edge windows. Buying, posting or
 deleting without an armed allowlist entry. Recording video (frames are enough). A second
 automation framework: this is CDP and nothing else.
+
+---
+
+## Stage 0 — the proof, measured (11 Nov 2026)
+
+A throwaway script (kept out of the repo), Edge 157.0.4341.46, a brand-new profile at
+`data\browser\profile`, Nexus Mods as the target. What it found, and the three things the
+implementation must carry because of it:
+
+**A hidden real browser gets past Cloudflare; a headless one never does.**
+
+| mode | result |
+|---|---|
+| headed, off-screen (`--window-position=-32000,-32000`) | **cleared in 2.6 s**, home page loaded |
+| headed, on-screen | 14 s, then Nexus's own "Something went wrong." page |
+| `--headless=new` | never cleared, 30 s |
+
+The flag that decided it was **`--disable-blink-features=AutomationControlled`**. Without
+it, the same hidden window sat on "Verifying…" for ever. The throttling flags matter too
+(`--disable-background-timer-throttling`, `--disable-backgrounding-occluded-windows`,
+`--disable-renderer-backgrounding`, `--disable-features=…CalculateNativeWinOcclusion`): a
+hidden window is a background window, and a challenge that runs on a timer needs its
+timers.
+
+**The rest of the mechanics work.** 2,280 characters of the real page read back as text;
+a click at the coordinates of "Browse all mods" (549, 294) navigated to `/mods`; 52
+screencast frames arrived in 1.06 s (about 16 ms apart), a strip of a CSS animation rather
+than a still. The browser was closed and nothing was left running; the profile is 92 MB
+and keeps its cookies for next time.
+
+**The open question is depth, not the challenge.** `/` loads; `/mods` and `/games` both
+return Nexus's generic error page — with no Cloudflare interstitial — for this session. A
+plain HTTP fetch is refused with 403 on every route, so the hidden browser is already
+doing better than `webfetch`; what is left is whether a **signed-in session** clears those
+routes. That is exactly what the hand-off window is for, so stage 2 moves up: sign in once
+in the hidden browser, then re-test the depth.
+
