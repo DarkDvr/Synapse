@@ -70,12 +70,23 @@ export function renderTranscript() {
   // Every part carries a stable key (its message id + index) so an expanded
   // Reasoning block or tool card can be restored after a rebuild — a poll
   // landing mid-read used to snap them shut.
+  // A prohibited refusal is one entry, and the alarm is it: the alarm carries the
+  // tool and the target and folds open for the rest. The harness message that
+  // follows said the same thing in a paragraph, so it is dropped when an alarm
+  // covers it — within a few seconds of it (12 Nov).
+  const refusals = alarmsHere()
+    .filter((a) => a.prohibited)
+    .map((a) => Number(a.at) || 0);
   const tagged = state.messages
     .filter((m) => {
       // A compaction the operator stopped is not a failure to read: the chip and
       // the toast already said "cancelled", and the engine's own message would
       // otherwise appear as a red "COMPACTION" block in the chat.
       if (m.type === 'compaction' && /cancell?ed/i.test(String(m.error || ''))) return false;
+      if (String(m.description || '').trim().toUpperCase() === 'PROHIBITED') {
+        const at = Number(m.created) || 0;
+        if (refusals.some((covered) => Math.abs(covered - at) <= 15000)) return false;
+      }
       return m.error || m.type === 'user' || m.type === 'assistant' || m.type === 'synthetic';
     })
     .map((m) => (m.parts ? { ...m, parts: m.parts.map((p, i) => ({ ...p, _k: `${m.id}:${i}` })) } : m));

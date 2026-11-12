@@ -59,18 +59,25 @@ export function alarmTitle(what) {
 
 export function renderAlarm(a) {
   if (a.prohibited) {
-    // One line, and a short one. A refused shell command is a paragraph — the chat
-    // keeps its first line and the whole of it in the hover, because the operator
-    // needs to know *that* it was refused and *what* was refused, not to read the
-    // command again (12 Nov).
+    // One entry, one line, and the rest behind it. The alarm names the tool and the
+    // start of the target; opening it shows the refused call in full and who asked.
+    // The harness message that used to follow it said the same thing in a paragraph
+    // (12 Nov).
     const target = (a.paths || []).join(' | ');
     const firstLine = target.split(/\r?\n/).map((l) => l.trim()).find(Boolean) || '';
     const shown = firstLine.length > 90 ? `${firstLine.slice(0, 89)}…` : firstLine;
     const who = String(a.note || '');
-    return `<div class="chat-alarm is-prohibited" title="${esc(`PROHIBITED: ${a.action} ${target}${who ? ` ${who}` : ''}`)}">
-    <span class="chat-alarm-mark">⛔</span>
-    <span class="chat-alarm-text">PROHIBITED · ${esc(a.action)}${shown ? ` · ${esc(shown)}` : ''}${who ? ` · ${esc(who)}` : ''}</span>
-  </div>`;
+    const detail = [
+      ...(a.paths || []).filter(Boolean).map((p) => `<div class="chat-alarm-call">${esc(String(p))}</div>`),
+      who ? `<div class="chat-alarm-who">${esc(who)}</div>` : '',
+    ].join('');
+    return `<details class="chat-alarm is-prohibited">
+    <summary title="${esc(`PROHIBITED: ${a.action} ${target}${who ? ` ${who}` : ''}`)}">
+      <span class="chat-alarm-mark">⛔</span>
+      <span class="chat-alarm-text">PROHIBITED · ${esc(a.action)}${shown ? ` · ${esc(shown)}` : ''}</span>
+    </summary>
+    <div class="chat-alarm-body">${detail || '<div class="chat-alarm-call">no path recorded</div>'}</div>
+  </details>`;
   }
   const title = alarmTitle(a.what);
   const detail = (a.paths || []).join(' | ');

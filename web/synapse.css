@@ -3517,3 +3517,25 @@ body.is-disconnected .app-shell { filter: blur(2px) brightness(0.45); pointer-ev
 .msg.harness.is-prohibited .chat-post.is-refusal > summary::marker { color: var(--red); }
 .msg.harness.is-prohibited .chat-post.is-refusal .chat-post-note { color: #ff7a66; }
 .msg.harness.is-prohibited .chat-post.is-refusal .chat-post-body { color: #ffb3a7; border-left: 2px solid var(--red); }
+/* ── the refusal is one line, and it opens (12 Nov) ────────────────────────
+   The alarm IS the entry now: a summary line with the tool and the start of the
+   target, and the refused call in full under it. The line stays a line — the
+   summary keeps the alarm's ellipsis — while the body is allowed to wrap. */
+.chat-alarm.is-prohibited > summary {
+  display: flex; align-items: baseline; gap: 0;
+  list-style: none; cursor: pointer;
+}
+.chat-alarm.is-prohibited > summary::-webkit-details-marker { display: none; }
+.chat-alarm.is-prohibited > summary::before {
+  content: '▸'; margin-right: 7px; color: var(--red); font-size: 0.8em;
+}
+.chat-alarm.is-prohibited[open] > summary::before { content: '▾'; }
+.chat-alarm.is-prohibited[open] { white-space: normal; }
+.chat-alarm-body {
+  margin: 6px 0 0 19px; padding-left: 10px;
+  border-left: 1px solid rgba(255, 122, 102, 0.35);
+  font-size: calc(var(--chat-fs) * 0.9); line-height: 1.5; color: #ffb3a7;
+  white-space: pre-wrap; word-break: break-word;
+}
+.chat-alarm-call { font-family: var(--mono, ui-monospace, monospace); }
+.chat-alarm-who { color: var(--muted); margin-top: 3px; }

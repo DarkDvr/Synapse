@@ -2555,5 +2555,6 @@ chat, because a session belongs to a directory.
 saying the same thing twice, at length: the alarm printed up to 150 characters of a shell
 command, and the message printed the model's whole instruction underneath. The alarm keeps
 the tool and the start of the target (90 characters, the rest on hover); the message folds
-to one line, `⛔ PROHIBITED · the protected list refused this change`, with the instruction
-behind the chevron. Enforcement is unchanged — only the reading.
+to a single `<details>` line that opens to the refused call in full and who asked; the
+harness message under it is not rendered at all when the alarm covers it. Enforcement is
+unchanged — only the reading.
