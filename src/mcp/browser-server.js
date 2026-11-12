@@ -22,6 +22,9 @@ import { createBrowser, findEdge } from '../browser/browser.js';
 import { checkUrl, hostOf } from '../browser/allow.js';
 import { askOperator } from '../browser/handoff.js';
 import { watchForSignIn } from '../browser/session-watch.js';
+// The descriptions a model reads live in their own file, so they can be tested without
+// starting this server — importing this one starts it, and it waits on stdin (13 Nov).
+import { TOOLS } from './browser-tools.js';
 
 const PROTOCOL_VERSION = '2024-11-05';
 // Its own sound: two hollow knocks on a plastic cup, not the finished-work chime.
@@ -67,156 +70,7 @@ const browser = createBrowser({
   log: { info: (m) => process.stderr.write(`${m}\n`) },
 });
 
-const TOOLS = [
-  {
-    name: 'open',
-    description:
-      'Open a web page in the harness\'s own browser and answer its address, title, a readable ' +
-      'outline of its text and the links on it. The browser is hidden; a host the operator has ' +
-      'a browser refuses. Use this instead of webfetch when a page is behind ' +
-      'a sign-in or a bot check, then click and read like a person would.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        url: { type: 'string', description: 'The page to open (http or https).' },
-        settleMs: { type: 'integer', description: 'How long to let the page finish rendering (default 900).', minimum: 0, maximum: 15000 },
-      },
-      required: ['url'],
-      additionalProperties: false,
-    },
-  },
-  {
-    name: 'read',
-    description:
-      'Read the current page: its text as a person sees it, and the links that can be clicked, ' +
-      'each with its address. Ask for more characters only when the first part was not enough.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        maxChars: { type: 'integer', description: 'Characters of text (1000-30000, default 6000).', minimum: 1000, maximum: 30000 },
-        links: { type: 'integer', description: 'How many links to list (0-120, default 60).', minimum: 0, maximum: 120 },
-        mode: { type: 'string', enum: ['article', 'text'], description: 'article (default) picks the main content and drops the page around it; text is the whole page.' },
-      },
-      additionalProperties: false,
-    },
-  },
-  {
-    name: 'click',
-    description:
-      'Click something on the page: a CSS selector, the visible text of a link or button, or an ' +
-      'x/y pair from `read`. Clicks are synthetic — the operator\'s cursor never moves. Answers the ' +
-      'address afterwards, so you can see whether it navigated.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        selector: { type: 'string', description: 'CSS selector to click.' },
-        text: { type: 'string', description: 'Visible text of the link or button (exact, then contains).' },
-        x: { type: 'integer', description: 'Page x coordinate, with y.' },
-        y: { type: 'integer', description: 'Page y coordinate, with x.' },
-      },
-      additionalProperties: false,
-    },
-  },
-  {
-    name: 'type',
-    description: 'Type text into the focused field, or into a field named by a CSS selector.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        text: { type: 'string', description: 'What to type.' },
-        selector: { type: 'string', description: 'CSS selector of the field to focus first.' },
-        submit: { type: 'boolean', description: 'Press Enter afterwards.' },
-      },
-      required: ['text'],
-      additionalProperties: false,
-    },
-  },
-  {
-    name: 'press',
-    description: 'Press one key: enter, tab, escape, backspace, space, arrows, pageup, pagedown.',
-    inputSchema: {
-      type: 'object',
-      properties: { key: { type: 'string', description: 'The key name.' } },
-      required: ['key'],
-      additionalProperties: false,
-    },
-  },
-  {
-    name: 'wait',
-    description:
-      'Wait until the page contains a piece of text, or a selector, or simply for a time. ' +
-      'Use it after a click that loads something, instead of guessing.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        text: { type: 'string', description: 'Text to wait for.' },
-        selector: { type: 'string', description: 'CSS selector to wait for.' },
-        ms: { type: 'integer', description: 'Milliseconds to wait instead.', minimum: 0, maximum: 30000 },
-        timeoutMs: { type: 'integer', description: 'How long before giving up (default 20000).', minimum: 1000, maximum: 120000 },
-      },
-      additionalProperties: false,
-    },
-  },
-  {
-    name: 'scroll',
-    description: 'Scroll the page by a number of pixels (positive is down) and answer where it stopped.',
-    inputSchema: {
-      type: 'object',
-      properties: { dy: { type: 'integer', description: 'Pixels to scroll (default 600).', minimum: -20000, maximum: 20000 } },
-      additionalProperties: false,
-    },
-  },
-  {
-    name: 'screenshot',
-    description:
-      'Take a picture of the page — the viewport, or the whole document — and answer its path, ' +
-      'in the project under .synapse\\browser\\. ' +
-      'Read the image to see what a person would see.',
-    inputSchema: {
-      type: 'object',
-      properties: { full: { type: 'boolean', description: 'Capture the whole document, not just the viewport.' } },
-      additionalProperties: false,
-    },
-  },
-  {
-    name: 'watch',
-    description:
-      'Watch movement for a moment: answers a strip of frames as image paths (project .synapse\\browser\\), for an animation, ' +
-      'a spinner, a menu that slides. A still cannot show what changed.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        ms: { type: 'integer', description: 'How long to watch (200-5000, default 1200).', minimum: 200, maximum: 5000 },
-      },
-      additionalProperties: false,
-    },
-  },
-  {
-    name: 'tabs',
-    description: 'List the pages this browser has open.',
-    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
-  },
-  {
-    name: 'handoff',
-    description:
-      'Ask the operator for a moment: brings the browser to the second monitor\'s taskbar, minimized ' +
-      'and without taking focus, and chimes once. Use it when a page needs a sign-in or a bot check ' +
-      'only a person can pass, then wait and read the page again.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        url: { type: 'string', description: 'Where to put the browser first (optional).' },
-        what: { type: 'string', description: 'One sentence for the operator: what is needed.' },
-      },
-      additionalProperties: false,
-    },
-  },
-  {
-    name: 'close',
-    description: 'Close the browser. The profile and whatever was signed in stay for next time.',
-    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
-  },
-];
+
 
 function send(message) {
   process.stdout.write(`${JSON.stringify(message)}\n`);

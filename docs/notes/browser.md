@@ -241,3 +241,21 @@ two ways to get it.
 The same run showed the browser's window in the taskbar. The hide was applied on launch and
 not on **attach**, so a browser that outlived a Synapse restart kept an app-window bit; it is
 re-hidden every time `start()` finds one running.
+**The description is the help (13 Nov).** A model never explores a server: the tool list with
+its descriptions and schemas rides in its context on every request, so a description is the
+only documentation it gets and a wrong one is worse than a short one. Two were wrong:
+`open` still promised a host list that was removed, and `handoff` described a minimised window
+it had stopped opening a release earlier since it became a permission card.
+
+There is deliberately **no `help` tool**. It would be a second copy of the same text, paid for
+on every turn, and it would drift the way `handoff` did — a model that already has the schema
+would be calling a tool to be told what it was told. What changed instead:
+
+- `open`: hidden window, http(s) only, sign-ins persist between runs, a wall is `handoff``s;
+- `read`: 6,000 by default, 30,000 at most, and a cut says so;
+- `handoff`: the card, the operator's Allow, no time limit;
+- `screenshot`: the project path and the chat-ready relative one.
+
+The descriptions live in `src/mcp/browser-tools.js` — apart from the server, because importing
+the server starts it and it waits on stdin — and `tests/browser-tools.test.mjs` pins the
+sentences that matter.

@@ -1024,7 +1024,10 @@ export function briefSession({ dir, role = 'architect', auto = false, single = f
   // "read that site" means "webfetch it", and a signed-in page answers a wall (11 Nov).
   if (browser) {
     lines.push(
-      'Browsing: `open`, `read`, `click`, `type`, `screenshot` reach pages webfetch cannot — signed in, behind a bot check, drawn by script. A page that asks you to sign in needs `handoff`.',
+      'Browsing: `open`, `read`, `click`, `type`, `screenshot` reach pages webfetch cannot — signed in, behind a bot check, drawn by script. ' +
+        'The browser is hidden and keeps its sign-ins between runs, so a site signed in before is already signed in. ' +
+        '`read` is cut at 6000 characters by default (up to 30000) and says so when it cuts, so a long thread takes one more call rather than a guess. ' +
+        'A page that asks you to sign in needs `handoff`: it asks the operator, and only their Allow opens a window.',
     );
   }
   // The app's own data is part of the project, not the machine. This is one rule
