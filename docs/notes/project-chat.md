@@ -414,3 +414,35 @@ a move of all of it, and the Rename dialog does it in one step:
 Refused while a session in that project is mid-turn, and refused for a name Windows cannot
 create (`folderNameProblem`). The engine-specific half lives in the adapter, as rule 5 of
 AGENTS.md requires.
+
+## One code path, two modes (12 Nov)
+
+Single and Multi are not two products. They share the chat, the cards, the composer, the
+permission panel and the briefs; the difference is one thing — **Multi has runs**. A run is a
+delegated worker with its own engine session, its own trace, its own plan row and its own
+`run.progress` events. Single has none of that: the Architect's own turn *is* the work.
+
+That asymmetry is where changes quietly fail. Anything written against a run simply has no
+caller in Single, and nothing complains:
+
+| if the change touches… | it reaches | because |
+|---|---|---|
+| `state.sessionId`, the transcript, the composer, permissions, questions | **both** | one chat, one panel, one set of cards |
+| `state.runs`, `currentRun()`, `run.progress`, `traceForSession()`, `noteCompactionEvent()` | **Multi only** | a run is the only thing that has a worker session |
+| the briefs, roles, the plan, `briefSession()` | **Multi only** | Single's brief is one paragraph |
+| the thinking pane, the chime, the taskbar blink, the clocks | **both**, but from different data | the pane is fed by deltas either way; the card's number comes from the session in Single and from the run in Multi |
+
+So the question before any change is: **which session owns this, in each mode?** If the answer
+is "the run", the other mode needs a session-level path or the change is half a change.
+
+Two examples from one day, both the same mistake:
+
+- a **compaction line** drawn only inside a worker's trace — Multi showed "Compacting", Single
+  showed nothing at all, and the operator asked why the context had dropped in silence;
+- a **thinking pane** whose duplicate check compared against the whole transcript — the pane
+  vanished after a tool call in Single, and the same check in Multi was masked because a
+  worker's pane is surrounded by notes rather than by messages.
+
+The fix is not to special-case Single at every call site. It is to ask the question at the
+top, decide explicitly, and write the answer down: in the commit ("Single only, because…",
+"both, and the session path is new"), and in the note that owns the feature.

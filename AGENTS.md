@@ -83,14 +83,10 @@ the cards and the commits, not the code. One reason per sentence, not a chain.
 - Affordances: `+` green, `✕` red, edit/settings icons yellow. The composer's
   **Stop is red** whether or not it is hovered, and Settings' **Revert** is red
   too — they are the two controls that throw work away.
-- **The live path is one colour: a yellow arrow with yellow ants.** Orange is this
-  palette's accent (text, borders), and it used to be the dot-ant colour too — the
-  operator changed that: a different hue on a 2.5px line read as one object with a
-  colour bug rather than a line with beads on it, so the beads are separated by
-  their glow instead. The two delegation cards wear the same **yellow** as a border
-  while a delegation is in flight, and **red means blocked and nothing else** (it
-  carried two meanings for one day: requester green / worker red borders, which
-  collided with the blocked dot).
+- **The live path is one colour: a yellow arrow with yellow ants.** Orange is the accent
+  (text, borders); the beads used to be orange too, and a different hue on a 2.5px line read
+  as a colour bug rather than as beads, so they are separated by their glow. Delegation cards
+  wear the same **yellow** while in flight, and **red means blocked and nothing else**.
 - **All button labels are Title Case.**
   This applies to buttons only — not headings, body text, labels or tooltips.
 
@@ -100,6 +96,9 @@ the cards and the commits, not the code. One reason per sentence, not a chain.
   reaches only you; `browser.preview` puts it on their screen (measured 2 Nov 2026).
 - **Use Edge, but surgically** — one session, reused; few screenshots.
 - **Stage the delivery.** Each stage is reviewed before the next starts.
+- **Every change answers the mode question: Single, Multi, or both?** Multi adds *runs*, and
+  anything hanging off one (`state.runs`, `currentRun()`, `traceForSession()`) is invisible in
+  Single. Say which in the commit; detail in `docs/notes/project-chat.md`, "One code path, two modes".
 
 ### Version control
 
