@@ -4,6 +4,25 @@ How Synapse talks to the engine, and the things that cost real time to discover.
 Split out of `AGENTS.md` verbatim; the file is read when work touches
 `src/api.js`, `src/runs.js`, `src/plans.js` or `src/engines/opencode.js`.
 
+## A tool call written as text
+
+A model sometimes ends a turn by printing the call into its answer (`<tool_call>` …
+`</tool_call>`). The engine sees no tool part, so nothing runs and the turn ends — the work
+stops for no visible reason (test_27b, 12 Nov, 15:58).
+
+- **A delegated run gets one nudge.** At the point where the run would be marked completed,
+  `src/model-slips.js` checks the transcript the wait already fetched: last message, no tool
+  part, last text **ending** in the closing tag with a `function=`/`<parameter` inside. It
+  must be the last thing in the message, so a model quoting the syntax mid-answer is not
+  matched. The nudge fires **once per task**, and only when the turn ended by itself — no
+  error, no graceful stop, no aborted signal. A run that was stopped, held or restarted is
+  never woken by it.
+- **The Architect's own turn gets a notice, not a nudge.** The harness does not send the
+  Architect a message after its turn: that is the shape of the wakes that once resurrected
+  stopped work, and the operator asked for it to stay that way. The page shows
+  `toast('The Model Wrote A Tool Call', …)` instead, from the same rule in `web/transcript.js`.
+  Saying "continue" is the operator's, one click.
+
 ## MCP: how the engine exposes tools to models
 
 Synapse registers its own MCP server in the engine's isolated config at

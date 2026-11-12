@@ -112,6 +112,7 @@ import {
   toggleTool,
   attachmentImage,
   browserLine,
+  endsInProseToolCall,
   transcriptWiring,
 } from './transcript.js';
 import { toast } from './toast.js';
@@ -1478,6 +1479,15 @@ function connectStream() {
           state.liveTool = null;
           renderTranscript();
         }
+      }
+    }
+
+    // The turn ended because the model wrote a tool call into its answer instead of
+    // making one: nothing ran. A notice, never a message — sending one after a turn is
+    // what must not happen on its own (12 Nov).
+    if (ev.kind === 'status' && ev.sessionId === state.sessionId && turnEnded(ev.type)) {
+      if (endsInProseToolCall(state.messages)) {
+        toast('The Model Wrote A Tool Call', 'It was text, so nothing ran. Say continue and it will carry on.');
       }
     }
 

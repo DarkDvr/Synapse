@@ -47,6 +47,7 @@ import {
 } from './plans.js';
 import { screenCallOver } from './desk.js';
 import { browserAskHolding } from './browser/ask.js';
+import { proseToolCall, PROSE_NUDGE } from './model-slips.js';
 import { normDir } from './paths.js';
 import { report } from './report.js';
 import { tokens, ranFor } from './words.js';
@@ -1436,6 +1437,9 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     // task moves on, and the next coder gets its own three.
     let loops = 0;
     let rungLoops = 0;
+    // One nudge per task when the model writes a tool call into its answer instead of
+    // making one. Two would be a loop, and a loop is what it looks like.
+    let proseAttempts = 0;
     let loopCount = 0;
     // The rung that hit the limit, and its model. Kept apart from the run's final
     // `role`/`modelRef`, because the task moves on to the next rung: the report must
@@ -1999,6 +2003,23 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
             alert({ dir, role, clear: true });
             break;
           }
+          // A tool call written into the answer is a model slip, not a finish: nothing
+          // ran, so the task cannot be done. The cure is one nudge, and only while this
+          // run is alive and nobody has stopped anything — a run that was stopped, held
+          // or restarted must never be woken by a guess (12 Nov).
+          if (!turnError && !gracefulStop && !signal?.aborted && proseAttempts < 1) {
+            const slip = proseToolCall(finished.messages || []);
+            if (slip) {
+              proseAttempts += 1;
+              log.info(`worker ${request.task} (${role}) wrote a tool call as text — asking it once to call the tool`);
+              emit('run.note', { dir, role, task: request.task, startedAt, kind: 'prose-call', times: proseAttempts });
+              await sleep(300, signal);
+              await nudge(worker.id, PROSE_NUDGE, signal);
+              before = markOf(await engine.getMessages(worker.id));
+              continue;
+            }
+          }
+
           if (!turnError) {
             outcome = 'completed';
             // The role is working again: whatever the card was saying about a
@@ -3124,7 +3145,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
       asking = waiting;
 
       if (messages.length && messages[messages.length - 1]?.type === 'idle' && messages[messages.length - 1]?.id !== before) {
-        return { timedOut: false };
+        return { timedOut: false, messages };
       }
       // A step that ended in an error is over, whether or not the engine appends an
       // idle after it. Measured 25 Oct: two aborted steps left this loop waiting the

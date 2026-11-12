@@ -366,6 +366,25 @@ const BROWSER_VERBS = {
   close: 'SynaBrowse · Close',
 };
 
+/**
+ * Did the turn end with a tool call written into the answer instead of made?
+ *
+ * The engine sees no tool part, so nothing ran and the turn is over. This is the page's
+ * copy of the rule in src/model-slips.js — it only *tells* the operator; no message is
+ * sent, because a message after a turn is exactly what must never happen on its own.
+ */
+export function endsInProseToolCall(messages) {
+  const last = (messages || [])[(messages || []).length - 1];
+  if (!last || last.type !== 'assistant') return false;
+  const parts = last.parts || [];
+  if (parts.some((p) => p?.type === 'tool')) return false;
+  const texts = parts.filter((p) => p?.type === 'text').map((p) => String(p.text || '').trim()).filter(Boolean);
+  const tail = texts[texts.length - 1] || '';
+  if (!/<tool_call>/i.test(tail) || !/<\/tool_call>\s*$/i.test(tail)) return false;
+  const block = tail.slice(tail.toLowerCase().lastIndexOf('<tool_call>'));
+  return /function\s*=|name\s*=|<parameter/i.test(block);
+}
+
 /** Is this part one of SynaBrowse's tools? */
 export function isBrowserTool(part) {
   return /^synapse-browser[._]/i.test(String(part?.name || ''));
