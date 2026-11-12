@@ -2528,3 +2528,17 @@ refuses a row whose role is the architect (journalled, and woken with "do it her
 your own tools"), and the page will not draw a path whose destination is the Architect
 even if an old run record says so. **A card is never its own destination.**
 
+
+**A stopwatch belongs to a session, not to a card (12 Nov).** The Architect's clock was
+advanced by the role cards in the DOM, so opening another project stopped it: the reading
+belonged to a chat that was no longer on screen, and the time spent looking elsewhere was
+lost. It is advanced from the *session's* busy state now (`advanceClock` in
+`web/clocks.js`), so a visit to another project leaves it alone and the card shows the full
+time when you come back. A worker's clock was always safe — it is derived from the run's
+`startedAt`.
+
+**A chime is for the chat you are watching (12 Nov).** The finished-work sound compared "was
+anything working" with "is anything working", without asking *which* chat: opening a
+finished project while a run was live made the page announce an ending that had not
+happened. The reading now carries the session it belongs to, and a change of chat drops it
+quietly instead of playing the sound.

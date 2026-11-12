@@ -321,6 +321,10 @@ function playDoneSound(value = state.config?.notify?.doneSound) {
  */
 function noteWorking() {
   const live = state.view === 'session' && Boolean(state.sessionId) && sessionWorking(state.sessionId);
+  // Which chat was working when this was last evaluated. Opening another project is not
+  // the work finishing — that reading belonged to a different session, and the chime
+  // played for a project finished hours earlier (12 Nov).
+  if (live) state.workLiveSession = state.sessionId;
   if (live) {
     // A *new* piece of work is what clears the last verdict. Clearing it on every
     // evaluation would undo it here: after a failed turn the project lock is still
@@ -335,6 +339,13 @@ function noteWorking() {
     return;
   }
   if (!state.workWasLive) return;
+  // A different chat is on screen now: whatever was working is not this. Drop the
+  // reading quietly rather than announcing the end of a project we are only visiting.
+  if (state.workLiveSession && state.workLiveSession !== state.sessionId) {
+    state.workWasLive = false;
+    state.workLiveSession = null;
+    return;
+  }
   if (workWillContinue({ mode: state.mode, auto: state.automation?.keepBuilding === true, tasks: state.planState?.plan?.tasks || [] })) return;
   state.workWasLive = false;
   if (state.workEndQuiet) {

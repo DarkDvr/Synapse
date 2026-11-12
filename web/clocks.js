@@ -85,6 +85,37 @@ export function roleIsWorking(role) {
   return !(form && form.sessionId && form.sessionId !== state.sessionId);
 }
 
+/**
+ * Advance one role's stopwatch, whether or not its card is on screen.
+ *
+ * The clock used to be driven by the cards in the DOM, so switching to another project
+ * stopped it: the reading belonged to a chat that was no longer displayed, and the time
+ * spent looking elsewhere was lost (12 Nov). Now the reading is tied to the *session*:
+ * it stops only when that session stops working, and a visit to another chat leaves it
+ * alone — the card shows the full time when you come back.
+ *
+ * Pure, so the rule can be tested without a page.
+ */
+export function advanceClock(rec, { sessionId = null, busy = false, busySince = null, now = Date.now() } = {}) {
+  let changed = false;
+  if (busy) {
+    // Start where the session became busy, not when this page noticed: a turn that began
+    // before the page was opened still reads its true length.
+    if (!rec.since) { rec.since = Number(busySince) || now; changed = true; }
+    if (rec.sessionId !== sessionId) { rec.sessionId = sessionId; changed = true; }
+    return changed;
+  }
+  // Not busy for the chat on screen. If the open reading belongs to another chat, leave
+  // it: that chat may be working while we look elsewhere.
+  if (rec.since && rec.sessionId === sessionId) {
+    rec.last = Math.max(0, now - rec.since);
+    rec.ms += rec.last;
+    rec.since = null;
+    changed = true;
+  }
+  return changed;
+}
+
 export function tickClocks() {
   const now = Date.now();
   wired.renderLastEventAge();
@@ -113,8 +144,18 @@ export function tickClocks() {
   let changed = false;
   let anyWorking = false;
 
+  // The Architect's clock follows its *session*, not the cards on screen: a different
+  // project in the panel must not stop it (12 Nov).
+  const arch = (c.roles.architect ||= { ms: 0, since: null, last: 0 });
+  const open = state.sessionId;
+  const archBusy = Boolean(open) && isBusy(open);
+  if (advanceClock(arch, { sessionId: open, busy: archBusy, busySince: state.busySince?.get(open), now })) changed = true;
+  if (archBusy) anyWorking = true;
+
   for (const card of document.querySelectorAll('#topology .role-card')) {
     const role = card.dataset.role;
+    // The Architect was advanced above, from the session rather than from this card.
+    if (role === 'architect') continue;
     const working = roleIsWorking(role);
     if (working) anyWorking = true;
     const rec = (c.roles[role] ||= { ms: 0, since: null, last: 0 });
