@@ -80,12 +80,43 @@ export function withinWindow(used, limit) {
   return value > cap ? cap : value;
 }
 
+/**
+ * How much of the prompt came from the provider's cache.
+ *
+ * The usage fields are `input` (fresh tokens this step) and `cache.read` (the prefix the
+ * provider served from its cache), so the prompt is their sum and the share is
+ * `read / (input + read)`. A cloud model with prompt caching reports both; a local one
+ * reports them when its server does (llama.cpp with cache reuse, LM Studio's KV reuse),
+ * and nothing when it does not — in which case there is no share to show, and nothing is
+ * invented.
+ *
+ * It is refused when the sum exceeds the window: that is the signature of a provider
+ * reporting `cache.read` as a running session total rather than this step's prefix (a 27B
+ * did exactly that on 12 Nov, 5.0M against a 262K window), and a percentage built on it
+ * would be fiction.
+ */
+export function cacheShare(input, cached, limit = 0) {
+  const fresh = Math.max(0, Number(input) || 0);
+  const read = Math.max(0, Number(cached) || 0);
+  const total = fresh + read;
+  const cap = Number(limit) || 0;
+  if (!total || cap < 0) return { ok: false, pct: 0, fresh, read, total };
+  if (cap && total > cap) return { ok: false, pct: 0, fresh, read, total };
+  // No cache figure at all: the provider does not report one.
+  if (!read) return { ok: false, pct: 0, fresh, read, total };
+  return { ok: true, pct: Math.round((read / total) * 1000) / 10, fresh, read, total };
+}
+
 export function noteArchitectUsage(ev) {
   const tokens = ev.raw?.data?.tokens;
   if (!tokens) return;
   state.archCtx = {
     sessionId: ev.sessionId,
     used: (Number(tokens.input) || 0) + (Number(tokens.cache?.read) || 0),
+    // The two halves, kept so the card can say how much of the prompt the provider's
+    // cache served (12 Nov).
+    fresh: Number(tokens.input) || 0,
+    cached: Number(tokens.cache?.read) || 0,
     at: Date.now(),
   };
   paintRates();
@@ -99,6 +130,8 @@ export function lastPromptOf(messages) {
   return {
     sessionId: state.sessionId,
     used: (Number(t.input) || 0) + (Number(t.cache?.read) || 0),
+    fresh: Number(t.input) || 0,
+    cached: Number(t.cache?.read) || 0,
     at: Date.now(),
   };
 }
@@ -157,13 +190,19 @@ export function paintRates(now = Date.now()) {
     let tip = '';
     if (card.dataset.role === 'architect' && Number(arch?.used) > 0) {
       const archUsed = withinWindow(arch.used, archLimit);
-    bits.push(`${wired.fmtTokens(archUsed)}${archLimit ? `/${wired.fmtTokens(archLimit)}` : ''} ctx`);
-      tip = `The Architect's last prompt: ${arch.used} tokens` + (archLimit ? ` of ${archLimit}` : '');
+      const share = cacheShare(arch.fresh, arch.cached, archLimit);
+      bits.push(`${wired.fmtTokens(archUsed)}${archLimit ? `/${wired.fmtTokens(archLimit)}` : ''} ctx` + (share.ok ? ` (${share.pct}% cache)` : ''));
+      tip =
+        `The Architect's last prompt: ${arch.used} tokens` +
+        (archLimit ? ` of ${archLimit}` : '') +
+        (share.ok ? ` — ${share.fresh} fresh and ${share.read} from the provider's cache` : '');
     } else if (run && run.role === card.dataset.role && Number(run.ctx) > 0) {
       const runUsed = withinWindow(run.ctx, run.ctxLimit);
-      bits.push(`${wired.fmtTokens(runUsed)}${run.ctxLimit ? `/${wired.fmtTokens(run.ctxLimit)}` : ''} ctx`);
+      const share = cacheShare(run.ctxFresh, run.ctxCached, run.ctxLimit);
+      bits.push(`${wired.fmtTokens(runUsed)}${run.ctxLimit ? `/${wired.fmtTokens(run.ctxLimit)}` : ''} ctx` + (share.ok ? ` (${share.pct}% cache)` : ''));
       tip =
         `Prompt ${withinWindow(run.ctx, run.ctxLimit)} tokens of ${run.ctxLimit || 'an unknown window'}` +
+        (share.ok ? ` — ${share.fresh} fresh and ${share.read} from the provider's cache` : '') +
         (run.ctxRoom ? `; Synapse compacts near ${run.ctxRoom}` : '');
     }
     // Two readings on one line, separated by air rather than a dot: "128 tok/s

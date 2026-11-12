@@ -1,3 +1,17 @@
+## The cache share on a card
+
+The card says `120k/262k ctx (92% cache)`. The prompt is `input + cache.read` from the step's
+usage, and the share is `cache.read / (input + cache.read)`:
+
+- a cloud model with prompt caching reports both numbers;
+- a local server reports them when it does KV reuse (llama.cpp's cache reuse, LM Studio) and
+  reports nothing when it does not — then there is no share, and none is shown;
+- the share is **refused** when the sum exceeds the window, because that is the signature of
+  a provider reporting `cache.read` as a running session total (a 27B reported five million
+  against a 262K window on 12 Nov). A percentage built on that would be fiction.
+
+The Architect's card takes the halves from the streamed event and the transcript; a worker's
+takes them from `promptParts()` through `run.progress` (`ctxFresh`, `ctxCached`).
 # Models and tools
 
 The catalog, the thinking-effort variants, what Synapse remembers about a model,

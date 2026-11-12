@@ -513,9 +513,21 @@ export function redeemModel({ outcome, modelRef, modelCache, notify, log } = {})
  * rate, not the delta since the previous turn.
  */
 export function promptSize(messages) {
+  return promptParts(messages).used;
+}
+
+/**
+ * The prompt and the two halves it is made of: fresh tokens, and the prefix the provider
+ * served from its cache. The page shows the share — "120k/262k ctx (92% cache)" — which
+ * needs both numbers; a provider that reports no cache leaves them at zero (12 Nov).
+ */
+export function promptParts(messages) {
   const last = [...(messages || [])].reverse().find((m) => m.type === 'assistant' && m.raw?.tokens);
   const t = last?.raw?.tokens;
-  return t ? (t.input || 0) + (t.cache?.read || 0) : 0;
+  if (!t) return { used: 0, fresh: 0, cached: 0 };
+  const fresh = Number(t.input) || 0;
+  const cached = Number(t.cache?.read) || 0;
+  return { used: fresh + cached, fresh, cached };
 }
 
 /**
@@ -1820,10 +1832,14 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
               // about the last failure or stall. It is not only the retry path:
               // any new turn means the worker is working.
               onActivity: () => alert({ dir, role, clear: true }),
-              onContext: (used, room, context) => {
+              onContext: (used, room, context, parts) => {
                 live.ctx = used;
                 live.ctxRoom = room;
                 live.ctxLimit = context;
+                // The two halves, so the card can say how much of the prompt the
+                // provider's cache served (12 Nov).
+                live.ctxFresh = parts?.fresh || 0;
+                live.ctxCached = parts?.cached || 0;
                 emit('run.progress', { ...live });
               },
               onCompact: (times, used, context) => {
@@ -3106,10 +3122,11 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
       // window is, and how many times it has been compacted. Both are facts from
       // the transcript, so neither costs an engine call.
       if (onContext || onCompact) {
-        const used = promptSize(messages);
+        const parts = promptParts(messages);
+        const used = parts.used;
         if (used && used !== lastCtx) {
           lastCtx = used;
-          onContext?.(used, window?.room || 0, window?.context || 0);
+          onContext?.(used, window?.room || 0, window?.context || 0, parts);
         }
         const events = compactionEvents(messages);
         if (events.length > compactions) {
