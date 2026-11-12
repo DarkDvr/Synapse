@@ -190,10 +190,12 @@ export function createBrowser({ profile, log = null, startMinimized = true, widt
       // off-screen and left *normal* so it still renders. The "Restore pages" bubble Edge
       // shows after a kill is suppressed by a flag; it used to appear at the top-left of the
       // primary and was mistaken for our window (12 Nov).
-      if (!existing) {
-        const hidden = await early;
-        if (hidden?.toolWindow) note('browser: window hidden (tool window yes)');
-      }
+      // Always, not only on a fresh launch: a browser that outlived a Synapse restart is
+      // attached with whatever window state it had, and a window with an app-window bit
+      // is a taskbar button the operator can see and click — they reported exactly that
+      // while two models were reading one thread (13 Nov).
+      const hidden = existing ? await hideBrowserWindow({ profile }).catch(() => null) : await early;
+      if (hidden?.toolWindow) note(`browser: window hidden (tool window yes${existing ? ', attached' : ''})`);
       note(`browser: ${existing ? 'attached to' : 'started'} Edge on port ${port}`);
       return page;
     })();
@@ -295,9 +297,11 @@ export function createBrowser({ profile, log = null, startMinimized = true, widt
         else if (tag === 'pre') lines.push('\\u0060\\u0060\\u0060\\n' + value.trim() + '\\n\\u0060\\u0060\\u0060');
         else push(value);
       }
-      const article = lines.join('\\n').slice(0, limit);
-      const plain = clean(textOf(body)).slice(0, limit);
-      const text = ${JSON.stringify(String(mode))} === 'text' || article.trim().length < 40 ? plain : article;
+      const articleFull = lines.join('\\n');
+      const plainFull = clean(textOf(body));
+      const usePlain = ${JSON.stringify(String(mode))} === 'text' || articleFull.trim().length < 40;
+      const full = usePlain ? plainFull : articleFull;
+      const text = full.slice(0, limit);
 
       const seen = new Set();
       const anchor = [...document.querySelectorAll('a[href]')].map((a) => {
@@ -311,7 +315,9 @@ export function createBrowser({ profile, log = null, startMinimized = true, widt
         return { text: label, href, at: [Math.round(box.x + box.width / 2), Math.round(box.y + box.height / 2)] };
       }).filter(Boolean).slice(0, ${Number(links)});
 
-      return { url: location.href, title: document.title, text, links: anchor, wall, chars: text.length };
+      // total is what the page held, chars is what this read returns: the tool says
+      // the difference so a model knows it is reading a cut (13 Nov).
+      return { url: location.href, title: document.title, text, links: anchor, wall, chars: text.length, total: full.length };
     })()`);
     return page;
   }

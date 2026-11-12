@@ -227,13 +227,31 @@ const toolText = (id, text, isError = false) => result(id, { content: [{ type: '
 // ── helpers ──────────────────────────────────────────────────────
 const stamp = () => new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
 
-/** A readable outline: what the page says, and what can be clicked. */
-const outline = (page) => {
+/**
+ * A readable outline: what the page says, and what can be clicked.
+ *
+ * `maxChars` and `links` are the caller's, not this function's: the tool used to cut every
+ * page at 6,000 characters however much was asked for, and said nothing when it did, so a
+ * model reading a long thread believed it had the whole thing (13 Nov — two models benched
+ * against one thread, both handed a cut).
+ *
+ * A cut now says so, with the size of what is missing and the two ways to get it.
+ */
+const outline = (page, { maxChars = 6000, links = 60 } = {}) => {
   const lines = [`# ${page.title || '(no title)'}`, page.url, ''];
-  lines.push((page.text || '').slice(0, 6000));
+  const total = Number(page.total) || String(page.text || '').length;
+  const shown = String(page.text || '').slice(0, maxChars);
+  lines.push(shown);
+  if (total > shown.length) {
+    lines.push(
+      '',
+      `[… truncated: ${shown.length.toLocaleString('en-US')} of ${total.toLocaleString('en-US')} characters. ` +
+        'Ask again with a larger maxChars (up to 30000), or scroll and read again for the rest.]',
+    );
+  }
   if (page.links?.length) {
     lines.push('', 'Links:');
-    for (const link of page.links.slice(0, 60)) lines.push(`- ${link.text} -> ${link.href} (${link.at.join(',')})`);
+    for (const link of page.links.slice(0, links)) lines.push(`- ${link.text} -> ${link.href} (${link.at.join(',')})`);
   }
   return lines.join('\n');
 };
@@ -316,7 +334,7 @@ async function handle(msg) {
             const page = await browser.read({});
             noteUsed(page.url);
             process.stderr.write(`open ${verdict.host} -> ${url}\n`);
-            return toolText(id, `Opened ${url}\n\n${outline(page)}${wallNote(page)}`);
+            return toolText(id, `Opened ${url}\n\n${outline(page, { maxChars: 6000, links: 60 })}${wallNote(page)}`);
           }
           case 'read': {
             const page = await browser.read({
@@ -325,7 +343,7 @@ async function handle(msg) {
               mode: args.mode === 'text' ? 'text' : 'article',
             });
             noteUsed(page.url);
-            return toolText(id, `${outline(page)}${wallNote(page)}`);
+            return toolText(id, `${outline(page, { maxChars: args.maxChars, links: args.links })}${wallNote(page)}`);
           }
           case 'click': {
             const at = Number.isFinite(args.x) && Number.isFinite(args.y) ? [Number(args.x), Number(args.y)] : null;

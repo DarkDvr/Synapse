@@ -229,3 +229,15 @@ refusing one is an error the model can report.
 | `src/browser/screen.ps1` | which monitor the operator is on, and the attach-thread focus |
 | `src/mcp/browser-server.js` | the twelve tools, the wall sentence, and `handoff` asking through the permission card |
 | `tests/browser.test.mjs`, `tests/browser-mcp.test.mjs`, `tests/browser-watch.test.mjs`, `tests/browser-chat.test.mjs`, `tests/sites.test.mjs` | the fence, the tools against a local page, the server over real stdio, the watcher, the chat labels, the record |
+
+**A page cut in silence is a page the model thinks it has (13 Nov).** Two models were benched
+against the same long Reddit thread. Both were handed 6,000 characters of it and neither was
+told: the tool's `outline` cut the text at 6,000 whatever `maxChars` said, and a cut left no
+mark. The page now reports its own length (`total`), the tool honours `maxChars` and `links`,
+and a cut ends with `[… truncated: 6,000 of 41,210 characters. Ask again with a larger maxChars
+(up to 30000), or scroll and read again for the rest.]` — the size of what is missing, and the
+two ways to get it.
+
+The same run showed the browser's window in the taskbar. The hide was applied on launch and
+not on **attach**, so a browser that outlived a Synapse restart kept an app-window bit; it is
+re-hidden every time `start()` finds one running.

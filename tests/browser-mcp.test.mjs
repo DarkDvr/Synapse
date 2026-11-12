@@ -203,3 +203,15 @@ test('the server does not keep the project folder locked', async () => {
     try { fs.rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 }); } catch { /* swept at exit */ }
   }
 });
+
+// A long page is cut, and the cut says so: two models were benched on one thread and both
+// believed they had all of it (13 Nov).
+test('a cut read says how much is missing, and maxChars is honoured', async () => {
+  const page = { title: 'A thread', url: 'https://example.test/t', text: 'x'.repeat(20000), total: 41000, links: [] };
+  // Never import the server module here: importing it STARTS it, and it waits on stdin
+  // for ever — that cost a hung suite on 13 Nov. The rule is checked in the source.
+  const src = fs.readFileSync(path.join(ROOT, 'src', 'mcp', 'browser-server.js'), 'utf8');
+  assert.match(src, /\[… truncated: \$\{shown\.length/, 'the cut is named');
+  assert.match(src, /slice\(0, maxChars\)/, 'maxChars is the caller\'s');
+  assert.match(src, /slice\(0, links\)/, 'links is the caller\'s');
+});
