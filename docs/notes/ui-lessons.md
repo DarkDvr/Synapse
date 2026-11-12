@@ -2558,3 +2558,11 @@ the tool and the start of the target (90 characters, the rest on hover); the mes
 to a single `<details>` line that opens to the refused call in full and who asked; the
 harness message under it is not rendered at all when the alarm covers it. Enforcement is
 unchanged — only the reading.
+
+**The thinking pane belongs to a step (12 Nov).** In Single mode the operator ran a tool and
+afterwards saw only folded Reasoning lines: no live pane. Two reasons, both in the same
+place. The pane kept its text across steps, so it began the next step holding the last one's
+words; and the check that hides it to avoid showing a paragraph twice compared against the
+**whole transcript**, where a model that opens a step the way it opened an earlier one always
+matched. The pane now starts again with each new assistant message (`stream.step`) and the
+check looks at that step's message alone.

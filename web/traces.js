@@ -414,8 +414,14 @@ export function renderSessionStream() {
   const t = state.sessionTrace;
   const text = String(t?.stream?.text || '');
   if (!t?.key || !text.trim()) return '';
-  const seen = state.messages
-    .flatMap((m) => m.parts || [])
+  // Only the step being written can be the same words twice. Comparing against the
+  // whole transcript hid the pane whenever a model began a step the way it began an
+  // earlier one — measured 12 Nov: after a tool call the pane vanished and only the
+  // folded Reasoning lines were left.
+  const msgs = state.messages || [];
+  const last = msgs[msgs.length - 1];
+  const stepParts = last && last.type === 'assistant' ? last.parts || [] : [];
+  const seen = stepParts
     .filter((p) => p.type === 'reasoning' || p.type === 'text')
     .map((p) => String(p.text || ''))
     .join('\n');

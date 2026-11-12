@@ -186,6 +186,17 @@ export function appendStream(kind, delta) {
     if (isWorker(trace)) trace.proseBuf = String(trace.proseBuf || '') + delta;
     return;
   }
+  // A step is one assistant message. When the engine starts the next one (the tool
+  // call that ended the last step is a completed message now), the pane starts
+  // again with that step's first words — otherwise it kept the previous step's text
+  // and the transcript hid it as a duplicate, which is what left the operator with
+  // folded Reasoning lines and no pane after every tool call (12 Nov).
+  const msgs = state.messages || [];
+  const lastMsg = msgs[msgs.length - 1];
+  const step = lastMsg && lastMsg.type === 'assistant' ? String(lastMsg.id || '') : '';
+  if (trace === state.sessionTrace && step && trace.stream?.step && trace.stream.step !== step) {
+    trace.stream = null;
+  }
   if (kind === 'think' && trace.stream?.kind === 'think') {
     if (trace.stream.ended) {
       trace.stream.ended = false;
@@ -198,6 +209,8 @@ export function appendStream(kind, delta) {
   // The first block of a turn, or the Architect speaking: a new pane, drawn open.
   foldStream(trace);
   trace.stream = newStream(kind);
+  // Which message this pane is writing into, so the next step starts a new one.
+  trace.stream.step = step;
   trace.thinkCollapsed = false;
   chatFollowArmed = true;
   lastChatTop = chatScroller()?.scrollTop || 0;
