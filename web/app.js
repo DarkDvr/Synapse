@@ -1442,10 +1442,12 @@ function connectStream() {
       // number while it runs (8 Nov).
       const run = currentRun();
       noteCompactionEvent(ev, { used: run?.ctx, limit: run?.ctxLimit });
-      // The open session's own compaction: its card must stop showing the size it no
-      // longer has (12 Nov, Single mode — a worker's card is fed by its run).
-      if (ev.type === EV.compactionEnded && ev.sessionId === state.sessionId) {
-        noteArchitectCompaction(ev.sessionId, ev.raw?.data?.tokens || ev.raw?.tokens || {});
+      // The open session's own compaction: its card stops printing a size that is no
+      // longer true, and says what is happening instead (13 Nov).
+      if (ev.sessionId === state.sessionId) {
+        if (ev.type === EV.compactionStarted) noteArchitectCompaction(ev.sessionId, 'start');
+        else if (ev.type === EV.compactionEnded) noteArchitectCompaction(ev.sessionId, 'end');
+        else if (ev.type === EV.compactionFailed) noteArchitectCompaction(ev.sessionId, 'end');
       }
     }
     const mine = !ev.sessionId || ev.sessionId === state.sessionId;

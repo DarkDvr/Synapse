@@ -2580,3 +2580,11 @@ It is one quiet line now — `⤵ Compacted — the conversation was summarised 
 summary` — where it happened, and the card takes the compaction's own figure when it is newer
 than the last step and smaller, then corrects itself on the next step. The cancelled case is
 still silent: the chip and the toast already said so.
+**A number that is no longer true is worse than no number (13 Nov).** After a compaction the
+Architect's card kept reading `205K/205K` — the window full — while the conversation had been
+cut to a summary. The tempting fix, printing the compaction's own usage, is the same lie in a
+new place: measured on `test_qfn_context_hard`, the compaction reported 167,193 tokens (what it
+*summarised*) and the context came out at 10,121 on the next step. So the card says the fact
+while it waits — `compacting… / 205K ctx`, then `compacted / 205K ctx` — and the next usage
+event prints the real figure. Nothing is invented in between, which is the only honest answer
+when the engine will not know the new size until it sends the next prompt.

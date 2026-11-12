@@ -108,23 +108,22 @@ export function cacheShare(input, cached, limit = 0) {
 }
 
 /**
- * The Architect's own transcript was compacted.
+ * The Architect's own transcript is being compacted, or has been.
  *
- * Its card kept reading the last step's prompt, so it went on showing 172K after the
- * conversation had been cut to a summary — the one number the card exists to answer, and
- * the moment it is most wrong (12 Nov, Single mode). A compaction can only make the
- * context smaller, so the figure it reports is taken only when it is smaller than what the
- * card shows: if a number ever arrives that is larger, it is not a compaction's, and the
- * next step's usage will correct everything anyway.
+ * The card cannot know the new size the moment the summary lands: the compaction's own
+ * usage is the prompt it *summarised* — measured 13 Nov, 167,193 tokens for a context that
+ * came out at 10,121 on the next step. Showing that number would be the same lie in a new
+ * place, and keeping the old one is worse: the operator watched a card read 205K/205K after
+ * the conversation had been cut down. So the card says what is true while it waits —
+ * "compacting" then "compacted" — and the next usage event puts the real figure back.
  */
-export function noteArchitectCompaction(sessionId, tokens) {
-  const fresh = Number(tokens?.input) || 0;
-  const cached = Number(tokens?.cache?.read) || 0;
-  const used = fresh + cached;
-  if (!used) return;
-  const at = state.archCtx?.sessionId === sessionId ? state.archCtx.used : 0;
-  if (at && used >= at) return;
-  state.archCtx = { sessionId, used, fresh, cached, at: Date.now() };
+export function noteArchitectCompaction(sessionId, phase) {
+  if (!state.sessionId || sessionId !== state.sessionId) return;
+  if (phase === 'start') {
+    state.archCtx = { ...(state.archCtx || {}), sessionId, used: 0, fresh: 0, cached: 0, pending: 'compacting', at: Date.now() };
+  } else if (phase === 'end') {
+    state.archCtx = { ...(state.archCtx || {}), sessionId, used: 0, fresh: 0, cached: 0, pending: 'compacted', at: Date.now() };
+  }
   paintRates();
 }
 
@@ -133,6 +132,7 @@ export function noteArchitectUsage(ev) {
   if (!tokens) return;
   state.archCtx = {
     sessionId: ev.sessionId,
+    pending: '',
     used: (Number(tokens.input) || 0) + (Number(tokens.cache?.read) || 0),
     // The two halves, kept so the card can say how much of the prompt the provider's
     // cache served (12 Nov).
@@ -147,14 +147,14 @@ export function noteArchitectUsage(ev) {
 export function lastPromptOf(messages) {
   const list = messages || [];
   const last = [...list].reverse().find((m) => m.type === 'assistant' && m.raw?.tokens);
-  // A finished compaction newer than the last step means the context has shrunk: the
-  // card must not keep showing the size that was just summarised — a reload used to
-  // bring the old number back (12 Nov).
-  const pack = [...list].reverse().find((m) => m.type === 'compaction' && String(m.raw?.status || '') === 'completed' && m.raw?.tokens);
+  // A compaction newer than the last step means the context is not the one that step
+  // reported. Its own usage is the prompt it summarised (measured 13 Nov: 167,193 for a
+  // context that came out at 10,121), so there is no honest number to print — only the
+  // fact. The card says "compacted" until the next step reports the real size.
+  const pack = [...list].reverse().find((m) => m.type === 'compaction');
   if (pack && (!last || Number(pack.created) > Number(last.created))) {
-    const fresh = Number(pack.raw.tokens.input) || 0;
-    const cached = Number(pack.raw.tokens.cache?.read) || 0;
-    if (fresh + cached) return { sessionId: state.sessionId, used: fresh + cached, fresh, cached, at: Date.now() };
+    const running = String(pack.raw?.status || '') === 'running';
+    return { sessionId: state.sessionId, used: 0, fresh: 0, cached: 0, pending: running ? 'compacting' : 'compacted', at: Date.now() };
   }
   const t = last?.raw?.tokens;
   if (!t) return null;
@@ -198,6 +198,9 @@ export function noteWorkerUsage(ev) {
 }
 
 export function paintRates(now = Date.now()) {
+  // No page, no painting: callers in a test process hold the state above, and must not
+  // need a DOM to exercise it (13 Nov).
+  if (typeof document === 'undefined') return;
   const run = wired.currentRun();
   const rate = run ? state.rates.get(wired.dirKey(run.dir)) : null;
   // The Architect is not a delegated run, so no `runs` record describes it. Its
@@ -222,11 +225,21 @@ export function paintRates(now = Date.now()) {
     if (card.dataset.role === 'architect' && Number(arch?.used) > 0) {
       const archUsed = withinWindow(arch.used, archLimit);
       const share = cacheShare(arch.fresh, arch.cached, archLimit);
-      bits.push(`${wired.fmtTokens(archUsed)}${archLimit ? `/${wired.fmtTokens(archLimit)}` : ''} ctx` + (share.ok ? ` (${share.pct}% cache)` : ''));
-      tip =
-        `The Architect's last prompt: ${arch.used} tokens` +
-        (archLimit ? ` of ${archLimit}` : '') +
-        (share.ok ? ` — ${share.fresh} fresh and ${share.read} from the provider's cache` : '');
+      if (arch.pending) {
+        // The number would be a lie: the context was just summarised and the next step
+        // has not reported its size yet (13 Nov).
+        bits.push(`${arch.pending === 'compacting' ? 'compacting…' : 'compacted'}${archLimit ? ` / ${wired.fmtTokens(archLimit)}` : ''} ctx`);
+        tip =
+          arch.pending === 'compacting'
+            ? 'The engine is summarising this conversation to make room.'
+            : 'The conversation was compacted; its new size arrives with the next step.';
+      } else {
+        bits.push(`${wired.fmtTokens(archUsed)}${archLimit ? `/${wired.fmtTokens(archLimit)}` : ''} ctx` + (share.ok ? ` (${share.pct}% cache)` : ''));
+        tip =
+          `The Architect's last prompt: ${arch.used} tokens` +
+          (archLimit ? ` of ${archLimit}` : '') +
+          (share.ok ? ` — ${share.fresh} fresh and ${share.read} from the provider's cache` : '');
+      }
     } else if (run && run.role === card.dataset.role && Number(run.ctx) > 0) {
       const runUsed = withinWindow(run.ctx, run.ctxLimit);
       const share = cacheShare(run.ctxFresh, run.ctxCached, run.ctxLimit);

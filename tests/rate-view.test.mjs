@@ -3,7 +3,8 @@
 // against a 262K window (12 Nov). The display clamps; this is the rule.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { withinWindow, cacheShare } from '../web/rate-view.js';
+import { withinWindow, cacheShare, lastPromptOf, noteArchitectCompaction } from '../web/rate-view.js';
+import { state } from '../web/state.js';
 
 test('a context figure is never larger than its window', () => {
   assert.equal(withinWindow(222325, 262144), 222325);
@@ -31,4 +32,36 @@ test('the cache share is read from the two halves the provider reports', () => {
 
   // No window known: the share is still computable, it is the cap that is missing.
   assert.equal(cacheShare(100, 900, 0).pct, 90);
+});
+
+// After a compaction there is no honest number until the next step reports its size.
+// The compaction's own usage is the prompt it summarised: measured 13 Nov, 167,193 for a
+// context that came out at 10,121 — printing it would be the same lie in a new place.
+test('a compaction newer than the last step says so, and prints no size', () => {
+  state.sessionId = 'sess_x';
+  const step = { id: 'm1', type: 'assistant', created: 1000, raw: { tokens: { input: 160000, cache: { read: 7193 } } } };
+  const pack = { id: 'c1', type: 'compaction', created: 2000, raw: { status: 'completed', tokens: { input: 167193, output: 2338 } } };
+  const done = lastPromptOf([step, pack]);
+  assert.equal(done.used, 0, 'no size is claimed');
+  assert.equal(done.pending, 'compacted');
+
+  const running = lastPromptOf([step, { ...pack, raw: { ...pack.raw, status: 'running' } }]);
+  assert.equal(running.pending, 'compacting');
+
+  // A step after it is the real context again: 10,121 tokens.
+  const after = { id: 'm2', type: 'assistant', created: 3000, raw: { tokens: { input: 9000, cache: { read: 1121 } } } };
+  assert.equal(lastPromptOf([step, pack, after]).used, 10121);
+});
+
+test('the card carries the compacting state until a usage event clears it', () => {
+  state.sessionId = 'sess_x';
+  state.archCtx = { sessionId: 'sess_x', used: 167193, fresh: 167193, cached: 0, at: Date.now() };
+  noteArchitectCompaction('sess_x', 'start');
+  assert.equal(state.archCtx.pending, 'compacting');
+  assert.equal(state.archCtx.used, 0);
+  noteArchitectCompaction('sess_x', 'end');
+  assert.equal(state.archCtx.pending, 'compacted');
+  // another chat's compaction must not touch this card
+  noteArchitectCompaction('sess_other', 'start');
+  assert.equal(state.archCtx.pending, 'compacted');
 });
