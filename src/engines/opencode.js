@@ -916,7 +916,13 @@ export class OpenCodeEngine extends Engine {
       const { DatabaseSync } = await import('node:sqlite');
       const db = new DatabaseSync(path.join(this.resolveHome().data, 'opencode', 'opencode.db'));
       db.exec('pragma busy_timeout = 5000');
-      const run = db.prepare('update session_v2 set directory = ? where lower(directory) = ?').run(newDir, oldDir.toLowerCase());
+      // The engine stores a session's directory with forward slashes (measured 12 Nov),
+      // while the registry speaks Windows paths. Both sides are compared normalised, and
+      // the new value is written the way the engine writes it.
+      const slash = (p) => String(p || '').replace(/\\/g, '/').replace(/\/+$/, '');
+      const run = db
+        .prepare("update session_v2 set directory = ? where replace(lower(directory), '\\', '/') = ?")
+        .run(slash(newDir), slash(oldDir).toLowerCase());
       sessions = Number(run?.changes || 0);
       db.close();
     } catch (err) {

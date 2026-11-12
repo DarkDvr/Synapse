@@ -2550,3 +2550,10 @@ the primary answer now, and deleting is the labelled alternative. Measured on th
 own rename: the server re-adopts the folder and reports the plan it found (12 tasks, 12 done,
 its goal), the project document and the run history; what it cannot bring back is the old
 chat, because a session belongs to a directory.
+
+**A refusal is one line (12 Nov).** The prohibited alarm and the prohibited message were
+saying the same thing twice, at length: the alarm printed up to 150 characters of a shell
+command, and the message printed the model's whole instruction underneath. The alarm keeps
+the tool and the start of the target (90 characters, the rest on hover); the message folds
+to one line, `⛔ PROHIBITED · the protected list refused this change`, with the instruction
+behind the chevron. Enforcement is unchanged — only the reading.

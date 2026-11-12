@@ -596,3 +596,33 @@ test('the re-use dialog offers re-use first', () => {
   assert.match(block[0], /danger: false/, 'it is not the dangerous one');
   assert.match(block[0], /extra: \{ label: 'Delete Folder And Start Fresh'/, 'deleting is the alternative');
 });
+
+// A refused change is one line in the chat, not the model's whole instruction.
+// Measured 12 Nov: a refused shell command printed three red lines and the sentence.
+test('the refusal is one line and the sentence is folded', async () => {
+  const { renderMessage } = await import('../web/transcript.js');
+  const html = renderMessage({
+    id: 'msg_refused',
+    type: 'synthetic',
+    description: 'PROHIBITED',
+    text: 'PROHIBITED: this path is on the operator\u2019s protected list and cannot be changed by any tool. Do not try another tool.',
+  });
+  assert.match(html, /is-prohibited/, 'it is still the red line');
+  assert.match(html, /<details class="chat-post is-refusal"/, 'the sentence is folded');
+  assert.doesNotMatch(html, /<div class="msg-answer">\s*PROHIBITED:/, 'the sentence is not printed inline');
+  // The whole sentence is one hover or one click away, never lost.
+  assert.match(html, /title="PROHIBITED: this path/, 'the sentence is in the summary title');
+  assert.match(html, /chat-post-body/, 'and in the folded body');
+});
+
+// The alarm above it names the tool and the start of the target, in one line: a
+// refused shell command used to print a hundred and fifty characters of it.
+test('the alarm keeps a refused command to one short line', async () => {
+  const { renderAlarm } = await import('../web/chat-notes.js');
+  const command = 'powershell [Security.Principal.WindowsIdentity]::GetCurrent() | New-Object Security.Principal.WindowsPrincipal($id) | $p.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)';
+  const html = renderAlarm({ prohibited: true, action: 'shell', paths: [command], note: '' });
+  const text = /<span class="chat-alarm-text">([\s\S]*?)<\/span>/.exec(html)[1];
+  assert.ok(text.length < 140, `the line stays short (${text.length})`);
+  assert.match(text, /…/, 'it is cut, not reflowed');
+  assert.ok(html.includes(command.replace(/&/g, '&amp;')), 'the whole command is still in the hover');
+});

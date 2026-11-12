@@ -3508,3 +3508,12 @@ body.is-disconnected .app-shell { filter: blur(2px) brightness(0.45); pointer-ev
 }
 .dlg-hint::before { content: '↳ '; color: var(--orange); }
 .set-field.wide:has(.dlg-hint) input { margin-bottom: 0; }
+/* ── a refusal, folded to one line (12 Nov) ────────────────────────────────
+   The prohibited message used to print the model's whole instruction into the
+   chat: three red lines for one refused command. It is one line now, in the red
+   the alarm uses, with the sentence behind the chevron. */
+.msg.harness.is-prohibited .chat-post.is-refusal { margin-top: 2px; }
+.msg.harness.is-prohibited .chat-post.is-refusal > summary { color: #ff7a66; }
+.msg.harness.is-prohibited .chat-post.is-refusal > summary::marker { color: var(--red); }
+.msg.harness.is-prohibited .chat-post.is-refusal .chat-post-note { color: #ff7a66; }
+.msg.harness.is-prohibited .chat-post.is-refusal .chat-post-body { color: #ffb3a7; border-left: 2px solid var(--red); }

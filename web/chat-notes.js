@@ -59,12 +59,17 @@ export function alarmTitle(what) {
 
 export function renderAlarm(a) {
   if (a.prohibited) {
+    // One line, and a short one. A refused shell command is a paragraph — the chat
+    // keeps its first line and the whole of it in the hover, because the operator
+    // needs to know *that* it was refused and *what* was refused, not to read the
+    // command again (12 Nov).
     const target = (a.paths || []).join(' | ');
-    const shown = target.length > 150 ? `${target.slice(0, 149)}…` : target;
+    const firstLine = target.split(/\r?\n/).map((l) => l.trim()).find(Boolean) || '';
+    const shown = firstLine.length > 90 ? `${firstLine.slice(0, 89)}…` : firstLine;
     const who = String(a.note || '');
     return `<div class="chat-alarm is-prohibited" title="${esc(`PROHIBITED: ${a.action} ${target}${who ? ` ${who}` : ''}`)}">
     <span class="chat-alarm-mark">⛔</span>
-    <span class="chat-alarm-text">PROHIBITED · ${esc(a.action)}${shown ? ` ${esc(shown)}` : ''}${who ? ` · ${esc(who)}` : ''}</span>
+    <span class="chat-alarm-text">PROHIBITED · ${esc(a.action)}${shown ? ` · ${esc(shown)}` : ''}${who ? ` · ${esc(who)}` : ''}</span>
   </div>`;
   }
   const title = alarmTitle(a.what);

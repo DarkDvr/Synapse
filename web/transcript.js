@@ -247,6 +247,21 @@ export function renderMessage(m, tail = '') {
         </details>
       </div></div>`;
     }
+    // A refusal is one line, not a paragraph. The rule behind it ("do not try another
+    // tool …") is the model's instruction; the operator needs the fact, and the
+    // sentence is one click away. Measured 12 Nov: a refused command filled three
+    // lines of the chat before this.
+    if (prohibited) {
+      const key = `refused:${m.id}`;
+      const sentence = String(body || '').split(/\r?\n/).map((l) => l.trim()).find(Boolean) || '';
+      return `<div class="${cls}" data-msg="synapse"><div class="msg-body">
+        ${stamp}<span class="msg-role">Synapse</span>
+        <details class="chat-post is-refusal" data-k="${esc(key)}"${state.open.has(key) ? ' open' : ''}>
+          <summary title="${esc(sentence)}"><span class="chat-post-note">⛔ PROHIBITED · the protected list refused this change</span></summary>
+          <div class="chat-post-body">${esc(String(body || ''))}</div>
+        </details>
+      </div></div>`;
+    }
     return `<div class="${cls}" data-msg="synapse"><div class="msg-body">
       ${stamp}<span class="msg-role">Synapse · ${label}</span>
       <div class="msg-answer">${renderMarkdown(body)}</div>
