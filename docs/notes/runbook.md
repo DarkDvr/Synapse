@@ -10,25 +10,25 @@ On 11 Nov a restart was done with `runs: 0` and killed the operator's own turn m
 the run list was empty because it is not a run, and `/api/pending` said `active: []` because
 there was no card to show. The turn was still live.
 
-A turn is live when the project's chat ends in an assistant message that is not
-`completed`, or when `/api/pending` says `canStop`. Both are cheap:
+**Use the script, not a hand-written check** (added 12 Nov after a second turn was killed):
 
-```js
-const pending = await (await fetch('http://127.0.0.1:8700/api/pending')).json();
-const projects = (await (await fetch('http://127.0.0.1:8700/api/projects')).json()).projects || [];
-const live = [];
-for (const p of projects) for (const s of p.sessions || []) {
-  const m = await (await fetch(`http://127.0.0.1:8700/api/sessions/${s.id}/messages`)).json();
-  const last = (m.messages || []).at(-1);
-  // `completed` is absent (undefined) while the turn runs, and a timestamp once it
-  // ends — so the test is falsy, not === false (measured 12 Nov).
-  if (last?.type === 'assistant' && !last.completed) live.push(p.name);
-}
-console.log('live turns:', live, 'canStop:', pending.canStop);
+```
+bin\node\node.exe scripts\wait-for-idle.mjs          # exits 0 when idle, 1 when not
+bin\node\node.exe scripts\wait-for-idle.mjs --timeout 300
 ```
 
-Wait for `live: []` and `canStop: false`. A restart is a stop, and a stop mid-turn is a
-killed turn with nothing to show for it.
+It asks three questions and needs all three to say idle, because each of the previous
+checks was right about one thing and blind to another:
+
+1. **the engine's own `/api/session/active`** — workers included; this is the authority, and
+   it survives a page reload;
+2. **`/api/pending`** — a card waiting for the operator, a question, or a stop in progress;
+3. **every chat's transcript** — an assistant message with no `completed` is a live turn, and
+   **any** such message counts, not only the last one: a steer can arrive after it, and the
+   last message is then the operator's.
+
+The hand-written version I used twice asked only the last of those, and once read
+`active: []` from a poll taken between two steps. It was wrong, and a turn paid for it.
 
 ## Protecting the harness's own files
 

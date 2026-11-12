@@ -1255,6 +1255,8 @@ function connectStream() {
     // so the page never decides when the machine goes — it only shows the count and
     // offers the way out.
     if (ev.kind === 'shutdown-warning') {
+      // The countdown is running: a person has to see it, wherever they are (12 Nov).
+      blinkTaskbar('the PC is about to shut down');
       showShutdownWarning(ev.seconds);
       return;
     }
@@ -2395,7 +2397,7 @@ async function bootPage() {
   // The run's cards need their layout (they move with the stage) and the desk badge.
   liveRunsWiring({ applyRoleCardsLayout, renderDesk });
   // The poll for waiting cards needs the chime's answer and the status chip.
-  pendingWiring({ noteWorking, settleEventChip, playSound });
+  pendingWiring({ noteWorking, settleEventChip, playSound, blinkTaskbar });
   // The Settings window asks for the update actions, the model reload, the skills read,
   // the dialog, the status line and the preview sound.
   settingsWindowWiring({

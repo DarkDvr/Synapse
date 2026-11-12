@@ -525,9 +525,9 @@ public partial class MainWindow : Window
     /// <summary>The work ended while the operator was looking at something else.</summary>
     internal void FlashTaskbar()
     {
-        // A window hidden in the tray has no taskbar button to blink; the balloon
-        // already says where the app went.
-        if (!IsVisible) return;
+        // Nothing to ask for when the window is already in front, and nothing to
+        // blink when it is hidden in the tray (12 Nov).
+        if (!IsVisible || IsActive) return;
         try
         {
             var info = new FLASHWINFO

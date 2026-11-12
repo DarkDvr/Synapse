@@ -168,12 +168,21 @@ export async function refreshPending() {
   for (const perm of state.permissions) {
     if (previousPermissions.has(perm.requestId) || state.announcedPermissions.has(perm.requestId)) continue;
     state.announcedPermissions.add(perm.requestId);
+    // A card that waits for a person is news in the taskbar too — but only when the
+    // thing waiting has no automatic answer and only when the window is not in
+    // front (the shell decides that part). A browser sign-in never answers itself,
+    // and neither does a screen lease; a permission card does only when
+    // Auto-Permissions is on for its project, which is what autoPermissionsAt says
+    // (12 Nov).
+    const wantsPerson = perm.scope === 'browser' || perm.scope === 'desk' || !perm.autoPermissionsAt;
     // A sign-in card is the one that asks to open a window: it has its own sound, the two
     // hollow knocks, and it is always on screen — the operator is the one who must act.
     if (perm.scope === 'browser') {
+      if (wantsPerson) wired.blinkTaskbar?.('a sign-in is waiting');
       wired.playSound?.('hollow');
       continue;
     }
+    if (wantsPerson) wired.blinkTaskbar?.(perm.scope === 'desk' ? 'the screen is asked for' : 'a permission is waiting');
     if (state.view === 'session' && perm.sessionId === state.sessionId) continue;
     const who = [perm.role, perm.task].filter(Boolean).join(' · ') || perm.title || 'A chat';
     toast('Permission Needed', `${who} is waiting on ${perm.action}. Open it in the rail to answer.`);
@@ -186,6 +195,8 @@ export async function refreshPending() {
   for (const form of state.forms) {
     if (state.announcedForms.has(form.id)) continue;
     state.announcedForms.add(form.id);
+    // A question with no automatic answer waits for a person: the same blink.
+    if (!form.autoAnswerAt) wired.blinkTaskbar?.('a question is waiting');
     if (state.view === 'session') continue; // the panel is on screen already
     const who = findSession(form.sessionId)?.title || 'this conversation';
     toast('Answer Needed', `${who} is waiting on a question. Open it in the rail to answer.`);

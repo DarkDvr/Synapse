@@ -285,5 +285,18 @@ shell, so the two talk over the channel they already have:
 - `ServerHost.OnLine` recognises the marker, keeps it out of the console store, and raises
   `Attention`;
 - `MainWindow.FlashTaskbar` calls `FlashWindowEx` with `FLASHW_ALL | FLASHW_TIMERNOFG` — the
-  flashing stops by itself the moment the window is activated. A window hidden in the tray
-  has no button to blink, and is left alone.
+  flashing stops by itself the moment the window is activated. It does nothing when the
+  window is already in front or hidden in the tray.
+
+What blinks, all of it only while Synapse is **not** the focused window:
+
+| when | why it is a person's turn |
+|---|---|
+| the work ends (the finished-work chime) | nobody is waiting on a model any more |
+| a run the harness stopped | the reason is in the chat, not on the screen |
+| a permission card appears | with Auto-Permissions off, only a person can answer it |
+| a SynaBrowse sign-in is asked for | it is never auto-allowed |
+| the screen (mouse, keyboard, focus) is asked for | it is never auto-allowed |
+| a question is asked | with Auto-Answer off, only a person can answer it |
+| the auto-shutdown countdown starts | the PC is about to go off |
+
