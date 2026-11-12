@@ -357,7 +357,7 @@ export function createProjectStore({ file, rootDir, legacyGeneralDir = null, har
     return { ok: true, moved: true, at: to };
   }
 
-  function update(id, { name } = {}) {
+  function update(id, { name, directory } = {}) {
     const raw = readRaw();
     const current = raw.find((p) => (p.id || idFor(p.directory)) === id);
     if (!current) {
@@ -367,6 +367,10 @@ export function createProjectStore({ file, rootDir, legacyGeneralDir = null, har
     }
     const next = String(name ?? '').trim();
     if (next) current.name = next;
+    // A renamed folder moves the project with it: the registry's directory is the
+    // project's identity, so it is updated in the same write (12 Nov).
+    const dir = String(directory ?? '').trim();
+    if (dir) current.directory = normalizeDir(dir) || current.directory;
     writeRaw(raw);
     return shape(current);
   }

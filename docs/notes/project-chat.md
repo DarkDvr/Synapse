@@ -395,3 +395,22 @@ not kept; `data\` is local and regenerable, so a path here would rot.
 Each phase is a commit; the only data migration is the project document, and it
 archives the files it replaces. A bad phase is reverted with git and the
 archive restored.
+
+## Renaming a project's folder (12 Nov)
+
+The folder is the project's identity: the plan, the project document and the run history
+live inside it, and the conversation lives in the engine keyed by directory. So a rename is
+a move of all of it, and the Rename dialog does it in one step:
+
+1. the engine lets go of the directory (`evictLocation`) — a process whose working
+   directory is the folder keeps it undeletable;
+2. the folder moves (`fs.rename`, four tries, because a browser or an editor may hold it);
+3. the registry takes the new directory;
+4. the engine's project row and its sessions are pointed at it (`moveProject` in the
+   adapter: `PATCH /api/project/{id} {canonical}` plus one UPDATE of
+   `session_v2.directory`). Measured: the engine serves the new path on the next request,
+   so the chat is there when the page reloads — no search, no copy.
+
+Refused while a session in that project is mid-turn, and refused for a name Windows cannot
+create (`folderNameProblem`). The engine-specific half lives in the adapter, as rule 5 of
+AGENTS.md requires.

@@ -185,7 +185,10 @@ export function openDialog({
           : f.type === 'textarea'
             ? `<textarea id="dlg-${esc(f.name)}" rows="4" placeholder="${esc(f.placeholder ?? '')}">${esc(f.value ?? '')}</textarea>`
             : `<input id="dlg-${esc(f.name)}" type="text" value="${esc(f.value ?? '')}" placeholder="${esc(f.placeholder ?? '')}" />`;
-        return `<label class="set-field wide"><span>${esc(f.label)}</span>${control}</label>`;
+        // A hint under a plain field: the rename dialog uses it to say what the
+        // folder name will do, and the path it will become (12 Nov).
+        const hint = f.hint ? `<small class="dlg-hint" data-hint-for="${esc(f.name)}">${esc(f.hint)}</small>` : '';
+        return `<label class="set-field wide"><span>${esc(f.label)}</span>${control}${hint}</label>`;
       })
       .join('');
     $('dialogModal').hidden = false;

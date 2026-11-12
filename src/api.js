@@ -206,6 +206,23 @@ function windowMap(config) {
   return out;
 }
 
+/**
+ * Why a folder name cannot be used, or null when it can.
+ *
+ * Deliberately strict: this renames a real folder that holds a project, so a name
+ * Windows cannot create is refused here rather than half-way through a move.
+ */
+export function folderNameProblem(folder) {
+  const name = String(folder ?? '').trim();
+  if (!name) return 'a folder needs a name';
+  if (name === '.' || name === '..') return 'that is not a folder name';
+  if (/[<>:"/\\|?*]/.test(name)) return 'a folder name cannot contain < > : " / \\ | ? *';
+  if (/[. ]$/.test(name)) return 'a folder name cannot end with a dot or a space';
+  if (/^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\.|$)/i.test(name)) return 'Windows reserves that name';
+  if (name.length > 120) return 'that name is too long';
+  return null;
+}
+
 export function createApi({ getConfig, applyConfig, power, engine, logger, getBootError, projects, toolStats, probe, modelCache, traceReasons, inspectModel: inspectRef, probeDir, runs, desk, engineUpdate, synapseUpdate, restart, stopSelf, pcShutdown, notify, permissionLog, permissionGate, permissionMemory }) {
   const app = logger.channel('app');
 
@@ -948,6 +965,48 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
     return { ok: true, host: key, sites: next.browser.sites };
   }
 
+  /**
+   * Move a project's folder, with everything in it.
+   *
+   * Refused while a turn is live — a moved folder under a running session is a run
+   * with nowhere to write. The engine lets go of the directory first (a process
+   * whose working directory is the folder keeps it undeletable), then the folder
+   * moves, then the registry and the engine's own rows follow.
+   */
+  async function renameProjectFolder(project, folder) {
+    const problem = folderNameProblem(folder);
+    if (problem) throw fail(400, problem);
+    const from = project.directory;
+    const to = path.join(path.dirname(from), folder);
+    if (!fs.existsSync(from)) throw fail(404, `the folder is gone: ${from}`);
+    if (fs.existsSync(to)) throw fail(409, `"${to}" already exists`);
+    const active = await safe(() => engine.listActiveSessions(), []);
+    if (active.length) {
+      const mine = await safe(() => engine.listSessions(), []);
+      const busy = mine.some((s) => active.includes(s.id) && normDir(s.directory) === normDir(from));
+      if (busy) throw fail(409, 'a session in this project is mid-turn — stop it first');
+    }
+    await safe(() => engine.evictLocation(from), false);
+    let lastError = null;
+    for (let i = 0; i < 4; i += 1) {
+      try {
+        fs.renameSync(from, to);
+        lastError = null;
+        break;
+      } catch (err) {
+        lastError = err;
+        await new Promise((r) => setTimeout(r, 700));
+      }
+    }
+    if (lastError) throw fail(500, `the folder could not be moved: ${lastError.message}`);
+    const engineMove = await safe(() => engine.moveProject(from, to), null);
+    app.info(
+      `project folder renamed: ${from} -> ${to}` +
+        (engineMove ? ` (chats moved: ${engineMove.sessions})` : ''),
+    );
+    return { directory: to, from, sessions: engineMove?.sessions || 0 };
+  }
+
   return {
     browserSignin,
     browserForget,
@@ -1473,9 +1532,20 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
       return { ok: true };
     },
 
+
     updateProject: async (id, body) => {
-      const project = projects.update(id, { name: body?.name });
-      return { project };
+      const now = projects.list().find((p) => p.id === id);
+      if (!now) throw fail(404, 'project not found');
+      // A folder name in the body moves the project on disk. The folder is the
+      // project's identity — the plan, the document and the chats all follow it — so
+      // the move and the registry change are one operation (12 Nov).
+      const folder = String(body?.folder ?? '').trim();
+      let moved = null;
+      if (folder && folder !== path.basename(now.directory)) {
+        moved = await renameProjectFolder(now, folder);
+      }
+      const project = projects.update(id, { name: body?.name, directory: moved?.directory });
+      return { project, moved };
     },
 
     /** Move a project up or down the rail: the registry is the order. */

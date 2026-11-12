@@ -215,21 +215,58 @@ export async function createChat(projectId) {
 export async function renameProject(id) {
   const p = state.projects.find((x) => x.id === id);
   if (!p) return;
+  // The folder is editable here too: renaming it moves everything inside — the plan,
+  // the document and the conversation — because a project *is* its folder. The path is
+  // shown under the field as it is typed, so the move is never a surprise (12 Nov).
+  const parts = String(p.directory || '').split(/[\\/]/);
+  const folder = parts.pop() || '';
+  const parent = parts.join('\\');
   const res = await wired.openDialog({
-    title: 'Rename project',
-    message: `The label only — the folder stays ${p.directory}.`,
-    fields: [{ name: 'name', label: 'Project name', value: p.name }],
-    confirmLabel: 'Rename',
-    afterRender: () => $('dlg-name')?.select(),
+    title: 'Rename Project',
+    message: '',
+    fields: [
+      { name: 'name', label: 'Project Name', value: p.name },
+      {
+        name: 'folder',
+        label: 'Folder Name',
+        value: folder,
+        hint: `Will become ${parent}\\${folder}`,
+      },
+    ],
+    confirmLabel: 'Save',
+    afterRender: () => {
+      $('dlg-name')?.select();
+      const input = $('dlg-folder');
+      const hint = document.querySelector('[data-hint-for="folder"]');
+      const paint = () => {
+        const next = (input?.value || '').trim() || folder;
+        if (hint) hint.textContent = `Will become ${parent}\\${next}`;
+      };
+      input?.addEventListener('input', paint);
+      input?.addEventListener('blur', paint);
+      paint();
+    },
   });
   if (!res) return;
   const name = res.name?.trim();
-  if (!name || name === p.name) return;
+  const nextFolder = (res.folder ?? '').trim();
+  const folderMoved = Boolean(nextFolder) && nextFolder !== folder;
+  if ((!name || name === p.name) && !folderMoved) return;
   try {
-    await api('PATCH', `/api/projects/${encodeURIComponent(id)}`, { name });
+    const out = await api('PATCH', `/api/projects/${encodeURIComponent(id)}`, {
+      name: name || undefined,
+      folder: folderMoved ? nextFolder : undefined,
+    });
     await loadProjects();
+    if (out?.moved) {
+      // Everything moved with it; the chat came along because the engine's own rows
+      // were moved, not because it was copied.
+      toast('Project Renamed', `Folder moved to ${out.moved.directory}${out.moved.sessions ? ` — ${out.moved.sessions} chat(s) with it.` : '.'}`);
+    } else {
+      toast('Project Renamed', name || p.name);
+    }
   } catch (err) {
-    toast('Could not rename the project', err.message);
+    toast('Could Not Rename the Project', err.message);
   }
 }
 

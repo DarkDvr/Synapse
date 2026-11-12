@@ -3496,3 +3496,15 @@ body.is-disconnected .app-shell { filter: blur(2px) brightness(0.45); pointer-ev
   color: #7d818a; font-family: var(--mono); font-size: calc(var(--chat-fs) * 0.9);
   line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere;
 }
+
+/* ── the rename dialog's folder hint (12 Nov) ──────────────────────────────
+   A field that moves a folder on disk says where the folder will land, as it is
+   typed. Muted, one line, the path in the same monospace the rail uses for
+   directories; it is an explanation, not a control. */
+.dlg-hint {
+  display: block; margin-top: 2px;
+  font-size: 11px; line-height: 1.5; color: var(--muted);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.dlg-hint::before { content: '↳ '; color: var(--orange); }
+.set-field.wide:has(.dlg-hint) input { margin-bottom: 0; }

@@ -885,6 +885,48 @@ export class OpenCodeEngine extends Engine {
    * deepObject (`location[directory]=…`). Verified: after this call the folder
    * deletes normally with the engine still running.
    */
+  /**
+   * Move a project, and its chats, to a new folder.
+   *
+   * The engine keeps a project row (its `canonical` path) and every session keeps its
+   * own copy of the directory. The project moves through the API; the sessions carry
+   * their own column, and the engine reads it per request — measured 12 Nov: the new
+   * directory showed on the next GET, with no restart. Both live here because both are
+   * the engine's shape, not the harness's.
+   */
+  async moveProject(from, to) {
+    const oldDir = String(from || '');
+    const newDir = String(to || '');
+    if (!oldDir || !newDir) return { project: false, sessions: 0 };
+    const key = (p) => String(p || '').replace(/[\\/]+/g, '/').replace(/\/+$/, '').toLowerCase();
+    let project = false;
+    try {
+      const list = await this.request('GET', '/api/project');
+      const all = Array.isArray(list?.data) ? list.data : Array.isArray(list) ? list : [];
+      const at = all.find((p) => key(p?.canonical || p?.worktree) === key(oldDir));
+      if (at) {
+        await this.request('PATCH', `/api/project/${encodeURIComponent(at.id)}`, { canonical: newDir });
+        project = true;
+      }
+    } catch (err) {
+      this.log?.warn?.(`could not move the project row to ${newDir}: ${err.message}`);
+    }
+    let sessions = 0;
+    try {
+      const { DatabaseSync } = await import('node:sqlite');
+      const db = new DatabaseSync(path.join(this.resolveHome().data, 'opencode', 'opencode.db'));
+      db.exec('pragma busy_timeout = 5000');
+      const run = db.prepare('update session_v2 set directory = ? where lower(directory) = ?').run(newDir, oldDir.toLowerCase());
+      sessions = Number(run?.changes || 0);
+      db.close();
+    } catch (err) {
+      // The folder moved either way; a chat left pointing at the old path is reported,
+      // never hidden.
+      this.log?.warn?.(`the chats of ${oldDir} could not be moved: ${err.message}`);
+    }
+    return { project, sessions };
+  }
+
   async evictLocation(directory) {
     const dir = String(directory || '');
     if (!dir) return false;
