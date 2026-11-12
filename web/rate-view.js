@@ -65,6 +65,21 @@ export function resetRate(run) {
  * working and nothing about what it was carrying. The event is the same one, on
  * the same stream, so this is a copy and not a measurement of its own.
  */
+/**
+ * A context figure cannot be larger than the window it is a fraction of.
+ *
+ * Some providers report `cache.read` as a running total for the session rather than this
+ * step's cached prefix — a 27B on 12 Nov reported five million against a 262K window, which
+ * cannot be a prompt: the engine compacts long before that. When the sum exceeds the
+ * window, the honest number is the step's fresh `input`, and never more than the window.
+ */
+export function withinWindow(used, limit) {
+  const value = Number(used) || 0;
+  const cap = Number(limit) || 0;
+  if (!cap) return value;
+  return value > cap ? cap : value;
+}
+
 export function noteArchitectUsage(ev) {
   const tokens = ev.raw?.data?.tokens;
   if (!tokens) return;
@@ -141,12 +156,14 @@ export function paintRates(now = Date.now()) {
     // the fill of the window is true whether or not the model is writing.
     let tip = '';
     if (card.dataset.role === 'architect' && Number(arch?.used) > 0) {
-      bits.push(`${wired.fmtTokens(arch.used)}${archLimit ? `/${wired.fmtTokens(archLimit)}` : ''} ctx`);
+      const archUsed = withinWindow(arch.used, archLimit);
+    bits.push(`${wired.fmtTokens(archUsed)}${archLimit ? `/${wired.fmtTokens(archLimit)}` : ''} ctx`);
       tip = `The Architect's last prompt: ${arch.used} tokens` + (archLimit ? ` of ${archLimit}` : '');
     } else if (run && run.role === card.dataset.role && Number(run.ctx) > 0) {
-      bits.push(`${wired.fmtTokens(run.ctx)}${run.ctxLimit ? `/${wired.fmtTokens(run.ctxLimit)}` : ''} ctx`);
+      const runUsed = withinWindow(run.ctx, run.ctxLimit);
+      bits.push(`${wired.fmtTokens(runUsed)}${run.ctxLimit ? `/${wired.fmtTokens(run.ctxLimit)}` : ''} ctx`);
       tip =
-        `Prompt ${run.ctx} tokens of ${run.ctxLimit || 'an unknown window'}` +
+        `Prompt ${withinWindow(run.ctx, run.ctxLimit)} tokens of ${run.ctxLimit || 'an unknown window'}` +
         (run.ctxRoom ? `; Synapse compacts near ${run.ctxRoom}` : '');
     }
     // Two readings on one line, separated by air rather than a dot: "128 tok/s
