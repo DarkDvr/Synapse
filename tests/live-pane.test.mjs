@@ -1,4 +1,4 @@
-// The live thinking pane belongs to the step being written (12 Nov).
+// The live thinking pane is not hidden by an older step that began the same way (12 Nov).
 //
 // It used to compare its own text against the whole transcript to avoid showing a
 // paragraph twice. After a tool call the next step often begins the way the last one
@@ -12,10 +12,10 @@ import { renderSessionStream } from '../web/traces.js';
 const step = (id, text, completed = true) => ({ id, type: 'assistant', completed, parts: [{ type: 'reasoning', text }] });
 const streamOf = (text, stepId) => ({ key: 'sess:test', stream: { kind: 'think', text, step: stepId, ended: false } });
 
-test('a new step shows its pane even when it begins like the last one', () => {
+test('the pane survives a step that begins like the last one', () => {
   state.sessionId = 'sess_test';
   state.messages = [step('m1', 'Now I have the contract. Let me read the file again.')];
-  // the next step starts with the same words; its own message is still empty
+  // one pane, appended: it holds the whole log; the step being written is still empty
   state.messages.push({ id: 'm2', type: 'assistant', completed: false, parts: [] });
   state.sessionTrace = streamOf('Now I have the contract. Let me read the file again. Yes.', 'm2');
   assert.match(renderSessionStream(), /is-live/, 'the pane is drawn');

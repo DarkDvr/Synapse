@@ -2559,10 +2559,12 @@ to a single `<details>` line that opens to the refused call in full and who aske
 harness message under it is not rendered at all when the alarm covers it. Enforcement is
 unchanged — only the reading.
 
-**The thinking pane belongs to a step (12 Nov).** In Single mode the operator ran a tool and
-afterwards saw only folded Reasoning lines: no live pane. Two reasons, both in the same
-place. The pane kept its text across steps, so it began the next step holding the last one's
-words; and the check that hides it to avoid showing a paragraph twice compared against the
+**One pane per turn, for workers and for the Architect alike (12 Nov).** In Single mode the
+operator ran a tool and afterwards saw only folded Reasoning lines: no live pane. The cause was
+the check that hides the pane once its words are in the transcript — it compared against the
 **whole transcript**, where a model that opens a step the way it opened an earlier one always
-matched. The pane now starts again with each new assistant message (`stream.step`) and the
-check looks at that step's message alone.
+matched. The fix is that one check: it looks at the step being written. The pane itself stays
+what it was for a worker — one pane per turn, appended to as the reasoning arrives, with the
+tool calls above it — because the shapes are the same and only what surrounds them differs: a
+worker's finished blocks become its history, the Architect's are already messages in the chat.
+Ending the pane per step was the first attempt and only hid it.
