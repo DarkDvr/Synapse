@@ -1013,6 +1013,21 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
     browserUsed,
     browserSignedIn,
     browserSignInAsk,
+    /**
+     * Ask the app's window to blink in the taskbar.
+     *
+     * The page knows when the work ends; the taskbar belongs to the shell. A line on
+     * stdout is the channel they already share — ServerHost reads it and the console
+     * hides the marker (12 Nov).
+     */
+    attention: async (body) => {
+      const what = String(body?.what || 'work').replace(/[^\w \-.]/g, '').slice(0, 80);
+      try {
+        process.stdout.write(`[[attention]] ${what}\n`);
+      } catch { /* no stdout: run by hand, nothing to blink */ }
+      return { ok: true };
+    },
+
     status: async () => ({
       version: APP_VERSION,
       // The files on disk may be newer than this process — a page reload cannot

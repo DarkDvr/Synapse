@@ -273,3 +273,17 @@ The guard is `tests/portable-paths.test.mjs`. The general rule for anything adde
 ask whether the value would still mean anything on a PC that has never seen this one.
 
 
+
+## The taskbar blink (12 Nov)
+
+When the work ends and the operator is looking at something else, the window's taskbar
+button flashes until they come back. The decision is the page's — it is the same moment the
+finished-work chime plays, and a run the harness stopped — while the taskbar belongs to the
+shell, so the two talk over the channel they already have:
+
+- the page posts `/api/attention`; the server writes one line, `[[attention]] work finished`;
+- `ServerHost.OnLine` recognises the marker, keeps it out of the console store, and raises
+  `Attention`;
+- `MainWindow.FlashTaskbar` calls `FlashWindowEx` with `FLASHW_ALL | FLASHW_TIMERNOFG` — the
+  flashing stops by itself the moment the window is activated. A window hidden in the tray
+  has no button to blink, and is left alone.

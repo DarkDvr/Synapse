@@ -58,6 +58,11 @@ public sealed class ServerHost : IDisposable
     ///  should shut down; the helper outside is waiting for this process.</summary>
     public event Action? QuitRequested;
 
+    /// <summary>The page asked the window to blink: the work ended while the
+    /// operator was looking elsewhere. The marker line is the channel the shell
+    /// already reads.</summary>
+    public event Action<string>? Attention;
+
     public ServerState State { get; private set; } = ServerState.Stopped;
 
     /// <summary>Where the UI will be served once the server is up.</summary>
@@ -272,6 +277,15 @@ public sealed class ServerHost : IDisposable
 
     void OnLine(string line)
     {
+        // "[[attention]] <what>" is the page asking for the taskbar. It is not console
+        // output, so it is not shown in the console store (12 Nov).
+        const string marker = "[[attention]]";
+        if (line.StartsWith(marker, StringComparison.Ordinal))
+        {
+            Attention?.Invoke(line[marker.Length..].Trim());
+            return;
+        }
+
         _console.Append(line + Environment.NewLine);
 
         // The one line that says the UI is being served. Everything else about the

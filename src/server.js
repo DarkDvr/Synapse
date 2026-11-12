@@ -356,6 +356,12 @@ export function createServer({ api, engine, logger, config, remote, onRemote }) 
       return sendJson(res, 200, await api.browserUsed((await readBody(req))?.host));
     }
 
+    // POST /api/attention — the page saying the work ended, so the window blinks in the
+    // taskbar. One line on stdout; the shell reads it (12 Nov).
+    if (seg[0] === 'attention' && method === 'POST') {
+      return sendJson(res, 200, await api.attention(await readBody(req)));
+    }
+
     // POST /api/restart — relaunch Synapse (Settings > Save Changes).
     if (seg[0] === 'restart' && method === 'POST') return sendJson(res, 200, await api.restart());
     // POST /api/shutdown — stop the server (tray > Stop Server). The app reads

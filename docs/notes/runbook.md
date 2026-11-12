@@ -20,7 +20,9 @@ const live = [];
 for (const p of projects) for (const s of p.sessions || []) {
   const m = await (await fetch(`http://127.0.0.1:8700/api/sessions/${s.id}/messages`)).json();
   const last = (m.messages || []).at(-1);
-  if (last?.type === 'assistant' && last.completed === false) live.push(p.name);
+  // `completed` is absent (undefined) while the turn runs, and a timestamp once it
+  // ends — so the test is falsy, not === false (measured 12 Nov).
+  if (last?.type === 'assistant' && !last.completed) live.push(p.name);
 }
 console.log('live turns:', live, 'canStop:', pending.canStop);
 ```

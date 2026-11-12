@@ -501,4 +501,45 @@ public partial class MainWindow : Window
         try { View.CoreWebView2?.PostWebMessageAsJson(JsonSerializer.Serialize(payload)); }
         catch { /* the document is navigating away */ }
     }
+
+    // ── the taskbar blink ──────────────────────────────────────────────
+    // When the work ends and the window is not in front, its taskbar button flashes.
+    // FLASHW_TIMERNOFG stops the flashing by itself the moment the operator comes
+    // back, so a blink never outlives the attention it asks for (12 Nov).
+    [StructLayout(LayoutKind.Sequential)]
+    struct FLASHWINFO
+    {
+        public uint cbSize;
+        public IntPtr hwnd;
+        public uint dwFlags;
+        public uint uCount;
+        public uint dwTimeout;
+    }
+
+    [DllImport("user32.dll")]
+    static extern bool FlashWindowEx(ref FLASHWINFO info);
+
+    const uint FLASHW_ALL = 0x00000003;
+    const uint FLASHW_TIMERNOFG = 0x0000000C;
+
+    /// <summary>The work ended while the operator was looking at something else.</summary>
+    internal void FlashTaskbar()
+    {
+        // A window hidden in the tray has no taskbar button to blink; the balloon
+        // already says where the app went.
+        if (!IsVisible) return;
+        try
+        {
+            var info = new FLASHWINFO
+            {
+                cbSize = (uint)Marshal.SizeOf<FLASHWINFO>(),
+                hwnd = new WindowInteropHelper(this).Handle,
+                dwFlags = FLASHW_ALL | FLASHW_TIMERNOFG,
+                uCount = 0,
+                dwTimeout = 0,
+            };
+            FlashWindowEx(ref info);
+        }
+        catch { /* cosmetic: a missing flash never blocks a finish */ }
+    }
 }

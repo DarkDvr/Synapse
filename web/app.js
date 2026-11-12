@@ -297,6 +297,14 @@ function playSound(name) {
 }
 
 /** Play the chosen finished-work sound, if the operator wants one. */
+/**
+ * The window blinks in the taskbar when the work ends: the page knows, the taskbar
+ * belongs to the shell, and the marker line is how it hears (12 Nov).
+ */
+function blinkTaskbar(what) {
+  api('POST', '/api/attention', { what }).catch(() => {});
+}
+
 function playDoneSound(value = state.config?.notify?.doneSound) {
   if (String(value ?? 'off') === 'off') return;
   playSound(doneSoundName(String(value ?? 'off')));
@@ -352,6 +360,9 @@ function noteWorking() {
     state.workEndQuiet = false;
     return;
   }
+  // The sound and the taskbar blink are the same news: the work ended while the
+  // operator was looking elsewhere (12 Nov).
+  blinkTaskbar('work finished');
   playDoneSound();
 }
 
@@ -1343,6 +1354,9 @@ function connectStream() {
     // Synapse's own short note (not an alarm, not a message to any model): the
     // harness declined to do something the operator should know about.
     if (ev.kind === 'note') {
+      // A run the harness stopped is the other moment the work ends while the
+      // operator is looking elsewhere: the same news, so the same blink (12 Nov).
+      if (/stopped/i.test(String(ev.title || ''))) blinkTaskbar('run stopped');
       toast(ev.title || 'Note', ev.body || '');
       return;
     }

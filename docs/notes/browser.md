@@ -68,8 +68,9 @@ The window is found again by the command line naming that profile — never by p
   tokens of markup.
 - `watch` records the screencast for a moment and answers a strip of frames, for an
   animation, a spinner, a menu that slides. A still cannot show what changed.
-- `screenshot`/`watch` write under `data\browser\shots\` and answer the path, so the model
-  can look and the operator can find it.
+- `screenshot`/`watch` write into the **project** (`<project>\.synapse\browser\shots\`) and answer
+  the absolute path *and* the project-relative one the chat can render, so the model
+  shows a picture without copying it.
 - The page must be an http(s) address. `file://` is refused: it would be a way around the
   harness's own rules.
 
@@ -219,10 +220,12 @@ refusing one is an error the model can report.
 | `src/browser/cdp.js` | the protocol client: requests that answer or fail in 60 s, events, evaluate, screenshot |
 | `src/browser/browser.js` | Edge by full path, the launch flags, the toolset, `clearSite`, the idle reaper |
 | `src/browser/allow.js` | the http(s) check (`hostOf`, `checkUrl`) |
-| `src/browser/artifacts.js` | where a project's screenshots live (`<project>\.synapse\browser\`) |
+| `src/browser/artifacts.js` | where a project's screenshots live (`<project>\.synapse\browser\shots`, with the harness folder as the fallback) |
 | `src/browser/sites.js` | the sites record: add, touch, forget, de-duplicate |
-| `src/browser/session-watch.js` | polls the sign-in window and closes it when the session lands |
+| `src/browser/session-watch.js` | polls the sign-in window and **hides** it when the session lands |
 | `src/browser/signin.js` | address candidates, `looksUnconfirmed`, the sign-in flow |
-| `src/browser/handoff.js` + `show.ps1` | the window, the chime, `stoleFocus` |
-| `src/mcp/browser-server.js` | the twelve tools, the wall sentence, the waiting notice |
+| `src/browser/handoff.js` + `show.ps1` | the window, `-Hide`/`-Focus`, the chime, `stoleFocus` |
+| `src/browser/ask.js` | the sign-in card: one request, no auto-allow, no timeout |
+| `src/browser/screen.ps1` | which monitor the operator is on, and the attach-thread focus |
+| `src/mcp/browser-server.js` | the twelve tools, the wall sentence, and `handoff` asking through the permission card |
 | `tests/browser.test.mjs`, `tests/browser-mcp.test.mjs`, `tests/browser-watch.test.mjs`, `tests/browser-chat.test.mjs`, `tests/sites.test.mjs` | the fence, the tools against a local page, the server over real stdio, the watcher, the chat labels, the record |

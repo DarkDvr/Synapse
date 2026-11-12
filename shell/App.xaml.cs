@@ -72,6 +72,8 @@ public partial class App : Application
         Console = new ConsoleStore(Path.Combine(Root, "logs", "console.log"));
         Server = new ServerHost(Root, Console);
         Server.QuitRequested += () => Dispatcher.InvokeAsync(ExitAsync);
+        // The page says the work ended; the taskbar button says so to the operator.
+        Server.Attention += _ => Dispatcher.InvokeAsync(() => _window?.FlashTaskbar());
         BuildTray();
 
         _window = new MainWindow(Root, Server, Console);
