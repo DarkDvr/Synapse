@@ -240,14 +240,23 @@ export function paintRates(now = Date.now()) {
           (archLimit ? ` of ${archLimit}` : '') +
           (share.ok ? ` — ${share.fresh} fresh and ${share.read} from the provider's cache` : '');
       }
-    } else if (run && run.role === card.dataset.role && Number(run.ctx) > 0) {
+    } else if (run && run.role === card.dataset.role && (Number(run.ctx) > 0 || run.ctxPending)) {
+      // A worker's compaction follows the same rule as the Architect's: no size until the
+      // next step reports one (13 Nov).
       const runUsed = withinWindow(run.ctx, run.ctxLimit);
       const share = cacheShare(run.ctxFresh, run.ctxCached, run.ctxLimit);
-      bits.push(`${wired.fmtTokens(runUsed)}${run.ctxLimit ? `/${wired.fmtTokens(run.ctxLimit)}` : ''} ctx` + (share.ok ? ` (${share.pct}% cache)` : ''));
-      tip =
-        `Prompt ${withinWindow(run.ctx, run.ctxLimit)} tokens of ${run.ctxLimit || 'an unknown window'}` +
-        (share.ok ? ` — ${share.fresh} fresh and ${share.read} from the provider's cache` : '') +
-        (run.ctxRoom ? `; Synapse compacts near ${run.ctxRoom}` : '');
+      if (run.ctxPending) {
+        bits.push(`${run.ctxPending === 'compacting' ? 'compacting…' : 'compacted'}${run.ctxLimit ? ` / ${wired.fmtTokens(run.ctxLimit)}` : ''} ctx`);
+        tip = run.ctxPending === 'compacting'
+          ? "The engine is summarising this worker's conversation to make room."
+          : "The worker's conversation was compacted; its new size arrives with the next step.";
+      } else {
+        bits.push(`${wired.fmtTokens(runUsed)}${run.ctxLimit ? `/${wired.fmtTokens(run.ctxLimit)}` : ''} ctx` + (share.ok ? ` (${share.pct}% cache)` : ''));
+        tip =
+          `Prompt ${withinWindow(run.ctx, run.ctxLimit)} tokens of ${run.ctxLimit || 'an unknown window'}` +
+          (share.ok ? ` — ${share.fresh} fresh and ${share.read} from the provider's cache` : '') +
+          (run.ctxRoom ? `; Synapse compacts near ${run.ctxRoom}` : '');
+      }
     }
     // Two readings on one line, separated by air rather than a dot: "128 tok/s
     // 27k/60k ctx" reads as two values, where a dot between them read as the

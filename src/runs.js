@@ -522,7 +522,17 @@ export function promptSize(messages) {
  * needs both numbers; a provider that reports no cache leaves them at zero (12 Nov).
  */
 export function promptParts(messages) {
-  const last = [...(messages || [])].reverse().find((m) => m.type === 'assistant' && m.raw?.tokens);
+  const list = messages || [];
+  const last = [...list].reverse().find((m) => m.type === 'assistant' && m.raw?.tokens);
+  // A compaction newer than the last step: the context is not what that step reported.
+  // The compaction's own usage is the prompt it *summarised* — measured 13 Nov, 167,193
+  // for a context that came out at 10,121 — so there is no honest number until the next
+  // step reports one. The card says the fact instead (13 Nov).
+  const pack = [...list].reverse().find((m) => m.type === 'compaction');
+  if (pack && (!last || Number(pack.created) > Number(last.created))) {
+    const running = String(pack.raw?.status || '') === 'running';
+    return { used: 0, fresh: 0, cached: 0, pending: running ? 'compacting' : 'compacted' };
+  }
   const t = last?.raw?.tokens;
   if (!t) return { used: 0, fresh: 0, cached: 0 };
   const fresh = Number(t.input) || 0;
@@ -1840,6 +1850,9 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
                 // provider's cache served (12 Nov).
                 live.ctxFresh = parts?.fresh || 0;
                 live.ctxCached = parts?.cached || 0;
+                // A compaction in this transcript: no honest size until the next step
+                // reports one, so the card says the fact (13 Nov).
+                live.ctxPending = parts?.pending || '';
                 emit('run.progress', { ...live });
               },
               onCompact: (times, used, context) => {

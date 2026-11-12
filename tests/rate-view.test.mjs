@@ -5,6 +5,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { withinWindow, cacheShare, lastPromptOf, noteArchitectCompaction } from '../web/rate-view.js';
 import { state } from '../web/state.js';
+import { promptParts } from '../src/runs.js';
 
 test('a context figure is never larger than its window', () => {
   assert.equal(withinWindow(222325, 262144), 222325);
@@ -64,4 +65,15 @@ test('the card carries the compacting state until a usage event clears it', () =
   // another chat's compaction must not touch this card
   noteArchitectCompaction('sess_other', 'start');
   assert.equal(state.archCtx.pending, 'compacted');
+});
+
+// The worker's card is fed by promptParts on the server: the same rule, one mode over.
+test('a worker\'s compaction hides its size too', () => {
+  const step = { type: 'assistant', created: 1000, raw: { tokens: { input: 150000, cache: { read: 17193 } } } };
+  const pack = { type: 'compaction', created: 2000, raw: { status: 'completed', tokens: { input: 167193 } } };
+  assert.equal(promptParts([step, pack]).pending, 'compacted');
+  assert.equal(promptParts([step, pack]).used, 0);
+  assert.equal(promptParts([step, { ...pack, raw: { status: 'running' } }]).pending, 'compacting');
+  const after = { type: 'assistant', created: 3000, raw: { tokens: { input: 9000, cache: { read: 1121 } } } };
+  assert.equal(promptParts([step, pack, after]).used, 10121);
 });
