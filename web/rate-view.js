@@ -107,6 +107,27 @@ export function cacheShare(input, cached, limit = 0) {
   return { ok: true, pct: Math.round((read / total) * 1000) / 10, fresh, read, total };
 }
 
+/**
+ * The Architect's own transcript was compacted.
+ *
+ * Its card kept reading the last step's prompt, so it went on showing 172K after the
+ * conversation had been cut to a summary — the one number the card exists to answer, and
+ * the moment it is most wrong (12 Nov, Single mode). A compaction can only make the
+ * context smaller, so the figure it reports is taken only when it is smaller than what the
+ * card shows: if a number ever arrives that is larger, it is not a compaction's, and the
+ * next step's usage will correct everything anyway.
+ */
+export function noteArchitectCompaction(sessionId, tokens) {
+  const fresh = Number(tokens?.input) || 0;
+  const cached = Number(tokens?.cache?.read) || 0;
+  const used = fresh + cached;
+  if (!used) return;
+  const at = state.archCtx?.sessionId === sessionId ? state.archCtx.used : 0;
+  if (at && used >= at) return;
+  state.archCtx = { sessionId, used, fresh, cached, at: Date.now() };
+  paintRates();
+}
+
 export function noteArchitectUsage(ev) {
   const tokens = ev.raw?.data?.tokens;
   if (!tokens) return;
@@ -124,7 +145,17 @@ export function noteArchitectUsage(ev) {
 
 /** The same number, from the transcript: the open session's newest prompt. */
 export function lastPromptOf(messages) {
-  const last = [...(messages || [])].reverse().find((m) => m.type === 'assistant' && m.raw?.tokens);
+  const list = messages || [];
+  const last = [...list].reverse().find((m) => m.type === 'assistant' && m.raw?.tokens);
+  // A finished compaction newer than the last step means the context has shrunk: the
+  // card must not keep showing the size that was just summarised — a reload used to
+  // bring the old number back (12 Nov).
+  const pack = [...list].reverse().find((m) => m.type === 'compaction' && String(m.raw?.status || '') === 'completed' && m.raw?.tokens);
+  if (pack && (!last || Number(pack.created) > Number(last.created))) {
+    const fresh = Number(pack.raw.tokens.input) || 0;
+    const cached = Number(pack.raw.tokens.cache?.read) || 0;
+    if (fresh + cached) return { sessionId: state.sessionId, used: fresh + cached, fresh, cached, at: Date.now() };
+  }
   const t = last?.raw?.tokens;
   if (!t) return null;
   return {

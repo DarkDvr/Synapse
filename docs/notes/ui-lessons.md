@@ -2568,3 +2568,15 @@ what it was for a worker — one pane per turn, appended to as the reasoning arr
 tool calls above it — because the shapes are the same and only what surrounds them differs: a
 worker's finished blocks become its history, the Architect's are already messages in the chat.
 Ending the pane per step was the first attempt and only hid it.
+
+**A compaction belongs in the chat, and the card follows it (12 Nov).** In Single mode the
+engine compacted the conversation twice and the chat said nothing: a compaction message was
+filtered out of the transcript as scaffolding, and the Architect's card kept showing the size
+that had just been summarised. Two reasons, both about ownership: the compaction line was
+drawn only on a *worker's* trace (`traceForSession` finds runs, and the Architect has none), and
+the card's number came from the newest assistant message, which predates the compaction.
+
+It is one quiet line now — `⤵ Compacted — the conversation was summarised · 172K prompt, 2K
+summary` — where it happened, and the card takes the compaction's own figure when it is newer
+than the last step and smaller, then corrects itself on the next step. The cancelled case is
+still silent: the chip and the toast already said so.

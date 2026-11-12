@@ -3539,3 +3539,14 @@ body.is-disconnected .app-shell { filter: blur(2px) brightness(0.45); pointer-ev
 }
 .chat-alarm-call { font-family: var(--mono, ui-monospace, monospace); }
 .chat-alarm-who { color: var(--muted); margin-top: 3px; }
+/* ── a compaction in the chat (12 Nov) ─────────────────────────────────────
+   The engine summarising the conversation is a fact about the chat, not
+   scaffolding: one quiet line where it happened. Grey, not red — nothing failed. */
+.msg.harness.is-compact { --speaker: var(--muted); }
+.msg.harness.is-compact .msg-role { color: var(--muted); }
+.compact-line {
+  display: inline-block; max-width: 100%;
+  font-size: calc(var(--chat-fs) * 0.92); color: var(--muted);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.compact-line::first-letter { color: var(--orange); }

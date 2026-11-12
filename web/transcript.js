@@ -12,6 +12,9 @@
 import { state } from './state.js';
 import { $ } from './dom.js';
 import { esc, hhmm, toolTarget, fileChip, shortName, reasoningGist } from './format.js';
+
+/** 172000 → "172K": one number, in the chat's own units. */
+const compactK = (n) => (!n ? '0' : n >= 1000000 ? `${(n / 1000000).toFixed(1)}M` : n >= 1000 ? `${Math.round(n / 1000)}K` : String(n));
 import { renderMarkdown } from './md.js';
 import { serverNow } from './api.js';
 import { permissionNote, permissionChip } from './ask-note.js';
@@ -83,6 +86,10 @@ export function renderTranscript() {
       // the toast already said "cancelled", and the engine's own message would
       // otherwise appear as a red "COMPACTION" block in the chat.
       if (m.type === 'compaction' && /cancell?ed/i.test(String(m.error || ''))) return false;
+      // A compaction is part of the conversation's history, not scaffolding: the
+      // operator asked why the context dropped and the chat said nothing (12 Nov).
+      // A cancelled one is the exception — the toast and the chip already said so.
+      if (m.type === 'compaction') return Boolean(m.raw?.status);
       if (String(m.description || '').trim().toUpperCase() === 'PROHIBITED') {
         const at = Number(m.created) || 0;
         if (refusals.some((covered) => Math.abs(covered - at) <= 15000)) return false;
@@ -276,6 +283,26 @@ export function renderMessage(m, tail = '') {
     return `<div class="${cls}" data-msg="synapse"><div class="msg-body">
       ${stamp}<span class="msg-role">Synapse · ${label}</span>
       <div class="msg-answer">${renderMarkdown(body)}</div>
+    </div></div>`;
+  }
+  if (m.type === 'compaction') {
+    const tokens = m.raw?.tokens || {};
+    const employed = Number(tokens.input) || 0;
+    const written = Number(tokens.output) || 0;
+    const running = String(m.raw?.status || '') === 'running';
+    const line = running
+      ? 'Compacting — the conversation is being summarised'
+      : 'Compacted — the conversation was summarised';
+    const numbers = running
+      ? ''
+      : ` · ${compactK(employed)} prompt, ${compactK(written)} summary`;
+    return `<div class="msg harness is-compact" data-msg="synapse"><div class="msg-body">
+      ${stamp}<span class="msg-role">Synapse</span>
+      <span class="compact-line" title="${esc(
+        running
+          ? 'The engine is writing a summary of this conversation to make room.'
+          : `The engine summarised this conversation to make room: ${employed} tokens of prompt, ${written} of summary.`,
+      )}">⤵ ${esc(line)}${esc(numbers)}</span>
     </div></div>`;
   }
   if (m.type === 'assistant') {

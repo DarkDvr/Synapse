@@ -52,6 +52,7 @@ import {
   noteDelta,
   resetRate,
   noteArchitectUsage,
+  noteArchitectCompaction,
   lastPromptOf,
   noteWorkerUsage,
   paintRates,
@@ -1441,6 +1442,11 @@ function connectStream() {
       // number while it runs (8 Nov).
       const run = currentRun();
       noteCompactionEvent(ev, { used: run?.ctx, limit: run?.ctxLimit });
+      // The open session's own compaction: its card must stop showing the size it no
+      // longer has (12 Nov, Single mode — a worker's card is fed by its run).
+      if (ev.type === EV.compactionEnded && ev.sessionId === state.sessionId) {
+        noteArchitectCompaction(ev.sessionId, ev.raw?.data?.tokens || ev.raw?.tokens || {});
+      }
     }
     const mine = !ev.sessionId || ev.sessionId === state.sessionId;
     // A worker's session is not the open one, so nothing of it renders through

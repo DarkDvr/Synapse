@@ -626,3 +626,15 @@ test('the alarm keeps a refused command to one short line', async () => {
   assert.match(text, /…/, 'it is cut, not reflowed');
   assert.ok(html.includes(command.replace(/&/g, '&amp;')), 'the whole command is still in the hover');
 });
+
+// A compaction is part of the conversation: the context dropped, and the chat has to
+// say why. A cancelled one is the exception — the chip and the toast already said so.
+test('a compaction is a line in the chat', async () => {
+  const { renderMessage } = await import('../web/transcript.js');
+  const done = renderMessage({ id: 'c1', type: 'compaction', created: Date.now(), completed: false, raw: { status: 'completed', tokens: { input: 172000, output: 2338 } } });
+  assert.match(done, /Compacted — the conversation was summarised/);
+  assert.match(done, /172K prompt/);
+  assert.match(done, /2K summary/);
+  const running = renderMessage({ id: 'c2', type: 'compaction', created: Date.now(), completed: false, raw: { status: 'running', tokens: {} } });
+  assert.match(running, /Compacting — the conversation is being summarised/);
+});
