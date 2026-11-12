@@ -301,13 +301,16 @@ export async function addProject() {
     // they answer.
     const info = await api('POST', '/api/projects/inspect', { directory });
     if (info.plan) {
+      // Re-use is the safe answer and the usual one: a renamed or re-added folder is
+      // meant to continue, not to restart. It is the primary action; deleting the
+      // folder is the deliberate, dangerous alternative (12 Nov).
       const choice = await wired.openDialog({
         title: 'This folder was a project before',
         message: '',
-        confirmLabel: 'Delete Folder And Start Fresh',
-        danger: true,
-        extra: { label: 'Re-Use It', result: 'reuse' },
-        okResult: 'wipe',
+        confirmLabel: 'Re-Use It',
+        danger: false,
+        extra: { label: 'Delete Folder And Start Fresh', result: 'wipe' },
+        okResult: 'reuse',
         dismissable: false,
         tone: 'clash',
         afterRender: () => { $('dialogBody').innerHTML = clashBody(info); },
@@ -326,6 +329,16 @@ export async function addProject() {
     const created = made?.project || state.projects.find((p) => p.directory.toLowerCase() === directory.toLowerCase());
     if (created) await openProjectChat(created.id);
   } catch (err) {
+    // The folder is already a project: open it rather than leaving the operator with
+    // an error after they renamed a folder and asked to import it (12 Nov).
+    const known = directory
+      ? state.projects.find((p) => p.directory.toLowerCase() === directory.toLowerCase())
+      : null;
+    if (known) {
+      toast('Already A Project', `"${known.name}" — opening it.`);
+      await openProjectChat(known.id);
+      return;
+    }
     toast('Could not add the project', err.message);
   }
 }

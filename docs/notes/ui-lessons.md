@@ -2542,3 +2542,11 @@ anything working" with "is anything working", without asking *which* chat: openi
 finished project while a run was live made the page announce an ending that had not
 happened. The reading now carries the session it belongs to, and a change of chat drops it
 quietly instead of playing the sound.
+
+**The safe answer is the primary button (12 Nov).** A folder that was a project before got a
+dialog whose primary action was **Delete Folder And Start Fresh** — dangerous, and the wrong
+default for the case that actually happens: a folder renamed, moved or re-added. Re-use is
+the primary answer now, and deleting is the labelled alternative. Measured on the operator's
+own rename: the server re-adopts the folder and reports the plan it found (12 tasks, 12 done,
+its goal), the project document and the run history; what it cannot bring back is the old
+chat, because a session belongs to a directory.

@@ -584,3 +584,15 @@ test('jumping to the question puts it at the top of the chat', () => {
   assert.match(css, /\.ask-head \{[^}]*padding-right:\s*0/);
   assert.doesNotMatch(css, /padding-right:\s*104px/, 'no nav reserve is left behind');
 });
+
+// A folder that was a project before is re-used, not wiped: the safe answer is the
+// primary button, and deleting the folder is the deliberate alternative (12 Nov).
+test('the re-use dialog offers re-use first', () => {
+  const src = fs.readFileSync(path.join(ROOT, 'web', 'project-menu.js'), 'utf8');
+  const block = /openDialog\(\{[\s\S]*?This folder was a project before[\s\S]*?\}\);/.exec(src);
+  assert.ok(block, 'the clash dialog exists');
+  assert.match(block[0], /confirmLabel: 'Re-Use It'/, 're-use is the primary action');
+  assert.match(block[0], /okResult: 'reuse'/, 'and its result is reuse');
+  assert.match(block[0], /danger: false/, 'it is not the dangerous one');
+  assert.match(block[0], /extra: \{ label: 'Delete Folder And Start Fresh'/, 'deleting is the alternative');
+});

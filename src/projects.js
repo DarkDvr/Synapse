@@ -298,8 +298,9 @@ export function createProjectStore({ file, rootDir, legacyGeneralDir = null, har
       throw err;
     }
     const all = list();
-    if (all.some((p) => key(p.directory) === key(dir))) {
-      const err = new Error(`"${dir}" is already a project`);
+    const clash = all.find((p) => key(p.directory) === key(dir));
+    if (clash) {
+      const err = new Error(`"${dir}" is already the project "${clash.name}"`);
       err.status = 409;
       throw err;
     }
