@@ -172,9 +172,9 @@ function settingsWorkers(c) {
   return [
     setGroup(
       'Looping',
-      `<label class="set-check" title="Interrupts a worker that repeats one phrase or one command, and counts it. At the limit the model is marked and the task moves to the next coder.">` +
-        `<input data-path="worker.loopGuard" type="checkbox" ${c.worker?.loopGuard !== false ? 'checked' : ''} />` +
-        `<span>Detect looping</span></label>` +
+      `<label class="set-check" title="Beta, experimental. Watches for a repeat — the same tool call four times in a window of twelve, or the same read-only answer three times — in a delegated run (interrupt and nudge) and in the operator's own turn (a steer, never an interrupt). It has produced false strikes on real work; off by default until it earns trust.">` +
+        `<input data-path="worker.loopGuard" type="checkbox" ${c.worker?.loopGuard === true ? 'checked' : ''} />` +
+        `<span>Detect looping (beta, experimental)</span></label>` +
         setField(c, 'Loops before the model is set aside', 'worker.loopLimit', {
           type: 'number',
           // A config saved before this existed has no key; the box shows the
