@@ -12,7 +12,7 @@ import { esc } from './format.js';
 import { $ } from './dom.js';
 import { api } from './api.js';
 import { toast } from './toast.js';
-import { projectOf, runIn } from './run-view.js';
+import { projectOf, runIn, dirKey } from './run-view.js';
 
 const missing = (name) => () => {
   throw new Error(`projects.js: ${name} was not wired at boot`);
@@ -42,6 +42,7 @@ export async function loadProjects({ keepOpen = false } = {}) {
   // The rail has no expand/collapse any more: a project is one row that opens
   // its conversation. The old per-load collapse state is not needed.
   renderTree();
+  pruneFolderState();
   // The open session can be deleted from another tab, or by Synapse's own
   // scaffolding sweep. Left alone, the UI keeps a dead session open and every
   // control on it answers 404 — which is how a mode switch once reported
@@ -72,6 +73,20 @@ export const findSession = (id) => {
     if (s) return s;
   }
   return null;
+};
+
+/**
+ * The same lookup, but only the operator's own conversation.
+ *
+ * A worker's session and the engine's subagent sessions are in the projects' session
+ * lists (the server filters them, and a page loaded before that filter still holds
+ * them), so "is this session still there" is not the same question as "may the page
+ * open it as a chat". On 13 Nov the restored session was a subagent's and the page
+ * showed its brief as the operator's own message.
+ */
+export const chatSession = (id) => {
+  const s = findSession(id);
+  return s && !s.internal && !s.raw?.parentID ? s : null;
 };
 
 
@@ -140,14 +155,38 @@ export function waitingFor(sessionId) {
 // Session" row. Clicking a project opens its chat, and the chat is the newest
 // session in that folder (a compact replaces it).
 export function newestSession(project) {
+  // Only the operator's own sessions count. A worker's session is marked internal;
+  // a session the engine spawned for a model's `subagent` call carries a parent and
+  // no mark of ours — on 13 Nov one was newer than the chat, so clicking the project
+  // opened the subagent's transcript (its brief as "You", its interrupted step as the
+  // Architect's). The server filters both out of `sessions`; this is the belt.
+  const chat = [...(project?.sessions || [])].filter((s) => !s.internal && !s.raw?.parentID);
   // By creation, not by update: the engine touches `updated` for reasons that
   // have nothing to do with the conversation (a policy write at boot), and the
   // chat is the one made last — a compact makes a newer one.
   return (
-    [...(project?.sessions || [])].sort(
+    chat.sort(
       (a, b) => (b.created || b.updated || 0) - (a.created || a.updated || 0),
     )[0] || null
   );
+}
+
+/**
+ * Drop the page state that belongs to folders that are no longer projects.
+ *
+ * A run's trace, its rate and its project-level alarms are keyed by folder, not by
+ * session, so deleting a project and making the same folder a project again brought
+ * the old runs back — a deleted project's "DESIGNER-1 · t1 · 3s" fold sat above a
+ * brand-new conversation (13 Nov, fable_calc). The run log on disk is the history;
+ * the rail is not a place to keep a dead folder's evidence.
+ */
+export function pruneFolderState() {
+  const folders = new Set(state.projects.map((p) => dirKey(p.directory)));
+  for (const [key, trace] of [...state.traces]) {
+    if (trace.dir && !folders.has(dirKey(trace.dir))) state.traces.delete(key);
+  }
+  for (const key of [...state.rates.keys()]) if (!folders.has(key)) state.rates.delete(key);
+  state.alarms = state.alarms.filter((a) => !a.dir || folders.has(dirKey(a.dir)));
 }
 
 /** Has this project's conversation been used at all (as opposed to just opened)? */

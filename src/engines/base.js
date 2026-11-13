@@ -204,7 +204,11 @@ export function normalizeSession(raw) {
     fullAuto: automation.autoPermissions && automation.autoAnswer,
     // Synapse marks its own scaffolding sessions here (worker sessions, which
     // run in the project directory but must not appear as the operator's work).
-    internal: raw?.metadata?.synapse?.internal === true,
+    // A session the engine spawned for another session's `subagent` call is the same
+    // kind of scaffolding, and it carries no Synapse mark at all — only a parent. On
+    // 13 Nov one was the newest session in its project, so opening the project showed
+    // the engine's subagent transcript as the conversation (13 Nov).
+    internal: raw?.metadata?.synapse?.internal === true || Boolean(raw?.parentID),
     metadata: raw?.metadata || null,
     created: raw?.time?.created || null,
     updated: raw?.time?.updated || null,

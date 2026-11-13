@@ -19,6 +19,7 @@ import {
   openProjectChat,
   openProjectFolder,
   findSession,
+chatSession,
   sessionWorking,
   isBusy,
   isStalled,
@@ -2575,12 +2576,12 @@ async function restoreOpenSession() {
   try {
     const pending = await api('GET', '/api/pending');
     const ids = [...(pending.forms || []).map((f) => f.sessionId), ...(pending.active || [])];
-    target = ids.find((id) => id && findSession(id)) || null;
+    target = ids.find((id) => id && chatSession(id)) || null;
   } catch { /* the pending list is a nicety here, not a requirement */ }
   if (!target) {
     let saved = null;
     try { saved = localStorage.getItem(LAST_SESSION_KEY); } catch { /* blocked storage */ }
-    if (saved && findSession(saved)) target = saved;
+    if (saved && chatSession(saved)) target = saved;
   }
   if (!target) {
     // The session was replaced by a compact, or deleted: open the project's

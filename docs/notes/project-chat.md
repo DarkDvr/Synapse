@@ -446,3 +446,44 @@ Two examples from one day, both the same mistake:
 The fix is not to special-case Single at every call site. It is to ask the question at the
 top, decide explicitly, and write the answer down: in the commit ("Single only, because…",
 "both, and the session path is new"), and in the note that owns the feature.
+
+## Three kinds of session, one of them is the chat (13 Nov)
+
+A project's folder holds three kinds of engine session, and only the first is the
+operator's conversation:
+
+1. **the chat** — Synapse made it; the title is the project's name; it carries
+   `metadata.synapse.automation`;
+2. **a worker's run session** — made by `src/runs.js`, marked `metadata.synapse.internal`,
+   deleted when the run ends;
+3. **the engine's own subagent** — made by the *model*, through the engine's `subagent`
+   tool. It carries **no Synapse metadata at all** — only `parentID`, pointing at the
+   session that spawned it. Its title is whatever the model asked for, and its transcript
+   begins with the engine's own "You are a subagent spawned by another session."
+
+The third kind was invisible until it wasn't. On 13 Nov 2026 `fable_calc`'s Architect
+called `subagent`; the child was created in the project folder eleven seconds after the
+chat, so it was **the newest session** — and `newestSession()` picks the newest by
+creation (a compact makes a newer chat, which is why that rule exists). Clicking the
+project opened the child: the engine's subagent preamble as a **YOU** message, the
+child's interrupted step under the **Architect's** name, and a Stop that cut the child
+instead of the chat. The project's real conversation was never touched; it was simply
+not what the page was showing.
+
+Two rules came out of it:
+
+- **A parented session is scaffolding.** `normalizeSession()` sets `internal` for a
+  session with a `parentID` as well as for Synapse's own mark, so `projectsWithSessions()`
+  never offers it and the rail never counts it. `newestSession()` also filters internal
+  and parented sessions — the belt to the server's braces.
+- **Page state keyed by folder dies with the folder.** The same evening `fable_calc` was
+  deleted and made again at the same path, and the deleted project's run fold
+  ("DESIGNER-1 · t1 · 3s") was still above the new conversation: traces, rates and
+  project alarms are keyed by directory, not by session. `pruneFolderState()` drops
+  them when the folder is no longer a project.
+
+**Open question, for the operator:** should a chat be allowed to call the engine's
+`subagent` at all? The work it does has no run, no trace, no plan row and no report —
+Synapse's `synapse-delegate` is the managed path, and Single already denies the tool.
+Denying it in Multi too would make that rule uniform; leaving it allows a model to
+explore in a way the operator cannot see. It is a policy choice, not a bug.
