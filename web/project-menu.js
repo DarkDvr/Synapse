@@ -195,7 +195,7 @@ export function recycleReason(message) {
   // the project's chat, which is not what holds a folder (a browser showing a file from
   // it, Explorer, or a scanner is) and cannot be done from the rail anyway (13 Nov).
   if (/being used|holding the folder|in use|being used by another process/i.test(text)) {
-    return 'Something else on the machine is still holding that folder — a browser showing a file from it, Explorer, or a scanner. Nothing was deleted; try again in a moment.';
+    return 'Something else on the machine is still holding that folder — a dev server a model started there, a browser showing a file from it, or a scanner. Nothing was deleted; try again in a moment.';
   }
   if (/denied/i.test(text)) return 'Windows would not let go of that folder — a file inside it may be open in another program. Close it and try again.';
   if (/not found|cannot find/i.test(text)) return 'The folder had already been moved or deleted.';

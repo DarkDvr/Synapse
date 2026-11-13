@@ -15,6 +15,22 @@ import { createBrowser, findEdge, siteDomains, cookieBelongsTo } from '../src/br
 import { addressCandidates, looksUnconfirmed } from '../src/browser/signin.js';
 import { tmpdir } from './tmpdir.mjs';
 
+// ── the window ──────────────────────────────────────────────────
+// The browser is headed but hidden: a tool window, off-screen, still rendering. Two ways
+// it could leave a taskbar entry the operator sees and cannot open (13 Nov): only the
+// first window found was converted, so a second Edge window kept its button; and the hide
+// path flashed that button, which is attention drawn to a window nobody should see.
+test('the hide path covers every window and never flashes a taskbar button', () => {
+  const script = fs.readFileSync(new URL('../src/browser/show.ps1', import.meta.url), 'utf8');
+  const hideAt = script.indexOf('if ($Hide) {');
+  const elseAt = script.indexOf('} else {', hideAt);
+  assert.ok(hideAt > 0 && elseAt > hideAt, 'the hide branch is still there');
+  const hideBranch = script.slice(hideAt, elseAt);
+  assert.match(hideBranch, /foreach \(\$win in \$found\)/, 'every window of the profile is hidden');
+  assert.doesNotMatch(hideBranch, /FlashWindowEx/, 'hiding does not flash a taskbar button');
+  assert.match(script.slice(elseAt), /FlashWindowEx/, 'showing still flashes it, so a sign-in is noticed');
+});
+
 // ── the fence ───────────────────────────────────────────────────
 test('a listed host covers itself and its subdomains, and nothing that looks like it', () => {
   assert.equal(hostAllowed('example.com', ['example.com']), true);

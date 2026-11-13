@@ -142,13 +142,19 @@ $h = [Math]::Min(860, [int]($area.Height * 0.86))
 $x = $area.X + [int](($area.Width - $w) / 2)
 $y = $area.Y + [int](($area.Height - $h) / 2)
 
-$ex = [W.U]::GetWindowLong($hwnd, $GWL_EXSTYLE)
 if ($Hide) {
-    [void][W.U]::SetWindowLong($hwnd, $GWL_EXSTYLE, (($ex -bor $WS_EX_TOOLWINDOW) -band (-bnot $WS_EX_APPWINDOW)))
-    [void][W.U]::ShowWindow($hwnd, 4)   # SW_SHOWNOACTIVATE: normal, so it keeps rendering
-    [void][W.U]::SetWindowPos($hwnd, [IntPtr]::Zero, -32000, -32000, $w, $h, $SWP_NOZORDER -bor $SWP_NOACTIVATE -bor $SWP_FRAMECHANGED)
+    # Every top-level window of this profile, not only the first. Edge can have more than
+    # one (a "Restore pages" bubble, a popup the page opened), and each window that escapes
+    # this loop is a taskbar entry the operator can see and click (13 Nov).
+    foreach ($win in $found) {
+        $ex = [W.U]::GetWindowLong($win, $GWL_EXSTYLE)
+        [void][W.U]::SetWindowLong($win, $GWL_EXSTYLE, (($ex -bor $WS_EX_TOOLWINDOW) -band (-bnot $WS_EX_APPWINDOW)))
+        [void][W.U]::ShowWindow($win, 4)   # SW_SHOWNOACTIVATE: normal, so it keeps rendering
+        [void][W.U]::SetWindowPos($win, [IntPtr]::Zero, -32000, -32000, $w, $h, $SWP_NOZORDER -bor $SWP_NOACTIVATE -bor $SWP_FRAMECHANGED)
+    }
     $state = 'hidden'
 } else {
+    $ex = [W.U]::GetWindowLong($hwnd, $GWL_EXSTYLE)
     [void][W.U]::SetWindowLong($hwnd, $GWL_EXSTYLE, (($ex -bor $WS_EX_APPWINDOW) -band (-bnot $WS_EX_TOOLWINDOW)))
     [void][W.U]::SetWindowPos($hwnd, [IntPtr]::Zero, $x, $y, $w, $h, $SWP_NOZORDER -bor $SWP_NOACTIVATE -bor $SWP_FRAMECHANGED)
     [void][W.U]::ShowWindow($hwnd, 9)   # SW_RESTORE
@@ -168,16 +174,18 @@ if ($Hide) {
         if ($attached) { [void][W.U]::AttachThreadInput($current, $fgThread, $false) }
     }
     $state = 'shown'
-}
 
-# Blink the taskbar button so the operator notices without a sound alone.
-$flash = New-Object 'W.U+FLASHWINFO'
-$flash.cbSize = [Runtime.InteropServices.Marshal]::SizeOf($flash)
-$flash.hwnd = $hwnd
-$flash.dwFlags = 0x00000002 -bor 0x0000000C   # FLASHW_TRAY | FLASHW_TIMERNOFG
-$flash.uCount = 3
-$flash.dwTimeout = 0
-[void][W.U]::FlashWindowEx([ref]$flash)
+    # Blink the taskbar button so the operator notices without a sound alone. Only on the
+    # show path: a hidden window has no button to blink, and asking the shell to flash one
+    # is how "SynaBrowse is on my taskbar" starts (13 Nov).
+    $flash = New-Object 'W.U+FLASHWINFO'
+    $flash.cbSize = [Runtime.InteropServices.Marshal]::SizeOf($flash)
+    $flash.hwnd = $hwnd
+    $flash.dwFlags = 0x00000002 -bor 0x0000000C   # FLASHW_TRAY | FLASHW_TIMERNOFG
+    $flash.uCount = 3
+    $flash.dwTimeout = 0
+    [void][W.U]::FlashWindowEx([ref]$flash)
+}
 
 try { if ($Sound) { $player = New-Object System.Media.SoundPlayer $Sound; $player.Play() } } catch { }
 Start-Sleep -Milliseconds 900

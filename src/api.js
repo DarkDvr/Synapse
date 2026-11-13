@@ -1762,8 +1762,9 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
           // folder but Synapse no longer knows it is there.
           const e = new Error(
             `could not move ${current.directory} to the Recycle Bin: ${lastError.message} ` +
-              'Something else on the machine is holding the folder — a browser showing a file from it, ' +
-              'Explorer, or a scanner. Nothing was deleted and the project is still here, so try again in a moment.',
+              'Something else on the machine is holding the folder — a dev server a model started there, ' +
+              'a browser showing a file from it, Explorer, or a scanner. Nothing was deleted and the project ' +
+              'is still here, so try again in a moment.',
           );
           e.status = 423; // locked
           throw e;
