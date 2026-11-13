@@ -17,18 +17,19 @@ import { normalize } from '../src/config.js';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
 
-test('a fold carries the first sentence, flattened and clipped', () => {
+test('a fold carries the first sentence, flattened and whole', () => {
   assert.equal(
     reasoningGist('The menu is drawn by MainWindow. I should move it into its own file.'),
     'Reasoning • The menu is drawn by MainWindow.',
   );
   // Newlines and runs of spaces are one line, because the summary is one line.
   assert.equal(reasoningGist('First line\n\n  second   line'), 'Reasoning • First line second line');
-  // A block with no sentence end is clipped with an ellipsis, on the same line.
-  const long = reasoningGist('word '.repeat(60));
-  assert.ok(long.length <= 122, `${long.length} characters`);
-  assert.match(long, /…$/);
-  assert.doesNotMatch(long, /\n/);
+  // A block with no sentence end is kept whole: the summary is `nowrap` with an
+  // ellipsis, so the pane's edge is what shortens it. A character cap here cut the
+  // sentence mid-word with two thirds of the line still empty (13 Nov).
+  const long = 'word '.repeat(60).trim();
+  assert.equal(reasoningGist(long), `Reasoning • ${long}`);
+  assert.doesNotMatch(reasoningGist(long), /…/, 'no character cut: the browser cuts at the edge');
   // Nothing to say still names the thing.
   assert.equal(reasoningGist('   '), 'Reasoning');
   assert.equal(reasoningGist(''), 'Reasoning');

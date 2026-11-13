@@ -2496,7 +2496,9 @@ own line and the sentence overflowed. So:
   (`.chat-alarm { … }` was missing from `document.styleSheets` while
   `.chat-alarm-mark` was present);
 - the line is a **block** now with the ellipsis on the block, not a flex row with it on
-  a child — `.msg-answer` makes its children blocks, and that was the fragile part;
+  a child — `.msg-answer` makes its children blocks, and that was the fragile part (the
+  amber line is a row again since 13 Nov, for a different reason: an inline span's box is
+  the whole sentence, so the *span* is the item that has to shrink — see below);
 - a CSS file is worth a structural check: 920 `{` against 920 `}` in `synapse.css` after
   the fix, comment delimiters balanced.
 
@@ -2554,7 +2556,8 @@ chat, because a session belongs to a directory.
 **A refusal is one line (12 Nov).** The prohibited alarm and the prohibited message were
 saying the same thing twice, at length: the alarm printed up to 150 characters of a shell
 command, and the message printed the model's whole instruction underneath. The alarm keeps
-the tool and the start of the target (90 characters, the rest on hover); the message folds
+the tool and the start of the target (90 characters then, and the rest on hover — since
+13 Nov the whole first line, cut at the pane's edge; see below); the message folds
 to a single `<details>` line that opens to the refused call in full and who asked; the
 harness message under it is not rendered at all when the alarm covers it. Enforcement is
 unchanged — only the reading.
@@ -2635,3 +2638,38 @@ the line because a bordered box has no baseline worth trusting.
 
 Measured on the running app at 13px and on a two-size render at 14/20: the label's line and the
 sentence's line are the same line.
+
+**The browser cuts the line, not a character count (13 Nov, second look).** Two reports,
+one cause: a PROHIBITED line that ended `Select-Obje…` with a third of the chat still
+empty, and Reasoning folds that stopped at `Cover at mi…` on a wide pane. Both were cut in
+JavaScript — 90 characters for the alarm, 110 for the fold — while both stylesheets
+already had `nowrap` and an ellipsis waiting. A character count is a guess at a column;
+the column is the thing that knows.
+
+So `reasoningGist` returns its first sentence whole, the alarm returns its whole command,
+and the summary and the span do the shortening at the pane's edge. Measured on a two-size
+render at 1100px: at 14px the alarm carries all 121 characters of the command with no cut
+at all; at 20px it ends at the chat's content edge. The full text is still in the
+summary's `title`.
+
+**A fold the operator opened stays open (13 Nov).** The prohibited alarm is a `<details>`
+built from page state beside the transcript, and it was the one fold with no key: every
+render — the thinking pane appending, a poll — rebuilt it shut. It carries
+`alarm:<time>:<action>` now, in the same `state.open` set the reasoning folds and the
+compact post use, and the capture-phase `toggle` listener in `app.js` remembers it like
+the others. Single and Multi alike: the alarm is page state rather than a run's, so both
+chats have the same fold and the same rule.
+
+**One chevron for every fold (13 Nov).** The alarm's marker was 0.8em and sat in the
+line's flow: a speck beside a red word, and it pushed the text right by its own width. It
+is the reasoning fold's marker now — `▸`/`▾` at 1.3em, line-height 1.15, in the same
+absolute 16px slot — so the first glyph of an alarm is on the column of every other fold's
+first glyph, and the operator can see it is a control.
+
+**A rule can be emptied by a paste (13 Nov).** The worker trace's role name never looked
+like its design — small, upper case, white and spaced — and the cause was the 11 Nov
+family: `.trace-role { }` stood empty with its four declarations on the next line, outside
+the braces, from a paste on 8 Nov. The browser dropped all four without a word, and reading
+the file showed nothing wrong: the declarations were there, just outside the rule. Fixed,
+and both stylesheets now scan clean for a declaration at brace depth 0 with balanced
+braces.

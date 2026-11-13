@@ -1392,10 +1392,13 @@ body[data-mode="single"] #runAuto { display: none; }
 }
 /* The role wears the Architect's own header type — upper case, spaced, bold — in
    white instead of the speaker's green; the rest of the line stays sentence case and
-   grey. One header grammar, two colours (8 Nov). */
+   grey. One header grammar, two colours (8 Nov).
+   The declarations sat outside this rule from 8 Nov until 13 Nov: a paste left the
+   opening line empty and the browser dropped four declarations on the floor, so the
+   only trace header never had the type it was designed with. */
 .trace-role {
-}
   color: #f2f4f7; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; font-size: calc(var(--chat-fs) * 0.76);
+}
 /* A worker's tool call is the Architect's card, reused as-is. The only addition is
    a little air from the thinking around it. */
 .trace-card { margin: 2px 0; }
@@ -1489,7 +1492,13 @@ body[data-mode="single"] #runAuto { display: none; }
   font-size: calc(var(--chat-fs) * 0.92); line-height: 1.45; color: var(--amber);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.chat-alarm-mark { font-size: calc(var(--chat-fs) * 0.88); margin-right: 7px; }
+/* The amber line is a row, like the prohibited one, so its text is the thing that
+   shrinks: as an inline span it kept its whole width and the block cut it, which
+   ellipsised at the right edge but left a box 200px past the pane for any layout
+   check to trip over. The prohibited alarm is a <details>, whose own children are
+   the summary and the body — it must not become a row. */
+.chat-alarm:not(.is-prohibited) { display: flex; align-items: baseline; gap: 0; }
+.chat-alarm-mark { flex: none; font-size: calc(var(--chat-fs) * 0.88); margin-right: 7px; }
 /* The one alarm in bright red: a tool tried to change something on the prohibited
    list. It is louder than the amber "touched Synapse" line on purpose — that one
    is news, this one is the machine saying no. */
@@ -3536,11 +3545,17 @@ body.is-disconnected .app-shell { filter: blur(2px) brightness(0.45); pointer-ev
    summary keeps the alarm's ellipsis — while the body is allowed to wrap. */
 .chat-alarm.is-prohibited > summary {
   display: flex; align-items: baseline; gap: 0;
+  position: relative; padding-left: 16px;
   list-style: none; cursor: pointer;
 }
 .chat-alarm.is-prohibited > summary::-webkit-details-marker { display: none; }
+/* The chevron is the reasoning fold's, to the glyph and the size (13 Nov): `▸`/`▾`
+   in a 16px slot at 1.3em, so a fold reads the same wherever it is and the marker
+   is as easy to hit as the word beside it. At 0.8em it was a speck at the end of
+   the line, and the operator had to guess it was a control. */
 .chat-alarm.is-prohibited > summary::before {
-  content: '▸'; margin-right: 7px; color: var(--red); font-size: 0.8em;
+  position: absolute; left: 0; top: 0; width: 16px; text-align: center;
+  content: '▸'; color: var(--red); font-size: 1.3em; line-height: 1.15;
 }
 .chat-alarm.is-prohibited[open] > summary::before { content: '▾'; }
 .chat-alarm.is-prohibited[open] { white-space: normal; }

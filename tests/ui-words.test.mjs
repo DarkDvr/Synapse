@@ -612,16 +612,35 @@ test('the refusal is one line and the sentence is folded', async () => {
   assert.match(html, /chat-post-body/, 'and in the folded body');
 });
 
-// The alarm above it names the tool and the start of the target, in one line: a
-// refused shell command used to print a hundred and fifty characters of it.
-test('the alarm keeps a refused command to one short line', async () => {
+// The alarm above it names the tool and its target on one line. It used to be cut
+// at 90 characters — a third of the pane left empty and the command ending
+// mid-word (13 Nov). The line is whole now: the summary's own ellipsis ends it at
+// the chat's edge, and the full text is still one hover away.
+test('the alarm names a refused command in full, and the chat edge cuts it', async () => {
   const { renderAlarm } = await import('../web/chat-notes.js');
   const command = 'powershell [Security.Principal.WindowsIdentity]::GetCurrent() | New-Object Security.Principal.WindowsPrincipal($id) | $p.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)';
-  const html = renderAlarm({ prohibited: true, action: 'shell', paths: [command], note: '' });
+  const html = renderAlarm({ prohibited: true, action: 'shell', paths: [command], note: '', at: 1700000000000 });
   const text = /<span class="chat-alarm-text">([\s\S]*?)<\/span>/.exec(html)[1];
-  assert.ok(text.length < 140, `the line stays short (${text.length})`);
-  assert.match(text, /…/, 'it is cut, not reflowed');
+  assert.ok(text.includes(command.replace(/&/g, '&amp;')), 'the whole command is on the line');
+  assert.doesNotMatch(text, /…/, 'nothing is cut by a character count');
+  assert.match(html, /data-k="alarm:1700000000000:shell"/, 'the fold carries a stable key');
   assert.ok(html.includes(command.replace(/&/g, '&amp;')), 'the whole command is still in the hover');
+});
+
+// The report behind that fold cannot be re-opened by a re-render: the thinking pane
+// appending, or a poll, used to snap it shut a second after the operator opened it.
+test('a refusal the operator opened stays open when the chat renders again', async () => {
+  const { renderAlarm } = await import('../web/chat-notes.js');
+  const { state } = await import('../web/state.js');
+  const alarm = { prohibited: true, action: 'shell', paths: ['node engine.test.js'], note: 'by coder 1 (t3)', at: 42 };
+  assert.doesNotMatch(renderAlarm(alarm), /<details[^>]* open/, 'shut until the operator asks');
+  state.open.add('alarm:42:shell');
+  try {
+    const open = renderAlarm(alarm);
+    assert.match(open, /<details class="chat-alarm is-prohibited" data-k="alarm:42:shell" open>/, 'the next render puts it back open');
+  } finally {
+    state.open.delete('alarm:42:shell');
+  }
 });
 
 // A compaction is part of the conversation: the context dropped, and the chat has to

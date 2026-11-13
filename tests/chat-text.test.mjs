@@ -93,6 +93,18 @@ test('the compacted line wears the chat type, and the reasoning fold marker', ()
   assert.match(css, /\.chat-post\[open\] > summary::after \{ content: '▾'; \}/, 'it has no open state');
 });
 
+// The prohibited alarm opens with a chevron too, and it had a 0.8em speck at the
+// start of the line: the operator could not see it was a control (13 Nov). It is
+// the fold marker now — the same 1.3em glyph in the same 16px slot.
+test('a prohibited line opens with the fold marker, not a speck', () => {
+  const css = read('web/synapse.css').replace(/\/\*[\s\S]*?\*\//g, '');
+  const rule = /\.chat-alarm\.is-prohibited > summary::before \{[^}]*\}/.exec(css);
+  assert.ok(rule, 'the alarm marker rule is gone');
+  assert.match(rule[0], /font-size:\s*1\.3em/, 'the chevron is not the reasoning size');
+  assert.match(rule[0], /content:\s*'▸'/, 'the chevron is not the reasoning glyph');
+  assert.match(css, /\.chat-alarm\.is-prohibited > summary \{[^}]*padding-left:\s*16px/, "it keeps the fold's 16px slot");
+});
+
 test('General is the first Settings tab and the Windows tab is gone', () => {
   const src = read('web/settings-panes.js');
   const block = /export const SETTINGS_TABS = \[([\s\S]*?)\n\];/.exec(src);

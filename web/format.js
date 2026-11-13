@@ -148,18 +148,21 @@ export function ago(ms) {
 }
 
 /**
- * The one-line gist of a reasoning block: its first sentence, clipped.
+ * The one-line gist of a reasoning block: its first sentence, whole.
  *
  * A fold that says only "Reasoning" makes the operator open it to learn whether it
  * was worth opening. The first sentence is what the model was about to do, so it is
- * the honest label — flattened to one line because the summary is one line, and
- * clipped at a length that survives the chat's narrowest column.
+ * the honest label — flattened to one line because the summary is one line.
+ *
+ * It used to be cut at 110 characters, which was a guess at the chat's narrowest
+ * column: on the operator's screen that left two thirds of the line empty and the
+ * sentence ended mid-word (13 Nov). The summary is already `nowrap` with an
+ * ellipsis, so the browser cuts it where the pane really ends and the cut moves
+ * with the window. Nothing is decided here but the sentence.
  */
-export function reasoningGist(text, max = 110) {
+export function reasoningGist(text) {
   const flat = String(text || '').replace(/\s+/g, ' ').trim();
   if (!flat) return 'Reasoning';
   const end = flat.search(/[.!?](?:\s|$)/);
-  const first = end > 0 ? flat.slice(0, end + 1) : flat;
-  const gist = first.length > max ? `${first.slice(0, max - 1).trimEnd()}…` : first;
-  return `Reasoning • ${gist}`;
+  return `Reasoning • ${end > 0 ? flat.slice(0, end + 1) : flat}`;
 }

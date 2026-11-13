@@ -60,31 +60,39 @@ export function alarmTitle(what) {
 export function renderAlarm(a) {
   if (a.prohibited) {
     // One entry, one line, and the rest behind it. The alarm names the tool and the
-    // start of the target; opening it shows the refused call in full and who asked.
-    // The harness message that used to follow it said the same thing in a paragraph
-    // (12 Nov).
+    // target; opening it shows the refused call in full and who asked. The harness
+    // message that used to follow it said the same thing in a paragraph (12 Nov).
+    //
+    // The line is cut where the chat ends, never at a character count: a 90-character
+    // cap left a third of the pane empty and ended the command mid-word (13 Nov). The
+    // summary is `nowrap` with an ellipsis, so the browser does the cutting at the
+    // width the operator actually has, and the full text is still in the hover.
+    //
+    // The fold carries a key, so a render — the thinking pane appending, a poll —
+    // puts it back the way the operator left it instead of snapping it shut.
     const target = (a.paths || []).join(' | ');
     const firstLine = target.split(/\r?\n/).map((l) => l.trim()).find(Boolean) || '';
-    const shown = firstLine.length > 90 ? `${firstLine.slice(0, 89)}…` : firstLine;
     const who = String(a.note || '');
+    const key = `alarm:${Number(a.at) || 0}:${a.action}`;
     const detail = [
       ...(a.paths || []).filter(Boolean).map((p) => `<div class="chat-alarm-call">${esc(String(p))}</div>`),
       who ? `<div class="chat-alarm-who">${esc(who)}</div>` : '',
     ].join('');
-    return `<details class="chat-alarm is-prohibited">
+    return `<details class="chat-alarm is-prohibited" data-k="${esc(key)}"${state.open.has(key) ? ' open' : ''}>
     <summary title="${esc(`PROHIBITED: ${a.action} ${target}${who ? ` ${who}` : ''}`)}">
       <span class="chat-alarm-mark">⛔</span>
-      <span class="chat-alarm-text">PROHIBITED · ${esc(a.action)}${shown ? ` · ${esc(shown)}` : ''}</span>
+      <span class="chat-alarm-text">PROHIBITED · ${esc(a.action)}${firstLine ? ` · ${esc(firstLine)}` : ''}</span>
     </summary>
     <div class="chat-alarm-body">${detail || '<div class="chat-alarm-call">no path recorded</div>'}</div>
   </details>`;
   }
+  // The amber alarm is the same shape and the same rule: the line runs to the chat's
+  // edge and is cut there, and the whole of it is in the title.
   const title = alarmTitle(a.what);
   const detail = (a.paths || []).join(' | ');
-  const shown = detail.length > 150 ? `${detail.slice(0, 149)}…` : detail;
   return `<div class="chat-alarm" title="${esc(`${title}: ${detail}${a.note ? ` — ${a.note}` : ''}`)}">
     <span class="chat-alarm-mark">⚠</span>
-    <span class="chat-alarm-text">${esc(title)}${shown ? ` · ${esc(shown)}` : ''}</span>
+    <span class="chat-alarm-text">${esc(title)}${detail ? ` · ${esc(detail)}` : ''}</span>
   </div>`;
 }
 
