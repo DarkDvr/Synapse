@@ -105,6 +105,20 @@ test('a prohibited line opens with the fold marker, not a speck', () => {
   assert.match(css, /\.chat-alarm\.is-prohibited > summary \{[^}]*padding-left:\s*16px/, "it keeps the fold's 16px slot");
 });
 
+// Two rules 17px apart read as a bracket rather than as a quote: the refusal keeps
+// the message's red rule and the opened sentence's own, and the sentence gets air
+// from it instead of sitting flush (13 Nov).
+test('a refusal wears one rule, and the opened sentence has room from it', () => {
+  const css = read('web/synapse.css').replace(/\/\*[\s\S]*?\*\//g, '');
+  const post = /\.msg\.harness\.is-prohibited \.chat-post\.is-refusal \{[^}]*\}/.exec(css);
+  assert.ok(post, 'the refusal post rule is gone');
+  assert.match(post[0], /border-left:\s*0/, 'the amber rule is off the refusal');
+  assert.match(post[0], /padding-left:\s*0/, 'and its indent went with it');
+  const body = /\.msg\.harness\.is-prohibited \.chat-post\.is-refusal \.chat-post-body \{[^}]*\}/.exec(css);
+  assert.ok(body, 'the opened sentence rule is gone');
+  assert.match(body[0], /padding-left:\s*10px/, 'the text has the gap the message answer has');
+});
+
 test('General is the first Settings tab and the Windows tab is gone', () => {
   const src = read('web/settings-panes.js');
   const block = /export const SETTINGS_TABS = \[([\s\S]*?)\n\];/.exec(src);

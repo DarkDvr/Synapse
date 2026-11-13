@@ -6,11 +6,14 @@
 // Synapse in a tool call" whatever it had actually noticed.
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { markWritten, wroteIt, forgetWrites } from '../src/synapse-writes.js';
 import { keepAttachments } from '../src/keep-attachments.js';
 import { writeDoc } from '../src/project-doc.js';
 import { alarmTitle, renderAlarm } from '../web/chat-notes.js';
 import { tmpdir } from './tmpdir.mjs';
+
+const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 let pass = 0;
 const fails = [];
@@ -74,6 +77,25 @@ try {
     alarmTitle('CHANGED DURING A WORKER RUN') === "Synapse's own files changed while a worker ran",
     alarmTitle('CHANGED DURING A WORKER RUN'),
   );
+  check(
+    'a change with no tool call behind it does not blame the worker',
+    alarmTitle('CHANGED WITH NO TOOL CALL') ===
+      'The harness changed during a run, and no tool call in that run named Synapse',
+    alarmTitle('CHANGED WITH NO TOOL CALL'),
+  );
+  check(
+    'the two diff lines are not one sentence',
+    alarmTitle('CHANGED WITH NO TOOL CALL') !== alarmTitle('CHANGED DURING A WORKER RUN'),
+  );
+  // The run's own calls decide which of the two sentences is used: this repository is
+  // edited while runs are live (13 Nov — our own four files were announced as a
+  // worker's tampering), so the diff needs the evidence beside it.
+  const runsSource = fs.readFileSync(path.join(REPO, 'src', 'runs.js'), 'utf8');
+  check(
+    'the diff is worded by the evidence',
+    runsSource.includes("harnessNamed.size ? 'CHANGED DURING A WORKER RUN' : 'CHANGED WITH NO TOOL CALL'"),
+  );
+  check('and the evidence comes from the run\'s own calls', /harnessNamed\.add\(/.test(runsSource));
   check(
     'a shell command naming the harness still says that',
     alarmTitle('shell command naming the harness') === 'A model named Synapse in a tool call',

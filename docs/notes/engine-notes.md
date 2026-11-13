@@ -923,6 +923,18 @@ thinking**; 13% of the time in tools, the rest in generation.
   DURING A WORKER RUN" — read "A model named Synapse in a tool call" beside a file
   name, which is the operator's "strange white errors". `alarmTitle()` now maps
   each kind to a sentence of its own.
+- **A changed tree is not a witness (13 Nov).** The post-run `git status` comparison
+  announced "Synapse's own files changed while a worker ran" for six files the
+  operator's agent was editing at the time. The alarm was right about the diff and
+  wrong about the author: `git status` cannot see who wrote a file. The run's own
+  transcript now decides the sentence — if any of its tool calls named the harness
+  (a write tool, or a shell command with a write shape), the files are evidence and
+  the line keeps its old reading; if none did, it is titled *"The harness changed
+  during a run, and no tool call in that run named Synapse"*. Nothing is suppressed:
+  the files are still listed, the log still records them, and the permission rules
+  and the restore point are unchanged — because a project script with a hard-coded
+  path could still write here. What changed is that the operator's own edit no
+  longer reads as a worker tampering with Synapse.
 
 ### What the engine actually does with a permission rule (measured, 2.0.30)
 

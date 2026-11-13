@@ -1460,6 +1460,11 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     // The last turn's own error at the moment of the stop, recorded separately so
     // the record can still answer "what was the worker doing".
     let lastTurnError = null;
+    // Every harness path this run's own tool calls named. The post-run diff says the
+    // tree changed; these are the only evidence that can say the run did it, because
+    // the operator — or an agent working on Synapse — edits this repository while runs
+    // are live (13 Nov: four of our own files were reported as a worker's tampering).
+    const harnessNamed = new Set();
     // Set when the operator (or the gate) refused a tool: the refusal note is the
     // turn's last word, not a provider failure to retry.
     let declined = false;
@@ -2252,6 +2257,13 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
         }
 
         const messages = await engine.getMessages(worker.id);
+        // What this run's calls touched in the harness, for the post-run comparison.
+        // Only a write tool and a write-shaped shell command can change a file there;
+        // a read is recorded by the guard and cannot explain a diff.
+        try {
+          const named = guard?.inspect?.(messages);
+          for (const p of [...(named?.writes || []), ...(named?.shells || [])]) harnessNamed.add(p);
+        } catch { /* the diff still stands on its own; only its wording changes */ }
         // A stop with a reason *is* the report: the reason explains a run that
         // ended early, and a worker interrupted mid-question has nothing to say
         // for itself. Recomputing this from the transcript overwrote the reason
@@ -2409,6 +2421,12 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     // worker was running — however it happened, and whether or not a tool call
     // named a path. Reported before the Architect is woken, so the two never
     // disagree about what the worker did.
+    //
+    // The diff says the tree changed; it cannot say who changed it. This repository is
+    // edited while runs are live — by the operator, and by the agent doing the
+    // operator's fixes — and on 13 Nov four of those files were announced as a
+    // worker's tampering. So the run's own calls decide the sentence: if none of
+    // them named the harness, the line says that instead of implying the worker.
     const harnessAfter = await (guard?.state?.() || Promise.resolve(null)).catch(() => null);
     const harnessChanged = (guard?.changed?.(harnessBefore, harnessAfter) || []).filter((line) => {
       // The Settings dialog is Synapse writing its own file, and Synapse knows
@@ -2423,7 +2441,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     if (harnessChanged.length) {
       guard.alarm({
         sessionId: architectId,
-        what: 'CHANGED DURING A WORKER RUN',
+        what: harnessNamed.size ? 'CHANGED DURING A WORKER RUN' : 'CHANGED WITH NO TOOL CALL',
         paths: harnessChanged.slice(0, 12),
         note: `${request.task} (${role})`,
       });

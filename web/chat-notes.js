@@ -53,6 +53,10 @@ export function alarmTitle(what) {
   if (/^WRITE INSIDE THE HARNESS$/i.test(kind)) return 'Something tried to write inside Synapse';
   if (/OUTSIDE ITS FOLDER/i.test(kind)) return 'A worker wrote outside its own folder';
   if (/CHANGED DURING A WORKER RUN/i.test(kind)) return "Synapse's own files changed while a worker ran";
+  // The same diff with no tool call behind it: this repository is edited while runs
+  // are live, so the line says what the evidence is instead of implying the worker
+  // (13 Nov — four of our own files were announced as tampering).
+  if (/CHANGED WITH NO TOOL CALL/i.test(kind)) return 'The harness changed during a run, and no tool call in that run named Synapse';
   if (/shell command naming/i.test(kind)) return 'A model named Synapse in a tool call';
   return kind ? 'The harness noticed something' : 'The harness noticed something';
 }

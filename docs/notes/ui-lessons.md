@@ -2673,3 +2673,11 @@ the braces, from a paste on 8 Nov. The browser dropped all four without a word, 
 the file showed nothing wrong: the declarations were there, just outside the rule. Fixed,
 and both stylesheets now scan clean for a declaration at brace depth 0 with balanced
 braces.
+
+**Two rules are one too many (13 Nov).** The refused message wore the post's amber rule
+*and* the message's red one, 17px apart, which read as a bracket around a line rather than
+as one quote. The post's rule and its 10px indent are off the refusal now, so the PROHIBITED
+line starts on the speaker's own column, and the opened sentence's rule gets 10px of air
+from its text — the gap `.msg-answer` uses. Measured on the harness page: the summary and
+the body both start at the message body's content edge (55px), and the body's text sits
+12px in from it (67px).
