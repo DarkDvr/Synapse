@@ -130,10 +130,23 @@ export function noteArchitectCompaction(sessionId, phase) {
 export function noteArchitectUsage(ev) {
   const tokens = ev.raw?.data?.tokens;
   if (!tokens) return;
+  const used = (Number(tokens.input) || 0) + (Number(tokens.cache?.read) || 0);
+  // The wiring may not be there (a test process): no wire, no window, and no judgement
+  // to make — the number is taken as given.
+  let limit = 0;
+  try {
+    limit = Number(wired.modelByRef(wired.selectionFor('architect').ref)?.context) || 0;
+  } catch { /* not wired */ }
+  // A prompt cannot be larger than the window it is a prompt for. When the provider
+  // reports `cache.read` as a running session total, the sum comes out over the window
+  // (262K on a 262K model) while the transcript reports the true 198K — and the two
+  // alternate on screen, which reads as a bug because it is one (13 Nov). An implausible
+  // event is dropped, not capped: the transcript's own figure is the honest one.
+  if (limit && used > limit) return;
   state.archCtx = {
     sessionId: ev.sessionId,
     pending: '',
-    used: (Number(tokens.input) || 0) + (Number(tokens.cache?.read) || 0),
+    used,
     // The two halves, kept so the card can say how much of the prompt the provider's
     // cache served (12 Nov).
     fresh: Number(tokens.input) || 0,

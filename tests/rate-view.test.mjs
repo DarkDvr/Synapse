@@ -3,7 +3,7 @@
 // against a 262K window (12 Nov). The display clamps; this is the rule.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { withinWindow, cacheShare, lastPromptOf, noteArchitectCompaction } from '../web/rate-view.js';
+import { withinWindow, cacheShare, lastPromptOf, noteArchitectCompaction, noteArchitectUsage, rateViewWiring } from '../web/rate-view.js';
 import { state } from '../web/state.js';
 import { promptParts } from '../src/runs.js';
 
@@ -76,4 +76,21 @@ test('a worker\'s compaction hides its size too', () => {
   assert.equal(promptParts([step, { ...pack, raw: { status: 'running' } }]).pending, 'compacting');
   const after = { type: 'assistant', created: 3000, raw: { tokens: { input: 9000, cache: { read: 1121 } } } };
   assert.equal(promptParts([step, pack, after]).used, 10121);
+});
+
+// The card flickered between 262K/262K and 198K/262K: a provider reporting cumulative cache
+// tokens produced a sum over the window, and the cap printed it while the transcript printed
+// the truth (13 Nov).
+test('an implausible usage event is ignored, not capped', () => {
+  state.sessionId = 'sess_x';
+  state.archCtx = { sessionId: 'sess_x', used: 198000, fresh: 1000, cached: 197000, at: 1 };
+  // the model's window is unknown here, so the guard cannot judge: it takes the number
+  noteArchitectUsage({ sessionId: 'sess_x', raw: { data: { tokens: { input: 1000, cache: { read: 197000 } } } } });
+  assert.equal(state.archCtx.used, 198000);
+  // with a window known and the sum over it, nothing is written
+  rateViewWiring({ modelByRef: () => ({ context: 262144 }), selectionFor: () => ({ ref: 'arch' }) });
+  state.archCtx = { sessionId: 'sess_x', used: 198000, fresh: 1000, cached: 197000, at: 1 };
+  const before = state.archCtx;
+  noteArchitectUsage({ sessionId: 'sess_x', raw: { data: { tokens: { input: 70000, cache: { read: 202000 } } } } });
+  assert.equal(state.archCtx, before, 'a 262K prompt on a 262K model is not a prompt');
 });

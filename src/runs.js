@@ -298,7 +298,21 @@ export function toolTarget(input = {}) {
     .map(String)
     .join(':');
   const target = String(raw ?? '').trim();
-  return slice ? `${target}#${slice}` : target;
+  if (target) return slice ? `${target}#${slice}` : target;
+  // No path, no command, no address — but the call is still the same call when the
+  // arguments are the same. A browser tool is exactly this: `read {maxChars: 2000}`,
+  // `scroll {dy: -3000}`. Skipping those left the loop guard blind to the one loop the
+  // operator could see on screen (13 Nov). An empty input stays empty: eight calls with
+  // `{}` are not eight of the same thing worth refusing.
+  const keys = Object.keys(input || {}).sort();
+  if (!keys.length) return '';
+  return keys
+    .map((key) => {
+      const value = input[key];
+      const text = typeof value === 'object' && value !== null ? JSON.stringify(value) : String(value);
+      return `${key}=${text.slice(0, 60)}`;
+    })
+    .join('&');
 }
 
 /** The tool input may arrive as an object or as a JSON string. */

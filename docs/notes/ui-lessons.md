@@ -2588,3 +2588,15 @@ new place: measured on `test_qfn_context_hard`, the compaction reported 167,193 
 while it waits — `compacting… / 205K ctx`, then `compacted / 205K ctx` — and the next usage
 event prints the real figure. Nothing is invented in between, which is the only honest answer
 when the engine will not know the new size until it sends the next prompt.
+**A call with no path is still a call (13 Nov).** The loop the operator could see on screen was
+`browser_read {maxChars: 2000}` and `browser_scroll {dy: -3000}` alternating, and the guard was
+blind to both: its signature was the *path*, and a browser call has none, so every one of them
+hit `if (!tool.target) continue`. `toolTarget()` now falls back to the sorted arguments — the
+same call with the same arguments is the same call — while an empty argument list still has no
+signature (eight `{}` calls are not eight of the same thing).
+
+**And two numbers for one context.** The card alternated between `262K/262K ctx` and `198K/262K
+ctx (100% cache)`: the first was a provider's cumulative `cache.read` summed into the prompt and
+capped at the window, the second the transcript's honest figure. A prompt cannot exceed the
+window it is a prompt for, so an event that says it did is now **dropped**, not capped. One
+source keeps the number; the other no longer speaks.

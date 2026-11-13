@@ -7,6 +7,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { toolSignature, loopStrike, LOOP_WINDOW, LOOP_NUDGE } from '../src/loop-detect.js';
 import { createTurnGuard } from '../src/turn-guard.js';
+import { toolTarget } from '../src/runs.js';
 
 const call = (name, target, output = '') => toolSignature({ name, target, output });
 const long = (n) => `${'x'.repeat(n)}`;
@@ -117,4 +118,16 @@ test('no nudge after the turn ends, and none for another session', async () => {
   const guard2 = createTurnGuard({ engine: other.engine, sessionId: 'sess_2', log: { warn() {} } });
   await guard2.poll();
   assert.equal(other.prompts.length, 0, 'only its own session');
+});
+
+// The loop the operator could see on screen was `browser_read {maxChars:2000}` and
+// `browser_scroll {dy:-3000}` alternating: neither has a path, so the guard had no
+// signature for either and skipped every call (13 Nov).
+test('a browser call has a signature, and an empty call has none', () => {
+  assert.equal(toolTarget({ maxChars: 2000 }), 'maxChars=2000');
+  assert.equal(toolTarget({ dy: -3000 }), 'dy=-3000');
+  assert.equal(toolTarget({ limit: 5, maxChars: 2000 }), 'limit=5&maxChars=2000', 'key order is stable');
+  assert.equal(toolTarget({}), '', 'no arguments is no signature');
+  const loop = [1, 2, 3, 4].map(() => toolSignature({ name: 'synapse-browser_read', target: toolTarget({ maxChars: 2000 }) }));
+  assert.equal(loopStrike(loop)?.times, 4, 'four identical browser calls strike');
 });
