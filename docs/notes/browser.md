@@ -213,6 +213,23 @@ refusing one is an error the model can report.
 - **Nothing here reads a cookie.** Not for the table, not for "validate", not for a
   fallback.
 
+## A local mock is a page (14 Nov)
+
+A model that writes a mock has one honest way to look at it, and on 14 Nov one was refused
+its own `file:///F:/dev/Synapse.Projects/test/mock-2.html` and had to describe a page it
+could not see. `open` accepts a `file:` address now, under the fence that keeps the browser
+a browser and not a way around the file rules:
+
+- the file must be **inside the projects folder** — the path is resolved first, so `..`
+  cannot climb out, and the harness and the rest of the machine are refused;
+- it must be **`.html`/`.htm`**, because the point is a page to look at, not a reader for
+  arbitrary files (the `read` tool has its own policy for those);
+- everything the browser does with it — `read`, `click`, `type`, `screenshot` — works the
+  same, and no host is recorded for it.
+
+`localPageAllowed()` in `src/browser/allow.js` is the rule, tested without a browser; the
+tool's description names it, because that is where a model learns what it may open.
+
 ## Where things live
 
 | | |
@@ -251,7 +268,7 @@ There is deliberately **no `help` tool**. It would be a second copy of the same 
 on every turn, and it would drift the way `handoff` did — a model that already has the schema
 would be calling a tool to be told what it was told. What changed instead:
 
-- `open`: hidden window, http(s) only, sign-ins persist between runs, a wall is `handoff``s;
+- `open`: hidden window, http(s) pages or a local `.html` mock inside the projects folder, sign-ins persist between runs, a wall is `handoff``s;
 - `read`: 6,000 by default, 30,000 at most, and a cut says so;
 - `handoff`: the card, the operator's Allow, no time limit;
 - `screenshot`: the project path and the chat-ready relative one.

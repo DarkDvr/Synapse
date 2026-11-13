@@ -18,10 +18,13 @@ const text = (name) => {
   return tool.description;
 };
 
-test('open says the window is hidden, the scheme is checked, and sessions persist', () => {
+test('open says the window is hidden, what it may open, and that sessions persist', () => {
   const d = text('open');
   assert.match(d, /hidden/i, 'the operator sees nothing');
-  assert.match(d, /http and https/, 'file:// is refused and the model is told');
+  assert.match(d, /http and https/, 'http(s) pages open');
+  assert.match(d, /local \.html\/\.htm page/, 'a local mock is a page too');
+  assert.match(d, /inside the projects folder/, 'and the fence is named');
+  assert.doesNotMatch(d, /file:\/\/ is refused/, 'the old blanket refusal is gone');
   assert.match(d, /sessions between runs/i, 'the profile is the point');
   assert.match(d, /handoff/, 'a wall is not a scrape');
   assert.doesNotMatch(d, /a host the operator has a browser refuses/, 'the host list is gone');

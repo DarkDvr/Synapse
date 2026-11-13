@@ -10,7 +10,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { hostOf, hostAllowed, checkUrl } from '../src/browser/allow.js';
+import { hostOf, hostAllowed, checkUrl, localPageAllowed } from '../src/browser/allow.js';
 import { createBrowser, findEdge, siteDomains, cookieBelongsTo } from '../src/browser/browser.js';
 import { addressCandidates, looksUnconfirmed } from '../src/browser/signin.js';
 import { tmpdir } from './tmpdir.mjs';
@@ -57,6 +57,22 @@ test('a URL parses to its host and keeps no lookalike', () => {
   assert.equal(hostOf('https://WWW.Example.COM./x'), 'www.example.com');
   assert.equal(hostOf('not a url'), '');
   assert.equal(hostOf('javascript:alert(1)'), '');
+});
+
+// A model that writes a mock needs to look at it: on 14 Nov one was refused its own
+// `file:///F:/dev/Synapse.Projects/test/mock-2.html` and guessed instead. The fence is
+// the projects folder and the page extension — never the harness, never the machine.
+test('a local page is allowed only inside the projects folder, and only as HTML', () => {
+  const root = 'F:\\dev\\Synapse.Projects';
+  const ok = (url) => localPageAllowed(url, { root }).ok;
+  assert.equal(ok('file:///F:/dev/Synapse.Projects/test/mock-2.html'), true, 'a mock the model wrote');
+  assert.equal(ok('file:///F:/dev/Synapse.Projects/test/MOCK.HTM'), true, 'the extension is not case-sensitive');
+  assert.equal(ok('file:///F:/dev/Synapse.Projects/test/mock-2.txt'), false, 'only a page');
+  assert.equal(ok('file:///F:/dev/Synapse/AGENTS.md'), false, 'the harness is not a page');
+  assert.equal(ok('file:///F:/dev/Synapse.Projects/../Synapse/src/index.js'), false, 'no climbing out');
+  assert.equal(ok('file:///C:/Windows/win.ini'), false, 'nor the machine');
+  assert.equal(ok('https://example.com'), false, 'this is the local-file rule, not the web one');
+  assert.equal(ok('nonsense'), false, 'and it is a URL or it is nothing');
 });
 
 // The sign-in field takes what a person types. A browser resolves it; the harness only

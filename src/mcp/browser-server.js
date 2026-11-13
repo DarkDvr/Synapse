@@ -16,10 +16,10 @@
 // stdout carries JSON-RPC and nothing else. All logging goes to stderr.
 import fs from 'node:fs';
 import path from 'node:path';
-import { DATA_DIR, WEB_DIR } from '../paths.js';
+import { DATA_DIR, WEB_DIR, PROJECTS_ROOT } from '../paths.js';
 import { artifactDir } from '../browser/artifacts.js';
 import { createBrowser, findEdge } from '../browser/browser.js';
-import { checkUrl, hostOf } from '../browser/allow.js';
+import { checkUrl, hostOf, localPageAllowed } from '../browser/allow.js';
 import { askOperator } from '../browser/handoff.js';
 import { watchForSignIn } from '../browser/session-watch.js';
 // The descriptions a model reads live in their own file, so they can be tested without
@@ -111,15 +111,23 @@ const outline = (page, { maxChars = 6000, links = 60 } = {}) => {
 };
 
 /**
- * Refuse what is not an http(s) address, in words the model can act on.
+ * Refuse what the browser must not open, in words the model can act on.
  *
  * There is no host list any more: the operator's short answer was "the sites I am logged
  * into", so the fence is the master switch, and the Sites table is a record of the
  * sessions rather than a permission list. What is still refused is a scheme a browser
- * would not treat as a page — `file://` would be a way around the harness's own rules.
+ * would not treat as a page, and a local file outside the projects folder — `file://` must
+ * not become a way around the harness's own rules (14 Nov: a model's own mock is allowed,
+ * the harness and the rest of the machine are not).
  */
 function guard(url) {
-  const verdict = checkUrl(url, ['*']);
+  const text = String(url || '').trim();
+  if (/^file:/i.test(text)) {
+    const local = localPageAllowed(text, { root: PROJECTS_ROOT });
+    if (!local.ok) throw new Error(local.reason);
+    return { ok: true, host: '', local: true, path: local.path };
+  }
+  const verdict = checkUrl(text, ['*']);
   if (!verdict.ok) throw new Error(verdict.reason);
   return verdict;
 }
@@ -187,7 +195,7 @@ async function handle(msg) {
             const url = await browser.goto(args.url, { settle: Number(args.settleMs ?? 900) });
             const page = await browser.read({});
             noteUsed(page.url);
-            process.stderr.write(`open ${verdict.host} -> ${url}\n`);
+            process.stderr.write(`open ${verdict.local ? verdict.path : verdict.host} -> ${url}\n`);
             return toolText(id, `Opened ${url}\n\n${outline(page, { maxChars: 6000, links: 60 })}${wallNote(page)}`);
           }
           case 'read': {

@@ -15,14 +15,16 @@ export const TOOLS = [
     description:
       'Open a page in the harness\'s own browser and answer its address, title, a readable ' +
       'outline of its text and the links on it. The window is hidden: the operator sees ' +
-      'nothing. Only http and https pages open — file:// is refused. The browser keeps its ' +
+      'nothing. It opens http and https pages, and a local .html/.htm page when the file is ' +
+      'inside the projects folder — a mock you wrote is meant to be looked at. The harness, ' +
+      'the rest of the machine and every other file type are refused. The browser keeps its ' +
       'sessions between runs, so a site the operator signed in before is already signed in. ' +
       'Use this instead of webfetch when a page is signed in, behind a bot check, or drawn ' +
       'by script; a page that asks to be signed in needs handoff, not a scrape.',
     inputSchema: {
       type: 'object',
       properties: {
-        url: { type: 'string', description: 'The page to open (http or https).' },
+        url: { type: 'string', description: 'The page to open (http(s), or a local .html/.htm file inside the projects folder).' },
         settleMs: { type: 'integer', description: 'How long to let the page finish rendering (default 900).', minimum: 0, maximum: 15000 },
       },
       required: ['url'],

@@ -75,9 +75,9 @@ test('the server answers the protocol and its tools work on a local page', async
   fs.writeFileSync(page, '<!doctype html><title>MCP page</title><h1 id="t">alpha</h1>'
     + '<button onclick="document.getElementById(\'t\').textContent=\'beta\'">Go</button>');
 
-  // A page has to be an http(s) address — the allowlist is about hosts, and a file://
-  // path is not one. So the test serves its own folder on loopback, which is also the
-  // path a real page takes.
+  // A local page is allowed only inside the projects folder (a model's own mock), and this
+  // test's folder is a temp dir, so it serves its own folder on loopback — which is also
+  // the path a real page takes.
   const server = http.createServer((req, res) => {
     const name = decodeURIComponent(String(req.url || '/').split('?')[0]).replace(/^\/+/, '') || 'page.html';
     try {
@@ -139,11 +139,12 @@ test('the server answers the protocol and its tools work on a local page', async
     assert.match(shot.result.content[0].text, /cite it exactly as !\[\]\(/, 'the answer must give a path the chat can render');
     assert.match(shot.result.content[0].text, /shot-\d/, 'the answer names the file');
 
-    // The fence is the switch, not a host list — but a page must still be an http(s)
-    // address: `file://` would be a way around the harness's own rules.
+    // The fence is the switch, not a host list — and a `file:` page is allowed only for a
+    // file inside the projects folder. The engine binary is outside it, so this is refused
+    // with the sentence that says where a local page may live (14 Nov).
     const blocked = await rpc.call('tools/call', { name: 'open', arguments: { url: `file:///${process.execPath.replace(/\\/g, '/')}` } });
-    assert.equal(blocked.result.isError, true, 'a file:// address was accepted');
-    assert.match(blocked.result.content[0].text, /http/);
+    assert.equal(blocked.result.isError, true, 'a file:// address outside the projects was accepted');
+    assert.match(blocked.result.content[0].text, /inside the projects folder/);
 
     const closed = await rpc.call('tools/call', { name: 'close', arguments: {} });
     assert.match(closed.result.content[0].text, /closed/i);
