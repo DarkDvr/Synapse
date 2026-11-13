@@ -12,6 +12,7 @@ import { api } from './api.js';
 import { $ } from './dom.js';
 import { newStream } from './stream-view.js';
 import { paneAdd, paneEnded, paneAfterRender } from './thinking-pane.js';
+import { turnLive } from './turn-live.js';
 
 // Four things this file needs from app.js: a redraw of the transcript, the trace a
 // piece of writing belongs to, the run on screen, and the question post (which is a
@@ -179,6 +180,10 @@ const isWorker = (trace) => trace !== state.sessionTrace;
 export function appendStream(kind, delta) {
   const trace = liveTrace();
   if (!trace || !delta) return;
+  // The Architect's pane exists only while its turn does. A delta for a turn that is
+  // over — a queued event, a step the page never saw start — used to open a one-line
+  // pane under a finished post, and nothing would ever close it (13 Nov).
+  if (!isWorker(trace) && !turnLive()) return;
   // Speech never takes the thinking pane — not a worker's (it becomes the paragraph
   // when the block ends) and not the Architect's either: its words land with the
   // message, and showing them in the pane cleared the thoughts above (9 Nov).

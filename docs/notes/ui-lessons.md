@@ -2681,3 +2681,18 @@ line starts on the speaker's own column, and the opened sentence's rule gets 10p
 from its text — the gap `.msg-answer` uses. Measured on the harness page: the summary and
 the body both start at the message body's content edge (55px), and the body's text sits
 12px in from it (67px).
+
+**A pane belongs to a turn, not to a chat (13 Nov).** The Architect's chat showed a
+one-line thinking box — *"digit-count computations depend"* — under a post whose turn was
+long over, with that reasoning already folded above it. The live step's state sits on the
+session's trace, and the trace is one object reused for every chat: a turn that ended while
+another project was on screen never reached the `execution.succeeded` branch that clears it,
+so opening the chat again drew the leftover. That is why the box was one line — it was a
+fragment no message would ever carry, and nothing was going to close it.
+
+Three rules now, one at each depth: **opening a chat starts with no pane** (`openSession`);
+**the pane is drawn only while the turn is live** — `state.busy`, or a newest assistant
+message the engine has not completed (`web/turn-live.js`), the same test the server uses for
+"idle"; and **a delta for a finished turn is refused**, so the next turn's first thought
+cannot resume the stale log. A finished turn's reasoning is its own folds above the post;
+the pane is only ever the words arriving now.

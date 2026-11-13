@@ -627,6 +627,11 @@ async function openSession(id) {
   // The next page load opens this one again (see restoreOpenSession).
   rememberSession(id);
   state.permissions = [];
+  // A live step belongs to the chat it was written in. The trace object is one and is
+  // reused, so a pane left behind when the operator was looking at another project
+  // used to be drawn under this chat's newest post, long after its turn had ended
+  // (13 Nov). The new chat's pane is built from its own deltas.
+  state.sessionTrace = { key: '', stream: null };
   // A stopwatch belongs to the session it measured, so opening another one swaps
   // the totals rather than carrying them across.
   state.clocks = loadClocks(id);

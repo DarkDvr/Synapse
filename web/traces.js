@@ -16,6 +16,7 @@ import { permissionChip } from './ask-note.js';
 import { esc, shortSpan, fileChip, reasoningGist } from './format.js';
 import { renderMarkdown } from './md.js';
 import { paneMarkup } from './thinking-pane.js';
+import { turnLive } from './turn-live.js';
 import { fmtTokens, dirKey, roleLabel } from './run-view.js';
 
 const missing = (name) => () => {
@@ -414,6 +415,16 @@ export function renderSessionStream() {
   const t = state.sessionTrace;
   const text = String(t?.stream?.text || '');
   if (!t?.key || !text.trim()) return '';
+  // The pane belongs to a live turn. Once the turn is over its reasoning is the
+  // message's own folds, and a pane that outlived it is a stray box under a finished
+  // post — the operator's one-line "digit-count computations depend" under the
+  // Architect's delegation (13 Nov). Dropped here as well as hidden, so it cannot be
+  // resumed by the next turn's first delta.
+  if (!turnLive()) {
+    t.stream = null;
+    t.key = '';
+    return '';
+  }
   // Only the step being written can be the same words twice. Comparing against the
   // whole transcript hid the pane whenever a model began a step the way it began an
   // earlier one — measured 12 Nov: after a tool call the pane vanished and only the
