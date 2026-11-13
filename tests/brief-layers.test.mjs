@@ -85,6 +85,18 @@ test('no role brief outgrows its ceiling', () => {
   }
 });
 
+// A tool's name is a literal. A model told "the delegate tool" invented a name, was
+// refused, and concluded the tool did not exist — then did the work through the engine's
+// own `subagent` (13 Nov). The brief names it, and says what a name error means.
+test('the Architect is given the delegate tool’s exact name', () => {
+  const architect = multi('architect');
+  assert.match(architect, /synapse-delegate_delegate/, 'the delegate tool is named exactly');
+  assert.match(architect, /No tool named/, 'a wrong name is distinguished from a missing tool');
+  assert.match(architect, /`subagent` is\s+not a delegation/s, 'the engine’s subagent is ruled out for a plan task');
+  // A worker does not delegate, so it is not handed the Architect's instruction.
+  assert.doesNotMatch(multi('coder-1'), /synapse-delegate_delegate/);
+});
+
 test('the Architect’s brief is the expensive one, and the layers are in it', () => {
   const dir = 'F:/dev/Synapse.Projects/__no_such_project__';
   const architect = briefSession({ dir, role: 'architect' });

@@ -55,6 +55,19 @@ Two non-obvious things, both found by testing:
 MCP tools arrive **namespaced** (`synapse-search_websearch`). Match
 names by suffix, not equality.
 
+**The name is a literal, so the brief has to say it (13 Nov).** On 13 Nov an Architect
+called `delegate_delegate`; the engine answered `No tool named "delegate_delegate" is
+currently available`, and the model concluded *the tool was missing* — it probed the
+code-mode `tools` object (which lists only the code-mode namespaces: `opencode`,
+`browser`) and fell back to the engine's own `subagent`. The same complaint had reached
+the operator twice that day. A model cannot invent a namespace, and it will not read the
+tool list as a spell-check when the brief used a generic word ("the delegate tool"). The
+brief now gives the exact name — `synapse-delegate_delegate` — where it tells the
+Architect to delegate, the way it already named the lease tool (`synapse-lease_lease`),
+and it says that a "No tool named" answer is a spelling error rather than an absence. It
+also rules the engine's `subagent` out for a plan task, in words: no run, no plan row,
+nothing for the operator to judge.
+
 **The same server carries `webfetch`**, because a search result is a URL and the
 engine's own fetcher returns the page, not the reading. Measured on 2 Nov:
 `github.com/DarkDvr/Synapse` is 302 KB of HTML with 11 KB of text in it, most of

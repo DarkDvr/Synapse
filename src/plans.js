@@ -1245,13 +1245,28 @@ export function briefSession({ dir, role = 'architect', auto = false, single = f
     isArchitect
       ? `Project plan: ${planRelPathPlain()} - you own this file and you are the only role that may write it. ` +
           `Read it when a session starts, and keep it current as work lands. To get a task done, hand it to ` +
-          `its role with the delegate tool and wait for the report; do not do the work yourself.`
+          `its role with the delegate tool - its exact name is synapse-delegate_delegate - and wait for the ` +
+          `report; do not do the work yourself.`
       : `Project plan: ${planRelPathPlain()} - read-only for you; the Architect is its only writer. ` +
           (OWNED_DIR[role]
             ? `Inside ${PLAN_DIR}/ you may write only under ${OWNED_DIR[role]}/ and nowhere else there. `
             : `Do not write anything inside ${PLAN_DIR}/. `) +
           `Your task is in the message you were given; do only that task.`,
   );
+
+  if (isArchitect) {
+    // A tool's name is a literal, and two models in one day got it wrong: each called
+    // `delegate_delegate`, the engine answered "No tool named …", and each concluded the
+    // tool did not exist — one fell back to the engine's own `subagent`, which starts no
+    // run and leaves nothing to judge (13 Nov). The lease tool is already named exactly
+    // in the brief for the same reason; the delegate tool is the one that matters most.
+    lines.push(
+      'A tool call answered "No tool named …" was addressed to a tool that does not exist: the name is wrong, ' +
+        'not the tool. Read the exact name from the tool list and call that. The engine\'s own `subagent` is ' +
+        'not a delegation: it starts no run, writes no plan row and leaves the operator nothing to judge. ' +
+        'A plan task never goes through it.',
+    );
+  }
 
   // Judge, do not build. This is the Architect's one real discipline, and it is
   // said three ways because a model that is stuck on a delegation will otherwise
