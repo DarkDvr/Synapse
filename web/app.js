@@ -2392,7 +2392,14 @@ async function bootPage() {
   tracesWiring({ renderTranscript });
   // The transcript asks the app for its height, the cards' activity, the question
   // post, the permission cards and the compact post's metadata.
-  transcriptWiring({ renderRoleActivity, mountAskPost, renderPermissions, compactPostOf });
+  transcriptWiring({
+    renderRoleActivity,
+    mountAskPost,
+    renderPermissions,
+    compactPostOf,
+    // The window, for the compaction line: the same figure the Architect's card uses.
+    architectLimit: () => Number(modelByRef(selectionFor('architect').ref)?.context) || 0,
+  });
   // The dock asks the app to reload the conversation, the cards that are waiting, the
   // compact chip and the rail.
   composerWiring({ loadMessages, refreshPending, renderCompactChip, renderTree });

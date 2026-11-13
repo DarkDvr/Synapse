@@ -629,14 +629,26 @@ test('the alarm keeps a refused command to one short line', async () => {
 
 // A compaction is part of the conversation: the context dropped, and the chat has to
 // say why. A cancelled one is the exception — the chip and the toast already said so.
-test('a compaction is a line in the chat', async () => {
+test('a compaction is a line in the chat, in the trace format Multi uses', async () => {
   const { renderMessage } = await import('../web/transcript.js');
-  const done = renderMessage({ id: 'c1', type: 'compaction', created: Date.now(), completed: false, raw: { status: 'completed', tokens: { input: 172000, output: 2338 } } });
-  assert.match(done, /Compacted — the conversation was summarised/);
-  assert.match(done, /172K prompt/);
-  assert.match(done, /2K summary/);
-  const running = renderMessage({ id: 'c2', type: 'compaction', created: Date.now(), completed: false, raw: { status: 'running', tokens: {} } });
-  assert.match(running, /Compacting — the conversation is being summarised/);
+  const { state } = await import('../web/state.js');
+  state.messages = [{ id: 'a1', type: 'assistant', created: 1000, raw: { tokens: { input: 160000, cache: { read: 7193 } } } }];
+  const done = renderMessage({
+    id: 'c1',
+    type: 'compaction',
+    created: 2000,
+    completed: false,
+    raw: { status: 'completed', tokens: { input: 167193, output: 2338 } },
+  });
+  assert.match(done, /class="trace-line is-compact"/, 'the run trace\'s own line, not a harness block');
+  assert.match(done, /Compacted ×1/, 'the count, as Multi prints it');
+  assert.match(done, /context at 167K/, 'and the size when it can be true');
+  // The transcript holds the first one by the time the second is written — that is what
+  // makes it the second, and the count is the chat´s, not this render´s.
+  state.messages.push({ id: 'c1', type: 'compaction', created: 2000, raw: { status: 'completed', tokens: {} } });
+  const running = renderMessage({ id: 'c2', type: 'compaction', created: 3000, completed: false, raw: { status: 'running', tokens: {} } });
+  assert.match(running, /Compacting ×2/, 'the second one, and in the present tense');
+  assert.match(running, /Compacting ×2/, 'the second one, and in the present tense');
 });
 
 // The operator's three UI rulings of 13 Nov, held as source assertions because they are
@@ -653,6 +665,6 @@ test('right-click is off, and no field offers prefill', () => {
 
 test('the steer label sits level with its sentence', () => {
   const css = fs.readFileSync(path.join(ROOT, 'web', 'synapse.css'), 'utf8');
-  assert.match(css, /\.msg\.user\.is-steer \.msg-role \{ position: relative; top: 1px; \}/, 'the You label');
+  assert.match(css, /\.msg\.user\.is-steer \.msg-role \{ position: relative; top: 0\.23em; \}/, 'the You label, nudged in em so it scales with the chat font size');
   assert.match(css, /\.msg\.user \.msg-text \.msg-steer \{ position: relative; top: -1px; \}/, 'the STEER tag');
 });

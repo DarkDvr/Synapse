@@ -286,23 +286,36 @@ export function renderMessage(m, tail = '') {
     </div></div>`;
   }
   if (m.type === 'compaction') {
-    const tokens = m.raw?.tokens || {};
-    const employed = Number(tokens.input) || 0;
-    const written = Number(tokens.output) || 0;
+    // The same line a run's trace draws ("⏳ Compacting ×1 · context at 172K/262K"), because
+    // a compaction is one thing whether a worker or the operator's own turn is doing it.
+    // The count is this compaction's place in the chat, and the size is the last prompt
+    // before it — what was summarised (13 Nov).
     const running = String(m.raw?.status || '') === 'running';
-    const line = running
-      ? 'Compacting — the conversation is being summarised'
-      : 'Compacted — the conversation was summarised';
-    const numbers = running
-      ? ''
-      : ` · ${compactK(employed)} prompt, ${compactK(written)} summary`;
-    return `<div class="msg harness is-compact" data-msg="synapse"><div class="msg-body">
-      ${stamp}<span class="msg-role">Synapse</span>
-      <span class="compact-line" title="${esc(
-        running
-          ? 'The engine is writing a summary of this conversation to make room.'
-          : `The engine summarised this conversation to make room: ${employed} tokens of prompt, ${written} of summary.`,
-      )}">⤵ ${esc(line)}${esc(numbers)}</span>
+    const list = state.messages || [];
+    // The count is this compaction's place in the chat. The transcript normally holds the
+    // message being rendered; a direct call (a test, a preview) does not, and then the
+    // message is one past what the list knows.
+    const counted = list.filter((x) => x.type === 'compaction' && Number(x.created) <= Number(m.created)).length;
+    const inList = list.some((x) => x && m.id && x.id === m.id);
+    const index = Math.max(1, inList ? counted : counted + 1);
+    // The size is the compaction's own prompt — what it summarised. The step before it can
+    // carry a provider's cumulative cache figure (270K on a 262K window, measured 13 Nov),
+    // and a number larger than the window it filled is not a number worth printing.
+    const before = [...list]
+      .reverse()
+      .find((x) => x.type === 'assistant' && x.raw?.tokens && Number(x.created) < Number(m.created));
+    const tokens = before?.raw?.tokens || {};
+    const summed = (Number(tokens.input) || 0) + (Number(tokens.cache?.read) || 0);
+    const limit = wired.architectLimit?.() || 0;
+    // Print the size only when it can be true. A prompt larger than the window it filled is
+    // a provider's cumulative cache figure, and the compaction's own usage is sometimes the
+    // summary request instead of the history (measured 13 Nov: 882 tokens on a full window).
+    // No number is better than a wrong one, so the line then says only that it happened.
+    const size = summed && (!limit || summed <= limit) ? summed : 0;
+    const where = size ? ` · context at ${compactK(size)}${limit ? `/${compactK(limit)}` : ''}` : '';
+    const line = running ? `Compacting ×${index}` : `Compacted ×${index}`;
+    return `<div class="trace" data-msg="synapse"><div class="trace-lines">
+      <div class="trace-line is-compact"><span class="trace-mark">⏳</span>${esc(line)}${esc(where)}</div>
     </div></div>`;
   }
   if (m.type === 'assistant') {
