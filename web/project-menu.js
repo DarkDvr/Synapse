@@ -190,8 +190,14 @@ export async function removeProject(id) {
 /** The server's words for a folder that would not go to the bin, in the operator's terms. */
 export function recycleReason(message) {
   const text = String(message || 'the server did not say why');
+  // "The process cannot access the file because it is being used" is the .NET wording,
+  // and it says nothing about who holds it. The old sentence told the operator to close
+  // the project's chat, which is not what holds a folder (a browser showing a file from
+  // it, Explorer, or a scanner is) and cannot be done from the rail anyway (13 Nov).
+  if (/being used|holding the folder|in use|being used by another process/i.test(text)) {
+    return 'Something else on the machine is still holding that folder — a browser showing a file from it, Explorer, or a scanner. Nothing was deleted; try again in a moment.';
+  }
   if (/denied/i.test(text)) return 'Windows would not let go of that folder — a file inside it may be open in another program. Close it and try again.';
-  if (/in use|being used by another process/i.test(text)) return 'A file in that folder is open in another program. Close it and try again.';
   if (/not found|cannot find/i.test(text)) return 'The folder had already been moved or deleted.';
   return text;
 }

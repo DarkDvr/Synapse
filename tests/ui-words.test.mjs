@@ -685,3 +685,17 @@ test('the steer label sits level with its sentence', () => {
   assert.match(css, /\.msg\.user \.msg-role \{[^}]*vertical-align: baseline/, 'and the label sits on it');
   assert.doesNotMatch(css, /\.msg\.user\.is-steer \.msg-role \{[^}]*top: [0-9]/, 'no pixel nudge is left');
 });
+
+// A failed delete told the operator to close the project's chat — which is not what holds
+// a folder (a browser showing a file from it, Explorer, a scanner is) and cannot be done
+// from the rail anyway. The .NET "being used" wording now maps to something true (13 Nov).
+test('a locked folder says what is really holding it', async () => {
+  const { recycleReason } = await import('../web/project-menu.js');
+  const raw =
+    'could not move F:\\dev\\Synapse.Projects\\old to the Recycle Bin: Exception calling "DeleteDirectory" ' +
+    'with "3" argument(s): The process cannot access the file because it is being used';
+  const text = recycleReason(raw);
+  assert.match(text, /Something else on the machine/, 'it names the real class of holder');
+  assert.match(text, /Nothing was deleted/, 'and says the project is safe');
+  assert.doesNotMatch(text, /close this project's chat/i, 'the old dead-end advice is gone');
+});

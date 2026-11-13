@@ -124,17 +124,24 @@ answers **413** (`InstructionEntryValueTooLargeError`). The route's own summary
 says changes "announce as updates at the next step boundary". Verified live on
 2.0.30: PUT returned 204 and GET read the value back.
 
-**The 204 means accepted, not applied, and a prompt can beat it (13 Nov).** On
-`calc-emperor` — a chat created in Single, switched to Multi and sent at once — the engine
-created the user message at `19:12:08.362` and applied the instruction entry at `.370`:
-eight milliseconds apart, in the wrong order. The first turn therefore ran on the brief
-from creation, "this is one conversation: do the work yourself... do not delegate, and
-ignore a delegation tool if one is offered", and the model built the whole calculator
-itself; the engine announced the change on the *next* turn ("The context under
-'synapse.plan' changed and supersedes the previous value"). `setInstruction` now waits for
-the engine's own `session.instructions.updated` event (2 s cap, then a warning and the turn
-goes on) before the prompt is sent. The permission PATCH is issued before the entry write,
-so waiting for the entry also settles the ruleset — one barrier for both.
+**The 204 means accepted, and the event is a turn-start signal, not an acknowledgement
+(13 Nov).** On `calc-emperor` — a chat created in Single, switched to Multi and sent at
+once — the engine created the user message at `19:12:08.362` and applied the instruction
+entry at `.370`: eight milliseconds apart, in that order. The first turn behaved exactly
+as the Single brief says ("do the work yourself… there is no team… ignore a delegation
+tool if one is offered") and did the whole task alone; the next turn was told "The context
+under 'synapse.plan' changed and supersedes the previous value".
+
+Which request saw which brief is not observable from here, and Synapse cannot make it
+deterministic: the engine emits `session.instructions.updated` when it *applies* an entry
+at a step boundary, and a write to an idle session emits nothing at all — a project's
+creation brief produced no event. A wait on that event before the prompt was tried for one
+release (1.58.8) and could never work — the event only arrives once a turn is starting,
+which the prompt itself does — while it cost every new project the 2 s timeout; removed
+the same night (1.58.9). What is certain is that a brief written in the same instant as a
+send may or may not reach that turn. A chat created in one mode and switched at send is
+therefore an unreliable first turn; setting the mode while the chat is idle, rather than
+at the send, is the change that would fix it, and it is not taken yet.
 
 This is how Synapse briefs a role — which project, where the plan file is, who
 may write it, what the plan currently says, and how work is expected to be

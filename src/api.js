@@ -1742,14 +1742,18 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
         // common holder is a process whose working directory is the project — which is why
         // the browser server steps out of it at start-up (11 Nov).
         let lastError = null;
-        for (let attempt = 0; attempt < 4; attempt += 1) {
+        // A handle Windows has not let go of yet usually clears within a second or two;
+        // the last attempt waits longer than the others because the common case is a
+        // browser or a scanner releasing it late (13 Nov).
+        const pauses = [700, 700, 700, 2500];
+        for (let attempt = 0; attempt < 5; attempt += 1) {
           try {
             await recycleFolder(current.directory);
             lastError = null;
             break;
           } catch (err) {
             lastError = err;
-            if (attempt < 3) await new Promise((r) => setTimeout(r, 700));
+            if (attempt < pauses.length) await new Promise((r) => setTimeout(r, pauses[attempt]));
           }
         }
         if (lastError) {
@@ -1758,7 +1762,8 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
           // folder but Synapse no longer knows it is there.
           const e = new Error(
             `could not move ${current.directory} to the Recycle Bin: ${lastError.message} ` +
-              "Something is still using the folder — close this project's chat, then try again.",
+              'Something else on the machine is holding the folder — a browser showing a file from it, ' +
+              'Explorer, or a scanner. Nothing was deleted and the project is still here, so try again in a moment.',
           );
           e.status = 423; // locked
           throw e;
