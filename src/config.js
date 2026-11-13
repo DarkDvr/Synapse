@@ -115,7 +115,7 @@ export const DEFAULTS = {
     // switched on deliberately. `profile` empty means the default under data\.
     // `sites` is a record, not a permission: the hosts the operator has signed into,
     // written by the sign-in flow only (src/browser/sites.js).
-    enabled: false,
+    enabled: true,
     profile: '',
     sites: [],
     // Close the browser after this many minutes with no tool call: it is ~300 MB of RAM,

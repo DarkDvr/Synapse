@@ -283,3 +283,21 @@ says it was cut at the ceiling rather than pretending the page ended.
 Why a file and not one huge answer: 400,000 characters is about 100K tokens. That is a
 context window spent on one page, and it is spent whether or not the model needed all of it.
 The file costs nothing until it is read, and the model chooses the piece.
+## Why a model cannot see it (13 Nov)
+
+"SynaBrowse is switched on and the model says there is no such tool" is almost always one
+thing: **the engine registers its MCP servers when it starts**, from
+`data\engine\opencode\config\opencode\opencode.json`, and that file is written at boot from the
+harness's own config. Flipping the switch while Synapse runs writes
+`config\synapse.config.json` — and nothing the engine can see until it starts again.
+
+- **The switch now says so**: `browser.enabled` and `browser.profile` are in
+  `restartNeeded()`, so Settings offers **Save & Restart** instead of a save that does nothing.
+- **The log says so**: `SynaBrowse switched on — the engine registers its tools at start, so
+  this takes effect after a restart`.
+- **The check**: `data\engine\opencode\config\opencode\opencode.json` must list
+  `"synapse-browser"`. If it does, a model that still "cannot find" it is looking for the wrong
+  name: the tools are `synapse-browser_open`, `synapse-browser_read`, and the rest.
+
+And it is **on by default** since 13 Nov. The sign-in permission card is what made that safe:
+nothing the browser does as the operator happens without a person saying yes to a card first.

@@ -597,7 +597,7 @@ function settingsBrowser(c) {
     setGroup(
       'SynaBrowse',
       `<label class="set-check" title="A browser the harness owns, with its own profile. Off means the tools do not exist for a model at all.">` +
-        `<input data-path="browser.enabled" type="checkbox" ${c.browser?.enabled === true ? 'checked' : ''} />` +
+        `<input data-path="browser.enabled" type="checkbox" ${c.browser?.enabled !== false ? 'checked' : ''} />` +
         `<span>Let models browse with SynaBrowse</span></label>` +
         setField(c, 'Profile folder (blank = data\\browser\\profile)', 'browser.profile', {
           wide: true,

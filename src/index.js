@@ -135,8 +135,21 @@ async function main() {
   const getConfig = () => currentConfig;
   let currentConfig = config;
   const applyConfig = (incoming) => {
+    const before = currentConfig;
     currentConfig = saveConfig(incoming);
     logger.configure(currentConfig.logging);
+    // The MCP servers are written into the engine's own config when it *starts*, so a
+    // switch flipped while it runs changes nothing a model can see. Said in the log,
+    // because the symptom is a model reporting a tool that exists and it does not say why
+    // (13 Nov: an operator switched SynaBrowse on and no model could find it).
+    if (Boolean(before?.browser?.enabled) !== Boolean(currentConfig?.browser?.enabled)) {
+      const on = currentConfig?.browser?.enabled;
+      logger
+        .channel('app')
+        .info(
+          `SynaBrowse ${on ? 'switched on' : 'switched off'} — the engine registers its tools at start, so this takes effect after a restart`,
+        );
+    }
     return currentConfig;
   };
 

@@ -582,6 +582,11 @@ export function restartNeeded(before, after) {
     'engine.opencode.password',
     'engine.opencode.startTimeoutMs',
     'engine.opencode.skillPaths',
+    // The MCP servers are registered in the engine's own config when it starts, so the
+    // browser switch (and its profile) only reach a model after a restart. This is the
+    // reason a model said "there is no such tool" with SynaBrowse switched on (13 Nov).
+    'browser.enabled',
+    'browser.profile',
   ];
   if (paths.some(changed)) return true;
   // Providers are one more thing the engine reads at start: adding a server,
