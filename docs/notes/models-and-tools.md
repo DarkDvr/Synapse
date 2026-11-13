@@ -648,4 +648,22 @@ whichever end of the step the usage figure arrives on, because the window is
 taken and cleared every time one is used. A step with no streamed text has no
 window and falls back to the whole-step rate.
 
+**The window was missing the tool call (13 Nov).** A tool call's arguments are
+`tokens.output` — a `write` of a whole HTML file is thousands of them — but they arrive as
+`session.tool.input.started`/`.ended`, not as deltas. So a step that wrote a file divided
+the file's tokens by the seconds it spent thinking around the write, and the card read
+2–4× the provider's own figure: the operator's Designer card said 279 tok/s while the
+provider's log said 60–174, and a step that was one big `write` read 1000+. Measured on
+the run itself, from its event timestamps: the 11 steps' old window summed to **24.8 s**,
+and with the tool-input marks added **42.9 s** — 279 becomes 161, inside the provider's
+range. The window now opens on the first delta *or* `tool.input.started` and closes on the
+last delta *or* `tool.input.ended`; `tool.called`/`tool.success` are excluded, because the
+tool's own running time is not the model writing.
+
+**And an event lost with the stream was a second step divided by one step's time.** The
+subtraction that turns cumulative `tokens.output` into *this step's* tokens needs every
+`usage.updated`; a reconnect loses some, and the next figure then spans two steps over one
+window — the "1000+ tok/s" sightings. `forgetUsageSamples()` re-baselines on reconnect:
+the next usage event becomes the baseline and no sample is taken across the gap.
+
 

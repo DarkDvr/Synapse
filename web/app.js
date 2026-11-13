@@ -52,6 +52,7 @@ import {
 import {
   noteDelta,
   resetRate,
+  forgetUsageSamples,
   noteArchitectUsage,
   noteArchitectCompaction,
   lastPromptOf,
@@ -1049,6 +1050,10 @@ function connectStream() {
       clearDisconnected();
       renderClients();
       renderStatus();
+      // The events that keep the speed's baseline current died with the old stream: the
+      // next usage figure would subtract a total from another step, and the card would
+      // read two steps' tokens over one step's window (13 Nov).
+      forgetUsageSamples();
       // A reconnect is exactly when a `run.finished` was missed: the stream that
       // would have carried it died first. Ask what is actually running.
       syncRuns().catch(() => {});
@@ -1464,6 +1469,12 @@ function connectStream() {
     if (liveRun && ev.sessionId && ev.sessionId === liveRun.workerId) {
       if (ev.type === EV.textDelta) { noteDelta(ev); appendStream('word', ev.raw?.data?.delta); }
       else if (ev.type === EV.reasoningDelta) { noteDelta(ev); appendStream('think', ev.raw?.data?.delta); }
+      // A tool call's arguments are model output too: they are counted in `tokens.output`
+      // but they arrive as tool-input events, not as text or reasoning deltas. Leaving
+      // them out of the window divided a whole step's tokens by the seconds spent thinking
+      // around the write — the Designer card read 279 tok/s while the provider's own log
+      // said 60–174, and a step that was one big `write` read 1000+ (13 Nov).
+      else if (ev.type === EV.toolInputStarted || ev.type === EV.toolInputEnded) noteDelta(ev);
       else if (ev.type === EV.usageUpdated) noteWorkerUsage(ev);
       else if (ev.type === EV.textEnded || ev.type === EV.reasoningEnded) endStream();
     } else if (ev.sessionId && ev.sessionId === state.sessionId) {

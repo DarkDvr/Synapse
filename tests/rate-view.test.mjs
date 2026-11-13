@@ -4,7 +4,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { withinWindow, cacheShare, lastPromptOf, noteArchitectCompaction, noteArchitectUsage, rateViewWiring } from '../web/rate-view.js';
+import { withinWindow, cacheShare, lastPromptOf, noteArchitectCompaction, noteArchitectUsage, rateViewWiring, noteDelta, noteWorkerUsage, resetRate, forgetUsageSamples } from '../web/rate-view.js';
 import { state } from '../web/state.js';
 import { promptParts } from '../src/runs.js';
 
@@ -110,4 +110,49 @@ test('the card line fits the narrowest card, and the cache share is in the hover
   assert.ok(code.includes('${share.fresh} fresh, ${share.read} read'), 'the halves are named');
   const clocks = read('clocks.js');
   assert.ok(clocks.includes('${hhmmss(running || last || 0)}/${hhmmss(total)}'), 'the clock has no air around its slash');
+});
+
+// The card's speed divides the step's tokens by the time the model was writing — and a
+// tool call's arguments are writing too. They are counted in `tokens.output` but arrive
+// as tool-input events, not deltas; without marking the window with them, a step that
+// wrote a file divided the file's tokens by the seconds spent thinking around it. The
+// operator's Designer card read 279 tok/s while the provider's own log said 60–174, and
+// a step that was one big write read 1000+ (13 Nov).
+const wire = () => rateViewWiring({
+  currentRun: () => ({ dir: 'F:/p', workerId: 'w', role: 'designer' }),
+  dirKey: (d) => String(d || '').toLowerCase(),
+  fmtTokens: (n) => String(n),
+});
+
+test('the speed window ends with the tool call the step wrote', () => {
+  const app = read('app.js').replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+  assert.match(
+    app,
+    /EV\.toolInputStarted \|\| ev\.type === EV\.toolInputEnded\) noteDelta\(ev\)/,
+    'the tool-input events are part of the writing window',
+  );
+});
+
+test('a reconnect re-baselines the speed instead of adding two steps', () => {
+  wire();
+  resetRate({ dir: 'F:/p' });
+  noteWorkerUsage({ sessionId: 'w', raw: { data: { tokens: { output: 100 } } } });
+  noteDelta({ sessionId: 'w' });
+  forgetUsageSamples();
+  noteWorkerUsage({ sessionId: 'w', raw: { data: { tokens: { output: 300 } } } });
+  assert.equal(state.rates.get('f:/p'), undefined, 'no sample is invented across the gap');
+});
+
+test('a step with a window becomes one sample of written tokens over its own time', async () => {
+  wire();
+  resetRate({ dir: 'F:/p' });
+  noteWorkerUsage({ sessionId: 'w', raw: { data: { tokens: { output: 100 } } } });
+  noteDelta({ sessionId: 'w' });
+  await new Promise((r) => setTimeout(r, 450));
+  noteDelta({ sessionId: 'w' });
+  noteWorkerUsage({ sessionId: 'w', raw: { data: { tokens: { output: 200 } } } });
+  const rec = state.rates.get('f:/p');
+  assert.ok(rec, 'the step is a sample');
+  assert.equal(rec.tokens, 100, 'the step wrote a hundred tokens');
+  assert.ok(rec.ms >= 400, `the window is the step's own (${rec.ms}ms)`);
 });

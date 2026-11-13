@@ -58,6 +58,20 @@ export function resetRate(run) {
 }
 
 /**
+ * Forget the per-step baseline and the open window, keeping the tally already shown.
+ *
+ * The stream dropped, so the `usage.updated` events that keep the baseline current were
+ * lost with it. The next one would subtract a total from several steps ago: two steps'
+ * tokens divided by one step's streaming time, which reads as double the speed — and as
+ * 1000+ tok/s when the gap was longer (13 Nov). After this, the next event is a new
+ * baseline and no sample is taken from the gap.
+ */
+export function forgetUsageSamples() {
+  usageTotals.clear();
+  deltaWindow.clear();
+}
+
+/**
  * The open session's own last prompt, for the Architect's card.
  *
  * A worker's usage arrives for the worker's session and is read by the runner; the
