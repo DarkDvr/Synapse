@@ -48,6 +48,8 @@ import {
 import { screenCallOver } from './desk.js';
 import { browserAskHolding } from './browser/ask.js';
 import { proseToolCall, PROSE_NUDGE } from './model-slips.js';
+// The loop rule is shared with the Architect's own turn: one detector, two callers (13 Nov).
+import { toolSignature, loopStrike, LOOP_WINDOW } from './loop-detect.js';
 import { normDir } from './paths.js';
 import { report } from './report.js';
 import { tokens, ranFor } from './words.js';
@@ -3117,15 +3119,17 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
           toolSeen.add(tool.id);
           onTool?.(tool);
           if (!loopGuard || !tool.target) continue;
-          const sig = `${tool.name}\u0000${tool.target}`;
-          toolWindow.push(sig);
-          while (toolWindow.length > 8) toolWindow.shift();
-          const times = toolWindow.filter((s) => s === sig).length;
-          if (times >= 4) {
+          toolWindow.push(toolSignature(tool));
+          while (toolWindow.length > LOOP_WINDOW) toolWindow.shift();
+          const strike = loopStrike(toolWindow);
+          if (strike) {
             return {
               timedOut: false,
               looped: true,
-              phrase: `${tool.name}${tool.target ? ` ${tool.target}` : ''} run ${times} times`,
+              phrase:
+                strike.kind === 'output'
+                  ? `${tool.name} returned the same answer ${strike.times} times`
+                  : `${tool.name}${tool.target ? ` ${tool.target}` : ''} run ${strike.times} times`,
             };
           }
         }
@@ -3220,6 +3224,9 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
       id: String(part.id || ''),
       name: String(part.name),
       target: toolTarget(input),
+      // The engine's own copy of the result: the digest rule compares answers, and it
+      // needs no extra call to get one (13 Nov).
+      output: String(part.output ?? ''),
     };
   }
 

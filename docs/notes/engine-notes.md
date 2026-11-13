@@ -1999,3 +1999,33 @@ already shows on hover. The rule waits for the file to stand still, like the mir
 
 Measured before adding it: every done row in the operator's active projects carries a
 result; the two that did not were old plans nobody could read afterwards.
+
+## The loop guard: two shapes, two watchers (13 Nov)
+
+A model that loops does one of two things, and the guard now names both:
+
+- **the same call, again** — the same tool on the same target four times in a window of
+  twelve. The target carries `offset:limit`, so paging a long document is a different target
+  each time and stays quiet.
+- **the same answer, again** — the same read-only tool returning byte-identical output three
+  times, whatever was asked. This is the shape the first rule misses: `offset 34, limit 11`
+  and then `offset 35, limit 10` return the same paragraphs, and the model learns nothing.
+  The digest comes from the output already in the transcript, so it costs no engine call.
+
+Thresholds are high on purpose — four calls, three answers, twelve wide — because a strike is
+a nudge, and a false one spends a model's attention. Outputs shorter than 240 characters are
+never evidence ("no files found" three times is a model trying three patterns), and writes are
+never judged by their answer.
+
+**Two watchers use the one rule** (`src/loop-detect.js`):
+
+| watcher | covers | what a strike does |
+|---|---|---|
+| the runner's (`waitForIdle`) | a delegated worker | interrupt, one nudge, and the run's loop limit |
+| `src/turn-guard.js` | the chat the *operator* drives | **steer** a nudge into the live turn — no interrupt, no wake — and tell the operator at the third |
+
+The second exists because the switch used to govern nothing in Single mode: a run is waited on
+by the runner, and a chat the operator drives is not. The guard could be on and catch nothing,
+which is exactly what happened to the 27B. The watcher starts when a message is sent, polls
+only while the engine says that session is active, and stops the moment it is not — it can
+never nudge a turn that has ended.

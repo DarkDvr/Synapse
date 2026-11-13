@@ -15,6 +15,7 @@ import { stopTargets, createStopper } from './stop.js';
 import { PROJECTS_ROOT, SKILLS_DIR, ROOT, SCRATCH_ROOT, scratchDir, normDir, BROWSER_DIR, WEB_DIR } from './paths.js';
 import { EV } from '../web/events.js';
 import { fail, refuseBusy } from './errors.js';
+import { createTurnGuard } from './turn-guard.js';
 import { braveEntries, entryBlockingWrite, protectionEntries, protectionFor } from './protection.js';
 import { mayRecycleFolder } from './projects.js';
 import { fetchProviderModels } from './providers.js';
@@ -225,6 +226,16 @@ export function folderNameProblem(folder) {
 
 export function createApi({ getConfig, applyConfig, power, engine, logger, getBootError, projects, toolStats, probe, modelCache, traceReasons, inspectModel: inspectRef, probeDir, runs, desk, engineUpdate, synapseUpdate, restart, stopSelf, pcShutdown, notify, permissionLog, permissionGate, permissionMemory }) {
   const app = logger.channel('app');
+  // One guard per chat the operator drives: the Architect's own turn has no run, and
+  // nothing was watching it (13 Nov).
+  const turnGuards = new Map();
+  function watchTurn(sessionId, dir) {
+    if (getConfig()?.worker?.loopGuard === false) return;
+    turnGuards.get(sessionId)?.stop?.();
+    const guard = createTurnGuard({ engine, sessionId, dir, log: app, notify });
+    turnGuards.set(sessionId, guard);
+    guard.start();
+  }
 
   // A sign-in is a permission: the card is the ask, and only an Allow opens a window.
   // The registry is shared with the runner, which pauses the stall clock while it waits.
@@ -2048,6 +2059,9 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
       // no note explains it, the same way a dropped connection is not explained. If
       // they want the work resumed or changed, they say so here.
       await engine.prompt(sessionId, text, { files: attachments });
+      // From here the turn is the engine's: the runner is not waiting on it, so the loop
+      // guard has to be a watcher of its own (13 Nov).
+      watchTurn(sessionId, String(directory || ''));
       return { ok: true, kept };
     },
 
