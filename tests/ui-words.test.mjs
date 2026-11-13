@@ -638,3 +638,21 @@ test('a compaction is a line in the chat', async () => {
   const running = renderMessage({ id: 'c2', type: 'compaction', created: Date.now(), completed: false, raw: { status: 'running', tokens: {} } });
   assert.match(running, /Compacting — the conversation is being summarised/);
 });
+
+// The operator's three UI rulings of 13 Nov, held as source assertions because they are
+// browser behaviours a unit test cannot press.
+test('right-click is off, and no field offers prefill', () => {
+  const js = fs.readFileSync(path.join(ROOT, 'web', 'app.js'), 'utf8');
+  assert.match(js, /document\.addEventListener\('contextmenu', \(e\) => e\.preventDefault\(\)\)/, 'right-click is refused');
+  assert.match(js, /setAttribute\('autocomplete', 'off'\)/, 'fields say no to autofill');
+  assert.match(js, /fillSweep\(document\)/, 'and the sweep runs at boot');
+  const shell = fs.readFileSync(path.join(ROOT, 'shell', 'MainWindow.xaml.cs'), 'utf8');
+  assert.match(shell, /IsGeneralAutofillEnabled = false/, 'the host stops saving form data');
+  assert.match(shell, /AreDefaultContextMenusEnabled = false/, 'and its own right-click menu');
+});
+
+test('the steer label sits level with its sentence', () => {
+  const css = fs.readFileSync(path.join(ROOT, 'web', 'synapse.css'), 'utf8');
+  assert.match(css, /\.msg\.user\.is-steer \.msg-role \{ position: relative; top: 1px; \}/, 'the You label');
+  assert.match(css, /\.msg\.user \.msg-text \.msg-steer \{ position: relative; top: -1px; \}/, 'the STEER tag');
+});

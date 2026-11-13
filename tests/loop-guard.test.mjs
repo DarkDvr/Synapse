@@ -56,8 +56,8 @@ test('a different phrase restarts the clock, and normal thinking cancels it', ()
   assert.equal(detector.push(`${other.repeat(24)}`, 2600), null);
 });
 
-test('the guard is on by default, with three loops to a work order', () => {
-  assert.equal(DEFAULTS.worker.loopGuard, true);
+test('the guard is off by default, with three loops to a work order', () => {
+  assert.equal(DEFAULTS.worker.loopGuard, false, 'off until it earns trust (13 Nov)');
   assert.equal(DEFAULTS.worker.loopLimit, 3);
 });
 

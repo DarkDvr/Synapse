@@ -2083,13 +2083,36 @@ document.addEventListener('keydown', (e) => {
     if (project) { openProjectChat(project.dataset.project); return; }
   });
 
-  // Right-click and Shift+F10 open the same menu; the ⋯ is the visible door.
-  $('projectTree').addEventListener('contextmenu', (e) => {
-    const row = e.target.closest('.tree-row.project');
-    if (!row) return;
-    e.preventDefault();
-    openProjectMenu(row.dataset.projectRow, e.clientX, e.clientY);
-  });
+  // No right-click anywhere. It opened the project menu on a row and did nothing useful
+  // anywhere else, and the operator's verdict was that it can only break things (13 Nov).
+  // The ⋯ button and Shift+F10 are still the two ways to the menu.
+  document.addEventListener('contextmenu', (e) => e.preventDefault());
+  // Prefill and autofill off everywhere: the browser's memory of what was typed in this
+  // app is not wanted, in any field — project names, addresses, paths (13 Nov).
+  const noFill = (el) => {
+    if (!el || !el.tagName) return;
+    const tag = el.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') {
+      if (el.dataset?.noFill === '1') return;
+      el.setAttribute('autocomplete', 'off');
+      el.setAttribute('autocorrect', 'off');
+      el.setAttribute('autocapitalize', 'off');
+      el.setAttribute('spellcheck', 'false');
+      if (el.dataset) el.dataset.noFill = '1';
+    } else if (tag === 'FORM') {
+      el.setAttribute('autocomplete', 'off');
+    }
+  };
+  const fillSweep = (root) => {
+    if (!root?.querySelectorAll) return;
+    root.querySelectorAll('input, textarea, select, form').forEach(noFill);
+  };
+  fillSweep(document);
+  // A dialog builds its fields after this runs, so the sweep is repeated on every change
+  // to the body — one observer, and a field nobody can prefill.
+  new MutationObserver(() => fillSweep(document)).observe(document.body, { childList: true, subtree: true });
+  document.addEventListener('focusin', (e) => noFill(e.target), true);
+
   $('projectTree').addEventListener('keydown', (e) => {
     if (e.key !== 'F10' || !e.shiftKey) return;
     const row = e.target.closest('.tree-row.project');

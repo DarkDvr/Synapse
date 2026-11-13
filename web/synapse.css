@@ -3550,3 +3550,11 @@ body.is-disconnected .app-shell { filter: blur(2px) brightness(0.45); pointer-ev
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .compact-line::first-letter { color: var(--orange); }
+/* ── the steer's "You" sits level with its sentence (13 Nov) ───────────────
+   Measured on the real stylesheet: the You label's middle sat at 47.8, the STEER
+   tag at 49.8 and the sentence at 48.8 — one pixel each way, which reads as "the
+   label is not aligned" even though both were centred in boxes of the same height.
+   One pixel each, scoped to the user message so the trace row keeps its own
+   centring. */
+.msg.user.is-steer .msg-role { position: relative; top: 1px; }
+.msg.user .msg-text .msg-steer { position: relative; top: -1px; }

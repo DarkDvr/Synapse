@@ -250,7 +250,14 @@ public partial class MainWindow : Window
         var core = View.CoreWebView2;
         core.Settings.AreDevToolsEnabled = true;
         core.Settings.IsStatusBarEnabled = false;
-        core.Settings.AreDefaultContextMenusEnabled = true;
+        // No prefill and no saved-password offers: the operator does not want the browser's
+        // memory of what was typed in this app, anywhere (13 Nov). The page also sets
+        // autocomplete=off on every field; this is the switch that makes it stick.
+        core.Settings.IsGeneralAutofillEnabled = false;
+        core.Settings.IsPasswordAutosaveEnabled = false;
+        // And no right-click: the page disables the event, and the host's own menu goes
+        // with it.
+        core.Settings.AreDefaultContextMenusEnabled = false;
         // Ctrl + wheel and Ctrl + plus/minus are the chat's text size, handled by the
         // page (web/chat-zoom.js). The browser's own zoom is off so the two never
         // fight: one gesture, one setting, and the rail and cards keep their size.

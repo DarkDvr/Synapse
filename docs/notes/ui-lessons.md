@@ -2600,3 +2600,23 @@ ctx (100% cache)`: the first was a provider's cumulative `cache.read` summed int
 capped at the window, the second the transcript's honest figure. A prompt cannot exceed the
 window it is a prompt for, so an event that says it did is now **dropped**, not capped. One
 source keeps the number; the other no longer speaks.
+**Three rulings from one evening (13 Nov).**
+
+- **No right-click anywhere.** It opened the project menu on a row and did nothing useful
+  elsewhere; the operator's words were "it can only break things". The page refuses the event
+  outright, the host's own default menu is off with it, and the menu keeps its two real doors:
+  the ⋯ on the row and Shift+F10.
+- **No prefill, in any field.** Not because autocomplete is a bad feature — because this app
+  remembers project names, addresses and paths the operator typed once by mistake, and then
+  offers them back. `autocomplete=off` is set at boot, on focus and on every DOM change (a
+  dialog builds its fields after boot), and WebView2's own form and password stores are
+  switched off in `MainWindow`, so the preference sticks beyond the page.
+- **The steer's "You" was a pixel high.** Measured on the real stylesheet: the label's middle
+  sat at 47.8, the sentence's at 48.8, and the STEER tag's at 49.8. Both are nudged one pixel,
+  scoped to the user message so the trace row keeps its own centring; measured again, all
+  three are 48.8.
+
+And the **loop guard defaults off** now. Two false strikes in one run is enough: a guard that
+fires on real work teaches the operator to ignore the alarm, which is worse than no alarm. The
+switch remains in Settings for the day it earns trust, and `engine-notes.md` records what it
+got wrong.

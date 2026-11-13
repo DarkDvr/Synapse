@@ -225,7 +225,11 @@ export const DEFAULTS = {
     // carry on. Every rescue is one loop. At `loopLimit` loops in one work order the
     // model is marked ISSUES and the task moves to the next coder. Effort is never
     // changed. On by default; the guard is loose on purpose.
-    loopGuard: true,
+    // Off by default until it earns trust: two false strikes in one run taught the operator
+  // to ignore it, and a guard that fires on real work is worse than none (13 Nov). The
+  // switch stays in Settings, and docs/notes/engine-notes.md records what it does and what
+  // it got wrong.
+  loopGuard: false,
     loopLimit: 3,
     // A work order that needs this many steps is too big for the model it was given:
     // the run stops and reports "needs splitting" instead of spending hours in one
