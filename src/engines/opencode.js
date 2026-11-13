@@ -96,6 +96,13 @@ export class OpenCodeEngine extends Engine {
     this.version = null;
     this._streamAbort = null;
     this._stopping = false;
+    // A brief is written through the engine's instruction entries, and the engine applies
+    // one on its own schedule: on 13 Nov a prompt was processed 8 ms before the entry it
+    // was sent with, so the first turn of a chat created in Single and switched to Multi
+    // ran on the Single brief — "do the work yourself, there is no team" (calc-emperor).
+    // `setInstruction` waits for the engine's own `session.instructions.updated` event.
+    this._instructionAt = new Map();
+    this._instructionWaiters = new Map();
   }
 
   // ── discovery ────────────────────────────────────────────────
@@ -637,12 +644,52 @@ export class OpenCodeEngine extends Engine {
    * Synapse that knows that, which is exactly what the adapter is for.
    */
   async setInstruction(sessionId, key, value) {
+    const started = Date.now();
     await this.request(
       'PUT',
       `/api/experimental/session/${encodeURIComponent(sessionId)}/instructions/entries/${encodeURIComponent(key)}`,
       { value },
     );
+    // The turn must not start before the engine has this: see the note in the
+    // constructor. A timeout is a warning, not a failure — a brief that is a moment
+    // late is better than a turn that never starts.
+    await this.awaitInstruction(sessionId, started);
     return true;
+  }
+
+  /**
+   * Wait until the engine reports that a session's instruction entries changed.
+   *
+   * The event is the only signal that the engine has applied the write; the PUT's
+   * `204` means it was accepted, not applied. `since` is the moment the write was
+   * sent, so an update that arrived before it cannot satisfy this wait.
+   */
+  awaitInstruction(sessionId, since, timeoutMs = 2000) {
+    if ((this._instructionAt.get(sessionId) || 0) > since) return Promise.resolve(true);
+    return new Promise((resolve) => {
+      let timer = null;
+      let done = false;
+      const finish = (applied) => {
+        if (done) return;
+        done = true;
+        if (timer) clearTimeout(timer);
+        const waiters = this._instructionWaiters.get(sessionId);
+        if (waiters) {
+          waiters.delete(finish);
+          if (!waiters.size) this._instructionWaiters.delete(sessionId);
+        }
+        resolve(Boolean(applied));
+      };
+      const waiters = this._instructionWaiters.get(sessionId) || new Set();
+      waiters.add(finish);
+      this._instructionWaiters.set(sessionId, waiters);
+      timer = setTimeout(() => {
+        this.sessionLog.warn(
+          `the engine did not confirm an instruction update for ${sessionId} in ${timeoutMs}ms — carrying on`,
+        );
+        finish(false);
+      }, timeoutMs);
+    });
   }
 
   async listInstructions(sessionId) {
@@ -1039,6 +1086,17 @@ export class OpenCodeEngine extends Engine {
     if (type.startsWith('session.')) this.sessionLog.debug(`event ${type}${sessionId ? ' ' + sessionId : ''}`);
     if (kind === 'tool') this.toolLog.debug(`event ${type}${sessionId ? ' ' + sessionId : ''} :: ${JSON.stringify(ev).slice(0, 900)}`);
     if (type === 'permission.asked') this.toolLog.info(`permission.asked ${sessionId ? sessionId + ' ' : ''}:: ${JSON.stringify(ev).slice(0, 600)}`);
+
+    // The engine has applied an instruction write; anyone waiting on it may prompt
+    // (see setInstruction). The timestamp is taken on arrival, not from the event.
+    if (type === 'session.instructions.updated' && sessionId) {
+      this._instructionAt.set(sessionId, Date.now());
+      const waiters = this._instructionWaiters.get(sessionId);
+      if (waiters) {
+        this._instructionWaiters.delete(sessionId);
+        for (const wake of [...waiters]) wake(true);
+      }
+    }
 
     this.emit('event', { ts: Date.now(), type, kind, sessionId, directory, raw: ev });
   }

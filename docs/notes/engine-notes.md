@@ -124,10 +124,21 @@ answers **413** (`InstructionEntryValueTooLargeError`). The route's own summary
 says changes "announce as updates at the next step boundary". Verified live on
 2.0.30: PUT returned 204 and GET read the value back.
 
+**The 204 means accepted, not applied, and a prompt can beat it (13 Nov).** On
+`calc-emperor` — a chat created in Single, switched to Multi and sent at once — the engine
+created the user message at `19:12:08.362` and applied the instruction entry at `.370`:
+eight milliseconds apart, in the wrong order. The first turn therefore ran on the brief
+from creation, "this is one conversation: do the work yourself... do not delegate, and
+ignore a delegation tool if one is offered", and the model built the whole calculator
+itself; the engine announced the change on the *next* turn ("The context under
+'synapse.plan' changed and supersedes the previous value"). `setInstruction` now waits for
+the engine's own `session.instructions.updated` event (2 s cap, then a warning and the turn
+goes on) before the prompt is sent. The permission PATCH is issued before the entry write,
+so waiting for the entry also settles the ruleset — one barrier for both.
+
 This is how Synapse briefs a role — which project, where the plan file is, who
 may write it, what the plan currently says, and how work is expected to be
 delivered. It is the right channel for three reasons:
-
 - **It is per session**, so the Architect and each worker can be told different
   things without any of them knowing the others exist.
 - **It is durable**, so it is sent once and re-sent only when its text changes,
@@ -338,6 +349,17 @@ Non-obvious, all verified on 2.0.30:
   `files: []` from its own tool calls. The Architect checked the disk, kept the
   task `todo`, wrote the reason into `note`, and re-delegated — attempt two wrote
   the real file. This is why the report always prints `Files written: none.`
+
+- **A model that waits inside its turn for the run it just delegated deadlocks itself
+  (13 Nov).** `calc-emperor-strict`: the Architect wrote its plan, called `delegate` for
+  t1, then read `plan.json` ten times over 35 seconds — each read "still todo, let me wait
+  a bit more". A delegation is read on the turn boundary, so t1 could not start until that
+  turn ended, and the model kept the turn open. The operator stopped it. The tool's
+  description already said "then stop"; what the model actually reads is the **receipt**,
+  so the receipt's first line is now "End this turn now. The run starts when the turn does,
+  and it cannot start while the turn is open: reading the plan again... will never show it
+  running." A turn that never ends already had one failure mode here (below); this is the
+  polite version, and it needs no recovery pass because nothing was journalled.
 
 - **A delegation can be orphaned by a turn that never ends.** "Read on the turn
   boundary" means `session.execution.succeeded|failed|interrupted` → `handleTurn`.

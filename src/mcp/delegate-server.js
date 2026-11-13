@@ -102,7 +102,10 @@ async function handle(msg) {
       return toolText(
         id,
         `Requested: ${task}.\n` +
-          `The harness starts it after this turn ends, on the model configured for its role ` +
+          `End this turn now. The run starts when the turn does, and it cannot start while the turn ` +
+          `is open: reading the plan again or waiting here will never show it running, and nothing ` +
+          `you do now makes it start sooner. The report is what tells you it finished.\n` +
+          `The harness starts it on the model configured for its role ` +
           `(${ROLES.join(', ')}), if the mode and the switches allow it. With Keep Building off that ` +
           `means the operator has asked for work since the last report; if it does not start, no report ` +
           `comes and the task stays in the plan. A task the plan still shows as todo was never started — ` +
