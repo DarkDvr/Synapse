@@ -2620,3 +2620,18 @@ And the **loop guard defaults off** now. Two false strikes in one run is enough:
 fires on real work teaches the operator to ignore the alarm, which is worse than no alarm. The
 switch remains in Settings for the day it earns trust, and `engine-notes.md` records what it
 got wrong.
+**Alignment is the baseline, not a number (13 Nov, third attempt).** The steer's "You" was
+nudged twice — one pixel, then 0.23em — and both times it looked right at the size it was
+measured at and wrong at the next. The reason is structural: the label was a fixed 1.5em box
+centred on its own glyphs, and the gap between a box's centre and the visual centre of an
+uppercase word depends on the font's metrics *and* on the chat's font size. A number cannot
+track both.
+
+The row is a flex row with `align-items: baseline` now, and the label is a plain inline box
+with `vertical-align: baseline` — a baseline is a property of the font, so it is right at 12px,
+14px, 20px and anything else. The only correction left is 4% of the type size below the
+baseline, which is the same fraction at every size, and the chips and the REUSE pill centre on
+the line because a bordered box has no baseline worth trusting.
+
+Measured on the running app at 13px and on a two-size render at 14/20: the label's line and the
+sentence's line are the same line.

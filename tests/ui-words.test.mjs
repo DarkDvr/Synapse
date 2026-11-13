@@ -140,16 +140,13 @@ test('a sent message can be put back in the composer', () => {
   assert.match(read('web/synapse.css'), /\.msg-reuse\s*\{/);
 });
 
-test('a You message keeps its parts on one vertical centre', () => {
+test('a You message keeps its parts on one baseline', () => {
   const css = read('web/synapse.css');
   assert.match(css, /\.msg\.user \.msg-body\s*\{[^}]*display: flex/);
-  assert.match(css, /\.msg\.user \.msg-body\s*\{[^}]*align-items: flex-start/);
-  // One line of chat text is 1.5 × its size, and the role and the clock are boxes
-  // that height so their glyphs centre on it. Both must follow --chat-fs: the size
-  // setting would otherwise put the label and the clock off the message's centre
-  // line at every size but the default.
-  assert.match(css, /\.msg\.user \.msg-role\s*\{[^}]*height: calc\(var\(--chat-fs\) \* 1\.5\)/);
-  assert.match(css, /\.msg\.user \.msg-time\s*\{[^}]*height: calc\(var\(--chat-fs\) \* 1\.5\)/);
+  // Alignment is the font's baseline, not a nudge: a fixed 1.5em box or a pixel offset was
+  // right at one chat size and wrong at the next (13 Nov, after three attempts).
+  assert.match(css, /\.msg\.user \.msg-body\s*\{[^}]*align-items: baseline/);
+  assert.match(css, /\.msg\.user \.msg-role\s*\{[^}]*vertical-align: baseline/);
   assert.match(css, /\.msg\.user \.msg-time\s*\{[^}]*order: 99/);
 });
 
@@ -665,6 +662,7 @@ test('right-click is off, and no field offers prefill', () => {
 
 test('the steer label sits level with its sentence', () => {
   const css = fs.readFileSync(path.join(ROOT, 'web', 'synapse.css'), 'utf8');
-  assert.match(css, /\.msg\.user\.is-steer \.msg-role \{ position: relative; top: 0\.23em; \}/, 'the You label, nudged in em so it scales with the chat font size');
-  assert.match(css, /\.msg\.user \.msg-text \.msg-steer \{ position: relative; top: -1px; \}/, 'the STEER tag');
+  assert.match(css, /\.msg\.user \.msg-body \{[^}]*align-items: baseline/, 'the row is baseline aligned');
+  assert.match(css, /\.msg\.user \.msg-role \{[^}]*vertical-align: baseline/, 'and the label sits on it');
+  assert.doesNotMatch(css, /\.msg\.user\.is-steer \.msg-role \{[^}]*top: [0-9]/, 'no pixel nudge is left');
 });

@@ -1325,9 +1325,17 @@ body[data-mode="single"] #runAuto { display: none; }
    them on the first line of a long message instead of centring them down its
    height. `order` moves the clock after the reuse button even though it is
    first in the markup. */
+/* One baseline for the row - for good (13 Nov).
+   The label used to be a fixed 1.5em box, centred on its own glyphs, and the fix was a
+   nudge in pixels or em. Both are guesses: the gap between a box centre and the visual
+   centre of an uppercase word depends on the font metrics and on the chat size, so the
+   guess was right at one size and wrong at the next.
+   A flex row aligns items on their BASELINE, which is a property of the font, not a
+   number someone typed. The role is a plain inline box again, the row is baseline
+   aligned, and there is no nudge to get wrong. */
 .msg.user .msg-body {
   display: flex;
-  align-items: flex-start;
+  align-items: baseline;
   gap: 7px;
   width: auto;
   max-width: none;
@@ -1336,14 +1344,19 @@ body[data-mode="single"] #runAuto { display: none; }
   padding-right: 0;
 }
 .msg.user .msg-role {
-  display: inline-flex;
-  align-items: center;
-  height: calc(var(--chat-fs) * 1.5);
-  line-height: calc(var(--chat-fs) * 1.5);
+  display: inline-block;
+  height: auto;
+  line-height: inherit;
   margin-right: 0;
+  vertical-align: baseline;
+  /* A caption sits on the line, and small caps read a hair low when it does: 4% of the
+     type size below the baseline is the same fraction at 12px and at 24px. */
+  transform: translateY(0.04em);
 }
 .msg.user .msg-text { flex: 0 1 auto; min-width: 0; }
-.msg.user .msg-files, .msg.user .msg-reuse { flex: 0 0 auto; }
+/* A chip and a pill are boxes, not words: they centre on the line rather than sit on a
+   baseline, or their borders hang below the sentence. */
+.msg.user .msg-files, .msg.user .msg-reuse { flex: 0 0 auto; align-self: center; }
 .msg.user .msg-time {
   display: inline-flex;
   align-items: center;
@@ -3558,5 +3571,5 @@ body.is-disconnected .app-shell { filter: blur(2px) brightness(0.45); pointer-ev
    is geometrically centred still reads high, and the chat's font size is the operator's
    setting — 0.23em is 2px at 13px and 3.2 at 14. Scoped to the user message so the trace
    row keeps its own centring. */
-.msg.user.is-steer .msg-role { position: relative; top: 0.23em; }
-.msg.user .msg-text .msg-steer { position: relative; top: -1px; }
+.msg.user.is-steer .msg-role { vertical-align: baseline; }
+.msg.user .msg-steer { vertical-align: baseline; }
