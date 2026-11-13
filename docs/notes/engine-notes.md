@@ -2029,3 +2029,17 @@ by the runner, and a chat the operator drives is not. The guard could be on and 
 which is exactly what happened to the 27B. The watcher starts when a message is sent, polls
 only while the engine says that session is active, and stops the moment it is not — it can
 never nudge a turn that has ended.
+**Two strikes that were ours (13 Nov).** One run produced two loop-guard nudges, and the
+transcript said the model was working both times:
+
+- **five reads of `archive.txt`** at offsets 216, 454, 668, 905, 1100 — paging a long file.
+  The Architect's watcher had its own, weaker target: the path, not the path *and the slice*,
+  so five different questions looked like one asked five times. It now uses the runner's
+  `toolTarget()`, which carries `offset:limit`.
+- **five writes of one `ANSWER.md`** — write, check, fix, write again. A file being rewritten
+  is the work, not a loop, and no target rule can tell them apart. **Mutating tools are no
+  longer judged by their target at all.** A command that repeats with byte-identical output
+  still is (a build polled twice looks different; a failing test re-run does not).
+
+The lesson is the one that keeps recurring here: a rule that fires on real work teaches the
+operator to ignore the alarm, which is worse than no alarm.

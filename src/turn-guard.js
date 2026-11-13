@@ -20,6 +20,8 @@
 // the same answer three times, in a window of twelve. Nothing is invented here.
 
 import { toolSignature, loopStrike, LOOP_WINDOW, LOOP_NUDGE } from './loop-detect.js';
+// One definition of a target: offsets and limits included, so paging a file is not a loop.
+import { toolTarget } from './runs.js';
 
 export function createTurnGuard({
   engine,
@@ -69,8 +71,10 @@ export function createTurnGuard({
           if (id && seen.has(id)) continue;
           if (id) seen.add(id);
           const input = typeof part.input === 'object' && part.input ? part.input : {};
-          const target =
-            input.filePath ?? input.file_path ?? input.path ?? input.command ?? input.pattern ?? input.url ?? '';
+          // The runner's own target rule, not a second, weaker one: this guard used to
+          // compare only the path, so five reads of *different slices* of one file struck
+          // as "the same target 4 times" (13 Nov).
+          const target = toolTarget(input);
           const call = toolSignature({
             name: String(part.name),
             target: String(target ?? ''),

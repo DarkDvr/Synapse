@@ -30,6 +30,20 @@ export const SAME_OUTPUT_MIN_CHARS = 240;
 /** The tool calls that only read: a repeated answer from these is waste, not work. */
 const READ_ONLY = new Set(['read', 'glob', 'grep', 'list', 'ls', 'search', 'webfetch', 'fetch', 'tree']);
 
+/**
+ * The tools that change a file. Their *target* is never evidence of a loop: a coder that
+ * writes the same file five times is iterating — write, run the tests, fix, write again —
+ * and that is the work, not a loop (13 Nov: five writes of one ANSWER.md struck a guard
+ * that should have watched the model, not the file).
+ */
+const MUTATING = new Set(['edit', 'write', 'patch', 'create', 'applypatch', 'apply_patch', 'write_file', 'str_replace']);
+
+/**
+ * A command that returns byte-identical output every time it runs is a loop — polling a
+ * build gives different text, re-running the same failing command gives the same text.
+ */
+const REPEATABLE = new Set([...READ_ONLY, 'shell', 'bash', 'cmd', 'powershell', 'pwsh']);
+
 /** A cheap, stable digest: enough to compare two answers, not a hash to store. */
 export function digestOf(text) {
   const value = String(text ?? '');
@@ -50,7 +64,8 @@ export function toolSignature({ name, target, output, input } = {}) {
   const where = String(target ?? '');
   return {
     sig: `${tool}\u0000${where}`,
-    digest: READ_ONLY.has(tool) ? digestOf(output ?? input ?? '') : '',
+    digest: REPEATABLE.has(tool) ? digestOf(output ?? input ?? '') : '',
+    mutating: MUTATING.has(tool),
   };
 }
 
@@ -63,9 +78,11 @@ export function toolSignature({ name, target, output, input } = {}) {
 export function loopStrike(window, { sameTarget = SAME_TARGET_STRIKES, sameOutput = SAME_OUTPUT_STRIKES } = {}) {
   const calls = Array.isArray(window) ? window.filter(Boolean) : [];
   if (!calls.length) return null;
-  const reached = (pick, threshold) => {
+  const reached = (pick, threshold, skipMutating = false) => {
     const tally = new Map();
     for (const call of calls) {
+      // A repeated write is iteration; a repeated read is a question asked twice.
+      if (skipMutating && call.mutating) continue;
       const key = pick(call);
       if (!key) continue;
       tally.set(key, (tally.get(key) || 0) + 1);
@@ -73,7 +90,7 @@ export function loopStrike(window, { sameTarget = SAME_TARGET_STRIKES, sameOutpu
     for (const [key, times] of tally) if (times >= threshold) return { key, times };
     return null;
   };
-  const same = reached((c) => c.sig, sameTarget);
+  const same = reached((c) => c.sig, sameTarget, true);
   if (same) return { kind: 'target', ...same };
   const digest = reached((c) => c.digest, sameOutput);
   if (digest) return { kind: 'output', ...digest };

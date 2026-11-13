@@ -131,3 +131,29 @@ test('a browser call has a signature, and an empty call has none', () => {
   const loop = [1, 2, 3, 4].map(() => toolSignature({ name: 'synapse-browser_read', target: toolTarget({ maxChars: 2000 }) }));
   assert.equal(loopStrike(loop)?.times, 4, 'four identical browser calls strike');
 });
+
+// The two strikes of 13 Nov, replayed. Both were ours.
+test('five reads of different slices of one file are paging, not a loop', () => {
+  const paged = [216, 454, 668, 905, 1100].map((offset) =>
+    toolSignature({ name: 'read', target: toolTarget({ path: 'archive.txt', offset, limit: 200 }) }),
+  );
+  assert.equal(loopStrike(paged), null, 'the target carries the slice');
+});
+
+test('five writes of one file are iteration, not a loop', () => {
+  const writes = [1, 2, 3, 4, 5].map(() => toolSignature({ name: 'write', target: toolTarget({ path: 'ANSWER.md' }) }));
+  assert.equal(writes.filter((w) => w.mutating).length, 5);
+  assert.equal(loopStrike(writes), null, 'write, test, fix, write again is the work');
+});
+
+test('the same shell command with the same answer is still a loop', () => {
+  const same = long(600);
+  const runs = [1, 2, 3].map(() => toolSignature({ name: 'shell', target: toolTarget({ command: 'npm test' }), output: same }));
+  assert.equal(loopStrike(runs)?.kind, 'output');
+  assert.equal(loopStrike(runs)?.times, 3);
+});
+
+test('a shell command with different answers is polling, not a loop', () => {
+  const runs = [1, 2, 3].map((n) => toolSignature({ name: 'shell', target: toolTarget({ command: 'npm test' }), output: long(600 + n) }));
+  assert.equal(loopStrike(runs), null);
+});
