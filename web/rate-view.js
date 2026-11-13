@@ -247,11 +247,15 @@ export function paintRates(now = Date.now()) {
             ? 'The engine is summarising this conversation to make room.'
             : 'The conversation was compacted; its new size arrives with the next step.';
       } else {
-        bits.push(`${wired.fmtTokens(archUsed)}${archLimit ? `/${wired.fmtTokens(archLimit)}` : ''} ctx` + (share.ok ? ` (${share.pct}% cache)` : ''));
+        // The cache share is in the tooltip, not on the line: at the narrowest card the
+        // three readings plus the clock already need every pixel, and "(100% cache)"
+        // was the thing the ellipsis ate (13 Nov — measured 173px wanted, 154 available;
+        // the line without it is 132px).
+        bits.push(`${wired.fmtTokens(archUsed)}${archLimit ? `/${wired.fmtTokens(archLimit)}` : ''} ctx`);
         tip =
           `The Architect's last prompt: ${arch.used} tokens` +
           (archLimit ? ` of ${archLimit}` : '') +
-          (share.ok ? ` — ${share.fresh} fresh and ${share.read} from the provider's cache` : '');
+          (share.ok ? ` — ${share.pct}% from the provider's cache (${share.fresh} fresh, ${share.read} read)` : '');
       }
     } else if (run && run.role === card.dataset.role && (Number(run.ctx) > 0 || run.ctxPending)) {
       // A worker's compaction follows the same rule as the Architect's: no size until the
@@ -264,10 +268,11 @@ export function paintRates(now = Date.now()) {
           ? "The engine is summarising this worker's conversation to make room."
           : "The worker's conversation was compacted; its new size arrives with the next step.";
       } else {
-        bits.push(`${wired.fmtTokens(runUsed)}${run.ctxLimit ? `/${wired.fmtTokens(run.ctxLimit)}` : ''} ctx` + (share.ok ? ` (${share.pct}% cache)` : ''));
+        // Same line, same rule as the Architect's card (13 Nov).
+        bits.push(`${wired.fmtTokens(runUsed)}${run.ctxLimit ? `/${wired.fmtTokens(run.ctxLimit)}` : ''} ctx`);
         tip =
           `Prompt ${withinWindow(run.ctx, run.ctxLimit)} tokens of ${run.ctxLimit || 'an unknown window'}` +
-          (share.ok ? ` — ${share.fresh} fresh and ${share.read} from the provider's cache` : '') +
+          (share.ok ? ` — ${share.pct}% from the provider's cache (${share.fresh} fresh, ${share.read} read)` : '') +
           (run.ctxRoom ? `; Synapse compacts near ${run.ctxRoom}` : '');
       }
     }

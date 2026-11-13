@@ -3,9 +3,12 @@
 // against a 262K window (12 Nov). The display clamps; this is the rule.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import { withinWindow, cacheShare, lastPromptOf, noteArchitectCompaction, noteArchitectUsage, rateViewWiring } from '../web/rate-view.js';
 import { state } from '../web/state.js';
 import { promptParts } from '../src/runs.js';
+
+const read = (rel) => fs.readFileSync(new URL(`../web/${rel}`, import.meta.url), 'utf8');
 
 test('a context figure is never larger than its window', () => {
   assert.equal(withinWindow(222325, 262144), 222325);
@@ -93,4 +96,18 @@ test('an implausible usage event is ignored, not capped', () => {
   const before = state.archCtx;
   noteArchitectUsage({ sessionId: 'sess_x', raw: { data: { tokens: { input: 70000, cache: { read: 202000 } } } } });
   assert.equal(state.archCtx, before, 'a 262K prompt on a 262K model is not a prompt');
+});
+
+// The card's second row is 13px and the clock owns its right half. Measured on the
+// narrowest card (288px): the rate line had 154px and wanted 207 with the cache share
+// on it, so the ellipsis ate "(100% ca…" and the clock read "00:05:47 / 00:57:04" with
+// two spaces the line could not afford (13 Nov). The share moved to the hover, the
+// slash lost its air, and the line is 132px — a 4-digit rate and an "M" window still fit.
+test('the card line fits the narrowest card, and the cache share is in the hover', () => {
+  const code = read('rate-view.js').replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+  assert.doesNotMatch(code, /share\.pct\}% cache/, 'the share is no longer printed on the line');
+  assert.match(code, /% from the provider's cache/, 'it is in the tooltip, with the figures');
+  assert.ok(code.includes('${share.fresh} fresh, ${share.read} read'), 'the halves are named');
+  const clocks = read('clocks.js');
+  assert.ok(clocks.includes('${hhmmss(running || last || 0)}/${hhmmss(total)}'), 'the clock has no air around its slash');
 });

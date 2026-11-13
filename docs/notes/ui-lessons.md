@@ -2696,3 +2696,12 @@ message the engine has not completed (`web/turn-live.js`), the same test the ser
 "idle"; and **a delta for a finished turn is refused**, so the next turn's first thought
 cannot resume the stale log. A finished turn's reasoning is its own folds above the post;
 the pane is only ever the words arriving now.
+
+**A card's line has to be measured (13 Nov).** The role card's second row is 13px and the
+clock owns its right half: at the narrowest card (288px) the rate line had **154px**. With
+the cache share on it the text wanted **207px**, so the ellipsis ate the middle of
+"(100% cache)" — the operator's "all the info doesn't fit into a role card". The timer lost
+the two spaces around its slash (109px → 98), the cache share moved off the line into the
+tooltip, and the line is **132px** now — a four-digit rate and an "M" window still fit at
+that width. The share is not lost: the hover reads "100% from the provider's cache (0 fresh,
+53K read)". Multi only, since Single hides the rate row; the clock change is in both.

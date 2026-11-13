@@ -235,7 +235,9 @@ export function paintClocks(now) {
       el.textContent = '';
       continue;
     }
-    el.textContent = `${hhmmss(running || last || 0)} / ${hhmmss(total)}`;
+    // No air around the slash: at the narrowest card the pair is the widest thing on
+    // the line, and two spaces there was 8px the rate could not have (13 Nov).
+    el.textContent = `${hhmmss(running || last || 0)}/${hhmmss(total)}`;
   }
   const clock = $('planClock');
   if (clock) {
