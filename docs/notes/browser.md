@@ -259,3 +259,27 @@ would be calling a tool to be told what it was told. What changed instead:
 The descriptions live in `src/mcp/browser-tools.js` — apart from the server, because importing
 the server starts it and it waits on stdin — and `tests/browser-tools.test.mjs` pins the
 sentences that matter.
+## The whole page, saved (13 Nov)
+
+A long thread is loaded as it is scrolled, so one `read` at the top can only ever see the top.
+Stitching six reads together is work a model does by guessing where it left off, and two
+models benched against one Reddit thread both ended up with a partial picture.
+
+`read` has two routes now:
+
+| route | what it is for |
+|---|---|
+| `read` | the current viewport's text — 6,000 characters by default, up to 100,000, and a cut says how much was left out |
+| `read { full: true }` | the whole page: the browser scrolls to the end in viewport steps (twice without growth before it stops), extracts once with a large ceiling, and **writes it into the project** as `<project>\\.synapse\\browser\\pages\\<slug>-<stamp>.md` |
+
+The saved file carries the title, the source address, the capture time, its size, and a short
+table of contents, then the text. The answer gives the path, the size in characters and rough
+tokens, and how many headings it found — so a model can read it in pieces with the `read` tool,
+grep it, or ask for a section, instead of asking the page again.
+
+The capture is bounded on purpose: 400,000 characters and 25 seconds. Past either, the answer
+says it was cut at the ceiling rather than pretending the page ended.
+
+Why a file and not one huge answer: 400,000 characters is about 100K tokens. That is a
+context window spent on one page, and it is spent whether or not the model needed all of it.
+The file costs nothing until it is read, and the model chooses the piece.

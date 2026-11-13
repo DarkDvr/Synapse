@@ -119,6 +119,20 @@ test('the server answers the protocol and its tools work on a local page', async
     const read = await rpc.call('tools/call', { name: 'read', arguments: {} });
     assert.match(read.result.content[0].text, /beta/);
 
+    // A long page, captured whole: the answer names a file in the project rather than
+    // handing back a cut, so a model reads one artifact instead of stitching six reads
+    // together (13 Nov).
+    const whole = await rpc.call('tools/call', { name: 'read', arguments: { full: true } });
+    const said = whole.result.content[0].text;
+    assert.match(said, /The whole page is saved: /, 'the answer names the file');
+    assert.match(said, /characters/, 'and says how much it held');
+    const saved = /The whole page is saved: (.+)/.exec(said)[1].trim();
+    assert.ok(fs.existsSync(saved), 'the file exists');
+    const body = fs.readFileSync(saved, 'utf8');
+    assert.match(body, /Source: http/, 'it records where it came from');
+    assert.match(body, /beta/, 'and holds the page text');
+    fs.rmSync(path.dirname(saved), { recursive: true, force: true });
+
     const shot = await rpc.call('tools/call', { name: 'screenshot', arguments: {} });
     const file = /Screenshot: (.*) \(/.exec(shot.result.content[0].text)?.[1];
     assert.ok(file && fs.existsSync(file), 'the screenshot was not written');

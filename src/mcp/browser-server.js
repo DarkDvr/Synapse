@@ -191,8 +191,59 @@ async function handle(msg) {
             return toolText(id, `Opened ${url}\n\n${outline(page, { maxChars: 6000, links: 60 })}${wallNote(page)}`);
           }
           case 'read': {
+            // `full` walks the page to its end and leaves the whole of it in the project,
+            // because a long thread cannot fit in one answer and a model stitching six
+            // pieces together is a model working from a guess (13 Nov).
+            if (args.full === true) {
+              const whole = await browser.captureFull({
+                links: Math.min(120, Math.max(0, Number(args.links ?? 0))),
+                mode: args.mode === 'text' ? 'text' : 'article',
+              });
+              const pages = path.join(ARTIFACTS, 'pages');
+              fs.mkdirSync(pages, { recursive: true });
+              const slug =
+                String(whole.title || whole.url || 'page')
+                  .replace(/[^a-z0-9]+/gi, '-')
+                  .replace(/^-+|-+$/g, '')
+                  .slice(0, 60) || 'page';
+              const file = path.join(pages, `${slug}-${stamp()}.md`);
+              const headings = (whole.text || '')
+                .split('\n')
+                .filter((line) => /^#{1,3} /.test(line))
+                .slice(0, 40);
+              fs.writeFileSync(
+                file,
+                [
+                  `# ${whole.title || '(no title)'}`,
+                  '',
+                  `Source: ${whole.url}`,
+                  `Captured: ${new Date().toISOString()} (${whole.chars} characters, ${whole.scrolled} scroll step(s))`,
+                  '',
+                  headings.length ? '## In this page' : '',
+                  ...headings.map((h) => `- ${h.replace(/^#+ /, '')}`),
+                  '',
+                  '---',
+                  '',
+                  whole.text || '',
+                ].join('\n'),
+                'utf8',
+              );
+              noteUsed(whole.url);
+              const rel = path.relative(START_DIR, file).replace(/\\/g, '/');
+              const k = Math.round((whole.chars || 0) / 4000);
+              return toolText(
+                id,
+                `The whole page is saved: ${file}\n` +
+                  `${whole.chars} characters (about ${k}K tokens), ${headings.length} heading(s)` +
+                  `${whole.capped ? ', cut at the capture ceiling' : ''}.\n` +
+                  'Read it in pieces with the read tool (offset and limit), or grep it — ' +
+                  'do not ask this page for the same text again.\n' +
+                  `It is a file, not a picture: cite it as ${rel} if you need to name it.` +
+                  `${wallNote(whole)}`,
+              );
+            }
             const page = await browser.read({
-              maxChars: Math.min(30000, Math.max(1000, Number(args.maxChars) || 6000)),
+              maxChars: Math.min(100000, Math.max(1000, Number(args.maxChars) || 6000)),
               links: Math.min(120, Math.max(0, Number(args.links ?? 60))),
               mode: args.mode === 'text' ? 'text' : 'article',
             });

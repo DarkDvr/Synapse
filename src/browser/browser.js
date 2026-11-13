@@ -322,6 +322,45 @@ export function createBrowser({ profile, log = null, startMinimized = true, widt
     return page;
   }
 
+  /**
+   * Walk a page to its end and read the whole of it.
+   *
+   * A long thread is loaded as it is scrolled, so one `read` at the top can only see the top.
+   * This scrolls in viewport steps until the document stops growing (twice, so a lazy section
+   * that arrives late is not missed), then extracts once with a large ceiling. It is bounded
+   * by time and by characters: a page that never ends is stopped at the cap rather than
+   * scrolling for ever, and the answer says which cap it hit.
+   *
+   * Returns the same shape as `read`, plus `scrolled` (how far it walked) and `capped`.
+   */
+  async function captureFull({ maxChars = 400000, maxMs = 25000, links = 0, mode = 'article', step = 0.9 } = {}) {
+    const p = await start();
+    used();
+    const started = Date.now();
+    let stable = 0;
+    let lastHeight = 0;
+    let scrolled = 0;
+    for (let i = 0; i < 400; i += 1) {
+      if (Date.now() - started > maxMs) break;
+      const info = await p.evaluate(
+        `(() => {
+          const el = document.scrollingElement || document.documentElement;
+          const before = el.scrollTop;
+          el.scrollTop = Math.min(el.scrollHeight, before + Math.round(innerHeight * ${Number(step)}));
+          return { top: el.scrollTop, height: el.scrollHeight, atEnd: el.scrollTop + innerHeight >= el.scrollHeight - 2 };
+        })()`,
+      );
+      scrolled += 1;
+      if (Math.abs(Number(info.height) - lastHeight) < 4) stable += 1;
+      else stable = 0;
+      lastHeight = Number(info.height);
+      if (info.atEnd && stable >= 2) break;
+      await new Promise((r) => setTimeout(r, 220));
+    }
+    const page = await read({ maxChars, links, mode });
+    return { ...page, scrolled, capped: Number(page.chars) >= Number(maxChars) };
+  }
+
   /** Click by selector, by visible text, or by coordinates. */
   async function click({ selector = null, text = null, at = null, settle = 700 } = {}) {
     const p = await start();
@@ -593,5 +632,5 @@ export function createBrowser({ profile, log = null, startMinimized = true, widt
   }, 30000);
   reaper.unref?.();
 
-  return { start, running, alive, pageState, goto, read, click, type, press, wait, scroll, screenshot, watch, tabs, clearSite, hideWindow, stop, profile };
+  return { start, running, alive, pageState, goto, read, captureFull, click, type, press, wait, scroll, screenshot, watch, tabs, clearSite, hideWindow, stop, profile };
 }

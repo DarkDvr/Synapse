@@ -30,7 +30,8 @@ test('open says the window is hidden, the scheme is checked, and sessions persis
 test('read says how much it returns and that a cut is marked', () => {
   const d = text('read');
   assert.match(d, /6000 by default/, 'the default is named');
-  assert.match(d, /30000 at most/, 'the ceiling is named');
+  assert.match(d, /100000 at most/, 'the ceiling is named');
+  assert.match(d, /full: true/, 'and the whole-page route');
   assert.match(d, /cut is marked/i, 'the model must know when it is reading a cut');
 });
 
