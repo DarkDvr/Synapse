@@ -65,13 +65,23 @@ $fgBefore = [W.U]::GetForegroundWindow()
 # Our browser: the processes whose command line names the SynaBrowse profile, skipping
 # `--type=` children. The comparison normalises separators, because the same profile
 # arrives as `F:\dev\...` from the app and `F:/dev/...` from a script.
+#
+# The match is the whole argument `--user-data-dir=<that profile>`, not "the command line
+# mentions this folder somewhere". An Edge a person or Windows opened runs on its own
+# profile; only Synapse launches Edge with this flag, so only Synapse's browser can ever be
+# a candidate, and a process that merely named our folder in another argument is left
+# alone (14 Nov: the operator asked what these rules could touch).
 $markerKey = ($Marker -replace '\\', '/').ToLower()
-$pids = @(Get-CimInstance Win32_Process -Filter "Name = 'msedge.exe'" |
-    Where-Object {
-        $_.CommandLine -and
-        $_.CommandLine -notmatch '--type=' -and
-        (($_.CommandLine -replace '\\', '/').ToLower().Contains($markerKey))
-    } | ForEach-Object { [uint32]$_.ProcessId })
+function Get-OurEdgePids {
+    $pattern = '--user-data-dir="?' + [regex]::Escape($markerKey) + '"?(\s|$)'
+    @(Get-CimInstance Win32_Process -Filter "Name = 'msedge.exe'" |
+        Where-Object {
+            $_.CommandLine -and
+            $_.CommandLine -notmatch '--type=' -and
+            (($_.CommandLine -replace '\\', '/').ToLower()) -match $pattern
+        } | ForEach-Object { [uint32]$_.ProcessId })
+}
+$pids = Get-OurEdgePids
 
 # The window: a top-level Chromium window of one of those processes, with a page title.
 $found = New-Object System.Collections.ArrayList
@@ -239,14 +249,8 @@ if ($WatchMs -gt 0) {
             }
             continue
         }
-        $live = @(Get-CimInstance Win32_Process -Filter "Name = 'msedge.exe'" |
-            Where-Object {
-                $_.CommandLine -and
-                $_.CommandLine -notmatch '--type=' -and
-                (($_.CommandLine -replace '\\', '/').ToLower().Contains($markerKey))
-            })
-        if ($live.Count -eq 0) { break }   # the browser is gone; nothing to watch
-        $pids = @($live | ForEach-Object { [uint32]$_.ProcessId })
+        $pids = Get-OurEdgePids
+        if ($pids.Count -eq 0) { break }   # the browser is gone; nothing to watch
         [void]$found.Clear()
         [void][W.U]::EnumWindows($callback, [IntPtr]::Zero)
         foreach ($win in $found) {

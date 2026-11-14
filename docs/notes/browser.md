@@ -264,6 +264,15 @@ window of the profile that lacks it. It stops when the browser does, and stands 
 a sign-in window is deliberately visible — the show path writes `synapse-shown` beside the
 profile and the next hide clears it (a stale flag expires after ten minutes).
 
+**The rule is the whole argument, not a mention (14 Nov).** The operator asked what else
+this could touch. A candidate is an `msedge.exe` process whose command line carries
+`--user-data-dir=<SynaBrowse's own profile>` **as an argument**, matched literally (quoted
+or not, separators normalised). An Edge that a person or Windows opened runs on its own
+profile and is never matched; a process that merely names our folder in another argument is
+not matched either; and WebView2 windows are a different process (`msedgewebview2.exe`), so
+Synapse's own window cannot be caught. Nothing here can see, move or hide a window that is
+not Synapse's browser.
+
 **A click is a click even when it cannot say where it landed (14 Nov).** `click` judged the
 landing address like a new open, and a click that reloads the document can come back with
 no address at all — `checkUrl('')` says "that is not an http(s) address", so a working

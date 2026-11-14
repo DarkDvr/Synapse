@@ -45,6 +45,19 @@ test('a window that appears after the first pass is still hidden', () => {
   assert.match(js, /watchBrowserWindow\(\{ profile \}\)/, 'the browser starts the watcher');
 });
 
+// The operator's question (14 Nov): what else could these rules touch? Only Edge processes
+// launched with `--user-data-dir=<SynaBrowse's own profile>` — the whole argument, not
+// "the command line mentions the folder". Edge a person or Windows opens runs on its own
+// profile, and a process that merely names our path elsewhere is left alone.
+test('only Synapse’s own Edge profile is ever touched', () => {
+  const script = fs.readFileSync(new URL('../src/browser/show.ps1', import.meta.url), 'utf8');
+  assert.match(script, /function Get-OurEdgePids/, 'one rule, used by the pass and the watcher');
+  assert.ok((script.match(/Get-OurEdgePids/g) || []).length >= 3, 'both callers use it');
+  assert.match(script, /--user-data-dir="\?/, 'the match is the whole argument');
+  assert.doesNotMatch(script, /\.Contains\(\$markerKey\)/, 'not a mention anywhere in the command line');
+  assert.match(script, /\[regex\]::Escape\(\$markerKey\)/, 'the folder is matched literally');
+});
+
 // ── the fence ───────────────────────────────────────────────────
 test('a listed host covers itself and its subdomains, and nothing that looks like it', () => {
   assert.equal(hostAllowed('example.com', ['example.com']), true);
