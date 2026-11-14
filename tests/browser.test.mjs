@@ -31,6 +31,20 @@ test('the hide path covers every window and never flashes a taskbar button', () 
   assert.match(script.slice(elseAt), /FlashWindowEx/, 'showing still flashes it, so a sign-in is noticed');
 });
 
+// A window can appear after the one pass — a cold start, a "Restore pages" bubble, a
+// popup — and each one that missed the pass sat on the taskbar until the browser closed
+// (14 Nov). An untitled window was skipped by the finder, which is exactly what a fresh
+// about:blank window looks like for a moment.
+test('a window that appears after the first pass is still hidden', () => {
+  const script = fs.readFileSync(new URL('../src/browser/show.ps1', import.meta.url), 'utf8');
+  assert.match(script, /\[int\]\$WatchMs = 0/, 'the script takes a watch window');
+  assert.match(script, /if \(\$WatchMs -gt 0\)/, 'and watches while it is asked to');
+  assert.match(script, /synapse-shown/, 'a sign-in window is left alone by the watcher');
+  assert.doesNotMatch(script, /if \(-not \$title\.ToString\(\)\)/, 'an untitled window is still ours');
+  const js = fs.readFileSync(new URL('../src/browser/browser.js', import.meta.url), 'utf8');
+  assert.match(js, /watchBrowserWindow\(\{ profile \}\)/, 'the browser starts the watcher');
+});
+
 // ── the fence ───────────────────────────────────────────────────
 test('a listed host covers itself and its subdomains, and nothing that looks like it', () => {
   assert.equal(hostAllowed('example.com', ['example.com']), true);

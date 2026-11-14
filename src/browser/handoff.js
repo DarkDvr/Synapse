@@ -120,3 +120,30 @@ export function hideBrowserWindow({ profile, sound = '', waitMs = 0 } = {}) {
     child.on('error', () => { clearTimeout(timer); resolve(null); });
   });
 }
+
+/**
+ * Keep a window hidden for the browser's life, not just at the moment it opens.
+ *
+ * One pass hides the window that exists then. Edge can make another one later — a cold
+ * start that lands after the pass, a "Restore pages" bubble, a popup the page opens — and
+ * each one that misses the pass wears a taskbar button the operator can see and click,
+ * with nothing behind it (14 Nov: "about:blank windows appear in my taskbar and sit
+ * there"). This runs show.ps1 with a watch window: it re-hides anything that appears,
+ * stops when the browser does, and stands aside while a sign-in window is deliberately
+ * on screen (the show path leaves a flag; the hide path clears it).
+ */
+export function watchBrowserWindow({ profile, ms = 30 * 60 * 1000 } = {}) {
+  try {
+    const child = spawn(
+      'powershell',
+      ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', SCRIPT, '-Marker', profile, '-Hide', '-WatchMs', String(ms)],
+      { windowsHide: true, detached: true, stdio: 'ignore' },
+    );
+    child.unref?.();
+    return true;
+  } catch {
+    // A machine without PowerShell keeps the one-shot hide; this is not the browser's
+    // problem to report.
+    return false;
+  }
+}

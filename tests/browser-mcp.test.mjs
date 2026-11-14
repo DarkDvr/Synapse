@@ -230,3 +230,12 @@ test('a cut read says how much is missing, and maxChars is honoured', async () =
   assert.match(src, /slice\(0, maxChars\)/, 'maxChars is the caller\'s');
   assert.match(src, /slice\(0, links\)/, 'links is the caller\'s');
 });
+
+// A click that reloads the document can come back with no address at all, and judging
+// "no address" as a refused page turned a working click into an error on a local mock
+// (14 Nov: "click failed: that is not an http(s) address").
+test('a click that cannot report its address is still a click', () => {
+  const src = fs.readFileSync(path.join(ROOT, 'src', 'mcp', 'browser-server.js'), 'utf8');
+  assert.match(src, /if \(url\) guard\(url\)/, 'an empty address is not a refused page');
+  assert.match(src, /url \? ` -> \$\{url\}` : ''/, 'and the answer does not print an empty arrow');
+});

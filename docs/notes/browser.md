@@ -250,6 +250,26 @@ Both are fixed at the source:
 - the `read` description says which mode to use: *article* for an article's prose, *text*
   for a thread, a forum or a profile.
 
+## A window made later is still ours (14 Nov)
+
+One pass hides the window that exists at that instant. Edge makes more than one: a cold
+start that lands after the pass, a "Restore pages" bubble, a popup a page opens. The finder
+also skipped any window with an **empty title** — which is exactly what a fresh
+`about:blank` window looks like for a moment — so it stayed on the taskbar until the
+browser closed, which is the operator's "about:blank windows appear and sit there".
+
+So the finder takes untitled windows now, and `start()` runs a **watcher** (`show.ps1`
+`-WatchMs`): every 1.2 s it re-applies the tool-window bit and the off-screen park to any
+window of the profile that lacks it. It stops when the browser does, and stands aside while
+a sign-in window is deliberately visible — the show path writes `synapse-shown` beside the
+profile and the next hide clears it (a stale flag expires after ten minutes).
+
+**A click is a click even when it cannot say where it landed (14 Nov).** `click` judged the
+landing address like a new open, and a click that reloads the document can come back with
+no address at all — `checkUrl('')` says "that is not an http(s) address", so a working
+click on a local mock was reported as a failure. An empty address now means "the page was
+being replaced", and the click is reported as done.
+
 ## Where things live
 
 | | |

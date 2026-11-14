@@ -262,8 +262,12 @@ async function handle(msg) {
             const at = Number.isFinite(args.x) && Number.isFinite(args.y) ? [Number(args.x), Number(args.y)] : null;
             const url = await browser.click({ selector: args.selector || null, text: args.text || null, at });
             // A click can navigate anywhere; the landing page is judged like a new open.
-            guard(url);
-            return toolText(id, `Clicked ${args.selector || args.text || `${args.x},${args.y}`} -> ${url}`);
+            // But a click that reloads the document can come back with no address at all —
+            // the evaluate ran while the page was being replaced — and judging "no address"
+            // as a refused page turned a working click into an error on a local mock
+            // (14 Nov: "click failed: that is not an http(s) address").
+            if (url) guard(url);
+            return toolText(id, `Clicked ${args.selector || args.text || `${args.x},${args.y}`}${url ? ` -> ${url}` : ''}`);
           }
           case 'type':
             await browser.type({ text: args.text, selector: args.selector || null, submit: args.submit === true });

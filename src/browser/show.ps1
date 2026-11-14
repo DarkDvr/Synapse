@@ -21,7 +21,8 @@ param(
     [switch]$Restore,
     [switch]$Focus,
     [switch]$Hide,
-    [int]$WaitMs = 0
+    [int]$WaitMs = 0,
+    [int]$WatchMs = 0
 )
 
 $ErrorActionPreference = 'Stop'
@@ -84,9 +85,10 @@ $callback = [W.U+EnumProc]{
     if ($class.ToString() -ne 'Chrome_WidgetWin_1') { return $true }
     $title = New-Object System.Text.StringBuilder 512
     [void][W.U]::GetWindowTextW($hWnd, $title, 512)
-    if (-not $title.ToString()) { return $true }
     # Edge shows a "Restore pages" bubble as its own window, and it is not ours to touch.
     if ($title.ToString() -match 'Restore pages') { return $true }
+    # An empty title is not "not our window": a fresh about:blank window has none for a
+    # moment, and skipping it left it on the taskbar for good (14 Nov).
     $box = New-Object 'W.U+RECT'
     [void][W.U]::GetWindowRect($hWnd, [ref]$box)
     if (($box.Right - $box.Left) -lt 300) { return $true }
@@ -152,6 +154,9 @@ if ($Hide) {
         [void][W.U]::ShowWindow($win, 4)   # SW_SHOWNOACTIVATE: normal, so it keeps rendering
         [void][W.U]::SetWindowPos($win, [IntPtr]::Zero, -32000, -32000, $w, $h, $SWP_NOZORDER -bor $SWP_NOACTIVATE -bor $SWP_FRAMECHANGED)
     }
+    # A watcher must not take the sign-in window away: the show path raises this flag and
+    # the next hide clears it.
+    Remove-Item (Join-Path $Marker 'synapse-shown') -Force -ErrorAction SilentlyContinue
     $state = 'hidden'
 } else {
     $ex = [W.U]::GetWindowLong($hwnd, $GWL_EXSTYLE)
@@ -159,6 +164,7 @@ if ($Hide) {
     [void][W.U]::SetWindowPos($hwnd, [IntPtr]::Zero, $x, $y, $w, $h, $SWP_NOZORDER -bor $SWP_NOACTIVATE -bor $SWP_FRAMECHANGED)
     [void][W.U]::ShowWindow($hwnd, 9)   # SW_RESTORE
     [void][W.U]::ShowWindow($hwnd, 4)   # SW_SHOWNOACTIVATE
+    New-Item -ItemType File -Path (Join-Path $Marker 'synapse-shown') -Force | Out-Null
     if ($Focus) {
         $current = [W.U]::GetCurrentThreadId()
         $fgThread = 0
@@ -214,3 +220,41 @@ $fgAfter = [W.U]::GetForegroundWindow()
     fgAfter    = $fgAfter.ToInt64()
     stoleFocus = ($fgBefore -ne $fgAfter)
 } | ConvertTo-Json -Compress
+
+# Keep watching, when asked. A window can appear after this pass — Edge's cold start, a
+# "Restore pages" bubble, a popup the page opens — and one that misses the pass keeps a
+# taskbar button the operator can see and click, with nothing behind it (14 Nov:
+# "about:blank windows appear in my taskbar and sit there"). It stops when the browser
+# does, and stands aside while a sign-in window is deliberately on screen.
+if ($WatchMs -gt 0) {
+    $flag = Join-Path $Marker 'synapse-shown'
+    $deadline = (Get-Date).AddMilliseconds($WatchMs)
+    while ((Get-Date) -lt $deadline) {
+        Start-Sleep -Milliseconds 1200
+        if (Test-Path $flag) {
+            # A hand-off is open: it is meant to be visible, and the hide that follows it
+            # clears the flag. A stale one (the operator closed the window) expires.
+            if (((Get-Date) - (Get-Item $flag).LastWriteTime).TotalMinutes -gt 10) {
+                Remove-Item $flag -Force -ErrorAction SilentlyContinue
+            }
+            continue
+        }
+        $live = @(Get-CimInstance Win32_Process -Filter "Name = 'msedge.exe'" |
+            Where-Object {
+                $_.CommandLine -and
+                $_.CommandLine -notmatch '--type=' -and
+                (($_.CommandLine -replace '\\', '/').ToLower().Contains($markerKey))
+            })
+        if ($live.Count -eq 0) { break }   # the browser is gone; nothing to watch
+        $pids = @($live | ForEach-Object { [uint32]$_.ProcessId })
+        [void]$found.Clear()
+        [void][W.U]::EnumWindows($callback, [IntPtr]::Zero)
+        foreach ($win in $found) {
+            $ex = [W.U]::GetWindowLong($win, $GWL_EXSTYLE)
+            if (($ex -band $WS_EX_TOOLWINDOW) -ne 0) { continue }
+            [void][W.U]::SetWindowLong($win, $GWL_EXSTYLE, (($ex -bor $WS_EX_TOOLWINDOW) -band (-bnot $WS_EX_APPWINDOW)))
+            [void][W.U]::ShowWindow($win, 4)
+            [void][W.U]::SetWindowPos($win, [IntPtr]::Zero, -32000, -32000, $w, $h, $SWP_NOZORDER -bor $SWP_NOACTIVATE -bor $SWP_FRAMECHANGED)
+        }
+    }
+}
