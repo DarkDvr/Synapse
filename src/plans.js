@@ -1473,6 +1473,7 @@ export function briefSession({ dir, role = 'architect', auto = false, single = f
     lines.push(
       `Format: {"version":1,"goal":"...","summary":"","tasks":[{"id":"t1","title":"...","role":"coder-1","status":"todo","origin":"plan|found|operator",` +
         `"detail":"...","reads":[],"dependsOn":[],"result":null,"note":null}]} - ` +
+        `role is one of the project's roles (${ROLES.join(', ')}) — exactly, with no suffix like "designer-1"; ` +
         `statuses: ${STATUSES.join(', ')}. Keep ids short and unique, titles under ${TITLE_MAX} characters, ` +
         `and mark a task "blocked" only when it needs the operator.`,
     );

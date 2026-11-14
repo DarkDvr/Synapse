@@ -44,6 +44,7 @@ import {
   setTaskStatus,
   releaseDoing,
   openDelegations,
+  ROLES,
 } from './plans.js';
 import { screenCallOver } from './desk.js';
 import { browserAskHolding } from './browser/ask.js';
@@ -1350,6 +1351,32 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
         text:
           `Nothing was run: the plan has no task "${request.task}". ` +
           `Check the id against the plan file and ask again.`,
+      });
+      return;
+    }
+
+    // A role that is not one of the project's roles cannot be run. It has no model, so
+    // the engine default was used and the provider's refusal read as a model problem: on
+    // 14 Nov `designer-1` and `qc-1` were accepted like that, the run died with "not
+    // available in your country", and the Architect spent its next turn listing models and
+    // rewriting the plan. The plan validator had said "unknown role" in a warning; this is
+    // the refusal that stops it before a worker exists.
+    if (!ROLES.includes(task.role)) {
+      const unknown = String(task.role || '').trim();
+      appendRun(dir, {
+        kind: 'delegate',
+        callId: request.callId,
+        task: task.id,
+        role: unknown,
+        outcome: 'unknown-role',
+      });
+      log.warn(`delegation refused: ${task.id} names unknown role "${unknown}" in ${project}`);
+      await wake(architectId, dir, {
+        description: `delegate ${task.id} refused: no such role`,
+        text:
+          `Nothing was run: ${task.id}'s role is "${unknown}", and this project has no such role. ` +
+          `The roles are ${ROLES.join(', ')} — use one of those exactly, with no suffix like "-1". ` +
+          `Fix the row's role in the plan, then delegate ${task.id} again.`,
       });
       return;
     }

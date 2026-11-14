@@ -159,6 +159,30 @@ try {
       woke[0]?.slice(0, 120),
     );
   }
+  // 2c. a row whose role does not exist: refused before a worker exists.
+  // 14 Nov, orinth-test-roles: the plan said "designer-1" and "qc-1" — the cards are
+  // designer and qc. The unknown role had no model, so the run used the engine default,
+  // the provider refused it by country, and the Architect spent its next turn listing
+  // models and rewriting the plan. Refused here, with the real roles named.
+  writePlan(plan(['build'], [task('t7', 'designer-1')]));
+  {
+    const { runner, woke, ran } = makeRunner();
+    await runner.handleTurn('ses_arch', delegate('t7', 'call_unknown_role'));
+    await settle();
+    const run = fs.readFileSync(path.join(DIR, '.synapse', 'runs.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+    expect('an unknown role starts nothing', !ran.includes('prompt') && !ran.includes('createSession'), ran.join(','));
+    expect(
+      'and is journalled as unknown-role',
+      run.some((r) => r.callId === 'call_unknown_role' && r.outcome === 'unknown-role'),
+      JSON.stringify(run.slice(-2)),
+    );
+    expect(
+      'the Architect is told the roles it may use',
+      /designer/.test(woke[0] || '') && /coder-1/.test(woke[0] || '') && /no suffix/.test(woke[0] || ''),
+      woke[0]?.slice(0, 140),
+    );
+  }
+
   // 3. a delegation no turn ever read: picked up once, at boot
   // Fever Tracker, 22 Oct: the Architect delegated t8 inside a turn that ended in
   // a question, Synapse restarted, the engine cancelled the question, the turn
