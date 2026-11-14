@@ -106,8 +106,9 @@ export const sessionWorking = (sessionId) => {
   if (isBusy(sessionId)) return true;
   // The engine's active list can be empty in the middle of a turn (measured);
   // the project lock is the second source, and it is the one the server refuses
-  // on, so the rail must agree with it.
-  if (sessionId === state.sessionId && state.busyInfo?.busy) return true;
+  // on, so the rail must agree with it. The answer is tagged with the chat it was
+  // asked about: another chat's lock is not this chat's work (14 Nov).
+  if (sessionId === state.sessionId && state.busyInfo?.busy && state.busyInfoSession === sessionId) return true;
   const project = projectOf(sessionId);
   const run = project ? runIn(project) : null;
   return Boolean(run && (!run.architect || run.architect === sessionId));

@@ -2737,3 +2737,14 @@ pane appears again… I can't read." Two causes, both the page's:
 
 Both modes: the pane is the same component in Single and Multi. A worker's trace draws its
 pane directly and never had the hide-on-duplicate rule.
+**A busy answer belongs to its chat (14 Nov).** Clicking into a finished project while
+another had a live run sounded the finished-work chime, for a project finished hours
+earlier. The sound's predicate counts the project lock as work, and the lock's answer
+(`state.busyInfo`) was still the *previous* chat's for up to a poll: `sessionWorking(B)`
+read `busy: true`, the chime's watcher recorded B as the working chat, and when the poll
+caught up the end of that imagined work played the sound. The 12 Nov guard — a reading
+that belonged to another chat is dropped — could not help, because the transient reading
+had already overwritten it with B. The answer now carries the chat that asked
+(`busyInfoSession`), `sessionWorking()` requires the two to match, a poll that lands after
+the operator has opened another chat is dropped, and `openSession` clears the previous
+chat's lock with the rest of its state (permissions, trace, clocks).

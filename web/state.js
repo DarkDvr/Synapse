@@ -59,6 +59,12 @@ export const state = {
   workEndQuiet: false,
   busySessions: new Set(),
   busySince: new Map(),
+  // The project-lock answer, and the chat that asked for it. The poll answers for the
+  // open chat; a switch leaves the previous chat's answer in hand for up to a poll, and
+  // reading it as this chat's work played the finished-work chime for a project finished
+  // hours earlier (14 Nov).
+  busyInfo: null,
+  busyInfoSession: null,
   toolsInFlight: new Set(),
   // What a tool is doing right now, in words, while it runs. A tool call emits nothing
   // until it finishes, so a 20-second page load in the chat looked like a dead turn — the

@@ -107,10 +107,21 @@ export async function refreshPending() {
   state.busySessions = active;
   // The project lock. The server decides; this is the face of it: Send and the
   // mode switch both read it, and both stay open for the cards and Stop.
+  //
+  // The answer belongs to the chat that asked. A poll that was in flight when the
+  // operator opened another project must not label the new one busy, and the previous
+  // chat's answer must not either: the working predicate read it as this chat's work and
+  // the finished-work chime played for a project finished hours earlier (14 Nov).
   if (state.sessionId) {
-    state.busyInfo = await api('GET', `/api/busy?session=${encodeURIComponent(state.sessionId)}`).catch(() => null);
+    const asked = state.sessionId;
+    const info = await api('GET', `/api/busy?session=${encodeURIComponent(asked)}`).catch(() => null);
+    if (asked === state.sessionId) {
+      state.busyInfo = info;
+      state.busyInfoSession = asked;
+    }
   } else {
     state.busyInfo = null;
+    state.busyInfoSession = null;
   }
   renderMode();
   renderComposer();

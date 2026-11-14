@@ -626,6 +626,11 @@ function setView() {
 async function openSession(id) {
   state.view = 'session';
   state.sessionId = id;
+  // The project lock belongs to the chat that was open, like the permissions and the
+  // trace. Keeping it let the previous chat's "busy" answer read as this chat's work,
+  // which armed the finished-work chime and sounded it when the poll caught up (14 Nov).
+  state.busyInfo = null;
+  state.busyInfoSession = null;
   // The next page load opens this one again (see restoreOpenSession).
   rememberSession(id);
   state.permissions = [];
