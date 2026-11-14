@@ -209,3 +209,16 @@ you started, by its id: Stop-Process -Id <pid>" — so the model can carry on.
 (`$n = 'py'+'thon'; Get-Process $n | Stop-Process`), a script that does it inside, and an
 interpreter that is not in `INTERPRETERS`. This is a fence on the shapes that reach beyond
 the project, not a kernel.
+
+**A tool's arguments are not shell syntax (14 Nov).** A Designer ran the shipped
+visual-review renderer as `node ...\skills\visual-review\bin\shot.mjs mock.html --do
+"click:[data-state=\"long\"]; wait:300" --eval "(()=>{...})()"`. The command analyzer read
+the `=>` in the eval as a redirect and the escaped quote in the selector as the end of the
+argument, so it invented a path `F:/long/]...` outside the project and asked the operator
+for permission on every render. Two fixes in `analyzeCommand`: a `>` after `=`, `<` or `&`
+is not a redirect (an arrow or a comparison), and `\"` inside a quoted argument is a quote
+rather than the end of it. The shipped-tool exemption already allowed the `skills/` path;
+with the arguments read correctly the whole command is one project run of one shipped tool,
+and it runs without a card. A real `>` redirect is still a write, and still judged where it
+lands.
+

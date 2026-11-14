@@ -79,7 +79,11 @@ const READ_VERBS = new RegExp(
 );
 
 const CD_VERBS = new Set(['cd', 'chdir', 'set-location', 'push-location', 'pushd', 'sl']);
-const REDIRECT = /(?:^|[^0-9&>])>>?\s*("[^"]*"|'[^']*'|[^\s;&|]+)/g;
+// A `>` that follows `=`, `<` or `&` is not a redirect: it is an arrow in code passed to
+// a script (`--eval "(() => {…})"`, `--do "...=>..."`) or a comparison. Reading it as a
+// redirect invented a write target out of the words after it and made a shipped tool's
+// own run ask for a card (14 Nov).
+const REDIRECT = /(?:^|[^0-9&>=<])>>?\s*("[^"]*"|'[^']*'|[^\s;&|]+)/g;
 
 // Running a shipped script is the toolbox working. Deleting or editing one is
 // not, so the toolbox allowance needs an interpreter at the front of the
@@ -204,6 +208,14 @@ function segmentsOf(command) {
     const char = text[i];
     if (quote) {
       current += char;
+      // `\"` inside a quoted argument is a quote, not the end of the argument: a model
+      // writing a CSS selector or a JSON value escapes it this way, and reading it as a
+      // close split the value on the `;` it contained (14 Nov).
+      if (char === '\\' && text[i + 1] === quote) {
+        current += text[i + 1];
+        i += 1;
+        continue;
+      }
       if (char === quote) quote = '';
       continue;
     }
@@ -224,8 +236,10 @@ function wordsOf(segment) {
   const out = [];
   let current = '';
   let quote = '';
-  for (const char of text) {
+  for (let i = 0; i < text.length; i += 1) {
+    const char = text[i];
     if (quote) {
+      if (char === '\\' && text[i + 1] === quote) { current += quote; i += 1; continue; }
       if (char === quote) quote = '';
       else current += char;
       continue;

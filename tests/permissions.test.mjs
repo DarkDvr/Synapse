@@ -122,6 +122,26 @@ test('a command that stays in the workspace is allowed', () => {
   assert.equal(shell('node src\\index.js').effect, 'allow');
 });
 
+// A shipped tool's own arguments are not shell syntax (14 Nov). The visual-review
+// renderer is given a CSS attribute selector and a `--eval` with an arrow in it; the
+// analyzer read `=>` as a redirect and the escaped quotes in the selector as a path, so a
+// Designer's render asked the operator for permission every single time.
+test('a shipped tool with a selector and an arrow in its arguments runs without asking', () => {
+  const cmd =
+    'node "F:\\dev\\Synapse\\skills\\visual-review\\bin\\shot.mjs" ".synapse/design/mock-calculator.html" ' +
+    '--widths 1440 --height 900 --do "click:[data-state=\\"long\\"]; wait:300" ' +
+    '--eval "(()=>{const v=document.querySelector(\'.cal\')?.textContent; return v;})()"';
+  const info = analyzeCommand(cmd, CWD);
+  assert.deepEqual(info.redirects, [], 'an arrow is not a redirect');
+  assert.ok(!info.paths.some((p) => /long/.test(p)), 'the selector is not a path');
+  assert.equal(shell(cmd).effect, 'allow');
+});
+
+test('a real redirect is still a redirect', () => {
+  const info = analyzeCommand('node "F:\\dev\\Synapse\\skills\\visual-review\\bin\\shot.mjs" page.html --eval "x" > out.txt', CWD);
+  assert.deepEqual(info.redirects, [`${PROJECT}/out.txt`]);
+});
+
 // "Always Allow" on a shell card is about the command and the files it names,
 // not the exact argument string: the model re-runs the same script with a pipe
 // or another flag, and every variant used to ask again.
