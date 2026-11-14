@@ -39,6 +39,19 @@ export function transcriptWiring(fns) {
 }
 
 // ── transcript ──────────────────────────────────────────────────
+
+/**
+ * Which post the live pane belongs to: the newest Assistant turn, even when a compaction
+ * line or a harness message arrived after it.
+ *
+ * It used to be "the last message, if it is an assistant", so a compaction line landing
+ * while a turn was writing hid the pane for one render and brought it back on the next —
+ * the chat moved twice for nothing, at every step (14 Nov).
+ */
+export function panePostIndex(showable) {
+  return (showable || []).reduce((at, m, i) => (m?.type === 'assistant' ? i : at), -1);
+}
+
 export function renderTranscript() {
   const el = $('transcript');
   if (!el) return;
@@ -162,14 +175,21 @@ export function renderTranscript() {
   // The live step belongs to the newest assistant message, inside its own green
   // rule — not to the transcript after it (2 Nov: the operator saw a second grey
   // block with its own head and gap, reading as somebody else's post).
+  //
+  // "Newest assistant" is not "the last message": a compaction line or a harness
+  // message can arrive while a turn is still writing, and the pane used to drop out
+  // for that render and come back on the next one — one of the two jumps the operator
+  // watched at every step (14 Nov).
   const liveTail = renderSessionStream();
+  const paneAt = panePostIndex(showable);
   for (let i = 0; i < showable.length; i += 1) {
     const m = showable[i];
     const at = Number(m.created) || 0;
     while (next < items.length && at && items[next].at < at) html += items[next++].html;
-    html += renderMessage(m, i === showable.length - 1 && m.type === 'assistant' ? liveTail : '');
+    html += renderMessage(m, i === paneAt ? liveTail : '');
   }
   while (next < items.length) html += items[next++].html;
+  if (liveTail && paneAt === -1) html += liveTail;
   html += leasesHere().map(renderLease).join('');
   el.innerHTML = html + pending;
   // The live panel's slide is a transform on a node this rebuild just replaced, so

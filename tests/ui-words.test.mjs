@@ -551,7 +551,8 @@ test('the Architect’s live reasoning is drawn inside its own post', () => {
   assert.match(js, /function renderMessage\(m, tail = ''\) \{/);
   assert.match(js, /<div class="msg-body">\$\{body\.join\(''\)\}\$\{tail\}<\/div>/, 'the tail lands inside the post');
   assert.match(js, /const liveTail = renderSessionStream\(\);/, 'the live step is computed once');
-  assert.match(js, /renderMessage\(m, i === showable\.length - 1 && m\.type === 'assistant' \? liveTail : ''\)/, 'and only the newest assistant message carries it');
+  assert.match(js, /renderMessage\(m, i === paneAt \? liveTail : ''\)/, 'and only the newest assistant message carries it');
+  assert.match(js, /panePostIndex\(showable\)/, 'the newest assistant, not "the last message" — a compaction line can follow it');
   assert.doesNotMatch(js, /el\.innerHTML = html \+ pending \+ renderSessionStream\(\)/, 'it is not appended after the conversation any more');
   // No head line: the post already says who is speaking.
   const fn = /function renderSessionStream\(\) \{([\s\S]*?)\n\}/.exec(traces);

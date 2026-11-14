@@ -409,7 +409,11 @@ export function traceSig() {
  * The open session's own live step, drawn in the panel the workers get.
  *
  * Once the step's message carries the same words, the message is the record and the
- * panel goes — otherwise the paragraph would be on screen twice.
+ * panel goes — otherwise the paragraph would be on screen twice. **Except once the
+ * panel has filled**: a full-height pane stays until the turn ends, even while the
+ * finished step's words are also in the message. Hiding it for the message and bringing
+ * it back for the next step moved the whole chat by eleven lines twice a step — the
+ * operator's "it jumps up and down so much I can't read" (14 Nov).
  */
 export function renderSessionStream() {
   const t = state.sessionTrace;
@@ -436,7 +440,7 @@ export function renderSessionStream() {
     .filter((p) => p.type === 'reasoning' || p.type === 'text')
     .map((p) => String(p.text || ''))
     .join('\n');
-  if (seen.length >= text.length && seen.includes(text.slice(0, 40))) return '';
+  if (!t.reserved && seen.length >= text.length && seen.includes(text.slice(0, 40))) return '';
   // No head line and no rule of its own: this panel sits *inside* the Architect's
   // post, so the post's green line is the only rule and the reasoning keeps its
   // grey. `is-own` is the whole difference from a worker's trace.

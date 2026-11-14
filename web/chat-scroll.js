@@ -204,6 +204,9 @@ export function appendStream(kind, delta) {
   foldStream(trace);
   trace.stream = newStream(kind);
   trace.thinkCollapsed = false;
+  // "Full" belongs to the turn that filled it. A new pane grows from its own height
+  // again, and once it fills it stays until this turn ends (14 Nov).
+  trace.reserved = false;
   chatFollowArmed = true;
   lastChatTop = chatScroller()?.scrollTop || 0;
   // The first words go in BEFORE the render. A pane is only markup once it has text

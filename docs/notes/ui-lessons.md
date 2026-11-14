@@ -2719,3 +2719,21 @@ and in the usage line now, the designer's brief says the same in one clause, and
 ever disagree again. A skill is documentation twice over — the script's own help and the
 prose around it — and a model that meets two defaults spends a turn deciding which to
 believe.
+
+**A full pane stays for the turn (14 Nov).** The operator's report: "thinking pane
+frequently gets removed, moving entire chat down, then a tool call appears, then thinking
+pane appears again… I can't read." Two causes, both the page's:
+
+- the pane was hidden the moment the step's own message carried the same words — correct
+  for a duplicate, wrong for a full pane: hiding and redrawing it moved the chat by eleven
+  lines twice a step. **Once `reserved` (the pane has reached its full height) it is not
+  hidden again until the turn ends**, and the flag now resets with a new pane, because
+  "full" belongs to the turn that filled it.
+- the pane was only drawn when the newest Assistant post happened to be the **last
+  message**. A compaction line or a harness message arriving mid-turn took it out for one
+  render and the next delta put it back. It is placed by `panePostIndex()` — the newest
+  Assistant post — whatever follows it, and appended at the end only if there is no
+  Assistant post yet.
+
+Both modes: the pane is the same component in Single and Multi. A worker's trace draws its
+pane directly and never had the hide-on-duplicate rule.

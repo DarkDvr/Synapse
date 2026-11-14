@@ -12,6 +12,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { state } from '../web/state.js';
 import { renderSessionStream } from '../web/traces.js';
+import { panePostIndex } from '../web/transcript.js';
 import { turnLive } from '../web/turn-live.js';
 
 const source = (rel) => fs.readFileSync(new URL(`../web/${rel}`, import.meta.url), 'utf8');
@@ -35,10 +36,24 @@ test('the pane goes once the step itself carries the words', () => {
   assert.equal(renderSessionStream(), '', 'no duplicate of the same step');
 });
 
-// The operator's screenshot: "digit-count computations depend" in a one-line box under
-// the Architect's delegation, with the turn long over and its reasoning already folded
-// above. The pane must not outlive the turn, and hiding it is not enough — a stale
-// stream would be resumed by the next turn's first delta.
+// The operator's rule (14 Nov): once the pane has built to its full height it stays
+// until the turn ends. Hiding it when a finished step's words reached the message, and
+// bringing it back for the next step, moved the whole chat by eleven lines twice a step.
+test('a full pane stays for the rest of the turn', () => {
+  state.sessionId = 'sess_test';
+  state.busy = true;
+  const text = 'Reading the file now.';
+  state.messages = [{ id: 'm2', type: 'assistant', completed: false, parts: [{ type: 'reasoning', text }] }];
+  state.sessionTrace = { key: 'sess:sess_test', reserved: true, stream: { kind: 'think', text } };
+  const html = renderSessionStream();
+  assert.match(html, /is-reserved/, 'the pane is still there, at its full height');
+  state.busy = false;
+  state.sessionTrace = null;
+});
+
+// The operator's screenshot the day before: "digit-count computations depend" in a
+// one-line box under the Architect's delegation, with the turn long over. A pane must not
+// outlive the turn — and hiding it is not enough: the stale stream would be resumed.
 test('a pane does not outlive its turn', () => {
   state.sessionId = 'sess_test';
   state.busy = false;
@@ -62,4 +77,14 @@ test('the pane is drawn while the turn runs, whatever the last message says', ()
 test('a late delta cannot open a pane again, and a new chat starts with none', () => {
   assert.match(source('chat-scroll.js'), /if \(!isWorker\(trace\) && !turnLive\(\)\) return;/, 'deltas for a finished turn are refused');
   assert.match(source('app.js'), /state\.sessionTrace = \{ key: '', stream: null \};/, 'opening a chat drops the last one\'s pane');
+});
+
+// The pane used to be drawn only when the assistant post happened to be the *last*
+// message, so a compaction line arriving mid-turn took it away for a render and the next
+// one put it back (14 Nov).
+test('the live pane sits in the newest Assistant post, whatever follows it', () => {
+  assert.equal(panePostIndex([{ type: 'user' }, { type: 'assistant' }, { type: 'assistant' }, { type: 'synthetic' }]), 2);
+  assert.equal(panePostIndex([{ type: 'user' }, { type: 'assistant' }]), 1);
+  assert.equal(panePostIndex([{ type: 'user' }]), -1, 'no assistant yet: nothing to attach it to');
+  assert.equal(panePostIndex([]), -1);
 });
