@@ -778,6 +778,7 @@ const ROLE_MANDATES = {
     'Then render every mock with the visual-review skill and read its layout findings before you report: controls',
     'in one row with two heights, a label off its centre, two labels a pixel apart on one line, and a block',
     'indented from the rows under it are defects, not taste - fix them, render again, and report the numbers.',
+    'Its PNGs go in .synapse/shots/ like every role\'s; the design folder holds the spec and the mocks.',
   ].join(' '),
   qc: [
     'You are QC - quality control. You judge the build a real, non-technical person will meet, not the code:',

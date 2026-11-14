@@ -2705,3 +2705,17 @@ the two spaces around its slash (109px → 98), the cache share moved off the li
 tooltip, and the line is **132px** now — a four-digit rate and an "M" window still fit at
 that width. The share is not lost: the hover reads "100% from the provider's cache (0 fresh,
 53K read)". Multi only, since Single hides the rate row; the clock change is in both.
+
+**One default, stated once (14 Nov).** The visual-review renderer's `--out` defaulted to
+`.synapse/design/shots` — the Designer's own folder — while the skill's own "Where the
+images go" section said `.synapse/shots`, which is the one folder inside `.synapse/` that
+every role may write (`SHARED_DIR` in `src/plans.js`). A designer read both and stopped
+mid-turn to reconcile them: *"the skill text says default .synapse/design/shots in the
+usage, but the 'Where the images go' section says .synapse/shots. There's a discrepancy."*
+Its brief put the spec and the mocks in `.synapse/design/`, and it read that as the render
+folder too — three answers to one question. The default is `.synapse/shots` in the script
+and in the usage line now, the designer's brief says the same in one clause, and
+`tests/visual-review.test.mjs` fails if the script's default and the skill's usage line
+ever disagree again. A skill is documentation twice over — the script's own help and the
+prose around it — and a model that meets two defaults spends a turn deciding which to
+believe.
