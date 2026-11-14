@@ -107,17 +107,17 @@ Nothing is minimized for a sign-in, and nothing takes the foreground uninvited.
 A hidden browser must be invisible *and* still render, and those two pull apart:
 
 - **The hide starts before the browser is ready.** `show.ps1 -Hide -WaitMs` is started the moment
-the process exists and grabs the window within 40 ms of its creation, so the button is not
-there for the second or two a DevTools handshake takes. Edge creates that first window only
-when it is ready, so a sub-second button can still be seen on a cold start — the window
-itself never appears.
-- **No taskbar button, no Alt-Tab.** The window is given `WS_EX_TOOLWINDOW` and loses
-  `WS_EX_APPWINDOW` (`show.ps1 -Hide`). Without it, a window parked off-screen still puts a
-  button on the taskbar, and clicking that button focuses a window nobody can see — which is
-  what the operator met (12 Nov).
+the process exists and grabs the window within 40 ms of its creation. It parks the window
+off-screen as soon as Edge creates it; it does not keep a button off the taskbar. Edge
+creates that first window only when it is ready, so a cold start can show a button first.
+- **No taskbar button: wanted, not delivered.** `show.ps1 -Hide` gives the window
+  `WS_EX_TOOLWINDOW` and takes `WS_EX_APPWINDOW` away, and the operator still sees a button
+  and a thumbnail with the page title (14 Nov, unresolved — see "Hiding it did not work"
+  below). Do not treat this bullet as a fact about the running app.
 - **Off-screen and normal, never minimized.** A minimized Chromium window stops compositing,
   so `Page.captureScreenshot` never answers; off-screen, it is invisible and still renders.
-  Measured both ways: minimized → no answer in 15 s; off-screen → 55 ms.
+  Measured both ways: minimized → no answer in 15 s; off-screen → 55 ms. This part works;
+  the window is out of the way even when its button is not.
 - **No "Restore pages" bubble.** Edge shows it as a window of its own at the top-left of the
   primary after a kill, and it was mistaken for ours. `--hide-crash-restore-bubble` and
   `--disable-session-crashed-bubble` suppress it, and the window search ignores it by title.
@@ -250,19 +250,24 @@ Both are fixed at the source:
 - the `read` description says which mode to use: *article* for an article's prose, *text*
   for a thread, a forum or a profile.
 
-## A window made later is still ours (14 Nov)
+## Hiding it did not work (14 Nov, unresolved)
 
-One pass hides the window that exists at that instant. Edge makes more than one: a cold
-start that lands after the pass, a "Restore pages" bubble, a popup a page opens. The finder
-also skipped any window with an **empty title** — which is exactly what a fresh
-`about:blank` window looks like for a moment — so it stayed on the taskbar until the
-browser closed, which is the operator's "about:blank windows appear and sit there".
+Bounded from above: the window still gets a taskbar button and it stays until Synapse
+kills the browser. Three attempts are gone from the code — every window rather than the
+first, untitled windows included, and a watcher that re-applied the tool-window bit every
+1.2 s. The last one still left the button on screen, so it was removed rather than kept as
+dead weight; `show.ps1 -Hide` is one pass again, and it is documented as what it is: the
+window is parked off-screen and keeps rendering, and it is **not** hidden from the taskbar.
 
-So the finder takes untitled windows now, and `start()` runs a **watcher** (`show.ps1`
-`-WatchMs`): every 1.2 s it re-applies the tool-window bit and the off-screen park to any
-window of the profile that lacks it. It stops when the browser does, and stands aside while
-a sign-in window is deliberately visible — the show path writes `synapse-shown` beside the
-profile and the next hide clears it (a stale flag expires after ten minutes).
+The evidence, in the operator's words: a taskbar thumbnail with the Edge logo and the page
+title, sitting there until the browser closed.
+
+What that points at: `WS_EX_TOOLWINDOW` is applied to a window the shell has **already put
+on the taskbar**, and Windows re-reads that bit when a window is hidden or re-shown, not
+while it stays visible. `SetWindowLong` + `SW_SHOWNOACTIVATE` on an already-visible window
+does not make the shell take the button away. The next thing to try is the explicit
+removal — `ITaskbarList::DeleteTab(hwnd)` — or going **headless entirely** and giving up the
+in-window sign-in, which is the only thing the visible window is for.
 
 **The rule is the whole argument, not a mention (14 Nov).** The operator asked what else
 this could touch. A candidate is an `msedge.exe` process whose command line carries

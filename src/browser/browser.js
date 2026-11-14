@@ -17,7 +17,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { connect, waitForPort, readPort } from './cdp.js';
-import { screenState, restoreFocus, hideBrowserWindow, watchBrowserWindow } from './handoff.js';
+import { screenState, restoreFocus, hideBrowserWindow } from './handoff.js';
 
 const EDGE_CANDIDATES = [
   'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
@@ -231,10 +231,6 @@ export function createBrowser({ profile, log = null, startMinimized = true, widt
       // while two models were reading one thread (13 Nov).
       const hidden = existing ? await hideBrowserWindow({ profile }).catch(() => null) : await early;
       if (hidden?.toolWindow) note(`browser: window hidden (tool window yes${existing ? ', attached' : ''})`);
-      // One pass hides the window that exists now; the watcher covers the ones Edge makes
-      // later — a cold-start window, a "Restore pages" bubble, a popup — which used to sit
-      // on the taskbar until the browser closed (14 Nov).
-      watchBrowserWindow({ profile });
       note(`browser: ${existing ? 'attached to' : 'started'} Edge on port ${port}`);
       return page;
     })();

@@ -21,8 +21,7 @@ param(
     [switch]$Restore,
     [switch]$Focus,
     [switch]$Hide,
-    [int]$WaitMs = 0,
-    [int]$WatchMs = 0
+    [int]$WaitMs = 0
 )
 
 $ErrorActionPreference = 'Stop'
@@ -72,18 +71,16 @@ $fgBefore = [W.U]::GetForegroundWindow()
 # a candidate, and a process that merely named our folder in another argument is left
 # alone (14 Nov: the operator asked what these rules could touch).
 $markerKey = ($Marker -replace '\\', '/').ToLower()
-function Get-OurEdgePids {
-    $pattern = '--user-data-dir="?' + [regex]::Escape($markerKey) + '"?(\s|$)'
-    @(Get-CimInstance Win32_Process -Filter "Name = 'msedge.exe'" |
-        Where-Object {
-            $_.CommandLine -and
-            $_.CommandLine -notmatch '--type=' -and
-            (($_.CommandLine -replace '\\', '/').ToLower()) -match $pattern
-        } | ForEach-Object { [uint32]$_.ProcessId })
-}
-$pids = Get-OurEdgePids
+$pattern = '--user-data-dir="?' + [regex]::Escape($markerKey) + '"?(\s|$)'
+$pids = @(Get-CimInstance Win32_Process -Filter "Name = 'msedge.exe'" |
+    Where-Object {
+        $_.CommandLine -and
+        $_.CommandLine -notmatch '--type=' -and
+        (($_.CommandLine -replace '\\', '/').ToLower()) -match $pattern
+    } | ForEach-Object { [uint32]$_.ProcessId })
 
-# The window: a top-level Chromium window of one of those processes, with a page title.
+# The window: a top-level Chromium window of one of those processes. A title is not
+# required — a fresh about:blank window has none for a moment (14 Nov).
 $found = New-Object System.Collections.ArrayList
 $callback = [W.U+EnumProc]{
     param($hWnd, $param)
@@ -155,18 +152,17 @@ $x = $area.X + [int](($area.Width - $w) / 2)
 $y = $area.Y + [int](($area.Height - $h) / 2)
 
 if ($Hide) {
-    # Every top-level window of this profile, not only the first. Edge can have more than
-    # one (a "Restore pages" bubble, a popup the page opened), and each window that escapes
-    # this loop is a taskbar entry the operator can see and click (13 Nov).
+    # One pass over the windows that exist now, and nothing more. This was built up over
+    # three attempts — every window and not the first, untitled windows included, a
+    # watcher for windows made later — and the operator's taskbar still kept the button
+    # (14 Nov). It is kept because it parks the window out of the way and the page still
+    # renders; it is not claimed to hide it. See docs/notes/browser.md.
     foreach ($win in $found) {
         $ex = [W.U]::GetWindowLong($win, $GWL_EXSTYLE)
         [void][W.U]::SetWindowLong($win, $GWL_EXSTYLE, (($ex -bor $WS_EX_TOOLWINDOW) -band (-bnot $WS_EX_APPWINDOW)))
         [void][W.U]::ShowWindow($win, 4)   # SW_SHOWNOACTIVATE: normal, so it keeps rendering
         [void][W.U]::SetWindowPos($win, [IntPtr]::Zero, -32000, -32000, $w, $h, $SWP_NOZORDER -bor $SWP_NOACTIVATE -bor $SWP_FRAMECHANGED)
     }
-    # A watcher must not take the sign-in window away: the show path raises this flag and
-    # the next hide clears it.
-    Remove-Item (Join-Path $Marker 'synapse-shown') -Force -ErrorAction SilentlyContinue
     $state = 'hidden'
 } else {
     $ex = [W.U]::GetWindowLong($hwnd, $GWL_EXSTYLE)
@@ -174,7 +170,6 @@ if ($Hide) {
     [void][W.U]::SetWindowPos($hwnd, [IntPtr]::Zero, $x, $y, $w, $h, $SWP_NOZORDER -bor $SWP_NOACTIVATE -bor $SWP_FRAMECHANGED)
     [void][W.U]::ShowWindow($hwnd, 9)   # SW_RESTORE
     [void][W.U]::ShowWindow($hwnd, 4)   # SW_SHOWNOACTIVATE
-    New-Item -ItemType File -Path (Join-Path $Marker 'synapse-shown') -Force | Out-Null
     if ($Focus) {
         $current = [W.U]::GetCurrentThreadId()
         $fgThread = 0
@@ -231,34 +226,3 @@ $fgAfter = [W.U]::GetForegroundWindow()
     stoleFocus = ($fgBefore -ne $fgAfter)
 } | ConvertTo-Json -Compress
 
-# Keep watching, when asked. A window can appear after this pass — Edge's cold start, a
-# "Restore pages" bubble, a popup the page opens — and one that misses the pass keeps a
-# taskbar button the operator can see and click, with nothing behind it (14 Nov:
-# "about:blank windows appear in my taskbar and sit there"). It stops when the browser
-# does, and stands aside while a sign-in window is deliberately on screen.
-if ($WatchMs -gt 0) {
-    $flag = Join-Path $Marker 'synapse-shown'
-    $deadline = (Get-Date).AddMilliseconds($WatchMs)
-    while ((Get-Date) -lt $deadline) {
-        Start-Sleep -Milliseconds 1200
-        if (Test-Path $flag) {
-            # A hand-off is open: it is meant to be visible, and the hide that follows it
-            # clears the flag. A stale one (the operator closed the window) expires.
-            if (((Get-Date) - (Get-Item $flag).LastWriteTime).TotalMinutes -gt 10) {
-                Remove-Item $flag -Force -ErrorAction SilentlyContinue
-            }
-            continue
-        }
-        $pids = Get-OurEdgePids
-        if ($pids.Count -eq 0) { break }   # the browser is gone; nothing to watch
-        [void]$found.Clear()
-        [void][W.U]::EnumWindows($callback, [IntPtr]::Zero)
-        foreach ($win in $found) {
-            $ex = [W.U]::GetWindowLong($win, $GWL_EXSTYLE)
-            if (($ex -band $WS_EX_TOOLWINDOW) -ne 0) { continue }
-            [void][W.U]::SetWindowLong($win, $GWL_EXSTYLE, (($ex -bor $WS_EX_TOOLWINDOW) -band (-bnot $WS_EX_APPWINDOW)))
-            [void][W.U]::ShowWindow($win, 4)
-            [void][W.U]::SetWindowPos($win, [IntPtr]::Zero, -32000, -32000, $w, $h, $SWP_NOZORDER -bor $SWP_NOACTIVATE -bor $SWP_FRAMECHANGED)
-        }
-    }
-}

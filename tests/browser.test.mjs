@@ -31,18 +31,18 @@ test('the hide path covers every window and never flashes a taskbar button', () 
   assert.match(script.slice(elseAt), /FlashWindowEx/, 'showing still flashes it, so a sign-in is noticed');
 });
 
-// A window can appear after the one pass — a cold start, a "Restore pages" bubble, a
-// popup — and each one that missed the pass sat on the taskbar until the browser closed
-// (14 Nov). An untitled window was skipped by the finder, which is exactly what a fresh
-// about:blank window looks like for a moment.
-test('a window that appears after the first pass is still hidden', () => {
+// It was tried and it did not work (14 Nov): the watcher, the sign-in flag and the whole
+// multi-pass hide are gone. What is left is one pass that parks the window off-screen —
+// documented as not hiding it from the taskbar — and the finder no longer needs a title,
+// because a fresh about:blank window has none for a moment.
+test('hiding is one pass, and nobody claims it removes the taskbar button', () => {
   const script = fs.readFileSync(new URL('../src/browser/show.ps1', import.meta.url), 'utf8');
-  assert.match(script, /\[int\]\$WatchMs = 0/, 'the script takes a watch window');
-  assert.match(script, /if \(\$WatchMs -gt 0\)/, 'and watches while it is asked to');
-  assert.match(script, /synapse-shown/, 'a sign-in window is left alone by the watcher');
+  assert.doesNotMatch(script, /WatchMs|synapse-shown/, 'the watcher and its flag are gone');
   assert.doesNotMatch(script, /if \(-not \$title\.ToString\(\)\)/, 'an untitled window is still ours');
   const js = fs.readFileSync(new URL('../src/browser/browser.js', import.meta.url), 'utf8');
-  assert.match(js, /watchBrowserWindow\(\{ profile \}\)/, 'the browser starts the watcher');
+  assert.doesNotMatch(js, /watchBrowserWindow/, 'and nothing starts one');
+  const notes = fs.readFileSync(new URL('../docs/notes/browser.md', import.meta.url), 'utf8');
+  assert.match(notes, /Hiding it did not work/, 'the notes say so plainly');
 });
 
 // The operator's question (14 Nov): what else could these rules touch? Only Edge processes
@@ -51,8 +51,6 @@ test('a window that appears after the first pass is still hidden', () => {
 // profile, and a process that merely names our path elsewhere is left alone.
 test('only Synapse’s own Edge profile is ever touched', () => {
   const script = fs.readFileSync(new URL('../src/browser/show.ps1', import.meta.url), 'utf8');
-  assert.match(script, /function Get-OurEdgePids/, 'one rule, used by the pass and the watcher');
-  assert.ok((script.match(/Get-OurEdgePids/g) || []).length >= 3, 'both callers use it');
   assert.match(script, /--user-data-dir="\?/, 'the match is the whole argument');
   assert.doesNotMatch(script, /\.Contains\(\$markerKey\)/, 'not a mention anywhere in the command line');
   assert.match(script, /\[regex\]::Escape\(\$markerKey\)/, 'the folder is matched literally');
