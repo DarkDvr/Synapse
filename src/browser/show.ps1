@@ -59,6 +59,30 @@ public struct FLASHWINFO { public uint cbSize; public IntPtr hwnd; public uint d
 '@
 }
 
+# The taskbar itself, for one call: DeleteTab removes a window's button. This is the API
+# whose whole job is taking a button off the taskbar, so it is worth trying after the
+# window's style has been changed — Windows re-reads the style only when a window is hidden
+# or shown, and a button the shell has already made otherwise stays (14 Nov).
+if (-not ('W.Taskbar' -as [type])) {
+    Add-Type -Namespace W -Name Taskbar -MemberDefinition @'
+[ComImport, Guid("56FDF342-FD6D-11d0-958A-006097C9A090"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+public interface ITaskbarList {
+  void HrInit();
+  void AddTab(IntPtr hwnd);
+  void DeleteTab(IntPtr hwnd);
+  void ActivateTab(IntPtr hwnd);
+  void SetActiveAlt(IntPtr hwnd);
+}
+[ComImport, Guid("56FDF344-FD6D-11d0-958A-006097C9A090")]
+public class CTaskbarList { }
+private static ITaskbarList list;
+public static void DeleteTab(IntPtr hwnd) {
+  if (list == null) { list = (ITaskbarList)new CTaskbarList(); list.HrInit(); }
+  list.DeleteTab(hwnd);
+}
+'@
+}
+
 $fgBefore = [W.U]::GetForegroundWindow()
 
 # Our browser: the processes whose command line names the SynaBrowse profile, skipping
@@ -152,16 +176,22 @@ $x = $area.X + [int](($area.Width - $w) / 2)
 $y = $area.Y + [int](($area.Height - $h) / 2)
 
 if ($Hide) {
-    # One pass over the windows that exist now, and nothing more. This was built up over
-    # three attempts — every window and not the first, untitled windows included, a
-    # watcher for windows made later — and the operator's taskbar still kept the button
-    # (14 Nov). It is kept because it parks the window out of the way and the page still
-    # renders; it is not claimed to hide it. See docs/notes/browser.md.
+    # Hide, change the style, show again — Windows reads the taskbar bit when a window is
+    # hidden or shown, so a window that was already visible keeps its button however many
+    # times the style is set (14 Nov; see docs/notes/browser.md). Then DeleteTab, the one
+    # call whose job is removing that button. The show is immediate and off-screen, so the
+    # browser never stops compositing for longer than this loop takes.
+    $tabbed = 0
     foreach ($win in $found) {
+        [void][W.U]::ShowWindow($win, 0)   # SW_HIDE
         $ex = [W.U]::GetWindowLong($win, $GWL_EXSTYLE)
         [void][W.U]::SetWindowLong($win, $GWL_EXSTYLE, (($ex -bor $WS_EX_TOOLWINDOW) -band (-bnot $WS_EX_APPWINDOW)))
-        [void][W.U]::ShowWindow($win, 4)   # SW_SHOWNOACTIVATE: normal, so it keeps rendering
         [void][W.U]::SetWindowPos($win, [IntPtr]::Zero, -32000, -32000, $w, $h, $SWP_NOZORDER -bor $SWP_NOACTIVATE -bor $SWP_FRAMECHANGED)
+        [void][W.U]::ShowWindow($win, 4)   # SW_SHOWNOACTIVATE: normal, so it keeps rendering
+        try {
+            [W.Taskbar]::DeleteTab($win)
+            $tabbed += 1
+        } catch { }   # no shell to ask: the style change is all there is
     }
     $state = 'hidden'
 } else {
@@ -217,6 +247,7 @@ $fgAfter = [W.U]::GetForegroundWindow()
     rect       = @($rect.Left, $rect.Top, ($rect.Right - $rect.Left), ($rect.Bottom - $rect.Top))
     state      = $state
     toolWindow = ((([W.U]::GetWindowLong($hwnd, $GWL_EXSTYLE)) -band $WS_EX_TOOLWINDOW) -ne 0)
+    tabsRemoved = $tabbed
     normal     = @($placeNow.rcNormalPosition.Left, $placeNow.rcNormalPosition.Top, ($placeNow.rcNormalPosition.Right - $placeNow.rcNormalPosition.Left), ($placeNow.rcNormalPosition.Bottom - $placeNow.rcNormalPosition.Top))
     onScreen   = ($rect.Left -ge $area.X -and $rect.Top -ge $area.Y -and $rect.Right -le ($area.X + $area.Width))
     minimized  = [W.U]::IsIconic($hwnd)

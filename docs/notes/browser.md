@@ -107,17 +107,16 @@ Nothing is minimized for a sign-in, and nothing takes the foreground uninvited.
 A hidden browser must be invisible *and* still render, and those two pull apart:
 
 - **The hide starts before the browser is ready.** `show.ps1 -Hide -WaitMs` is started the moment
-the process exists and grabs the window within 40 ms of its creation. It parks the window
-off-screen as soon as Edge creates it; it does not keep a button off the taskbar. Edge
-creates that first window only when it is ready, so a cold start can show a button first.
-- **No taskbar button: wanted, not delivered.** `show.ps1 -Hide` gives the window
-  `WS_EX_TOOLWINDOW` and takes `WS_EX_APPWINDOW` away, and the operator still sees a button
-  and a thumbnail with the page title (14 Nov, unresolved — see "Hiding it did not work"
-  below). Do not treat this bullet as a fact about the running app.
+  the process exists and grabs the window within 40 ms of its creation, parking it off-screen
+  as soon as Edge creates it.
+- **No taskbar button: hide, style, show, then DeleteTab.** `show.ps1 -Hide` hides the window,
+  sets `WS_EX_TOOLWINDOW`, clears `WS_EX_APPWINDOW`, shows it off-screen and calls
+  `ITaskbarList::DeleteTab`. Setting the style on an already-visible window does nothing —
+  Windows re-reads it on hide/show — which is why the first three attempts failed (14 Nov;
+  see "Hiding it: the attempts, and the one that works" below).
 - **Off-screen and normal, never minimized.** A minimized Chromium window stops compositing,
   so `Page.captureScreenshot` never answers; off-screen, it is invisible and still renders.
-  Measured both ways: minimized → no answer in 15 s; off-screen → 55 ms. This part works;
-  the window is out of the way even when its button is not.
+  Measured both ways: minimized → no answer in 15 s; off-screen → 55 ms.
 - **No "Restore pages" bubble.** Edge shows it as a window of its own at the top-left of the
   primary after a kill, and it was mistaken for ours. `--hide-crash-restore-bubble` and
   `--disable-session-crashed-bubble` suppress it, and the window search ignores it by title.
@@ -250,24 +249,42 @@ Both are fixed at the source:
 - the `read` description says which mode to use: *article* for an article's prose, *text*
   for a thread, a forum or a profile.
 
-## Hiding it did not work (14 Nov, unresolved)
+## Hiding it: the attempts, and the one that works (14 Nov)
 
-Bounded from above: the window still gets a taskbar button and it stays until Synapse
-kills the browser. Three attempts are gone from the code — every window rather than the
-first, untitled windows included, and a watcher that re-applied the tool-window bit every
-1.2 s. The last one still left the button on screen, so it was removed rather than kept as
-dead weight; `show.ps1 -Hide` is one pass again, and it is documented as what it is: the
-window is parked off-screen and keeps rendering, and it is **not** hidden from the taskbar.
+The window used to keep a taskbar button with a thumbnail carrying the Edge logo and the
+page title, and it stayed until Synapse killed the browser. Everything built to prevent that
+was tried, failed, and was removed (1.58.22, −116 lines); then the cause was found and the
+fix is three calls.
 
-The evidence, in the operator's words: a taskbar thumbnail with the Edge logo and the page
-title, sitting there until the browser closed.
+| attempt | what it did | result |
+|---|---|---|
+| 12 Nov | `WS_EX_TOOLWINDOW` on, `WS_EX_APPWINDOW` off, parked at −32000, left normal so Chromium keeps rendering | button stayed; off-screen parking worked |
+| 13 Nov | the same on **every** top-level window of the profile, not just the first; no `FlashWindowEx` on hide | button stayed |
+| 14 Nov | untitled windows accepted, and a **watcher** re-applying the bits every 1.2 s with a sign-in flag | button stayed; watcher and flag removed (1.58.22) |
+| 14 Nov | **hide → set the style → show**, then `ITaskbarList::DeleteTab` | **button gone** |
 
-What that points at: `WS_EX_TOOLWINDOW` is applied to a window the shell has **already put
-on the taskbar**, and Windows re-reads that bit when a window is hidden or re-shown, not
-while it stays visible. `SetWindowLong` + `SW_SHOWNOACTIVATE` on an already-visible window
-does not make the shell take the button away. The next thing to try is the explicit
-removal — `ITaskbarList::DeleteTab(hwnd)` — or going **headless entirely** and giving up the
-in-window sign-in, which is the only thing the visible window is for.
+**Why the first three failed:** the tool-window bit was set on a window the shell had
+**already put on the taskbar**, and Windows re-reads that bit when a window is hidden or
+shown — not while it stays visible. Setting the style and re-showing a window that is
+already visible changes nothing the shell can see, however many times it is done.
+
+**The fix, in `show.ps1 -Hide`,** for every window found: `SW_HIDE`; set
+`WS_EX_TOOLWINDOW` and clear `WS_EX_APPWINDOW`; move to −32000; `SW_SHOWNOACTIVATE`;
+`ITaskbarList::DeleteTab(hwnd)` on the taskbar object. The hide is momentary and the show
+is immediate,
+so the browser never stops compositing long enough to matter — a probe loaded a page and
+screenshotted after it. The report carries `tabsRemoved` (the log reads `taskbar buttons
+removed 2`).
+
+**How it was checked:** a probe browser on a scratch profile was left running; a screenshot
+of the taskbar 9 s and 16 s after start showed no Edge button, twice. A control — the same
+Edge launched *without* the hide — showed `about:blank - Perso…` in the same place. The
+operator's evidence, the taskbar thumbnail, is what the old code produced and this does not.
+
+**What is still not covered:** a window Edge creates **later** (a popup) is not hidden,
+because the watcher is gone. The browser's main window is created once at launch, and the
+probe's page loads did not make another; if a stray button ever appears again during a
+session, this is the line to move back — one pass at launch is not a watcher.
 
 **The rule is the whole argument, not a mention (14 Nov).** The operator asked what else
 this could touch. A candidate is an `msedge.exe` process whose command line carries

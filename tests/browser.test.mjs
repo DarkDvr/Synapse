@@ -31,18 +31,25 @@ test('the hide path covers every window and never flashes a taskbar button', () 
   assert.match(script.slice(elseAt), /FlashWindowEx/, 'showing still flashes it, so a sign-in is noticed');
 });
 
-// It was tried and it did not work (14 Nov): the watcher, the sign-in flag and the whole
-// multi-pass hide are gone. What is left is one pass that parks the window off-screen —
-// documented as not hiding it from the taskbar — and the finder no longer needs a title,
-// because a fresh about:blank window has none for a moment.
-test('hiding is one pass, and nobody claims it removes the taskbar button', () => {
+// The fix that worked (14 Nov): the shell re-reads the taskbar bit only when a window is
+// hidden or shown, and DeleteTab removes a button the shell has already made. The watcher
+// and its sign-in flag are gone — one pass is enough.
+test('hiding is hide, style, show, then DeleteTab', () => {
   const script = fs.readFileSync(new URL('../src/browser/show.ps1', import.meta.url), 'utf8');
-  assert.doesNotMatch(script, /WatchMs|synapse-shown/, 'the watcher and its flag are gone');
+  const hideAt = script.indexOf('if ($Hide) {');
+  const elseAt = script.indexOf('} else {', hideAt);
+  assert.ok(hideAt > 0 && elseAt > hideAt, 'the hide branch is still there');
+  const branch = script.slice(hideAt, elseAt);
+  assert.match(branch, /ShowWindow\(\$win, 0\)/, 'hidden first, so the shell re-reads the style');
+  assert.match(branch, /WS_EX_TOOLWINDOW/);
+  assert.match(branch, /ShowWindow\(\$win, 4\)/, 'shown off-screen again, so it keeps rendering');
+  assert.match(branch, /\[W\.Taskbar\]::DeleteTab\(\$win\)/, 'and the button it already made is removed');
+  assert.doesNotMatch(script, /WatchMs|synapse-shown/, 'no watcher and no flag: one pass');
   assert.doesNotMatch(script, /if \(-not \$title\.ToString\(\)\)/, 'an untitled window is still ours');
   const js = fs.readFileSync(new URL('../src/browser/browser.js', import.meta.url), 'utf8');
   assert.doesNotMatch(js, /watchBrowserWindow/, 'and nothing starts one');
   const notes = fs.readFileSync(new URL('../docs/notes/browser.md', import.meta.url), 'utf8');
-  assert.match(notes, /Hiding it did not work/, 'the notes say so plainly');
+  assert.match(notes, /the one that works/, 'the notes say which attempt worked, and why the others did not');
 });
 
 // The operator's question (14 Nov): what else could these rules touch? Only Edge processes

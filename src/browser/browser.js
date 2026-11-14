@@ -230,7 +230,9 @@ export function createBrowser({ profile, log = null, startMinimized = true, widt
       // is a taskbar button the operator can see and click — they reported exactly that
       // while two models were reading one thread (13 Nov).
       const hidden = existing ? await hideBrowserWindow({ profile }).catch(() => null) : await early;
-      if (hidden?.toolWindow) note(`browser: window hidden (tool window yes${existing ? ', attached' : ''})`);
+      if (hidden?.toolWindow) {
+        note(`browser: window hidden (tool window yes${existing ? ', attached' : ''}, taskbar buttons removed ${hidden.tabsRemoved ?? 0})`);
+      }
       note(`browser: ${existing ? 'attached to' : 'started'} Edge on port ${port}`);
       return page;
     })();
