@@ -230,6 +230,26 @@ a browser and not a way around the file rules:
 `localPageAllowed()` in `src/browser/allow.js` is the rule, tested without a browser; the
 tool's description names it, because that is where a model learns what it may open.
 
+## Names and lines (14 Nov)
+
+A model reading a Reddit thread for a report needed two things the extraction had thrown
+away: **who wrote each comment**, and **the page's line structure**. Article mode emitted
+only headings, paragraphs, list items and quotes — a username is a standalone link outside
+the paragraph, so every name was dropped and the model had the words with no attribution.
+Text mode, the fallback, ran the page through `clean()`, which collapses all whitespace:
+the whole thread arrived as **one 20,000-character line**, so the model shell-split it and
+still lost where one comment ended.
+
+Both are fixed at the source:
+
+- **text mode keeps the page's own lines** — one line per block, blank runs collapsed, and
+  every name, date and comment keeps its own row;
+- **article mode keeps standalone labels** — a link or a `<time>` outside a paragraph is an
+  author, a date or a tag, and is emitted as its own line. The page's nav, aside, form,
+  buttons and footer are still furniture and stay out;
+- the `read` description says which mode to use: *article* for an article's prose, *text*
+  for a thread, a forum or a profile.
+
 ## Where things live
 
 | | |

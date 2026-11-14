@@ -157,3 +157,17 @@ test('a shell command with different answers is polling, not a loop', () => {
   const runs = [1, 2, 3].map((n) => toolSignature({ name: 'shell', target: toolTarget({ command: 'npm test' }), output: long(600 + n) }));
   assert.equal(loopStrike(runs), null);
 });
+
+// A scroll is a movement, not a question: the same delta from a new position is new
+// reading. On 14 Nov a model walking a long thread scrolled `dy: 400` five times between
+// screenshots, and the fourth struck the guard as "the same target" (ornith-test-web-reddit).
+test('a scroll that moves is reading, and one that cannot move is still a loop', () => {
+  const moving = [400, 800, 1200, 1600].map((top) =>
+    toolSignature({ name: 'synapse-browser_scroll', target: toolTarget({ dy: 400 }), output: `Scrolled to ${top} of 20000 (not at the end)\n\nsome page text` }),
+  );
+  assert.equal(loopStrike(moving), null, 'each scroll landed somewhere new');
+  const stuck = [0, 1, 2, 3].map(() =>
+    toolSignature({ name: 'synapse-browser_scroll', target: toolTarget({ dy: 400 }), output: 'Scrolled to 20000 of 20000 (at the end)\n\nsome page text' }),
+  );
+  assert.equal(loopStrike(stuck)?.kind, 'target', 'a page that cannot move is a loop');
+});

@@ -284,11 +284,22 @@ export function createBrowser({ profile, log = null, startMinimized = true, widt
       const root = best || body;
       const lines = [];
       const push = (s) => { const v = clean(s); if (v) lines.push(v); };
-      for (const el of root.querySelectorAll('h1,h2,h3,h4,p,li,pre,blockquote,td,th,figcaption')) {
-        if (el.closest('nav, header, footer, aside, form, script, style, [aria-hidden=true]')) continue;
+      for (const el of root.querySelectorAll('h1,h2,h3,h4,p,li,pre,blockquote,td,th,figcaption,a,time')) {
+        if (el.closest('nav, aside, form, script, style, [aria-hidden=true], button, [role=button]')) continue;
         if (el.parentElement && el.parentElement.closest('p, li')) continue;
         const tag = el.tagName.toLowerCase();
         const value = textOf(el);
+        if (tag === 'a' || tag === 'time') {
+          // A link or a timestamp standing on its own — not inside a paragraph — is a
+          // label: an author, a date, a tag. Dropping those stripped the attribution from
+          // a thread (14 Nov: the model had the comments and none of the names). The
+          // page's own footer is still furniture, so it stays out.
+          if (el.closest('p, li, blockquote, td, th, h1, h2, h3, h4, pre, figcaption, footer')) continue;
+          const label = clean(value);
+          if (label.length >= 2 && label.length <= 80) push(label);
+          continue;
+        }
+        if (el.closest('header, footer')) continue;
         if (tag === 'h1') push('# ' + clean(value));
         else if (tag === 'h2') push('## ' + clean(value));
         else if (tag === 'h3' || tag === 'h4') push('### ' + clean(value));
@@ -298,7 +309,16 @@ export function createBrowser({ profile, log = null, startMinimized = true, widt
         else push(value);
       }
       const articleFull = lines.join('\\n');
-      const plainFull = clean(textOf(body));
+      // The whole page in its own line structure. Calling clean() here was the "one long
+      // line": a thread of ninety comments arrived as one paragraph with every name
+      // somewhere inside it (14 Nov), so the model shell-split it and still lost the
+      // nesting.
+      const plainLines = textOf(body)
+        .replace(/\\u00a0/g, ' ')
+        .split('\\n')
+        .map((line) => line.replace(/[ \\t]+/g, ' ').trim())
+        .filter((line, i, all) => line || (i > 0 && all[i - 1]));
+      const plainFull = plainLines.join('\\n').trim();
       const usePlain = ${JSON.stringify(String(mode))} === 'text' || articleFull.trim().length < 40;
       const full = usePlain ? plainFull : articleFull;
       const text = full.slice(0, limit);

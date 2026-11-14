@@ -170,6 +170,7 @@ test('read() returns the article and says when a page is a sign-in wall', async 
   fs.writeFileSync(article, `<!doctype html><title>Article page</title>
     <nav><a href="/a">Products</a><a href="/b">Pricing</a><a href="/c">Careers</a></nav>
     <main><article><h1>The real story</h1>
+      <div class="by"><a href="/user/alice">u/alice</a> <time>2h</time></div>
       <p>First paragraph of the article, with the substance in it.</p>
       <h2>A heading</h2>
       <p>Second paragraph, also substance rather than chrome.</p>
@@ -186,8 +187,16 @@ test('read() returns the article and says when a page is a sign-in wall', async 
     const page = await browser.read({});
     assert.match(page.text, /First paragraph of the article/);
     assert.match(page.text, /one point/);
+    assert.match(page.text, /u\/alice/, 'a byline standing outside the paragraphs is a label, and stays');
     assert.doesNotMatch(page.text, /Careers|Privacy|Terms/, 'the nav and footer should not be in the article');
     assert.equal(page.wall, '');
+
+    // Text mode is the whole page in its own lines. It used to be squeezed to one line,
+    // so a thread arrived as a single paragraph with the names buried in it (14 Nov).
+    const whole = await browser.read({ mode: 'text', maxChars: 100000 });
+    assert.match(whole.text, /u\/alice/, 'text mode keeps the author');
+    assert.ok(whole.text.split('\n').length >= 5, `text mode keeps the page's lines (${whole.text.split('\n').length})`);
+    assert.match(whole.text, /First paragraph of the article[\s\S]*Second paragraph/, 'and the blocks stay apart');
 
     await browser.goto(`file:///${login.replace(/\\/g, '/')}`);
     const wall = await browser.read({});

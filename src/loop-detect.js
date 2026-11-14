@@ -44,6 +44,16 @@ const MUTATING = new Set(['edit', 'write', 'patch', 'create', 'applypatch', 'app
  */
 const REPEATABLE = new Set([...READ_ONLY, 'shell', 'bash', 'cmd', 'powershell', 'pwsh']);
 
+/**
+ * The tools whose call means "move", not "ask for this again". A scroll with the same
+ * delta from a new position lands somewhere else, so the same arguments are not the same
+ * question: a model walking a long thread scrolls 400px five times and that is reading,
+ * not looping (14 Nov: the guard struck on the fourth screenshot-and-scroll pair in
+ * ornith-test-web-reddit). The signature carries the *result* as well, so a page that
+ * cannot move — the same position back every time — still strikes.
+ */
+const MOVING = new Set(['scroll']);
+
 /** A cheap, stable digest: enough to compare two answers, not a hash to store. */
 export function digestOf(text) {
   const value = String(text ?? '');
@@ -62,10 +72,12 @@ export function digestOf(text) {
 export function toolSignature({ name, target, output, input } = {}) {
   const tool = String(name || '');
   const where = String(target ?? '');
+  const moving = MOVING.has(tool.split('_').pop());
   return {
-    sig: `${tool}\u0000${where}`,
+    sig: `${tool}\u0000${moving ? `${where}\u0000${String(output ?? '').slice(0, 400)}` : where}`,
     digest: REPEATABLE.has(tool) ? digestOf(output ?? input ?? '') : '',
     mutating: MUTATING.has(tool),
+    moving,
   };
 }
 

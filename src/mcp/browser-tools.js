@@ -37,6 +37,9 @@ export const TOOLS = [
       'Read the current page: its text as a person sees it, and the links that can be clicked, ' +
       'each with its address and its x/y. The text is cut at maxChars — 6000 by default, ' +
       '100000 at most — and a cut is marked in the answer with how much was left out. ' +
+      'mode "article" (default) picks the main prose and drops the page around it; mode "text" ' +
+      'keeps the whole page in the order it lays out, one line per block, so authors, dates ' +
+      'and each comment keep their own lines — use it for a thread, a forum or a profile. ' +
       'For a long page (a thread with hundreds of comments) pass full: true instead: the ' +
       'harness scrolls to the end, saves the whole text in the project, and answers its path, ' +
       'so you can read or grep it in pieces rather than stitching several reads together.',
@@ -45,7 +48,7 @@ export const TOOLS = [
       properties: {
         maxChars: { type: 'integer', description: 'Characters of text (1000-100000, default 6000).', minimum: 1000, maximum: 100000 },
         links: { type: 'integer', description: 'How many links to list (0-120, default 60).', minimum: 0, maximum: 120 },
-        mode: { type: 'string', enum: ['article', 'text'], description: 'article (default) picks the main content and drops the page around it; text is the whole page.' },
+        mode: { type: 'string', enum: ['article', 'text'], description: 'article (default) picks the main prose; text is the whole page, one line per block, with names and dates.' },
         full: { type: 'boolean', description: 'Walk the page to its end — scrolling, so lazy sections load — and save the whole of it to the project instead of returning it. Answers the file path.' },
       },
       additionalProperties: false,

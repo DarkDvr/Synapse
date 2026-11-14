@@ -2097,3 +2097,13 @@ transcript said the model was working both times:
 
 The lesson is the one that keeps recurring here: a rule that fires on real work teaches the
 operator to ignore the alarm, which is worse than no alarm.
+
+**A scroll is a movement, not a question (14 Nov).** The third false strike of the week:
+`ornith-test-web-reddit`, a model walking a long thread took five `browser_scroll {dy: 400}`
+calls between screenshots — each from a new position, reading a new part of the page — and
+the fourth struck as "the same target four times". The target rule compares arguments, and
+for a scroll the arguments say *how far*, not *which part*; the page moves underneath. For
+the tools in `MOVING` the signature now carries the result as well as the arguments, so a
+scroll that lands somewhere new is a new call, and a scroll that cannot move — the same
+position back, at the end of the page — still strikes, which is the loop worth catching.
+
