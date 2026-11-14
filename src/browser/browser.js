@@ -61,6 +61,9 @@ const KEYS = {
   escape: { code: 'Escape', key: 'Escape', vk: 27 },
   esc: { code: 'Escape', key: 'Escape', vk: 27 },
   backspace: { code: 'Backspace', key: 'Backspace', vk: 8 },
+  delete: { code: 'Delete', key: 'Delete', vk: 46 },
+  home: { code: 'Home', key: 'Home', vk: 36 },
+  end: { code: 'End', key: 'End', vk: 35 },
   arrowup: { code: 'ArrowUp', key: 'ArrowUp', vk: 38 },
   arrowdown: { code: 'ArrowDown', key: 'ArrowDown', vk: 40 },
   arrowleft: { code: 'ArrowLeft', key: 'ArrowLeft', vk: 37 },
@@ -69,6 +72,38 @@ const KEYS = {
   pageup: { code: 'PageUp', key: 'PageUp', vk: 33 },
   space: { code: 'Space', key: ' ', vk: 32 },
 };
+
+/** The physical key each printable ASCII character sits on, and its virtual key code. */
+const PRINTABLE = {
+  ' ': ['Space', 32], '=': ['Equal', 187], '-': ['Minus', 189], '.': ['Period', 190], ',': ['Comma', 188],
+  '/': ['Slash', 191], ';': ['Semicolon', 186], "'": ['Quote', 222], '[': ['BracketLeft', 219],
+  ']': ['BracketRight', 221], '\\': ['Backslash', 220], '`': ['Backquote', 192],
+  '+': ['Equal', 187], '*': ['Digit8', 56], '(': ['Digit9', 57], ')': ['Digit0', 48],
+  '!': ['Digit1', 49], '@': ['Digit2', 50], '#': ['Digit3', 51], '$': ['Digit4', 52],
+  '%': ['Digit5', 53], '^': ['Digit6', 54], '&': ['Digit7', 55], '_': ['Minus', 189],
+  '<': ['Comma', 188], '>': ['Period', 190], '?': ['Slash', 191], ':': ['Semicolon', 186],
+  '"': ['Quote', 222], '{': ['BracketLeft', 219], '}': ['BracketRight', 221], '|': ['Backslash', 220],
+  '~': ['Backquote', 192],
+};
+
+/**
+ * The key event for one printable character, or null.
+ *
+ * A page with a keyboard handler — a calculator, a game, anything listening for `keydown`
+ * and reading `event.key` — cannot be driven by `type`, which inserts text without firing
+ * a key event at all. A model that asked to press "7" was told "unknown key: 7" while it
+ * was testing exactly that (14 Nov). The mapping is the physical key a person would press:
+ * `Digit7` for "7", `Equal` for "=", and a shifted glyph on its unshifted key.
+ */
+export function keyForChar(ch) {
+  const value = String(ch ?? '');
+  if (value.length !== 1 || value < ' ' || value > '~') return null;
+  if (value >= '0' && value <= '9') return { code: `Digit${value}`, key: value, vk: value.charCodeAt(0) };
+  if (value >= 'a' && value <= 'z') return { code: `Key${value.toUpperCase()}`, key: value, vk: value.toUpperCase().charCodeAt(0) };
+  if (value >= 'A' && value <= 'Z') return { code: `Key${value}`, key: value, vk: value.charCodeAt(0) };
+  const entry = PRINTABLE[value];
+  return entry ? { code: entry[0], key: value, vk: entry[1] } : null;
+}
 
 /**
  * One browser for the harness, opened on demand.
@@ -407,7 +442,14 @@ export function createBrowser({ profile, log = null, startMinimized = true, widt
         return pick(candidates.find((el) => clean(el.innerText || el.value || '').toLowerCase() === want))
           || pick(candidates.find((el) => clean(el.innerText || el.value || '').toLowerCase().includes(want)));
       })()`);
-      if (!found) throw new Error(`nothing to click: ${selector || text}`);
+      // A page can show text that is not a control — a hint, a label, an overlay's
+      // message. Saying which is what turns a failed click into the next step.
+      if (!found) {
+        throw new Error(
+          `nothing to click: ${selector || text}. That is not a link, a button or a form control — ` +
+            'use an x/y from read, or a CSS selector.',
+        );
+      }
       point = found;
     }
     const [x, y] = point;
@@ -428,20 +470,46 @@ export function createBrowser({ profile, log = null, startMinimized = true, widt
     return true;
   }
 
-  /** A key press, for the keys that end a form or move a page. */
+  /**
+   * A key press, for the keys that end a form, move a page, or drive a page's own
+   * keyboard handler. A printable character (or several) is pressed as a real key, so a
+   * calculator sees `keydown` with `key: "7"`.
+   */
   async function press(name) {
     const p = await start();
     used();
-    const key = KEYS[String(name || '').toLowerCase()];
-    if (!key) throw new Error(`unknown key: ${name}`);
-    for (const type of ['keyDown', 'keyUp']) {
-      await p.send('Input.dispatchKeyEvent', {
-        type,
-        key: key.key,
-        code: key.code,
-        windowsVirtualKeyCode: key.vk,
-        nativeVirtualKeyCode: key.vk,
-      });
+    const raw = String(name ?? '');
+    const named = KEYS[raw.toLowerCase()];
+    // A chord is not a sequence: "ctrl+c" typed one character at a time would put
+    // "ctrl+c" into whatever has focus. There are no modifier combinations in this tool,
+    // so the model is told rather than silently fed the wrong keys.
+    if (!named && raw.length > 1 && /^(ctrl|control|shift|alt|meta|cmd|command|win)\+/i.test(raw)) {
+      throw new Error(`unknown key: ${name}. Chords are not supported — press the keys one at a time, or type the text.`);
+    }
+    const keys = named ? [named] : [...raw].map(keyForChar);
+    if (!keys.length || keys.some((key) => !key)) {
+      const names = Object.keys(KEYS).filter((key) => key !== 'esc').join(', ');
+      throw new Error(
+        `unknown key: ${name}. Press one printable character ("7", "=", "+") or a named key: ${names}.`,
+      );
+    }
+    for (const key of keys) {
+      for (const type of ['keyDown', 'keyUp']) {
+        const event = {
+          type,
+          key: key.key,
+          code: key.code,
+          windowsVirtualKeyCode: key.vk,
+          nativeVirtualKeyCode: key.vk,
+        };
+        // `text` on the way down is what makes the browser insert the character and fire
+        // `keypress`; the try/keydown listeners see `key` either way.
+        if (type === 'keyDown' && key.key.length === 1) {
+          event.text = key.key;
+          event.unmodifiedText = key.key;
+        }
+        await p.send('Input.dispatchKeyEvent', event);
+      }
     }
     return true;
   }

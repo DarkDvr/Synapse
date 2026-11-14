@@ -279,6 +279,20 @@ no address at all — `checkUrl('')` says "that is not an http(s) address", so a
 click on a local mock was reported as a failure. An empty address now means "the page was
 being replaced", and the click is reported as done.
 
+**A key is a character too (14 Nov).** A calculator test wanted "7", and `press` knew only
+names: `press failed: unknown key: 7`. `type` could not help — it inserts text through
+`insertText`, which fires **no key event at all**, so a page that listens for `keydown`
+never sees it. `press` now takes any printable ASCII character, or several one after the
+other, and dispatches a real keyDown/keyUp with the physical code and virtual key
+(`Digit7`/55; `Equal`/187 for both "=" and "+"), plus `text` on the way down so the
+character is inserted and `keypress` fires. A chord is refused by name ("ctrl+c" would
+otherwise be typed into the field as six characters), and `type`'s description now says it
+does not fire key events.
+
+A failed `click` also says what the text was, not only that it was not found: *"that is not
+a link, a button or a form control — use an x/y from read, or a CSS selector"* — which is
+the move that works on an overlay whose hint text is not clickable.
+
 ## Where things live
 
 | | |

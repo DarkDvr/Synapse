@@ -73,7 +73,10 @@ export const TOOLS = [
   },
   {
     name: 'type',
-    description: 'Type text into the focused field, or into a field named by a CSS selector.',
+    description:
+      'Insert text into the focused field, or into a field named by a CSS selector. This pastes ' +
+      'the text in — it does not fire key events, so a page that listens for keys (a calculator, ' +
+      'a shortcut) needs `press` instead.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -87,10 +90,15 @@ export const TOOLS = [
   },
   {
     name: 'press',
-    description: 'Press one key: enter, tab, escape, backspace, space, arrows, pageup, pagedown.',
+    description:
+      'Press a key on the page. A single printable character is pressed as that key — "7", "=", ' +
+      '"+", "a" — so the page sees a real keydown/keypress/keyup, which is what a keyboard ' +
+      'shortcut or a calculator needs. Several characters are pressed one by one the same way. ' +
+      'Named keys: enter, tab, escape, backspace, space, arrows, pageup, pagedown. Unlike `type`, ' +
+      'which inserts text into a field, this fires key events.',
     inputSchema: {
       type: 'object',
-      properties: { key: { type: 'string', description: 'The key name.' } },
+      properties: { key: { type: 'string', description: 'A character ("7", "="), several characters, or a key name (enter, tab, escape…).' } },
       required: ['key'],
       additionalProperties: false,
     },

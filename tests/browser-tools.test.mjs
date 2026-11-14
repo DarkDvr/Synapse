@@ -53,6 +53,17 @@ test('screenshot gives a path the chat can render', () => {
   assert.match(d, /relative path/, 'and the chat-ready one');
 });
 
+// A model that needed to press "7" was told "unknown key: 7" (14 Nov): the tool only knew
+// names. The description now says a character is a key, and `type` says why it is not.
+test('press takes a character, and type says it cannot', () => {
+  const p = text('press');
+  assert.match(p, /printable character/, 'a character is a key');
+  assert.match(p, /"7"/, 'the example is the one that failed');
+  assert.match(p, /keydown/, 'and it fires key events');
+  const t = text('type');
+  assert.match(t, /does not fire key events/, 'type explains the difference');
+});
+
 test('every tool has a description and a schema', () => {
   for (const tool of TOOLS) {
     assert.ok(tool.description && tool.description.length > 20, `${tool.name} says what it does`);

@@ -11,7 +11,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { hostOf, hostAllowed, checkUrl, localPageAllowed } from '../src/browser/allow.js';
-import { createBrowser, findEdge, siteDomains, cookieBelongsTo } from '../src/browser/browser.js';
+import { createBrowser, findEdge, siteDomains, cookieBelongsTo, keyForChar } from '../src/browser/browser.js';
 import { addressCandidates, looksUnconfirmed } from '../src/browser/signin.js';
 import { tmpdir } from './tmpdir.mjs';
 
@@ -56,6 +56,20 @@ test('only Synapse’s own Edge profile is ever touched', () => {
   assert.match(script, /--user-data-dir="\?/, 'the match is the whole argument');
   assert.doesNotMatch(script, /\.Contains\(\$markerKey\)/, 'not a mention anywhere in the command line');
   assert.match(script, /\[regex\]::Escape\(\$markerKey\)/, 'the folder is matched literally');
+});
+
+// A character is pressed as the key it sits on, so a page's own keydown sees "7" — which
+// is what a calculator or a shortcut listens for; `type` cannot do that (14 Nov).
+test('a printable character maps to the key a person would press', () => {
+  assert.deepEqual(keyForChar('7'), { code: 'Digit7', key: '7', vk: 55 });
+  assert.deepEqual(keyForChar('='), { code: 'Equal', key: '=', vk: 187 });
+  assert.deepEqual(keyForChar('+'), { code: 'Equal', key: '+', vk: 187 });
+  assert.equal(keyForChar('a').code, 'KeyA');
+  assert.equal(keyForChar('A').key, 'A');
+  assert.equal(keyForChar(' ').code, 'Space');
+  assert.equal(keyForChar('é'), null, 'a character that is not on this keyboard is not a key');
+  assert.equal(keyForChar('ab'), null, 'one character at a time');
+  assert.equal(keyForChar(''), null);
 });
 
 // ── the fence ───────────────────────────────────────────────────
@@ -139,6 +153,7 @@ test('the tools drive a local page: read, click, type, screenshot, watch', async
       <input id="field" placeholder="type here" />
       <div id="out">nothing yet</div>
       <div style="width:60px;height:60px;background:#ff7d1a;animation:spin 1s linear infinite"></div>
+      <script>window.typed = ''; addEventListener('keydown', (e) => { window.typed += e.key; });</script>
     `).replace('</body>', '<style>@keyframes spin{to{transform:rotate(360deg)}}</style></body>'),
   );
 
@@ -155,6 +170,19 @@ test('the tools drive a local page: read, click, type, screenshot, watch', async
     await browser.type({ text: 'hello', selector: '#field' });
     const typed = await browser.start().then((p) => p.evaluate("document.getElementById('field').value"));
     assert.equal(typed, 'hello');
+
+    // A page with a keyboard handler needs real key events, not inserted text: "7", "="
+    // and "+" press as the keys they are, and the page's own keydown sees them (14 Nov).
+    await browser.press('7');
+    await browser.press('=');
+    await browser.press('+');
+    await browser.press('Enter');
+    const keys = await browser.start().then((p) => p.evaluate('window.typed'));
+    assert.equal(keys, '7=+Enter', `the page saw ${JSON.stringify(keys)}`);
+    // A chord is refused, not typed one character at a time; a key that is not on the
+    // keyboard at all says so.
+    await assert.rejects(() => browser.press('ctrl+c'), /Chords are not supported/, 'a chord is named, not typed');
+    await assert.rejects(() => browser.press('\u0001'), /unknown key/, 'a control character is not a key');
 
     const png = await browser.screenshot({ full: false });
     assert.ok(png.length > 1000, 'a screenshot is a picture');
