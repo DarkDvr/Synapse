@@ -187,7 +187,7 @@ test('a project server writes inside the project, anything else in the harness',
   const root = 'F:\\dev\\Synapse.Projects';
   assert.equal(
     artifactDir('F:\\dev\\Synapse.Projects\\demo', root),
-    'F:\\dev\\Synapse.Projects\\demo\\.synapse\\browser\\shots',
+    'F:\\dev\\Synapse.Projects\\demo\\.project\\browser\\shots',
   );
   // The projects root is the "all projects" context, not a project.
   assert.match(artifactDir(root, root), /data.*browser.*shots$/);

@@ -8,7 +8,7 @@
 // Three rules:
 //   - the command is judged by the same shell policy as any other (a process
 //     outside the project, or a protected path, is refused before anything runs);
-//   - the registry and the logs live inside `.synapse`, so the work is not
+//   - the registry and the logs live inside `.project`, so the work is not
 //     scattered and a project's deletion takes them with it;
 //   - `stop` kills the tree of the pid Synapse recorded, never a name.
 //
@@ -28,8 +28,8 @@ const LOG_MAX = 8000;
 const START_DIR = process.cwd();
 try { process.chdir(DATA_DIR); } catch { /* the harness folder exists; nothing to do */ }
 
-const STATE_DIR = path.join(START_DIR, '.synapse', 'processes');
-const REGISTRY = path.join(START_DIR, '.synapse', 'processes.json');
+const STATE_DIR = path.join(START_DIR, '.project', 'processes');
+const REGISTRY = path.join(START_DIR, '.project', 'processes.json');
 
 let config = {};
 try { config = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8')); } catch {
@@ -141,7 +141,7 @@ function start(id, command) {
       id: procId,
       pid: child.pid,
       command: cmd,
-      log: `.synapse/processes/${procId}.log`,
+      log: `.project/processes/${procId}.log`,
       startedAt: Date.now(),
     };
     child.on('close', () => {

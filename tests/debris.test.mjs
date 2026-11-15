@@ -3,7 +3,7 @@
 // The operator's decision (10 Nov): a plan task for cleanup spends a worker run on
 // files the harness can name, and the model that made the mess is the one deciding
 // what the mess is. So: a finished task's scratch goes, a stray file in the project
-// root is *moved* into `.synapse/reports/<date>/`, and anything in the scratch root
+// root is *moved* into `.project/reports/<date>/`, and anything in the scratch root
 // that no live project claims is removed — the load-bearing word being *claims*.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -42,7 +42,7 @@ test('a finished task loses its scratch, and only its own', () => {
 
 test('a stray file in the project root is moved, never deleted', () => {
   const dir = tmp();
-  fs.mkdirSync(path.join(dir, '.synapse'), { recursive: true });
+  fs.mkdirSync(path.join(dir, '.project'), { recursive: true });
   fs.writeFileSync(path.join(dir, 'plan.json'), '{"not":"the plan"}');
   fs.writeFileSync(path.join(dir, 't8-proof.txt'), 'the proof');
   fs.writeFileSync(path.join(dir, 'build.log'), 'log');
@@ -58,7 +58,7 @@ test('a stray file in the project root is moved, never deleted', () => {
   assert.ok(fs.existsSync(path.join(dir, 'README.md')), 'README.md was moved');
   assert.ok(fs.existsSync(path.join(dir, 'src')), 'a folder was moved');
   // And they are in the dated reports folder, not gone.
-  const into = path.join(dir, '.synapse', 'reports', '2026-11-10');
+  const into = path.join(dir, '.project', 'reports', '2026-11-10');
   for (const name of names) assert.ok(fs.existsSync(path.join(into, name)), `${name} is missing from the reports folder`);
   // A second run of the same task does not overwrite the first proof.
   fs.writeFileSync(path.join(dir, 't9-proof.txt'), 'second');

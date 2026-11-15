@@ -96,8 +96,8 @@ the cards and the commits, not the code. One reason per sentence, not a chain.
 ### Working style rules
 
 - **The chat is how the operator is shown anything.** A screenshot you take reaches
-  only you; put the picture in the project (`.synapse/shots/`) and write it into a
-  message as markdown — `![what it shows](.synapse/shots/shot.png)`. The operator
+  only you; put the picture in the project (`.project/shots/`) and write it into a
+  message as markdown — `![what it shows](.project/shots/shot.png)`. The operator
   sees a chip that opens the picture full size.
 - **Use Edge, but surgically** — one session, reused; few screenshots.
 - **Stage the delivery.** Each stage is reviewed before the next starts.

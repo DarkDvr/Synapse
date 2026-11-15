@@ -1,6 +1,6 @@
 // What Synapse wrote itself, so its own writes are never blamed on a model.
 //
-// The tamper check compares `.synapse` before and after a worker's turn and reports
+// The tamper check compares `.project` before and after a worker's turn and reports
 // whatever appeared. That is right for a worker's writes and wrong for ours: the
 // operator's kept attachment and their answer to a question both land in that
 // folder while the worker is running, and on 10 Nov both were reported as "the

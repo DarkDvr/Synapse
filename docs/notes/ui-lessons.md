@@ -1023,7 +1023,7 @@ alignment. So `shot.mjs` now measures four, on every run, and `--audit` prints t
 | `baseline` | two same-size runs on one line | baselines ≥0.6px apart |
 | `column` | rows that start with a short label, in one block | one row 2–40px right of the rest |
 
-Measured on the operator's own mock (`f4-modlist/.synapse/design/mock-1.html`, 876px): **three
+Measured on the operator's own mock (`f4-modlist/.project/design/mock-1.html`, 876px): **three
 findings, and they are the three things they photographed.** `button#p2.btn` was 26px against
 `#p1`'s 30px; `span.sz` and its `a` sat 1px apart on one line; `div.h1` started its content at
 145px while every row under it started at 133px (a header built from flex with a 12px gap, over
@@ -1205,13 +1205,13 @@ whether a given paragraph is "the answer".
   to the browser.
 - **"Keep" is a deliberate project copy, not a temp file (28 Oct).** Each attachment
   chip carries a small boxed checkbox and the word **Keep**; the tooltip says it
-  saves a copy in `.synapse/attachments/` that survives compaction and workers can
+  saves a copy in `.project/attachments/` that survives compaction and workers can
   read. A kept file is written at send (timestamped, name-sanitised), the project
   Log gets a `### attachment` line, and every brief names the folder. The inline
   attachment is still what the model reads that turn. Tested live: after a compact,
-  the new session listed `.synapse/attachments/` and quoted the kept file.
+  the new session listed `.project/attachments/` and quoted the kept file.
 - **A picture a model shows is a chip, and the picture is the hover (3 Nov).** A
-  markdown image with a project-relative path — `![the mock](.synapse/shots/mock.png)`
+  markdown image with a project-relative path — `![the mock](.project/shots/mock.png)`
   — is not rendered inline: it is one violet chip in the sentence, and hovering it
   shows the picture full size, centred above the chip. Inline put a wall of chat on
   screen for every screenshot; the chip costs a line and the operator chooses to
@@ -2708,13 +2708,13 @@ that width. The share is not lost: the hover reads "100% from the provider's cac
 53K read)". Multi only, since Single hides the rate row; the clock change is in both.
 
 **One default, stated once (14 Nov).** The visual-review renderer's `--out` defaulted to
-`.synapse/design/shots` — the Designer's own folder — while the skill's own "Where the
-images go" section said `.synapse/shots`, which is the one folder inside `.synapse/` that
+`.project/design/shots` — the Designer's own folder — while the skill's own "Where the
+images go" section said `.project/shots`, which is the one folder inside `.project/` that
 every role may write (`SHARED_DIR` in `src/plans.js`). A designer read both and stopped
-mid-turn to reconcile them: *"the skill text says default .synapse/design/shots in the
-usage, but the 'Where the images go' section says .synapse/shots. There's a discrepancy."*
-Its brief put the spec and the mocks in `.synapse/design/`, and it read that as the render
-folder too — three answers to one question. The default is `.synapse/shots` in the script
+mid-turn to reconcile them: *"the skill text says default .project/design/shots in the
+usage, but the 'Where the images go' section says .project/shots. There's a discrepancy."*
+Its brief put the spec and the mocks in `.project/design/`, and it read that as the render
+folder too — three answers to one question. The default is `.project/shots` in the script
 and in the usage line now, the designer's brief says the same in one clause, and
 `tests/visual-review.test.mjs` fails if the script's default and the skill's usage line
 ever disagree again. A skill is documentation twice over — the script's own help and the

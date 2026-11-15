@@ -97,9 +97,25 @@ explicit "discard without a handover" after a failure.)
 
 ---
 
+## The state folder
+
+Every project has one folder for everything the harness keeps about it: `.project`.
+The plan, the features, the project document, the run log, reports, shots,
+attachments and a private project's scratch all live there. It is excluded from
+the run's diff and from git, because it is state, not work.
+
+It was called `.synapse` until 15 Nov 2026. The first boot with this version moves
+the folder and rewrites the paths inside it, updates a project's `.gitignore` if it
+named the old folder, and adds the new one to `.git/info/exclude` so a model's
+`git status` stays clean. A project with both keeps `.project` and moves in what it
+can, naming any leftover.
+
+A `.project` **file** (an Eclipse project) cannot coexist with the folder. Such a
+project is reported and its state is not created; rename the file first.
+
 ## The project document
 
-One file, `.synapse/project.md`, replacing `requirement.md` and `decisions.md`
+One file, `.project/project.md`, replacing `requirement.md` and `decisions.md`
 and carrying the handover. Four sections, delimited by HTML comment markers
 (`<!-- synapse:current -->` …) because the Notes are the operator's prose and a
 `##` inside them must not be read as a section:
@@ -139,7 +155,7 @@ Updated:        the stamp of the last write
   on the Fever Tracker project: its brief now opens with the 26 Oct fixes, not
   the first day's plan.
 - Migration: existing `requirement.md` and `decisions.md` are imported into the
-  Log in order, then copied to `.synapse/archive/` and removed. A project with
+  Log in order, then copied to `.project/archive/` and removed. A project with
   only the old files still briefs from them (read-only) until the first write.
 - A file the operator has edited into something without markers is never
   overwritten; a write reports the error and leaves it alone.
@@ -284,7 +300,7 @@ registry does not name:
   metadata are skipped, and a junction back to the harness (or to a folder
   containing it) is refused and logged.
 - A discovered project gets the same two things Add Project gives one:
-  `.synapse\plan.json` when it is missing, and its scratch folder under
+  `.project\plan.json` when it is missing, and its scratch folder under
   `_scratch`. An existing plan, name and created stamp are never touched.
 - Discovery runs before `pruneMissing()`, so a folder that came back keeps its
   registry name instead of being pruned and re-added as the folder name.
@@ -483,7 +499,7 @@ explore in a way the operator cannot see. It is a policy choice, not a bug.
 ## Private projects (15 Nov)
 
 The project menu (⋯) has a **Private** switch below Cmd, after a divider. It is a marker
-file in the project itself — `.synapse\private` — so the flag is part of the folder, never a
+file in the project itself — `.project\private` — so the flag is part of the folder, never a
 record about it. The menu shows the state with a check mark; there is no badge in the rail,
 because a badge would be a trace too.
 
@@ -499,7 +515,7 @@ With the marker on, Synapse writes nothing about the project outside its folder:
 - **no permission memory**: an answer still holds for that gate run, but it is not written
   to `data\permission-memory.json`;
 - **no provider diary**: failures are not written to `data\provider-errors.log`;
-- **no scratch folder outside**: a private project's scratch is `<project>\.synapse\scratch`
+- **no scratch folder outside**: a private project's scratch is `<project>\.project\scratch`
   instead of the shared `_scratch` root.
 
 **Switching it on also removes what is already there.** The marker stops new traces; the

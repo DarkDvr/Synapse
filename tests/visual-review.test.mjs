@@ -23,19 +23,19 @@ test('--help prints the usage and exits 0, without needing a page', () => {
 });
 
 // The renderer's default is the shared screenshots folder, and the skill says so.
-// Before 14 Nov the usage line said `.synapse/design/shots` while the skill's own
-// "Where the images go" said `.synapse/shots`, and a model stopped mid-turn to
-// reconcile the two. `.synapse/shots` is the one folder inside `.synapse` every role
+// Before 14 Nov the usage line said `.project/design/shots` while the skill's own
+// "Where the images go" said `.project/shots`, and a model stopped mid-turn to
+// reconcile the two. `.project/shots` is the one folder inside `.project` every role
 // may write (src/plans.js, SHARED_DIR); the designer's folder is not.
 test('the default output folder is the shared one, in the code and in the skill', () => {
   const source = fs.readFileSync(SHOT, 'utf8');
-  assert.match(source, /outDir: path\.resolve\('\.synapse\/shots'\)/, 'the renderer defaults to the shared folder');
+  assert.match(source, /outDir: path\.resolve\('\.project\/shots'\)/, 'the renderer defaults to the shared folder');
   const help = run('--help');
-  assert.match(help.stdout, /default \.synapse\/shots/, 'the usage says it');
-  assert.doesNotMatch(help.stdout, /\.synapse\/design\/shots/, 'and not the designer\'s folder');
+  assert.match(help.stdout, /default \.project\/shots/, 'the usage says it');
+  assert.doesNotMatch(help.stdout, /\.project\/design\/shots/, 'and not the designer\'s folder');
   const skill = fs.readFileSync(path.resolve('skills/visual-review/SKILL.md'), 'utf8');
-  assert.match(skill, /--out DIR\s+where the PNGs go \(default \.synapse\/shots\)/, 'the skill says the same');
-  assert.doesNotMatch(skill, /default \.synapse\/design\/shots/, 'and nowhere claims the old default');
+  assert.match(skill, /--out DIR\s+where the PNGs go \(default \.project\/shots\)/, 'the skill says the same');
+  assert.doesNotMatch(skill, /default \.project\/design\/shots/, 'and nowhere claims the old default');
 });
 
 // Brave resets the operator's profile when anything touches it, so the renderer

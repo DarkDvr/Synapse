@@ -27,7 +27,7 @@ const USAGE = `Usage: app-check.mjs (--exe <path> | --pid <n>) [options]
 
   --exe <path>        start this app (and close it afterwards unless --keep)
   --pid <n>           look at an app that is already running
-  --out DIR           where the window PNG goes (default .synapse/shots)
+  --out DIR           where the window PNG goes (default .project/shots)
   --resize WxH        resize the window before the shot, e.g. 900x700
   --wait <ms>         how long to wait for the window to appear (default 15000)
   --settle <ms>       wait after the window appears, for the first paint (default 1200)
@@ -40,7 +40,7 @@ function parseArgs(argv) {
   const out = {
     exe: '',
     pid: 0,
-    outDir: path.resolve('.synapse/shots'),
+    outDir: path.resolve('.project/shots'),
     resize: '',
     wait: 15000,
     settle: 1200,

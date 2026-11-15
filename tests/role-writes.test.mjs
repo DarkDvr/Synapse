@@ -1,10 +1,10 @@
-// What a worker may write inside .synapse, and what the harness must not blame it for.
+// What a worker may write inside .project, and what the harness must not blame it for.
 //
 // Two rules that pull against each other, and one evening that proved they did:
 //
 //  - the brief tells every role to put its proof, logs and notes in
-//    `.synapse/reports/`, because that is where the operator looks;
-//  - the role's permission rules deny `.synapse/**` and allow only the role's own
+//    `.project/reports/`, because that is where the operator looks;
+//  - the role's permission rules deny `.project/**` and allow only the role's own
 //    folder (plus screenshots), so a coder's `write` into `reports/` was refused.
 //
 // On 10 Nov the coder did what the brief said anyway, by shell redirect, and the
@@ -37,7 +37,7 @@ test('a worker may keep evidence where the brief tells it to', () => {
   assert.equal(SHARED_DIR, `${PLAN_DIR}/shots`);
 });
 
-test('the rest of .synapse stays denied for a coder', () => {
+test('the rest of .project stays denied for a coder', () => {
   const rules = rulesFor('coder-1');
   const deny = rules.find((r) => r.effect === 'deny' && r.resource === `${PLAN_DIR}/**`);
   assert.ok(deny, 'the broad deny is what makes the folder list a rule rather than a wish');
@@ -53,7 +53,7 @@ test('a proof the harness moved out of the project root is marked as the harness
   const moved = tidyProjectRoot(project);
   assert.equal(moved.length, 1, 'the mover did not move the proof');
   assert.equal(fs.existsSync(path.join(project, 't1-proof.txt')), false);
-  // The fingerprint reports the path relative to `.synapse`, and the check under
+  // The fingerprint reports the path relative to `.project`, and the check under
   // test resolves it against the project — the same file the mover wrote.
   assert.equal(
     wroteIt(moved[0].to, since),

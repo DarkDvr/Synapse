@@ -213,7 +213,7 @@ export function report({ task, role, insteadOf, startedBelow = false, skipped, o
     }
     if (Array.isArray(synapseTouched) && synapseTouched.length) {
       lines.push(
-        `Warning: these files changed inside .synapse while the worker ran, and they are not this role's to ` +
+        `Warning: these files changed inside .project while the worker ran, and they are not this role's to ` +
           `write: ${synapseTouched.slice(0, 8).join(', ')}. The file tools are refused there, so this went ` +
           `around them; check the contents before you trust the plan or the contract.`,
       );

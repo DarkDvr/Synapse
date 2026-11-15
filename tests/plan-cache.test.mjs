@@ -23,8 +23,8 @@ function project(tasks = [
   { id: 't2', title: 'Second', role: 'coder-1', status: 'todo' },
 ]) {
   const dir = tmpdir('synapse-plan-cache-');
-  fs.mkdirSync(path.join(dir, '.synapse'), { recursive: true });
-  fs.writeFileSync(path.join(dir, '.synapse', 'plan.json'), `${JSON.stringify(plan(tasks), null, 2)}\n`, 'utf8');
+  fs.mkdirSync(path.join(dir, '.project'), { recursive: true });
+  fs.writeFileSync(path.join(dir, '.project', 'plan.json'), `${JSON.stringify(plan(tasks), null, 2)}\n`, 'utf8');
   return dir;
 }
 
@@ -77,7 +77,7 @@ test('a changed file is seen at once, even when its size is the same', () => {
 test('a change made by someone else is caught by the stat', () => {
   const dir = project();
   clearPlanCache();
-  const file = path.join(dir, '.synapse', 'plan.json');
+  const file = path.join(dir, '.project', 'plan.json');
   assert.equal(readPlan(dir).plan.tasks.length, 2);
   // The Architect owns the file, so this is the normal case: a tool writes it and
   // Synapse never hears about it.

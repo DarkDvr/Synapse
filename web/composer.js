@@ -195,7 +195,7 @@ export async function send() {
     if (sent?.kept?.length) {
       toast(
         'Kept In The Project',
-        `${sent.kept.length === 1 ? 'The file is' : 'The files are'} in .synapse/attachments/ — it survives compaction and workers can read it.`,
+        `${sent.kept.length === 1 ? 'The file is' : 'The files are'} in .project/attachments/ — it survives compaction and workers can read it.`,
       );
     }
     // The server has accepted it, so the project is busy now: read that state at
@@ -593,7 +593,7 @@ export function renderAttachments() {
       (f) => {
         const image = /^image\//i.test(f.mime);
         const keepTitle = f.keep
-          ? 'Kept — a copy will be saved in .synapse/attachments when you send. It survives compaction and workers can read it. Click to stop keeping it.'
+          ? 'Kept — a copy will be saved in .project/attachments when you send. It survives compaction and workers can read it. Click to stop keeping it.'
           : 'Keep a copy in this project when you send. It survives compaction and workers can read it.';
         // A picture says more than its name, so the chip carries the bytes for a
         // preview; anything else keeps the tooltip that already showed its name.

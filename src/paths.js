@@ -71,7 +71,7 @@ export const SCRATCH_ROOT = path.join(PROJECTS_ROOT, '_scratch');
  *  promises that nothing about the project lands outside it (15 Nov). */
 export function scratchDir(dir, root = SCRATCH_ROOT) {
   if (root === SCRATCH_ROOT && hasMarker(dir)) {
-    return path.join(path.resolve(String(dir || '')), '.synapse', 'scratch');
+    return path.join(path.resolve(String(dir || '')), '.project', 'scratch');
   }
   const base = path.basename(String(dir || '')) || 'project';
   const hash = createHash('sha1').update(path.resolve(String(dir || '')).toLowerCase()).digest('hex').slice(0, 8);

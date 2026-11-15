@@ -16,7 +16,7 @@ const SLIP = [
   'Reading the attachment now: <tool_call>',
   'function=read>',
   '<parameter=path>',
-  'F:\\dev\\Synapse.Projects\\test_27b\\.synapse\\attachments\\pasted.txt',
+  'F:\\dev\\Synapse.Projects\\test_27b\\.project\\attachments\\pasted.txt',
   '</parameter>',
   '</function>',
   '</tool_call>',

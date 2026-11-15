@@ -112,8 +112,8 @@ test('a file chip is one function, and its source says where the picture is', ()
   // picture), or no picture at all — one chip, three sources (7 Nov).
   const attached = fileChip({ name: 'shot.png', mime: 'image/png' }, { msgId: 'msg_1', index: 2 });
   assert.match(attached, /class="chat-image" data-msg="msg_1" data-file="2"/);
-  const saved = fileChip({ name: 'shot.png', mime: 'image/png' }, { src: '.synapse/attachments/shot.png' });
-  assert.match(saved, /class="chat-image" data-src="\.synapse\/attachments\/shot\.png"/);
+  const saved = fileChip({ name: 'shot.png', mime: 'image/png' }, { src: '.project/attachments/shot.png' });
+  assert.match(saved, /class="chat-image" data-src="\.project\/attachments\/shot\.png"/);
   const plain = fileChip({ name: 'notes.txt', mime: 'text/plain' });
   assert.match(plain, /class="chat-image is-file"/);
   assert.match(plain, />TXT</, 'the tag is the extension');

@@ -42,7 +42,7 @@ export function alarmsHere() {
  * What an alarm is called, in the operator's words.
  *
  * It used to be one sentence chosen by testing `what` for "write" or "edit", so
- * every alarm whose text was not literally that — "WROTE INSIDE .synapse OUTSIDE ITS
+ * every alarm whose text was not literally that — "WROTE INSIDE .project OUTSIDE ITS
  * FOLDER", "CHANGED DURING A WORKER RUN" — was titled "A model named Synapse in a
  * tool call". Beside a file name it read as nonsense, and on 10 Nov the operator
  * asked what these strange white errors were. Each kind now says what it is, and an

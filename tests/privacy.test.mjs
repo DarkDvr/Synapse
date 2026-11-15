@@ -52,7 +52,7 @@ test('a private project keeps its scratch inside its own folder', () => {
   assert.ok(scratchDir(dir).toLowerCase().includes('_scratch'), 'ordinary projects use the shared root');
   setMarker(dir, true);
   const inside = scratchDir(dir);
-  assert.equal(path.resolve(inside), path.resolve(dir, '.synapse', 'scratch'));
+  assert.equal(path.resolve(inside), path.resolve(dir, '.project', 'scratch'));
   setMarker(dir, false);
   fs.rmSync(path.dirname(dir), { recursive: true, force: true });
 });

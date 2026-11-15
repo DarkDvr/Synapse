@@ -24,7 +24,7 @@ node "<the app-check.mjs path from your brief>" --exe dist\App.exe [options]
 
   --exe <path>         start this app and close it afterwards
   --pid <n>            look at an app that is already running
-  --out DIR            where the window PNG goes (default .synapse/shots)
+  --out DIR            where the window PNG goes (default .project/shots)
   --resize WxH         resize the window before the shot, e.g. 900x700
   --wait <ms>          how long to wait for the window (default 15000)
   --settle <ms>        wait after it appears, for the first paint (default 1200)
@@ -62,8 +62,8 @@ A desktop window is resized, not emulated: run it twice, or resize the same wind
 and say what changes at the narrow size.
 
 ```
-node "<app-check path>" --exe dist\App.exe --resize 900x700 --out .synapse/shots
-node "<app-check path>" --exe dist\App.exe --resize 420x760 --out .synapse/shots
+node "<app-check path>" --exe dist\App.exe --resize 900x700 --out .project/shots
+node "<app-check path>" --exe dist\App.exe --resize 420x760 --out .project/shots
 ```
 
 ## What this cannot tell you

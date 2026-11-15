@@ -20,9 +20,9 @@ const project = () => tmpdir('synapse-round-');
 const task = (id, status) => ({ id, title: `task ${id}`, role: 'coder-1', status });
 
 function writePlan(dir, { tasks, summary = 'It works.' }) {
-  fs.mkdirSync(path.join(dir, '.synapse'), { recursive: true });
+  fs.mkdirSync(path.join(dir, '.project'), { recursive: true });
   fs.writeFileSync(
-    path.join(dir, '.synapse', 'plan.json'),
+    path.join(dir, '.project', 'plan.json'),
     JSON.stringify({ version: 1, goal: 'fix it', summary, tasks }),
     'utf8',
   );
@@ -83,7 +83,7 @@ test('a plan rewritten after a close closes a new round', () => {
   writePlan(dir, { tasks: [task('t1', 'done')], summary: 'One.' });
   assert.equal(closeRound(dir), true);
   writePlan(dir, { tasks: [task('t1', 'done')], summary: 'Two.' });
-  const file = path.join(dir, '.synapse', 'plan.json');
+  const file = path.join(dir, '.project', 'plan.json');
   const future = new Date(Date.now() + 5000);
   fs.utimesSync(file, future, future);
   assert.equal(closeRound(dir), true, 'a newer finished plan is a new round');

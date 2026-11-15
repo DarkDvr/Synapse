@@ -26,7 +26,7 @@ const expect = (label, ok, detail) =>
 // ── the plan ────────────────────────────────────────────────────
 const ROOT = tmpdir('synapse-run-rules-');
 const DIR = path.join(ROOT, 'project');
-const PLAN = path.join(DIR, '.synapse', 'plan.json');
+const PLAN = path.join(DIR, '.project', 'plan.json');
 const write = (plan, ageMs = 0) => {
   fs.mkdirSync(path.dirname(PLAN), { recursive: true });
   fs.writeFileSync(PLAN, JSON.stringify(plan, null, 2), 'utf8');
@@ -146,7 +146,7 @@ try {
   expect('and to name a report rather than quote it', architect.includes('do not quote a report back'));
   // A coder rendering the page into the designer's folder is a stray write and an
   // alarm, six times over across projects. The sent folder is named in its brief.
-  expect('a coder is told where renders go', coder.includes('.synapse/shots/') && coder.includes('stray write'));
+  expect('a coder is told where renders go', coder.includes('.project/shots/') && coder.includes('stray write'));
   // Routing is the failure that survives a menu: a plan whose every task is on a
   // coder delivers the files and skips the craft. The brief has to name the
   // crafts and say a coder builds a decision rather than making one.
@@ -207,7 +207,7 @@ try {
     fields,
     answer: { ot: 'Allow amber for warnings', bad: 'Ink + glyph, no hue' },
   });
-  const file = path.join(dir, '.synapse', 'project.md');
+  const file = path.join(dir, '.project', 'project.md');
   const first = fs.readFileSync(file, 'utf8');
   expect('the answer is written as a line a model can read', /\*\*Overtime flag style\*\* -> Allow amber/.test(first), first.slice(-80));
   expect('the document says an answered question is settled', /Decisions in force/.test(first), first.slice(0, 300));
@@ -219,7 +219,7 @@ try {
   expect('a blank answer is recorded as blank', fs.readFileSync(file, 'utf8').includes('(left blank)'));
 
   const brief = briefSession({ dir, role: 'designer' });
-  expect('the brief points at the project document', brief.includes('.synapse/project.md'));
+  expect('the brief points at the project document', brief.includes('.project/project.md'));
   expect('the brief says not to re-ask', /never ask a question it already answers/.test(brief));
   const before = briefSession({ dir: path.join(ROOT, 'still-none'), role: 'designer' });
   expect('no document, no line about one', !before.includes('project.md'));
@@ -552,7 +552,7 @@ try {
     'a render that also clears project scratch is tool use',
     alarmCount(
       turn(
-        '$dir = "F:\\dev\\Synapse.Projects\\x\\.synapse\\design\\shots"; Remove-Item $dir -Recurse -Force; ' +
+        '$dir = "F:\\dev\\Synapse.Projects\\x\\.project\\design\\shots"; Remove-Item $dir -Recurse -Force; ' +
           'node "F:/dev/Synapse/skills/visual-review/bin/shot.mjs" "file:///F:/x/mock-a.html?state=day" --out "F:/x/shots/a.png" 2>&1 | Out-String',
       ),
     ) === 0,
@@ -578,7 +578,7 @@ try {
     sessionId: 'arch',
     label: 'turn',
     messages: turn(
-      'Get-ChildItem -Recurse F:\\dev\\Synapse.Projects\\x\\.synapse -Filter shot.mjs | Select-Object FullName; ' +
+      'Get-ChildItem -Recurse F:\\dev\\Synapse.Projects\\x\\.project -Filter shot.mjs | Select-Object FullName; ' +
         'Get-ChildItem F:\\dev\\Synapse\\skills -Recurse -Filter shot.mjs',
     ),
   });

@@ -102,7 +102,7 @@ export function renderTrace(t) {
     if (steer) {
       // A steer that carried a file shows it the way the chat shows any attachment:
       // the same chip, the same picture on hover. The bytes are in the project
-      // (`.synapse/attachments/`), because a worker's own session is not the chat
+      // (`.project/attachments/`), because a worker's own session is not the chat
       // and its message is the one place the operator cannot see.
       const files = Array.isArray(n?.files) ? n.files : [];
       const chips = files.map((f) => fileChip(f, { src: f.path })).join('');

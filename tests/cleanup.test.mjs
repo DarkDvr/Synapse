@@ -96,16 +96,16 @@ test('a port that is not answering is not proof of anything', async () => {
 });
 
 // Fever Tracker's Designer finished with contrast.mjs and serve.mjs in
-// .synapse/design/, plus a nested .synapse/design/.synapse/design/shots where a
+// .project/design/, plus a nested .project/design/.project/design/shots where a
 // render doubled a relative path. The operator cleaned it by hand. This sweep is
-// narrow on purpose: scripts and temp files inside .synapse only, never a plan
+// narrow on purpose: scripts and temp files inside .project only, never a plan
 // file, never something the plan names, and it can be asked what it would do.
-test('the scratch sweep takes scripts and the doubled .synapse, and nothing else', () => {
+test('the scratch sweep takes scripts and the doubled .project, and nothing else', () => {
   const dir = tmpdir('synapse-scratch-');
   try {
-    const syn = path.join(dir, '.synapse');
+    const syn = path.join(dir, '.project');
     fs.mkdirSync(path.join(syn, 'design'), { recursive: true });
-    fs.mkdirSync(path.join(syn, 'design', '.synapse', 'design', 'shots'), { recursive: true });
+    fs.mkdirSync(path.join(syn, 'design', '.project', 'design', 'shots'), { recursive: true });
     const keep = [
       path.join(syn, 'plan.json'),
       path.join(syn, 'runs.jsonl'),
@@ -128,13 +128,13 @@ test('the scratch sweep takes scripts and the doubled .synapse, and nothing else
       fs.mkdirSync(path.dirname(f), { recursive: true });
       fs.writeFileSync(f, 'x');
     }
-    const named = ['.synapse/design/keep-this.mjs'];
+    const named = ['.project/design/keep-this.mjs'];
     fs.writeFileSync(path.join(syn, 'design', 'keep-this.mjs'), 'x');
 
     const found = findScratch(dir, { named }).map((f) => path.relative(dir, f.path).replace(/\\/g, '/'));
-    assert.ok(found.includes('.synapse/design/contrast.mjs'), 'contrast.mjs is scratch');
-    assert.ok(found.includes('.synapse/design/serve.mjs'), 'serve.mjs is scratch');
-    assert.ok(found.some((f) => f.startsWith('.synapse/design/.synapse')), 'the doubled .synapse is scratch');
+    assert.ok(found.includes('.project/design/contrast.mjs'), 'contrast.mjs is scratch');
+    assert.ok(found.includes('.project/design/serve.mjs'), 'serve.mjs is scratch');
+    assert.ok(found.some((f) => f.startsWith('.project/design/.project')), 'the doubled .project is scratch');
     for (const f of ['plan.json', 'runs.jsonl', 'features.json', 'requirement.md', 'decisions.md', 'project.md']) {
       assert.ok(!found.some((g) => g.endsWith(`/${f}`)), `${f} must be kept`);
     }
@@ -151,7 +151,7 @@ test('the scratch sweep takes scripts and the doubled .synapse, and nothing else
     const real = sweepScratch(dir);
     assert.equal(real.removed.length, dry.found);
     assert.ok(!fs.existsSync(path.join(syn, 'design', 'serve.mjs')));
-    assert.ok(!fs.existsSync(path.join(syn, 'design', '.synapse')));
+    assert.ok(!fs.existsSync(path.join(syn, 'design', '.project')));
     assert.ok(fs.existsSync(path.join(syn, 'design', 'mock-1.html')));
     assert.ok(fs.existsSync(path.join(syn, 'plan.json')));
   } finally {

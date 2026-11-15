@@ -78,7 +78,7 @@ test('a Single send applies the ruleset once, before the prompt', async () => {
   assert.deepEqual(h.calls.map((c) => c.at), ['permissions', 'prompt']);
   assert.match(h.briefs.at(-1), /do not delegate/);
   assert.match(h.prompts.at(-1), /Do one small thing/);
-  const doc = fs.readFileSync(path.join(dir, '.synapse', 'project.md'), 'utf8');
+  const doc = fs.readFileSync(path.join(dir, '.project', 'project.md'), 'utf8');
   assert.match(doc, /### chat · /, 'a Single message is a chat entry');
   fs.rmSync(dir, { recursive: true, force: true });
 });
@@ -89,7 +89,7 @@ test('sending in the mode already applied does not patch the engine', async () =
   await h.api.sendMessage('ses_x', { text: 'Build it', mode: 'multi' });
   assert.equal(h.calls.filter((c) => c.at === 'permissions').length, 0);
   assert.match(h.briefs.at(-1), /You judge; you do not build/);
-  const doc = fs.readFileSync(path.join(dir, '.synapse', 'project.md'), 'utf8');
+  const doc = fs.readFileSync(path.join(dir, '.project', 'project.md'), 'utf8');
   assert.match(doc, /### request · /, 'a Multi message is the request');
   fs.rmSync(dir, { recursive: true, force: true });
 });

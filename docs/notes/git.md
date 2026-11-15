@@ -19,17 +19,17 @@ is what the Architect can read.
 ## What a run records
 
 Before the worker starts, `treeOf()` builds a tree object from the folder as it
-stands: a temporary index inside `.synapse/cache`, `read-tree HEAD`, `add -A`,
+stands: a temporary index inside `.project/cache`, `read-tree HEAD`, `add -A`,
 `write-tree`. The real index and HEAD are untouched, and the temporary index is
 deleted. After the run, the same call gives the new tree; `changeSince()` diffs the
 two and writes:
 
 ```
-<project>\.synapse\reports\diffs\<task>-<stamp>.diff
+<project>\.project\reports\diffs\<task>-<stamp>.diff
 ```
 
 The report then carries one line — `Changed: 3 files, +42 −7 — the diff is …` — and
-the run ledger keeps the same numbers. `.synapse` is excluded from both trees: the
+the run ledger keeps the same numbers. `.project` is excluded from both trees: the
 harness's own state is not the worker's change. Ignored files are excluded too,
 because the project's `.gitignore` is the project's answer about what is source and
 what is build output.
@@ -51,7 +51,7 @@ ref: only one rollback point per project can ever be the newest.
   id. The tool refuses while a delegation is live, refuses any task that is not
   the newest result, and consumes the ref when it succeeds.
 - **A restore writes the checkpoint's files back and removes files that arrived
-  after it.** `.synapse` was never in the tree, so the plan and the evidence are
+  after it.** `.project` was never in the tree, so the plan and the evidence are
   untouched. The real index is not rewritten; the operator's `git status` shows
   the restore as a working-tree change.
 - **One restore, one task.** The plan row is not edited: the Architect judges it

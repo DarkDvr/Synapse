@@ -69,7 +69,7 @@ test('runTaskChecks stops at the first failure and keeps the log inside the proj
   });
   assert.equal(result.failed?.code, 2);
   assert.equal(result.ran, 1, 'the second check is not run after a failure');
-  assert.ok(result.logPath?.startsWith('.synapse/reports/checks/'));
+  assert.ok(result.logPath?.startsWith('.project/reports/checks/'));
   assert.ok(fs.existsSync(path.join(dir, ...result.logPath.split('/'))));
 });
 
@@ -78,10 +78,10 @@ test('runTaskChecks stops at the first failure and keeps the log inside the proj
 function project(name, checks, script = {}) {
   const dir = path.join(ROOT, name);
   fs.rmSync(dir, { recursive: true, force: true });
-  fs.mkdirSync(path.join(dir, '.synapse'), { recursive: true });
+  fs.mkdirSync(path.join(dir, '.project'), { recursive: true });
   fs.writeFileSync(path.join(dir, 'check.js'), script.check || 'process.exit(0);\n');
   fs.writeFileSync(
-    path.join(dir, '.synapse', 'plan.json'),
+    path.join(dir, '.project', 'plan.json'),
     JSON.stringify({
       version: 1,
       goal: 'test',
@@ -190,7 +190,7 @@ function delegate(runner, arch, callId) {
 }
 
 function readResult(dir) {
-  const file = path.join(dir, '.synapse', 'runs.jsonl');
+  const file = path.join(dir, '.project', 'runs.jsonl');
   if (!fs.existsSync(file)) return null;
   const lines = fs.readFileSync(file, 'utf8').trim().split('\n').filter(Boolean).map((l) => JSON.parse(l));
   return lines.find((r) => r.kind === 'result') || null;

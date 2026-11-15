@@ -39,7 +39,7 @@ present on nearly every Windows 10 machine through Edge.
 
 ## Verify it, both halves
 
-- The **window**: `node "<app-check.mjs>" --exe dist\App.exe --out .synapse\shots`
+- The **window**: `node "<app-check.mjs>" --exe dist\App.exe --out .project\shots`
   — launches it, waits for the window, photographs it, reports whether it is still
   running.
 - The **interface**: `node "<shot.mjs>" ui\index.html --widths 1280,760` — the same

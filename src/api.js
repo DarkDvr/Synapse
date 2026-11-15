@@ -1556,7 +1556,7 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
         } catch { /* a directory we cannot read is the project's problem, not this call's */ }
       }
       const project = projects.create({ name: body?.name, directory: body?.directory });
-      // The store gives it `.synapse\plan.json` and its scratch folder, whether
+      // The store gives it `.project\plan.json` and its scratch folder, whether
       // the folder was new or already there. Re-adding a project continues its
       // plan; this never touches an existing one.
       return {
@@ -1613,7 +1613,7 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
     /**
      * Mark a project Private, or make it ordinary again (15 Nov).
      *
-     * The marker is a file in the project's own `.synapse` folder; switching it on
+     * The marker is a file in the project's own `.project` folder; switching it on
      * registers the folder with the log filter and clears the run traces that were
      * written before the switch. Nothing about the toggle is logged, and nothing is
      * written anywhere but the folder.
@@ -1976,7 +1976,7 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
     },
 
     /**
-     * The open session's project plan, read straight from `.synapse\plan.json`
+     * The open session's project plan, read straight from `.project\plan.json`
      * in its directory. The file is the source of truth — there is no store to
      * keep in sync, and a plan written by hand reads the same as one the
      * Architect wrote.
@@ -2832,7 +2832,7 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
       }
       // Written where the model can find it after a compact, which is the one
       // thing a deleted conversation cannot survive. Best-effort: a session
-      // outside a project has no .synapse, and an answer already given is not
+      // outside a project has no .project, and an answer already given is not
       // worth failing the reply over.
       try {
         const session = await safe(() => engine.getSession(sessionId), null);

@@ -28,9 +28,9 @@ const logBefore = fs.existsSync(PROVIDER_LOG) ? fs.readFileSync(PROVIDER_LOG, 'u
 function project(name) {
   const dir = path.join(ROOT, name);
   fs.rmSync(dir, { recursive: true, force: true });
-  fs.mkdirSync(path.join(dir, '.synapse'), { recursive: true });
+  fs.mkdirSync(path.join(dir, '.project'), { recursive: true });
   fs.writeFileSync(
-    path.join(dir, '.synapse', 'plan.json'),
+    path.join(dir, '.project', 'plan.json'),
     JSON.stringify({
       version: 1,
       goal: 'test',
@@ -125,7 +125,7 @@ function makeEngine({ dir, script, wakeScript }) {
 
 async function runCase({ name, script, wakeScript = [{}], ladder = ['coder-1'], roleRef = 'opencode/deepseek-v4.1-flash-free', cancelAfter = 0, stopWakeAfter = 0, untilWoke = 1, harnessStopAfter = 0, harnessReason = '', delegates = 1 }) {
   const dir = project(name);
-  const runsFile = path.join(dir, '.synapse', 'runs.jsonl');
+  const runsFile = path.join(dir, '.project', 'runs.jsonl');
   const { engine, sessions, woke, descriptions, interrupts, created, deleted, prompts } = makeEngine({ dir, script, wakeScript });
   const events = [];
   const noted = [];

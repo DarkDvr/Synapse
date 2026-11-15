@@ -4,7 +4,7 @@
 // The failure this earns: a Multi session was switched to Single to ask for one
 // small thing (copy the exe to a folder). The brief quoted the stored requirement
 // — the whole Multi-mode campaign, "Continue work", an old issue list — and the
-// model then opened .synapse/plan.json and decided from t21 whether the build was
+// model then opened .project/plan.json and decided from t21 whether the build was
 // current, reporting on t18 and t20. Nothing was wrong with the answer; the model
 // was still standing in a plan that was not this conversation's.
 //
@@ -31,9 +31,9 @@ const REQUIREMENT =
   'Build a Windows app with a graph.\n\n---\n\nYour work got interrupted, continue\n\n---\n\nContinue work';
 
 const writePlan = () => {
-  fs.mkdirSync(path.join(DIR, '.synapse'), { recursive: true });
+  fs.mkdirSync(path.join(DIR, '.project'), { recursive: true });
   fs.writeFileSync(
-    path.join(DIR, '.synapse', 'plan.json'),
+    path.join(DIR, '.project', 'plan.json'),
     JSON.stringify({
       version: 1,
       goal: 'The old campaign goal',
@@ -44,8 +44,8 @@ const writePlan = () => {
 };
 
 try {
-  fs.mkdirSync(path.join(DIR, '.synapse'), { recursive: true });
-  fs.writeFileSync(path.join(DIR, '.synapse', 'requirement.md'), `# The operator's request\n\n${REQUIREMENT}\n`, 'utf8');
+  fs.mkdirSync(path.join(DIR, '.project'), { recursive: true });
+  fs.writeFileSync(path.join(DIR, '.project', 'requirement.md'), `# The operator's request\n\n${REQUIREMENT}\n`, 'utf8');
 
   // ── Single, in a project that carries the earlier task's paperwork ──
   writePlan();
@@ -121,8 +121,8 @@ try {
       guard: null,
     });
   };
-  const docPath = path.join(DIR, '.synapse', 'project.md');
-  const legacyPath = path.join(DIR, '.synapse', 'requirement.md');
+  const docPath = path.join(DIR, '.project', 'project.md');
+  const legacyPath = path.join(DIR, '.project', 'requirement.md');
   await makeApi(true).sendMessage('ses_chat', { text: 'Copy the exe to E:/Portable Software/Fever Tracker' });
   const afterSingle = fs.existsSync(docPath) ? fs.readFileSync(docPath, 'utf8') : '';
   expect('a Single message creates the project document', Boolean(afterSingle), afterSingle.slice(0, 120));

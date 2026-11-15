@@ -9,7 +9,7 @@
 //   - a page must be an http(s) address — no file://, nothing that reaches past a URL;
 //   - nothing here reads a cookie, exports a session or runs an arbitrary script: the
 //     toolset is a fixed list of operations;
-//   - a screenshot or a strip of frames is written under the **project** (`.synapse\browser\`),
+//   - a screenshot or a strip of frames is written under the **project** (`.project\browser\`),
 //     so it is deleted with the project and never mixes two projects' browsing; the path is
 //     answered, so the model can look at it.
 //

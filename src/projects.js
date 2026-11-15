@@ -26,6 +26,118 @@ const key = (dir) => normalizeDir(dir).toLowerCase();
  *  separator, no trailing slash. */
 const fold = (dir) => normalizeDir(dir).replace(/\//g, '\\').toLowerCase();
 
+// The folder is `.project` now. `.synapse` was the old name, and every existing
+// project is migrated in place on the first boot with this version: the folder is
+// renamed, the paths inside it are rewritten, and the project's git ignores the
+// new name. A `.project` **file** (Eclipse) is a real collision: the harness needs
+// a folder, so the project is named with the error rather than written over it.
+const STATE_DIR = '.project';
+const LEGACY_STATE_DIR = '.synapse';
+const TEXT_STATE = new Set(['.json', '.jsonl', '.md', '.txt', '.html', '.css', '.js', '.mjs', '.py', '.ps1']);
+
+/** Rewrite `.synapse` paths inside the state folder, once, when it is migrated. */
+function rewriteStatePaths(root) {
+  const walk = (dir) => {
+    let entries = [];
+    try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch {
+      // An unreadable folder has no state files to rewrite.
+      return;
+    }
+    for (const entry of entries) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        walk(full);
+        continue;
+      }
+      if (!TEXT_STATE.has(path.extname(entry.name).toLowerCase())) continue;
+      try {
+        const stat = fs.statSync(full);
+        if (stat.size > 4 * 1024 * 1024) continue;
+        const text = fs.readFileSync(full, 'utf8');
+        const next = text.replace(/(?<![\w?])\.synapse(?![\w])/g, '.project');
+        if (next !== text) fs.writeFileSync(full, next, 'utf8');
+      } catch { /* a state file that cannot be rewritten is not a failed migration */ }
+    }
+  };
+  walk(root);
+}
+
+/** Replace the old folder in a project's own `.gitignore`, if it names it. */
+function rewriteGitIgnore(dir) {
+  const file = path.join(dir, '.gitignore');
+  try {
+    const text = fs.readFileSync(file, 'utf8');
+    const next = text.replace(/^(\.synapse\/?)(\r?)$/gm, (match, entry, cr) => `.project/${cr}`);
+    if (next !== text) fs.writeFileSync(file, next, 'utf8');
+  } catch { /* no .gitignore is the normal case */ }
+}
+
+/** Tell git to ignore the state folder without editing a tracked file. */
+function ignoreStateInGit(dir) {
+  const info = path.join(dir, '.git', 'info');
+  if (!fs.existsSync(info)) return;
+  const file = path.join(info, 'exclude');
+  try {
+    const text = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '';
+    if (/^\.project\/?$/m.test(text)) return;
+    fs.writeFileSync(file, `${text.replace(/\s*$/, '')}\n.project/\n`, 'utf8');
+  } catch { /* a repository without an exclude file still works */ }
+}
+
+/**
+ * Move a project's harness state from `.synapse` to `.project`, once.
+ *
+ * Called before anything reads a plan or a private marker, because both live in
+ * this folder. A project with both keeps `.project` and moves in whatever
+ * `.synapse` has that `.project` does not; the remainder is left for the operator
+ * and named in the log rather than deleted.
+ */
+export function migrateProjectState(dir, { log } = {}) {
+  const target = normalizeDir(dir);
+  const old = path.join(target, LEGACY_STATE_DIR);
+  const next = path.join(target, STATE_DIR);
+  if (!fs.existsSync(old)) {
+    if (fs.existsSync(next) && !fs.statSync(next).isDirectory()) {
+      return { error: `${target} already has a .project file; Synapse needs a .project folder. Rename that file first.` };
+    }
+    return { migrated: false };
+  }
+  let info;
+  try { info = fs.statSync(old); } catch {
+    // The folder vanished between the check and the stat: nothing to migrate.
+    return { migrated: false };
+  }
+  if (!info.isDirectory()) return { migrated: false };
+  if (fs.existsSync(next)) {
+    let nextInfo;
+    try { nextInfo = fs.statSync(next); } catch {
+      // It vanished while we looked; the caller tries again next boot.
+      return { migrated: false };
+    }
+    if (!nextInfo.isDirectory()) {
+      return { error: `${target} already has a .project file; Synapse needs a .project folder. Rename that file first.` };
+    }
+    for (const name of fs.readdirSync(old)) {
+      const from = path.join(old, name);
+      const to = path.join(next, name);
+      if (fs.existsSync(to)) continue;
+      try { fs.renameSync(from, to); } catch { /* left in .synapse and named below */ }
+    }
+  } else {
+    try {
+      fs.renameSync(old, next);
+    } catch (err) {
+      return { error: `could not move .synapse to .project in ${target}: ${err.message}` };
+    }
+  }
+  rewriteStatePaths(next);
+  rewriteGitIgnore(target);
+  ignoreStateInGit(target);
+  const leftover = fs.existsSync(old);
+  log?.info?.(`project state: .synapse -> .project in ${target}${leftover ? ' (some old files were left in .synapse)' : ''}`);
+  return { migrated: true, leftover };
+}
+
 // A leading underscore is the harness's namespace. `_scratch` and `_probe` are
 // the two it uses today; treating the whole prefix as reserved means a folder it
 // adds later cannot turn into a project in the rail.
@@ -57,13 +169,15 @@ const isFolderEntry = (entry, root) => {
  * The folders every project owns, created when they are missing.
  *
  * A project is usable the moment it is registered, so discovery and Add Project
- * both call this: `.synapse\plan.json` is the file the Architect starts from, and
+ * both call this: `.project\plan.json` is the file the Architect starts from, and
  * the scratch folder is outside the project but named in every brief. An
  * existing plan is never touched; a failure is reported, not thrown, so a
  * read-only folder still becomes a project the operator can see and fix.
  */
 export function ensureProjectFolders(dir, { scratchRoot = SCRATCH_ROOT } = {}) {
   const target = normalizeDir(dir);
+  const state = migrateProjectState(target);
+  if (state.error) return { directory: target, plan: { created: false, path: '', error: state.error }, scratch: '', error: state.error };
   const plan = ensurePlan(target);
   let scratch = '';
   let error = plan.error || '';
@@ -395,7 +509,7 @@ export function createProjectStore({ file, rootDir, legacyGeneralDir = null, har
 
   /**
    * Turn the Private marker on or off. The flag is a file in the project's own
-   * `.synapse` folder; nothing about it is written anywhere else, which is the whole
+   * `.project` folder; nothing about it is written anywhere else, which is the whole
    * point of it (15 Nov).
    */
   function setPrivate(id, on) {

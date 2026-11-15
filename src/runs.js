@@ -1029,7 +1029,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
             text:
               `A run finished before Synapse restarted, and the report may not have reached you: ` +
               `${result.task} (${result.role || 'worker'}) ${result.outcome || 'finished'}` +
-              `${result.error ? ` - ${result.error}` : ''}. Read .synapse/runs.jsonl and judge it; ` +
+              `${result.error ? ` - ${result.error}` : ''}. Read .project/runs.jsonl and judge it; ` +
               `do not assume it succeeded.`,
           });
           appendRun(dir, { kind: 'wake', callId: result.callId, at: Date.now(), status: 'done' });
@@ -2461,7 +2461,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     // What the run actually changed, from the two trees. Computed before the
     // cleanup below, which moves stray files and would otherwise appear in the diff
     // as the worker's doing. The patch goes inside the project, under
-    // `.synapse/reports/diffs/`.
+    // `.project/reports/diffs/`.
     let change = null;
     try {
       change = await changeSince(dir, task.id, changeBefore);
@@ -2476,12 +2476,12 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
       if (dropped) checkpoint = null;
     }
 
-    // Neither must anything else in .synapse that is not this role's to write.
+    // Neither must anything else in .project that is not this role's to write.
     // The path rules stop the file tools; a shell redirect, the `execute` tool or
     // an absolute path can still land, so the folder is compared around the turn
     // the way the harness repository is.
     const synapseAfter = synapseFingerprint(dir);
-    // Two folders in .synapse are nobody's in particular: the screenshots a render
+    // Two folders in .project are nobody's in particular: the screenshots a render
     // leaves, and the evidence every role is told to keep. A write there is the
     // brief being followed, not a stray write.
     const sharedDirs = [SHARED_DIR, EVIDENCE_DIR].map((d) => d.split('/').pop());
@@ -2493,17 +2493,17 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
       // reported as the worker's stray writes on 10 Nov — twice, about the
       // operator's own clicks. Only what Synapse said it wrote is excused, so a
       // worker writing project.md is still news (see src/synapse-writes.js).
-      .filter((p) => !wroteIt(`${dir}/.synapse/${p}`, startedAt));
+      .filter((p) => !wroteIt(`${dir}/.project/${p}`, startedAt));
     if (strayWrites.length) {
       if (guard?.alarm) {
         guard.alarm({
           sessionId: architectId,
-          what: 'WROTE INSIDE .synapse OUTSIDE ITS FOLDER',
+          what: 'WROTE INSIDE .project OUTSIDE ITS FOLDER',
           paths: strayWrites.slice(0, 12),
           note: `${request.task} (${role})`,
         });
       } else {
-        log.error(`.synapse changed during ${request.task} (${role}): ${strayWrites.join(', ')}`);
+        log.error(`.project changed during ${request.task} (${role}): ${strayWrites.join(', ')}`);
       }
     }
 
@@ -2543,7 +2543,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     // A finished task's scratch is where it built everything, and nobody reopens it —
     // it was 1.3 GB for one task folder on 10 Nov. A failed or stopped task keeps its
     // folder, because the wreckage is evidence. And a proof file, a log or a harness
-    // file written to the project's *root* is moved into `.synapse/reports/<date>/`,
+    // file written to the project's *root* is moved into `.project/reports/<date>/`,
     // never deleted: the operator's words were "automated", and a report is evidence
     // until they say otherwise.
     if (outcome === 'completed' && !stopReason) removeTaskScratch(dir, task.id, { log });
@@ -2643,7 +2643,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
         (resumes ? `, ${resumes} restart${resumes === 1 ? '' : 's'}` : '') +
         (files.length ? `, ${files.length} file(s) written` : '') +
         (planTouched ? ' - THE PLAN FILE CHANGED DURING THE WORKER TURN' : '') +
-        (strayWrites.length ? ` - .synapse WRITTEN OUTSIDE ITS FOLDER: ${strayWrites.join(', ')}` : '') +
+        (strayWrites.length ? ` - .project WRITTEN OUTSIDE ITS FOLDER: ${strayWrites.join(', ')}` : '') +
         (filesOutside.length ? ` - WROTE OUTSIDE THE PROJECT: ${filesOutside.join(', ')}` : ''),
     );
 
@@ -2684,7 +2684,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
         cleaned.add(dir);
         // Files first: a helper script is not a process, and the two left behind
         // by the Designer (contrast.mjs, serve.mjs) were the operator's to clean.
-        // Only scripts and temp files inside .synapse, never a plan deliverable.
+        // Only scripts and temp files inside .project, never a plan deliverable.
         try {
           const named = (done?.tasks || []).flatMap((t) => (Array.isArray(t.reads) ? t.reads : []));
           const files = sweepScratch(dir, { log, named });
@@ -3805,7 +3805,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     if (!said) return { ok: false, reason: 'The steer is empty.' };
     const at = Date.now();
     // The saved copies, not the base64: the run card and the project record point at
-    // `.synapse/attachments/`, and a steer is small enough that the bytes belong in
+    // `.project/attachments/`, and a steer is small enough that the bytes belong in
     // the project rather than in every `/api/runs` answer.
     const entry = {
       at,

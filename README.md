@@ -9,7 +9,7 @@ genuine **OpenCode** engine over its HTTP + SSE API and rebuilds the interface
 from scratch — today that engine, tomorrow anything that implements the contract
 in `src\engines\base.js`.
 
-**Version 1.59.0** - Windows 10/11, x64. The zip carries Node, Git, the engine and the fonts.
+**Version 1.59.1** - Windows 10/11, x64. The zip carries Node, Git, the engine and the fonts.
 
 **Licence:** AGPL-3.0-only, Copyright (C) 2026 DarkDvr — see `LICENSE`, `NOTICE`, `THIRD-PARTY.md`.
 
@@ -84,10 +84,10 @@ adopted; its plan and scratch folder are created if missing. Folders starting wi
 ```
 <project>\
   bin\                      ← deliverables; everything else is scratch
-  .synapse\plan.json        ← the plan, owned by the Architect
-  .synapse\features.json    ← what you confirmed, and what you rejected
-  .synapse\ideas\ design\ reports\    ← one folder per role
-  .synapse\runs.jsonl       ← append-only record of every delegation
+  .project\plan.json        ← the plan, owned by the Architect
+  .project\features.json    ← what you confirmed, and what you rejected
+  .project\ideas\ design\ reports\    ← one folder per role
+  .project\runs.jsonl       ← append-only record of every delegation
 ```
 
 Deleting a project sends its folder to the Recycle Bin; re-adding a folder that already holds a plan asks first. The `⋯` menu can also make a project **Private**: Synapse then keeps no log, census, trace or scratch record of it outside its own folder.

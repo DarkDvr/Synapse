@@ -159,13 +159,13 @@ delivered. It is the right channel for three reasons:
 **Never put a lone backslash in text a model reads.** The first plan Synapse
 generated came back as invalid JSON because the brief said `bin\` and the model
 copied it verbatim into a JSON string, where `\ ` is an invalid escape. Model-
-facing paths use forward slashes (`bin/`, `.synapse/plan.json`).
+facing paths use forward slashes (`bin/`, `.project/plan.json`).
 
 ---
 
 ## The project plan: a file the Architect owns
 
-`<project>\.synapse\plan.json` — goal + tasks (`id`, `title`, `role`, `status`,
+`<project>\.project\plan.json` — goal + tasks (`id`, `title`, `role`, `status`,
 `detail`, `dependsOn`, `result`, `note`). The Architect writes it with the
 ordinary file tools; there is no tool and no store for it.
 
@@ -185,7 +185,7 @@ ordinary file tools; there is no tool and no store for it.
   session, undeletable) is gone: every project is one workspace and one chat, and
   an existing General folder is adopted as an ordinary project on the first boot
   after the change. A project with no plan still gets one at boot; a project the
-  operator deletes takes its chat, its folder and its `.synapse` with it.
+  operator deletes takes its chat, its folder and its `.project` with it.
 - **`id` is required.** Delegation refers to tasks by id, and the Architect may
   rewrite the file at any time; a task without one is flagged and skipped.
 - **It is the current request's checklist, not a diary.** A new operator request
@@ -333,7 +333,7 @@ engine session with that role's model and effort instead.
 
 `delegate { task }` is a stateless MCP tool (src/mcp/delegate-server.js). The
 request is read out of the transcript on the turn boundary, exactly like the
-census, and answered once — the call id is written to `.synapse\runs.jsonl`
+census, and answered once — the call id is written to `.project\runs.jsonl`
 **before** the worker starts, so a restart or a re-scan cannot run it twice.
 `src/runs.js` then creates a real session for the task's role, on that role's
 model and effort, briefs it with its own task, runs it, records the evidence, and
@@ -719,20 +719,20 @@ list" below). Roles are identities plus one mandate each (`ROLE_MANDATES` in
 
 | role | may write | produces |
 |---|---|---|
-| inventor | `.synapse/ideas/` | `ideas-1.md`, ranked, with a one-line why and effort |
-| designer | `.synapse/design/` | `design.md` (the spec) + `mock-N.html` |
-| qc | `.synapse/qc_findings/` | `qc-N.md`: ids `Q1…`, severity, exact repro |
+| inventor | `.project/ideas/` | `ideas-1.md`, ranked, with a one-line why and effort |
+| designer | `.project/design/` | `design.md` (the spec) + `mock-N.html` |
+| qc | `.project/qc_findings/` | `qc-N.md`: ids `Q1…`, severity, exact repro |
 | coders | the project | `bin/` |
-| every role | `.synapse/reports/`, `.synapse/shots/` | evidence (a proof, a log) and the renders it took |
+| every role | `.project/reports/`, `.project/shots/` | evidence (a proof, a log) and the renders it took |
 
 **Evidence and screenshots are shared on purpose.** The brief tells every role to
-keep its proof and logs in `.synapse/reports/`, so the write rules allow that folder
+keep its proof and logs in `.project/reports/`, so the write rules allow that folder
 to every role, and the stray-write check ignores it — a rule that denied it made the
 brief a lie, and on 10 Nov a coder wrote there by shell and the tamper alarm reported
 its compliance as tampering. The cleanup mover marks the files it moves into
-`.synapse` as the harness's own writes for the same reason.
+`.project` as the harness's own writes for the same reason.
 
-**The file contract is the point.** `.synapse/` holds `project.md` — the project's
+**The file contract is the point.** `.project/` holds `project.md` — the project's
 living document, written by the harness, never by a model: a `## Current` head
 (the latest request and the decisions still in force), the `## Handover` from the
 last compact, the operator's own `## Notes`, and an append-only `## Log` of every
@@ -809,7 +809,7 @@ the task, the worker's last words and the "do not repeat" instruction.
 **"Keep" writes a deliberate project copy (28 Oct).** An attachment is normally
 inline in the operator's message and exists only in the engine's transcript: a
 compaction may summarise it and a project compact deletes it. Checking **Keep** on
-the attic chip writes the bytes to `.synapse/attachments/<stamp>-<name>` before the
+the attic chip writes the bytes to `.project/attachments/<stamp>-<name>` before the
 prompt, appends a `### attachment` line to the project Log, and every brief says
 the folder exists — so a later Architect or a worker can list and read it. The
 inline copy is still what the model reads that turn; the file is what survives. It
@@ -951,7 +951,7 @@ thinking**; 13% of the time in tools, the rest in generation.
   alarm was the operator's own Settings save, and `configSavedAt()` now excuses
   exactly that: a config change no save of ours explains is still reported.
 - **Our writes are not a worker's (10 Nov).** Two alarms blamed a worker for the
-  operator's own two clicks. A kept attachment lands in `.synapse/attachments/`
+  operator's own two clicks. A kept attachment lands in `.project/attachments/`
   while a turn is open, and an answer to a question is appended to `project.md`
   while one is open, so the before/after comparison found both and reported "the
   worker wrote outside its folder" — once about a steer's image, once about
@@ -961,7 +961,7 @@ thinking**; 13% of the time in tools, the rest in generation.
   the window they were written. Exempting the file *names* would have been shorter
   and would have let a worker edit `project.md` unnoticed.
   The heading was a second bug of the same alarm: it was chosen by testing the
-  text for "write", so every other kind — "WROTE INSIDE .synapse…", "CHANGED
+  text for "write", so every other kind — "WROTE INSIDE .project…", "CHANGED
   DURING A WORKER RUN" — read "A model named Synapse in a tool call" beside a file
   name, which is the operator's "strange white errors". `alarmTitle()` now maps
   each kind to a sentence of its own.
@@ -983,20 +983,20 @@ thinking**; 13% of the time in tools, the rest in generation.
 This cost an afternoon and is not guessable:
 
 - **The rule matches the path as the model wrote it.** A relative rule
-  (`.synapse/**`) refuses a relative write; an **absolute** rule does *not*
+  (`.project/**`) refuses a relative write; an **absolute** rule does *not*
   refuse a relative path. Emit both forms.
 - **`edit` is the action for both the `write` and the `edit` tools.** `write` is
   not an action name at all — a rule on it denies nothing, which looks exactly
   like a working rule until you test it.
 - **`read` is an action**, so reads can be denied separately.
 - **`action:'*'` with a path denies reads too** — right for a folder nobody
-  should read, wrong for `.synapse`, which is meant to be read.
+  should read, wrong for `.project`, which is meant to be read.
 - **`shell` and `execute` are not path-matched.** They take a command, so a
   worker can go around any path rule with a redirect. Hence
   `synapseFingerprint`/`fingerprintDiff`: the runner compares every file under
-  `.synapse` before and after a worker turn and reports anything changed outside
+  `.project` before and after a worker turn and reports anything changed outside
   that role's folder as an alarm — prevention for the file tools, detection for
-  the rest. **Verified live:** a coder rule refused `.synapse/probe/x.txt` twice
+  the rest. **Verified live:** a coder rule refused `.project/probe/x.txt` twice
   (`write:error`, no file), while the same write with an absolute path in the
   prompt got through — which is exactly why the detection layer exists.
 
@@ -1164,9 +1164,9 @@ cases with the best chance of happening beat a complete matrix"), because the
 locale-matrix run was technically correct and useless for a small tool.
 
 **Ideas are hidden from coders.** `roleReadRules` denies `read` on
-`.synapse/ideas/**` for `coder-*` only: the ideas file is the one place rejected
+`.project/ideas/**` for `coder-*` only: the ideas file is the one place rejected
 options live, and a coder that reads it can quietly build one. Everything else in
-`.synapse` stays readable, because the brief and the contract are there to be
+`.project` stays readable, because the brief and the contract are there to be
 read.
 
 **Synapse ships the skills it needs, and says what it cannot find.** `skills\`
@@ -1368,11 +1368,11 @@ also defeats the purpose, because Single is meant to have tools.
 
 The trap is not a fresh Single session — it is a live Multi session switched to
 Single to ask for one small thing. The transcript still contains the whole
-campaign, and the project still carries `.synapse/`. Omitting the harness from the
+campaign, and the project still carries `.project/`. Omitting the harness from the
 brief is not enough; the brief has to overrule what the model can see.
 
 Measured 26 Oct: asked to copy one exe into a folder, the model read
-`.synapse/plan.json`, decided from `t21` whether the build was current, and
+`.project/plan.json`, decided from `t21` whether the build was current, and
 reported on `t18` and `t20`. The brief had also quoted the stored requirement
 verbatim — the old campaign, "Continue work" and all — because Single used to
 present it as "the operator's request".
@@ -1425,11 +1425,11 @@ project's name as its engine title, for an audit read of the engine's own list.
 
 ## A project's memory is its folder, so deleting the project takes it
 
-`.synapse` — the plan, the project document, the ideas, the design, the
+`.project` — the plan, the project document, the ideas, the design, the
 findings and the run log — belongs to the **directory**, not to a conversation.
 That is why a project is one chat: a second conversation in the same folder would
 inherit the first one's plan and look as if it had opened onto a dead campaign.
-Deleting a project takes its chat, its folder and its `.synapse` together, after
+Deleting a project takes its chat, its folder and its `.project` together, after
 the `bin\` consent; there is no separate "delete the plan" step left. The old
 General override (one workspace per session) is gone with the project, and the
 old `forget` checkbox went with the session delete.
@@ -1475,18 +1475,18 @@ question-loop guard is what stops it.
 What is ours is that the answer had no life beyond that transcript. A compaction
 replaces older turns with a summary, and a summary is a model's account of an
 answer; the project's document exists for exactly this reason and the answer needed
-the same treatment. So `replyForm` appends to **`.synapse/project.md`**, under the
+the same treatment. So `replyForm` appends to **`.project/project.md`**, under the
 Log, as a `### decision` entry — the question titles and the operator's values,
 verbatim, written by Synapse and never by a model. The head then lists the
 decisions still in force, and every brief that sees the file says so: *"the
-operator's answers so far are in `.synapse/project.md` … read it before you ask
+operator's answers so far are in `.project/project.md` … read it before you ask
 anything, and never ask a question it already answers"*. The Architect's features
 multiselect lands there too, which is what makes a rejected idea stay rejected.
 
 Two edges worth knowing. The guard's own memory (`questionHistory`) is in-process:
 a restart forgets which questions were already asked, so the file is the only
 durable record for the *next* run, not a replacement for the guard. And a session
-outside a project has no `.synapse`, so nothing is written — the reply still goes
+outside a project has no `.project`, so nothing is written — the reply still goes
 through, and the missing file is not an error.
 
 ## Stop means stop
@@ -1887,7 +1887,7 @@ is allowed to grow it is a rule against the behaviour that makes the harness goo
 
 - **The word.** The UI and the briefs call it the **Project Plan**; what changed is
   how it is treated — a work list that grows while the round runs, not a contract
-  fixed at approval. The file is still `.synapse\plan.json`: renaming it would
+  fixed at approval. The file is still `.project\plan.json`: renaming it would
   migrate every existing project for a word, and the file name is not a claim about
   how it is used.
 - **`phases` is gone.** The top-level field, `PHASE_ROLES`, `uncoveredPhases`, the
@@ -2072,7 +2072,7 @@ short commands; the harness runs them in the project when the worker says it is 
   or a check that is wrong; retrying the same turn finds neither. QC still judges the
   work; the check is the cheap proof before that.
 - **Bounded and local.** At most three commands, 300 characters each, two minutes each.
-  Output is capped; the full log goes to `.synapse/reports/checks/` inside the project,
+  Output is capped; the full log goes to `.project/reports/checks/` inside the project,
   and no check output is kept outside it.
 
 `parseChecks` is tolerant of a missing field and names a malformed one in the plan

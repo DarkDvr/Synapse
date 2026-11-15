@@ -1,6 +1,6 @@
 // The project's plan: a plain JSON file the Architect owns, inside the project.
 //
-//   <project>\.synapse\plan.json
+//   <project>\.project\plan.json
 //
 // The plan is *intent*, written by the Architect with the ordinary file tools it
 // already has - there is no tool for it and no store in Synapse, because the
@@ -13,7 +13,7 @@
 // bad file produces `problems` and `error` for a human to see rather than an
 // exception nobody can act on.
 //
-// A companion file, `.synapse\runs.jsonl`, holds the harness's own record of
+// A companion file, `.project\runs.jsonl`, holds the harness's own record of
 // what actually ran. That is evidence, not intent, and the harness owns it - so
 // the two never have to be written by the same party.
 import fs from 'node:fs';
@@ -61,7 +61,7 @@ const RESULT_STATUS_GRACE_MS = 10 * 60 * 1000;
 // nothing.
 export const ORIGINS = ['plan', 'found', 'operator'];
 
-export const PLAN_DIR = '.synapse';
+export const PLAN_DIR = '.project';
 const PLAN_NAME = 'plan.json';
 const RUNS_NAME = 'runs.jsonl';
 const FEATURES_NAME = 'features.json';
@@ -107,7 +107,7 @@ export function clearPlanCache() {
 const emptyPlan = () => ({ version: 1, goal: '', tasks: [] });
 
 /**
- * Create `.synapse\plan.json` when it is missing. This is the one write Synapse
+ * Create `.project\plan.json` when it is missing. This is the one write Synapse
  * does, it happens before anyone owns the file, and it never touches an
  * existing plan.
  */
@@ -772,20 +772,20 @@ const ROLE_MANDATES = {
     'At least two of the features should be things the operator did not think to ask for, and every one must be',
     'defensible in a single sentence: what it saves the person, or what it stops them getting wrong. If a feature',
     'only makes sense because you imagined a user this project does not have, leave it out.',
-    'Write the list to .synapse/ideas/ideas-1.md (create the folder): most valuable first, each item with a one-line',
+    'Write the list to .project/ideas/ideas-1.md (create the folder): most valuable first, each item with a one-line',
     'reason it matters and an effort estimate (small, medium or large). After the list, say what you would leave out',
     'and why. Be opinionated - ten ideas of equal weight is not a ranking. Work from the operator\'s request and the',
     'project goal, and keep it to what this project can actually deliver.',
   ].join(' '),
   designer: [
     'You are the Designer. You decide how it looks - layout, palette, type, spacing, states - and you do not write',
-    'application code. Write the spec to .synapse/design/design.md: a table of screens and their controls, the colour',
+    'application code. Write the spec to .project/design/design.md: a table of screens and their controls, the colour',
     'tokens as real values, the values for each theme that was asked for, and the grid every screen sits on - the',
     'column count, the gutter, the baseline and the spacing scale. A layout that is "close enough" is not a layout:',
     'every control, label and card sits on a column line and on the baseline, and each label is centred against the',
     'control beside it. Put that in the spec as numbers the build can be measured against; vertical centring is a',
     'fact, not an accident of the build. Then one self-contained mock per screen',
-    'at .synapse/design/mock-1.html, mock-2.html and so on - plain HTML with inline CSS, static, opening at any width.',
+    'at .project/design/mock-1.html, mock-2.html and so on - plain HTML with inline CSS, static, opening at any width.',
     'Two mocks is the ceiling: the operator picks a direction, not a catalogue, and every extra one is another',
     'file to keep in step and another round of renders to look at. States of one screen belong in one mock behind',
     'a query flag (?state=night), not in a file each. The spec is what the builder is held to: tables and values,',
@@ -798,7 +798,7 @@ const ROLE_MANDATES = {
     'Then render every mock with the visual-review skill and read its layout findings before you report: controls',
     'in one row with two heights, a label off its centre, two labels a pixel apart on one line, and a block',
     'indented from the rows under it are defects, not taste - fix them, render again, and report the numbers.',
-    'Its PNGs go in .synapse/shots/ like every role\'s; the design folder holds the spec and the mocks.',
+    'Its PNGs go in .project/shots/ like every role\'s; the design folder holds the spec and the mocks.',
   ].join(' '),
   qc: [
     'You are QC - quality control. You judge the build a real, non-technical person will meet, not the code:',
@@ -822,7 +822,7 @@ const ROLE_MANDATES = {
     'silently accepted, or produces a wrong answer. (4) Missing or dishonest states: no feedback where',
     'something happened, a status that is not true, work lost on refresh or on a second click.',
     'Do not fix anything and do not edit the build.',
-    'Write the findings to .synapse/qc_findings/qc-1.md (create the folder): each with an id (Q1, Q2...), a',
+    'Write the findings to .project/qc_findings/qc-1.md (create the folder): each with an id (Q1, Q2...), a',
     'severity (critical, major, minor, nice-to-have), the exact command and input that reproduces it, what',
     'happened and what should have happened. Then one line per area you checked, not a matrix. Batch: when',
     'you need several files or several probes, ask for them in one turn, and run a suite once per batch of',
@@ -877,7 +877,7 @@ const QC_PROPORTION =
   'the operator, not a reason for another fix round, and a re-run is a check of the ids already listed, not a ' +
   'second hunt.';
 
-/** Where a role may write inside .synapse, and nowhere else there. */
+/** Where a role may write inside .project, and nowhere else there. */
 const OWNED_DIR = {
   inventor: `${PLAN_DIR}/ideas`,
   designer: `${PLAN_DIR}/design`,
@@ -885,7 +885,7 @@ const OWNED_DIR = {
 };
 
 /** A folder every role may write: screenshots the visual-review skill produces. It
- *  used to point at `.synapse/design/shots/`, which is the Designer's folder — so a
+ *  used to point at `.project/design/shots/`, which is the Designer's folder — so a
  *  coder that rendered the page tripped the write rules and the harness alarm. */
 export const SHARED_DIR = `${PLAN_DIR}/shots`;
 
@@ -895,19 +895,19 @@ export const SHARED_DIR = `${PLAN_DIR}/shots`;
  *  brief a lie — see roleWriteRules. */
 export const EVIDENCE_DIR = `${PLAN_DIR}/reports`;
 
-/** The folder inside .synapse that a role owns, or '' for none. */
+/** The folder inside .project that a role owns, or '' for none. */
 export function ownedFolder(role) {
   const dir = OWNED_DIR[role];
   return dir ? dir.split('/').pop() : '';
 }
 
 /**
- * Where a worker may write inside .synapse, enforced by the engine.
+ * Where a worker may write inside .project, enforced by the engine.
  *
  * Three measured facts (2.0.30) decide this shape:
  *
  *   - the rule is matched against the path *as the model wrote it*, so a
- *     relative rule `.synapse/**` refuses a relative path while an absolute
+ *     relative rule `.project/**` refuses a relative path while an absolute
  *     rule does not; both forms are emitted because a model may write either;
  *   - `edit` is the action that covers both the `write` and the `edit` tools —
  *     `write` is not an action name at all (a rule on it denies nothing);
@@ -930,7 +930,7 @@ export function roleWriteRules(dir, role) {
     // that renders a page must not need another role's folder to keep one.
     rules.push({ action: 'edit', resource: `${base}/shots/**`, effect: 'allow' });
     // Evidence is everyone's too. The brief tells every role to put its proof and
-    // logs in `.synapse/reports/`, so denying exactly that folder made the brief a
+    // logs in `.project/reports/`, so denying exactly that folder made the brief a
     // lie: a coder's `write` was refused, it fell back to a shell redirect, and the
     // tamper check then reported its own compliance as tampering (11 Nov).
     rules.push({ action: 'edit', resource: `${base}/reports/**`, effect: 'allow' });
@@ -939,7 +939,7 @@ export function roleWriteRules(dir, role) {
 }
 
 /**
- * What a coder may not read inside .synapse.
+ * What a coder may not read inside .project.
  *
  * Ideas are the one file that still holds the options the operator turned down,
  * and a coder that reads them is a coder that can quietly build one. `read` is a
@@ -955,7 +955,7 @@ export function roleReadRules(dir, role) {
 }
 
 /**
- * Every file under .synapse, with a cheap identity. Compared around a worker
+ * Every file under .project, with a cheap identity. Compared around a worker
  * turn so a write that went around the path rules — a shell redirect, the `execute`
  * tool, an absolute path — is still seen and reported, the way the harness
  * watchdog compares the repository.
@@ -1038,7 +1038,7 @@ export function briefSession({ dir, role = 'architect', auto = false, single = f
   // not in the transcript, so the next session can only find it by being told
   // where to look; one line here is the whole rule.
   lines.push(
-    `Attachments the operator chose to keep are in .synapse/attachments/ — list that folder when a task may need one.`,
+    `Attachments the operator chose to keep are in .project/attachments/ — list that folder when a task may need one.`,
   );
   // The browser is in the toolset and a model will not reach for it unprompted: the
   // engine's own webfetch is described as *the* way to read a page, so without this line
@@ -1074,23 +1074,23 @@ export function briefSession({ dir, role = 'architect', auto = false, single = f
     // chat turns a local image into a chip and shows the picture on hover; the
     // chip is temporary with the message, so nothing is copied or kept.
     lines.push(
-      `To show the operator a picture, keep the image in the project (screenshots belong in .synapse/shots) and ` +
-        `write it as markdown: ![what it shows](.synapse/shots/shot.png). It appears as a chip in your message, ` +
+      `To show the operator a picture, keep the image in the project (screenshots belong in .project/shots) and ` +
+        `write it as markdown: ![what it shows](.project/shots/shot.png). It appears as a chip in your message, ` +
         `and the picture full size when the operator hovers it. Never paste image data into a message.`,
     );
   }
   // Where evidence lives while a worker works. Said to every role, because every role
   // writes a proof or a log at some point, and the ones written at the project root
   // were the debris the operator kept finding: a 47 KB log named plan.json, a
-  // `-proof.txt` beside the product. The harness moves those into `.synapse/reports/`
+  // `-proof.txt` beside the product. The harness moves those into `.project/reports/`
   // at the end of a run; a worker that writes them there in the first place needs no
   // moving, and the operator has one folder to look in (10 Nov).
   if (!isArchitect) {
     lines.push(
-      `Write your proof, logs and notes into .synapse/reports/ — that is where evidence belongs, and where ` +
+      `Write your proof, logs and notes into .project/reports/ — that is where evidence belongs, and where ` +
         `the operator looks for it. Anything of that shape left at the project root is moved there when your ` +
         `run ends, so put it there yourself and it keeps its place. Evidence is not a deliverable: a file that ` +
-        `records what you checked belongs in .synapse/reports/ even when it is about something in bin/.`,
+        `records what you checked belongs in .project/reports/ even when it is about something in bin/.`,
     );
   }
 
@@ -1102,7 +1102,7 @@ export function briefSession({ dir, role = 'architect', auto = false, single = f
   // The failure this branch had not accounted for: the operator switches a live
   // Multi session to Single to ask for one small thing, and the model is still
   // standing in the plan it wrote. Measured 26 Oct - asked to copy one exe, it read
-  // .synapse/plan.json, decided from t21 whether the build was current, and reported
+  // .project/plan.json, decided from t21 whether the build was current, and reported
   // on t18 and t20. The transcript cannot be shortened from here, so the brief has
   // to overrule it: the stored request is not quoted (that is the old campaign, not
   // this conversation) and a plan on disk is named only to be refused.
@@ -1277,7 +1277,7 @@ export function briefSession({ dir, role = 'architect', auto = false, single = f
 
   if (isArchitect) {
     lines.push(
-      'The harness records each run\'s change as a diff under .synapse/reports/diffs, named in the report. Read ' +
+      'The harness records each run\'s change as a diff under .project/reports/diffs, named in the report. Read ' +
         'it when a report claims code or layout: the diff is what changed.',
     );
     // A tool's name is a literal, and two models in one day got it wrong: each called

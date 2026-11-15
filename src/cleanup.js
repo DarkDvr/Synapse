@@ -224,19 +224,19 @@ export async function sweepProject(dir, { log = null, keep = [], dryRun = false 
 }
 
 /**
- * Files a worker left behind in `.synapse/` that its plan never asked for.
+ * Files a worker left behind in `.project/` that its plan never asked for.
  *
  * The Designer on Fever Tracker finished with `contrast.mjs` and `serve.mjs` in
- * `.synapse/design/`, and a nested `.synapse/design/.synapse/design/shots/` where
+ * `.project/design/`, and a nested `.project/design/.project/design/shots/` where
  * a render wrote to a relative output path twice. None of it is a deliverable, all
  * of it makes the next worker's folder look like it contains something meant, and
  * the operator had to clean it by hand.
  *
  * Deliberately narrow, because this deletes: only scripts, logs and temp files;
- * only inside `.synapse/`; never a file the plan names in `reads`, and never one of
+ * only inside `.project/`; never a file the plan names in `reads`, and never one of
  * the files Synapse itself reads (plan, runs, features, the project document, and
  * the two files it was made from for projects written before it).
- * A nested `.synapse` under `.synapse` is always scratch. Anything it removes is
+ * A nested `.project` under `.project` is always scratch. Anything it removes is
  * logged by path, and `dryRun` lists instead of deleting.
  */
 const SCRATCH = /\.(mjs|js|cjs|ts|ps1|sh|bat|cmd|py|tmp|log|bak)$/i;
@@ -251,7 +251,7 @@ const KEEP = new Set([
 ]);
 
 export function findScratch(dir, { named = [] } = {}) {
-  const root = path.join(dir, '.synapse');
+  const root = path.join(dir, '.project');
   const keep = new Set([...named].map((n) => path.resolve(dir, n).toLowerCase()));
   const out = [];
   const walk = (at, depth) => {
@@ -265,9 +265,9 @@ export function findScratch(dir, { named = [] } = {}) {
     for (const entry of entries) {
       const full = path.join(at, entry.name);
       if (entry.isDirectory()) {
-        // `.synapse` inside `.synapse` is a doubled relative path, not structure.
-        if (entry.name === '.synapse') {
-          out.push({ path: full, why: 'nested .synapse (a relative path doubled)' });
+        // `.project` inside `.project` is a doubled relative path, not structure.
+        if (entry.name === '.project') {
+          out.push({ path: full, why: 'nested .project (a relative path doubled)' });
           continue;
         }
         walk(full, depth + 1);
@@ -288,7 +288,7 @@ export function sweepScratch(dir, { log = null, named = [], dryRun = false } = {
   const found = findScratch(dir, { named });
   if (!found.length) return { found: 0, removed: [] };
   const list = found.map((f) => path.relative(dir, f.path).replace(/\\/g, '/'));
-  log?.info?.(`cleanup: ${found.length} scratch item(s) in .synapse for ${path.basename(dir)}: ${list.join(', ')}`);
+  log?.info?.(`cleanup: ${found.length} scratch item(s) in .project for ${path.basename(dir)}: ${list.join(', ')}`);
   if (dryRun) return { found: found.length, removed: [], would: list };
   const removed = [];
   for (const f of found) {
@@ -383,9 +383,9 @@ export function removeTaskScratch(projectDir, taskId, { log = null, dryRun = fal
  * Files a worker left in the project's root that are not the project's.
  *
  * Only names the harness can prove are debris: its own files at the wrong level
- * (`plan.json`, `features.json`, `project.md`, `runs.jsonl` belong in `.synapse`), a
+ * (`plan.json`, `features.json`, `project.md`, `runs.jsonl` belong in `.project`), a
  * report or a log (`*.log`, `*-proof.txt`, `*_proof.txt`, `proof.txt`), and nothing
- * else. They are **moved** to `.synapse/reports/<date>/`, never deleted — a proof file
+ * else. They are **moved** to `.project/reports/<date>/`, never deleted — a proof file
  * is evidence until the operator says otherwise — and every move is logged.
  *
  * Deliberately narrow: the project root is where a real deliverable lives
@@ -408,7 +408,7 @@ export function tidyProjectRoot(dir, { log = null, dryRun = false, at = Date.now
     return moved;
   }
   const day = new Date(at).toISOString().slice(0, 10);
-  const into = path.join(dir, '.synapse', 'reports', day);
+  const into = path.join(dir, '.project', 'reports', day);
   for (const entry of entries) {
     if (!entry.isFile()) continue;
     if (!STRAY_ROOT.some((re) => re.test(entry.name))) continue;
@@ -428,7 +428,7 @@ export function tidyProjectRoot(dir, { log = null, dryRun = false, at = Date.now
         target = path.join(into, `${path.basename(entry.name, ext)}-${n++}${ext}`);
       }
       fs.renameSync(from, target);
-      // Ours, not the worker's: a move that lands in .synapse while a turn is being
+      // Ours, not the worker's: a move that lands in .project while a turn is being
       // judged must not be reported as the worker writing outside its folder
       // (11 Nov — a proof file the harness moved was reported as tampering). The
       // target, not `to`: a name that had to become `-2` is the file that exists.

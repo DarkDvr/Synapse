@@ -46,7 +46,7 @@ const result = (id, payload) => send({ jsonrpc: '2.0', id, result: payload });
 const toolText = (id, text, isError = false) => result(id, { content: [{ type: 'text', text }], isError });
 
 function ledger() {
-  const file = path.join(START_DIR, '.synapse', 'runs.jsonl');
+  const file = path.join(START_DIR, '.project', 'runs.jsonl');
   let text = '';
   try { text = fs.readFileSync(file, 'utf8'); } catch {
     // A project with no ledger has no run to restore.
@@ -111,7 +111,7 @@ async function restore(id, task) {
   await dropCheckpoint(START_DIR, ref);
   try {
     fs.appendFileSync(
-      path.join(START_DIR, '.synapse', 'runs.jsonl'),
+      path.join(START_DIR, '.project', 'runs.jsonl'),
       `${JSON.stringify({ kind: 'restore', task, ref, at: Date.now(), by: 'model' })}\n`,
     );
   } catch { /* the restore happened; a missing note is not worth undoing it */ }

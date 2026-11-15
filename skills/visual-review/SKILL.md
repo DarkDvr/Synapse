@@ -25,7 +25,7 @@ node "<the shot.mjs path from your brief>" <file|url> --widths 1280,390 [options
 
   --widths 1280,390     widths to capture (default 1280)
   --height 900          viewport height
-  --out DIR             where the PNGs go (default .synapse/shots)
+  --out DIR             where the PNGs go (default .project/shots)
   --do "steps"          drive the page before the capture, per width:
                           click:#start   wait:600   key:s   eval:<js>
   --audit               print the layout findings; exit 1 if there are any
@@ -107,7 +107,7 @@ same script, at the size that was approved — and it renders the build at exact
 the mock's size and compares the two pixel by pixel:
 
 ```
-node "<shot.mjs path>" bin/index.html --diff .synapse/design/mock-1-880.png
+node "<shot.mjs path>" bin/index.html --diff .project/design/mock-1-880.png
 diff: 1.08% of 880x900 differs at 880px (2 region(s)) -> …/index-880-diff.png
 ```
 
@@ -186,8 +186,8 @@ tool, and worth more than ten minutes of workarounds.
 
 ## Where the images go
 
-Put them in the project: `.synapse/shots/` — the default, and the one folder inside
-`.synapse/` that every role may write. What you looked at is then an artifact the operator
+Put them in the project: `.project/shots/` — the default, and the one folder inside
+`.project/` that every role may write. What you looked at is then an artifact the operator
 can open too. `--out` is only for a second round you want kept apart. Never write
 screenshots into the harness's own folders — `skills/`, where `shot.mjs` lives, and `src/`
 beside it are not yours to add files to.

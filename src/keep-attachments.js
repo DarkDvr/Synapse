@@ -3,7 +3,7 @@
 // An attachment is normally inline in the message and exists only in the
 // engine's transcript; after a compaction that transcript may be summarised and,
 // for a project compact, deleted. "Keep" writes the bytes into
-// `.synapse/attachments/` before the message is sent, so the file survives and a
+// `.project/attachments/` before the message is sent, so the file survives and a
 // later Architect or worker can read it. This is not a temp file: it is a project
 // file the operator asked to keep, and deleting the project deletes it.
 import fs from 'node:fs';
@@ -18,7 +18,7 @@ export function safeAttachmentName(name) {
 }
 
 /**
- * Write every attachment marked `keep` into `<project>/.synapse/attachments/`.
+ * Write every attachment marked `keep` into `<project>/.project/attachments/`.
  *
  * Returns `{ name, path, mime, bytes }` for each file written. The path is the
  * project-relative one (`/` separators) for the Log and the briefs. A failure on
@@ -27,7 +27,7 @@ export function safeAttachmentName(name) {
 export function keepAttachments(dir, files, { at = Date.now() } = {}) {
   const kept = [];
   if (!dir || !Array.isArray(files) || !files.length) return kept;
-  const folder = path.join(dir, '.synapse', 'attachments');
+  const folder = path.join(dir, '.project', 'attachments');
   const stamp = new Date(at).toISOString().slice(0, 19).replace(/[:T]/g, '-');
   for (const file of files) {
     if (!file || file.keep !== true) continue;
@@ -46,7 +46,7 @@ export function keepAttachments(dir, files, { at = Date.now() } = {}) {
       markWritten(full);
       kept.push({
         name,
-        path: `.synapse/attachments/${name}`,
+        path: `.project/attachments/${name}`,
         mime: String(file.mime || 'application/octet-stream'),
         bytes: bytes.length,
       });

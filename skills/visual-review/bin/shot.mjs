@@ -68,7 +68,7 @@ const USAGE = `Usage: shot.mjs <file|url> [options]
 
   --widths 1280,390     widths to capture (default 1280)
   --height 900          viewport height
-  --out DIR             where the PNGs go (default .synapse/shots)
+  --out DIR             where the PNGs go (default .project/shots)
   --do "steps"          before the capture, per width:
                           click:#start   wait:600   key:s   eval:<js>
   --expect "sel|regex"   fail unless that element's RENDERED text matches
@@ -86,11 +86,11 @@ const USAGE = `Usage: shot.mjs <file|url> [options]
 function parseArgs(argv) {
   const out = {
     target: '',
-    // The shared screenshots folder: the one place inside .synapse that every role may
-    // write (src/plans.js, SHARED_DIR). It used to default to .synapse/design/shots, the
+    // The shared screenshots folder: the one place inside .project that every role may
+    // write (src/plans.js, SHARED_DIR). It used to default to .project/design/shots, the
     // Designer's own folder, so a coder's or QC's default render landed where only the
     // designer may write — and a model reading the skill met two different defaults (14 Nov).
-    outDir: path.resolve('.synapse/shots'),
+    outDir: path.resolve('.project/shots'),
     widths: [1280],
     height: 900,
     evalExpr: '',

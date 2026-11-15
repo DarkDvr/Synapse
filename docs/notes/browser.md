@@ -67,7 +67,7 @@ The window is found again by the command line naming that profile — never by p
   tokens of markup.
 - `watch` records the screencast for a moment and answers a strip of frames, for an
   animation, a spinner, a menu that slides. A still cannot show what changed.
-- `screenshot`/`watch` write into the **project** (`<project>\.synapse\browser\shots\`) and answer
+- `screenshot`/`watch` write into the **project** (`<project>\.project\browser\shots\`) and answer
   the absolute path *and* the project-relative one the chat can render, so the model
   shows a picture without copying it.
 - The page must be an http(s) address. `file://` is refused: it would be a way around the
@@ -170,7 +170,7 @@ The sign-in button says what it is doing: **Opening…** while the browser start
 
 The engine gives each project's MCP server that project's folder as its working directory —
 measured 11 Nov, the server for `test` starts with cwd `F:\dev\Synapse.Projects\test`.
-So screenshots and frame strips go to `<project>\.synapse\browser\shots\`:
+So screenshots and frame strips go to `<project>\.project\browser\shots\`:
 
 - they are deleted with the project, and picked up by the project's own cleanup;
 - two projects browsing the same site keep their own pictures;
@@ -321,7 +321,7 @@ the move that works on an overlay whose hint text is not clickable.
 | `src/browser/cdp.js` | the protocol client: requests that answer or fail in 60 s, events, evaluate, screenshot |
 | `src/browser/browser.js` | Edge by full path, the launch flags, the toolset, `clearSite`, the idle reaper |
 | `src/browser/allow.js` | the http(s) check (`hostOf`, `checkUrl`) |
-| `src/browser/artifacts.js` | where a project's screenshots live (`<project>\.synapse\browser\shots`, with the harness folder as the fallback) |
+| `src/browser/artifacts.js` | where a project's screenshots live (`<project>\.project\browser\shots`, with the harness folder as the fallback) |
 | `src/browser/sites.js` | the sites record: add, touch, forget, de-duplicate |
 | `src/browser/session-watch.js` | polls the sign-in window and **hides** it when the session lands |
 | `src/browser/signin.js` | address candidates, `looksUnconfirmed`, the sign-in flow |
@@ -371,7 +371,7 @@ models benched against one Reddit thread both ended up with a partial picture.
 | route | what it is for |
 |---|---|
 | `read` | the current viewport's text — 6,000 characters by default, up to 100,000, and a cut says how much was left out |
-| `read { full: true }` | the whole page: the browser scrolls to the end in viewport steps (twice without growth before it stops), extracts once with a large ceiling, and **writes it into the project** as `<project>\\.synapse\\browser\\pages\\<slug>-<stamp>.md` |
+| `read { full: true }` | the whole page: the browser scrolls to the end in viewport steps (twice without growth before it stops), extracts once with a large ceiling, and **writes it into the project** as `<project>\\.project\\browser\\pages\\<slug>-<stamp>.md` |
 
 The saved file carries the title, the source address, the capture time, its size, and a short
 table of contents, then the text. The answer gives the path, the size in characters and rough

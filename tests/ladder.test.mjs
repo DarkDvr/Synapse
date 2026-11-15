@@ -24,9 +24,9 @@ const quiet = { info: () => {}, warn: () => {}, error: () => {}, debug: () => {}
 function project(name, role = 'coder-1') {
   const dir = path.join(ROOT, name);
   fs.rmSync(dir, { recursive: true, force: true });
-  fs.mkdirSync(path.join(dir, '.synapse'), { recursive: true });
+  fs.mkdirSync(path.join(dir, '.project'), { recursive: true });
   fs.writeFileSync(
-    path.join(dir, '.synapse', 'plan.json'),
+    path.join(dir, '.project', 'plan.json'),
     JSON.stringify({
       version: 1,
       goal: 'test',
@@ -131,7 +131,7 @@ function runnerFor({ engine, ladder, retryBaseSec = 1, retryCapSec = 2 }) {
 }
 
 function readRuns(dir) {
-  const file = path.join(dir, '.synapse', 'runs.jsonl');
+  const file = path.join(dir, '.project', 'runs.jsonl');
   if (!fs.existsSync(file)) return [];
   return fs.readFileSync(file, 'utf8').trim().split('\n').filter(Boolean).map((l) => JSON.parse(l));
 }
@@ -248,7 +248,7 @@ const expect = (label, ok, detail) => checks.push({ label, ok, detail });
   const dir = project('lost-wake');
   const now = Date.now();
   fs.writeFileSync(
-    path.join(dir, '.synapse', 'runs.jsonl'),
+    path.join(dir, '.project', 'runs.jsonl'),
     [
       JSON.stringify({ kind: 'delegate', callId: 'c_lost', task: 't1', role: 'coder-1', architect: 'ses_arch', at: now - 60000 }),
       JSON.stringify({ kind: 'result', callId: 'c_lost', task: 't1', role: 'coder-1', architect: 'ses_arch', outcome: 'completed', at: now - 30000, error: null }),

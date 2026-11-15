@@ -21,7 +21,7 @@ import path from 'node:path';
 import { markWritten } from './synapse-writes.js';
 
 /** Mirrors PLAN_DIR in plans.js — kept here so this module imports nothing. */
-const SYNAPSE_DIR = '.synapse';
+const SYNAPSE_DIR = '.project';
 const DOC_NAME = 'project.md';
 export const DOC_RELATIVE = `${SYNAPSE_DIR}/${DOC_NAME}`;
 const LEGACY_REQUEST = 'requirement.md';

@@ -20,8 +20,8 @@ const check = (name, ok, detail = '') => {
 };
 
 const dir = tmpdir('synapse-stop-');
-fs.mkdirSync(path.join(dir, '.synapse'), { recursive: true });
-const planFile = path.join(dir, '.synapse', 'plan.json');
+fs.mkdirSync(path.join(dir, '.project'), { recursive: true });
+const planFile = path.join(dir, '.project', 'plan.json');
 fs.writeFileSync(planFile, JSON.stringify({
   version: 1,
   goal: 'x',
@@ -74,7 +74,7 @@ check('it is written down', logs.some((l) => /stopped by the operator/.test(l)),
     parts: [{ type: 'tool', id: 'call_1', name: 'delegate', input: { task: 't1' }, status: 'completed' }],
   }];
   await runner.handleTurn('ses_x', messages);
-  const held = fs.readFileSync(path.join(dir, '.synapse', 'runs.jsonl'), 'utf8');
+  const held = fs.readFileSync(path.join(dir, '.project', 'runs.jsonl'), 'utf8');
   check('a delegation while held is recorded, not run', held.includes('stopped-by-operator'), held);
   check('and nothing was started', !logs.some((l) => /run t1 \(/.test(l)), logs.slice(-4).join(' | '));
 }

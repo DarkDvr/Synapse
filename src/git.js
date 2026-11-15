@@ -9,7 +9,7 @@
 //   - **The tree a run started from, and the patch it left.** The harness reads
 //     git with a *temporary index* inside the project, so it can compare the tree
 //     before and after a delegation without touching HEAD, the real index, or a
-//     single file. The patch is written under `.synapse/reports/diffs/` — inside
+//     single file. The patch is written under `.project/reports/diffs/` — inside
 //     the project, like every other piece of evidence.
 //
 // The harness never commits a project and never pushes. A project's history is
@@ -148,14 +148,14 @@ export async function ensureRepo(dir, { log } = {}) {
  * real index.
  *
  * A temporary index is built from `HEAD` (or empty), the folder is added to it
- * with `.synapse` excluded, and the resulting tree is returned. Untracked files
+ * with `.project` excluded, and the resulting tree is returned. Untracked files
  * count; ignored files do not, which is what a project's own `.gitignore` asked
  * for. Returns `null` when there is no repo or git cannot answer.
  */
 export async function treeOf(dir) {
   if (!findGit()) return null;
   if (!(await isRepo(dir))) return null;
-  const cache = path.join(dir, '.synapse', 'cache');
+  const cache = path.join(dir, '.project', 'cache');
   const index = path.join(cache, `index-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
   try {
     fs.mkdirSync(cache, { recursive: true });
@@ -169,7 +169,7 @@ export async function treeOf(dir) {
     const base = head.ok ? ['read-tree', 'HEAD'] : ['read-tree', '--empty'];
     const read = await runGit(base, { cwd: dir, env, timeoutMs: 20_000 });
     if (!read.ok) return null;
-    const add = await runGit(['add', '-A', '--', '.', ':(exclude).synapse'], {
+    const add = await runGit(['add', '-A', '--', '.', ':(exclude).project'], {
       cwd: dir,
       env,
       timeoutMs: 60_000,
@@ -226,7 +226,7 @@ export async function diffTrees(dir, from, to) {
 
 /** Write a run's patch inside the project. Returns its relative path, or null. */
 function saveDiff(dir, taskId, diff) {
-  const folder = path.join(dir, '.synapse', 'reports', 'diffs');
+  const folder = path.join(dir, '.project', 'reports', 'diffs');
   const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
   const name = `${String(taskId || 'task')}-${stamp}.diff`;
   try {
@@ -242,7 +242,7 @@ function saveDiff(dir, taskId, diff) {
       ].join('\n'),
       'utf8',
     );
-    return ['.synapse', 'reports', 'diffs', name].join('/');
+    return ['.project', 'reports', 'diffs', name].join('/');
   } catch {
     // A diff that cannot be written is still a run; the report simply has no patch.
     return null;
@@ -312,7 +312,7 @@ export async function dropCheckpoint(dir, ref) {
  * Put the working tree back to a checkpoint.
  *
  * Files the checkpoint has are written back, files that arrived after it are
- * removed, and nothing is touched in `.synapse` (it was never in the tree). The
+ * removed, and nothing is touched in `.project` (it was never in the tree). The
  * real index is not rewritten: a restore is a change to the worktree, and the
  * operator's `git status` should show it as one.
  */
@@ -342,7 +342,7 @@ export async function restoreCheckpoint(dir, ref) {
   if (!tree.ok) return { ok: false, error: 'could not read the checkpoint tree' };
   const files = tree.out.split('\n').filter(Boolean);
 
-  const cache = path.join(dir, '.synapse', 'cache');
+  const cache = path.join(dir, '.project', 'cache');
   const index = path.join(cache, `restore-${process.pid}-${Date.now()}`);
   try {
     fs.mkdirSync(cache, { recursive: true });
@@ -366,7 +366,7 @@ export async function restoreCheckpoint(dir, ref) {
   for (const rel of removals) {
     const target = path.resolve(dir, rel);
     if (!target.startsWith(path.resolve(dir) + path.sep)) continue;
-    if (target.split(path.sep).includes('.synapse')) continue;
+    if (target.split(path.sep).includes('.project')) continue;
     try {
       fs.rmSync(target, { force: true });
       deleted += 1;

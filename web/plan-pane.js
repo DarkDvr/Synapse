@@ -1,5 +1,5 @@
 // The plan pane: the work list the Architect keeps in the project's
-// `.synapse/plan.json`, drawn as rows with a status, a role and a clock.
+// `.project/plan.json`, drawn as rows with a status, a role and a clock.
 //
 // The file is the source of truth. This module renders it and says plainly when the
 // file is malformed rather than hiding the problem; nothing here decides a status.
@@ -28,7 +28,7 @@ export function planPaneWiring(fns) {
 }
 
 // ── the project plan ────────────────────────────────────────────
-// `.synapse\plan.json` in the session's project folder, written by the Architect
+// `.project\plan.json` in the session's project folder, written by the Architect
 // and read here. The file is the source of truth: this pane only renders it, and
 // says so plainly when the file is malformed rather than hiding the problem.
 export const PLAN_STATUS = {
@@ -91,7 +91,7 @@ export function updatePlanOverflow() {
 
 export function paintPlan(body) {
   const st = state.planState;
-  const rel = st?.relative || '.synapse\\plan.json';
+  const rel = st?.relative || '.project\\plan.json';
 
   // Single mode is a chat, not a run: there are no roles and no work list, so the
   // panel says what the conversation is about and how long it has run, and nothing

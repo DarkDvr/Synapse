@@ -33,8 +33,8 @@ const quiet = { info: () => {}, warn: () => {}, error: () => {}, debug: () => {}
 function project(name) {
   const dir = path.join(ROOT, name);
   fs.rmSync(dir, { recursive: true, force: true });
-  fs.mkdirSync(path.join(dir, '.synapse'), { recursive: true });
-  fs.writeFileSync(path.join(dir, '.synapse', 'plan.json'), '{"version":1,"tasks":[]}');
+  fs.mkdirSync(path.join(dir, '.project'), { recursive: true });
+  fs.writeFileSync(path.join(dir, '.project', 'plan.json'), '{"version":1,"tasks":[]}');
   return dir;
 }
 
@@ -58,13 +58,13 @@ test('a folder becomes a repository once', async () => {
   assert.equal(again.created, false);
 });
 
-test('the tree sees untracked files and ignores .synapse', async () => {
+test('the tree sees untracked files and ignores .project', async () => {
   const dir = project('tree');
   await ensureRepo(dir, { log: quiet });
   const before = await treeOf(dir);
   assert.ok(before);
   fs.writeFileSync(path.join(dir, 'hello.txt'), 'hello\n');
-  fs.writeFileSync(path.join(dir, '.synapse', 'noise.txt'), 'not the worker\'s\n');
+  fs.writeFileSync(path.join(dir, '.project', 'noise.txt'), 'not the worker\'s\n');
   const after = await treeOf(dir);
   assert.notEqual(after, before);
   const diff = await diffTrees(dir, before, after);
@@ -94,7 +94,7 @@ test('changeSince saves the patch inside the project and returns null when nothi
   const change = await changeSince(dir, 't1', before);
   assert.ok(change);
   assert.equal(change.stat, '1 file, +1 −0');
-  assert.ok(change.patchPath.startsWith('.synapse/reports/diffs/'));
+  assert.ok(change.patchPath.startsWith('.project/reports/diffs/'));
   assert.ok(fs.existsSync(path.join(dir, ...change.patchPath.split('/'))));
   assert.match(fs.readFileSync(path.join(dir, ...change.patchPath.split('/')), 'utf8'), /\+console\.log/);
 });
@@ -203,7 +203,7 @@ function runnerFor(engine) {
 test('the report names the diff, and the patch is inside the project', async () => {
   const dir = project('runner');
   fs.writeFileSync(
-    path.join(dir, '.synapse', 'plan.json'),
+    path.join(dir, '.project', 'plan.json'),
     JSON.stringify({
       version: 1,
       goal: 'test',
@@ -224,7 +224,7 @@ test('the report names the diff, and the patch is inside the project', async () 
   await runner.handleTurn('ses_arch', [...stub.arch]);
   const result = await (async () => {
     for (let i = 0; i < 200; i += 1) {
-      const file = path.join(dir, '.synapse', 'runs.jsonl');
+      const file = path.join(dir, '.project', 'runs.jsonl');
       if (fs.existsSync(file)) {
         const lines = fs.readFileSync(file, 'utf8').trim().split('\n').filter(Boolean).map((l) => JSON.parse(l));
         const r = lines.find((x) => x.kind === 'result');
@@ -242,7 +242,7 @@ test('the report names the diff, and the patch is inside the project', async () 
     .map((m) => String(m.parts?.[0]?.text || ''))
     .find((t) => t.startsWith('t1 (coder-1)')) || '';
   assert.match(report, /Changed: 1 file, \+1 −0/);
-  assert.match(report, /\.synapse\/reports\/diffs\/t1-/);
+  assert.match(report, /\.project\/reports\/diffs\/t1-/);
   assert.ok(fs.existsSync(path.join(dir, ...result.change.patch.split('/'))));
   assert.equal(result.checkpoint, null, 'a clean run drops its rollback point');
   assert.equal((await runGit(['for-each-ref', 'refs/synapse'], { cwd: dir })).out.trim(), '');
@@ -251,7 +251,7 @@ test('the report names the diff, and the patch is inside the project', async () 
 test('a run whose check fails keeps its rollback point', async () => {
   const dir = project('runner-check');
   fs.writeFileSync(
-    path.join(dir, '.synapse', 'plan.json'),
+    path.join(dir, '.project', 'plan.json'),
     JSON.stringify({
       version: 1,
       goal: 'test',
@@ -281,7 +281,7 @@ test('a run whose check fails keeps its rollback point', async () => {
   await runner.handleTurn('ses_arch', [...stub.arch]);
   const result = await (async () => {
     for (let i = 0; i < 300; i += 1) {
-      const file = path.join(dir, '.synapse', 'runs.jsonl');
+      const file = path.join(dir, '.project', 'runs.jsonl');
       if (fs.existsSync(file)) {
         const lines = fs.readFileSync(file, 'utf8').trim().split('\n').filter(Boolean).map((l) => JSON.parse(l));
         const r = lines.find((x) => x.kind === 'result');

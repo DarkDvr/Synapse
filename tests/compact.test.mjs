@@ -105,7 +105,7 @@ test('a compact writes the handover, starts a fresh chat and deletes the old one
   assert.equal(out.summary.includes('Finish the thing'), true);
 
   // The handover is in the project document before anything is thrown away.
-  const doc = fs.readFileSync(path.join(dir, '.synapse', 'project.md'), 'utf8');
+  const doc = fs.readFileSync(path.join(dir, '.project', 'project.md'), 'utf8');
   assert.match(doc, /## Handover[\s\S]*Finish the thing/);
   assert.match(doc, /### compact · /);
 
@@ -140,7 +140,7 @@ test('a compact that never gets a handover deletes nothing', async () => {
   await assert.rejects(() => h.api.compactSession('ses_old', { timeoutMs: 1200 }), (err) => err.status === 504);
   assert.equal(h.calls.some((c) => c.at === 'create'), false);
   assert.equal(h.calls.some((c) => c.at === 'delete'), false);
-  assert.equal(fs.existsSync(path.join(dir, '.synapse', 'project.md')), false);
+  assert.equal(fs.existsSync(path.join(dir, '.project', 'project.md')), false);
   fs.rmSync(dir, { recursive: true, force: true });
 });
 

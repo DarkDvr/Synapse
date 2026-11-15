@@ -56,7 +56,7 @@ async function waitFor(fn, ms = 8000) {
 
 test('start, logs and stop by id; a protected command is refused', async () => {
   const dir = tmpdir('synapse-process-test-');
-  fs.mkdirSync(path.join(dir, '.synapse'), { recursive: true });
+  fs.mkdirSync(path.join(dir, '.project'), { recursive: true });
   const child = spawn(process.execPath, [SERVER], {
     cwd: dir,
     stdio: ['pipe', 'pipe', 'pipe'],
@@ -89,8 +89,8 @@ test('start, logs and stop by id; a protected command is refused', async () => {
     assert.match(text, /Started p1 \(pid \d+\)/);
     pid = Number(/pid (\d+)/.exec(text)?.[1] || 0);
     assert.ok(pid > 0);
-    assert.ok(fs.existsSync(path.join(dir, '.synapse', 'processes.json')));
-    assert.ok(fs.existsSync(path.join(dir, '.synapse', 'processes', 'p1.log')));
+    assert.ok(fs.existsSync(path.join(dir, '.project', 'processes.json')));
+    assert.ok(fs.existsSync(path.join(dir, '.project', 'processes', 'p1.log')));
 
     const logged = await waitFor(async () => {
       const res = await call('tools/call', { name: 'process', arguments: { action: 'logs', id: 'p1' } });

@@ -751,7 +751,7 @@ export const configSavedAt = () => lastSaveAt;
 export function saveConfig(cfg) {
   const normalized = normalize(cfg);
   fs.mkdirSync(CONFIG_DIR, { recursive: true });
-  const tmp = path.join(CONFIG_DIR, `.synapse.config.${process.pid}.tmp`);
+  const tmp = path.join(CONFIG_DIR, `.project.config.${process.pid}.tmp`);
   fs.writeFileSync(tmp, JSON.stringify(normalized, null, 2) + '\n', 'utf8');
   fs.renameSync(tmp, CONFIG_FILE);
   lastSaveAt = Date.now();

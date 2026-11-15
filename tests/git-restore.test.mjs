@@ -48,7 +48,7 @@ function rpc(child) {
 
 test('restore refuses while a run is live, then puts the newest failed run back once', async () => {
   const dir = tmpdir('synapse-restore-test-');
-  fs.mkdirSync(path.join(dir, '.synapse'), { recursive: true });
+  fs.mkdirSync(path.join(dir, '.project'), { recursive: true });
   await ensureRepo(dir, { log: quiet });
   fs.writeFileSync(path.join(dir, 'keep.txt'), 'before\n');
   const before = await treeOf(dir);
@@ -57,7 +57,7 @@ test('restore refuses while a run is live, then puts the newest failed run back 
   fs.writeFileSync(path.join(dir, 'keep.txt'), 'after\n');
   fs.writeFileSync(path.join(dir, 'extra.txt'), 'extra\n');
 
-  const ledger = path.join(dir, '.synapse', 'runs.jsonl');
+  const ledger = path.join(dir, '.project', 'runs.jsonl');
   fs.writeFileSync(
     ledger,
     [

@@ -3,7 +3,7 @@
 // The operator copies a project folder in and expects it to be there on the next
 // start, without using Add Project. A project is a directory, so the folder is
 // already a project; discovery only has to write the registry entry and give it
-// the `.synapse` plan and scratch folder every project owns. The harness's own
+// the `.project` plan and scratch folder every project owns. The harness's own
 // `_scratch` and `_probe` are the exceptions.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -78,7 +78,7 @@ test('a folder already in the projects root becomes a project with its plan and 
     assert.deepEqual(JSON.parse(fs.readFileSync(path.join(a.dir, 'data', 'projects.json'), 'utf8')).projects.map((p) => p.name), ['alpha']);
 
     // The same two things Add Project gives a project.
-    const plan = readJson(path.join(alpha, '.synapse', 'plan.json'));
+    const plan = readJson(path.join(alpha, '.project', 'plan.json'));
     assert.deepEqual(plan, { version: 1, goal: '', tasks: [] }, 'an empty, valid plan');
     assert.equal(fs.readFileSync(path.join(alpha, 'keep.txt'), 'utf8'), 'the operator was here', 'nothing in the folder is touched');
     assert.ok(fs.existsSync(scratchDir(alpha, a.scratchRoot)), 'the scratch folder the brief names exists');
@@ -99,7 +99,7 @@ test('the harness folders, dot folders, metadata and loose files are not project
     const store = a.store();
     assert.deepEqual(store.discover().map((p) => p.name), ['beta'], 'only the real project is adopted');
     assert.deepEqual(store.list().map((p) => p.name), ['beta']);
-    assert.equal(fs.existsSync(path.join(a.root, '_scratch', '.synapse')), false, 'scratch stays scratch');
+    assert.equal(fs.existsSync(path.join(a.root, '_scratch', '.project')), false, 'scratch stays scratch');
   } finally {
     a.done();
   }
@@ -109,7 +109,7 @@ test('an existing project keeps its name, its stamp and its plan', () => {
   const a = arena();
   try {
     const gamma = path.join(a.root, 'gamma');
-    const planFile = path.join(gamma, '.synapse', 'plan.json');
+    const planFile = path.join(gamma, '.project', 'plan.json');
     fs.mkdirSync(path.dirname(planFile), { recursive: true });
     const written = '{\n  "version": 1,\n  "goal": "finish the clock",\n  "tasks": [{ "id": "t1", "status": "done" }]\n}\n';
     fs.writeFileSync(planFile, written, 'utf8');
@@ -149,7 +149,7 @@ test('ensuring a project folder leaves an existing plan and reports a failure in
   const a = arena();
   try {
     const project = path.join(a.root, 'delta');
-    const planFile = path.join(project, '.synapse', 'plan.json');
+    const planFile = path.join(project, '.project', 'plan.json');
     fs.mkdirSync(path.dirname(planFile), { recursive: true });
     fs.writeFileSync(planFile, '{"version":1,"goal":"keep me","tasks":[]}', 'utf8');
 

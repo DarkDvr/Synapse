@@ -17,9 +17,9 @@ import { tmpdir } from './tmpdir.mjs';
 
 const writeProject = (records) => {
   const dir = tmpdir('synapse-brief-');
-  fs.mkdirSync(path.join(dir, '.synapse'), { recursive: true });
+  fs.mkdirSync(path.join(dir, '.project'), { recursive: true });
   fs.writeFileSync(
-    path.join(dir, '.synapse', 'plan.json'),
+    path.join(dir, '.project', 'plan.json'),
     JSON.stringify({
       version: 1,
       goal: 'finish the widget',
@@ -30,7 +30,7 @@ const writeProject = (records) => {
       ],
     }),
   );
-  fs.writeFileSync(path.join(dir, '.synapse', 'runs.jsonl'), records.map((r) => JSON.stringify(r)).join('\n') + '\n');
+  fs.writeFileSync(path.join(dir, '.project', 'runs.jsonl'), records.map((r) => JSON.stringify(r)).join('\n') + '\n');
   return dir;
 };
 

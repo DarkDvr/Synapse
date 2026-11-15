@@ -1718,7 +1718,7 @@ function wire() {
     const label = box.closest('.attach-keep');
     if (label) {
       label.title = file.keep
-        ? 'Kept — a copy will be saved in .synapse/attachments when you send. It survives compaction and workers can read it. Click to stop keeping it.'
+        ? 'Kept — a copy will be saved in .project/attachments when you send. It survives compaction and workers can read it. Click to stop keeping it.'
         : 'Keep a copy in this project when you send. It survives compaction and workers can read it.';
     }
   });

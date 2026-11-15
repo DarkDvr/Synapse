@@ -259,6 +259,6 @@ call `entryBlockingWrite(..., { operator: true })`, which skips the mandatory pr
 and nothing else, so the machine built-ins still apply.
 
 Audited at the same time, because the report asked what else could be caught: **rename**, the
-**Private** toggle, **Browse/Cmd**, the shipped **skills** and the project's own `.synapse`
+**Private** toggle, **Browse/Cmd**, the shipped **skills** and the project's own `.project`
 writes never went through the protected list at all — the two delete paths were its only
 callers. Model actions still go through `decide`, where the fence holds.

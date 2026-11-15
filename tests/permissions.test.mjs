@@ -100,7 +100,7 @@ test('browser profiles are refused, and Brave through the prohibited list', () =
 test('a write inside the workspace is allowed, relative or absolute', () => {
   assert.equal(call('edit', 'src/app.js').effect, 'allow');
   assert.equal(call('edit', `${PROJECT}/src/app.js`).effect, 'allow');
-  assert.equal(call('edit', '.synapse/plan.json').effect, 'allow');
+  assert.equal(call('edit', '.project/plan.json').effect, 'allow');
 });
 
 test('a write that climbs out of the workspace asks — unless it lands in another project', () => {
@@ -166,7 +166,7 @@ test('a command that stays in the workspace is allowed', () => {
 // Designer's render asked the operator for permission every single time.
 test('a shipped tool with a selector and an arrow in its arguments runs without asking', () => {
   const cmd =
-    'node "F:\\dev\\Synapse\\skills\\visual-review\\bin\\shot.mjs" ".synapse/design/mock-calculator.html" ' +
+    'node "F:\\dev\\Synapse\\skills\\visual-review\\bin\\shot.mjs" ".project/design/mock-calculator.html" ' +
     '--widths 1440 --height 900 --do "click:[data-state=\\"long\\"]; wait:300" ' +
     '--eval "(()=>{const v=document.querySelector(\'.cal\')?.textContent; return v;})()"';
   const info = analyzeCommand(cmd, CWD);
@@ -611,7 +611,7 @@ test('a command that takes the screen is recognised', () => {
   // window forward and photographs it: that is the screen too. Only `window.ps1`
   // was recognised, so a worker could take it without a card by using this file
   // (7 Nov — the operator's first test prompt produced no request at all).
-  assert.equal(screenTaking('node "F:\\dev\\Synapse\\skills\\app-check\\bin\\app-check.mjs" --exe "C:\\Windows\\System32\\notepad.exe" --out ".synapse/shots"'), true);
+  assert.equal(screenTaking('node "F:\\dev\\Synapse\\skills\\app-check\\bin\\app-check.mjs" --exe "C:\\Windows\\System32\\notepad.exe" --out ".project/shots"'), true);
   assert.equal(screenTaking('node "F:\\dev\\Synapse\\skills\\app-check\\bin\\app-check.mjs" --pid 1234 --out shots'), true);
   // Asking the tool what its options are is not taking anything.
   assert.equal(screenTaking('node "F:\\dev\\Synapse\\skills\\app-check\\bin\\app-check.mjs" --help'), false);

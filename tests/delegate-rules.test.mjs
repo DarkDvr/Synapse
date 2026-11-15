@@ -25,8 +25,8 @@ const plan = (phases, tasks) => ({ version: 1, goal: 'x', ...(phases ? { phases 
 const task = (id, role) => ({ id, title: `Do ${id}`, role, status: 'todo', detail: 'd', reads: [], dependsOn: [] });
 
 const writePlan = (p) => {
-  fs.mkdirSync(path.join(DIR, '.synapse'), { recursive: true });
-  fs.writeFileSync(path.join(DIR, '.synapse', 'plan.json'), JSON.stringify(p, null, 2), 'utf8');
+  fs.mkdirSync(path.join(DIR, '.project'), { recursive: true });
+  fs.writeFileSync(path.join(DIR, '.project', 'plan.json'), JSON.stringify(p, null, 2), 'utf8');
 };
 
 // ── the file's shape ────────────────────────────────────────────
@@ -121,8 +121,8 @@ try {
     const { runner, woke, ran } = makeRunner();
     await runner.handleTurn('ses_arch', delegate('t1'));
     await settle();
-    const run = fs.existsSync(path.join(DIR, '.synapse', 'runs.jsonl'))
-      ? fs.readFileSync(path.join(DIR, '.synapse', 'runs.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l))
+    const run = fs.existsSync(path.join(DIR, '.project', 'runs.jsonl'))
+      ? fs.readFileSync(path.join(DIR, '.project', 'runs.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l))
       : [];
     expect('a partial list is not refused', ran.includes('prompt'), ran.join(','));
     expect('so nothing is woken to complain', woke.length === 0, woke[0]?.slice(0, 90));
@@ -150,7 +150,7 @@ try {
     const { runner, woke, ran } = makeRunner();
     await runner.handleTurn('ses_arch', delegate('t9', 'call_self'));
     await settle();
-    const run = fs.readFileSync(path.join(DIR, '.synapse', 'runs.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+    const run = fs.readFileSync(path.join(DIR, '.project', 'runs.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l));
     expect('a row for the Architect is not delegated', !ran.includes('prompt') && !ran.includes('createSession'), ran.join(','));
     expect('the refusal is recorded', run.some((r) => r.outcome === 'self-delegation'), JSON.stringify(run.slice(-2)));
     expect(
@@ -169,7 +169,7 @@ try {
     const { runner, woke, ran } = makeRunner();
     await runner.handleTurn('ses_arch', delegate('t7', 'call_unknown_role'));
     await settle();
-    const run = fs.readFileSync(path.join(DIR, '.synapse', 'runs.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+    const run = fs.readFileSync(path.join(DIR, '.project', 'runs.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l));
     expect('an unknown role starts nothing', !ran.includes('prompt') && !ran.includes('createSession'), ran.join(','));
     expect(
       'and is journalled as unknown-role',
@@ -209,7 +209,7 @@ try {
   // hears about is a project that never finishes.
   writePlan(plan(['build', 'qc'], [task('t1', 'coder-1'), { ...task('t16', 'qc'), status: 'doing' }]));
   {
-    const journal = path.join(DIR, '.synapse', 'runs.jsonl');
+    const journal = path.join(DIR, '.project', 'runs.jsonl');
     const rounds = ['t6', 't8', 't13']
       .map((id) => JSON.stringify({ at: Date.now(), kind: 'result', task: id, role: 'qc', outcome: 'completed' }))
       .join('\n');
@@ -227,7 +227,7 @@ try {
   // told anything.
   writePlan(plan(['build'], [task('t1', 'coder-1')]));
   {
-    const journal = path.join(DIR, '.synapse', 'runs.jsonl');
+    const journal = path.join(DIR, '.project', 'runs.jsonl');
     const { runner, woke, ran } = makeRunner({ single: true });
     await runner.handleTurn('ses_arch', delegate('t1', 'call_single_mode'));
     await settle();

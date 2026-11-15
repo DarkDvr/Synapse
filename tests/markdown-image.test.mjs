@@ -9,9 +9,9 @@ import assert from 'node:assert/strict';
 import { renderMarkdown } from '../web/md.js';
 
 test('a local image becomes a chip carrying its path, not an inline picture', () => {
-  const html = renderMarkdown('Here it is: ![the mock](.synapse/shots/mock.png)');
+  const html = renderMarkdown('Here it is: ![the mock](.project/shots/mock.png)');
   assert.match(html, /class="chat-image"/);
-  assert.match(html, /data-src=".synapse\/shots\/mock.png"/);
+  assert.match(html, /data-src=".project\/shots\/mock.png"/);
   assert.match(html, /the mock/);
   assert.match(html, /class="chat-image-tag"[^>]*>PNG</, 'the tag is the extension');
   assert.doesNotMatch(html, /<img/);
@@ -24,7 +24,7 @@ test('the tag is the file extension, JPEG for both spellings', () => {
 });
 
 test('a picture on its own line follows the sentence it illustrates', () => {
-  const html = renderMarkdown('Here it is:\n\n![the mock](.synapse/shots/mock.png)');
+  const html = renderMarkdown('Here it is:\n\n![the mock](.project/shots/mock.png)');
   assert.equal((html.match(/<p>/g) || []).length, 1, 'one paragraph, not two');
   assert.match(html, /Here it is:.*class="chat-image"/);
 });
@@ -42,6 +42,6 @@ test('a path that is not an image file is not a chip', () => {
 });
 
 test('a Windows-style path is accepted as a chip', () => {
-  const html = renderMarkdown('![shot](.synapse\\shots\\shot.PNG)');
+  const html = renderMarkdown('![shot](.project\\shots\\shot.PNG)');
   assert.match(html, /class="chat-image"/);
 });

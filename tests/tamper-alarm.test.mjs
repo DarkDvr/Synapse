@@ -28,16 +28,16 @@ const check = (label, ok, detail = '') => {
 const ROOT = tmpdir('synapse-writes-');
 try {
   const dir = path.join(ROOT, 'project');
-  fs.mkdirSync(path.join(dir, '.synapse'), { recursive: true });
+  fs.mkdirSync(path.join(dir, '.project'), { recursive: true });
   const startedAt = Date.now();
 
   // ── the module's own promise ──────────────────────────────────
   forgetWrites();
-  const one = path.join(dir, '.synapse', 'attachments', 'x.png');
+  const one = path.join(dir, '.project', 'attachments', 'x.png');
   check('nothing is excused before it is written', wroteIt(one, 0) === false);
   markWritten(one);
   check('a write Synapse made is known', wroteIt(one, startedAt) === true);
-  check('and it is not a different file', wroteIt(path.join(dir, '.synapse', 'project.md'), startedAt) === false);
+  check('and it is not a different file', wroteIt(path.join(dir, '.project', 'project.md'), startedAt) === false);
   check('a mark older than the turn excuses nothing', wroteIt(one, Date.now() + 60_000) === false);
   forgetWrites();
   check('forgetting clears it', wroteIt(one, 0) === false);
@@ -51,12 +51,12 @@ try {
   const keptFull = path.join(dir, ...String(kept[0]?.path || '').split('/'));
   check('the file is there', fs.existsSync(keptFull), keptFull);
   check("the harness's own copy is excused", wroteIt(keptFull, startedAt) === true);
-  check('an unkept attachment is not written', !fs.existsSync(path.join(dir, '.synapse', 'attachments', 'skipped.png')));
+  check('an unkept attachment is not written', !fs.existsSync(path.join(dir, '.project', 'attachments', 'skipped.png')));
 
   // ── an answered question says so ──────────────────────────────
   forgetWrites();
   writeDoc(dir, { current: 'c', handover: '', notes: '', log: '### request · 9 Nov 2026, 21:00\nship it\n' });
-  const doc = path.join(dir, '.synapse', 'project.md');
+  const doc = path.join(dir, '.project', 'project.md');
   check('the document is written', fs.existsSync(doc));
   check('the operator\'s answer landing in it is excused', wroteIt(doc, startedAt) === true);
   check('a worker writing the same file is still not excused by a stale mark', wroteIt(doc, Date.now() + 60_000) === false);
@@ -69,8 +69,8 @@ try {
   );
   check(
     'a worker outside its folder says so',
-    alarmTitle('WROTE INSIDE .synapse OUTSIDE ITS FOLDER') === 'A worker wrote outside its own folder',
-    alarmTitle('WROTE INSIDE .synapse OUTSIDE ITS FOLDER'),
+    alarmTitle('WROTE INSIDE .project OUTSIDE ITS FOLDER') === 'A worker wrote outside its own folder',
+    alarmTitle('WROTE INSIDE .project OUTSIDE ITS FOLDER'),
   );
   check(
     'a change during a run says so',
@@ -101,8 +101,8 @@ try {
     alarmTitle('shell command naming the harness') === 'A model named Synapse in a tool call',
     alarmTitle('shell command naming the harness'),
   );
-  check('two kinds do not share a title', alarmTitle('WRITE INSIDE THE HARNESS') !== alarmTitle('WROTE INSIDE .synapse OUTSIDE ITS FOLDER'));
-  const shown = renderAlarm({ what: 'WROTE INSIDE .synapse OUTSIDE ITS FOLDER', paths: ['project.md'], note: 't9 (designer)' });
+  check('two kinds do not share a title', alarmTitle('WRITE INSIDE THE HARNESS') !== alarmTitle('WROTE INSIDE .project OUTSIDE ITS FOLDER'));
+  const shown = renderAlarm({ what: 'WROTE INSIDE .project OUTSIDE ITS FOLDER', paths: ['project.md'], note: 't9 (designer)' });
   check('the card carries the real title', shown.includes('A worker wrote outside its own folder'), shown.slice(0, 120));
   check('and the file it is about', shown.includes('project.md'));
   check('the raw constant is not the heading', !shown.includes('OUTSIDE ITS FOLDER</span>'), shown.slice(0, 140));

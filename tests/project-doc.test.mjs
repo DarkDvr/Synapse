@@ -23,7 +23,7 @@ import {
 } from '../src/project-doc.js';
 
 const project = () => tmpdir('synapse-doc-');
-const docFile = (dir) => path.join(dir, '.synapse', 'project.md');
+const docFile = (dir) => path.join(dir, '.project', 'project.md');
 
 test('the first request creates the document and the head quotes it', () => {
   const dir = project();
@@ -116,14 +116,14 @@ test('the handover is replaced without touching the log or the head', () => {
 
 test('the old two files are imported and archived on first use', () => {
   const dir = project();
-  fs.mkdirSync(path.join(dir, '.synapse'), { recursive: true });
+  fs.mkdirSync(path.join(dir, '.project'), { recursive: true });
   fs.writeFileSync(
-    path.join(dir, '.synapse', 'requirement.md'),
+    path.join(dir, '.project', 'requirement.md'),
     "# The operator's request\n\nBuild a clock\n\n---\n\nNow add a stopwatch\n",
     'utf8',
   );
   fs.writeFileSync(
-    path.join(dir, '.synapse', 'decisions.md'),
+    path.join(dir, '.project', 'decisions.md'),
     "# The operator's answers\n\n## 21 Oct 2026, 19:51 - abc123\n\n- **Overtime flag style** -> Allow amber\n",
     'utf8',
   );
@@ -135,14 +135,14 @@ test('the old two files are imported and archived on first use', () => {
   assert.match(doc.log, /Build a clock/);
   assert.match(doc.current, /Overtime flag style -> Allow amber/);
   // The originals move aside, so nothing reads two versions of the same words.
-  assert.equal(fs.existsSync(path.join(dir, '.synapse', 'requirement.md')), false);
-  assert.equal(fs.existsSync(path.join(dir, '.synapse', 'decisions.md')), false);
-  assert.match(fs.readFileSync(path.join(dir, '.synapse', 'archive', 'requirement.md'), 'utf8'), /Build a clock/);
+  assert.equal(fs.existsSync(path.join(dir, '.project', 'requirement.md')), false);
+  assert.equal(fs.existsSync(path.join(dir, '.project', 'decisions.md')), false);
+  assert.match(fs.readFileSync(path.join(dir, '.project', 'archive', 'requirement.md'), 'utf8'), /Build a clock/);
 });
 
 test('a document somebody broke by hand is never overwritten', () => {
   const dir = project();
-  fs.mkdirSync(path.join(dir, '.synapse'), { recursive: true });
+  fs.mkdirSync(path.join(dir, '.project'), { recursive: true });
   fs.writeFileSync(docFile(dir), '# I edited this by hand\n', 'utf8');
   const out = appendRequest(dir, 'Add a button');
   assert.equal(out.ok, false);
@@ -151,8 +151,8 @@ test('a document somebody broke by hand is never overwritten', () => {
 
 test('a legacy project briefs from the old files before any write', () => {
   const dir = project();
-  fs.mkdirSync(path.join(dir, '.synapse'), { recursive: true });
-  fs.writeFileSync(path.join(dir, '.synapse', 'requirement.md'), "# The operator's request\n\nFirst ask\n", 'utf8');
+  fs.mkdirSync(path.join(dir, '.project'), { recursive: true });
+  fs.writeFileSync(path.join(dir, '.project', 'requirement.md'), "# The operator's request\n\nFirst ask\n", 'utf8');
   const doc = digest(dir);
   assert.equal(doc.exists, false);
   assert.match(doc.current, /Request: First ask/);

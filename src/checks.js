@@ -149,7 +149,7 @@ export function runCheck(command, { cwd, timeoutMs = CHECK_TIMEOUT_MS, signal } 
 
 /** Where a failed check's full output is kept: inside the project, never outside. */
 function saveLog(dir, taskId, command, result) {
-  const folder = path.join(dir, '.synapse', 'reports', 'checks');
+  const folder = path.join(dir, '.project', 'reports', 'checks');
   const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
   const name = `${String(taskId || 'task')}-${stamp}.log`;
   try {
@@ -165,7 +165,7 @@ function saveLog(dir, taskId, command, result) {
       ].join('\n'),
       'utf8',
     );
-    return `${['.synapse', 'reports', 'checks', name].join('/')}`;
+    return `${['.project', 'reports', 'checks', name].join('/')}`;
   } catch {
     // A log that cannot be written is not a reason to fail the run; the report
     // still carries the tail.

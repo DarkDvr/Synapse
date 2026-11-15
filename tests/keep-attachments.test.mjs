@@ -12,11 +12,11 @@ import { tmpdir } from './tmpdir.mjs';
 const b64 = (text) => Buffer.from(text).toString('base64');
 const temp = () => tmpdir('synapse-keep-');
 
-test('a kept file lands in .synapse/attachments with its bytes', () => {
+test('a kept file lands in .project/attachments with its bytes', () => {
   const dir = temp();
   const kept = keepAttachments(dir, [{ name: 'log.txt', mime: 'text/plain', data: b64('hello'), keep: true }]);
   assert.equal(kept.length, 1);
-  assert.match(kept[0].path, /^\.synapse\/attachments\//);
+  assert.match(kept[0].path, /^\.project\/attachments\//);
   assert.equal(fs.readFileSync(path.join(dir, kept[0].path), 'utf8'), 'hello');
   assert.equal(kept[0].bytes, 5);
 });
@@ -28,8 +28,8 @@ test('unchecked files are not written', () => {
     { name: 'yes.txt', data: b64('y'), keep: true },
   ]);
   assert.deepEqual(kept.map((k) => k.name).map((n) => n.endsWith('yes.txt')), [true]);
-  assert.equal(fs.existsSync(path.join(dir, '.synapse', 'attachments')), true);
-  assert.equal(fs.readdirSync(path.join(dir, '.synapse', 'attachments')).length, 1);
+  assert.equal(fs.existsSync(path.join(dir, '.project', 'attachments')), true);
+  assert.equal(fs.readdirSync(path.join(dir, '.project', 'attachments')).length, 1);
 });
 
 test('two files with one name do not overwrite each other', () => {

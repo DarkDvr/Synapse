@@ -2,7 +2,7 @@
 //
 // The operator's rule: a project marked Private writes nothing to the logs and leaves
 // no trace outside its own folder. The marker lives **inside** the project —
-// `.synapse\private` — so the flag itself is part of the folder, not a record about it.
+// `.project\private` — so the flag itself is part of the folder, not a record about it.
 //
 // This module is the one place that answers "is this private?": the logger asks before
 // writing a line, the census and the trace store ask before recording, and the scratch
@@ -11,7 +11,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 /** The marker, relative to a project's folder. */
-export const MARKER = path.join('.synapse', 'private');
+export const MARKER = path.join('.project', 'private');
 
 const fold = (value) =>
   path.resolve(String(value || '')).replace(/\//g, '\\').replace(/\\+$/, '').toLowerCase();

@@ -50,7 +50,7 @@ test('handoff describes the card, not the window it used to open', () => {
 
 test('screenshot gives a path the chat can render', () => {
   const d = text('screenshot');
-  assert.match(d, /\.synapse\\browser\\shots/, 'the project folder');
+  assert.match(d, /\.project\\browser\\shots/, 'the project folder');
   assert.match(d, /relative path/, 'and the chat-ready one');
 });
 

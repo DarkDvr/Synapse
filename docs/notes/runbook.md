@@ -148,11 +148,11 @@ worth checking: `GET /api/status` → `engine.home`, and the pid in
 There is no browser MCP any more. The harness has its own browser — SynaBrowse,
 `src/browser/`, driven by `open`, `read`, `click`, `type`, `screenshot` — and it
 is documented in `docs/notes/browser.md`. It is for *models*: it is hidden, it
-keeps its own profile, and its screenshots land in the project's `.synapse\browser\`.
+keeps its own profile, and its screenshots land in the project's `.project\browser\`.
 
 To look at the running UI yourself, use the renderer in `skills\visual-review`
 (it drives headless Edge, measures the layout and writes PNGs to
-`.synapse\shots`), or open Edge at `http://127.0.0.1:8700` by its full path. Brave
+`.project\shots`), or open Edge at `http://127.0.0.1:8700` by its full path. Brave
 and Firefox are the operator's and are never touched.
 
 What still holds, whatever the tool:
@@ -166,7 +166,7 @@ What still holds, whatever the tool:
 - **Two widths at least** — the stage changes at 1460px, and a bug there is
   invisible at 1600px. Click the thing the operator will click, then re-measure.
 - **Show the operator through the chat**: put the picture in the project and write
-  it as markdown, `![what it shows](.synapse/shots/shot.png)`. A screenshot that
+  it as markdown, `![what it shows](.project/shots/shot.png)`. A screenshot that
   stays in your own context is not shown to anyone.
 
 ---
@@ -269,11 +269,11 @@ cleanup code exists and why the brief says "stop what you started by its id". Th
 
 ```
 start  — run a command in the project; answer an id (p1), its pid and a log
-logs   — the end of that process's log, from .synapse/processes/p1.log
+logs   — the end of that process's log, from .project/processes/p1.log
 stop   — kill the tree of that pid, never a name
 ```
 
-The registry is `.synapse/processes.json` inside the project, so a project's
+The registry is `.project/processes.json` inside the project, so a project's
 deletion takes it and the logs with it. The command is judged by the same shell
 policy as any other before anything runs: a command that reaches outside, or is
 protected, is refused with the reason instead of starting. At most five are live
@@ -406,12 +406,12 @@ it). It runs at boot and every half hour, because this app stays up for days.
 **A stray file in the project root is moved, never deleted.** Only names the harness can
 prove are debris: its own files at the wrong level (`plan.json`, `features.json`,
 `project.md`, `runs.jsonl`), a log, or a proof file. They go to
-`.synapse\reports\<date>\`, one line in the log, and a second one of the same name gets
+`.project\reports\<date>\`, one line in the log, and a second one of the same name gets
 `-2` rather than overwriting a proof. The project root is where a real deliverable lives,
 and a rule that guesses would move one. (`src/cleanup.js`, `tidyProjectRoot`, called at
 the end of every run.)
 
-**The brief sends evidence to `.synapse/reports/`**, so most of that move is empty by
+**The brief sends evidence to `.project/reports/`**, so most of that move is empty by
 construction: a worker that writes there keeps its own place.
 
 **The .NET toolchain keeps its temp inside `data\toolchain\dotnet`** (`DOTNET_CLI_HOME`,

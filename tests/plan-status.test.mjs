@@ -13,9 +13,9 @@ import { tmpdir } from './tmpdir.mjs';
 
 const project = (tasks) => {
   const dir = tmpdir('synapse-plan-status-');
-  fs.mkdirSync(path.join(dir, '.synapse'), { recursive: true });
+  fs.mkdirSync(path.join(dir, '.project'), { recursive: true });
   fs.writeFileSync(
-    path.join(dir, '.synapse', 'plan.json'),
+    path.join(dir, '.project', 'plan.json'),
     JSON.stringify({ version: 1, goal: 'g', tasks }, null, 2),
   );
   clearPlanCache();
@@ -68,8 +68,8 @@ test('a row marked done owes a result, and a fresh write is not judged yet', () 
   // not were the ones nobody could read afterwards (10 Nov).
   const project = (tasks) => {
     const dir = tmpdir('synapse-plan-result-');
-    fs.mkdirSync(path.join(dir, '.synapse'), { recursive: true });
-    const file = path.join(dir, '.synapse', 'plan.json');
+    fs.mkdirSync(path.join(dir, '.project'), { recursive: true });
+    const file = path.join(dir, '.project', 'plan.json');
     fs.writeFileSync(file, JSON.stringify({ version: 1, goal: 'g', tasks }, null, 2));
     // The rule waits for the file to stand still: `result` and `status` land in two
     // writes, and judging between them flagged six of six finished runs on the clock
@@ -89,8 +89,8 @@ test('a row marked done owes a result, and a fresh write is not judged yet', () 
 
   // A fresh write is not judged: the two-step save is not a fault.
   const dir = tmpdir('synapse-plan-fresh-');
-  fs.mkdirSync(path.join(dir, '.synapse'), { recursive: true });
-  fs.writeFileSync(path.join(dir, '.synapse', 'plan.json'), JSON.stringify({ version: 1, tasks: [{ id: 't1', title: 'one', role: 'coder-1', status: 'done' }] }));
+  fs.mkdirSync(path.join(dir, '.project'), { recursive: true });
+  fs.writeFileSync(path.join(dir, '.project', 'plan.json'), JSON.stringify({ version: 1, tasks: [{ id: 't1', title: 'one', role: 'coder-1', status: 'done' }] }));
   clearPlanCache();
   assert.equal(readPlan(dir).problems.filter((p) => /records no result/.test(p)).length, 0, 'a fresh write was judged');
 });

@@ -7,7 +7,7 @@ import { loadConfig, saveConfig, repairMachinePaths } from './config.js';
 import { logger } from './logger.js';
 import { createEngine } from './engines/index.js';
 import { EV, turnEnded } from '../web/events.js';
-import { createProjectStore, ensureProjectFolders } from './projects.js';
+import { createProjectStore, ensureProjectFolders, migrateProjectState } from './projects.js';
 import { addSession, isPrivateDir, setPrivateDirs } from './privacy.js';
 import { createToolStats } from './toolstats.js';
 import { readPlan, logPlanState } from './plans.js';
@@ -198,6 +198,14 @@ async function main() {
   // A registry copied from another machine still names that machine's folders. Silent
   // by the operator's rule: a project whose directory is gone is not a project here.
   projects.pruneMissing();
+  // The harness folder in a project is `.project` now; a project made by an older
+  // build still has `.synapse`, and that has to move before a plan or a private
+  // marker is read. One rename per project, once.
+  for (const project of projects.list()) {
+    if (!project.exists) continue;
+    const state = migrateProjectState(project.directory, { log: app });
+    if (state.error) app.warn(`project state: ${state.error}`);
+  }
   // The private markers are in the folders; the log filter needs them before anything
   // writes a line about one of these projects (15 Nov).
   setPrivateDirs(projects.list().filter((p) => p.private).map((p) => p.directory));
