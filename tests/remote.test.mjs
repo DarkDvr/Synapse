@@ -9,6 +9,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import { isLoopback, isPrivateAddress, parseCookies, tokenMatches, createRemoteToken, loginPage, machineName } from '../src/remote.js';
+import { createServer } from '../src/server.js';
+import { EventEmitter } from 'node:events';
 import { tmpdir } from './tmpdir.mjs';
 
 test('loopback is only this machine', () => {
@@ -64,4 +66,36 @@ test('the machine has a name a browser can take, or none at all', () => {
   // A hostname is letters, digits and hyphens. Anything else is refused rather
   // than pasted into a URL where it would not resolve.
   if (name) assert.match(name, /^[A-Za-z0-9][A-Za-z0-9-]*$/);
+});
+
+test('the remote switch is an API, not a shadowed boolean', async () => {
+  // The request handler takes a `fromLan` flag; the old name `remote` shadowed the
+  // module object with the token and the bindHost function, so GET answered 500 and
+  // POST turned the config on and then failed to move the listener. That is how a
+  // laptop lost the host after an update.
+  const quiet = { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} };
+  const handler = createServer({
+    api: {},
+    engine: new EventEmitter(),
+    logger: { channel: () => quiet },
+    config: {},
+    remote: {
+      token: 'test-token',
+      enabled: () => false,
+      bindHost: () => '127.0.0.1',
+      status: (local) => ({ enabled: false, port: 8700, host: 'HOST', url: null, namedUrl: null, addresses: [], token: local ? 'test-token' : null }),
+    },
+    onRemote: async () => ({ enabled: true }),
+  });
+  await new Promise((resolve) => handler.server.listen(0, '127.0.0.1', resolve));
+  try {
+    const port = handler.server.address().port;
+    const res = await fetch(`http://127.0.0.1:${port}/api/remote`);
+    assert.equal(res.status, 200);
+    const body = await res.json();
+    assert.equal(body.enabled, false);
+    assert.equal(body.token, 'test-token', 'the host sees the token');
+  } finally {
+    await new Promise((resolve) => handler.server.close(resolve));
+  }
 });

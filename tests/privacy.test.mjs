@@ -145,18 +145,18 @@ test('the census forgets a private session but keeps its own counts', () => {
 test('a remote view is never shown a private project', () => {
   const read = (rel) => fs.readFileSync(path.resolve(rel), 'utf8');
   const server = read('src/server.js');
-  assert.match(server, /\{ remote: !isLoopback\(address\) \}/, 'the request knows whether it is remote');
+  assert.match(server, /\{ fromLan: !isLoopback\(address\) \}/, 'the request knows whether it is remote');
   assert.match(server, /privateFrame && !view\.local/, 'private frames never reach a LAN view');
-  assert.match(server, /api\.projects\(\{ remote \}\)/, 'the rail is filtered');
-  assert.match(server, /api\.runs\(\{ remote \}\)/, 'the live runs are filtered');
-  assert.match(server, /api\.pending\(query\?\.get\('session'\) \|\| null, \{ remote \}\)/, 'the cards are filtered');
+  assert.match(server, /api\.projects\(\{ remote: fromLan \}\)/, 'the rail is filtered');
+  assert.match(server, /api\.runs\(\{ remote: fromLan \}\)/, 'the live runs are filtered');
+  assert.match(server, /api\.pending\(query\?\.get\('session'\) \|\| null, \{ remote: fromLan \}\)/, 'the cards are filtered');
   assert.match(server, /isPrivateDir\(await api\.projectDirectory\(projectId\)\)/, 'a named project answers 404');
   assert.match(server, /api\.sessionDirectory\(id\)/, 'a named session answers 404');
   const api = read('src/api.js');
   assert.match(api, /remote \? list\.filter\(\(p\) => !p\.private\) : list/, 'only the LAN list is filtered');
   assert.match(api, /\.filter\(\(run\) => !remote \|\| !isPrivateDir\(run\?\.dir\)\)/, 'runs of a private project are not sent');
-  assert.match(server, /remote && isPrivateDir\(await api\.projectDirectory\(String\(body\?\.projectId/, 'no new chat opens in a private project');
-  assert.match(server, /remote && isPrivateDir\(String\(body\?\.dir/, 'a run cannot be stopped by naming a private folder');
+  assert.match(server, /fromLan && isPrivateDir\(await api\.projectDirectory\(String\(body\?\.projectId/, 'no new chat opens in a private project');
+  assert.match(server, /fromLan && isPrivateDir\(String\(body\?\.dir/, 'a run cannot be stopped by naming a private folder');
 });
 
 
