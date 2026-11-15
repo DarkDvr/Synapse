@@ -201,3 +201,15 @@ test('the config keeps both answers, strips junk, and defaults sensibly', () => 
   const blank = normalize({});
   assert.deepEqual(blank.protection, { builtinsOff: [], builtinsSealed: [], paths: [], removed: [] });
 });
+
+// The projects fence is a rule about models, not a veto on the operator (15 Nov). It
+// blocked Delete Project because the delete path consults the same protected list.
+test('the operator can delete a project inside the fence; a model still cannot reach it', () => {
+  const at = 'F:/dev/Synapse.Projects/demo';
+  assert.ok(entryBlockingWrite(at, normalize({})), 'a model sees the projects fence');
+  assert.equal(entryBlockingWrite(at, normalize({}), { operator: true }), null, 'the operator does not');
+  // The machine is still refused for the operator too: a project wrongly pointing at
+  // Windows must not be deletable as "just a project".
+  const windows = path.join(process.env.SystemRoot || 'C:/Windows', 'System32');
+  assert.ok(entryBlockingWrite(windows, normalize({}), { operator: true }), 'Windows stays refused');
+});

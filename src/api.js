@@ -1690,7 +1690,7 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
       if (!dir) {
         throw fail(400, 'a directory is required');
       }
-      const guarded = entryBlockingWrite(dir, getConfig() || {});
+      const guarded = entryBlockingWrite(dir, getConfig() || {}, { operator: true });
       if (guarded) {
         throw fail(403, `${dir} is protected (${guarded.label}) and cannot be deleted`);
       }
@@ -1794,7 +1794,7 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
         if (!allowed.ok) {
           throw fail(400, `refusing to delete the folder: ${allowed.reason}`);
         }
-        const guarded = entryBlockingWrite(current.directory, getConfig() || {});
+        const guarded = entryBlockingWrite(current.directory, getConfig() || {}, { operator: true });
         if (guarded) {
           const err = new Error(
             `refusing to delete ${current.directory}: it is on the prohibited list (${guarded.label})`,
@@ -2887,3 +2887,4 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
     },
   };
 }
+

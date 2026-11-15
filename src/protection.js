@@ -126,11 +126,21 @@ export function protectionFor(config, { env = process.env } = {}) {
   }));
 }
 
-/** The first entry covering `target` whose writes are refused, or null. */
-export function entryBlockingWrite(target, config, { env = process.env } = {}) {
+/**
+ * The first entry covering `target` whose writes are refused, or null.
+ *
+ * `operator: true` is for the app's own operations — deleting a project, wiping a
+ * stale folder — and skips the mandatory projects fence: that entry is about what a
+ * *model* may reach, and the operator deleting their own project is not a model
+ * reaching into another one (15 Nov). The machine built-ins still apply, so a project
+ * that mistakenly points at Windows is still refused.
+ */
+export function entryBlockingWrite(target, config, { env = process.env, operator = false } = {}) {
   const at = String(target || '');
   return (
-    protectionFor(config, { env }).find((entry) => entry.write === false && covers(entry.path, at)) || null
+    protectionFor(config, { env }).find(
+      (entry) => entry.write === false && covers(entry.path, at) && !(operator && entry.mandatory),
+    ) || null
   );
 }
 

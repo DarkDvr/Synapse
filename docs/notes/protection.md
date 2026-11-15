@@ -250,3 +250,15 @@ read-only `Get-Content ..\other\file` is a read of another project too.
 **Not covered:** a project registered outside the projects root (Add Project accepts any
 folder). The fence is about the one folder every project lives in; a per-registry rule would
 need the project list inside the policy, which it does not have.
+
+**The fence is about models, not the operator (15 Nov, same day).** Delete Project and the
+add-project wipe also consult the protected list — they refuse deleting a project that
+points at Windows or at Synapse itself. With the projects fence mandatory, they refused
+*every* delete: "refusing to delete … it is on the prohibited list (Another project)". Both
+call `entryBlockingWrite(..., { operator: true })`, which skips the mandatory projects entry
+and nothing else, so the machine built-ins still apply.
+
+Audited at the same time, because the report asked what else could be caught: **rename**, the
+**Private** toggle, **Browse/Cmd**, the shipped **skills** and the project's own `.synapse`
+writes never went through the protected list at all — the two delete paths were its only
+callers. Model actions still go through `decide`, where the fence holds.
