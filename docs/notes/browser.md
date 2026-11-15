@@ -3,8 +3,7 @@
 A browser Synapse owns, on its own profile, driven over the Chrome DevTools Protocol.
 Models get it as twelve tools; the operator sees one window, only when a person is
 genuinely needed. This note is the "why" behind `src/browser/` and
-`src/mcp/browser-server.js`; the plan and the measurements that produced it are in
-`docs/plan-synabrowse.md`.
+`src/mcp/browser-server.js`, with the measurements that produced it.
 
 ## Why a browser at all
 

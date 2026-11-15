@@ -44,6 +44,10 @@ foreach ($file in $files) { Copy-Item -LiteralPath (Join-Path $root $file) -Dest
 foreach ($dir in @('src', 'web', 'skills')) {
     Copy-Item -LiteralPath (Join-Path $root $dir) -Destination $stage -Recurse
 }
+# A template built once leaves .NET's restore output behind, and it is gitignored
+# but would still travel in the zip; strip it from the stage.
+$templateObj = Join-Path $stage 'skills\win-app\template\obj'
+if (Test-Path -LiteralPath $templateObj) { Remove-Item -LiteralPath $templateObj -Recurse -Force }
 
 # Node and npm travel; the npm-installed copy of the engine does not. It is
 # 729 MB of duplicate runtime, and the engine itself is bin\opencode.

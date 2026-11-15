@@ -789,8 +789,8 @@ test('a sweep, a family, or an id it found: refused', () => {
 });
 
 // ── the shapes a hostile command uses ───────────────────────────
-// Each of these was found by the strength tests (docs/strength-tests.md) trying to get a
-// kill past the rule, and each is refused now.
+// Each of these was found by an adversarial probe trying to get a kill past the
+// rule, and each is refused now.
 test('a kill reached by another route is still a kill', () => {
   const dir = tmpdir('synapse-kill-');
   fs.writeFileSync(path.join(dir, 'sweep.ps1'), 'Get-Process python | ForEach-Object { Stop-Process -Id $_.Id -Force }');
