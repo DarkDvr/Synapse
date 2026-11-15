@@ -8,7 +8,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
 
-import { migrateProjectState } from '../src/projects.js';
+import { migrateProjectState, ignoreProjectState } from '../src/projects.js';
 import { ensureRepo } from '../src/git.js';
 import { tmpdir } from './tmpdir.mjs';
 
@@ -49,6 +49,15 @@ test('both folders keep .project and move in what is missing', () => {
   assert.ok(fs.existsSync(path.join(dir, '.project', 'old.md')));
   assert.equal(fs.readFileSync(path.join(dir, '.project', 'new.md'), 'utf8'), 'already here\n');
   assert.equal(fs.existsSync(path.join(dir, '.synapse', 'old.md')), false);
+});
+
+test('a new repository is told to ignore the state folder', async () => {
+  const dir = tmpdir('synapse-migrate-new-');
+  await ensureRepo(dir, { log: quiet });
+  ignoreProjectState(dir);
+  ignoreProjectState(dir);
+  const exclude = fs.readFileSync(path.join(dir, '.git', 'info', 'exclude'), 'utf8');
+  assert.equal((exclude.match(/^\.project\/$/gm) || []).length, 1);
 });
 
 test('a .project file is reported, not written over', () => {

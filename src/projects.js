@@ -73,7 +73,7 @@ function rewriteGitIgnore(dir) {
 }
 
 /** Tell git to ignore the state folder without editing a tracked file. */
-function ignoreStateInGit(dir) {
+export function ignoreProjectState(dir) {
   const info = path.join(dir, '.git', 'info');
   if (!fs.existsSync(info)) return;
   const file = path.join(info, 'exclude');
@@ -132,7 +132,7 @@ export function migrateProjectState(dir, { log } = {}) {
   }
   rewriteStatePaths(next);
   rewriteGitIgnore(target);
-  ignoreStateInGit(target);
+  ignoreProjectState(target);
   const leftover = fs.existsSync(old);
   log?.info?.(`project state: .synapse -> .project in ${target}${leftover ? ' (some old files were left in .synapse)' : ''}`);
   return { migrated: true, leftover };

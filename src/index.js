@@ -7,7 +7,7 @@ import { loadConfig, saveConfig, repairMachinePaths } from './config.js';
 import { logger } from './logger.js';
 import { createEngine } from './engines/index.js';
 import { EV, turnEnded } from '../web/events.js';
-import { createProjectStore, ensureProjectFolders, migrateProjectState } from './projects.js';
+import { createProjectStore, ensureProjectFolders, migrateProjectState, ignoreProjectState } from './projects.js';
 import { addSession, isPrivateDir, setPrivateDirs } from './privacy.js';
 import { createToolStats } from './toolstats.js';
 import { readPlan, logPlanState } from './plans.js';
@@ -577,6 +577,9 @@ async function main() {
     gitChecked.add(dir);
     const result = await ensureRepo(dir, { log: app });
     if (!result.ok) app.warn(`git init skipped for ${dir}: ${result.error}`);
+    // A new project has no `.git` when the state folder is created, so the
+    // exclusion is written here, once the repository exists.
+    if (result.ok) ignoreProjectState(dir);
   }
 
   // Scan a finished turn once: its tool calls go into the census, a
