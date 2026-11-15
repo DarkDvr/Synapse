@@ -2056,6 +2056,30 @@ already shows on hover. The rule waits for the file to stand still, like the mir
 Measured before adding it: every done row in the operator's active projects carries a
 result; the two that did not were old plans nobody could read afterwards.
 
+## A check the harness runs (15 Nov)
+
+A row can carry the proof itself, not only a sentence about it. `checks` is one to three
+short commands; the harness runs them in the project when the worker says it is done.
+
+- **Same policy as a shell call.** Each command goes through `decide()` before it runs. A
+  check that would ask or is refused is reported as *not run*, with the reason — never
+  silently passed, because a skipped check that reads as a pass is worse than no check.
+- **One repair turn.** A failure sends the command, its exit code and the tail of its
+  output back to the same worker; it fixes the cause and reports again. A second failure
+  stops there: the report head says *finished, but its check fails*, the worker's own
+  words follow, and the Architect judges. The harness never marks the plan row.
+- **Why one, not a loop.** A check that fails twice is a task the worker cannot finish,
+  or a check that is wrong; retrying the same turn finds neither. QC still judges the
+  work; the check is the cheap proof before that.
+- **Bounded and local.** At most three commands, 300 characters each, two minutes each.
+  Output is capped; the full log goes to `.synapse/reports/checks/` inside the project,
+  and no check output is kept outside it.
+
+`parseChecks` is tolerant of a missing field and names a malformed one in the plan
+problems; the format line and one sentence in the Architect's brief are what tell a model
+the field exists. The worker is told the commands in its task message, so a task without
+checks costs no extra context.
+
 ## The loop guard: two shapes, two watchers (13 Nov)
 
 A model that loops does one of two things, and the guard now names both:

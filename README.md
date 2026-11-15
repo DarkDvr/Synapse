@@ -102,6 +102,10 @@ build exposed — is marked `found` in the pane, so a Project Plan that changed
 after you looked says so. What stays fixed is the scope: `features.json` is the
 agreed contract, and a new feature still comes back to you as a question.
 
+A row may also carry **`checks`** — up to three short commands that prove the row. The
+harness runs them when the worker reports done, sends a failure back once, and puts a
+still-failing check in the report so the Architect judges the work on it.
+
 The pipeline behind the plan is a **menu, not a checklist** — a small job spends a
 task or two, a full build spends invent, design, build and review:
 

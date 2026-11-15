@@ -53,6 +53,7 @@ import { proseToolCall, PROSE_NUDGE } from './model-slips.js';
 import { toolSignature, loopStrike, LOOP_WINDOW } from './loop-detect.js';
 import { normDir } from './paths.js';
 import { report } from './report.js';
+import { runTaskChecks, checkNudge } from './checks.js';
 import { tokens, ranFor } from './words.js';
 import { skillRules, describeSkills, roleMustLoad } from './skills.js';
 import { rulesFor } from './permissions.js';
@@ -1494,8 +1495,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     const harnessNamed = new Set();
     // Set when the operator (or the gate) refused a tool: the refusal note is the
     // turn's last word, not a provider failure to retry.
-    let declined = false;
-    // Skills the brief required and the worker never loaded; see workerSkills.
+    let declined = false;    // Skills the brief required and the worker never loaded; see workerSkills.
     let skillsMissing = [];
     let skillsRequired = [];
     // How many times this delegation was rescued rather than abandoned. Recorded
@@ -1510,6 +1510,11 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     // One nudge per task when the model writes a tool call into its answer instead of
     // making one. Two would be a loop, and a loop is what it looks like.
     let proseAttempts = 0;
+    // The acceptance checks, and the one repair turn a failure earns. A second
+    // failure is reported to the Architect rather than retried: two identical
+    // failures are a task the worker cannot finish, not a checking mistake.
+    let checkResult = null;
+    let checkAttempts = 0;
     let loopCount = 0;
     // The rung that hit the limit, and its model. Kept apart from the run's final
     // `role`/`modelRef`, because the task moves on to the next rung: the report must
@@ -2099,6 +2104,31 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
           }
 
           if (!turnError) {
+            // The worker says it is done. If the plan named a command that proves
+            // it, run that here — the brief already says a done row owes evidence,
+            // and this is the one place the harness can check the claim itself. A
+            // failure goes back once with the tail of the output; a second one is
+            // reported, not retried.
+            if (Array.isArray(task.checks) && task.checks.length) {
+              checkResult = await runTaskChecks(task.checks, {
+                dir,
+                config,
+                signal,
+                taskId: task.id,
+              });
+              if (checkResult.failed && checkAttempts < 1 && !signal?.aborted) {
+                checkAttempts += 1;
+                log.info(
+                  `worker ${request.task} (${role}) failed a check — asking it to fix it ` +
+                    `(${checkResult.failed.command})`,
+                );
+                await sleep(300, signal);
+                await nudge(worker.id, checkNudge(checkResult, checkResult.logPath), signal);
+                before = markOf(await engine.getMessages(worker.id));
+                continue;
+              }
+            }
+            if (signal?.aborted) { outcome = 'stopped'; break; }
             outcome = 'completed';
             // The role is working again: whatever the card was saying about a
             // provider failure is no longer news.
@@ -2687,7 +2717,9 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
         const said = stopReason
           ? `stopped by the harness in ${who}`
           : outcome === 'completed'
-            ? `completed by ${who}`
+            ? checkResult?.failed
+              ? `finished, but its check failed in ${who}`
+              : `completed by ${who}`
             : outcome === 'error'
               ? `failed in ${who}`
               : outcome === 'timeout'
@@ -2735,6 +2767,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
         loopRole,
         loopModel,
         modelRef,
+        checks: checkResult,
       }),
     }, signal?.aborted ? undefined : signal);
     // A stop aborts the run's signal, and passing that to the wake made the wake
@@ -3307,6 +3340,12 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     if (task.detail) lines.push(`What is wanted: ${task.detail}`);
     if (Array.isArray(task.reads) && task.reads.length) {
       lines.push(`Read these before you start: ${task.reads.join(', ')}.`);
+    }
+    if (Array.isArray(task.checks) && task.checks.length) {
+      lines.push(
+        `The task is done only when these pass: ${task.checks.join(' | ')}. Run them yourself before you ` +
+          `report; the harness runs them again when you finish.`,
+      );
     }
     if (goal) lines.push(`The project goal, for context: ${goal}`);
     if (note) lines.push(`The Architect adds: ${note}`);

@@ -1,0 +1,254 @@
+// The acceptance checks a plan row can carry.
+//
+// The parser is small and the runner is the point: a task's own command must be
+// judged by the same policy as a shell call, run in the project, and a failure
+// must reach the worker once rather than the Architect's report doing the work of
+// a verifier.
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import test from 'node:test';
+
+import { parseChecks, runCheck, runTaskChecks, checkDecision, CHECK_MAX } from '../src/checks.js';
+import { createRunner } from '../src/runs.js';
+import { tmpdir } from './tmpdir.mjs';
+
+const ROOT = tmpdir('synapse-checks-test-');
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const quiet = { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} };
+
+test('parseChecks keeps one to three short commands, in order, without repeats', () => {
+  assert.deepEqual(parseChecks(['  node a.js ', 'node a.js', 'node b.js', 7, '', 'node c.js', 'node d.js']), [
+    'node a.js',
+    'node b.js',
+    'node c.js',
+  ]);
+  assert.equal(parseChecks('node a.js').length, 0);
+  assert.equal(parseChecks(['x'.repeat(301)]).length, 0);
+  assert.equal(parseChecks(['a', 'b', 'c', 'd']).length, CHECK_MAX);
+});
+
+test('a check is allowed inside the project and refused through the fence', () => {
+  const dir = path.join(ROOT, 'decision');
+  fs.mkdirSync(dir, { recursive: true });
+  const config = { protection: { paths: [] } };
+  assert.equal(checkDecision('node bin/test.js', { dir, config }).effect, 'allow');
+  const outside = checkDecision('Remove-Item -Recurse C:\\Windows\\System32\\x', { dir, config });
+  assert.notEqual(outside.effect, 'allow', 'a protected path is not a check');
+  const other = checkDecision(`node ${path.join(ROOT, 'other-project', 'x.js')}`, { dir, config });
+  assert.notEqual(other.effect, 'allow', 'another project is not the project');
+});
+
+test('a check that exits 0 passes and one that exits 3 fails with its output', async () => {
+  const dir = path.join(ROOT, 'run');
+  fs.mkdirSync(dir, { recursive: true });
+  const ok = await runCheck('node -e "process.exit(0)"', { cwd: dir });
+  assert.equal(ok.ok, true);
+  assert.equal(ok.code, 0);
+  const bad = await runCheck('node -e "console.log(\'broken output\'); process.exit(3)"', { cwd: dir });
+  assert.equal(bad.ok, false);
+  assert.equal(bad.code, 3);
+  assert.match(bad.output, /broken output/);
+});
+
+test('a check that never returns is stopped at the timeout, not left running', async () => {
+  const dir = path.join(ROOT, 'timeout');
+  fs.mkdirSync(dir, { recursive: true });
+  const result = await runCheck('node -e "setTimeout(() => {}, 10000)"', { cwd: dir, timeoutMs: 400 });
+  assert.equal(result.timedOut, true);
+  assert.equal(result.code, 124);
+});
+
+test('runTaskChecks stops at the first failure and keeps the log inside the project', async () => {
+  const dir = path.join(ROOT, 'sequence');
+  fs.mkdirSync(dir, { recursive: true });
+  const result = await runTaskChecks(['node -e "process.exit(2)"', 'node -e "process.exit(0)"'], {
+    dir,
+    config: {},
+    taskId: 't1',
+  });
+  assert.equal(result.failed?.code, 2);
+  assert.equal(result.ran, 1, 'the second check is not run after a failure');
+  assert.ok(result.logPath?.startsWith('.synapse/reports/checks/'));
+  assert.ok(fs.existsSync(path.join(dir, ...result.logPath.split('/'))));
+});
+
+// ── through the delegation runner ────────────────────────────────────
+
+function project(name, checks, script = {}) {
+  const dir = path.join(ROOT, name);
+  fs.rmSync(dir, { recursive: true, force: true });
+  fs.mkdirSync(path.join(dir, '.synapse'), { recursive: true });
+  fs.writeFileSync(path.join(dir, 'check.js'), script.check || 'process.exit(0);\n');
+  fs.writeFileSync(
+    path.join(dir, '.synapse', 'plan.json'),
+    JSON.stringify({
+      version: 1,
+      goal: 'test',
+      summary: '',
+      tasks: [
+        {
+          id: 't1',
+          title: 'Do the thing',
+          role: 'coder-1',
+          status: 'todo',
+          detail: 'd',
+          checks,
+          dependsOn: [],
+          result: null,
+          note: null,
+        },
+      ],
+    }),
+  );
+  return dir;
+}
+
+/** A stub engine with one scripted turn per worker session (see ladder.test). */
+function makeEngine({ dir, script }) {
+  const sessions = new Map();
+  const arch = [];
+  let seq = 0;
+  const startTurn = (id) => {
+    const s = sessions.get(id);
+    const step = s.script.length > 1 ? s.script.shift() : s.script[0];
+    if (!step) return;
+    const n = (s.turn = (s.turn || 0) + 1);
+    setTimeout(() => {
+      if (!sessions.has(id)) return;
+      s.messages.push({
+        id: `${id}-a${n}`,
+        type: 'assistant',
+        parts: [{ type: 'text', text: 'done' }],
+        completed: Date.now(),
+      });
+      s.messages.push({ id: `${id}-i${n}`, type: 'idle', parts: [] });
+    }, step.delay ?? 10);
+  };
+  const engine = {
+    async getSession(id) {
+      if (id === 'ses_arch') return { id, directory: dir, internal: false, single: false, auto: false };
+      return { id, directory: dir, internal: true };
+    },
+    async createSession({ metadata }) {
+      const id = `ses_w${(seq += 1)}`;
+      sessions.set(id, { role: metadata?.synapse?.role || null, messages: [], script: [...script] });
+      return { id };
+    },
+    async setInstruction() {},
+    async prompt(id) {
+      const s = sessions.get(id);
+      s.messages.push({ id: `${id}-u`, type: 'user', parts: [{ type: 'text', text: 'go' }] });
+      startTurn(id);
+    },
+    async synthetic(id, text) {
+      if (id === 'ses_arch') {
+        arch.push({ id: `a-s${arch.length}`, type: 'synthetic', parts: [{ type: 'text', text }] });
+        setTimeout(() => {
+          arch.push({ id: `a-r${arch.length}`, type: 'assistant', parts: [{ type: 'text', text: 'noted' }] });
+          arch.push({ id: `a-i${arch.length}`, type: 'idle', parts: [] });
+        }, 10);
+        return;
+      }
+      const s = sessions.get(id);
+      s.messages.push({ id: `${id}-s${s.messages.length}`, type: 'synthetic', parts: [{ type: 'text', text }] });
+      startTurn(id);
+    },
+    async getMessages(id) {
+      return id === 'ses_arch' ? [...arch] : [...(sessions.get(id)?.messages || [])];
+    },
+    async interrupt() {},
+    async switchModel() {},
+    async updateSessionPermissions() {},
+    async deleteSession(id) { sessions.delete(id); },
+  };
+  return { engine, sessions, arch };
+}
+
+function runnerFor(engine) {
+  return createRunner({
+    engine,
+    logger: { channel: () => quiet },
+    getConfig: () => ({
+      roles: { 'coder-1': { ref: 'opencode/one' } },
+      worker: { ladder: ['coder-1'], stallSec: 30, resumeMax: 0, retryBaseSec: 1, retryCapSec: 2 },
+    }),
+    modelCache: { get: () => null, noteIssue: () => true },
+    notify: () => {},
+  });
+}
+
+function delegate(runner, arch, callId) {
+  arch.push({ id: `u_${callId}`, type: 'user', created: Date.now(), parts: [{ type: 'text', text: 'go' }] });
+  arch.push({
+    id: `a_${callId}`,
+    type: 'assistant',
+    created: Date.now() + 1,
+    parts: [{ type: 'tool', name: 'synapse-delegate_delegate', id: callId, input: { task: 't1' } }],
+  });
+  return runner.handleTurn('ses_arch', [...arch]);
+}
+
+function readResult(dir) {
+  const file = path.join(dir, '.synapse', 'runs.jsonl');
+  if (!fs.existsSync(file)) return null;
+  const lines = fs.readFileSync(file, 'utf8').trim().split('\n').filter(Boolean).map((l) => JSON.parse(l));
+  return lines.find((r) => r.kind === 'result') || null;
+}
+
+async function waitFor(fn, ms = 12000) {
+  for (let i = 0; i < ms / 25; i += 1) {
+    const v = fn();
+    if (v) return v;
+    await sleep(25);
+  }
+  return null;
+}
+
+/** The report is the synthetic message the Architect is woken with. */
+function wakeText(stub) {
+  return (
+    [...stub.arch]
+      .reverse()
+      .filter((m) => m.type === 'synthetic')
+      .map((m) => String(m.parts?.[0]?.text || ''))
+      .find((t) => /^t1 \(coder-1\)/.test(t)) || ''
+  );
+}
+
+test('a failing check is sent back once, and a passing second run completes', async () => {
+  const dir = project('repair', ['node check.js'], {
+    // Fails the first time, passes once the marker exists. The worker's second
+    // turn is the repair; the issue is the check's, not the script's.
+    check:
+      "const fs = require('fs'); if (fs.existsSync('marker.txt')) process.exit(0); " +
+      "fs.writeFileSync('marker.txt', '1'); process.exit(1);\n",
+  });
+  const stub = makeEngine({ dir, script: [{}] });
+  const runner = runnerFor(stub.engine);
+  await delegate(runner, stub.arch, 'call_repair');
+  const result = await waitFor(() => readResult(dir));
+  assert.ok(result, 'a result was recorded');
+  assert.equal(result.outcome, 'completed', String(result.text || result.error || ''));
+  const report = await waitFor(() => wakeText(stub));
+  assert.match(report, /Checks: 1 command passed/);
+  const worker = [...stub.sessions.values()][0];
+  assert.ok(
+    worker.messages.some((m) => m.type === 'synthetic' && /harness ran your task's check/.test(m.parts?.[0]?.text || '')),
+    'the worker was told its check failed',
+  );
+});
+
+test('a check that still fails is reported to the Architect and not marked as proof', async () => {
+  const dir = project('still-failing', ['node check.js'], { check: 'process.exit(9);\n' });
+  const stub = makeEngine({ dir, script: [{}] });
+  const runner = runnerFor(stub.engine);
+  await delegate(runner, stub.arch, 'call_still');
+  const result = await waitFor(() => readResult(dir));
+  assert.ok(result);
+  assert.equal(result.outcome, 'completed', String(result.text || result.error || ''));
+  const report = await waitFor(() => wakeText(stub));
+  assert.match(report, /finished, but its check fails/);
+  assert.match(report, /exited 9/);
+  assert.match(report, /still failed/);
+});

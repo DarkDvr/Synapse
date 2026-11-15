@@ -19,10 +19,12 @@
 import { QC_ROUNDS } from './plans.js';
 import { tokens } from './words.js';
 
-export function report({ task, role, insteadOf, startedBelow = false, skipped, outcome, harnessStop, text, files, context, workerId, planTouched, synapseTouched, qcRound, skillsRequired, skillsMissing, auto, stallSec, retries, resumes, loops = 0, loopCount = 0, loopMarked = false, loopRole = null, loopModel = null, modelRef = '', error, stoppedBy, lastTurnError, steers, deferred }) {
+export function report({ task, role, insteadOf, startedBelow = false, skipped, outcome, harnessStop, text, files, context, workerId, planTouched, synapseTouched, qcRound, skillsRequired, skillsMissing, auto, stallSec, retries, resumes, loops = 0, loopCount = 0, loopMarked = false, loopRole = null, loopModel = null, modelRef = '', error, stoppedBy, lastTurnError, steers, deferred, checks }) {
     const head =
       outcome === 'completed'
-        ? `${task.id} (${role}) finished.`
+        ? checks?.failed
+          ? `${task.id} (${role}) finished, but its check fails.`
+          : `${task.id} (${role}) finished.`
         : outcome === 'timeout'
           ? `${task.id} (${role}) produced nothing for ${Math.round(stallSec / 60)} minutes in a row and was stopped` +
             `${resumes ? ` after ${resumes} restart${resumes === 1 ? '' : 's'}` : ''}.`
@@ -118,6 +120,31 @@ export function report({ task, role, insteadOf, startedBelow = false, skipped, o
       lines.push(`Before the stop, the last turn had ended with: ${lastTurnError}`);
     }
     lines.push(files.length ? `Files written: ${files.join(', ')}` : `Files written: none.`);
+    // The harness ran the task's own acceptance check. A failure is evidence,
+    // not a retry instruction: the worker has already had its one repair turn.
+    if (checks?.failed) {
+      const r = checks.failed;
+      const tail = String(r.output || '').trim().slice(-800);
+      lines.push(
+        `The harness ran the task's check: \`${r.command}\` exited ${r.code}` +
+          `${r.timedOut ? ' (timed out)' : ''}` +
+          `${checks.logPath ? `; the full output is in ${checks.logPath}` : ''}.` +
+          (tail ? `\n${tail}` : ''),
+      );
+      lines.push(
+        `It was sent back to the worker once and still failed. Judge the task on the evidence; do not mark ` +
+          `it done on this report alone.`,
+      );
+    } else if (checks?.ran) {
+      lines.push(`Checks: ${checks.ran} command${checks.ran === 1 ? '' : 's'} passed.`);
+    }
+    if (checks?.skipped?.length) {
+      lines.push(
+        `Check not run: ${checks.skipped
+          .map((s) => `\`${s.command}\` (${s.effect || 'refused'} — ${s.reason || 'the policy'})`)
+          .join(', ')}. It needs the operator, so treat the work as unproven by that command.`,
+      );
+    }
     if (skillsMissing?.length) {
       lines.push(
         `Skills this role is required to load, and did not: ${skillsMissing.join(', ')}. The brief asks for ` +

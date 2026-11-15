@@ -20,6 +20,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { digest as projectDigest, DOC_RELATIVE } from './project-doc.js';
 import { scratchDir } from './paths.js';
+import { parseChecks, CHECK_MAX } from './checks.js';
 // The plan's shape (a `t2a` belongs to its `t2`) is one rule, shared with the page that
 // draws the rail: web/plan-order.js. Same file, same answer in both runtimes.
 import { parentOf } from '../web/plan-order.js';
@@ -465,6 +466,24 @@ export function readPlan(dir) {
     // `reads` may name a file an earlier task has not written yet, and flagging
     // that would have the Architect rewriting a perfectly good plan.
     const reads = Array.isArray(source.reads) ? source.reads.map(asText).filter(Boolean) : [];
+    // The command(s) that prove the deliverable. Optional: a task with no cheap
+    // proof still gets the Architect's judgement and QC. The parser is tolerant of
+    // an absent field and names a malformed one rather than repairing it.
+    let checks = [];
+    if (source.checks !== undefined) {
+      if (!Array.isArray(source.checks)) {
+        problems.push(`${where} has "checks" that is not a list of commands`);
+      } else {
+        if (source.checks.length > CHECK_MAX) {
+          problems.push(`${where} has ${source.checks.length} checks; keep at most ${CHECK_MAX}`);
+        }
+        checks = parseChecks(source.checks);
+        for (const raw of source.checks) {
+          if (typeof raw !== 'string' || !raw.trim()) problems.push(`${where} has an empty or non-text check`);
+          else if (raw.trim().length > 300) problems.push(`${where} has a check longer than 300 characters`);
+        }
+      }
+    }
     if (status === 'doing') {
       for (const rel of reads) {
         const parts = rel.split(/[\\/]/);
@@ -490,6 +509,7 @@ export function readPlan(dir) {
       detail: asText(source.detail) || null,
       dependsOn: Array.isArray(source.dependsOn) ? source.dependsOn.map(asText).filter(Boolean) : [],
       reads,
+      checks,
       result,
       note: asText(source.note) || null,
     };
@@ -1473,7 +1493,7 @@ export function briefSession({ dir, role = 'architect', auto = false, single = f
   if (isArchitect) {
     lines.push(
       `Format: {"version":1,"goal":"...","summary":"","tasks":[{"id":"t1","title":"...","role":"coder-1","status":"todo","origin":"plan|found|operator",` +
-        `"detail":"...","reads":[],"dependsOn":[],"result":null,"note":null}]} - ` +
+        `"detail":"...","reads":[],"checks":[],"dependsOn":[],"result":null,"note":null}]} - ` +
         `role is one of (${ROLES.filter((r) => r !== 'architect').join(', ')}) — exactly, with no suffix ` +
         `like "designer-1", and never "architect": you do not build. ` +
         `statuses: ${STATUSES.join(', ')}. Keep ids short and unique, titles under ${TITLE_MAX} characters, ` +
@@ -1624,6 +1644,11 @@ export function briefSession({ dir, role = 'architect', auto = false, single = f
         `it. "Build the sky" costs an hour of searching; "add the solar position to bin/solar.js and prove it ` +
         `with node bin/tests/solar.test.js" costs minutes. A task that says what to change and how it will be ` +
         `checked is also a task that can be finished in one sitting.`,
+    );
+    lines.push(
+      `A task whose deliverable can be proved by a command carries "checks": one to three short commands that ` +
+        `must exit 0. The harness runs them when the worker says it is done, and a failure goes back to the ` +
+        `worker once; keep each under two minutes, inside the project, and never destructive.`,
     );
     lines.push(
       auto
