@@ -52,6 +52,26 @@ export function panePostIndex(showable) {
   return (showable || []).reduce((at, m, i) => (m?.type === 'assistant' ? i : at), -1);
 }
 
+/**
+ * Where a merged Assistant turn must be split so an alarm stays put.
+ *
+ * The engine sends one message per step and the transcript merges the steps of a turn
+ * into one block. An alarm (a PROHIBITED refusal) that arrived between two steps was
+ * therefore rendered after the whole turn — and as the turn kept growing, it slid down
+ * with it and stayed at the bottom of the chat (15 Nov). The first Assistant message at
+ * or after the alarm is the step that follows it; the merge stops there, so the line
+ * sits where it happened.
+ */
+export function alarmBreaks(messages, alarmTimes = []) {
+  const breaks = new Set();
+  for (const at of alarmTimes || []) {
+    if (!at) continue;
+    const hit = (messages || []).find((m) => m?.type === 'assistant' && (Number(m.created) || 0) >= at);
+    if (hit?.id) breaks.add(hit.id);
+  }
+  return breaks;
+}
+
 export function renderTranscript() {
   const el = $('transcript');
   if (!el) return;
@@ -110,7 +130,7 @@ export function renderTranscript() {
       return m.error || m.type === 'user' || m.type === 'assistant' || m.type === 'synthetic';
     })
     .map((m) => (m.parts ? { ...m, parts: m.parts.map((p, i) => ({ ...p, _k: `${m.id}:${i}` })) } : m));
-  const showable = groupTurns(tagged);
+  const showable = groupTurns(tagged, { breakBefore: alarmBreaks(tagged, refusals) });
   // Only permissions stay in the transcript: a form is answered in the panel
   // over the chat, and a card here would both duplicate it and change the
   // transcript's height the moment it appeared.

@@ -12,7 +12,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { state } from '../web/state.js';
 import { renderSessionStream } from '../web/traces.js';
-import { panePostIndex } from '../web/transcript.js';
+import { alarmBreaks, panePostIndex } from '../web/transcript.js';
+import { groupTurns } from '../web/run-view.js';
 import { turnLive } from '../web/turn-live.js';
 
 const source = (rel) => fs.readFileSync(new URL(`../web/${rel}`, import.meta.url), 'utf8');
@@ -88,3 +89,22 @@ test('the live pane sits in the newest Assistant post, whatever follows it', () 
   assert.equal(panePostIndex([{ type: 'user' }]), -1, 'no assistant yet: nothing to attach it to');
   assert.equal(panePostIndex([]), -1);
 });
+
+// A PROHIBITED line is a refusal that happened at one step. The transcript merges a
+// turn's steps into one block, so a line that arrived between two steps used to be
+// rendered after the whole turn — and as the turn grew it slid down and sat at the
+// bottom of the chat (15 Nov).
+test('an alarm between two steps splits the turn instead of sinking to its bottom', () => {
+  const messages = [
+    { id: 'm1', type: 'assistant', created: 100, parts: [] },
+    { id: 'm2', type: 'assistant', created: 200, parts: [] },
+    { id: 'm3', type: 'assistant', created: 300, parts: [] },
+  ];
+  const breaks = alarmBreaks(messages, [150]);
+  assert.deepEqual([...breaks], ['m2'], 'the first step after the alarm is where the merge stops');
+  assert.equal(groupTurns(messages).length, 1, 'without a break the turn is one block');
+  assert.equal(groupTurns(messages, { breakBefore: breaks }).length, 2, 'with it, the line can sit between the steps');
+  assert.equal(alarmBreaks(messages, []).size, 0, 'no alarm, no break');
+  assert.equal(alarmBreaks(messages, [999]).size, 0, 'an alarm after the last step breaks nothing');
+});
+

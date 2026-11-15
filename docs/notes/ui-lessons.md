@@ -2756,3 +2756,15 @@ out: "they honestly have no reason to be there… yellow is redundant". What is 
 red dot for a stalled session, which is the only state nothing else on the row carries. The
 dot class no longer reserves a hidden 7px circle; a stall is rare enough that the small
 shift is not worth a permanent hole in every row.
+
+**An alarm belongs to the step that caused it (15 Nov).** The operator: "Prohibited node
+looks good, but it keeps staying at the bottom of the chat. It should stay anchored to chat
+where it first appeared." The transcript merges an Assistant turn's steps into one block
+(`groupTurns`) and places alarms between *messages* by time. An alarm that arrived between
+two steps was therefore rendered after the whole turn — and as the turn kept growing, it
+slid down with the block and stayed at the bottom.
+
+The alarm is now a **break in the merge**: `alarmBreaks()` marks the first Assistant message
+at or after the alarm's time, and `groupTurns(messages, { breakBefore })` stops merging
+there. The line sits between the step that was refused and the step after it, and later
+steps cannot move it. A turn is one block, but a refusal inside it is a boundary.

@@ -80,12 +80,16 @@ export const roleLabel = (id) => ROLES.find((r) => r.id === id)?.name || String(
  * them raw gave a three-question chat fourteen "Architect" headers. Consecutive
  * assistant messages belong to the same turn, so merge them into one block: one
  * header, the steps in order, and the answer panels amongst them.
+ *
+ * `breakBefore` holds message ids a merged turn must not swallow: a transcript
+ * alarm between two steps is anchored to the step where it happened, and a merge
+ * across it would leave the line under the whole turn (15 Nov).
  */
-export function groupTurns(messages) {
+export function groupTurns(messages, { breakBefore = new Set() } = {}) {
   const out = [];
   for (const m of messages) {
     const prev = out[out.length - 1];
-    if (m.type === 'assistant' && prev?.type === 'assistant') {
+    if (m.type === 'assistant' && prev?.type === 'assistant' && !breakBefore.has(m.id)) {
       prev.parts = [...(prev.parts || []), ...(m.parts || [])];
       prev.text = `${prev.text || ''}${m.text || ''}`;
       prev.error = prev.error || m.error;
