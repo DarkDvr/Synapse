@@ -1768,7 +1768,17 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
         throw fail(404, 'project not found');
       }
       const withSessions = (await projectsWithSessions()).find((p) => p.id === id);
-      const sessions = withSessions?.sessions || [];
+      // `projectsWithSessions` hides scaffolding (worker, probe), but delete must
+      // take it too: a worker session keeps its directory and title in the engine
+      // store, and deleting only the visible chat leaves those rows behind.
+      let sessions = withSessions?.sessions || [];
+      try {
+        const all = await engine.listSessions();
+        const mine = all.filter((s) => s?.id && normDir(s.directory) === normDir(current.directory));
+        if (mine.length) sessions = mine;
+      } catch (err) {
+        app.warn(`could not list every session of ${current.name} before deleting it: ${err.message}`);
+      }
       // Whether this was private has to be read before the folder moves: the marker
       // travels with it to the Recycle Bin and is gone from the path afterwards.
       const wasPrivate = isPrivateDir(current.directory) || fs.existsSync(path.join(current.directory, '.project', 'private'));
