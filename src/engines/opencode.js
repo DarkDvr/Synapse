@@ -403,6 +403,11 @@ export class OpenCodeEngine extends Engine {
 
   // ── lifecycle ────────────────────────────────────────────────
 
+  /** Where this engine keeps its conversations, for the stopped-engine purge. */
+  storeFile() {
+    return path.join(this.resolveHome().data, 'opencode', 'opencode.db');
+  }
+
   async start() {
     this._stopping = false;
     const binary = this.resolveBinary();

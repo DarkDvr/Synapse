@@ -4,14 +4,15 @@
 // do, both because the operator asked for them:
 //
 //   - forget a conversation it can never open again, through the engine's own API;
-//   - and, only while the engine is *not* running, rewrite the file so the space
-//     those deletions freed goes back to the disk.
+//   - and, only while the engine is *not* running, rewrite the file so the pages
+//     those deletions freed go back to the disk. The next start after a project
+//     delete forces this once, with `secure_delete`, so deleted chat text is not
+//     left in a free page.
 //
 // SQLite keeps freed pages for reuse. That is right for a database that grows, and
 // wrong for one that shrank: measured 7 Nov, 430 MB holding 19 conversations nobody
 // could open. `VACUUM` rewrites the whole file, so it must never run while the engine
-// has it open — which is why the only caller is the adapter's `start()`, one line
-// before it spawns the process.
+// has it open — which is why it is called before the adapter spawns the process.
 import fs from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 
@@ -24,7 +25,7 @@ const mb = (bytes) => `${(Math.max(0, bytes) / (1024 * 1024)).toFixed(1)} MB`;
  * Returns `{ before, after, freed }`, or `{ skipped }` with the reason. Never throws:
  * a store that cannot be rewritten is a slower store, not a broken one.
  */
-export function vacuumStore(file, { log = null, minFreeBytes = MIN_FREE_BYTES } = {}) {
+export function vacuumStore(file, { log = null, minFreeBytes = MIN_FREE_BYTES, force = false, secure = false } = {}) {
   if (!file || !fs.existsSync(file)) return { skipped: 'no database yet' };
   const before = fs.statSync(file).size;
   let db = null;
@@ -33,11 +34,15 @@ export function vacuumStore(file, { log = null, minFreeBytes = MIN_FREE_BYTES } 
     const pageSize = Number(db.prepare('PRAGMA page_size').get()?.page_size) || 4096;
     const free = Number(db.prepare('PRAGMA freelist_count').get()?.freelist_count) || 0;
     const freeBytes = free * pageSize;
-    if (freeBytes < minFreeBytes) {
+    if (!force && freeBytes < minFreeBytes) {
       db.close();
       db = null;
       return { skipped: `${free} free page(s), not worth a rewrite`, before, after: before, freed: 0 };
     }
+    // A deleted row leaves its bytes in the page until something overwrites them.
+    // The engine's own DELETE does not set this on its connection, so a purge does:
+    // VACUUM then rewrites every page.
+    if (secure) db.exec('PRAGMA secure_delete = ON');
     // A write-ahead log has to be folded back first: VACUUM cannot run with one open.
     try { db.exec('PRAGMA wal_checkpoint(TRUNCATE)'); } catch { /* no WAL in use */ }
     db.exec('VACUUM');
@@ -45,7 +50,7 @@ export function vacuumStore(file, { log = null, minFreeBytes = MIN_FREE_BYTES } 
     db = null;
     const after = fs.statSync(file).size;
     log?.info?.(`engine store: reclaimed ${mb(before - after)} of ${mb(before)} (${free} free page(s))`);
-    return { before, after, freed: before - after };
+    return { before, after, freed: before - after, vacuumed: true };
   } catch (err) {
     try { db?.close(); } catch { /* already closed */ }
     log?.warn?.(`engine store: could not reclaim space — ${err.message}`);

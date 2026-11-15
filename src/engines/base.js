@@ -18,6 +18,9 @@ export class Engine extends EventEmitter {
   async stop() {}
   // status(): { kind, ready, version, endpoint, pid, detail }
   status() { return { kind: this.kind, ready: false, version: null, endpoint: null, pid: null }; }
+  // The engine's on-disk conversation store, when it has one. Synapse only rewrites
+  // it while the engine is stopped (see src/engine-store.js).
+  storeFile() { return null; }
 
   // ── capabilities ─────────────────────────────────────────────
   async listModels() { return []; }

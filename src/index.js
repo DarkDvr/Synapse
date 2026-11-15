@@ -6,6 +6,8 @@ import { DATA_DIR, LOGS_DIR, WORKSPACE_DIR, GENERAL_DIR, ENGINE_HOME, PID_FILE, 
 import { loadConfig, saveConfig, repairMachinePaths } from './config.js';
 import { logger } from './logger.js';
 import { createEngine } from './engines/index.js';
+import { vacuumStore } from './engine-store.js';
+import { readPending, clearPending } from './engine-purge.js';
 import { EV, turnEnded } from '../web/events.js';
 import { createProjectStore, ensureProjectFolders, migrateProjectState, ignoreProjectState } from './projects.js';
 import { addSession, isPrivateDir, setPrivateDirs } from './privacy.js';
@@ -264,6 +266,38 @@ async function main() {
     dataDir: DATA_DIR,
   });
   app.info(`engine: ${config.engine.type}`);
+
+  // A project deleted during the last session left a note. The engine's DELETE
+  // removes the rows, but SQLite keeps their pages until a VACUUM; that can only
+  // run while the engine is stopped, and this is the moment. The note carries a
+  // count only — no project name, folder or session id.
+  const pendingCleanup = readPending();
+  if (pendingCleanup.deletes > 0) {
+    const count = pendingCleanup.deletes;
+    const projectWord = count === 1 ? 'project' : 'projects';
+    const mb = (bytes) => `${(Math.max(0, Number(bytes) || 0) / (1024 * 1024)).toFixed(1)} MB`;
+    try {
+      const store = engine.storeFile?.();
+      if (!store) {
+        app.info(`engine store: nothing to clean after ${count} deleted ${projectWord} — this engine keeps no store`);
+        clearPending();
+      } else {
+        const result = vacuumStore(store, { force: true, secure: true });
+        if (result.vacuumed) {
+          const reclaimed = result.freed > 0 ? `, ${mb(result.freed)} reclaimed` : '';
+          app.info(`engine store: cleaned up after ${count} deleted ${projectWord} — ${mb(result.before)} → ${mb(result.after)}${reclaimed}`);
+          clearPending();
+        } else if (result.skipped === 'no database yet') {
+          app.info(`engine store: nothing to clean after ${count} deleted ${projectWord} — no database yet`);
+          clearPending();
+        } else {
+          app.warn(`engine store: cleanup after ${count} deleted ${projectWord} failed (${result.skipped}); retrying next start`);
+        }
+      }
+    } catch (err) {
+      app.warn(`engine store: cleanup after ${count} deleted ${projectWord} failed (${err.message}); retrying next start`);
+    }
+  }
 
   try {
     await engine.start();

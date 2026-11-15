@@ -30,6 +30,7 @@ import { probeToolchain } from './toolchain.js';
 import { busyInfo } from './busy.js';
 import { addPrivateDir, addSession, isPrivateDir, isPrivateSession, removePrivateDir, setPrivateDirs } from './privacy.js';
 import { purgePrivateTraces, requestConsolePurge } from './privacy-purge.js';
+import { noteDeletedProject } from './engine-purge.js';
 import { APP_VERSION, sourceVersion } from './version.js';
 
 // What an attachment may be. The old rule was six files of up to 8 MB each, which
@@ -1887,6 +1888,14 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
         }
       }
       projects.remove(id);
+      // The engine deletes the chat rows, but SQLite keeps their pages until a
+      // VACUUM. That waits for the next engine start (engine-purge.js); the note
+      // carries only a count, so it names nothing.
+      try {
+        noteDeletedProject();
+      } catch (err) {
+        app.warn(`could not note the deleted project for engine housekeeping: ${err.message}`);
+      }
       if (wasPrivate) {
         // The folder is in the Recycle Bin, but the diaries and the shell's console
         // are ours: purge the project's lines now that its sessions are gone too.

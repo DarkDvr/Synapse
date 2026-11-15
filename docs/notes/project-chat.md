@@ -539,8 +539,12 @@ drops any frame that names it for non-loopback clients. The host's own page is u
 What is *not* covered, and cannot be with this engine:
 
 - **the engine's own session store** (`data\engine\opencode\opencode.db`) holds the
-  conversation, exactly as it does for every chat. A private project is private from
-  Synapse's records, not from the engine's;
+  conversation, exactly as it does for every chat. Deleting a project asks the engine to
+  delete its sessions (the chat rows go), and the next engine start runs a forced secure
+  `VACUUM` before opening the store, so the pages SQLite kept are rewritten too. The
+  startup console says how many deleted projects were cleaned and how much was reclaimed.
+  Brief/instruction rows and the project/worktree rows are not chat and may remain; the
+  store is never edited while the engine is running;
 - **the shared browser profile** under `data\browser` keeps the cookies of sites opened
   from a private project;
 - **the projects registry** (`data\projects.json`) knows the project's name and folder — it
