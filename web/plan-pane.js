@@ -171,7 +171,12 @@ export function paintPlan(body) {
         // showing it made a finished plan look like it was still asking. The file
         // keeps the text (the Architect owns it) — this is just what the pane shows.
         const asking = status === 'blocked' || status === 'failed';
-        const tooltip = [t.title, t.result ? `Result: ${t.result}` : '', t.note ? `Note: ${t.note}` : '']
+        const tooltip = [
+          t.title,
+          t.detail ? `Detail: ${t.detail}` : '',
+          t.result ? `Result: ${t.result}` : '',
+          t.note ? `Note: ${t.note}` : '',
+        ]
           .filter(Boolean)
           .join('\n\n');
         // The step's own stopwatch: what the harness recorded for it, plus this
@@ -201,7 +206,7 @@ export function paintPlan(body) {
           </span>
           <span class="plan-main">
             <span class="plan-title" title="${esc(tooltip)}">${esc(t.title)}</span>
-            ${t.note && asking ? `<span class="plan-note">${esc(t.note)}</span>` : ''}
+            ${t.note && asking ? `<span class="plan-note" title="${esc(t.note)}">${esc(t.note)}</span>` : ''}
           </span>
           <span class="plan-side">
             <span class="plan-role">${esc(t.role)}</span>

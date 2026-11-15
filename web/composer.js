@@ -111,9 +111,7 @@ export function renderComposer() {
               ? 'Waiting on the provider — Stop or wait'
               : held
                 ? 'Working — Stop to take over'
-                : state.mode === 'single'
-                  ? 'Message'
-                  : 'Message the Architect…';
+                : 'CTRL+Enter to send';
   }
   // A pending question takes the whole composer, not just the text box: Attach, the
   // mode switch and the run menu are all "start something else", and a half-dead

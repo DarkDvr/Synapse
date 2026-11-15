@@ -102,8 +102,10 @@ const makeRunner = ({ auto = true, stallSec = 5, workerMessages = null, single =
   return { runner, woke, ran, warns, arch, nudged };
 };
 
-/** A run is started without being awaited, so give it a tick to reach the prompt. */
-const settle = () => new Promise((r) => setTimeout(r, 300));
+/** A run is started without being awaited, so give it a tick to reach the prompt.
+ *  A delegation now reads a git tree before it starts a worker (and initialises a
+ *  repository when the project has none), so the old 300 ms was too short. */
+const settle = () => new Promise((r) => setTimeout(r, 1200));
 
 // A distinct call id per case: a request is answered once, so reusing one would be
 // skipped as already handled rather than run.

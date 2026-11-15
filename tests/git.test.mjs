@@ -74,6 +74,20 @@ test('the tree sees untracked files and ignores .project', async () => {
   assert.match(diff.patch, /\+hello/);
 });
 
+test('a project that ignores .project still gets a tree', async () => {
+  const dir = project('ignored-state');
+  fs.writeFileSync(path.join(dir, '.gitignore'), '.project/\n');
+  fs.mkdirSync(path.join(dir, '.project'), { recursive: true });
+  fs.writeFileSync(path.join(dir, '.project', 'plan.json'), '{}');
+  await ensureRepo(dir, { log: quiet });
+  const before = await treeOf(dir);
+  assert.ok(before, 'git add must not refuse the ignored state folder');
+  fs.writeFileSync(path.join(dir, 'app.js'), 'console.log(1);\n');
+  const after = await treeOf(dir);
+  const diff = await diffTrees(dir, before, after);
+  assert.deepEqual(diff.files, ['app.js']);
+});
+
 test('a project .gitignore is respected', async () => {
   const dir = project('ignored');
   await ensureRepo(dir, { log: quiet });
@@ -211,7 +225,8 @@ test('the report names the diff, and the patch is inside the project', async () 
       tasks: [{ id: 't1', title: 'Change it', role: 'coder-1', status: 'todo', detail: 'd' }],
     }),
   );
-  await ensureRepo(dir, { log: quiet });
+  // No repository yet: the run itself must make one, or a project's first diff
+  // is always missing.
   const stub = makeEngine({ dir, writes: [{ file: 'hello.txt', text: 'hello\n' }] });
   const runner = runnerFor(stub.engine);
   stub.arch.push({ id: 'u1', type: 'user', created: Date.now(), parts: [{ type: 'text', text: 'go' }] });

@@ -54,7 +54,7 @@ import { toolSignature, loopStrike, LOOP_WINDOW } from './loop-detect.js';
 import { normDir } from './paths.js';
 import { report } from './report.js';
 import { runTaskChecks, checkNudge } from './checks.js';
-import { treeOf, changeSince, createCheckpoint, dropCheckpoint } from './git.js';
+import { treeOf, changeSince, createCheckpoint, dropCheckpoint, isRepo, ensureRepo } from './git.js';
 import { tokens, ranFor } from './words.js';
 import { skillRules, describeSkills, roleMustLoad } from './skills.js';
 import { rulesFor } from './permissions.js';
@@ -1681,8 +1681,10 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
 
     // The tree the run starts from, for the diff at the end. A project with no git
     // (or no git on the machine) answers null and the run simply has no diff. The
-    // same tree becomes the rollback point; a clean run drops it at the end.
+    // same tree becomes the rollback point; a clean run drops it at the end. A
+    // project's first run still gets a baseline: the repository is made here.
     try {
+      if (!(await isRepo(dir))) await ensureRepo(dir, { log });
       changeBefore = await treeOf(dir);
       if (changeBefore) checkpoint = await createCheckpoint(dir, changeBefore, `${task.id}-${startedAt}`);
     } catch { /* no repository or no git: the report says nothing about a change */ }

@@ -3,6 +3,10 @@
 A throwaway project that exercises all four on a real run. It uses only Node, no
 installs and no network, and it is small enough for a local model.
 
+**Run it on 1.59.3 or later.** A project started on an earlier build has no diff
+for its first runs and no rollback point for t2 — the first version's tree read
+refused the ignored `.project` folder. Start a **new** project after the update.
+
 **Set up:** new project, **Multi** mode, **Keep Building off** (so you move one
 task at a time and can see each report). Pick any models; a cheap coder is fine.
 

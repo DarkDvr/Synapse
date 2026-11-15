@@ -57,7 +57,7 @@ export function renderMode() {
     ? 'Single: one Architect, all the tools, no delegation — it answers everything itself. Click for Multi.'
     : 'Multi: the Architect can delegate to subagents and the role cards are shown. Click for Single.';
   const input = $('promptInput');
-  if (input) input.placeholder = single ? 'Message' : 'Message the Architect…';
+  if (input) input.placeholder = 'CTRL+Enter to send';
   document.body.dataset.mode = state.mode;
   renderKeep();
   // The keep-building flag only exists in Multi, so switching modes changes the

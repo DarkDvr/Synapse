@@ -135,12 +135,28 @@ export async function isRepo(dir) {
  */
 export async function ensureRepo(dir, { log } = {}) {
   if (!findGit()) return { ok: false, created: false, error: 'git is not available' };
-  if (await isRepo(dir)) return { ok: true, created: false };
+  if (await isRepo(dir)) {
+    ignoreState(dir);
+    return { ok: true, created: false };
+  }
   let r = await runGit(['init', '-q', '-b', 'main'], { cwd: dir, timeoutMs: 20_000 });
   if (!r.ok) r = await runGit(['init', '-q'], { cwd: dir, timeoutMs: 20_000 });
   if (!r.ok) return { ok: false, created: false, error: r.err.trim() || 'git init failed' };
+  ignoreState(dir);
   log?.info?.(`git: initialized ${dir}`);
   return { ok: true, created: true };
+}
+
+/** Tell git to ignore the project's state folder, without editing a tracked file. */
+function ignoreState(dir) {
+  const info = path.join(dir, '.git', 'info');
+  if (!fs.existsSync(info)) return;
+  const file = path.join(info, 'exclude');
+  try {
+    const text = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '';
+    if (/^\.project\/?$/m.test(text)) return;
+    fs.writeFileSync(file, `${text.replace(/\s*$/, '')}\n.project/\n`, 'utf8');
+  } catch { /* a repository without an exclude file still works */ }
 }
 
 /**
@@ -169,7 +185,7 @@ export async function treeOf(dir) {
     const base = head.ok ? ['read-tree', 'HEAD'] : ['read-tree', '--empty'];
     const read = await runGit(base, { cwd: dir, env, timeoutMs: 20_000 });
     if (!read.ok) return null;
-    const add = await runGit(['add', '-A', '--', '.', ':(exclude).project'], {
+    const add = await runGit(['add', '-A'], {
       cwd: dir,
       env,
       timeoutMs: 60_000,
