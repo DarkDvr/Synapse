@@ -122,8 +122,7 @@ export function createToolStats({ file, logger }) {
   }
 
   /** Scan a session's transcript; safe to call repeatedly. */
-  function recordMessages(messages, { model, agent, sessionId } = {}) {    let added = 0;
-    for (const m of messages || []) {
+  function recordMessages(messages, { model, agent, sessionId } = {}) {    let added = 0;    for (const m of messages || []) {
       for (const part of m.parts || []) {
         if (part?.type !== 'tool') continue;
         const detail = part.error || part.output || '';
@@ -160,6 +159,22 @@ export function createToolStats({ file, logger }) {
     flush();
   }
 
+  /**
+   * Drop the recent errors of these sessions.
+   *
+   * Called when a project is marked Private (15 Nov): the aggregate counts carry no
+   * project name, but `recentErrors` keeps the session id and the tool's own words.
+   */
+  function forgetSessions(ids = []) {
+    const set = new Set((ids || []).map(String).filter(Boolean));
+    if (!set.size) return 0;
+    const before = state.recentErrors.length;
+    state.recentErrors = state.recentErrors.filter((entry) => !set.has(String(entry.sessionId || '')));
+    const removed = before - state.recentErrors.length;
+    if (removed) flush();
+    return removed;
+  }
+
   function snapshot() {    const rank = (bucket) =>
       Object.entries(bucket)
         .map(([key, v]) => ({
@@ -181,5 +196,5 @@ export function createToolStats({ file, logger }) {
     };
   }
 
-  return { record, recordMessages, snapshot, clear, flush };
+  return { record, recordMessages, snapshot, clear, forgetSessions, flush };
 }

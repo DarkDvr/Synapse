@@ -194,9 +194,10 @@ tray is where the server is stopped and started, and Exit is the only way to sto
 both. To work on the server on its own: `bin\node\node.exe src\index.js`.
 
 Gotchas:
-- **Auto-Shutdown must be off before any test, build or restart.** It powers the PC off
-  when every plan is done and nothing is running; on 11 Nov it shut this machine down
-  twice mid-session. The switch is the project's cog, not the number in Settings.
+- **Run the checks through `bin\node\node.exe scripts\checks.mjs`.** A test run looks like
+  "nothing to do" to the app, so Auto-Shutdown can power the PC off under it — 11 Nov and
+  again on 15 Nov. The script switches every project's Auto-Shutdown off (and the old global
+  default), proves it, runs the suite and puts the switches back. Doing it by hand is not enough.
 - **Nothing here matches on a process name** (see "Destructive commands"): the app
   stops the process it holds, and `Kill(entireProcessTree)` is the fallback after 8s.
 - The console is in the window: stdout is captured into `logs\console.log` and served,

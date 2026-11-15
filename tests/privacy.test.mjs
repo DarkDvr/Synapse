@@ -13,6 +13,8 @@ import { MARKER, addSession, hasMarker, isPrivateDir, isPrivateSession, isPrivat
 import { logger } from '../src/logger.js';
 import { scratchDir } from '../src/paths.js';
 import { createProjectStore } from '../src/projects.js';
+import { purgePrivateTraces } from '../src/privacy-purge.js';
+import { createToolStats } from '../src/toolstats.js';
 import { createTraceReasons } from '../src/trace-reasons.js';
 
 const quiet = { channel: () => ({ info() {}, warn() {}, error() {}, debug() {} }) };
@@ -100,4 +102,59 @@ test('a marker in the folder reaches the rail, and the trace store forgets the p
   assert.equal(fs.existsSync(path.join(dir, MARKER)), false, 'switching back removes the marker');
   fs.rmSync(root, { recursive: true, force: true });
 });
+
+test('marking a project Private removes the lines that named it', () => {
+  const root = tmpdir('synapse-private-purge-');
+  const logs = path.join(root, 'logs');
+  const data = path.join(root, 'data');
+  fs.mkdirSync(logs, { recursive: true });
+  fs.mkdirSync(data, { recursive: true });
+  const dir = 'F:\\somewhere\\Synapse.Projects\\secret';
+  fs.writeFileSync(
+    path.join(logs, 'app.log'),
+    `plan (${dir}): empty\nordinary line\nses_secret did something\n`,
+    'utf8',
+  );
+  fs.writeFileSync(path.join(data, 'provider-errors.log'), `no activity for ${dir}\nkept line\n`, 'utf8');
+  const out = purgePrivateTraces({ dir, sessionIds: ['ses_secret'], dirs: [logs, data] });
+  assert.equal(out.files, 2, 'both diaries were rewritten');
+  assert.equal(out.lines, 3, 'the folder lines and the session line are gone');
+  const app = fs.readFileSync(path.join(logs, 'app.log'), 'utf8');
+  assert.doesNotMatch(app, /secret/, 'nothing names the folder or the session');
+  assert.match(app, /ordinary line/, 'everything else is kept');
+  assert.match(fs.readFileSync(path.join(data, 'provider-errors.log'), 'utf8'), /kept line/);
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('the census forgets a private session but keeps its own counts', () => {
+  const root = tmpdir('synapse-private-census-');
+  const stats = createToolStats({ file: path.join(root, 'tool-stats.json'), logger: quiet });
+  stats.record({ id: 'a', name: 'shell', failed: true, sessionId: 'ses_secret', message: 'boom one' });
+  stats.record({ id: 'b', name: 'shell', failed: true, sessionId: 'ses_other', message: 'boom two' });
+  assert.equal(stats.snapshot().recentErrors.length, 2);
+  assert.equal(stats.forgetSessions(['ses_secret']), 1);
+  const left = stats.snapshot().recentErrors;
+  assert.equal(left.length, 1);
+  assert.equal(left[0].sessionId, 'ses_other');
+  assert.equal(stats.snapshot().total, 2, 'the anonymous total is not rewritten');
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+// A LAN view must not see a private project at all (15 Nov): not in the rail, not in
+// the live runs, not in the cards, not in the event stream, and not by a guessed id.
+test('a remote view is never shown a private project', () => {
+  const read = (rel) => fs.readFileSync(path.resolve(rel), 'utf8');
+  const server = read('src/server.js');
+  assert.match(server, /\{ remote: !isLoopback\(address\) \}/, 'the request knows whether it is remote');
+  assert.match(server, /privateFrame && !view\.local/, 'private frames never reach a LAN view');
+  assert.match(server, /api\.projects\(\{ remote \}\)/, 'the rail is filtered');
+  assert.match(server, /api\.runs\(\{ remote \}\)/, 'the live runs are filtered');
+  assert.match(server, /api\.pending\(query\?\.get\('session'\) \|\| null, \{ remote \}\)/, 'the cards are filtered');
+  assert.match(server, /isPrivateDir\(await api\.projectDirectory\(projectId\)\)/, 'a named project answers 404');
+  assert.match(server, /api\.sessionDirectory\(id\)/, 'a named session answers 404');
+  const api = read('src/api.js');
+  assert.match(api, /remote \? list\.filter\(\(p\) => !p\.private\) : list/, 'only the LAN list is filtered');
+  assert.match(api, /\.filter\(\(run\) => !remote \|\| !isPrivateDir\(run\?\.dir\)\)/, 'runs of a private project are not sent');
+});
+
 

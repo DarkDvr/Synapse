@@ -1,8 +1,13 @@
 # The suite, and the run on GitHub
 
-`node --test "tests/*.test.mjs"` from the project root. 633 tests, one skipped by
+`node --test "tests/*.test.mjs"` from the project root. 751 tests, one skipped by
 design: `engine-contract.test.mjs` needs `SYNAPSE_E2E=1` and a live engine, so the
 suite stays offline.
+
+On this machine, run it through `bin\node\node.exe scripts\checks.mjs`: the same
+command, with Auto-Shutdown switched off for every project first and put back after. An
+idle app plus a test run is exactly what the auto-shutdown tick waits for — it powered
+the PC off under the suite on 11 Nov and again on 15 Nov.
 
 `.github/workflows/tests.yml` runs the same command on `windows-latest` for every
 push to `main`, and by hand from the Actions tab. Windows because the app is: the
@@ -83,4 +88,5 @@ cleared). Two honest limits: a process killed outright (SIGKILL, a hard `taskkil
 reaches the hook, so it leaves one; and the hook must be synchronous, because Node runs no
 async work on `exit`. `tests/tmpdir.test.mjs` proves the case that matters — a child that
 throws leaves nothing behind, and a folder removed early does not break the sweep.
+
 

@@ -47,7 +47,7 @@ const BASELINE = {
   'src/remote.js': 1,
   'src/runs.js': 6,
   'src/secrets.js': 1,
-  'src/server.js': 2,
+  'src/server.js': 1,
   'src/site-sessions.js': 1,
   'src/stop.js': 1,
   'src/synapse-update.js': 1,
@@ -104,3 +104,4 @@ test('the baseline is not stale: every entry still has at least that many', () =
   }
   assert.deepEqual(stale, []);
 });
+

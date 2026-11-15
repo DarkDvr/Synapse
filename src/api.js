@@ -29,6 +29,7 @@ import { setProviderKey, providerKeyState, maskKey } from './secrets.js';
 import { probeToolchain } from './toolchain.js';
 import { busyInfo } from './busy.js';
 import { addPrivateDir, addSession, isPrivateDir, isPrivateSession, removePrivateDir, setPrivateDirs } from './privacy.js';
+import { purgePrivateTraces } from './privacy-purge.js';
 import { APP_VERSION, sourceVersion } from './version.js';
 
 // What an attachment may be. The old rule was six files of up to 8 MB each, which
@@ -1456,12 +1457,15 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
     // What is running, with the reasoning each worker has finished. The steps are
     // kept server-side so a reload and a second view show the same trace instead of
     // an empty one (8 Nov).
-    runs: async () => ({
-      runs: (runs?.active() || []).map((run) => ({
-        ...run,
-        // A private project leaves no reasoning behind, wherever it was written.
-        reasons: isPrivateDir(run?.dir) ? [] : traceReasons?.get?.(run) || [],
-      })),
+    runs: async ({ remote = false } = {}) => ({
+      runs: (runs?.active() || [])
+        // A LAN view is not told about a private project's run (15 Nov).
+        .filter((run) => !remote || !isPrivateDir(run?.dir))
+        .map((run) => ({
+          ...run,
+          // A private project leaves no reasoning behind, wherever it was written.
+          reasons: isPrivateDir(run?.dir) ? [] : traceReasons?.get?.(run) || [],
+        })),
     }),
 
     /** One finished reasoning step from a worker's trace. */
@@ -1505,7 +1509,29 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
     },
 
     // ── projects ─────────────────────────────────────────────
-    projects: async () => ({ projects: await projectsWithSessions() }),
+    // `remote` is the LAN view: a private project is not listed there (15 Nov).
+    projects: async ({ remote = false } = {}) => {
+      const list = await projectsWithSessions();
+      return { projects: remote ? list.filter((p) => !p.private) : list };
+    },
+
+    /** The folder a session runs in, for the privacy gate on remote routes. */
+    sessionDirectory: async (id) => {
+      if (!id) return '';
+      try {
+        const session = await engine.getSession(id);
+        return session?.directory || '';
+      } catch {
+        // A session that is gone names no folder; the route will fail on its own.
+        return '';
+      }
+    },
+
+    /** The folder a project owns, for the same gate. */
+    projectDirectory: (id) => {
+      const found = projects.list().find((p) => p.id === id);
+      return found?.directory || '';
+    },
 
     createProject: async (body) => {
       // Does this folder already carry a plan? Adding a project only registers a
@@ -1594,14 +1620,23 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
      */
     setProjectPrivate: async (id, body) => {
       const project = projects.setPrivate(id, body?.private === true || body?.private === 'true');
-      if (project.private) {
-        addPrivateDir(project.directory);
-        // Traces written before the switch are still traces of this project.
-        traceReasons?.forget?.(project.directory);
-      } else {
+      if (!project.private) {
         removePrivateDir(project.directory);
+        return { project, purged: { files: 0, lines: 0 } };
       }
-      return { project };
+      addPrivateDir(project.directory);
+      // Traces written before the switch are still traces of this project: gather its
+      // sessions, then remove every line and every record that names them (15 Nov).
+      const sessions = await safe(() => engine.listSessions(), []);
+      const ids = (sessions || [])
+        .filter((s) => s?.id && normDir(s.directory) === normDir(project.directory))
+        .map((s) => s.id);
+      for (const sessionId of ids) addSession(sessionId, project.directory);
+      traceReasons?.forget?.(project.directory);
+      toolStats?.forgetSessions?.(ids);
+      for (const sessionId of ids) permissionMemory?.forgetSession?.(sessionId);
+      const purged = purgePrivateTraces({ dir: project.directory, sessionIds: ids });
+      return { project, purged };
     },
 
     /** Move a project up or down the rail: the registry is the order. */
@@ -2563,8 +2598,15 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
      * permission or a form makes no progress and emits nothing, so this is the
      * only way to notice it after a reload.
      */
-    pending: async (focusSessionId = null) => {
+    pending: async (focusSessionId = null, { remote = false } = {}) => {
       if (!engine.status().ready) return { permissions: [], forms: [], active: [], canStop: false, stopping: null };
+      // A LAN view sees no asks from a private project (15 Nov): one session list
+      // decides which of the waiting ones belong to one.
+      const privateSessions = new Set();
+      if (remote) {
+        const known = await safe(() => engine.listSessions(), []);
+        for (const s of known || []) if (isPrivateDir(s.directory)) privateSessions.add(s.id);
+      }
       const [permissions, active] = await Promise.all([
         safe(() => engine.listPendingPermissions(), []),
         safe(() => engine.listActiveSessions(), []),
@@ -2720,10 +2762,21 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
           };
         });
 
+      const visiblePermissions = remote
+        ? enginePermissions.filter((p) => !privateSessions.has(p.sessionId) && !isPrivateDir(p.directory))
+        : enginePermissions;
+      const visibleAsks = remote
+        ? browserAsks.list().filter((a) => !isPrivateDir(a.directory))
+        : browserAsks.list();
+      const visibleForms = remote ? open.filter((f) => !privateSessions.has(f.sessionID)) : open;
+      const visibleActive = remote
+        ? active.filter((id) => !privateSessions.has(typeof id === 'string' ? id : id?.id))
+        : active;
+
       return {
-        permissions: [...enginePermissions, ...browserAsks.list()],
+        permissions: [...visiblePermissions, ...visibleAsks],
         forms: await Promise.all(
-          open.map(async (f) => {
+          visibleForms.map(async (f) => {
             // Whether *this chat* answers its own questions (Auto-Answer is on for
             // it). It is that chat's switch, not the one on screen: a worker asking
             // from another chat must not be labelled with the open chat's setting.
@@ -2748,7 +2801,7 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
             };
           }),
         ),
-        active,
+        active: visibleActive,
         canStop,
         activeHere,
         stopping,

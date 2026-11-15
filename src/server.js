@@ -7,6 +7,7 @@ import crypto from 'node:crypto';
 import { WEB_DIR, WORKSPACE_DIR } from './paths.js';
 import { isLoopback, isPrivateAddress, parseCookies, tokenMatches, loginPage, REMOTE_COOKIE } from './remote.js';
 import { createPresence } from './presence.js';
+import { isPrivateDir, isPrivateSession, isPrivateText } from './privacy.js';
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -69,7 +70,12 @@ export function createServer({ api, engine, logger, config, remote, onRemote }) 
     if (sseClients.size === 0) return;
     let frame;
     try { frame = `data: ${JSON.stringify(ev)}\n\n`; } catch { return; }
-    for (const res of sseClients.keys()) {
+    // A LAN view hears nothing about a private project (15 Nov): its events carry
+    // session ids and folders like any other, so the frame is dropped for remote
+    // clients and sent to the host as usual.
+    const privateFrame = isPrivateText(frame);
+    for (const [res, view] of sseClients) {
+      if (privateFrame && !view.local) continue;
       try { res.write(frame); } catch { /* dropped client */ }
     }
   };
@@ -213,9 +219,36 @@ export function createServer({ api, engine, logger, config, remote, onRemote }) 
     });
   }
 
-  async function handleApi(req, res, pathname, query) {
+  async function handleApi(req, res, pathname, query, { remote = false } = {}) {
     const { method } = req;
     const seg = pathname.replace(/^\/api\/?/, '').split('/').filter(Boolean);
+
+    // A private project is invisible from the LAN (15 Nov). The lists are filtered
+    // where they are built; a route that names one answers as if it did not exist, so a
+    // guessed id tells a remote view nothing.
+    if (remote) {
+      const sessionId = seg[0] === 'sessions' && seg[1] ? decodeURIComponent(seg[1]) : '';
+      const querySession = ['busy', 'pending', 'permissions'].includes(seg[0])
+        ? String(query?.get('session') || '')
+        : '';
+      for (const id of [sessionId, querySession]) {
+        if (!id) continue;
+        if (isPrivateSession(id) || isPrivateDir(await api.sessionDirectory(id))) {
+          return sendJson(res, 404, { error: 'not found' });
+        }
+      }
+      const projectId =
+        seg[0] === 'projects' && seg[1] && !['inspect', 'wipe'].includes(seg[1])
+          ? decodeURIComponent(seg[1])
+          : '';
+      if (projectId && isPrivateDir(await api.projectDirectory(projectId))) {
+        return sendJson(res, 404, { error: 'not found' });
+      }
+      if (seg[0] === 'image') {
+        const dir = String(query?.get('dir') || '');
+        if (dir && isPrivateDir(dir)) return sendJson(res, 404, { error: 'not found' });
+      }
+    }
 
     // GET /api/image?dir=…&path=… — a picture a model showed in its answer.
     // Read-only, images only, inside the projects root; the chat holds the chip,
@@ -438,7 +471,7 @@ export function createServer({ api, engine, logger, config, remote, onRemote }) 
     // `?session=` asks for that session's own forms as well, so the question
     // panel knows what the open session is waiting on.
     if (seg[0] === 'pending' && method === 'GET') {
-      return sendJson(res, 200, await api.pending(query?.get('session') || null));
+      return sendJson(res, 200, await api.pending(query?.get('session') || null, { remote }));
     }
 
     // GET /api/permissions?session= — decisions for the permission chip. A page
@@ -448,7 +481,7 @@ export function createServer({ api, engine, logger, config, remote, onRemote }) 
     }
 
     // GET /api/runs — delegated work in flight (the live path + role cards)
-    if (seg[0] === 'runs' && method === 'GET') return sendJson(res, 200, await api.runs());
+    if (seg[0] === 'runs' && method === 'GET') return sendJson(res, 200, await api.runs({ remote }));
     // POST /api/runs/reason — one finished reasoning step, so the trace survives a
     // reload the way its notes already do.
     if (seg[0] === 'runs' && seg[1] === 'reason' && method === 'POST') {
@@ -483,13 +516,17 @@ export function createServer({ api, engine, logger, config, remote, onRemote }) 
 
     // /api/projects...
     if (seg[0] === 'projects') {
-      if (seg.length === 1 && method === 'GET') return sendJson(res, 200, await api.projects());
+      if (seg.length === 1 && method === 'GET') return sendJson(res, 200, await api.projects({ remote }));
       if (seg.length === 1 && method === 'POST') return sendJson(res, 200, await api.createProject(await readBody(req)));
       if (seg.length === 2 && seg[1] === 'inspect' && method === 'POST') {
-        return sendJson(res, 200, await api.inspectProjectDir(await readBody(req)));
+        const body = await readBody(req);
+        if (remote && isPrivateDir(String(body?.directory || ''))) return sendJson(res, 404, { error: 'not found' });
+        return sendJson(res, 200, await api.inspectProjectDir(body));
       }
       if (seg.length === 2 && seg[1] === 'wipe' && method === 'POST') {
-        return sendJson(res, 200, await api.wipeProjectDir(await readBody(req)));
+        const body = await readBody(req);
+        if (remote && isPrivateDir(String(body?.directory || ''))) return sendJson(res, 404, { error: 'not found' });
+        return sendJson(res, 200, await api.wipeProjectDir(body));
       }
       const projectId = decodeURIComponent(seg[1] || '');
       if (seg.length === 2 && method === 'PATCH') return sendJson(res, 200, await api.updateProject(projectId, await readBody(req)));
@@ -583,7 +620,9 @@ export function createServer({ api, engine, logger, config, remote, onRemote }) 
           return res.end();
         }
       }
-      if (pathname.startsWith('/api/')) return await handleApi(req, res, pathname, url.searchParams);
+      if (pathname.startsWith('/api/')) {
+        return await handleApi(req, res, pathname, url.searchParams, { remote: !isLoopback(address) });
+      }
       return serveStatic(res, pathname);
     } catch (err) {
       const status = err.status || 500;
