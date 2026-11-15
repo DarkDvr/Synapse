@@ -117,6 +117,8 @@ export const LEASE_SERVER = path.join(ROOT, 'src', 'mcp', 'lease-server.js');
 // The Architect's rollback action: restore the project to the checkpoint kept
 // before the newest failed run.
 export const GIT_SERVER = path.join(ROOT, 'src', 'mcp', 'git-server.js');
+// A process a model owns: start, read its log, stop it by the id Synapse issued.
+export const PROCESS_SERVER = path.join(ROOT, 'src', 'mcp', 'process-server.js');
 
 // SynaBrowse: the tools that drive the harness's own browser. Registered only when the
 // operator has switched it on — a browser that can act as them is not a default.

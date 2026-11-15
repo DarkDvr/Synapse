@@ -1408,6 +1408,10 @@ export function briefSession({ dir, role = 'architect', auto = false, single = f
         'it says so. If it changes the task materially and the intent is unclear, ask the operator a question ' +
         'before acting.',
     );
+    lines.push(
+      'To run a server or watcher, use the process tool (start, logs, stop): it gives you an id, so stop it by ' +
+        'that id when done, never by name.',
+    );
     // What a turn costs, said plainly, because the model is the only thing that
     // decides how many of them there are. Every turn re-sends this whole
     // transcript - its own thinking included - so the bill is turns multiplied by

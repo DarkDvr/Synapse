@@ -261,6 +261,29 @@ The third is a deliberate show stopper: it is a model problem the operator wants
 to see, not to be asked again. The reason travels into the run result, so the
 Architect is told not to re-delegate the task as it is.
 
+## A process a model owns (15 Nov)
+
+The shell can start a server, but nothing owns it afterwards: that is why the
+cleanup code exists and why the brief says "stop what you started by its id". The
+`process` tool is the missing half. One tool, three actions:
+
+```
+start  — run a command in the project; answer an id (p1), its pid and a log
+logs   — the end of that process's log, from .synapse/processes/p1.log
+stop   — kill the tree of that pid, never a name
+```
+
+The registry is `.synapse/processes.json` inside the project, so a project's
+deletion takes it and the logs with it. The command is judged by the same shell
+policy as any other before anything runs: a command that reaches outside, or is
+protected, is refused with the reason instead of starting. At most five are live
+at once; a sixth is refused until one is stopped.
+
+It is deliberately not a service manager: no restart, no start-on-boot, and no
+automatic sweep at the end of a run. The existing cleanup still handles what a
+worker forgets when the plan finishes; the registry and the logs are ordinary
+project evidence, not debris.
+
 ## There is no 'cleaning up' to remember any more
 
 Two test runs left static web servers running for hours — ` python -m http.server
