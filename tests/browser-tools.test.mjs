@@ -10,6 +10,7 @@
 // `browser-server.js` starts the stdio server, which waits on stdin for ever.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import { TOOLS } from '../src/mcp/browser-tools.js';
 
 const text = (name) => {
@@ -71,3 +72,17 @@ test('every tool has a description and a schema', () => {
   }
   assert.equal(TOOLS.length, 12, 'the twelve tools the brief names');
 });
+
+// A timeout is the moment a model needs the most information: "did not happen" says
+// nothing about whether to open something, change the spelling, or read the page. The
+// answer now says which kind of absence it found (14 Nov).
+test('wait explains a timeout as missing, or in the page and not shown', () => {
+  const d = text('wait');
+  assert.match(d, /not shown/i, 'the two absences are named');
+  assert.match(d, /collapsed comment/i, 'with the shape a page actually has');
+  assert.match(d, /read` is cheaper|read is cheaper/i, 'and the cheaper way to check now');
+  const src = fs.readFileSync(new URL('../src/mcp/browser-server.js', import.meta.url), 'utf8');
+  assert.match(src, /Not shown:/, 'the server says which one it was');
+  assert.match(src, /Not there:/);
+});
+

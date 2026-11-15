@@ -276,13 +276,31 @@ async function handle(msg) {
             await browser.press(args.key);
             return toolText(id, `Pressed ${args.key}.`);
           case 'wait': {
-            const ok = await browser.wait({
+            const waited = await browser.wait({
               text: args.text || null,
               selector: args.selector || null,
               ms: args.ms ?? null,
               timeoutMs: Math.min(120000, Math.max(1000, Number(args.timeoutMs) || 20000)),
             });
-            return toolText(id, ok ? 'It happened.' : 'It did not happen in time.', !ok);
+            const secs = `${Math.round((Number(waited.elapsedMs) || 0) / 100) / 10}s`;
+            if (waited.ok) return toolText(id, `It happened after ${secs}.`);
+            // The answer to a timeout is the useful part: missing from the page, or in
+            // it and hidden — a collapsed comment, a closed menu, a tooltip (14 Nov).
+            const what = args.selector ? `the selector ${args.selector}` : `the text "${args.text}"`;
+            if (waited.hidden) {
+              return toolText(
+                id,
+                `Not shown: after ${secs} ${what} is not displayed, but it is in the page's HTML — a collapsed comment, ` +
+                  `a closed menu or a tooltip. Open that, then wait again; or read the page to see what is rendered.`,
+                true,
+              );
+            }
+            return toolText(
+              id,
+              `Not there: after ${secs} ${what} is in neither the page's text nor its HTML ` +
+                `(${waited.textLength} characters of text). Check the spelling, or read the page to see what it says.`,
+              true,
+            );
           }
           case 'scroll': {
             const y = await browser.scroll({ dy: Number(args.dy ?? 600) });

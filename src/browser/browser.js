@@ -518,17 +518,40 @@ export function createBrowser({ profile, log = null, startMinimized = true, widt
     used();
     if (ms) {
       await new Promise((r) => setTimeout(r, Number(ms)));
-      return true;
+      return { ok: true, elapsedMs: Number(ms), visible: true, hidden: false };
     }
+    const needle = String(text ?? '');
     const began = Date.now();
     while (Date.now() - began < timeoutMs) {
       const hit = await p.evaluate(selector
         ? `Boolean(document.querySelector(${JSON.stringify(selector)}))`
-        : `(document.body?.innerText || '').includes(${JSON.stringify(String(text))})`);
-      if (hit) return true;
+        : `(document.body?.innerText || '').includes(${JSON.stringify(needle)})`);
+      if (hit) return { ok: true, elapsedMs: Date.now() - began, visible: true, hidden: false };
       await new Promise((r) => setTimeout(r, 250));
     }
-    return false;
+    // Why it did not happen is the useful half: a collapsed comment, a closed menu and a
+    // tooltip are in the page's HTML with no rendered text, so "not shown" and "not
+    // there" are two different answers and they lead to different next steps (14 Nov).
+    const facts = selector
+      ? null
+      : await p
+          .evaluate(`(() => {
+        const needle = ${JSON.stringify(needle)};
+        const html = document.documentElement?.outerHTML || '';
+        return {
+          html: html.length,
+          inHtml: needle ? html.includes(needle) : false,
+          text: (document.body?.innerText || '').length,
+        };
+      })()`)
+          .catch(() => null);
+    return {
+      ok: false,
+      elapsedMs: Date.now() - began,
+      visible: false,
+      hidden: Boolean(facts?.inHtml),
+      textLength: Number(facts?.text) || 0,
+    };
   }
 
   /** Scrolling, because a page that is 4,000 pixels tall is read in pieces. */

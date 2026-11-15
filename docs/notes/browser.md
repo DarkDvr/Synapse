@@ -403,3 +403,21 @@ harness's own config. Flipping the switch while Synapse runs writes
 
 And it is **on by default** since 13 Nov. The sign-in permission card is what made that safe:
 nothing the browser does as the operator happens without a person saying yes to a card first.
+## A wait that fails says which absence it found (14 Nov)
+
+`wait` matched **rendered text only** (`document.body.innerText`). On a Reddit thread a
+model waited for `"193"` and `"smithereens"` four times, each a five-second red failure,
+and could not tell whether the page was late, the comment was collapsed, or the text was
+simply not there — so it kept changing the needle and trying again.
+
+The answer now carries the target, the time it waited, and on a timeout the difference that
+matters: it checks the page's HTML as well and says
+
+- *"Not shown: after 5s the text "193" is not displayed, but it is in the page's HTML — a
+  collapsed comment, a closed menu or a tooltip. Open that, then wait again"*; or
+- *"Not there: after 5s the text "193" is in neither the page's text nor its HTML (9,400
+  characters of text). Check the spelling, or read the page to see what it says."*
+
+The description says what the tool is for: a wait is for *after an action*, and `read` is
+the cheaper way to check whether something is on the page now. `browser.wait()` answers
+`{ ok, elapsedMs, hidden, textLength }` instead of a bare boolean, so the server can say it.

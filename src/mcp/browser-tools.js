@@ -106,12 +106,16 @@ export const TOOLS = [
   {
     name: 'wait',
     description:
-      'Wait until the page contains a piece of text, or a selector, or simply for a time. ' +
-      'Use it after a click that loads something, instead of guessing.',
+      'Wait until the page shows a piece of text, or a selector, or simply for a time. Use it ' +
+      'after a click that loads something, instead of guessing — to check whether something is ' +
+      'there *now*, `read` is cheaper. It waits for text a person can see, so a timeout says ' +
+      'which kind of absence it was: the text is missing from the page entirely, or it is in the ' +
+      'page and not shown (a collapsed comment, a closed menu, a tooltip) — open that and wait ' +
+      'again. Check the spelling before waiting twice.',
     inputSchema: {
       type: 'object',
       properties: {
-        text: { type: 'string', description: 'Text to wait for.' },
+        text: { type: 'string', description: 'Text to wait for, as a person would read it.' },
         selector: { type: 'string', description: 'CSS selector to wait for.' },
         ms: { type: 'integer', description: 'Milliseconds to wait instead.', minimum: 0, maximum: 30000 },
         timeoutMs: { type: 'integer', description: 'How long before giving up (default 20000).', minimum: 1000, maximum: 120000 },

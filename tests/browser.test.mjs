@@ -158,6 +158,7 @@ test('the tools drive a local page: read, click, type, screenshot, watch', async
       <input id="field" placeholder="type here" />
       <div id="out">nothing yet</div>
       <div style="width:60px;height:60px;background:#ff7d1a;animation:spin 1s linear infinite"></div>
+      <p id="hidden" style="display:none">needle-hidden</p>
       <script>window.typed = ''; addEventListener('keydown', (e) => { window.typed += e.key; });</script>
     `).replace('</body>', '<style>@keyframes spin{to{transform:rotate(360deg)}}</style></body>'),
   );
@@ -188,6 +189,19 @@ test('the tools drive a local page: read, click, type, screenshot, watch', async
     // keyboard at all says so.
     await assert.rejects(() => browser.press('ctrl+c'), /Chords are not supported/, 'a chord is named, not typed');
     await assert.rejects(() => browser.press('\u0001'), /unknown key/, 'a control character is not a key');
+
+    // A wait answers with *why* it timed out: in the page but not shown, or not there at
+    // all. The difference is what tells a model to open a collapsed comment instead of
+    // changing its spelling (14 Nov).
+    const seen = await browser.wait({ text: 'clicked', timeoutMs: 2000 });
+    assert.equal(seen.ok, true, 'text already on the page answers at once');
+    const hidden = await browser.wait({ text: 'needle-hidden', timeoutMs: 1200 });
+    assert.equal(hidden.ok, false);
+    assert.equal(hidden.hidden, true, 'in the HTML, not shown');
+    const absent = await browser.wait({ text: 'needle-absent', timeoutMs: 1200 });
+    assert.equal(absent.ok, false);
+    assert.equal(absent.hidden, false, 'not in the page at all');
+    assert.ok(absent.textLength > 0, 'and it says how much text the page has');
 
     const png = await browser.screenshot({ full: false });
     assert.ok(png.length > 1000, 'a screenshot is a picture');
