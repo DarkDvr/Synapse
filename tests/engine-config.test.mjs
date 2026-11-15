@@ -161,6 +161,15 @@ const written = (dirs) => JSON.parse(fs.readFileSync(path.join(dirs.config, 'ope
   check('nonsense falls back to 20 seconds', c5.fullAuto.timeoutSec === 20, String(c5.fullAuto.timeoutSec));
 }
 
+// ── the engine's children ────────────────────────────────────────
+{
+  // Python's stdout takes the locale's encoding when it is a pipe, and a check mark in a
+  // script's output ended a step with "charmap codec can't encode character '\u2713'"
+  // (15 Nov). The engine starts with UTF-8 streams, and every model command inherits it.
+  const src = fs.readFileSync(path.resolve('src/engines/opencode.js'), 'utf8');
+  check('Python children are told their streams are UTF-8', /PYTHONIOENCODING:\s*'utf-8'/.test(src), 'no PYTHONIOENCODING in the engine env');
+}
+
 const failed = checks.filter((c) => !c.ok);
 console.log(`\n${checks.length - failed.length}/${checks.length} passed`);
 process.exit(failed.length ? 1 : 0);

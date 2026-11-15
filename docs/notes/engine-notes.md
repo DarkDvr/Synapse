@@ -2107,3 +2107,22 @@ the tools in `MOVING` the signature now carries the result as well as the argume
 scroll that lands somewhere new is a new call, and a scroll that cannot move — the same
 position back, at the end of the page — still strikes, which is the loop worth catching.
 
+
+## Python's streams are UTF-8, because its locale is not (15 Nov)
+
+A worker printed a check mark and its step died:
+
+```
+'charmap' codec can't encode character '\u2713' in position 4: character maps to <undefined>
+```
+
+Nothing in Synapse was decoding anything: Python had failed before its output reached us.
+When stdout is a **pipe** — which is how the engine captures a command's output — Python
+takes its encoding from the locale, and on Windows that is cp1252, where "✓" does not
+exist. The console code page does not help: Python does not consult it for a pipe.
+
+The engine is now started with `PYTHONIOENCODING=utf-8`, and every command a model runs is
+a child of it, so they inherit it. Only the streams are pinned: a script's own `open()`
+default is still the locale's, which is the script's business. The engine reads our
+children's output as UTF-8 (the suite's own "✔" lines arrive intact), so a model can print
+what it likes.

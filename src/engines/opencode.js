@@ -434,6 +434,12 @@ export class OpenCodeEngine extends Engine {
       DOTNET_NOLOGO: '1',
       DOTNET_CLI_TELEMETRY_OPTOUT: '1',
       DOTNET_SKIP_FIRST_TIME_EXPERIENCE: '1',
+      // Python picks its stdout encoding from the locale, which on Windows is cp1252 when
+      // the stream is a pipe — and a model that prints a check mark ("\u2713") kills its
+      // own step with "charmap codec can't encode character '\u2713'" (15 Nov). The
+      // engine reads our children's output as UTF-8, so tell Python its streams are UTF-8.
+      // Only the streams: a script's own file encoding is its business.
+      PYTHONIOENCODING: 'utf-8',
     };
 
     this.log.info(`engine binary: ${binary}`);
