@@ -700,3 +700,15 @@ test('a locked folder says what is really holding it', async () => {
   assert.match(text, /Nothing was deleted/, 'and says the project is safe');
   assert.doesNotMatch(text, /close this project's chat/i, 'the old dead-end advice is gone');
 });
+
+test('the project menu is placed before it is shown', () => {
+  // `position: fixed` with no offsets sits at the page's top-left. Un-hiding it
+  // before the offsets are set let one frame paint there (operator, 16 Nov).
+  const js = read('web/project-menu.js');
+  const hidden = js.indexOf("el.style.visibility = 'hidden'");
+  const shown = js.indexOf('el.hidden = false');
+  const visible = js.indexOf("el.style.visibility = ''");
+  assert.ok(hidden > 0 && shown > 0 && visible > 0, 'the three steps are present');
+  assert.ok(hidden < shown, 'hidden before un-hiding');
+  assert.ok(visible > shown, 'visible only after the offsets are set');
+});

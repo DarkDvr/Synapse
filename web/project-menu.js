@@ -67,12 +67,17 @@ export function openProjectMenu(id, x, y) {
     <span class="project-menu-sep" aria-hidden="true"></span>
     <button type="button" class="project-menu-item" data-menu-action="rename" role="menuitem">Rename</button>
     <button type="button" class="project-menu-item is-danger" data-menu-action="delete" role="menuitem">Delete…</button>`;
+  // Place it before it can be seen. The menu is `position: fixed` with no offsets
+  // until it is measured, and its static position is the top-left of the page: taking
+  // it out of `hidden` first let one frame paint there before the offsets landed.
+  el.style.visibility = 'hidden';
   el.hidden = false;
   el.style.left = '0px';
   el.style.top = '0px';
   const box = el.getBoundingClientRect();
   el.style.left = `${Math.min(Math.max(8, x), window.innerWidth - box.width - 8)}px`;
   el.style.top = `${Math.min(Math.max(8, y), window.innerHeight - box.height - 8)}px`;
+  el.style.visibility = '';
   el.querySelector('button')?.focus();
 }
 

@@ -107,6 +107,13 @@ const makeRunner = ({ auto = true, stallSec = 5, workerMessages = null, single =
  *  repository when the project has none), so the old 300 ms was too short. */
 const settle = () => new Promise((r) => setTimeout(r, 1200));
 
+/** Wait for a run to actually reach the prompt; git may be initialising on the first one. */
+const waitForPrompt = async (ran, ms = 5000) => {
+  const end = Date.now() + ms;
+  while (Date.now() < end && !ran.includes('prompt')) await new Promise((r) => setTimeout(r, 50));
+  return ran.includes('prompt');
+};
+
 // A distinct call id per case: a request is answered once, so reusing one would be
 // skipped as already handled rather than run.
 const delegate = (taskId, callId = `call_${taskId}`) => [
