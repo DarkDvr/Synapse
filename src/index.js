@@ -374,11 +374,15 @@ async function main() {
       try {
         const sessions = await engine.listSessions();
         let n = 0;
+        const privateIds = new Map();
         for (const s of sessions) {
+          if (s?.id && s.directory && isPrivateDir(s.directory)) {
+            addSession(s.id, s.directory);
+            const ids = privateIds.get(s.directory) || [];
+            ids.push(s.id);
+            privateIds.set(s.directory, ids);
+          }
           if (!s?.id || s.internal) continue;
-          // A private project's session id joins the log filter's list before any
-          // line can name it (15 Nov).
-          if (isPrivateDir(s.directory)) addSession(s.id, s.directory);
           // A conversation whose folder is gone cannot run: the pass below deletes it,
           // so there is nothing to bring under the policy — and with the whole store
           // listed now, patching those would be hundreds of requests for nothing.
@@ -389,6 +393,13 @@ async function main() {
             ...skillRules(getConfig(), 'architect'),
           ]);
           n += 1;
+        }
+        // Now that the engine has named the sessions, the private diaries can lose
+        // the lines that only carried a session id, and the shell can do the same to
+        // its console (the boot pass before the engine had only the folder names).
+        for (const [dir, ids] of privateIds) {
+          purgePrivateTraces({ dir, sessionIds: ids });
+          requestConsolePurge(dir, ids);
         }
         if (n) app.info(`permissions: ${n} existing session(s) brought under the policy`);
       } catch (err) {

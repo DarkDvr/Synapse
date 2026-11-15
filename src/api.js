@@ -1769,6 +1769,9 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
       }
       const withSessions = (await projectsWithSessions()).find((p) => p.id === id);
       const sessions = withSessions?.sessions || [];
+      // Whether this was private has to be read before the folder moves: the marker
+      // travels with it to the Recycle Bin and is gone from the path afterwards.
+      const wasPrivate = isPrivateDir(current.directory) || fs.existsSync(path.join(current.directory, '.project', 'private'));
       if (sessions.length) {
         const busy = await busyFor(sessions[sessions.length - 1].id);
         if (busy.busy) throw refuseBusy(busy);
@@ -1838,7 +1841,11 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
           throw e;
         }
         recycled = true;
-        app.info(`deleted project folder to the Recycle Bin: ${current.directory}`);
+        app.info(
+          wasPrivate
+            ? 'deleted a private project folder to the Recycle Bin'
+            : `deleted project folder to the Recycle Bin: ${current.directory}`,
+        );
       }
       // The project's scratch folder lives beside the projects, not inside the
       // folder the Recycle Bin takes, and it belongs to this project and nothing
@@ -1848,7 +1855,11 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
         const scratch = scratchDir(current.directory);
         if (fs.existsSync(scratch)) {
           fs.rmSync(scratch, { recursive: true, force: true });
-          app.info(`removed the deleted project's scratch folder: ${scratch}`);
+          app.info(
+            wasPrivate
+              ? 'removed a deleted private project\'s scratch folder'
+              : `removed the deleted project's scratch folder: ${scratch}`,
+          );
         }
       } catch (err) {
         app.warn(`could not remove the scratch folder of a deleted project: ${err.message}`);
@@ -1866,6 +1877,13 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
         }
       }
       projects.remove(id);
+      if (wasPrivate) {
+        // The folder is in the Recycle Bin, but the diaries and the shell's console
+        // are ours: purge the project's lines now that its sessions are gone too.
+        purgePrivateTraces({ dir: current.directory, sessionIds: sessions.map((s) => s.id) });
+        requestConsolePurge(current.directory, sessions.map((s) => s.id));
+        removePrivateDir(current.directory);
+      }
       return { ok: true, recycled, directory: current.directory, binFiles: bin.files };
     },
 
