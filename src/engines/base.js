@@ -216,14 +216,44 @@ export function normalizeSession(raw) {
   };
 }
 
+/**
+ * Was this failure the provider putting `{"error": …}` inside a response that had
+ * already started?
+ *
+ * An SSE response sends its 200 before the first token, so a failure after that can
+ * only arrive as an error frame — or, for a provider that answers with a JSON body,
+ * as a 200 whose body is `{"error": …}`. The engine relays both as a provider error
+ * whose `response.body` carries the provider's own object; the status is 200 because
+ * that is what the provider sent. Detecting the shape lets the runner treat it as a
+ * failed turn rather than a retryable outage (15 Nov).
+ */
+export function providerErrorFrame(error) {
+  const body = error?.response?.body;
+  if (!body) return null;
+  let parsed = null;
+  try {
+    parsed = typeof body === 'string' ? JSON.parse(body) : body;
+  } catch {
+    // A body that is not JSON is not an error object; the plain sentence stands.
+    return null;
+  }
+  const frame = parsed?.error;
+  if (!frame || typeof frame !== 'object') return null;
+  const message = String(frame.message || error?.message || '').trim();
+  return message ? { message, type: String(frame.type || 'error') } : null;
+}
+
 export function normalizeMessage(raw) {
   const type = raw?.type || 'unknown';
+  const frame = providerErrorFrame(raw?.error);
   const msg = {
     id: raw?.id || '',
     type,
     created: raw?.time?.created || null,
     completed: raw?.time?.completed || null,
     error: raw?.error?.message || null,
+    // A provider's own error object, not a crash in the harness (15 Nov).
+    errorKind: frame ? 'provider-frame' : null,
     raw,
   };
 

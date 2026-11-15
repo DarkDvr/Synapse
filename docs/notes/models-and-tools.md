@@ -703,3 +703,27 @@ Two lessons:
 The chat that hit this had taught itself to print "✓" in its reasoning; every request then
 carried it, and the server's encoder refused it every time — a loop that looks like a model
 refusing to work rather than a provider failing to log.
+
+**Follow-up (15 Nov): a provider error inside a 200 is a failed turn, not an outage.**
+The charmap failure came back as HTTP **200** with `{"error": {"type": "server_error", …}}`
+in the body — an SSE response sends its status before the first token, so there is no status
+left to say "failed". The engine relayed it as a provider error with `response.body`; the
+runner read only the sentence, classified it "unknown" and retried, so one provider bug
+became ten identical failures.
+
+The shape is now recognised:
+
+- `providerErrorFrame()` in `src/engines/base.js` parses `error.response.body` and finds the
+  provider's own object; `normalizeMessage` marks the message `errorKind: 'provider-frame'`;
+- `turnErrorOf` reports it as *"the provider returned an error inside its response: <their
+  sentence>"*, which is what the card and the model see;
+- `classifyFailure` maps that to **terminal** / `provider-frame`, so the same request is not
+  retried. Everything else on the ladder is untouched — a rate limit is still transient.
+
+**The hunch about the printer, checked.** PolyStrata has `_debug_req()` (an 80-character
+preview of the last message at request start) and — more likely — a mid-stream
+`print(f"[strata] raw: …")` behind the same `STRATA_DEBUG=1` switch, which prints the
+model's **generated text**: exactly the shape that carries a "✓", and it runs after the 200
+is already sent. Neither `[strata] req` nor `raw:` lines appear in its logs, but a print that
+raises writes nothing, so their absence is what the bug predicts. The fix stays on that
+side: launch it with `PYTHONIOENCODING=utf-8` (or `PYTHONUTF8=1`).

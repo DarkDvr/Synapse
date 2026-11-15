@@ -80,6 +80,14 @@ const RULES = [
     re: /compaction produced no summary|compaction failed|compaction\.failed/i,
   },
   {
+    // A provider that answers, then puts `{"error": …}` inside the response. There is
+    // no HTTP status left to say it, and the same request fails the same way: retrying
+    // turns a one-line provider bug into an outage that never clears (15 Nov).
+    reason: 'provider-frame',
+    kind: 'terminal',
+    re: /returned an error inside its response|error inside its (?:response|stream)/i,
+  },
+  {
     reason: 'bad-request',
     kind: 'terminal',
     re: /invalid request|bad request|\b400\b|unprocessable|\b422\b|validation (error|failed)/i,

@@ -3413,7 +3413,14 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     for (const message of afterMark(messages, mark)) {
       if (message?.type === 'assistant') last = message;
     }
-    return last?.error ? String(last.error) : null;
+    if (!last?.error) return null;
+    // The provider answered, then put its error object inside that response. The
+    // sentence is the provider's own, and saying so keeps the runner from reading it
+    // as an outage and retrying the same request (15 Nov).
+    if (last.errorKind === 'provider-frame') {
+      return `the provider returned an error inside its response: ${String(last.error)}`;
+    }
+    return String(last.error);
   }
 
   /** Did a tool in this turn end because its permission was declined? The gate
