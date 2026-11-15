@@ -424,17 +424,17 @@ function settingsProhibited(c) {
   const writeOff = new Set((c.protection?.builtinsOff || []).map(String));
   const readOff = new Set((c.protection?.builtinsSealed || []).map(String));
   const added = Array.isArray(c.protection?.paths) ? c.protection.paths : [];
-  const boxes = (kind, key, write, read) => `
-      <input type="checkbox" class="prot-check" data-prot-write="${esc(key)}" data-prot-kind="${kind}"${write ? ' checked' : ''}
-             title="${write ? 'Changes allowed: untick to refuse every change to this path' : 'Changes refused before any permission card'}"
+  const boxes = (kind, key, write, read, mandatory = false) => `
+      <input type="checkbox" class="prot-check" data-prot-write="${esc(key)}" data-prot-kind="${kind}"${write ? ' checked' : ''}${mandatory ? ' disabled' : ''}
+             title="${mandatory ? 'Mandatory: a project may not change another project' : write ? 'Changes allowed: untick to refuse every change to this path' : 'Changes refused before any permission card'}"
              aria-label="Allow changes to ${esc(key)}" />
-      <input type="checkbox" class="prot-check" data-prot-read="${esc(key)}" data-prot-kind="${kind}"${read ? ' checked' : ''}
-             title="${read ? 'Reads allowed: untick to refuse reads as well' : 'Reads refused: tick to allow reading this path'}"
+      <input type="checkbox" class="prot-check" data-prot-read="${esc(key)}" data-prot-kind="${kind}"${read ? ' checked' : ''}${mandatory ? ' disabled' : ''}
+             title="${mandatory ? 'Mandatory: a project may not read another project' : read ? 'Reads allowed: untick to refuse reads as well' : 'Reads refused: tick to allow reading this path'}"
              aria-label="Allow reads of ${esc(key)}" />`;
-  const row = ({ kind, key, target, builtin, write, read }) => `
+  const row = ({ kind, key, target, builtin, write, read, mandatory = false }) => `
     <div class="prot-row">
-      <span class="prot-path" title="${esc(target)}"><span class="prot-name">${esc(target)}</span>${builtin ? '<span class="prot-tag is-builtin">Built-in</span>' : ''}</span>
-      ${boxes(kind, key, write, read)}
+      <span class="prot-path" title="${esc(target)}"><span class="prot-name">${esc(target)}</span>${builtin ? '<span class="prot-tag is-builtin">Built-in</span>' : ''}${mandatory ? '<span class="prot-tag">Mandatory</span>' : ''}</span>
+      ${boxes(kind, key, write, read, mandatory)}
       ${builtin
         ? '<button type="button" class="prot-x" disabled title="Built-in paths can be switched off but not removed" aria-label="Built-in path, cannot be removed">✕</button>'
         : `<button type="button" class="prot-x" data-prot-del="${esc(target)}" title="Remove this path from the list" aria-label="Remove ${esc(target)}">✕</button>`}
@@ -446,8 +446,11 @@ function settingsProhibited(c) {
         key: entry.id,
         target: entry.path,
         builtin: true,
-        write: writeOff.has(entry.id),
-        read: !readOff.has(entry.id),
+        // The server refuses both boxes for a mandatory entry; showing them ticked
+        // would be a promise it does not keep (15 Nov).
+        write: entry.mandatory ? false : writeOff.has(entry.id),
+        read: entry.mandatory ? false : !readOff.has(entry.id),
+        mandatory: entry.mandatory === true,
       }),
     ),
     ...added.map((entry) =>

@@ -1,6 +1,6 @@
 {
   "name": "synapse",
-  "version": "1.58.28",
+  "version": "1.58.29",
   "private": true,
   "author": "DarkDvr",
   "license": "AGPL-3.0-only",
@@ -19,4 +19,5 @@
     "test": "node --test \"tests/*.test.mjs\""
   }
 }
+
 

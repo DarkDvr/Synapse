@@ -47,9 +47,17 @@ test('the built-in list is the machine, and it always has Synapse in it', () => 
 test('two boxes per entry: writes refused, reads allowed by default', () => {
   const entries = protectionEntries(normalize({}));
   for (const entry of entries) {
+    // One entry is sealed on purpose: the projects root (15 Nov). Every other entry
+    // keeps the tier's promise that OS folders can still be read.
+    if (entry.mandatory) continue;
     assert.equal(entry.write, false, `${entry.path} refuses writes`);
     assert.equal(entry.read, true, `${entry.path} allows reads`);
   }
+  const projects = entries.find((entry) => entry.id === 'projects');
+  assert.ok(projects, 'the projects root is in the list');
+  assert.equal(projects.write, false, 'another project cannot be changed');
+  assert.equal(projects.read, false, 'or looked into');
+  assert.equal(projects.mandatory, true, 'and the boxes are not the operator\'s to tick');
   // Switching a built-in's Write back on is an id list; clearing its Read is another.
   const off = protectionEntries(
     normalize({ protection: { builtinsOff: ['windows'], builtinsSealed: ['program-data'] } }),

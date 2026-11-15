@@ -9,6 +9,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import { decide, grantKey, rulesFor, zoneOf, inside, isSecret, analyzeCommand, refusalNote, screenTaking } from '../src/permissions.js';
+import { protectionEntries } from '../src/protection.js';
+import { scratchDir } from '../src/paths.js';
 import { tmpdir } from './tmpdir.mjs';
 
 const HOME = 'C:/Users/tester';
@@ -32,6 +34,40 @@ const call = (action, resource, extra = {}) =>
   });
 
 const shell = (command, extra = {}) => call('shell', command, extra);
+
+// ── the projects fence (15 Nov) ────────────────────────────────
+// A project may not look into another. The projects root is a mandatory protected
+// entry and the project in use is the more specific permitted subfolder, so this is
+// the existing "most specific path wins" rule rather than a second policy.
+test('no project reads or changes another project', () => {
+  const sibling = 'F:/dev/Synapse.Projects/other-app/src/app.js';
+  const read = shell(`Get-Content "${sibling}"`);
+  assert.equal(read.effect, 'deny', 'a read-only command naming another project is refused');
+  assert.equal(read.scope, 'prohibited');
+  assert.match(read.reason, /Another project/);
+  assert.equal(call('read', sibling).effect, 'deny');
+  assert.equal(call('write', sibling).effect, 'deny');
+  assert.equal(call('read', 'F:/dev/Synapse.Projects').effect, 'deny', 'the root itself too');
+  assert.equal(call('read', 'F:/dev/Synapse.Projects/demo-two/x.txt').effect, 'deny', 'a name that starts with ours is still another project');
+  // The project in use is the permitted subfolder...
+  assert.equal(call('read', `${PROJECT}/src/app.js`).effect, 'allow');
+  assert.equal(call('write', `${PROJECT}/src/new.js`).effect, 'allow');
+  // ...and so is the scratch folder the brief hands the worker.
+  const own = scratchDir(PROJECT, SCRATCH);
+  assert.equal(call('read', `${own}/probe.ps1`, { scratchRoot: SCRATCH }).effect, 'allow');
+});
+
+test('the projects fence is mandatory: the boxes cannot switch it off', () => {
+  const entries = protectionEntries(
+    { protection: { builtinsOff: ['projects'], builtinsSealed: ['projects'] } },
+    { env: {} },
+  );
+  const row = entries.find((entry) => entry.id === 'projects');
+  assert.ok(row, 'the projects root is a built-in entry');
+  assert.equal(row.write, false, 'a write into another project is refused whatever the config says');
+  assert.equal(row.read, false, 'so is a read');
+  assert.equal(row.mandatory, true, 'and the pane shows why its boxes are disabled');
+});
 
 // ── zones ───────────────────────────────────────────────────────
 test('the three zones, and the boundary between them', () => {
@@ -67,8 +103,10 @@ test('a write inside the workspace is allowed, relative or absolute', () => {
   assert.equal(call('edit', '.synapse/plan.json').effect, 'allow');
 });
 
-test('a write that climbs out of the workspace asks', () => {
-  assert.equal(call('edit', '../other/file.txt').effect, 'ask');
+test('a write that climbs out of the workspace asks — unless it lands in another project', () => {
+  // `..\other` is the sibling project, so the projects fence answers and the operator
+  // is not asked (15 Nov).
+  assert.equal(call('edit', '../other/file.txt').effect, 'deny');
   assert.equal(call('edit', '../../Windows/x.txt').effect, 'ask');
 });
 
@@ -98,7 +136,7 @@ test('the scratch folder is writable without asking, and is not the harness', ()
     home: HOME,
     protection: [{ path: HARNESS, label: 'Synapse', write: false, read: true }],
   };
-  const file = `${SCRATCH}/demo-1234/probe.ps1`;
+  const file = `${scratchDir(PROJECT, SCRATCH)}/probe.ps1`;
   assert.equal(zoneOf(file, { projectRoot: PROJECT, harnessRoot: HARNESS, scratchRoot: SCRATCH }), 'scratch');
   const write = decide({ ...base, action: 'edit', resources: [file] });
   assert.equal(write.effect, 'allow');
@@ -450,7 +488,7 @@ test('reading AppData while writing in the project does not ask', () => {
 test('an outside read beside a scratch delete does not ask', () => {
   const command =
     `Get-ChildItem "D:\\temp\\fever tracker" -File\n` +
-    `Remove-Item "${SCRATCH}/fever-tracker-3f38e7d2/q2.png" -Force`;
+    `Remove-Item "${scratchDir(PROJECT, SCRATCH)}/q2.png" -Force`;
   const answer = decide({
     action: 'shell',
     resources: [command],

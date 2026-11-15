@@ -15,7 +15,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { ROOT, normDir } from './paths.js';
+import { ROOT, PROJECTS_ROOT, normDir } from './paths.js';
 
 /** Forward slashes, no trailing separator, lower case: one spelling per path. */
 
@@ -40,6 +40,11 @@ export function builtinEntries(env = process.env) {
     { id: 'program-files-x86', path: env['ProgramFiles(x86)'] || '', label: 'Program Files (x86)' },
     { id: 'program-data', path: env.ProgramData || '', label: 'ProgramData' },
     { id: 'synapse', path: ROOT, label: 'Synapse itself' },
+    // Every project lives under one root; the mandatory entry below keeps a model from
+    // reading or changing any of them. The project in use is a more specific permitted
+    // path (src/permissions.js), which is how "not another project" is expressed with
+    // the same rule the operator already knows.
+    { id: 'projects', path: PROJECTS_ROOT, label: 'Another project' },
   ];
   return list.filter((entry) => {
     if (!entry.path) return false;
@@ -53,6 +58,16 @@ export function builtinEntries(env = process.env) {
 
 /** A browser profile folder is not merely protected: reading it resets the browser. */
 const sealedPath = (value) => /bravesoftware/i.test(String(value || ''));
+
+/**
+ * Entries the operator cannot switch off.
+ *
+ * Only one today: the projects root. A project must not read or change another project,
+ * and that rule cannot be a preference — one unticked box would let any model wander
+ * into every project on the machine. The project in use is permitted as a more specific
+ * path by `withProjectFence` in permissions.js.
+ */
+const MANDATORY = new Set(['projects']);
 
 /**
  * Every entry, built-in and added, in the order Settings shows them.
@@ -71,8 +86,11 @@ export function protectionEntries(config, { env = process.env } = {}) {
   const builtins = builtinEntries(env).map((entry) => ({
     ...entry,
     builtin: true,
-    write: writeOff.has(entry.id),
-    read: !readOff.has(entry.id),
+    mandatory: MANDATORY.has(entry.id),
+    // A mandatory entry is refused on both boxes whatever the config says: unticking it
+    // would let one project read another, which is the whole reason it exists (15 Nov).
+    write: MANDATORY.has(entry.id) ? false : writeOff.has(entry.id),
+    read: MANDATORY.has(entry.id) ? false : !readOff.has(entry.id),
   }));
   const custom = (Array.isArray(config?.protection?.paths) ? config.protection.paths : [])
     .filter((entry) => entry && String(entry.path || '').trim())
@@ -98,11 +116,13 @@ export function protectionEntries(config, { env = process.env } = {}) {
 /** The entries in the shape permissions.js judges with: write and read allowed. */
 export function protectionFor(config, { env = process.env } = {}) {
   return protectionEntries(config, { env }).map((entry) => ({
+    id: entry.id,
     path: entry.path,
     label: entry.label,
     write: entry.write,
     read: entry.read,
     builtin: entry.builtin,
+    mandatory: entry.mandatory === true,
   }));
 }
 

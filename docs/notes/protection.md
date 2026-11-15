@@ -222,3 +222,31 @@ with the arguments read correctly the whole command is one project run of one sh
 and it runs without a card. A real `>` redirect is still a write, and still judged where it
 lands.
 
+
+## A project cannot look into another (15 Nov)
+
+The operator asked whether the existing "most specific path wins" rule could express it.
+It can, so the fence is **two entries, not a new policy**:
+
+- the **projects root** (`F:\dev\Synapse.Projects`) is a protected entry with **both boxes
+  refused** — writes and reads;
+- the **project in use** is a more specific permitted subfolder of it, and so is the
+  **scratch folder** the brief hands a worker (`_scratch\<name>-<hash>`), or the fence would
+  block the probe scripts the brief tells the model to write.
+
+The two permitted entries are appended per request (`withProjectFence` in
+`src/permissions.js`), because "the project in use" is not a property of the machine. The
+operator's own entries come first, so a path they added inside their project still wins by
+being more specific — the fence does not override a deliberate refusal.
+
+The root entry is **mandatory**: `src/protection.js` refuses both boxes whatever the config
+says, and Settings shows them disabled with a "Mandatory" tag. One unticked box would let
+any model wander into every project.
+
+The refusal says what it is, not "PROHIBITED": *"Another project is not yours to read. Work
+only inside your own project folder."* It covers file tools and shell commands alike — a
+read-only `Get-Content ..\other\file` is a read of another project too.
+
+**Not covered:** a project registered outside the projects root (Add Project accepts any
+folder). The fence is about the one folder every project lives in; a per-registry rule would
+need the project list inside the policy, which it does not have.

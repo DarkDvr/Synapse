@@ -21,6 +21,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { covers } from './protection.js';
+import { PROJECTS_ROOT, SCRATCH_ROOT, scratchDir } from './paths.js';
 
 const WRITE_ACTIONS = new Set(['edit', 'write', 'patch', 'create']);
 const SHELL_ACTIONS = new Set(['shell', 'bash']);
@@ -362,6 +363,41 @@ function decidingEntry(target, ctx) {
   return best;
 }
 
+/**
+ * The fence around the projects folder: no project looks into another.
+ *
+ * The protected list already answers "most specific path wins", so this is two
+ * entries rather than a new rule: the projects root is prohibited (`src/protection.js`
+ * keeps that entry mandatory — it is not the operator's to switch off), and the project
+ * in use is a permitted subfolder of it. The scratch folder the brief hands a worker is
+ * the second permitted subfolder; without it the fence would block the probe scripts the
+ * brief tells it to write.
+ *
+ * Added per request because "the project in use" is not a property of the machine. The
+ * operator's own entries come first in the list, so one they added inside their project
+ * still wins by being more specific (15 Nov).
+ */
+function withProjectFence(protection, { projectRoot, scratchRoot } = {}) {
+  const list = Array.isArray(protection) ? [...protection] : [];
+  if (!projectRoot) return list;
+  // The root is a mandatory built-in entry (src/protection.js). A caller that did not
+  // pass the list still gets the fence: the rule does not depend on remembering it.
+  const root = key(PROJECTS_ROOT);
+  if (!list.some((entry) => key(entry.path) === root)) {
+    list.push({ id: 'projects', path: PROJECTS_ROOT, label: 'Another project', read: false, write: false });
+  }
+  list.push({ id: 'this-project', path: projectRoot, label: 'this project', read: true, write: true });
+  try {
+    const own = scratchDir(projectRoot, scratchRoot || SCRATCH_ROOT);
+    if (own) {
+      list.push({ id: 'this-scratch', path: own, label: 'your scratch folder', read: true, write: true });
+    }
+  } catch {
+    // A project with no usable path is caught by the zone checks; the fence is extra.
+  }
+  return list;
+}
+
 function prohibitedWrite(target, ctx) {
   const entry = decidingEntry(target, ctx);
   return entry && entry.write === false ? entry : null;
@@ -370,6 +406,18 @@ function prohibitedWrite(target, ctx) {
 function prohibitedRead(target, ctx) {
   const entry = decidingEntry(target, ctx);
   return entry && entry.read === false ? entry : null;
+}
+
+/**
+ * The sentence a fence refusal uses. The projects root is not the operator's list —
+ * they cannot switch it off — so it does not borrow that wording.
+ */
+function fenceDeny(entry, verb) {
+  return deny(
+    `Another project is not yours to ${verb}. Work only inside your own project folder.`,
+    true,
+    'prohibited',
+  );
 }
 
 /**
@@ -435,7 +483,7 @@ function decideWrite(resources, ctx) {
     if (!target || target.unknown) return ask('The harness cannot tell which folder this is.', true, 'unknown');
     // PROHIBITED beats every other rule: no card, no remembered grant, no answer.
     const guarded = prohibitedWrite(target.path, ctx);
-    if (guarded) return deny(`PROHIBITED: ${guarded.label} is on the protected list.`, true, 'prohibited');
+    if (guarded) return guarded.id === 'projects' ? fenceDeny(guarded, 'change') : deny(`PROHIBITED: ${guarded.label} is on the protected list.`, true, 'prohibited');
     if (isSecret(target.path, ctx)) return deny('The harness never opens saved-password folders.', true, 'secret');
     paths.push(target.path);
     zones.push(zoneOf(target.path, ctx));
@@ -1049,14 +1097,14 @@ function decideShell(resources, ctx) {
       .flatMap((part) => [...part.paths, ...part.redirects])
       .map((p) => prohibitedRead(p, ctx))
       .find(Boolean);
-    if (sealed) return deny(`PROHIBITED: ${sealed.label} is not read either.`, true, 'prohibited');
+    if (sealed) return sealed.id === 'projects' ? fenceDeny(sealed, 'read') : deny(`PROHIBITED: ${sealed.label} is not read either.`, true, 'prohibited');
   }
   // A copy's source is a read, and it is judged like one: an entry whose Read is
   // unticked still refuses it, and so does a source the harness would not let a
   // model read at all.
   const copySources = [...copies.values()].flatMap((copy) => copy.sources);
   const sealedCopy = copySources.map((p) => prohibitedRead(p, ctx)).find(Boolean);
-  if (sealedCopy) return deny(`PROHIBITED: ${sealedCopy.label} is not read either.`, true, 'prohibited');
+  if (sealedCopy) return sealedCopy.id === 'projects' ? fenceDeny(sealedCopy, 'read') : deny(`PROHIBITED: ${sealedCopy.label} is not read either.`, true, 'prohibited');
   const unreadableCopy = copySources.find((p) => !harnessReadable(p, ctx));
   if (unreadableCopy) return deny("These are Synapse's private files.", true, 'harness');
   const writesHarness =
@@ -1158,7 +1206,7 @@ function decideRead(resources, ctx) {
     // treats a read as a touch. Every other protected path is readable — that is
     // the point of the tier, so OS logs and drivers can be inspected.
     const guarded = prohibitedRead(target.path, ctx);
-    if (guarded) return deny(`PROHIBITED: ${guarded.label} is not read either.`, outside, 'prohibited');
+    if (guarded) return guarded.id === 'projects' ? fenceDeny(guarded, 'read') : deny(`PROHIBITED: ${guarded.label} is not read either.`, outside, 'prohibited');
     // A .env holds live keys. The model may read .env.example; the real file is
     // the operator's to hand over, because the values are the point of it.
     if (isEnvFile(target.path)) return ask('This file holds keys or passwords.', outside, zone);
@@ -1214,7 +1262,15 @@ export function grantKey({ action, resources, cwd, projectRoot, harnessRoot, hom
 
 export function decide({ action, resources, cwd, projectRoot, harnessRoot, scratchRoot, home = os.homedir(), protection = [], deskHeld = false }) {
   const a = String(action || '').toLowerCase();
-  const ctx = { cwd, projectRoot, harnessRoot, scratchRoot, home, protection, deskHeld };
+  const ctx = {
+    cwd,
+    projectRoot,
+    harnessRoot,
+    scratchRoot,
+    home,
+    protection: withProjectFence(protection, { projectRoot, scratchRoot }),
+    deskHeld,
+  };
   if (WRITE_ACTIONS.has(a)) return decideWrite(resources, ctx);
   if (SHELL_ACTIONS.has(a)) return decideShell(resources, ctx);
   if (EXECUTE_ACTIONS.has(a)) return ask('This is code the harness cannot inspect.', false, 'unknown');
@@ -1257,3 +1313,4 @@ export function rulesFor({ home = os.homedir() } = {}) {
   }
   return rules;
 }
+
