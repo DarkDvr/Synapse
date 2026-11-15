@@ -1276,6 +1276,10 @@ export function briefSession({ dir, role = 'architect', auto = false, single = f
   );
 
   if (isArchitect) {
+    lines.push(
+      'The harness records each run\'s change as a diff under .synapse/reports/diffs, named in the report. Read ' +
+        'it when a report claims code or layout: the diff is what changed.',
+    );
     // A tool's name is a literal, and two models in one day got it wrong: each called
     // `delegate_delegate`, the engine answered "No tool named …", and each concluded the
     // tool did not exist — one fell back to the engine's own `subagent`, which starts no

@@ -9,7 +9,7 @@ genuine **OpenCode** engine over its HTTP + SSE API and rebuilds the interface
 from scratch — today that engine, tomorrow anything that implements the contract
 in `src\engines\base.js`.
 
-**Version 1.58.34** - Windows 10/11, x64. The zip carries Node, the engine and the fonts.
+**Version 1.58.34** - Windows 10/11, x64. The zip carries Node, Git, the engine and the fonts.
 
 **Licence:** AGPL-3.0-only, Copyright (C) 2026 DarkDvr — see `LICENSE`, `NOTICE`, `THIRD-PARTY.md`.
 
@@ -19,6 +19,8 @@ in `src\engines\base.js`.
   it arrives with Microsoft Edge.
 - The **.NET 10 Desktop Runtime** for `Synapse.exe`. `shell\build.ps1 -Portable`
   produces a copy that carries its own, for a PC without one.
+- **Git** — if the machine has none, Synapse installs a private MinGit into
+  `bin\git` on first launch; nothing is installed system-wide.
 - Nothing else. Node and the engine are in `bin\`, and `vendor-node.ps1` and
   `vendor-engine.ps1` restore them if they are missing.
 

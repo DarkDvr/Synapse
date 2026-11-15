@@ -1,7 +1,7 @@
 // Synapse entry point: load config, start the engine, serve the UI.
 import fs from 'node:fs';
 import path from 'node:path';
-import { spawn, execFile } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { DATA_DIR, LOGS_DIR, WORKSPACE_DIR, GENERAL_DIR, ENGINE_HOME, PID_FILE, PROJECTS_FILE, TOOL_STATS_FILE, PROBE_DIR, PROBE_FILE, MODEL_CACHE_FILE, TRACE_REASONS_FILE, NPM_ATTEMPT_FILE, PERMISSION_MEMORY_FILE, REMOTE_TOKEN_FILE, ROOT, SCRATCH_ROOT, scratchDir } from './paths.js';
 import { loadConfig, saveConfig, repairMachinePaths } from './config.js';
 import { logger } from './logger.js';
@@ -36,6 +36,7 @@ import { remember as rememberWindow } from './windows.js';
 import { sweepOrphans } from './cleanup.js';
 import { createHousekeeping } from './housekeeping.js';
 import { hasNpm, installLocalNpm } from './npm-check.js';
+import { ensureGit, ensureRepo } from './git.js';
 import { APP_VERSION } from './version.js';
 import { createSynapseUpdate } from './synapse-update.js';
 
@@ -228,6 +229,14 @@ async function main() {
     }
     currentConfig = applyConfig(currentConfig);
   }
+
+  // ── git ──────────────────────────────────────────────────────
+  // Git is how a run's change is recorded: the tree before a delegation, the
+  // patch after it. A machine with none gets the private MinGit in `bin\git`
+  // here, before the engine starts, so the engine's shells find `git` too. The
+  // install is silent and inside this folder; a failure is a warning, not a boot
+  // failure — diffs and checkpoints are off until it exists.
+  await ensureGit({ log: app });
 
   // ── engine ───────────────────────────────────────────────────
   engine = createEngine(currentConfig, {
@@ -554,27 +563,12 @@ async function main() {
   // cheap and idempotent.
   const gitChecked = new Set();
   const pathKey = (d) => String(d || '').replace(/[\\/]+$/, '').toLowerCase();
-  function git(args, dir) {
-    return new Promise((resolve, reject) => {
-      execFile('git', args, { cwd: dir, windowsHide: true, timeout: 20000 }, (err, stdout) =>
-        (err ? reject(err) : resolve(String(stdout || '').trim())),
-      );
-    });
-  }
   async function ensureGitRepo(dir) {
     // The probe scratch directory is not a project; never repository it.
     if (!dir || pathKey(dir) === pathKey(PROBE_DIR) || gitChecked.has(dir)) return;
     gitChecked.add(dir);
-    try {
-      await git(['rev-parse', '--git-dir'], dir);
-      return; // already a repository, or inside one
-    } catch { /* not under git — initialize it below */ }
-    try {
-      await git(['init'], dir);
-      app.info(`git: initialized ${dir}`);
-    } catch (err) {
-      app.warn(`git init skipped for ${dir}: ${err.message}`);
-    }
+    const result = await ensureRepo(dir, { log: app });
+    if (!result.ok) app.warn(`git init skipped for ${dir}: ${result.error}`);
   }
 
   // Scan a finished turn once: its tool calls go into the census, a

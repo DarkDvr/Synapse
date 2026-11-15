@@ -61,6 +61,14 @@ robocopy (Join-Path $root 'bin\opencode') (Join-Path $stage 'bin\opencode') /E `
     /XF '*.bak' /NFL /NDL /NJH /NJS /NP | Out-Null
 if ($LASTEXITCODE -ge 8) { throw "robocopy failed copying bin\opencode ($LASTEXITCODE)" }
 
+# The private Git, when this machine has one. It is optional: a fresh PC can fetch
+# it on first launch, but carrying it means the zip is the whole toolchain.
+$gitDir = Join-Path $root 'bin\git'
+if (Test-Path -LiteralPath $gitDir) {
+    robocopy $gitDir (Join-Path $stage 'bin\git') /E /NFL /NDL /NJH /NJS /NP | Out-Null
+    if ($LASTEXITCODE -ge 8) { throw "robocopy failed copying bin\git ($LASTEXITCODE)" }
+}
+
 $readme = @"
 Synapse $version — one folder
 ============================

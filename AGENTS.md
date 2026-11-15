@@ -46,12 +46,12 @@ the cards and the commits, not the code. One reason per sentence, not a chain.
    `child_process`, `fs`. No build step, no bundler, no framework. If a problem
    looks like it needs a package, solve it in the standard library instead —
    web search, MCP, markdown rendering and the UI are all hand-rolled here.
-2. **Self-contained and offline.** The app fetches nothing for itself: fonts,
-   scripts and assets are vendored, and there are no CDN links ever. The network
-   is used only for the work — the model provider, a page a model fetches or
-   browses — and for the two update feeds (`src/engine-update.js`,
-   `src/synapse-update.js`), which answer the update chip, cache their answers,
-   and download only when Update is pressed.
+2. **Self-contained and offline.** The app fetches nothing it does not install
+   itself: fonts, scripts and assets are vendored, and there are no CDN links ever.
+   The network is used for the work — the model provider, a page a model fetches or
+   browses — for the two update feeds (`src/engine-update.js`, `src/synapse-update.js`),
+   and to provision a missing runtime into `bin\` (rule 3). The feeds answer the update
+   chip, cache their answers, and download only when Update is pressed.
 3. **A good tenant.** Whatever Synapse needs, it installs itself and silently,
    inside this folder — `bin\node`, `bin\opencode`, `vendor\`. Never `winget`, a
    global install, a PATH edit, the registry or `%APPDATA%`. The machine is
@@ -185,6 +185,7 @@ an agent does not know to open is a document that does not exist:
 | `docs/notes/project-chat.md` | before changing how a project, a chat or a compaction works — the one-chat-per-project scope, the project document, phases, and Private |
 | `docs/notes/protection.md` | before touching `src/protection.js`, the prohibited list, or the Brave rule — what is refused without asking, and what the fence cannot see |
 | `docs/notes/tests.md` | before adding a test, or when CI is red — the one rule a test must keep, and how the suite runs |
+| `docs/notes/git.md` | before touching git, the diff or a checkpoint — who commits, what the private MinGit installs, and what the harness never does |
 | `docs/notes/releases.md` | before bumping, tagging, or building a release — the three places the version lives, and the checklist |
 
 Two rules: **a new lesson goes in `docs/notes/`, not here**; and a rule you move out
@@ -240,7 +241,7 @@ scripts/              checks.mjs (suite with Auto-Shutdown off); wait-for-idle.m
 config/               synapse.config.json (this machine's answers); config.default.json ships
 data/                 runtime state: engine home, browser profile, caches, pids
 logs/                 one file per channel: app, engine, session, tools
-bin/                  Node and the engine, vendored (not in git)
+bin/                  Node, a private Git and the engine, vendored (not in git)
 docs/notes/           the detail behind this file; the index is above
 ```
 

@@ -414,6 +414,11 @@ export class OpenCodeEngine extends Engine {
     // not touched.
     const nodeDir = path.join(ROOT, 'bin', 'node');
     const nodeThere = fs.existsSync(path.join(nodeDir, process.platform === 'win32' ? 'node.exe' : 'node'));
+    // The private Git, on the same rule: a worker can run `git status` and `git
+    // diff` on a machine that never installed Git, and the harness's own install
+    // put it here. The machine's PATH is not touched.
+    const gitDir = path.join(ROOT, 'bin', 'git', 'cmd');
+    const gitThere = fs.existsSync(path.join(gitDir, 'git.exe'));
     // Where the .NET toolchain keeps its own debris: the first-run sentinel, the
     // CLI's home, its temp. Left unset, a `dotnet build` a worker runs writes them
     // wherever HOME pointed — on 10 Nov that was 258 MB of `.net` sitting in the
@@ -428,7 +433,13 @@ export class OpenCodeEngine extends Engine {
       XDG_DATA_HOME: home.data,
       XDG_STATE_HOME: home.state,
       TMPDIR: home.tmp,
-      ...(nodeThere ? { PATH: `${nodeDir}${path.delimiter}${process.env.PATH || ''}` } : {}),
+      ...(nodeThere || gitThere
+        ? {
+            PATH: [nodeThere ? nodeDir : '', gitThere ? gitDir : '', process.env.PATH || '']
+              .filter(Boolean)
+              .join(path.delimiter),
+          }
+        : {}),
       ...(fs.existsSync(nugetCache) ? { NUGET_PACKAGES: nugetCache } : {}),
       DOTNET_CLI_HOME: dotnetHome,
       DOTNET_NOLOGO: '1',

@@ -54,6 +54,7 @@ import { toolSignature, loopStrike, LOOP_WINDOW } from './loop-detect.js';
 import { normDir } from './paths.js';
 import { report } from './report.js';
 import { runTaskChecks, checkNudge } from './checks.js';
+import { treeOf, changeSince } from './git.js';
 import { tokens, ranFor } from './words.js';
 import { skillRules, describeSkills, roleMustLoad } from './skills.js';
 import { rulesFor } from './permissions.js';
@@ -1470,6 +1471,10 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     let stallSec = Math.max(30, Number(roleConfig.stallSec) || settings.stallSec);
     const fingerprintBefore = planFingerprint(dir);
     const synapseBefore = synapseFingerprint(dir);
+    // The project as git saw it when this delegation started. Comparing trees is
+    // how the run's own change is known: a worker is not the only thing that may
+    // touch the folder while it runs, but a tree before and a tree after are.
+    let changeBefore = null;
     const startedAt = Date.now();
     let worker = null;
     let before = null;
@@ -1672,6 +1677,12 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     };
     running.set(normDir(dir), live);
     emit('run.started', live);
+
+    // The tree the run starts from, for the diff at the end. A project with no git
+    // (or no git on the machine) answers null and the run simply has no diff.
+    try {
+      changeBefore = await treeOf(dir);
+    } catch { /* no repository or no git: the report says nothing about a change */ }
 
     // A restore point first, then a clean baseline: the harness is committed as it
     // stands, so anything it shows once the worker has stopped is the worker's
@@ -2444,6 +2455,17 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     const after = planFingerprint(dir);
     const planTouched = fingerprintBefore !== after;
 
+    // What the run actually changed, from the two trees. Computed before the
+    // cleanup below, which moves stray files and would otherwise appear in the diff
+    // as the worker's doing. The patch goes inside the project, under
+    // `.synapse/reports/diffs/`.
+    let change = null;
+    try {
+      change = await changeSince(dir, task.id, changeBefore);
+    } catch (err) {
+      log.warn(`could not record the project's diff for ${request.task}: ${err.message}`);
+    }
+
     // Neither must anything else in .synapse that is not this role's to write.
     // The path rules stop the file tools; a shell redirect, the `execute` tool or
     // an absolute path can still land, so the folder is compared around the turn
@@ -2569,6 +2591,17 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
       // task.
       steers: steers.slice(-20),
       files,
+      // What the run changed, as git sees it, and the patch inside the project.
+      // Null when the folder was already the same at the end, or has no git.
+      change: change
+        ? {
+            stat: change.stat,
+            files: change.files.slice(0, 60),
+            added: change.added,
+            removed: change.removed,
+            patch: change.patchPath,
+          }
+        : null,
       text: text.slice(0, RESULT_MAX),
       // What the run cost in context, so the audit after a project reads the run
       // log instead of the engine's database. `peak` is the whole prompt of the
@@ -2768,6 +2801,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
         loopModel,
         modelRef,
         checks: checkResult,
+        change,
       }),
     }, signal?.aborted ? undefined : signal);
     // A stop aborts the run's signal, and passing that to the wake made the wake

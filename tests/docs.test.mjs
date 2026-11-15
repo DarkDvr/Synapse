@@ -56,6 +56,7 @@ const NOTES = [
   'docs/notes/protection.md',
   'docs/notes/releases.md',
   'docs/notes/tests.md',
+  'docs/notes/git.md',
 ];
 const agents = read('AGENTS.md');
 const slashed = (rel) => [rel, rel.replace(/\//g, '\\')];

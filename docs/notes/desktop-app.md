@@ -35,6 +35,7 @@ exactly as it was?** If the answer is no, the dependency is installed wrongly.
 | Node | `bin\node\node.exe` | `vendor-node.ps1`, or the npm fetch in `src\npm-check.js` |
 | npm | `bin\node\node_modules\npm` | same download as Node; only used for engine updates |
 | Engine | `bin\opencode\opencode.exe` | `vendor-engine.ps1`, or the update flow in `src\engine-update.js` |
+| Git | `bin\git\cmd\git.exe` | MinGit 2.56.1, downloaded once on first launch when the machine has none — `src\git.js` |
 | .NET packages | `vendor\nuget-packages` | `vendor-nuget.ps1`, so a worker's `dotnet build` needs no network |
 | Fonts | `web\vendor\fonts.css` | vendored, never a CDN |
 | WebView2 runtime | the machine | shipped with Windows 11, present on nearly every Windows 10 box through Edge. Not ours to install: if it is missing the app says so and stops |
@@ -45,6 +46,11 @@ with a copied folder, restored by the scripts above.
 **The vendored copy is preferred, always.** `start` resolves `bin\node\node.exe`
 first and falls back to whatever is on `PATH` only for a dev checkout, and says
 which one it used. The engine does the same for `bin\opencode`.
+
+**Git follows the same rule.** A machine with git uses its own; one without gets
+MinGit in `bin\git`, downloaded by `src\git.js` before the engine starts and put
+on the engine's PATH for the workers. Nothing is installed system-wide and
+deleting `bin\git` undoes it. See `docs/notes/git.md`.
 
 ---
 

@@ -19,7 +19,7 @@
 import { QC_ROUNDS } from './plans.js';
 import { tokens } from './words.js';
 
-export function report({ task, role, insteadOf, startedBelow = false, skipped, outcome, harnessStop, text, files, context, workerId, planTouched, synapseTouched, qcRound, skillsRequired, skillsMissing, auto, stallSec, retries, resumes, loops = 0, loopCount = 0, loopMarked = false, loopRole = null, loopModel = null, modelRef = '', error, stoppedBy, lastTurnError, steers, deferred, checks }) {
+export function report({ task, role, insteadOf, startedBelow = false, skipped, outcome, harnessStop, text, files, context, workerId, planTouched, synapseTouched, qcRound, skillsRequired, skillsMissing, auto, stallSec, retries, resumes, loops = 0, loopCount = 0, loopMarked = false, loopRole = null, loopModel = null, modelRef = '', error, stoppedBy, lastTurnError, steers, deferred, checks, change }) {
     const head =
       outcome === 'completed'
         ? checks?.failed
@@ -120,6 +120,14 @@ export function report({ task, role, insteadOf, startedBelow = false, skipped, o
       lines.push(`Before the stop, the last turn had ended with: ${lastTurnError}`);
     }
     lines.push(files.length ? `Files written: ${files.join(', ')}` : `Files written: none.`);
+    // What changed on disk, from the trees around the run — the evidence behind
+    // "I did it", independent of the worker's sentence. The patch is inside the
+    // project, so the Architect can read the actual change instead of a claim.
+    if (change) {
+      lines.push(
+        `Changed: ${change.stat}${change.patchPath ? ` — the diff is ${change.patchPath}` : ''}.`,
+      );
+    }
     // The harness ran the task's own acceptance check. A failure is evidence,
     // not a retry instruction: the worker has already had its one repair turn.
     if (checks?.failed) {
