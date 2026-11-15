@@ -8,6 +8,7 @@ import { logger } from './logger.js';
 import { createEngine } from './engines/index.js';
 import { EV, turnEnded } from '../web/events.js';
 import { createProjectStore, ensureProjectFolders } from './projects.js';
+import { addSession, isPrivateDir, setPrivateDirs } from './privacy.js';
 import { createToolStats } from './toolstats.js';
 import { readPlan, logPlanState } from './plans.js';
 import { createRunner } from './runs.js';
@@ -196,6 +197,9 @@ async function main() {
   // A registry copied from another machine still names that machine's folders. Silent
   // by the operator's rule: a project whose directory is gone is not a project here.
   projects.pruneMissing();
+  // The private markers are in the folders; the log filter needs them before anything
+  // writes a line about one of these projects (15 Nov).
+  setPrivateDirs(projects.list().filter((p) => p.private).map((p) => p.directory));
   app.info(`projects: ${projects.list().length}${discovered.length ? ` (${discovered.length} found in the folder)` : ''}`);
   app.info(`scratch: ${SCRATCH_ROOT}`);
   // Every project owns a plan file. Create the ones that are missing rather than
@@ -344,6 +348,9 @@ async function main() {
         let n = 0;
         for (const s of sessions) {
           if (!s?.id || s.internal) continue;
+          // A private project's session id joins the log filter's list before any
+          // line can name it (15 Nov).
+          if (isPrivateDir(s.directory)) addSession(s.id, s.directory);
           // A conversation whose folder is gone cannot run: the pass below deletes it,
           // so there is nothing to bring under the policy — and with the whole store
           // listed now, patching those would be hundreds of requests for nothing.
@@ -581,7 +588,11 @@ async function main() {
       if (type === EV.executionSucceeded && session?.directory) {
         ensureGitRepo(session.directory).catch(() => {});
       }
-      const added = toolStats.recordMessages(messages, {
+      // A private project is not counted: the census is a trace outside the folder,
+      // and its own log line would name the session (15 Nov). The rest of the turn's
+      // checks still run.
+      const privateProject = isPrivateDir(session?.directory);
+      const added = privateProject ? 0 : toolStats.recordMessages(messages, {
         // A session created without an explicit model reports none until later;
         // fall back to the Architect's stored choice so the census stays
         // per-model. A non-default thinking variant is part of the identity

@@ -126,15 +126,22 @@ export const isStalled = (sessionId) =>
   !state.toolsInFlight.has(sessionId) &&
   Date.now() - lastProgress(sessionId) > STALL_MS;
 
-export function liveDot(sessionId, { clickable = true, on = sessionWorking(sessionId), ok = false, idle = false } = {}) {
-  const stalled = isStalled(sessionId);
-  if (stalled && clickable) {
-    return `<button class="tree-live on stalled" data-interrupt="${esc(sessionId)}" title="No response for over ${Math.round(STALL_MS / 1000)}s — click to interrupt"></button>`;
+/**
+ * The one dot the rail still draws: a stalled session, in red, clickable to interrupt.
+ *
+ * It used to have three more states — amber breathing while working, green for "has a
+ * conversation", grey for "never used". The animation already says "working" and the
+ * row says the rest, so the operator asked for them out (15 Nov): the green circles
+ * "have no reason to be there". Red stays, because a stopped upstream is the one thing
+ * nothing else on the row shows.
+ */
+export function liveDot(sessionId, { clickable = true } = {}) {
+  const title = `No response for over ${Math.round(STALL_MS / 1000)}s — click to interrupt`;
+  if (!isStalled(sessionId)) return '';
+  if (clickable) {
+    return `<button class="tree-live on stalled" data-interrupt="${esc(sessionId)}" title="${title}"></button>`;
   }
-  if (stalled) return '<span class="tree-live on stalled" title="Stalled"></span>';
-  const cls = `${on ? ' on' : ''}${ok ? ' ok' : ''}${idle ? ' idle' : ''}`;
-  const title = on ? 'Working' : ok ? 'Idle — this project has a conversation' : idle ? 'Never used' : '';
-  return `<span class="tree-live${cls}" title="${title}"></span>`;
+  return '<span class="tree-live on stalled" title="Stalled"></span>';
 }
 
 /**
@@ -208,7 +215,6 @@ export function renderTree() {
       const current = Boolean(chat) && state.view === 'session' && chat.id === state.sessionId;
       const working = Boolean(chat) && sessionWorking(chat.id);
       const waiting = chat ? waitingFor(chat.id) : null;
-      const used = projectUsed(p);
       const waitNote =
         waiting === 'answer' ? ' · waiting on your answer' : waiting === 'decision' ? ' · waiting for your decision' : '';
       const title = `${p.name}${working ? ' · working' : ''}${waitNote}${p.exists === false ? ' · folder missing' : ''}`;
@@ -219,7 +225,7 @@ export function renderTree() {
           </button>
           <span class="tree-actions">
             ${waiting ? `<span class="tree-wait" title="${waiting === 'answer' ? 'Waiting on your answer' : 'Waiting for your decision'}" aria-label="${waiting === 'answer' ? 'Waiting on your answer' : 'Waiting for your decision'}">?</span>` : ''}
-            ${liveDot('', { clickable: false, on: working, ok: used && !working, idle: !used && !working })}
+            ${chat && isStalled(chat.id) ? liveDot(chat.id, { clickable: false }) : ''}
             <button class="tree-menu" data-menu-project="${esc(p.id)}" title="Project menu" aria-label="Project menu" aria-haspopup="menu">⋯</button>
           </span>
         </div>

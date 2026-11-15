@@ -20,6 +20,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { DATA_DIR } from './paths.js';
+import { isPrivateDir } from './privacy.js';
 
 export const PROVIDER_LOG = path.join(DATA_DIR, 'provider-errors.log');
 /** Days of history to keep. Deliberately not a setting: the point is to see
@@ -136,12 +137,15 @@ const oneLine = (s) =>
  * One line per failure: when, what kind, which role and model, which turn, and
  * the provider's own words. `role` / `model` / `task` may be empty for a wake.
  */
-export function recordProviderError({ message, classification, role, model, task, attempt, note } = {}) {
+export function recordProviderError({ message, classification, role, model, task, attempt, note, dir } = {}) {
   // Under `node --test` the harness runs on stubs: their fake models and fake
   // failures are not the provider's. The ladder tests wrote "opencode/one …
   // Invalid request: text is required" into the real diary, beside a genuine
   // usage cap (found 30 Oct). The diary is evidence, so a test run stays out of it.
   if (process.env.NODE_TEST_CONTEXT) return null;
+  // A private project's failures are not written to the diary: the file is outside
+  // its folder, and the line names the task and the provider's words (15 Nov).
+  if (isPrivateDir(dir)) return null;
   const cls = classification || classifyFailure(message);
   const at = new Date().toISOString();
   const fields = [

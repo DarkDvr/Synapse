@@ -488,25 +488,16 @@ body.dark .sidebar .nav-link.active > span:first-child { color: #fff; }
    answer the click itself or it feels dead. */
 .btn-thin:active { background: rgba(237, 194, 90, 0.22); border-color: rgba(237, 194, 90, 0.65); color: #fff; }
 
-/* the live marker: reserved space, revealed only while work is running */
+/* The rail's only dot: a stalled session. Working is the row's own animation, a
+   conversation is the row itself, and "never used" was a circle that said nothing —
+   the operator asked for the green and amber ones out (15 Nov). Red stays: an upstream
+   that stopped answering is the one thing nothing else on the row shows. */
 .tree-live {
-  width: 7px; height: 7px; border-radius: 50%; flex: none;
-  background: var(--amber); box-shadow: 0 0 0 3px rgba(232, 163, 61, 0.16);
-  opacity: 0; border: 0; padding: 0; cursor: default;
-}
-.tree-live.on { opacity: 1; animation: dot-breathe 1.4s ease-in-out infinite; }
-/* running with no progress: the upstream never answered */
-.tree-live.stalled {
+  width: 7px; height: 7px; border-radius: 50%; flex: none; border: 0; padding: 0;
   background: var(--red); box-shadow: 0 0 0 3px rgba(240, 86, 63, 0.18);
-  animation: dot-breathe 1s ease-in-out infinite; cursor: pointer;
+  cursor: pointer; animation: dot-breathe 1s ease-in-out infinite;
 }
-.tree-live.stalled:hover { box-shadow: 0 0 0 5px rgba(240, 86, 63, 0.3); }
-/* The project row's dot: three states, one shape. Grey never used, green idle
-   with a conversation, amber breathing while it works. The amber is the live
-   path's colour family; green is the same green the cards use for "has taken
-   part". */
-.tree-live.ok { opacity: 1; background: var(--green); box-shadow: 0 0 0 2px rgba(53, 192, 138, 0.16); }
-.tree-live.idle { opacity: 1; background: #4a4e56; box-shadow: none; }
+.tree-live:hover { box-shadow: 0 0 0 5px rgba(240, 86, 63, 0.3); }
 /* The ⋯ door to the project menu. Visible on every row (a hidden door is not a
    door); it brightens under the pointer and on the open row. */
 .tree-menu {
@@ -537,6 +528,10 @@ body.dark .sidebar .nav-link.active > span:first-child { color: #fff; }
 .project-menu-item:hover, .project-menu-item:focus-visible { background: #2b2e33; outline: none; }
 .project-menu-item:disabled { color: #5c6168; background: transparent; cursor: default; }
 .project-menu-item.is-danger { color: var(--red); }
+/* The Private toggle: a label and a check mark at the far end, so the menu keeps one
+   column of text and the state is still readable at a glance (15 Nov). */
+.project-menu-item.is-toggle { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+.project-menu-mark { color: var(--green); font-size: 12px; line-height: 1; }
 .project-menu-sep { display: block; height: 1px; margin: 4px 6px; background: var(--line); }
 
 /* A project stopped on a question or a decision. The dot alone could not carry

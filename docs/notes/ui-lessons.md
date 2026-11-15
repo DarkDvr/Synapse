@@ -2748,3 +2748,11 @@ had already overwritten it with B. The answer now carries the chat that asked
 (`busyInfoSession`), `sessionWorking()` requires the two to match, a poll that lands after
 the operator has opened another chat is dropped, and `openSession` clears the previous
 chat's lock with the rest of its state (permissions, trace, clocks).
+
+**The rail's dots said what the row already said (15 Nov).** A green circle for "this
+project has a conversation" and an amber one for "working" — the row is already animated
+while it works, and having a conversation is what a project is. The operator asked for both
+out: "they honestly have no reason to be there… yellow is redundant". What is left is one
+red dot for a stalled session, which is the only state nothing else on the row carries. The
+dot class no longer reserves a hidden 7px circle; a stall is rare enough that the small
+shift is not worth a permanent hole in every row.

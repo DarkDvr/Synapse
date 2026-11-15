@@ -10,6 +10,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { ensurePlan } from './plans.js';
 import { SCRATCH_ROOT, scratchDir } from './paths.js';
+import { hasMarker, setMarker } from './privacy.js';
 
 const idFor = (dir) => crypto.createHash('sha1').update(dir.toLowerCase()).digest('hex').slice(0, 12);
 
@@ -143,6 +144,9 @@ export function createProjectStore({ file, rootDir, legacyGeneralDir = null, har
     directory: normalizeDir(p.directory),
     created: p.created ?? null,
     exists: fs.existsSync(normalizeDir(p.directory)),
+    // The marker lives inside the folder, so this is a fact about the folder, not a
+    // record of it (15 Nov).
+    private: hasMarker(normalizeDir(p.directory)),
   });
 
   /**
@@ -389,5 +393,21 @@ export function createProjectStore({ file, rootDir, legacyGeneralDir = null, har
     return true;
   }
 
-  return { list, find, create, move, update, remove, idFor, normalizeDir, pruneMissing, discover };
+  /**
+   * Turn the Private marker on or off. The flag is a file in the project's own
+   * `.synapse` folder; nothing about it is written anywhere else, which is the whole
+   * point of it (15 Nov).
+   */
+  function setPrivate(id, on) {
+    const p = list().find((q) => q.id === id);
+    if (!p) {
+      const err = new Error('project not found');
+      err.status = 404;
+      throw err;
+    }
+    setMarker(p.directory, Boolean(on));
+    return shape({ id: p.id, name: p.name, directory: p.directory, created: p.created });
+  }
+
+  return { list, find, create, move, update, remove, setPrivate, idFor, normalizeDir, pruneMissing, discover };
 }

@@ -28,6 +28,7 @@ import { questionSignature, guardDecision, readableAnswer } from './question-loo
 import { setProviderKey, providerKeyState, maskKey } from './secrets.js';
 import { probeToolchain } from './toolchain.js';
 import { busyInfo } from './busy.js';
+import { addPrivateDir, addSession, isPrivateDir, isPrivateSession, removePrivateDir, setPrivateDirs } from './privacy.js';
 import { APP_VERSION, sourceVersion } from './version.js';
 
 // What an attachment may be. The old rule was six files of up to 8 MB each, which
@@ -551,6 +552,9 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
    */
   async function projectsWithSessions() {
     const list = projects.list().map((p) => ({ ...p, sessions: [] }));
+    // The private markers are facts about the folders; keep the filter in step on every
+    // rail load, so a folder marked outside Synapse is honoured too (15 Nov).
+    setPrivateDirs(list.filter((p) => p.private).map((p) => p.directory));
     if (!engine.status().ready) return list;
 
     const byDir = new Map(list.map((p) => [normDir(p.directory), p]));
@@ -564,6 +568,7 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
       if (isScratchSession(s)) continue; // probe/model-check scaffolding
       const owner = byDir.get(normDir(s.directory));
       if (!owner) continue;
+      if (owner.private) addSession(s.id, owner.directory);
       owner.sessions.push(s);
     }
     for (const p of list) {
@@ -1452,7 +1457,11 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
     // kept server-side so a reload and a second view show the same trace instead of
     // an empty one (8 Nov).
     runs: async () => ({
-      runs: (runs?.active() || []).map((run) => ({ ...run, reasons: traceReasons?.get?.(run) || [] })),
+      runs: (runs?.active() || []).map((run) => ({
+        ...run,
+        // A private project leaves no reasoning behind, wherever it was written.
+        reasons: isPrivateDir(run?.dir) ? [] : traceReasons?.get?.(run) || [],
+      })),
     }),
 
     /** One finished reasoning step from a worker's trace. */
@@ -1464,6 +1473,7 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
       };
       const text = String(body?.text || '');
       if (!run.dir || !run.task || !text) throw fail(400, 'a run and the text it thought are needed');
+      if (isPrivateDir(run.dir)) return { ok: true, count: 0 };
       return { ok: true, count: traceReasons?.add?.(run, text) || 0 };
     },
 
@@ -1572,6 +1582,26 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
       }
       const project = projects.update(id, { name: body?.name, directory: moved?.directory });
       return { project, moved };
+    },
+
+    /**
+     * Mark a project Private, or make it ordinary again (15 Nov).
+     *
+     * The marker is a file in the project's own `.synapse` folder; switching it on
+     * registers the folder with the log filter and clears the run traces that were
+     * written before the switch. Nothing about the toggle is logged, and nothing is
+     * written anywhere but the folder.
+     */
+    setProjectPrivate: async (id, body) => {
+      const project = projects.setPrivate(id, body?.private === true || body?.private === 'true');
+      if (project.private) {
+        addPrivateDir(project.directory);
+        // Traces written before the switch are still traces of this project.
+        traceReasons?.forget?.(project.directory);
+      } else {
+        removePrivateDir(project.directory);
+      }
+      return { project };
     },
 
     /** Move a project up or down the rail: the registry is the order. */
@@ -1870,6 +1900,8 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
         ],
         directory: location,
       });
+      // The new chat is known to the log filter before its first log line.
+      addSession(session.id, location);
       // From the first turn, the Architect knows where it is and that the plan
       // file is its own to keep.
       await brief(session.id, location, 'architect', false);
@@ -1964,6 +1996,8 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
       try {
         const session = await engine.getSession(sessionId);
         directory = session?.directory || '';
+        // Log lines from here on are filtered by session id as well as by folder.
+        if (directory) addSession(sessionId, directory);
         sessionModel = String(session?.model || '');
         const applied = session?.single === true ? 'single' : 'multi';
         single = asked ? asked === 'single' : applied === 'single';

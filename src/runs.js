@@ -1985,6 +1985,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
               task: request.task,
               attempt: rungResumes,
               note: 'stall restart',
+              dir,
             });
             log.warn(
               `worker ${request.task} (${role}) produced nothing for ${stallSec}s — restarting it ` +
@@ -2135,6 +2136,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
             model: modelRef,
             task: request.task,
             attempt: rungRetries + 1,
+            dir,
           });
           log.error(
             `worker ${request.task} (${role}) turn ended in an error [${cls.kind}/${cls.reason}]: ${turnError}`,
@@ -3547,6 +3549,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
           classification: cls,
           role: 'architect',
           note: 'the synthetic message could not be sent',
+          dir,
         });
         if (cls.kind === 'terminal') {
           log.error(`could not report to the Architect: ${err.message}`);
@@ -3618,7 +3621,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
       const cls = finished.stalled
         ? { kind: 'transient', reason: 'stalled' }
         : classifyFailure(err);
-      recordProviderError({ message: err, classification: cls, role: 'architect', note: 'the wake turn failed' });
+      recordProviderError({ message: err, classification: cls, role: 'architect', note: 'the wake turn failed', dir });
 
       if (cls.kind === 'terminal') {
         log.error(`the Architect could not process the report: ${err}`);

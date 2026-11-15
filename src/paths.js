@@ -4,6 +4,7 @@
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
+import { hasMarker } from './privacy.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -64,8 +65,14 @@ export const SCRATCH_ROOT = path.join(PROJECTS_ROOT, '_scratch');
 
 /** One project's scratch folder: its name plus a hash of its path, so two
  *  projects that share a folder name cannot share scratch space. The root can be
- *  passed for a store built somewhere else (tests), and defaults to the real one. */
+ *  passed for a store built somewhere else (tests), and defaults to the real one.
+ *
+ *  A **private** project keeps its scratch inside its own folder instead: the marker
+ *  promises that nothing about the project lands outside it (15 Nov). */
 export function scratchDir(dir, root = SCRATCH_ROOT) {
+  if (root === SCRATCH_ROOT && hasMarker(dir)) {
+    return path.join(path.resolve(String(dir || '')), '.synapse', 'scratch');
+  }
   const base = path.basename(String(dir || '')) || 'project';
   const hash = createHash('sha1').update(path.resolve(String(dir || '')).toLowerCase()).digest('hex').slice(0, 8);
   return path.join(root, `${base}-${hash}`);

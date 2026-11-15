@@ -69,6 +69,26 @@ export function createTraceReasons(file, { log } = {}) {
       return store.runs[keyOf(run)]?.reasons || [];
     },
 
+    /**
+     * Forget every run of one project.
+     *
+     * Called when a project is marked Private: the file is outside the project folder,
+     * and a trace written before the switch is still a trace of it (15 Nov).
+     */
+    forget(dir) {
+      const prefix = `${String(dir || '').toLowerCase()}|`;
+      if (!prefix || prefix === '|') return 0;
+      let dropped = 0;
+      for (const key of Object.keys(store.runs)) {
+        if (key.startsWith(prefix)) {
+          delete store.runs[key];
+          dropped += 1;
+        }
+      }
+      if (dropped) save();
+      return dropped;
+    },
+
     /** Forget runs older than a day. Called once at boot. */
     prune(maxAgeMs = 24 * 60 * 60 * 1000) {
       const now = Date.now();

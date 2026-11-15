@@ -487,3 +487,37 @@ Two rules came out of it:
 Synapse's `synapse-delegate` is the managed path, and Single already denies the tool.
 Denying it in Multi too would make that rule uniform; leaving it allows a model to
 explore in a way the operator cannot see. It is a policy choice, not a bug.
+## Private projects (15 Nov)
+
+The project menu (⋯) has a **Private** switch below Cmd, after a divider. It is a marker
+file in the project itself — `.synapse\private` — so the flag is part of the folder, never a
+record about it. The menu shows the state with a check mark; there is no badge in the rail,
+because a badge would be a trace too.
+
+With the marker on, Synapse writes nothing about the project outside its folder:
+
+- **no log lines**, in any channel and not even in `debug.log`: the logger drops a line that
+  names the project's folder or one of its sessions (`src/privacy.js`). The rail's load
+  registers the folders and session ids, and so do chat creation and send, so the filter is
+  in place before the first line about them;
+- **no census**: `afterTurn` skips `toolStats.recordMessages` for the session;
+- **no trace reasons**: `/api/runs` returns none, new ones are refused, and switching a
+  project to Private deletes the traces written before the switch;
+- **no permission memory**: an answer still holds for that gate run, but it is not written
+  to `data\permission-memory.json`;
+- **no provider diary**: failures are not written to `data\provider-errors.log`;
+- **no scratch folder outside**: a private project's scratch is `<project>\.synapse\scratch`
+  instead of the shared `_scratch` root.
+
+What is *not* covered, and cannot be with this engine:
+
+- **the engine's own session store** (`data\engine\opencode\opencode.db`) holds the
+  conversation, exactly as it does for every chat. A private project is private from
+  Synapse's records, not from the engine's;
+- **the shared browser profile** under `data\browser` keeps the cookies of sites opened
+  from a private project;
+- **the projects registry** (`data\projects.json`) knows the project's name and folder — it
+  has to, or the rail could not list it.
+
+The work itself — plan, runs, project document, artifacts — lives in the project folder as
+always, which is where the operator can delete it in one move.

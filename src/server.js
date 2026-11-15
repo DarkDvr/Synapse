@@ -500,6 +500,10 @@ export function createServer({ api, engine, logger, config, remote, onRemote }) 
       if (seg[2] === 'move' && method === 'POST') {
         return sendJson(res, 200, await api.moveProject(projectId, await readBody(req)));
       }
+      // Private: the marker lives in the project's own folder (15 Nov).
+      if (seg[2] === 'private' && method === 'POST') {
+        return sendJson(res, 200, await api.setProjectPrivate(projectId, await readBody(req)));
+      }
       if (seg.length === 2 && method === 'DELETE') {
         return sendJson(res, 200, await api.deleteProject(projectId, await readBody(req)));
       }

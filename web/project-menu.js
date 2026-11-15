@@ -12,7 +12,7 @@ import { esc, fmtBytes } from './format.js';
 import { $ } from './dom.js';
 import { api } from './api.js';
 import { toast } from './toast.js';
-import { loadProjects, openProjectChat, openProjectFolder } from './projects.js';
+import { loadProjects, openProjectChat, openProjectFolder, renderTree } from './projects.js';
 import { chatBody } from './mode.js';
 import { projectOf } from './run-view.js';
 import { ago } from './format.js';
@@ -58,6 +58,10 @@ export function openProjectMenu(id, x, y) {
     <button type="button" class="project-menu-item" data-menu-action="browse" role="menuitem">Browse</button>
     <button type="button" class="project-menu-item" data-menu-action="cmd" role="menuitem">Cmd</button>
     <span class="project-menu-sep" aria-hidden="true"></span>
+    <button type="button" class="project-menu-item is-toggle${p.private ? ' is-on' : ''}" data-menu-action="private" role="menuitemcheckbox" aria-checked="${p.private ? 'true' : 'false'}" title="No log lines or records outside this project's folder">
+      <span>Private</span><span class="project-menu-mark" aria-hidden="true">${p.private ? '✓' : ''}</span>
+    </button>
+    <span class="project-menu-sep" aria-hidden="true"></span>
     <button type="button" class="project-menu-item" data-menu-action="up" role="menuitem"${first ? ' disabled' : ''}>Move Up</button>
     <button type="button" class="project-menu-item" data-menu-action="down" role="menuitem"${last ? ' disabled' : ''}>Move Down</button>
     <span class="project-menu-sep" aria-hidden="true"></span>
@@ -76,10 +80,35 @@ export function projectMenuAction(id, action) {
   if (!id) return;
   if (action === 'browse') openProjectFolder(id, 'browse');
   else if (action === 'cmd') openProjectFolder(id, 'cmd');
+  else if (action === 'private') toggleProjectPrivate(id);
   else if (action === 'up') moveProject(id, -1);
   else if (action === 'down') moveProject(id, 1);
   else if (action === 'rename') renameProject(id);
   else if (action === 'delete') removeProject(id);
+}
+
+/**
+ * Private: the marker lives in the project's own folder, and the server stops writing
+ * anything about it to the logs or the records (15 Nov). The menu is the only place the
+ * state is shown, because a badge in the rail would be a trace of its own.
+ */
+export async function toggleProjectPrivate(id) {
+  const p = state.projects.find((q) => q.id === id);
+  if (!p) return;
+  try {
+    const res = await api('POST', `/api/projects/${encodeURIComponent(id)}/private`, { private: !p.private });
+    p.private = Boolean(res?.project?.private);
+    closeProjectMenu();
+    renderTree();
+    toast(
+      p.private ? 'Private' : 'Not Private',
+      p.private
+        ? `${p.name} keeps no log lines or records outside its folder.`
+        : `${p.name} is an ordinary project again.`,
+    );
+  } catch (err) {
+    toast('Private Failed', err.message);
+  }
 }
 
 /** Move a project up or down the rail. The order lives in the registry file. */

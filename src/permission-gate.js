@@ -17,6 +17,7 @@ import os from 'node:os';
 import { decide, grantKey, resolvePath, refusalNote } from './permissions.js';
 import { readAutomation } from './automation.js';
 import { normDir } from './paths.js';
+import { isPrivateDir, isPrivateSession } from './privacy.js';
 import { EV } from '../web/events.js';
 
 export function createPermissionGate({
@@ -104,6 +105,10 @@ export function createPermissionGate({
   function remember(sessionId, action, resources) {
     if (!sessionId) return false;
     const dir = sessions.get(sessionId)?.directory || root;
+    // A private project does not remember its answers: the memory file lives outside
+    // the project and would name the session and the paths asked about (15 Nov). The
+    // answer still holds for this gate run; it just is not written down.
+    if (isPrivateSession(sessionId) || isPrivateDir(dir)) return false;
     const grant = grantKey({ action, resources, cwd: dir, projectRoot: dir, harnessRoot: root, home });
     if (memory) return Boolean(memory.remember(sessionId, action, grant));
     fallback.add(memoryKey(sessionId, action, grant));

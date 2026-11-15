@@ -14,6 +14,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { LOGS_DIR } from './paths.js';
+import { isPrivateText } from './privacy.js';
 
 // Lower is more severe. A configured level writes itself and everything above it
 // (so info writes error, warn and info, and drops debug).
@@ -71,6 +72,9 @@ class Logger {
 
   _write(channel, level, msg) {
     if (this.enabled[channel] === false) return;
+    // A private project writes nothing to the logs (15 Nov): no channel, no debug
+    // timeline, no console line may name its folder or one of its sessions.
+    if (isPrivateText(msg)) return;
     // The channel files always take error, warn and info — they are the readable
     // story. The deep file has its own switch and its own two numbers, and it is
     // the only place a debug line can land.
