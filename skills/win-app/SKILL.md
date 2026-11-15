@@ -9,8 +9,8 @@ A window (WPF) around a web page (WebView2). `template/` beside this file is the
 shell, complete and correct. Copy it into the project and work in its `ui\` folder.
 
 **This skill is the source.** Synapse's own folders are off limits to you — do not
-read `templates\`, `src\` or `data\` looking for a scaffold. Everything needed is in
-`template/`.
+read `src\`, `data\` or its `skills\` neighbours looking for a scaffold. Everything
+needed is in `template/`.
 
 ## Copy it
 

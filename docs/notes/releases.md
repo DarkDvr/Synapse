@@ -38,7 +38,9 @@ That is the whole list: `version.test.mjs` fails when the three disagree.
 ## The release checklist
 
 1. Bump `package.json`, `shell/Synapse.csproj` and `README.md`.
-2. Run the suite: `bin\node\node.exe --test "tests\*.test.mjs"`.
+2. Run the suite through `bin\node\node.exe scripts\checks.mjs` — it switches
+   Auto-Shutdown off for every project first, so the run cannot power the PC off
+   (`docs/notes/tests.md`).
 3. **Read the live state immediately before you stop anything**: `/api/runs` and
    `/api/pending`, now. Not the reading you took when you started, not the one
    from the last restart — the check that matters is the one a second before the

@@ -1,8 +1,8 @@
 # UI lessons
 
 Layout invariants, the chat dock, the ask panel, the role cards and the model
-picker — with the measurements that prove them. Split out of `AGENTS.md`
-verbatim; read it before changing anything in `web/`.
+picker — with the measurements that prove them. Split out of `AGENTS.md`; read it
+before changing anything in `web/`.
 
 - **A model name is the model's name.** The picker used to strip the word "free"
   from every label and cut the rest at 28 characters, because a `<select>` cannot
@@ -1129,10 +1129,11 @@ whether a given paragraph is "the answer".
   pixel) over a `rgba(237,194,90,0.10)` wash. Browse/Cmd use the same yellow on
   hover and press. Violet fills belong to the composer.
 - **The rail is a list of projects, one row each (27 Oct).** Clicking a row opens
-  the project's one conversation (its newest session, by creation). The row keeps
+  the project's one conversation (its newest session, by creation). The row kept
   a state dot — grey never used, green idle with a conversation, amber breathing
   while it works — a `?` when it is waiting on the operator, and a `⋯` that opens
-  Browse, Cmd, Rename and Delete. Right-click and Shift+F10 open the same menu;
+  Browse, Cmd, Rename and Delete. (Since 15 Nov the only dot is a red stall mark;
+  see the end of this note.) Right-click and Shift+F10 open the same menu;
   the `⋯` is the visible door, because a menu nobody can see is not a menu. The
   sessions list, its label, the per-row pencil/✕/Browse/Cmd and the collapse
   caret are gone: the name gets the width back, and the row is one click to open.
@@ -1884,7 +1885,7 @@ stopped on the first sample and wrote three completely silent files. The check i
 which is how it was caught.
 
 **When it plays is "the chat went quiet", not "a message arrived".** `noteWorking()` asks
-`sessionWorking()` — the same predicate the rail's breathing dot uses — so the sound is the
+`sessionWorking()` — the same predicate the role card's breathing dot uses — so the sound is the
 moment the work the operator was waiting on stops. A Multi run keeps it live while a worker
 builds, so the gaps between delegated tasks do not chirp; the chime comes when the Architect
 has read the last report and said its piece. A turn that failed or was interrupted is not

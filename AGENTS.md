@@ -10,12 +10,13 @@ read the one `docs/notes/` file that matches the thing you are about to touch
 
 ## What Synapse is
 
-A self-contained Windows agent-build harness: pick models in the UI, discuss a
-plan, approve it, let workers execute, watch it happen live. It is **not** a
-wrapper around the OpenCode desktop app — it drives the genuine `opencode.exe`
-over its HTTP + SSE API and rebuilds the interface from scratch.
+A self-contained Windows agent-build harness: pick models in the UI, discuss the
+work, let the Architect keep a Project Plan, and watch workers execute it live. It
+is **not** a wrapper around the OpenCode desktop app — it drives the genuine
+`opencode.exe` over its HTTP + SSE API and rebuilds the interface from scratch.
 
-Everything lives in `F:\dev\Synapse`; nothing is written outside it but the engine binary it locates.
+Everything the app needs lives in `F:\dev\Synapse`; its projects folder is the
+sibling `F:\dev\Synapse.Projects`, and nothing is written into the user's profile.
 **It is a harness for any project, and any model.** No project, product or model
 may be named in its code, its briefs or its config: the briefs are sent to every
 project this harness will ever run, so a rule shaped around one project's incident
@@ -45,11 +46,12 @@ the cards and the commits, not the code. One reason per sentence, not a chain.
    `child_process`, `fs`. No build step, no bundler, no framework. If a problem
    looks like it needs a package, solve it in the standard library instead —
    web search, MCP, markdown rendering and the UI are all hand-rolled here.
-2. **Self-contained and offline.** Nothing may be fetched at runtime except the
-   model provider. Fonts are vendored locally. No CDN links, ever. The exceptions
-   are the two update feeds (`src/engine-update.js`, `src/synapse-update.js`):
-   they answer the operator's update chip, cache their answers, and download only
-   when Update is pressed.
+2. **Self-contained and offline.** The app fetches nothing for itself: fonts,
+   scripts and assets are vendored, and there are no CDN links ever. The network
+   is used only for the work — the model provider, a page a model fetches or
+   browses — and for the two update feeds (`src/engine-update.js`,
+   `src/synapse-update.js`), which answer the update chip, cache their answers,
+   and download only when Update is pressed.
 3. **A good tenant.** Whatever Synapse needs, it installs itself and silently,
    inside this folder — `bin\node`, `bin\opencode`, `vendor\`. Never `winget`, a
    global install, a PATH edit, the registry or `%APPDATA%`. The machine is
@@ -67,9 +69,10 @@ the cards and the commits, not the code. One reason per sentence, not a chain.
    or tokens.
 8. **A model touches its project, reads the harness, and asks for the rest.**
    `src/permissions.js` decides and the engine enforces: outside the project it
-   asks, inside the harness it refuses, and credential stores are refused. The
-   prohibited list outranks every rule here (`docs/notes/protection.md`). Do not
-   widen a zone in a brief or a config — change the policy and its tests.
+   asks, another project is refused, inside the harness it refuses writes, and
+   credential stores are refused. The prohibited list outranks every rule here
+   (`docs/notes/protection.md`). Do not widen a zone in a brief or a config —
+   change the policy and its tests.
 9. **Edge or headless, never Brave.** Windows' default browser here is Brave; touching
    it — opening it, reading or copying its profile — resets extensions, cookies and
    settings. Open links in Edge by its full path, take pictures with `skills/visual-review`,
@@ -92,8 +95,10 @@ the cards and the commits, not the code. One reason per sentence, not a chain.
 
 ### Working style rules
 
-- **The review pane is how the operator is shown anything.** A screenshot in the chat
-  reaches only you; `browser.preview` puts it on their screen (measured 2 Nov 2026).
+- **The chat is how the operator is shown anything.** A screenshot you take reaches
+  only you; put the picture in the project (`.synapse/shots/`) and write it into a
+  message as markdown — `![what it shows](.synapse/shots/shot.png)`. The operator
+  sees a chip that opens the picture full size.
 - **Use Edge, but surgically** — one session, reused; few screenshots.
 - **Stage the delivery.** Each stage is reviewed before the next starts.
 - **Every change answers the mode question: Single, Multi, or both?** Multi adds *runs*, and
@@ -112,6 +117,9 @@ the cards and the commits, not the code. One reason per sentence, not a chain.
 ### Versioning: commit, bump, tag, push
 
 `package.json` holds `major.minor.patch` (fix = patch, feature = minor, break = major).
+**It is the single source**: `shell/Synapse.csproj` `<Version>` and the line under the
+README title are bumped in the same commit, and `tests/version.test.mjs` fails when the
+three disagree.
 **Finished work is delivered, not left local**: when it passes the suite and no real run
 is live, bump, commit, tag `vX.Y.Z`, and push `main` and the tag — do not wait to be
 asked; the version is how the operator knows which build is answering. **A GitHub
@@ -123,7 +131,8 @@ is the record.
 **Then restart the whole app**: stop it, launch `Synapse.exe` — window, tray and server. A
 server-only restart leaves the page on the old build; check the version. **Read
 `/api/runs` and `/api/pending` immediately before the stop** — a reading from earlier
-in the session is stale; a run can start in between (8 Nov: a t5 died that way).
+in the session is stale; a run can start in between (8 Nov: a t5 died that way). The
+last word on a live turn is `scripts\wait-for-idle.mjs` (`docs/notes/runbook.md`).
 
 ### Destructive commands — verify before you act
 
@@ -163,7 +172,7 @@ an agent does not know to open is a document that does not exist:
 
 | Read this | before |
 |---|---|
-| `docs/notes/engine-notes.md` | changing `src/api.js`, `src/runs.js`, `src/plans.js` or `src/engines/opencode.js` — the work-list file contract (it was called the plan; the name is the only thing the rename changed), delegation and its ladder, instruction entries, what a permission rule really does |
+| `docs/notes/engine-notes.md` | changing `src/api.js`, `src/runs.js`, `src/plans.js` or `src/engines/opencode.js` — the Project Plan contract (a work list the Architect owns), delegation and its ladder, instruction entries, what a permission rule really does |
 | `docs/notes/models-and-tools.md` | touching model choice, the catalog cache, the probe or the engine update — context limits, variants, marks, ask counters |
 | `docs/notes/runtime-scope.md` | before starting work on Synapse's own runtime (independence from OpenCode) — what the runtime does, what a replacement costs, the staged path |
 | `docs/notes/ui-lessons.md` | touching `web/` — layout invariants, the chat dock, the ask panel, the cards and the picker, with the measurements that prove them |
@@ -173,8 +182,10 @@ an agent does not know to open is a document that does not exist:
 | `docs/notes/multi-user.md` | two views at once — what "busy" means, who may send, Stop as the takeover, and the Settings lock |
 | `docs/notes/web-reading.md` | before promising to read a signed-in site, or touching any browser — every cookie route was measured, one destroyed the operator's browser data, and Brave is never touched |
 | `docs/notes/browser.md` | before touching `src/browser/`, `src/mcp/browser-server.js` or the Browser tab — SynaBrowse's flags, its profile, the Sites record and the hand-off |
-| `docs/notes/project-chat.md` | before changing how a project, a chat or a compaction works — the one-chat-per-project scope, its phases and what is still open |
+| `docs/notes/project-chat.md` | before changing how a project, a chat or a compaction works — the one-chat-per-project scope, the project document, phases, and Private |
 | `docs/notes/protection.md` | before touching `src/protection.js`, the prohibited list, or the Brave rule — what is refused without asking, and what the fence cannot see |
+| `docs/notes/tests.md` | before adding a test, or when CI is red — the one rule a test must keep, and how the suite runs |
+| `docs/notes/releases.md` | before bumping, tagging, or building a release — the three places the version lives, and the checklist |
 
 Two rules: **a new lesson goes in `docs/notes/`, not here**; and a rule you move out
 leaves its invariant behind in one line. Deferred work lives in the note that owns it.
@@ -186,7 +197,7 @@ leaves its invariant behind in one line. Deferred work lives in the note that ow
 Synapse.exe        # the app: window, tray icon, and the server it starts
 .\shell\build.ps1  # build it — one lean exe at the root, needs the .NET 10 runtime
 vendor-node.ps1    # copies Node into bin\node so the folder travels
-vendor-engine.ps1  # copies the runtime into bin\opencode so it travels with the app
+vendor-engine.ps1  # copies the engine into bin\opencode so it travels with the app
 ```
 
 `Synapse.exe` is the only thing launched. Close hides the window to the tray; the
@@ -210,43 +221,27 @@ Gotchas:
 
 ```
 Synapse.exe           the app — window, tray, server supervisor (build output)
-shell/                the WPF frame behind it: App, MainWindow, ServerHost, ConsoleStore
-src/
-  index.js            boot wiring: config → projects → engine → probe → server
-  paths.js            every filesystem path, derived from the project root
-  config.js           DEFAULTS, merge, normalize, load/save
-  logger.js           per-channel logs, rotation, cleanup
-  server.js           HTTP routes + SSE broadcast
-  api.js              engine-agnostic operations the routes call
-  projects.js         the project registry (a project IS a directory)
-  project-doc.js      the project's living document (current, handover, log)
-  toolstats.js        the tool-call census (data\tool-stats.json)
-  probe.js            the tool probe: one turn per tool
-  providers.js        provider types, ids, and "ask a server what it serves"
-  secrets.js          provider keys in data\provider-keys.json, never the config
-  engine-update.js    is there a newer engine, and stop/install/start
-  mcp/search-server.js stdio MCP server exposing websearch to the engine
-  engines/base.js     engine contract + message normalisation
-  engines/opencode.js the OpenCode adapter
-web/
-  index.html          the shell
-  app.js              boot, the event stream and the wiring (modules beside it)
-  md.js               the markdown renderer (escape-first, fenced code, GFM tables)
-  rate.js             tokens per second, measured from the stream
-  synapse.css         theme + shell; panel.css the main-panel grid
-  vendor/             fonts (offline) and the baseline stylesheet
-  favicon.ico         the same, packed as a multi-size icon
-skills/               shipped WITH Synapse, always on the engine's skill path
-  visual-review/      render a page to PNG, then read it (the agents' eyes)
-  app-check/          launch a desktop app, photograph its window, report if it lived
-  win-app/            the Windows shell (WPF + WebView2) and its build steps
-  ui-design/ frontend-design/ aesthetic-foundations/ code-craft/ web-guidelines/
-                      the craft briefs: direction, tokens, states, colour, hierarchy
-data/                 runtime state (projects, census, probe results, engine home)
+shell/                the WPF frame: App, MainWindow, ServerHost, ConsoleStore
+src/                  index.js boots it; server.js is the routes, api.js the operations
+                      they call; runs.js delegation, plans.js the Project Plan and the
+                      briefs, permissions.js the policy and permission-gate.js its gate,
+                      protection.js the prohibited list, projects.js, project-doc.js,
+                      privacy.js (Private), toolstats.js, providers.js, engines/
+                      (base contract, opencode adapter), mcp/ (search, delegate, lease,
+                      browser), browser/ (SynaBrowse)
+web/                  index.html and app.js (boot, stream, wiring) with its modules;
+                      md.js, synapse.css, panel.css, vendor/ (fonts + locked baseline)
+skills/               shipped with Synapse, always on the engine's skill path:
+                      visual-review, app-check, win-app, and the craft briefs
+                      (ui-design, frontend-design, aesthetic-foundations, code-craft,
+                      web-guidelines, frontend-syntax-css-grid-subgrid)
+tests/                node --test, one file per subject; run through scripts\checks.mjs
+scripts/              checks.mjs (suite with Auto-Shutdown off); wait-for-idle.mjs
+config/               synapse.config.json (this machine's answers); config.default.json ships
+data/                 runtime state: engine home, browser profile, caches, pids
 logs/                 one file per channel: app, engine, session, tools
-bin/opencode/         a copy of the runtime that travels with the app (not in git;
-                      vendor-engine.ps1 puts it there, ~210 MB, with its licence)
-docs/notes/           the detail behind this file; the index is in "Where the rest lives"
+bin/                  Node and the engine, vendored (not in git)
+docs/notes/           the detail behind this file; the index is above
 ```
 
 **`web/vendor/summit.css` is a locked baseline.** The only edit ever made to it
@@ -265,12 +260,11 @@ refuses outright (`Missing key at ["files"][0]["uri"]` — it wants `{uri}`, not
 `{data, mime, source}`). Read the dump to know what to try, then **probe the live
 engine once before building on it**: send the body you expect and read the 400.
 
-**The engine is 2.2.6.** The table below was measured on 2.0.30 unless it says
-otherwise; each upgrade is re-verified on the routes Synapse depends on. **The model
-catalog ships inside the engine binary, not in Synapse** — so a stale model list means
-a stale *binary*, never a stale cache. The console prints `catalog: N model(s) from
-engine X` at every boot, which is the check; the update dialog (see
-`docs/notes/models-and-tools.md`) is the fix.
+**The engine is 2.2.6.** Each upgrade re-checks the routes below; where a row names a
+version, it was measured there. **The model catalog ships inside the engine binary, not
+in Synapse** — so a stale model list means a stale *binary*, never a stale cache. The
+console prints `catalog: N model(s) from engine X` at every boot, which is the check;
+the update dialog (see `docs/notes/models-and-tools.md`) is the fix.
 
 | Thing | Reality |
 |---|---|

@@ -32,7 +32,7 @@ exactly as it was?** If the answer is no, the dependency is installed wrongly.
 
 | Part | Lives in | How it gets there |
 |---|---|---|
-| Node | `bin\node\node.exe` | `vendor-node.ps1`, or `src\npm-check.js` when the runtime asks for it |
+| Node | `bin\node\node.exe` | `vendor-node.ps1`, or the npm fetch in `src\npm-check.js` |
 | npm | `bin\node\node_modules\npm` | same download as Node; only used for engine updates |
 | Engine | `bin\opencode\opencode.exe` | `vendor-engine.ps1`, or the update flow in `src\engine-update.js` |
 | .NET packages | `vendor\nuget-packages` | `vendor-nuget.ps1`, so a worker's `dotnet build` needs no network |
@@ -50,9 +50,9 @@ which one it used. The engine does the same for `bin\opencode`.
 
 ## 3. npm is for one thing
 
-`npm` is used by exactly one feature: **Settings → Runtime → Check for Updates**,
-which installs `@opencode/cli` and copies the binary over the vendored one. The
-app itself is plain Node with zero packages; nothing else at runtime touches npm.
+`npm` is used by exactly one feature: **Settings → Check for Updates**, which
+installs `@opencode/cli` and copies the binary over the vendored one. The app
+itself is plain Node with zero packages; nothing else at runtime touches npm.
 
 Three facts that were wrong before this note existed:
 
@@ -92,15 +92,16 @@ eight seconds, which is the handle-safe version of `taskkill /T`.
 | Code | Means | Shell does |
 |---|---|---|
 | 2 | "restart me" — Settings → Restart Now | respawns |
-| 3 | "close the whole app" — a staged Synapse update is waiting | raises `QuitRequested`; the app exits, and `update-apply.ps1` replaces the files and starts it again |
+| 3 | "close the whole app" — a staged Synapse update is waiting | raises `QuitRequested`; the app exits, and `update-apply.mjs` replaces the files and starts it again |
 | 0 | stopped on purpose | stays stopped |
 | anything else | it died | shows the failure with the tail, does **not** respawn in a loop |
 
 **Updates use code 3.** The server downloads and stages a release, starts
-`update-apply.ps1` detached, and exits 3. The shell closes; the helper waits for
-both pids, backs up the program files under `data\backups\`, overlays the stage
-and starts `Synapse.exe` again. The stage never contains `data\`, `config\` or the
-projects folder, so an update cannot take the operator's settings with it. A
+`update-apply.mjs` detached, and exits 3 (`update-apply.ps1` remains the fallback
+for an install from before the Node helper existed). The shell closes; the helper
+waits for both pids, backs up the program files under `data\backups\`, overlays the
+stage and starts `Synapse.exe` again. The stage never contains `data\`, `config\` or
+the projects folder, so an update cannot take the operator's settings with it. A
 failed copy restores the backup and still starts the old version.
 
 **A crash leaves things running, so the next start cleans up after it.** Measured:
@@ -133,7 +134,7 @@ page-drawn confirmation would be invisible in both. Consent then `POST`s
 `/api/shutdown`, so the engine is stopped rather than orphaned.
 
 **The page stays too.** A deliberate stop — or a crash — does not swap the window to
-the boot panel. The Runtime row goes red, and the console is one click away. The
+the boot panel. The Engine row goes red, and the console is one click away. The
 panel is for a server that never arrived, which is the only case where there is no
 page worth keeping. When the server comes back the shell reloads the page, because
 everything on it was fetched from a server that no longer exists. That includes a
@@ -143,7 +144,7 @@ restart does, so the window reloads too. Verified 28 Oct: `[app] reloading
 http://127.0.0.1:8700` followed the restart in `logs\console.log`, and a client
 change in `web/` is live after a server restart without Ctrl+R.
 
-**The console is behind `...` on the Runtime row.** A boxed ellipsis, not a label: it
+**The console is behind `...` on the Engine row.** A boxed ellipsis, not a label: it
 is an affordance, not a fourth row in a block that already has three. The panel is
 wide and tall on purpose — `min(1180px, 100%)` by `76vh` — because it is a log to
 read, not a peek. Lines wrap rather than scrolling sideways (a stack trace is read),
@@ -157,7 +158,7 @@ border and the label only: a filled button would be louder than the dialog it si
 and Close is the primary action here. Stop goes through the tray's own confirmation,
 because the question is asked in the shell and not in two places that could drift.
 
-**The title bar says the server is stopped**, as well as the Runtime row — that strip
+**The title bar says the server is stopped**, as well as the Engine row — that strip
 is the only thing on screen that does not depend on the page below it, which is
 exactly the state it describes.
 
@@ -244,11 +245,11 @@ itself. The exe is a small framework-dependent app on purpose; when the runtime 
 missing, Windows says so before Synapse has run a line.
 
 Two ways a copy leaves this machine, and they are different things. **The release
-zip** (`make-release.ps1`, published with each version) is the program: `Synapse.exe`,
-`package.json`, the updater, `src\`, `web\`, `skills\` and the seed config — no `data\`,
-no `logs\`, no projects, no keys, no tests, no docs, no git. **Copying the folder**
-moves everything, including this machine's answers, which is what makes it a clone
-rather than a delivery.
+zip** (`make-release.ps1`, built for a release) is the program: `Synapse.exe`,
+`package.json`, the updater, `src\`, `web\`, `skills\` and the seed config — no
+`data\`, no `logs\`, no projects, no keys, no tests, no docs, no git. **Copying
+the folder** moves everything, including this machine's answers, which is what
+makes it a clone rather than a delivery.
 
 The rule that makes the rest true: **a path that names a place on this machine is a
 hint, never an instruction.** The config and the runtime state travel with the folder,

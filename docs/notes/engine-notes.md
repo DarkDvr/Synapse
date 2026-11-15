@@ -1,7 +1,7 @@
 # Engine notes
 
 How Synapse talks to the engine, and the things that cost real time to discover.
-Split out of `AGENTS.md` verbatim; the file is read when work touches
+Split out of `AGENTS.md`; the file is read when work touches
 `src/api.js`, `src/runs.js`, `src/plans.js` or `src/engines/opencode.js`.
 
 ## A tool call written as text
@@ -1220,7 +1220,7 @@ good code", so `code-craft` was written instead. Read a skill before shipping it
 a description is a claim, not a measurement.
 
 The operator's own folders are extra paths on top (`engine.opencode.skillPaths`,
-one `;`-separated line in Settings → Skills). Nothing is downloaded at runtime — the
+one `;`-separated line in Settings → Tools → Skills). Nothing is downloaded at runtime — the
 offline rule makes "install" mean "carry the folder", and a third-party skill stays
 where its licence lives.
 
@@ -1229,7 +1229,7 @@ machine, the folder does not, and the ruleset still *allows* a name that can nev
 load. Nothing errors; the capability just vanishes. `GET /api/skills` therefore
 returns `missing` (names a role expects, and which roles) and `paths` (each
 configured folder, and whether it exists). The UI says it once at boot as a toast
-and lists it in Settings → Skills; the role picker shows such a name as *"not
+and lists it in Settings → Tools → Skills; the role picker shows such a name as *"not
 installed on this machine — the reference is kept, but nothing loads"*, so
 unticking it is deliberate rather than a silent loss. Verified live: a role set to
 `nope-skill` produced the toast, named the role, and Settings read
@@ -1885,9 +1885,11 @@ is allowed to grow it is a rule against the behaviour that makes the harness goo
 
 **What changed.**
 
-- **The word.** The brief, the docs and the pane call it a work list. The file is
-  still `.synapse\plan.json`: renaming it would migrate every existing project for
-  a word, and the file name is not a claim about how it is used.
+- **The word.** The UI and the briefs call it the **Project Plan**; what changed is
+  how it is treated — a work list that grows while the round runs, not a contract
+  fixed at approval. The file is still `.synapse\plan.json`: renaming it would
+  migrate every existing project for a word, and the file name is not a claim about
+  how it is used.
 - **`phases` is gone.** The top-level field, `PHASE_ROLES`, `uncoveredPhases`, the
   validator complaint, the delegation refusal and the "finished means every phase
   is covered" rule. Old plans keep the field and it is ignored on read. The role on

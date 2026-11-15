@@ -1474,7 +1474,8 @@ export function briefSession({ dir, role = 'architect', auto = false, single = f
     lines.push(
       `Format: {"version":1,"goal":"...","summary":"","tasks":[{"id":"t1","title":"...","role":"coder-1","status":"todo","origin":"plan|found|operator",` +
         `"detail":"...","reads":[],"dependsOn":[],"result":null,"note":null}]} - ` +
-        `role is one of the project's roles (${ROLES.join(', ')}) — exactly, with no suffix like "designer-1"; ` +
+        `role is one of (${ROLES.filter((r) => r !== 'architect').join(', ')}) — exactly, with no suffix ` +
+        `like "designer-1", and never "architect": you do not build. ` +
         `statuses: ${STATUSES.join(', ')}. Keep ids short and unique, titles under ${TITLE_MAX} characters, ` +
         `and mark a task "blocked" only when it needs the operator.`,
     );
@@ -1505,15 +1506,6 @@ export function briefSession({ dir, role = 'architect', auto = false, single = f
       `When every task is done, also write "summary" in the plan: ONE sentence a customer would ` +
         `understand, saying what this project delivers. No file paths, no tool names, no code. ` +
         `The Architect's card shows it instead of just a tick.`,
-    );
-    // The operator's setup deliberately gives the coders different models, from
-    // cheap and experimental to reliable and expensive. The Architect only needs
-    // to know they are peers: the ladder is the harness's business (it is the one
-    // that can see a model refuse a turn).
-    lines.push(
-      `coder-1 and coder-2 are peers - two coders, which may each be on a different model. Write ` +
-        `coding work for one of them; if that coder cannot do it, Synapse moves the task down the line ` +
-        `itself and the report tells you which role actually ran it.`,
     );
     // The list is live within the round, but it is the operator's checklist, not
     // a diary. Two rounds of rows on 27 Oct — seven rows deep, NEW badges, one

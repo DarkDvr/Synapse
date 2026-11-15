@@ -1,3 +1,9 @@
+# Models and tools
+
+The catalog, the thinking-effort variants, what Synapse remembers about a model,
+the probe, and how the engine itself is updated. Split out of `AGENTS.md`; read it
+before touching model selection or `src/modelcache.js`.
+
 ## The cache share on a card
 
 The card says `120k/262k ctx (92% cache)`. The prompt is `input + cache.read` from the step's
@@ -12,11 +18,6 @@ usage, and the share is `cache.read / (input + cache.read)`:
 
 The Architect's card takes the halves from the streamed event and the transcript; a worker's
 takes them from `promptParts()` through `run.progress` (`ctxFresh`, `ctxCached`).
-# Models and tools
-
-The catalog, the thinking-effort variants, what Synapse remembers about a model,
-the probe, and how the engine itself is updated. Split out of `AGENTS.md`
-verbatim; read it before touching model selection or `src/modelcache.js`.
 
 ## Tools and models
 

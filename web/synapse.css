@@ -3370,7 +3370,7 @@ body { overflow-anchor: none; }
 /* ── 20. the console ───────────────────────────────────────────────────── */
 
 /* Ten pixels of type on a sixteen-pixel line: this is an affordance, not a
-   label. The Runtime row has no room for a fourth word and does not need one —
+   label. The Engine row has no room for a fourth word and does not need one —
    a boxed ellipsis is the conventional mark for "there is more here". */
 .console-open {
   align-self: center; margin-left: 1px;

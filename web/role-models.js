@@ -154,7 +154,7 @@ export async function editRoleSettings(roleId) {
   }
   const allowed = Array.isArray(entry.skills) ? entry.skills : installed.map((s) => s.name);
   if (!installed.length) {
-    toast('No Skills Available', 'Synapse found no skills in its own folder or yours — see Settings → Skills.');
+    toast('No Skills Available', 'Synapse found no skills in its own folder or yours — see Settings → Tools.');
     return;
   }
   // A name the role expects but this machine cannot load is shown rather than

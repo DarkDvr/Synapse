@@ -9,7 +9,7 @@ genuine **OpenCode** engine over its HTTP + SSE API and rebuilds the interface
 from scratch — today that engine, tomorrow anything that implements the contract
 in `src\engines\base.js`.
 
-**Version 1.58.33** - Windows 10/11, x64. The zip carries Node, the engine and the fonts.
+**Version 1.58.34** - Windows 10/11, x64. The zip carries Node, the engine and the fonts.
 
 **Licence:** AGPL-3.0-only, Copyright (C) 2026 DarkDvr — see `LICENSE`, `NOTICE`, `THIRD-PARTY.md`.
 
@@ -56,17 +56,17 @@ holds a handle to.
 ## What you see
 
 - **Sidebar** — projects, plus **Browse** (Explorer),
-  **Cmd** (a prompt in that folder), Settings, and a STATUS block: remote access,
-  the runtime, the last event, the local LLM.
+  **Cmd** (a prompt in that folder), Settings, and a STATUS block: Remote Access,
+  the Engine, the Last Event, the Local LLM.
 - **Stage** — the role cards, then the chat. The Architect is always on screen;
   **Multi** reveals the five workers.
 - **Rail** — the Project Plan on the left, the live tool census on the right.
 
 A card is a control as well as a status: its model and thinking effort are chosen
-there, its dot says whether that role has been used in this chat, and while a
-delegation runs a yellow arrow with travelling beads joins the two cards taking
-part. The chat can chime when the Architect finishes — four sounds, or off, in
-**Settings → Notices**.
+there, and its dot says whether that role has been used in this chat, is working
+now, or is blocked. While a delegation runs a yellow arrow with travelling beads
+joins the two cards taking part. The chat can chime when the Architect finishes —
+four sounds, or off, in **Settings → General**.
 
 ## Projects
 
@@ -88,23 +88,22 @@ adopted; its plan and scratch folder are created if missing. Folders starting wi
   .synapse\runs.jsonl       ← append-only record of every delegation
 ```
 
-Deleting a project sends its folder to the Recycle Bin; re-adding a folder that already holds a plan asks first.
+Deleting a project sends its folder to the Recycle Bin; re-adding a folder that already holds a plan asks first. The `⋯` menu can also make a project **Private**: Synapse then keeps no log, census, trace or scratch record of it outside its own folder.
 
 ## The Project Plan and the pipeline
 
-The Architect keeps the Project Plan as a file, with its ordinary file tools.
-Synapse only reads and renders it and **never repairs it**: a malformed file is
-named, in the pane and in the Architect's own brief, so the model fixes its own
-document.
+The Architect keeps the Project Plan as a file, with its ordinary file tools. It is
+a **work list**, not a fixed contract: it grows while the work happens. Synapse
+only reads and renders it and **never repairs it**: a malformed file is named, in
+the pane and in the Architect's own brief, so the model fixes its own document.
 
-The Project Plan is live. It starts with the work the Architect can see and grows
-while the work happens — a defect a worker reported, a decision the build exposed —
-and every row added that way is marked `found` in the pane, so a Project Plan that
-changed after you looked says so. What stays fixed is the scope: `features.json`
-is the agreed contract, and a new feature still comes back to you as a question.
+A row added while the work happens — a defect a worker reported, a decision the
+build exposed — is marked `found` in the pane, so a Project Plan that changed
+after you looked says so. What stays fixed is the scope: `features.json` is the
+agreed contract, and a new feature still comes back to you as a question.
 
-The pipeline behind the plan is a **menu, not a checklist** — a clock pays for
-invent, design, build and review, a one-file script pays for two tasks:
+The pipeline behind the plan is a **menu, not a checklist** — a small job spends a
+task or two, a full build spends invent, design, build and review:
 
 | Role | Produces |
 |---|---|
@@ -145,8 +144,8 @@ over it. The keys most worth knowing:
 | `engine.opencode.binary` | the engine program (`""` = find it) |
 | `engine.opencode.port` | engine port (8720) |
 | `engine.opencode.home` | the engine's isolated home (`""` = `data\engine\opencode`) |
-| `roles.<id>` | `{ "ref", "variant" }` for one role, the Architect included |
-| `worker.stallSec` | silence before a worker is told to carry on (minutes) |
+| `roles.<id>` | `{ "ref", "variant", "skills", "mustLoad" }` for one role, the Architect included |
+| `worker.stallSec` | silence before a worker is told to carry on (seconds; default 600) |
 | `worker.resumeMax` | how many nudges one task gets before it is reported stuck |
 | `logging.retentionDays` | how long logs are kept |
 
@@ -154,8 +153,9 @@ over it. The keys most worth knowing:
 
 One file per channel in `logs\`: `app` (lifecycle, config, run milestones),
 `engine` (process output and stream health), `session` (prompts and events) and
-`tools` (tool calls and permission requests). Rotated at `logging.maxFileMb`,
-deleted past `logging.retentionDays`.
+`tools` (tool calls and permission requests), plus `debug` (every line, one
+timeline) and `console` (what the window shows while the server is down). Rotated
+at `logging.maxFileMb`, deleted past `logging.retentionDays`.
 
 ## Changing engines
 
@@ -167,13 +167,7 @@ Nothing engine-specific leaks outside its adapter.
 
 ## Where the detail is
 
-This file is the front door. The reasoning, the measurements and the traps live
-next to it:
-
-| File | Holds |
-|---|---|
-| `AGENTS.md` | the rules, how to run and restart it, the engine trap table |
-| `docs\notes\engine-notes.md` | the engine API, briefs, the plan contract, delegation, permissions |
-| `docs\notes\models-and-tools.md` | the catalog, effort variants, marks, the probe, engine updates |
-| `docs\notes\ui-lessons.md` | layout invariants and the measurements that prove them |
-| `docs\notes\runbook.md` | protecting the harness, browsers, destructive commands |
+This file is the front door. `AGENTS.md` is the map of the rules and the traps,
+and its table names the `docs\notes\` file for whatever you are about to touch —
+the engine API and briefs, models, the UI measurements, the runbook, the browser,
+protection, tests and releases.

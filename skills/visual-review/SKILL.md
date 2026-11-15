@@ -5,10 +5,11 @@ description: Render a local HTML file or an http(s) URL with the machine's own b
 
 # Visual Review
 
-You have no browser tool. This skill gives you two things you lack: a still image
-of a rendered page, and the numbers behind it. The image is a real screenshot from
-a real browser, not a description of one — so look at it, and be careful about what
-a still cannot tell you. The numbers are facts you cannot get wrong.
+You have a browser tool, but a browser cannot answer "does this look right?" The
+browser screenshot is a picture with no numbers; this skill gives you both: a
+still image of a rendered page, and the layout facts behind it. The image is a
+real screenshot from a real browser, not a description of one — so look at it, and
+be careful about what a still cannot tell you. The numbers are facts you can quote.
 
 ## Render it
 

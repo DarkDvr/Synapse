@@ -14,8 +14,9 @@ conversation away and leaves a handover behind.
 
 - The rail is a **list of projects**. Clicking one opens its chat. `⋯` on the
   row (or right-click) opens Browse, Cmd, Rename, Delete.
-- The row's dot: grey never used, green idle with a conversation, yellow
-  breathing working, amber `?` waiting on you. No session counts, no children.
+- The row carries a red dot only when its chat is stalled (every other state is
+  already said by the row itself), a `?` when it is waiting on the operator, and a
+  `⋯` that opens Browse, Cmd, Rename and Delete. No session counts, no children.
 - No New Session, no session titles, no rename-a-session, no General section.
 - The chat has a compact chip in its top-left, floating like the scroll buttons
   and hidden whenever a compaction cannot run. Two clicks: the second, within
@@ -220,10 +221,10 @@ why it can disagree with what the operator meant when they clicked twice.
   delete path.
 
 ### Phase 4 — the project list — **built 27 Oct**
-- One row per project: a state dot (grey never used, green idle with a
-  conversation, amber breathing working), a `?` when it waits on the operator,
-  and a `⋯` menu with Browse, Cmd, Rename, Delete. Right-click and Shift+F10 open
-  the same menu; the empty state is a real first run with one New Project button.
+- One row per project: a red dot while its chat is stalled, a `?` when it waits
+  on the operator, and a `⋯` menu with Browse, Cmd, Rename, Delete. Right-click
+  and Shift+F10 open the same menu; the empty state is a real first run with one
+  New Project button.
 - General is gone: no auto-create, no default project, no default session
   directory, no undeletable rule, no per-session folders. The old `general`
   folder is adopted as an ordinary project on the first boot after the change
@@ -366,25 +367,17 @@ not kept; `data\` is local and regenerable, so a path here would rot.
 
 ## Open questions
 
-1. ~~One file or two?~~ One file (`project.md`), settled 27 Oct.
-2. Compact failure: retry only (recommended) or also offer "discard without a
+1. Compact failure: retry only (recommended) or also offer "discard without a
    handover"?
-3. Plan row times after a compact: reset with the chat (recommended, matches
-   yesterday's fix) or span compactions with a plan-generation id?
-4. Old sessions on upgrade: leave them hidden in the engine (recommended) or
-   delete them?
-5. The `⋯` menu: is Rename there, or does a double-click rename (the menu is
-   clearer)?
 
 ---
 
 ## How this is tested
 
-- `node --test tests\*.test.mjs` after every phase (187 today, and the new
-  files: project document, mode-at-send, compaction, ui-words).
-- One live QC pass per phase in the QC Edge profile: the rail, the menu, the
-  dot states, the chip, the confirm, a compact with a second view open, a
-  reload after a compact, and a fresh profile with no projects.
+- `bin\node\node.exe scripts\checks.mjs` after every change (`docs/notes/tests.md`).
+- One live QC pass per phase in an Edge profile: the rail, the menu, the chip,
+  the confirm, a compact with a second view open, a reload after a compact, and a
+  fresh profile with no projects.
 - A compact is the one flow that swaps the open chat under the page, so it is
   tested from **two tabs** with the post open, not one: the second tab is the
   only witness to whether the broadcast re-points a view.

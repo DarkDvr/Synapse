@@ -41,24 +41,12 @@ and Brave is the one browser where even that excuse is refused.
 does not merely fail; it destroys. That cost was paid once, on 2 Nov, and the operator
 had to sign in to Edge sites again.
 
-## The one route left
+## The route we took (Nov 2026)
 
-**A sign-in window inside Synapse (WebView2).** Synapse's own WebView2 profile
-(`data\webview2\EBWebView`) is app-owned, has no app-bound key, and its cookies can be
-reused *in process* through `CoreWebView2.CookieManager` — no decryption, no profile
-thefts. It needs:
-
-1. a small WPF window sharing the app's WebView2 environment, navigated to the site, so
-   the operator signs in once;
-2. an IPC message answering "the cookies for this host" (values never logged);
-3. a server route that hands them to `src/fetch.js` (which already accepts a `sessions`
-   map and follows redirects by hand so a cookie cannot leave its host);
-4. a `webfetch` path that says "use my session", or a tool the model can call when a
-   fetch comes back walled.
-
-Estimated at about a day. It is deferred, not rejected: the operator said the manual
-alternative (pasting a Cookie header into Settings) was too much work, and that editor
-was removed in 1.12.0. The storage and the sending rules stayed
-(`src/site-sessions.js`, `tests/site-sessions.test.mjs`) because whatever fills that
-file must still obey them: a cookie goes to its own host and subdomains, never to a
-lookalike, and never across a redirect to another site.
+Not WebView2 cookies: **SynaBrowse**, the harness's own hidden Edge with its own
+profile (`data\browser\profile`). A site is signed into once, by the operator, in
+a window the `handoff` tool puts on their monitor; the profile keeps the session
+for every later run. No cookie is read, copied or exported — the browser already
+has it, and the page is read through the browser. `docs/notes/browser.md` is the
+reference; `src/site-sessions.js` and its tests stay because the old webfetch
+session map still obeys the same host rules.

@@ -1,8 +1,8 @@
 # The suite, and the run on GitHub
 
-`node --test "tests/*.test.mjs"` from the project root. 751 tests, one skipped by
-design: `engine-contract.test.mjs` needs `SYNAPSE_E2E=1` and a live engine, so the
-suite stays offline.
+`node --test "tests/*.test.mjs"` from the project root. Every test runs offline
+except one skipped by design: `engine-contract.test.mjs` needs `SYNAPSE_E2E=1` and
+a live engine.
 
 On this machine, run it through `bin\node\node.exe scripts\checks.mjs`: the same
 command, with Auto-Shutdown switched off for every project first and put back after. An
@@ -20,7 +20,7 @@ browser is a sentence at the top instead of a failure fifteen minutes in.
 `config/synapse.config.json`, `data/`, `logs/` and `bin/` are gitignored — they are
 this machine's answers, not the program. A test that opens one of them passes here
 and fails on every runner, and it fails the ugliest way: an `ENOENT` at import time,
-so the whole file reports as one broken test and the other 579 pass around it.
+so the whole file reports as one broken test while the rest pass around it.
 
 This has now happened three times:
 

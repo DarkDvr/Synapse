@@ -1656,7 +1656,7 @@ async function checkSkills({ quiet = false } = {}) {
   }
   if (gone.length) parts.push(`folder not found: ${gone.map((p) => p.path).join(', ')}`);
   if (dupes.length) parts.push(`two copies of ${dupes.join(', ')} — the engine picks one`);
-  toast('Some Skills Are Missing', `${parts.join('. ')}. Settings → Skills says where they go.`, 9000);
+  toast('Some Skills Are Missing', `${parts.join('. ')}. Settings → Tools says where they go.`, 9000);
 }
 
 // ── wiring ──────────────────────────────────────────────────────
