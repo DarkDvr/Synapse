@@ -17,7 +17,7 @@ const fold = (value) =>
   path.resolve(String(value || '')).replace(/\//g, '\\').replace(/\\+$/, '').toLowerCase();
 
 /** Markers are matched against free text: one separator, no case, no trailing slash. */
-const slash = (value) => String(value || '').replace(/\\/g, '/').toLowerCase();
+const slash = (value) => String(value || '').replace(/\\/g, '/').replace(/\/{2,}/g, '/').toLowerCase();
 
 const dirs = new Set();
 const sessions = new Map();
@@ -91,12 +91,24 @@ export function isPrivateSession(id) {
  * The folder is matched with either separator, because log lines are written from
  * paths that arrive in both forms on Windows.
  */
+/** A marker inside a line counts only at a name boundary: `changes-test` must not
+ *  match a log line about `changes-test2` (16 Nov). */
+function markerIn(text, marker) {
+  let at = text.indexOf(marker);
+  while (at >= 0) {
+    const next = text[at + marker.length];
+    if (next === undefined || !/[a-z0-9_-]/.test(next)) return true;
+    at = text.indexOf(marker, at + 1);
+  }
+  return false;
+}
+
 export function isPrivateText(text) {
   const body = String(text || '');
   if (!body || !dirs.size) return false;
   const asSlashes = slash(body);
   for (const dir of dirs) {
-    if (asSlashes.includes(dir.replace(/\\/g, '/'))) return true;
+    if (markerIn(asSlashes, dir.replace(/\\/g, '/'))) return true;
   }
   if (!sessions.size) return false;
   for (const id of sessions.keys()) if (body.includes(id)) return true;

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Text;
 
@@ -166,6 +167,88 @@ public sealed class ConsoleStore : IDisposable
         catch
         {
             _file = null;
+        }
+    }
+
+    /// <summary>
+    /// Remove every line that names a path or session the server just made private.
+    ///
+    /// The shell owns this file and opens it without write sharing, which is why the
+    /// server asks instead of editing it. The ring is filtered too: the console popup
+    /// reads the ring, and a private project must not remain in either copy.
+    /// </summary>
+    public void Purge(IReadOnlyList<string> needles)
+    {
+        if (needles == null || needles.Count == 0) return;
+        lock (_gate)
+        {
+            try { _file?.Dispose(); } catch { /* reopening below */ }
+            _file = null;
+
+            var kept = Filter(_text.ToString(), needles);
+            _text.Clear();
+            _text.Append(kept);
+            _start = 0;
+            _end = kept.Length;
+
+            Rewrite(_path, needles);
+            Rewrite(OldPath(), needles);
+
+            try
+            {
+                _file = new StreamWriter(new FileStream(_path, FileMode.Append, FileAccess.Write, FileShare.Read))
+                {
+                    AutoFlush = true,
+                };
+            }
+            catch
+            {
+                _file = null;   // the ring is still clean; the file was rewritten
+            }
+        }
+    }
+
+    string OldPath() => _path.EndsWith(".log", StringComparison.OrdinalIgnoreCase)
+        ? _path[..^4] + ".1.log"
+        : _path + ".1";
+
+    static string Filter(string text, IReadOnlyList<string> needles)
+    {
+        var lines = text.Split('\n');
+        var kept = new StringBuilder(text.Length);
+        for (var i = 0; i < lines.Length; i++)
+        {
+            var line = lines[i];
+            if (!Hit(line, needles))
+            {
+                kept.Append(line);
+                if (i < lines.Length - 1) kept.Append('\n');
+            }
+        }
+        return kept.ToString();
+    }
+
+    static bool Hit(string line, IReadOnlyList<string> needles)
+    {
+        foreach (var needle in needles)
+        {
+            if (!string.IsNullOrEmpty(needle) && line.Contains(needle, StringComparison.OrdinalIgnoreCase)) return true;
+        }
+        return false;
+    }
+
+    static void Rewrite(string path, IReadOnlyList<string> needles)
+    {
+        try
+        {
+            if (!File.Exists(path)) return;
+            var text = File.ReadAllText(path);
+            var kept = Filter(text, needles);
+            if (kept.Length != text.Length) File.WriteAllText(path, kept);
+        }
+        catch
+        {
+            // A locked or vanished file keeps its lines; the ring is still clean.
         }
     }
 

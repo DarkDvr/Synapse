@@ -29,7 +29,7 @@ import { setProviderKey, providerKeyState, maskKey } from './secrets.js';
 import { probeToolchain } from './toolchain.js';
 import { busyInfo } from './busy.js';
 import { addPrivateDir, addSession, isPrivateDir, isPrivateSession, removePrivateDir, setPrivateDirs } from './privacy.js';
-import { purgePrivateTraces } from './privacy-purge.js';
+import { purgePrivateTraces, requestConsolePurge } from './privacy-purge.js';
 import { APP_VERSION, sourceVersion } from './version.js';
 
 // What an attachment may be. The old rule was six files of up to 8 MB each, which
@@ -1636,6 +1636,9 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
       toolStats?.forgetSessions?.(ids);
       for (const sessionId of ids) permissionMemory?.forgetSession?.(sessionId);
       const purged = purgePrivateTraces({ dir: project.directory, sessionIds: ids });
+      // The shell owns console.log; ask it to remove the same lines from the file
+      // and the ring it shows.
+      requestConsolePurge(project.directory, ids);
       return { project, purged };
     },
 

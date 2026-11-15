@@ -286,6 +286,21 @@ public sealed class ServerHost : IDisposable
             return;
         }
 
+        // The server asks for a console purge when a project is made private: the
+        // shell owns console.log, so the server cannot edit it. The request is not
+        // console output and never reaches the ring.
+        const string purge = "[[purge-console]]";
+        if (line.StartsWith(purge, StringComparison.Ordinal))
+        {
+            try
+            {
+                var needles = JsonSerializer.Deserialize<string[]>(line[purge.Length..]);
+                if (needles is { Length: > 0 }) _console.Purge(needles);
+            }
+            catch { /* a malformed request is not console output */ }
+            return;
+        }
+
         _console.Append(line + Environment.NewLine);
 
         // The one line that says the UI is being served. Everything else about the

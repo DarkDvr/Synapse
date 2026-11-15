@@ -126,6 +126,39 @@ test('marking a project Private removes the lines that named it', () => {
   fs.rmSync(root, { recursive: true, force: true });
 });
 
+test('purge matches escaped JSON paths and the project name, not its neighbour', () => {
+  const root = tmpdir('synapse-private-escaped-');
+  const logs = path.join(root, 'logs');
+  fs.mkdirSync(logs, { recursive: true });
+  const dir = 'F:\\somewhere\\Synapse.Projects\\changes-test';
+  fs.writeFileSync(
+    path.join(logs, 'debug.log'),
+    [
+      'cwd: "F:\\\\somewhere\\\\Synapse.Projects\\\\changes-test"',
+      'project added: changes-test2 -> F:\\somewhere\\Synapse.Projects\\changes-test2',
+      'scratch: F:\\somewhere\\Synapse.Projects\\_scratch\\changes-test-abc',
+      'kept line',
+    ].join('\n') + '\n',
+    'utf8',
+  );
+  const out = purgePrivateTraces({ dir, dirs: [logs] });
+  assert.equal(out.lines, 2, 'the escaped path and the scratch name are removed');
+  const text = fs.readFileSync(path.join(logs, 'debug.log'), 'utf8');
+  assert.doesNotMatch(text, /changes-test"|changes-test-abc/);
+  assert.match(text, /changes-test2/, 'a longer name is a different project');
+  assert.match(text, /kept line/);
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('a private match sees a JSON-escaped path', () => {
+  reset();
+  const dir = 'F:\\somewhere\\Synapse.Projects\\changes-test';
+  setPrivateDirs([dir]);
+  assert.equal(isPrivateText('cwd: "F:\\\\somewhere\\\\Synapse.Projects\\\\changes-test"'), true);
+  assert.equal(isPrivateText('cwd: "F:\\\\somewhere\\\\Synapse.Projects\\\\changes-test2"'), false);
+  reset();
+});
+
 test('the census forgets a private session but keeps its own counts', () => {
   const root = tmpdir('synapse-private-census-');
   const stats = createToolStats({ file: path.join(root, 'tool-stats.json'), logger: quiet });

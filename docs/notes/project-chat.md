@@ -520,15 +520,18 @@ With the marker on, Synapse writes nothing about the project outside its folder:
 
 **Switching it on also removes what is already there.** The marker stops new traces; the
 toggle is not a promise about the past, so it (1) rewrites every `logs\*.log` and
-`data\provider-errors.log`, dropping the lines that name the project's folder or one of its
-sessions (`src/privacy-purge.js`); (2) deletes the project's trace reasons; (3) forgets its
-remembered permission answers; (4) drops its tool census's recent errors (the aggregate
-counts stay — they carry no project name); and (5) registers the folder and sessions with
-the filter immediately. The engine's database and the browser profile are not touched, for
-the reasons below — those are the leftovers that cannot be removed.
+`data\provider-errors.log`, dropping the lines that name the project's folder, its scratch
+folder or one of its sessions (`src/privacy-purge.js`); (2) deletes the project's trace
+reasons; (3) forgets its remembered permission answers; (4) drops its tool census's recent
+errors (the aggregate counts stay — they carry no project name); and (5) registers the
+folder and sessions with the filter immediately. `console.log` is owned by the shell, which
+holds it open without write sharing, so the server sends one `[[purge-console]]` request on
+stdout and the shell rewrites both its ring and the file. The engine's database and the
+browser profile are not touched, for the reasons below — those are the leftovers that
+cannot be removed.
 
 **A LAN view does not see a private project at all.** Remote access serves the same page, so
-the filter is server-side (`src/server.js`, `{ remote }`): the rail's project list
+the filter is server-side (`src/server.js`, the `fromLan` flag): the rail's project list
 excludes it, `/api/runs`, `/api/pending` and the permission cards leave it out, a guessed
 project or session id answers 404, `/api/image` refuses its folder, and the event stream
 drops any frame that names it for non-loopback clients. The host's own page is unaffected.

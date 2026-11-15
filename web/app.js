@@ -1067,6 +1067,10 @@ function connectStream() {
       // restarted onto a new build, and the About page would otherwise keep the
       // number it read when the tab was opened.
       refreshStatus().catch(() => {});
+      // A restart puts the listener back on loopback and the config back to off.
+      // This page kept the switch where it was, so it said "on" on a server that
+      // was not sharing anything; ask again on every reconnect.
+      refreshRemote().catch(() => {});
       return;
     }
 

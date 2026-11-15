@@ -9,6 +9,7 @@ import { createEngine } from './engines/index.js';
 import { EV, turnEnded } from '../web/events.js';
 import { createProjectStore, ensureProjectFolders, migrateProjectState, ignoreProjectState } from './projects.js';
 import { addSession, isPrivateDir, setPrivateDirs } from './privacy.js';
+import { purgePrivateTraces, requestConsolePurge } from './privacy-purge.js';
 import { createToolStats } from './toolstats.js';
 import { readPlan, logPlanState } from './plans.js';
 import { createRunner } from './runs.js';
@@ -209,6 +210,16 @@ async function main() {
   // The private markers are in the folders; the log filter needs them before anything
   // writes a line about one of these projects (15 Nov).
   setPrivateDirs(projects.list().filter((p) => p.private).map((p) => p.directory));
+  // A private project is private from every boot, not only from the toggle: purge
+  // anything an older build or a crash left in the diaries, and ask the shell to do
+  // the same to its console file and ring.
+  for (const project of projects.list()) {
+    if (!project.private) continue;
+    try {
+      purgePrivateTraces({ dir: project.directory });
+    } catch { /* a locked diary is retried on the next boot */ }
+    requestConsolePurge(project.directory);
+  }
   app.info(`projects: ${projects.list().length}${discovered.length ? ` (${discovered.length} found in the folder)` : ''}`);
   app.info(`scratch: ${SCRATCH_ROOT}`);
   // Every project owns a plan file. Create the ones that are missing rather than

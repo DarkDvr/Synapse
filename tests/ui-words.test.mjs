@@ -701,6 +701,15 @@ test('a locked folder says what is really holding it', async () => {
   assert.doesNotMatch(text, /close this project's chat/i, 'the old dead-end advice is gone');
 });
 
+test('a reconnecting page re-reads the remote switch', () => {
+  // The server starts with Remote Access off; a page that stayed open kept its
+  // switch on and said the LAN was shared when the listener was on loopback.
+  const js = read('web/app.js');
+  const hello = js.slice(js.indexOf("if (ev.kind === 'hello')"));
+  const block = hello.slice(0, hello.indexOf("if (ev.kind === 'presence')"));
+  assert.match(block, /refreshRemote\(\)/, 'the reconnect asks for the settled state');
+});
+
 test('the project menu is placed before it is shown', () => {
   // `position: fixed` with no offsets sits at the page's top-left. Un-hiding it
   // before the offsets are set let one frame paint there (operator, 16 Nov).
