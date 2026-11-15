@@ -155,6 +155,9 @@ test('a remote view is never shown a private project', () => {
   const api = read('src/api.js');
   assert.match(api, /remote \? list\.filter\(\(p\) => !p\.private\) : list/, 'only the LAN list is filtered');
   assert.match(api, /\.filter\(\(run\) => !remote \|\| !isPrivateDir\(run\?\.dir\)\)/, 'runs of a private project are not sent');
+  assert.match(server, /remote && isPrivateDir\(await api\.projectDirectory\(String\(body\?\.projectId/, 'no new chat opens in a private project');
+  assert.match(server, /remote && isPrivateDir\(String\(body\?\.dir/, 'a run cannot be stopped by naming a private folder');
 });
+
 
 

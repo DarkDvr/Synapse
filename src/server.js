@@ -488,7 +488,10 @@ export function createServer({ api, engine, logger, config, remote, onRemote }) 
       return sendJson(res, 200, await api.traceReason(await readBody(req)));
     }
     if (seg[0] === 'runs' && seg[1] === 'cancel' && method === 'POST') {
-      return sendJson(res, 200, await api.cancelRun(await readBody(req)));
+      const body = await readBody(req);
+      // A LAN view cannot stop a private project's run by naming its folder (15 Nov).
+      if (remote && isPrivateDir(String(body?.dir || ''))) return sendJson(res, 404, { error: 'not found' });
+      return sendJson(res, 200, await api.cancelRun(body));
     }
     // POST /api/runs/resume — the operator fixed what was refused; a stopped
     // project may take tasks again. Called after a role's model is changed.
@@ -554,7 +557,14 @@ export function createServer({ api, engine, logger, config, remote, onRemote }) 
     // left is "make this project's chat"; renaming and deleting a chat are gone
     // with the session list (a project's chat is the project).
     if (seg[0] === 'sessions') {
-      if (seg.length === 1 && method === 'POST') return sendJson(res, 200, await api.createSession(await readBody(req)));
+      if (seg.length === 1 && method === 'POST') {
+        const body = await readBody(req);
+        // No session in a private project is created for a LAN view (15 Nov).
+        if (remote && isPrivateDir(await api.projectDirectory(String(body?.projectId || '')))) {
+          return sendJson(res, 404, { error: 'not found' });
+        }
+        return sendJson(res, 200, await api.createSession(body));
+      }
       const sessionId = decodeURIComponent(seg[1] || '');
       if (seg[2] === 'model' && method === 'POST') return sendJson(res, 200, await api.switchModel(sessionId, await readBody(req)));
       if (seg[2] === 'messages' && method === 'GET') return sendJson(res, 200, await api.messages(sessionId));
