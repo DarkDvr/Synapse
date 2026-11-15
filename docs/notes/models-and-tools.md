@@ -667,3 +667,39 @@ window — the "1000+ tok/s" sightings. `forgetUsageSamples()` re-baselines on r
 the next usage event becomes the baseline and no sample is taken across the gap.
 
 
+
+## A provider's error wears its own clothes (15 Nov)
+
+A turn failed with
+
+```
+'charmap' codec can't encode character '\u2713' in position 41: character maps to <undefined>
+```
+
+and it looked like Python inside Synapse. Nothing here runs Python. The engine's raw
+message said what it really was:
+
+```json
+{"type":"provider.internal","status":200,
+ "response":{"body":"{\"error\":{\"type\":\"server_error\",\"message\":\"'charmap' codec ...\"}}"}}
+```
+
+The **model server** (PolyStrata, a Python process at `127.0.0.1:8080`) had raised
+`UnicodeEncodeError` inside itself — a print or log write in cp1252 — and handed the text
+back as an error object in a 200 response. The engine labelled it `provider.internal`; the
+page shows the provider's sentence, which is why it reads like ours.
+
+Two lessons:
+
+- **Read the engine's raw message before believing a stack trace's owner.** `GET
+  /api/session/{id}/message` on port 8720 (Basic auth `opencode:<data\engine\opencode\password.txt>`)
+  carries the `error.type`, the status and the provider's body. `provider.internal` means the
+  provider, whoever wrote it.
+- **`PYTHONIOENCODING=utf-8` in the engine's environment reaches the engine's children, not
+  the provider.** It is there for model-run scripts (1.58.24) and would not have fixed this;
+  the model server is launched by the operator, not by Synapse, and needs the variable at its
+  own start (or `encoding="utf-8"` on whatever it writes).
+
+The chat that hit this had taught itself to print "✓" in its reasoning; every request then
+carried it, and the server's encoder refused it every time — a loop that looks like a model
+refusing to work rather than a provider failing to log.
