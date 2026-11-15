@@ -38,6 +38,25 @@ A binary file is counted, not patched. A patch over 400 KB is cut and says so. A
 folder with no repository, or a machine with no Git, simply has no diff; the report
 says nothing about a change rather than guessing one.
 
+## Checkpoints and restore
+
+The same tree that anchors the diff is also a rollback point. Before a delegation
+starts, `createCheckpoint()` writes it into a commit (no parent, no HEAD move) and
+puts a ref under `refs/synapse/` inside the project. A new run replaces the older
+ref: only one rollback point per project can ever be the newest.
+
+- **A clean run drops its point.** The work was wanted; the ref and its commit go.
+- **A failed, stopped or unproven run keeps it.** The report says *Rollback point
+  kept*, and the Architect can call the `synapse-git_restore` tool with the task
+  id. The tool refuses while a delegation is live, refuses any task that is not
+  the newest result, and consumes the ref when it succeeds.
+- **A restore writes the checkpoint's files back and removes files that arrived
+  after it.** `.synapse` was never in the tree, so the plan and the evidence are
+  untouched. The real index is not rewritten; the operator's `git status` shows
+  the restore as a working-tree change.
+- **One restore, one task.** The plan row is not edited: the Architect judges it
+  again with the work back where it started.
+
 ## The private Git
 
 A new PC may have no Git. On first launch `ensureGit()` looks for one (the vendored

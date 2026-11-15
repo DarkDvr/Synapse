@@ -114,6 +114,9 @@ export const MODEL_CACHE_FILE = path.join(DATA_DIR, 'model-cache.json');
 export const SEARCH_SERVER = path.join(ROOT, 'src', 'mcp', 'search-server.js');
 export const DELEGATE_SERVER = path.join(ROOT, 'src', 'mcp', 'delegate-server.js');
 export const LEASE_SERVER = path.join(ROOT, 'src', 'mcp', 'lease-server.js');
+// The Architect's rollback action: restore the project to the checkpoint kept
+// before the newest failed run.
+export const GIT_SERVER = path.join(ROOT, 'src', 'mcp', 'git-server.js');
 
 // SynaBrowse: the tools that drive the harness's own browser. Registered only when the
 // operator has switched it on — a browser that can act as them is not a default.

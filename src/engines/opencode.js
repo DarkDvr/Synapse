@@ -14,7 +14,7 @@ import {
   normalizeSession,
   parseModelRef,
 } from './base.js';
-import { ROOT, SEARCH_SERVER, DELEGATE_SERVER, LEASE_SERVER, BROWSER_SERVER, ENGINE_PID_FILE, SKILLS_DIR, VENDOR_ENGINE } from '../paths.js';
+import { ROOT, SEARCH_SERVER, DELEGATE_SERVER, LEASE_SERVER, GIT_SERVER, BROWSER_SERVER, ENGINE_PID_FILE, SKILLS_DIR, VENDOR_ENGINE } from '../paths.js';
 import { providerApiKey } from '../config.js';
 import { vacuumStore } from '../engine-store.js';
 
@@ -186,6 +186,7 @@ export class OpenCodeEngine extends Engine {
     delete servers['synapse-search'];
     delete servers['synapse-delegate'];
     delete servers['synapse-lease'];
+    delete servers['synapse-git'];
     delete servers['synapse-browser'];
     // A server that no longer exists: the plan became a file the Architect owns
     // (src/plans.js), so the entry must not linger pointing at a deleted file.
@@ -219,6 +220,15 @@ export class OpenCodeEngine extends Engine {
     servers['synapse-lease'] = {
       type: 'local',
       command: [process.execPath, LEASE_SERVER],
+      codemode: false,
+    };
+
+    // The Architect's rollback: put the project back to the point before the
+    // newest failed run. It refuses while a run is live, and a clean run has no
+    // checkpoint to restore.
+    servers['synapse-git'] = {
+      type: 'local',
+      command: [process.execPath, GIT_SERVER],
       codemode: false,
     };
 

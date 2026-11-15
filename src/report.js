@@ -19,7 +19,7 @@
 import { QC_ROUNDS } from './plans.js';
 import { tokens } from './words.js';
 
-export function report({ task, role, insteadOf, startedBelow = false, skipped, outcome, harnessStop, text, files, context, workerId, planTouched, synapseTouched, qcRound, skillsRequired, skillsMissing, auto, stallSec, retries, resumes, loops = 0, loopCount = 0, loopMarked = false, loopRole = null, loopModel = null, modelRef = '', error, stoppedBy, lastTurnError, steers, deferred, checks, change }) {
+export function report({ task, role, insteadOf, startedBelow = false, skipped, outcome, harnessStop, text, files, context, workerId, planTouched, synapseTouched, qcRound, skillsRequired, skillsMissing, auto, stallSec, retries, resumes, loops = 0, loopCount = 0, loopMarked = false, loopRole = null, loopModel = null, modelRef = '', error, stoppedBy, lastTurnError, steers, deferred, checks, change, checkpoint }) {
     const head =
       outcome === 'completed'
         ? checks?.failed
@@ -127,6 +127,9 @@ export function report({ task, role, insteadOf, startedBelow = false, skipped, o
       lines.push(
         `Changed: ${change.stat}${change.patchPath ? ` — the diff is ${change.patchPath}` : ''}.`,
       );
+    }
+    if (checkpoint) {
+      lines.push('Rollback point kept: the project can be put back to before this run, if the work is unusable.');
     }
     // The harness ran the task's own acceptance check. A failure is evidence,
     // not a retry instruction: the worker has already had its one repair turn.

@@ -17,6 +17,10 @@ import {
   changeSince,
   diffTrees,
   ensureGit,
+  createCheckpoint,
+  restoreCheckpoint,
+  dropCheckpoint,
+  runGit,
   MINGIT,
 } from '../src/git.js';
 import { createRunner } from '../src/runs.js';
@@ -101,6 +105,31 @@ test('a folder with no git has no tree and no diff', async () => {
   assert.equal(await changeSince(dir, 't1', null), null);
 });
 
+test('a checkpoint writes back what it had and removes what came after', async () => {
+  const dir = project('checkpoint');
+  await ensureRepo(dir, { log: quiet });
+  fs.writeFileSync(path.join(dir, 'keep.txt'), 'before\n');
+  const before = await treeOf(dir);
+  const checkpoint = await createCheckpoint(dir, before, 't1-test');
+  assert.ok(checkpoint?.ref.startsWith('refs/synapse/'));
+  fs.writeFileSync(path.join(dir, 'keep.txt'), 'after\n');
+  fs.writeFileSync(path.join(dir, 'extra.txt'), 'extra\n');
+  const restored = await restoreCheckpoint(dir, checkpoint.ref);
+  assert.equal(restored.ok, true);
+  assert.equal(fs.readFileSync(path.join(dir, 'keep.txt'), 'utf8'), 'before\n');
+  assert.equal(fs.existsSync(path.join(dir, 'extra.txt')), false);
+  assert.equal(await dropCheckpoint(dir, checkpoint.ref), true);
+  assert.equal((await runGit(['for-each-ref', 'refs/synapse'], { cwd: dir })).out.trim(), '');
+});
+
+test('restore refuses a ref that is not a checkpoint', async () => {
+  const dir = project('checkpoint-bad');
+  await ensureRepo(dir, { log: quiet });
+  const result = await restoreCheckpoint(dir, 'refs/heads/main');
+  assert.equal(result.ok, false);
+  assert.match(result.error, /checkpoint/i);
+});
+
 // ── through the runner: the report names the change ──────────────────
 
 function makeEngine({ dir, writes = [] }) {
@@ -137,6 +166,15 @@ function makeEngine({ dir, writes = [] }) {
         }, 10);
         return;
       }
+      // A repair turn from the runner (a failed check): answer it, so the run can
+      // finish and the rollback point is kept.
+      const s = sessions.get(id);
+      s.messages.push({ id: `${id}-s${s.messages.length}`, type: 'synthetic', parts: [{ type: 'text', text }] });
+      const n = (s.turn = (s.turn || 0) + 1);
+      setTimeout(() => {
+        s.messages.push({ id: `${id}-a${n}`, type: 'assistant', parts: [{ type: 'text', text: 'done' }] });
+        s.messages.push({ id: `${id}-i${n}`, type: 'idle', parts: [] });
+      }, 10);
     },
     async getMessages(id) {
       return id === 'ses_arch' ? [...arch] : [...(sessions.get(id)?.messages || [])];
@@ -206,4 +244,61 @@ test('the report names the diff, and the patch is inside the project', async () 
   assert.match(report, /Changed: 1 file, \+1 −0/);
   assert.match(report, /\.synapse\/reports\/diffs\/t1-/);
   assert.ok(fs.existsSync(path.join(dir, ...result.change.patch.split('/'))));
+  assert.equal(result.checkpoint, null, 'a clean run drops its rollback point');
+  assert.equal((await runGit(['for-each-ref', 'refs/synapse'], { cwd: dir })).out.trim(), '');
+});
+
+test('a run whose check fails keeps its rollback point', async () => {
+  const dir = project('runner-check');
+  fs.writeFileSync(
+    path.join(dir, '.synapse', 'plan.json'),
+    JSON.stringify({
+      version: 1,
+      goal: 'test',
+      summary: '',
+      tasks: [
+        {
+          id: 't1',
+          title: 'Prove it',
+          role: 'coder-1',
+          status: 'todo',
+          detail: 'd',
+          checks: ['node -e "process.exit(1)"'],
+        },
+      ],
+    }),
+  );
+  await ensureRepo(dir, { log: quiet });
+  const stub = makeEngine({ dir, writes: [{ file: 'hello.txt', text: 'hello\n' }] });
+  const runner = runnerFor(stub.engine);
+  stub.arch.push({ id: 'u1', type: 'user', created: Date.now(), parts: [{ type: 'text', text: 'go' }] });
+  stub.arch.push({
+    id: 'a1',
+    type: 'assistant',
+    created: Date.now() + 1,
+    parts: [{ type: 'tool', name: 'synapse-delegate_delegate', id: 'call_cp', input: { task: 't1' } }],
+  });
+  await runner.handleTurn('ses_arch', [...stub.arch]);
+  const result = await (async () => {
+    for (let i = 0; i < 300; i += 1) {
+      const file = path.join(dir, '.synapse', 'runs.jsonl');
+      if (fs.existsSync(file)) {
+        const lines = fs.readFileSync(file, 'utf8').trim().split('\n').filter(Boolean).map((l) => JSON.parse(l));
+        const r = lines.find((x) => x.kind === 'result');
+        if (r) return r;
+      }
+      await sleep(25);
+    }
+    return null;
+  })();
+  assert.ok(result, 'a result was recorded');
+  assert.ok(result.checkpoint?.ref?.startsWith('refs/synapse/'), 'the failed check keeps a rollback point');
+  const refs = (await runGit(['for-each-ref', '--format=%(refname)', 'refs/synapse'], { cwd: dir })).out.trim();
+  assert.equal(refs, result.checkpoint.ref);
+  const report = stub.arch
+    .filter((m) => m.type === 'synthetic')
+    .map((m) => String(m.parts?.[0]?.text || ''))
+    .find((t) => t.startsWith('t1 (coder-1)')) || '';
+  assert.match(report, /Rollback point kept/);
+  assert.match(report, /finished, but its check fails/);
 });

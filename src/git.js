@@ -264,6 +264,118 @@ export async function changeSince(dir, taskId, from) {
 }
 
 /**
+ * A rollback point: a commit whose tree is the project as it stood, kept alive by
+ * a ref inside the project's own repository. No parent, no HEAD move, no branch.
+ */
+export async function createCheckpoint(dir, tree, label) {
+  if (!tree) return null;
+  const safe = String(label || 'checkpoint')
+    .replace(/[^A-Za-z0-9._-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 60) || 'checkpoint';
+  const ref = `refs/synapse/${safe}`;
+  const env = {
+    GIT_AUTHOR_NAME: 'Synapse',
+    GIT_AUTHOR_EMAIL: 'synapse@localhost',
+    GIT_COMMITTER_NAME: 'Synapse',
+    GIT_COMMITTER_EMAIL: 'synapse@localhost',
+  };
+  // One rollback point per project: a new run supersedes the older one, and the
+  // older one can no longer be restored anyway (the tool only offers the newest
+  // run). Dropping it here is what keeps the refs from piling up.
+  const existing = await runGit(['for-each-ref', '--format=%(refname)', 'refs/synapse'], {
+    cwd: dir,
+    timeoutMs: 10_000,
+  });
+  for (const old of existing.out.split('\n').map((line) => line.trim()).filter(Boolean)) {
+    if (old !== ref) await runGit(['update-ref', '-d', old], { cwd: dir, timeoutMs: 10_000 });
+  }
+  const commit = await runGit(['commit-tree', tree, '-m', `Synapse checkpoint: ${safe}`], {
+    cwd: dir,
+    env,
+    timeoutMs: 20_000,
+  });
+  if (!commit.ok) return null;
+  const sha = commit.out.trim();
+  const set = await runGit(['update-ref', ref, sha], { cwd: dir, env, timeoutMs: 10_000 });
+  return set.ok ? { ref, commit: sha, at: Date.now() } : null;
+}
+
+/** Forget a checkpoint ref. Its objects stay until git's own gc decides otherwise. */
+export async function dropCheckpoint(dir, ref) {
+  if (!String(ref || '').startsWith('refs/synapse/')) return false;
+  const r = await runGit(['update-ref', '-d', ref], { cwd: dir, timeoutMs: 10_000 });
+  return r.ok;
+}
+
+/**
+ * Put the working tree back to a checkpoint.
+ *
+ * Files the checkpoint has are written back, files that arrived after it are
+ * removed, and nothing is touched in `.synapse` (it was never in the tree). The
+ * real index is not rewritten: a restore is a change to the worktree, and the
+ * operator's `git status` should show it as one.
+ */
+export async function restoreCheckpoint(dir, ref) {
+  if (!String(ref || '').startsWith('refs/synapse/')) {
+    return { ok: false, error: 'that is not one of Synapse\'s checkpoint refs' };
+  }
+  const commit = await runGit(['rev-parse', '--verify', `${ref}^{commit}`], { cwd: dir, timeoutMs: 10_000 });
+  if (!commit.ok) return { ok: false, error: 'the checkpoint no longer exists' };
+  const sha = commit.out.trim();
+  const current = await treeOf(dir);
+  if (!current) return { ok: false, error: 'the project has no git tree to compare' };
+
+  const status = await runGit(['diff', '--name-status', '--no-renames', current, sha], {
+    cwd: dir,
+    timeoutMs: 60_000,
+  });
+  if (!status.ok) return { ok: false, error: status.err.trim() || 'could not compare the trees' };
+  const removals = [];
+  for (const line of status.out.split('\n')) {
+    if (!line.trim()) continue;
+    const [kind, ...rest] = line.split('\t');
+    if (kind === 'D') removals.push(rest.join('\t'));
+  }
+
+  const tree = await runGit(['ls-tree', '-r', '--name-only', sha], { cwd: dir, timeoutMs: 30_000 });
+  if (!tree.ok) return { ok: false, error: 'could not read the checkpoint tree' };
+  const files = tree.out.split('\n').filter(Boolean);
+
+  const cache = path.join(dir, '.synapse', 'cache');
+  const index = path.join(cache, `restore-${process.pid}-${Date.now()}`);
+  try {
+    fs.mkdirSync(cache, { recursive: true });
+    const env = { GIT_INDEX_FILE: index };
+    const read = await runGit(['read-tree', sha], { cwd: dir, env, timeoutMs: 30_000 });
+    if (!read.ok) return { ok: false, error: read.err.trim() || 'could not stage the checkpoint tree' };
+    const prefix = `${dir.replace(/\\/g, '/')}/`;
+    const write = await runGit(['checkout-index', '-a', '-f', `--prefix=${prefix}`], {
+      cwd: dir,
+      env,
+      timeoutMs: 60_000,
+    });
+    if (!write.ok) return { ok: false, error: write.err.trim() || 'could not write the checkpoint files' };
+  } finally {
+    for (const file of [index, `${index}.lock`]) {
+      try { fs.rmSync(file, { force: true }); } catch { /* a temporary index */ }
+    }
+  }
+
+  let deleted = 0;
+  for (const rel of removals) {
+    const target = path.resolve(dir, rel);
+    if (!target.startsWith(path.resolve(dir) + path.sep)) continue;
+    if (target.split(path.sep).includes('.synapse')) continue;
+    try {
+      fs.rmSync(target, { force: true });
+      deleted += 1;
+    } catch { /* a file that is already gone is the same result */ }
+  }
+  return { ok: true, restored: files.length, deleted, commit: sha };
+}
+
+/**
  * Make sure a git exists, installing the private MinGit on a machine that has
  * none. Silent on success beyond one info line; a failure is a warning, never a
  * boot failure: the app runs without diffs and checkpoints.
