@@ -119,6 +119,9 @@ async function restore(turned) {
       warn(`  could not restore auto-shutdown for ${session.name}: ${err.message}`);
     }
   }
+  if (turned.length) {
+    warn(`  note: ${turned.length} project(s) have Auto-Shutdown on again; the app now checks the machine's last input before powering off.`);
+  }
 }
 
 function runCommand() {

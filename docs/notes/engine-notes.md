@@ -2011,6 +2011,14 @@ rather than re-arming on the next sweep; a run that starts cancels it outright.
 The countdown is still armed by `armPowerCountdown` in `src/api.js`, which shares
 `clearPower`, the guards and the Cancel with the old path.
 
+**Synapse being quiet is not the machine being idle (16 Nov).** At 15:12 the app
+powered the PC off while the operator was working in another app: no Synapse turn
+had run for twenty minutes, which was true, and was all the old tick checked. The
+deadline now asks Windows for the last mouse or keyboard input (`GetLastInputInfo`,
+one small PowerShell call at the deadline only) and counts the wait from that, not
+from the last turn. If the answer cannot be had, it does not power off — not
+knowing is not permission. It has happened more than once.
+
 ### The form list is scoped by directory (3 Nov)
 
 Auto-Answer never fired, with the old Full auto switch either. The reason was not

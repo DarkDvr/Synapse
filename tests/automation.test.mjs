@@ -115,7 +115,7 @@ test('the four waits come from Settings, and a broken value falls back', () => {
 
 // ── Auto-Shutdown ─────────────────────────────────────────────────────
 
-function harness({ sessions, quiet = true, minutes = 5 } = {}) {
+function harness({ sessions, quiet = true, minutes = 5, idleMs = 60 * 60_000 } = {}) {
   const calls = { armed: 0, cancelled: 0 };
   let clock = 0;
   let powerArmed = false;
@@ -141,7 +141,13 @@ function harness({ sessions, quiet = true, minutes = 5 } = {}) {
     },
   };
   const config = { automation: { shutdownMin: minutes } };
-  const tick = createAutoShutdown({ engine, api, getConfig: () => config, now: () => clock }).tick;
+  const tick = createAutoShutdown({
+    engine,
+    api,
+    getConfig: () => config,
+    now: () => clock,
+    userIdle: async () => idleMs,
+  }).tick;
   return {
     calls,
     tick,
@@ -180,6 +186,24 @@ test('a live turn resets the wait and cancels what was armed', async () => {
   h.advance(60 * 60_000);
   await h.tick();
   assert.equal(h.calls.armed, 0, 'never count down with a turn running');
+});
+
+test('the operator using the machine keeps it on, even when Synapse is quiet', async () => {
+  // 16 Nov: no Synapse turn for twenty minutes, while the operator was working in
+  // another app. Synapse's quiet is not the machine's idle.
+  const h = harness({ sessions: on, minutes: 5, idleMs: 30_000 });
+  await h.tick();
+  h.advance(5 * 60_000);
+  await h.tick();
+  assert.equal(h.calls.armed, 0, 'a person at the keyboard is not an idle machine');
+});
+
+test('not knowing the idle time is not permission to power off', async () => {
+  const h = harness({ sessions: on, minutes: 5, idleMs: null });
+  await h.tick();
+  h.advance(5 * 60_000);
+  await h.tick();
+  assert.equal(h.calls.armed, 0, 'the safe answer when Windows cannot tell us');
 });
 
 test('a cancel starts the whole wait again, rather than re-arming on the next tick', async () => {

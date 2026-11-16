@@ -16,6 +16,7 @@
 // its own if a run has started.
 import { AUTOMATION_DEFAULTS, readAutomation } from './automation.js';
 import { shutdownIdleMs } from './auto-answer.js';
+import { userIdleMs as readUserIdleMs } from './user-idle.js';
 
 /**
  * @param {object} deps
@@ -25,7 +26,7 @@ import { shutdownIdleMs } from './auto-answer.js';
  * @param {() => object} deps.getConfig
  * @param {() => number} [deps.now]
  */
-export function createAutoShutdown({ engine, api, logger, getConfig, now = Date.now }) {
+export function createAutoShutdown({ engine, api, logger, getConfig, now = Date.now, userIdle = readUserIdleMs }) {
   const log = logger?.channel?.('app');
   // When the machine last became quiet. The idle delay counts from here, not from
   // an event, so a page that was never open cannot change the answer.
@@ -33,6 +34,8 @@ export function createAutoShutdown({ engine, api, logger, getConfig, now = Date.
   // Was the countdown ours? A cancel by the operator must start the whole wait
   // again rather than re-arm on the next tick.
   let armed = false;
+  // One warning, not every ten seconds, when Windows cannot answer.
+  let idleWarned = false;
 
   const sessionsWith = async () => {
     const list = await engine.listSessions();
@@ -98,6 +101,26 @@ export function createAutoShutdown({ engine, api, logger, getConfig, now = Date.
       if (quietSince === null) quietSince = now();
       const wait = shutdownIdleMs(getConfig());
       if (now() - quietSince < wait) return { waiting: wait - (now() - quietSince) };
+
+      // Synapse being quiet is not the same as the machine being idle. On 16 Nov
+      // this powered the PC off at 15:12 while the operator was working in another
+      // app: no turn had run for twenty minutes. The system's own last-input clock
+      // is the honest question. Not knowing the answer is not permission.
+      const idle = await Promise.resolve(userIdle()).catch(() => null);
+      if (idle === null) {
+        if (!idleWarned) {
+          idleWarned = true;
+          log?.warn('auto-shutdown: cannot read how long the machine has been idle; not powering it off');
+        }
+        // Try again after another full wait, not every ten seconds.
+        quietSince = now();
+        return { skipped: 'cannot read the machine idle time' };
+      }
+      if (idle < wait) {
+        // Count the wait from the operator's last touch, not from Synapse's last turn.
+        quietSince = now() - idle;
+        return { waiting: wait - idle };
+      }
 
       armed = true;
       const minutes = Math.round(wait / 60_000);
