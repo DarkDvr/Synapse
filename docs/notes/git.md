@@ -6,10 +6,10 @@ is what the Architect can read.
 
 ## Who does what
 
-- **The harness** initialises the repository (once, after a project's first
-  successful turn), reads the tree, writes the diff, and keeps checkpoints. It
-  never commits a project, never pushes, never moves HEAD, and never edits a
-  project's `.git/config`.
+- **The harness** initialises the repository (once per loaded project, at boot; and
+  again for a folder first seen later), reads the tree, writes the diff, and keeps
+  checkpoints. It never commits a project, never pushes, never moves HEAD, and never
+  edits a project's `.git/config`.
 - **A model** may use git to inspect its work: `git status`, `git diff`, `git log`.
   It does not commit or push unless the task or the operator asks for it. A commit
   is a judgement about what the work is; that belongs to the operator.

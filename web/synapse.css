@@ -1515,7 +1515,7 @@ body[data-mode="single"] #runAuto { display: none; }
 /* The one alarm in bright red: a tool tried to change something on the prohibited
    list. It is louder than the amber "touched Synapse" line on purpose — that one
    is news, this one is the machine saying no. */
-.chat-alarm.is-prohibited { border-left-color: var(--red); color: #ff7a66; }
+.chat-alarm.is-prohibited { border-left-color: var(--red); color: #ff7a66; margin-bottom: 15px; }
 .chat-alarm.is-prohibited .chat-alarm-mark { color: var(--red); }
 .chat-alarm-text {
   min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -3613,6 +3613,7 @@ body.is-disconnected .app-shell { filter: blur(2px) brightness(0.45); pointer-ev
 }
 .chat-alarm-call { font-family: var(--mono, ui-monospace, monospace); }
 .chat-alarm-who { color: var(--muted); margin-top: 3px; }
+.chat-alarm.is-prohibited .chat-alarm-who { color: #ffb3a7; }
 /* ── a compaction in the chat (12 Nov) ─────────────────────────────────────
    The engine summarising the conversation is a fact about the chat, not
    scaffolding: one quiet line where it happened. Grey, not red — nothing failed. */

@@ -119,6 +119,12 @@ test('a refusal wears one rule, and the opened sentence has room from it', () =>
   assert.match(body[0], /padding-left:\s*10px/, 'the text has the gap the message answer has');
 });
 
+test('the prohibited alarm keeps its own end gap and a pale-red attribution', () => {
+  const css = read('web/synapse.css');
+  assert.match(css, /\.chat-alarm\.is-prohibited \{[^}]*margin-bottom: 15px/, 'the red line ends with air, not against the next post');
+  assert.match(css, /\.chat-alarm\.is-prohibited \.chat-alarm-who \{[^}]*#ffb3a7/, 'the "by …" line belongs to the refusal, in its colour');
+});
+
 test('General is the first Settings tab and the Windows tab is gone', () => {
   const src = read('web/settings-panes.js');
   const block = /export const SETTINGS_TABS = \[([\s\S]*?)\n\];/.exec(src);

@@ -1931,6 +1931,8 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
                 // a count with no size beside it says less than it could.
                 live.compactAt = used;
                 live.compactLimit = context;
+                live.compactMarks = Array.isArray(live.compactMarks) ? live.compactMarks : [];
+                live.compactMarks.push({ at: Date.now(), times, used, context });
                 emit('run.note', {
                   dir,
                   role,

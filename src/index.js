@@ -257,7 +257,21 @@ async function main() {
   // here, before the engine starts, so the engine's shells find `git` too. The
   // install is silent and inside this folder; a failure is a warning, not a boot
   // failure — diffs and checkpoints are off until it exists.
-  await ensureGit({ log: app });
+  const gitReady = await ensureGit({ log: app });
+  // A loaded project is a repository before a model touches it. Waiting for the
+  // project's first successful turn left an old project without one until it happened
+  // to run again, and a model's own `git status` could not answer (16 Nov). This is
+  // idempotent, checks once per project at boot, and writes only `.git` + the state
+  // exclusion — never a commit, never the project's files.
+  if (gitReady?.ok) {
+    await Promise.all(
+      projects.list().filter((project) => project.exists).map(async (project) => {
+        const result = await ensureRepo(project.directory, { log: app });
+        if (!result.ok) app.warn(`git init skipped for ${project.name}: ${result.error}`);
+        else ignoreProjectState(project.directory);
+      }),
+    );
+  }
 
   // ── engine ───────────────────────────────────────────────────
   engine = createEngine(currentConfig, {

@@ -77,6 +77,22 @@ test('a finished compaction keeps the size the engine actually sent', () => {
   assert.match(done, /Compacted ×2 · context at 165K\/205K/);
 });
 
+test('a compaction stays where it happened, not pinned under later work', () => {
+  const html = renderTrace({
+    key: 'k',
+    role: 'coder-1',
+    task: 't4',
+    startedAt: 1,
+    notes: [{ at: 2000, steer: true, text: 'after the compaction' }],
+    marks: [{ kind: 'compact', at: 1000, count: 1, size: 50000, limit: 200000 }],
+  });
+  const compactAt = html.indexOf('Compacted ×1');
+  const laterAt = html.indexOf('after the compaction');
+  assert.ok(compactAt >= 0, 'the line exists');
+  assert.ok(laterAt >= 0, 'the later work exists');
+  assert.ok(compactAt < laterAt, 'the line travels with its moment, not the footer');
+});
+
 test('a compaction with no size says nothing it cannot support', () => {
   const bare = renderTrace({
     key: 'k',

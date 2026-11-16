@@ -75,6 +75,15 @@ export function steerLine(text) {
   return said.length > 300 ? `${said.slice(0, 299)}…` : said;
 }
 
+function compactMark(mark) {
+  const count = Math.max(1, Number(mark.count) || 1);
+  const size = Number(mark.size) || 0;
+  const limit = Number(mark.limit) || 0;
+  const where = size ? ` · context at ${fmtTokens(size)}${limit ? `/${fmtTokens(limit)}` : ''}` : '';
+  const line = mark.running ? `Compacting ×${count}` : `Compacted ×${count}`;
+  return `<div class="trace-line is-compact"><span class="trace-mark">⏳</span>${esc(line)}${esc(where)}</div>`;
+}
+
 export function renderTrace(t) {
   const name = roleLabel(t.role);
   const head = [name, t.task, t.title].filter(Boolean);
@@ -203,11 +212,16 @@ export function renderTrace(t) {
   for (const n of tail) entries.push({ at: when(n), html: note(n) });
   for (const r of recentReasons) entries.push({ at: when(r), html: reasonFold(r) });
   for (const s of steers) entries.push({ at: when(s), html: note(s) });
+  // A compaction is a moment in the run, not a permanent footer. Each one sits where
+  // it happened, like a steer or a step, and stays there when the run folds.
+  for (const mark of (t.marks || []).filter((m) => m && m.kind === 'compact')) {
+    entries.push({ at: when(mark), html: compactMark(mark) });
+  }
   entries.sort((a, b) => a.at - b.at || (a.html < b.html ? -1 : a.html > b.html ? 1 : 0));
   const timeline = entries.map((e) => e.html).join('');
-  // A compaction line is pinned: the four-line tail is for steps, and this is not
-  // a step — it is the reason the next step is slower and the window is empty
-  // again. It stays for the whole run, and the folded summary counts it.
+  // A compaction line is shown at its own position now. The old pinned footer is kept
+  // only for a trace rebuilt from `/api/runs` that has a count but no marks: it is
+  // better than losing the fact, and the next live compaction gives the trace marks.
   const packed = Number(t.compactions) || 0;
   const compacting = Number(t.compactingSince) || 0;
   // How full the window was when it fired. While it runs, that is the last prompt
@@ -228,6 +242,7 @@ export function renderTrace(t) {
     : packed
       ? `<div class="trace-line is-compact"><span class="trace-mark">⏳</span>Compacted ×${packed}${compactWhere}</div>`
       : '';
+  const hasMarks = (t.marks || []).some((m) => m && m.kind === 'compact');
   // A loop rescue is pinned for the same reason: it is not a step, and it is the
   // one line that explains why the next thinking is shorter.
   const looped = Number(t.loops) || 0;
@@ -243,7 +258,7 @@ export function renderTrace(t) {
   // that emptied the window and the loop rescue that shortened the thinking. They
   // sit just above the panel, where the operator is looking, and at the bottom of
   // the trace when no panel is showing.
-  const pinned = `${compactLine}${loopLine}`;
+  const pinned = `${hasMarks ? '' : compactLine}${loopLine}`;
   const body = `${timeline}${pinned}${streaming}`;
   const rest = [t.task, t.title].filter(Boolean).join(' · ');
   if (!t.finishedAt) {
@@ -313,12 +328,35 @@ export function traceFor(ev) {
 /** One compaction, on a trace. `times` is the transcript's own tally, so the
  *  count only ever goes up: a note repeated (a re-sent event, two pages open) must
  *  not become "Compacting ×2" for one compaction. */
-export function noteCompaction(trace, { times, used, context } = {}) {
+export function noteCompaction(trace, { times, used, context, at = 0 } = {}) {
   const counted = Number(times) || 0;
   const known = Number(trace.compactions) || 0;
   trace.compactions = counted > known ? counted : known || 1;
   if (Number(used)) trace.compactAt = Number(used);
   if (Number(context)) trace.compactLimit = Number(context);
+  trace.marks = Array.isArray(trace.marks) ? trace.marks : [];
+  const running = trace.marks.find((m) => m.kind === 'compact' && m.running);
+  if (running) {
+    running.running = false;
+    running.count = trace.compactions;
+    running.size = Number(used) || running.size || 0;
+    running.limit = Number(context) || running.limit || 0;
+    return;
+  }
+  const existing = trace.marks.find((m) => m.kind === 'compact' && m.count === trace.compactions);
+  if (existing) {
+    if (Number(used)) existing.size = Number(used);
+    if (Number(context)) existing.limit = Number(context);
+    return;
+  }
+  trace.marks.push({
+    kind: 'compact',
+    at: Number(at) || Date.now(),
+    count: trace.compactions,
+    size: Number(used) || 0,
+    limit: Number(context) || 0,
+    running: false,
+  });
 }
 
 /** One loop rescue, on a trace. Like a compaction, the count only goes up: a
@@ -361,6 +399,17 @@ export function noteCompactionEvent(ev, { used = 0, limit = 0 } = {}) {
     // runs — which is exactly when the operator wants the number (8 Nov).
     if (Number(used)) trace.compactFrom = Number(used);
     if (Number(limit)) trace.compactLimit = Number(limit);
+    trace.marks = Array.isArray(trace.marks) ? trace.marks : [];
+    if (!trace.marks.some((m) => m.kind === 'compact' && m.running)) {
+      trace.marks.push({
+        kind: 'compact',
+        at: Date.now(),
+        count: (Number(trace.compactions) || 0) + 1,
+        size: Number(used) || Number(trace.compactFrom) || 0,
+        limit: Number(limit) || Number(trace.compactLimit) || 0,
+        running: true,
+      });
+    }
   } else {
     trace.compactingSince = 0;
     if (ev.type === EV.compactionEnded) {
@@ -370,6 +419,8 @@ export function noteCompactionEvent(ev, { used = 0, limit = 0 } = {}) {
       // is the small one if the transcript has already shrunk. Showing that was
       // the "Compacted ×2 · context at 11K" the operator was rightly suspicious of.
       noteCompaction(trace, { times: (Number(trace.compactions) || 0) + 1 });
+    } else if (ev.type === EV.compactionFailed) {
+      trace.marks = (trace.marks || []).filter((m) => !(m.kind === 'compact' && m.running));
     }
   }
   wired.renderTranscript();
@@ -397,6 +448,7 @@ export function traceSig() {
           `${t.key}:${t.finishedAt || 0}:${(t.notes || []).length}:${t.stream ? t.stream.text.length : 0}:` +
           `${t.stream?.ended ? 1 : 0}:${Number(t.compactions) || 0}:${Number(t.compactingSince) || 0}:` +
           `${Number(t.compactFrom) || 0}:${Number(t.compactAt) || 0}:${Number(t.compactLimit) || 0}:` +
+          `${(t.marks || []).map((m) => `${m.kind}:${m.count}:${m.at}:${m.size}:${m.running ? 1 : 0}`).join('.')}:` +
           `${(t.reasons || []).length}:${(t.reasons || []).map((r) => String(r.text || '').length).join('.')}:` +
           `${Number(t.loops) || 0}:${Number(t.loopLimit) || 0}:${t.loopStop ? 1 : 0}:${t.reserved ? 1 : 0}:${t.thinkCollapsed ? 1 : 0}`,
       )

@@ -47,6 +47,13 @@ test('the private MinGit is pinned, and a machine that has git is left alone', a
   assert.equal(found.how, 'found');
 });
 
+test('boot gives every loaded project a repository, before a model touches it', () => {
+  const src = fs.readFileSync(new URL('../src/index.js', import.meta.url), 'utf8');
+  assert.match(src, /const gitReady = await ensureGit\(\{ log: app \}\)/);
+  assert.match(src, /projects\.list\(\)[\s\S]{0,300}ensureRepo\(project\.directory/, 'the boot scan is bounded and per project');
+  assert.match(src, /ignoreProjectState\(project\.directory\)/, 'and writes the state exclusion once the repo exists');
+});
+
 test('a folder becomes a repository once', async () => {
   const dir = project('init');
   assert.equal(await isRepo(dir), false);
