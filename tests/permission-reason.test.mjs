@@ -24,14 +24,14 @@ const REQUEST = {
   resources: ['D:/notes.txt'],
 };
 
-function harness({ entry = REQUEST, replyThrows = null } = {}) {
+function harness({ entry = REQUEST, replyThrows = null, single = false } = {}) {
   const replied = [];
   const synthetic = [];
   const answered = [];
   const logs = [];
   const engine = {
     status: () => ({ ready: true, kind: 'stub' }),
-    getSession: async (id) => ({ id, directory: null }),
+    getSession: async (id) => ({ id, directory: null, single }),
     listForms: async () => [],
     listPendingPermissions: async () => [],
     listActiveSessions: async () => [],
@@ -117,7 +117,19 @@ const settle = () => new Promise((r) => setTimeout(r, 10));
   const { api, synthetic } = harness({ entry: { ...REQUEST, role: null } });
   await api.permission('ses_worker', { requestId: 'per_1', decision: 'reject' });
   await settle();
-  check('the Architect is not sent a note with no reason', synthetic.length === 0, JSON.stringify(synthetic));
+  check('the Multi Architect is not sent a note with no reason', synthetic.length === 0, JSON.stringify(synthetic));
+}
+
+{
+  // Single is not Multi with one worker: there is no report and no wake. The
+  // engine ends the model's turn when a tool is declined, so a reason-less
+  // rejection used to leave the chat silent. The refusal note is the turn's
+  // only way to carry on (16 Nov).
+  const { api, synthetic } = harness({ entry: { ...REQUEST, role: null }, single: true });
+  await api.permission('ses_worker', { requestId: 'per_1', decision: 'reject' });
+  await settle();
+  check('a Single chat is told it was declined', synthetic.length === 1 && /declined/.test(synthetic[0].text), synthetic[0]?.text);
+  check('and is told not to try another route', /Do not try another path or tool/.test(synthetic[0].text || ''), synthetic[0]?.text);
 }
 
 {

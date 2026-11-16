@@ -1075,7 +1075,13 @@ verdicts, never a harness write or a credential store.
 `synthetic` message — why it was refused, that a workaround is not allowed, and
 where to escalate (a worker's report; the Architect asks the operator). Measured
 26 Oct: the model answered "…I won't attempt any alternate path or tool", which
-is the note's instruction.
+is the note's instruction. The Architect of a **Multi** chat is not sent one
+without a typed reason: that is the operator's own conversation, and the extra
+turn once ended with an empty report (26 Oct). A **Single** chat is different
+(16 Nov): there is no worker report and no wake, and the engine ends the model's
+own turn when a tool is declined, so a reason-less rejection left the chat
+silent with the work unfinished. The note is sent in Single, and the model can
+answer or ask instead of leaving the operator to type "continue".
 
 **Why broad asks instead of path globs.** The engine matches a path *as the model
 wrote it*, so a rule that allows `F:/.../project/**` says nothing about a relative
