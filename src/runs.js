@@ -2141,7 +2141,16 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
                 signal,
                 taskId: task.id,
               });
-              if (checkResult.failed && checkAttempts < 1 && !signal?.aborted) {
+              if (checkResult.invalid) {
+                // The check itself cannot run here: a missing cmdlet or executable is
+                // not the worker's code, and telling it to fix that walks it into the
+                // machine's protected folders (16 Nov). Report it to the Architect.
+                checkAttempts = 1;
+                log.warn(
+                  `worker ${request.task} (${role}) could not run its check ` +
+                    `(${checkResult.invalid}) - reporting it, not asking the worker to fix it`,
+                );
+              } else if (checkResult.failed && checkAttempts < 1 && !signal?.aborted) {
                 checkAttempts += 1;
                 log.info(
                   `worker ${request.task} (${role}) failed a check — asking it to fix it ` +

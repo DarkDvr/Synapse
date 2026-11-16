@@ -23,7 +23,9 @@ export function report({ task, role, insteadOf, startedBelow = false, skipped, o
     const head =
       outcome === 'completed'
         ? checks?.failed
-          ? `${task.id} (${role}) finished, but its check fails.`
+          ? checks.failed.invalid
+            ? `${task.id} (${role}) finished, but its check could not run.`
+            : `${task.id} (${role}) finished, but its check fails.`
           : `${task.id} (${role}) finished.`
         : outcome === 'timeout'
           ? `${task.id} (${role}) produced nothing for ${Math.round(stallSec / 60)} minutes in a row and was stopped` +
@@ -136,16 +138,27 @@ export function report({ task, role, insteadOf, startedBelow = false, skipped, o
     if (checks?.failed) {
       const r = checks.failed;
       const tail = String(r.output || '').trim().slice(-800);
-      lines.push(
-        `The harness ran the task's check: \`${r.command}\` exited ${r.code}` +
-          `${r.timedOut ? ' (timed out)' : ''}` +
-          `${checks.logPath ? `; the full output is in ${checks.logPath}` : ''}.` +
-          (tail ? `\n${tail}` : ''),
-      );
-      lines.push(
-        `It was sent back to the worker once and still failed. Judge the task on the evidence; do not mark ` +
-          `it done on this report alone.`,
-      );
+      if (r.invalid) {
+        lines.push(
+          `The harness could not run the task's check: \`${r.command}\` — ${r.invalid}.` +
+            `${checks.logPath ? ` The full output is in ${checks.logPath}.` : ''}`,
+        );
+        lines.push(
+          `That is a check-environment problem, not evidence about the work. Replace the check with one the ` +
+            `harness shell can run; do not send the worker back to fix it.`,
+        );
+      } else {
+        lines.push(
+          `The harness ran the task's check: \`${r.command}\` exited ${r.code}` +
+            `${r.timedOut ? ' (timed out)' : ''}` +
+            `${checks.logPath ? `; the full output is in ${checks.logPath}` : ''}.` +
+            (tail ? `\n${tail}` : ''),
+        );
+        lines.push(
+          `It was sent back to the worker once and still failed. Judge the task on the evidence; do not mark ` +
+            `it done on this report alone.`,
+        );
+      }
     } else if (checks?.ran) {
       lines.push(`Checks: ${checks.ran} command${checks.ran === 1 ? '' : 's'} passed.`);
     }

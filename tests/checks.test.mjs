@@ -9,7 +9,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
 
-import { parseChecks, runCheck, runTaskChecks, checkDecision, CHECK_MAX } from '../src/checks.js';
+import { parseChecks, runCheck, runTaskChecks, checkDecision, checkInfrastructureFailure, CHECK_MAX } from '../src/checks.js';
 import { createRunner } from '../src/runs.js';
 import { tmpdir } from './tmpdir.mjs';
 
@@ -37,6 +37,35 @@ test('a check is allowed inside the project and refused through the fence', () =
   assert.notEqual(outside.effect, 'allow', 'a protected path is not a check');
   const other = checkDecision(`node ${path.join(ROOT, 'other-project', 'x.js')}`, { dir, config });
   assert.notEqual(other.effect, 'allow', 'another project is not the project');
+});
+
+test('a check whose own command is missing is invalid, not the worker’s code', async () => {
+  assert.match(
+    checkInfrastructureFailure({
+      ok: false,
+      output: "Get-FileHash : The term 'Get-FileHash' is not recognized as the name of a cmdlet, function, script file, or operable program.",
+    }),
+    /not available to the harness/,
+  );
+  assert.match(
+    checkInfrastructureFailure({
+      ok: false,
+      output: "'definitely-not-a-command' is not recognized as an internal or external command,",
+    }),
+    /not available to the harness/,
+  );
+  assert.match(checkInfrastructureFailure({ ok: false, code: 127, output: '' }), /could not find a command/);
+  assert.equal(
+    checkInfrastructureFailure({ ok: false, code: 2, output: 'AssertionError: expected 2, got 3' }),
+    '',
+    'a real failing assertion is still the worker’s check',
+  );
+  const dir = path.join(ROOT, 'invalid');
+  fs.mkdirSync(dir, { recursive: true });
+  const result = await runTaskChecks(['definitely-not-a-command-synapse-test'], { dir, config: {}, taskId: 't1' });
+  assert.ok(result.invalid, 'the runner marks a missing command invalid');
+  assert.equal(result.failed?.invalid, result.invalid);
+  assert.match(result.failed?.output || '', /not recognized|command not found/i);
 });
 
 test('a check that exits 0 passes and one that exits 3 fails with its output', async () => {
@@ -251,4 +280,24 @@ test('a check that still fails is reported to the Architect and not marked as pr
   assert.match(report, /finished, but its check fails/);
   assert.match(report, /exited 9/);
   assert.match(report, /still failed/);
+});
+
+test('a check whose own command is missing is reported invalid, never sent back', async () => {
+  const dir = project('invalid-check', ['definitely-not-a-command-synapse-test'], {});
+  const stub = makeEngine({ dir, script: [{}] });
+  const runner = runnerFor(stub.engine);
+  await delegate(runner, stub.arch, 'call_invalid');
+  const result = await waitFor(() => readResult(dir));
+  assert.ok(result);
+  assert.equal(result.outcome, 'completed', String(result.text || result.error || ''));
+  const report = await waitFor(() => wakeText(stub));
+  assert.match(report, /finished, but its check could not run/);
+  assert.match(report, /check-environment problem/);
+  assert.match(report, /do not send the worker back/);
+  assert.doesNotMatch(report, /still failed/, 'there is nothing for the worker to repair');
+  const worker = [...stub.sessions.values()][0];
+  assert.ok(
+    !worker.messages.some((m) => m.type === 'synthetic' && /harness ran your task's check/.test(m.parts?.[0]?.text || '')),
+    'the worker is not nudged about a missing harness command',
+  );
 });

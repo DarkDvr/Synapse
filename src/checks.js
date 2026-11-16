@@ -174,10 +174,35 @@ function saveLog(dir, taskId, command, result) {
 }
 
 /**
+ * Did the check fail because the harness could not run it, rather than because the
+ * project is wrong? A missing cmdlet or executable is a defect in the check itself:
+ * the worker cannot install it, and asking it to try walks it into protected system
+ * folders. That is what happened on 16 Nov with a `Get-FileHash` check that worked in
+ * the worker's shell but not in the harness's check process (17 Nov).
+ */
+export function checkInfrastructureFailure(result) {
+  if (!result || result.ok !== false || result.skipped || result.aborted) return '';
+  const text = String(result.output || '');
+  if (/could not (?:start|run) the check/i.test(text)) return 'the check process could not start';
+  if (
+    /is not recognized as the name of a cmdlet|is not recognized as an internal or external command|CommandNotFoundException|\bcommand not found\b|^\S[^\r\n]*: not found\b/im.test(
+      text,
+    )
+  ) {
+    return 'a command the check names is not available to the harness';
+  }
+  if (Number(result.code) === 127 || Number(result.code) === 9009) {
+    return 'the shell could not find a command the check names';
+  }
+  return '';
+}
+
+/**
  * Run a task's checks in order, stopping at the first real failure.
  *
- * Returns `{ results, failed, skipped, ran, logPath }`. A check the policy will
- * not allow is `skipped` with its reason, never silently passed.
+ * Returns `{ results, failed, skipped, ran, logPath, invalid }`. A check the policy
+ * will not allow is `skipped` with its reason, never silently passed. A check whose
+ * own command is unavailable is marked `invalid`; the worker is not asked to fix it.
  */
 export async function runTaskChecks(checks, { dir, config, signal, taskId } = {}) {
   const results = [];
@@ -201,10 +226,12 @@ export async function runTaskChecks(checks, { dir, config, signal, taskId } = {}
     if (!result.ok) break;
   }
   const failed = results.find((r) => r.ok === false && !r.aborted) || null;
+  const invalid = failed ? checkInfrastructureFailure(failed) : '';
+  if (failed && invalid) failed.invalid = invalid;
   const skipped = results.filter((r) => r.skipped);
   const ran = results.filter((r) => !r.skipped && !r.aborted).length;
   const logPath = failed ? saveLog(dir, taskId, failed.command, failed) : null;
-  return { results, failed, skipped, ran, logPath };
+  return { results, failed, skipped, ran, logPath, invalid };
 }
 
 /** The one repair turn a failed check gets. Short: the session has the rest. */

@@ -2114,6 +2114,12 @@ short commands; the harness runs them in the project when the worker says it is 
   output back to the same worker; it fixes the cause and reports again. A second failure
   stops there: the report head says *finished, but its check fails*, the worker's own
   words follow, and the Architect judges. The harness never marks the plan row.
+- **A check that cannot run is not a worker failure.** A missing cmdlet or executable
+  (`... is not recognized ...`, `command not found`, exit 127/9009, or a check process that
+  could not start) is marked invalid. The report says *finished, but its check could not
+  run* and tells the Architect to replace the check; the worker is not nudged. It cannot
+  install a command into the harness's shell, and asking it to try is what sent t2a into
+  protected Windows folders on 17 Nov.
 - **Why one, not a loop.** A check that fails twice is a task the worker cannot finish,
   or a check that is wrong; retrying the same turn finds neither. QC still judges the
   work; the check is the cheap proof before that.
