@@ -106,6 +106,63 @@ test('a healthy turn is left alone', async () => {
   assert.equal(prompts.length, 0);
 });
 
+test('one nudge spends the calls that struck, so a later part cannot re-fire it', async () => {
+  // The 16 Nov second nudge: the four shell calls stayed in the window, and the next
+  // part after the quiet period was an edit. It was named as the looping tool and
+  // nudged again for a strike that had already been answered.
+  const parts = [1, 2, 3, 4].map((n) => ({
+    type: 'tool',
+    name: 'shell',
+    id: `sh-${n}`,
+    input: { command: 'python _scratch/debug.py' },
+    output: long(600 + n),
+  }));
+  const { engine, prompts } = fakeEngine({ active: ['sess_1'], messages: [{ parts }] });
+  let clock = 1_000_000;
+  const guard = createTurnGuard({
+    engine,
+    sessionId: 'sess_1',
+    log: { warn() {} },
+    now: () => clock,
+  });
+  await guard.poll();
+  assert.equal(prompts.length, 0, 'different answers are not a strike');
+  // Add the identical calls with identical output, then a normal edit after the nudge.
+  parts.push(
+    ...['a', 'b', 'c', 'd'].map((n) => ({
+      type: 'tool',
+      name: 'shell',
+      id: `same-${n}`,
+      input: { command: 'python _scratch/test.py' },
+      output: long(700),
+    })),
+  );
+  await guard.poll();
+  assert.equal(prompts.length, 1, 'the identical runs strike once');
+  parts.push({ type: 'tool', name: 'edit', id: 'after', input: { path: 'sheet.py' }, output: 'done' });
+  clock += 100_000;
+  await guard.poll();
+  assert.equal(prompts.length, 1, 'the spent strike is not fired again');
+});
+
+test('the watcher starts at this send, not at the chat history', async () => {
+  const old = {
+    created: 500_000,
+    parts: [1, 2, 3, 4].map((n) => ({ type: 'tool', name: 'read', id: `old-${n}`, input: { path: 'same.md' }, output: long(600) })),
+  };
+  const messages = [old];
+  const { engine, prompts } = fakeEngine({ active: ['sess_1'], messages });
+  const guard = createTurnGuard({ engine, sessionId: 'sess_1', log: { warn() {} }, since: 1_000_000 });
+  await guard.poll();
+  assert.equal(prompts.length, 0, 'an earlier turn is not this turn');
+  messages.push({
+    created: 1_000_001,
+    parts: [1, 2, 3, 4].map((n) => ({ type: 'tool', name: 'read', id: `new-${n}`, input: { path: 'same.md' }, output: long(600) })),
+  });
+  await guard.poll();
+  assert.equal(prompts.length, 1, 'the current turn still strikes');
+});
+
 test('no nudge after the turn ends, and none for another session', async () => {
   const parts = [1, 2, 3, 4].map((n) => msgPart(n));
   const idle = fakeEngine({ active: [], messages: [{ parts }] });
@@ -151,6 +208,28 @@ test('the same shell command with the same answer is still a loop', () => {
   const runs = [1, 2, 3].map(() => toolSignature({ name: 'shell', target: toolTarget({ command: 'npm test' }), output: same }));
   assert.equal(loopStrike(runs)?.kind, 'output');
   assert.equal(loopStrike(runs)?.times, 3);
+});
+
+test('four runs of one command with different answers are work, not a loop', () => {
+  // The 16 Nov shape: `python _scratch/debug.py` run four times while the file and
+  // the sheet were edited between runs. The command was identical, the answer was
+  // not — traceback, #REF!, #REF!, then a pass. The target alone struck.
+  const runs = [1, 2, 3, 4].map((n) =>
+    toolSignature({ name: 'shell', target: toolTarget({ command: 'python _scratch/debug.py' }), output: long(600 + n) }),
+  );
+  assert.equal(loopStrike(runs), null);
+});
+
+test('a strike names the call that repeated, not the call that noticed it', () => {
+  const runs = [1, 2, 3, 4].map(() =>
+    toolSignature({ name: 'shell', target: toolTarget({ command: 'npm test' }), output: long(600) }),
+  );
+  const strike = loopStrike(runs);
+  assert.ok(strike, 'four identical answers are a strike');
+  assert.equal(strike?.tool, 'shell');
+  assert.equal(strike?.target, 'npm test');
+  // The current part may be an edit; the message must still say shell (16 Nov).
+  assert.equal(loopStrike(runs)?.tool, 'shell');
 });
 
 test('a shell command with different answers is polling, not a loop', () => {

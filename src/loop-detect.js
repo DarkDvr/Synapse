@@ -73,11 +73,15 @@ export function toolSignature({ name, target, output, input } = {}) {
   const tool = String(name || '');
   const where = String(target ?? '');
   const moving = MOVING.has(tool.split('_').pop());
+  const repeatable = REPEATABLE.has(tool);
   return {
+    tool,
+    target: where,
     sig: `${tool}\u0000${moving ? `${where}\u0000${String(output ?? '').slice(0, 400)}` : where}`,
-    digest: REPEATABLE.has(tool) ? digestOf(output ?? input ?? '') : '',
+    digest: repeatable ? digestOf(output ?? input ?? '') : '',
     mutating: MUTATING.has(tool),
     moving,
+    repeatable,
   };
 }
 
@@ -97,12 +101,24 @@ export function loopStrike(window, { sameTarget = SAME_TARGET_STRIKES, sameOutpu
       if (skipMutating && call.mutating) continue;
       const key = pick(call);
       if (!key) continue;
-      tally.set(key, (tally.get(key) || 0) + 1);
+      const entry = tally.get(key) || { times: 0, tool: call.tool || '', target: call.target || '' };
+      entry.times += 1;
+      entry.tool = call.tool || entry.tool;
+      entry.target = call.target || entry.target;
+      tally.set(key, entry);
     }
-    for (const [key, times] of tally) if (times >= threshold) return { key, times };
+    for (const [key, { times, tool, target }] of tally) if (times >= threshold) return { key, times, tool, target };
     return null;
   };
-  const same = reached((c) => c.sig, sameTarget, true);
+  // A command that returns a different answer is a new question, not the same call.
+  // The target alone struck four runs of one test script after edits on 16 Nov; the
+  // output had changed every time. Identical (or short, uninformative) answers still
+  // strike on the same target.
+  const same = reached(
+    (c) => (c.repeatable && c.digest ? `${c.sig}\u0000${c.digest}` : c.sig),
+    sameTarget,
+    true,
+  );
   if (same) return { kind: 'target', ...same };
   const digest = reached((c) => c.digest, sameOutput);
   if (digest) return { kind: 'output', ...digest };

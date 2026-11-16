@@ -582,7 +582,7 @@ Non-obvious, all verified on 2.0.30:
   * **thinking** — the newest assistant message is looked at only while it has
     written no text and called no tool: a last 320-character tail that is periodic
     (the same 12–96 character phrase) and still the same ten seconds later is a loop;
-  * **calls** — the same tool with the same target three times inside the last five
+  * **calls** — the same tool with the same target four times inside the last twelve
     calls. A step that calls a tool ends with a tool part, so the thinking check
     cannot see this one; `node bin/t1a-proof.js` eight times in seven minutes was
     `loops: 0` on 4 Nov precisely because of that.
@@ -599,6 +599,17 @@ Non-obvious, all verified on 2.0.30:
   mark is also skipped at the start of later tasks, so coder-1 is not given the
   first turn of every task only to loop again. `worker.loopGuard` turns the guard
   off; the number of rescues rides the run and its result line as `loops`.
+- **A changed answer is a new question, and a spent strike is spent (16 Nov).** The
+  operator's own turn is watched by `src/turn-guard.js`, and four runs of one test
+  script there were called "the same target 4 times" while the model was editing the
+  script and the sheet between runs: the answers were a traceback, two `#REF!`s and
+  a pass. The target key now includes the answer digest for a tool that returns one,
+  so four runs with four answers are work; identical answers still strike. Two more
+  faults came from the same nudge: the message named the part that happened to be
+  current (an edit) rather than the shell that repeated, and the four calls stayed in
+  the window, so the same spent strike fired again after the quiet period. The strike
+  now carries its own tool, the window is cleared when a nudge lands, and the watcher
+  starts at the send instead of reading the chat's history.
 - **Recoverable provider failures never end a run.** `src/provider-errors.js`
   classifies the sentence a turn ended with. *Transient* — rate limit/429,
   connection reset, socket/network/DNS, 5xx, "overloaded", the free-tier message,

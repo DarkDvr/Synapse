@@ -232,10 +232,10 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
   // One guard per chat the operator drives: the Architect's own turn has no run, and
   // nothing was watching it (13 Nov).
   const turnGuards = new Map();
-  function watchTurn(sessionId, dir) {
+  function watchTurn(sessionId, dir, since = 0) {
     if (getConfig()?.worker?.loopGuard === false) return;
     turnGuards.get(sessionId)?.stop?.();
-    const guard = createTurnGuard({ engine, sessionId, dir, log: app, notify });
+    const guard = createTurnGuard({ engine, sessionId, dir, log: app, notify, since });
     turnGuards.set(sessionId, guard);
     guard.start();
   }
@@ -2173,10 +2173,13 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
       // The operator's words are the message. A stop before this one is just a cut:
       // no note explains it, the same way a dropped connection is not explained. If
       // they want the work resumed or changed, they say so here.
+      // The guard watches this turn only: a chat carries every earlier turn, and the
+      // first poll used to nudge a fresh turn for the previous one's last twelve calls.
+      const turnStartedAt = Date.now();
       await engine.prompt(sessionId, text, { files: attachments });
       // From here the turn is the engine's: the runner is not waiting on it, so the loop
       // guard has to be a watcher of its own (13 Nov).
-      watchTurn(sessionId, String(directory || ''));
+      watchTurn(sessionId, String(directory || ''), turnStartedAt);
       return { ok: true, kept };
     },
 

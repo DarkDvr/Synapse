@@ -32,6 +32,9 @@ export function createTurnGuard({
   everyMs = 4000,
   quietMs = 90_000,
   strikesBeforeTelling = 3,
+  // Only calls made after this send are watched. Without it the first poll read the
+  // whole chat and could nudge a fresh turn for the previous one's last twelve calls.
+  since = 0,
   now = () => Date.now(),
   setInterval: setTimer = setInterval,
   clearInterval: clearTimer = clearInterval,
@@ -65,6 +68,8 @@ export function createTurnGuard({
       const messages = await engine.getMessages(sessionId).catch(() => null);
       if (!Array.isArray(messages)) return;
       for (const message of messages) {
+        const created = Number(message?.created || 0);
+        if (since && created && created < since) continue;
         for (const part of message?.parts || []) {
           if (part?.type !== 'tool' || !part.name) continue;
           const id = String(part.id || '');
@@ -89,13 +94,17 @@ export function createTurnGuard({
           if (at - lastNudge < quietMs) continue;
           lastNudge = at;
           strikes += 1;
+          const struck = strike.tool || part.name;
           const what =
             strike.kind === 'output'
-              ? `${part.name} returned the same answer ${strike.times} times`
-              : `${part.name} was called on the same target ${strike.times} times`;
+              ? `${struck} returned the same answer ${strike.times} times`
+              : `${struck} was called on the same target ${strike.times} times`;
           log.warn?.(`loop guard: ${what} in ${sessionId} — nudging the turn`);
           try {
             await engine.prompt(sessionId, `[harness] ${LOOP_NUDGE}`, { delivery: 'steer' });
+            // The calls that struck are spent: a later part must not re-fire the same
+            // strike every quiet period, and must not be blamed for it.
+            window = [];
           } catch (err) {
             log.warn?.(`loop guard: the nudge did not reach ${sessionId}: ${err.message}`);
           }

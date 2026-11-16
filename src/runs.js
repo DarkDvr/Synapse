@@ -3266,13 +3266,15 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
           while (toolWindow.length > LOOP_WINDOW) toolWindow.shift();
           const strike = loopStrike(toolWindow);
           if (strike) {
+            const struck = strike.tool || tool.name;
+            const where = strike.target || tool.target;
             return {
               timedOut: false,
               looped: true,
               phrase:
                 strike.kind === 'output'
-                  ? `${tool.name} returned the same answer ${strike.times} times`
-                  : `${tool.name}${tool.target ? ` ${tool.target}` : ''} run ${strike.times} times`,
+                  ? `${struck} returned the same answer ${strike.times} times`
+                  : `${struck}${where ? ` ${where}` : ''} run ${strike.times} times`,
             };
           }
         }
