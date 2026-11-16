@@ -10,6 +10,20 @@ idle app plus a test run is exactly what the auto-shutdown tick waits for — it
 the PC off under the suite on 11 Nov and again on 15 Nov. Only the Synapse window may
 turn Auto-Shutdown back on; the script and the tests may only turn it off.
 
+## The audit (16 Nov)
+
+The suite had grown to 126 files / 816 cases. It was not mostly duplication: policy,
+gate plumbing, page wiring and CSS each had a test, and several apparent duplicates
+were one invariant checked at two layers. The safe cut was **packaging**, not coverage:
+the 52 UI-contract cases became eight groups (each failure still names its original
+case), and `auto-shutdown-policy.test.mjs` folded into `shutdown.test.mjs`. That is
+125 files / 772 cases, with the same assertions.
+
+What was deliberately not done: deleting policy or provider-permutation cases to hit a
+number. They are cheap and each names a branch. The next real saving is time, not count:
+`loop-run` (about 137 s) and the two visual `--diff` tests (about 31 s each) are the
+poles; they want an opt-in `SYNAPSE_SLOW` path, not deletion.
+
 `.github/workflows/tests.yml` runs the same command on `windows-latest` for every
 push to `main`, and by hand from the Actions tab. Windows because the app is: the
 tests read Windows paths, drive Edge through `skills/visual-review` and read the

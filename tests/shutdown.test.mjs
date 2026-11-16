@@ -261,3 +261,36 @@ test('the real shutdown command forces the machine down and reports a refusal', 
   assert.match(src, /child\.on\('exit', \(code\) =>/, 'a refused shutdown is logged');
   assert.match(src, /stdio: \['ignore', 'ignore', 'pipe'\]/, 'so its stderr can be read');
 });
+
+// ── only the window may arm it (16 Nov) ───────────────────────────────
+// The audit's safety rule: a test or a script may turn Auto-Shutdown off, but only
+// the operator's page may turn it on. The three checks below are source guards for
+// that rule; the behavioural half is in automation.test.mjs.
+function walkSrc(dir, out = []) {
+  for (const entry of fs.readdirSync(path.join(process.cwd(), dir), { withFileTypes: true })) {
+    const rel = path.join(dir, entry.name).replace(/\\/g, '/');
+    if (entry.isDirectory()) walkSrc(rel, out);
+    else if (/\.m?js$/.test(entry.name)) out.push(rel);
+  }
+  return out;
+}
+
+test('the page marks every request, and the server reads the mark', () => {
+  assert.match(read('web/api.js'), /'x-synapse-ui': '1'/);
+  assert.match(read('src/server.js'), /x-synapse-ui/);
+  assert.match(read('src/api.js'), /mayEnableAutoShutdown/);
+  assert.match(read('src/api.js'), /Auto-Shutdown can only be turned on in the Synapse window/);
+});
+
+test('nothing in src or scripts ever asks for Auto-Shutdown on', () => {
+  for (const rel of [...walkSrc('src'), 'scripts/checks.mjs']) {
+    assert.doesNotMatch(read(rel), /autoShutdown\s*:\s*true/, rel);
+  }
+});
+
+test('the checks script leaves the switch off, never restores it', () => {
+  const script = read('scripts/checks.mjs');
+  assert.doesNotMatch(script, /autoShutdown\s*:\s*true/);
+  assert.match(script, /never restores/i);
+  assert.match(script, /only the Synapse window can turn it on/i);
+});

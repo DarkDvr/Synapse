@@ -41,13 +41,19 @@ const ui = () =>
     .map(read)
     .join('\n');
 
-test('index.html says nothing about sessions or General', () => {
+// The UI contract is one subject, so it runs as eight groups rather than fifty-two
+// separately registered cases. Every case keeps its own name in a failure; the
+// assertions are unchanged (16 Nov, test audit).
+const contracts = [];
+const contract = (name, fn) => { contracts.push({ name, fn }); };
+
+contract('index.html says nothing about sessions or General', () => {
   const html = read('web/index.html');
   assert.doesNotMatch(html, /session/i, 'the page shell must not name sessions');
   assert.doesNotMatch(html, /\bGeneral\b/, 'General is gone');
 });
 
-test('the old session controls and wording are gone from app.js', () => {
+contract('the old session controls and wording are gone from app.js', () => {
   const js = read('web/app.js');
   for (const needle of [
     'New Session',
@@ -67,7 +73,7 @@ test('the old session controls and wording are gone from app.js', () => {
   assert.match(ui(), /setSlider\(c, 'Chat Text Size', 'ui\.chatTextPx'/);
 });
 
-test('the dead session-row styles are gone from the stylesheet', () => {
+contract('the dead session-row styles are gone from the stylesheet', () => {
   const css = read('web/synapse.css');
   for (const needle of ['.tree-row.session', '.tree-caret', '.tree-project-body', '.tree-sessions', '.tree-add-row', '.tree-rename']) {
     assert.equal(css.includes(needle), false, `synapse.css still contains: ${needle}`);
@@ -76,7 +82,7 @@ test('the dead session-row styles are gone from the stylesheet', () => {
 
 // Phase 5 removed the function but left the project menu calling it, so Delete…
 // threw instead of asking. The menu is only as good as the handler behind it.
-test('the project menu’s Delete is wired to a client path that exists', () => {
+contract('the project menu’s Delete is wired to a client path that exists', () => {
   // 7 Nov: the menu is its own module.
   const js = read('web/project-menu.js');
   assert.match(js, /data-menu-action="delete"/);
@@ -85,7 +91,7 @@ test('the project menu’s Delete is wired to a client path that exists', () => 
   assert.match(js, /api\('DELETE', `\/api\/projects\//);
 });
 
-test('a permission chip is keyed by the tool call, never the request', () => {
+contract('a permission chip is keyed by the tool call, never the request', () => {
   const js = read('web/app.js');
   assert.match(js, /permissionDecisions\?\.set\(decided\.toolCallId/);
   assert.doesNotMatch(js, /permissionDecisions\?\.set\(decided\.requestId/);
@@ -96,7 +102,7 @@ test('a permission chip is keyed by the tool call, never the request', () => {
 // card that appeared under the pointer. A card that has been waiting has been
 // read, and a click on it answers at once; the guard is the fresh card, not every
 // click after focus.
-test('the click that wakes the window cannot answer a fresh permission card', () => {
+contract('the click that wakes the window cannot answer a fresh permission card', () => {
   const js = read('web/app.js');
   assert.match(js, /function wakeClick\(e, requestId\)/);
   // Allow/Reject, Stop Run, and Reject With Reason all guard.
@@ -107,7 +113,7 @@ test('the click that wakes the window cannot answer a fresh permission card', ()
   assert.match(js, /addEventListener\('focus', \(\) => \{ state\.focusAt = Date\.now\(\); \}\)/);
 });
 
-test('a file chip is one function, and its source says where the picture is', () => {
+contract('a file chip is one function, and its source says where the picture is', () => {
   // A message's own bytes, a file in the project (a kept attachment, a steer's
   // picture), or no picture at all — one chip, three sources (7 Nov).
   const attached = fileChip({ name: 'shot.png', mime: 'image/png' }, { msgId: 'msg_1', index: 2 });
@@ -119,7 +125,7 @@ test('a file chip is one function, and its source says where the picture is', ()
   assert.match(plain, />TXT</, 'the tag is the extension');
 });
 
-test('an attached picture uses the same chip as a picture the model shows', () => {
+contract('an attached picture uses the same chip as a picture the model shows', () => {
   const js = ui();
   // One chip function, three places it is drawn: a message, a model's answer and a
   // steer's picture (7 Nov). The steer's bytes are a file in the project, so its
@@ -132,7 +138,7 @@ test('an attached picture uses the same chip as a picture the model shows', () =
   assert.match(js, /attachmentImage\(message, Number\(chip\.dataset\.file/);
 });
 
-test('a sent message can be put back in the composer', () => {
+contract('a sent message can be put back in the composer', () => {
   const js = ui();
   assert.match(js, /data-reuse-msg/);
   assert.match(js, /function reuseMessage\(messageId\)/);
@@ -140,7 +146,7 @@ test('a sent message can be put back in the composer', () => {
   assert.match(read('web/synapse.css'), /\.msg-reuse\s*\{/);
 });
 
-test('a You message keeps its parts on one baseline', () => {
+contract('a You message keeps its parts on one baseline', () => {
   const css = read('web/synapse.css');
   assert.match(css, /\.msg\.user \.msg-body\s*\{[^}]*display: flex/);
   // Alignment is the font's baseline, not a nudge: a fixed 1.5em box or a pixel offset was
@@ -150,7 +156,7 @@ test('a You message keeps its parts on one baseline', () => {
   assert.match(css, /\.msg\.user \.msg-time\s*\{[^}]*order: 99/);
 });
 
-test('the attachment budget is total size, with a count sanity cap', () => {
+contract('the attachment budget is total size, with a count sanity cap', () => {
   const js = ui();
   assert.match(js, /ATTACH_TOTAL_BYTES = 48 \* 1024 \* 1024/);
   assert.match(js, /ATTACH_MAX_COUNT = 24/);
@@ -160,7 +166,7 @@ test('the attachment budget is total size, with a count sanity cap', () => {
 // 4 Nov: a steer only appeared once the engine had delivered it, which can be
 // minutes. The page paints the operator's own sentence at once, and keeps it
 // until the transcript carries it.
-test('a steer is on screen before the engine echoes it', () => {
+contract('a steer is on screen before the engine echoes it', () => {
   const js = ui();
   assert.match(js, /local-steer-/);
   assert.match(js, /startsWith\('local-steer-'\)/);
@@ -170,7 +176,7 @@ test('a steer is on screen before the engine echoes it', () => {
 // 4 Nov: the answer box behind "Something Else" is prose. Enter is a newline and
 // Ctrl+Enter sends, the same as the chat composer; every other ask field keeps
 // Enter-to-move-on.
-test('Something Else answers like the chat: Enter newline, Ctrl+Enter sends', () => {
+contract('Something Else answers like the chat: Enter newline, Ctrl+Enter sends', () => {
   // 6 Nov: the field is drawn by ./ask-panel.js; its key and click handlers are wired
   // in app.js, so the rule is read across both.
   const js = read('web/ask-panel.js') + read('web/app.js');
@@ -183,7 +189,7 @@ test('Something Else answers like the chat: Enter newline, Ctrl+Enter sends', ()
 });
 
 // 4 Nov: the wake lock. Settings owns both halves; the cog has only the master.
-test('Keep PC Awake is in Settings and the cog, with the monitor as the second half', () => {
+contract('Keep PC Awake is in Settings and the cog, with the monitor as the second half', () => {
   const js = ui();
   assert.match(js, /'Keep PC Awake'/);
   assert.match(js, /'Also Keep The Monitor On'/);
@@ -196,7 +202,7 @@ test('Keep PC Awake is in Settings and the cog, with the monitor as the second h
 
 // 4 Nov: a provider that reports `reasoning: 0` while writing reasoning must not be
 // described as "0% was reasoning" — the header uses the same truth as the body.
-test('the run header does not claim 0% reasoning when it was not split', () => {
+contract('the run header does not claim 0% reasoning when it was not split', () => {
   const src = read('src/runs.js');
   assert.match(src, /tokens \(\$\{thinkNote\(context\)\}\)/);
   assert.doesNotMatch(src, /% was reasoning/);
@@ -205,7 +211,7 @@ test('the run header does not claim 0% reasoning when it was not split', () => {
 // 4 Nov: a role card shows Blocked only while the harness is actually stuck on the
 // task — not for an old blocker the role has worked past, and not during the
 // Architect's own turn.
-test('a role is only Blocked while the plan is genuinely stuck', () => {
+contract('a role is only Blocked while the plan is genuinely stuck', () => {
   // 7 Nov: the cards' activity moved to ./live-runs.js.
   const js = read('web/live-runs.js');
   assert.match(js, /const blocked = blockedTasks\.length > 0 && !archBusy && !run && !anyReady;/);
@@ -214,7 +220,7 @@ test('a role is only Blocked while the plan is genuinely stuck', () => {
 
 // 4 Nov: the PROHIBITED list is a table — the path, a Write box, a Read box, and
 // a delete button that is disabled for the ones Synapse ships.
-test('Prohibited is a table with a Write and a Read box per row', () => {
+contract('Prohibited is a table with a Write and a Read box per row', () => {
   const js = ui();
   assert.match(js, /id: 'prohibited', label: 'Prohibited'/);
   assert.match(js, /function settingsProhibited/);
@@ -232,7 +238,7 @@ test('Prohibited is a table with a Write and a Read box per row', () => {
 
 // 4 Nov: the guard no longer rewrites the effort; it counts loops and sets the
 // model aside at the limit. The setting is a number beside the switch.
-test('the loop setting is a count, and the card says what happened', () => {
+contract('the loop setting is a count, and the card says what happened', () => {
   const js = ui();
   assert.match(js, /worker\.loopLimit/);
   assert.match(js, /asking it to carry on/);
@@ -242,7 +248,7 @@ test('the loop setting is a count, and the card says what happened', () => {
 
 // 4 Nov: settings had a wall of grey notes in a coder's voice. What is left is
 // short and only where it has to be seen; the rest is a tooltip.
-test('the settings panes keep only a few short notes', () => {
+contract('the settings panes keep only a few short notes', () => {
   const js = read('web/app.js');
   const notes = js.match(/class="set-note"/g) || [];
   assert.ok(notes.length <= 6, `set-note blocks: ${notes.length}`);
@@ -252,7 +258,7 @@ test('the settings panes keep only a few short notes', () => {
 // 4 Nov: the operator arranged providers in Settings and the model menu sorted
 // by label instead; the rail's project order was likewise fixed. Both orders are
 // now the operator's, saved with the config / the registry.
-test('the rail and the model menu follow the order the operator arranged', () => {
+contract('the rail and the model menu follow the order the operator arranged', () => {
   // 7 Nov: the project menu is its own module; the rail's rows are in projects.js.
   const menu = read('web/project-menu.js');
   // The order itself moved to ./provider-list.js (6 Nov) — it is one answer three
@@ -268,7 +274,7 @@ test('the rail and the model menu follow the order the operator arranged', () =>
 
 // 4 Nov: a moved project row should read as one motion, and the model picker
 // needed about six more characters for the names it holds.
-test('a moved project slides, and the model picker is six characters wider', () => {
+contract('a moved project slides, and the model picker is six characters wider', () => {
   // 7 Nov: the move lives in the project menu's module.
   const js = read('web/project-menu.js');
   assert.match(js, /row\.animate\(\[\{ transform: `translateY\(\$\{dy\}px\)` \}/);
@@ -280,7 +286,7 @@ test('a moved project slides, and the model picker is six characters wider', () 
 // "Views: 2" counted the window you were looking at as well as the laptop, and
 // sat in the rail whether or not Remote Access was on. The LAN clients are what
 // the address is for; they are named under it, and they hide with it.
-test('the rail names LAN clients under the address, not a Views row', () => {
+contract('the rail names LAN clients under the address, not a Views row', () => {
   const html = read('web/index.html');
   assert.doesNotMatch(html, /Views:/);
   assert.doesNotMatch(html, /id="viewsRow"/);
@@ -301,7 +307,7 @@ test('the rail names LAN clients under the address, not a Views row', () => {
 // 1 Nov: a compact is meant to leave one post, not a list of the runs that came
 // before it. The folds and the amber alarm lines are page state per project, so they
 // outlived the conversation they described and reappeared above the fresh chat.
-test('a compact takes the discarded chat’s folds and alarms with it', () => {
+contract('a compact takes the discarded chat’s folds and alarms with it', () => {
   const js = read('web/app.js');
   const at = js.indexOf("ev.type === 'project.compacted'");
   assert.notEqual(at, -1, 'the compacted event is still handled');
@@ -317,7 +323,7 @@ test('a compact takes the discarded chat’s folds and alarms with it', () => {
 // 1 Nov: the engine announces every instruction file it loads and posts the whole text,
 // so android\AGENTS.md (a hundred lines) landed in the chat the moment it was compacted.
 // It stays in the model's context; the chat shows one line.
-test('a file the engine loads is one collapsed line, not its whole text', () => {
+contract('a file the engine loads is one collapsed line, not its whole text', () => {
   const js = ui();
   assert.match(js, /\^loaded\\s\/i\.test/, 'the loaded-instructions message is recognised');
   assert.match(js, /Instructions from \$\{esc\(short\)\}/, 'the line names the file, not the whole path');
@@ -328,7 +334,7 @@ test('a file the engine loads is one collapsed line, not its whole text', () => 
 
 // The answer, not the work: the last text of a tool-free assistant message gets
 // the green rule; narration in a step that also calls a tool stays plain.
-test('the final answer has its own rule, and work does not', () => {
+contract('the final answer has its own rule, and work does not', () => {
   const css = read('web/synapse.css');
   assert.match(css, /\.msg\.assistant \.msg-answer\.is-answer\s*\{[^}]*margin-top: 20px/);
   assert.match(css, /\.msg\.assistant \.msg-answer\.is-answer::before\s*\{[^}]*background: var\(--surface\)/);
@@ -341,7 +347,7 @@ test('the final answer has its own rule, and work does not', () => {
 // 31 Oct: the break is on both sides of the prose, not just above a turn's last text.
 // A single-mode turn is one rule with cards and speech alternating inside it, so the
 // prose ran into the cards above and below it and read as one more line of the run.
-test('prose and cards are separated wherever they meet, either way round', () => {
+contract('prose and cards are separated wherever they meet, either way round', () => {
   const css = read('web/synapse.css');
   const region = (sel) => {
     const at = css.indexOf(sel);
@@ -372,7 +378,7 @@ test('prose and cards are separated wherever they meet, either way round', () =>
 
 // 30 Oct UI pass: the operator moved the update check into the Settings rail,
 // stopped the About page selling itself, and made notices easier to notice.
-test('Updates is a Settings page above About, and About is just the facts', () => {
+contract('Updates is a Settings page above About, and About is just the facts', () => {
   const js = ui();
   assert.match(js, /\{ id: 'updates', label: 'Check for Updates', icon: 'refresh' \}/);
   assert.ok(
@@ -386,7 +392,7 @@ test('Updates is a Settings page above About, and About is just the facts', () =
   assert.match(read('web/synapse.css'), /\.about-gap\s*\{\s*height: 39px/);
 });
 
-test('every textual Close is the grey secondary button', () => {
+contract('every textual Close is the grey secondary button', () => {
   const html = read('web/index.html');
   const classes = [...html.matchAll(/<button class="([^"]+)"[^>]*>Close<\/button>/g)].map((m) => m[1]);
   assert.ok(classes.length >= 6, `expected the six Close buttons, found ${classes.length}`);
@@ -399,7 +405,7 @@ test('every textual Close is the grey secondary button', () => {
 // Save Changes retired: the footer is Cancel and Revert on the left, Apply and
 // one primary on the right. The primary's label is the thing it will do, and the
 // X is gone — Cancel is the way out.
-test('the settings footer has one honest primary, not a Save Changes', () => {
+contract('the settings footer has one honest primary, not a Save Changes', () => {
   const html = read('web/index.html');
   assert.match(html, /id="cancelSettings"[^>]*>Cancel<\/button>/);
   assert.match(html, /id="revertSettings"[^>]*>Revert<\/button>/);
@@ -419,18 +425,18 @@ test('the settings footer has one honest primary, not a Save Changes', () => {
   assert.doesNotMatch(js, /state\.settingsTab !== 'updates'/);
 });
 
-test('notices carry the yellow border and yellow text, and the work ring is twice as quick', () => {
+contract('notices carry the yellow border and yellow text, and the work ring is twice as quick', () => {
   const css = read('web/synapse.css');
   assert.match(css, /\.toast\s*\{[^}]*border: 1px solid var\(--yellow\)/);
   assert.match(css, /\.toast\s*\{[^}]*color: var\(--yellow\)/);
   assert.match(css, /work-spin 2\.1s linear infinite/);
 });
 
-test('the provider Name control starts on the Type control’s line', () => {
+contract('the provider Name control starts on the Type control’s line', () => {
   assert.match(read('web/synapse.css'), /\.prov-edit \.set-grid\s*\{[^}]*align-items: start/);
 });
 
-test('the Updates page is content-sized, and its footer button cannot stretch', () => {
+contract('the Updates page is content-sized, and its footer button cannot stretch', () => {
   const css = read('web/synapse.css');
   assert.match(css, /\.upd-card\s*\{[^}]*align-content: start/);
   assert.match(css, /\.upd-card-foot\s*\{[^}]*align-items: center/);
@@ -443,7 +449,7 @@ test('the Updates page is content-sized, and its footer button cannot stretch', 
   assert.doesNotMatch(read('web/app.js'), /classList\.toggle\('is-updates'/);
 });
 
-test('the Settings subtitle is an empty line, not the config sentence', () => {
+contract('the Settings subtitle is an empty line, not the config sentence', () => {
   const html = read('web/index.html');
   assert.doesNotMatch(html, /Writes config\/synapse\.config\.json/);
   assert.match(html, /<p class="modal-sub" aria-hidden="true">&nbsp;<\/p>/);
@@ -456,7 +462,7 @@ test('the Settings subtitle is an empty line, not the config sentence', () => {
 // the transcript — and the two things that make that safe are that the node is
 // *moved* rather than rebuilt (or a poll would eat the answers) and that it is sized
 // to the chat (or Submit lands below the fold).
-test('the question is a moved post in the transcript, not an overlay', () => {
+contract('the question is a moved post in the transcript, not an overlay', () => {
   const css = read('web/synapse.css');
   const host = /\.ask-host\s*\{([^}]*)\}/.exec(css);
   assert.ok(host, 'the host has a rule');
@@ -479,7 +485,7 @@ test('the question is a moved post in the transcript, not an overlay', () => {
   assert.doesNotMatch(js, /fitAskPanel/, 'no height fitting is left behind');
 });
 
-test('the composer reads the send button before it uses it', () => {
+contract('the composer reads the send button before it uses it', () => {
   // A line-edit put `sendBtn.disabled = …` above its own `const` and the whole page
   // died at boot with "Cannot access 'sendBtn' before initialization" — the rail
   // empty, no explanation on screen (3 Nov). Cheap guard, expensive bug.
@@ -493,7 +499,7 @@ test('the composer reads the send button before it uses it', () => {
   assert.ok(decl < use, 'the declaration comes first');
 });
 
-test('a pending question takes the composer, and leaves Stop as the way out', () => {
+contract('a pending question takes the composer, and leaves Stop as the way out', () => {
   const js = ui();
   const block = /for \(const id of \['attachBtn', 'modeToggle', 'runBtn'\]\) \{([\s\S]*?)\}/.exec(js);
   assert.ok(block, 'the composer controls are switched off together');
@@ -505,7 +511,7 @@ test('a pending question takes the composer, and leaves Stop as the way out', ()
 });
 
 // ── the Architect's own step streams like a worker's (2 Nov) ──────────
-test('the open session has a trace, so its reasoning streams instead of dumping', () => {
+contract('the open session has a trace, so its reasoning streams instead of dumping', () => {
   const js = read('web/app.js');
   // 6 Nov: the streaming panel and the follow rule moved to ./chat-scroll.js, so the
   // half of this rule that lives there is read there.
@@ -527,7 +533,7 @@ test('the open session has a trace, so its reasoning streams instead of dumping'
 // getElementById — which cannot find a node that is no longer in the document. The
 // composer said "Answer the question to continue" and there was no question on
 // screen until a reload rebuilt the page (reported and reproduced 2 Nov).
-test('the question panel survives a transcript rebuild because the node is held', () => {
+contract('the question panel survives a transcript rebuild because the node is held', () => {
   const js = read('web/ask-panel.js');
   assert.match(js, /let askHostEl = null;/, 'the node is kept in a variable');
   assert.match(js, /function askHost\(\) \{/, 'and looked up through one accessor');
@@ -541,7 +547,7 @@ test('the question panel survives a transcript rebuild because the node is held'
 // The live step is part of the Architect's post, not a second block after it.
 // Reported 2 Nov: a grey panel with its own "Architect · Thinking" head and its own
 // gap, reading as somebody else's message under a green one.
-test('the Architect’s live reasoning is drawn inside its own post', () => {
+contract('the Architect’s live reasoning is drawn inside its own post', () => {
   // 6 Nov: the renderer moved to ./transcript.js, the panel to ./traces.js.
   const js = read('web/transcript.js');
   // 6 Nov: the panel itself moved to ./traces.js with the trace it draws.
@@ -570,7 +576,7 @@ test('the Architect’s live reasoning is drawn inside its own post', () => {
   assert.doesNotMatch(css, /\.trace\.is-own \.trace-flow \{[^}]*border:\s*0/, 'the embedded panel does not strip it again');
 });
 
-test('jumping to the question puts it at the top of the chat', () => {
+contract('jumping to the question puts it at the top of the chat', () => {
   // 6 Nov: the jump itself moved to ./chat-scroll.js with the rest of the scrolling.
   const js = read('web/chat-scroll.js');
   // The 46px landing was a workaround for the floating buttons covering the header.
@@ -585,7 +591,7 @@ test('jumping to the question puts it at the top of the chat', () => {
 
 // A folder that was a project before is re-used, not wiped: the safe answer is the
 // primary button, and deleting the folder is the deliberate alternative (12 Nov).
-test('the re-use dialog offers re-use first', () => {
+contract('the re-use dialog offers re-use first', () => {
   const src = fs.readFileSync(path.join(ROOT, 'web', 'project-menu.js'), 'utf8');
   const block = /openDialog\(\{[\s\S]*?This folder was a project before[\s\S]*?\}\);/.exec(src);
   assert.ok(block, 'the clash dialog exists');
@@ -597,7 +603,7 @@ test('the re-use dialog offers re-use first', () => {
 
 // A refused change is one line in the chat, not the model's whole instruction.
 // Measured 12 Nov: a refused shell command printed three red lines and the sentence.
-test('the refusal is one line and the sentence is folded', async () => {
+contract('the refusal is one line and the sentence is folded', async () => {
   const { renderMessage } = await import('../web/transcript.js');
   const html = renderMessage({
     id: 'msg_refused',
@@ -617,7 +623,7 @@ test('the refusal is one line and the sentence is folded', async () => {
 // at 90 characters — a third of the pane left empty and the command ending
 // mid-word (13 Nov). The line is whole now: the summary's own ellipsis ends it at
 // the chat's edge, and the full text is still one hover away.
-test('the alarm names a refused command in full, and the chat edge cuts it', async () => {
+contract('the alarm names a refused command in full, and the chat edge cuts it', async () => {
   const { renderAlarm } = await import('../web/chat-notes.js');
   const command = 'powershell [Security.Principal.WindowsIdentity]::GetCurrent() | New-Object Security.Principal.WindowsPrincipal($id) | $p.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)';
   const html = renderAlarm({ prohibited: true, action: 'shell', paths: [command], note: '', at: 1700000000000 });
@@ -630,7 +636,7 @@ test('the alarm names a refused command in full, and the chat edge cuts it', asy
 
 // The report behind that fold cannot be re-opened by a re-render: the thinking pane
 // appending, or a poll, used to snap it shut a second after the operator opened it.
-test('a refusal the operator opened stays open when the chat renders again', async () => {
+contract('a refusal the operator opened stays open when the chat renders again', async () => {
   const { renderAlarm } = await import('../web/chat-notes.js');
   const { state } = await import('../web/state.js');
   const alarm = { prohibited: true, action: 'shell', paths: ['node engine.test.js'], note: 'by coder 1 (t3)', at: 42 };
@@ -646,7 +652,7 @@ test('a refusal the operator opened stays open when the chat renders again', asy
 
 // A compaction is part of the conversation: the context dropped, and the chat has to
 // say why. A cancelled one is the exception — the chip and the toast already said so.
-test('a compaction is a line in the chat, in the trace format Multi uses', async () => {
+contract('a compaction is a line in the chat, in the trace format Multi uses', async () => {
   const { renderMessage } = await import('../web/transcript.js');
   const { state } = await import('../web/state.js');
   state.messages = [{ id: 'a1', type: 'assistant', created: 1000, raw: { tokens: { input: 160000, cache: { read: 7193 } } } }];
@@ -670,7 +676,7 @@ test('a compaction is a line in the chat, in the trace format Multi uses', async
 
 // The operator's three UI rulings of 13 Nov, held as source assertions because they are
 // browser behaviours a unit test cannot press.
-test('right-click is off, and no field offers prefill', () => {
+contract('right-click is off, and no field offers prefill', () => {
   const js = fs.readFileSync(path.join(ROOT, 'web', 'app.js'), 'utf8');
   assert.match(js, /document\.addEventListener\('contextmenu', \(e\) => e\.preventDefault\(\)\)/, 'right-click is refused');
   assert.match(js, /setAttribute\('autocomplete', 'off'\)/, 'fields say no to autofill');
@@ -680,7 +686,7 @@ test('right-click is off, and no field offers prefill', () => {
   assert.match(shell, /AreDefaultContextMenusEnabled = false/, 'and its own right-click menu');
 });
 
-test('the steer label sits level with its sentence', () => {
+contract('the steer label sits level with its sentence', () => {
   const css = fs.readFileSync(path.join(ROOT, 'web', 'synapse.css'), 'utf8');
   assert.match(css, /\.msg\.user \.msg-body \{[^}]*align-items: baseline/, 'the row is baseline aligned');
   assert.match(css, /\.msg\.user \.msg-role \{[^}]*vertical-align: baseline/, 'and the label sits on it');
@@ -690,7 +696,7 @@ test('the steer label sits level with its sentence', () => {
 // A failed delete told the operator to close the project's chat — which is not what holds
 // a folder (a browser showing a file from it, Explorer, a scanner is) and cannot be done
 // from the rail anyway. The .NET "being used" wording now maps to something true (13 Nov).
-test('a locked folder says what is really holding it', async () => {
+contract('a locked folder says what is really holding it', async () => {
   const { recycleReason } = await import('../web/project-menu.js');
   const raw =
     'could not move F:\\dev\\Synapse.Projects\\old to the Recycle Bin: Exception calling "DeleteDirectory" ' +
@@ -701,7 +707,7 @@ test('a locked folder says what is really holding it', async () => {
   assert.doesNotMatch(text, /close this project's chat/i, 'the old dead-end advice is gone');
 });
 
-test('a reconnecting page re-reads the remote switch', () => {
+contract('a reconnecting page re-reads the remote switch', () => {
   // The server starts with Remote Access off; a page that stayed open kept its
   // switch on and said the LAN was shared when the listener was on loopback.
   const js = read('web/app.js');
@@ -710,7 +716,7 @@ test('a reconnecting page re-reads the remote switch', () => {
   assert.match(block, /refreshRemote\(\)/, 'the reconnect asks for the settled state');
 });
 
-test('the project menu is placed before it is shown', () => {
+contract('the project menu is placed before it is shown', () => {
   // `position: fixed` with no offsets sits at the page's top-left. Un-hiding it
   // before the offsets are set let one frame paint there (operator, 16 Nov).
   const js = read('web/project-menu.js');
@@ -722,7 +728,7 @@ test('the project menu is placed before it is shown', () => {
   assert.ok(visible > shown, 'visible only after the offsets are set');
 });
 
-test('Keep Building is read-only in Single and resets when Multi is chosen', () => {
+contract('Keep Building is read-only in Single and resets when Multi is chosen', () => {
   const menu = read('web/run-menu.js');
   assert.match(menu, /automationDisabled\(state\.mode, row\.key\)/, 'the row consults the mode');
   assert.match(menu, /el\.disabled = disabled/, 'and is really disabled');
@@ -731,10 +737,39 @@ test('Keep Building is read-only in Single and resets when Multi is chosen', () 
   assert.match(app, /AUTOMATION_DEFAULTS\.keepBuilding/, 'Multi starts at the default');
 });
 
-test('the cog has three tones, and shutdown is the strongest', () => {
+contract('the cog has three tones, and shutdown is the strongest', () => {
   const css = read('web/synapse.css');
   assert.match(css, /\.run-btn \{[^}]*color: #d2d4d9/, 'default is light grey');
   assert.match(css, /\.run-btn\.is-on \{[^}]*var\(--green\)/, 'a standing decision is green');
   assert.match(css, /\.run-btn\.is-shutdown \{[^}]*var\(--yellow\)/, 'shutdown is yellow');
   assert.match(css, /\.run-btn\.is-shutdown:hover/, 'and stays yellow under the pointer');
 });
+
+// Eight groups, not fifty-two registrations: the same assertions, one subject. A
+// failure names the original case, and every case in the group still runs so one
+// broken selector does not hide the next.
+const groups = [
+  ['the page, the project menu and its placement', [0, 1, 2, 3, 49]],
+  ['chips, attachments and the message you can re-use', [4, 5, 6, 7, 8, 10]],
+  ['the composer, steer and the wake lock', [9, 11, 12, 13, 14, 34, 35]],
+  ['settings, the plan and the rail', [15, 16, 17, 18, 19, 20, 21]],
+  ["the chat's text and its answers", [22, 23, 24, 25, 32]],
+  ['settings pages, footers and fields', [26, 27, 28, 29, 30, 31]],
+  ['questions and the live step', [33, 36, 37, 38, 39, 40]],
+  ['refusals, compactions, the mode and the cog', [41, 42, 43, 44, 45, 46, 47, 48, 50, 51]],
+];
+
+for (const [label, indexes] of groups) {
+  test(`UI contract: ${label}`, async () => {
+    const failures = [];
+    for (const index of indexes) {
+      const entry = contracts[index];
+      try {
+        await entry.fn();
+      } catch (err) {
+        failures.push(`${entry.name}: ${err.message}`);
+      }
+    }
+    assert.deepEqual(failures, [], failures.join('\n'));
+  });
+}
