@@ -2126,9 +2126,9 @@ problems; the format line and one sentence in the Architect's brief are what tel
 the field exists. The worker is told the commands in its task message, so a task without
 checks costs no extra context.
 
-## The loop guard: two shapes, two watchers (13 Nov)
+## The loop guard: three shapes, two watchers (13 Nov, extended 16 Nov)
 
-A model that loops does one of two things, and the guard now names both:
+A model that loops does one of three things, and the guard now names all three:
 
 - **the same call, again** — the same tool on the same target four times in a window of
   twelve. The target carries `offset:limit`, so paging a long document is a different target
@@ -2137,6 +2137,13 @@ A model that loops does one of two things, and the guard now names both:
   times, whatever was asked. This is the shape the first rule misses: `offset 34, limit 11`
   and then `offset 35, limit 10` return the same paragraphs, and the model learns nothing.
   The digest comes from the output already in the transcript, so it costs no engine call.
+- **the same explanation, again** — an 18-word passage repeated in five distinct assistant
+  turns inside a window of sixteen. The first two rules cannot see this: the model changes
+  the probe every turn, so no tool target repeats, while the same paragraph comes back. The
+  16 Nov run spent ninety turns re-explaining one hash check and made a different shell
+  probe each time; the check command had reached five turns by turn 61. Five, not three or
+  four: a model may quote its acceptance sentence while it works, and a guard that cries
+  wolf on the task is worse than no guard.
 
 Thresholds are high on purpose — four calls, three answers, twelve wide — because a strike is
 a nudge, and a false one spends a model's attention. Outputs shorter than 240 characters are

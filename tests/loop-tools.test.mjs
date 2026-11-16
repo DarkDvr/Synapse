@@ -5,7 +5,7 @@
 // The phrase half lives in loop-guard.test.mjs.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { toolSignature, loopStrike, LOOP_WINDOW, LOOP_NUDGE } from '../src/loop-detect.js';
+import { toolSignature, loopStrike, LOOP_WINDOW, LOOP_NUDGE, repeatedReasoning } from '../src/loop-detect.js';
 import { createTurnGuard } from '../src/turn-guard.js';
 import { toolTarget } from '../src/runs.js';
 
@@ -18,6 +18,39 @@ test('the same call four times is a strike, and three is not', () => {
   const four = [...three, call('read', 'a.md')];
   assert.equal(loopStrike(four)?.kind, 'target');
   assert.equal(loopStrike(four)?.times, 4);
+});
+
+test('the same long explanation in five turns is a reasoning strike', () => {
+  const passage =
+    'the harness check is the hash equality between app ui index html and bin ui index html ' +
+    'and the command keeps failing because the function is not resolved in this context';
+  const turn = (suffix) => `${suffix} ${passage} then I will try one more probe and write the report`;
+  const four = [turn('first'), turn('second'), turn('third'), turn('fourth')];
+  assert.equal(repeatedReasoning(four), null, 'four turns can still be the task being quoted');
+  const strike = repeatedReasoning([...four, turn('fifth')]);
+  assert.equal(strike?.kind, 'reasoning');
+  assert.equal(strike?.turns, 5);
+  assert.match(strike?.phrase, /hash equality/);
+});
+
+test('a repeated short phrase is how a model talks, not a loop', () => {
+  const phrase = 'let me check the hash again and then decide';
+  assert.equal(repeatedReasoning(Array.from({ length: 6 }, () => phrase)), null);
+  assert.equal(
+    repeatedReasoning(['one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen']),
+    null,
+    'one turn cannot repeat across turns',
+  );
+});
+
+test('different explanations in four turns are work, not a loop', () => {
+  const turns = [
+    'read the ribbon rule and change position relative so the sheen is confined',
+    'build the harness and compare the two screenshots at both widths',
+    'the check fails because the function is missing; make a shim in the project root',
+    'copy the page and run the suites with the real command line tool',
+  ];
+  assert.equal(repeatedReasoning(turns), null);
 });
 
 test('paging a long file is not a loop', () => {

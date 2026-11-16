@@ -50,7 +50,7 @@ import { screenCallOver } from './desk.js';
 import { browserAskHolding } from './browser/ask.js';
 import { proseToolCall, PROSE_NUDGE } from './model-slips.js';
 // The loop rule is shared with the Architect's own turn: one detector, two callers (13 Nov).
-import { toolSignature, loopStrike, LOOP_WINDOW } from './loop-detect.js';
+import { toolSignature, loopStrike, LOOP_WINDOW, repeatedReasoning } from './loop-detect.js';
 import { normDir } from './paths.js';
 import { report } from './report.js';
 import { runTaskChecks, checkNudge } from './checks.js';
@@ -3115,6 +3115,11 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     let announced = false;
     let asking = false;
     const loopDetector = loopGuard ? createLoopDetector() : null;
+    // The other half of the thinking guard: one passage, repeated across turns. It is
+    // kept per assistant message, not per poll, because the transcript is re-read every
+    // few hundred milliseconds and the same turn must not count twice.
+    const reasonSeen = new Set();
+    const reasonTurns = [];
     // The action half of the same guard (see the tool block below).
     const toolSeen = new Set();
     const toolWindow = [];
@@ -3235,6 +3240,32 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
       if (loopDetector) {
         const phrase = loopDetector.push(reasoningTail(messages, before));
         if (phrase) return { timedOut: false, looped: true, phrase };
+      }
+
+      // The same explanation, turn after turn, with a different probe each time. A
+      // command window cannot see this: the tool target is the whole command, and the
+      // model changes the probe while restating the same paragraph (16 Nov).
+      if (loopGuard) {
+        for (const message of afterMark(messages, before)) {
+          if (message?.type !== 'assistant' || !message.id || reasonSeen.has(message.id)) continue;
+          const text = (message.parts || [])
+            .filter((part) => part?.type === 'reasoning' || part?.type === 'text')
+            .map((part) => String(part.text || ''))
+            .join('\n')
+            .trim();
+          if (text.length < 400) continue;
+          reasonSeen.add(message.id);
+          reasonTurns.push(text);
+          if (reasonTurns.length > 16) reasonTurns.shift();
+        }
+        const repeated = repeatedReasoning(reasonTurns);
+        if (repeated) {
+          return {
+            timedOut: false,
+            looped: true,
+            phrase: `the same explanation in ${repeated.turns} turns: "${repeated.phrase}"`,
+          };
+        }
       }
 
       // Tool calls are the other half of "going in circles": the thinking check

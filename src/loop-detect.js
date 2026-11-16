@@ -27,6 +27,19 @@ export const SAME_OUTPUT_STRIKES = 3;
 // trying three patterns, not a loop.
 export const SAME_OUTPUT_MIN_CHARS = 240;
 
+// A third shape, and the one the tool window cannot see: the model says the same
+// thing over and over while every command it runs is slightly different. A long
+// passage (18 words) that appears in five separate assistant turns is not an
+// accident; it is a paragraph the model keeps coming back to instead of moving on
+// (16 Nov: a worker spent ninety turns re-explaining one hash check and made a
+// different shell probe each time, so no tool signature repeated). Five, not four:
+// a model may quote its acceptance sentence three or four times while it works; the
+// check command that trapped this one had reached five by turn 61.
+export const REASON_WINDOW = 16;
+export const REASON_SHINGLE = 18;
+export const REASON_STRIKES = 5;
+
+
 /** The tool calls that only read: a repeated answer from these is waste, not work. */
 const READ_ONLY = new Set(['read', 'glob', 'grep', 'list', 'ls', 'search', 'webfetch', 'fetch', 'tree']);
 
@@ -125,6 +138,61 @@ export function loopStrike(window, { sameTarget = SAME_TARGET_STRIKES, sameOutpu
   return null;
 }
 
+/** The words a passage is compared by: case, punctuation and line shape are not its meaning. */
+function wordsOf(text) {
+  return String(text ?? '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+}
+
+/**
+ * Does the recent thinking repeat one long passage, across turns?
+ *
+ * The tool window catches the same command; this catches the same *explanation* when
+ * every command is a slightly different probe. It looks for an 18-word shingle in at
+ * least five distinct assistant turns within the last sixteen. Short phrases are
+ * ignored — "let me check" is how a model talks, not what it is stuck on — and the
+ * whole of the longest repeated passage is returned for the report.
+ *
+ * Pure: the runner keeps the window.
+ */
+export function repeatedReasoning(texts, {
+  window = REASON_WINDOW,
+  shingle = REASON_SHINGLE,
+  strikes = REASON_STRIKES,
+} = {}) {
+  const recent = (Array.isArray(texts) ? texts : []).slice(-window);
+  if (recent.length < strikes) return null;
+  const seen = new Map();
+  recent.forEach((text, turn) => {
+    const words = wordsOf(text);
+    if (words.length < shingle) return;
+    const local = new Set();
+    for (let i = 0; i + shingle <= words.length; i += 1) {
+      const key = words.slice(i, i + shingle).join(' ');
+      if (local.has(key)) continue;
+      local.add(key);
+      const turns = seen.get(key) || new Set();
+      turns.add(turn);
+      seen.set(key, turns);
+    }
+  });
+  let best = null;
+  for (const [key, turns] of seen) {
+    if (turns.size < strikes) continue;
+    if (!best || turns.size > best.turns.size) best = { key, turns };
+  }
+  if (!best) return null;
+  return {
+    kind: 'reasoning',
+    turns: best.turns.size,
+    phrase: best.key.length > 200 ? `${best.key.slice(0, 199)}…` : best.key,
+  };
+}
+
 /**
  * What the model is told when it is nudged.
  *
@@ -132,6 +200,6 @@ export function loopStrike(window, { sameTarget = SAME_TARGET_STRIKES, sameOutpu
  * and a model that starts over wastes the turn it already paid for.
  */
 export const LOOP_NUDGE =
-  'You are repeating yourself: the same call, or the same answer, is coming back without ' +
+  'You are repeating yourself: the same call, the same answer, or the same explanation is coming back without ' +
   'making progress. Do not repeat it and do not start over — use what you already have and ' +
   'do the next real step now.';
