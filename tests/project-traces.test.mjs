@@ -32,6 +32,9 @@ function store({ projectDir = DIR, otherDir = 'F:\\dev\\Synapse.Projects\\kept' 
   db.prepare('insert into project values (?, ?)').run(OTHER, otherDir.replace(/\\/g, '/'));
   db.prepare('insert into worktree values (?, ?)').run(ID, projectDir.replace(/\\/g, '/'));
   db.prepare('insert into worktree values (?, ?)').run(OTHER, otherDir.replace(/\\/g, '/'));
+  // The engine also lists every folder it has seen under a `global` owner.
+  db.prepare('insert into worktree values (?, ?)').run('global', projectDir.replace(/\\/g, '/'));
+  db.prepare('insert into worktree values (?, ?)').run('global', otherDir.replace(/\\/g, '/'));
   // A brief is stored as a content-addressed blob, in JSON form (doubled backslashes).
   const brief = (dirPath) => JSON.stringify({ text: `Synapse project: ${dirPath}\\nScratch folder: ${dirPath}\\.project\\scratch` });
   db.prepare('insert into instruction_blob values (?, ?)').run('h1', brief(projectDir.replace(/\\/g, '\\\\')));
@@ -66,7 +69,7 @@ test('purging removes the row, its worktrees and its shell output — and nothin
 
   assert.equal(result.projectId, ID);
   assert.equal(result.projectRows, 1);
-  assert.equal(result.worktreeRows, 1);
+  assert.equal(result.worktreeRows, 2, 'the project row and its global worktree row');
   assert.equal(result.shells, 1);
   assert.equal(result.briefs, 1, 'the project\'s brief blob goes, the neighbour\'s stays');
 

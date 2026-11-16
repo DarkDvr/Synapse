@@ -67,6 +67,14 @@ export async function purgeProjectTraces({ dataDir, dir, log = null } = {}) {
         result.projectId = id;
         const worktrees = db.prepare('delete from worktree where project_id = ?').run(id);
         result.worktreeRows = Number(worktrees?.changes || 0);
+        // The engine also keeps a `global` worktree row per directory it has seen — a
+        // list of every folder ever opened, which outlives the project (measured
+        // 16 Nov: 90 of 97 rows pointed at folders that no longer exist). The path is
+        // content of its own, so it goes by directory as well as by id.
+        const byDir = db
+          .prepare("delete from worktree where replace(lower(directory), '\\', '/') = ?")
+          .run(engineDir(dir).toLowerCase());
+        result.worktreeRows += Number(byDir?.changes || 0);
         const projects = db.prepare('delete from project where id = ?').run(id);
         result.projectRows = Number(projects?.changes || 0);
       }
