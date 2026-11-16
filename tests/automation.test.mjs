@@ -17,6 +17,7 @@ import {
 } from '../src/automation.js';
 import { createAutoShutdown } from '../src/auto-shutdown.js';
 import { automationMs, keepBuildingDelayMs, answerTimeoutMs, permissionsTimeoutMs, shutdownIdleMs } from '../src/auto-answer.js';
+import { automationDisabled } from '../web/automation.js';
 
 const session = (synapse) => ({ metadata: { synapse } });
 
@@ -32,6 +33,12 @@ test('a project starts with Keep Building on and the other three off', () => {
   assert.deepEqual(cleanAutomation({ keepBuilding: 'yes', autoAnswer: 1, nope: true }), {
     ...AUTOMATION_DEFAULTS,
   });
+});
+
+test('Keep Building is read-only in Single and live in Multi', () => {
+  assert.equal(automationDisabled('single', 'keepBuilding'), true);
+  assert.equal(automationDisabled('multi', 'keepBuilding'), false);
+  assert.equal(automationDisabled('single', 'autoPermissions'), false, 'the other three still apply');
 });
 
 test('a chat saved before the four switches keeps what it had', () => {

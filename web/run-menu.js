@@ -12,7 +12,7 @@ import { $ } from './dom.js';
 import { api } from './api.js';
 import { automationWaitSec } from './mode.js';
 import { toast } from './toast.js';
-import { anyAutomationOn, AUTOMATION_ROWS, AUTOMATION_DEFAULTS } from './automation.js';
+import { automationDisabled, AUTOMATION_ROWS, AUTOMATION_DEFAULTS } from './automation.js';
 import { findSession } from './projects.js';
 import { renderTranscript } from './transcript.js';
 
@@ -33,18 +33,24 @@ export function renderKeep() {
   if (!btn) return;
   btn.hidden = state.view !== 'session' || !state.sessionId;
   // Green while any switch is on — a standing decision the operator can see
-  // without opening the menu. All off: gray.
+  // without opening the menu. All off: gray. Keep Building is not a decision in
+  // Single, so a stale value there must not light the cog.
   const awake = state.config?.automation?.keepAwake === true;
-  btn.classList.toggle('is-on', anyAutomationOn(state.automation) || awake);
-  const on = AUTOMATION_ROWS.filter((row) => state.automation?.[row.key] === true).map((row) => row.label);
+  const activeRows = AUTOMATION_ROWS.filter((row) => !automationDisabled(state.mode, row.key));
+  btn.classList.toggle('is-on', activeRows.some((row) => state.automation?.[row.key] === true) || awake);
+  const on = activeRows.filter((row) => state.automation?.[row.key] === true).map((row) => row.label);
   if (awake) on.push('Keep PC Awake');
   btn.title = on.length ? `Automation: ${on.join(', ')}` : 'Automation — four switches, all off';
   for (const row of AUTOMATION_ROWS) {
     const el = $(row.id || `run_${row.key}`);
     if (!el) continue;
+    const disabled = automationDisabled(state.mode, row.key);
+    el.disabled = disabled;
+    el.setAttribute('aria-disabled', String(disabled));
+    el.classList.toggle('is-readonly', disabled);
     el.setAttribute('aria-checked', String(state.automation?.[row.key] === true));
     const hint = el.querySelector('small');
-    if (hint) hint.textContent = row.hint;
+    if (hint) hint.textContent = disabled ? 'Only in Multi — the Architect can hand the plan to the team.' : row.hint;
   }
   const powerRow = $('run_keepAwake');
   if (powerRow) {
@@ -145,9 +151,9 @@ export async function togglePower() {
  * and the answer is written back onto the session in the rail, so opening another
  * project and coming back shows the same four.
  */
-export async function setAutomationSwitch(key, next) {
+export async function setAutomationSwitch(key, next, { quiet = false } = {}) {
   const row = AUTOMATION_ROWS.find((r) => r.key === key);
-  if (!state.sessionId || !row) return;
+  if (!state.sessionId || !row || automationDisabled(state.mode, key)) return;
   try {
     const r = await api('POST', `/api/sessions/${encodeURIComponent(state.sessionId)}/automation`, {
       patch: { [key]: next === true },
@@ -158,7 +164,7 @@ export async function setAutomationSwitch(key, next) {
     renderKeep();
     renderTranscript();
     const on = state.automation[key] === true;
-    toast(`${row.label} ${on ? 'On' : 'Off'}`, on ? row.on : row.off);
+    if (!quiet) toast(`${row.label} ${on ? 'On' : 'Off'}`, on ? row.on : row.off);
   } catch (err) {
     toast(`Could Not Change ${row.label}`, err.message);
   }

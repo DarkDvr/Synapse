@@ -520,7 +520,15 @@ function applyMode(mode) {
   const cancel = () => { interfered = true; };
   scroller?.addEventListener('wheel', cancel, { passive: true, once: true });
   scroller?.addEventListener('touchmove', cancel, { passive: true, once: true });
+  const was = state.mode;
   state.mode = mode;
+  // Keep Building is read-only in Single. Entering Multi is the first moment it
+  // can act, so it starts at the default instead of whatever stale value Single
+  // was carrying; other switches keep their own choices.
+  if (was === 'single' && mode === 'multi') {
+    state.automation = { ...(state.automation || {}), keepBuilding: AUTOMATION_DEFAULTS.keepBuilding };
+    setAutomationSwitch('keepBuilding', AUTOMATION_DEFAULTS.keepBuilding, { quiet: true });
+  }
   renderMode();
   renderPlan();
   setView();

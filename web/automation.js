@@ -49,3 +49,8 @@ export const AUTOMATION_ROWS = Object.freeze([
 export function anyAutomationOn(automation) {
   return AUTOMATION_ROWS.some((row) => automation?.[row.key] === true);
 }
+
+/** Keep Building is a Multi idea: in Single there is no plan for it to carry. */
+export function automationDisabled(mode, key) {
+  return key === 'keepBuilding' && mode === 'single';
+}

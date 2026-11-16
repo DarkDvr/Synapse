@@ -1270,6 +1270,10 @@ body[data-view="session"] .chat-dock:not(.has-history) .composer { border-top-co
 }
 .run-menu-row:hover { background: rgba(255, 255, 255, 0.045); }
 .run-menu-row:focus-visible { outline: none; background: rgba(255, 255, 255, 0.06); }
+/* Keep Building has no meaning in Single; it is shown, greyed and inert rather
+   than pretending a click can matter. */
+.run-menu-row:disabled { opacity: 0.55; cursor: default; }
+.run-menu-row:disabled:hover { background: transparent; }
 .run-menu-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .run-menu-text > span { font-size: 12px; font-weight: 600; }
 .run-menu-text small { font-size: 10.5px; color: #82868e; line-height: 1.35; }

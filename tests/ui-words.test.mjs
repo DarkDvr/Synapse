@@ -721,3 +721,12 @@ test('the project menu is placed before it is shown', () => {
   assert.ok(hidden < shown, 'hidden before un-hiding');
   assert.ok(visible > shown, 'visible only after the offsets are set');
 });
+
+test('Keep Building is read-only in Single and resets when Multi is chosen', () => {
+  const menu = read('web/run-menu.js');
+  assert.match(menu, /automationDisabled\(state\.mode, row\.key\)/, 'the row consults the mode');
+  assert.match(menu, /el\.disabled = disabled/, 'and is really disabled');
+  const app = read('web/app.js');
+  assert.match(app, /was === 'single' && mode === 'multi'/, 'the switch is detected');
+  assert.match(app, /AUTOMATION_DEFAULTS\.keepBuilding/, 'Multi starts at the default');
+});
