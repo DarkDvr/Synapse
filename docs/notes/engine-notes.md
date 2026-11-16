@@ -2019,6 +2019,12 @@ one small PowerShell call at the deadline only) and counts the wait from that, n
 from the last turn. If the answer cannot be had, it does not power off — not
 knowing is not permission. It has happened more than once.
 
+**Only the operator's window can arm it (16 Nov).** The page marks its requests
+with `x-synapse-ui`; the server refuses `autoShutdown: true` from anything else,
+so a test, a script or a stray API call can turn the switch off but never on.
+`scripts/checks.mjs` turns it off before a run and leaves it off — a restore is an
+enable with a nicer name, and restoring it is what armed the 15:12 power-off.
+
 ### The form list is scoped by directory (3 Nov)
 
 Auto-Answer never fired, with the old Full auto switch either. The reason was not

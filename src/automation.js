@@ -35,6 +35,20 @@ export function cleanAutomation(value) {
 }
 
 /**
+ * May this request turn Auto-Shutdown on?
+ *
+ * Only the operator, in the Synapse window. A test, a script or another HTTP
+ * caller may always turn it **off**, and may change the other three switches; it
+ * may not arm the power-off. `ui` is set by the server from the page's own header,
+ * so a request that did not come through the window cannot enable it (16 Nov).
+ */
+export function mayEnableAutoShutdown(patch, { ui = false } = {}) {
+  if (!patch || typeof patch !== 'object') return true;
+  if (patch.autoShutdown !== true) return true;
+  return ui === true;
+}
+
+/**
  * Read a session's automation, honouring the two switches that came before it.
  *
  * A session saved under the old names is not reset: `synapse.auto` becomes Keep

@@ -1,4 +1,4 @@
-// Run the checks with Auto-Shutdown forcibly off, then put it back.
+// Run the checks with Auto-Shutdown off, and leave it off.
 //
 //   bin\node\node.exe scripts\checks.mjs                    # the full suite
 //   bin\node\node.exe scripts\checks.mjs -- node --version   # any command
@@ -6,9 +6,11 @@
 //
 // Why this exists: a test run counts as "nothing to do" to the app. A project with
 // Auto-Shutdown on, an idle engine and an empty run list is exactly the condition the
-// auto-shutdown tick waits for — so the machine powered off under the tests, twice. A
-// note in AGENTS.md was not enough (15 Nov), so the harness now turns the switches off
-// itself, proves they are off, runs the command, and restores them.
+// auto-shutdown tick waits for — so the machine powered off under the tests. A note in
+// AGENTS.md was not enough (15 Nov), and putting the switches back afterwards armed the
+// same power-off again (16 Nov). The harness now turns the switches off itself, proves
+// they are off, runs the command, and turns them off again afterwards. Only the Synapse
+// window may turn Auto-Shutdown on; this script can only turn it off.
 //
 // What it turns off:
 //   * every chat's Auto-Shutdown (per project, in `synapse.automation`);
@@ -16,8 +18,7 @@
 //     stored their own automation;
 //   * any countdown already armed, so a minute the tests take cannot become a power-off.
 //
-// It reads before it writes: a chat that already had the switch off is not "restored" to
-// on afterwards.
+// It reads before it writes, and it never restores a switch to on.
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 
@@ -108,20 +109,18 @@ async function verify() {
   return left;
 }
 
-async function restore(turned) {
-  for (const session of turned) {
-    try {
-      await api('POST', `/api/sessions/${encodeURIComponent(session.id)}/automation`, {
-        patch: { autoShutdown: true },
-      });
-      say(`  auto-shutdown back on: ${session.name}`);
-    } catch (err) {
-      warn(`  could not restore auto-shutdown for ${session.name}: ${err.message}`);
-    }
+/** Turn off anything that is on again, and prove it stayed off. Never restore. */
+async function ensureOff() {
+  const now = await snapshot();
+  if (!now.sessions.length && !now.whenDone) return true;
+  warn('auto-shutdown was on again; turning it off and leaving it off:');
+  await disable(now);
+  const left = await verify();
+  if (left.length) {
+    warn(`NOT SAFE — auto-shutdown is still on for: ${left.join(', ')}`);
+    return false;
   }
-  if (turned.length) {
-    warn(`  note: ${turned.length} project(s) have Auto-Shutdown on again; the app now checks the machine's last input before powering off.`);
-  }
+  return true;
 }
 
 function runCommand() {
@@ -135,20 +134,18 @@ function runCommand() {
   });
 }
 
-let turned = [];
-let restoring = false;
-const restoreOnce = async () => {
-  if (restoring) return;
-  restoring = true;
-  if (turned.length) {
-    say('restoring the switches it changed:');
-    await restore(turned);
-  }
+let checking = false;
+const ensureOffOnce = async () => {
+  if (checking) return false;
+  checking = true;
+  const ok = await ensureOff();
+  checking = false;
+  return ok;
 };
 
 for (const signal of ['SIGINT', 'SIGTERM']) {
   process.on(signal, () => {
-    restoreOnce().finally(() => process.exit(130));
+    ensureOffOnce().finally(() => process.exit(130));
   });
 }
 
@@ -162,15 +159,15 @@ const snap = await snapshot();
 if (!snap.sessions.length && !snap.whenDone) {
   say('auto-shutdown is already off for every project — nothing to change.');
 } else {
-  say('auto-shutdown is on somewhere; switching it off for the length of the run:');
-  turned = await disable(snap);
+  say('auto-shutdown is on somewhere; turning it off for the run and leaving it off:');
+  await disable(snap);
   const left = await verify();
   if (left.length) {
     warn(`NOT SAFE — auto-shutdown is still on for: ${left.join(', ')}. The command was not run.`);
-    await restoreOnce();
+    await ensureOffOnce();
     process.exit(1);
   }
-  say('verified: no project and no global default can power the machine off during the run.');
+  say('verified: no project and no global default can power the machine off.');
 }
 
 if (snap.runs.length) {
@@ -179,5 +176,10 @@ if (snap.runs.length) {
 
 say(`running: ${run.slice(0, 3).join(' ')}${run.length > 3 ? ' …' : ''}`);
 const code = await runCommand();
-await restoreOnce();
+const off = await ensureOffOnce();
+if (!off) {
+  warn('auto-shutdown is still armed; turn it off in the Synapse window now.');
+  process.exit(1);
+}
+say('auto-shutdown is off; only the Synapse window can turn it on.');
 process.exit(code);

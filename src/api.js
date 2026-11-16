@@ -7,7 +7,7 @@ import { appendRun, readPlan, readRuns, runLedger, briefSession, logPlanState, B
 import { ensureProjectDoc, appendRequest as appendProjectRequest, appendChat, appendDecision as appendProjectDecision, appendEntry, setHandover } from './project-doc.js';
 import { createFormAuto } from './form-auto.js';
 import { answerTimeoutMs, formPages } from './auto-answer.js';
-import { AUTOMATION_DEFAULTS, AUTOMATION_KEYS, cleanAutomation, nextSynapse, readAutomation } from './automation.js';
+import { AUTOMATION_DEFAULTS, AUTOMATION_KEYS, cleanAutomation, nextSynapse, readAutomation, mayEnableAutoShutdown } from './automation.js';
 import { keepAttachments } from './keep-attachments.js';
 import { skillRules, describeSkills } from './skills.js';
 import { rulesFor, decide, resolvePath, refusalNote, SINGLE_RULES } from './permissions.js';
@@ -810,8 +810,11 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
    * without resetting it — and writes those two as mirrors so any older reader
    * cannot disagree with the switch the operator just set.
    */
-  async function applyAutomation(sessionId, patch) {
+  async function applyAutomation(sessionId, patch, { allowAutoShutdown = false } = {}) {
     requireReady();
+    if (!mayEnableAutoShutdown(patch, { ui: allowAutoShutdown })) {
+      throw fail(403, 'Auto-Shutdown can only be turned on in the Synapse window.');
+    }
     const session = await engine.getSession(sessionId);
     const meta = session?.metadata && typeof session.metadata === 'object' ? session.metadata : {};
     const next = nextSynapse(meta.synapse, patch && typeof patch === 'object' ? patch : {});
@@ -2423,7 +2426,8 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
      * The four automation switches, per project. The body carries a `patch`, so the
      * page sends only what moved and the answer is always the whole set.
      */
-    setAutomation: async (sessionId, body) => applyAutomation(sessionId, body?.patch),
+    setAutomation: async (sessionId, body, options = {}) =>
+      applyAutomation(sessionId, body?.patch, { allowAutoShutdown: options.ui === true }),
 
     /** The old two switches, still callable: each maps onto the one it became. */
     setAuto: async (sessionId, body) => applyAutomation(sessionId, { keepBuilding: body?.auto === true }),

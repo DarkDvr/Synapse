@@ -574,7 +574,11 @@ export function createServer({ api, engine, logger, config, remote, onRemote }) 
       // Auto-Answer and Auto-Shutdown. One body carries a `patch`, so the page
       // sends only what moved and always gets the whole set back.
       if (seg[2] === 'automation' && method === 'POST') {
-        return sendJson(res, 200, await api.setAutomation(sessionId, await readBody(req)));
+        const body = await readBody(req);
+        // Only the page may turn Auto-Shutdown on. It marks every request with this
+        // header; a test or a script does not, so it can only turn the switch off.
+        const ui = req.headers['x-synapse-ui'] === '1';
+        return sendJson(res, 200, await api.setAutomation(sessionId, body, { ui }));
       }
       // The old single switch, still served: it maps onto the two it became.
       if (seg[2] === 'full-auto' && method === 'POST') {

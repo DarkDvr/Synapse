@@ -77,6 +77,9 @@ the cards and the commits, not the code. One reason per sentence, not a chain.
    it — opening it, reading or copying its profile — resets extensions, cookies and
    settings. Open links in Edge by its full path, take pictures with `skills/visual-review`,
    and leave the seeded Brave entry in the prohibited list (Write and Read cleared) alone.
+10. **Auto-Shutdown is the operator's switch alone.** Only the Synapse window may turn
+    it on; the server refuses any other caller. `scripts\checks.mjs` turns it off before
+    a run and leaves it off — a test or a script may never arm the power-off.
 
 ### Palette (do not break this)
 
@@ -209,8 +212,9 @@ both. To work on the server on its own: `bin\node\node.exe src\index.js`.
 Gotchas:
 - **Run the checks through `bin\node\node.exe scripts\checks.mjs`.** A test run looks like
   "nothing to do" to the app, so Auto-Shutdown can power the PC off under it — 11 Nov and
-  again on 15 Nov. The script switches every project's Auto-Shutdown off (and the old global
-  default), proves it, runs the suite and puts the switches back. Doing it by hand is not enough.
+  again on 15 Nov. The script turns every project's Auto-Shutdown off (and the old global
+  default), proves it, runs the suite and leaves them off. Only the Synapse window can turn
+  it back on. Doing it by hand is not enough.
 - **Nothing here matches on a process name** (see "Destructive commands"): the app
   stops the process it holds, and `Kill(entireProcessTree)` is the fallback after 8s.
 - The console is in the window: stdout is captured into `logs\console.log` and served,

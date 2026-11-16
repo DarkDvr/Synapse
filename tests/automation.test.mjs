@@ -12,6 +12,7 @@ import {
   AUTOMATION_DEFAULTS,
   AUTOMATION_KEYS,
   cleanAutomation,
+  mayEnableAutoShutdown,
   nextSynapse,
   readAutomation,
 } from '../src/automation.js';
@@ -20,6 +21,13 @@ import { automationMs, keepBuildingDelayMs, answerTimeoutMs, permissionsTimeoutM
 import { automationDisabled, automationChecked, automationTone } from '../web/automation.js';
 
 const session = (synapse) => ({ metadata: { synapse } });
+
+test('only the Synapse window may turn Auto-Shutdown on', () => {
+  assert.equal(mayEnableAutoShutdown({ autoShutdown: true }), false, 'a test or a script may not arm it');
+  assert.equal(mayEnableAutoShutdown({ autoShutdown: true }, { ui: true }), true, 'the operator may');
+  assert.equal(mayEnableAutoShutdown({ autoShutdown: false }), true, 'turning it off is always allowed');
+  assert.equal(mayEnableAutoShutdown({ keepBuilding: true, autoPermissions: true }), true);
+});
 
 test('a project starts with Keep Building on and the other three off', () => {
   assert.deepEqual({ ...AUTOMATION_DEFAULTS }, {

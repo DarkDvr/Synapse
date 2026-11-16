@@ -20,6 +20,9 @@ export async function api(method, path, body) {
     method,
     headers: {
       ...(body !== undefined ? { 'content-type': 'application/json' } : {}),
+      // The page is the only client allowed to arm Auto-Shutdown. The server checks
+      // this marker; a test or a script can turn the switch off but not on.
+      'x-synapse-ui': '1',
       // Who is asking, as far as presence is concerned: the Settings lock and the
       // name in "started from laptop" both come from this header.
       ...(state.clientId ? { 'x-client-id': state.clientId } : {}),

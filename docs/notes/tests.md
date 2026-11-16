@@ -5,9 +5,10 @@ except one skipped by design: `engine-contract.test.mjs` needs `SYNAPSE_E2E=1` a
 a live engine.
 
 On this machine, run it through `bin\node\node.exe scripts\checks.mjs`: the same
-command, with Auto-Shutdown switched off for every project first and put back after. An
+command, with Auto-Shutdown turned off for every project first and **left off**. An
 idle app plus a test run is exactly what the auto-shutdown tick waits for — it powered
-the PC off under the suite on 11 Nov and again on 15 Nov.
+the PC off under the suite on 11 Nov and again on 15 Nov. Only the Synapse window may
+turn Auto-Shutdown back on; the script and the tests may only turn it off.
 
 `.github/workflows/tests.yml` runs the same command on `windows-latest` for every
 push to `main`, and by hand from the Actions tab. Windows because the app is: the
