@@ -60,3 +60,18 @@ export function automationDisabled(mode, key) {
 export function automationChecked(mode, key, value) {
   return !automationDisabled(mode, key) && value === true;
 }
+
+/**
+ * The cog's colour, weakest to strongest:
+ *   idle      white/light grey
+ *   active    green — a building, permission, answer or wake lock is standing
+ *   shutdown  yellow — Auto-Shutdown is on, and it outranks everything.
+ *
+ * Keep Building cannot make it green in Single; it is not applicable there.
+ */
+export function automationTone(mode, automation, { awake = false } = {}) {
+  if (automation?.autoShutdown === true) return 'shutdown';
+  const building = !automationDisabled(mode, 'keepBuilding') && automation?.keepBuilding === true;
+  if (building || automation?.autoPermissions === true || automation?.autoAnswer === true || awake) return 'active';
+  return 'idle';
+}

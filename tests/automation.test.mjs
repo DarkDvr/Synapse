@@ -17,7 +17,7 @@ import {
 } from '../src/automation.js';
 import { createAutoShutdown } from '../src/auto-shutdown.js';
 import { automationMs, keepBuildingDelayMs, answerTimeoutMs, permissionsTimeoutMs, shutdownIdleMs } from '../src/auto-answer.js';
-import { automationDisabled, automationChecked } from '../web/automation.js';
+import { automationDisabled, automationChecked, automationTone } from '../web/automation.js';
 
 const session = (synapse) => ({ metadata: { synapse } });
 
@@ -44,6 +44,19 @@ test('Keep Building is read-only in Single and live in Multi', () => {
   assert.equal(automationChecked('single', 'keepBuilding', true), false);
   assert.equal(automationChecked('multi', 'keepBuilding', true), true);
   assert.equal(automationChecked('single', 'autoPermissions', true), true);
+});
+
+test('the cog is grey, then green, then yellow for shutdown', () => {
+  const off = { keepBuilding: false, autoPermissions: false, autoAnswer: false, autoShutdown: false };
+  assert.equal(automationTone('multi', off), 'idle');
+  assert.equal(automationTone('multi', { ...off, keepBuilding: true }), 'active');
+  assert.equal(automationTone('single', { ...off, keepBuilding: true }), 'idle', 'not a Single decision');
+  assert.equal(automationTone('multi', { ...off, autoPermissions: true }), 'active');
+  assert.equal(automationTone('multi', { ...off, autoAnswer: true }), 'active');
+  assert.equal(automationTone('multi', off, { awake: true }), 'active');
+  // Auto-Shutdown is the strongest: it is yellow even beside a green switch.
+  assert.equal(automationTone('multi', { ...off, autoShutdown: true }), 'shutdown');
+  assert.equal(automationTone('multi', { keepBuilding: true, autoPermissions: true, autoAnswer: true, autoShutdown: true }), 'shutdown');
 });
 
 test('a chat saved before the four switches keeps what it had', () => {

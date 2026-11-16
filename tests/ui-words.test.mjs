@@ -730,3 +730,11 @@ test('Keep Building is read-only in Single and resets when Multi is chosen', () 
   assert.match(app, /was === 'single' && mode === 'multi'/, 'the switch is detected');
   assert.match(app, /AUTOMATION_DEFAULTS\.keepBuilding/, 'Multi starts at the default');
 });
+
+test('the cog has three tones, and shutdown is the strongest', () => {
+  const css = read('web/synapse.css');
+  assert.match(css, /\.run-btn \{[^}]*color: #d2d4d9/, 'default is light grey');
+  assert.match(css, /\.run-btn\.is-on \{[^}]*var\(--green\)/, 'a standing decision is green');
+  assert.match(css, /\.run-btn\.is-shutdown \{[^}]*var\(--yellow\)/, 'shutdown is yellow');
+  assert.match(css, /\.run-btn\.is-shutdown:hover/, 'and stays yellow under the pointer');
+});

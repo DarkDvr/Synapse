@@ -1241,20 +1241,34 @@ body[data-view="session"] .chat-dock:not(.has-history) .composer { border-top-co
 .run-btn {
   width: 36px; height: 36px; padding: 0; border-radius: 8px; cursor: pointer;
   display: inline-flex; align-items: center; justify-content: center;
-  background: transparent; border: 1px solid #3a3d43; color: #82868e;
+  background: transparent; border: 1px solid #3a3d43; color: #d2d4d9;
 }
-/* Any switch on: green at rest — the cog is a status light as well as a button.
-   Hover and an open menu are always yellow, even while it is green. */
+/* The cog is a status light as well as a button. Weakest to strongest:
+   light grey (nothing), green (a standing decision), yellow (Auto-Shutdown).
+   Hover and an open menu brighten the state; they never invent a colour. */
+.run-btn:hover, .run-btn[aria-expanded="true"] {
+  border-color: rgba(238, 240, 243, 0.55); color: #eef0f3;
+  background: rgba(255, 255, 255, 0.05);
+}
 .run-btn.is-on {
   border-color: rgba(53, 192, 138, 0.62); color: var(--green);
   background: rgba(53, 192, 138, 0.07);
 }
-.run-btn:hover, .run-btn[aria-expanded="true"] {
-  border-color: rgba(237, 194, 90, 0.65); color: var(--yellow);
-  background: rgba(237, 194, 90, 0.06);
+.run-btn.is-on:hover, .run-btn.is-on[aria-expanded="true"] {
+  border-color: rgba(53, 192, 138, 0.9); color: var(--green);
+  background: rgba(53, 192, 138, 0.11);
 }
-.run-btn:focus-visible { outline: none; border-color: var(--yellow); box-shadow: 0 0 0 3px rgba(237, 194, 90, 0.22); }
+.run-btn.is-shutdown {
+  border-color: rgba(237, 194, 90, 0.72); color: var(--yellow);
+  background: rgba(237, 194, 90, 0.09);
+}
+.run-btn.is-shutdown:hover, .run-btn.is-shutdown[aria-expanded="true"] {
+  border-color: var(--yellow); color: var(--yellow);
+  background: rgba(237, 194, 90, 0.14);
+}
+.run-btn:focus-visible { outline: none; border-color: currentColor; box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.14); }
 .run-btn.is-on:focus-visible { border-color: var(--green); box-shadow: 0 0 0 3px rgba(53, 192, 138, 0.25); }
+.run-btn.is-shutdown:focus-visible { border-color: var(--yellow); box-shadow: 0 0 0 3px rgba(237, 194, 90, 0.28); }
 #runBtn[hidden] { display: none; }
 .run-menu {
   position: absolute; right: 0; bottom: calc(100% + 8px); width: 272px; padding: 6px;

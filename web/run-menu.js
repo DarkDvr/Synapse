@@ -12,7 +12,7 @@ import { $ } from './dom.js';
 import { api } from './api.js';
 import { automationWaitSec } from './mode.js';
 import { toast } from './toast.js';
-import { automationChecked, automationDisabled, AUTOMATION_ROWS, AUTOMATION_DEFAULTS } from './automation.js';
+import { automationChecked, automationDisabled, automationTone, AUTOMATION_ROWS, AUTOMATION_DEFAULTS } from './automation.js';
 import { findSession } from './projects.js';
 import { renderTranscript } from './transcript.js';
 
@@ -36,8 +36,10 @@ export function renderKeep() {
   // without opening the menu. All off: gray. Keep Building is not a decision in
   // Single, so a stale value there must not light the cog.
   const awake = state.config?.automation?.keepAwake === true;
+  const tone = automationTone(state.mode, state.automation, { awake });
+  btn.classList.toggle('is-on', tone === 'active');
+  btn.classList.toggle('is-shutdown', tone === 'shutdown');
   const activeRows = AUTOMATION_ROWS.filter((row) => !automationDisabled(state.mode, row.key));
-  btn.classList.toggle('is-on', activeRows.some((row) => state.automation?.[row.key] === true) || awake);
   const on = activeRows.filter((row) => state.automation?.[row.key] === true).map((row) => row.label);
   if (awake) on.push('Keep PC Awake');
   btn.title = on.length ? `Automation: ${on.join(', ')}` : 'Automation — four switches, all off';
