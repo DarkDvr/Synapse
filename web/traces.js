@@ -84,6 +84,15 @@ function compactMark(mark) {
   return `<div class="trace-line is-compact"><span class="trace-mark">⏳</span>${esc(line)}${esc(where)}</div>`;
 }
 
+function loopMark(mark) {
+  const count = Math.max(1, Number(mark.count) || 1);
+  const limit = Math.max(1, Number(mark.limit) || 3);
+  const tail = mark.stop || count >= limit
+    ? ' — marked ISSUES, next coder'
+    : ` of ${limit} — asking it to carry on`;
+  return `<div class="trace-line is-loop"><span class="trace-mark">↻</span>Loop detected ×${count}${esc(tail)}</div>`;
+}
+
 export function renderTrace(t) {
   const name = roleLabel(t.role);
   const head = [name, t.task, t.title].filter(Boolean);
@@ -214,8 +223,8 @@ export function renderTrace(t) {
   for (const s of steers) entries.push({ at: when(s), html: note(s) });
   // A compaction is a moment in the run, not a permanent footer. Each one sits where
   // it happened, like a steer or a step, and stays there when the run folds.
-  for (const mark of (t.marks || []).filter((m) => m && m.kind === 'compact')) {
-    entries.push({ at: when(mark), html: compactMark(mark) });
+  for (const mark of (t.marks || []).filter((m) => m && (m.kind === 'compact' || m.kind === 'loop'))) {
+    entries.push({ at: when(mark), html: mark.kind === 'loop' ? loopMark(mark) : compactMark(mark) });
   }
   entries.sort((a, b) => a.at - b.at || (a.html < b.html ? -1 : a.html > b.html ? 1 : 0));
   const timeline = entries.map((e) => e.html).join('');
@@ -243,8 +252,10 @@ export function renderTrace(t) {
       ? `<div class="trace-line is-compact"><span class="trace-mark">⏳</span>Compacted ×${packed}${compactWhere}</div>`
       : '';
   const hasMarks = (t.marks || []).some((m) => m && m.kind === 'compact');
-  // A loop rescue is pinned for the same reason: it is not a step, and it is the
-  // one line that explains why the next thinking is shorter.
+  // A loop rescue is a moment too: it explains the shorter thinking that follows it,
+  // not the thinking an hour later. It used to be pinned under the live step for the
+  // whole run; that read as a status line and made the operator ask why it never
+  // moved (17 Nov).
   const looped = Number(t.loops) || 0;
   const loopLimit = Number(t.loopLimit) || 3;
   const loopLine = looped
@@ -254,11 +265,9 @@ export function renderTrace(t) {
         : ` of ${loopLimit} — asking it to carry on`) +
       '</div>'
     : '';
-  // The two lines that are about the run rather than a step in it: the compaction
-  // that emptied the window and the loop rescue that shortened the thinking. They
-  // sit just above the panel, where the operator is looking, and at the bottom of
-  // the trace when no panel is showing.
-  const pinned = `${hasMarks ? '' : compactLine}${loopLine}`;
+  const hasLoopMarks = (t.marks || []).some((m) => m && m.kind === 'loop');
+  // The fallback footer is only for a trace whose marks did not survive a reload.
+  const pinned = `${hasMarks ? '' : compactLine}${hasLoopMarks ? '' : loopLine}`;
   const body = `${timeline}${pinned}${streaming}`;
   const rest = [t.task, t.title].filter(Boolean).join(' · ');
   if (!t.finishedAt) {
@@ -362,12 +371,26 @@ export function noteCompaction(trace, { times, used, context, at = 0 } = {}) {
 /** One loop rescue, on a trace. Like a compaction, the count only goes up: a
  *  re-sent event must not turn one rescue into "×2". `to` is the effort it was
  *  lowered to; no `to` means there was nowhere left to go. */
-export function noteLoop(trace, { times, limit } = {}) {
+export function noteLoop(trace, { times, limit, at = 0 } = {}) {
   const counted = Number(times) || 0;
   const known = Number(trace.loops) || 0;
   trace.loops = counted > known ? counted : known || 1;
   if (Number(limit)) trace.loopLimit = Number(limit);
   trace.loopStop = trace.loops >= trace.loopLimit;
+  trace.marks = Array.isArray(trace.marks) ? trace.marks : [];
+  const existing = trace.marks.find((m) => m.kind === 'loop' && m.count === trace.loops);
+  if (existing) {
+    existing.limit = trace.loopLimit;
+    existing.stop = trace.loopStop;
+    return;
+  }
+  trace.marks.push({
+    kind: 'loop',
+    at: Number(at) || Date.now(),
+    count: trace.loops,
+    limit: trace.loopLimit,
+    stop: trace.loopStop,
+  });
 }
 
 /** The trace of a delegated run whose worker session is this one, if any. */
@@ -448,7 +471,7 @@ export function traceSig() {
           `${t.key}:${t.finishedAt || 0}:${(t.notes || []).length}:${t.stream ? t.stream.text.length : 0}:` +
           `${t.stream?.ended ? 1 : 0}:${Number(t.compactions) || 0}:${Number(t.compactingSince) || 0}:` +
           `${Number(t.compactFrom) || 0}:${Number(t.compactAt) || 0}:${Number(t.compactLimit) || 0}:` +
-          `${(t.marks || []).map((m) => `${m.kind}:${m.count}:${m.at}:${m.size}:${m.running ? 1 : 0}`).join('.')}:` +
+          `${(t.marks || []).map((m) => `${m.kind}:${m.count}:${m.at}:${m.size}:${m.limit}:${m.stop ? 1 : 0}:${m.running ? 1 : 0}`).join('.')}:` +
           `${(t.reasons || []).length}:${(t.reasons || []).map((r) => String(r.text || '').length).join('.')}:` +
           `${Number(t.loops) || 0}:${Number(t.loopLimit) || 0}:${t.loopStop ? 1 : 0}:${t.reserved ? 1 : 0}:${t.thinkCollapsed ? 1 : 0}`,
       )

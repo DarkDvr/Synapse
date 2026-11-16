@@ -93,6 +93,25 @@ test('a compaction stays where it happened, not pinned under later work', () => 
   assert.ok(compactAt < laterAt, 'the line travels with its moment, not the footer');
 });
 
+test('a loop rescue stays with its moment, not pinned under later work', () => {
+  const html = renderTrace({
+    key: 'k',
+    role: 'coder-1',
+    task: 't4',
+    startedAt: 1,
+    loops: 2,
+    loopLimit: 5,
+    notes: [{ at: 2000, steer: true, text: 'after the loop' }],
+    marks: [{ kind: 'loop', at: 1000, count: 2, limit: 5, stop: false }],
+  });
+  const loopAt = html.indexOf('Loop detected ×2');
+  const laterAt = html.indexOf('after the loop');
+  assert.ok(loopAt >= 0, 'the line exists');
+  assert.ok(laterAt >= 0, 'the later work exists');
+  assert.ok(loopAt < laterAt, 'the rescue travels with its moment, not the footer');
+  assert.match(html, /Loop detected ×2 of 5 — asking it to carry on/);
+});
+
 test('a compaction with no size says nothing it cannot support', () => {
   const bare = renderTrace({
     key: 'k',

@@ -2049,6 +2049,13 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
             live.loopLimit = loopLimit;
             live.loopStop = rungLoops >= loopLimit;
             live.loopPhrase = String(finished.phrase || '').slice(0, 120);
+            live.loopMarks = Array.isArray(live.loopMarks) ? live.loopMarks : [];
+            live.loopMarks.push({
+              at: Date.now(),
+              times: rungLoops,
+              limit: loopLimit,
+              stop: live.loopStop,
+            });
             emit('run.progress', { ...live });
             emit('run.note', {
               dir,

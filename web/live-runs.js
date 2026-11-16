@@ -484,7 +484,15 @@ export async function loadRuns() {
             size: Number(m.used) || 0,
             limit: Number(m.context) || 0,
             running: false,
-          })),
+          })).concat(
+            (Array.isArray(run.loopMarks) ? run.loopMarks : []).map((m) => ({
+              kind: 'loop',
+              at: Number(m.at) || 0,
+              count: Number(m.times) || 1,
+              limit: Number(m.limit) || 3,
+              stop: Boolean(m.stop),
+            })),
+          ),
           loops: Number(run.loops) || 0,
           loopLimit: Number(run.loopLimit) || 3,
           loopStop: Boolean(run.loopStop),
