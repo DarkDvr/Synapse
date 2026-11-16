@@ -122,24 +122,35 @@ const settle = () => new Promise((r) => setTimeout(r, 10));
 
 {
   // Single is not Multi with one worker: there is no report and no wake. The
-  // engine ends the model's turn when a tool is declined, so a reason-less
-  // rejection used to leave the chat silent. The refusal note is the turn's
-  // only way to carry on (16 Nov).
+  // engine ends the model's turn when a tool is declined, so the note is what
+  // makes it carry on — it must not end the chat like a Stop.
   const { api, synthetic } = harness({ entry: { ...REQUEST, role: null }, single: true });
   await api.permission('ses_worker', { requestId: 'per_1', decision: 'reject' });
   await settle();
   check('a Single chat is told it was declined', synthetic.length === 1 && /declined/.test(synthetic[0].text), synthetic[0]?.text);
-  check('and is told not to try another route', /Do not try another path or tool/.test(synthetic[0].text || ''), synthetic[0]?.text);
+  check('and that this is not a stop', /not the work/.test(synthetic[0].text || ''), synthetic[0]?.text);
+  check('and is told to continue working', /Continue your work now/.test(synthetic[0].text || ''), synthetic[0]?.text);
+  check('and is told not to try another route', /Do not try another path, tool or command/.test(synthetic[0].text || ''), synthetic[0]?.text);
 }
 
 {
-  // But a typed reason reaches the Architect's own chat: that is the point of
-  // "Reject With Reason".
+  // A reason is not a request to stop and ask: it is the sentence the model must
+  // act on. The note carries it back and says to carry on (16 Nov).
+  const { api, synthetic } = harness({ entry: { ...REQUEST, role: null }, single: true });
+  await api.permission('ses_worker', { requestId: 'per_1', decision: 'reject', reason: 'Use tar, not Python.' });
+  await settle();
+  check('a Single chat is told the operator’s reason', /They said: "Use tar, not Python\."/.test(synthetic[0]?.text || ''), synthetic[0]?.text);
+  check('and still told to continue working', /Continue your work now/.test(synthetic[0]?.text || ''), synthetic[0]?.text);
+}
+
+{
+  // Multi Architect with a reason keeps the old wording: it is the operator's
+  // chat, and the note is information rather than an instruction to keep going.
   const { api, synthetic } = harness({ entry: { ...REQUEST, role: null } });
   await api.permission('ses_worker', { requestId: 'per_1', decision: 'reject', reason: 'not now' });
   await settle();
-  check('the Architect is told the reason', synthetic.length === 1, JSON.stringify(synthetic));
-  check('in the operator’s words', /not now/.test(synthetic[0]?.text || ''), String(synthetic[0]?.text || ''));
+  check('the Multi Architect is told the reason', synthetic.length === 1, JSON.stringify(synthetic));
+  check('but is not told to continue its own turn', !/Continue your work now/.test(synthetic[0]?.text || ''), synthetic[0]?.text);
 }
 
 {

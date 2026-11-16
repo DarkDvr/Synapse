@@ -2580,22 +2580,23 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
         // it always (the role is told and carries on). The Architect gets it when
         // the operator typed a reason — that sentence is the point of "Reject With
         // Reason" (3 Nov), and without this the reason vanished for its own chat.
-        // A **Single** chat also gets it with no reason (16 Nov). There is no worker
-        // report and no wake in Single: the model's own turn is the whole job, and
-        // the engine ends that turn when a tool is declined. Without a note the
-        // chat goes silent and the operator has to type "continue". In Multi the
-        // old rule stands — the Architect is the operator's own chat, and a
+        // A **Single** chat gets it always (16 Nov), with or without a reason.
+        // There is no worker report and no wake in Single: the model's own turn
+        // is the whole job, and the engine ends that turn when a tool is
+        // declined. The note says the refusal is not a stop and tells it to
+        // carry on another way; a typed reason rides it back. In Multi the old
+        // rule stands — the Architect is the operator's own chat, and a
         // reason-less extra turn there once ended a report empty (26 Oct).
         const askedByWorker = entry?.role && entry.role !== 'architect';
         let single = false;
-        if (!askedByWorker && !reason) {
+        if (!askedByWorker) {
           try {
             single = (await engine.getSession(sessionId))?.single === true;
           } catch { /* the card is settled; a missing session cannot be told anything */ }
         }
         if (askedByWorker || reason || single) {
           Promise.resolve(
-            engine.synthetic?.(sessionId, refusalNote({ role: entry?.role, scope: entry?.scope, reason }), {
+            engine.synthetic?.(sessionId, refusalNote({ role: entry?.role, scope: entry?.scope, reason, single }), {
               description: 'permission refused',
             }),
           ).catch((err) => app.warn(`could not explain the refusal to ${sessionId}: ${err.message}`));

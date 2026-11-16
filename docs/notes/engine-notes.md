@@ -1079,9 +1079,13 @@ is the note's instruction. The Architect of a **Multi** chat is not sent one
 without a typed reason: that is the operator's own conversation, and the extra
 turn once ended with an empty report (26 Oct). A **Single** chat is different
 (16 Nov): there is no worker report and no wake, and the engine ends the model's
-own turn when a tool is declined, so a reason-less rejection left the chat
-silent with the work unfinished. The note is sent in Single, and the model can
-answer or ask instead of leaving the operator to type "continue".
+own turn when a tool is declined. A reason-less rejection used to leave the chat
+silent with the work unfinished, and a reason only produced a note that told the
+model to ask about it. Now a Single chat always gets the note, with or without a
+reason, and the note says the rejection is **not a stop**: do not retry the same
+route, continue the work another way, and ask only if there is genuinely no
+other way. A typed reason is carried back in the operator's words, which is the
+whole point of "Reject With Reason".
 
 **Why broad asks instead of path globs.** The engine matches a path *as the model
 wrote it*, so a rule that allows `F:/.../project/**` says nothing about a relative

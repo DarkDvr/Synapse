@@ -580,6 +580,20 @@ test('the operator\'s own reason travels with the refusal', () => {
   assert.doesNotMatch(long, /\n/);
 });
 
+test('a Single chat is told a refusal is not a stop, and to carry on', () => {
+  const note = refusalNote({ single: true, scope: 'outside' });
+  assert.match(note, /not the work/);
+  assert.match(note, /Continue your work now/);
+  assert.match(note, /do not stop/);
+  assert.doesNotMatch(note, /ask them why/);
+  // The operator's reason is the point of "Reject With Reason": it travels back
+  // and the model continues with it, rather than asking what they meant.
+  const withReason = refusalNote({ single: true, scope: 'outside', reason: '  Use tar, not Python.  ' });
+  assert.match(withReason, /They said: "Use tar, not Python\."/);
+  assert.match(withReason, /Continue your work now/);
+  assert.doesNotMatch(withReason, /ask them why/);
+});
+
 test('a decision says whether the call reached outside the project', () => {
   assert.equal(call('edit', 'src/a.js').outside, false);
   assert.equal(call('edit', 'D:/x.txt').outside, true);

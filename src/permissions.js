@@ -450,7 +450,7 @@ function fenceDeny(entry, verb) {
  * their words — a rule about workarounds is useful, but "that file is generated"
  * is what stops the worker guessing again.
  */
-export function refusalNote({ role, scope, reason } = {}) {
+export function refusalNote({ role, scope, reason, single = false } = {}) {
   const worker = Boolean(role) && role !== 'architect';
   const why = String(reason || '').replace(/\s+/g, ' ').trim().slice(0, 300);
   const said = why ? ` They said: "${why}".` : '';
@@ -460,6 +460,18 @@ export function refusalNote({ role, scope, reason } = {}) {
       'with permission. Do not try another tool, another path or a shell command to reach the same place. ' +
       'Stop and say in your report what you were trying to change and why.'
     ) + said;
+  }
+  // Single is one conversation with no worker report and no wake: the model's own
+  // turn is the work. A declined request is not a stop, so the note says so and
+  // tells it to carry on another way — including when the operator typed a reason,
+  // which is the whole point of "Reject With Reason" (16 Nov).
+  if (single) {
+    return (
+      'The operator declined this exact request, not the work.' + said +
+      ' Do not try another path, tool or command to reach the same place. Continue your work now with a ' +
+      'different approach: do not stop, and do not ask a question unless there is genuinely no other way ' +
+      'to finish. If you cannot continue without it, say what is blocked and what you need.'
+    );
   }
   if (scope === 'desk') {
     return (
