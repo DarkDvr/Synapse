@@ -129,8 +129,8 @@ const settle = () => new Promise((r) => setTimeout(r, 10));
   await settle();
   check('a Single chat is told it was declined', synthetic.length === 1 && /declined/.test(synthetic[0].text), synthetic[0]?.text);
   check('and that this is not a stop', /not the work/.test(synthetic[0].text || ''), synthetic[0]?.text);
-  check('and is told to continue working', /Continue your work now/.test(synthetic[0].text || ''), synthetic[0]?.text);
-  check('and is told not to try another route', /Do not try another path, tool or command/.test(synthetic[0].text || ''), synthetic[0]?.text);
+  check('and is told to continue working', /Try a different approach and keep working/.test(synthetic[0].text || ''), synthetic[0]?.text);
+  check('and is told not to treat it as a Stop', /not a Stop/.test(synthetic[0].text || ''), synthetic[0]?.text);
 }
 
 {
@@ -140,7 +140,7 @@ const settle = () => new Promise((r) => setTimeout(r, 10));
   await api.permission('ses_worker', { requestId: 'per_1', decision: 'reject', reason: 'Use tar, not Python.' });
   await settle();
   check('a Single chat is told the operator’s reason', /They said: "Use tar, not Python\."/.test(synthetic[0]?.text || ''), synthetic[0]?.text);
-  check('and still told to continue working', /Continue your work now/.test(synthetic[0]?.text || ''), synthetic[0]?.text);
+  check('and to act on it and keep working', /Act on that and keep working/.test(synthetic[0]?.text || ''), synthetic[0]?.text);
 }
 
 {
@@ -150,7 +150,7 @@ const settle = () => new Promise((r) => setTimeout(r, 10));
   await api.permission('ses_worker', { requestId: 'per_1', decision: 'reject', reason: 'not now' });
   await settle();
   check('the Multi Architect is told the reason', synthetic.length === 1, JSON.stringify(synthetic));
-  check('but is not told to continue its own turn', !/Continue your work now/.test(synthetic[0]?.text || ''), synthetic[0]?.text);
+  check('but is not told to continue its own turn', !/Act on that and keep working/.test(synthetic[0]?.text || ''), synthetic[0]?.text);
 }
 
 {

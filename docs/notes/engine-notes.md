@@ -1081,11 +1081,13 @@ turn once ended with an empty report (26 Oct). A **Single** chat is different
 (16 Nov): there is no worker report and no wake, and the engine ends the model's
 own turn when a tool is declined. A reason-less rejection used to leave the chat
 silent with the work unfinished, and a reason only produced a note that told the
-model to ask about it. Now a Single chat always gets the note, with or without a
-reason, and the note says the rejection is **not a stop**: do not retry the same
-route, continue the work another way, and ask only if there is genuinely no
-other way. A typed reason is carried back in the operator's words, which is the
-whole point of "Reject With Reason".
+model to ask about it. Now a Single chat always gets a short note: the request
+was declined, not the work; a typed reason is quoted back and is what the model
+acts on; keep working; this is not a Stop. The note deliberately does **not**
+carry a list of forbidden routes — the first version said "do not try another
+path or tool" beside a reason that said "retry this tool call", and the model was
+left with two instructions that contradicted each other (16 Nov). The failed call
+is already in front of it; the operator's sentence is the instruction.
 
 **Why broad asks instead of path globs.** The engine matches a path *as the model
 wrote it*, so a rule that allows `F:/.../project/**` says nothing about a relative

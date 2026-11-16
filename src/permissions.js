@@ -466,12 +466,15 @@ export function refusalNote({ role, scope, reason, single = false } = {}) {
   // tells it to carry on another way — including when the operator typed a reason,
   // which is the whole point of "Reject With Reason" (16 Nov).
   if (single) {
-    return (
-      'The operator declined this exact request, not the work.' + said +
-      ' Do not try another path, tool or command to reach the same place. Continue your work now with a ' +
-      'different approach: do not stop, and do not ask a question unless there is genuinely no other way ' +
-      'to finish. If you cannot continue without it, say what is blocked and what you need.'
-    );
+    // Short on purpose. The model has the failed call in front of it; what it
+    // needs is the operator's sentence and permission to carry on, not a
+    // paragraph of rules that can contradict that sentence (16 Nov).
+    const base = 'The operator declined this request, not the work.';
+    if (why) {
+      const quote = `They said: "${why}${/[.!?…]$/.test(why) ? '' : '.'}"`;
+      return `${base} ${quote} Act on that and keep working — this is not a Stop. If you are blocked, say what you need.`;
+    }
+    return `${base} Try a different approach and keep working — this is not a Stop. If you are blocked, say what you need.`;
   }
   if (scope === 'desk') {
     return (
