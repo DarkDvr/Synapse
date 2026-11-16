@@ -420,3 +420,30 @@ matters: it checks the page's HTML as well and says
 The description says what the tool is for: a wait is for *after an action*, and `read` is
 the cheaper way to check whether something is on the page now. `browser.wait()` answers
 `{ ok, elapsedMs, hidden, textLength }` instead of a bare boolean, so the server can say it.
+
+## Where a click lands (16 Nov)
+
+A model reported clicks landing "slightly off-target from the screenshots". Measured in a
+scratch project — never in the operator's live one — the pipeline is exact:
+
+- a 1280x800 window gives a **1280x800** viewport PNG at `devicePixelRatio` 1, because the
+  page is held at `Emulation.setDeviceMetricsOverride` with `deviceScaleFactor: 1`;
+- a click asked for **324,444** arrives with `clientX/clientY` **324,444**: delivery error 0,0;
+- `read`'s `at` values are `getBoundingClientRect` centres, the same space as a click.
+
+So the arithmetic is not the error — a model reading a picture is, by a few pixels or by a
+scale factor from whatever its vision pipeline did to the image. The click therefore makes
+the near-miss harmless instead of arguing about it:
+
+- the point is **clamped** into the viewport, because a y from a whole-page image can be
+  past its bottom;
+- if nothing clickable is under the point, it **snaps** to the nearest control within
+  **28 px** and the answer says which, and how far;
+- the answer reports where it really landed (`at`), and `screenshot` now says the image's
+  size and that one image pixel is one CSS pixel of the viewport.
+
+**The whole-page capture was lying.** `Page.captureScreenshot` with `captureBeyondViewport`
+alone returns the viewport (measured: a page 888 px tall came back 1280x800). It now asks
+`Page.getLayoutMetrics` for the content size and clips to it, so a full-page image is the
+document (888 tall for that page, 1265 wide — the width excludes the scrollbar, which is
+why a full-image x is a document x and not a viewport one).

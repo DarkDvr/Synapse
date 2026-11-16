@@ -127,13 +127,29 @@ export async function connect(port, { preferUrl = null } = {}) {
     return result?.value;
   };
 
-  /** A PNG of the page, viewport or whole. */
+  /**
+   * A PNG of the page, viewport or whole.
+   *
+   * `captureBeyondViewport` on its own still returns the viewport — measured 16 Nov: a
+   * page 888 px tall came back 1280x800. The whole page needs a clip the size of its
+   * content, which is what `Page.getLayoutMetrics` reports.
+   */
   const screenshot = async ({ full = false } = {}) => {
-    const shot = await send('Page.captureScreenshot', {
-      format: 'png',
-      captureBeyondViewport: full,
-      ...(full ? { fromSurface: true } : {}),
-    });
+    const params = { format: 'png' };
+    if (full) {
+      params.captureBeyondViewport = true;
+      params.fromSurface = true;
+      try {
+        const metrics = await send('Page.getLayoutMetrics');
+        const size = metrics?.cssContentSize || metrics?.contentSize || null;
+        if (size?.width && size?.height) {
+          params.clip = { x: 0, y: 0, width: Math.ceil(size.width), height: Math.ceil(size.height), scale: 1 };
+        }
+      } catch {
+        // No metrics means the viewport is what we can give; the caller sees the size.
+      }
+    }
+    const shot = await send('Page.captureScreenshot', params);
     return Buffer.from(shot.data, 'base64');
   };
 

@@ -18,7 +18,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { DATA_DIR, WEB_DIR, PROJECTS_ROOT } from '../paths.js';
 import { artifactDir } from '../browser/artifacts.js';
-import { createBrowser, findEdge } from '../browser/browser.js';
+import { clickSummary, createBrowser, findEdge } from '../browser/browser.js';
 import { checkUrl, hostOf, localPageAllowed } from '../browser/allow.js';
 import { askOperator } from '../browser/handoff.js';
 import { watchForSignIn } from '../browser/session-watch.js';
@@ -260,14 +260,22 @@ async function handle(msg) {
           }
           case 'click': {
             const at = Number.isFinite(args.x) && Number.isFinite(args.y) ? [Number(args.x), Number(args.y)] : null;
-            const url = await browser.click({ selector: args.selector || null, text: args.text || null, at });
+            const res = await browser.click({ selector: args.selector || null, text: args.text || null, at });
+            // The click answers where it landed; a string is the address alone, which is
+            // what every earlier caller expected.
+            const url = typeof res === 'string' ? res : res?.url || '';
+            const snap = typeof res === 'object' && res?.snapped ? res.snapped : null;
+            const landed = typeof res === 'object' && Array.isArray(res?.at) ? res.at : null;
             // A click can navigate anywhere; the landing page is judged like a new open.
             // But a click that reloads the document can come back with no address at all —
             // the evaluate ran while the page was being replaced — and judging "no address"
             // as a refused page turned a working click into an error on a local mock
             // (14 Nov: "click failed: that is not an http(s) address").
             if (url) guard(url);
-            return toolText(id, `Clicked ${args.selector || args.text || `${args.x},${args.y}`}${url ? ` -> ${url}` : ''}`);
+            return toolText(
+              id,
+              `Clicked ${args.selector || args.text || `${args.x},${args.y}`}${clickSummary(res)}${url ? ` -> ${url}` : ''}`,
+            );
           }
           case 'type':
             await browser.type({ text: args.text, selector: args.selector || null, submit: args.submit === true });
@@ -310,10 +318,19 @@ async function handle(msg) {
             const file = path.join(ARTIFACTS, `shot-${stamp()}.png`);
             const png = await browser.screenshot({ full: args.full === true, file });
             const rel = path.relative(START_DIR, file).replace(/\\/g, '/');
+            // The size, and what a pixel of it is worth, because a model reading a picture
+            // guesses coordinates from it: the viewport is one CSS pixel per image pixel
+            // (measured 16 Nov), and a whole-page image is the document, so its y is a
+            // page coordinate rather than a viewport one.
+            const w = png.readUInt32BE(16);
+            const h = png.readUInt32BE(20);
+            const mapping = args.full
+              ? ' The image is the whole document: a y taken from it is a page coordinate, so click with the page at the top, or use the `at` values read gives you.'
+              : ' One image pixel is one CSS pixel of the viewport, so an x/y read off it can be clicked as it is.';
             return toolText(
               id,
-              `Screenshot: ${file} (${Math.round(png.length / 1024)} KB, ${args.full ? 'whole page' : 'viewport'}).` +
-                ` Read it to see the page. In the chat, cite it exactly as ![](${rel}) — it is already inside the project, so there is nothing to copy.`,
+              `Screenshot: ${file} (${Math.round(png.length / 1024)} KB, ${w}x${h} px, ${args.full ? 'whole page' : 'viewport'}).` +
+                `${mapping} In the chat, cite it exactly as ![](${rel}) — it is already inside the project, so there is nothing to copy.`,
             );
           }
           case 'watch': {
@@ -407,3 +424,4 @@ process.stdin.on('data', (chunk) => {
 });
 process.stdin.on('end', () => { browser.stop().finally(() => process.exit(0)); });
 process.stderr.write(`synapse-browser MCP ready (enabled=${cfg.enabled}, profile=${cfg.profile})\n`);
+

@@ -95,6 +95,25 @@ const PRINTABLE = {
  * was testing exactly that (14 Nov). The mapping is the physical key a person would press:
  * `Digit7` for "7", `Equal` for "=", and a shifted glyph on its unshifted key.
  */
+/**
+ * Where a click landed, in the words the tool answer uses.
+ *
+ * Kept out of the MCP server so it can be tested without a browser: the sentence is
+ * the part a model reads, and "the point missed a control, so the nearest one was
+ * used" is what turns a near-miss into a next step instead of a mystery.
+ */
+export function clickSummary(res) {
+  if (!res || typeof res !== 'object') return '';
+  const at = Array.isArray(res.at) ? res.at : null;
+  const where = at ? ` at ${at[0]},${at[1]}` : '';
+  const snap = res.snapped
+    ? ` (the point missed a control, so the nearest one was used: ${res.snapped.label ? `"${res.snapped.label}" ` : ''}${res.snapped.px} px away)`
+    : res.clamped
+      ? ' (the point was outside the viewport, so it was clamped into it)'
+      : '';
+  return where + snap;
+}
+
 export function keyForChar(ch) {
   const value = String(ch ?? '');
   if (value.length !== 1 || value < ' ' || value > '~') return null;
@@ -418,11 +437,22 @@ export function createBrowser({ profile, log = null, startMinimized = true, widt
     return { ...page, scrolled, capped: Number(page.chars) >= Number(maxChars) };
   }
 
-  /** Click by selector, by visible text, or by coordinates. */
-  async function click({ selector = null, text = null, at = null, settle = 700 } = {}) {
+  /**
+   * Click by selector, by visible text, or by coordinates.
+   *
+   * A coordinate is a CSS pixel in the viewport, which is also a pixel of a viewport
+   * screenshot: measured 16 Nov, a 1280x800 window gives a 1280x800 PNG at device scale
+   * 1, and a click at 324,444 arrives at exactly 324,444. So the arithmetic is not the
+   * error — a model reading a picture is, by a few pixels or by a scale factor. A click
+   * that lands near a control is therefore allowed to find it: the point is clamped to
+   * the viewport and, if nothing clickable is under it, snapped to the nearest control
+   * within `snapPx`, and the answer says what it snapped to.
+   */
+  async function click({ selector = null, text = null, at = null, settle = 700, snapPx = 28 } = {}) {
     const p = await start();
     used();
     let point = at;
+    let snapped = null;
     if (!point) {
       const found = await p.evaluate(`(() => {
         const clean = (s) => String(s || '').replace(/\\s+/g, ' ').trim();
@@ -450,12 +480,53 @@ export function createBrowser({ profile, log = null, startMinimized = true, widt
       }
       point = found;
     }
-    const [x, y] = point;
+    const [wantedX, wantedY] = point;
+    const aim = await p.evaluate(`(() => {
+      const snapPx = ${Number(snapPx) || 0};
+      const control = 'a,button,[role=button],input,select,textarea,summary,label';
+      const clamp = (v, lo, hi) => Math.min(Math.max(v, lo), hi);
+      const x = Math.round(clamp(${Number(wantedX)}, 0, Math.max(0, innerWidth - 2)));
+      const y = Math.round(clamp(${Number(wantedY)}, 0, Math.max(0, innerHeight - 2)));
+      const label = (el) => String(el?.innerText || el?.value || el?.getAttribute?.('aria-label') || '')
+        .replace(/\s+/g, ' ').trim().slice(0, 60);
+      const under = document.elementFromPoint(x, y);
+      const direct = under && under.closest(control);
+      if (direct) return { x, y, snapped: null, clamped: [x !== ${Number(wantedX)}, y !== ${Number(wantedY)}] };
+      let best = null;
+      let bestD = snapPx * snapPx;
+      for (const el of document.querySelectorAll(control)) {
+        const r = el.getBoundingClientRect();
+        if (r.width < 4 || r.height < 4) continue;
+        if (r.bottom < 0 || r.top > innerHeight || r.right < 0 || r.left > innerWidth) continue;
+        const ex = clamp(x, r.left, r.right);
+        const ey = clamp(y, r.top, r.bottom);
+        const d = (ex - x) ** 2 + (ey - y) ** 2;
+        if (d <= bestD) { bestD = d; best = el; }
+      }
+      if (!best) return { x, y, snapped: null, clamped: [x !== ${Number(wantedX)}, y !== ${Number(wantedY)}] };
+      const r = best.getBoundingClientRect();
+      const tx = Math.round(r.left + r.width / 2);
+      const ty = Math.round(r.top + r.height / 2);
+      return { x: tx, y: ty, snapped: { from: [x, y], to: [tx, ty], px: Math.round(Math.sqrt(bestD)), label: label(best) },
+               clamped: [x !== ${Number(wantedX)}, y !== ${Number(wantedY)}] };
+    })()`);
+    const x = Number(aim?.x ?? wantedX);
+    const y = Number(aim?.y ?? wantedY);
+    snapped = aim?.snapped || null;
     for (const type of ['mousePressed', 'mouseReleased']) {
       await p.send('Input.dispatchMouseEvent', { type, x, y, button: 'left', clickCount: 1 });
     }
     await new Promise((r) => setTimeout(r, settle));
-    return p.evaluate('location.href');
+    // An object, not a bare address: the caller says where the click really landed. The
+    // address is still there, and a string is still accepted, so no caller breaks.
+    let url = '';
+    try {
+      url = await p.evaluate('location.href');
+    } catch {
+      // A click that replaces the document has no address to read yet (14 Nov).
+      url = '';
+    }
+    return { url, at: [x, y], requested: [wantedX, wantedY], snapped, clamped: Boolean(aim?.clamped?.some(Boolean)) };
   }
 
   /** Type into whatever has focus (or into a selector first). */
