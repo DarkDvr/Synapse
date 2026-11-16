@@ -13,7 +13,7 @@ import { MARKER, addSession, hasMarker, isPrivateDir, isPrivateSession, isPrivat
 import { logger } from '../src/logger.js';
 import { scratchDir } from '../src/paths.js';
 import { createProjectStore } from '../src/projects.js';
-import { purgePrivateTraces } from '../src/privacy-purge.js';
+import { purgeEngineLog, purgePrivateTraces } from '../src/privacy-purge.js';
 import { createToolStats } from '../src/toolstats.js';
 import { createTraceReasons } from '../src/trace-reasons.js';
 
@@ -194,3 +194,32 @@ test('a remote view is never shown a private project', () => {
 
 
 
+
+test('the engine\'s own log is a diary too: a private project\'s lines are rewritten out', () => {
+  // The engine writes this file itself, so the logger filter cannot reach it. It records
+  // the folder a location booted for, and the cwd of every shell command — the tool
+  // calls a private project ran, in plain text (measured 16 Nov).
+  const file = path.join(tmpdir('synapse-engine-log-'), 'opencode.log');
+  const dir = 'F:\\dev\\Synapse.Projects\\secret-one';
+  const lines = [
+    `timestamp=1 message="watcher subscribe" path="F:\\\\dev\\\\Synapse.Projects\\\\secret-one" type=entries`,
+    `timestamp=2 message="spawning process" command="pwsh" args="[\"-Command\",\"node -e read(\\'.project/scratch/a.txt\\')\"]" cwd="F:\\\\dev\\\\Synapse.Projects\\\\secret-one"`,
+    `timestamp=3 message="spawning process" command="pwsh" args="[\"-Command\",\"ls\"]" cwd="F:\\\\dev\\\\Synapse.Projects\\\\.kept"`,
+    'timestamp=4 message="cli starting" version=2.2.6',
+  ];
+  fs.writeFileSync(file, lines.join('\n'), 'utf8');
+
+  const result = purgeEngineLog({ dir, file });
+
+  assert.equal(result.files, 1);
+  const left = fs.readFileSync(file, 'utf8');
+  assert.doesNotMatch(left, /secret-one/, 'the folder and the command run there are gone');
+  assert.match(left, /\.kept/, 'another project keeps its lines');
+  assert.match(left, /cli starting/, 'the engine\'s own life is not rewritten away');
+  assert.equal(left.split('\n').length, 2);
+});
+
+test('an engine log that is not there is a no-op, not an error', () => {
+  const file = path.join(tmpdir('synapse-engine-log-missing-'), 'opencode.log');
+  assert.deepEqual(purgeEngineLog({ dir: 'F:\\dev\\Synapse.Projects\\gone', file }), { files: 0, lines: 0 });
+});

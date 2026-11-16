@@ -565,14 +565,25 @@ came back afterwards. Each was recovered by hand, and each is now removed at del
 - **the shell output itself** — the tool output of that project was still readable, byte
   for byte, in that folder. It is deleted with the row;
 - **the project's own `.project\scratch`** — it sits inside the folder, so the Recycle Bin
-  took it along with the plan and the project document. It is emptied before the move.
+  took it along with the plan and the project document. It is emptied before the move;
+- **the engine's own log** — `data\engine\opencode\data\opencode\log\opencode.log` is
+  text the engine writes for itself, so the filter in `privacy.js` cannot reach it. It
+  names the folder a location booted for and the `cwd` of every shell command run there:
+  the tool calls, in plain words. `purgeEngineLog` rewrites its lines out, at the Private
+  switch and again at delete (`src/privacy-purge.js`);
+- **the orphaned brief blob** — the text handed to a session is stored twice, as the
+  session's entry and as a content-addressed blob. The entry goes with the session; the
+  blob has no owner and survived a delete on 16 Nov, still naming the folder.
+  `forgetProject` removes a blob whose text names the folder.
 
 What still survives a delete, and why:
 
 - **the folder in the Recycle Bin** — that is the undo, and it holds `.project\project.md`,
   whose Log keeps every request verbatim. Empty the bin for a private project, or the
   prompts are one right-click away;
-- **the SQLite pages** until the next engine start VACUUMs them (`engine-purge.js`);
+- **the SQLite pages** until the next engine start VACUUMs them (`engine-purge.js`) —
+  measured 16 Nov on a project deleted 12 seconds before a restart: nothing of it was
+  left in the 301 MB store afterwards;
 - **the shared browser profile** and **the projects registry**, as above.
 
 The lesson worth keeping: "deleted" and "forgotten" are different words. Deletion moved the

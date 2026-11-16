@@ -6,7 +6,7 @@
 // database) are not ours to edit, and the note in docs/notes/project-chat.md says so.
 import fs from 'node:fs';
 import path from 'node:path';
-import { DATA_DIR, LOGS_DIR } from './paths.js';
+import { DATA_DIR, ENGINE_HOME, LOGS_DIR } from './paths.js';
 
 const fold = (value) =>
   String(value || '').replace(/\\/g, '/').replace(/\/{2,}/g, '/').toLowerCase().replace(/\/+$/, '');
@@ -93,6 +93,38 @@ export function purgePrivateTraces({ dir, sessionIds = [], dirs = [LOGS_DIR, DAT
     }
   }
   return { files, lines };
+}
+
+/**
+ * Rewrite the engine's own log, which is text and names projects in plain words.
+ *
+ * The engine writes it with its own logger, so the filter in `privacy.js` cannot reach
+ * it: it records the working directory of every shell command (`cwd=`) and every
+ * project it boots a location for (16 Nov). A file it writes and Synapse reads is a
+ * diary like any other, so a private project's lines are rewritten out of it — the same
+ * rule as `logs\*.log`.
+ *
+ * A file the engine holds open cannot always be rewritten; that is warned about and
+ * the marker still stops the next project's new lines from being written? It does not —
+ * the engine writes regardless. So a failure is reported rather than swallowed.
+ */
+export function purgeEngineLog({ dir, sessionIds = [], file = null } = {}) {
+  const target = file || path.join(ENGINE_HOME, 'data', 'opencode', 'log', 'opencode.log');
+  const needles = markers(dir, sessionIds);
+  const nameRe = namePattern(dir);
+  if (!needles.length && !nameRe) return { files: 0, lines: 0 };
+  let size = 0;
+  try {
+    size = fs.statSync(target).size;
+  } catch {
+    // No engine log is a log with nothing to purge; the engine writes one when it runs.
+    return { files: 0, lines: 0 };
+  }
+  // A log this large is rewritten line by line in memory; 400 MB is the ceiling beyond
+  // which the pass would cost more than it is worth.
+  if (size > 400 * 1024 * 1024) return { files: 0, lines: 0, tooBig: true };
+  const removed = scrub(target, needles, nameRe);
+  return { files: removed ? 1 : 0, lines: removed };
 }
 
 /**

@@ -51,7 +51,7 @@ export function projectIdForDir(db, dir) {
  * Anything missing is normal, not an error: a project the engine never saw.
  */
 export async function purgeProjectTraces({ dataDir, dir, log = null } = {}) {
-  const result = { projectId: '', projectRows: 0, worktreeRows: 0, shells: 0 };
+  const result = { projectId: '', projectRows: 0, worktreeRows: 0, shells: 0, briefs: 0 };
   if (!dataDir || !dir) return result;
 
   const store = path.join(dataDir, 'opencode');
@@ -69,6 +69,27 @@ export async function purgeProjectTraces({ dataDir, dir, log = null } = {}) {
         result.worktreeRows = Number(worktrees?.changes || 0);
         const projects = db.prepare('delete from project where id = ?').run(id);
         result.projectRows = Number(projects?.changes || 0);
+      }
+      // The brief handed to a session is stored twice: once as the session's entry and
+      // once as a content-addressed blob. The entry goes with the session; the blob has
+      // no owner and outlived a delete on 16 Nov, still naming the folder. Blobs are
+      // JSON, so their backslashes are escaped (once, twice, depending on the writer),
+      // which rules out a LIKE on the path: candidates are found by the folder's name,
+      // then compared on a flattened form.
+      const base = path.basename(String(dir));
+      if (base) {
+        const folder = String(dir).replace(/\\+/g, '\\').replace(/\\/g, '/').toLowerCase();
+        const rows = db
+          .prepare('select hash, value from instruction_blob where value like ?')
+          .all(`%${base}%`);
+        const drop = db.prepare('delete from instruction_blob where hash = ?');
+        for (const row of rows) {
+          const flat = String(row.value).replace(/\\+/g, '\\').replace(/\\/g, '/').toLowerCase();
+          if (flat.includes(folder)) {
+            drop.run(row.hash);
+            result.briefs += 1;
+          }
+        }
       }
     } catch (err) {
       log?.warn?.(`could not remove the deleted project's row from the engine store: ${err.message}`);

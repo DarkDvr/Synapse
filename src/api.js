@@ -29,7 +29,7 @@ import { setProviderKey, providerKeyState, maskKey } from './secrets.js';
 import { probeToolchain } from './toolchain.js';
 import { busyInfo } from './busy.js';
 import { addPrivateDir, addSession, isPrivateDir, isPrivateSession, removePrivateDir, setPrivateDirs } from './privacy.js';
-import { purgePrivateTraces, requestConsolePurge } from './privacy-purge.js';
+import { purgeEngineLog, purgePrivateTraces, requestConsolePurge } from './privacy-purge.js';
 import { noteDeletedProject } from './engine-purge.js';
 import { APP_VERSION, sourceVersion } from './version.js';
 
@@ -1660,6 +1660,9 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
       toolStats?.forgetSessions?.(ids);
       for (const sessionId of ids) permissionMemory?.forgetSession?.(sessionId);
       const purged = purgePrivateTraces({ dir: project.directory, sessionIds: ids });
+      // The engine writes its own log, and it names the folder and the working
+      // directory of every command; the filter in privacy.js cannot reach it.
+      purgeEngineLog({ dir: project.directory, sessionIds: ids });
       // The shell owns console.log; ask it to remove the same lines from the file
       // and the ring it shows.
       requestConsolePurge(project.directory, ids);
@@ -1934,6 +1937,8 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
         // The folder is in the Recycle Bin, but the diaries and the shell's console
         // are ours: purge the project's lines now that its sessions are gone too.
         purgePrivateTraces({ dir: current.directory, sessionIds: sessions.map((s) => s.id) });
+        // The engine's log keeps the folder and the cwd of every command run there.
+        purgeEngineLog({ dir: current.directory, sessionIds: sessions.map((s) => s.id) });
         requestConsolePurge(current.directory, sessions.map((s) => s.id));
         removePrivateDir(current.directory);
       }
