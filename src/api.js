@@ -1794,6 +1794,18 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
       if (!current) {
         throw fail(404, 'project not found');
       }
+      const wasPrivateForLog = isPrivateDir(current.directory);
+      // A refused delete says why in the log as well as in the toast: the next attempt
+      // (16 Nov: a project switched to Private would not go to the bin, and nothing
+      // recorded which check said no) should not have to guess.
+      const noteRefusal = (message) =>
+        app.warn(`delete refused for ${wasPrivateForLog ? 'a private project' : `"${current.name}"`}: ${message}`);
+      const refuse = (message, status) => {
+        noteRefusal(message);
+        const err = new Error(message);
+        if (status) err.status = status;
+        return err;
+      };
       const withSessions = (await projectsWithSessions()).find((p) => p.id === id);
       // `projectsWithSessions` hides scaffolding (worker, probe), but delete must
       // take it too: a worker session keeps its directory and title in the engine
@@ -1811,7 +1823,13 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
       const wasPrivate = isPrivateDir(current.directory) || fs.existsSync(path.join(current.directory, '.project', 'private'));
       if (sessions.length) {
         const busy = await busyFor(sessions[sessions.length - 1].id);
-        if (busy.busy) throw refuseBusy(busy);
+        if (busy.busy) {
+          // Keep the error `refuseBusy` builds (the page reads `busy` off it) and only
+          // add the log line.
+          const e = refuseBusy(busy);
+          noteRefusal(e.message);
+          throw e;
+        }
       }
       const bin = binContents(current.directory);
       // Enforced here as well as in the dialog: the checkbox is the operator's
@@ -1839,7 +1857,7 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
         }
         const allowed = mayRecycleFolder(current.directory, { projectsRoot: PROJECTS_ROOT, harness: ROOT });
         if (!allowed.ok) {
-          throw fail(400, `refusing to delete the folder: ${allowed.reason}`);
+          throw refuse(`refusing to delete the folder: ${allowed.reason}`, 400);
         }
         const guarded = entryBlockingWrite(current.directory, getConfig() || {}, { operator: true });
         if (guarded) {
@@ -1847,7 +1865,7 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
             `refusing to delete ${current.directory}: it is on the prohibited list (${guarded.label})`,
           );
           err.status = 403;
-          throw err;
+          throw refuse(err.message, 403);
         }
         // Windows releases a handle a moment after the process that held it lets go, so a
         // delete that fails on the first attempt is retried rather than reported. The
@@ -1879,7 +1897,7 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
               'is still here, so try again in a moment.',
           );
           e.status = 423; // locked
-          throw e;
+          throw refuse(e.message, 423);
         }
         recycled = true;
         app.info(
