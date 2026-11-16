@@ -986,7 +986,9 @@ function decideShell(resources, ctx) {
   const stopsOthers = stopsOtherProcesses(segments, command) || scriptStopsProcesses(segments, ctx);
   if (stopsOthers) return deny(stopsOthers, true, 'processes');
 
-  const harnessPaths = decisionPaths.filter((p) => zoneOf(p, ctx) === 'harness');
+  const readHarnessPaths = segments.flatMap((part) =>
+    (part.readsOnly ? part.paths.filter((p) => zoneOf(p, ctx) === 'harness') : []),
+  );
   // A shipped tool runs from the harness's own `skills/` folder, and that is what
   // this allows — statement by statement, never for the whole command, so a second
   // statement that deletes a skill is still judged as the write it is.
@@ -1139,15 +1141,30 @@ function decideShell(resources, ctx) {
   if (sealedCopy) return sealedCopy.id === 'projects' ? fenceDeny(sealedCopy, 'read') : deny(`PROHIBITED: ${sealedCopy.label} is not read either.`, true, 'prohibited');
   const unreadableCopy = copySources.find((p) => !harnessReadable(p, ctx));
   if (unreadableCopy) return deny("These are Synapse's private files.", true, 'harness');
+  // A harness path named by a statement that only reads is a read, whatever a
+  // different statement in the same command does. `node --version; Test-Path
+  // shot.mjs` used to ask "changing it is a deliberate choice" because the command
+  // as a whole was not read-only; the Test-Path was judged by its neighbour (16 Nov).
+  const harnessWritePaths = segments.flatMap((part) =>
+    part.readsOnly
+      ? []
+      : part.paths.filter(
+          (p) =>
+            zoneOf(p, ctx) === 'harness' &&
+            !toolPath(p, part) &&
+            !programInTool(p, part) &&
+            !copySource(p, part),
+        ),
+  );
   const writesHarness =
-    redirectZones.includes('harness') || (harnessPaths.length > 0 && !info.readsOnly && !runsShippedTool);
+    redirectZones.includes('harness') || (harnessWritePaths.length > 0 && !runsShippedTool);
   if (writesHarness) {
     // The Synapse folder is a built-in protection, so this line means the operator
     // switched that entry off on purpose: a change to the harness is then their
     // decision to make, like any other folder outside the project.
     return ask('Synapse is the app itself. Changing it is a deliberate choice.', true, 'harness');
   }
-  if (harnessPaths.length > 0 && info.readsOnly && !harnessPaths.every((p) => harnessReadable(p, ctx))) {
+  if (readHarnessPaths.length && !readHarnessPaths.every((p) => harnessReadable(p, ctx))) {
     return deny("These are Synapse's private files.", true, 'harness');
   }
 

@@ -1100,6 +1100,15 @@ path or tool" beside a reason that said "retry this tool call", and the model wa
 left with two instructions that contradicted each other (16 Nov). The failed call
 is already in front of it; the operator's sentence is the instruction.
 
+**A read statement is a read, even beside a command (16 Nov).** `node --version;
+Test-Path "…\skills\visual-review\bin\shot.mjs"` asked *"Synapse is the app itself.
+Changing it is a deliberate choice"*, although the Test-Path only looked. The harness
+test used the command's `readsOnly` flag, and `node --version` made that false; the
+Test-Path's harness path was then judged as a possible write. The decision is per
+statement now: a read-only statement's harness path is checked for readability, and
+only a non-read statement's harness path is a write. The same probe with `Set-Content`
+still asks.
+
 **Why broad asks instead of path globs.** The engine matches a path *as the model
 wrote it*, so a rule that allows `F:/.../project/**` says nothing about a relative
 `src/app.js`, and the relative twin of every "outside" rule cannot be expressed.

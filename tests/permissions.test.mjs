@@ -236,6 +236,23 @@ test('reading the harness is allowed; writing it is denied', () => {
   assert.equal(shell('Remove-Item F:\\dev\\Synapse\\skills\\visual-review\\SKILL.md').effect, 'deny');
 });
 
+test('a read-only harness path beside a version probe is a read', () => {
+  // The 16 Nov card: `node --version` is not a read verb, so the whole command was
+  // judged as a possible write and the Test-Path of a shipped skill asked "changing
+  // Synapse is a deliberate choice". A read statement is a read whatever its neighbour.
+  const readBesideProbe = shell(
+    'node --version; Test-Path "F:\\dev\\Synapse\\skills\\visual-review\\bin\\shot.mjs"; Test-Path ".project\\scratch"',
+    { protection: [] },
+  );
+  assert.equal(readBesideProbe.effect, 'allow', readBesideProbe.reason);
+  const writeBesideProbe = shell(
+    'node --version; Set-Content "F:\\dev\\Synapse\\skills\\visual-review\\bin\\shot.mjs" x',
+    { protection: [] },
+  );
+  assert.equal(writeBesideProbe.effect, 'ask', 'a real write still asks');
+  assert.equal(writeBesideProbe.scope, 'harness');
+});
+
 test('the shipped toolbox may run', () => {
   assert.equal(
     shell('node F:\\dev\\Synapse\\skills\\visual-review\\bin\\shot.mjs page.html').effect,
