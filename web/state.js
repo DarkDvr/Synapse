@@ -143,6 +143,12 @@ export const state = {
   // Worker leases: a worker's own estimate of a long command, with a live clock in
   // the chat. Keyed `${dir}|${task}`.
   leases: new Map(),
+  // SynaBrowse downloads, keyed `${dir}\0<guid>`. A download is not a message: the
+  // browser reports it over SSE after the tool call has answered, and a page opened
+  // mid-download asks for the list. `downloadsFor` is the directory already fetched.
+  downloads: new Map(),
+  downloadsFor: null,
+  downloadSeq: 0,
   clocks: null,
   collapsed: new Set(),
   // True once the first project list has arrived; see loadProjects.

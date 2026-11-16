@@ -65,12 +65,20 @@ test('press takes a character, and type says it cannot', () => {
   assert.match(t, /does not fire key events/, 'type explains the difference');
 });
 
+test('download says where it goes, and that click waits for a file', () => {
+  const d = text('download');
+  assert.match(d, /\.project\/downloads/, 'the project folder is named');
+  assert.match(d, /progress bar/, 'the chat shows progress');
+  assert.match(d, /never overwritten/, 'a collision is a new name, not a lost file');
+  assert.match(d, /click/i, 'a click that downloads is the common route');
+});
+
 test('every tool has a description and a schema', () => {
   for (const tool of TOOLS) {
     assert.ok(tool.description && tool.description.length > 20, `${tool.name} says what it does`);
     assert.equal(tool.inputSchema?.type, 'object', `${tool.name} has an object schema`);
   }
-  assert.equal(TOOLS.length, 12, 'the twelve tools the brief names');
+  assert.equal(TOOLS.length, 13, 'the thirteen tools the brief names');
 });
 
 // A timeout is the moment a model needs the most information: "did not happen" says

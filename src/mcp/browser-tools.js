@@ -181,6 +181,25 @@ export const TOOLS = [
     },
   },
   {
+    name: 'download',
+    description:
+      'Save a file from the page into the project, under .project/downloads, and answer its path. ' +
+      'Pass url for a direct file address; leave it out to wait for a download a click has just ' +
+      'started. A click on a download link already waits for the file, so this tool is for a URL ' +
+      'that is itself the file, or for a download that began after the click answered. The name ' +
+      'is the one the site suggested, made safe; an existing file is never overwritten — the new ' +
+      'one gets " (1)". The chat shows an ASCII progress bar while it runs, so the operator can ' +
+      'watch a large file. A cancelled or failed download says so instead of answering a path.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        url: { type: 'string', description: 'A direct http(s) file address. Leave it out to wait for a download already in flight.' },
+        timeoutMs: { type: 'integer', description: 'How long to wait for the file (1000-600000, default 120000).', minimum: 1000, maximum: 600000 },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
     name: 'close',
     description: 'Close the browser. The profile and whatever was signed in stay for next time.',
     inputSchema: { type: 'object', properties: {}, additionalProperties: false },

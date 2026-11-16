@@ -388,6 +388,18 @@ export function createServer({ api, engine, logger, config, remote, onRemote }) 
     if (seg[0] === 'browser' && seg[1] === 'used' && method === 'POST') {
       return sendJson(res, 200, await api.browserUsed((await readBody(req))?.host));
     }
+    // POST /api/browser/download — the browser process reporting a download's progress.
+    // Only this machine may post one; the bytes are already in the project.
+    if (seg[0] === 'browser' && seg[1] === 'download' && method === 'POST') {
+      if (fromLan) return sendJson(res, 403, { error: 'download progress is reported on the host only' });
+      return sendJson(res, 200, await api.browserDownload(await readBody(req)));
+    }
+    // GET /api/browser/downloads?dir=… — what a page opened mid-download reopens from.
+    if (seg[0] === 'browser' && seg[1] === 'downloads' && method === 'GET') {
+      const dir = query?.get('dir') || '';
+      if (fromLan && isPrivateDir(dir)) return sendJson(res, 404, { error: 'not found' });
+      return sendJson(res, 200, await api.browserDownloads(dir));
+    }
 
     // POST /api/attention — the page saying the work ended, so the window blinks in the
     // taskbar. One line on stdout; the shell reads it (12 Nov).

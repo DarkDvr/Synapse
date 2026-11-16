@@ -252,6 +252,10 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
   // One guard per chat the operator drives: the Architect's own turn has no run, and
   // nothing was watching it (13 Nov).
   const turnGuards = new Map();
+  // Downloads are a live page state, not a chat message: the browser process reports
+  // progress here, the page draws it, and a reload asks for what is still running.
+  const browserDownloadLog = new Map();
+  const browserDownloadState = new Set(['starting', 'inProgress', 'saving', 'completed', 'canceled', 'interrupted']);
   function watchTurn(sessionId, dir, since = 0) {
     if (getConfig()?.worker?.loopGuard === false) return;
     turnGuards.get(sessionId)?.stop?.();
@@ -970,6 +974,64 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
     return { ok: true, host };
   }
 
+  /**
+   * A browser download's progress, from the browser process.
+   *
+   * This is not a file operation: the browser already saved the bytes under the
+   * project's `.project\downloads`. This records the state so the page can draw an ASCII
+   * bar, and so a reload asks for the downloads that are still running. Only a caller on
+   * this machine may report one; a LAN view can read its own project's list.
+   */
+  function browserDownload(body = {}) {
+    const dir = path.resolve(String(body?.dir || ''));
+    const root = path.resolve(PROJECTS_ROOT);
+    const inside = dir.toLowerCase().startsWith(`${root.toLowerCase()}${path.sep}`) && dir.toLowerCase() !== root.toLowerCase();
+    if (!inside) return { ok: false, error: 'a download must stay inside a project folder' };
+    const id = String(body?.id || '').trim();
+    if (!id) return { ok: false, error: 'a download needs an id' };
+    const key = `${normDir(dir)}\u0000${id}`;
+    const previous = browserDownloadLog.get(key);
+    const state = browserDownloadState.has(String(body?.state)) ? String(body.state) : 'inProgress';
+    const rec = {
+      id,
+      dir,
+      name: String(body?.name || previous?.name || 'download').replace(/[\r\n]/g, ' ').slice(0, 160),
+      received: Math.max(0, Number(body?.received) || 0),
+      total: Math.max(0, Number(body?.total) || 0),
+      state,
+      path: String(body?.path || previous?.path || '').replace(/[\r\n]/g, ' ').slice(0, 300),
+      error: String(body?.error || '').replace(/[\r\n]/g, ' ').slice(0, 200),
+      startedAt: Number(body?.startedAt) || previous?.startedAt || Date.now(),
+      at: Number(body?.at) || Date.now(),
+      ...(state === 'completed' || state === 'canceled' || state === 'interrupted' ? { endedAt: Date.now() } : {}),
+    };
+    browserDownloadLog.set(key, rec);
+    // A long session can browse a lot of files; the page only ever wants the recent ones.
+    if (browserDownloadLog.size > 100) {
+      const oldest = [...browserDownloadLog.entries()].sort((a, b) => (a[1].at || 0) - (b[1].at || 0))[0];
+      if (oldest) browserDownloadLog.delete(oldest[0]);
+    }
+    notify?.({ kind: 'browser-download', type: 'browser.download', download: rec, dir, ts: Date.now() });
+    return { ok: true };
+  }
+
+  /** The downloads a page opened later should reopen: the project's, newest last. */
+  function browserDownloads(dir = '') {
+    const key = normDir(path.resolve(String(dir || '')));
+    if (!key) return [];
+    const cutoff = Date.now() - 10 * 60 * 1000;
+    const out = [];
+    for (const [id, rec] of browserDownloadLog) {
+      if (normDir(rec.dir) !== key) continue;
+      if (rec.endedAt && rec.endedAt < cutoff) {
+        browserDownloadLog.delete(id);
+        continue;
+      }
+      out.push(rec);
+    }
+    return out.sort((a, b) => (a.startedAt || 0) - (b.startedAt || 0));
+  }
+
   /** The browser opened a host with a session: move "Last used" and nothing else. */
   async function browserUsed(host) {
     const key = String(host || '').trim().toLowerCase();
@@ -1054,6 +1116,8 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
     browserUsed,
     browserSignedIn,
     browserSignInAsk,
+    browserDownload,
+    browserDownloads,
     /**
      * Ask the app's window to blink in the taskbar.
      *

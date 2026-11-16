@@ -1886,6 +1886,27 @@ body[data-mode="single"] #runAuto { display: none; }
 .state-pill.warn  { color: var(--amber); border-color: #5a4725; background: var(--amber-soft); }
 .state-pill.err   { color: var(--red);   border-color: #5d2f27; background: var(--red-soft); }
 
+/* A browser download, in the chat. It is a tool card that does not open: the bar is the
+   detail. The bar is ASCII on purpose — it follows the chat text size and cannot disagree
+   with the percentage printed beside it. */
+.tool-download .tool-head { cursor: default; }
+.tool-download .tool-head:hover { background: transparent; }
+.download-body { padding: 5px 9px 8px; display: grid; gap: 3px; }
+.download-name {
+  font-family: var(--mono); font-size: calc(var(--chat-fs) * 0.8); color: var(--text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.download-bar {
+  margin: 0; font-family: var(--mono); font-size: calc(var(--chat-fs) * 0.8);
+  line-height: 1.2; letter-spacing: 0; color: var(--yellow);
+}
+.tool-download.is-done .download-bar { color: var(--green); }
+.tool-download.is-error .download-bar { color: var(--red); }
+.download-meta, .download-foot {
+  color: var(--muted); font-family: var(--mono); font-size: calc(var(--chat-fs) * 0.72);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
 .perm-card {
   margin: 6px 0; padding: 10px 11px; border-radius: 8px;
   background: #241f16; border: 1px solid #5a4725;

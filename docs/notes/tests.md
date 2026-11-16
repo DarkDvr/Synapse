@@ -16,8 +16,9 @@ The suite had grown to 126 files / 816 cases. It was not mostly duplication: pol
 gate plumbing, page wiring and CSS each had a test, and several apparent duplicates
 were one invariant checked at two layers. The safe cut was **packaging**, not coverage:
 the 52 UI-contract cases became eight groups (each failure still names its original
-case), and `auto-shutdown-policy.test.mjs` folded into `shutdown.test.mjs`. That is
-125 files / 772 cases, with the same assertions.
+case), and `auto-shutdown-policy.test.mjs` folded into `shutdown.test.mjs`. That
+pass ended at 125 files / 772 cases, with the same assertions. The download feature
+added one file and the browser cases; the suite is now 126 files / 794 cases.
 
 What was deliberately not done: deleting policy or provider-permutation cases to hit a
 number. They are cheap and each names a branch. The next real saving is time, not count:

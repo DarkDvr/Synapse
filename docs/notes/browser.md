@@ -1,7 +1,7 @@
 # SynaBrowse — the harness's own browser
 
 A browser Synapse owns, on its own profile, driven over the Chrome DevTools Protocol.
-Models get it as twelve tools; the operator sees one window, only when a person is
+Models get it as thirteen tools; the operator sees one window, only when a person is
 genuinely needed. This note is the "why" behind `src/browser/` and
 `src/mcp/browser-server.js`, with the measurements that produced it.
 
@@ -60,7 +60,7 @@ The window is found again by the command line naming that profile — never by p
 ## The tools (`src/mcp/browser-server.js`)
 
 `open`, `read`, `click`, `type`, `press`, `wait`, `scroll`, `screenshot`, `watch`, `tabs`,
-`handoff`, `close`.
+`handoff`, `download`, `close`.
 
 - `read` answers the page as a person reads it — headings and text, plus the links that can
   be clicked with their addresses and coordinates. Not HTML: a DOM dump is thousands of
@@ -314,6 +314,33 @@ A failed `click` also says what the text was, not only that it was not found: *"
 a link, a button or a form control — use an x/y from read, or a CSS selector"* — which is
 the move that works on an overlay whose hint text is not clickable.
 
+## Downloads (16 Nov)
+
+A download is a file the page hands the browser, not a page the model reads. It goes to
+`<project>\.project\downloads\`: it belongs to the project, is deleted with it, and does
+not sit in the operator's Downloads folder where the next person finds it.
+
+- **The browser chooses the folder, not the page.** `Browser.setDownloadBehavior` with
+  `allowAndName` makes Chromium write under the download's GUID; a site cannot choose a
+  path. On completion the GUID is renamed to the suggested filename, made safe as one
+  leaf, and a collision gets ` (1)` rather than overwriting the first file.
+- **A click that downloads waits for the file.** `click` waits a moment for a
+  `Browser.downloadWillBegin`, then for the file; its answer carries the project-relative
+  path. `download {url}` is the explicit route for an address that is itself a file;
+  `download` with no `url` waits for a download already in flight.
+- **The chat shows an ASCII bar.** The browser reports begin/progress/completed on the
+  browser's CDP endpoint (not the page's); `src/mcp/browser-server.js` forwards them
+  (throttled to four a second) to `POST /api/browser/download`, and the page draws a
+  `SynaBrowse · Download` card with `[####----] 42%`, bytes and the saved path. A reload
+  asks `GET /api/browser/downloads?dir=…`, so a download that outlives the page is still
+  there.
+- **Progress is browser-scoped, the folder is the project's.** The profile is one global
+  browser, so the download folder is set again before each browser action. One browser and
+  one page are already the rule; a download is not a second concurrency model.
+- **No file is ever written outside a project.** The API refuses a `dir` outside the
+  projects root, and a failed `setDownloadBehavior` denies downloads rather than falling
+  back to the machine's Downloads folder.
+
 ## Where things live
 
 | | |
@@ -322,14 +349,16 @@ the move that works on an overlay whose hint text is not clickable.
 | `src/browser/browser.js` | Edge by full path, the launch flags, the toolset, `clearSite`, the idle reaper |
 | `src/browser/allow.js` | the http(s) check (`hostOf`, `checkUrl`) |
 | `src/browser/artifacts.js` | where a project's screenshots live (`<project>\.project\browser\shots`, with the harness folder as the fallback) |
+| `src/browser/downloads.js` | safe download names, collision suffixes, the ASCII bar and byte labels |
+| `web/downloads.js` | the chat's download chip, its progress and its saved path |
 | `src/browser/sites.js` | the sites record: add, touch, forget, de-duplicate |
 | `src/browser/session-watch.js` | polls the sign-in window and **hides** it when the session lands |
 | `src/browser/signin.js` | address candidates, `looksUnconfirmed`, the sign-in flow |
 | `src/browser/handoff.js` + `show.ps1` | the window, `-Hide`/`-Focus`, the chime, `stoleFocus` |
 | `src/browser/ask.js` | the sign-in card: one request, no auto-allow, no timeout |
 | `src/browser/screen.ps1` | which monitor the operator is on, and the attach-thread focus |
-| `src/mcp/browser-server.js` | the twelve tools, the wall sentence, and `handoff` asking through the permission card |
-| `tests/browser.test.mjs`, `tests/browser-mcp.test.mjs`, `tests/browser-watch.test.mjs`, `tests/browser-chat.test.mjs`, `tests/sites.test.mjs` | the fence, the tools against a local page, the server over real stdio, the watcher, the chat labels, the record |
+| `src/mcp/browser-server.js` | the thirteen tools, the wall sentence, `handoff` asking through the permission card, and download progress |
+| `tests/browser.test.mjs`, `tests/browser-mcp.test.mjs`, `tests/browser-watch.test.mjs`, `tests/browser-chat.test.mjs`, `tests/browser-downloads.test.mjs`, `tests/sites.test.mjs` | the fence, the tools against a local page, the server over real stdio, the watcher, the chat labels, download names/chips, the record |
 
 **A page cut in silence is a page the model thinks it has (13 Nov).** Two models were benched
 against the same long Reddit thread. Both were handed 6,000 characters of it and neither was

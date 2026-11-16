@@ -103,7 +103,7 @@ test('the server answers the protocol and its tools work on a local page', async
 
     const tools = await rpc.call('tools/list', {});
     const names = tools.result.tools.map((tool) => tool.name);
-    for (const expected of ['open', 'read', 'click', 'type', 'press', 'wait', 'screenshot', 'watch', 'tabs', 'handoff', 'close']) {
+    for (const expected of ['open', 'read', 'click', 'type', 'press', 'wait', 'screenshot', 'watch', 'tabs', 'handoff', 'download', 'close']) {
       assert.ok(names.includes(expected), `the server is missing ${expected}`);
     }
 

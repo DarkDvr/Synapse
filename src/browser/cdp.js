@@ -46,26 +46,23 @@ export async function listTargets(port) {
 }
 
 /**
- * Connect to one page target and answer a small client.
+ * Attach to one websocket and answer the small client both a page and the browser use.
  *
- * `send(method, params)` resolves with the result or rejects with the protocol's own
- * error. `waitEvent(method, ms)` returns the first matching event, consuming it, so a
- * caller can await a load that may already have happened.
+ * The browser endpoint is a different target from a page: `Browser.download*` events and
+ * `Browser.setDownloadBehavior` only exist there. Everything else — numbered requests, the
+ * event queue, evaluate, screenshot — is the same protocol.
  */
-export async function connect(port, { preferUrl = null } = {}) {
-  const targets = (await listTargets(port)).filter((t) => t.type === 'page');
-  const target = (preferUrl && targets.find((t) => t.url.includes(preferUrl))) || targets[0];
-  if (!target?.webSocketDebuggerUrl) throw new Error('the browser has no page to drive');
-
-  const ws = new WebSocket(target.webSocketDebuggerUrl);
+async function clientFor(wsUrl, target = null) {
+  const ws = new WebSocket(wsUrl);
   await new Promise((resolve, reject) => {
     ws.onopen = resolve;
-    ws.onerror = () => reject(new Error('could not attach to the page'));
+    ws.onerror = () => reject(new Error('could not attach to the browser'));
   });
 
   let seq = 0;
   const pending = new Map();
   const events = [];
+  const listeners = new Set();
   ws.onmessage = (m) => {
     let msg;
     try { msg = JSON.parse(m.data); } catch { return; /* a malformed frame is not ours */ }
@@ -78,6 +75,11 @@ export async function connect(port, { preferUrl = null } = {}) {
     }
     events.push(msg);
     if (events.length > 400) events.splice(0, 200);
+    // A download's progress arrives as events, not as answers: a queue that is only
+    // polled cannot tell begin from progress from done without losing one.
+    for (const fn of listeners) {
+      try { fn(msg); } catch { /* a listener must not take the protocol down */ }
+    }
   };
 
   // Every request answers or fails in this long. Without it a half-open socket — the
@@ -113,6 +115,13 @@ export async function connect(port, { preferUrl = null } = {}) {
       if (Date.now() - at > timeoutMs) return null;
       await new Promise((r) => setTimeout(r, 40));
     }
+  };
+
+  /** Every protocol event, as it arrives. Returns a function that unsubscribes. */
+  const onEvent = (fn) => {
+    if (typeof fn !== 'function') return () => {};
+    listeners.add(fn);
+    return () => listeners.delete(fn);
   };
 
   /** Evaluate an expression in the page and return its value. */
@@ -154,8 +163,30 @@ export async function connect(port, { preferUrl = null } = {}) {
   };
 
   const close = () => {
+    listeners.clear();
     try { ws.close(); } catch { /* already gone */ }
   };
 
-  return { target, send, waitEvent, evaluate, screenshot, close };
+  return { target, send, waitEvent, onEvent, evaluate, screenshot, close };
+}
+
+/** Connect to one page target. */
+export async function connect(port, { preferUrl = null } = {}) {
+  const targets = (await listTargets(port)).filter((t) => t.type === 'page');
+  const target = (preferUrl && targets.find((t) => t.url.includes(preferUrl))) || targets[0];
+  if (!target?.webSocketDebuggerUrl) throw new Error('the browser has no page to drive');
+  return clientFor(target.webSocketDebuggerUrl, target);
+}
+
+/**
+ * Connect to the browser itself, not a page.
+ *
+ * Downloads are browser-scoped: their events are emitted on `/json/version`'s websocket,
+ * and `Browser.setDownloadBehavior` is accepted only there. The page connection cannot
+ * see them, which is why this is a second client rather than another flag on `connect`.
+ */
+export async function connectBrowser(port) {
+  const info = await (await fetch(`http://127.0.0.1:${port}/json/version`)).json();
+  if (!info?.webSocketDebuggerUrl) throw new Error('the browser has no debugging endpoint');
+  return clientFor(info.webSocketDebuggerUrl, null);
 }

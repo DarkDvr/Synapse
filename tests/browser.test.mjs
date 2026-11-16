@@ -10,6 +10,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import http from 'node:http';
 import { hostOf, hostAllowed, checkUrl, localPageAllowed } from '../src/browser/allow.js';
 import { createBrowser, findEdge, siteDomains, cookieBelongsTo, keyForChar } from '../src/browser/browser.js';
 import { addressCandidates, looksUnconfirmed } from '../src/browser/signin.js';
@@ -214,6 +215,53 @@ test('the tools drive a local page: read, click, type, screenshot, watch', async
     await browser.stop();
     // Edge lets go of its profile a moment after the process exits; the folder is a
     // tmpdir() and would be swept anyway, so a locked file is not a test failure.
+    try { fs.rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 }); } catch { /* swept at exit */ }
+  }
+});
+
+// A link that is a file: the browser's own download, saved under the project — not the
+// operator's Downloads — and the click's answer carries the path. Measured 16 Nov: a
+// local page with `<a download>` and an attachment header.
+test('a download link saves into the project and the click answers its path', async (t) => {
+  const edge = findEdge();
+  if (!edge) {
+    t.skip('no Edge on this machine');
+    return;
+  }
+  const dir = tmpdir('synabrowse-download-');
+  const profile = path.join(dir, 'profile');
+  const downloads = path.join(dir, 'downloads');
+  const server = http.createServer((req, res) => {
+    if (req.url === '/file') {
+      res.writeHead(200, {
+        'content-type': 'application/octet-stream',
+        'content-disposition': 'attachment; filename="report.txt"',
+      });
+      res.end('downloaded body');
+      return;
+    }
+    res.writeHead(200, { 'content-type': 'text/html' });
+    res.end(PAGE('<a id="dl" href="/file" download>Download</a>'));
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const port = server.address().port;
+  const events = [];
+  const browser = createBrowser({ profile, downloadDir: downloads, onDownload: (rec) => events.push(rec) });
+  try {
+    await browser.goto(`http://127.0.0.1:${port}/`);
+    const clicked = await browser.click({ selector: '#dl' });
+    assert.ok(clicked.download, 'the click should see the download');
+    assert.equal(clicked.download.state, 'completed');
+    assert.equal(clicked.download.name, 'report.txt');
+    const saved = path.join(downloads, 'report.txt');
+    assert.ok(fs.existsSync(saved), 'the file is under the project download folder');
+    assert.equal(fs.readFileSync(saved, 'utf8'), 'downloaded body');
+    assert.ok(events.some((e) => e.state === 'starting'), 'progress begins with a start');
+    assert.ok(events.some((e) => e.state === 'completed'), 'and ends completed');
+    assert.equal(browser.downloads().length, 1);
+  } finally {
+    await browser.stop();
+    await new Promise((resolve) => server.close(resolve));
     try { fs.rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 }); } catch { /* swept at exit */ }
   }
 });

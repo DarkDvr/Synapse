@@ -22,6 +22,7 @@ import { alarmsHere, renderAlarm, leasesHere, renderLease, chatErrorsHere, rende
 import { chatAtBottom, chatFollows, scrollChatToBottom, renderChatNav, captureChatSlack, restoreStreamView } from './chat-scroll.js';
 import { currentProject, roleLabel, groupTurns, currentForm } from './run-view.js';
 import { renderTrace, tracesFor, traceSig, renderSessionStream } from './traces.js';
+import { downloadCardsHtml, downloadsForProject } from './downloads.js';
 
 const missing = (name) => () => {
   throw new Error(`transcript.js: ${name} was not wired at boot`);
@@ -144,8 +145,9 @@ export function renderTranscript() {
   // dock's own child and takes its height from the dock, so a freshly opened
   // session (a strip of composer) would show a 64px form with its buttons
   // hanging outside it. A form is something to read, so the dock opens for it.
+  const downloads = downloadsForProject();
   const hasHistory =
-    showable.length > 0 || Boolean(postHtml) || Boolean(pending) || Boolean(currentForm()) || alarmsHere().length > 0;
+    showable.length > 0 || Boolean(postHtml) || Boolean(pending) || Boolean(currentForm()) || alarmsHere().length > 0 || downloads.length > 0;
   // The dock is a bare composer while empty and fills the stage once there is
   // anything to show; the CSS keys off this class, so set it on every render.
   $('chatDock')?.classList.toggle('has-history', hasHistory);
@@ -155,7 +157,7 @@ export function renderTranscript() {
   // Nothing in the conversation changed since the last render: leave the DOM —
   // and whatever the operator has open — exactly as it is.
   const sig = hasHistory
-    ? `${showable.map((m) => `${m.id}:${m.completed || 0}:${(m.parts || []).length}`).join(',')}|${pending.length}|${state.streaming}|${traceSig()}|${alarmsHere().length}|${state.decisionSeq}|${
+    ? `${showable.map((m) => `${m.id}:${m.completed || 0}:${(m.parts || []).length}`).join(',')}|${pending.length}|${state.streaming}|${traceSig()}|${alarmsHere().length}|${state.decisionSeq}|${state.downloadSeq}|${
         compactPost ? `${compactPost.at}:${compactPost.summary.length}` : ''
       }`
     : '';
@@ -211,7 +213,7 @@ export function renderTranscript() {
   while (next < items.length) html += items[next++].html;
   if (liveTail && paneAt === -1) html += liveTail;
   html += leasesHere().map(renderLease).join('');
-  el.innerHTML = html + pending;
+  el.innerHTML = html + downloadCardsHtml() + pending;
   // The live panel's slide is a transform on a node this rebuild just replaced, so
   // the offset has to be put back or the text snaps to its first line.
   restoreStreamView();
@@ -469,6 +471,7 @@ const BROWSER_VERBS = {
   watch: 'SynaBrowse · Watch',
   tabs: 'SynaBrowse · Tabs',
   handoff: 'SynaBrowse · Handoff',
+  download: 'SynaBrowse · Download',
   close: 'SynaBrowse · Close',
 };
 
@@ -546,6 +549,7 @@ export function browserLine(input) {
   };
   // A handoff carries its URL too, but the news is that it is waiting for the operator.
   if (i.what) return 'SynaBrowse is asking you to sign in…';
+  if (i.timeoutMs !== undefined) return 'SynaBrowse is downloading a file…';
   if (i.url) return `SynaBrowse is opening ${host(i.url) || 'a page'}…`;
   if (i.text && (i.selector === undefined)) return `SynaBrowse is clicking “${String(i.text).slice(0, 40)}”…`;
   if (i.selector) return `SynaBrowse is clicking ${String(i.selector).slice(0, 40)}…`;

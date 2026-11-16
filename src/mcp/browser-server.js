@@ -19,6 +19,7 @@ import path from 'node:path';
 import { DATA_DIR, WEB_DIR, PROJECTS_ROOT } from '../paths.js';
 import { artifactDir } from '../browser/artifacts.js';
 import { clickSummary, createBrowser, findEdge } from '../browser/browser.js';
+import { formatBytes } from '../browser/downloads.js';
 import { checkUrl, hostOf, localPageAllowed } from '../browser/allow.js';
 import { askOperator } from '../browser/handoff.js';
 import { watchForSignIn } from '../browser/session-watch.js';
@@ -61,12 +62,50 @@ function settings() {
 // and then the process steps out of the project and holds nothing of the operator's.
 const ARTIFACTS = artifactDir();
 const START_DIR = process.cwd();
+// A download is a project file. A server whose cwd is not a project (the projects root,
+// the harness) has no folder to put one in; it must not invent one under the harness.
+const IN_PROJECT = path.resolve(START_DIR).toLowerCase().startsWith(`${path.resolve(PROJECTS_ROOT).toLowerCase()}${path.sep}`);
+const DOWNLOADS = IN_PROJECT ? path.join(START_DIR, '.project', 'downloads') : null;
 try { process.chdir(DATA_DIR); } catch { /* the harness folder exists; nothing to do */ }
 
 const cfg = settings();
+
+/**
+ * Tell the page about a download. The browser owns the bytes; Synapse only draws the
+ * progress. Progress is throttled to four a second — a fast download would otherwise
+ * put hundreds of SSE frames on the page for one file — and every state change is sent.
+ */
+const reported = new Map();
+function reportDownload(rec) {
+  const now = Date.now();
+  const final = !['starting', 'inProgress', 'saving'].includes(rec.state);
+  const last = reported.get(rec.id) || 0;
+  if (!final && now - last < 250) return;
+  reported.set(rec.id, now);
+  const rel = rec.path ? path.relative(START_DIR, rec.path).replace(/\\/g, '/') : '';
+  fetch('http://127.0.0.1:8700/api/browser/download', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      dir: START_DIR,
+      id: rec.id,
+      name: rec.name,
+      received: rec.received,
+      total: rec.total,
+      state: rec.state,
+      path: rel,
+      error: rec.error || '',
+      startedAt: rec.startedAt,
+      at: now,
+    }),
+  }).catch(() => { /* the app may be down; the file is still saved */ });
+}
+
 const browser = createBrowser({
   profile: cfg.profile,
   idleMs: cfg.idleMinutes * 60 * 1000,
+  downloadDir: DOWNLOADS,
+  onDownload: reportDownload,
   log: { info: (m) => process.stderr.write(`${m}\n`) },
 });
 
@@ -130,6 +169,24 @@ function guard(url) {
   const verdict = checkUrl(text, ['*']);
   if (!verdict.ok) throw new Error(verdict.reason);
   return verdict;
+}
+
+/** The sentence a download leaves in the tool answer. */
+function downloadAnswer(rec) {
+  if (!rec) return '';
+  const rel = rec.path
+    ? path.relative(START_DIR, rec.path).replace(/\\/g, '/')
+    : path.relative(START_DIR, path.join(DOWNLOADS || START_DIR, rec.name)).replace(/\\/g, '/');
+  if (rec.state === 'completed') {
+    return `Downloaded ${rec.name} (${formatBytes(rec.received || rec.total)}) to ${rel}. ` +
+      `In the chat, cite it as [${rec.name}](${rel}).`;
+  }
+  if (rec.state === 'canceled' || rec.state === 'interrupted') {
+    return `The download of ${rec.name} ${rec.state}: ${rec.error || 'the browser stopped it'}.`;
+  }
+  const pct = rec.total > 0 ? ` (${Math.round((rec.received / rec.total) * 100)}%)` : '';
+  return `Downloading ${rec.name}: ${formatBytes(rec.received)}${rec.total ? ` of ${formatBytes(rec.total)}` : ''}${pct}. ` +
+    `It is being saved to ${rel}; the chat shows the progress.`;
 }
 
 /**
@@ -272,10 +329,35 @@ async function handle(msg) {
             // as a refused page turned a working click into an error on a local mock
             // (14 Nov: "click failed: that is not an http(s) address").
             if (url) guard(url);
+            const download = typeof res === 'object' ? res?.download : null;
             return toolText(
               id,
-              `Clicked ${args.selector || args.text || `${args.x},${args.y}`}${clickSummary(res)}${url ? ` -> ${url}` : ''}`,
+              `Clicked ${args.selector || args.text || `${args.x},${args.y}`}${clickSummary(res)}${url ? ` -> ${url}` : ''}` +
+                `${download ? `\n${downloadAnswer(download)}` : ''}`,
             );
+          }
+          case 'download': {
+            // A direct file URL, or the download a page button just started. The click
+            // path already waits; this is the explicit route for a URL that is a file.
+            const url = String(args.url || '').trim();
+            const timeoutMs = Math.min(600_000, Math.max(1000, Number(args.timeoutMs) || 120_000));
+            let rec = null;
+            if (url) {
+              guard(url);
+              rec = await browser.downloadFrom(url, { timeoutMs });
+            } else {
+              const active = browser.downloads().find((d) => ['starting', 'inProgress', 'saving'].includes(d.state));
+              rec = active ? await browser.waitForDownload({ since: active.startedAt, graceMs: 1000, timeoutMs }) : null;
+            }
+            if (!rec) {
+              return toolText(
+                id,
+                'No download started. If the file is behind a button, click it (click waits for the download); ' +
+                  'if it is a direct address, call download with that url.',
+                true,
+              );
+            }
+            return toolText(id, downloadAnswer(rec), rec.state === 'canceled' || rec.state === 'interrupted');
           }
           case 'type':
             await browser.type({ text: args.text, selector: args.selector || null, submit: args.submit === true });

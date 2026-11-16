@@ -188,6 +188,7 @@ import {
 } from './live-runs.js';
 import { refreshPending, schedulePendingRefresh, schedulePermissionRender, pendingWiring } from './pending.js';
 import { openRailModal, closeRailModal, renderToolUsage, renderProbe, replyPermission } from './tool-panels.js';
+import { downloadBody } from './downloads.js';
 import {
   renderSettings,
   updateSettingsFoot,
@@ -730,6 +731,47 @@ function showNothing() {
 }
 
 // ── messages ────────────────────────────────────────────────────
+/** A download from the browser, drawn where the chat's live state is drawn. */
+function applyDownload(download) {
+  if (!download?.id || !download.dir) return;
+  const key = `${dirKey(download.dir)}\u0000${download.id}`;
+  const first = !state.downloads.has(key);
+  state.downloads.set(key, download);
+  const final = ['completed', 'canceled', 'interrupted'].includes(String(download.state || ''));
+  if (first || final) state.downloadSeq += 1;
+  const node = document.querySelector(`[data-download-card="${CSS.escape(String(download.id))}"]`);
+  if (!node) {
+    renderTranscript();
+    return;
+  }
+  const cls = download.state === 'completed' ? ' is-done' : download.state === 'canceled' || download.state === 'interrupted' ? ' is-error' : '';
+  node.className = `tool-card tool-download${cls}`;
+  node.innerHTML = downloadBody(download);
+  if (first) renderTranscript();
+}
+
+/**
+ * The downloads a page opened after they started should still see. They are live state,
+ * not messages, so the transcript poll cannot reconstruct them; this asks once per chat.
+ */
+async function loadDownloads() {
+  const project = currentProject();
+  const dir = project?.directory;
+  if (!dir) return;
+  if (state.downloadsFor === dirKey(dir)) return;
+  try {
+    const res = await api('GET', `/api/browser/downloads?dir=${encodeURIComponent(dir)}`);
+    if (currentProject()?.directory !== dir) return;
+    state.downloadsFor = dirKey(dir);
+    for (const item of res || []) {
+      if (!item?.id) continue;
+      state.downloads.set(`${dirKey(item.dir || dir)}\u0000${item.id}`, item);
+    }
+    state.downloadSeq += 1;
+    renderTranscript();
+  } catch { /* a reloaded page with no download list is still a working chat */ }
+}
+
 async function loadMessages() {
   // The chat this request is for. It can be replaced while the request is in
   // flight — a compact deletes the old chat as the new one opens — and a late
@@ -776,6 +818,7 @@ async function loadMessages() {
     // opened later never saw. The transcript carries the same number, so seed it
     // here rather than showing an empty corner until the next turn.
     state.archCtx = lastPromptOf(state.messages) || state.archCtx;
+    await loadDownloads();
     updateBusyFromMessages();
   } catch (err) {
     if (/not found|404/i.test(err.message)) {
@@ -1190,6 +1233,13 @@ function connectStream() {
         // is free; the falling chime says the machine is theirs again.
         toast('Screen Released', 'The AI is not using your mouse or keyboard any more.');
       }
+      return;
+    }
+
+    // A browser download is live state: the tool call may already have answered, and the
+    // file grows afterwards. The card is updated in place, not by rebuilding the chat.
+    if (ev.kind === 'browser-download') {
+      applyDownload(ev.download || {});
       return;
     }
 

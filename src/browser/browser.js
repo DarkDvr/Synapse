@@ -16,7 +16,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
-import { connect, waitForPort, readPort } from './cdp.js';
+import { connect, connectBrowser, waitForPort, readPort } from './cdp.js';
+import { safeDownloadName, uniqueDownloadPath } from './downloads.js';
 import { screenState, restoreFocus, hideBrowserWindow } from './handoff.js';
 
 const EDGE_CANDIDATES = [
@@ -153,17 +154,186 @@ export function cookieBelongsTo(domain, host) {
   return siteDomains(host).includes(d) || (base ? d.endsWith(`.${base}`) : false);
 }
 
-export function createBrowser({ profile, log = null, startMinimized = true, width = 1280, height = 800, idleMs = 5 * 60 * 1000 } = {}) {
+export function createBrowser({
+  profile,
+  log = null,
+  startMinimized = true,
+  width = 1280,
+  height = 800,
+  idleMs = 5 * 60 * 1000,
+  downloadDir = null,
+  onDownload = null,
+} = {}) {
   let child = null;
   let page = null;
   let starting = null;
   let pageWindowId = null;
   let lastUsed = Date.now();
+  let browserConn = null;
+  let browserPort = null;
+  // guid -> one download's record. Kept after completion so a page reload mid-download
+  // still has something to draw, and pruned on access rather than by another timer.
+  const downloads = new Map();
 
   /** Every action says "still in use", so the idle clock follows the work, not the clock. */
   const used = () => { lastUsed = Date.now(); };
 
   const note = (msg) => log?.info?.(msg);
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+  // ── downloads ───────────────────────────────────────────────────
+  // The protocol reports a download on the *browser* endpoint, not the page: begin,
+  // progress, completed/cancelled. `allowAndName` writes the bytes under the GUID, so a
+  // site cannot choose a path; the GUID becomes the suggested name once the file is whole.
+  const pruneDownloads = () => {
+    const cutoff = Date.now() - 10 * 60 * 1000;
+    for (const [id, rec] of downloads) if (rec.endedAt && rec.endedAt < cutoff) downloads.delete(id);
+  };
+  const emitDownload = (rec) => {
+    try { onDownload?.({ ...rec }); } catch (err) { log?.warn?.(`browser: download report failed: ${err.message}`); }
+  };
+
+  async function finalizeDownload(rec) {
+    const source = path.join(downloadDir, rec.id);
+    if (!fs.existsSync(source)) {
+      rec.state = 'interrupted';
+      rec.error = 'the downloaded file is missing';
+      rec.endedAt = Date.now();
+      emitDownload(rec);
+      return;
+    }
+    const target = uniqueDownloadPath(downloadDir, rec.name);
+    let last = null;
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      try {
+        await fs.promises.rename(source, target);
+        rec.path = target;
+        rec.name = path.basename(target);
+        rec.state = 'completed';
+        rec.endedAt = Date.now();
+        emitDownload(rec);
+        return;
+      } catch (err) {
+        last = err;
+        await sleep(200);
+      }
+    }
+    rec.state = 'interrupted';
+    rec.error = last?.message || 'could not save the download';
+    rec.endedAt = Date.now();
+    emitDownload(rec);
+  }
+
+  function handleDownloadEvent(msg) {
+    if (!downloadDir) return;
+    const p = msg?.params || {};
+    if (msg.method === 'Browser.downloadWillBegin') {
+      const id = String(p.guid || '');
+      if (!id) return;
+      const rec = {
+        id,
+        url: String(p.url || ''),
+        name: safeDownloadName(p.suggestedFilename),
+        received: 0,
+        total: 0,
+        state: 'starting',
+        startedAt: Date.now(),
+        path: null,
+        error: null,
+      };
+      downloads.set(id, rec);
+      emitDownload(rec);
+      return;
+    }
+    if (msg.method !== 'Browser.downloadProgress') return;
+    const rec = downloads.get(String(p.guid || ''));
+    if (!rec) return;
+    rec.received = Number(p.receivedBytes) || 0;
+    rec.total = Number(p.totalBytes) || 0;
+    const state = String(p.state || 'inProgress');
+    if (state === 'completed') {
+      rec.state = 'saving';
+      finalizeDownload(rec).catch((err) => {
+        rec.state = 'interrupted';
+        rec.error = err.message;
+        rec.endedAt = Date.now();
+        emitDownload(rec);
+      });
+      return;
+    }
+    rec.state = state;
+    if (state === 'canceled' || state === 'interrupted') {
+      for (const file of [path.join(downloadDir, rec.id), path.join(downloadDir, `${rec.id}.crdownload`)]) {
+        try { fs.rmSync(file, { force: true }); } catch { /* a partial that is already gone */ }
+      }
+      rec.error = state;
+      rec.endedAt = Date.now();
+    }
+    emitDownload(rec);
+  }
+
+  /** Set the download folder on every start/attach: the profile is shared, the folder is
+   *  this project's, and another project's server may have set it last. */
+  async function ensureDownloadBehavior() {
+    if (!downloadDir || !page) return;
+    fs.mkdirSync(downloadDir, { recursive: true });
+    if (!browserConn || browserPort !== page.port) {
+      try { browserConn?.close?.(); } catch { /* a replaced connection */ }
+      browserConn = await connectBrowser(page.port);
+      browserPort = page.port;
+      browserConn.onEvent(handleDownloadEvent);
+    }
+    try {
+      await browserConn.send('Browser.setDownloadBehavior', {
+        behavior: 'allowAndName',
+        downloadPath: downloadDir,
+        eventsEnabled: true,
+      });
+    } catch (err) {
+      // Never fall back to the user's Downloads folder. Denying is the safe failure; the
+      // model gets a sentence instead of a file it cannot find.
+      log?.warn?.(`browser: could not choose the download folder: ${err.message}`);
+      try { await browserConn.send('Browser.setDownloadBehavior', { behavior: 'deny', eventsEnabled: false }); } catch { /* gone */ }
+    }
+  }
+
+  /** Wait for a download that began at or after `since`; null when none began. */
+  async function waitForDownload({ since = 0, graceMs = 1500, timeoutMs = 120_000 } = {}) {
+    if (!downloadDir) return null;
+    const began = Date.now();
+    let rec = null;
+    while (Date.now() - began < graceMs) {
+      rec = [...downloads.values()]
+        .filter((d) => d.startedAt >= since)
+        .sort((a, b) => a.startedAt - b.startedAt)[0] || null;
+      if (rec) break;
+      await sleep(75);
+    }
+    if (!rec) return null;
+    while (Date.now() - began < timeoutMs) {
+      if (!['starting', 'inProgress', 'saving'].includes(rec.state)) return rec;
+      await sleep(100);
+    }
+    return rec;
+  }
+
+  /** A URL that is itself a file, rather than a page: navigate and wait for the download. */
+  async function downloadFrom(url, { timeoutMs = 120_000 } = {}) {
+    const p = await start();
+    used();
+    const since = Date.now();
+    try {
+      await p.send('Page.navigate', { url });
+    } catch {
+      // A download aborts the navigation; the event is the answer, not the error.
+    }
+    return waitForDownload({ since, graceMs: 4000, timeoutMs });
+  }
+
+  const downloadList = () => {
+    pruneDownloads();
+    return [...downloads.values()].sort((a, b) => a.startedAt - b.startedAt);
+  };
 
   const launchArgs = ({ position }) => [
     `--user-data-dir=${profile}`,
@@ -185,7 +355,10 @@ export function createBrowser({ profile, log = null, startMinimized = true, widt
       page = null;
       child = null;
     }
-    if (page) return page;
+    if (page) {
+      await ensureDownloadBehavior();
+      return page;
+    }
     if (starting) return starting;
     starting = (async () => {
       const edge = findEdge();
@@ -253,6 +426,7 @@ export function createBrowser({ profile, log = null, startMinimized = true, widt
         note(`browser: window hidden (tool window yes${existing ? ', attached' : ''}, taskbar buttons removed ${hidden.tabsRemoved ?? 0})`);
       }
       note(`browser: ${existing ? 'attached to' : 'started'} Edge on port ${port}`);
+      await ensureDownloadBehavior();
       return page;
     })();
     try {
@@ -451,6 +625,7 @@ export function createBrowser({ profile, log = null, startMinimized = true, widt
   async function click({ selector = null, text = null, at = null, settle = 700, snapPx = 28 } = {}) {
     const p = await start();
     used();
+    const since = Date.now();
     let point = at;
     let snapped = null;
     if (!point) {
@@ -526,7 +701,17 @@ export function createBrowser({ profile, log = null, startMinimized = true, widt
       // A click that replaces the document has no address to read yet (14 Nov).
       url = '';
     }
-    return { url, at: [x, y], requested: [wantedX, wantedY], snapped, clamped: Boolean(aim?.clamped?.some(Boolean)) };
+    // A link can be a file: wait a moment for the browser to announce one. A click that
+    // downloads often never navigates, so the old answer said only "clicked".
+    const download = downloadDir ? await waitForDownload({ since, graceMs: 900 }) : null;
+    return {
+      url,
+      at: [x, y],
+      requested: [wantedX, wantedY],
+      snapped,
+      clamped: Boolean(aim?.clamped?.some(Boolean)),
+      ...(download ? { download } : {}),
+    };
   }
 
   /** Type into whatever has focus (or into a selector first). */
@@ -781,6 +966,9 @@ export function createBrowser({ profile, log = null, startMinimized = true, widt
   /** Close the browser: the profile and its session stay. */
   async function stop() {
     const exited = [];
+    try { browserConn?.close?.(); } catch { /* gone */ }
+    browserConn = null;
+    browserPort = null;
     if (page) {
       try { await page.send('Browser.close'); } catch { /* already gone */ }
       try { page.close(); } catch { /* fine */ }
@@ -816,5 +1004,5 @@ export function createBrowser({ profile, log = null, startMinimized = true, widt
   }, 30000);
   reaper.unref?.();
 
-  return { start, running, alive, pageState, goto, read, captureFull, click, type, press, wait, scroll, screenshot, watch, tabs, clearSite, hideWindow, stop, profile };
+  return { start, running, alive, pageState, goto, read, captureFull, click, type, press, wait, scroll, screenshot, watch, tabs, clearSite, hideWindow, stop, downloadFrom, waitForDownload, downloads: downloadList, profile };
 }
