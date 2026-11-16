@@ -54,3 +54,9 @@ export function anyAutomationOn(automation) {
 export function automationDisabled(mode, key) {
   return key === 'keepBuilding' && mode === 'single';
 }
+
+/** What the switch shows. A disabled switch is off, whatever value it stores:
+ *  Single has no Keep Building, and showing it on would imply it does. */
+export function automationChecked(mode, key, value) {
+  return !automationDisabled(mode, key) && value === true;
+}

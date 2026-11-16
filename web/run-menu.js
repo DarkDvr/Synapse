@@ -12,7 +12,7 @@ import { $ } from './dom.js';
 import { api } from './api.js';
 import { automationWaitSec } from './mode.js';
 import { toast } from './toast.js';
-import { automationDisabled, AUTOMATION_ROWS, AUTOMATION_DEFAULTS } from './automation.js';
+import { automationChecked, automationDisabled, AUTOMATION_ROWS, AUTOMATION_DEFAULTS } from './automation.js';
 import { findSession } from './projects.js';
 import { renderTranscript } from './transcript.js';
 
@@ -48,7 +48,7 @@ export function renderKeep() {
     el.disabled = disabled;
     el.setAttribute('aria-disabled', String(disabled));
     el.classList.toggle('is-readonly', disabled);
-    el.setAttribute('aria-checked', String(state.automation?.[row.key] === true));
+    el.setAttribute('aria-checked', String(automationChecked(state.mode, row.key, state.automation?.[row.key])));
     const hint = el.querySelector('small');
     if (hint) hint.textContent = disabled ? 'Only in Multi — the Architect can hand the plan to the team.' : row.hint;
   }

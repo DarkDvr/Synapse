@@ -17,7 +17,7 @@ import {
 } from '../src/automation.js';
 import { createAutoShutdown } from '../src/auto-shutdown.js';
 import { automationMs, keepBuildingDelayMs, answerTimeoutMs, permissionsTimeoutMs, shutdownIdleMs } from '../src/auto-answer.js';
-import { automationDisabled } from '../web/automation.js';
+import { automationDisabled, automationChecked } from '../web/automation.js';
 
 const session = (synapse) => ({ metadata: { synapse } });
 
@@ -39,6 +39,11 @@ test('Keep Building is read-only in Single and live in Multi', () => {
   assert.equal(automationDisabled('single', 'keepBuilding'), true);
   assert.equal(automationDisabled('multi', 'keepBuilding'), false);
   assert.equal(automationDisabled('single', 'autoPermissions'), false, 'the other three still apply');
+  // Single always draws it off, whatever the stored value says: it is not
+  // applicable, not merely hidden.
+  assert.equal(automationChecked('single', 'keepBuilding', true), false);
+  assert.equal(automationChecked('multi', 'keepBuilding', true), true);
+  assert.equal(automationChecked('single', 'autoPermissions', true), true);
 });
 
 test('a chat saved before the four switches keeps what it had', () => {
