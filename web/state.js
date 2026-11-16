@@ -83,6 +83,10 @@ export const state = {
   // the time between its first and last streamed piece, which is what the model's
   // own log calls speed. Empty the moment there is nothing to measure.
   rates: new Map(),
+  // The last measured rate for each role, per project, keyed `${dir}\0${role}`.
+  // It outlives the run and the page: the operator asked for the figure to stay
+  // until that role's model changes or a newer step measures it (16 Nov).
+  roleRates: new Map(),
   // Files the operator attached to the message they are writing: { id, name, mime,
   // size, data }, where `data` is base64 without the data: prefix. Cleared on a
   // successful send, kept on a failed one.

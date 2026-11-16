@@ -13,6 +13,7 @@ import { $ } from './dom.js';
 import { api } from './api.js';
 import { toast } from './toast.js';
 import { projectOf, runIn, dirKey } from './run-view.js';
+import { pruneRoleRates } from './role-rate-store.js';
 
 const missing = (name) => () => {
   throw new Error(`projects.js: ${name} was not wired at boot`);
@@ -194,6 +195,7 @@ export function pruneFolderState() {
     if (trace.dir && !folders.has(dirKey(trace.dir))) state.traces.delete(key);
   }
   for (const key of [...state.rates.keys()]) if (!folders.has(key)) state.rates.delete(key);
+  pruneRoleRates(folders);
   state.alarms = state.alarms.filter((a) => !a.dir || folders.has(dirKey(a.dir)));
 }
 

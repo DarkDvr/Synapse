@@ -58,6 +58,7 @@ import {
   lastPromptOf,
   noteWorkerUsage,
   paintRates,
+  loadRateMemory,
   rateViewWiring,
 } from './rate-view.js';
 import {
@@ -217,7 +218,7 @@ import {
   dialogDismissable,
   dialogOkResult,
 } from './dialog.js';
-import { loadClocks, tickClocks, clocksWiring } from './clocks.js';
+import { loadClocks, tickClocks, clocksWiring, flushClocks, reconcileClocks, transcriptWorkMs } from './clocks.js';
 import {
   refreshRemote,
   renderRemote,
@@ -633,6 +634,9 @@ function setView() {
 
 
 async function openSession(id) {
+  // The previous chat's reading belongs to it: write it before the swap, including a
+  // running `since`, so coming back later still knows when its turn began (16 Nov).
+  flushClocks();
   state.view = 'session';
   state.sessionId = id;
   // The project lock belongs to the chat that was open, like the permissions and the
@@ -665,6 +669,13 @@ async function openSession(id) {
   renderTree();
   renderCompactChip();
   await loadMessages();
+  // If this chat finished while another project was on screen — or while Synapse was
+  // closed — the transcript's last completed turn is the honest end of its clock.
+  reconcileClocks({
+    busy: state.busy || isBusy(id),
+    endedAt: lastCompletedAt(state.messages),
+    fallbackMs: transcriptWorkMs(state.messages),
+  });
   // A session is opened to read where it got to, not where it started: put the
   // transcript at its end once, without touching the page (the role cards above it
   // are where the operator's eye goes next anyway).
@@ -716,6 +727,7 @@ function dropLivePost() {
 }
 
 function showNothing() {
+  flushClocks();
   state.view = 'none';
   state.sessionId = null;
   state.messages = [];
@@ -770,6 +782,17 @@ async function loadDownloads() {
     state.downloadSeq += 1;
     renderTranscript();
   } catch { /* a reloaded page with no download list is still a working chat */ }
+}
+
+/** When the transcript's last assistant turn ended, for a clock that outlived the page. */
+function lastCompletedAt(messages = []) {
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const m = messages[i];
+    if (m?.type !== 'assistant') continue;
+    const at = Number(m.completed) || Number(m.raw?.time?.completed) || 0;
+    if (at) return at;
+  }
+  return 0;
 }
 
 async function loadMessages() {
@@ -1723,6 +1746,8 @@ async function checkSkills({ quiet = false } = {}) {
 
 // ── wiring ──────────────────────────────────────────────────────
 function wire() {
+  // The last measured speed for every role, before the first card paints.
+  loadRateMemory();
   setupModelPickers();
   // One stopwatch per card and one for the session, on a single one-second
   // interval: HH:MM:SS needs a second's resolution and this is a text node per
@@ -1744,6 +1769,8 @@ function wire() {
     }
   }
   setInterval(tickClocks, 1000);
+  // A page going away must leave the running `since` behind, not only the banked total.
+  window.addEventListener('pagehide', flushClocks);
   // Ctrl + wheel and Ctrl + plus/minus move the chat's text size instead of the
   // window's own zoom: one setting, one number, the same bounds as the slider.
   installChatZoom();
@@ -2468,7 +2495,7 @@ async function bootPage() {
   chatNotesWiring({ currentProject, dirKey, roleLabel });
   // The card's rate corner needs the run on screen, the model behind a ref and the
   // token formatter.
-  rateViewWiring({ dirKey, currentRun, modelByRef, selectionFor, fmtTokens });
+  rateViewWiring({ dirKey, currentRun, currentProject, modelByRef, selectionFor, fmtTokens });
   // The chat's scrolling and its streaming panel redraw the transcript, find the
   // trace a piece of writing belongs to, and need the question post as a jump target.
   chatScrollWiring({ renderTranscript, traceOf, currentRun, askHost });

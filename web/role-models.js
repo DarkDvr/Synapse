@@ -17,6 +17,7 @@ import { modelByRef, selectionFor, topEfforts, variantsOf, ROLES, architectSelec
 import { hiddenProviderIds } from './provider-list.js';
 import { renderTranscript } from './transcript.js';
 import { pickers, syncPickerInput } from './model-picker.js';
+import { clearRoleRate } from './role-rate-store.js';
 
 const missing = (name) => () => {
   throw new Error(`role-models.js: ${name} was not wired at boot`);
@@ -276,6 +277,9 @@ export async function setRoleModel(roleId, ref) {
   const variant = topEfforts(modelByRef(ref)).some((v) => v.id === current) ? current : '';
   try {
     await saveRoleSelection(roleId, ref, variant);
+    // A speed belongs to the model it was measured on. The old model's figure must
+    // not reappear here or on another project's card (16 Nov).
+    clearRoleRate(roleId);
     // Keep the card's own select in step: renderRoleActivity reads the refused
     // mark from it, and a stale value would keep the old model's red line.
     const select = document.querySelector(`#topology .role-model[data-role="${CSS.escape(roleId)}"]`);

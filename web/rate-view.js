@@ -7,16 +7,29 @@
 // one number.
 import { state } from './state.js';
 import { addSample, rateOf } from './rate.js';
+import { clearRoleRate, getRoleRate, loadRoleRates, rememberRoleRate, roleRateKey } from './role-rate-store.js';
 
 // Five things this file needs from app.js: the folder key, the run on screen, the
 // model behind a ref, the role's selection, and the token formatter. Wired at boot.
 const wired = {
   dirKey: (dir) => String(dir || '').toLowerCase(),
   currentRun: () => null,
+  currentProject: () => null,
   modelByRef: () => null,
   selectionFor: () => ({ ref: '' }),
   fmtTokens: (n) => String(n),
 };
+
+/** The open project, or the live run's folder when a card is being painted. */
+const projectDir = () => wired.currentProject?.()?.directory || wired.currentRun?.()?.dir || '';
+const modelFor = (role) => {
+  try { return wired.selectionFor(role)?.ref || ''; } catch { return ''; }
+};
+
+/** Boot-time restore; tests call this with their own storage. */
+export function loadRateMemory(storage) {
+  return loadRoleRates(storage);
+}
 
 /** Hand this module the five things that live in app.js. Called once, at boot. */
 export function rateViewWiring(fns) {
@@ -217,7 +230,8 @@ export function noteArchitectUsage(ev) {
   // alternate on screen, which reads as a bug because it is one (13 Nov). An implausible
   // event is dropped, not capped: the transcript's own figure is the honest one.
   if (limit && used > limit) return;
-  measureSession(ev.sessionId, ev);
+  const measured = measureSession(ev.sessionId, ev);
+  if (measured) rememberRoleRate(projectDir(), 'architect', modelFor('architect'), measured);
   state.archCtx = {
     sessionId: ev.sessionId,
     pending: '',
@@ -283,6 +297,8 @@ export function noteWorkerUsage(ev) {
   rec.ms = tally.ms;
   rec.at = Date.now();
   state.rates.set(key, rec);
+  // The card's memory, not the runner's tally: a later role/model keeps its own.
+  rememberRoleRate(run.dir, run.role, modelFor(run.role) || run.model || '', rec);
   paintRates();
 }
 
@@ -292,6 +308,7 @@ export function paintRates(now = Date.now()) {
   if (typeof document === 'undefined') return;
   const run = wired.currentRun();
   const rate = run ? state.rates.get(wired.dirKey(run.dir)) : null;
+  const dir = projectDir();
   // The Architect is not a delegated run, so no `runs` record describes it. Its
   // window comes from the usage event its own session sends, and the window size
   // from the model on its card — the same pair, in the same corner.
@@ -300,13 +317,20 @@ export function paintRates(now = Date.now()) {
   for (const card of document.querySelectorAll('#topology .role-card')) {
     const el = card.querySelector('.role-rate');
     if (!el) continue;
+    const role = card.dataset.role;
+    const model = modelFor(role);
+    const stored = state.roleRates?.get(roleRateKey(dir, role));
+    if (stored && model && stored.model && stored.model !== model) {
+      // A new model is a new reading. Do not let the old model's number reappear if
+      // the operator changes back.
+      clearRoleRate(role, dir);
+    }
     const bits = [];
-    // The last rate the model was measured at, kept until a new one replaces it: the
-    // operator asked for the figure to stay put when a turn goes quiet (16 Nov). A
-    // reading older than a minute says so in the tooltip rather than vanishing.
-    const own = card.dataset.role === 'architect'
-      ? sessionRates.get(state.sessionId)
-      : sessionRates.get(run?.workerId) || (run && rate && rate.role === card.dataset.role ? rate : null);
+    // Only this role's last reading. The active worker's session is not every
+    // worker's: reading it for every card made all four workers show Designer's
+    // 110 tok/s while only Designer was writing (16 Nov).
+    let own = getRoleRate(dir, role, model);
+    if (!own && run && rate && rate.role === role) own = rate;
     const words = rateText(own);
     if (words) bits.push(words);
     // The window, in the corner the operator already looks at: "27k/60k ctx". It
@@ -366,7 +390,7 @@ export function paintRates(now = Date.now()) {
   // model, the same measurement the Architect's card shows.
   const rail = typeof document !== 'undefined' ? document.getElementById('planRate') : null;
   if (rail) {
-    const open = sessionRates.get(state.sessionId);
+    const open = getRoleRate(dir, 'architect', modelFor('architect'));
     const text = rateText(open);
     if (rail.textContent !== text) rail.textContent = text;
     const age = open ? Math.round((now - open.at) / 1000) : 0;

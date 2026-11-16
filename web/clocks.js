@@ -39,17 +39,26 @@ export function clocksWiring(fns) {
 export const clockKey = (id) => `synapse.clocks.${id}`;
 
 export function loadClocks(sessionId) {
-  const c = { sessionId: sessionId || null, session: { ms: 0, since: null }, roles: {}, ticks: 0 };
+  const c = { sessionId: sessionId || null, session: { ms: 0, since: null, last: 0 }, roles: {}, ticks: 0, at: 0 };
   if (!sessionId) return c;
   try {
     const raw = JSON.parse(localStorage.getItem(clockKey(sessionId)) || 'null');
     if (raw && typeof raw === 'object') {
       c.session.ms = Math.max(0, Number(raw.session?.ms) || 0);
+      // `since` is absolute: the turn may have started before the page was closed or
+      // before this project was opened. Keeping it is what lets the time away count
+      // (16 Nov). A stale one is reconciled against the transcript on open.
+      c.session.since = Number(raw.session?.since) || null;
+      c.session.last = Math.max(0, Number(raw.session?.last) || 0);
+      c.at = Math.max(0, Number(raw.at) || 0);
       for (const [role, v] of Object.entries(raw.roles || {})) {
         c.roles[role] = {
           ms: Math.max(0, Number(v?.ms) || 0),
-          since: null,
+          since: Number(v?.since) || null,
           last: Math.max(0, Number(v?.last) || 0),
+          pausedMs: Math.max(0, Number(v?.pausedMs) || 0),
+          waitSince: Number(v?.waitSince) || null,
+          runKey: String(v?.runKey || ''),
         };
       }
     }
@@ -57,32 +66,54 @@ export function loadClocks(sessionId) {
   return c;
 }
 
+/** Write the reading now; called on a transition, on a timer, and before a page goes. */
+export function flushClocks() {
+  saveClocks();
+}
+
 function saveClocks() {
   const c = state.clocks;
   if (!c?.sessionId) return;
   try {
     const roles = {};
-    for (const [role, v] of Object.entries(c.roles)) roles[role] = { ms: v.ms, last: v.last };
-    localStorage.setItem(clockKey(c.sessionId), JSON.stringify({ session: { ms: c.session.ms }, roles }));
+    for (const [role, v] of Object.entries(c.roles)) {
+      roles[role] = {
+        ms: v.ms,
+        since: v.since,
+        last: v.last,
+        pausedMs: v.pausedMs || 0,
+        waitSince: v.waitSince || null,
+        runKey: v.runKey || '',
+      };
+    }
+    c.at = Date.now();
+    localStorage.setItem(
+      clockKey(c.sessionId),
+      JSON.stringify({ session: { ms: c.session.ms, since: c.session.since, last: c.session.last }, roles, at: c.at }),
+    );
   } catch { /* full or blocked storage must not break a turn */ }
 }
 
 /** Is this card doing work right now? The same reading its dot uses. */
 export function roleIsWorking(role) {
   const run = currentRun();
-  const form = (state.forms || [])[0];
-  const perm = (state.permissions || [])[0];
+  const waiting = (sessionId) => Boolean(sessionId) && (
+    (state.forms || []).some((form) => form.sessionId === sessionId) ||
+    (state.permissions || []).some((perm) => perm.sessionId === sessionId)
+  );
   if (role === 'architect') {
     // Waiting on the operator is not work, and neither is waiting on a worker —
     // the worker's own card is the one that should be counting.
-    if (form && form.sessionId === state.sessionId) return false;
-    if (perm && perm.sessionId === state.sessionId) return false;
+    if (waiting(state.sessionId)) return false;
     if (run) return false;
-    return isBusy(state.sessionId);
+    return isBusy(state.sessionId) || state.busy === true;
   }
   if (!run || run.role !== role) return false;
-  // A worker stopped on a question is waiting, exactly as its card says.
-  return !(form && form.sessionId && form.sessionId !== state.sessionId);
+  // A worker stopped on its own question or permission card is waiting, exactly as
+  // its card says. The card used to look only for a form, and it compared the form's
+  // session with the *open* chat, so a worker's permission kept its clock running
+  // while the operator was looking at the card (16 Nov).
+  return !waiting(run.workerId);
 }
 
 /**
@@ -96,7 +127,7 @@ export function roleIsWorking(role) {
  *
  * Pure, so the rule can be tested without a page.
  */
-export function advanceClock(rec, { sessionId = null, busy = false, busySince = null, now = Date.now() } = {}) {
+export function advanceClock(rec, { sessionId = null, busy = false, busySince = null, endedAt = null, now = Date.now() } = {}) {
   let changed = false;
   if (busy) {
     // Start where the session became busy, not when this page noticed: a turn that began
@@ -108,13 +139,79 @@ export function advanceClock(rec, { sessionId = null, busy = false, busySince = 
   // Not busy for the chat on screen. If the open reading belongs to another chat, leave
   // it: that chat may be working while we look elsewhere.
   if (rec.since && rec.sessionId === sessionId) {
-    rec.last = Math.max(0, now - rec.since);
+    // The transcript knows when the turn really ended; a page that opens after a
+    // project finished behind it would otherwise bill the time it was closed (16 Nov).
+    const end = Number(endedAt) >= rec.since ? Number(endedAt) : now;
+    rec.last = Math.max(0, end - rec.since);
     rec.ms += rec.last;
     rec.since = null;
     changed = true;
   }
   return changed;
 }
+
+/**
+ * A rough total for a chat whose stopwatch was never written down: the sum of the
+ * completed assistant turns the transcript still holds. Used only when a project has
+ * no saved reading at all — a chat that ran entirely in the background can still show
+ * that it did some work when it is first opened (16 Nov).
+ */
+export function transcriptWorkMs(messages = []) {
+  let total = 0;
+  for (const m of messages) {
+    if (m?.type !== 'assistant' || !m.completed) continue;
+    const started = Number(m.created) || 0;
+    const ended = Number(m.completed) || 0;
+    if (started && ended > started) total += ended - started;
+  }
+  return total;
+}
+
+/**
+ * Close a stopwatch whose chat finished while this page was elsewhere or closed.
+ *
+ * The transcript's last completed assistant message is the honest end time; the last
+ * local save is the fallback when there is no such message. Without this, opening a
+ * project after its turn finished billed the downtime as work (16 Nov).
+ */
+export function reconcileClocks({ busy = false, endedAt = null, fallbackMs = 0, now = Date.now() } = {}) {
+  const c = state.clocks;
+  if (!c) return;
+  let changed = false;
+  // A chat never opened while it worked has no saved `since`; the transcript's own turn
+  // lengths are the only honest record left.
+  if (Number(fallbackMs) > 0) {
+    for (const rec of [c.session, c.roles.architect]) {
+      if (rec && !rec.since && !rec.ms) {
+        rec.ms = Number(fallbackMs);
+        rec.last = Number(fallbackMs);
+        changed = true;
+      }
+    }
+  }
+  if (busy) {
+    if (changed) {
+      saveClocks();
+      paintClocks(now);
+    }
+    return;
+  }
+  const known = Number(endedAt) || 0;
+  const saved = Number(c.at) || 0;
+  for (const rec of [c.session, c.roles.architect]) {
+    if (!rec?.since) continue;
+    const end = known >= rec.since ? known : saved >= rec.since ? saved : now;
+    rec.last = Math.max(0, end - rec.since);
+    rec.ms += rec.last;
+    rec.since = null;
+    changed = true;
+  }
+  if (changed) {
+    saveClocks();
+    paintClocks(now);
+  }
+}
+
 
 export function tickClocks() {
   const now = Date.now();
@@ -148,7 +245,7 @@ export function tickClocks() {
   // project in the panel must not stop it (12 Nov).
   const arch = (c.roles.architect ||= { ms: 0, since: null, last: 0 });
   const open = state.sessionId;
-  const archBusy = Boolean(open) && isBusy(open);
+  const archBusy = Boolean(open) && roleIsWorking('architect');
   if (advanceClock(arch, { sessionId: open, busy: archBusy, busySince: state.busySince?.get(open), now })) changed = true;
   if (archBusy) anyWorking = true;
 
@@ -157,8 +254,28 @@ export function tickClocks() {
     // The Architect was advanced above, from the session rather than from this card.
     if (role === 'architect') continue;
     const working = roleIsWorking(role);
+    const live = currentRun();
+    const runKey = live && live.role === role ? `${live.task}|${Number(live.startedAt) || 0}` : '';
+    const rec = (c.roles[role] ||= { ms: 0, since: null, last: 0, pausedMs: 0, waitSince: null, runKey: '' });
+    // A new run starts with no pause behind it; the same run keeps the pause already
+    // accumulated (a page reload in the middle of a permission card).
+    if (rec.runKey !== runKey) {
+      rec.runKey = runKey;
+      rec.pausedMs = 0;
+      rec.waitSince = null;
+      changed = true;
+    }
+    if (runKey) {
+      if (!working && !rec.waitSince) {
+        rec.waitSince = now;
+        changed = true;
+      } else if (working && rec.waitSince) {
+        rec.pausedMs += Math.max(0, now - rec.waitSince);
+        rec.waitSince = null;
+        changed = true;
+      }
+    }
     if (working) anyWorking = true;
-    const rec = (c.roles[role] ||= { ms: 0, since: null, last: 0 });
     if (working && !rec.since) rec.since = now;
     else if (!working && rec.since) {
       rec.last = now - rec.since;
@@ -216,8 +333,13 @@ export function roleTime(role, now) {
     const base = Number(spent[t.id]) || 0;
     total += base;
     if (base > 0) last = base;
-    if (live && live.task === t.id) {
-      running = Math.max(0, now - (Number(live.startedAt) || now));
+    if (live && live.role === role && live.task === t.id) {
+      const rec = state.clocks?.roles?.[role];
+      const key = `${live.task}|${Number(live.startedAt) || 0}`;
+      const paused = rec && rec.runKey === key
+        ? (Number(rec.pausedMs) || 0) + (rec.waitSince ? Math.max(0, now - rec.waitSince) : 0)
+        : 0;
+      running = Math.max(0, now - (Number(live.startedAt) || now) - paused);
       total += running;
     }
   }
@@ -225,6 +347,7 @@ export function roleTime(role, now) {
 }
 
 export function paintClocks(now) {
+  if (typeof document === 'undefined') return;
   const c = state.clocks;
   if (!c) return;
   for (const card of document.querySelectorAll('#topology .role-card')) {

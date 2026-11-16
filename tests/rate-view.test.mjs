@@ -5,6 +5,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { withinWindow, cacheShare, lastPromptOf, noteArchitectCompaction, noteArchitectUsage, rateViewWiring, noteDelta, noteWorkerUsage, resetRate, forgetUsageSamples, sessionRate, rateText } from '../web/rate-view.js';
+import { getRoleRate } from '../web/role-rate-store.js';
 import { state } from '../web/state.js';
 import { promptParts } from '../src/runs.js';
 
@@ -181,4 +182,36 @@ test('a rate the operator has seen stays, however old the sample is', () => {
   assert.equal(rateText(old), '300 tok/s');
   assert.equal(rateText({ tokens: 0, ms: 0, at: Date.now() }), '', 'nothing measured: nothing invented');
   assert.equal(rateText(null), '');
+});
+
+test('a role card keeps its own rate, not the active worker\'s', async () => {
+  wire();
+  state.roleRates = new Map();
+  state.rates.clear();
+  noteWorkerUsage({ sessionId: 'w', raw: { data: { tokens: { output: 100 } } } });
+  noteDelta({ sessionId: 'w' });
+  await new Promise((r) => setTimeout(r, 450));
+  noteDelta({ sessionId: 'w' });
+  noteWorkerUsage({ sessionId: 'w', raw: { data: { tokens: { output: 200 } } } });
+  assert.ok(getRoleRate('F:/p', 'designer', ''), 'the worker that wrote has a reading');
+  assert.equal(getRoleRate('F:/p', 'coder-1', ''), null, 'an idle role must not borrow it');
+  assert.equal(getRoleRate('F:/p', 'inventor', ''), null);
+});
+
+test('the Architect\'s reading is remembered on its own role', async () => {
+  rateViewWiring({
+    currentProject: () => ({ directory: 'F:/p' }),
+    selectionFor: () => ({ ref: 'arch-model' }),
+  });
+  state.roleRates = new Map();
+  state.sessionId = 'arch_2';
+  noteArchitectUsage({ sessionId: 'arch_2', raw: { data: { tokens: { input: 10, output: 80 } } } });
+  noteDelta({ sessionId: 'arch_2' });
+  await new Promise((r) => setTimeout(r, 450));
+  noteDelta({ sessionId: 'arch_2' });
+  noteArchitectUsage({ sessionId: 'arch_2', raw: { data: { tokens: { input: 10, output: 180 } } } });
+  const saved = getRoleRate('F:/p', 'architect', 'arch-model');
+  assert.ok(saved, 'the Architect has a persistent reading');
+  assert.equal(saved.tokens, 100);
+  assert.equal(getRoleRate('F:/p', 'architect', 'other-model'), null, 'a model change drops it');
 });
