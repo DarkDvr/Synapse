@@ -129,7 +129,7 @@ try {
   {
     const { runner, woke, ran } = makeRunner();
     await runner.handleTurn('ses_arch', delegate('t1'));
-    await settle();
+    await waitForPrompt(ran);
     const run = fs.existsSync(path.join(DIR, '.project', 'runs.jsonl'))
       ? fs.readFileSync(path.join(DIR, '.project', 'runs.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l))
       : [];
@@ -143,7 +143,7 @@ try {
   {
     const { runner, woke, ran, warns } = makeRunner();
     await runner.handleTurn('ses_arch', delegate('t1', 'call_second_try'));
-    await settle();
+    await waitForPrompt(ran);
     expect('a whole plan lets the work start', ran.includes('prompt'), ran.join(',') + ' warns=' + warns.join(' | '));
     expect('and nothing is refused', woke.length === 0);
   }
@@ -202,7 +202,7 @@ try {
     const { runner, ran, arch, warns } = makeRunner();
     arch.push(...delegate('t8', 'call_recover'));
     const n = await runner.recoverDelegations([DIR]);
-    await settle();
+    await waitForPrompt(ran);
     expect('a delegation with no turn behind it is picked up', n === 1, String(n));
     expect('and the work starts', ran.includes('prompt'), `${ran.join(',')} warns=${warns.join(' | ')}`);
 

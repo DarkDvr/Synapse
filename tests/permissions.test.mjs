@@ -848,3 +848,16 @@ test('the harness gives the model its own screenshots, and nothing else under da
   assert.equal(call('read', `${HARNESS}/data/browser/profile/Cookies`).effect, 'deny');
   assert.equal(call('read', `${HARNESS}/data/engine/opencode/opencode.json`).effect, 'deny');
 });
+
+test('a method call\'s closing parenthesis is not part of the path', () => {
+  // PowerShell's method-call syntax glues the closing `)` to the quoted argument.
+  // The tokenizer drops the quotes, so the path used to end in `)` and miss both
+  // the project and scratch entries; the projects fence then answered "Another
+  // project" (the ExtractToDirectory refusal of 16 Nov).
+  const scratch = scratchDir(PROJECT);
+  const project = shell(`[System.IO.Compression.ZipFile]::ExtractToDirectory($zip, "${PROJECT}")`);
+  const own = shell(`[System.IO.Compression.ZipFile]::ExtractToDirectory($zip, "${scratch}")`, { scratchRoot: SCRATCH });
+  assert.equal(project.effect, 'allow', project.reason);
+  assert.equal(own.effect, 'allow', own.reason);
+  assert.equal(own.scope, 'scratch');
+});

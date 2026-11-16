@@ -182,7 +182,24 @@ function looksLikePath(token) {
 
 /** Resolve one path-shaped token against the directory the command is in. */
 export function resolvePath(value, cwd, { home = os.homedir() } = {}) {
-  const raw = String(value || '').replace(/^["']|["']$/g, '').trim();
+  let raw = String(value || '').trim();
+  // A quoted argument in a method call arrives as `"C:\path")`: the closing
+  // parenthesis is syntax, not part of the path. Reading it as a character made
+  // the path miss the project/scratch entry and hit the projects fence — the
+  // ExtractToDirectory refusal of 16 Nov.
+  if (/^["']/.test(raw)) {
+    const quote = raw[0];
+    const close = raw.indexOf(quote, 1);
+    if (close > 0) raw = raw.slice(1, close);
+    else raw = raw.slice(1);
+  }
+  // The tokenizer drops the quotes before a path reaches here, so a method call's
+  // closing `)` is still glued to the path (`…7a7d7b1e)`). One unbalanced closing
+  // parenthesis is syntax; a name like `Release (final)` is balanced and kept.
+  const opens = (raw.match(/\(/g) || []).length;
+  const closes = (raw.match(/\)/g) || []).length;
+  if (closes > opens) raw = raw.replace(/\)+$/, '');
+  raw = raw.trim();
   if (!raw) return null;
   const { text, unknown } = expand(raw, home);
   if (unknown) return { unknown: true, raw };
