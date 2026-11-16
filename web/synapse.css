@@ -2971,8 +2971,7 @@ body.is-stopping .chat-dock { animation: stop-glow 0.7s ease-in-out infinite; }
    columns of checkboxes, and the delete button has the last. One border for the
    whole table and hairlines between the rows, so a list of eight paths is one
    quiet block rather than eight cards. */
-.prot-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0 0 8px; }
-.prot-pane .set-note { margin: 0; }
+.prot-pane .set-note { margin: 0 0 8px; }
 .prot-table {
   border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: #15161a;
 }
@@ -2982,6 +2981,10 @@ body.is-stopping .chat-dock { animation: stop-glow 0.7s ease-in-out infinite; }
   padding: 3px 10px; background: transparent;
 }
 .prot-row + .prot-row { border-top: 1px solid rgba(255, 255, 255, 0.045); }
+/* The last row is the form, as in the Sites table: the path in the path column,
+   the two permission columns empty, and Add in the action column. */
+.prot-row.is-add { grid-template-columns: minmax(0, 1fr) 44px 44px 64px; }
+.prot-row.is-add .site-add-btn { justify-self: stretch; }
 .prot-row:not(.is-head):hover { background: rgba(255, 255, 255, 0.025); }
 .prot-row.is-head { padding: 4px 10px; background: #1b1d21; border-bottom: 1px solid var(--line); }
 .prot-head {

@@ -2,7 +2,7 @@
 // Handlers call the engine adapter; nothing here knows about OpenCode.
 import fs from 'node:fs';
 import path from 'node:path';
-import { spawn, execFile } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { appendRun, readPlan, readRuns, runLedger, briefSession, logPlanState, BRIEF_KEY } from './plans.js';
 import { ensureProjectDoc, appendRequest as appendProjectRequest, appendChat, appendDecision as appendProjectDecision, appendEntry, setHandover } from './project-doc.js';
 import { createFormAuto } from './form-auto.js';
@@ -2033,41 +2033,6 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
      * whether the row can be deleted.
      */
     protection: async () => ({ entries: protectionEntries(getConfig() || {}) }),
-
-    /** The native picker behind Settings > Prohibited > Add. Runs on this PC. */
-    pickProtectionPath: async (body) => {
-      const kind = body?.kind === 'file' ? 'file' : 'folder';
-      const script =
-        kind === 'file'
-          ? [
-              'Add-Type -AssemblyName System.Windows.Forms',
-              '$d = New-Object System.Windows.Forms.OpenFileDialog',
-              "$d.Title = 'Protect a file'",
-              'if ($d.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { $d.FileName }',
-            ].join('\n')
-          : [
-              'Add-Type -AssemblyName System.Windows.Forms',
-              '$d = New-Object System.Windows.Forms.FolderBrowserDialog',
-              "$d.Description = 'Protect a folder'",
-              '$d.ShowNewFolderButton = $false',
-              'if ($d.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { $d.SelectedPath }',
-            ].join('\n');
-      const chosen = await new Promise((resolve, reject) => {
-        execFile(
-          'powershell.exe',
-          ['-NoProfile', '-STA', '-Command', script],
-          { windowsHide: true, timeout: 300000 },
-          (err, stdout, stderr) => {
-            if (err) {
-              reject(new Error(String(stderr || err.message).split(/\r?\n/).filter(Boolean).pop() || err.message));
-              return;
-            }
-            resolve(String(stdout || '').trim());
-          },
-        );
-      });
-      return { path: chosen || null };
-    },
 
     createSession: async (body) => {
       requireReady();

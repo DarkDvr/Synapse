@@ -521,12 +521,10 @@ export function createServer({ api, engine, logger, config, remote, onRemote }) 
     }
     if (seg[0] === 'tools' && seg[1] === 'probe' && method === 'GET') return sendJson(res, 200, await api.probe());
 
-    // /api/protection — the PROHIBITED list Settings edits, and the native picker.
-    if (seg[0] === 'protection') {
-      if (seg.length === 1 && method === 'GET') return sendJson(res, 200, await api.protection());
-      if (seg[1] === 'pick' && method === 'POST') {
-        return sendJson(res, 200, await api.pickProtectionPath(await readBody(req)));
-      }
+    // /api/protection — the PROHIBITED list Settings edits. Paths are typed in the
+    // table; there is no native picker route.
+    if (seg[0] === 'protection' && seg.length === 1 && method === 'GET') {
+      return sendJson(res, 200, await api.protection());
     }
 
     // /api/projects...

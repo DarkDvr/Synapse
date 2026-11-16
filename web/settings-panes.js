@@ -467,16 +467,7 @@ function settingsProhibited(c) {
   return `
     <section class="set-group prot-pane">
       <h4 title="Built-in entries can be switched off but not removed; paths you add can be deleted. Each box is a permission: a cleared Write refuses every change to that path; a cleared Read refuses reading it too. The most specific entry wins, so a subfolder can be allowed inside a protected folder.">Prohibited</h4>
-      <div class="prot-top">
-        <p class="set-note">Tick the checkboxes to allow that action.</p>
-        <div class="prov-add">
-          <button type="button" class="btn btn-provider btn-sm" data-prot-add>+ Add Path</button>
-          <div class="prov-add-menu" id="protAddMenu" hidden>
-            <button type="button" data-prot-new="folder">Add Folder…</button>
-            <button type="button" data-prot-new="file">Add File…</button>
-          </div>
-        </div>
-      </div>
+      <p class="set-note">Tick the checkboxes to allow that action.</p>
       <div class="prot-table">
         <div class="prot-row is-head" aria-hidden="true">
           <span class="prot-path">Path</span>
@@ -485,6 +476,15 @@ function settingsProhibited(c) {
           <span class="prot-head"></span>
         </div>
         ${rows || '<div class="prot-empty">Loading the list…</div>'}
+        <div class="prot-row is-add">
+          <input id="protAddPath" class="site-add-input" type="text" spellcheck="false" autocomplete="off"
+                 placeholder="type a path, then Add" aria-label="Path to protect"
+                 title="Type the full path. A new path starts protected for writes and readable, like the built-ins." />
+          <span class="prot-head"></span>
+          <span class="prot-head"></span>
+          <button type="button" class="btn btn-secondary btn-sm site-add-btn" id="protAdd"
+                  title="Add this path to the prohibited list">Add</button>
+        </div>
       </div>
     </section>`;
 }

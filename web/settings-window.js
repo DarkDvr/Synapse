@@ -98,25 +98,26 @@ export function removeProtectionPath(target) {
   renderSettings();
 }
 
-export async function addProtectionPath(kind) {
-  try {
-    const picked = await api('POST', '/api/protection/pick', { kind: kind === 'file' ? 'file' : 'folder' });
-    const chosen = String(picked?.path || '').trim();
-    if (!chosen) return;
-    const c = collectSettings();
-    if (!c) return;
-    c.protection = c.protection || {};
-    const paths = Array.isArray(c.protection.paths) ? c.protection.paths : (c.protection.paths = []);
-    if (!paths.some((p) => samePath(p.path, chosen))) {
-      // A new path starts protected for writes and readable, the same default the
-      // built-ins have; the operator clears Read only when touching it is dangerous.
-      paths.push({ path: chosen, label: '', write: false, read: true });
-    }
-    c.protection.removed = (c.protection.removed || []).filter((p) => !samePath(p, chosen));
-    renderSettings();
-  } catch (err) {
-    toast('Could Not Add A Path', err.message);
+export function addProtectionPath(value) {
+  // The last row of the table is the form, like the Sites table: a typed path, Add
+  // (or Enter) beside it, no native picker and no second window to find (17 Nov).
+  const chosen = String(value || '').trim().replace(/^"(.*)"$/, '$1').trim();
+  if (!chosen) {
+    $('settingsBody')?.querySelector('#protAddPath')?.focus();
+    return;
   }
+  const c = collectSettings();
+  if (!c) return;
+  c.protection = c.protection || {};
+  const paths = Array.isArray(c.protection.paths) ? c.protection.paths : (c.protection.paths = []);
+  if (!paths.some((p) => samePath(p.path, chosen))) {
+    // A new path starts protected for writes and readable, the same default the
+    // built-ins have; the operator clears Read only when touching it is dangerous.
+    paths.push({ path: chosen, label: '', write: false, read: true });
+  }
+  c.protection.removed = (c.protection.removed || []).filter((p) => !samePath(p, chosen));
+  renderSettings();
+  $('settingsBody')?.querySelector('#protAddPath')?.focus();
 }
 
 // The nine panes come from ./settings-panes.js; Providers is the one editor that
@@ -258,6 +259,13 @@ export function onSettingsInput(e) {
   if (e.target?.id === 'browserSigninUrl' && e.key === 'Enter') {
     e.preventDefault();
     $('settingsBody')?.querySelector('#browserSignin')?.click();
+    return;
+  }
+  // The Prohibited table's last row works the same way: type the path and press Add
+  // or Enter; no native picker, no second window (17 Nov).
+  if (e.target?.id === 'protAddPath' && e.key === 'Enter') {
+    e.preventDefault();
+    $('settingsBody')?.querySelector('#protAdd')?.click();
     return;
   }
   // The chat's size is the one setting whose effect is worth seeing while it is
@@ -423,15 +431,12 @@ export async function onSettingsClick(e) {
   // The Engine pane's own button now lands on the Updates page instead of
   // opening the chip's popup over the settings window.
   if (e.target.closest('[data-check-update]')) { switchSettingsTab('updates'); return; }
-  // Prohibited: the tick and the two add buttons. A tick is a draft change, saved
-  // with the rest of the settings; nothing is enforced until Save.
-  if (e.target.closest('[data-prot-add]')) {
-    const menu = $('protAddMenu');
-    if (menu) menu.hidden = !menu.hidden;
+  // Prohibited: a tick is a draft change, saved with the rest of the settings;
+  // nothing is enforced until Save. The Add button reads the table's last row.
+  if (e.target.closest('#protAdd')) {
+    addProtectionPath($('settingsBody')?.querySelector('#protAddPath')?.value);
     return;
   }
-  const protNew = e.target.closest('[data-prot-new]');
-  if (protNew) { addProtectionPath(protNew.dataset.protNew); return; }
   const protDel = e.target.closest('[data-prot-del]');
   if (protDel) { removeProtectionPath(protDel.dataset.protDel); return; }
   const protToggle = e.target.closest('[data-prot-write],[data-prot-read]');

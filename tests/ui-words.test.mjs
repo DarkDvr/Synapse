@@ -236,6 +236,20 @@ contract('Prohibited is a table with a Write and a Read box per row', () => {
   assert.match(css, /\.msg\.harness\.is-prohibited/);
 });
 
+contract('Prohibited adds a typed path in the table’s last row, not a picker', () => {
+  const panes = read('web/settings-panes.js');
+  const win = read('web/settings-window.js');
+  const css = read('web/synapse.css');
+  assert.match(panes, /id="protAddPath"/);
+  assert.match(panes, /id="protAdd"/);
+  assert.match(panes, /placeholder="type a path, then Add"/);
+  assert.doesNotMatch(panes, /data-prot-add|data-prot-new|protAddMenu|Add Folder|Add File/);
+  assert.match(win, /e\.target\?\.id === 'protAddPath'/);
+  assert.match(win, /paths\.push\(\{ path: chosen, label: '', write: false, read: true \}\)/);
+  assert.doesNotMatch(win, /protection\/pick/);
+  assert.match(css, /\.prot-row\.is-add \{ grid-template-columns: minmax\(0, 1fr\) 44px 44px 64px; \}/);
+});
+
 // 4 Nov: the guard no longer rewrites the effort; it counts loops and sets the
 // model aside at the limit. The setting is a number beside the switch.
 contract('the loop setting is a count, and the card says what happened', () => {

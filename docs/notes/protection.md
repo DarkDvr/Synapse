@@ -37,10 +37,10 @@ The list is a table of **two permissions per path**, because they are independen
   `%SystemRoot%`, `%ProgramFiles%`, `%ProgramFiles(x86)%`, `%ProgramData%`, and the
   folder Synapse runs from. They start **Write cleared, Read ticked**. They can be
   changed but never deleted: a half-ticked list must not be able to lose Windows.
-- **Added entries**, chosen in that pane with the native folder or file picker.
-  They start the same way — Write cleared, Read ticked — and can be deleted.
-  Deleting one records its path in `protection.removed`, which is what stops a
-  seeded entry coming back at boot.
+- **Added entries**, typed into the last row of that table. They start the same
+  way — Write cleared, Read ticked — and can be deleted. Deleting one records its
+  path in `protection.removed`, which is what stops a seeded entry coming back at
+  boot.
 
 The config keeps `protection: { builtinsOff, builtinsSealed, paths, removed }`:
 `builtinsOff` lists the built-in ids whose Write was switched back on,
