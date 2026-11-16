@@ -233,7 +233,10 @@ export function planClockMarkup() {
   const c = state.clocks;
   if (!c) return '';
   const ms = c.session.ms + (c.session.since ? Date.now() - c.session.since : 0);
-  return `<span class="plan-clock" id="planClock" title="Time this chat has spent working — it pauses whenever no card is working, and whenever you are being waited on.">${hhmmss(ms)}</span>`;
+  // The rate sits beside the clock in both modes: a Single-mode chat has no role card,
+  // so the rail is the one place its speed can be read (16 Nov).
+  return `<span class="plan-rate" id="planRate" title="How fast the model was last measured writing."></span>` +
+    `<span class="plan-clock" id="planClock" title="Time this chat has spent working — it pauses whenever no card is working, and whenever you are being waited on.">${hhmmss(ms)}</span>`;
 }
 
 /**

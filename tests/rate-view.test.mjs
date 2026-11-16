@@ -4,7 +4,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { withinWindow, cacheShare, lastPromptOf, noteArchitectCompaction, noteArchitectUsage, rateViewWiring, noteDelta, noteWorkerUsage, resetRate, forgetUsageSamples } from '../web/rate-view.js';
+import { withinWindow, cacheShare, lastPromptOf, noteArchitectCompaction, noteArchitectUsage, rateViewWiring, noteDelta, noteWorkerUsage, resetRate, forgetUsageSamples, sessionRate, rateText } from '../web/rate-view.js';
 import { state } from '../web/state.js';
 import { promptParts } from '../src/runs.js';
 
@@ -155,4 +155,30 @@ test('a step with a window becomes one sample of written tokens over its own tim
   assert.ok(rec, 'the step is a sample');
   assert.equal(rec.tokens, 100, 'the step wrote a hundred tokens');
   assert.ok(rec.ms >= 400, `the window is the step's own (${rec.ms}ms)`);
+});
+
+// The operator's rule (16 Nov): when there is no fresh figure, keep the last one until a
+// new step is measured — and measure the Architect too, whose card used to show a window
+// and never a speed, and Single mode, which has no card at all.
+test('the Architect is measured from its own usage event, like a worker', async () => {
+  wire();
+  state.sessionId = 'arch_1';
+  state.archCtx = null;
+  noteArchitectUsage({ sessionId: 'arch_1', raw: { data: { tokens: { input: 10, output: 80 } } } });
+  noteDelta({ sessionId: 'arch_1' });
+  await new Promise((r) => setTimeout(r, 450));
+  noteDelta({ sessionId: 'arch_1' });
+  noteArchitectUsage({ sessionId: 'arch_1', raw: { data: { tokens: { input: 10, output: 180 } } } });
+  const rec = sessionRate('arch_1');
+  assert.ok(rec, 'the step became a sample');
+  assert.equal(rec.tokens, 100);
+});
+
+test('a rate the operator has seen stays, however old the sample is', () => {
+  // 45 s of quiet used to erase the figure from the card. It is the same tally now,
+  // ten minutes later, and it still reads.
+  const old = { tokens: 900, ms: 3000, at: Date.now() - 10 * 60 * 1000 };
+  assert.equal(rateText(old), '300 tok/s');
+  assert.equal(rateText({ tokens: 0, ms: 0, at: Date.now() }), '', 'nothing measured: nothing invented');
+  assert.equal(rateText(null), '');
 });

@@ -2580,6 +2580,9 @@ body.is-stopping .chat-dock { animation: stop-glow 0.7s ease-in-out infinite; }
 /* The session's own stopwatch: time spent working, grey and quiet, in the corner
    where a reader looks last. */
 .plan-clock { color: #6c7079; font-variant-numeric: tabular-nums; flex: none; }
+  /* Beside the clock, in both modes: the speed the model was last measured at. */
+.plan-rate { color: #6c7079; font-variant-numeric: tabular-nums; flex: none; }
+.plan-rate:not(:empty) { margin-right: 9px; }
 
 /* One stopwatch per role card: current task, then total for this session. It
    sits in the extra strip under the clamped subtitle, so it can never collide

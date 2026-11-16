@@ -38,7 +38,64 @@ export function rateViewWiring(fns) {
 // then barely moves, which is what a rate on a card is for.
 const deltaWindow = new Map(); // sessionId -> { first, last }
 const usageTotals = new Map(); // dirKey -> tokens written so far in this run
-const RATE_FRESH_MS = 45000;
+const sessionTotals = new Map(); // sessionId -> tokens written so far, whoever owns it
+const sessionRates = new Map(); // sessionId -> { tokens, ms, at } — a rate that keeps
+// After this long the figure is still shown, and the tooltip says how old it is.
+const STALE_NOTE_S = 60;
+
+/**
+ * Add one step's writing to a session's tally and keep the resulting rate.
+ *
+ * The Architect's own session is measured here too: its usage event is the same one a
+ * worker sends, and before this only the worker's went anywhere, so the Architect card
+ * could show a window and never a speed (16 Nov).
+ */
+function measureSession(sessionId, ev, { consumeWindow = true } = {}) {
+  if (!sessionId) return null;
+  const tokens = ev.raw?.data?.tokens;
+  if (!tokens) return null;
+  const written = (Number(tokens.output) || 0) + (Number(tokens.reasoning) || 0);
+  const w = deltaWindow.get(sessionId);
+  // The worker's own path reads the same window after this, so it is left in place for
+  // it to consume: deleting it here made the card's sample vanish (16 Nov).
+  if (consumeWindow) deltaWindow.delete(sessionId);
+  const prev = sessionTotals.get(sessionId);
+  // A total that went backwards is a session that started again (or a stream that was
+  // reset): this step is the new baseline, not a sample from a negative gap.
+  if (prev === undefined || written < prev) {
+    sessionTotals.set(sessionId, written);
+    return null;
+  }
+  sessionTotals.set(sessionId, written);
+  if (written === prev) return null;
+  const ms = w ? w.last - w.first : 0;
+  if (!ms || ms < 400) return null;
+  const step = written - prev;
+  const rec = sessionRates.get(sessionId) || { tokens: 0, ms: 0, at: 0 };
+  const tally = addSample({ tokens: rec.tokens, ms: rec.ms }, { written: step, ms });
+  rec.tokens = tally.tokens;
+  rec.ms = tally.ms;
+  rec.at = Date.now();
+  sessionRates.set(sessionId, rec);
+  return rec;
+}
+
+/**
+ * The words for a rate, or nothing while there is no sample yet.
+ *
+ * Deliberately blind to the reading's age: a figure the operator has seen should not
+ * disappear because a turn went quiet (16 Nov). A stale reading is marked in the
+ * tooltip, not removed from the line.
+ */
+export function rateText(rec) {
+  const tps = rateOf(rec);
+  return tps ? `${tps} tok/s` : '';
+}
+
+/** The last rate this session was measured at, however long ago that was. */
+export function sessionRate(sessionId) {
+  return sessionRates.get(sessionId) || null;
+}
 
 export function noteDelta(ev) {
   if (!ev.sessionId) return;
@@ -69,6 +126,9 @@ export function resetRate(run) {
 export function forgetUsageSamples() {
   usageTotals.clear();
   deltaWindow.clear();
+  // The shown rate stays: it is the last thing the model was measured at, and the
+  // operator asked for it to keep until a new one is measured (16 Nov).
+  sessionTotals.clear();
 }
 
 /**
@@ -157,6 +217,7 @@ export function noteArchitectUsage(ev) {
   // alternate on screen, which reads as a bug because it is one (13 Nov). An implausible
   // event is dropped, not capped: the transcript's own figure is the honest one.
   if (limit && used > limit) return;
+  measureSession(ev.sessionId, ev);
   state.archCtx = {
     sessionId: ev.sessionId,
     pending: '',
@@ -199,6 +260,7 @@ export function noteWorkerUsage(ev) {
   if (!run || !ev.sessionId || ev.sessionId !== run.workerId) return;
   const tokens = ev.raw?.data?.tokens;
   if (!tokens) return;
+  measureSession(ev.sessionId, ev, { consumeWindow: false });
   const total = (Number(tokens.output) || 0) + (Number(tokens.reasoning) || 0);
   const key = wired.dirKey(run.dir);
   // The window belongs to the step this usage figure is about, so it is taken
@@ -238,12 +300,15 @@ export function paintRates(now = Date.now()) {
   for (const card of document.querySelectorAll('#topology .role-card')) {
     const el = card.querySelector('.role-rate');
     if (!el) continue;
-    const mine = run && rate && rate.role === card.dataset.role && now - rate.at < RATE_FRESH_MS;
     const bits = [];
-    // The run's own measured average. Shown only while it has something behind it:
-    // a step or two of evidence is a number, one short step is a guess.
-    const tps = mine ? rateOf(rate) : 0;
-    if (tps) bits.push(`${tps} tok/s`);
+    // The last rate the model was measured at, kept until a new one replaces it: the
+    // operator asked for the figure to stay put when a turn goes quiet (16 Nov). A
+    // reading older than a minute says so in the tooltip rather than vanishing.
+    const own = card.dataset.role === 'architect'
+      ? sessionRates.get(state.sessionId)
+      : sessionRates.get(run?.workerId) || (run && rate && rate.role === card.dataset.role ? rate : null);
+    const words = rateText(own);
+    if (words) bits.push(words);
     // The window, in the corner the operator already looks at: "27k/60k ctx". It
     // is the pair that explains a slowdown (a full window is re-read every turn)
     // and the compaction that follows. Shown even when the rate has gone stale —
@@ -296,5 +361,20 @@ export function paintRates(now = Date.now()) {
     const text = bits.join('   ');
     if (el.textContent !== text) el.textContent = text;
     if (el.title !== tip) el.title = tip;
+  }
+  // Single mode has no role card, so the rail carries the number: the open chat's own
+  // model, the same measurement the Architect's card shows.
+  const rail = typeof document !== 'undefined' ? document.getElementById('planRate') : null;
+  if (rail) {
+    const open = sessionRates.get(state.sessionId);
+    const text = rateText(open);
+    if (rail.textContent !== text) rail.textContent = text;
+    const age = open ? Math.round((now - open.at) / 1000) : 0;
+    const note = !text
+      ? 'How fast the model writes, measured from the stream. Nothing measured yet in this chat.'
+      : age > STALE_NOTE_S
+        ? `Last measured ${Math.round(age / 60)} min ago; it stays until a new step is measured.`
+        : 'How fast the model was last measured writing.';
+    if (rail.title !== note) rail.title = note;
   }
 }

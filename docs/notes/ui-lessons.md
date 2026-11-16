@@ -2769,3 +2769,24 @@ The alarm is now a **break in the merge**: `alarmBreaks()` marks the first Assis
 at or after the alarm's time, and `groupTurns(messages, { breakBefore })` stops merging
 there. The line sits between the step that was refused and the step after it, and later
 steps cannot move it. A turn is one block, but a refusal inside it is a boundary.
+
+## The rate stays, and Single mode has one (16 Nov)
+
+Two complaints, one cause: the number was painted only onto `#topology .role-card`,
+inside a freshness gate.
+
+- **Single mode showed no tok/s at all** — there is no role card there. The rate now also
+  goes in the rail's plan line, beside the clock (`#planRate`, `planClockMarkup`), which
+  exists in both modes.
+- **The figure vanished when a turn went quiet** — `paintRates` required a sample newer
+  than 45 s and otherwise painted nothing. It now keeps the last reading until a new step
+  replaces it (`rateText`, which is deliberately blind to age), and the tooltip says how
+  old it is once it passes a minute.
+- **The Architect was never measured.** `noteWorkerUsage` only ever looked at the run's
+  worker session, so the Architect card could show a window and never a speed. Every
+  usage event now goes through `measureSession`, keyed by session, so the Architect's own
+  card and the rail's line get a real figure.
+
+One trap found on the way: the delta window is shared state. `measureSession` consumed it
+for the worker path too, so the card's own sample found no window and dropped out; the
+caller now owns the window (`consumeWindow`).
