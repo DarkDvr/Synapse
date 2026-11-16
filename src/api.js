@@ -105,6 +105,26 @@ export function binContents(dir) {
  *
  * Resolves only when the folder is really gone — the exit code alone is not proof.
  */
+/**
+ * Empty a project's own `.project\scratch` before its folder is recycled.
+ *
+ * That folder is inside the project, so the Recycle Bin takes it along with
+ * everything else. Measured 16 Nov: a drawing a deleted project had made was
+ * still readable from the bin afterwards. The scratch folder beside the projects
+ * (`_scratch`) is removed separately, after the move.
+ */
+function emptyProjectScratch(dir) {
+  const scratch = path.join(dir, '.project', 'scratch');
+  try {
+    if (!fs.existsSync(scratch)) return false;
+    fs.rmSync(scratch, { recursive: true, force: true });
+    return true;
+  } catch (err) {
+    app.warn(`could not empty the scratch folder inside a deleted project: ${err.message}`);
+    return false;
+  }
+}
+
 function recycleFolder(dir) {
   return new Promise((resolve, reject) => {
     // Newlines, never semicolons: the call is one statement spread over six lines,
@@ -1800,6 +1820,10 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
         err.status = 409;
         throw err;
       }
+      // The project's own scratch folder sits inside the folder the Recycle Bin
+      // takes, so it is emptied first: a private project's work should not be
+      // readable from the bin.
+      const emptiedScratch = fs.existsSync(current.directory) && emptyProjectScratch(current.directory);
       let recycled = false;
       if (fs.existsSync(current.directory)) {
         // The engine holds a location "loaded" once it has served a turn there,
@@ -1890,6 +1914,13 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
           app.warn(`could not delete the conversation ${s.id} of a deleted project: ${err.message}`);
         }
       }
+      // The engine's store keeps the project's row and the shell output written
+      // for it; both outlived a delete on 16 Nov, so they go with the project.
+      try {
+        await engine.forgetProject?.(current.directory);
+      } catch (err) {
+        app.warn(`could not forget the deleted project in the engine store: ${err.message}`);
+      }
       projects.remove(id);
       // The engine deletes the chat rows, but SQLite keeps their pages until a
       // VACUUM. That waits for the next engine start (engine-purge.js); the note
@@ -1906,7 +1937,7 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
         requestConsolePurge(current.directory, sessions.map((s) => s.id));
         removePrivateDir(current.directory);
       }
-      return { ok: true, recycled, directory: current.directory, binFiles: bin.files };
+      return { ok: true, recycled, directory: current.directory, binFiles: bin.files, scratchEmptied: emptiedScratch };
     },
 
     /**

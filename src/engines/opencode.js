@@ -17,6 +17,7 @@ import {
 import { ROOT, SEARCH_SERVER, DELEGATE_SERVER, LEASE_SERVER, GIT_SERVER, PROCESS_SERVER, BROWSER_SERVER, ENGINE_PID_FILE, SKILLS_DIR, VENDOR_ENGINE } from '../paths.js';
 import { providerApiKey } from '../config.js';
 import { vacuumStore } from '../engine-store.js';
+import { purgeProjectTraces } from '../engine-project-purge.js';
 
 const ENGINE_USERNAME = 'opencode';
 // What the engine reports as a model's output limit when a provider entry carries
@@ -918,6 +919,25 @@ export class OpenCodeEngine extends Engine {
   }
 
   /**
+   * Forget a deleted project inside the engine's store.
+   *
+   * The engine's DELETE removes a chat and its messages, but not the project row
+   * that remembers the folder, and not the shell output written for it. Measured
+   * 16 Nov: both survived a delete and were recovered by hand. Called by the
+   * project delete once its sessions are gone, so nothing is still writing.
+   */
+  async forgetProject(dir) {
+    const home = this.resolveHome();
+    const result = await purgeProjectTraces({ dataDir: home.data, dir, log: this.log });
+    if (result.projectRows || result.shells) {
+      this.sessionLog.info(
+        `project forgotten in the engine store: ${result.projectRows} row(s), ${result.shells} shell file(s)`,
+      );
+    }
+    return result;
+  }
+
+  /**
    * Dispose the engine's cached services for a directory.
    *
    * The engine keeps a location loaded once it has served a turn there, and that
@@ -1084,3 +1104,4 @@ export class OpenCodeEngine extends Engine {
     this.emit('event', { ts: Date.now(), type, kind, sessionId, directory, raw: ev });
   }
 }
+

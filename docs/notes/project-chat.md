@@ -540,11 +540,10 @@ What is *not* covered, and cannot be with this engine:
 
 - **the engine's own session store** (`data\engine\opencode\opencode.db`) holds the
   conversation, exactly as it does for every chat. Deleting a project asks the engine to
-  delete its sessions (the chat rows go), and the next engine start runs a forced secure
-  `VACUUM` before opening the store, so the pages SQLite kept are rewritten too. The
-  startup console says how many deleted projects were cleaned and how much was reclaimed.
-  Brief/instruction rows and the project/worktree rows are not chat and may remain; the
-  store is never edited while the engine is running;
+  delete its sessions (the chat rows go — measured 16 Nov: 18,790 messages, not one row
+  left behind), and the next engine start runs a forced secure `VACUUM`, so the pages
+  SQLite kept are rewritten too. The startup console says how many deleted projects were
+  cleaned and how much was reclaimed. Brief/instruction rows still remain;
 - **the shared browser profile** under `data\browser` keeps the cookies of sites opened
   from a private project;
 - **the projects registry** (`data\projects.json`) knows the project's name and folder — it
@@ -553,4 +552,29 @@ What is *not* covered, and cannot be with this engine:
 The work itself — plan, runs, project document, artifacts — lives in the project folder as
 always, which is where the operator can delete it in one move.
 
+### What a delete leaves behind (16 Nov)
 
+A private project was created and deleted inside four minutes as a test, and three things
+came back afterwards. Each was recovered by hand, and each is now removed at delete:
+
+- **the engine's project row** — it remembers the folder's path, and the row survived the
+  delete. `forgetProject` removes it, its `worktree` rows, and the shell output written
+  under `data\opencode\shell\<project id>` (`src/engine-project-purge.js`). The store is
+  open while the engine runs, so this writes to it — as `moveProject` already did, with a
+  busy timeout, and the engine reads these rows per request rather than caching them;
+- **the shell output itself** — the tool output of that project was still readable, byte
+  for byte, in that folder. It is deleted with the row;
+- **the project's own `.project\scratch`** — it sits inside the folder, so the Recycle Bin
+  took it along with the plan and the project document. It is emptied before the move.
+
+What still survives a delete, and why:
+
+- **the folder in the Recycle Bin** — that is the undo, and it holds `.project\project.md`,
+  whose Log keeps every request verbatim. Empty the bin for a private project, or the
+  prompts are one right-click away;
+- **the SQLite pages** until the next engine start VACUUMs them (`engine-purge.js`);
+- **the shared browser profile** and **the projects registry**, as above.
+
+The lesson worth keeping: "deleted" and "forgotten" are different words. Deletion moved the
+folder and dropped the chats; it did not touch the engine's own memory of the project, and it
+left the project's scratch in the bin.

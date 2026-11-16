@@ -1,6 +1,6 @@
 {
   "name": "synapse",
-  "version": "1.59.19",
+  "version": "1.59.20",
   "private": true,
   "author": "DarkDvr",
   "license": "AGPL-3.0-only",
@@ -9,7 +9,7 @@
     "url": "https://github.com/DarkDvr/Synapse.git"
   },
   "type": "module",
-  "description": "Synapse — a self-contained Windows agent harness: plan, delegate, run and watch AI work on any project with any model.",
+  "description": "Synapse \u2014 a self-contained Windows agent harness: plan, delegate, run and watch AI work on any project with any model.",
   "engines": {
     "node": ">=20"
   },
