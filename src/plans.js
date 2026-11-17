@@ -78,15 +78,30 @@ export const HARNESS_KEY = 'synapse.harness';
  * discover reliably: the three global roots and how a script-relative output path is
  * judged. `$PWD` is the per-project root; SYNAPSE_PROJECT is deliberately absent —
  * one engine serves every project, so a global project variable would be wrong.
+ *
+ * With the browser switched on it also names the browser and search tools, because
+ * those names are the one thing a model cannot infer: the engine prefixes an MCP
+ * server's tools with its key (`synapse-browser_open`), and the bare `websearch` is
+ * not a tool at all. A brief that named `open` cost a Single chat nine guessed URLs
+ * on 17 Nov. Switched off, the tools are absent, so the paragraph is absent too.
  */
-export function harnessCore() {
+export function harnessCore({ browser = false } = {}) {
   const harness = process.env.SYNAPSE_HARNESS || ROOT;
   const projects = process.env.SYNAPSE_PROJECTS_ROOT || PROJECTS_ROOT;
   const scratch = process.env.SYNAPSE_SCRATCH_ROOT || SCRATCH_ROOT;
-  return [
+  const lines = [
     `Harness roots: SYNAPSE_HARNESS=${harness}; SYNAPSE_PROJECTS_ROOT=${projects}; SYNAPSE_SCRATCH_ROOT=${scratch}.`,
     `The project root is $PWD (PowerShell) or %CD% (cmd). A relative path in a shell command is resolved from the working directory, not from a script's own folder. For a script's output folder, use an absolute path inside the project — for example, "$PWD\\bin".`,
-  ].join('\n');
+  ];
+  if (browser) {
+    lines.push(
+      'Browser: `synapse-browser_open`, `_read`, `_click`, `_screenshot` reach pages `webfetch` cannot ' +
+        '(signed in, bot check, drawn by script). A 404 from a fetch is a guessed path, not a wall: open the ' +
+        'site and follow its links.',
+      'Search: `synapse-search_websearch`; `synapse-search_webfetch` fetches a page. A bare `websearch` does not exist.',
+    );
+  }
+  return lines.join('\n');
 }
 
 // A read that lands inside a write is retried twice, 25 ms apart (see readPlan).
@@ -1051,7 +1066,7 @@ export function handoverDigest(text, max = 700) {
  * skimmed. Facts first (what the plan currently says), then the one rule that
  * cannot be guessed (the Architect owns the file; nobody else writes it).
  */
-export function briefSession({ dir, role = 'architect', auto = false, single = false, skills = '', focus = '', instructions = '', browser = false } = {}) {
+export function briefSession({ dir, role = 'architect', auto = false, single = false, skills = '', focus = '', instructions = '' } = {}) {
   const state = readPlan(dir);
   // The project's own document: what was asked, what was decided, the operator's
   // standing notes and the last compact's handover. This is what makes a long
@@ -1088,23 +1103,9 @@ export function briefSession({ dir, role = 'architect', auto = false, single = f
   lines.push(
     `Attachments the operator chose to keep are in .project/attachments/ — list that folder when a task may need one.`,
   );
-  // The browser and the search server arrive namespaced — `synapse-browser_open`,
-  // `synapse-search_websearch` — while the plain `webfetch` is the engine's own, and
-  // its `websearch` is switched off, so a bare `websearch` answers "not available".
-  // Naming them is the only part of this a model cannot infer; what each tool does is
-  // in its own description, read in the same tool list, and repeating that here charged
-  // every step of every turn for a paragraph (17 Nov: a brief that named `open` and
-  // `read` sent a model to tools that do not exist, and it fell back to guessing URLs).
-  if (browser) {
-    lines.push(
-      'Browser: `synapse-browser_open`, `_read`, `_click`, `_screenshot` reach pages `webfetch` cannot ' +
-        '(signed in, bot check, drawn by script). A 404 from a fetch is a guessed path, not a wall: open the ' +
-        'site and follow its links.',
-    );
-    lines.push(
-      'Search: `synapse-search_websearch`; `synapse-search_webfetch` fetches a page. A bare `websearch` does not exist.',
-    );
-  }
+  // The browser and search tools are named in the harness core, not here: they are the
+  // same tools for every role, they are absent when the browser is off, and a model
+  // cannot infer a prefixed name. See harnessCore.
   // The app's own data is part of the project, not the machine. This is one rule
   // for every project this harness will ever build; the operator does not keep
   // anything in AppData, and scratch is temporary by definition.

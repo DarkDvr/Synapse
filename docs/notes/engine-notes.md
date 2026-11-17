@@ -2238,7 +2238,12 @@ them.
   `synapse.plan` for every session. It names the roots and the rule that a relative shell
   path is judged from the working directory, not from a script's own `Push-Location`; for a
   script's output folder, use `"$PWD\bin"` or an absolute path. It cannot be skipped by not
-  loading a skill and cannot be edited by a project.
+  loading a skill and cannot be edited by a project. With the browser switched on it also
+  names the browser and search tools — `synapse-browser_open` and the rest of that family,
+  `synapse-search_websearch` and `synapse-search_webfetch` — because the engine prefixes a
+  server's tools with its key, and a model cannot infer a name it has never been shown.
+  Switched off, the tools are absent and so is the paragraph. The block is one copy for
+  every role: it is set once per session, not repeated in each role's brief.
 - **The handover digest is deterministic.** `handoverDigest()` extracts Objective,
   Requirements and Decisions from the compaction handover; the full handover stays in
   `.project/project.md` with a pointer. No second model, no invented decisions. An

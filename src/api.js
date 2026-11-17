@@ -499,11 +499,13 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
         // Single is a chat, not this harness: its skills line may not say "this
         // role" or "your report", because there is neither.
         skills: describeSkills(getConfig(), role, { chat: single }),
-        browser: getConfig()?.browser?.enabled === true,
         focus: getConfig()?.roles?.[role]?.focus,
         instructions: getConfig()?.roles?.[role]?.instructions,
       });
-      const core = harnessCore();
+      // The core carries the harness roots and — when the browser is on — the browser
+      // and search tool names. It is the same block for every role, so it is set once
+      // per session and only written again when its text changes.
+      const core = harnessCore({ browser: getConfig()?.browser?.enabled === true });
       if (briefedCore.get(sessionId) !== core) {
         await engine.setInstruction(sessionId, HARNESS_KEY, core);
         briefedCore.set(sessionId, core);

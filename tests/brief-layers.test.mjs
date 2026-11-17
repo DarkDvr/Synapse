@@ -139,17 +139,20 @@ test('the Architect is given the delegate tool’s exact name', () => {
 // The same lesson for the browser, one day later: the brief said `open`, `read`, `click`,
 // but the engine prefixes a server's tools with its key, so the model's list holds
 // `synapse-browser_open`. The model could not have called what the brief named, and it
-// fell back to guessing URLs with webfetch (17 Nov). The brief must use the real names.
-test('the brief names the browser and search tools as the model receives them', () => {
-  const dir = 'F:/dev/Synapse.Projects/__no_such_project__';
-  const withBrowser = briefSession({ dir, role: 'coder-1', browser: true });
-  assert.match(withBrowser, /`synapse-browser_open`/, 'the browser tools lost their prefix');
-  assert.match(withBrowser, /`synapse-search_websearch`/, 'the search tool lost its prefix');
-  assert.match(withBrowser, /bare `websearch` does not exist/, 'the name that is not a tool is not called out');
-  assert.doesNotMatch(withBrowser, /`open`, `read`/, 'the brief names bare tools again');
-  // With the browser switched off the tools are absent, so there is nothing to name.
-  const off = briefSession({ dir, role: 'coder-1' });
+// fell back to guessing URLs with webfetch (17 Nov). The names now live in the harness
+// core — one block, every role — and only while the browser is switched on.
+test('the browser and search tools are named in the core, and only while the browser is on', () => {
+  const off = harnessCore();
   assert.doesNotMatch(off, /synapse-browser_/, 'a browser tool is named while the browser is off');
+  assert.doesNotMatch(off, /synapse-search_/, 'a search tool is named while the browser is off');
+  const on = harnessCore({ browser: true });
+  assert.match(on, /`synapse-browser_open`/, 'the browser tools lost their prefix');
+  assert.match(on, /`synapse-search_websearch`/, 'the search tool lost its prefix');
+  assert.match(on, /bare `websearch` does not exist/, 'the name that is not a tool is not called out');
+  assert.doesNotMatch(on, /`open`, `read`/, 'the core names bare tools again');
+  assert.ok(on.length < 1200, `the core with the browser is ${on.length} characters`);
+  // One block, not a second copy in every role's brief.
+  assert.doesNotMatch(briefSession({ dir: 'F:/dev/Synapse.Projects/__no_such_project__', role: 'coder-1' }), /synapse-browser_/);
 });
 
 test('the server exports the three roots to shells and check processes', () => {

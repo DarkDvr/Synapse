@@ -64,9 +64,11 @@ The window is found again by the command line naming that profile — never by p
 
 The model sees them namespaced — `synapse-browser_open`, `synapse-browser_read`, and so
 on — because the engine prefixes a server's tools with its key, and the key here is
-`synapse-browser`. The brief names the prefixed names for that reason: a brief that says
-only `open` sends the model to a tool that does not exist, and the turn is spent on the
-error (17 Nov, measured in a Single chat that then guessed nine URLs with `webfetch`).
+`synapse-browser`. The harness core names the prefixed names for that reason: a brief that
+says only `open` sends the model to a tool that does not exist, and the turn is spent on
+the error (17 Nov, measured in a Single chat that then guessed nine URLs with `webfetch`).
+The names travel in `synapse.harness`, one copy for every role, and only while the browser
+is switched on.
 
 - `read` answers the page as a person reads it — headings and text, plus the links that can
   be clicked with their addresses and coordinates. Not HTML: a DOM dump is thousands of
