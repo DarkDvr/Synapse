@@ -45,6 +45,7 @@ export function renderMode() {
   const btn = $('modeToggle');
   const label = $('modeLabel');
   if (!btn || !label) return;
+  const changed = document.body.dataset.mode !== state.mode;
   const single = state.mode === 'single';
   label.textContent = single ? 'Single' : 'Multi';
   btn.classList.toggle('is-single', single);
@@ -62,7 +63,8 @@ export function renderMode() {
   renderKeep();
   // The keep-building flag only exists in Multi, so switching modes changes the
   // composer row's height — and with it the room the transcript has, without the
-  // dock's own height changing. That is a change only the transcript can see, so
-  // it settles it here rather than a frame later.
-  settleChatBox();
+  // dock's own height changing. Only a real mode change settles the chat; the
+  // pending poll calls this function every eight seconds, and settling on every
+  // call made `lockTranscriptTop` oscillate by 0.03px (the idle jitter, 17 Nov).
+  if (changed) settleChatBox();
 }

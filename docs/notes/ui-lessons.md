@@ -1641,6 +1641,15 @@ scrolled up — line **0.00–0.02px**, composer **0.00**, dock bottom **0.00**,
 361–371px as intended. A 30-second run in Multi — top edge 6px, bottom **0.00**,
 composer **0.00**, a fixed line **0.00**. Ten seconds idle — **0.00** everywhere.
 
+**The idle jitter was a poll, not layout.** `refreshPending` calls `renderMode()` every
+eight seconds; `renderMode()` called `settleChatBox()` on every call, and
+`lockTranscriptTop()` wrote a fresh fractional `margin-top` each time. The layout gives
+part of that margin back, so the wanted value alternated 0.734 ↔ 0.750, the transcript's
+top moved 59.984 ↔ 60.016, and a line of text snapped a whole pixel as it re-rasterised —
+the "possessed" chat. It now settles only when `body.dataset.mode` actually changes, and
+the lift has a 0.05px deadband. Measured after: no top/height change in twelve idle
+seconds; typing only shrinks the transcript from the bottom as the composer grows.
+
 One thing the invariant alone got wrong, because it is only as right as the number it
 holds: a chat that sat **12px short of the end** kept those 12px through a switch. In
 Single's tall box that gap is invisible; in Multi's short one there is no spare room

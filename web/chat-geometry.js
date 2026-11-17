@@ -33,6 +33,10 @@ function lockTranscriptTop() {
   const cur = parseFloat(el.style.marginTop) || 0;
   const base = el.getBoundingClientRect().top - cur;
   const lift = Math.ceil(base) - base;
+  // A repeat call must be a no-op. The layout gives a little of the margin back
+  // (0.734 → 0.750 shifts the top by only 0.031), so writing every computed value
+  // alternated between the two forever. That was the idle one-pixel jitter.
+  if (Math.abs(cur - lift) < 0.05) return;
   const want = lift > 0.02 && lift < 0.98 ? `${lift.toFixed(3)}px` : '';
   if ((el.style.marginTop || '') !== want) el.style.marginTop = want;
 }
