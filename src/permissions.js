@@ -430,8 +430,12 @@ function prohibitedRead(target, ctx) {
  * they cannot switch it off — so it does not borrow that wording.
  */
 function fenceDeny(entry, verb) {
+  const at = String(entry?.path || '').trim();
+  const where = at && path.resolve(at) === path.resolve(PROJECTS_ROOT) ? 'the projects root' : at || 'That path';
   return deny(
-    `Another project is not yours to ${verb}. Work only inside your own project folder.`,
+    `PROHIBITED: ${where} is outside your project. Another project is not yours to ${verb}. ` +
+      `Work only inside your own project folder. A relative path is resolved from the command's working directory, ` +
+      `not from a script's own folder; use an absolute path inside your project when a script takes an output folder.`,
     true,
     'prohibited',
   );
@@ -1098,7 +1102,9 @@ function decideShell(resources, ctx) {
     .find((p) => prohibitedWrite(p, ctx));
   if (guardedWrite) {
     const entry = prohibitedWrite(guardedWrite, ctx);
-    return deny(`PROHIBITED: ${entry.label} is on the protected list.`, true, 'prohibited');
+    return entry.id === 'projects'
+      ? fenceDeny(entry, 'change')
+      : deny(`PROHIBITED: ${entry.label} is on the protected list.`, true, 'prohibited');
   }
   // A write with no path of its own runs in the statement's directory: `cd
   // C:\Windows` then `del x` names nothing and still lands in Windows. A copy is
@@ -1106,7 +1112,9 @@ function decideShell(resources, ctx) {
   const guardedDir = segments.find((part) => !part.readsOnly && !copies.has(part) && part.dir && prohibitedWrite(part.dir, ctx));
   if (guardedDir) {
     const entry = prohibitedWrite(guardedDir.dir, ctx);
-    return deny(`PROHIBITED: ${entry.label} is on the protected list.`, true, 'prohibited');
+    return entry.id === 'projects'
+      ? fenceDeny(entry, 'change')
+      : deny(`PROHIBITED: ${entry.label} is on the protected list.`, true, 'prohibited');
   }
   // The screen: the one thing on this machine that is the operator's while they are
   // using it. A command that takes it must be their decision, not a policy default —

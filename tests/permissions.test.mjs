@@ -57,6 +57,14 @@ test('no project reads or changes another project', () => {
   assert.equal(call('read', `${own}/probe.ps1`, { scratchRoot: SCRATCH }).effect, 'allow');
 });
 
+test('a relative output path that leaves the project says how to name the project path', () => {
+  const build = shell('powershell -File app/build.ps1 -Portable -Out ../bin');
+  assert.equal(build.effect, 'deny');
+  assert.match(build.reason, /the projects root/);
+  assert.match(build.reason, /relative path/i);
+  assert.match(build.reason, /absolute path/i);
+});
+
 test('the projects fence is mandatory: the boxes cannot switch it off', () => {
   const entries = protectionEntries(
     { protection: { builtinsOff: ['projects'], builtinsSealed: ['projects'] } },

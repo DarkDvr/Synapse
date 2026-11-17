@@ -42,6 +42,13 @@ The list is a table of **two permissions per path**, because they are independen
   path in `protection.removed`, which is what stops a seeded entry coming back at
   boot.
 
+A refusal names the path it actually resolved, not only the spelling the model used.
+If a relative path leaves the project, the sentence says it was resolved from the
+command's working directory and tells the model to use an absolute project path when a
+script changes into its own folder. That is the `app/build.ps1 -Out ../bin` trap: the
+script would write inside the project, but the policy judges the literal `../bin` from
+the project root, where it is the projects root.
+
 The config keeps `protection: { builtinsOff, builtinsSealed, paths, removed }`:
 `builtinsOff` lists the built-in ids whose Write was switched back on,
 `builtinsSealed` the ids whose Read was cleared, and each added path carries
