@@ -25,6 +25,21 @@ test('the rail draws one dot: the red one for a stalled session', () => {
   assert.match(live[1], /background: var\(--red\)/, 'and the one left is red');
 });
 
+test('a private project wears a quiet violet tint in the rail', () => {
+  const js = read('web/projects.js');
+  assert.match(js, /\$\{p\.private \? ' is-private' : ''\}/, 'the row knows it is private');
+  assert.match(js, /p\.private \? ' · private' : ''/, 'and the tooltip says so');
+  const css = read('web/synapse.css');
+  const rule = /\.tree-row\.project\.is-private \{([\s\S]*?)\}/.exec(css);
+  assert.ok(rule, 'the private row has a rule');
+  assert.match(rule[1], /background: rgba\(124, 108, 255, 0\.07\)/, 'a wash, not a fill');
+  assert.match(rule[1], /border-color: rgba\(124, 108, 255, 0\.30\)/, 'and a quiet edge');
+  // "You are here" and "it is working" are momentary and must win over a property.
+  const current = css.indexOf('.tree-row.project.is-current {');
+  const priv = css.indexOf('.tree-row.project.is-private {');
+  assert.ok(current > priv, 'the private rule comes before the current-project rules');
+});
+
 test('the project menu has a Private toggle below Cmd', () => {
   const js = read('web/project-menu.js');
   const from = js.indexOf('el.innerHTML = `');

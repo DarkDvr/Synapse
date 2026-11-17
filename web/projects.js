@@ -219,9 +219,9 @@ export function renderTree() {
       const waiting = chat ? waitingFor(chat.id) : null;
       const waitNote =
         waiting === 'answer' ? ' · waiting on your answer' : waiting === 'decision' ? ' · waiting for your decision' : '';
-      const title = `${p.name}${working ? ' · working' : ''}${waitNote}${p.exists === false ? ' · folder missing' : ''}`;
+      const title = `${p.name}${p.private ? ' · private' : ''}${working ? ' · working' : ''}${waitNote}${p.exists === false ? ' · folder missing' : ''}`;
       return `<div class="tree-project">
-        <div class="tree-row project${current ? ' is-current' : ''}${working ? ' has-work' : ''}${waiting ? ' has-question' : ''}" data-project-row="${esc(p.id)}">
+        <div class="tree-row project${current ? ' is-current' : ''}${working ? ' has-work' : ''}${waiting ? ' has-question' : ''}${p.private ? ' is-private' : ''}" data-project-row="${esc(p.id)}">
           <button class="tree-open" data-project="${esc(p.id)}" title="${esc(title)}">
             <span class="tree-name">${esc(p.name)}</span>
           </button>
