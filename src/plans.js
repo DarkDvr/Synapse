@@ -1088,16 +1088,21 @@ export function briefSession({ dir, role = 'architect', auto = false, single = f
   lines.push(
     `Attachments the operator chose to keep are in .project/attachments/ — list that folder when a task may need one.`,
   );
-  // The browser is in the toolset and a model will not reach for it unprompted: the
-  // engine's own webfetch is described as *the* way to read a page, so without this line
-  // "read that site" means "webfetch it", and a signed-in page answers a wall (11 Nov).
+  // The browser and the search server arrive namespaced — `synapse-browser_open`,
+  // `synapse-search_websearch` — while the plain `webfetch` is the engine's own, and
+  // its `websearch` is switched off, so a bare `websearch` answers "not available".
+  // Naming them is the only part of this a model cannot infer; what each tool does is
+  // in its own description, read in the same tool list, and repeating that here charged
+  // every step of every turn for a paragraph (17 Nov: a brief that named `open` and
+  // `read` sent a model to tools that do not exist, and it fell back to guessing URLs).
   if (browser) {
     lines.push(
-      'Browsing: `open`, `read`, `click`, `type`, `screenshot`, `download` reach pages webfetch cannot — signed in, behind a bot check, drawn by script. ' +
-        'A click on a download link waits for the file; a direct file address uses `download`. Files are saved under .project/downloads/ and the chat shows their progress. ' +
-        'The browser is hidden and keeps its sign-ins between runs, so a site signed in before is already signed in. ' +
-        '`read` is cut at 6000 characters by default (up to 100000) and says so when it cuts; for a long thread pass `full: true` and the whole page is saved in the project for you to read or grep in pieces. ' +
-        'A page that asks you to sign in needs `handoff`: it asks the operator, and only their Allow opens a window.',
+      'Browser: `synapse-browser_open`, `_read`, `_click`, `_screenshot` reach pages `webfetch` cannot ' +
+        '(signed in, bot check, drawn by script). A 404 from a fetch is a guessed path, not a wall: open the ' +
+        'site and follow its links.',
+    );
+    lines.push(
+      'Search: `synapse-search_websearch`; `synapse-search_webfetch` fetches a page. A bare `websearch` does not exist.',
     );
   }
   // The app's own data is part of the project, not the machine. This is one rule

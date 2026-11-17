@@ -136,6 +136,22 @@ test('the Architect is given the delegate tool’s exact name', () => {
   assert.doesNotMatch(multi('coder-1'), /synapse-delegate_delegate/);
 });
 
+// The same lesson for the browser, one day later: the brief said `open`, `read`, `click`,
+// but the engine prefixes a server's tools with its key, so the model's list holds
+// `synapse-browser_open`. The model could not have called what the brief named, and it
+// fell back to guessing URLs with webfetch (17 Nov). The brief must use the real names.
+test('the brief names the browser and search tools as the model receives them', () => {
+  const dir = 'F:/dev/Synapse.Projects/__no_such_project__';
+  const withBrowser = briefSession({ dir, role: 'coder-1', browser: true });
+  assert.match(withBrowser, /`synapse-browser_open`/, 'the browser tools lost their prefix');
+  assert.match(withBrowser, /`synapse-search_websearch`/, 'the search tool lost its prefix');
+  assert.match(withBrowser, /bare `websearch` does not exist/, 'the name that is not a tool is not called out');
+  assert.doesNotMatch(withBrowser, /`open`, `read`/, 'the brief names bare tools again');
+  // With the browser switched off the tools are absent, so there is nothing to name.
+  const off = briefSession({ dir, role: 'coder-1' });
+  assert.doesNotMatch(off, /synapse-browser_/, 'a browser tool is named while the browser is off');
+});
+
 test('the server exports the three roots to shells and check processes', () => {
   const src = fs.readFileSync(new URL('../src/index.js', import.meta.url), 'utf8');
   assert.match(src, /process\.env\.SYNAPSE_HARNESS = ROOT/);
