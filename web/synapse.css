@@ -415,12 +415,16 @@ body.dark .sidebar .nav-link.active > span:first-child { color: #fff; }
 /* ── 6. sidebar: two-tier project tree ─────────────────────────────────── */
 
 /* tier 1 — project: a panel with its own surface, so it never reads as a session */
+/* Every project row is a translucent panel, not an opaque card. The rail's own
+   background showing through is what makes the green "you are here" wash read as a
+   tint rather than a different material — and the base is deliberately lighter-handed
+   (4%) than that wash (8%), so the chosen row is the one that stands out. */
 .tree-row.project {
-  background: #212329;
-  border: 1px solid #2c2f36;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.07);
   border-radius: 8px;
 }
-.tree-row.project:hover { background: #262931; border-color: #363a42; }
+.tree-row.project:hover { background: rgba(255, 255, 255, 0.065); border-color: rgba(255, 255, 255, 0.11); }
 /* Private is a property of the project, not a state of the run: a quiet violet wash
    and edge, the surface colour of the app rather than a signal colour. It is placed
    before the current/working rules on purpose — "you are here" and "it is working"

@@ -25,6 +25,19 @@ test('the rail draws one dot: the red one for a stalled session', () => {
   assert.match(live[1], /background: var\(--red\)/, 'and the one left is red');
 });
 
+test('every project row is translucent, and lighter-handed than the chosen one', () => {
+  const css = read('web/synapse.css');
+  const base = /\.tree-row\.project \{([\s\S]*?)\}/.exec(css);
+  assert.ok(base, 'the project row has a base rule');
+  assert.match(base[1], /background: rgba\(255, 255, 255, 0\.04\)/, 'a translucent panel, not an opaque card');
+  assert.match(base[1], /border: 1px solid rgba\(255, 255, 255, 0\.07\)/, 'and a translucent edge');
+  // The green "you are here" wash is heavier (8%) than the neutral base (4%), which is
+  // what makes the chosen row the one that stands out.
+  const current = /\.tree-row\.project\.is-current \{([\s\S]*?)\}/.exec(css);
+  assert.ok(current, 'the chosen row has a rule');
+  assert.match(current[1], /rgba\(53, 192, 138, 0\.08\)/);
+});
+
 test('a private project wears a quiet violet tint in the rail', () => {
   const js = read('web/projects.js');
   assert.match(js, /\$\{p\.private \? ' is-private' : ''\}/, 'the row knows it is private');
