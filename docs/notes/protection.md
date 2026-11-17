@@ -273,12 +273,16 @@ callers. Model actions still go through `decide`, where the fence holds.
 ## The fence names where the path went (17 Nov)
 
 A worker wrote `..\p3-browser-output.txt` and was refused; it then asked the operator
-"which path was protected?" — because the sentence said only "the projects root". The
-resolution was correct (the shell's working directory is the project, so `..` is the root
-that holds every project), and the refusal now says both facts: the resolved path
-(`the projects root (F:\dev\Synapse.Projects)`) and the folder it was resolved from
-(`the command's working directory (F:\...\vpa-modlist-installer)`), then where to write
-instead — the project, its scratch folder, or an absolute output path.
+"which path was protected?" The resolution was right (the shell's working directory is the
+project, so `..` is the folder above it), but the sentence was not: it said "the projects
+root", which to a model that has no reason to know other projects exist reads as **this
+project's root folder**.
 
-The rule did not change: the projects root is a built-in prohibited entry and no project
-may change another. Only the sentence did.
+The words were the bug. A refusal now names the thing by what it is, not by our name for
+it: `F:\dev\Synapse.Projects — the shared folder that holds every project, one subfolder
+each`, then the working directory the relative path came from, that `..` from there is one
+level above the project, and where to write instead. The rule did not change: that folder
+is a built-in prohibited entry, and no project may read or change another.
+
+The lesson generalises: a message written in the operator's vocabulary is read by someone
+who does not share it. Name the folder, not the concept.

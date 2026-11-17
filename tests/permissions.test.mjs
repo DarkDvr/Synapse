@@ -60,14 +60,15 @@ test('no project reads or changes another project', () => {
 test('a relative output path that leaves the project says how to name the project path', () => {
   const build = shell('powershell -File app/build.ps1 -Portable -Out ../bin');
   assert.equal(build.effect, 'deny');
-  assert.match(build.reason, /the projects root/);
+  // Not "the projects root": that read to a worker as "this project's root folder", and a
+  // worker asked which path was protected (17 Nov). It is the shared folder, named as one,
+  // with the path and the working directory `..` was resolved from.
+  assert.match(build.reason, /shared folder that holds every project/);
+  assert.doesNotMatch(build.reason, /the projects root/);
   assert.match(build.reason, /relative path/i);
   assert.match(build.reason, /absolute path/i);
-  // It names where `..` landed and the folder it was resolved from: a worker asked
-  // "which path was protected?" (17 Nov) because the old sentence only said "the
-  // projects root" and left it to work out that the cwd is the project, not the script.
-  assert.match(build.reason, /the projects root \(F:\\dev\\Synapse\.Projects\)/i);
   assert.match(build.reason, /working directory \(F:\\dev\\Synapse\.Projects\\demo\)/i);
+  assert.match(build.reason, /one level above your project/);
 });
 
 test('the projects fence is mandatory: the boxes cannot switch it off', () => {

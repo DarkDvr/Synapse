@@ -426,26 +426,32 @@ function prohibitedRead(target, ctx) {
 }
 
 /**
- * The sentence a fence refusal uses. The projects root is not the operator's list —
+ * The sentence a fence refusal uses. The projects folder is not the operator's list —
  * they cannot switch it off — so it does not borrow that wording.
  *
- * It names the resolved path and the working directory the relative one was resolved
- * from. A worker that wrote `..\out.txt` had to ask which path was protected (17 Nov):
- * the old sentence said "the projects root" and left it to work out that `..` from the
- * project folder lands there.
+ * "The projects root" read to a worker as "this project's root folder": it has no reason
+ * to know other projects exist, so the phrase quietly meant its own folder (17 Nov, a
+ * worker asked which path was protected). It is named for what it is now — the shared
+ * folder that holds every project — with the path, the working directory a relative path
+ * was resolved from, and where to write instead.
  */
 function fenceDeny(entry, verb, cwd = '') {
   const at = String(entry?.path || '').trim();
   const root = at && path.resolve(at) === path.resolve(PROJECTS_ROOT);
-  const where = root ? `the projects root (${at})` : at || 'That path';
   const from = String(cwd || '').trim();
-  const resolving =
-    root && from
-      ? `A relative path is resolved from the command's working directory (${from}), not from a script's own folder, ` +
-        `so \`..\` from there lands in the projects root. `
-      : `A relative path is resolved from the command's working directory, not from a script's own folder. `;
+  const where = root
+    ? `${at} — the shared folder that holds every project, one subfolder each`
+    : `${at || 'That path'} (outside the project you are working in)`;
+  const resolving = from
+    ? root
+      ? `A relative path is resolved from your working directory (${from}), not from a script's own folder: ` +
+        `\`..\` from there is one level above your project — this shared folder, not your project's own root. `
+      : `A relative path is resolved from your working directory (${from}), not from a script's own folder. ` +
+        `It resolved to ${at || 'that path'}. `
+    : '';
   return deny(
-    `PROHIBITED: ${where} is outside your project. Another project is not yours to ${verb}. ` +
+    `PROHIBITED: that path is outside the project you are working in. ${where}. ` +
+      `Another project is not yours to ${verb}. ` +
       resolving +
       `Work only inside your own project folder or its scratch folder, and give a script its output folder as an absolute path.`,
     true,
