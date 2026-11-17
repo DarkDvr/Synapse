@@ -69,13 +69,26 @@ export const SCRATCH_ROOT = path.join(PROJECTS_ROOT, '_scratch');
  *
  *  A **private** project keeps its scratch inside its own folder instead: the marker
  *  promises that nothing about the project lands outside it (15 Nov). */
+/**
+ * The folder name a project owns in the shared scratch root.
+ *
+ * A private project's scratch lives inside the project now (see `scratchDir`), but the
+ * shared-root folder it had before can still hold work. Housekeeping keeps this name for
+ * every project — a sweep that only knew the current location would treat that older
+ * folder as debris, and it did: `skyrim_modlist-<hash>` was swept on 17 Nov when the
+ * project had moved its scratch inside.
+ */
+export function scratchRootName(dir) {
+  const base = path.basename(String(dir || '')) || 'project';
+  const hash = createHash('sha1').update(path.resolve(String(dir || '')).toLowerCase()).digest('hex').slice(0, 8);
+  return `${base}-${hash}`;
+}
+
 export function scratchDir(dir, root = SCRATCH_ROOT) {
   if (root === SCRATCH_ROOT && hasMarker(dir)) {
     return path.join(path.resolve(String(dir || '')), '.project', 'scratch');
   }
-  const base = path.basename(String(dir || '')) || 'project';
-  const hash = createHash('sha1').update(path.resolve(String(dir || '')).toLowerCase()).digest('hex').slice(0, 8);
-  return path.join(root, `${base}-${hash}`);
+  return path.join(root, scratchRootName(dir));
 }
 
 // Isolated engine home (config/data/state/tmp) so the engine never touches

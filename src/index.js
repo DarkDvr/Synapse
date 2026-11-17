@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
-import { DATA_DIR, LOGS_DIR, WORKSPACE_DIR, GENERAL_DIR, ENGINE_HOME, PID_FILE, PROJECTS_FILE, TOOL_STATS_FILE, PROBE_DIR, PROBE_FILE, MODEL_CACHE_FILE, TRACE_REASONS_FILE, NPM_ATTEMPT_FILE, PERMISSION_MEMORY_FILE, REMOTE_TOKEN_FILE, ROOT, PROJECTS_ROOT, SCRATCH_ROOT, scratchDir } from './paths.js';
+import { DATA_DIR, LOGS_DIR, WORKSPACE_DIR, GENERAL_DIR, ENGINE_HOME, PID_FILE, PROJECTS_FILE, TOOL_STATS_FILE, PROBE_DIR, PROBE_FILE, MODEL_CACHE_FILE, TRACE_REASONS_FILE, NPM_ATTEMPT_FILE, PERMISSION_MEMORY_FILE, REMOTE_TOKEN_FILE, ROOT, PROJECTS_ROOT, SCRATCH_ROOT, scratchDir, scratchRootName } from './paths.js';
 import { loadConfig, saveConfig, repairMachinePaths, providerApiKey } from './config.js';
 import { logger } from './logger.js';
 import { createEngine } from './engines/index.js';
@@ -1061,10 +1061,12 @@ async function main() {
     try {
       // The scratch folders of the projects that exist now: everything else that
       // carries the harness's naming shape is a deleted (or moved) project's, and
-      // a week-old one is worth more as disk space (see housekeeping.js).
+      // a week-old one is worth more as disk space (see housekeeping.js). Both names
+      // are kept — where the scratch is today, and the shared-root name a private
+      // project had before it moved inside.
       const keepScratch = projects
         .list()
-        .map((p) => path.basename(scratchDir(p.directory)));
+        .flatMap((p) => [path.basename(scratchDir(p.directory)), scratchRootName(p.directory)]);
       const report = housekeeping.run({ keepScratch });
       if (report.removed) {
         app.info(`housekeeping: ${report.removed} item(s), ${Math.round(report.bytes / (1024 * 1024))} MB freed`);

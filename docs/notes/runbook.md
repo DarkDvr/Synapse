@@ -322,6 +322,13 @@ again — nothing on disk was touched.
 bin\node\node.exe src\housekeeping.js --dry-run
 ```
 
+Both paths use the same keep list, read from `data\projects.json`: where each project's
+scratch is now, and the shared-root name it had before a private project moved inside.
+The hand run omitted it until 17 Nov, so it would have treated a project's working set as
+debris. A folder another process holds is skipped and named in the log; it used to throw,
+and because the sweep runs in name order, one locked engine temp folder near the top
+(`bobe1t4p`, EPERM on every boot) aborted every pass before it reached the rest.
+
 It removes only what it can prove is dead:
 
 | what | when | why it is safe |

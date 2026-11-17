@@ -17,6 +17,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { createHousekeeping } from '../src/housekeeping.js';
+import { scratchDir, scratchRootName } from '../src/paths.js';
 import { reclaimSnapshotStore } from '../src/engines/opencode.js';
 import { tmpdir } from './tmpdir.mjs';
 
@@ -235,6 +236,93 @@ test('the engine snapshot store is emptied before start and its folder kept', ()
     assert.deepEqual(fs.readdirSync(globalDir), [], 'the global folder stays for the engine to rebuild in');
     assert.equal(fs.existsSync(path.join(dataHome, 'opencode', 'opencode.db')), true, 'the database is never touched');
     assert.equal(reclaimSnapshotStore(path.join(dir, 'missing')), 0, 'a missing store is not an error');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// 6: the unclaimed sweep, and the two names a private project owns.
+test('a folder no project claims goes; a live name, the engine temp and a fresh folder stay', () => {
+  const dir = root();
+  try {
+    const scratch = path.join(dir, 'scratch');
+    const dead = path.join(scratch, 'nobody-1234abcd');
+    const live = path.join(scratch, 'live-1234abcd');
+    const engineTemp = path.join(scratch, 'opencode');
+    const fresh = path.join(scratch, 'fresh-1234abcd');
+    write(path.join(dead, 'a.txt'), 'x'.repeat(1024));
+    write(path.join(live, 'a.txt'), 'keep me');
+    write(path.join(engineTemp, 'a.txt'), 'in use');
+    write(path.join(fresh, 'a.txt'), 'just written');
+    const old = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    for (const p of [dead, live, engineTemp]) fs.utimesSync(p, old, old);
+
+    const report = house(dir).sweepUnclaimedScratch({ keep: ['live-1234abcd'] });
+    assert.equal(report.removed, 1);
+    assert.equal(fs.existsSync(dead), false, 'the unclaimed folder is gone');
+    assert.equal(fs.existsSync(live), true, 'a project’s scratch is kept');
+    assert.equal(fs.existsSync(engineTemp), true, 'the engine’s temp root is never swept by this pass');
+    assert.equal(fs.existsSync(fresh), true, 'a folder written within the grace period is left alone');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('a private project owns two scratch names, and housekeeping keeps both', () => {
+  const dir = tmpdir('synapse-private-');
+  try {
+    fs.mkdirSync(path.join(dir, '.project'), { recursive: true });
+    fs.writeFileSync(path.join(dir, '.project', 'private'), '');
+    const legacy = scratchRootName(dir);
+    assert.match(legacy, /^synapse-private-.*-[0-9a-f]{8}$/, 'the shared-root name still has the harness shape');
+    assert.notEqual(path.basename(scratchDir(dir)), legacy, 'the live scratch moved inside the project');
+    // And the hand-run CLI must read the registry: without it, a project's working set
+    // is debris. The boot passes the same list.
+    const src = fs.readFileSync(new URL('../src/housekeeping.js', import.meta.url), 'utf8');
+    const cli = src.slice(src.indexOf('process.argv[1]'));
+    assert.match(cli, /registry\.projects/, 'the registry is read');
+    assert.match(cli, /run\(\{ keepScratch \}\)/, 'and passed to the sweep');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('one locked folder does not abort the rest of the sweep', () => {
+  const dir = root();
+  try {
+    const scratch = path.join(dir, 'scratch');
+    // The locked one sorts first: if the sweep throws on it, nothing after it is tried —
+    // which is what happened on every boot with `bobe1t4p` and a 300-folder pile.
+    const locked = path.join(scratch, 'a-locked-1234abcd');
+    const later = path.join(scratch, 'z-later-1234abcd');
+    write(path.join(locked, 'held.txt'), 'x'.repeat(1024));
+    write(path.join(later, 'a.txt'), 'y'.repeat(1024));
+    const old = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    for (const p of [locked, later]) fs.utimesSync(p, old, old);
+
+    // Windows' EPERM, exactly: the one folder cannot be removed. A real open handle does
+    // not reproduce it here (Node opens with FILE_SHARE_DELETE), so the failure is
+    // injected at the call that would raise it.
+    const realRm = fs.rmSync;
+    let attempts = 0;
+    try {
+      fs.rmSync = (target, opts) => {
+        attempts += 1;
+        if (String(target).includes('a-locked-1234abcd')) {
+          const err = new Error('EPERM: operation not permitted');
+          err.code = 'EPERM';
+          throw err;
+        }
+        return realRm(target, opts);
+      };
+      const report = house(dir).sweepUnclaimedScratch({ keep: [] });
+      assert.equal(fs.existsSync(later), false, 'the folder after the locked one was still swept');
+      assert.equal(fs.existsSync(locked), true, 'the locked folder stays for the next pass');
+      assert.equal(report.skipped, 1, 'and the skip is counted, not thrown');
+      assert.equal(attempts, 2, 'both folders were attempted');
+    } finally {
+      fs.rmSync = realRm;
+    }
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }

@@ -25,7 +25,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
-import { ROOT, SCRATCH_ROOT } from './paths.js';
+import { ROOT, SCRATCH_ROOT, PROJECTS_FILE, scratchDir, scratchRootName } from './paths.js';
 
 const MINUTE = 60 * 1000;
 const DAY = 24 * 60 * 60 * 1000;
@@ -56,10 +56,23 @@ export function createHousekeeping({ root = ROOT, scratchRoot = SCRATCH_ROOT, lo
   const say = (message) => log?.info?.(message);
   const warn = (message) => log?.warn?.(message);
 
-  /** Remove one file or folder, in dry-run mode only counting it. */
+  /** Remove one file or folder, in dry-run mode only counting it.
+   *
+   * A file another process is holding is skipped, not fatal. It used to throw, and the
+   * whole sweep ran alphabetically — so one locked engine temp folder near the top of
+   * the list (`bobe1t4p`, EPERM on every boot) aborted every pass before it reached the
+   * rest, and the pile grew to 300 folders while the log said "housekeeping failed". */
   function drop(target, report) {
     const bytes = sizeOf(target);
-    if (!dryRun) fs.rmSync(target, { recursive: true, force: true });
+    if (!dryRun) {
+      try {
+        fs.rmSync(target, { recursive: true, force: true });
+      } catch (err) {
+        report.skipped = (report.skipped || 0) + 1;
+        warn(`housekeeping: left ${path.basename(target)} (${err.code || err.message})`);
+        return 0;
+      }
+    }
     report.removed += 1;
     report.bytes += bytes;
     return bytes;
@@ -345,10 +358,28 @@ function createSha256(file) {
 }
 
 // Run by hand: `bin\node\node.exe src\housekeeping.js [--dry-run]`.
+//
+// The boot passes the live projects' scratch names, and so must this: without them the
+// sweep treats a project's working set as debris. It did — a hand run would have deleted
+// every project's scratch older than the ten-minute grace, which is the folder a model
+// may still resume from. The registry is the same source the boot reads, so the two
+// cannot disagree about what a project owns.
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const dryRun = process.argv.includes('--dry-run');
   const log = { info: (m) => console.log(m), warn: (m) => console.warn(m) };
-  const result = createHousekeeping({ dryRun, log }).run();
+  let keepScratch = [];
+  try {
+    const registry = JSON.parse(fs.readFileSync(PROJECTS_FILE, 'utf8'));
+    // Both names a project may own: where its scratch is now, and the shared-root name
+    // it had before a private project moved its scratch inside. The sweep keeps both.
+    keepScratch = (registry.projects || []).flatMap((p) => [
+      path.basename(scratchDir(p.directory)),
+      scratchRootName(p.directory),
+    ]).filter(Boolean);
+  } catch {
+    // No registry yet (a fresh folder): there are no projects to keep.
+  }
+  const result = createHousekeeping({ dryRun, log }).run({ keepScratch });
   const freed = dryRun ? 'would free' : 'freed';
   console.log(`housekeeping: ${result.removed} item(s), ${freed} ${mb(result.bytes)}${dryRun ? ' (dry run)' : ''}`);
 }
