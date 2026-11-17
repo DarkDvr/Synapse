@@ -62,7 +62,11 @@ test('the Architect is told where it is, who owns it and the cap', () => {
   const brief = briefSession({ dir, role: 'architect' });
   assert.match(brief, new RegExp(FACTS_RELATIVE.replace(/[.]/g, '\\.')), 'the architect does not know the file exists');
   assert.match(brief, /you own it and you are its only writer/, 'nobody owns the file');
-  assert.match(brief, new RegExp(`it is ${factsStatus(dir).chars} now`), 'the brief does not quote the current size');
+  assert.match(brief, /Cap 6000 characters; it is \d+ now/, 'the brief does not quote the cap and the current size');
+  assert.match(brief, new RegExp(`it is ${factsStatus(dir).chars} now`), 'the size is not the real one');
+  // The how-to lives in the file itself. Repeating it in every turn's brief is how a
+  // brief grows back into the wall of text the digest work was undoing.
+  assert.doesNotMatch(brief, /add a dated line/, 'the brief repeats the file instructions');
   // The file is reference for the role that judges, not for a worker's task.
   assert.doesNotMatch(briefSession({ dir, role: 'coder-1' }), /Project facts:/, 'a worker was pointed at the facts file');
 });
@@ -72,7 +76,7 @@ test('past the cap the Architect is told to condense before adding', () => {
   ensureFacts(dir);
   fs.writeFileSync(factsFile(dir), `# Project facts\n\n${'x'.repeat(FACTS_LIMIT)}\n`, 'utf8');
   const brief = briefSession({ dir, role: 'architect' });
-  assert.match(brief, /over the 6000 cap - condense it before you add/, 'an oversized file reads as fine');
+  assert.match(brief, /over the cap: condense it before you add/, 'an oversized file reads as fine');
 });
 
 test('the template stays small enough to be worth reading', () => {

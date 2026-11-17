@@ -35,6 +35,13 @@ Two things mirror it and are bumped in the same commit:
 
 That is the whole list: `version.test.mjs` fails when the three disagree.
 
+A bump touches three files and nothing else, so stage those three by name rather
+than the whole tree. On 17 Nov an unrelated commit — a runbook note — carried a
+`package.json` and csproj at **1.59.26** while the README still said 1.60.12, and
+the suite went red on a commit whose message said nothing about the version. The
+mechanism does not matter; the symptom does: the number moved backwards and only
+`version.test.mjs` noticed.
+
 ## The release checklist
 
 1. Bump `package.json`, `shell/Synapse.csproj` and `README.md`.

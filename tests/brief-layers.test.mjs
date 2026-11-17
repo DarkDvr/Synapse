@@ -72,12 +72,11 @@ test('the laws are at the top, where a reader looks first', () => {
 // it guards. A real VPA brief is 1.4×–2.5× these numbers once skills and a project
 // are present. Keep the base from growing; measure those other parts separately.
 //
-// The architect's guard rose by 290 on 17 Nov for the facts-file line (its owner, its
-// cap, and the size it is at). That is a deliberate fixed cost, not drift: the line
-// tells the Architect where durable facts go, and there is no cheaper way to make a
-// file discoverable than naming it. Anything else that pushes this number up should
-// displace something rather than add to it.
-const BARE_BRIEF_LIMIT = { architect: 15800, qc: 7300, designer: 5300, inventor: 4800, 'coder-1': 4100, 'coder-2': 4100, single: 2000 };
+// The architect's guard rose by 107 on 17 Nov for the facts-file line: its path, its
+// owner, its cap and its current size. The how-to is written in the file itself, so it
+// is not repeated here — a brief that repeats the file doubles the cost of every step.
+// Anything else that pushes this number up should displace something rather than add.
+const BARE_BRIEF_LIMIT = { architect: 15650, qc: 7300, designer: 5300, inventor: 4800, 'coder-1': 4100, 'coder-2': 4100, single: 2000 };
 
 test('a bare role brief stays within its regression guard', () => {
   const dir = 'F:/dev/Synapse.Projects/__no_such_project__';

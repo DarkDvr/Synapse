@@ -1337,17 +1337,14 @@ export function briefSession({ dir, role = 'architect', auto = false, single = f
 
   if (isArchitect) {
     // The facts file is reference, not a second plan: what a run learned that will
-    // still be true next week. It is named here because a file nothing points at is
-    // a file nobody opens — and it is the Architect's alone, so a worker's lesson
-    // travels in its report rather than straight into the file.
+    // still be true next week. The brief carries only what the file cannot say about
+    // itself — that it exists, whose it is, and how big it is now. What belongs in it
+    // and how to keep it are written in the file, so they are not repeated here.
     const facts = factsStatus(dir);
     lines.push(
-      `Project facts: ${FACTS_RELATIVE} - you own it and you are its only writer. Read it before you plan; ` +
-        `add a dated line when a run teaches something that stays true next week (a failing command, an odd ` +
-        `path, a limit the operator set), and delete what has stopped being true. ` +
-        (facts.over
-          ? `It is ${facts.chars} characters, over the ${FACTS_LIMIT} cap - condense it before you add.`
-          : `Keep it under ${FACTS_LIMIT} characters; it is ${facts.chars} now.`),
+      `Project facts: ${FACTS_RELATIVE} - you own it and you are its only writer. Read it before you plan. ` +
+        `Cap ${FACTS_LIMIT} characters; it is ${facts.chars} now` +
+        (facts.over ? ' - over the cap: condense it before you add.' : '.'),
     );
     lines.push(
       'The harness records each run\'s change as a diff under .project/reports/diffs, named in the report. Read ' +
