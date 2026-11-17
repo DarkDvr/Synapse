@@ -418,3 +418,20 @@ construction: a worker that writes there keeps its own place.
 plus `NUGET_PACKAGES` pointed at `vendor\nuget-packages` when it exists). Unset, a
 worker's `dotnet build` wrote a 258 MB `.net` tree wherever HOME pointed. The operator
 expects more .NET projects, so this is the normal case rather than an edge one.
+
+## Before restarting the model server, ask who is using it (17 Nov)
+
+A live run was in flight - a coder step with a 132k prompt - when the model server was
+restarted to register a new profile. Nothing was lost only because the harness retried,
+but the restart was avoidable: the run was visible in three places, and none of them was
+checked.
+
+- `GET /api/runs` and `GET /api/pending` - `active` names the sessions working right now;
+- `logs\app.log` - `run <task> (<role>) started` without a matching `completed` is a live
+  run;
+- the server's own console - `reading the prompt`, or any line after `ready`, means a
+  request is in flight.
+
+A profile only has to be registered once, and `switch_on_request` loads a model on demand:
+adding a profile is never urgent enough to interrupt a run. Register it, tell the
+operator it is ready, and let them restart between tasks.
