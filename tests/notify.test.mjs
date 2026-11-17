@@ -23,7 +23,7 @@ const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
 const ui = () => ['web/app.js', 'web/settings-panes.js', 'web/settings-form.js', 'web/ui-prefs.js'].map(read).join('\n');
 const tasks = (...statuses) => statuses.map((status, i) => ({ id: `t${i + 1}`, status }));
 
-test('the config takes the four sounds and off, and refuses a name it does not have', () => {
+test('the config takes every sound in the list, and refuses a name it does not have', () => {
   for (const name of DONE_SOUNDS) {
     assert.equal(normalize({ notify: { doneSound: name } }).notify.doneSound, name, name);
   }
@@ -83,12 +83,32 @@ test('every sound is a real, short, quiet WAV', () => {
     assert.equal(buf.readUInt16LE(34), 16, `${name}: 16-bit`);
     const samples = (buf.length - 44) / 2;
     const seconds = samples / buf.readUInt32LE(24);
-    assert.ok(seconds > 0.1 && seconds <= 1.5, `${name} lasts ${seconds.toFixed(2)}s — short`);
+    assert.ok(seconds > 0.1 && seconds <= 2.6, `${name} lasts ${seconds.toFixed(2)}s — out of range`);
     let peak = 0;
     for (let i = 0; i < samples; i++) peak = Math.max(peak, Math.abs(buf.readInt16LE(44 + i * 2)));
     const dbfs = 20 * Math.log10(peak / 32768);
     // Quiet enough to talk over, loud enough to hear. Measured: -14 to -18 dBFS.
     assert.ok(dbfs > -26 && dbfs < -6, `${name} peaks at ${dbfs.toFixed(1)} dBFS — subtle`);
+  }
+  // The two wooden ones are the long pair (17 Nov): about twice the bell, and low
+  // enough that they cannot be heard as one of the screen-lease notes.
+  const zcr = (name) => {
+    const buf = fs.readFileSync(path.join(ROOT, 'web', 'sounds', `${name}.wav`));
+    let cross = 0;
+    let prev = 0;
+    for (let i = 44; i + 1 < buf.length; i += 2) {
+      const v = buf.readInt16LE(i);
+      if ((v >= 0) !== (prev >= 0)) cross += 1;
+      prev = v;
+    }
+    return cross / ((buf.length - 44) / 2 / buf.readUInt32LE(24));
+  };
+  for (const name of ['marimba', 'woodblock']) {
+    const buf = fs.readFileSync(path.join(ROOT, 'web', 'sounds', `${name}.wav`));
+    const seconds = (buf.length - 44) / 2 / buf.readUInt32LE(24);
+    assert.ok(seconds >= 2.3, `${name} lasts ${seconds.toFixed(2)}s — the long pair should be about twice the bell`);
+    assert.ok(zcr(name) < 1500, `${name} is not wooden enough: ${Math.round(zcr(name))} zero-crossings/s`);
+    assert.ok(zcr(name) < zcr('screen-in') / 2, `${name} is too close to the screen-lease sound`);
   }
 });
 

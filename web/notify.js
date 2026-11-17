@@ -17,6 +17,11 @@ export const DONE_SOUNDS = [
   { v: 'bell', l: 'Bell — one struck note' },
   { v: 'wood', l: 'Wood — a quiet knock' },
   { v: 'ripple', l: 'Ripple — three light plips' },
+  // The two long ones (17 Nov). Low and wooden on purpose: the screen-lease pair is
+  // bright and plastic, so a finished-work sound in this register cannot be confused
+  // with "the AI has your mouse".
+  { v: 'marimba', l: 'Marimba — four warm wooden notes' },
+  { v: 'woodblock', l: 'Woodblock — three low knocks' },
 ];
 
 /** What the config chooses when the key is missing (a config from an older build). */

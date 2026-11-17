@@ -218,8 +218,67 @@ function hollow() {
   return finish(buf, 0.16);
 }
 
+// ── two longer, wooden finished-work sounds ─────────────────────
+// "Twice longer, and more woody" (17 Nov). The four originals are short, and the
+// screen pair is deliberately plastic and bright — so a finished-work sound that is
+// low and wooden cannot be mistaken for a lease change. Both run about 2.4 seconds,
+// twice the bell, and they decay rather than ring: a bar or a block has no sustain.
+
+/** A soft mallet tick: two milliseconds of low-passed noise, under the note. */
+function tick(buf, at, { amp = 0.3, cutoff = 1000, decay = 0.004 } = {}) {
+  let low = 0;
+  const a = 1 - Math.exp((-TAU * cutoff) / RATE);
+  let seed = 1337 + Math.round(at * 1000);
+  const start = Math.round(at * RATE);
+  for (let i = 0; i < seconds(0.02); i++) {
+    seed = (seed * 1664525 + 1013904223) >>> 0;
+    const noise = (seed / 0xffffffff) * 2 - 1;
+    low += a * (noise - low);
+    const t = i / RATE;
+    const ramp = Math.min(1, t / 0.001);
+    if (start + i < buf.length) buf[start + i] += low * ramp * Math.exp(-t / decay) * amp;
+  }
+}
+
+/** A marimba bar: fundamental plus the tuned 4th (a bar's first overtone is 4×, not 2×). */
+function marimba() {
+  const len = seconds(2.5);
+  const buf = new Float32Array(len);
+  // C4, G4, E4, C5 — a fifth up, a step down, a third up: it settles.
+  const notes = [[0.0, 261.63], [0.38, 392.0], [0.82, 329.63], [1.3, 523.25]];
+  for (const [at, f] of notes) {
+    add(buf, note(len, at, f, { amp: 0.9, tau: 0.62, attack: 0.004, harmonics: [[1, 1], [4, 0.17], [9.2, 0.05]] }));
+    tick(buf, at, { amp: 0.16, cutoff: 1200, decay: 0.003 });
+  }
+  return finish(buf, 0.16);
+}
+
+/** Three low knocks on a hollow block, the last one deeper and left to die. */
+function woodblock() {
+  const len = seconds(2.4);
+  const buf = new Float32Array(len);
+  // A block's body is mostly odd-ish near-modes; 2.72 is a log drum's first overtone.
+  const body = [[1, 1], [2.72, 0.4], [4.9, 0.13]];
+  const hits = [[0.0, 196.0, 0.3], [0.55, 220.0, 0.32], [1.15, 174.61, 0.55]];
+  for (const [at, f, tau] of hits) {
+    add(buf, note(len, at, f, { amp: 0.95, tau, attack: 0.0015, harmonics: body }));
+    tick(buf, at, { amp: 0.4, cutoff: 700, decay: 0.005 });
+  }
+  return finish(buf, 0.18);
+}
+
 fs.mkdirSync(OUT, { recursive: true });
-for (const [name, make] of Object.entries({ chime, bell, wood, ripple, hollow, 'screen-in': screenIn, 'screen-out': screenOut })) {
+for (const [name, make] of Object.entries({
+  chime,
+  bell,
+  wood,
+  ripple,
+  hollow,
+  marimba,
+  woodblock,
+  'screen-in': screenIn,
+  'screen-out': screenOut,
+})) {
   const file = path.join(OUT, `${name}.wav`);
   const data = wav(make());
   fs.writeFileSync(file, data);

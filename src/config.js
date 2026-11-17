@@ -10,7 +10,7 @@ import { normalizeSites } from './browser/sites.js';
 
 /** The finished-work sounds that exist in `web\sounds`, plus "off". The list is here
  *  so the config can refuse an unknown name instead of silently playing nothing. */
-export const DONE_SOUNDS = ['off', 'chime', 'bell', 'wood', 'ripple'];
+export const DONE_SOUNDS = ['off', 'chime', 'bell', 'wood', 'ripple', 'marimba', 'woodblock'];
 
 /** The chat's text size, in whole pixels — the same bounds web/ui-prefs.js shows in
  *  the form. Below the floor the prose stops being readable at 100%; above the ceiling

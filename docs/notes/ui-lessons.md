@@ -1880,10 +1880,19 @@ he is done", with a few to choose between. Three decisions carried it.
 
 **The sounds are generated, not borrowed.** Windows' own chimes are Microsoft's files, and
 reading `C:\Windows\Media` at runtime would put the app's behaviour in someone else's
-folder — the one thing this harness does not do (AGENTS.md, rule 2). Four short WAVs are
+folder — the one thing this harness does not do (AGENTS.md, rule 2). Six WAVs are
 written by `scripts/make-sounds.mjs` into `web/sounds/`, which means they travel with the
-folder, play on a fresh PC, and carry no licence but ours. All are mono 16-bit, 0.3–1.2s,
-peaking between −14 and −18 dBFS: loud enough to notice, quiet enough to talk over.
+folder, play on a fresh PC, and carry no licence but ours. All are mono 16-bit, peaking
+between −14 and −18 dBFS: loud enough to notice, quiet enough to talk over.
+
+**Two of them are long and wooden on purpose (17 Nov).** The operator asked for something
+"twice longer, and more woody" that could not be taken for a screen alert. Both run about
+2.4 s — twice the bell — and sit low: a marimba bar (fundamental plus the bar's tuned 4th,
+not a bell's inharmonic partials) and three knocks on a hollow block, the last one deeper
+and left to die. The screen pair is the opposite register on purpose — bright, thin,
+under half a second — so the two families cannot be confused. `tests/notify.test.mjs`
+measures it rather than trusting the description: the long pair must last at least 2.3 s
+and have under half the zero-crossing rate of screen-in.
 
 **The screen lease has its own pair, and its own switch.** Taking the mouse and
 keyboard plays screen-in — four bright, thin notes rising, a toy-piano timbre that is
