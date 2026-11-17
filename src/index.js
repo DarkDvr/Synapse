@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { DATA_DIR, LOGS_DIR, WORKSPACE_DIR, GENERAL_DIR, ENGINE_HOME, PID_FILE, PROJECTS_FILE, TOOL_STATS_FILE, PROBE_DIR, PROBE_FILE, MODEL_CACHE_FILE, TRACE_REASONS_FILE, NPM_ATTEMPT_FILE, PERMISSION_MEMORY_FILE, REMOTE_TOKEN_FILE, ROOT, PROJECTS_ROOT, SCRATCH_ROOT, scratchDir } from './paths.js';
-import { loadConfig, saveConfig, repairMachinePaths } from './config.js';
+import { loadConfig, saveConfig, repairMachinePaths, providerApiKey } from './config.js';
 import { logger } from './logger.js';
 import { createEngine } from './engines/index.js';
 import { vacuumStore } from './engine-store.js';
@@ -34,7 +34,7 @@ import { createApi, toClientConfig } from './api.js';
 import { createTraceReasons } from './trace-reasons.js';
 import { createServer } from './server.js';
 import { pruneProviderLog } from './provider-errors.js';
-import { measureLocalWindows } from './providers.js';
+import { measureLocalWindows, syncProviderModels } from './providers.js';
 import { remember as rememberWindow } from './windows.js';
 import { sweepOrphans } from './cleanup.js';
 import { createHousekeeping } from './housekeeping.js';
@@ -240,6 +240,33 @@ async function main() {
     if (folders.plan.created) app.info(`plan file created: ${folders.plan.path}`);
     if (folders.facts?.created) app.info(`facts file created: ${folders.facts.path}`);
     if (folders.error) app.warn(`could not give ${project.name} its folders (${folders.error})`);
+  }
+
+  // ── what every provider serves, asked once ───────────────────
+  // The engine reads its provider definitions at start and never looks again, so a
+  // model discovered after this point cannot run until the next restart. That is
+  // why the query is here, before the engine exists, under one three-second deadline
+  // shared by every provider — and why a provider that does not answer keeps the
+  // list it had. A local server that was not launched yet is the common case, not an
+  // error: the operator is told which lists are the old ones and refreshes them in
+  // Settings when the server is up.
+  let providerSync = { changed: false, failed: [], added: 0, removed: 0, removedIds: [], at: 0 };
+  try {
+    providerSync = await syncProviderModels(currentConfig, {
+      timeoutMs: 3000,
+      keyFor: (p) => {
+        const held = providerApiKey(p, process.env);
+        return held.key || '';
+      },
+    });
+    if (providerSync.changed) currentConfig = applyConfig(currentConfig);
+    const fresh = providerSync.added + providerSync.removed;
+    if (fresh) app.info(`model lists: ${providerSync.added} added, ${providerSync.removed} removed`);
+    if (providerSync.failed.length) {
+      app.info(`model lists kept for: ${providerSync.failed.map((f) => f.name).join(', ')} (no answer; refresh in Settings)`);
+    }
+  } catch (err) {
+    app.warn(`could not refresh the provider model lists: ${err.message}`);
   }
 
   // ── what the local runtimes have loaded ──────────────────────
@@ -883,6 +910,9 @@ async function main() {
   power.apply(currentConfig.automation);
   const api = createApi({
     getConfig,
+    // The boot's model-list answer, so the page can name the providers that did not
+    // reply and the operator knows which lists are the old ones.
+    providerSync: () => providerSync,
     applyConfig,
     power,
     engine,

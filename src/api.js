@@ -247,7 +247,7 @@ export function folderNameProblem(folder) {
   return null;
 }
 
-export function createApi({ getConfig, applyConfig, power, engine, logger, getBootError, projects, toolStats, probe, modelCache, traceReasons, inspectModel: inspectRef, probeDir, runs, desk, engineUpdate, synapseUpdate, restart, stopSelf, pcShutdown, notify, permissionLog, permissionGate, permissionMemory }) {
+export function createApi({ getConfig, applyConfig, power, engine, logger, getBootError, projects, toolStats, probe, modelCache, traceReasons, inspectModel: inspectRef, probeDir, runs, desk, engineUpdate, synapseUpdate, restart, stopSelf, pcShutdown, notify, providerSync, permissionLog, permissionGate, permissionMemory }) {
   const app = logger.channel('app');
   // One guard per chat the operator drives: the Architect's own turn has no run, and
   // nothing was watching it (13 Nov).
@@ -1155,6 +1155,10 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
       // Whether the machine is actually being held awake right now, and whether the
       // monitor is included. The config says what was asked; this says what happened.
       power: power?.state?.() || null,
+      // Which provider lists the boot refreshed, and which kept an older list because
+      // the server did not answer. The page names them once, so the operator knows
+      // what to refresh in Settings.
+      providerSync: providerSync ? providerSync() : null,
     }),
 
     getConfig: async () => toClientConfig(getConfig()),

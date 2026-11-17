@@ -728,3 +728,26 @@ model's **generated text**: exactly the shape that carries a "✓", and it runs 
 is already sent. Neither `[strata] req` nor `raw:` lines appear in its logs, but a print that
 raises writes nothing, so their absence is what the bug predicts. The fix stays on that
 side: launch it with `PYTHONIOENCODING=utf-8` (or `PYTHONUTF8=1`).
+
+## The model list, asked once at boot (17 Nov)
+
+A provider's list in Settings is a snapshot from the last time the operator pressed
+Refresh List, and on 17 Nov OpenCode Go's was months old: models it had added were
+missing, models it had dropped were still offered to the roles. The engine reads its
+provider definitions once, at start, so a list learned *after* that start cannot run
+until the next restart — which is why this is a boot step rather than a background
+task.
+
+- `syncProviderModels()` asks every provider in parallel under **one three-second
+  deadline** shared by all of them, before the engine is configured.
+- **An answer is authoritative for ids.** A model the provider no longer lists is
+  removed: a role pointing at it could not run, and the operator needs to see that
+  now. New ids are added.
+- **The operator's entry survives** for a model that is still listed — its name, its
+  window, its output. A `/models` listing is not a measurement of anything.
+- **No answer changes nothing.** Timeout, 401, an empty list, HTML instead of JSON:
+  the saved list stands, and the page names that provider once ("Model Lists Not
+  Updated… refresh them in Settings"). A local runtime the operator has not launched
+  yet is the ordinary case, not an error.
+- A role whose saved ref is no longer in the catalog shows an **empty model field
+  with a red border**, and sending is refused with the reason. Single and Multi both.

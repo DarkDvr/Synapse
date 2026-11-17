@@ -1294,12 +1294,15 @@ whether a given paragraph is "the answer".
   arrives mid-run pushes the live thinking up, and the operator saw the active
   reasoning as "the 3rd chat entry from the bottom". It settles back to its start
   when it reports.
-- **Popups go to the window's top-right, not the bottom-right.** The baseline's
+- **Popups go in the chat's own top-left corner (17 Nov).** The baseline's
   `.toast-region` is `fixed; right: 24px; bottom: 24px`, which parked a toast about
-  the run on top of the composer's Send and Stop. It is now `top: 16px; right:
-  24px; bottom: auto` (an override in `synapse.css` — `summit.css` is locked), so
-  the stack grows downward from the corner and no chat control is ever under it.
-  It does overlap the plan panel's head, which is the corner the operator chose.
+  the run on top of the composer's Send and Stop. It was then moved to the window's
+  top-right — away from the controls, but also away from where the operator is
+  reading. It now lives **inside `.chat-dock`** as `position: absolute; top: 12px;
+  left: 16px`, so a notice arrives where the answer will. `summit.css` is locked, so
+  this is an override in `synapse.css`. Two related changes: a toast stays 5.2
+  seconds instead of 4.2, and it **stops counting down while the pointer is on it** —
+  a line that vanishes mid-read has to be brought back by repeating the action.
 - **A finished plan row with no clock was a lie of omission (27 Oct).** The
   per-step stopwatch hides at zero, which is right for a task nobody has run yet —
   but the QC row the Architect settled itself is `done` with no worker run, and an

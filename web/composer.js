@@ -14,7 +14,7 @@ import { api } from './api.js';
 import { toast } from './toast.js';
 import { addChatError } from './chat-notes.js';
 import { chatScroller, animateScroll } from './chat-scroll.js';
-import { currentProject, currentRun, roleLabel, currentForm } from './run-view.js';
+import { currentProject, currentRun, roleLabel, currentForm, selectionFor, modelByRef } from './run-view.js';
 import { renderTranscript, attachmentImage } from './transcript.js';
 import { traceOf, steerLine } from './traces.js';
 
@@ -130,6 +130,15 @@ export async function send() {
   const text = input.value.trim();
   const files = state.attachments.slice();
   if (!text && !files.length) return;
+
+  // A role without a model cannot run a turn: the engine would refuse the prompt, or
+  // a worker would be briefed and never start. Say it before the message leaves the
+  // box, and keep the draft — the operator has to choose a model, not retype.
+  const pick = selectionFor('architect');
+  if (pick?.ref && !modelByRef(pick.ref)) {
+    toast('No Model for the Architect', `${pick.ref} is no longer offered. Choose a model on the card above.`);
+    return;
+  }
 
   // One project, one conversation. The server refuses too; this keeps the draft
   // in the box instead of losing it to a round trip. The exception is the

@@ -231,6 +231,8 @@
 
           <!-- ── conversation (live · no header) ─────────────────────── -->
           <section class="chat-dock" id="chatDock" aria-label="Conversation">
+            <!-- Notices belong to the conversation: this sits in the chat's top-left corner. -->
+            <div class="toast-region" id="toastRegion" aria-live="polite" aria-atomic="false"></div>
             <div class="chat-scroll" id="transcript"></div>
             <div class="chat-tools">
               <!-- The only reset: discards this conversation and leaves a handover.
@@ -326,7 +328,6 @@
      clipped role-card wrapper -->
 <div class="model-menu" id="modelMenu" role="listbox" hidden></div>
 
-<div class="toast-region" id="toastRegion" aria-live="polite" aria-atomic="false"></div>
 
 <!-- error detail popup: one shape for a plain error and for an alarm -->
 <div class="modal-backdrop" id="errorModal" hidden>

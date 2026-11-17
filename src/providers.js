@@ -144,7 +144,7 @@ function ollamaTagsUrl(root) {
  * name, a window when the server offers one) and an error is returned as a
  * sentence, never as a stack trace. The API key is never echoed back.
  */
-export async function fetchProviderModels({ baseURL, apiKey, format, type } = {}, { fetchImpl = fetch, timeoutMs = 8000 } = {}) {
+export async function fetchProviderModels({ baseURL, apiKey, format, type } = {}, { fetchImpl = fetch, timeoutMs = 8000, windows = true } = {}) {
   const root = String(baseURL || '').trim().replace(/\/+$/, '');
   if (!/^https?:\/\//i.test(root)) return { ok: false, models: [], error: 'The server URL must start with http:// or https://.' };
   const key = String(apiKey || '').trim();
@@ -187,7 +187,7 @@ export async function fetchProviderModels({ baseURL, apiKey, format, type } = {}
       // saying nothing: the watchdog would never compact and the server would
       // truncate. So only the loaded length is taken — and it wins over any
       // maximum the list itself offered, because a maximum is not a window.
-      if (type === 'local') {
+      if (type === 'local' && windows) {
         const windows = await probeLoadedWindows(root, fetchImpl, timeoutMs);
         if (windows.size) {
           for (const m of models) {
@@ -392,6 +392,104 @@ export async function providerUp(provider, { fetchImpl = fetch, timeoutMs = 3000
  *
  * A server that is not answering changes nothing: the last known window stands.
  */
+/**
+ * What every provider serves, asked once at boot, before the engine is configured.
+ *
+ * The engine is handed its provider definitions at start and reads them once, so a
+ * model discovered after that start cannot run until the next restart. That is why
+ * this is not a background task: it has to finish before `engine.start()`, under one
+ * short deadline shared by every provider.
+ *
+ * The answer is authoritative for *ids*: a model the provider no longer lists is
+ * removed, because a role pointing at it would fail silently at the next run and the
+ * operator needs to see that now, not tonight. What is *kept* is the operator's own
+ * entry for a model that survives — its name, its window, its output ceiling — since
+ * a `/models` listing is not a measurement.
+ *
+ * A provider that does not answer keeps its list exactly as it was. So does one that
+ * answers with nothing usable: an empty list must never be read as "no models here".
+ * Both are reported, so the page can say which lists are the old ones.
+ */
+export async function syncProviderModels(config, { fetchImpl = fetch, timeoutMs = 3000, keyFor = (p) => p?.apiKey } = {}) {
+  const providers = config?.engine?.opencode?.providers;
+  if (!Array.isArray(providers) || !providers.length) {
+    return { changed: false, failed: [], added: 0, removed: 0, removedIds: [] };
+  }
+  const deadlineAt = Date.now() + Math.max(250, Number(timeoutMs) || 3000);
+  const answers = await Promise.all(
+    providers.map(async (p) => {
+      const root = String(p?.baseURL || '').trim();
+      if (!/^https?:\/\//i.test(root)) return { p, ok: false, models: [], error: 'No address.' };
+      const left = deadlineAt - Date.now();
+      if (left < 100) return { p, ok: false, models: [], error: 'The shared 3-second deadline ran out.' };
+      try {
+        // The deadline is enforced here, not trusted to the fetch: an implementation
+        // that ignores the abort signal must not be able to hold the boot open. This
+        // raced a real `fetch` in a test and lost — the whole sync hung on a promise
+        // that never settled.
+        let timer = null;
+        const late = new Promise((resolve) => {
+          timer = setTimeout(
+            () => resolve({ ok: false, models: [], error: 'No answer before the deadline.' }),
+            Math.max(1, left),
+          );
+        });
+        const answer = await Promise.race([
+          fetchProviderModels(
+            { baseURL: root, apiKey: keyFor(p), format: p?.format, type: providerType(p) },
+            // No window probe here: that is the boot measurement's job, and a list
+            // query must stay one request per provider.
+            { fetchImpl, timeoutMs: left, windows: false },
+          ),
+          late,
+        ]);
+        clearTimeout(timer);
+        return { p, ok: answer.ok, models: answer.models || [], error: answer.error || '' };
+      } catch (err) {
+        return { p, ok: false, models: [], error: String(err?.message || err) };
+      }
+    }),
+  );
+
+  const failed = [];
+  const removedIds = [];
+  let added = 0;
+  let removed = 0;
+  let changed = false;
+  for (const { p, ok, models, error } of answers) {
+    if (!ok || !models.length) {
+      failed.push({ id: String(p?.id || ''), name: String(p?.name || p?.id || 'a provider'), error: String(error || 'It listed no models.') });
+      continue;
+    }
+    const before = Array.isArray(p.models) ? p.models : [];
+    const byId = new Map(before.map((m) => [String(m.id || ''), m]));
+    const next = [];
+    for (const m of models) {
+      const id = String(m.id || '').trim();
+      if (!id) continue;
+      const old = byId.get(id);
+      // A survivor keeps the operator's entry; the provider only decides that it is
+      // still served, and what its default name is when the entry has none.
+      next.push(old ? { ...old, name: old.name || m.name || id } : { id, name: m.name || id });
+      if (!old) added += 1;
+    }
+    if (!next.length) {
+      failed.push({ id: String(p?.id || ''), name: String(p?.name || p?.id || 'a provider'), error: 'It listed no usable models.' });
+      continue;
+    }
+    const kept = new Set(next.map((m) => String(m.id)));
+    for (const old of before) {
+      if (kept.has(String(old.id || ''))) continue;
+      removed += 1;
+      removedIds.push(`${p?.id || '?'}/${old.id}`);
+    }
+    const sameIds = before.length === next.length && before.every((m) => kept.has(String(m.id)));
+    if (!sameIds) changed = true;
+    p.models = next;
+  }
+  return { changed, failed, added, removed, removedIds, at: Date.now() };
+}
+
 export async function measureLocalWindows(config, { fetchImpl = fetch, timeoutMs = 1500 } = {}) {
   const providers = config?.engine?.opencode?.providers;
   if (!Array.isArray(providers)) return [];

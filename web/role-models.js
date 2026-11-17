@@ -14,7 +14,6 @@ import { $ } from './dom.js';
 import { api } from './api.js';
 import { toast } from './toast.js';
 import { modelByRef, selectionFor, topEfforts, variantsOf, ROLES, architectSelection, currentProject, dirKey } from './run-view.js';
-import { hiddenProviderIds } from './provider-list.js';
 import { renderTranscript } from './transcript.js';
 import { pickers, syncPickerInput } from './model-picker.js';
 import { clearRoleRate } from './role-rate-store.js';
@@ -81,6 +80,17 @@ export function renderEffort(roleId) {
   btn.setAttribute('aria-label', btn.title);
 }
 
+// A role with no model is said out loud once, not on every redraw: the red border is
+// the standing state, and a toast that repeats on every render is noise.
+const notedMissing = new Set();
+function noteMissingModel(role, ref) {
+  const key = `${role}|${ref}`;
+  if (notedMissing.has(key)) return;
+  notedMissing.add(key);
+  const name = ROLES.find((r) => r.id === role)?.name || role;
+  toast('No Model for This Role', `${name}: ${ref} is no longer offered. Choose a model before sending.`);
+}
+
 export function fillRoleModels() {
   if (state.models.length === 0) return;
   document.querySelectorAll('.role-model').forEach((sel, i) => {
@@ -88,37 +98,36 @@ export function fillRoleModels() {
     sel.innerHTML = state.models
       .map((m) => `<option value="${esc(m.ref)}">${esc(wired.modelLabel(m.name))}</option>`)
       .join('');
-    // The saved ref is the identity, and it is never replaced. A role whose model
-    // is missing from the catalog *right now* — a provider had a bad minute, its
-    // key was refused, the engine was restarting — keeps its own ref in an option
-    // of its own, marked as missing. This used to fall back to another model by
-    // position in the list, which is how the Architect's card came back showing a
-    // DeepSeek from a different provider: same name, different source, and the
-    // picker's value is what a later save would have written.
+    // The saved ref is the identity, and it is never replaced silently. But a role
+    // whose model its provider no longer lists *cannot run*: the card shows nothing
+    // selected and a red border, so the difference between "not right now" and
+    // "choose another" is visible without opening the menu. The ref stays in the
+    // config until the operator picks a model — the choice is theirs, not ours.
     const chosen = selectionFor(role).ref;
     const known = modelByRef(chosen);
-    if (chosen && !known) {
-      const id = String(chosen).split('/').pop();
-      // Two reasons a saved model is not in the list, and they read differently: it
-      // left the engine's catalog, or the operator removed its provider in Settings.
-      // Either way the ref is kept — the choice is not replaced by a neighbour.
-      const hidden = hiddenProviderIds().has(String(chosen).split('/')[0]);
-      sel.insertAdjacentHTML(
-        'beforeend',
-        `<option value="${esc(chosen)}">${esc(id)} — ${hidden ? 'hidden in Settings' : 'not in the catalog'}</option>`,
-      );
+    const gone = Boolean(chosen && !known);
+    if (gone) {
+      sel.insertAdjacentHTML('afterbegin', '<option value="">No model — choose one</option>');
+      sel.classList.add('is-missing');
+      sel.value = '';
+      sel.title = `${chosen} is no longer offered by its provider. Choose a model for this role.`;
+      noteMissingModel(role, chosen);
+    } else {
+      sel.classList.remove('is-missing');
+      // Nothing saved at all is the only case where a model is offered: the first
+      // free one, so a fresh install has something selectable rather than a blank.
+      const fallback = state.models.find((m) => m.free) || state.models[0];
+      sel.value = chosen || fallback.ref;
+      sel.title = known ? wired.modelTitle(known) : `Model for the ${role} role`;
     }
-    // Nothing saved at all is the only case where a model is offered: the first
-    // free one, so a fresh install has something selectable rather than a blank.
-    const fallback = state.models.find((m) => m.free) || state.models[0];
-    sel.value = chosen || fallback.ref;
-    sel.title = known
-      ? wired.modelTitle(known)
-      : chosen
-        ? `${chosen} is ${hiddenProviderIds().has(String(chosen).split('/')[0]) ? 'from a provider hidden in Settings' : "not in the engine's catalog right now"} — the choice is kept, not replaced`
-        : `Model for the ${role} role`;
     const p = pickers.get(role);
-    if (p) syncPickerInput(p.input);
+    if (p) {
+      syncPickerInput(p.input);
+      // syncPickerInput reads the select: with nothing selected it shows the
+      // placeholder. The red mark is this module's, because it knows *why*.
+      p.input.classList.toggle('is-missing', gone);
+      p.input.placeholder = gone ? 'No model — choose one' : 'Search models…';
+    }
     renderEffort(role);
   });
 }

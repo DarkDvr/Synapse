@@ -916,10 +916,10 @@ body.dark .sidebar-bottom,
    sits on a dead model and the card looks fine. */
 .model-search.has-issues { border-color: rgba(232, 163, 61, 0.55); color: var(--amber); }
 .model-search.has-issues:hover { border-color: var(--amber); }
-/* The saved model is not in the catalog at this moment. Amber, not red: nothing
-   failed, the choice is simply not on offer right now — and it is still the
-   choice, so it is shown rather than replaced. */
-.model-search.is-missing { border-color: rgba(232, 163, 61, 0.4); color: var(--amber); font-style: italic; }
+/* The saved model is not in the catalog: its provider no longer lists it, or the
+   provider was removed. Red and empty — a role that cannot run must not look
+   ready, and the operator has to choose another model before sending. */
+.model-search.is-missing { border-color: rgba(240, 86, 63, 0.75); color: var(--red); font-style: normal; }
 /* Skipped just now: red, text included. The background stays as it is — this is a
    mark on the control, not a new control. */
 .model-search.is-skipped {
@@ -3107,10 +3107,14 @@ body.is-stopping .chat-dock { animation: stop-glow 0.7s ease-in-out infinite; }
 
 /* The baseline puts the toast stack in the bottom-right corner, which is where
    the composer's buttons are: a toast about the run landed on top of Send. It
-   goes to the upper-right corner of the window instead, clear of the composer,
-   the jump buttons and the conversation. (`summit.css` is a locked baseline, so
-   this is an override, not an edit.) */
-.toast-region { top: 16px; right: 24px; bottom: auto; }
+   then moved to the window's upper-right, which is nowhere the operator is
+   looking. Now it is the conversation's own top-left corner — above the first
+   line of chat, inside the dock — so a notice arrives where the answer will.
+   (`summit.css` is a locked baseline, so this is an override, not an edit.) */
+.toast-region {
+  position: absolute; top: 12px; left: 16px; right: auto; bottom: auto;
+  justify-items: start; max-width: min(420px, calc(100% - 32px));
+}
 /* Notices are the one thing that arrives unasked, so they carry the accent:
    a yellow border and yellow text, not another dark panel that reads as part of
    the page. The icon's green was semantic for a success that most toasts are
