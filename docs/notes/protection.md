@@ -270,19 +270,25 @@ Audited at the same time, because the report asked what else could be caught: **
 writes never went through the protected list at all — the two delete paths were its only
 callers. Model actions still go through `decide`, where the fence holds.
 
-## The fence names where the path went (17 Nov)
+## The fence says the folder and the constants, nothing else (17 Nov)
 
-A worker wrote `..\p3-browser-output.txt` and was refused; it then asked the operator
-"which path was protected?" The resolution was right (the shell's working directory is the
-project, so `..` is the folder above it), but the sentence was not: it said "the projects
-root", which to a model that has no reason to know other projects exist reads as **this
-project's root folder**.
+A worker wrote `..\p3-browser-output.txt`, was refused, and then asked the operator "which
+path was protected?" Two wordings failed before this one. "The projects root" read as
+**this project's root folder** — a model has no reason to know other projects exist. "The
+shared folder that holds every project" then explained a concept the model does not need,
+and mentioned other projects at all.
 
-The words were the bug. A refusal now names the thing by what it is, not by our name for
-it: `F:\dev\Synapse.Projects — the shared folder that holds every project, one subfolder
-each`, then the working directory the relative path came from, that `..` from there is one
-level above the project, and where to write instead. The rule did not change: that folder
-is a built-in prohibited entry, and no project may read or change another.
+What it says now, and the whole of it:
 
-The lesson generalises: a message written in the operator's vocabulary is read by someone
-who does not share it. Name the folder, not the concept.
+> PROHIBITED: F:\dev\Synapse.Projects is outside your project folder. Work only inside
+> your project folder or SYNAPSE_SCRATCH_ROOT (F:\dev\Synapse.Projects\_scratch). Nothing
+> above your project folder is yours; SYNAPSE_PROJECTS_ROOT is F:\dev\Synapse.Projects.
+
+Three facts, no concept: where the path landed, the two places it may work, and that
+nothing above the project is its own. The constants are the ones the core instruction gives
+every role, so the sentence speaks the vocabulary the reader already has instead of
+inventing one.
+
+The rule did not change: that folder is a built-in prohibited entry, and no project may
+read or change another. The brief's coder line says the same thing in the same words —
+"inside the project folder or the scratch folder".

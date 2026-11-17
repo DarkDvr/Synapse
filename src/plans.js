@@ -867,7 +867,7 @@ const ROLE_MANDATES = {
   ].join(' '),
   'coder-1': [
     'You are a Coder. Build exactly what the task names and nothing else: the plan, the confirmed features and the',
-    'design are read-only to you. Work only inside the project folder. If you render the page to look at it, put the',
+    'design are read-only to you. Work only inside the project folder or the scratch folder. If you render the page to look at it, put the',
     `images in ${PLAN_DIR}/shots/ - it is the one folder inside ${PLAN_DIR} that every role may write. The design and`, 
     'findings folders belong to the roles that own them, and a render in one of those is reported as a stray write.',
     'Run the renderer with its audit when you render (`--audit`): a row of buttons with two heights, a label off',

@@ -44,7 +44,11 @@ test('no project reads or changes another project', () => {
   const read = shell(`Get-Content "${sibling}"`);
   assert.equal(read.effect, 'deny', 'a read-only command naming another project is refused');
   assert.equal(read.scope, 'prohibited');
-  assert.match(read.reason, /Another project/);
+  // Plain words and the two constants: the folder, the allowed places, nothing to infer.
+  assert.match(read.reason, /outside your project folder/);
+  assert.match(read.reason, /SYNAPSE_SCRATCH_ROOT/);
+  assert.match(read.reason, /SYNAPSE_PROJECTS_ROOT/);
+  assert.doesNotMatch(read.reason, /another project/i);
   assert.equal(call('read', sibling).effect, 'deny');
   assert.equal(call('write', sibling).effect, 'deny');
   assert.equal(call('read', 'F:/dev/Synapse.Projects').effect, 'deny', 'the root itself too');
@@ -57,18 +61,16 @@ test('no project reads or changes another project', () => {
   assert.equal(call('read', `${own}/probe.ps1`, { scratchRoot: SCRATCH }).effect, 'allow');
 });
 
-test('a relative output path that leaves the project says how to name the project path', () => {
+test('a relative output path that leaves the project says only where it may go', () => {
   const build = shell('powershell -File app/build.ps1 -Portable -Out ../bin');
   assert.equal(build.effect, 'deny');
-  // Not "the projects root": that read to a worker as "this project's root folder", and a
-  // worker asked which path was protected (17 Nov). It is the shared folder, named as one,
-  // with the path and the working directory `..` was resolved from.
-  assert.match(build.reason, /shared folder that holds every project/);
-  assert.doesNotMatch(build.reason, /the projects root/);
-  assert.match(build.reason, /relative path/i);
-  assert.match(build.reason, /absolute path/i);
-  assert.match(build.reason, /working directory \(F:\\dev\\Synapse\.Projects\\demo\)/i);
-  assert.match(build.reason, /one level above your project/);
+  // No "projects root", no other projects, no working-directory lecture: the folder it
+  // landed on, the two places it may work, and the constants it already knows (17 Nov).
+  assert.match(build.reason, /outside your project folder/);
+  assert.doesNotMatch(build.reason, /the projects root/i);
+  assert.doesNotMatch(build.reason, /another project/i);
+  assert.match(build.reason, /SYNAPSE_SCRATCH_ROOT \(F:\\dev\\Synapse\.Projects\\_scratch\)/);
+  assert.match(build.reason, /SYNAPSE_PROJECTS_ROOT is F:\\dev\\Synapse\.Projects/);
 });
 
 test('the projects fence is mandatory: the boxes cannot switch it off', () => {
