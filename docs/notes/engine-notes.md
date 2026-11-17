@@ -1173,6 +1173,12 @@ the ✎ button on the role card, which now holds three things:
   allowed by construction: the box is dead until the skill is allowed, `normalize()`
   filters it again on the way in, and the dialog filters it on save. A required skill
   the engine refuses would be reported missing on every run, for ever.
+  **The end-of-run check uses the list the brief actually asked for**, snapshotted
+  when the worker was created, not `getConfig()` at the end. A role's skills can be
+  changed while a run is live; on 17 Nov the Architect was told three designer skills
+  "were never loaded" after the list underneath the run had moved. `roleMustLoad()`
+  also filters out a required name that the same role is not allowed to load, so a
+  hand-edited config cannot demand an impossible skill.
   Ticking every skill stores *no* `skills` list, because
   that is the same thing and it lets a skill added later reach the role.
 - **Focus** (QC only) — `app` by default, `security` when needed.

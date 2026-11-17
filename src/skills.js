@@ -45,11 +45,19 @@ export function skillRules(config, role) {
   return rules;
 }
 
-/** The skills a role must load before it starts, or [] when none were set. */
+/** The skills a role must load before it starts, or [] when none were set.
+ *
+ * A required name that is not in the role's allowed list is not demanded: the
+ * engine's ruleset denies it, so the brief would be asking for something no role
+ * can do. The role dialog already keeps `mustLoad` a subset of `skills`; this also
+ * holds for a hand-edited config (17 Nov: the Architect reported three required
+ * designer skills that had been withdrawn from the session). */
 export function roleMustLoad(config, role) {
   const entry = config?.roles?.[role];
   if (!entry || !Array.isArray(entry.mustLoad)) return [];
-  return entry.mustLoad.map((s) => String(s || '').trim()).filter(Boolean);
+  const must = entry.mustLoad.map((s) => String(s || '').trim()).filter(Boolean);
+  const allowed = roleSkillList(config, role);
+  return allowed === null ? must : must.filter((s) => allowed.includes(s));
 }
 
 /**

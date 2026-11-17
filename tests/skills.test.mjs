@@ -43,6 +43,17 @@ test('a required skill is an instruction, an optional one is not', () => {
   assert.match(text, /Also available when the task needs it: visual-review/);
 });
 
+test('a required skill that is not allowed is not demanded', () => {
+  const withdrawn = {
+    roles: {
+      designer: { skills: ['visual-review'], mustLoad: ['aesthetic-foundations', 'visual-review'] },
+    },
+  };
+  const text = describeSkills(withdrawn, 'designer');
+  assert.match(text, /visual-review/);
+  assert.doesNotMatch(text, /aesthetic-foundations/, 'the session cannot load it, so the brief must not ask');
+});
+
 test('no shipped skill names one machine\'s folder', () => {
   const bad = [];
   const walk = (dir) => {

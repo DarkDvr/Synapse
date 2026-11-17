@@ -1744,6 +1744,11 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
         },
       });
       live.workerId = w.id;
+      // Snapshot what the brief actually demanded, before a config change can move
+      // the goalposts. The end-of-run check uses this list, not whatever the role is
+      // configured with hours later (17 Nov: three designer skills were reported as
+      // "never loaded" after the session's list had changed underneath the run).
+      skillsRequired = roleMustLoad(config, role);
       // Its context: where it is, what the plan says, and that the plan is not
       // its to touch. The task itself goes in the message that prompts it.
       try {
@@ -2410,7 +2415,6 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
         // the only way to know whether it did: Shift Test 3 and 4 both shipped
         // without a single `code-craft` load, and nothing noticed.
         const skillsUsed = workerSkills(messages);
-        skillsRequired = roleMustLoad(getConfig(), role);
         skillsMissing = skillsRequired.filter((s) => !skillsUsed.has(s));
         if (skillsMissing.length) {
           out.warn(
