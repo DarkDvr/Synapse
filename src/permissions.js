@@ -428,14 +428,26 @@ function prohibitedRead(target, ctx) {
 /**
  * The sentence a fence refusal uses. The projects root is not the operator's list —
  * they cannot switch it off — so it does not borrow that wording.
+ *
+ * It names the resolved path and the working directory the relative one was resolved
+ * from. A worker that wrote `..\out.txt` had to ask which path was protected (17 Nov):
+ * the old sentence said "the projects root" and left it to work out that `..` from the
+ * project folder lands there.
  */
-function fenceDeny(entry, verb) {
+function fenceDeny(entry, verb, cwd = '') {
   const at = String(entry?.path || '').trim();
-  const where = at && path.resolve(at) === path.resolve(PROJECTS_ROOT) ? 'the projects root' : at || 'That path';
+  const root = at && path.resolve(at) === path.resolve(PROJECTS_ROOT);
+  const where = root ? `the projects root (${at})` : at || 'That path';
+  const from = String(cwd || '').trim();
+  const resolving =
+    root && from
+      ? `A relative path is resolved from the command's working directory (${from}), not from a script's own folder, ` +
+        `so \`..\` from there lands in the projects root. `
+      : `A relative path is resolved from the command's working directory, not from a script's own folder. `;
   return deny(
     `PROHIBITED: ${where} is outside your project. Another project is not yours to ${verb}. ` +
-      `Work only inside your own project folder. A relative path is resolved from the command's working directory, ` +
-      `not from a script's own folder; use an absolute path inside your project when a script takes an output folder.`,
+      resolving +
+      `Work only inside your own project folder or its scratch folder, and give a script its output folder as an absolute path.`,
     true,
     'prohibited',
   );
@@ -519,7 +531,7 @@ function decideWrite(resources, ctx) {
     if (!target || target.unknown) return ask('The harness cannot tell which folder this is.', true, 'unknown');
     // PROHIBITED beats every other rule: no card, no remembered grant, no answer.
     const guarded = prohibitedWrite(target.path, ctx);
-    if (guarded) return guarded.id === 'projects' ? fenceDeny(guarded, 'change') : deny(`PROHIBITED: ${guarded.label} is on the protected list.`, true, 'prohibited');
+    if (guarded) return guarded.id === 'projects' ? fenceDeny(guarded, 'change', ctx.cwd) : deny(`PROHIBITED: ${guarded.label} is on the protected list.`, true, 'prohibited');
     if (isSecret(target.path, ctx)) return deny('The harness never opens saved-password folders.', true, 'secret');
     paths.push(target.path);
     zones.push(zoneOf(target.path, ctx));
@@ -1103,7 +1115,7 @@ function decideShell(resources, ctx) {
   if (guardedWrite) {
     const entry = prohibitedWrite(guardedWrite, ctx);
     return entry.id === 'projects'
-      ? fenceDeny(entry, 'change')
+      ? fenceDeny(entry, 'change', ctx.cwd)
       : deny(`PROHIBITED: ${entry.label} is on the protected list.`, true, 'prohibited');
   }
   // A write with no path of its own runs in the statement's directory: `cd
@@ -1113,7 +1125,7 @@ function decideShell(resources, ctx) {
   if (guardedDir) {
     const entry = prohibitedWrite(guardedDir.dir, ctx);
     return entry.id === 'projects'
-      ? fenceDeny(entry, 'change')
+      ? fenceDeny(entry, 'change', ctx.cwd)
       : deny(`PROHIBITED: ${entry.label} is on the protected list.`, true, 'prohibited');
   }
   // The screen: the one thing on this machine that is the operator's while they are
@@ -1139,14 +1151,14 @@ function decideShell(resources, ctx) {
       .flatMap((part) => [...part.paths, ...part.redirects])
       .map((p) => prohibitedRead(p, ctx))
       .find(Boolean);
-    if (sealed) return sealed.id === 'projects' ? fenceDeny(sealed, 'read') : deny(`PROHIBITED: ${sealed.label} is not read either.`, true, 'prohibited');
+    if (sealed) return sealed.id === 'projects' ? fenceDeny(sealed, 'read', ctx.cwd) : deny(`PROHIBITED: ${sealed.label} is not read either.`, true, 'prohibited');
   }
   // A copy's source is a read, and it is judged like one: an entry whose Read is
   // unticked still refuses it, and so does a source the harness would not let a
   // model read at all.
   const copySources = [...copies.values()].flatMap((copy) => copy.sources);
   const sealedCopy = copySources.map((p) => prohibitedRead(p, ctx)).find(Boolean);
-  if (sealedCopy) return sealedCopy.id === 'projects' ? fenceDeny(sealedCopy, 'read') : deny(`PROHIBITED: ${sealedCopy.label} is not read either.`, true, 'prohibited');
+  if (sealedCopy) return sealedCopy.id === 'projects' ? fenceDeny(sealedCopy, 'read', ctx.cwd) : deny(`PROHIBITED: ${sealedCopy.label} is not read either.`, true, 'prohibited');
   const unreadableCopy = copySources.find((p) => !harnessReadable(p, ctx));
   if (unreadableCopy) return deny("These are Synapse's private files.", true, 'harness');
   // A harness path named by a statement that only reads is a read, whatever a
@@ -1263,7 +1275,7 @@ function decideRead(resources, ctx) {
     // treats a read as a touch. Every other protected path is readable — that is
     // the point of the tier, so OS logs and drivers can be inspected.
     const guarded = prohibitedRead(target.path, ctx);
-    if (guarded) return guarded.id === 'projects' ? fenceDeny(guarded, 'read') : deny(`PROHIBITED: ${guarded.label} is not read either.`, outside, 'prohibited');
+    if (guarded) return guarded.id === 'projects' ? fenceDeny(guarded, 'read', ctx.cwd) : deny(`PROHIBITED: ${guarded.label} is not read either.`, outside, 'prohibited');
     // A .env holds live keys. The model may read .env.example; the real file is
     // the operator's to hand over, because the values are the point of it.
     if (isEnvFile(target.path)) return ask('This file holds keys or passwords.', outside, zone);

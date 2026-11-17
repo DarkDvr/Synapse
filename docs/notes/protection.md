@@ -269,3 +269,16 @@ Audited at the same time, because the report asked what else could be caught: **
 **Private** toggle, **Browse/Cmd**, the shipped **skills** and the project's own `.project`
 writes never went through the protected list at all — the two delete paths were its only
 callers. Model actions still go through `decide`, where the fence holds.
+
+## The fence names where the path went (17 Nov)
+
+A worker wrote `..\p3-browser-output.txt` and was refused; it then asked the operator
+"which path was protected?" — because the sentence said only "the projects root". The
+resolution was correct (the shell's working directory is the project, so `..` is the root
+that holds every project), and the refusal now says both facts: the resolved path
+(`the projects root (F:\dev\Synapse.Projects)`) and the folder it was resolved from
+(`the command's working directory (F:\...\vpa-modlist-installer)`), then where to write
+instead — the project, its scratch folder, or an absolute output path.
+
+The rule did not change: the projects root is a built-in prohibited entry and no project
+may change another. Only the sentence did.

@@ -63,6 +63,11 @@ test('a relative output path that leaves the project says how to name the projec
   assert.match(build.reason, /the projects root/);
   assert.match(build.reason, /relative path/i);
   assert.match(build.reason, /absolute path/i);
+  // It names where `..` landed and the folder it was resolved from: a worker asked
+  // "which path was protected?" (17 Nov) because the old sentence only said "the
+  // projects root" and left it to work out that the cwd is the project, not the script.
+  assert.match(build.reason, /the projects root \(F:\\dev\\Synapse\.Projects\)/i);
+  assert.match(build.reason, /working directory \(F:\\dev\\Synapse\.Projects\\demo\)/i);
 });
 
 test('the projects fence is mandatory: the boxes cannot switch it off', () => {
