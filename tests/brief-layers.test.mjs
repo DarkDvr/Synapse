@@ -81,7 +81,9 @@ test('the laws are at the top, where a reader looks first', () => {
 // has to say where the mirrored copy lives and that waiting is not finishing (a QC run
 // ended without its report because it could not read the file). Short on purpose — it is
 // re-read every step.
-const BARE_BRIEF_LIMIT = { architect: 15650, qc: 7300, designer: 5450, inventor: 4850, 'coder-1': 4200, 'coder-2': 4200, single: 2000 };
+// The Architect's guard rose again by 90 on 17 Nov for the JSON rule: a plan written with a
+// raw newline inside a string is not JSON, and the harness can only report "no task" for it.
+const BARE_BRIEF_LIMIT = { architect: 15750, qc: 7300, designer: 5450, inventor: 4850, 'coder-1': 4200, 'coder-2': 4200, single: 2000 };
 
 test('a bare role brief stays within its regression guard', () => {
   const dir = 'F:/dev/Synapse.Projects/__no_such_project__';

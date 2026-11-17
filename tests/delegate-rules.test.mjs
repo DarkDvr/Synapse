@@ -148,6 +148,31 @@ try {
     expect('and nothing is refused', woke.length === 0);
   }
 
+  // 2a. a plan the harness cannot parse: the refusal says so, not "no such task"
+  // 17 Nov, VPA: the Architect's first write put a raw newline inside a JSON string. The
+  // file had no tasks, so the delegation was answered "the plan has no task t1" — true,
+  // useless, and it sent the Architect looking for a row it had just written. The parse
+  // error is the answer, with the fix in the same sentence.
+  fs.writeFileSync(
+    path.join(DIR, '.project', 'plan.json'),
+    '{"version":1,"goal":"x","tasks":[{"id":"t1","title":"Do\nt1","role":"coder-1","status":"todo"}]}',
+    'utf8',
+  );
+  {
+    const { runner, woke, ran } = makeRunner();
+    await runner.handleTurn('ses_arch', delegate('t1', 'call_broken_plan'));
+    await settle();
+    const run = fs.readFileSync(path.join(DIR, '.project', 'runs.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+    expect('a broken plan starts nothing', !ran.includes('prompt') && !ran.includes('createSession'), ran.join(','));
+    expect('it is journalled as bad-plan', run.some((r) => r.callId === 'call_broken_plan' && r.outcome === 'bad-plan'), JSON.stringify(run.slice(-2)));
+    expect(
+      'and the Architect is told the file is unreadable, with the JSON rule',
+      /not valid JSON/i.test(woke[0] || '') && /real newline/i.test(woke[0] || ''),
+      woke[0]?.slice(0, 160),
+    );
+    expect('not "no such task"', !/has no task/i.test(woke[0] || ''), woke[0]?.slice(0, 160));
+  }
+
   // 2b. a row whose role is the Architect is its own work, not a delegation
   // 11 Nov, sysmoninor: the Architect delegated a role=architect row, the runner
   // spawned a worker with that role, and the page drew a delegation from the

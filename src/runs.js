@@ -1346,6 +1346,28 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     const task = (plan.plan?.tasks || []).find((t) => t.id === request.task);
     const project = dir.split(/[\\/]/).filter(Boolean).pop() || dir;
 
+    // A file the harness could not parse has no tasks at all, so "no task t1" would be
+    // true and useless: the Architect would go looking for a missing row in a file it
+    // wrote. Say what is actually wrong, with the fix. (17 Nov, VPA: a raw newline inside
+    // a JSON string — the plan had no tasks, and "no task t1" cost three turns.)
+    if (plan.error) {
+      appendRun(dir, { kind: 'delegate', callId: request.callId, task: request.task, outcome: 'bad-plan' });
+      log.warn(`delegation rejected: the plan file in ${project} is unreadable: ${plan.error}`);
+      const json = /not valid JSON/i.test(plan.error);
+      await wake(architectId, dir, {
+        description: `delegate ${request.task} rejected: the plan file is broken`,
+        text:
+          `Nothing was run: ${plan.error}. The harness reads no tasks from a file it cannot parse, ` +
+          `so no task can be found. ` +
+          (json
+            ? `A JSON string cannot contain a real newline: keep each string on one line, or write ` +
+              `\\n instead. `
+            : '') +
+          `Fix the file, then ask again.`,
+      });
+      return;
+    }
+
     if (!task) {
       // Recorded so the same call is not retried forever, and the Architect is
       // told rather than left waiting.

@@ -2270,3 +2270,20 @@ the run completed without `qc-8.md`.
 - A read of the engine path is refused with the project path in the note; the gate copies
   the file at that moment and says where it went.
 - The copy is a snapshot: read it again after a pause. "Waiting" is not finishing.
+
+## A plan the harness cannot parse says so (17 Nov)
+
+The Architect's first write of `plan.json` sometimes puts a real newline inside a JSON
+string ("Bad control character in string literal"). The file is then not JSON, the harness
+reads no tasks from it, and a delegation answered "the plan has no task t1" — true and
+useless: the row was there, in a file that could not be read. The Architect spent three
+turns finding that out on its own (VPA, 17 Nov).
+
+- A delegation now reads the parse error first: `Nothing was run: plan.json is not valid
+  JSON: <the parser's message>. … A JSON string cannot contain a real newline: keep each
+  string on one line, or write \n instead. Fix the file, then ask again.` It is journalled
+  as `bad-plan`.
+- The Architect's brief carries the rule in one sentence, beside the line that says it owns
+  the file.
+- The file is still never repaired by the harness: the Architect owns it, and a silently
+  mended plan is a plan nobody understands.

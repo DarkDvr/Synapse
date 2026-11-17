@@ -1338,7 +1338,8 @@ export function briefSession({ dir, role = 'architect', auto = false, single = f
       ? `Project plan: ${planRelPathPlain()} - you own this file and you are the only role that may write it. ` +
           `Read it when a session starts, and keep it current as work lands. To get a task done, hand it to ` +
           `its role with the delegate tool - its exact name is synapse-delegate_delegate - and wait for the ` +
-          `report; do not do the work yourself.`
+          `report; do not do the work yourself. It is JSON: a string may not contain a real newline - keep ` +
+          `each on one line, or write \\n.`
       : `Project plan: ${planRelPathPlain()} - read-only for you; the Architect is its only writer. ` +
           (OWNED_DIR[role]
             ? `Inside ${PLAN_DIR}/ you may write only under ${OWNED_DIR[role]}/ and nowhere else there. `
