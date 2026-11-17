@@ -33,6 +33,8 @@ test('an answered list replaces the ids and keeps the operator’s own numbers',
   assert.equal(out.added, 1);
   assert.equal(out.removed, 1);
   assert.deepEqual(out.removedIds, ['oc-go/gone']);
+  // The notice needs the counts per provider, not just the totals.
+  assert.deepEqual(out.updated, [{ id: 'oc-go', name: 'OpenCode Go', added: 1, removed: 1 }]);
   const models = config.engine.opencode.providers[0].models;
   // The list is normalised in id order, so the new model comes first by name.
   assert.deepEqual(models.map((m) => m.id), ['new', 'stay'], 'the provider decides which ids exist');

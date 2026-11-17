@@ -8,6 +8,7 @@ import { esc, relTime, ago, versionTag, shortSpan } from './format.js';
 import { $ } from './dom.js';
 import { api, serverNow } from './api.js';
 import { toast } from './toast.js';
+import { providerSyncNote } from './provider-sync-note.js';
 import { providerLabel } from './provider-list.js';
 import { modelByRef, architectSelection, currentRun } from './run-view.js';
 import { isBusy } from './projects.js';
@@ -43,13 +44,8 @@ function noteProviderSync() {
   const sync = state.status?.providerSync;
   if (!sync) return;
   syncNoted = true;
-  const names = (sync.failed || []).map((f) => f.name).filter(Boolean);
-  if (!names.length) return;
-  const who = names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
-  toast(
-    'Model Lists Not Updated',
-    `No answer from ${who}, so the saved lists were kept. Refresh them in Settings → Providers once the server is running.`,
-  );
+  const note = providerSyncNote(sync);
+  if (note) toast(note.title, note.body);
 }
 
 export function renderStatus() {

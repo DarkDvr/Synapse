@@ -452,6 +452,7 @@ export async function syncProviderModels(config, { fetchImpl = fetch, timeoutMs 
   );
 
   const failed = [];
+  const updated = [];
   const removedIds = [];
   let added = 0;
   let removed = 0;
@@ -464,6 +465,7 @@ export async function syncProviderModels(config, { fetchImpl = fetch, timeoutMs 
     const before = Array.isArray(p.models) ? p.models : [];
     const byId = new Map(before.map((m) => [String(m.id || ''), m]));
     const next = [];
+    let gained = 0;
     for (const m of models) {
       const id = String(m.id || '').trim();
       if (!id) continue;
@@ -471,23 +473,31 @@ export async function syncProviderModels(config, { fetchImpl = fetch, timeoutMs 
       // A survivor keeps the operator's entry; the provider only decides that it is
       // still served, and what its default name is when the entry has none.
       next.push(old ? { ...old, name: old.name || m.name || id } : { id, name: m.name || id });
-      if (!old) added += 1;
+      if (!old) gained += 1;
     }
     if (!next.length) {
       failed.push({ id: String(p?.id || ''), name: String(p?.name || p?.id || 'a provider'), error: 'It listed no usable models.' });
       continue;
     }
     const kept = new Set(next.map((m) => String(m.id)));
+    let lost = 0;
     for (const old of before) {
       if (kept.has(String(old.id || ''))) continue;
-      removed += 1;
+      lost += 1;
       removedIds.push(`${p?.id || '?'}/${old.id}`);
     }
     const sameIds = before.length === next.length && before.every((m) => kept.has(String(m.id)));
     if (!sameIds) changed = true;
+    // A provider that answered with exactly what it had is not news: it is named in
+    // the notice only when something was gained or lost.
+    if (gained || lost) {
+      updated.push({ id: String(p?.id || ''), name: String(p?.name || p?.id || 'a provider'), added: gained, removed: lost });
+    }
+    added += gained;
+    removed += lost;
     p.models = next;
   }
-  return { changed, failed, added, removed, removedIds, at: Date.now() };
+  return { changed, failed, updated, added, removed, removedIds, at: Date.now() };
 }
 
 export async function measureLocalWindows(config, { fetchImpl = fetch, timeoutMs = 1500 } = {}) {

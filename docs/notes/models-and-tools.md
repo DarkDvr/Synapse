@@ -746,8 +746,10 @@ task.
 - **The operator's entry survives** for a model that is still listed — its name, its
   window, its output. A `/models` listing is not a measurement of anything.
 - **No answer changes nothing.** Timeout, 401, an empty list, HTML instead of JSON:
-  the saved list stands, and the page names that provider once ("Model Lists Not
-  Updated… refresh them in Settings"). A local runtime the operator has not launched
-  yet is the ordinary case, not an error.
+  the saved list stands. The page says it once, and the two halves are deliberately
+  different shapes — a line per provider that *changed*, with `(+added, -removed)`,
+  then one comma-separated sentence for the providers that did not answer. A provider
+  that answered with the same list is not mentioned: there is nothing to do about it.
+  A local runtime the operator has not launched yet is the ordinary case, not an error.
 - A role whose saved ref is no longer in the catalog shows an **empty model field
   with a red border**, and sending is refused with the reason. Single and Multi both.

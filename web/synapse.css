@@ -3126,7 +3126,10 @@ body.is-stopping .chat-dock { animation: stop-glow 0.7s ease-in-out infinite; }
   box-shadow: 0 15px 40px rgba(0, 0, 0, 0.55), 0 0 18px rgba(237, 194, 90, 0.14);
 }
 .toast strong { color: var(--yellow); }
-.toast p { color: rgba(237, 194, 90, 0.82); }
+/* A notice body may be a list now — the model-list answer is one line per provider
+   that changed. `pre-wrap` keeps those lines and the blank one between the two
+   halves, without letting the text be HTML. */
+.toast p { color: rgba(237, 194, 90, 0.82); white-space: pre-wrap; line-height: 1.5; }
 .toast-icon {
   background: rgba(237, 194, 90, 0.12);
   border: 1px solid rgba(237, 194, 90, 0.45);
