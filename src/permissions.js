@@ -21,7 +21,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { covers } from './protection.js';
-import { PROJECTS_ROOT, SCRATCH_ROOT, scratchDir } from './paths.js';
+import { ROOT, PROJECTS_ROOT, SCRATCH_ROOT, scratchDir } from './paths.js';
 
 const WRITE_ACTIONS = new Set(['edit', 'write', 'patch', 'create']);
 const SHELL_ACTIONS = new Set(['shell', 'bash']);
@@ -425,26 +425,40 @@ function prohibitedRead(target, ctx) {
   return entry && entry.read === false ? entry : null;
 }
 
+const foldersText = () => {
+  const scratch = process.env.SYNAPSE_SCRATCH_ROOT || SCRATCH_ROOT;
+  return `You should work only inside your project folder ($PWD, or %CD% in cmd) or SYNAPSE_SCRATCH_ROOT (${scratch}).`;
+};
+
 /**
- * The sentence a fence refusal uses. The projects folder is not the operator's list —
- * they cannot switch it off — so it does not borrow that wording.
+ * The sentence a refusal about the projects folder uses. That folder is not the
+ * operator's list — they cannot switch it off — so it does not borrow that wording.
  *
- * It says the two places a model may work and the constants for them, and nothing else.
- * "The projects root" read as "this project's root folder" to a model with no reason to
- * know other projects exist (17 Nov, a worker asked which path was protected). The core
- * instruction every role already carries names the three roots, so the sentence speaks
- * that vocabulary instead of inventing a concept the reader has to infer.
+ * It says the folder and its constant, that neither may be browsed, and the two places a
+ * model may work. Nothing else: no "another project", no working-directory lecture. "The
+ * projects root" read as "this project's root folder" to a model with no reason to know
+ * other projects exist (17 Nov, a worker asked which path was protected), and explaining
+ * other projects to it explained something it does not need.
  */
 function fenceDeny(entry) {
   const at = String(entry?.path || '').trim();
-  const scratch = process.env.SYNAPSE_SCRATCH_ROOT || SCRATCH_ROOT;
   const projects = process.env.SYNAPSE_PROJECTS_ROOT || PROJECTS_ROOT;
   return deny(
-    `PROHIBITED: ${at || 'that path'} is outside your project folder. Work only inside your project ` +
-      `folder or SYNAPSE_SCRATCH_ROOT (${scratch}). Nothing above your project folder is yours; ` +
-      `SYNAPSE_PROJECTS_ROOT is ${projects}.`,
+    `PROHIBITED: ${at || projects} and SYNAPSE_PROJECTS_ROOT are outside your project folder and are ` +
+      `not permitted for you to browse. ${foldersText()}`,
     true,
     'prohibited',
+  );
+}
+
+/** A read inside the harness: the same shape, with the harness's own constant. */
+function harnessDeny() {
+  const harness = process.env.SYNAPSE_HARNESS || ROOT;
+  return deny(
+    `PROHIBITED: that path is inside SYNAPSE_HARNESS (${harness}), Synapse's own folder, and is not ` +
+      `permitted for you to read. ${foldersText()}`,
+    true,
+    'harness',
   );
 }
 
@@ -1155,7 +1169,7 @@ function decideShell(resources, ctx) {
   const sealedCopy = copySources.map((p) => prohibitedRead(p, ctx)).find(Boolean);
   if (sealedCopy) return sealedCopy.id === 'projects' ? fenceDeny(sealedCopy) : deny(`PROHIBITED: ${sealedCopy.label} is not read either.`, true, 'prohibited');
   const unreadableCopy = copySources.find((p) => !harnessReadable(p, ctx));
-  if (unreadableCopy) return deny("These are Synapse's private files.", true, 'harness');
+  if (unreadableCopy) return harnessDeny();
   // A harness path named by a statement that only reads is a read, whatever a
   // different statement in the same command does. `node --version; Test-Path
   // shot.mjs` used to ask "changing it is a deliberate choice" because the command
@@ -1180,7 +1194,7 @@ function decideShell(resources, ctx) {
     return ask('Synapse is the app itself. Changing it is a deliberate choice.', true, 'harness');
   }
   if (readHarnessPaths.length && !readHarnessPaths.every((p) => harnessReadable(p, ctx))) {
-    return deny("These are Synapse's private files.", true, 'harness');
+    return harnessDeny();
   }
 
   const parts = Array.isArray(info.segments) && info.segments.length
@@ -1275,7 +1289,7 @@ function decideRead(resources, ctx) {
     // the operator's to hand over, because the values are the point of it.
     if (isEnvFile(target.path)) return ask('This file holds keys or passwords.', outside, zone);
     if (zone !== 'harness') continue;
-    if (!harnessReadable(target.path, ctx)) return deny("These are Synapse's private files.", true, 'harness');
+    if (!harnessReadable(target.path, ctx)) return harnessDeny();
   }
   return allow('Reading is allowed.', outside, scope);
 }

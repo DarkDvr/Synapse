@@ -514,8 +514,9 @@ export function createPermissionGate({
         // on a suite it could not read, and ended without its report).
         const adopted = adoptEngineCopy([...(request.resources || []), what], info.directory, { log });
         const note = adopted
-          ? `These are Synapse's private files, so you cannot read them there. The output of that ` +
-            `command is copied to ${adopted.path} — read that file; it grows while the command runs.`
+          ? `PROHIBITED: that path is inside SYNAPSE_HARNESS, Synapse's own folder, so you cannot read it ` +
+            `there. The output of that command is copied to ${adopted.path} — read that file; it grows while ` +
+            `the command runs.`
           : refusalNote({ role: info.role, scope: verdict.scope });
         Promise.resolve(
           engine.synthetic?.(request.sessionId, note, {

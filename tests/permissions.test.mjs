@@ -61,16 +61,26 @@ test('no project reads or changes another project', () => {
   assert.equal(call('read', `${own}/probe.ps1`, { scratchRoot: SCRATCH }).effect, 'allow');
 });
 
-test('a relative output path that leaves the project says only where it may go', () => {
+test('refusals about folders use one wording: the folder, its constant, and where you may work', () => {
   const build = shell('powershell -File app/build.ps1 -Portable -Out ../bin');
   assert.equal(build.effect, 'deny');
-  // No "projects root", no other projects, no working-directory lecture: the folder it
-  // landed on, the two places it may work, and the constants it already knows (17 Nov).
-  assert.match(build.reason, /outside your project folder/);
+  // No "projects root", no other projects, no working-directory lecture: the folder and
+  // its constant, that neither may be browsed, and the two places it may work (17 Nov).
+  assert.match(build.reason, /are outside your project folder and are not permitted for you to browse/);
   assert.doesNotMatch(build.reason, /the projects root/i);
   assert.doesNotMatch(build.reason, /another project/i);
+  assert.match(build.reason, /\$PWD/);
   assert.match(build.reason, /SYNAPSE_SCRATCH_ROOT \(F:\\dev\\Synapse\.Projects\\_scratch\)/);
-  assert.match(build.reason, /SYNAPSE_PROJECTS_ROOT is F:\\dev\\Synapse\.Projects/);
+  assert.match(build.reason, /SYNAPSE_PROJECTS_ROOT/);
+
+  // The harness gets the same shape, with its own constant. (Its sources are readable —
+  // the harness is read-only, not closed — but its data and config folders are not.)
+  const inside = call('read', `${HARNESS}/data/synapse.pid`);
+  assert.equal(inside.effect, 'deny');
+  assert.match(inside.reason, /inside SYNAPSE_HARNESS \(F:\\dev\\Synapse\)/);
+  assert.match(inside.reason, /\$PWD/);
+  assert.match(inside.reason, /SYNAPSE_SCRATCH_ROOT/);
+  assert.doesNotMatch(inside.reason, /private files/i);
 });
 
 test('the projects fence is mandatory: the boxes cannot switch it off', () => {

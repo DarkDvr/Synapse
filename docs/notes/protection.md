@@ -270,25 +270,33 @@ Audited at the same time, because the report asked what else could be caught: **
 writes never went through the protected list at all — the two delete paths were its only
 callers. Model actions still go through `decide`, where the fence holds.
 
-## The fence says the folder and the constants, nothing else (17 Nov)
+## One wording for every folder refusal (17 Nov)
 
 A worker wrote `..\p3-browser-output.txt`, was refused, and then asked the operator "which
-path was protected?" Two wordings failed before this one. "The projects root" read as
+path was protected?" Three wordings failed before this one. "The projects root" read as
 **this project's root folder** — a model has no reason to know other projects exist. "The
-shared folder that holds every project" then explained a concept the model does not need,
-and mentioned other projects at all.
+shared folder that holds every project" explained a concept it does not need, and
+mentioned other projects at all. The last one named the folder but still left the reader
+to join the dots.
 
 What it says now, and the whole of it:
 
-> PROHIBITED: F:\dev\Synapse.Projects is outside your project folder. Work only inside
-> your project folder or SYNAPSE_SCRATCH_ROOT (F:\dev\Synapse.Projects\_scratch). Nothing
-> above your project folder is yours; SYNAPSE_PROJECTS_ROOT is F:\dev\Synapse.Projects.
+> PROHIBITED: `F:\dev\Synapse.Projects` and `SYNAPSE_PROJECTS_ROOT` are outside your
+> project folder and are not permitted for you to browse. You should work only inside your
+> project folder (`$PWD`, or `%CD%` in cmd) or `SYNAPSE_SCRATCH_ROOT`
+> (`F:\dev\Synapse.Projects\_scratch`).
 
-Three facts, no concept: where the path landed, the two places it may work, and that
-nothing above the project is its own. The constants are the ones the core instruction gives
-every role, so the sentence speaks the vocabulary the reader already has instead of
-inventing one.
+The harness uses the same shape for its own folder:
 
-The rule did not change: that folder is a built-in prohibited entry, and no project may
-read or change another. The brief's coder line says the same thing in the same words —
-"inside the project folder or the scratch folder".
+> PROHIBITED: that path is inside `SYNAPSE_HARNESS` (`F:\dev\Synapse`), Synapse's own
+> folder, and is not permitted for you to read. You should work only inside your project
+> folder (`$PWD`, or `%CD%` in cmd) or `SYNAPSE_SCRATCH_ROOT` (`…\_scratch`).
+
+Four facts, no concept: the folder and its constant, that it is not for browsing, the
+project folder's own name (`$PWD`), and the scratch folder with its path. The constants are
+the ones the core instruction gives every role, so the sentence and the instructions share
+one vocabulary.
+
+The rule did not change: the projects folder is a built-in prohibited entry, no project may
+read or change another, and the harness is read-only. The brief's coder line says the same
+thing in the same words — "inside the project folder or the scratch folder".
