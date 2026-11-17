@@ -233,10 +233,9 @@ export function planClockMarkup() {
   const c = state.clocks;
   if (!c) return '';
   const ms = c.session.ms + (c.session.since ? Date.now() - c.session.since : 0);
-  // The rate sits beside the clock in both modes: a Single-mode chat has no role card,
-  // so the rail is the one place its speed can be read (16 Nov).
-  return `<span class="plan-rate" id="planRate" title="How fast the model was last measured writing."></span>` +
-    `<span class="plan-clock" id="planClock" title="Time this chat has spent working — it pauses whenever no card is working, and whenever you are being waited on.">${hhmmss(ms)}</span>`;
+  // The stopwatch stays; the plan's tok/s label was removed (17 Nov). It read as a
+  // stray value at the foot of the chat and duplicated the role cards.
+  return `<span class="plan-clock" id="planClock" title="Time this chat has spent working — it pauses whenever no card is working, and whenever you are being waited on.">${hhmmss(ms)}</span>`;
 }
 
 /**

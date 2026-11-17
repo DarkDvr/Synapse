@@ -759,6 +759,14 @@ contract('the cog has three tones, and shutdown is the strongest', () => {
   assert.match(css, /\.run-btn\.is-shutdown:hover/, 'and stays yellow under the pointer');
 });
 
+contract('the plan foot is a clock, not a speed', () => {
+  const pane = read('web/plan-pane.js');
+  assert.match(pane, /id="planClock"/);
+  assert.doesNotMatch(pane, /planRate|plan-rate/);
+  assert.doesNotMatch(read('web/rate-view.js'), /planRate|plan-rate/);
+  assert.doesNotMatch(read('web/synapse.css'), /\.plan-rate/);
+});
+
 // Eight groups, not fifty-two registrations: the same assertions, one subject. A
 // failure names the original case, and every case in the group still runs so one
 // broken selector does not hide the next.
@@ -766,7 +774,7 @@ const groups = [
   ['the page, the project menu and its placement', [0, 1, 2, 3, 49]],
   ['chips, attachments and the message you can re-use', [4, 5, 6, 7, 8, 10]],
   ['the composer, steer and the wake lock', [9, 11, 12, 13, 14, 34, 35]],
-  ['settings, the plan and the rail', [15, 16, 17, 18, 19, 20, 21]],
+  ['settings, the plan and the rail', [15, 16, 17, 18, 19, 20, 21, 52]],
   ["the chat's text and its answers", [22, 23, 24, 25, 32]],
   ['settings pages, footers and fields', [26, 27, 28, 29, 30, 31]],
   ['questions and the live step', [33, 36, 37, 38, 39, 40]],

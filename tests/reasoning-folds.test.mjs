@@ -11,6 +11,7 @@ import { fileURLToPath } from 'node:url';
 
 import { reasoningGist } from '../web/format.js';
 import { renderTrace } from '../web/traces.js';
+import { adoptRunMarks } from '../web/live-runs.js';
 import { state } from '../web/state.js';
 import { normalize } from '../src/config.js';
 
@@ -110,6 +111,23 @@ test('a loop rescue stays with its moment, not pinned under later work', () => {
   assert.ok(laterAt >= 0, 'the later work exists');
   assert.ok(loopAt < laterAt, 'the rescue travels with its moment, not the footer');
   assert.match(html, /Loop detected ×2 of 5 — asking it to carry on/);
+});
+
+test('a trace rebuilt from the run adopts the runner’s loop marks', () => {
+  const trace = { marks: [] };
+  adoptRunMarks(trace, {
+    loopMarks: [{ at: 1000, times: 1, limit: 5, stop: false }],
+    compactMarks: [{ at: 2000, times: 1, used: 50000, context: 200000 }],
+  });
+  assert.equal(trace.marks.length, 2);
+  assert.equal(trace.marks.find((m) => m.kind === 'loop')?.count, 1);
+  assert.equal(trace.marks.find((m) => m.kind === 'compact')?.size, 50000);
+  // A second progress tick must not duplicate them.
+  adoptRunMarks(trace, {
+    loopMarks: [{ at: 1000, times: 1, limit: 5, stop: false }],
+    compactMarks: [{ at: 2000, times: 1, used: 50000, context: 200000 }],
+  });
+  assert.equal(trace.marks.length, 2);
 });
 
 test('a compaction with no size says nothing it cannot support', () => {

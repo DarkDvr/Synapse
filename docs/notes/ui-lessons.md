@@ -1156,6 +1156,9 @@ whether a given paragraph is "the answer".
   stops them without inventing a second notion of "working". Totals live in
   `localStorage` keyed by session id; the current interval restarts from now on
   reload, because time with the page closed is not time we measured.
+  The plan footer is only the clock: the small `tok/s` label beside it was removed
+  on 17 Nov because it read as a stray value under the chat and duplicated the
+  role cards.
   The clock needs a strip of its own, so `.role-card` gained 8px of bottom
   padding: it sits under the clamped subtitle and can never collide with it, and
   every card is still the same height (114px).

@@ -31,6 +31,43 @@ import { toolTarget } from './format.js';
 const missing = (name) => () => {
   throw new Error(`live-runs.js: ${name} was not wired at boot`);
 };
+
+/**
+ * Adopt the runner's timestamped notes for a trace rebuilt from `/api/runs`.
+ *
+ * `run.note` is the fast path, but a page opened mid-run (or an SSE note that
+ * arrives before the trace exists) has only the run object. Without this the count
+ * survived and the line fell back to the pinned footer — the regression the
+ * operator saw on the first t1 turn (17 Nov).
+ */
+export function adoptRunMarks(trace, run) {
+  if (!trace || !run) return;
+  trace.marks = Array.isArray(trace.marks) ? trace.marks : [];
+  const adopt = (mark, kind) => {
+    const count = Number(mark.times ?? mark.count) || 1;
+    if (trace.marks.some((m) => m.kind === kind && Number(m.count) === count)) return;
+    trace.marks.push(
+      kind === 'compact'
+        ? {
+            kind,
+            at: Number(mark.at) || 0,
+            count,
+            size: Number(mark.used) || 0,
+            limit: Number(mark.context) || 0,
+            running: false,
+          }
+        : {
+            kind,
+            at: Number(mark.at) || 0,
+            count,
+            limit: Number(mark.limit) || 3,
+            stop: Boolean(mark.stop),
+          },
+    );
+  };
+  for (const mark of Array.isArray(run.compactMarks) ? run.compactMarks : []) adopt(mark, 'compact');
+  for (const mark of Array.isArray(run.loopMarks) ? run.loopMarks : []) adopt(mark, 'loop');
+}
 const wired = {
   applyRoleCardsLayout: missing('applyRoleCardsLayout'),
   renderDesk: missing('renderDesk'),
@@ -657,9 +694,13 @@ export function handleRunEvent(ev) {
         finishedAt: 0,
         notes: steerNotes(run),
         stream: null,
-        loops: 0,
-        loopLimit: 3,
-        loopStop: false,
+        compactions: Number(run.compactions) || 0,
+        compactAt: Number(run.compactAt) || 0,
+        compactLimit: Number(run.compactLimit) || 0,
+        loops: Number(run.loops) || 0,
+        loopLimit: Number(run.loopLimit) || 3,
+        loopStop: Boolean(run.loopStop),
+        marks: [],
       });
       // A run that is already answering asks have their answers on the server; the
       // trace starts with them instead of showing the work without its permissions.
@@ -696,6 +737,11 @@ export function handleRunEvent(ev) {
       // times a second.
       if (trace.stream) paneEnded(trace);
     }
+    // A trace made from `/api/runs` (or a note that arrived before it existed) gets
+    // the runner's timestamped marks here. It is idempotent, so every progress tick
+    // is safe.
+    const currentTrace = traceOf(run);
+    if (currentTrace) adoptRunMarks(currentTrace, run);
     // Every progress tick carries the run's own compaction tally, which was read
     // from the transcript by the runner. Taking it here is what makes the count
     // survive a page reload — the `run.note` for a compaction may well have been

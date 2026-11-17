@@ -2192,6 +2192,12 @@ the tools in `MOVING` the signature now carries the result as well as the argume
 scroll that lands somewhere new is a new call, and a scroll that cannot move — the same
 position back, at the end of the page — still strikes, which is the loop worth catching.
 
+**A mark survives the trace's birth (17 Nov).** `run.note` is the fast path, but a page
+opened mid-run has only `/api/runs` to rebuild from, and a note can arrive before the trace
+exists. `adoptRunMarks()` copies the runner's timestamped loop and compaction marks on every
+progress tick, idempotently. Without it the count survived and the line fell back to the
+pinned footer — the t1 regression the operator saw.
+
 
 ## Python's streams are UTF-8, because its locale is not (15 Nov)
 

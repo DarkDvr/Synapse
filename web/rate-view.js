@@ -53,8 +53,6 @@ const deltaWindow = new Map(); // sessionId -> { first, last }
 const usageTotals = new Map(); // dirKey -> tokens written so far in this run
 const sessionTotals = new Map(); // sessionId -> tokens written so far, whoever owns it
 const sessionRates = new Map(); // sessionId -> { tokens, ms, at } — a rate that keeps
-// After this long the figure is still shown, and the tooltip says how old it is.
-const STALE_NOTE_S = 60;
 
 /**
  * Add one step's writing to a session's tally and keep the resulting rate.
@@ -385,20 +383,5 @@ export function paintRates(now = Date.now()) {
     const text = bits.join('   ');
     if (el.textContent !== text) el.textContent = text;
     if (el.title !== tip) el.title = tip;
-  }
-  // Single mode has no role card, so the rail carries the number: the open chat's own
-  // model, the same measurement the Architect's card shows.
-  const rail = typeof document !== 'undefined' ? document.getElementById('planRate') : null;
-  if (rail) {
-    const open = getRoleRate(dir, 'architect', modelFor('architect'));
-    const text = rateText(open);
-    if (rail.textContent !== text) rail.textContent = text;
-    const age = open ? Math.round((now - open.at) / 1000) : 0;
-    const note = !text
-      ? 'How fast the model writes, measured from the stream. Nothing measured yet in this chat.'
-      : age > STALE_NOTE_S
-        ? `Last measured ${Math.round(age / 60)} min ago; it stays until a new step is measured.`
-        : 'How fast the model was last measured writing.';
-    if (rail.title !== note) rail.title = note;
   }
 }
