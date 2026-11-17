@@ -2252,3 +2252,20 @@ them.
   with no skills and no project document. A real VPA brief was 10.2k for a coder and 21.7k
   for the Architect; after the digest it is 9.0k and 20.4k. Skills can be larger than the
   brief itself (three coder skills were 19k characters in the same turn).
+
+## A backgrounded command's output belongs to the project (17 Nov)
+
+The engine answers a long command with "moved to the background" and a path under its own
+data folder — `data\engine\opencode\data\opencode\shell\…`. That folder is closed to models
+(the harness is read-only), so the one handle a model is given for a long command is a file
+it may not open. A QC run waited on a suite it could not read, ended its turn "waiting", and
+the run completed without `qc-8.md`.
+
+- The output is not a permission exception: it is the model's own work, so the harness
+  **copies it into the project** at `.project/logs/shell-<id>.out`, where the model may
+  read it and the operator keeps it. The same rule as the browser's screenshots.
+- The runner mirrors it on every poll (`src/shell-mirror.js`), so the copy grows with the
+  command. The brief names the pattern in one line.
+- A read of the engine path is refused with the project path in the note; the gate copies
+  the file at that moment and says where it went.
+- The copy is a snapshot: read it again after a pause. "Waiting" is not finishing.

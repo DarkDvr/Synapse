@@ -20,6 +20,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { digest as projectDigest, DOC_RELATIVE } from './project-doc.js';
 import { FACTS_RELATIVE, FACTS_LIMIT, factsStatus } from './project-facts.js';
+import { MIRROR_RULE } from './shell-mirror.js';
 import { scratchDir, ROOT, PROJECTS_ROOT, SCRATCH_ROOT } from './paths.js';
 import { parseChecks, CHECK_MAX } from './checks.js';
 // The plan's shape (a `t2a` belongs to its `t2`) is one rule, shared with the page that
@@ -1147,6 +1148,10 @@ export function briefSession({ dir, role = 'architect', auto = false, single = f
         `run ends, so put it there yourself and it keeps its place. Evidence is not a deliverable: a file that ` +
         `records what you checked belongs in .project/reports/ even when it is about something in bin/.`,
     );
+    // A command the engine backgrounds writes its output where the worker may not read
+    // it; the runner mirrors it into .project/logs (17 Nov: a QC run ended "waiting" on
+    // a suite it could not open, and the report was never written).
+    lines.push(MIRROR_RULE);
   }
 
   // Single mode is not this harness at all: it is a chat that can use tools. No

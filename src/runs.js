@@ -48,6 +48,7 @@ import {
   openDelegations,
   ROLES,
 } from './plans.js';
+import { backgroundShells, mirrorShells } from './shell-mirror.js';
 import { screenCallOver } from './desk.js';
 import { browserAskHolding } from './browser/ask.js';
 import { proseToolCall, PROSE_NUDGE } from './model-slips.js';
@@ -1973,6 +1974,15 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
           }
 
           const now = await engine.getMessages(worker.id);
+
+          // A command the engine moved to the background writes its output under the
+          // harness, where the worker cannot read it. Copy it into the project; the
+          // brief names `.project/logs/shell-<id>.out` (see src/shell-mirror.js).
+          try {
+            mirrorShells(dir, backgroundShells(now));
+          } catch (err) {
+            log.warn(`could not mirror a background shell for ${request.task}: ${err.message}`);
+          }
 
           if (finished.overSteps) {
             // The task is too big for its model, not stalled: every step re-sends the

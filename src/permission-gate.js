@@ -17,6 +17,7 @@ import os from 'node:os';
 import { decide, grantKey, resolvePath, refusalNote } from './permissions.js';
 import { readAutomation } from './automation.js';
 import { normDir } from './paths.js';
+import { adoptEngineCopy } from './shell-mirror.js';
 import { isPrivateDir, isPrivateSession } from './privacy.js';
 import { EV } from '../web/events.js';
 
@@ -507,8 +508,17 @@ export function createPermissionGate({
       // Architect is not (an extra turn once ended with an empty report).
       const escalate = (Boolean(info.role) && info.role !== 'architect') || verdict.scope === 'prohibited';
       if (verdict.effect === 'deny' && escalate) {
+        // A refused read of the engine's own copy of a backgrounded command is the one
+        // refusal that can be answered: the file is the model's own output, so it is
+        // copied into the project and the note names the copy (17 Nov — a QC run waited
+        // on a suite it could not read, and ended without its report).
+        const adopted = adoptEngineCopy([...(request.resources || []), what], info.directory, { log });
+        const note = adopted
+          ? `These are Synapse's private files, so you cannot read them there. The output of that ` +
+            `command is copied to ${adopted.path} — read that file; it grows while the command runs.`
+          : refusalNote({ role: info.role, scope: verdict.scope });
         Promise.resolve(
-          engine.synthetic?.(request.sessionId, refusalNote({ role: info.role, scope: verdict.scope }), {
+          engine.synthetic?.(request.sessionId, note, {
             description: verdict.scope === 'prohibited' ? 'PROHIBITED' : 'permission refused',
           }),
         ).catch((err) => log.warn(`could not explain the refusal to ${request.sessionId}: ${err.message}`));

@@ -76,7 +76,12 @@ test('the laws are at the top, where a reader looks first', () => {
 // owner, its cap and its current size. The how-to is written in the file itself, so it
 // is not repeated here — a brief that repeats the file doubles the cost of every step.
 // Anything else that pushes this number up should displace something rather than add.
-const BARE_BRIEF_LIMIT = { architect: 15650, qc: 7300, designer: 5300, inventor: 4800, 'coder-1': 4100, 'coder-2': 4100, single: 2000 };
+// The worker guards rose by ~150 on 17 Nov for the background-shell line: the engine moves
+// a long command to the background and writes its output under the harness, so the brief
+// has to say where the mirrored copy lives and that waiting is not finishing (a QC run
+// ended without its report because it could not read the file). Short on purpose — it is
+// re-read every step.
+const BARE_BRIEF_LIMIT = { architect: 15650, qc: 7300, designer: 5450, inventor: 4850, 'coder-1': 4200, 'coder-2': 4200, single: 2000 };
 
 test('a bare role brief stays within its regression guard', () => {
   const dir = 'F:/dev/Synapse.Projects/__no_such_project__';
