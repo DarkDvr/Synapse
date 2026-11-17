@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
-import { DATA_DIR, LOGS_DIR, WORKSPACE_DIR, GENERAL_DIR, ENGINE_HOME, PID_FILE, PROJECTS_FILE, TOOL_STATS_FILE, PROBE_DIR, PROBE_FILE, MODEL_CACHE_FILE, TRACE_REASONS_FILE, NPM_ATTEMPT_FILE, PERMISSION_MEMORY_FILE, REMOTE_TOKEN_FILE, ROOT, SCRATCH_ROOT, scratchDir } from './paths.js';
+import { DATA_DIR, LOGS_DIR, WORKSPACE_DIR, GENERAL_DIR, ENGINE_HOME, PID_FILE, PROJECTS_FILE, TOOL_STATS_FILE, PROBE_DIR, PROBE_FILE, MODEL_CACHE_FILE, TRACE_REASONS_FILE, NPM_ATTEMPT_FILE, PERMISSION_MEMORY_FILE, REMOTE_TOKEN_FILE, ROOT, PROJECTS_ROOT, SCRATCH_ROOT, scratchDir } from './paths.js';
 import { loadConfig, saveConfig, repairMachinePaths } from './config.js';
 import { logger } from './logger.js';
 import { createEngine } from './engines/index.js';
@@ -111,6 +111,12 @@ async function main() {
   // %LOCALAPPDATA%\Temp\opencode before this, another app's space.
   process.env.TEMP = SCRATCH_ROOT;
   process.env.TMP = SCRATCH_ROOT;
+  // Stable roots for every tool shell and every check process. They are process
+  // environment, not per project: SYNAPSE_PROJECT would be wrong in one engine that
+  // serves all projects. The project root is the shell's own $PWD.
+  process.env.SYNAPSE_HARNESS = ROOT;
+  process.env.SYNAPSE_PROJECTS_ROOT = PROJECTS_ROOT;
+  process.env.SYNAPSE_SCRATCH_ROOT = SCRATCH_ROOT;
 
   // ── config ───────────────────────────────────────────────────
   const { config, created, error } = loadConfig();

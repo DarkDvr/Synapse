@@ -2211,3 +2211,27 @@ a child of it, so they inherit it. Only the streams are pinned: a script's own `
 default is still the locale's, which is the script's business. The engine reads our
 children's output as UTF-8 (the suite's own "✔" lines arrive intact), so a model can print
 what it likes.
+
+## The harness core and the handover digest (17 Nov)
+
+The project brief was doing two jobs: teaching the harness and carrying the project. Split
+them.
+
+- **Three roots are process environment**, set in `src/index.js`: `SYNAPSE_HARNESS`,
+  `SYNAPSE_PROJECTS_ROOT`, `SYNAPSE_SCRATCH_ROOT`. The engine and the check processes
+  inherit them, so a shell and the check that judges it see one answer. There is deliberately
+  no `SYNAPSE_PROJECT`: one engine serves every project, and a global value would be the
+  wrong project's. `$PWD` is the per-shell project root.
+- **`synapse.harness`** is a second instruction entry, ~400 characters, set beside
+  `synapse.plan` for every session. It names the roots and the rule that a relative shell
+  path is judged from the working directory, not from a script's own `Push-Location`; for a
+  script's output folder, use `"$PWD\bin"` or an absolute path. It cannot be skipped by not
+  loading a skill and cannot be edited by a project.
+- **The handover digest is deterministic.** `handoverDigest()` extracts Objective,
+  Requirements and Decisions from the compaction handover; the full handover stays in
+  `.project/project.md` with a pointer. No second model, no invented decisions. An
+  unstructured handover is left full rather than guessed at.
+- **The bare-brief guard is not a project budget.** `tests/brief-layers` measures a brief
+  with no skills and no project document. A real VPA brief was 10.2k for a coder and 21.7k
+  for the Architect; after the digest it is 9.0k and 20.4k. Skills can be larger than the
+  brief itself (three coder skills were 19k characters in the same turn).

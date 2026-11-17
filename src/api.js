@@ -3,7 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
-import { appendRun, readPlan, readRuns, runLedger, briefSession, logPlanState, BRIEF_KEY } from './plans.js';
+import { appendRun, readPlan, readRuns, runLedger, briefSession, logPlanState, BRIEF_KEY, HARNESS_KEY, harnessCore } from './plans.js';
 import { ensureProjectDoc, appendRequest as appendProjectRequest, appendChat, appendDecision as appendProjectDecision, appendEntry, setHandover } from './project-doc.js';
 import { createFormAuto } from './form-auto.js';
 import { answerTimeoutMs, formPages } from './auto-answer.js';
@@ -358,6 +358,9 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
   // The last brief we handed each session, so an unchanged plan does not PUT
   // the same text again on every message.
   const briefed = new Map();
+  // The harness core is static for the life of the process; one PUT per session is
+  // enough. The plan brief still refreshes as the project changes.
+  const briefedCore = new Map();
 
   // Conversations with a compact in flight. The operator can only start one from
   // one window, but the route is open to any client, and a second compact while
@@ -500,6 +503,11 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
         focus: getConfig()?.roles?.[role]?.focus,
         instructions: getConfig()?.roles?.[role]?.instructions,
       });
+      const core = harnessCore();
+      if (briefedCore.get(sessionId) !== core) {
+        await engine.setInstruction(sessionId, HARNESS_KEY, core);
+        briefedCore.set(sessionId, core);
+      }
       if (briefed.get(sessionId) === text) return;
       await engine.setInstruction(sessionId, BRIEF_KEY, text);
       briefed.set(sessionId, text);

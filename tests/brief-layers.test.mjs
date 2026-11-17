@@ -6,7 +6,8 @@
 // receives, which is cheap to assert and easy to lose in a refactor.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { briefSession } from '../src/plans.js';
+import fs from 'node:fs';
+import { briefSession, harnessCore, handoverDigest } from '../src/plans.js';
 
 const NOWHERE = 'F:/dev/Synapse.Projects/__no_such_project__';
 const multi = (role) => briefSession({ dir: NOWHERE, role });
@@ -65,24 +66,57 @@ test('the laws are at the top, where a reader looks first', () => {
   assert.match(round, /Current plan:|The plan file does not exist yet|The plan is empty/, 'the round carries no plan state');
 });
 
-// ── the brief has a ceiling ─────────────────────────────────────
-// "Keep it short" is a promise; a ceiling is a mechanism. The Architect's brief is
-// re-sent on every turn of every project, so its size is a bill paid forever: 14.7k
-// characters is about 3.9k tokens per turn. These numbers have roughly 5% of headroom,
-// so a new rule fits — and the one after that has to be paid for by removing another, or
-// by raising the number here in a commit that says why (10 Nov).
-const CEILING = { architect: 15500, qc: 7300, designer: 5300, inventor: 4800, 'coder-1': 4100, 'coder-2': 4100, single: 2000 };
+// ── the bare brief has a regression guard ───────────────────────
+// This is not a real project budget: it measures a brief with no configured skills
+// and no project document, which no working role receives. The fixed rules are what
+// it guards. A real VPA brief is 1.4×–2.5× these numbers once skills and a project
+// are present. Keep the base from growing; measure those other parts separately.
+const BARE_BRIEF_LIMIT = { architect: 15500, qc: 7300, designer: 5300, inventor: 4800, 'coder-1': 4100, 'coder-2': 4100, single: 2000 };
 
-test('no role brief outgrows its ceiling', () => {
+test('a bare role brief stays within its regression guard', () => {
   const dir = 'F:/dev/Synapse.Projects/__no_such_project__';
-  for (const [role, max] of Object.entries(CEILING)) {
+  for (const [role, max] of Object.entries(BARE_BRIEF_LIMIT)) {
     const brief =
       role === 'single' ? briefSession({ dir, role: 'architect', single: true }) : briefSession({ dir, role });
     assert.ok(
       brief.length <= max,
-      `${role}'s brief is ${brief.length} characters, ceiling ${max} — a rule added without one removed`,
+      `${role}'s bare brief is ${brief.length} characters, guard ${max} — this excludes skills and project data`,
     );
   }
+});
+
+// The short core is always present, unlike a skill, and must stay small enough to
+// read in one glance. It names roots and the shell-path rule; it does not carry the
+// project's own facts.
+test('the harness core is small, and says where the project root is', () => {
+  const core = harnessCore();
+  assert.ok(core.length < 700, `the core is ${core.length} characters`);
+  assert.match(core, /SYNAPSE_HARNESS=/);
+  assert.match(core, /SYNAPSE_PROJECTS_ROOT=/);
+  assert.match(core, /SYNAPSE_SCRATCH_ROOT=/);
+  assert.match(core, /\$PWD/);
+  assert.match(core, /working directory/);
+  assert.doesNotMatch(core, /SYNAPSE_PROJECT=/);
+});
+
+test('the handover digest keeps the sections that bind and drops the narrative', () => {
+  const full = [
+    '## Objective',
+    'Ship the thing.',
+    '## Requirements',
+    '- The data stays in bin/data.',
+    '## Decisions',
+    '- Free tier only.',
+    '## Long narrative',
+    '- This is old detail that belongs in the full file.',
+  ].join('\n');
+  const digest = handoverDigest(full, 300);
+  assert.match(digest, /## Objective/);
+  assert.match(digest, /## Requirements/);
+  assert.match(digest, /## Decisions/);
+  assert.doesNotMatch(digest, /Long narrative|old detail/);
+  assert.ok(digest.length <= 300);
+  assert.equal(handoverDigest('Just prose with no headings.'), '', 'an unstructured handover is left to the full text');
 });
 
 // A tool's name is a literal. A model told "the delegate tool" invented a name, was
@@ -95,6 +129,13 @@ test('the Architect is given the delegate tool’s exact name', () => {
   assert.match(architect, /`subagent` is\s+not a delegation/s, 'the engine’s subagent is ruled out for a plan task');
   // A worker does not delegate, so it is not handed the Architect's instruction.
   assert.doesNotMatch(multi('coder-1'), /synapse-delegate_delegate/);
+});
+
+test('the server exports the three roots to shells and check processes', () => {
+  const src = fs.readFileSync(new URL('../src/index.js', import.meta.url), 'utf8');
+  assert.match(src, /process\.env\.SYNAPSE_HARNESS = ROOT/);
+  assert.match(src, /process\.env\.SYNAPSE_PROJECTS_ROOT = PROJECTS_ROOT/);
+  assert.match(src, /process\.env\.SYNAPSE_SCRATCH_ROOT = SCRATCH_ROOT/);
 });
 
 test('the Architect’s brief is the expensive one, and the layers are in it', () => {

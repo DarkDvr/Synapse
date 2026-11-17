@@ -19,7 +19,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { digest as projectDigest, DOC_RELATIVE } from './project-doc.js';
-import { scratchDir } from './paths.js';
+import { scratchDir, ROOT, PROJECTS_ROOT, SCRATCH_ROOT } from './paths.js';
 import { parseChecks, CHECK_MAX } from './checks.js';
 // The plan's shape (a `t2a` belongs to its `t2`) is one rule, shared with the page that
 // draws the rail: web/plan-order.js. Same file, same answer in both runtimes.
@@ -68,6 +68,25 @@ const FEATURES_NAME = 'features.json';
 
 /** The instruction-entry key the brief is attached to, per session. */
 export const BRIEF_KEY = 'synapse.plan';
+/** The short, always-on harness facts: paths and the shell-path rule. Kept apart
+ *  from the plan brief so it can be read at a glance and never grows with a project. */
+export const HARNESS_KEY = 'synapse.harness';
+
+/**
+ * The small instruction that every role gets. It names only what the shell cannot
+ * discover reliably: the three global roots and how a script-relative output path is
+ * judged. `$PWD` is the per-project root; SYNAPSE_PROJECT is deliberately absent —
+ * one engine serves every project, so a global project variable would be wrong.
+ */
+export function harnessCore() {
+  const harness = process.env.SYNAPSE_HARNESS || ROOT;
+  const projects = process.env.SYNAPSE_PROJECTS_ROOT || PROJECTS_ROOT;
+  const scratch = process.env.SYNAPSE_SCRATCH_ROOT || SCRATCH_ROOT;
+  return [
+    `Harness roots: SYNAPSE_HARNESS=${harness}; SYNAPSE_PROJECTS_ROOT=${projects}; SYNAPSE_SCRATCH_ROOT=${scratch}.`,
+    `The project root is $PWD (PowerShell) or %CD% (cmd). A relative path in a shell command is resolved from the working directory, not from a script's own folder. For a script's output folder, use an absolute path inside the project — for example, "$PWD\\bin".`,
+  ].join('\n');
+}
 
 // A read that lands inside a write is retried twice, 25 ms apart (see readPlan).
 const PLAN_READ_TRIES = 3;
@@ -997,6 +1016,34 @@ export function fingerprintDiff(before = {}, after = {}, allowFolder = '') {
 }
 
 /**
+ * The short, every-turn view of a compaction handover.
+ *
+ * The full handover is model-written and stays in `.project/project.md`; this only
+ * keeps the parts that still bind and drops the narrative. It is deterministic on
+ * purpose — no second model, no invented decisions. A handover without recognisable
+ * sections is left alone by the caller rather than guessed at.
+ */
+export function handoverDigest(text, max = 700) {
+  const src = String(text || '').trim();
+  if (!src) return '';
+  const wanted = /^(objective|requirements|decisions|constraints|current round)$/i;
+  const kept = [];
+  let on = false;
+  for (const line of src.split(/\r?\n/)) {
+    const heading = /^##\s+(.+?)\s*$/.exec(line);
+    if (heading) {
+      on = wanted.test(String(heading[1] || '').trim());
+      if (on) kept.push(line);
+      continue;
+    }
+    if (on) kept.push(line);
+  }
+  const out = kept.join('\n').trim();
+  if (!out) return '';
+  return out.length > max ? `${out.slice(0, max).trimEnd()} […]` : out;
+}
+
+/**
  * The brief handed to a session through the engine's instruction entries.
  *
  * Kept short on purpose: it is re-read on every step, and a wall of text gets
@@ -1197,7 +1244,18 @@ export function briefSession({ dir, role = 'architect', auto = false, single = f
     lines.push(`Where this project stands${origin}:\n${plain(capped(doc.current, 1800))}`);
   }
   if (doc.notes) lines.push(`The operator's standing notes for this project:\n${plain(capped(doc.notes, 900))}`);
-  if (doc.handover) lines.push(`The handover from the last compact:\n${plain(capped(doc.handover, 2000))}`);
+  if (doc.handover) {
+    const digest = handoverDigest(doc.handover);
+    if (digest) {
+      lines.push(
+        `The handover from the last compact (digest):\n${plain(digest)}\n` +
+          `Full handover and history: ${DOC_RELATIVE} — read it when you need the detail.`,
+      );
+    } else {
+      // An old, unstructured handover is not guessed at; keep it as it was.
+      lines.push(`The handover from the last compact:\n${plain(capped(doc.handover, 2000))}`);
+    }
+  }
   // A stopped run has no report, so a steer sent during it would otherwise be
   // invisible to the Architect. The result line kept it; the brief carries it
   // forward without waking anyone or explaining the stop.

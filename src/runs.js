@@ -33,6 +33,8 @@ import {
   QC_ROUNDS,
   planFingerprint,
   BRIEF_KEY,
+  HARNESS_KEY,
+  harnessCore,
   PLAN_DIR,
   roleWriteRules,
   roleReadRules,
@@ -1745,6 +1747,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
       // Its context: where it is, what the plan says, and that the plan is not
       // its to touch. The task itself goes in the message that prompts it.
       try {
+        await engine.setInstruction(w.id, HARNESS_KEY, harnessCore());
         await engine.setInstruction(
           w.id,
           BRIEF_KEY,
