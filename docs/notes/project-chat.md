@@ -162,6 +162,33 @@ Updated:        the stamp of the last write
 
 ---
 
+## The facts file (17 Nov)
+
+`.project/facts.md` is reference, not a second plan: what a run taught that will
+still be true next week — a command that fails here, a path that resolves oddly, an
+account or tool the project depends on, a limit the operator set. It is separate from
+`project.md` because compaction rewrites that document, so a fact recorded only in
+the handover can be summarised away; this file survives.
+
+- Created by `ensureProjectFolders` (`src/project-facts.js`), so every project has it
+  before its first session — headings and the rule, no facts.
+- **The Architect owns it.** The worker write fence denies `edit` on `.project/**` for
+  every other role, so a worker's lesson reaches the file through its report, which
+  the Architect already reads. No new permission rule, no tamper exemption.
+- One line in the Architect's brief: the path, the ownership, the cap (6,000
+  characters) and the size the file is at now. Over the cap, the same line says so and
+  tells the Architect to condense before adding.
+- Nothing else reads it: it is not inlined in a brief and not part of the digest. That
+  is the point — opening it is a choice, and the cap keeps it worth opening.
+- Cost: 290 characters in the Architect's bare brief (`BARE_BRIEF_LIMIT` moved
+  15,500 → 15,800) and nothing in a worker's.
+
+Open question, to be checked after a few Architect turns: does a file of headers get
+used, or does it stay the template? If it stays empty the pointer is too weak; if it
+fills with task status the headings are wrong.
+
+---
+
 ## Mode at send
 
 Today the toggle PATCHes the session's permission ruleset immediately. That is

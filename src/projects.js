@@ -9,6 +9,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { ensurePlan } from './plans.js';
+import { ensureFacts } from './project-facts.js';
 import { SCRATCH_ROOT, scratchDir } from './paths.js';
 import { hasMarker, setMarker } from './privacy.js';
 
@@ -169,25 +170,35 @@ const isFolderEntry = (entry, root) => {
  * The folders every project owns, created when they are missing.
  *
  * A project is usable the moment it is registered, so discovery and Add Project
- * both call this: `.project\plan.json` is the file the Architect starts from, and
- * the scratch folder is outside the project but named in every brief. An
- * existing plan is never touched; a failure is reported, not thrown, so a
- * read-only folder still becomes a project the operator can see and fix.
+ * both call this: `.project\plan.json` is the file the Architect starts from,
+ * `.project\facts.md` is where its durable facts are kept, and the scratch folder
+ * is outside the project but named in every brief. An existing file is never
+ * touched; a failure is reported, not thrown, so a read-only folder still becomes
+ * a project the operator can see and fix.
  */
 export function ensureProjectFolders(dir, { scratchRoot = SCRATCH_ROOT } = {}) {
   const target = normalizeDir(dir);
   const state = migrateProjectState(target);
-  if (state.error) return { directory: target, plan: { created: false, path: '', error: state.error }, scratch: '', error: state.error };
+  if (state.error) {
+    return {
+      directory: target,
+      plan: { created: false, path: '', error: state.error },
+      facts: { created: false, path: '', error: state.error },
+      scratch: '',
+      error: state.error,
+    };
+  }
   const plan = ensurePlan(target);
+  const facts = ensureFacts(target);
   let scratch = '';
-  let error = plan.error || '';
+  let error = plan.error || facts.error || '';
   try {
     scratch = scratchDir(target, scratchRoot);
     fs.mkdirSync(scratch, { recursive: true });
   } catch (err) {
     error ||= `could not create ${scratch || 'the scratch folder'}: ${err.message}`;
   }
-  return { directory: target, plan, scratch, error };
+  return { directory: target, plan, facts, scratch, error };
 }
 
 /**

@@ -19,6 +19,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { digest as projectDigest, DOC_RELATIVE } from './project-doc.js';
+import { FACTS_RELATIVE, FACTS_LIMIT, factsStatus } from './project-facts.js';
 import { scratchDir, ROOT, PROJECTS_ROOT, SCRATCH_ROOT } from './paths.js';
 import { parseChecks, CHECK_MAX } from './checks.js';
 // The plan's shape (a `t2a` belongs to its `t2`) is one rule, shared with the page that
@@ -1335,6 +1336,19 @@ export function briefSession({ dir, role = 'architect', auto = false, single = f
   );
 
   if (isArchitect) {
+    // The facts file is reference, not a second plan: what a run learned that will
+    // still be true next week. It is named here because a file nothing points at is
+    // a file nobody opens — and it is the Architect's alone, so a worker's lesson
+    // travels in its report rather than straight into the file.
+    const facts = factsStatus(dir);
+    lines.push(
+      `Project facts: ${FACTS_RELATIVE} - you own it and you are its only writer. Read it before you plan; ` +
+        `add a dated line when a run teaches something that stays true next week (a failing command, an odd ` +
+        `path, a limit the operator set), and delete what has stopped being true. ` +
+        (facts.over
+          ? `It is ${facts.chars} characters, over the ${FACTS_LIMIT} cap - condense it before you add.`
+          : `Keep it under ${FACTS_LIMIT} characters; it is ${facts.chars} now.`),
+    );
     lines.push(
       'The harness records each run\'s change as a diff under .project/reports/diffs, named in the report. Read ' +
         'it when a report claims code or layout: the diff is what changed.',

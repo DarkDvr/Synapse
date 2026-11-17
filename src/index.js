@@ -232,11 +232,13 @@ async function main() {
   app.info(`scratch: ${SCRATCH_ROOT}`);
   // Every project owns a plan file. Create the ones that are missing rather than
   // waiting for the first session: an empty, valid file is a better starting
-  // point than a missing one, and it makes the file discoverable.
+  // point than a missing one, and it makes the file discoverable. The facts file
+  // is created the same way, empty but for its headings.
   for (const project of projects.list()) {
     if (!project.exists) continue;
     const folders = ensureProjectFolders(project.directory);
     if (folders.plan.created) app.info(`plan file created: ${folders.plan.path}`);
+    if (folders.facts?.created) app.info(`facts file created: ${folders.facts.path}`);
     if (folders.error) app.warn(`could not give ${project.name} its folders (${folders.error})`);
   }
 
