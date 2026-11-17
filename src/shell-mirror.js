@@ -75,6 +75,12 @@ export const MIRROR_RULE =
   'If the engine moves a command to the background, its output is copied to ' +
   '`.project/logs/shell-<id>.out` — read that file, and do not end the turn waiting.';
 
+/** The same news, for a turn that was not briefed with the rule (a chat): a steer. */
+export const mirrorSteer = (id) =>
+  `The engine moved that command to the background. Its output is being copied to ` +
+  `.project/logs/shell-${id}.out — read that file, and read it again while the command ` +
+  `runs; do not end the turn waiting.`;
+
 /** The engine's own copy of a backgrounded command: …\data\opencode\shell\<hash>\sh_<id>.out */
 const ENGINE_COPY = /((?:[A-Za-z]:)?[\\/][^\s"']*?data[\\/]engine[\\/]opencode[\\/]data[\\/]opencode[\\/]shell[\\/][^\s"']*?[\\/](sh_[\w-]+)\.out)/i;
 

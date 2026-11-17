@@ -2265,7 +2265,8 @@ the run completed without `qc-8.md`.
   **copies it into the project** at `.project/logs/shell-<id>.out`, where the model may
   read it and the operator keeps it. The same rule as the browser's screenshots.
 - The runner mirrors it on every poll (`src/shell-mirror.js`), so the copy grows with the
-  command. The brief names the pattern in one line.
+  command. The brief names the pattern in one line; a chat turn is told the same thing by
+  a steer from its turn watcher, which runs even when the loop guard is off.
 - A read of the engine path is refused with the project path in the note; the gate copies
   the file at that moment and says where it went.
 - The copy is a snapshot: read it again after a pause. "Waiting" is not finishing.

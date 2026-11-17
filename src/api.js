@@ -257,9 +257,23 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
   const browserDownloadLog = new Map();
   const browserDownloadState = new Set(['starting', 'inProgress', 'saving', 'completed', 'canceled', 'interrupted']);
   function watchTurn(sessionId, dir, since = 0) {
-    if (getConfig()?.worker?.loopGuard === false) return;
+    // The loop guard can be off; the background-output mirror still has to run, so the
+    // watcher always starts and `loops` decides only the nudging half.
+    const loops = getConfig()?.worker?.loopGuard !== false;
     turnGuards.get(sessionId)?.stop?.();
-    const guard = createTurnGuard({ engine, sessionId, dir, log: app, notify, since });
+    const guard = createTurnGuard({
+      engine,
+      sessionId,
+      dir,
+      log: app,
+      notify,
+      since,
+      loops,
+      // The mirror does not need the loop guard's four-second rhythm: a backgrounded
+      // command runs for minutes. Polling less often when that half is off keeps a long
+      // chat from re-reading its transcript every four seconds.
+      everyMs: loops ? 4000 : 10000,
+    });
     turnGuards.set(sessionId, guard);
     guard.start();
   }

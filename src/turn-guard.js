@@ -22,6 +22,7 @@
 import { toolSignature, loopStrike, LOOP_WINDOW, LOOP_NUDGE } from './loop-detect.js';
 // One definition of a target: offsets and limits included, so paging a file is not a loop.
 import { toolTarget } from './runs.js';
+import { backgroundShells, mirrorShells, mirrorSteer } from './shell-mirror.js';
 
 export function createTurnGuard({
   engine,
@@ -35,6 +36,10 @@ export function createTurnGuard({
   // Only calls made after this send are watched. Without it the first poll read the
   // whole chat and could nudge a fresh turn for the previous one's last twelve calls.
   since = 0,
+  // The loop guard may be switched off; the background-output mirror may not. It is not a
+  // guard — it is the copy of a file the model cannot read (17 Nov), and every mode needs
+  // it, including the operator's own chat.
+  loops = true,
   now = () => Date.now(),
   setInterval: setTimer = setInterval,
   clearInterval: clearTimer = clearInterval,
@@ -43,6 +48,7 @@ export function createTurnGuard({
   let stopped = false;
   let window = [];
   const seen = new Set();
+  const toldShells = new Set();
   let strikes = 0;
   let lastNudge = 0;
   let told = false;
@@ -67,6 +73,26 @@ export function createTurnGuard({
       }
       const messages = await engine.getMessages(sessionId).catch(() => null);
       if (!Array.isArray(messages)) return;
+
+      // A backgrounded command writes its output under the harness, where the model may
+      // not read it. Copy it into the project and tell this turn where — once per shell.
+      // This runs even when the loop guard is switched off: it is not a guard, it is the
+      // copy (17 Nov, a QC run ended "waiting" on a file it could not open).
+      const shells = backgroundShells(messages);
+      if (shells.length) {
+        mirrorShells(dir, shells, { log });
+        for (const shell of shells) {
+          if (toldShells.has(shell.id)) continue;
+          toldShells.add(shell.id);
+          try {
+            await engine.prompt(sessionId, `[harness] ${mirrorSteer(shell.id)}`, { delivery: 'steer' });
+          } catch (err) {
+            log.warn?.(`could not tell ${sessionId} where the background output was copied: ${err.message}`);
+          }
+        }
+      }
+      if (!loops) return;
+
       for (const message of messages) {
         const created = Number(message?.created || 0);
         if (since && created && created < since) continue;
