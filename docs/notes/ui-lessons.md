@@ -39,21 +39,27 @@ answering meant guessing what had been said. As a post, the answer is one scroll
   any long message. The padding came down so a typical four-option question (287px) fits
   a 294px chat without clipping its own header — measured after: header 5px inside the
   chat, Submit visible, zero inner overflow.
-- **It opens at its start, not its end.** Scrolling to the bottom of a chat shorter than
-  the question hid the question's own header and title. On a new form the transcript is
-  positioned so the panel's top sits a few pixels below the chat's top, and the chat's
-  follow is released so streaming text cannot yank it back.
+- **It opens at the end of the chat, under the report that raised it.** The chat used to
+  be scrolled until the panel's *top* sat at the top of the box, which put the whole
+  report above the fold: the operator answered a question about a report they only saw
+  once the panel was gone (18 Nov — after the answer the panel was removed and the
+  report's last screen landed exactly where the question had been). `askScrollTop()`
+  puts the panel's bottom at the end of the chat with the report above it. The follow is
+  not cut, so a report the poll has not fetched yet settles above the panel instead of
+  moving it. A panel taller than the chat is the one case where both cannot be shown, and
+  then its head goes to the top: a list of answers with the question above the fold is
+  the bug, not the fix.
 - **Dense, not boxed.** Every answer used to be its own orange-bordered box inside an
   orange-bordered panel — too much orange, and three options took a screenful. The panel
   keeps its orange border (that is what marks it as a question), the fill is neutral, and
   the answers are a plain list divided by hairlines: one above every row, the first
   included, with a radio/checkbox, a 12.5px label and a 10.5px description.
-- **The question is a jump target, and it lands at the top.** The chat's next/previous
-  buttons step through messages, and the question is one of them — it was not, so
-  "next" walked past it and the only way to read a question was to drag the chat
-  (reported 2 Nov). It lands as the first thing in the chat, with the panel's header
-  reserving 104px on its right: the floating jump buttons sit there, and landing the
-  header underneath them hid it.
+- **The question is a jump target.** The chat's next/previous buttons step through
+  messages, and the question is one of them — it was not, so "next" walked past it and
+  the only way to read a question was to drag the chat (reported 2 Nov). Jumping to it
+  puts its top at the top of the chat, which is the operator asking to go there — unlike
+  the arrival above, which puts it at the end, clear of the jump buttons that float over
+  the chat's top-right corner.
 - **The Architect's live reasoning is inside its own post — and still a box.** It used
   to be a second grey block after the message, with its own "Architect · Thinking" head
   and its own gap, so it read as somebody else's post under a green one.

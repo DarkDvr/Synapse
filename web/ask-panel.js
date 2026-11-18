@@ -1,9 +1,10 @@
 // The question, in the chat: what the engine asked, the options, and the answer.
 //
 // A question is not an overlay — it is the last thing in the conversation, so the
-// operator can read what was said before answering it. That is why this module also
-// sizes the box: the post has to sit in the chat, at the top, with the answer panel
-// inside it, and the chat must not move under the reader while it appears.
+// operator reads the report that raised it first and answers it second. That is why
+// this module also places it: at the end of the chat, never with its top above the
+// report (placeAskHost, in ./chat-scroll.js), and the chat is not moved again while
+// it waits.
 //
 // Three things come from app.js and are wired at boot: how long an answer waits
 // before it is taken automatically, the cards that are waiting, and the rail.
@@ -14,7 +15,7 @@ import { serverNow } from './api.js';
 import { api } from './api.js';
 import { toast } from './toast.js';
 import { askHeadNote, answerTimeline } from './ask-note.js';
-import { stopFollowingChat } from './chat-scroll.js';
+import { placeAskHost } from './chat-scroll.js';
 import { currentForm } from './run-view.js';
 import { renderTranscript } from './transcript.js';
 import { renderComposer } from './composer.js';
@@ -182,17 +183,9 @@ export function renderAskPanel() {
   mountAskPost();
   refreshAskPanel();
   // A question is the thing the run is waiting on: show it, even if the operator
-  // had scrolled up to read. It goes to the very top of the chat, so the question is
-  // the first thing read; the panel's header leaves room on its right for the
-  // floating jump buttons, which otherwise sat over it.
-  stopFollowingChat();
-  requestAnimationFrame(() => {
-    const el = $('transcript');
-    const host = askHost();
-    if (!el || !host) return;
-    const top = host.getBoundingClientRect().top - el.getBoundingClientRect().top;
-    if (Math.abs(top) > 2) el.scrollTop += top - 6;
-  });
+  // had scrolled up to read. It is placed at the end of the chat, *under* the report
+  // that raised it, so the reason is read before the question (chat-scroll.js).
+  requestAnimationFrame(() => placeAskHost(askHost()));
 }
 
 /**

@@ -122,11 +122,6 @@ export function noteChatScroll() {
  *  mistaken for the reader moving. */
 let chatScrollWritten = null;
 
-/** Stop following the writing. The question post calls this. */
-export function stopFollowingChat() {
-  chatFollowArmed = false;
-}
-
 /**
  * Is the chat still following the writing?
  *
@@ -326,6 +321,64 @@ export function scrollChatToBottom(behavior = 'auto') {
   // it grew, the branch above took over and the jump stopped. The page is moved
   // deliberately in exactly two places (Send and opening a session), never by a
   // render.
+}
+
+/**
+ * The room a new question keeps under itself when it is placed at the end of the chat.
+ */
+export const ASK_GAP = 8;
+
+/**
+ * Where a question arriving puts the chat: at its end, so the words that raised it stay
+ * above it and are read first.
+ *
+ * The chat used to be scrolled until the question's *top* sat at the top of the box. With
+ * a report above it, that put the report — the very thing the question is about —
+ * entirely above the fold, and the answer was given blind; after answering, the panel
+ * went away and the report's last screen landed exactly where the question had been, so
+ * it seemed to arrive *after* the answer (18 Nov). A question must never cost the reader
+ * its reason.
+ *
+ * A panel taller than the chat is the one case that cannot show both, and then its head
+ * goes to the top: the first line of a question outranks its options, and showing a list
+ * of answers with no question over it is worse than showing no report.
+ *
+ * `top` and the result are in the scroller's own coordinates (for the page, document
+ * offsets), and `viewport` is the height of the box that scrolls.
+ */
+export function askScrollTop({ top = 0, height = 0, viewport = 0, gap = ASK_GAP } = {}) {
+  const at = Number(top) || 0;
+  const bottom = at + Math.max(0, Number(height) || 0) - Math.max(0, Number(viewport) || 0) + gap;
+  return Math.max(0, Math.min(bottom, at));
+}
+
+/**
+ * Put a question at the end of the chat, under the words that raised it.
+ *
+ * It used to be scrolled until its *top* sat at the top of the box, which put the whole
+ * report above the fold — the operator answered a question about a report they only saw
+ * once the panel was gone (18 Nov). A panel taller than the chat cannot show both, and
+ * then its own head goes to the top (askScrollTop).
+ *
+ * The host node arrives from ask-panel.js, which holds it across renders: it is moved,
+ * never rebuilt, so nothing here may look it up by id.
+ */
+export function placeAskHost(host) {
+  const el = $('transcript');
+  if (!el || !host || host.hidden) return;
+  const panel = host.getBoundingClientRect();
+  const scroller = chatScroller();
+  if (scroller) {
+    const top = scroller.scrollTop + panel.top - el.getBoundingClientRect().top;
+    scroller.scrollTop = askScrollTop({ top, height: panel.height, viewport: scroller.clientHeight });
+    return;
+  }
+  // The stacked layout has no scroller of its own: the page moves instead, and the same
+  // rule applies in document coordinates.
+  window.scrollTo(
+    0,
+    askScrollTop({ top: window.scrollY + panel.top, height: panel.height, viewport: window.innerHeight }),
+  );
 }
 
 /**

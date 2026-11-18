@@ -76,7 +76,6 @@ import {
   captureChatSlack,
   restoreChatSlack,
   CHAT_FOLLOW_SLACK,
-  stopFollowingChat,
   chatScrollWiring,
 } from './chat-scroll.js';
 import {
