@@ -189,7 +189,7 @@ an agent does not know to open is a document that does not exist:
 | `docs/notes/protection.md` | before touching `src/protection.js`, the prohibited list, or the Brave rule — what is refused without asking, and what the fence cannot see |
 | `docs/notes/tests.md` | before adding a test, or when CI is red — the one rule a test must keep, and how the suite runs |
 | `docs/notes/git.md` | before touching git, the diff or a checkpoint — who commits, what the private MinGit installs, and what the harness never does |
-| `docs/notes/backlog.md` | before choosing what to build next — the ideas that survived a first look, and why each one waits |
+| `docs/notes/backlog.md` | before choosing what to build next — the ideas that survived a first look, and why each one waits; parked defects live in `docs/notes/findings.md` |
 | `docs/notes/releases.md` | before bumping, tagging, or building a release — the three places the version lives, and the checklist |
 
 Two rules: **a new lesson goes in `docs/notes/`, not here**; and a rule you move out

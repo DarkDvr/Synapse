@@ -70,6 +70,9 @@ Ids are stable: they are the ticket names and the scenario names. `M` = must,
 | B1 | Any text part | Markdown: headings, lists (incl. task lists), GFM tables, blockquotes, fenced code, rules, inline code, bold/italic/strike, links | M: escaped first (no injected markup); a table never widens the column; code scrolls inside itself |
 | B2 | An image written inline or on its own line | A chip in the sentence, the picture on hover | M: the chip joins the paragraph it illustrates; a `javascript:` or missing file is not a chip |
 | B3 | Text as it arrives | — | M: prose that is still growing is drawn where it is, not re-lettered below the reader (see G3/G4) |
+| B4 | A selection the operator is making | The native selection | M: **a live update never takes it away**: while a selection rests in the conversation, the render waits (the chat pauses, then catches up when it is released); today every delta rebuilds the transcript and the selection dies |
+| B5 | A right-click | The page's own menu: Copy, Select All; Cut/Copy/Paste/Select All in a field | M: Copy puts exactly the selection on the clipboard, in the operator's own text; the menu never appears as the browser's default (no Print/Reload/Save As/Inspect); today right-click is switched off everywhere |
+| B6 | Copying from a card | The menu over a `<pre>` (tool output, code) | M: Copy takes the text, not the card's chrome |
 
 ### C. Disclosures (folds)
 
@@ -132,7 +135,7 @@ Ids are stable: they are the ticket names and the scenario names. `M` = must,
 | G3 | Words arriving faster than they are read | — | M: the pane follows only while the reader is at the pane's end; a reader who scrolls up is left where they are and told new words are waiting; P: it pins to the bottom every frame, so it cannot be read or scrolled |
 | G4 | The step's message landing | The words also exist in the message | M: no duplicate, no flicker, no re-lettering; the pane's words are the same words as the fold's, once |
 | G5 | A live tool | A waiting line from the tool's own input | M: appears without a render of the whole chat |
-| G6 | The Architect's prose | Lands with the message | P: it arrives only when the engine has stored the message, so a turn blocked on a question shows its reason a beat late — this is what the "no report" report was; Q1 decides whether the new chat streams prose as it is written |
+| G6 | The Architect's prose | Streamed in as it is written | M: the operator reads it while it is being written, paced to something readable, and reconciled when the message lands (Q1: decided — stream it) |
 
 ### H. The question panel
 
@@ -178,7 +181,7 @@ Ids are stable: they are the ticket names and the scenario names. `M` = must,
 | K3 | Spacing is in line units (¼, ½, 1, 2), not in ad-hoc pixels; P: the Compacting line's inset does not match a post's |
 | K4 | Both layouts (wide, stacked), the zoom control and every font size are the same design, measured at 1280/1460/1600 |
 | K5 | No horizontal scrollbar ever; the scrollbar gutter is stable; long words wrap or scroll inside their own block |
-| K6 | Motion: 120–200ms, ease-out, transform/height only; only state changes animate, never the scroll while text arrives; honour reduced motion |
+| K6 | Motion: 120ms, ease-out, transform/height only; only state changes animate (a fold opening, a card expanding, the panel arriving, a report settling), never the scroll while text arrives; honour reduced motion |
 
 ### L. What survives
 
@@ -186,7 +189,7 @@ Ids are stable: they are the ticket names and the scenario names. `M` = must,
 |---|---|---|
 | L1 | A reload | Messages, compact post, chat errors, steers, downloads, forms, permissions survive; the pane is rebuilt from the live stream; open folds and scroll position do not (today) |
 | L2 | A reload mid-turn | The page rejoins the turn: the post, the pane from the next delta, the composer says Working |
-| L3 | Switching chats and back | Nothing of the old chat leaks in: no trace, no pane, no pending steers, no clocks |
+| L3 | Switching chats and back | Nothing of the old chat leaks in: no trace, no pane, no pending steers, no clocks; a chat opens at its **end**, never at a remembered offset (Q3: decided) |
 
 ### M. Time
 
@@ -245,8 +248,12 @@ a model or a file wrote it.
 - S15 the rare harness lines: an alarm, a loop rescue, a lease expiry. **Assert: each
   sits where it happened and says what it is in the operator's words.**
 - S16 the motion audit: open and close every disclosure, show and answer the panel, let a
-  report land — at 0.25× speed. **Assert: 120–200ms, transform/height only, no scroll
+  report land — at 0.25× speed. **Assert: 120ms, transform/height only, no scroll
   movement, nothing moves under a reduced-motion setting.**
+- S17 text interaction: select a sentence across a streaming turn, right-click it, Copy,
+  then Select All; then do it in the composer and over a tool card's output. **Assert:
+  the selection survives the update, the clipboard is exactly the selected text, and the
+  menu is the page's own.**
 
 The mapping is the contract — each row lands in at least one scenario:
 
@@ -274,6 +281,7 @@ The mapping is the contract — each row lands in at least one scenario:
 | S14 | L1–L3 |
 | S15 | E1, E3, E4, E7 |
 | S16 | K6 |
+| S17 | B4, B5, B6 |
 
 Every scenario runs at: normal speed, 10× speed, and paused on each frame boundary
 (for screenshots). Each produces a screenshot pair (old/new) at 1280 and 1600, and the
@@ -300,28 +308,29 @@ overflow.
 3. Nothing else. The engine's event stream is fine-grained enough; the chat's problems
    are all on this side of it.
 
-## 6. Open questions for the operator
+## 6. Decisions
 
-1. **The Architect's prose while it is written** — show it as it streams (paced, in the
-   post), or only when the message lands? Today the second: the words appear when the
-   engine has stored them, so a question can open a beat before its report (1.62.12
-   fetches first and closes that gap, but the words still cannot be read as they are
-   written). I recommend streaming it, paced at reading speed, reconciled when the
-   message lands.
-2. **Folds across a reload** — keep open/closed state per chat, or start folded?
-   I recommend keeping it for the page's lifetime only: it is reading state, not truth.
-3. **Scroll position per chat** — remember it when switching chats, or always open a
-   chat at its end? I recommend remembering for the page's lifetime.
-4. **The pane after a step** — dim and keep (today), or fold to "Thinking…" after a
-   moment? I recommend keep, with a click to fold.
-5. **Two speaker languages or one?** Architect green and worker amber/neutral today.
-   I recommend one post shape with a per-speaker accent colour, so a trace is visibly
-   the same kind of thing.
-6. **Motion budget** — is 120–200ms right for folds and cards, and should the answer
-   cross-fade in, or appear instantly?
-7. **Tool cards** — one line + expand (today), or the last output line inline as well?
-8. **What do you want to be able to do to a finished post?** Copy, reuse, select,
-   quote into the composer? Today: copy on errors and reuse on your own messages.
+Answered by the operator on 18 Nov; these are the design, not options.
+
+1. **The Architect's prose streams in.** The operator reads what it is writing while it
+   writes it, not after the message is stored. Paced, reconciled when the message lands
+   (G6, G4). The pane keeps its own hand-off rule (G3).
+2. **Folds survive the page, not a reload.** Open/closed state is reading state
+   (Q2 → L1).
+3. **No scroll memory per chat.** A chat opens at its end; switching away means "I am
+   done reading that" (L3).
+4. **The pane keeps what it has:** dim and keep the finished step, click to fold (G2).
+5. **Keep the current colours**, and the vertical rule is what says whose post it is:
+   You violet, Architect green, Synapse yellow, a worker's trace its own grey. The
+   *structure* unifies; the colour does not (Post, §1).
+6. **Motion: 120ms**, fast but not instant (K6). Everything that appears, folds or
+   grows animates; nothing on the scroll under a live update.
+7. **Tool cards keep one line plus expand** — and expanding and collapsing are animated
+   like every other disclosure (D1–D3, C4, K6).
+8. **Text must behave like text again.** Right-click is a real menu (Copy, Select All,
+   Cut/Copy/Paste in a field), and a selection must survive a live update: while the
+   operator is selecting, the render waits and catches up when they release it (B4–B6).
+   Both are current-chat faults, fixed now as well as in the rebuild.
 
 ---
 
@@ -332,5 +341,5 @@ overflow.
   and accepted.
 - The five pains have a rule each: no jump on growth (G2/G3/K6), readable live words
   (G3/G6), nothing closes on its own (A13/C5/C7), motion on every state change (K6),
-  one measured spine (K1/K2/K3).
+  one measured spine (K1/K2/K3) — plus text that behaves like text (B4–B6).
 - A screenshot pair per category, at two widths, reviewed before the next phase.
