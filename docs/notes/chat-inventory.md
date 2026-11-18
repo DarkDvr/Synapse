@@ -344,8 +344,10 @@ Answered by the operator on 18 Nov; these are the design, not options.
    Both are current-chat faults, fixed now as well as in the rebuild.
 9. **The pane is a fixed window (19 Nov).** Eleven lines from its first word, the words at
    its bottom growing upward, the text scrolling inside it, and the follow released the
-   moment the reader scrolls up. Measured in the lab: the old chat grew its post from 45 to
-   162 px while a stream arrived; the new one stayed at 245 px through every step (G2, G3).
+   moment the reader scrolls up — with a small "New words" hint when words arrive after
+   that, which takes them back to the end. Measured in the lab: the old chat grew its post
+   from 45 to 162 px while a stream arrived; the new one stayed at 245 px through every step
+   (G2, G3), and the hint appears in the new panel only (pane-scroll scenario).
 10. **The reader's line is the anchor (19 Nov).** An update never moves the first thing
     visible: the view remembers its offset from the top of the window and puts it back
     after the paint, unless the reader is at the end (then it follows). Measured in the
