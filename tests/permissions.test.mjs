@@ -819,6 +819,13 @@ test('one process it started, by its id: allowed', () => {
     // model had to find another way to stop the app it had started.
     'foreach($f in "app.pid","app3.pid"){ $p=[int](Get-Content $f); if($p){ Stop-Process -Id $p -Force } }; ' +
       'Get-Process | Where-Object { $_.ProcessName -eq "Demo App" } | Select-Object Id,Title',
+    // A POSIX kill names its id as the argument, which is the same "one id it was
+    // given". Refused on 18 Nov — three times — because a `ps` beside it made the
+    // command look like a sweep, and the refusal told the model to stop by id, which
+    // is exactly what it had done.
+    'kill 17863',
+    'kill -9 17863',
+    '& $plink -ssh root@192.168.1.1 "kill 17863 2>/dev/null; sleep 2; ps | grep mihomo | grep -v grep"',
   ]) {
     const decision = shell(command);
     assert.equal(decision.effect, 'allow', `${command} was ${decision.effect}: ${decision.reason}`);
@@ -836,6 +843,9 @@ test('a sweep, a family, or an id it found: refused', () => {
     'Stop-Process -Name python* -Force',
     'taskkill /IM python.exe /F',
     'pkill -f python',
+    // The POSIX forms of a list and a lookup are no safer than the PowerShell ones.
+    'ps | grep mihomo; kill 17863 17864',
+    'ps | grep mihomo; kill $(pgrep mihomo)',
   ];
   for (const command of cases) {
     const decision = shell(command);

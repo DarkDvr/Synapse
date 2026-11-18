@@ -496,18 +496,17 @@ export function createPermissionGate({
       await engine.replyPermission(request.sessionId, request.requestId, decision);
       // The reply's own `message` field is dropped on this route: measured on
       // 2.1.2, the tool error is always "The user declined this tool call", with
-      // no feedback. A synthetic note is the channel that actually reaches a
-      // worker, and it says what the refusal means and where to escalate. The
-      // Architect is not sent one: the operator is in its chat, the refusal is
-      // already on its card, and the extra turn ended with an empty message
-      // (measured 26 Oct) instead of the Architect's closing report.
-      // A PROHIBITED refusal is not a declined tool call: it is the operator's
-      // protected list saying no, and it is told to whoever asked — including the
-      // Architect, because "something tried to change Windows" is news the chat
-      // should carry. Everything else keeps the old rule: workers are told, the
-      // Architect is not (an extra turn once ended with an empty report).
-      const escalate = (Boolean(info.role) && info.role !== 'architect') || verdict.scope === 'prohibited';
-      if (verdict.effect === 'deny' && escalate) {
+      // no feedback. A synthetic note is the channel that actually reaches the
+      // model, and the engine ends its turn on a declined call ("Step interrupted"),
+      // so the note is also what lets it carry on with another approach.
+      //
+      // **Every refusal is told, whoever asked (18 Nov).** Workers always were; a
+      // Single chat has been told since 16 Nov; but a refusal the policy made itself
+      // was silent in the Architect's own chat. There, three attempts to stop one
+      // process ended three turns with nothing said, and the operator had to nudge
+      // the model by hand. The note is the harness's own words, so `policy` keeps it
+      // from claiming the operator declined anything (see refusalNote).
+      if (verdict.effect === 'deny') {
         // A refused read of the engine's own copy of a backgrounded command is the one
         // refusal that can be answered: the file is the model's own output, so it is
         // copied into the project and the note names the copy (17 Nov — a QC run waited
@@ -517,7 +516,7 @@ export function createPermissionGate({
           ? `PROHIBITED: that path is inside SYNAPSE_HARNESS, Synapse's own folder, so you cannot read it ` +
             `there. The output of that command is copied to ${adopted.path} — read that file; it grows while ` +
             `the command runs.`
-          : refusalNote({ role: info.role, scope: verdict.scope });
+          : refusalNote({ role: info.role, scope: verdict.scope, reason: verdict.reason, policy: true });
         Promise.resolve(
           engine.synthetic?.(request.sessionId, note, {
             description: verdict.scope === 'prohibited' ? 'PROHIBITED' : 'permission refused',

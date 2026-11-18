@@ -208,9 +208,29 @@ commands were exactly that, and refusing them would break how a project tests it
 list of names treated as shared runtimes is the same `INTERPRETERS` set the shell analysis
 already uses for "a program that hosts other work" — no new list to maintain.
 
+**A POSIX `kill` names its id the other way round (18 Nov).** `kill 17863`, `kill -9 17863`
+and `kill $pid` are the same "one id it was given" as `Stop-Process -Id 17863`, but
+`plainId` only knew the Windows spelling: a command that named a literal pid *and* ran a
+`ps` beside it (to read the result) was read as a sweep and refused. That happened three
+times in one chat, and each refusal told the model to "stop the one process you started,
+by its id" — the thing it had just done. A literal id, or a plain variable, after
+`kill [options]` is now an id; a second id (`kill 1 2`), a group (`kill -9 -1`), a job
+(`kill %1`) and a subexpression (`kill $(pgrep …)`) are still a list or a lookup, and
+still refused.
+
 A refusal rather than a question is deliberate: an unattended night run must not stop and
 wait (the operator's rule, 10 Nov), and the refusal names the fix — "stop the one process
 you started, by its id: Stop-Process -Id <pid>" — so the model can carry on.
+
+**Every refusal is explained, whoever asked (18 Nov).** The engine ends the model's turn
+when a tool call is declined — the transcript says "Step interrupted" — so the synthetic
+note is the only channel left: without it the model is stopped with nothing said, and the
+operator has to nudge it by hand. Workers were always told, and a Single chat has been
+since 16 Nov; a refusal `decide()` made *itself* (the kill guard, elevation, the fence)
+was silent in the Architect's chat, which is where those three kill attempts happened.
+The gate now tells every asker. `refusalNote({ policy: true })` keeps the harness's own
+voice: it never says the operator declined anything, and for a refusal the model can fix
+it passes the policy's sentence on whole, because that sentence is the way out.
 
 **What it still cannot see:** a command that builds the name or the id at runtime
 (`$n = 'py'+'thon'; Get-Process $n | Stop-Process`), a script that does it inside, and an

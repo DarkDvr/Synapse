@@ -474,11 +474,23 @@ function harnessDeny() {
  * `reason` is the operator's own sentence, when they typed one. It comes first in
  * their words — a rule about workarounds is useful, but "that file is generated"
  * is what stops the worker guessing again.
+ *
+ * `policy` marks a refusal the harness made by itself (`decide()` said no: the kill
+ * guard, the elevation rule, the fence). Nobody declined those, so the note must not
+ * put words in the operator's mouth — and where the policy's sentence *is* the way
+ * out, it is passed on whole instead of being replaced with a general rule.
  */
-export function refusalNote({ role, scope, reason, single = false } = {}) {
+export function refusalNote({ role, scope, reason, single = false, policy = false } = {}) {
   const worker = Boolean(role) && role !== 'architect';
   const why = String(reason || '').replace(/\s+/g, ' ').trim().slice(0, 300);
-  const said = why ? ` They said: "${why}".` : '';
+  const said = !policy && why ? ` They said: "${why}".` : '';
+  // The engine ends the model's turn when a call is refused ("Step interrupted"), so
+  // this note is the only thing it will hear about it. A refusal the model can fix —
+  // a sweep instead of one id, an elevation prompt nobody can answer — says what is
+  // wrong and what to do instead, in the policy's own sentence.
+  if (policy && why && (scope === 'processes' || scope === 'elevation')) {
+    return `The harness refused that command, not the work. ${why}`;
+  }
   if (scope === 'prohibited') {
     return (
       'PROHIBITED: this path is on the operator\'s protected list and cannot be changed by any tool, even ' +
@@ -514,6 +526,14 @@ export function refusalNote({ role, scope, reason, single = false } = {}) {
       'writable. Do not try another tool or another path to reach the same place. If the task depends on ' +
       'it, stop and explain why in your report.'
     ) + said;
+  }
+  // A policy refusal with no sentence of its own: nobody declined it, so say who did,
+  // and leave the model free to work another way instead of ending its task.
+  if (policy) {
+    return (
+      `The harness refused that request, not the work.${why ? ` ${why}` : ''} ` +
+      'Carry on another way, and say what you needed it for.'
+    );
   }
   return worker
     ? 'The operator declined this exact request.' + said + ' Do not try another path or tool to reach the same place. ' +
@@ -801,13 +821,49 @@ function nestedPayloads(text) {
  * not a stop, excused only when the id happened to be a literal number.
  */
 function plainId(text) {
-  const m = /(?:-id|\/pid)\s+(\([^)]*\)|\$[A-Za-z_][\w.]*|\d+)/i.exec(String(text || ''));
-  if (!m) return false;
-  const arg = m[1];
-  if (arg.startsWith('(')) return false;
-  if (/^\$_/.test(arg)) return false;
-  if (/^\d+$/.test(arg)) return true;
-  return /^\$[A-Za-z_]/.test(arg);
+  const t = String(text || '').trim();
+  // The argument on its own: a caller that has already cut the statement down to
+  // what followed the verb (`stopsOtherProcesses`) hands over `17863` or `$p`. The
+  // pipeline's own object is not an id the model was given — it is the list.
+  if (/^(?:\d+|\$[A-Za-z_][\w.]*)$/.test(t) && !/^\$_/.test(t)) return true;
+  const m = /(?:-id|\/pid)\s+(\([^)]*\)|\$[A-Za-z_][\w.]*|\d+)/i.exec(t);
+  if (m) {
+    const arg = m[1];
+    if (arg.startsWith('(')) return false;
+    if (/^\$_/.test(arg)) return false;
+    if (/^\d+$/.test(arg)) return true;
+    return /^\$[A-Za-z_]/.test(arg);
+  }
+  // A POSIX stop names its process the other way round, with the id as the argument.
+  // `kill 17863` is the same "one id it was given" the paragraph above allows, and
+  // refusing it while the refusal says "stop it by its id" left a model with nothing
+  // it could do: three attempts to stop one pid were all refused on 18 Nov, and the
+  // third was a literal id next to a `ps` that only read the result.
+  return killNamesOneId(t);
+}
+
+/**
+ * Is every `kill` in this text a stop of one process it named?
+ *
+ * One argument, and it is an id — a number, or a plain variable read from a pid
+ * file. Options (`-9`, `-SIGKILL`) and redirections (`2>/dev/null`) are not ids, a
+ * second id is a list, and a subexpression (`kill $(pgrep …)`) is a lookup.
+ */
+function killNamesOneId(text) {
+  const re = /\bkill(?!all)\b([^;|&\n]*)/gi;
+  let seen = false;
+  for (const match of String(text || '').matchAll(re)) {
+    seen = true;
+    const args = match[1]
+      .replace(/\d*>&\d+/g, ' ')
+      .replace(/\d*>>?\s*[^\s;|&]+/g, ' ')
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean);
+    const rest = args.filter((word) => !/^-/.test(word));
+    if (rest.length !== 1 || !/^(?:\d+|\$[A-Za-z_][\w.]*)$/.test(rest[0]) || /^\$_/.test(rest[0])) return false;
+  }
+  return seen;
 }
 
 /** The verdict for one piece of command text, or null when it stops nothing it should not. */

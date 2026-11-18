@@ -353,7 +353,7 @@ test('a refusal carries an explanation, an allow does not', async () => {
   assert.equal(notes.length, 1, 'an allow has nothing to explain');
 });
 
-test('a refusal to the Architect is not repeated as a synthetic note', async () => {
+test('a refusal to the Architect is told too, so its turn can carry on', async () => {
   const replies = [];
   const notes = [];
   const engine = {
@@ -368,13 +368,42 @@ test('a refusal to the Architect is not repeated as a synthetic note', async () 
     },
   };
   const gate = createPermissionGate({ engine, logger: quiet, root: ROOT, home: HOME });
-  // A credential store, not a prohibited path: a PROHIBITED refusal *is* told to
-  // the Architect on purpose (something tried to change the machine), while a
-  // refused read is not repeated as an extra turn in its own chat.
+  // The engine ends the model's turn when a call is declined ("Step interrupted"), so
+  // a refusal nobody explains leaves it stopped with no way to change course. The
+  // Architect is no different from a worker here (18 Nov: three attempts to stop one
+  // process ended three turns with nothing said).
   await gate.handle(event('read', [`${HOME}/.ssh/id_rsa`]));
   await new Promise((r) => setImmediate(r));
   assert.equal(replies[0], 'reject');
-  assert.equal(notes.length, 0, 'the operator is already in the Architect chat; no extra turn');
+  assert.equal(notes.length, 1, 'the turn is over; the note is the only thing the model hears');
+  assert.match(notes[0], /permanently/);
+  assert.doesNotMatch(notes[0], /They said/, 'a policy refusal did not decline anything the operator said');
+});
+
+test('a refused kill tells the model how to stop one process', async () => {
+  const notes = [];
+  const engine = {
+    async getSession() {
+      return { directory: PROJECT, metadata: {} };
+    },
+    async replyPermission() {},
+    async synthetic(sessionId, text, meta) {
+      notes.push({ text, meta });
+    },
+  };
+  const gate = createPermissionGate({ engine, logger: quiet, root: ROOT, home: HOME });
+  const verdict = await gate.handle(
+    event('shell', ['Get-Process python | ForEach-Object { Stop-Process -Id $_.Id -Force }']),
+  );
+  assert.equal(verdict.effect, 'deny');
+  assert.equal(verdict.scope, 'processes');
+  await new Promise((r) => setImmediate(r));
+  assert.equal(notes.length, 1);
+  // The policy's own sentence, not a general "do not try again": it names the shape
+  // that is allowed, which is the only thing that can set the model back on course.
+  assert.match(notes[0].text, /not the work/);
+  assert.match(notes[0].text, /by its id/);
+  assert.equal(notes[0].meta.description, 'permission refused');
 });
 
 test('a multi-line command sent as resources still asks', async () => {
