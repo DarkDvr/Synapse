@@ -192,8 +192,13 @@ export function renderTrace(t) {
   const reasons = Array.isArray(t.reasons) ? t.reasons : [];
   const recentReasons = reasons.slice(-10);
   const olderReasons = reasons.slice(0, Math.max(0, reasons.length - 10));
+  // The key is what the toggle handler stores, and the open state is read back from it:
+  // without this a trace's reasoning shut itself on the next render, which the operator
+  // met as "the chat collapsed my history" (18 Nov).
+  const foldKey = (suffix) => `${t.key}:${suffix}`;
+  const foldOpen = (key) => (state.open.has(key) ? ' open' : '');
   const reasonFold = (r) =>
-    `<details class="reasoning is-trace" data-k="${esc(t.key)}:r${Number(r.at) || 0}">` +
+    `<details class="reasoning is-trace" data-k="${esc(foldKey(`r${Number(r.at) || 0}`))}"${foldOpen(foldKey(`r${Number(r.at) || 0}`))}>` +
     `<summary>${esc(reasoningGist(r.text))}</summary><pre>${esc(r.text)}</pre></details>`;
   // Steps and thinking are one timeline: a tool call belongs between the thought
   // that asked for it and the thought after it. They used to be two lists — every
@@ -213,7 +218,7 @@ export function renderTrace(t) {
     entries.push({
       at: older[0].at,
       html:
-        `<details class="trace-archive" data-k="${esc(t.key)}:older">` +
+        `<details class="trace-archive" data-k="${esc(foldKey('older'))}"${foldOpen(foldKey('older'))}>` +
         `<summary>Older entries (${older.length})</summary>` +
         `${older.map((e) => e.html).join('')}</details>`,
     });
@@ -288,7 +293,7 @@ export function renderTrace(t) {
   // The task's own title belongs on the folded line: "Coder 1 · t8" says where,
   // not what. It ellipsizes when the column is short, and the tooltip has the lot.
   const foldHead = [name, t.task, t.title].filter(Boolean).join(' · ');
-  return `<details class="trace is-fold" data-trace="${esc(t.key)}">
+  return `<details class="trace is-fold" data-trace="${esc(t.key)}" data-k="${esc(foldKey('fold'))}"${foldOpen(foldKey('fold'))}>
     <summary title="${esc(foldHead)}"><span class="trace-role">${esc(name)}</span>${rest ? esc(` · ${rest}`) : ''}${took}${written}${packedNote}${loopedNote}${steeredNote}</summary>
     <div class="trace-lines">${body}</div>
   </details>`;

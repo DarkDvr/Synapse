@@ -61,7 +61,7 @@ Ids are stable: they are the ticket names and the scenario names. `M` = must,
 | A10 | A `synthetic` message | "Synapse · <label>", yellow rule | M: four variants: report, loaded instructions (one line + fold), PROHIBITED (one red line, folds open), plain |
 | A11 | A compaction | A post at the top of the new chat: "Compacted <when> · N messages", summary behind it | M: survives a reload; replaced by the next compact; the only thing in a fresh chat |
 | A12 | Consecutive assistant steps | One post | M: a line that arrived between two steps must not move to the end of the turn (an alarm splits the post); the live pane belongs to the newest assistant post even if a line follows it; P: the merge hides which step a card came from, and an alarm is the one visible seam |
-| A13 | Any post rebuilt | — | M: **nothing the operator opened closes**, across a poll, a regroup or a trace update; P: three different holes — a trace's reasoning fold and its "Older entries" archive are rendered without their remembered `open` state (`traces.js:196`, `:216`), a folded trace (`traces.js:291`) carries no key at all, and a reasoning fold that rolls into the archive loses its own key |
+| A13 | Any post rebuilt | — | M: **nothing the operator opened closes**, across a poll, a regroup or a trace update; P: three holes — two closed on chat-v2 (1.62.14: a trace's reasoning fold and its archive read their keys, and a folded trace has one), and the third still open: a message fold that rolls into the archive loses its own key |
 
 ### B. Prose blocks
 
@@ -78,13 +78,13 @@ Ids are stable: they are the ticket names and the scenario names. `M` = must,
 
 | Id | Comes from | What appears | Must / Pain |
 |---|---|---|---|
-| C1 | A `reasoning` part | A fold, summary = its first sentence; the newest ten keep their own | M: open state survives every render; opening one does not move the reader's line; P: in a post it does, in a trace it never does — the trace's fold is drawn without `open` |
-| C2 | Older reasoning / older trace entries | One "N earlier reasoning" / "Older entries (N)" fold | M: contents kept, key stable, opening it does not close anything else; P: the message archive honours the key, the trace archive does not; and a message fold that rolls into the archive loses its key, which reads as "the chat collapsed my history" |
+| C1 | A `reasoning` part | A fold, summary = its first sentence; the newest ten keep their own | M: open state survives every render; opening one does not move the reader's line. **Fixed on chat-v2** (1.62.14): a trace's fold reads its own key and is drawn open |
+| C2 | Older reasoning / older trace entries | One "N earlier reasoning" / "Older entries (N)" fold | M: contents kept, key stable, opening it does not close anything else; P: the trace archive ignored its key until chat-v2 (1.62.14); the message archive honours it, but a message fold that rolls into the archive still loses its own key, which reads as "the chat collapsed my history" |
 | C3 | Loaded instructions | One line + fold with the file's text | M: one line in the chat; the path is in the tooltip; the text is behind it |
 | C4 | A tool card | Detail: input, output, error, exit code | M: stays open across renders; body is `<pre>`; failures colour the body, not the whole card |
 | C5 | A browser group | Rows of calls | M: open state survives; P: its key is positional (`browser-group-N`), not the calls' own ids, so it only survives while the whole turn renders identically |
 | C6 | A permission diff | "N files · +A −D" + patch | M: closed by default; opening does not move the reader |
-| C7 | A finished trace | Its fold: role · task · title · took · files · compacted ×N · looped ×N · steered | M: opening it stays open across the next event, and the line says enough that it does not need opening; P: the fold has no key and no `open` state, so the next render shuts it |
+| C7 | A finished trace | Its fold: role · task · title · took · files · compacted ×N · looped ×N · steered | M: opening it stays open across the next event, and the line says enough that it does not need opening; P: the fold had no key and no `open` state, so the next render shut it — fixed on chat-v2 (1.62.14) |
 
 ### D. Cards
 
@@ -282,6 +282,12 @@ The mapping is the contract — each row lands in at least one scenario:
 | S15 | E1, E3, E4, E7 |
 | S16 | K6 |
 | S17 | B4, B5, B6 |
+
+The player exists: `tests/scenario-player.mjs` applies a scenario to the page's own
+renderer with no server and no browser, and `tests/scenario.test.mjs` holds the first case
+(`tests/scenarios/S1-folds.json`) — every fold the operator opened stays open across the
+next update. It fails on the renderer before 1.62.14 and passes after it, which is how we
+know the harness can see the thing it is for.
 
 Every scenario runs at: normal speed, 10× speed, and paused on each frame boundary
 (for screenshots). Each produces a screenshot pair (old/new) at 1280 and 1600, and the

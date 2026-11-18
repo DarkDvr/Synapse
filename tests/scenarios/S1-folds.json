@@ -1,0 +1,247 @@
+{
+  "name": "S1 — nothing the operator opened closes",
+  "why": "The operator opens a reasoning archive, an older step history, one reasoning fold and a finished trace. Every later update — a new step, the trace finishing — must leave them open (18 Nov: \"the chat collapses my history\").",
+  "steps": [
+    {
+      "do": "messages",
+      "messages": [
+        {
+          "id": "m1",
+          "type": "assistant",
+          "created": 1,
+          "completed": 0,
+          "parts": [
+            {
+              "type": "reasoning",
+              "text": "Architect thought 1: the plan holds, and the next step follows from it."
+            },
+            {
+              "type": "reasoning",
+              "text": "Architect thought 2: the plan holds, and the next step follows from it."
+            },
+            {
+              "type": "reasoning",
+              "text": "Architect thought 3: the plan holds, and the next step follows from it."
+            },
+            {
+              "type": "reasoning",
+              "text": "Architect thought 4: the plan holds, and the next step follows from it."
+            },
+            {
+              "type": "reasoning",
+              "text": "Architect thought 5: the plan holds, and the next step follows from it."
+            },
+            {
+              "type": "reasoning",
+              "text": "Architect thought 6: the plan holds, and the next step follows from it."
+            },
+            {
+              "type": "reasoning",
+              "text": "Architect thought 7: the plan holds, and the next step follows from it."
+            },
+            {
+              "type": "reasoning",
+              "text": "Architect thought 8: the plan holds, and the next step follows from it."
+            },
+            {
+              "type": "reasoning",
+              "text": "Architect thought 9: the plan holds, and the next step follows from it."
+            },
+            {
+              "type": "reasoning",
+              "text": "Architect thought 10: the plan holds, and the next step follows from it."
+            },
+            {
+              "type": "reasoning",
+              "text": "Architect thought 11: the plan holds, and the next step follows from it."
+            },
+            {
+              "type": "reasoning",
+              "text": "Architect thought 12: the plan holds, and the next step follows from it."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "do": "open",
+      "key": "reasoning:m1"
+    },
+    {
+      "do": "render"
+    },
+    {
+      "do": "trace",
+      "trace": {
+        "key": "k1",
+        "dir": "F:/scenario",
+        "role": "coder-1",
+        "task": "t1",
+        "startedAt": 1,
+        "notes": [
+          {
+            "at": 10,
+            "text": "step 0",
+            "tool": {
+              "name": "shell",
+              "target": "npm run 0"
+            }
+          },
+          {
+            "at": 11,
+            "text": "step 1",
+            "tool": {
+              "name": "shell",
+              "target": "npm run 1"
+            }
+          },
+          {
+            "at": 12,
+            "text": "step 2",
+            "tool": {
+              "name": "shell",
+              "target": "npm run 2"
+            }
+          },
+          {
+            "at": 13,
+            "text": "step 3",
+            "tool": {
+              "name": "shell",
+              "target": "npm run 3"
+            }
+          },
+          {
+            "at": 14,
+            "text": "step 4",
+            "tool": {
+              "name": "shell",
+              "target": "npm run 4"
+            }
+          },
+          {
+            "at": 15,
+            "text": "step 5",
+            "tool": {
+              "name": "shell",
+              "target": "npm run 5"
+            }
+          }
+        ],
+        "reasons": [
+          {
+            "at": 100,
+            "text": "Coder thought 1: keep the change small and prove it."
+          },
+          {
+            "at": 110,
+            "text": "Coder thought 2: keep the change small and prove it."
+          },
+          {
+            "at": 120,
+            "text": "Coder thought 3: keep the change small and prove it."
+          },
+          {
+            "at": 130,
+            "text": "Coder thought 4: keep the change small and prove it."
+          },
+          {
+            "at": 140,
+            "text": "Coder thought 5: keep the change small and prove it."
+          },
+          {
+            "at": 150,
+            "text": "Coder thought 6: keep the change small and prove it."
+          },
+          {
+            "at": 160,
+            "text": "Coder thought 7: keep the change small and prove it."
+          },
+          {
+            "at": 170,
+            "text": "Coder thought 8: keep the change small and prove it."
+          },
+          {
+            "at": 180,
+            "text": "Coder thought 9: keep the change small and prove it."
+          },
+          {
+            "at": 190,
+            "text": "Coder thought 10: keep the change small and prove it."
+          },
+          {
+            "at": 200,
+            "text": "Coder thought 11: keep the change small and prove it."
+          },
+          {
+            "at": 210,
+            "text": "Coder thought 12: keep the change small and prove it."
+          }
+        ],
+        "marks": [],
+        "compactions": 0,
+        "loops": 0
+      }
+    },
+    {
+      "do": "render"
+    },
+    {
+      "do": "open",
+      "key": "k1:older"
+    },
+    {
+      "do": "open",
+      "key": "k1:r120"
+    },
+    {
+      "do": "note",
+      "key": "k1",
+      "note": {
+        "at": 60,
+        "text": "step 6",
+        "tool": {
+          "name": "read",
+          "target": "src/app.js"
+        }
+      }
+    },
+    {
+      "do": "render"
+    },
+    {
+      "do": "trace-update",
+      "key": "k1",
+      "patch": {
+        "finishedAt": 999,
+        "ms": 5000,
+        "files": 3
+      }
+    },
+    {
+      "do": "render"
+    },
+    {
+      "do": "open",
+      "key": "k1:fold"
+    },
+    {
+      "do": "render"
+    },
+    {
+      "do": "note",
+      "key": "k1",
+      "note": {
+        "at": 70,
+        "text": "step 7",
+        "tool": {
+          "name": "shell",
+          "target": "npm test"
+        }
+      }
+    },
+    {
+      "do": "render"
+    }
+  ]
+}
