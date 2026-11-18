@@ -44,6 +44,12 @@ export function applyStep(state, step) {
     case 'messages':
       state.messages = (step.messages || []).map((m) => ({ ...m, created: stamp(m.created) }));
       return;
+    case 'parts': {
+      const message = (state.messages || []).find((m) => m.id === step.id);
+      if (!message) throw new Error(`scenario: no message "${step.id}" to grow`);
+      message.parts = [...(message.parts || []), ...(step.add || [])];
+      return;
+    }
     case 'trace':
       state.traces.set(step.trace.key, step.trace);
       return;

@@ -1,0 +1,253 @@
+{
+  "name": "S5 — a change above the reader does not move the line they are reading",
+  "why": "A turn keeps writing while the operator reads back through it. When a step above them grows — a tool call lands, a card gains a line — everything below it shifts down, and the line they were on walks away. The old chat re-renders the whole conversation and has nothing to hold that line with; the new one captures the first visible block and puts it back.",
+  "steps": [
+    {
+      "do": "messages",
+      "messages": [
+        {
+          "id": "m1",
+          "type": "user",
+          "created": 1000,
+          "text": "Message 1: one more thing to look at."
+        },
+        {
+          "id": "m2",
+          "type": "assistant",
+          "created": 2000,
+          "completed": 2500,
+          "parts": [
+            {
+              "type": "text",
+              "text": "Report 2. Two lines of words so the conversation is tall enough to scroll in, and every post has a real height."
+            }
+          ]
+        },
+        {
+          "id": "m3",
+          "type": "user",
+          "created": 3000,
+          "text": "Message 3: one more thing to look at."
+        },
+        {
+          "id": "m4",
+          "type": "assistant",
+          "created": 4000,
+          "completed": 4500,
+          "parts": [
+            {
+              "type": "text",
+              "text": "Report 4. Two lines of words so the conversation is tall enough to scroll in, and every post has a real height."
+            }
+          ]
+        },
+        {
+          "id": "m5",
+          "type": "user",
+          "created": 5000,
+          "text": "Message 5: one more thing to look at."
+        },
+        {
+          "id": "m6",
+          "type": "assistant",
+          "created": 6000,
+          "completed": 6500,
+          "parts": [
+            {
+              "type": "text",
+              "text": "Report 6. Two lines of words so the conversation is tall enough to scroll in, and every post has a real height."
+            }
+          ]
+        },
+        {
+          "id": "m7",
+          "type": "user",
+          "created": 7000,
+          "text": "Message 7: one more thing to look at."
+        },
+        {
+          "id": "m8",
+          "type": "assistant",
+          "created": 8000,
+          "completed": 8500,
+          "parts": [
+            {
+              "type": "text",
+              "text": "Report 8. Two lines of words so the conversation is tall enough to scroll in, and every post has a real height."
+            }
+          ]
+        },
+        {
+          "id": "m9",
+          "type": "user",
+          "created": 9000,
+          "text": "Message 9: one more thing to look at."
+        },
+        {
+          "id": "m10",
+          "type": "assistant",
+          "created": 10000,
+          "completed": 10500,
+          "parts": [
+            {
+              "type": "text",
+              "text": "Report 10. Two lines of words so the conversation is tall enough to scroll in, and every post has a real height."
+            }
+          ]
+        },
+        {
+          "id": "m11",
+          "type": "user",
+          "created": 11000,
+          "text": "Message 11: one more thing to look at."
+        },
+        {
+          "id": "m12",
+          "type": "assistant",
+          "created": 12000,
+          "completed": 12500,
+          "parts": [
+            {
+              "type": "text",
+              "text": "Report 12. Two lines of words so the conversation is tall enough to scroll in, and every post has a real height."
+            }
+          ]
+        },
+        {
+          "id": "m13",
+          "type": "user",
+          "created": 13000,
+          "text": "Message 13: one more thing to look at."
+        },
+        {
+          "id": "m14",
+          "type": "assistant",
+          "created": 14000,
+          "completed": 14500,
+          "parts": [
+            {
+              "type": "text",
+              "text": "Report 14. Two lines of words so the conversation is tall enough to scroll in, and every post has a real height."
+            }
+          ]
+        },
+        {
+          "id": "m15",
+          "type": "user",
+          "created": 15000,
+          "text": "Message 15: one more thing to look at."
+        },
+        {
+          "id": "m16",
+          "type": "assistant",
+          "created": 16000,
+          "completed": 16500,
+          "parts": [
+            {
+              "type": "text",
+              "text": "Report 16. Two lines of words so the conversation is tall enough to scroll in, and every post has a real height."
+            }
+          ]
+        },
+        {
+          "id": "m17",
+          "type": "user",
+          "created": 17000,
+          "text": "Message 17: one more thing to look at."
+        },
+        {
+          "id": "m18",
+          "type": "assistant",
+          "created": 18000,
+          "completed": 18500,
+          "parts": [
+            {
+              "type": "text",
+              "text": "Report 18. Two lines of words so the conversation is tall enough to scroll in, and every post has a real height."
+            }
+          ]
+        },
+        {
+          "id": "m19",
+          "type": "user",
+          "created": 19000,
+          "text": "Message 19: one more thing to look at."
+        },
+        {
+          "id": "m20",
+          "type": "assistant",
+          "created": 20000,
+          "completed": 20500,
+          "parts": [
+            {
+              "type": "text",
+              "text": "Report 20. Two lines of words so the conversation is tall enough to scroll in, and every post has a real height."
+            }
+          ]
+        },
+        {
+          "id": "m21",
+          "type": "user",
+          "created": 21000,
+          "text": "Message 21: one more thing to look at."
+        },
+        {
+          "id": "m22",
+          "type": "assistant",
+          "created": 22000,
+          "completed": 22500,
+          "parts": [
+            {
+              "type": "text",
+              "text": "Report 22. Two lines of words so the conversation is tall enough to scroll in, and every post has a real height."
+            }
+          ]
+        },
+        {
+          "id": "m23",
+          "type": "user",
+          "created": 23000,
+          "text": "Message 23: one more thing to look at."
+        },
+        {
+          "id": "m24",
+          "type": "assistant",
+          "created": 24000,
+          "completed": 24500,
+          "parts": [
+            {
+              "type": "text",
+              "text": "Report 24. Two lines of words so the conversation is tall enough to scroll in, and every post has a real height."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "do": "render"
+    },
+    {
+      "do": "scrollTo",
+      "fraction": 0.4
+    },
+    {
+      "do": "parts",
+      "id": "m2",
+      "add": [
+        {
+          "type": "tool",
+          "name": "shell",
+          "status": "completed",
+          "input": {
+            "command": "npm test"
+          },
+          "output": "ok — 41 tests",
+          "failed": false
+        }
+      ]
+    },
+    {
+      "do": "render"
+    }
+  ]
+}

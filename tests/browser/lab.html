@@ -15,10 +15,12 @@
   <style>
     html, body { margin: 0; height: 100%; background: #151619; }
     body { color: var(--text); }
-    #lab { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 10px; box-sizing: border-box; height: 100%; }
-    .lab-pane { position: relative; min-width: 0; height: 100%; }
-    .lab-pane .chat-dock { display: block; height: 100%; }
-    .lab-pane .chat-scroll { height: 100%; }
+    #lab { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: minmax(0, 1fr); gap: 12px; padding: 10px; box-sizing: border-box; height: 100%; }
+    /* The app's own rules for the dock are scoped to `body[data-view]` and win on a plain
+       class, so these carry the id: the lab needs a fixed box, and that is the whole point. */
+    #lab .lab-pane { position: relative; min-width: 0; min-height: 0; height: 100%; overflow: hidden; }
+    #lab .lab-pane .chat-dock { display: block; height: 100%; }
+    #lab .lab-pane .chat-scroll { height: 100%; }
     .lab-label { position: absolute; z-index: 5; top: 2px; right: 6px; font: 600 10px/1.4 var(--mono, monospace); letter-spacing: .08em; color: #82868e; }
   </style>
 </head>

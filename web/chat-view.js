@@ -16,6 +16,12 @@ import { formatBytes, progressBar, downloadLabel } from './downloads.js';
 /** HH:MM, in the operator's own 24-hour clock. */
 const CLOCK = (at) => new Date(Number(at) || 0).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
 
+/** Whitespace collapsed: the text of a node is compared across repaints. */
+const squash = (text) => String(text || '').replace(/\s+/g, ' ').trim();
+
+/** Two lines: the same window the chat uses for "at the end". */
+const CHAT_FOLLOW_SLACK = 48;
+
 const el = (tag, className = '', text = '') => {
   const node = document.createElement(tag);
   if (className) node.className = className;
@@ -496,7 +502,46 @@ export function createChatView(host) {
     return node;
   }
 
+  /**
+   * The reader's line, captured before an update.
+   *
+   * The first thing visible in the box, and where it sits in the *content* (not the
+   * viewport): the offset survives the box resizing, a viewport position does not. If the
+   * update adds or removes anything above it, that number is what has to come back
+   * unchanged -- otherwise the words slide under the operator while they read (18 Nov).
+   */
+  function captureAnchor() {
+    const box = host.getBoundingClientRect();
+    const top = box.top + 2;
+    for (const node of host.querySelectorAll('.msg, .trace, .trace-line, .chat-alarm, .chat-error, .tool-card')) {
+      const rect = node.getBoundingClientRect();
+      if (rect.bottom <= top) continue;
+      return {
+        text: squash(node.textContent).slice(0, 40),
+        offset: rect.top - box.top + host.scrollTop,
+      };
+    }
+    return null;
+  }
+
+  /** Put it back: the same words at the same content offset, whatever moved above them. */
+  function restoreAnchor(anchor) {
+    if (!anchor) return;
+    const box = host.getBoundingClientRect();
+    for (const node of host.querySelectorAll('.msg, .trace, .trace-line, .chat-alarm, .chat-error, .tool-card')) {
+      if (!squash(node.textContent).startsWith(anchor.text)) continue;
+      const now = node.getBoundingClientRect().top - box.top + host.scrollTop;
+      const delta = now - anchor.offset;
+      if (Math.abs(delta) >= 1) host.scrollTop += delta;
+      return;
+    }
+  }
+
   function update(model) {
+    // At the end of the conversation the reader is following it: the box stays at the end.
+    // Anywhere else they are reading, and the line they are on is the contract.
+    const following = host.scrollHeight - host.scrollTop - host.clientHeight <= CHAT_FOLLOW_SLACK;
+    const anchor = following ? null : captureAnchor();
     const wanted = [];
     if (model.handover) wanted.push(paint({ ...model.handover, key: 'compact-post' }));
     for (const item of model.items || []) wanted.push(paint(item));
@@ -518,6 +563,8 @@ export function createChatView(host) {
 
     host.classList.toggle('is-empty', wanted.length === 0);
     host.parentElement?.classList.toggle('has-history', wanted.length > 0);
+    if (following) host.scrollTop = host.scrollHeight;
+    else restoreAnchor(anchor);
   }
 
   return { update, nodes: made };

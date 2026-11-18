@@ -38,6 +38,37 @@ const idOf = (node) => {
   return ids.get(node);
 };
 
+const squash = (text) => String(text || '').replace(/\s+/g, ' ').trim();
+
+/**
+ * The first thing visible in a panel, and where it sits in the *window*.
+ *
+ * The viewport offset is the honest measure: the reader is looking at a place on the
+ * screen, and if that place moves, the words they were reading moved. A content offset
+ * changes whenever anything above grows — that is geometry, not movement.
+ */
+const anchorOf = (host) => {
+  const box = host.getBoundingClientRect();
+  const top = box.top + 2;
+  for (const node of host.querySelectorAll('.msg, .trace, .trace-line, .tool-card')) {
+    const rect = node.getBoundingClientRect();
+    if (rect.bottom <= top) continue;
+    return { text: squash(node.textContent).slice(0, 40), at: Math.round(rect.top - box.top) };
+  }
+  return null;
+};
+
+/** How far that same text moved on screen since the anchor was taken. Zero is the answer. */
+const movedSince = (host, anchor) => {
+  if (!anchor) return null;
+  const box = host.getBoundingClientRect();
+  for (const node of host.querySelectorAll('.msg, .trace, .trace-line, .tool-card')) {
+    if (!squash(node.textContent).startsWith(anchor.text)) continue;
+    return Math.round(node.getBoundingClientRect().top - box.top - anchor.at);
+  }
+  return null;
+};
+
 const shape = (host) => ({
   text: host.textContent.replace(/\s+/g, ' ').trim(),
   posts: host.querySelectorAll('.msg').length,
@@ -51,6 +82,9 @@ const shape = (host) => ({
 
 /** Draw both, and answer how they differ this frame. */
 function frame(step, model) {
+  // Where the reader is, before anything moves.
+  const anchorOld = anchorOf(oldHost);
+  const anchorNew = anchorOf(newHost);
   state.renderSig = '';
   renderTranscript();
   view.update(model);
@@ -66,6 +100,8 @@ function frame(step, model) {
     // The same characters: a block join is a space in one renderer and a newline in the
     // other, which reads the same and is not a difference worth chasing.
     sameText: a.text.replace(/\s+/g, '') === b.text.replace(/\s+/g, ''),
+    // A change above the reader must not move the line they are on. Zero is the answer.
+    moved: { old: movedSince(oldHost, anchorOld), new: movedSince(newHost, anchorNew) },
   };
 }
 
@@ -81,6 +117,10 @@ window.__labRun = async (name, only) => {
   view.update(buildChat(state));
   const frames = [];
   for (const [i, step] of scenario.steps.entries()) {
+    if (step.do === 'scrollTo') {
+      window.__labScrollTo(step.fraction);
+      continue;
+    }
     applyStep(state, step);
     if (step.do === 'open' || step.do === 'close') continue;
     frames.push(frame(i, buildChat(state)));
