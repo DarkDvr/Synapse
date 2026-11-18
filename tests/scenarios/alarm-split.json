@@ -1,0 +1,25 @@
+{
+  "name": "S3 — an alarm stays where it happened",
+  "why": "A turn is one post, merged from the engine's one-message-per-step output. An alarm that arrives between two steps must split the post where it landed, or it slides down with the turn and ends up under the whole thing (15 Nov). Nothing else in the scenario changes: this is a line, in its moment.",
+  "steps": [
+    {
+      "do": "messages",
+      "messages": [
+        { "id": "m1", "type": "assistant", "created": "now-9000", "completed": "now-8000", "parts": [{ "type": "text", "text": "first step of the turn" }] },
+        { "id": "m2", "type": "assistant", "created": "now-2000", "completed": "now-1500", "parts": [{ "type": "text", "text": "second step of the turn" }] }
+      ]
+    },
+    {
+      "do": "alarm",
+      "alarm": {
+        "at": "now-5000",
+        "prohibited": true,
+        "action": "shell",
+        "paths": ["C:/Windows/System32/drivers/etc/hosts"],
+        "note": "by Coder 1 · t4",
+        "sessionId": "ses_scenario"
+      }
+    },
+    { "do": "render" }
+  ]
+}

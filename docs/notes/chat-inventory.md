@@ -289,6 +289,11 @@ renderer with no server and no browser, and `tests/scenario.test.mjs` holds the 
 next update. It fails on the renderer before 1.62.14 and passes after it, which is how we
 know the harness can see the thing it is for.
 
+Three cases exist so far. Two of them are locks rather than faults — they pin behaviour the
+chat already gets right, so the rebuild cannot lose it quietly: `download-placement.json`
+(a saved download is drawn inside the post it happened in) and `alarm-split.json` (a
+prohibition splits the turn it arrived in, instead of sliding to the end of it).
+
 Every scenario runs at: normal speed, 10× speed, and paused on each frame boundary
 (for screenshots). Each produces a screenshot pair (old/new) at 1280 and 1600, and the
 numbers the layout audit already knows how to measure: left edges, baselines, overlaps,
@@ -340,7 +345,85 @@ Answered by the operator on 18 Nov; these are the design, not options.
 
 ---
 
-## 7. Done means
+## 7. The item model — what the new renderer is given
+
+The renderer is the easy half. The hard half is turning `state` (messages, traces, forms,
+downloads, alarms, leases) into something a renderer can draw without knowing the rules.
+That derivation is the **item model**: a pure function of the page's state and the
+operator's open folds.
+
+```js
+buildChat(state) -> { items: Item[] }
+```
+
+It does grouping, windowing, ordering and keying — every rule in this document that is not
+a pixel. The renderer then only walks the list.
+
+### The shapes
+
+| `kind` | Fields | Drawn as |
+|---|---|---|
+| `post` | `key, speaker` (you, architect, synapse), `at, time, state` (live, done, error), `blocks[]` | A post: rule, role, time, body (Post, §1) |
+| `trace` | `key, role, task, title, at, state` (live, folded), `blocks[]` | A trace post variant: head plus timeline, folded to one line when done |
+| `line` | `key, line` (compact, waiting, lease, alarm, refusal, error, loop, steer), `at, props` | One line of status (Line, §1) |
+
+A `post` holds `blocks`, exactly four kinds:
+
+| `block.kind` | Fields | Drawn as |
+|---|---|---|
+| `prose` | `key, text, answer: boolean` | Markdown; `answer` is the green answer panel |
+| `fold` | `key, tone` (reasoning, archive, loaded, refusal, trace), `summary, body, open: boolean` | A disclosure; `open` comes from the model, which reads `state.open` |
+| `card` | `key, card` (tool, browser, question, download, permission), `props, open: boolean` | A card: head, optional body |
+| `stream` | `key, text, live: boolean` | The live pane — one text node, no animation of its own |
+
+### The keys
+
+Stable for the page's life, and never positional:
+
+| Thing | Key |
+|---|---|
+| A message's part | `<messageId>:<partIndex>` (assigned once, before grouping) |
+| A reasoning archive | `reasoning:<messageId>` |
+| A trace's own fold | `<traceKey>:fold` |
+| A trace's older entries | `<traceKey>:older` |
+| A trace's reasoning block | `<traceKey>:r<at>` |
+| A download | `download:<id>` |
+| A permission | `perm:<requestId>` |
+| An alarm | `alarm:<at>:<action>` |
+| The compact post | `compact-post` |
+
+Two rules follow, and they are the whole point: **a key never changes because a neighbour
+appeared**, and **`open` is read from the key, not remembered by the renderer**.
+
+### The rules the model owns
+
+1. **One post per turn.** Consecutive assistant messages merge; a prohibited alarm between
+   two steps breaks the merge there; completion is the last merged message's completion.
+2. **The pane belongs to the newest assistant post**, even when a line arrived after it.
+3. **Downloads sit in the post whose window contains them** (`[post.at, next.at)`), and a
+   live one lands in the newest.
+4. **A line sits at its own `at`**, never pinned to the end; a compaction and a loop mark
+   are lines, not footers.
+5. **A trace is a post with a role** — same spine, same blocks; its timeline is ordered by
+   `at`, with one `archive` fold for everything older than the last four steps and ten
+   reasoning blocks.
+6. **Nothing is sorted by accident**: `at`, then the key as a tiebreak, so two runs of the
+   same scenario produce byte-identical output.
+
+### What the model must never do
+
+No HTML, no DOM, no state mutation, no timers. It takes the state and the open set and
+returns a list. That is what lets the scenario harness assert the *rules* (this item, that
+key, this order) separately from the pixels, and what lets one model drive both renderers
+while the old one is still on screen.
+
+### How it is proven
+
+The scenarios in `tests/scenarios/` feed `state`; `tests/scenario.test.mjs` asserts the
+rendered frames. When the model exists, the same files get a second assertion — the item
+list — and a disagreement between the two is a bug in one of them, not a matter of taste.
+
+## 8. Done means
 
 - Every row above has a scenario and its assertions pass on the new renderer.
 - Every scenario also passes on the old renderer, or the difference is written down

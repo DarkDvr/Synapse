@@ -10,6 +10,7 @@
 // over the frames this returns (tests/scenario.test.mjs holds the cases; the scenario
 // files are in tests/scenarios/). Fed by hand now, by a recording later.
 import { installPage } from './fake-page.mjs';
+import { dirKey } from '../web/run-view.js';
 
 /** The page state a transcript render reads. Reset before every scenario. */
 function reset(state) {
@@ -33,10 +34,20 @@ function reset(state) {
   state.compacting = false;
 }
 
+/**
+ * A scenario says `"now-5000"` where a real timestamp matters — a download is only shown
+ * for ten minutes after it ends, and a message's window is measured from its own clock.
+ * Everything else is a plain number.
+ */
+const stamp = (value) => {
+  if (typeof value !== 'string' || !value.startsWith('now')) return value;
+  return Date.now() + (Number(value.slice(3)) || 0);
+};
+
 function apply(state, step) {
   switch (step.do) {
     case 'messages':
-      state.messages = step.messages || [];
+      state.messages = (step.messages || []).map((m) => ({ ...m, created: stamp(m.created) }));
       break;
     case 'trace':
       state.traces.set(step.trace.key, step.trace);
@@ -53,8 +64,17 @@ function apply(state, step) {
       trace.notes = [...(trace.notes || []), step.note];
       break;
     }
+    case 'download': {
+      const d = {
+        ...step.download,
+        startedAt: stamp(step.download.startedAt),
+        endedAt: stamp(step.download.endedAt),
+      };
+      state.downloads.set(`${dirKey(d.dir)}\u0000${d.id}`, d);
+      break;
+    }
     case 'alarm':
-      state.alarms.push(step.alarm);
+      state.alarms.push({ ...step.alarm, at: stamp(step.alarm.at) });
       break;
     case 'lease':
       state.leases.set(step.key, step.lease);

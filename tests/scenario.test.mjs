@@ -1,16 +1,22 @@
 // The first scenario, and the promise it checks: nothing the operator opened closes.
 //
 // The player (./scenario-player.mjs) feeds a scenario to the page's own renderer with no
-// server and no browser. This case is the operator's 18 Nov complaint — a reasoning
+// server and no browser. The first case is the operator's 18 Nov complaint — a reasoning
 // archive, an older step history, one reasoning fold and a finished trace, each opened,
 // then the conversation updates. Every one must still be open in every later frame.
+//
+// The other two lock the two placement rules the chat already keeps, so the rebuild cannot
+// quietly lose them: a download is drawn inside the post it happened in, and an alarm
+// splits the turn it arrived in instead of sliding to the end of it.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { play, foldOpen } from './scenario-player.mjs';
 
-const scenario = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'tests/scenarios/S1-folds.json'), 'utf8'));
+const read = (name) => JSON.parse(fs.readFileSync(path.join(process.cwd(), 'tests/scenarios', name), 'utf8'));
+
+const scenario = read('S1-folds.json');
 
 /** Every frame drawn after the step that opened `key` keeps it open. */
 function staysOpen(frames, steps, key) {
@@ -42,4 +48,25 @@ test('the folds were closed before the operator opened them', async () => {
       assert.equal(foldOpen(frame.html, key), false, `${key} was already open before it was clicked`);
     }
   }
+});
+
+test('a saved download is drawn inside the post it happened in', async () => {
+  const { frames } = await play(read('download-placement.json'));
+  const html = frames.at(-1).html;
+  const card = html.indexOf('report.txt');
+  const first = html.indexOf('The first report');
+  const second = html.indexOf('operator reply in between');
+  assert.ok(card > 0, 'the download card was not drawn at all');
+  assert.ok(card > first, 'the card came before the post it belongs to');
+  assert.ok(card < second, 'the card drifted past the next post');
+});
+
+test('an alarm splits the turn it arrived in, rather than sliding to its end', async () => {
+  const { frames } = await play(read('alarm-split.json'));
+  const html = frames.at(-1).html;
+  const first = html.indexOf('first step of the turn');
+  const alarm = html.indexOf('PROHIBITED');
+  const second = html.indexOf('second step of the turn');
+  assert.ok(first >= 0 && alarm > first, 'the alarm is missing or above the first step');
+  assert.ok(second > alarm, 'the second step came before the alarm: the turn was not split');
 });

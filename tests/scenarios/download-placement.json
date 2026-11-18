@@ -1,0 +1,29 @@
+{
+  "name": "S2 — a download belongs to the post it happened in",
+  "why": "A saved download is not a transcript entry of its own: it sits inside the post whose time window contains the moment it finished, within that post's rule, and scrolls with it (1.62.9). A card appended after the conversation would drift away from the work it belongs to.",
+  "steps": [
+    {
+      "do": "messages",
+      "messages": [
+        { "id": "m1", "type": "assistant", "created": "now-9000", "completed": "now-8000", "parts": [{ "type": "text", "text": "The first report — the browser is fetching the file." }] },
+        { "id": "u1", "type": "user", "created": "now-6000", "text": "operator reply in between" },
+        { "id": "m2", "type": "assistant", "created": "now-2000", "completed": "now-1500", "parts": [{ "type": "text", "text": "second message, written after the file arrived" }] }
+      ]
+    },
+    {
+      "do": "download",
+      "download": {
+        "id": "d1",
+        "dir": "F:/scenario",
+        "name": "report.txt",
+        "state": "completed",
+        "received": 2048,
+        "total": 2048,
+        "path": "C:/Users/operator/Downloads/report.txt",
+        "startedAt": "now-8000",
+        "endedAt": "now-7000"
+      }
+    },
+    { "do": "render" }
+  ]
+}
