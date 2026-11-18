@@ -162,6 +162,10 @@ export const state = {
   // the DOM or it dies with the next render.
   open: new Set(),
   renderSig: '',
+  // A render was held back because the operator is holding a selection in the chat
+  // (see selectionInChat in web/transcript.js). Cleared when the selection is
+  // released, and the conversation catches up then.
+  renderPaused: false,
   // A provider failure shown on a role's card, keyed `${dirKey}|${role}`: red
   // *text*, never a border, and cleared when that role works again.
   roleErrors: new Map(),

@@ -17,7 +17,7 @@ import { toast } from './toast.js';
 import { askHeadNote, answerTimeline } from './ask-note.js';
 import { placeAskHost } from './chat-scroll.js';
 import { currentForm } from './run-view.js';
-import { renderTranscript } from './transcript.js';
+import { renderTranscript, forceNextRender } from './transcript.js';
 import { renderComposer } from './composer.js';
 
 const missing = (name) => () => {
@@ -193,6 +193,9 @@ export function renderAskPanel() {
   // with the report nowhere, which is the whole thing this placement exists to prevent
   // (18 Nov, second time). One fetch, then place.
   requestAnimationFrame(async () => {
+    // A held selection pauses renders, but a question outranks one: this render has to
+    // happen or the report is not in the DOM to be placed above the panel.
+    forceNextRender();
     try {
       await wired.loadMessages();
     } catch { /* a stale chat still gets the question; it is the reason to answer */ }

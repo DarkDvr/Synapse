@@ -3657,3 +3657,23 @@ body.is-disconnected .app-shell { filter: blur(2px) brightness(0.45); pointer-ev
    row keeps its own centring. */
 .msg.user.is-steer .msg-role { vertical-align: baseline; }
 .msg.user .msg-steer { vertical-align: baseline; }
+/* ── the right-click menu ─────────────────────────────────────────────────
+   The page's own, and only about text: Copy and Select All, Cut/Paste in a
+   field. Right-click was switched off on 13 Nov because the menu it opened
+   everywhere was the project list — which took copy out of the chat too
+   (18 Nov). It wears the model menu's surface, so it belongs to this window
+   rather than to the browser. */
+.ctx-menu {
+  position: fixed; z-index: 90;
+  background: #1b1d21; border: 1px solid var(--line); border-radius: 8px;
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.55);
+  padding: 3px; min-width: 136px;
+}
+.ctx-item {
+  display: block; width: 100%; text-align: left;
+  padding: 5px 9px; border: 0; border-radius: 5px;
+  background: transparent; color: var(--text);
+  font: inherit; font-size: 12px; line-height: 1.3; cursor: pointer;
+}
+.ctx-item:hover:not(:disabled) { background: var(--violet-soft); }
+.ctx-item:disabled { opacity: 0.4; cursor: default; }

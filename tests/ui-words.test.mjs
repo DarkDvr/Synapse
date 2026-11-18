@@ -691,16 +691,21 @@ contract('a compaction is a line in the chat, in the trace format Multi uses', a
   assert.match(running, /Compacting ×2/, 'the second one, and in the present tense');
 });
 
-// The operator's three UI rulings of 13 Nov, held as source assertions because they are
-// browser behaviours a unit test cannot press.
-contract('right-click is off, and no field offers prefill', () => {
+// The operator's UI rulings, held as source assertions because they are browser
+// behaviours a unit test cannot press. Right-click was refused on 13 Nov (the menu it
+// opened everywhere was the project list) and restored on 18 Nov as the page's own text
+// menu — Copy, Select All, and Cut/Paste in a field. The host's default menu stays off,
+// so ours is the only one; and no field offers prefill, either day's ruling.
+contract('right-click is the page’s own menu, and no field offers prefill', () => {
   const js = fs.readFileSync(path.join(ROOT, 'web', 'app.js'), 'utf8');
-  assert.match(js, /document\.addEventListener\('contextmenu', \(e\) => e\.preventDefault\(\)\)/, 'right-click is refused');
+  assert.match(js, /installContextMenu\(\)/, 'the page installs its own menu');
+  assert.match(js, /from '\.\/context-menu\.js'/, 'and the menu is its own module');
+  assert.doesNotMatch(js, /document\.addEventListener\('contextmenu', \(e\) => e\.preventDefault\(\)\)/, 'the blanket refusal is gone');
   assert.match(js, /setAttribute\('autocomplete', 'off'\)/, 'fields say no to autofill');
   assert.match(js, /fillSweep\(document\)/, 'and the sweep runs at boot');
   const shell = fs.readFileSync(path.join(ROOT, 'shell', 'MainWindow.xaml.cs'), 'utf8');
   assert.match(shell, /IsGeneralAutofillEnabled = false/, 'the host stops saving form data');
-  assert.match(shell, /AreDefaultContextMenusEnabled = false/, 'and its own right-click menu');
+  assert.match(shell, /AreDefaultContextMenusEnabled = false/, 'and its own right-click menu stays off: the page draws that');
 });
 
 contract('the steer label sits level with its sentence', () => {

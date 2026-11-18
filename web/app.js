@@ -112,6 +112,7 @@ import {
 } from './traces.js';
 import {
   renderTranscript,
+  selectionInChat,
   toggleTool,
   attachmentImage,
   browserLine,
@@ -119,6 +120,7 @@ import {
   transcriptWiring,
 } from './transcript.js';
 import { toast } from './toast.js';
+import { installContextMenu } from './context-menu.js';
 import { paneWiring, paneToggle } from './thinking-pane.js';
 import {
   renderComposer,
@@ -2209,10 +2211,19 @@ document.addEventListener('keydown', (e) => {
     if (project) { openProjectChat(project.dataset.project); return; }
   });
 
-  // No right-click anywhere. It opened the project menu on a row and did nothing useful
-  // anywhere else, and the operator's verdict was that it can only break things (13 Nov).
-  // The ⋯ button and Shift+F10 are still the two ways to the menu.
-  document.addEventListener('contextmenu', (e) => e.preventDefault());
+  // A selection pauses the conversation: `renderTranscript` holds the render back while
+  // the operator has a range in the chat, and this is what catches it up — the moment
+  // they click away, select elsewhere, or collapse it (18 Nov).
+  document.addEventListener('selectionchange', () => {
+    if (!state.renderPaused || selectionInChat()) return;
+    state.renderPaused = false;
+    renderTranscript();
+  });
+  // Right-click is the page's own menu now: Copy and Select All, and Cut/Paste in a
+  // field — never the browser's Print/Reload/Save As. It was switched off on 13 Nov
+  // because the menu it opened everywhere was the project list; that took copy with it
+  // (18 Nov). `web/context-menu.js` owns the menu; the transcript owns the selection.
+  installContextMenu();
   // Prefill and autofill off everywhere: the browser's memory of what was typed in this
   // app is not wanted, in any field — project names, addresses, paths (13 Nov).
   const noFill = (el) => {

@@ -73,9 +73,43 @@ export function alarmBreaks(messages, alarmTimes = []) {
   return breaks;
 }
 
+/**
+ * Is the operator holding a selection inside the conversation?
+ *
+ * A selection is a reader's work in progress, and this renderer replaces the whole
+ * conversation: the range dies with the nodes. Live turns rebuild on every reasoning
+ * delta, so a selection could not survive a second — the operator could not select a
+ * sentence to copy it (18 Nov). While one is held the render waits (state.renderPaused),
+ * and app.js catches the chat up when it is released.
+ */
+export function selectionInChat() {
+  const box = $('transcript');
+  const sel = window.getSelection?.();
+  if (!box || !sel || sel.isCollapsed || !sel.rangeCount) return false;
+  const node = sel.getRangeAt(0).commonAncestorContainer;
+  const el = node?.nodeType === 1 ? node : node?.parentElement;
+  return Boolean(el && box.contains(el));
+}
+
+// One render may ignore a held selection. The question panel uses it: a question
+// arriving is a stronger event than a selection, and its placement needs the report in
+// the DOM before it can be put under it.
+let renderOnce = false;
+
+/** Let the next render replace the conversation even if a selection is in it. */
+export function forceNextRender() {
+  renderOnce = true;
+}
+
 export function renderTranscript() {
   const el = $('transcript');
   if (!el) return;
+  if (!renderOnce && selectionInChat()) {
+    state.renderPaused = true;
+    return;
+  }
+  renderOnce = false;
+  state.renderPaused = false;
   toolSeq = 0;
   // Read the reader's intent BEFORE anything below can move the box. A dock that
   // shrinks makes the transcript look "scrolled up" even though nobody moved —
