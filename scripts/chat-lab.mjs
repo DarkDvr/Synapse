@@ -42,7 +42,9 @@ function copy(from, to) {
 }
 
 const runner = path.join(ROOT, 'skills', 'visual-review', 'bin', 'shot.mjs');
-const common = [runner, path.join(stage, 'lab.html'), '--widths', width, '--height', height];
+// A page's motion is part of what it looks like; the headless browser turns it off unless
+// the review asks for it. `--motion` is passed through to the shot script.
+const common = [runner, path.join(stage, 'lab.html'), '--widths', width, '--height', height, ...(args.includes('--motion') ? ['--motion'] : [])];
 
 const run = shot
   ? // A picture needs the scenario played before the capture, and a beat for layout.

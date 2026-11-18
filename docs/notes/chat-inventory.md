@@ -335,7 +335,10 @@ Answered by the operator on 18 Nov; these are the design, not options.
    You violet, Architect green, Synapse yellow, a worker's trace its own grey. The
    *structure* unifies; the colour does not (Post, §1).
 6. **Motion: 120ms**, fast but not instant (K6). Everything that appears, folds or
-   grows animates; nothing on the scroll under a live update.
+   grows animates; nothing on the scroll under a live update. A fold opens by growing its
+   body from zero and closes by shrinking it before it is taken away — measured in the lab
+   with `--motion`: closed 0 px, 60 ms in 55 px, settled 56 px. Reduced motion turns all of
+   it off, and the lab says so in every frame.
 7. **Tool cards keep one line plus expand** — and expanding and collapsing are animated
    like every other disclosure (D1–D3, C4, K6).
 8. **Text must behave like text again.** Right-click is a real menu (Copy, Select All,

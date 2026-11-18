@@ -3706,3 +3706,10 @@ body.is-disconnected .app-shell { filter: blur(2px) brightness(0.45); pointer-ev
 }
 .think-new[hidden] { display: none; }
 .think-new:hover { border-color: var(--violet-bright); color: #fff; }
+
+
+/* v2: a fold's body is a box whose height can be animated. The browser hides a closed
+   `details`' content with content-visibility, which still *measures* — so "closed" has to
+   mean display:none here, or the animation has nothing to grow from. */
+details > .fold-body { display: none; }
+details[open] > .fold-body { display: block; }

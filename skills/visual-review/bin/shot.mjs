@@ -128,6 +128,7 @@ function parseArgs(argv) {
       out.widthsGiven = true;
     } else if (a === '--height') out.height = Number.parseInt(argv[++i], 10) || 900;
     else if (a === '--audit') out.audit = true;
+  else if (a === '--motion') out.motion = true;
     else if (a === '--diff') out.diff = String(argv[++i] || '');
     else if (a === '--diff-threshold') out.diffThreshold = Number.parseInt(argv[++i], 10);
     else if (a === '--fail-over') out.failOver = Number.parseFloat(argv[++i]);
@@ -813,6 +814,10 @@ function withPage(width, job, url = target) {
         deviceScaleFactor: 1,
         mobile: false,
       });
+      // A page's own motion is part of what it looks like; the headless default hides it.
+      if (args.motion) {
+        await send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'no-preference' }] });
+      }
       const loaded = new Promise((res) => {
         loadResolve = res;
         setTimeout(res, 15000);

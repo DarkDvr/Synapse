@@ -243,25 +243,70 @@ function foldNode(item) {
   if (item.title) summary.title = String(item.title);
   summary.textContent = String(item.tone === 'reasoning' ? `Reasoning • ${item.summary || ''}` : item.summary || '');
   fold.append(summary);
+  // One wrapper, always: a fold has to have something whose height can be animated.
+  const body = el('div', `fold-body${item.format === 'pre' ? ' is-pre' : ''}`);
   if (Array.isArray(item.body)) {
-    const body = el('div', 'trace-lines');
-    for (const block of item.body) body.append(blockNode(block));
-    fold.append(body);
+    const lines = el('div', 'trace-lines');
+    for (const block of item.body) lines.append(blockNode(block));
+    body.append(lines);
   } else if (item.format === 'pre') {
     const node = el('pre');
     node.textContent = String(item.body || '');
-    fold.append(node);
+    body.append(node);
   } else {
-    const body = el('div', 'chat-post-body');
-    body.innerHTML = renderMarkdown(String(item.body || ''));
-    fold.append(body);
+    const markdown = el('div', 'chat-post-body');
+    markdown.innerHTML = renderMarkdown(String(item.body || ''));
+    body.append(markdown);
   }
-  return fold;
+  fold.append(body);
+  return animateFold(fold, summary, body);
 }
 
 // Whether each pane is following its own end. View state: the model has no opinion about
 // where the operator is looking.
 const paneFollow = new Map();
+
+/** Is the page's own motion preference off? Then every fold snaps, as the browser should. */
+const motionOff = () => Boolean(window.matchMedia?.('(prefers-reduced-motion: reduce)').matches);
+
+/**
+ * A fold that opens and closes at 120ms.
+ *
+ * `<details>` toggles instantly: its content is not rendered while it is closed, so a height
+ * transition has to be driven by hand. Opening sets `open` first and grows the body from
+ * zero; closing keeps it open, shrinks the body, and sets `open` false on the last frame —
+ * otherwise the content disappears before anything can move. The operator's click is still
+ * a click: the `toggle` event fires at the end and the state records the fold.
+ */
+function animateFold(details, summary, body) {
+  if (!summary || !body) return details;
+  summary.addEventListener('click', (event) => {
+    if (motionOff()) return;
+    event.preventDefault();
+    const opening = !details.open;
+    const start = body.getBoundingClientRect().height;
+    if (opening) details.open = true;
+    body.style.overflow = 'hidden';
+    body.style.height = `${start}px`;
+    const end = opening ? body.scrollHeight : 0;
+    // A frame between the two heights, or the browser has nothing to interpolate.
+    body.getBoundingClientRect();
+    body.style.transition = 'height 120ms ease-out';
+    body.style.height = `${end}px`;
+    let finished = false;
+    const done = () => {
+      if (finished) return;
+      finished = true;
+      body.style.transition = '';
+      body.style.height = '';
+      body.style.overflow = '';
+      if (!opening) details.open = false;
+    };
+    body.addEventListener('transitionend', done, { once: true });
+    setTimeout(done, 170);
+  });
+  return details;
+}
 
 /** Mark a node as just arrived. Only a genuinely new node gets this — a repaint is not an arrival. */
 function appear(node) {
@@ -484,7 +529,10 @@ function fillTrace(root, item) {
     // The role is its own span, the same one the old chat styles: "CODER 1" in the trace's
     // colour, the task and the figures after it in the ordinary text colour.
     summary.append(el('span', 'trace-role', label), document.createTextNode(`${rest}${took}${files}${packed}${looped}${steered}`));
-    root.replaceChildren(summary, blocks);
+    const body = el('div', 'fold-body');
+    body.append(blocks);
+    root.replaceChildren(summary, body);
+    animateFold(root, summary, body);
     return;
   }
   const line = el('div', 'trace-head');
