@@ -49,6 +49,17 @@ answering meant guessing what had been said. As a post, the answer is one scroll
   moving it. A panel taller than the chat is the one case where both cannot be shown, and
   then its head goes to the top: a list of answers with the question above the fold is
   the bug, not the fix.
+- **The report has to be in the page before the panel is placed (18 Nov, second time).**
+  The placement above assumed the report was already in `state.messages`; three things
+  could keep it out, and all three are now closed. The pending poll and the message poll
+  are separate timers, so the form can arrive a beat before the message it is about —
+  `renderAskPanel` asks for the transcript (`loadMessages()`) and only then places. The
+  transcript's "nothing changed" signature compared part *counts*, so a report that grew
+  inside a part that already existed never redrew — a live message's text length is part
+  of the signature. And two fetches in flight could land out of order, the older snapshot
+  last, putting the page back to a chat with no report in it — only the newest answer may
+  write `state.messages` (`messagesAsked`). The blocked turn has no later event to fetch
+  again, so any of the three meant the report stayed missing until the answer.
 - **Dense, not boxed.** Every answer used to be its own orange-bordered box inside an
   orange-bordered panel — too much orange, and three options took a screenful. The panel
   keeps its orange border (that is what marks it as a question), the fill is neutral, and

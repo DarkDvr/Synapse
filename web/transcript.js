@@ -156,8 +156,21 @@ export function renderTranscript() {
 
   // Nothing in the conversation changed since the last render: leave the DOM —
   // and whatever the operator has open — exactly as it is.
+  //
+  // A part *count* is not the same as "nothing changed". The Architect's report is
+  // text inside a part that already exists, so a message that grew kept the same
+  // signature and was never redrawn: on 18 Nov a question panel opened over a chat
+  // whose report had not been fetched yet, the report arrived a moment later, and it
+  // stayed invisible until something else moved. Only a live message is measured —
+  // a finished one's text cannot change, and the length is what the check is for.
+  const messageSig = (m) => {
+    const live = m.type === 'assistant' && !m.completed;
+    return (m.parts || [])
+      .map((p) => `${p.type}${live && p.type === 'text' ? `:${String(p.text || '').length}` : ''}${p.status ? `.${p.status}` : ''}`)
+      .join(',');
+  };
   const sig = hasHistory
-    ? `${showable.map((m) => `${m.id}:${m.completed || 0}:${(m.parts || []).length}`).join(',')}|${pending.length}|${state.streaming}|${traceSig()}|${alarmsHere().length}|${state.decisionSeq}|${state.downloadSeq}|${
+    ? `${showable.map((m) => `${m.id}:${m.completed || 0}:${messageSig(m)}`).join(',')}|${pending.length}|${state.streaming}|${traceSig()}|${alarmsHere().length}|${state.decisionSeq}|${state.downloadSeq}|${
         compactPost ? `${compactPost.at}:${compactPost.summary.length}` : ''
       }`
     : '';

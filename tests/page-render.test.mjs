@@ -92,6 +92,24 @@ test('a message renders its own text even when a picture is attached', () => {
   assert.ok(traceKeyOf({ dir: 'F:\\x', task: 't1' }), 'the trace key helper is usable from a test');
 });
 
+test('a report that grows inside a part is redrawn, not left at its first words', () => {
+  // The report is text inside a part that already exists, so the "nothing changed"
+  // signature must not be a part count: the count stayed the same while the report
+  // grew, and on 18 Nov it was never redrawn under a question that had just opened.
+  const messages = [
+    { id: 'm1', type: 'assistant', created: Date.now(), parts: [{ type: 'reasoning', text: 'thinking' }, { type: 'text', text: 'Done — and it ' }] },
+  ];
+  const page = reset(messages);
+  renderTranscript();
+  assert.match(page.innerHTML, /Done — and it/, 'the first words are missing');
+  messages[0] = {
+    ...messages[0],
+    parts: [{ type: 'reasoning', text: 'thinking' }, { type: 'text', text: 'Done — and it works. Both halves verified.' }],
+  };
+  renderTranscript();
+  assert.match(page.innerHTML, /Both halves verified/, 'the grown text was not redrawn');
+});
+
 test('a post with no parts says "…" only when there is nothing to show yet', () => {
   // The page opens an assistant post on the turn's first token, before the engine has
   // written any part of it. The ellipsis tells the operator "this is coming"; once the

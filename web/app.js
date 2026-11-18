@@ -794,6 +794,18 @@ function lastCompletedAt(messages = []) {
   return 0;
 }
 
+/**
+ * How many transcript fetches have been asked for. Only the newest answer may write.
+ *
+ * Two reloads are in flight all turn long (a text delta and a tool event, a poll and
+ * the question's own refresh), and the slower one carries the older snapshot. It used
+ * to land last and put the page back to a transcript that had no report in it — and
+ * with the turn blocked on a question there is no later event to fetch again, so the
+ * report stayed missing until the operator answered (18 Nov, the "question before
+ * report" they reported twice).
+ */
+let messagesAsked = 0;
+
 async function loadMessages() {
   // The chat this request is for. It can be replaced while the request is in
   // flight — a compact deletes the old chat as the new one opens — and a late
@@ -802,9 +814,12 @@ async function loadMessages() {
   // leaving the landing page a second after a successful compact.
   const id = state.sessionId;
   if (!id) return;
+  const asked = ++messagesAsked;
+  /** Is this answer still the one the page is waiting for? */
+  const current = () => state.sessionId === id && asked === messagesAsked;
   try {
     const loaded = (await api('GET', `/api/sessions/${encodeURIComponent(id)}/messages`)).messages;
-    if (state.sessionId !== id) return;
+    if (!current()) return;
     // A steer this page painted the moment it was sent is not in the engine's
     // transcript until the model has read it. Dropping it here made the operator's
     // own sentence vanish for minutes - the "no confirmation" they reported
@@ -828,7 +843,7 @@ async function loadMessages() {
     if (state.decisionsFor !== id) {
       try {
         const d = await api('GET', `/api/permissions?session=${encodeURIComponent(id)}`);
-        if (state.sessionId !== id) return;
+        if (!current()) return;
         state.permissionDecisions = new Map(
           (d.decisions || []).filter((x) => x.toolCallId).map((x) => [x.toolCallId, x]),
         );
@@ -841,6 +856,7 @@ async function loadMessages() {
     // here rather than showing an empty corner until the next turn.
     state.archCtx = lastPromptOf(state.messages) || state.archCtx;
     await loadDownloads();
+    if (!current()) return;
     updateBusyFromMessages();
   } catch (err) {
     if (/not found|404/i.test(err.message)) {
@@ -855,7 +871,7 @@ async function loadMessages() {
     }
     setEventChip('message load failed');
   }
-  if (state.sessionId !== id) return;
+  if (!current()) return;
   renderTranscript();
   // The plan is a file the Architect writes during the turn, so a message
   // refresh is exactly when it is most likely to have changed.
@@ -2515,7 +2531,7 @@ async function bootPage() {
   composerWiring({ loadMessages, refreshPending, renderCompactChip, renderTree });
   // The question post asks the app how long an answer waits, and tells it to refresh
   // the waiting cards and the rail.
-  askPanelWiring({ answerWaitSec, refreshPending, renderTree });
+  askPanelWiring({ answerWaitSec, refreshPending, renderTree, loadMessages });
   // A plan row and a role card are two views of the same worker, so the pane asks for
   // the cards' activity and the chime's "is more work coming?".
   planPaneWiring({ noteWorking, renderRoleActivity });

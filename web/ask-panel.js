@@ -27,9 +27,10 @@ const wired = {
   answerWaitSec: missing('answerWaitSec'),
   refreshPending: missing('refreshPending'),
   renderTree: missing('renderTree'),
+  loadMessages: missing('loadMessages'),
 };
 
-/** Hand this module the three things that live in app.js. Called once, at boot. */
+/** Hand this module the four things that live in app.js. Called once, at boot. */
 export function askPanelWiring(fns) {
   Object.assign(wired, fns);
 }
@@ -185,7 +186,18 @@ export function renderAskPanel() {
   // A question is the thing the run is waiting on: show it, even if the operator
   // had scrolled up to read. It is placed at the end of the chat, *under* the report
   // that raised it, so the reason is read before the question (chat-scroll.js).
-  requestAnimationFrame(() => placeAskHost(askHost()));
+  //
+  // The transcript is refreshed first. The pending poll and the message poll are two
+  // different timers, so the form can arrive a beat before the report it is about does
+  // — and a panel placed against the older chat sits under a screenful of tool cards
+  // with the report nowhere, which is the whole thing this placement exists to prevent
+  // (18 Nov, second time). One fetch, then place.
+  requestAnimationFrame(async () => {
+    try {
+      await wired.loadMessages();
+    } catch { /* a stale chat still gets the question; it is the reason to answer */ }
+    placeAskHost(askHost());
+  });
 }
 
 /**
