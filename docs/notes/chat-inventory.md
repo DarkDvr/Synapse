@@ -23,7 +23,7 @@ new feature should be a new *instance*, never a new visual language.
 | Primitive | What it is | Rules |
 |---|---|---|
 | **Post** | one speaker's block: a header line and a body | One header line: rule, role, time. The rule is the only left spine. Variants by speaker (You, Architect, Synapse) and by state (live, finished, errored) |
-| **Block** (inside a post) | the content, in time order | Exactly four kinds: **prose** (markdown), **disclosure** (a fold), **card** (tool, download, permission, question), **stream** (the live pane) |
+| **Block** (inside a post) | the content, in time order | Exactly five kinds: **prose** (markdown), **disclosure** (a fold), **card** (tool, download, permission, question), **stream** (the live pane), **line** (a status line *inside* a post: waiting, steer, compaction, loop) |
 | **Line** | one line of status that is not a block | Icon + sentence + optional chip. Used inside posts and traces: compaction, waiting, lease, alarm, error, loop, steer |
 | **Panel** | the question form | Owns its input state across renders; pages itself; never rebuilt by a poll |
 | **Trace** | a *post variant* for delegated work | Same header and spine as a post; timeline of lines and blocks; folds to one line when it ends |
@@ -367,7 +367,7 @@ a pixel. The renderer then only walks the list.
 | `trace` | `key, role, task, title, at, state` (live, folded), `blocks[]` | A trace post variant: head plus timeline, folded to one line when done |
 | `line` | `key, line` (compact, waiting, lease, alarm, refusal, error, loop, steer), `at, props` | One line of status (Line, §1) |
 
-A `post` holds `blocks`, exactly four kinds:
+A `post` holds `blocks`, exactly five kinds — the four below, plus a `line` used inside a post or a trace (waiting, steer, compaction, loop):
 
 | `block.kind` | Fields | Drawn as |
 |---|---|---|
@@ -375,6 +375,7 @@ A `post` holds `blocks`, exactly four kinds:
 | `fold` | `key, tone` (reasoning, archive, loaded, refusal, trace), `summary, body, open: boolean` | A disclosure; `open` comes from the model, which reads `state.open` |
 | `card` | `key, card` (tool, browser, question, download, permission), `props, open: boolean` | A card: head, optional body |
 | `stream` | `key, text, live: boolean` | The live pane — one text node, no animation of its own |
+| `line` | `key, line` (waiting, steer, compact, loop, note), `at, props` | One status line, inside the post or trace it belongs to |
 
 ### The keys
 
