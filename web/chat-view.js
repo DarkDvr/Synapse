@@ -10,6 +10,8 @@
 // `trace-line`, `reasoning`, `msg-answer`), so the two renderers can be compared side by
 // side with one stylesheet, and so nothing here is a second design language.
 import { renderMarkdown } from './md.js';
+import { roleLabel } from './run-view.js';
+import { formatBytes, progressBar, downloadLabel } from './downloads.js';
 
 /** HH:MM, in the operator's own 24-hour clock. */
 const CLOCK = (at) => new Date(Number(at) || 0).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
@@ -195,10 +197,20 @@ function cardNode(item) {
     const head = el('div', 'tool-head');
     head.append(el('span', `status-dot ${done ? 'ok' : bad ? 'err' : 'warn'}`), el('span', 'tool-name', 'SynaBrowse · Download'), el('span', 'tool-target', String(d.name || '')));
     const pct = Number(d.total) > 0 ? ` ${Math.round((Number(d.received) / Number(d.total)) * 100)}%` : '';
-    head.append(el('span', `tool-state state-pill ${done ? 'ok' : bad ? 'err' : 'warn'}`, `${done ? 'Saved' : bad ? 'Failed' : 'Downloading'}${pct}`));
+    head.append(el('span', `tool-state state-pill ${done ? 'ok' : bad ? 'err' : 'warn'}`, `${downloadLabel(state)}${pct}`));
     card.append(head);
+    const foot = done
+      ? `Saved to ${d.path || `.project/downloads/${d.name}`}`
+      : bad
+        ? d.error || 'The browser stopped it.'
+        : 'Saving to .project/downloads';
+    const size = Number(d.total) > 0 ? `${formatBytes(d.received)} / ${formatBytes(d.total)}` : formatBytes(d.received);
+    const bar = el('code', 'download-bar', progressBar(d.received, d.total));
+    const meta = el('div', 'download-meta', size);
+    const where = el('div', 'download-foot', foot);
+    where.title = foot;
     const body = el('div', 'download-body');
-    body.append(el('div', 'download-name', String(d.name || '')), el('div', 'download-meta', String(d.path || '')));
+    body.append(el('div', 'download-name', String(d.name || '')), bar, meta, where);
     card.append(body);
     return card;
   }
@@ -223,7 +235,7 @@ function foldNode(item) {
   fold.open = Boolean(item.open);
   const summary = el('summary');
   if (item.title) summary.title = String(item.title);
-  summary.textContent = String(item.summary || '');
+  summary.textContent = String(item.tone === 'reasoning' ? `Reasoning • ${item.summary || ''}` : item.summary || '');
   fold.append(summary);
   if (Array.isArray(item.body)) {
     const body = el('div', 'trace-lines');
@@ -266,6 +278,11 @@ function streamNode(item) {
 function blockNode(block) {
   switch (block.kind) {
     case 'prose': {
+      if (block.format === 'pre') {
+        const node = el('pre', 'trace-old');
+        node.textContent = String(block.text || '');
+        return node;
+      }
       const node = prose(block.text);
       if (block.answer) node.classList.add('is-answer');
       return node;
@@ -290,7 +307,22 @@ function fillPost(post, item) {
   post.dataset.key = item.key;
   const body = el('div', 'msg-body');
   body.append(el('span', 'msg-time', CLOCK(item.at)), el('span', 'msg-role', item.speaker === 'you' ? 'You' : item.speaker === 'synapse' ? 'Synapse' : 'Architect'));
+  if (item.steer) body.append(el('span', 'msg-steer', 'STEER:'));
   for (const block of item.blocks) body.append(blockNode(block));
+  // The operator's own message can be put back in the composer, attachments and all — after
+  // the words, where the old chat puts it.
+  if (item.speaker === 'you' && item.reuseId) {
+    const reuse = document.createElement('button');
+    reuse.type = 'button';
+    reuse.className = 'msg-reuse';
+    reuse.dataset.reuseMsg = item.reuseId;
+    reuse.title = 'Copy this message and its attachments into the composer';
+    reuse.setAttribute('aria-label', 'Copy this message into the composer');
+    reuse.innerHTML =
+      '<svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">' +
+      '<path d="M3 5.4A5.2 5.2 0 1 1 3 10.6"/><path d="M3 2.6v3.2h3.2"/></svg><span>Reuse</span>';
+    body.append(reuse);
+  }
   if (item.error) body.append(el('div', 'msg-error', String(item.error)));
   post.replaceChildren(body);
 }
@@ -304,21 +336,30 @@ function postNode(item) {
 function fillTrace(root, item) {
   const blocks = el('div', 'trace-lines');
   for (const block of item.blocks) blocks.append(blockNode(block));
-  const head = `${item.role || 'Worker'}${item.task ? ` · ${item.task}` : ''}${item.title ? ` · ${item.title}` : ''}`;
+  const label = roleLabel(item.role) || 'Worker';
+  const rest = `${item.task ? ` · ${item.task}` : ''}${item.title ? ` · ${item.title}` : ''}`;
+  const took = item.ms ? ` · ${Math.round(item.ms / 1000)}s` : '';
+  const files = item.files ? ` · ${item.files} files` : '';
+  const packed = item.compactions ? ` · compacted ×${item.compactions}` : '';
+  const looped = item.loops ? ` · looped ×${item.loops}` : '';
+  const steered = item.steered ? ' · steered' : '';
+  const head = `${label}${rest}`;
   root.className = item.folded ? 'trace is-fold' : 'trace is-live';
   root.dataset.key = item.key;
   root.dataset.k = `${item.key}:fold`;
   if (item.folded) {
     root.open = Boolean(item.open);
     const summary = el('summary');
-    summary.title = head;
-    summary.textContent = [head, item.ms ? ` · ${Math.round(item.ms / 1000)}s` : '', item.files ? ` · ${item.files} files` : '', item.compactions ? ` · compacted ×${item.compactions}` : '', item.loops ? ` · looped ×${item.loops}` : '', item.steered ? ' · steered' : ''].join('');
+    summary.title = `${head}${took}${files}${packed}${looped}${steered}`;
+    // The role is its own span, the same one the old chat styles: "CODER 1" in the trace's
+    // colour, the task and the figures after it in the ordinary text colour.
+    summary.append(el('span', 'trace-role', label), document.createTextNode(`${rest}${took}${files}${packed}${looped}${steered}`));
     root.replaceChildren(summary, blocks);
     return;
   }
   const line = el('div', 'trace-head');
   line.title = head;
-  line.textContent = head;
+  line.append(el('span', 'trace-role', label), document.createTextNode(rest));
   root.replaceChildren(line, blocks);
 }
 

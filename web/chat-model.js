@@ -273,21 +273,22 @@ function traceItem(src, t, at) {
     return { kind: 'line', key: `${t.key}:n${when(n)}`, line: 'note', at: when(n), props: { text } };
   };
 
-  const reasonFold = (r, older) => ({
+  const reasonFold = (r) => ({
     kind: 'fold',
-    key: `${t.key}:${older ? 'o' : 'r'}${when(r)}`,
-    tone: older ? 'archive' : 'reasoning',
+    key: `${t.key}:r${when(r)}`,
+    tone: 'reasoning',
     summary: firstLine(r.text),
     format: 'pre',
     body: String(r.text || ''),
-    open: isOpen(src, `${t.key}:${older ? 'o' : 'r'}${when(r)}`),
+    open: isOpen(src, `${t.key}:r${when(r)}`),
   });
 
   const entries = [
     ...olderSteps.map((n) => ({ at: when(n), older: true, block: noteBlock(n) })),
-    ...olderReasons.map((r) => ({ at: when(r), older: true, block: reasonFold(r, true) })),
+    // Inside the archive an older thought is its text, not a fold: the archive is the fold.
+    ...olderReasons.map((r) => ({ at: when(r), older: true, block: { kind: 'prose', key: `${t.key}:o${when(r)}`, text: String(r.text || ''), answer: false, format: 'pre' } })),
     ...tailSteps.map((n) => ({ at: when(n), older: false, block: noteBlock(n) })),
-    ...recentReasons.map((r) => ({ at: when(r), older: false, block: reasonFold(r, false) })),
+    ...recentReasons.map((r) => ({ at: when(r), older: false, block: reasonFold(r) })),
     ...steers.map((n) => ({ at: when(n), older: false, block: noteBlock(n) })),
     ...(t.marks || [])
       .filter((m) => m && (m.kind === 'compact' || m.kind === 'loop'))
@@ -496,7 +497,9 @@ function postFor(src, m, { mine, pane }) {
   const at = Number(m.created) || 0;
   const blocks = [];
   if (m.type === 'user') {
-    blocks.push({ kind: 'prose', key: `${m.id}:text`, text: String(m.text || ''), answer: false });
+    // A steer keeps the engine's marker in its text; the chat shows the tag, not the marker.
+    const steer = /^\[steer\]\s*([\s\S]*)$/.exec(String(m.text || ''));
+    blocks.push({ kind: 'prose', key: `${m.id}:text`, text: steer ? steer[1] : String(m.text || ''), answer: false });
   } else if (m.type === 'synthetic') {
     const body = String(m.text || '').replace(/^\s*\[harness\]\s*/i, '');
     const label = String(m.description || '');

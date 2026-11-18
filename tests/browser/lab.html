@@ -7,22 +7,31 @@
   <link rel="stylesheet" href="/web/baseline.css" />
   <link rel="stylesheet" href="/web/synapse.css" />
   <link rel="stylesheet" href="/web/panel.css" />
-  <!-- The lab is not the app: one fixed-height scroller, so a scenario has a real
-       viewport to scroll in and the numbers mean something. Everything else is the
-       app's own stylesheet, unchanged, so what is measured is what ships. -->
+  <!-- The lab is not the app: two fixed-height scrollers side by side, so a scenario has a
+       real viewport to scroll in and the old and the new renderer can be compared on the
+       same conversation, with the same stylesheet. Each dock sits inside a plain wrapper:
+       panel.css places `.chat-dock` in the app's own grid, and inside a block it is just a
+       block, which is what a lab needs. What is measured here is what ships. -->
   <style>
     html, body { margin: 0; height: 100%; background: #151619; }
     body { color: var(--text); }
-    #lab { max-width: 980px; margin: 0 auto; padding: 10px; box-sizing: border-box; }
-    #chatDock { display: block; position: relative; height: 800px; }
-    #transcript { height: 100%; }
+    #lab { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 10px; box-sizing: border-box; height: 100%; }
+    .lab-pane { position: relative; min-width: 0; height: 100%; }
+    .lab-pane .chat-dock { display: block; height: 100%; }
+    .lab-pane .chat-scroll { height: 100%; }
+    .lab-label { position: absolute; z-index: 5; top: 2px; right: 6px; font: 600 10px/1.4 var(--mono, monospace); letter-spacing: .08em; color: #82868e; }
   </style>
 </head>
 <body class="dark" data-view="session" data-mode="single">
   <div id="lab">
-    <section class="chat-dock has-history" id="chatDock">
-      <div class="chat-scroll" id="transcript"></div>
-    </section>
+    <div class="lab-pane">
+      <span class="lab-label">OLD</span>
+      <section class="chat-dock has-history" id="dock1"><div class="chat-scroll" id="transcript"></div></section>
+    </div>
+    <div class="lab-pane">
+      <span class="lab-label">NEW</span>
+      <section class="chat-dock has-history" id="dock2"><div class="chat-scroll" id="transcript-v2"></div></section>
+    </div>
   </div>
   <script type="module" src="/lab.js"></script>
 </body>
