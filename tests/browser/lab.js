@@ -78,6 +78,9 @@ const shape = (host) => ({
   postHeights: [...host.querySelectorAll('.msg')].map((n) => Math.round(n.getBoundingClientRect().height)),
   paneHeights: [...host.querySelectorAll('.trace-flow-view')].map((n) => Math.round(n.getBoundingClientRect().height)),
   scroll: { top: Math.round(host.scrollTop), height: host.scrollHeight, client: host.clientHeight },
+  entering: host.querySelectorAll('.is-enter').length,
+  reducedMotion: window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+  hint: Boolean(host.querySelector('.think-new:not([hidden])')),
 });
 
 /** Draw both, and answer how they differ this frame. */
@@ -95,8 +98,8 @@ function frame(step, model) {
     items: model.items.length,
     keys: (model.items || []).map((i) => i.key),
     nodes: [...view.nodes.entries()].map(([key, held]) => `${key}#${idOf(held.node)}`),
-    old: { text: a.text.length, posts: a.posts, cards: a.cards, folds: a.folds, scroll: a.scroll, postHeights: a.postHeights, paneHeights: a.paneHeights },
-    new: { text: b.text.length, posts: b.posts, cards: b.cards, folds: b.folds, scroll: b.scroll, postHeights: b.postHeights, paneHeights: b.paneHeights },
+    old: { text: a.text.length, posts: a.posts, cards: a.cards, folds: a.folds, scroll: a.scroll, postHeights: a.postHeights, paneHeights: a.paneHeights, entering: a.entering, hint: a.hint, reducedMotion: a.reducedMotion },
+    new: { text: b.text.length, posts: b.posts, cards: b.cards, folds: b.folds, scroll: b.scroll, postHeights: b.postHeights, paneHeights: b.paneHeights, entering: b.entering, hint: b.hint, reducedMotion: b.reducedMotion },
     // The same characters: a block join is a space in one renderer and a newline in the
     // other, which reads the same and is not a difference worth chasing.
     sameText: a.text.replace(/\s+/g, '') === b.text.replace(/\s+/g, ''),
@@ -119,6 +122,11 @@ window.__labRun = async (name, only) => {
   for (const [i, step] of scenario.steps.entries()) {
     if (step.do === 'scrollTo') {
       window.__labScrollTo(step.fraction);
+      continue;
+    }
+    if (step.do === 'scrollPane') {
+      const pane = newHost.querySelector('.trace-flow-view');
+      if (pane) pane.scrollTop = Math.round((pane.scrollHeight - pane.clientHeight) * Number(step.fraction || 0));
       continue;
     }
     applyStep(state, step);

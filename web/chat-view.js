@@ -263,6 +263,14 @@ function foldNode(item) {
 // where the operator is looking.
 const paneFollow = new Map();
 
+/** Mark a node as just arrived. Only a genuinely new node gets this — a repaint is not an arrival. */
+function appear(node) {
+  if (!node || !node.classList) return node;
+  node.classList.add('is-enter');
+  setTimeout(() => node.classList.remove('is-enter'), 160);
+  return node;
+}
+
 /**
  * The live pane: a window of a fixed number of lines, from its first word.
  *
@@ -308,6 +316,19 @@ function streamNode(item) {
   wrap.append(flow);
   // The ▾ folds the pane to its one-line "Thinking…" state. The click itself is the app's
   // (it writes the trace's collapsed flag and repaints) — the lab has no handler.
+  const hint = el('button', 'think-new', 'New words ↓');
+  hint.type = 'button';
+  hint.hidden = true;
+  hint.title = 'Jump to the newest thought';
+  hint.addEventListener('click', () => {
+    view.scrollTop = view.scrollHeight;
+    const s = paneFollow.get(item.key) || { follow: true };
+    s.follow = true;
+    s.lastLen = String(item.text || '').length;
+    paneFollow.set(item.key, s);
+    hint.hidden = true;
+  });
+  wrap.append(hint);
   const toggle = el('button', 'think-toggle', '▾');
   toggle.type = 'button';
   toggle.dataset.thinkToggle = item.key;
@@ -328,10 +349,26 @@ function fillStreamNode(node, item) {
   const flow = node.querySelector('.trace-flow');
   const view = node.querySelector('.trace-flow-view');
   const body = node.querySelector('.trace-flow-body');
+  const hint = node.querySelector('.think-new');
+  // Geometry, asked before the new words are written: writing them makes the box taller,
+  // and a reader at the end would look "scrolled up" a line later. This is the same
+  // question the chat's own follow asks, in the same place.
+  const atEnd = view ? view.scrollHeight - view.scrollTop - view.clientHeight <= 4 : true;
+  const text = String(item.text || '');
+  const state = paneFollow.get(item.key) || { follow: true, lastLen: 0 };
+  const grew = text.length > (Number(state.lastLen) || 0);
+  state.lastLen = text.length;
   if (flow) flow.classList.toggle('is-idle', !item.live);
-  if (body) body.textContent = String(item.text || '');
-  const state = paneFollow.get(item.key) || { follow: true };
-  if (view && state.follow) view.scrollTop = view.scrollHeight;
+  if (body) body.textContent = text;
+  if (view && atEnd) {
+    view.scrollTop = view.scrollHeight;
+    state.follow = true;
+  } else {
+    state.follow = false;
+  }
+  // Words arrived while the reader is scrolled up: say so, without moving their line.
+  if (hint) hint.hidden = state.follow || !grew;
+  paneFollow.set(item.key, state);
 }
 
 /**
@@ -361,7 +398,7 @@ function fillBlocks(container, blocks, held) {
       nodes.push(prev.node);
       continue;
     }
-    const node = blockNode(block);
+    const node = appear(blockNode(block));
     held.set(key, { node, sig });
     nodes.push(node);
   }
@@ -496,7 +533,7 @@ export function createChatView(host) {
       if (item.kind === 'post') fillPost(node, item);
       else fillTrace(node, item);
     } else {
-      node = itemNode(item);
+      node = appear(itemNode(item));
     }
     made.set(item.key, { node, sig });
     return node;
