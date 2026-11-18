@@ -265,7 +265,7 @@ function traceItem(src, t, at) {
     }
     if (n && n.prose) return { kind: 'prose', key: `${t.key}:p${when(n)}`, text, answer: true };
     if (showCards(src) && n && n.tool) {
-      return { kind: 'card', key: `${t.key}:t${when(n)}`, card: 'tool', props: { ...toolish(n.tool), only: true }, open: false };
+      return { kind: 'card', key: `${t.key}:t${when(n)}`, card: 'tool', props: { name: String(n.tool.name || 'tool'), target: String(n.tool.target || ''), only: true }, open: false };
     }
     if (n && n.perm) {
       return { kind: 'card', key: `${t.key}:m${when(n)}`, card: 'permission', props: { decision: n.perm, record: true }, open: false };

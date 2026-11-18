@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Synapse chat lab</title>
+  <link rel="stylesheet" href="/web/vendor/fonts.css" />
+  <link rel="stylesheet" href="/web/baseline.css" />
+  <link rel="stylesheet" href="/web/synapse.css" />
+  <link rel="stylesheet" href="/web/panel.css" />
+  <!-- The lab is not the app: one fixed-height scroller, so a scenario has a real
+       viewport to scroll in and the numbers mean something. Everything else is the
+       app's own stylesheet, unchanged, so what is measured is what ships. -->
+  <style>
+    html, body { margin: 0; height: 100%; background: #151619; }
+    body { color: var(--text); }
+    #lab { max-width: 980px; margin: 0 auto; padding: 10px; box-sizing: border-box; }
+    #chatDock { display: block; position: relative; height: 800px; }
+    #transcript { height: 100%; }
+  </style>
+</head>
+<body class="dark" data-view="session" data-mode="single">
+  <div id="lab">
+    <section class="chat-dock has-history" id="chatDock">
+      <div class="chat-scroll" id="transcript"></div>
+    </section>
+  </div>
+  <script type="module" src="/lab.js"></script>
+</body>
+</html>
