@@ -43,6 +43,9 @@ const shape = (host) => ({
   posts: host.querySelectorAll('.msg').length,
   cards: host.querySelectorAll('.tool-card').length,
   folds: host.querySelectorAll('details').length,
+  // Heights are the whole point of the pane check: a fixed window keeps them still.
+  postHeights: [...host.querySelectorAll('.msg')].map((n) => Math.round(n.getBoundingClientRect().height)),
+  paneHeights: [...host.querySelectorAll('.trace-flow-view')].map((n) => Math.round(n.getBoundingClientRect().height)),
   scroll: { top: Math.round(host.scrollTop), height: host.scrollHeight, client: host.clientHeight },
 });
 
@@ -58,8 +61,8 @@ function frame(step, model) {
     items: model.items.length,
     keys: (model.items || []).map((i) => i.key),
     nodes: [...view.nodes.entries()].map(([key, held]) => `${key}#${idOf(held.node)}`),
-    old: { text: a.text.length, posts: a.posts, cards: a.cards, folds: a.folds, scroll: a.scroll },
-    new: { text: b.text.length, posts: b.posts, cards: b.cards, folds: b.folds, scroll: b.scroll },
+    old: { text: a.text.length, posts: a.posts, cards: a.cards, folds: a.folds, scroll: a.scroll, postHeights: a.postHeights, paneHeights: a.paneHeights },
+    new: { text: b.text.length, posts: b.posts, cards: b.cards, folds: b.folds, scroll: b.scroll, postHeights: b.postHeights, paneHeights: b.paneHeights },
     // The same characters: a block join is a space in one renderer and a newline in the
     // other, which reads the same and is not a difference worth chasing.
     sameText: a.text.replace(/\s+/g, '') === b.text.replace(/\s+/g, ''),

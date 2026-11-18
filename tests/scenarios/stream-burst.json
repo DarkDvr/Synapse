@@ -1,0 +1,25 @@
+{
+  "name": "S4 — the pane grows without moving the conversation",
+  "why": "Words arrive faster than they are read, and the pane is where they land. In the old chat the box grows line by line until it fills, and every one of those lines pushes the chat down; in a live turn that is the jump the operator feels while reading (18 Nov). The new pane is a fixed window from its first word: the text scrolls inside it, and it follows only while the reader is at its own end.",
+  "steps": [
+    {
+      "do": "messages",
+      "messages": [
+        { "id": "m1", "type": "assistant", "created": "now-4000", "completed": 0, "parts": [{ "type": "text", "text": "Starting on the router." }] }
+      ]
+    },
+    { "do": "render" },
+    { "do": "stream", "key": "ses_scenario", "delta": "First, read the current config and check the tunnel count.\n" },
+    { "do": "render" },
+    { "do": "stream", "key": "ses_scenario", "delta": "The provider lists four nodes; all four answer on the control port.\n" },
+    { "do": "render" },
+    { "do": "stream", "key": "ses_scenario", "delta": "Pick the Amsterdam one, measure its delay, and write the config.\n" },
+    { "do": "render" },
+    { "do": "stream", "key": "ses_scenario", "delta": "Then restart the core and prove the exit address from the PC.\n" },
+    { "do": "render" },
+    { "do": "stream", "key": "ses_scenario", "delta": "Last step: record what changed, and say what to check.\n" },
+    { "do": "render" },
+    { "do": "stream", "key": "ses_scenario", "delta": "Done — nothing else on the router is affected.\n" },
+    { "do": "render" }
+  ]
+}

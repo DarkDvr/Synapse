@@ -253,9 +253,23 @@ function foldNode(item) {
   return fold;
 }
 
+// Whether each pane is following its own end. View state: the model has no opinion about
+// where the operator is looking.
+const paneFollow = new Map();
+
+/**
+ * The live pane: a window of a fixed number of lines, from its first word.
+ *
+ * It used to grow line by line until it filled, and every line pushed the conversation down
+ * while the operator was reading it. A fixed window means the words move inside the box and
+ * nothing outside it moves. The text scrolls natively, so the operator can read back; the
+ * pane follows only while they are at its end, and stops the moment they scroll up.
+ */
+const PANE_LINES = 11;
+const PANE_LINE_EM = 1.45;
+
 function streamNode(item) {
-  const p = { text: item.text, live: item.live, collapsed: item.collapsed };
-  if (p.collapsed) {
+  if (item.collapsed) {
     const row = el('div', 'think-line');
     const button = el('button', 'think-toggle', 'Thinking…');
     button.type = 'button';
@@ -263,16 +277,89 @@ function streamNode(item) {
     row.append(el('span', 'status-dot live'), button);
     return row;
   }
+  if (!paneFollow.has(item.key)) paneFollow.set(item.key, { follow: true });
   const wrap = el('div', 'think-wrap');
-  const flow = el('div', `trace-flow${p.live ? '' : ' is-idle'}`);
+  const flow = el('div', 'trace-flow');
   flow.dataset.pane = item.key;
   const view = el('div', 'trace-flow-view');
+  // The height is set here, not only in the stylesheet: the old rule is a max-height, and a
+  // max-height is exactly the growth this pane must not have.
+  view.style.height = `calc(${PANE_LINES} * ${PANE_LINE_EM}em)`;
+  view.style.overflowY = 'auto';
+  // The words sit at the bottom of the window and grow upward, like a terminal: the newest
+  // line is always the one nearest the toggle, and a short thought leaves its empty room
+  // above rather than below, where the eye is going anyway.
+  const inner = el('div', 'trace-flow-inner');
+  inner.style.display = 'flex';
+  inner.style.flexDirection = 'column';
+  inner.style.justifyContent = 'flex-end';
+  inner.style.minHeight = '100%';
   const body = el('div', 'trace-flow-body');
-  body.textContent = String(p.text || '');
-  view.append(body);
+  body.textContent = String(item.text || '');
+  inner.append(body);
+  view.append(inner);
   flow.append(view);
   wrap.append(flow);
+  // The ▾ folds the pane to its one-line "Thinking…" state. The click itself is the app's
+  // (it writes the trace's collapsed flag and repaints) — the lab has no handler.
+  const toggle = el('button', 'think-toggle', '▾');
+  toggle.type = 'button';
+  toggle.dataset.thinkToggle = item.key;
+  toggle.title = 'Hide the thinking';
+  toggle.setAttribute('aria-label', 'Hide the thinking');
+  wrap.append(toggle);
+  view.addEventListener('scroll', () => {
+    const state = paneFollow.get(item.key) || { follow: true };
+    state.follow = view.scrollHeight - view.scrollTop - view.clientHeight <= 4;
+    paneFollow.set(item.key, state);
+  }, { passive: true });
+  fillStreamNode(wrap, item);
   return wrap;
+}
+
+/** New words in a pane that already exists: write the text, and follow only if pinned. */
+function fillStreamNode(node, item) {
+  const flow = node.querySelector('.trace-flow');
+  const view = node.querySelector('.trace-flow-view');
+  const body = node.querySelector('.trace-flow-body');
+  if (flow) flow.classList.toggle('is-idle', !item.live);
+  if (body) body.textContent = String(item.text || '');
+  const state = paneFollow.get(item.key) || { follow: true };
+  if (view && state.follow) view.scrollTop = view.scrollHeight;
+}
+
+/**
+ * The blocks of one container, keyed.
+ *
+ * A block that has not changed keeps its node, and a stream keeps its node even when it has
+ * changed: that is what lets the pane hold its scroll and its window while the words arrive.
+ * Everything else is rebuilt, which is cheap and loses nothing.
+ */
+function fillBlocks(container, blocks, held) {
+  const nodes = [];
+  for (const block of blocks || []) {
+    const key = String(block.key || '');
+    if (!key) {
+      nodes.push(blockNode(block));
+      continue;
+    }
+    const sig = JSON.stringify(block);
+    const prev = held.get(key);
+    if (prev && prev.sig === sig) {
+      nodes.push(prev.node);
+      continue;
+    }
+    if (prev && block.kind === 'stream') {
+      fillStreamNode(prev.node, block);
+      held.set(key, { node: prev.node, sig });
+      nodes.push(prev.node);
+      continue;
+    }
+    const node = blockNode(block);
+    held.set(key, { node, sig });
+    nodes.push(node);
+  }
+  container.append(...nodes);
 }
 
 function blockNode(block) {
@@ -308,7 +395,7 @@ function fillPost(post, item) {
   const body = el('div', 'msg-body');
   body.append(el('span', 'msg-time', CLOCK(item.at)), el('span', 'msg-role', item.speaker === 'you' ? 'You' : item.speaker === 'synapse' ? 'Synapse' : 'Architect'));
   if (item.steer) body.append(el('span', 'msg-steer', 'STEER:'));
-  for (const block of item.blocks) body.append(blockNode(block));
+  fillBlocks(body, item.blocks, post._blocks || (post._blocks = new Map()));
   // The operator's own message can be put back in the composer, attachments and all — after
   // the words, where the old chat puts it.
   if (item.speaker === 'you' && item.reuseId) {
@@ -335,7 +422,7 @@ function postNode(item) {
 
 function fillTrace(root, item) {
   const blocks = el('div', 'trace-lines');
-  for (const block of item.blocks) blocks.append(blockNode(block));
+  fillBlocks(blocks, item.blocks, root._blocks || (root._blocks = new Map()));
   const label = roleLabel(item.role) || 'Worker';
   const rest = `${item.task ? ` · ${item.task}` : ''}${item.title ? ` · ${item.title}` : ''}`;
   const took = item.ms ? ` · ${Math.round(item.ms / 1000)}s` : '';

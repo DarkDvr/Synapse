@@ -342,6 +342,10 @@ Answered by the operator on 18 Nov; these are the design, not options.
    Cut/Copy/Paste in a field), and a selection must survive a live update: while the
    operator is selecting, the render waits and catches up when they release it (B4–B6).
    Both are current-chat faults, fixed now as well as in the rebuild.
+9. **The pane is a fixed window (19 Nov).** Eleven lines from its first word, the words at
+   its bottom growing upward, the text scrolling inside it, and the follow released the
+   moment the reader scrolls up. Measured in the lab: the old chat grew its post from 45 to
+   162 px while a stream arrived; the new one stayed at 245 px through every step (G2, G3).
 
 ---
 
