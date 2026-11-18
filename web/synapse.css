@@ -1911,6 +1911,11 @@ body[data-mode="single"] #runAuto { display: none; }
   line-height: 1.2; letter-spacing: 0; color: var(--yellow);
 }
 .tool-download.is-done .download-bar { color: var(--green); }
+/* A saved download folds to its head: the bar, the bytes and the path were the live
+   state, and once it is saved they are history. Its place in the conversation comes from
+   when it finished, so it scrolls up with the chat instead of standing at the bottom of
+   the page (17 Nov). */
+.tool-download.is-done .download-body { display: none; }
 .tool-download.is-error .download-bar { color: var(--red); }
 .download-meta, .download-foot {
   color: var(--muted); font-family: var(--mono); font-size: calc(var(--chat-fs) * 0.72);

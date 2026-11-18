@@ -85,6 +85,12 @@ export function downloadCard(d) {
   return `<div class="tool-card tool-download${cls}" data-download-card="${esc(d.id)}">${downloadBody(d)}</div>`;
 }
 
-export function downloadCardsHtml() {
-  return downloadsForProject().map(downloadCard).join('');
-}
+/**
+ * Where a card sits in the conversation.
+ *
+ * A live download is the newest thing happening, so it belongs at the bottom with the
+ * live trace. A saved one belongs where it finished — the same rule as a finished run —
+ * so the chat moves on above it and the card scrolls up instead of standing at the bottom
+ * of the page for ten minutes (17 Nov).
+ */
+export const downloadAt = (d) => (Number(d?.endedAt) > 0 ? Number(d.endedAt) : Number.MAX_SAFE_INTEGER);

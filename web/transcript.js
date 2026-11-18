@@ -22,7 +22,7 @@ import { alarmsHere, renderAlarm, leasesHere, renderLease, chatErrorsHere, rende
 import { chatAtBottom, chatFollows, scrollChatToBottom, renderChatNav, captureChatSlack, restoreStreamView } from './chat-scroll.js';
 import { currentProject, roleLabel, groupTurns, currentForm } from './run-view.js';
 import { renderTrace, tracesFor, traceSig, renderSessionStream } from './traces.js';
-import { downloadCardsHtml, downloadsForProject } from './downloads.js';
+import { downloadCard, downloadAt, downloadsForProject } from './downloads.js';
 
 const missing = (name) => () => {
   throw new Error(`transcript.js: ${name} was not wired at boot`);
@@ -189,6 +189,9 @@ export function renderTranscript() {
       at: t.finishedAt ? Number(t.startedAt) || 0 : Number.MAX_SAFE_INTEGER,
       html: renderTrace(t),
     })),
+    // A live download sits at the bottom with the live trace; a saved one takes its place
+    // where it finished and scrolls up with the conversation (17 Nov).
+    ...downloads.map((d) => ({ at: downloadAt(d), html: downloadCard(d) })),
     ...alarmsHere().map((a) => ({ at: Number(a.at) || 0, html: renderAlarm(a) })),
     ...chatErrorsHere().map((e) => ({ at: Number(e.at) || 0, html: renderChatError(e) })),
   ].sort((x, y) => x.at - y.at);
@@ -213,7 +216,7 @@ export function renderTranscript() {
   while (next < items.length) html += items[next++].html;
   if (liveTail && paneAt === -1) html += liveTail;
   html += leasesHere().map(renderLease).join('');
-  el.innerHTML = html + downloadCardsHtml() + pending;
+  el.innerHTML = html + pending;
   // The live panel's slide is a transform on a node this rebuild just replaced, so
   // the offset has to be put back or the text snaps to its first line.
   restoreStreamView();

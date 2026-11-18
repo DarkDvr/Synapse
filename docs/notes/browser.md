@@ -342,6 +342,12 @@ not sit in the operator's Downloads folder where the next person finds it.
   `SynaBrowse · Download` card with `[####----] 42%`, bytes and the saved path. A reload
   asks `GET /api/browser/downloads?dir=…`, so a download that outlives the page is still
   there.
+- **A live card sits at the bottom; a saved one takes its place and folds (17 Nov).** The
+  card used to be appended after the transcript and stay there, open, for ten minutes, so
+  the chat moved on above it and it never receded. Now it is placed in the conversation
+  like a trace: at the end while the bytes arrive, then at the moment it finished, so it
+  scrolls up with the chat. A completed card folds to its one-line head — the bar, the
+  bytes and the path were the live state, and the head already says `Saved` and the name.
 - **Progress is browser-scoped, the folder is the project's.** The profile is one global
   browser, so the download folder is set again before each browser action. One browser and
   one page are already the rule; a download is not a second concurrency model.

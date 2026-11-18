@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { safeDownloadName, uniqueDownloadPath, formatBytes, progressBar } from '../src/browser/downloads.js';
-import { downloadBody } from '../web/downloads.js';
+import { downloadBody, downloadAt } from '../web/downloads.js';
 import { createApi } from '../src/api.js';
 import { PROJECTS_ROOT } from '../src/paths.js';
 import { tmpdir } from './tmpdir.mjs';
@@ -53,6 +53,16 @@ test('the chat chip carries the name, the bar and the saved path', () => {
   assert.match(html, /Saved/);
   assert.match(html, /\.project\/downloads\/report\.pdf/);
   assert.match(html, /100%/);
+});
+
+test('a saved download folds and takes its place in the conversation', () => {
+  // Live: the newest thing happening, so the bottom with the live trace.
+  assert.equal(downloadAt({ state: 'inProgress', startedAt: 1 }), Number.MAX_SAFE_INTEGER);
+  // Saved: where it finished, so the chat moves on above it.
+  assert.equal(downloadAt({ state: 'completed', endedAt: 4242 }), 4242);
+  // And it folds to its head: the bar, the bytes and the path were the live state.
+  const css = fs.readFileSync(new URL('../web/synapse.css', import.meta.url), 'utf8');
+  assert.match(css, /\.tool-download\.is-done \.download-body \{ display: none; \}/);
 });
 
 test('a failed download says so instead of a path', () => {
