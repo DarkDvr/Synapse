@@ -46,6 +46,7 @@ const NOTES = [
   'docs/notes/models-and-tools.md',
   'docs/notes/runtime-scope.md',
   'docs/notes/ui-lessons.md',
+  'docs/notes/chat-inventory.md',
   'docs/notes/runbook.md',
   'docs/notes/desktop-app.md',
   'docs/notes/remote-access.md',

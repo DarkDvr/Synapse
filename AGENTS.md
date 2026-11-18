@@ -139,9 +139,8 @@ last word on a live turn is `scripts\wait-for-idle.mjs` (`docs/notes/runbook.md`
 
 ### Destructive commands — verify before you act
 
-This machine is shared and busy: the desktop app, a browser running hundreds of
-processes, games, other agents. A command that "cleans up" broadly is not a
-shortcut, it is collateral damage.
+This machine is shared and busy: the desktop app, a browser running hundreds of processes,
+games, other agents. A command that "cleans up" broadly is collateral damage, not a shortcut.
 
 **Never match processes by name or by a loose path fragment.** The specific
 disaster: `Get-Process -Name opencode` is case-insensitive, so it also matches
@@ -179,6 +178,7 @@ an agent does not know to open is a document that does not exist:
 | `docs/notes/models-and-tools.md` | touching model choice, the catalog cache, the probe or the engine update — context limits, variants, marks, ask counters |
 | `docs/notes/runtime-scope.md` | before starting work on Synapse's own runtime (independence from OpenCode) — what the runtime does, what a replacement costs, the staged path |
 | `docs/notes/ui-lessons.md` | touching `web/` — layout invariants, the chat dock, the ask panel, the cards and the picker, with the measurements that prove them |
+| `docs/notes/chat-inventory.md` | starting the chat rebuild, or checking a chat behaviour rather than guessing it — every thing the conversation can show, the six primitives, and the scenario that tests each row |
 | `docs/notes/runbook.md` | running, restarting or debugging it; anything that kills a process |
 | `docs/notes/desktop-app.md` | touching `shell\`, `Synapse.exe`, `bin\node`, npm or any dependency — the good-tenant rule, the process model, exit codes, where the console lives |
 | `docs/notes/remote-access.md` | the LAN switch, the token or the login page, or changing what the HTTP listener binds |
