@@ -566,12 +566,15 @@ contract('the Architect’s live reasoning is drawn inside its own post', () => 
   const js = read('web/transcript.js');
   // 6 Nov: the panel itself moved to ./traces.js with the trace it draws.
   const traces = read('web/traces.js');
-  // renderMessage takes the tail and puts it inside .msg-body, which carries the
-  // speaker's 2px rule.
-  assert.match(js, /function renderMessage\(m, tail = ''\) \{/);
-  assert.match(js, /<div class="msg-body">\$\{body\.join\(''\)\}\$\{tail\}<\/div>/, 'the tail lands inside the post');
+  // renderMessage takes the tail and the downloads and puts them inside .msg-body, which
+  // carries the speaker's 2px rule.
+  assert.match(js, /function renderMessage\(m, tail = '', extras = ''\) \{/);
+  assert.match(js, /<div class="msg-body">\$\{body\.join\(''\)\}\$\{tail\}\$\{extras\}<\/div>/, 'the tail lands inside the post');
   assert.match(js, /const liveTail = renderSessionStream\(\);/, 'the live step is computed once');
-  assert.match(js, /renderMessage\(m, i === paneAt \? liveTail : ''\)/, 'and only the newest assistant message carries it');
+  assert.match(js, /renderMessage\(m, i === paneAt \? liveTail : '', extras\)/, 'and only the newest assistant message carries it');
+  // A download belongs inside the post it happened in (18 Nov), not after the conversation.
+  assert.match(js, /downloadsInWindow\(downloads, at, until\)/, 'downloads are placed by post window');
+  assert.doesNotMatch(js, /html \+ downloadCardsHtml\(\)/, 'the old end-of-chat strip is gone');
   assert.match(js, /panePostIndex\(showable\)/, 'the newest assistant, not "the last message" — a compaction line can follow it');
   assert.doesNotMatch(js, /el\.innerHTML = html \+ pending \+ renderSessionStream\(\)/, 'it is not appended after the conversation any more');
   // No head line: the post already says who is speaking.

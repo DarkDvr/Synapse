@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { safeDownloadName, uniqueDownloadPath, formatBytes, progressBar } from '../src/browser/downloads.js';
-import { downloadBody, downloadAt } from '../web/downloads.js';
+import { downloadBody, downloadAt, downloadsInWindow } from '../web/downloads.js';
 import { createApi } from '../src/api.js';
 import { PROJECTS_ROOT } from '../src/paths.js';
 import { tmpdir } from './tmpdir.mjs';
@@ -63,6 +63,16 @@ test('a saved download folds and takes its place in the conversation', () => {
   // And it folds to its head: the bar, the bytes and the path were the live state.
   const css = fs.readFileSync(new URL('../web/synapse.css', import.meta.url), 'utf8');
   assert.match(css, /\.tool-download\.is-done \.download-body \{ display: none; \}/);
+});
+
+test('a card belongs to the post it happened in, not the bottom of the page', () => {
+  const saved = { id: 'saved', state: 'completed', endedAt: 1500 };
+  const live = { id: 'live', state: 'inProgress', startedAt: 900 };
+  // The window is one post: from its start to the next post's start.
+  assert.deepEqual(downloadsInWindow([saved, live], 1000, 2000).map((d) => d.id), ['saved']);
+  // The newest post has no next one; the live card lands there, at its end.
+  assert.deepEqual(downloadsInWindow([saved, live], 1000).map((d) => d.id), ['saved', 'live']);
+  assert.deepEqual(downloadsInWindow([saved], 2000), []);
 });
 
 test('a failed download says so instead of a path', () => {

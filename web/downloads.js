@@ -94,3 +94,17 @@ export function downloadCard(d) {
  * of the page for ten minutes (17 Nov).
  */
 export const downloadAt = (d) => (Number(d?.endedAt) > 0 ? Number(d.endedAt) : Number.MAX_SAFE_INTEGER);
+
+/**
+ * The downloads that belong to one post: from its start up to the next post's start.
+ *
+ * A card inside a message's body sits within the role's green rule, where the operator
+ * expects it, and scrolls with that post instead of waiting at the bottom of the page
+ * (18 Nov). A live download carries `MAX_SAFE_INTEGER`, so it lands in the newest post.
+ */
+export function downloadsInWindow(downloads, from, until = Number.POSITIVE_INFINITY) {
+  return (Array.isArray(downloads) ? downloads : []).filter((d) => {
+    const at = downloadAt(d);
+    return at >= from && at < until;
+  });
+}

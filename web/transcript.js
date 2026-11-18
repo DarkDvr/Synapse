@@ -22,7 +22,7 @@ import { alarmsHere, renderAlarm, leasesHere, renderLease, chatErrorsHere, rende
 import { chatAtBottom, chatFollows, scrollChatToBottom, renderChatNav, captureChatSlack, restoreStreamView } from './chat-scroll.js';
 import { currentProject, roleLabel, groupTurns, currentForm } from './run-view.js';
 import { renderTrace, tracesFor, traceSig, renderSessionStream } from './traces.js';
-import { downloadCard, downloadAt, downloadsForProject } from './downloads.js';
+import { downloadCard, downloadsForProject, downloadsInWindow } from './downloads.js';
 
 const missing = (name) => () => {
   throw new Error(`transcript.js: ${name} was not wired at boot`);
@@ -189,9 +189,6 @@ export function renderTranscript() {
       at: t.finishedAt ? Number(t.startedAt) || 0 : Number.MAX_SAFE_INTEGER,
       html: renderTrace(t),
     })),
-    // A live download sits at the bottom with the live trace; a saved one takes its place
-    // where it finished and scrolls up with the conversation (17 Nov).
-    ...downloads.map((d) => ({ at: downloadAt(d), html: downloadCard(d) })),
     ...alarmsHere().map((a) => ({ at: Number(a.at) || 0, html: renderAlarm(a) })),
     ...chatErrorsHere().map((e) => ({ at: Number(e.at) || 0, html: renderChatError(e) })),
   ].sort((x, y) => x.at - y.at);
@@ -207,14 +204,30 @@ export function renderTranscript() {
   // watched at every step (14 Nov).
   const liveTail = renderSessionStream();
   const paneAt = panePostIndex(showable);
+  // A download belongs to the post it happened in: inside that post's green rule, and
+  // scrolling with it (18 Nov). Live cards carry MAX_SAFE_INTEGER, so they land in the
+  // newest post; anything that fits no post (a chat with no assistant message yet) is
+  // appended after the conversation.
+  const placedDownloads = new Set();
   for (let i = 0; i < showable.length; i += 1) {
     const m = showable[i];
     const at = Number(m.created) || 0;
     while (next < items.length && at && items[next].at < at) html += items[next++].html;
-    html += renderMessage(m, i === paneAt ? liveTail : '');
+    let extras = '';
+    if (m.type === 'assistant' && downloads.length) {
+      const until = Number(showable[i + 1]?.created) || Number.POSITIVE_INFINITY;
+      const mine = downloadsInWindow(downloads, at, until).filter((d) => !placedDownloads.has(d.id));
+      if (mine.length) {
+        mine.forEach((d) => placedDownloads.add(d.id));
+        extras = mine.map(downloadCard).join('');
+      }
+    }
+    html += renderMessage(m, i === paneAt ? liveTail : '', extras);
   }
   while (next < items.length) html += items[next++].html;
   if (liveTail && paneAt === -1) html += liveTail;
+  const orphanDownloads = downloads.filter((d) => !placedDownloads.has(d.id)).map(downloadCard).join('');
+  html += orphanDownloads;
   html += leasesHere().map(renderLease).join('');
   el.innerHTML = html + pending;
   // The live panel's slide is a transform on a node this rebuild just replaced, so
@@ -231,7 +244,7 @@ export function renderTranscript() {
 }
 
 // The role label shares the first line with the text; the time rides the right.
-export function renderMessage(m, tail = '') {
+export function renderMessage(m, tail = '', extras = '') {
   const t = hhmm(m.created);
   const stamp = t ? `<span class="msg-time">${t}</span>` : '';
 
@@ -450,7 +463,7 @@ export function renderMessage(m, tail = '') {
       );
     }
     if (m.error) body.push(`<div class="msg-error">${esc(m.error)}</div>`);
-    return `<div class="msg assistant" data-msg="assistant"><div class="msg-body">${body.join('')}${tail}</div></div>`;
+    return `<div class="msg assistant" data-msg="assistant"><div class="msg-body">${body.join('')}${tail}${extras}</div></div>`;
   }
   const body = m.error
     ? `<div class="msg-error">${esc(m.error)}</div>`
