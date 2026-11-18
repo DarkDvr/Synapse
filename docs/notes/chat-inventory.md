@@ -339,8 +339,11 @@ Answered by the operator on 18 Nov; these are the design, not options.
    body from zero and closes by shrinking it before it is taken away — measured in the lab
    with `--motion`: closed 0 px, 60 ms in 55 px, settled 56 px. Reduced motion turns all of
    it off, and the lab says so in every frame.
-7. **Tool cards keep one line plus expand** — and expanding and collapsing are animated
-   like every other disclosure (D1–D3, C4, K6).
+7. **Tool cards keep one line plus expand** — and expanding and collapsing animate like
+   every other disclosure: the body grows from zero and shrinks before it is taken away
+   (measured in the lab with `--motion`: closed 1 px of border, 56 px at 60 ms, 96 px
+   settled, back to 1 px). The click is the page's: the view reports it and `state.open`
+   keeps the answer, so a repaint opens the same card (D1–D3, C4, K6).
 8. **Text must behave like text again.** Right-click is a real menu (Copy, Select All,
    Cut/Copy/Paste in a field), and a selection must survive a live update: while the
    operator is selecting, the render waits and catches up when they release it (B4–B6).

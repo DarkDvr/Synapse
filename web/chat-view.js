@@ -149,9 +149,47 @@ function toolCard(item) {
   if (p.input !== null && p.input !== undefined) detail.append(pre(JSON.stringify(p.input, null, 1)));
   if (p.output) detail.append(pre(String(p.output), failed ? 'is-error' : ''));
   if (p.error) detail.append(pre(String(p.error), 'is-error'));
-  detail.hidden = !item.open;
+  // No `hidden`: a collapsed card keeps its body and a height of zero, so the same
+  // height transition the folds use can open and close it.
+  detail.style.height = item.open ? '' : '0px';
+  detail.style.overflow = item.open ? '' : 'hidden';
+  if (!item.open) card.classList.add('is-collapsed');
+  head.addEventListener('click', () => {
+    const opening = card.classList.contains('is-collapsed');
+    animateDetail(card, head, detail, opening);
+    viewToggle(item.key, Boolean(opening));
+  });
   card.append(head, detail);
   return card;
+}
+
+/** Open or close a card's body over 120ms, with reduced motion taking the short road. */
+function animateDetail(card, head, detail, opening) {
+  card.classList.toggle('is-collapsed', !opening);
+  card.classList.toggle('open', opening);
+  head.setAttribute('aria-expanded', String(opening));
+  if (motionOff()) {
+    detail.style.height = opening ? '' : '0px';
+    detail.style.overflow = opening ? '' : 'hidden';
+    return;
+  }
+  const start = opening ? 0 : detail.getBoundingClientRect().height;
+  detail.style.overflow = 'hidden';
+  detail.style.height = `${start}px`;
+  const end = opening ? detail.scrollHeight : 0;
+  detail.getBoundingClientRect();
+  detail.style.transition = 'height 120ms ease-out';
+  detail.style.height = `${end}px`;
+  let finished = false;
+  const done = () => {
+    if (finished) return;
+    finished = true;
+    detail.style.transition = '';
+    detail.style.height = opening ? '' : '0px';
+    detail.style.overflow = opening ? '' : 'hidden';
+  };
+  detail.addEventListener('transitionend', done, { once: true });
+  setTimeout(done, 170);
 }
 
 function targetOf(p) {
@@ -265,6 +303,10 @@ function foldNode(item) {
 // Whether each pane is following its own end. View state: the model has no opinion about
 // where the operator is looking.
 const paneFollow = new Map();
+
+// What the view does when the operator opens a card: it tells the page, and the page owns
+// the state (state.open). The view never keeps the answer for itself.
+let viewToggle = () => {};
 
 /** Is the page's own motion preference off? Then every fold snaps, as the browser should. */
 const motionOff = () => Boolean(window.matchMedia?.('(prefers-reduced-motion: reduce)').matches);
@@ -432,8 +474,20 @@ function fillBlocks(container, blocks, held) {
       continue;
     }
     const sig = JSON.stringify(block);
+    // The same block with only its open state changed: a card can animate instead of being
+    // rebuilt. A stream is handled below for the same reason.
+    const base = JSON.stringify({ ...block, open: undefined });
     const prev = held.get(key);
     if (prev && prev.sig === sig) {
+      nodes.push(prev.node);
+      continue;
+    }
+    if (prev && prev.base === base && block.kind === 'card' && prev.open !== block.open) {
+      // Everything but the open state is the same: keep the node and let it animate.
+      const detail = prev.node.querySelector('.tool-detail');
+      const head = prev.node.querySelector('.tool-head');
+      if (detail && head) animateDetail(prev.node, head, detail, Boolean(block.open));
+      held.set(key, { node: prev.node, sig, base, open: block.open });
       nodes.push(prev.node);
       continue;
     }
@@ -444,7 +498,7 @@ function fillBlocks(container, blocks, held) {
       continue;
     }
     const node = appear(blockNode(block));
-    held.set(key, { node, sig });
+    held.set(key, { node, sig, base, open: block.open });
     nodes.push(node);
   }
   container.append(...nodes);
@@ -563,7 +617,8 @@ function itemNode(item) {
  * is repainted in place, and a node that is gone is removed. That is what makes the
  * conversation stable under a live update, and it is the whole point of the rebuild.
  */
-export function createChatView(host) {
+export function createChatView(host, { onToggle } = {}) {
+  if (typeof onToggle === 'function') viewToggle = onToggle;
   const made = new Map(); // key -> { node, sig }
 
   function paint(item) {

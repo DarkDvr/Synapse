@@ -18,7 +18,13 @@ import { tracesWiring } from './web/traces.js';
 
 const oldHost = document.getElementById('transcript');
 const newHost = document.getElementById('transcript-v2');
-const view = createChatView(newHost);
+const view = createChatView(newHost, {
+  // Opening a card is the page's business, not the renderer's: the state keeps the answer.
+  onToggle: (key, open) => {
+    if (open) state.open.add(key);
+    else state.open.delete(key);
+  },
+});
 
 // The wiring the old renderer needs to draw a transcript on its own.
 transcriptWiring({
