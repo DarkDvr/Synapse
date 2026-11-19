@@ -765,6 +765,10 @@ export async function interrupt() {
       // stop that did not take still looked successful.
       await api('POST', `/api/sessions/${encodeURIComponent(state.sessionId)}/interrupt`);
       state.stopping = true;
+      // The second press is "stop now, I am reading something". The page records it so the
+      // turn's end does not close the operator's folds or redraw over what they are
+      // reading (`closeReasoningFolds` in app.js).
+      state.hardStop = true;
     } else {
       const r = await api('POST', `/api/sessions/${encodeURIComponent(state.sessionId)}/stop`);
       state.stopping = Boolean(r?.stopping);

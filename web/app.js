@@ -121,6 +121,7 @@ import {
 } from './transcript.js';
 import { toast } from './toast.js';
 import { installContextMenu } from './context-menu.js';
+import { installFoldMotion } from './folds.js';
 import { paneWiring, paneToggle } from './thinking-pane.js';
 import {
   renderComposer,
@@ -725,6 +726,35 @@ function dropLivePost() {
   if (!last || !String(last.id || '').startsWith('local-live-')) return false;
   state.messages = msgs.slice(0, -1);
   return true;
+}
+
+/**
+ * The turn is over, so the reading is over: close every reasoning fold this conversation
+ * left open.
+ *
+ * A reasoning block the operator opens is kept out of the archive while it is open
+ * (`web/transcript.js`), so without a deadline a fold they opened once would sit open for
+ * days. The turn's end is that deadline (19 Nov). A block's key is `<messageId>:<partIndex>`
+ * and an archive's is `reasoning:<messageId>`, so this closes exactly those and leaves tool
+ * cards, loaded-file folds and worker traces alone.
+ */
+function closeReasoningFolds() {
+  const ids = new Set((state.messages || []).map((m) => String(m?.id || '')).filter(Boolean));
+  if (!ids.size) return false;
+  let closed = 0;
+  for (const key of [...state.open]) {
+    const k = String(key);
+    const archive = /^reasoning:(.+)$/.exec(k);
+    const cut = k.lastIndexOf(':');
+    const owner = archive ? archive[1] : k.slice(0, cut);
+    // Only `id:number` and `reasoning:id` are reasoning folds; anything else is the
+    // operator's other business and is left open.
+    if (!archive && (cut <= 0 || !/^\d+$/.test(k.slice(cut + 1)))) continue;
+    if (!ids.has(owner)) continue;
+    state.open.delete(k);
+    closed += 1;
+  }
+  return closed > 0;
 }
 
 function showNothing() {
@@ -1676,6 +1706,8 @@ function connectStream() {
         }
         if (ev.type === EV.executionStarted) {
           state.busy = true;
+          // A new turn: the last turn's cut, if there was one, is no longer the news.
+          state.hardStop = false;
           // Open the post now, not on the first delta: the model can spend many
           // seconds reading its prompt before it says anything, and the chat used to
           // sit empty for that whole time (11 Nov). The placeholder says "Thinking…"
@@ -1688,6 +1720,11 @@ function connectStream() {
           // leave the page's placeholder as an empty "Architect" post, so it goes
           // with the turn. The reload below puts the real one back when there is one.
           if (dropLivePost()) renderTranscript();
+          // The turn is over, so close what the operator left open in its reasoning —
+          // except after the second Stop. That Stop means "stop now, I am reading
+          // something", so the chat is not touched: nothing closes, nothing redraws
+          // beyond the placeholder going, and the next turn's end closes the folds.
+          if (!state.hardStop && closeReasoningFolds()) renderTranscript();
         }
         // A turn that failed or was interrupted is not "done": the chime stays quiet
         // for it, so the sound always means the work finished.
@@ -2224,6 +2261,9 @@ document.addEventListener('keydown', (e) => {
   // because the menu it opened everywhere was the project list; that took copy with it
   // (18 Nov). `web/context-menu.js` owns the menu; the transcript owns the selection.
   installContextMenu();
+  // Reasoning folds open and close over 500ms instead of snapping. One listener on the
+  // transcript, because its markup is replaced on every redraw and the folds with it.
+  installFoldMotion($('transcript'));
   // Prefill and autofill off everywhere: the browser's memory of what was typed in this
   // app is not wanted, in any field — project names, addresses, paths (13 Nov).
   const noFill = (el) => {

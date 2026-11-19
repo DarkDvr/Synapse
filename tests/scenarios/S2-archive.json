@@ -1,0 +1,37 @@
+{
+  "name": "S2 — a fold the operator has open is never archived",
+  "why": "A long turn keeps its newest ten reasoning blocks as their own folds and rolls everything older into one archive. If a block the operator has open rolls into that archive, its fold disappears and the archive is closed — the chat shut something they were reading (18 Nov, again 19 Nov). An open fold must stay out of the archive until it is closed or the turn ends.",
+  "steps": [
+    {
+      "do": "messages",
+      "messages": [
+        {
+          "id": "m1",
+          "type": "assistant",
+          "created": 1,
+          "completed": 0,
+          "parts": [
+            { "type": "reasoning", "text": "Thinking block 1 about the router and its tunnels." },
+            { "type": "reasoning", "text": "Thinking block 2 about the router and its tunnels." },
+            { "type": "reasoning", "text": "Thinking block 3 about the router and its tunnels." },
+            { "type": "reasoning", "text": "Thinking block 4 about the router and its tunnels." },
+            { "type": "reasoning", "text": "Thinking block 5 about the router and its tunnels." },
+            { "type": "reasoning", "text": "Thinking block 6 about the router and its tunnels." },
+            { "type": "reasoning", "text": "Thinking block 7 about the router and its tunnels." },
+            { "type": "reasoning", "text": "Thinking block 8 about the router and its tunnels." },
+            { "type": "reasoning", "text": "Thinking block 9 about the router and its tunnels." },
+            { "type": "reasoning", "text": "Thinking block 10 about the router and its tunnels." },
+            { "type": "reasoning", "text": "Thinking block 11 about the router and its tunnels." }
+          ]
+        }
+      ]
+    },
+    { "do": "render" },
+    { "do": "open", "key": "m1:0" },
+    { "do": "render" },
+    { "do": "parts", "id": "m1", "add": [{ "type": "reasoning", "text": "One more block, which pushes the oldest into the archive." }] },
+    { "do": "render" },
+    { "do": "parts", "id": "m1", "add": [{ "type": "reasoning", "text": "And another, so the archive has two candidates." }] },
+    { "do": "render" }
+  ]
+}

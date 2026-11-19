@@ -451,7 +451,12 @@ export function renderMessage(m, tail = '', extras = '') {
     const reasoningAt = parts
       .map((p, i) => (p.type === 'reasoning' && String(p.text || '').trim() ? i : -1))
       .filter((i) => i >= 0);
-    const olderReasoning = reasoningAt.length > REASONING_KEEP ? reasoningAt.slice(0, -REASONING_KEEP) : [];
+    const olderReasoning = (reasoningAt.length > REASONING_KEEP ? reasoningAt.slice(0, -REASONING_KEEP) : [])
+      // A fold the operator has open is never archived, however old it gets: the archive is
+      // one closed fold, so rolling an open one into it is the chat shutting something the
+      // operator was reading (reported twice, 18 Nov and again 19 Nov). It stays out until
+      // they close it, or until the turn ends and the page closes every reasoning fold.
+      .filter((n) => !state.open.has(parts[n]._k));
     const recentReasoning = new Set(reasoningAt.slice(-REASONING_KEEP));
     const archiveKey = `reasoning:${m.id}`;
     for (const [i, part] of parts.entries()) {
@@ -469,13 +474,14 @@ export function renderMessage(m, tail = '', extras = '') {
           body.push(
             `<details class="reasoning is-archive" data-k="${esc(archiveKey)}"${state.open.has(archiveKey) ? ' open' : ''}>` +
               `<summary>${olderReasoning.length} earlier reasoning</summary>` +
-              olderReasoning.map((n) => `<pre>${esc(parts[n].text)}</pre>`).join('') +
+              `<div class="fold-wrap">${olderReasoning.map((n) => `<pre>${esc(parts[n].text)}</pre>`).join('')}</div>` +
               `</details>`,
           );
-        } else if (recentReasoning.has(i)) {
+        } else if (recentReasoning.has(i) || state.open.has(part._k)) {
           body.push(
             `<details class="reasoning" data-k="${esc(part._k)}"${state.open.has(part._k) ? ' open' : ''}>` +
-              `<summary>${esc(reasoningGist(part.text))}</summary><pre>${esc(part.text)}</pre></details>`,
+              `<summary>${esc(reasoningGist(part.text))}</summary>` +
+              `<div class="fold-wrap"><pre>${esc(part.text)}</pre></div></details>`,
           );
         }
       }

@@ -38,6 +38,15 @@ function apply(state, step) {
     case 'messages':
       state.messages = step.messages || [];
       break;
+    case 'parts': {
+      // A turn gaining a part: the engine writes a new reasoning block, a tool call, a
+      // paragraph. The blocks that were there keep their identity, which is what makes an
+      // open fold testable as the turn grows past the point where it would be archived.
+      const m = (state.messages || []).find((x) => x.id === step.id);
+      if (!m) throw new Error(`scenario: no message "${step.id}" to grow`);
+      m.parts = [...(m.parts || []), ...(step.add || [])];
+      break;
+    }
     case 'trace':
       state.traces.set(step.trace.key, step.trace);
       break;

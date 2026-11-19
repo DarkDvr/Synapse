@@ -313,12 +313,10 @@ What it *found* stays useful, and these are the defects it found in the chat tha
   it (row C2). The one rule the old chat still breaks: "nothing the operator opened closes".
 - **A browser group's card is keyed by position** (`browser-group-N`), not by the calls it
   holds, so it only keeps its open state while the whole turn renders identically (row C5).
-- **The compact post's summary runs its time into its count**: "Compacted 28 Oct, 20:5482
-  messages" — the separator is missing (`web/transcript.js`).
 - **A selection stops the whole chat**: `web/transcript.js` pauses the render while a
   selection rests in the conversation, so the operator reads an answer that is no longer the
-  answer. It is the one thing keeping the selection alive today; the cheap improvement is to
-  pause only the post being read, not the transcript.
+  answer. It is the one thing keeping the selection alive today; the fix the operator chose is
+  to keep the freeze but make it visible, with a yellow pause sign and a Continue button.
 - **The live pane grows the conversation as it writes** (rows G2–G4): every new line pushes
   the post below it down. A fixed window that scrolls inside itself is what the rebuild
   proved works, and it is a small change to `web/thinking-pane.js` and its CSS.

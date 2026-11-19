@@ -10,7 +10,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { play, foldOpen } from './scenario-player.mjs';
 
-const scenario = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'tests/scenarios/S1-folds.json'), 'utf8'));
+const read = (name) => JSON.parse(fs.readFileSync(path.join(process.cwd(), 'tests/scenarios', name), 'utf8'));
+
+const scenario = read('S1-folds.json');
 
 /** Every frame drawn after the step that opened `key` keeps it open. */
 function staysOpen(frames, steps, key) {
@@ -42,4 +44,22 @@ test('the folds were closed before the operator opened them', async () => {
       assert.equal(foldOpen(frame.html, key), false, `${key} was already open before it was clicked`);
     }
   }
+});
+
+// The archive is one closed fold. Rolling an open block into it is the chat shutting what the
+// operator was reading, and it happened whenever a turn ran past ten reasoning blocks.
+test('a reasoning fold the operator has open is never archived', async () => {
+  const archiveScenario = read('S2-archive.json');
+  const { frames } = await play(archiveScenario);
+  assert.ok(frames.length >= 4, `only ${frames.length} frames were drawn`);
+  const opened = archiveScenario.steps.findIndex((s) => s.do === 'open' && s.key === 'm1:0');
+  const after = frames.filter((f) => f.step > opened);
+  assert.ok(after.length >= 3, 'the scenario never grew the turn after the fold was opened');
+  for (const frame of after) {
+    assert.match(frame.html, /data-k="m1:0"/, `the open fold was archived at step ${frame.step}`);
+    assert.equal(foldOpen(frame.html, 'm1:0'), true, `the open fold closed at step ${frame.step}`);
+  }
+  // The archive still forms, from the older blocks that were not open: thirteen blocks,
+  // ten kept, three candidates of which one is open, so two are archived.
+  assert.match(frames.at(-1).html, /2 earlier reasoning/, 'the archive holds the wrong number of blocks');
 });

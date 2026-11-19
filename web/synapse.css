@@ -1819,6 +1819,15 @@ body[data-mode="single"] #runAuto { display: none; }
    not something to read now. */
 .reasoning.is-archive summary { color: #7a7f87; font-size: calc(var(--chat-fs) * 0.96); }
 .reasoning.is-archive pre { margin-top: 6px; }
+
+/* The wrapper a fold's text sits in, because a height cannot be animated on the text
+   itself: the fold grows and shrinks its body from zero (web/folds.js). A closed fold's
+   body is not rendered at all, so its height measures zero — without this rule a closed
+   `<details>` still reports the height of its content, the animation starts at its own
+   end height, and nothing moves. The wrapper also keeps the pre's margins inside it,
+   which is what makes the measured height match the height on screen. */
+.reasoning .fold-wrap { overflow: hidden; }
+.reasoning:not([open]) > .fold-wrap { display: none; }
 /* A worker's completed thinking, folded inside its trace: the chat's fold exactly,
    only its margin tighter — the trace is already a panel. */
 .reasoning.is-trace { margin: 1px 0; }
