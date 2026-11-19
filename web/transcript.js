@@ -18,7 +18,7 @@ const compactK = (n) => (!n ? '0' : n >= 1000000 ? `${(n / 1000000).toFixed(1)}M
 import { renderMarkdown } from './md.js';
 import { serverNow } from './api.js';
 import { permissionNote, permissionChip } from './ask-note.js';
-import { alarmsHere, renderAlarm, leasesHere, renderLease, chatErrorsHere, renderChatError } from './chat-notes.js';
+import { alarmsHere, renderAlarm, leasesHere, renderLease, chatErrorsHere, renderChatError, leaseClock, leaseFor } from './chat-notes.js';
 import { chatAtBottom, chatFollows, scrollChatToBottom, renderChatNav, captureChatSlack, restoreStreamView } from './chat-scroll.js';
 import { currentProject, roleLabel, groupTurns, currentForm } from './run-view.js';
 import { renderTrace, tracesFor, traceSig, renderSessionStream } from './traces.js';
@@ -704,6 +704,7 @@ export function renderTool(part) {
     <div class="tool-head" role="button" tabindex="0" data-tool-toggle="${esc(id)}" aria-expanded="${open}" aria-controls="${esc(id)}-detail">
       <span class="status-dot ${cls}" role="img" aria-label="${esc(label)}"></span>
       <span class="tool-name">${esc(toolLabel(part))}</span>
+      ${leaseClock(part, leaseFor({ dir: currentProject()?.directory }))}
       <span class="tool-target" title="${esc(target)}">${esc(target)}</span>
       ${permChip}
       <span class="tool-state state-pill ${cls}">${esc(label)}</span>

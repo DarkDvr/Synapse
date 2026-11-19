@@ -16,6 +16,7 @@ import { permissionChip } from './ask-note.js';
 import { esc, shortSpan, fileChip, reasoningGist } from './format.js';
 import { renderMarkdown } from './md.js';
 import { paneMarkup } from './thinking-pane.js';
+import { leaseClock, leaseFor } from './chat-notes.js';
 import { turnLive } from './turn-live.js';
 import { fmtTokens, dirKey, roleLabel } from './run-view.js';
 
@@ -100,6 +101,8 @@ export function renderTrace(t) {
   // on one line, with the whole command in the tooltip. The switch is
   // `ui.workerCards`; off returns the plain note the trace used to show (8 Nov).
   const cardsOn = () => state.config?.ui?.workerCards !== false;
+  // A lease this worker is holding: its countdown rides the call that asked for it.
+  const lease = leaseFor({ dir: t.dir, task: t.task });
   const toolLine = (tool, fallback) => {
     const name = String(tool?.name || '').trim();
     const target = String(tool?.target || '').trim() || fallback;
@@ -108,7 +111,7 @@ export function renderTrace(t) {
     // same flex head, the same type. A worker's call arrives as a name and a target
     // with no detail to open, so the head stands alone — but it is one component in
     // one place, not a lookalike (8 Nov).
-    return `<div class="tool-card trace-card"><div class="tool-head"><span class="status-dot ok" role="img" aria-label="tool call"></span><span class="tool-name">${esc(name)}</span><span class="tool-target" title="${esc(target)}">${esc(target)}</span></div></div>`;
+    return `<div class="tool-card trace-card"><div class="tool-head"><span class="status-dot ok" role="img" aria-label="tool call"></span><span class="tool-name">${esc(name)}</span>${leaseClock(tool, lease)}<span class="tool-target" title="${esc(target)}">${esc(target)}</span></div></div>`;
   };
   const note = (n) => {
     if (n?.perm) return permLine(n.perm);

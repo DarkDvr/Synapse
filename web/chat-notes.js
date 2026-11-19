@@ -132,6 +132,28 @@ export function leasesHere() {
   );
 }
 
+/** The lease a trace (or the session itself) is holding, by the key `noteLease` wrote. */
+export function leaseFor({ dir, task = '' } = {}) {
+  return state.leases.get(`${wired.dirKey(dir)}|${task || ''}`) || null;
+}
+
+/**
+ * The countdown a lease puts on the tool call that asked for it.
+ *
+ * A card that says "completed" while the worker still holds the operator's screen says nothing
+ * about how long the screen is gone. The clock does, in front of the target: the same element
+ * the lease line uses (`data-lease-until`), so the page's one-second ticker keeps it honest
+ * without a rebuild (20 Nov).
+ */
+export function leaseClock(tool, lease) {
+  if (!lease || lease.expired) return '';
+  if (!/(^|[_:])lease$/i.test(String(tool?.name || '').trim())) return '';
+  const until = Number(lease.until) || 0;
+  if (!until) return '';
+  const left = hhmmss(Math.max(0, until - Date.now()));
+  return `<span class="tool-lease-clock" data-lease-until="${until}" title="The lease on your screen ends in ${esc(left)}">${esc(left)}</span>`;
+}
+
 export function renderLease(lease) {
   const role = wired.roleLabel(lease.role) || 'Worker';
   const reason = lease.reason ? ` · “${esc(lease.reason)}”` : '';

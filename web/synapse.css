@@ -1901,6 +1901,15 @@ details:not([open]) > [data-fold-body] { display: none; }
   text-align: center; transition: transform 0.15s ease;
 }
 .tool-card.open .tool-chev { transform: rotate(90deg); }
+/* A lease's countdown, riding the tool call that asked for it: the card says "completed", the
+   clock says how long the worker still has the operator's screen. Tabular figures so the
+   number does not shiver as it counts. */
+.tool-lease-clock {
+  font-family: var(--mono); font-size: calc(var(--chat-fs) * 0.8);
+  font-variant-numeric: tabular-nums; color: var(--yellow);
+  padding: 0 5px; border: 1px solid rgba(237, 194, 90, 0.4); border-radius: 5px;
+  flex: none;
+}
 .tool-detail { border-top: 1px solid #2a2d33; }
 .tool-body { padding: 7px 9px; }
 .tool-body + .tool-body { border-top: 1px solid #23262b; }
