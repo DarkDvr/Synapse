@@ -426,7 +426,14 @@ export function buildChat(src = pageState) {
   const live = Boolean(src.busy) || Boolean(last?.type === 'assistant' && !last?.completed && !last?.error);
   const pane =
     live && src.sessionTrace?.stream?.text
-      ? { text: String(src.sessionTrace.stream.text), ended: Boolean(src.sessionTrace.stream.ended) }
+      ? {
+          text: String(src.sessionTrace.stream.text),
+          ended: Boolean(src.sessionTrace.stream.ended),
+          // Folding the pane to its one-line "Thinking…" is the operator's own switch: the
+          // app keeps it on the session's trace, the same place a worker's trace keeps its
+          // own (web/thinking-pane.js).
+          collapsed: Boolean(src.sessionTrace.thinkCollapsed),
+        }
       : null;
 
   // Everything that sits between posts, by its own time.
@@ -574,7 +581,7 @@ function postFor(src, m, { mine, pane }) {
 
   // What a tool is doing, in words, while it runs and the turn emits nothing (11 Nov).
   if (m.live && src.liveTool) blocks.push({ kind: 'line', key: 'waiting', line: 'waiting', props: { text: String(src.liveTool) } });
-  if (pane) blocks.push({ kind: 'stream', key: 'pane', text: pane.text, live: !pane.ended });
+  if (pane) blocks.push({ kind: 'stream', key: 'pane', text: pane.text, live: !pane.ended, collapsed: pane.collapsed });
   for (const d of mine) blocks.push({ kind: 'card', key: `download:${d.id}`, card: 'download', props: { ...d }, open: false });
 
   return {

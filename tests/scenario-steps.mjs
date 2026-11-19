@@ -44,6 +44,16 @@ export function applyStep(state, step) {
     case 'messages':
       state.messages = (step.messages || []).map((m) => ({ ...m, created: stamp(m.created) }));
       return;
+    case 'grow': {
+      // A text part gaining words, the way a delta arrives: the same part, a longer string.
+      const message = (state.messages || []).find((m) => m.id === step.id);
+      if (!message) throw new Error(`scenario: no message "${step.id}" to grow`);
+      const parts = message.parts || [];
+      const part = parts.find((p) => p.key && p.key === step.part) || parts[Number(step.part)];
+      if (!part) throw new Error(`scenario: no part "${step.part}" in "${step.id}"`);
+      part.text = String(part.text || '') + String(step.delta || '');
+      return;
+    }
     case 'parts': {
       const message = (state.messages || []).find((m) => m.id === step.id);
       if (!message) throw new Error(`scenario: no message "${step.id}" to grow`);
@@ -96,14 +106,26 @@ export function applyStep(state, step) {
       state.open.delete(step.key);
       return;
     case 'stream': {
-      state.sessionTrace.key = step.key;
+      // A step that forgets the key keeps the one already there: the pane belongs to the
+      // session's own trace, and a missing key used to blank it and take the old chat's
+      // pane off the screen in the middle of a turn.
+      if (step.key) state.sessionTrace.key = step.key;
       const stream = state.sessionTrace.stream || { kind: 'think', text: '', offset: 0 };
       stream.kind = step.kind || 'think';
       stream.text += step.delta || '';
       state.sessionTrace.stream = stream;
       return;
     }
+    // The pane's own switch — the operator's click on its ▾. It lives on the session's trace,
+    // the same place a worker's trace keeps its own (web/thinking-pane.js).
+    case 'stream-flag':
+      Object.assign(state.sessionTrace, step.patch || {});
+      return;
     case 'render':
+      return;
+    // Where the reader's own selection is, is not state: it is the browser's. The lab
+    // (tests/browser/lab.js) makes the selection; a player with no DOM has nothing to do.
+    case 'select':
       return;
     default:
       throw new Error(`scenario: unknown step "${step.do}"`);

@@ -566,7 +566,9 @@ function streamNode(item) {
   inner.style.justifyContent = 'flex-end';
   inner.style.minHeight = '100%';
   const body = el('div', 'trace-flow-body');
-  body.textContent = String(item.text || '');
+  // One text node, appended to as the words arrive. A selection inside the pane then
+  // survives the next line, the same way it does inside a post.
+  body.append(document.createTextNode(String(item.text || '')));
   inner.append(body);
   view.append(inner);
   flow.append(view);
@@ -616,7 +618,21 @@ function fillStreamNode(node, item) {
   const grew = text.length > (Number(state.lastLen) || 0);
   state.lastLen = text.length;
   if (flow) flow.classList.toggle('is-idle', !item.live);
-  if (body) body.textContent = text;
+  if (body) {
+    // The words go into the text node that is already there, and only the new tail is
+    // written: assigning the whole string would drop a selection the reader made in it.
+    const words = body.firstChild;
+    const was = words && words.nodeType === 3 ? String(words.data || '') : null;
+    if (was !== null && typeof words.appendData === 'function' && text.startsWith(was)) {
+      if (text !== was) words.appendData(text.slice(was.length));
+    } else if (was !== null && was === text) {
+      // Already written by the node's own construction: nothing to do.
+    } else if (words && words.nodeType === 3) {
+      words.data = text;
+    } else {
+      body.textContent = text;
+    }
+  }
   if (view && atEnd) {
     view.scrollTop = view.scrollHeight;
     state.follow = true;
@@ -629,20 +645,94 @@ function fillStreamNode(node, item) {
 }
 
 /**
- * The blocks of one container, keyed.
+ * Copy a freshly drawn node over a live one, changing as little as it can.
  *
- * A block that has not changed keeps its node, and a stream keeps its node even when it has
- * changed: that is what lets the pane hold its scroll and its window while the words arrive.
- * Everything else is rebuilt, which is cheap and loses nothing.
+ * Markdown is drawn as HTML, so a paragraph that gained a word arrives as a whole new
+ * string. Replacing the block would take the operator's selection with it, and a selection
+ * is not a nicety: it is how they copy a line out of an answer that is still being written
+ * (13 Nov). Walking the two trees and writing only what changed keeps the same text nodes —
+ * and a selection lives in those. An append moves nothing, so every offset in the selection
+ * stays exactly where the operator put it.
  */
-function fillBlocks(container, blocks, held) {
-  const nodes = [];
-  for (const block of blocks || []) {
-    const key = String(block.key || '');
-    if (!key) {
-      nodes.push(blockNode(block));
+function reconcile(live, fresh) {
+  if (!live || !fresh || live === fresh) return;
+  if (live.nodeType === 3 || fresh.nodeType === 3) {
+    if (live.nodeType !== fresh.nodeType) {
+      live.replaceWith(fresh);
+      return;
+    }
+    const was = String(live.data || '');
+    const now = String(fresh.data || '');
+    if (was === now) return;
+    if (now.startsWith(was) && typeof live.appendData === 'function') live.appendData(now.slice(was.length));
+    else live.data = now;
+    return;
+  }
+  if (live.nodeType !== 1 || live.tagName !== fresh.tagName) {
+    live.replaceWith(fresh);
+    return;
+  }
+  for (const attr of [...fresh.attributes]) {
+    if (live.getAttribute(attr.name) !== attr.value) live.setAttribute(attr.name, attr.value);
+  }
+  for (const attr of [...live.attributes]) {
+    if (!fresh.hasAttribute(attr.name)) live.removeAttribute(attr.name);
+  }
+  // Both lists are read before anything moves: appending a child takes it out of `fresh`,
+  // and a list that changes while it is walked is how a render loop skips a node.
+  const want = [...fresh.childNodes];
+  const have = [...live.childNodes];
+  const shared = Math.min(want.length, have.length);
+  for (let i = 0; i < shared; i += 1) {
+    if (have[i].parentNode !== live) continue;
+    reconcile(have[i], want[i]);
+  }
+  for (let i = shared; i < want.length; i += 1) live.appendChild(want[i]);
+  while (live.childNodes.length > want.length) live.removeChild(live.lastChild);
+}
+
+/**
+ * The run of children between two markers, in order, and nothing else.
+ *
+ * `start` and `end` are the invisible markers a post keeps around its blocks; both null means
+ * the whole container, which is what a trace's own lines are. A node already in its place is
+ * not touched — moving a node in the document takes the selection inside it with it, so the
+ * one thing this must never do is re-insert a node that has not moved — and anything left
+ * over inside the run is taken away, which is how a block that is gone stops being drawn.
+ */
+function place(container, nodes, start = null, end = null) {
+  let node = start ? start.nextSibling : container.firstChild;
+  for (const want of nodes) {
+    if (node === want) {
+      node = node.nextSibling;
       continue;
     }
+    container.insertBefore(want, node || end || null);
+    // `want` is now behind `node`, which is where the next one has to go.
+  }
+  while (node && node !== end) {
+    const next = node.nextSibling;
+    node.remove?.();
+    node = next;
+  }
+}
+
+/**
+ * The blocks of one container, keyed.
+ *
+ * A block that has not changed keeps its node; a stream and a paragraph keep theirs even
+ * when they have changed. For a paragraph the node is kept and only the words that arrived
+ * are written into it — that is what lets a selection survive a delta. Everything else is
+ * rebuilt, which is cheap and loses nothing.
+ */
+function fillBlocks(container, blocks, held, start = null, end = null) {
+  const nodes = [];
+  const seen = new Set();
+  for (const [index, block] of (blocks || []).entries()) {
+    // A block with no key still needs one: the nodes now live in a container that is kept
+    // across repaints, so a fresh node per frame would pile up instead of replacing one.
+    const key = String(block.key || `#${index}`);
+    seen.add(key);
     const sig = JSON.stringify(block);
     // The same block with only its open state changed: a card can animate instead of being
     // rebuilt. A stream is handled below for the same reason.
@@ -657,21 +747,45 @@ function fillBlocks(container, blocks, held) {
       const detail = prev.node.querySelector('.tool-detail');
       const head = prev.node.querySelector('.tool-head');
       if (detail && head) animateDetail(prev.node, head, detail, Boolean(block.open));
-      held.set(key, { node: prev.node, sig, base, open: block.open });
+      held.set(key, { ...prev, sig, base, open: block.open });
       nodes.push(prev.node);
       continue;
     }
     if (prev && block.kind === 'stream') {
-      fillStreamNode(prev.node, block);
-      held.set(key, { node: prev.node, sig });
+      // The pane has two shapes — the open window and the one-line "Thinking…" — and they
+      // are different elements. Writing words into the row would draw nothing at all, which
+      // is what a click on the pane's toggle used to get.
+      const shape = Boolean(block.collapsed);
+      const was = prev.node.classList.contains('think-line');
+      if (shape === was) {
+        fillStreamNode(prev.node, block);
+        held.set(key, { ...prev, sig, base, collapsed: shape });
+        nodes.push(prev.node);
+        continue;
+      }
+    }
+    // A paragraph that grew: the same element, with only the new words written into it.
+    const wanted = block.kind === 'prose' ? (block.format === 'pre' ? 'PRE' : 'DIV') : '';
+    if (prev && wanted && prev.node.tagName === wanted) {
+      reconcile(prev.node, blockNode(block));
+      held.set(key, { ...prev, sig, base });
       nodes.push(prev.node);
       continue;
     }
     const node = appear(blockNode(block));
+    // A rebuilt block takes the place of the one it replaces. Nothing takes the old node
+    // away for us: the container is kept across repaints now, so a leftover would be drawn
+    // twice — once stale, once live.
+    if (prev) prev.node.replaceWith(node);
     held.set(key, { node, sig, base, open: block.open });
     nodes.push(node);
   }
-  container.append(...nodes);
+  for (const [key, prev] of [...held]) {
+    if (seen.has(key)) continue;
+    held.delete(key);
+    prev.node.remove?.();
+  }
+  place(container, nodes, start, end);
 }
 
 function blockNode(block) {
@@ -704,26 +818,71 @@ function blockNode(block) {
 function fillPost(post, item) {
   post.className = `msg ${item.speaker === 'you' ? 'user' : item.speaker === 'synapse' ? 'harness' : 'assistant'}${item.steer ? ' is-steer' : ''}`;
   post.dataset.key = item.key;
-  const body = el('div', 'msg-body');
-  body.append(el('span', 'msg-time', CLOCK(item.at)), el('span', 'msg-role', item.speaker === 'you' ? 'You' : item.speaker === 'synapse' ? 'Synapse' : 'Architect'));
-  if (item.steer) body.append(el('span', 'msg-steer', 'STEER:'));
-  fillBlocks(body, item.blocks, post._blocks || (post._blocks = new Map()));
-  // The operator's own message can be put back in the composer, attachments and all — after
-  // the words, where the old chat puts it.
-  if (item.speaker === 'you' && item.reuseId) {
-    const reuse = document.createElement('button');
-    reuse.type = 'button';
-    reuse.className = 'msg-reuse';
-    reuse.dataset.reuseMsg = item.reuseId;
-    reuse.title = 'Copy this message and its attachments into the composer';
-    reuse.setAttribute('aria-label', 'Copy this message into the composer');
-    reuse.innerHTML =
-      '<svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">' +
-      '<path d="M3 5.4A5.2 5.2 0 1 1 3 10.6"/><path d="M3 2.6v3.2h3.2"/></svg><span>Reuse</span>';
-    body.append(reuse);
+  // The frame is built once and then kept: the header, two invisible comments that mark the
+  // run of blocks, and the two things that come after it. A post is repainted on every
+  // delta, and taking an element out of the document takes the selection inside it with it —
+  // so a repaint writes into the frame and never rebuilds it.
+  let body = post._body;
+  if (!body) {
+    body = post._body = el('div', 'msg-body');
+    body._time = el('span', 'msg-time');
+    body._role = el('span', 'msg-role');
+    // Comments: they hold a place for the blocks without being anything the page draws,
+    // says or measures. A placeholder element would take a line box and make the post two
+    // pixels taller than the old chat's.
+    body._start = document.createComment('words');
+    body._mark = document.createComment('/words');
+    body.append(body._time, body._role, body._start, body._mark);
+    post.append(body);
   }
-  if (item.error) body.append(el('div', 'msg-error', String(item.error)));
-  post.replaceChildren(body);
+  const speaker = item.speaker === 'you' ? 'You' : item.speaker === 'synapse' ? 'Synapse' : 'Architect';
+  const clock = CLOCK(item.at);
+  if (body._time.textContent !== clock) body._time.textContent = clock;
+  if (body._role.textContent !== speaker) body._role.textContent = speaker;
+  // The steer tag is only there on a steered turn. Built when it is needed and taken away
+  // when it is not: an empty span of its height still takes a line box, and that is a post
+  // two pixels taller than the old chat's for no reason at all.
+  if (item.steer) {
+    if (!body._steer) {
+      body._steer = el('span', 'msg-steer', 'STEER:');
+      body.insertBefore(body._steer, body._start);
+    }
+  } else if (body._steer) {
+    body._steer.remove();
+    body._steer = null;
+  }
+  fillBlocks(body, item.blocks, post._blocks || (post._blocks = new Map()), body._start, body._mark);
+  // The operator's own message can be put back in the composer, attachments and all — after
+  // the words, where the old chat puts it. Built on arrival, then kept.
+  if (item.speaker === 'you' && item.reuseId) {
+    if (!body._reuse) {
+      const reuse = document.createElement('button');
+      reuse.type = 'button';
+      reuse.className = 'msg-reuse';
+      reuse.title = 'Copy this message and its attachments into the composer';
+      reuse.setAttribute('aria-label', 'Copy this message into the composer');
+      reuse.innerHTML =
+        '<svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">' +
+        '<path d="M3 5.4A5.2 5.2 0 1 1 3 10.6"/><path d="M3 2.6v3.2h3.2"/></svg><span>Reuse</span>';
+      body._reuse = reuse;
+      body.append(reuse);
+    }
+    body._reuse.dataset.reuseMsg = item.reuseId;
+  } else if (body._reuse) {
+    body._reuse.remove();
+    body._reuse = null;
+  }
+  const error = item.error ? String(item.error) : '';
+  if (error) {
+    if (!body._error) {
+      body._error = el('div', 'msg-error');
+      body.append(body._error);
+    }
+    if (body._error.textContent !== error) body._error.textContent = error;
+  } else if (body._error) {
+    body._error.remove();
+    body._error = null;
+  }
 }
 
 function postNode(item) {
@@ -733,8 +892,6 @@ function postNode(item) {
 }
 
 function fillTrace(root, item) {
-  const blocks = el('div', 'trace-lines');
-  fillBlocks(blocks, item.blocks, root._blocks || (root._blocks = new Map()));
   const label = roleLabel(item.role) || 'Worker';
   const rest = `${item.task ? ` · ${item.task}` : ''}${item.title ? ` · ${item.title}` : ''}`;
   const took = item.ms ? ` · ${Math.round(item.ms / 1000)}s` : '';
@@ -742,27 +899,54 @@ function fillTrace(root, item) {
   const packed = item.compactions ? ` · compacted ×${item.compactions}` : '';
   const looped = item.loops ? ` · looped ×${item.loops}` : '';
   const steered = item.steered ? ' · steered' : '';
-  const head = `${label}${rest}`;
+  const figures = `${took}${files}${packed}${looped}${steered}`;
   root.className = item.folded ? 'trace is-fold' : 'trace is-live';
   root.dataset.key = item.key;
   root.dataset.k = `${item.key}:fold`;
   if (item.folded) {
+    if (!root._lines) {
+      // Built once: the summary, the body, and the lines inside it. The role is its own
+      // span, the same one the old chat styles: "CODER 1" in the trace's colour, the task
+      // and the figures after it in the ordinary text colour.
+      const summary = el('summary');
+      const role = el('span', 'trace-role', label);
+      const after = document.createTextNode('');
+      summary.append(role, after);
+      const body = el('div', 'fold-body');
+      const lines = el('div', 'trace-lines');
+      body.append(lines);
+      root.replaceChildren(summary, body);
+      root._summary = summary;
+      root._role = role;
+      root._after = after;
+      root._body = body;
+      root._lines = lines;
+      animateFold(root, summary, body);
+    }
     root.open = Boolean(item.open);
-    const summary = el('summary');
-    summary.title = `${head}${took}${files}${packed}${looped}${steered}`;
-    // The role is its own span, the same one the old chat styles: "CODER 1" in the trace's
-    // colour, the task and the figures after it in the ordinary text colour.
-    summary.append(el('span', 'trace-role', label), document.createTextNode(`${rest}${took}${files}${packed}${looped}${steered}`));
-    const body = el('div', 'fold-body');
-    body.append(blocks);
-    root.replaceChildren(summary, body);
-    animateFold(root, summary, body);
+    if (root._role.textContent !== label) root._role.textContent = label;
+    if (root._after.data !== `${rest}${figures}`) root._after.data = `${rest}${figures}`;
+    root._summary.title = `${label}${rest}${figures}`;
+    fillBlocks(root._lines, item.blocks, root._blocks || (root._blocks = new Map()));
     return;
   }
-  const line = el('div', 'trace-head');
-  line.title = head;
-  line.append(el('span', 'trace-role', label), document.createTextNode(rest));
-  root.replaceChildren(line, blocks);
+  if (!root._lines) {
+    const line = el('div', 'trace-head');
+    const role = el('span', 'trace-role', label);
+    const restNode = document.createTextNode('');
+    line.append(role, restNode);
+    const lines = el('div', 'trace-lines');
+    root.replaceChildren(line, lines);
+    root._head = line;
+    root._role = role;
+    root._rest = restNode;
+    root._lines = lines;
+  }
+  if (root._role.textContent !== label) root._role.textContent = label;
+  if (root._rest.data !== rest) root._rest.data = rest;
+  const title = `${label}${rest}`;
+  if (root._head.title !== title) root._head.title = title;
+  fillBlocks(root._lines, item.blocks, root._blocks || (root._blocks = new Map()));
 }
 
 function itemNode(item) {
@@ -808,6 +992,9 @@ export function createChatView(host, { onToggle, onSubmit } = {}) {
       else fillTrace(node, item);
     } else {
       node = appear(itemNode(item));
+      // A new element for a key that already had one: the old element goes, or the
+      // conversation would show both — a live trace and its finished version, together.
+      if (held) held.node.remove();
     }
     made.set(item.key, { node, sig });
     return node;

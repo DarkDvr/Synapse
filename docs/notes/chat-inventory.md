@@ -70,7 +70,7 @@ Ids are stable: they are the ticket names and the scenario names. `M` = must,
 | B1 | Any text part | Markdown: headings, lists (incl. task lists), GFM tables, blockquotes, fenced code, rules, inline code, bold/italic/strike, links | M: escaped first (no injected markup); a table never widens the column; code scrolls inside itself |
 | B2 | An image written inline or on its own line | A chip in the sentence, the picture on hover | M: the chip joins the paragraph it illustrates; a `javascript:` or missing file is not a chip |
 | B3 | Text as it arrives | — | M: prose that is still growing is drawn where it is, not re-lettered below the reader (see G3/G4) |
-| B4 | A selection the operator is making | The native selection | M: **a live update never takes it away**: while a selection rests in the conversation, the render waits (the chat pauses, then catches up when it is released); today every delta rebuilds the transcript and the selection dies |
+| B4 | A selection the operator is making | The native selection | M: **a live update never takes it away**. Done on chat-v2: the paragraph keeps its node and only the words that arrived are appended to its text node, so the highlight stays on the words the operator chose (measured: held in 6 of 6 frames while the post grew 109 → 221 characters, `selection`). The old chat keeps it only by refusing to draw — `web/transcript.js` pauses the render while a selection is in the chat, and the post stays frozen at 39 characters |
 | B5 | A right-click | The page's own menu: Copy, Select All; Cut/Copy/Paste/Select All in a field | M: Copy puts exactly the selection on the clipboard, in the operator's own text; the menu never appears as the browser's default (no Print/Reload/Save As/Inspect); today right-click is switched off everywhere |
 | B6 | Copying from a card | The menu over a `<pre>` (tool output, code) | M: Copy takes the text, not the card's chrome |
 
@@ -131,7 +131,7 @@ Ids are stable: they are the ticket names and the scenario names. `M` = must,
 | Id | Comes from | What appears | Must / Pain |
 |---|---|---|---|
 | G1 | The first delta of a turn | A post with the pane | M: the post does not appear twice, and a compaction line arriving mid-turn does not hide the pane |
-| G2 | Reasoning deltas | The pane: a window of about eleven lines, tail, eased slide, "Thinking…" when collapsed, dim when idle | M: a fixed window — growth moves nothing outside it; the words stay when the step ends; the ▾ hides it |
+| G2 | Reasoning deltas | The pane: a window of about eleven lines, tail, eased slide, "Thinking…" when collapsed, dim when idle | M: a fixed window — growth moves nothing outside it; the words stay when the step ends; the ▾ hides it and clicking again brings the same words back. Done on chat-v2: the two shapes are two elements and the view rebuilds when the shape changes (measured: 245 → 63 → 245 px, the same 127 characters back, then 172 with the next delta, `pane-collapse`) |
 | G3 | Words arriving faster than they are read | — | M: the pane follows only while the reader is at the pane's end; a reader who scrolls up is left where they are and told new words are waiting; P: it pins to the bottom every frame, so it cannot be read or scrolled |
 | G4 | The step's message landing | The words also exist in the message | M: no duplicate, no flicker, no re-lettering; the pane's words are the same words as the fold's, once |
 | G5 | A live tool | A waiting line from the tool's own input | M: appears without a render of the whole chat |
@@ -289,10 +289,19 @@ renderer with no server and no browser, and `tests/scenario.test.mjs` holds the 
 next update. It fails on the renderer before 1.62.14 and passes after it, which is how we
 know the harness can see the thing it is for.
 
-Three cases exist so far. Two of them are locks rather than faults — they pin behaviour the
+Nine cases exist so far. Two of them are locks rather than faults — they pin behaviour the
 chat already gets right, so the rebuild cannot lose it quietly: `download-placement.json`
 (a saved download is drawn inside the post it happened in) and `alarm-split.json` (a
-prohibition splits the turn it arrived in, instead of sliding to the end of it).
+prohibition splits the turn it arrived in, instead of sliding to the end of it). The rest are
+the promises the rebuild is for: `stream-burst` (the pane's fixed window), `pane-scroll` (the
+"new words" hint), `anchor` (the reader's line), `form` (the panel keeps typed answers),
+`selection` (a selection survives the delta after it) and `pane-collapse` (the pane's two
+shapes, and the words coming back).
+
+`node scripts/chat-lab.mjs --check` answers the ones that can be pass/fail — text identity
+between the two renderers on every frame, the selection against each of them, the pane's fold
+— and exits non-zero when one breaks. It needs a browser, so it is a lab command, not part of
+`scripts/checks.mjs`.
 
 Every scenario runs at: normal speed, 10× speed, and paused on each frame boundary
 (for screenshots). Each produces a screenshot pair (old/new) at 1280 and 1600, and the
@@ -463,48 +472,52 @@ list — and a disagreement between the two is a bug in one of them, not a matte
 ## 9. Where it stands, and how to run it
 
 **The branch.** `chat-v2`, in its own worktree at `F:\dev\Synapse.worktrees\chat-v2` so the
-running app's folder is never touched. Main still draws the old chat; the branch is ahead of
-`bf7cb95`. The last commit is `a1fd9a6`.
+running app's folder is never touched. Main still draws the old chat, and `main` is merged
+into the branch whenever it moves (`b04d091` merged `8be801d`).
 
 **What is built.**
 - `web/chat-model.js` — the item model (§7): `{ handover, items, pending, form }`.
 - `web/chat-view.js` — the keyed renderer: posts, traces, lines, prose, folds, cards,
-  streams, the question panel. One element per key, and a repaint keeps the node.
+  streams, the question panel. One element per key, a repaint writes into that element, and
+  a paragraph that grew is written into the text node it already had.
 - `tests/browser/lab.html` + `lab.js` — both renderers, one state, side by side, with the
-  anchor, the pane, the hint and the motion measured on every frame.
+  anchor, the pane, the hint, the selection and the motion measured on every frame, and
+  `__labCheck()` for the promises that can be answered pass/fail.
 - `scripts/chat-lab.mjs` — stages the page into `%TEMP%\synapse-chat-lab` and runs it:
-  `node scripts/chat-lab.mjs <scenario> [--shot] [--motion] [--width N --height N]`.
+  `node scripts/chat-lab.mjs <scenario> [--shot] [--motion] [--width N --height N]`,
+  `--panel old` to make a scenario's selection in the old panel, and `--check` for the cases.
 - `tests/scenario-steps.mjs` + `tests/scenario-player.mjs` — one scenario, applied in Node
-  against the old renderer or in the lab against both. Steps: `messages`, `parts`, `trace`,
-  `trace-update`, `note`, `download`, `alarm`, `lease`, `form`, `permission`, `handover`,
-  `open`, `close`, `stream`, `render`, and the lab's `scrollTo` / `scrollPane`.
+  against the old renderer or in the lab against both. Steps: `messages`, `parts`, `grow`,
+  `trace`, `trace-update`, `note`, `download`, `alarm`, `lease`, `form`, `permission`,
+  `handover`, `open`, `close`, `stream`, `stream-flag`, `render`, and the lab's `scrollTo`,
+  `scrollPane`, `select`.
 - `tests/scenarios/` — `S1-folds`, `download-placement`, `alarm-split`, `stream-burst`,
-  `pane-scroll`, `anchor`, `form`.
+  `pane-scroll`, `anchor`, `form`, `selection`, `pane-collapse`.
 - `tests/chat-model.test.mjs` and `tests/scenario.test.mjs` — the model and the frames.
 
-**What is proved**, both renderers, one state:
+**What is proved**, both renderers, one state (`node scripts/chat-lab.mjs --check`, 10 cases):
 
 | Promise | Old | New |
 |---|---|---|
 | Folds the operator opened stay open | closes | open (S1) |
 | A download sits inside its post | yes | yes (download-placement) |
 | A prohibition splits the turn it landed in | yes | yes (alarm-split) |
-| The two render the same characters | — | identical text on every frame |
+| The two render the same characters | — | identical words on every frame of seven scenarios |
 | The pane grows without moving the chat | post 45 → 162 px | 245 px throughout (stream-burst) |
 | The reader's line holds still | 44 px | 1 px (anchor) |
 | The pane says there are new words | no | yes (pane-scroll) |
 | Folds and cards open in 120 ms | instant | 0→55→56 px; 1→56→96→1 px |
 | The question panel keeps typed answers | yes | yes (form) |
+| A selection survives the delta that follows it | kept by *not drawing*: the post froze at 39 characters | kept while drawing: 109 → 221 characters (selection) |
+| The pane folds to one line and comes back | yes | 245 → 63 → 245 px, same 127 characters, then 172 (pane-collapse) |
 
 **What is left**, in order:
 
-1. **Per-block text updates**, so a selection inside a paragraph survives that paragraph
-   growing. It is the one promise still unproven: a changed block is rebuilt today.
-2. **The panel's arrival animation**, and the question countdown in v2 — `firstAt` and
+1. **The panel's arrival animation**, and the question countdown in v2 — `firstAt` and
    `wait` are in the model, the ticking is not.
-3. **The app switch**: `chat.renderer: v1 | v2`, the ask host and the permission cards wired
+2. **The app switch**: `chat.renderer: v1 | v2`, the ask host and the permission cards wired
    to the view, then the operator's side-by-side judgement and the decision.
-4. Only then: the rail, the role cards and the plan pane on the same primitives.
+3. Only then: the rail, the role cards and the plan pane on the same primitives.
 
 **Traps that cost time here.**
 - The lab's panels must beat the app's `body[data-view] .chat-dock` rules, so the lab's rules
@@ -518,3 +531,14 @@ running app's folder is never touched. Main still draws the old chat; the branch
   whenever anything above grows — that is geometry, not movement.
 - A closing fold has to stay `open` until its body has shrunk, or the content disappears
   before anything can move.
+- **A container that is kept across repaints has to take its own leftovers away.** Replacing
+  a block's node without removing the old one drew the same reasoning archive twice — the
+  lab caught it as 163 extra characters, and the fix is `replaceWith` plus a run that ends at
+  a marker.
+- **An empty placeholder element is not free.** A permanently present `msg-steer` span made
+  every assistant post 2 px taller than the old chat's; an empty inline-flex box still takes
+  a line. The header span is built when a turn is steered and removed when it is not.
+- **A selection in a detached tree still answers `toString()`.** `web/transcript.js` pauses
+  its render while a selection is in the chat, so the old panel kept the words *and* stopped
+  drawing — the lab had to ask `node.isConnected` before it could tell a kept selection from
+  a frozen conversation.
