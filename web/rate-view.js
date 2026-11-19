@@ -336,6 +336,12 @@ export function paintRates(now = Date.now()) {
     // and the compaction that follows. Shown even when the rate has gone stale —
     // the fill of the window is true whether or not the model is writing.
     let tip = '';
+    // How much of the prompt the provider's cache served, on the line (20 Nov — the operator
+    // missed it after 13 Nov moved it into the tooltip only, because "(100% cache)" was eaten
+    // by the ellipsis on a worker's narrow card). So the length follows the room: Multi's four
+    // cards get the bare number, Single's one wide card gets the word with it.
+    const single = state.mode === 'single';
+    const cacheBit = (share) => (share.ok ? `${share.pct}%${single ? ' cache' : ''}` : '');
     if (card.dataset.role === 'architect' && Number(arch?.used) > 0) {
       const archUsed = withinWindow(arch.used, archLimit);
       const share = cacheShare(arch.fresh, arch.cached, archLimit);
@@ -348,11 +354,13 @@ export function paintRates(now = Date.now()) {
             ? 'The engine is summarising this conversation to make room.'
             : 'The conversation was compacted; its new size arrives with the next step.';
       } else {
-        // The cache share is in the tooltip, not on the line: at the narrowest card the
-        // three readings plus the clock already need every pixel, and "(100% cache)"
-        // was the thing the ellipsis ate (13 Nov — measured 173px wanted, 154 available;
-        // the line without it is 132px).
+        // The figure and, beside it, what the cache served. Both are on the line again (20
+        // Nov): the operator missed the share after 13 Nov kept it only in the tooltip. Multi
+        // gets the bare number because four narrow cards ate "(100% cache)" (measured 173px
+        // wanted, 154 available); Single's one wide card gets the word as well.
         bits.push(`${wired.fmtTokens(archUsed)}${archLimit ? `/${wired.fmtTokens(archLimit)}` : ''} ctx`);
+        const shareBit = cacheBit(share);
+        if (shareBit) bits.push(shareBit);
         tip =
           `The Architect's last prompt: ${arch.used} tokens` +
           (archLimit ? ` of ${archLimit}` : '') +
@@ -369,8 +377,11 @@ export function paintRates(now = Date.now()) {
           ? "The engine is summarising this worker's conversation to make room."
           : "The worker's conversation was compacted; its new size arrives with the next step.";
       } else {
-        // Same line, same rule as the Architect's card (13 Nov).
+        // Same line, same rule as the Architect's card (13 Nov) — and the same share on it,
+        // in the short form Multi's narrow cards have room for (20 Nov).
         bits.push(`${wired.fmtTokens(runUsed)}${run.ctxLimit ? `/${wired.fmtTokens(run.ctxLimit)}` : ''} ctx`);
+        const shareBit = cacheBit(share);
+        if (shareBit) bits.push(shareBit);
         tip =
           `Prompt ${withinWindow(run.ctx, run.ctxLimit)} tokens of ${run.ctxLimit || 'an unknown window'}` +
           (share.ok ? ` — ${share.pct}% from the provider's cache (${share.fresh} fresh, ${share.read} read)` : '') +
