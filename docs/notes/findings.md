@@ -38,6 +38,12 @@ more — open a note for it.
 
 ## Elsewhere
 
+- **The chat rebuild is on branch `chat-v2`**, in its own worktree at
+  `F:\dev\Synapse.worktrees\chat-v2` — the running app's folder is untouched. The contract,
+  the decisions, the measurements and the status are in that branch's
+  `docs/notes/chat-inventory.md` (§7 the item model, §9 where it stands and how to run it).
+  Main is still the old chat; nothing of the rebuild is live.
+
 - **The rail, role cards and plan pane will want the same primitives.** They read the
   same state and draw the same cards; the vocabulary in `chat-inventory.md` is built so
   they can follow, but they are the next job after the chat, not part of it.
