@@ -1,0 +1,21 @@
+{
+  "name": "S10 — the pane tails its own end, and holds the reader's place when they scroll up",
+  "why": "The pane is a window that scrolls inside itself. Two rules make it readable: while the reader is at its end it follows the newest words, and once they scroll up it stops following and says there are new words below. The bug the operator saw was a third behaviour — the window sitting at the top of the reasoning while the words arrived underneath (19 Nov). That happened whenever the pane was drawn into a fresh element, which starts at scrollTop 0.",
+  "steps": [
+    { "do": "messages", "messages": [ { "id": "m1", "type": "assistant", "created": "now-9000", "completed": 0, "parts": [{ "type": "text", "text": "Starting on the router." }] } ] },
+    { "do": "render" },
+    { "do": "stream", "key": "ses_scenario", "delta": "First, read the current config and check the tunnel count.\nThe provider lists four nodes; all four answer on the control port.\nPick the Amsterdam one, measure its delay, and write the config.\n" },
+    { "do": "render" },
+    { "do": "stream", "key": "ses_scenario", "delta": "Then restart the core and prove the exit address from the PC.\nThe first attempt bound the wrong interface, so the tunnel came up but carried nothing.\nA second attempt with the interface named explicitly worked.\n" },
+    { "do": "render" },
+    { "do": "stream", "key": "ses_scenario", "delta": "Last step: record what changed, and say what to check.\nTwo files moved, one setting changed, and the restart is the only thing that needs a hand.\nNothing else on the router was touched.\n" },
+    { "do": "render" },
+    { "do": "stream", "key": "ses_scenario", "delta": "One more thought about the delay measurement.\nThe number read on the PC is the round trip, not the radio link.\nThe difference matters when the tunnel carries voice.\n" },
+    { "do": "render" },
+    { "do": "scrollPane", "fraction": 0 },
+    { "do": "stream", "key": "ses_scenario", "delta": "A line that arrives while the reader is looking at the top.\nAnd a second line, so the box has something to add.\nAnd a third, so the hint has a reason to appear.\n" },
+    { "do": "render" },
+    { "do": "stream", "key": "ses_scenario", "delta": "And one more, which must not move their line either.\nNot by a pixel while they read the earlier words.\n" },
+    { "do": "render" }
+  ]
+}

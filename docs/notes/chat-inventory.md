@@ -493,7 +493,8 @@ into the branch whenever it moves (`b04d091` merged `8be801d`).
   `handover`, `open`, `close`, `stream`, `stream-flag`, `render`, and the lab's `scrollTo`,
   `scrollPane`, `select`.
 - `tests/scenarios/` — `S1-folds`, `download-placement`, `alarm-split`, `stream-burst`,
-  `pane-scroll`, `anchor`, `form`, `selection`, `pane-collapse`, `form-tick`.
+  `pane-scroll`, `anchor`, `form`, `selection`, `pane-collapse`, `form-tick`,
+  `selection-swap`, `pane-tail`.
 - `tests/chat-model.test.mjs` and `tests/scenario.test.mjs` — the model and the frames.
 - `web/chat-render.js` — the switch: `?chat=v2` draws the conversation with the new renderer
   in the same element, and every call site in `app.js` still says `renderTranscript()`. The
@@ -502,7 +503,7 @@ into the branch whenever it moves (`b04d091` merged `8be801d`).
   `tests/chat-render.test.mjs` holds the switch: v1 unless the address says `v2`, a typo is
   not a switch, and a page that asked but mounted nothing still draws a chat.
 
-**What is proved**, both renderers, one state (`node scripts/chat-lab.mjs --check`, 12 cases):
+**What is proved**, both renderers, one state (`node scripts/chat-lab.mjs --check`, 14 cases):
 
 | Promise | Old | New |
 |---|---|---|
@@ -542,15 +543,39 @@ After those, the two renderers agree on **395,073 characters of 395,072** — th
 the compact summary, where the old chat writes `20:5482 messages` with no separator and the
 new one writes `20:54 — 82 messages`. That is the new chat being right (see `findings.md`).
 
+**The operator's first look, and the four things it found (19 Nov).** All four were real, and
+three were the same mistake in different clothes: a post was keyed by the engine's message id,
+so the page's live placeholder and the engine's message were two different posts — and every
+update inside a turn swapped one for the other.
+
+- **No animation.** It was there — a fold measured 44 → 0 px over 500 ms at 60 ms samples —
+  but 120 ms was too quick to see on its own, so every duration is 500 ms now (`MOTION_MS` in
+  `web/chat-view.js`, `chat-in` in the stylesheet). A page that asks for reduced motion still
+  gets none, and says so once in the console, because "I see no animations" must not be a
+  mystery in the log.
+- **A selection cleared on every update.** Two keys were built from the message id: the post
+  (`assistant-local-live-…` → `assistant-msg_…`) and the paragraph inside it
+  (`local-live-…:0`). Both are positional now (`post:12`, `p0`), so the placeholder and the
+  engine's message are the same post and the same text node — measured, the selection holds in
+  6 of 6 frames across the swap (`selection-swap`).
+- **The pane jumping to the top of the reasoning.** Two causes that met: the pane block was
+  gated on the *message* being live, so it vanished and came back at every step boundary, and a
+  fresh element starts at `scrollTop: 0` while the view read that as "the reader scrolled up".
+  The pane now stays whenever the stream has text, and a new element tails (`pane-tail`: at the
+  end it follows; scrolled up it holds and shows the hint).
+- **The pane's lifetime.** It was cleared when the session's turn ended. It now goes dim and
+  stays under the post with its words until the next turn opens, which is where the green rule
+  splits. A worker's pane already lived until its trace finished, which is Multi's half of the
+  same rule.
+
 **What is left**, in order:
 
-1. **A live turn on the switch**: a message sent, a delta arriving, a card landing, a question
-   asked, a download. The static conversation is identical; what has not been watched is the
-   page's own wiring doing its job while the new renderer draws — `replyForm`, `paneToggle`,
-   the chip preview, the fold's `toggle`.
-2. **The operator's judgement**: the same conversation, both chats, and their answer to which
-   one to keep. The lab's numbers are the evidence; the judgement is theirs.
-3. Only then: the rail, the role cards and the plan pane on the same primitives.
+1. **The operator's judgement**: the same conversation, both chats, and their answer to which
+   one to keep. The lab's numbers are the evidence; the judgement is theirs. A live turn has
+   now been watched on the switch — pane at 205 px with its words, a tool card landing, the
+   pane dimming and staying when the turn ended — but every live shape has not been seen yet:
+   a question, a download, a permission card.
+2. Only then: the rail, the role cards and the plan pane on the same primitives.
 
 **Traps that cost time here.**
 - The lab's panels must beat the app's `body[data-view] .chat-dock` rules, so the lab's rules

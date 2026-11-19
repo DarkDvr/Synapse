@@ -200,7 +200,11 @@ function assistantBlocks(src, m) {
     if (part.type === 'text') {
       blocks.push({
         kind: 'prose',
-        key: part.key,
+        // By where it sits, not by the message's id: the page's live placeholder and the
+        // engine's message are the same post, and a block keyed by the id would be rebuilt
+        // when the id changed under it — taking the operator's selection with it (19 Nov).
+        // A paragraph carries no open/closed state, so nothing needs the key to be global.
+        key: `p${i}`,
         text: String(part.text || ''),
         // The last text of a turn that did work is the answer; narration in a step that
         // then calls a tool is not.
@@ -436,17 +440,19 @@ export function buildChat(src = pageState) {
   });
   const last = showable.at(-1);
   const live = Boolean(src.busy) || Boolean(last?.type === 'assistant' && !last?.completed && !last?.error);
-  const pane =
-    live && src.sessionTrace?.stream?.text
-      ? {
-          text: String(src.sessionTrace.stream.text),
-          ended: Boolean(src.sessionTrace.stream.ended),
-          // Folding the pane to its one-line "Thinking…" is the operator's own switch: the
-          // app keeps it on the session's trace, the same place a worker's trace keeps its
-          // own (web/thinking-pane.js).
-          collapsed: Boolean(src.sessionTrace.thinkCollapsed),
-        }
-      : null;
+  // The pane belongs to the newest assistant post, even when a line arrived after it — and it
+  // is still there after the turn ends, dim, until the app clears it for the next turn. The
+  // page decides when the step's words stop being the news; the model draws what it is given.
+  const pane = src.sessionTrace?.stream?.text
+    ? {
+        text: String(src.sessionTrace.stream.text),
+        ended: Boolean(src.sessionTrace.stream.ended),
+        // Folding the pane to its one-line "Thinking…" is the operator's own switch: the
+        // app keeps it on the session's trace, the same place a worker's trace keeps its
+        // own (web/thinking-pane.js).
+        collapsed: Boolean(src.sessionTrace.thinkCollapsed),
+      }
+    : null;
 
   // Everything that sits between posts, by its own time.
   const between = [
@@ -476,7 +482,7 @@ export function buildChat(src = pageState) {
         ? downloads.filter((d) => downloadAt(d) >= at && downloadAt(d) < until && !placed.has(d.id))
         : [];
     for (const d of mine) placed.add(d.id);
-    items.push(postFor(src, m, { mine, pane: i === paneAt ? pane : null }));
+    items.push(postFor(src, m, { mine, pane: i === paneAt ? pane : null, ordinal: i }));
   }
   while (next < between.length) items.push(between[next++]);
 
@@ -553,7 +559,7 @@ function formItem(src) {
   };
 }
 
-function postFor(src, m, { mine, pane }) {
+function postFor(src, m, { mine, pane, ordinal = 0 }) {
   const speaker = m.type === 'user' ? 'you' : m.type === 'synthetic' ? 'synapse' : 'architect';
   const at = Number(m.created) || 0;
   const blocks = [];
@@ -563,7 +569,7 @@ function postFor(src, m, { mine, pane }) {
     // Plain, not markdown: these are the operator's own words, and the old chat has always
     // shown them as typed. A list of "1. …" turned into a numbered list is not the message
     // they sent (19 Nov, seen on a real conversation the moment the switch went on).
-    blocks.push({ kind: 'prose', key: `${m.id}:text`, text: steer ? steer[1] : String(m.text || ''), format: 'plain', answer: false });
+    blocks.push({ kind: 'prose', key: 'text', text: steer ? steer[1] : String(m.text || ''), format: 'plain', answer: false });
   } else if (m.type === 'synthetic') {
     const body = String(m.text || '').replace(/^\s*\[harness\]\s*/i, '');
     const label = String(m.description || '');
@@ -589,7 +595,7 @@ function postFor(src, m, { mine, pane }) {
         title: sentence,
       });
     } else {
-      blocks.push({ kind: 'prose', key: `${m.id}:text`, text: body, answer: false });
+      blocks.push({ kind: 'prose', key: 'text', text: body, answer: false });
     }
   } else {
     blocks.push(...assistantBlocks(src, m).blocks);
@@ -602,7 +608,14 @@ function postFor(src, m, { mine, pane }) {
 
   return {
     kind: 'post',
-    key: `${m.type}-${m.id}`,
+    // A post is keyed by where it sits, not by the engine's message id.
+    //
+    // The id is the one thing about a live turn that changes under the operator: the page
+    // opens a `local-live-…` placeholder before the engine has a message, and the engine's
+    // real message replaces it at the same place. Keyed by id, that swap replaced the whole
+    // post — and with it the text the operator had selected, and the pane that was being
+    // written into (19 Nov: "selection is once again cleared when chat updates").
+    key: `post:${ordinal}`,
     speaker,
     at,
     state: m.error ? 'error' : m.type === 'assistant' && !m.completed && !m.error ? 'live' : 'done',

@@ -106,9 +106,15 @@ const shape = (host) => ({
   entering: host.querySelectorAll('.is-enter').length,
   reducedMotion: window.matchMedia('(prefers-reduced-motion: reduce)').matches,
   hint: Boolean(host.querySelector('.think-new:not([hidden])')),
-  // The pane's own words, and whether it is folded to its one-line shape.
+  // The pane's own words, whether it is folded to its one-line shape, whether it is dimmed,
+  // and where it is scrolled: a pane that jumps to the top of the reasoning reads as a bug.
   pane: host.querySelector('.trace-flow-body')?.textContent || '',
   paneShut: Boolean(host.querySelector('.think-line')),
+  paneIdle: Boolean(host.querySelector('.trace-flow.is-idle')),
+  paneScroll: (() => {
+    const view = host.querySelector('.trace-flow-view');
+    return view ? { top: Math.round(view.scrollTop), max: Math.round(view.scrollHeight - view.clientHeight) } : null;
+  })(),
 });
 
 /**
@@ -185,8 +191,8 @@ function frame(step, model, picked) {
     items: model.items.length,
     keys: (model.items || []).map((i) => i.key),
     nodes: [...view.nodes.entries()].map(([key, held]) => `${key}#${idOf(held.node)}`),
-    old: { text: a.text.length, posts: a.posts, cards: a.cards, folds: a.folds, scroll: a.scroll, postHeights: a.postHeights, paneHeights: a.paneHeights, pane: a.pane, paneShut: a.paneShut, entering: a.entering, hint: a.hint, reducedMotion: a.reducedMotion },
-    new: { text: b.text.length, posts: b.posts, cards: b.cards, folds: b.folds, scroll: b.scroll, postHeights: b.postHeights, paneHeights: b.paneHeights, pane: b.pane, paneShut: b.paneShut, entering: b.entering, hint: b.hint, reducedMotion: b.reducedMotion },
+    old: { text: a.text.length, posts: a.posts, cards: a.cards, folds: a.folds, scroll: a.scroll, postHeights: a.postHeights, paneHeights: a.paneHeights, pane: a.pane, paneShut: a.paneShut, paneIdle: a.paneIdle, paneScroll: a.paneScroll, entering: a.entering, hint: a.hint, reducedMotion: a.reducedMotion },
+    new: { text: b.text.length, posts: b.posts, cards: b.cards, folds: b.folds, scroll: b.scroll, postHeights: b.postHeights, paneHeights: b.paneHeights, pane: b.pane, paneShut: b.paneShut, paneIdle: b.paneIdle, paneScroll: b.paneScroll, entering: b.entering, hint: b.hint, reducedMotion: b.reducedMotion },
     // The same characters: a block join is a space in one renderer and a newline in the
     // other, which reads the same and is not a difference worth chasing.
     sameText: a.text.replace(/\s+/g, '') === b.text.replace(/\s+/g, ''),
@@ -292,6 +298,10 @@ window.__labBox = (key) => {
   return { top: Math.round(r.top - box.top), height: Math.round(r.height), open: 'open' in node ? node.open : null };
 };
 
+/** Select words by hand and read back where the selection is: for a check that needs to know. */
+window.__labPick = (words, panel) => select(words, panel || 'new');
+window.__labSel = () => selectionNow();
+
 /**
  * The promises that need a browser, as cases that fail rather than as numbers to read.
  *
@@ -338,19 +348,47 @@ window.__labCheck = async () => {
         `${first.new.pane.length} characters → ${reopened.new.pane.length} back → ${grown.new.pane.length} with the next delta`,
   );
 
+  // The pane is a window that scrolls inside itself: at its end it follows the words, and
+  // once the reader scrolls up it holds their line and says so. Sitting at the top of the
+  // reasoning while the words arrive underneath was the third behaviour, and the bug.
+  const tail = await window.__labRun('pane-tail');
+  const afterScroll = tail.filter((f) => String(f.new.pane || '').includes('A line that arrives'));
+  const beforeScroll = tail.filter((f) => !String(f.new.pane || '').includes('A line that arrives') && f.new.paneScroll && f.new.paneScroll.max > 4);
+  const tailed = beforeScroll.length >= 2 && beforeScroll.every((f) => f.new.paneScroll.top === f.new.paneScroll.max);
+  const held = afterScroll.length >= 2
+    && afterScroll.every((f) => f.new.paneScroll && f.new.paneScroll.top === 0)
+    && afterScroll.at(-1).new.paneScroll.max > 0;
+  const told = afterScroll.length >= 2 && afterScroll.every((f) => f.new.hint === true);
+  caseFor(
+    'the pane tails at its end, and holds the reader\'s line when they scroll up',
+    tailed && held && told,
+    `before the scroll: ${beforeScroll.length} frame(s)${tailed ? ' all at the end' : ', one sat at the top'}; ` +
+      `after: ${afterScroll.length} frame(s) ${held ? 'held' : 'moved'}, hint ${told ? 'shown' : 'missing'}`,
+  );
+
   // A selection inside a post, under the words that arrive after it. The new renderer writes
   // the new words into the paragraph that is already there; the old one either replaces its
   // markup and loses the selection, or stops drawing altogether — `web/transcript.js` pauses
   // the render while a selection is in the chat, so the operator is left reading an answer
   // that is no longer the answer. It cannot do both, and that is the case.
-  const selectionRun = async (panel) => {
-    const frames = await window.__labRun('selection', 0, panel);
+  const selectionRun = async (name, panel) => {
+    const frames = await window.__labRun(name, 0, panel);
     const at = frames.findIndex((f) => f.picked);
     return at < 0 ? [] : frames.slice(at);
   };
   const holds = (f) => Boolean(f.picked) && f.selection.text === f.picked.text && f.selection.panel === f.picked.panel;
 
-  const fresh = await selectionRun('new');
+  // The live swap: the page's placeholder post and the engine's message are the same post,
+  // so the selection stays on the words the operator chose when the id changes under it.
+  const swapped = await selectionRun('selection-swap', 'new');
+  const swapHeld = swapped.filter(holds).length;
+  caseFor(
+    'a selection survives the engine replacing the live message',
+    swapped.length >= 2 && swapHeld === swapped.length,
+    swapped.length < 2 ? `only ${swapped.length} frame(s) after the selection` : `held in ${swapHeld} of ${swapped.length} frames`,
+  );
+
+  const fresh = await selectionRun('selection', 'new');
   const kept = fresh.filter(holds).length;
   const drew = fresh.length > 1 && fresh.at(-1).new.text > fresh[0].new.text;
   caseFor(
@@ -361,7 +399,7 @@ window.__labCheck = async () => {
       : `held in ${kept} of ${fresh.length} frames, ${fresh[0].new.text} → ${fresh.at(-1).new.text} characters`,
   );
 
-  const past = await selectionRun('old');
+  const past = await selectionRun('selection', 'old');
   const wasKept = past.filter(holds).length;
   const stalled = past.length > 1 && past.at(-1).old.text === past[0].old.text;
   caseFor(

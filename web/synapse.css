@@ -3680,15 +3680,17 @@ body.is-disconnected .app-shell { filter: blur(2px) brightness(0.45); pointer-ev
 
 
 /* ── v2: motion, and the pane's hint ────────────────────────────────────
-   A node that has just appeared fades in and lifts four pixels over 120ms: fast
-   enough to read as "it arrived", slow enough not to be a cut. Only a node that is
-   genuinely new animates — a repaint is not an arrival, and animating one would make
-   the chat twitch every time a status changed. Reduced motion turns it off. */
+   A node that has just appeared fades in and lifts four pixels over 500ms: the
+   operator could not tell a missing animation from a quick one (19 Nov), so for
+   now it is slow enough to be seen on its own. Only a node that is genuinely new
+   animates — a repaint is not an arrival, and animating one would make the chat
+   twitch every time a status changed. Reduced motion turns it off, which is the
+   browser's rule and not a preference of ours. */
 @keyframes chat-in {
   from { opacity: 0; transform: translateY(4px); }
   to { opacity: 1; transform: none; }
 }
-.is-enter { animation: chat-in 120ms ease-out both; }
+.is-enter { animation: chat-in 500ms ease-out both; }
 @media (prefers-reduced-motion: reduce) {
   .is-enter { animation: none; }
 }

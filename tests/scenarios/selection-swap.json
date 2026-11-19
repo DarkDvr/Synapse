@@ -1,0 +1,28 @@
+{
+  "name": "S9 — a selection survives the engine's message replacing the live one",
+  "why": "While a turn is being written, the page carries a placeholder message of its own and the engine's real message replaces it at the same place in the conversation. Keyed by the message id, that swap replaced the whole post, and with it the words the operator had selected — which is what they saw on every live update (19 Nov). The post is keyed by where it sits, so the placeholder and the real message are the same post and the selection stays on the text.",
+  "steps": [
+    {
+      "do": "messages",
+      "messages": [
+        { "id": "m0", "type": "user", "created": 900, "text": "Say something about the harbour." },
+        {
+          "id": "local-live-s1",
+          "type": "assistant",
+          "created": 1000,
+          "completed": 0,
+          "live": true,
+          "parts": [{ "type": "text", "text": "The harbour was quiet before dawn. " }]
+        }
+      ]
+    },
+    { "do": "render" },
+    { "do": "select", "panel": "new", "text": "harbour was quiet" },
+    { "do": "swap", "from": "local-live-s1", "to": "msg_real_1", "completed": false },
+    { "do": "render" },
+    { "do": "grow", "id": "msg_real_1", "part": "0", "delta": "A single lamp swung over the water." },
+    { "do": "render" },
+    { "do": "swap", "from": "msg_real_1", "to": "msg_real_1", "completed": true },
+    { "do": "render" }
+  ]
+}

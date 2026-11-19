@@ -25,6 +25,17 @@ const squash = (text) => String(text || '').replace(/\s+/g, ' ').trim();
 /** Two lines: the same window the chat uses for "at the end". */
 const CHAT_FOLLOW_SLACK = 48;
 
+/**
+ * How long the chat's own movement lasts.
+ *
+ * 500ms, and one number: the operator could not tell whether an animation was missing or
+ * merely quick (19 Nov), so the pause is long enough to be seen on its own. It is slow on
+ * purpose for now — the judgement of it comes after the eye has found it. A page that asks
+ * for reduced motion still gets none of this (`motionOff`), which is the browser's rule and
+ * not a preference of ours.
+ */
+const MOTION_MS = 500;
+
 const el = (tag, className = '', text = '') => {
   const node = document.createElement(tag);
   if (className) node.className = className;
@@ -170,7 +181,7 @@ function toolCard(item) {
   return card;
 }
 
-/** Open or close a card's body over 120ms, with reduced motion taking the short road. */
+/** Open or close a card's body over MOTION_MS, with reduced motion taking the short road. */
 function animateDetail(card, head, detail, opening) {
   card.classList.toggle('is-collapsed', !opening);
   card.classList.toggle('open', opening);
@@ -185,7 +196,7 @@ function animateDetail(card, head, detail, opening) {
   detail.style.height = `${start}px`;
   const end = opening ? detail.scrollHeight : 0;
   detail.getBoundingClientRect();
-  detail.style.transition = 'height 120ms ease-out';
+  detail.style.transition = `height ${MOTION_MS}ms ease-out`;
   detail.style.height = `${end}px`;
   let finished = false;
   const done = () => {
@@ -196,7 +207,7 @@ function animateDetail(card, head, detail, opening) {
     detail.style.overflow = opening ? '' : 'hidden';
   };
   detail.addEventListener('transitionend', done, { once: true });
-  setTimeout(done, 170);
+  setTimeout(done, MOTION_MS + 60);
 }
 
 /**
@@ -328,8 +339,17 @@ let viewPaneToggle = () => {};
 /** Is the page's own motion preference off? Then every fold snaps, as the browser should. */
 const motionOff = () => Boolean(window.matchMedia?.('(prefers-reduced-motion: reduce)').matches);
 
+// Said once, in the console the app already has: a page that is told "no motion" draws no
+// motion, and "I see no animations" must not be a mystery to the next person reading the log.
+let motionSaid = false;
+const noteMotion = () => {
+  if (motionSaid || !motionOff()) return;
+  motionSaid = true;
+  console.info('chat: this machine asks for reduced motion, so folds, cards and arrivals do not animate');
+};
+
 /**
- * A fold that opens and closes at 120ms.
+ * A fold that opens and closes at MOTION_MS.
  *
  * `<details>` toggles instantly: its content is not rendered while it is closed, so a height
  * transition has to be driven by hand. Opening sets `open` first and grows the body from
@@ -340,6 +360,7 @@ const motionOff = () => Boolean(window.matchMedia?.('(prefers-reduced-motion: re
 function animateFold(details, summary, body) {
   if (!summary || !body) return details;
   summary.addEventListener('click', (event) => {
+    noteMotion();
     if (motionOff()) return;
     event.preventDefault();
     const opening = !details.open;
@@ -350,7 +371,7 @@ function animateFold(details, summary, body) {
     const end = opening ? body.scrollHeight : 0;
     // A frame between the two heights, or the browser has nothing to interpolate.
     body.getBoundingClientRect();
-    body.style.transition = 'height 120ms ease-out';
+    body.style.transition = `height ${MOTION_MS}ms ease-out`;
     body.style.height = `${end}px`;
     // A repaint that lands in the middle of this must not put `open` back: the body is
     // still shrinking, and closing it now would take the content away before it moved.
@@ -366,7 +387,7 @@ function animateFold(details, summary, body) {
       if (!opening) details.open = false;
     };
     body.addEventListener('transitionend', done, { once: true });
-    setTimeout(done, 170);
+    setTimeout(done, MOTION_MS + 60);
   });
   return details;
 }
@@ -576,7 +597,7 @@ function buildForm(form) {
 function appear(node) {
   if (!node || !node.classList) return node;
   node.classList.add('is-enter');
-  setTimeout(() => node.classList.remove('is-enter'), 160);
+  setTimeout(() => node.classList.remove('is-enter'), MOTION_MS + 60);
   return node;
 }
 
@@ -671,6 +692,11 @@ function fillStreamNode(node, item) {
   const atEnd = view ? view.scrollHeight - view.scrollTop - view.clientHeight <= 4 : true;
   const text = String(item.text || '');
   const state = paneFollow.get(item.key) || { follow: true, lastLen: 0 };
+  // A pane drawn for the first time — or drawn again into a new element — starts at the top
+  // of whatever it holds, which reads as "it jumped to the beginning of the reasoning" even
+  // though nobody scrolled. A fresh element is not the reader having scrolled up: tail it.
+  const fresh = state.node !== view;
+  state.node = view;
   const grew = text.length > (Number(state.lastLen) || 0);
   state.lastLen = text.length;
   if (flow) flow.classList.toggle('is-idle', !item.live);
@@ -689,7 +715,7 @@ function fillStreamNode(node, item) {
       body.textContent = text;
     }
   }
-  if (view && atEnd) {
+  if (view && (atEnd || fresh)) {
     view.scrollTop = view.scrollHeight;
     state.follow = true;
   } else {
@@ -1140,7 +1166,7 @@ export function createChatView(host, { onToggle, onSubmit, onPaneToggle } = {}) 
         panelNode.dataset.sig = sig;
         panelPage = 0;
         // A question arriving is the one thing in the chat that is waiting for the operator:
-        // it comes in on the same 120ms as everything else rather than appearing mid-frame.
+        // it comes in on the same motion as everything else rather than appearing mid-frame.
         appear(panelNode);
         startPanelClock(panelNode, model.form);
       }

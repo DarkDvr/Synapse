@@ -123,7 +123,7 @@ import {
 import { renderTranscript, chatIsV2, mountChatView } from './chat-render.js';
 import { toast } from './toast.js';
 import { installContextMenu } from './context-menu.js';
-import { paneWiring, paneToggle } from './thinking-pane.js';
+import { paneWiring, paneToggle, paneEnded } from './thinking-pane.js';
 import {
   renderComposer,
   send,
@@ -1606,9 +1606,11 @@ function connectStream() {
       } else if (ev.type === EV.textEnded || ev.type === EV.reasoningEnded) {
         endStream();
       } else if (turnEnded(ev.type)) {
-        // The turn is over: nothing may stream into it any more.
-        state.sessionTrace.stream = null;
-        state.sessionTrace.key = '';
+        // The turn is over, and the pane keeps the step's words: it goes dim and stays under
+        // the post until the next turn opens, which is where the operator's green rule splits
+        // (their rule, 19 Nov). Nothing streams into it any more — `paneEnded` says so in the
+        // one place the pane's shape is decided.
+        paneEnded(state.sessionTrace);
       }
     }
     // The Architect's own card gets the same number from the same event. Its
@@ -1681,6 +1683,11 @@ function connectStream() {
         }
         if (ev.type === EV.executionStarted) {
           state.busy = true;
+          // A new turn: the last turn's pane has had its moment under the finished post, and
+          // this turn's pane starts empty. It is cleared here rather than when the last turn
+          // ended, so the words stay on screen until the green rule splits (19 Nov).
+          state.sessionTrace.stream = null;
+          state.sessionTrace.key = '';
           // Open the post now, not on the first delta: the model can spend many
           // seconds reading its prompt before it says anything, and the chat used to
           // sit empty for that whole time (11 Nov). The placeholder says "Thinking…"

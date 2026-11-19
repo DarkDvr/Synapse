@@ -129,6 +129,16 @@ export function applyStep(state, step) {
     case 'stream-flag':
       Object.assign(state.sessionTrace, step.patch || {});
       return;
+    // The engine's message replacing the page's live placeholder: the same place in the
+    // conversation, a different id. This is the swap that used to take the operator's
+    // selection with it (19 Nov), so it is a step a scenario can name.
+    case 'swap': {
+      const msgs = state.messages || [];
+      const at = msgs.findIndex((m) => m.id === step.from);
+      if (at < 0) throw new Error(`scenario: no message "${step.from}" to swap`);
+      msgs[at] = { ...msgs[at], id: step.to, live: false, completed: step.completed === false ? 0 : 1 };
+      return;
+    }
     case 'render':
       return;
     // Where the reader's own selection is, is not state: it is the browser's. The lab
