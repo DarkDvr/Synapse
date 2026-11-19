@@ -20,10 +20,10 @@ test('opening a fold grows its body over 500ms, then puts it back', async () => 
   window.matchMedia = () => ({ matches: false, addEventListener() {}, removeEventListener() {} });
   const { animateFold, FOLD_MS } = await import('../web/folds.js');
   const { details, body } = fold();
-  assert.equal(FOLD_MS, 500);
+  assert.equal(FOLD_MS, 250);
   assert.equal(animateFold(details, body), true);
   assert.equal(details.open, true, 'the fold was not opened');
-  assert.match(String(body.style.transition), /height 500ms/, 'no 500ms height transition');
+  assert.match(String(body.style.transition), /height 250ms/, 'no 500ms height transition');
   assert.equal(body.style.overflow, 'hidden');
   await new Promise((r) => setTimeout(r, FOLD_MS + 140));
   assert.equal(body.style.transition, '', 'the transition was left on the element');
@@ -53,4 +53,32 @@ test('a page that asks for reduced motion snaps, and the module leaves it alone'
   assert.equal(animateFold(details, body), false);
   assert.equal(details.open, false, 'the fold was opened by the animation');
   assert.ok(!body.style.transition, 'the reduced-motion path touched the element');
+});
+
+// The thinking pane is a different shape on each side of its toggle, so it moves as a box
+// rather than as a fold: same 250ms, and the callback is what flips the state afterwards.
+test('the pane helper grows a box from nothing and reports when it is done', async () => {
+  const { window } = installPage();
+  window.matchMedia = () => ({ matches: false, addEventListener() {}, removeEventListener() {} });
+  const { animateHeight, FOLD_MS } = await import('../web/folds.js');
+  const box = new FakeElement('', 'div');
+  const timeline = [];
+  assert.equal(animateHeight(box, 200, () => timeline.push('done'), 0), true);
+  assert.equal(box.style.height, '200px', 'the box was not grown');
+  assert.match(String(box.style.transition), /height 250ms/, 'the pane does not use the fold duration');
+  assert.deepEqual(timeline, [], 'the caller was told the move was finished before it started');
+  await new Promise((r) => setTimeout(r, FOLD_MS + 140));
+  assert.deepEqual(timeline, ['done'], 'the caller was never told the move was done');
+  assert.equal(box.style.height, '');
+});
+
+test('the pane helper still calls back when motion is off, so the state still flips', async () => {
+  const { window } = installPage();
+  window.matchMedia = () => ({ matches: true, addEventListener() {}, removeEventListener() {} });
+  const { animateHeight } = await import('../web/folds.js');
+  const box = new FakeElement('', 'div');
+  let done = false;
+  assert.equal(animateHeight(box, 200, () => { done = true; }, 0), false);
+  assert.equal(done, true, 'a reduced-motion page would never finish the toggle');
+  assert.ok(!box.style.height, 'the reduced-motion path touched the element');
 });

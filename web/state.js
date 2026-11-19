@@ -166,6 +166,13 @@ export const state = {
   // (see selectionInChat in web/transcript.js). Cleared when the selection is
   // released, and the conversation catches up then.
   renderPaused: false,
+  // Until when a fold or the thinking pane owns the markup (a timestamp, 0 when nothing
+  // is moving). A redraw in that window would replace the element mid-animation, so it
+  // waits and draws once when the animation is done (web/transcript.js).
+  renderHoldUntil: 0,
+  // True after the second Stop — "stop now, I am reading". The turn's end then leaves the
+  // conversation exactly as it is instead of closing the folds (app.js).
+  hardStop: false,
   // A provider failure shown on a role's card, keyed `${dirKey}|${role}`: red
   // *text*, never a border, and cleared when that role works again.
   roleErrors: new Map(),

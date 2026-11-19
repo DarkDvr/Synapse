@@ -96,6 +96,9 @@ export function selectionInChat() {
 // the DOM before it can be put under it.
 let renderOnce = false;
 
+// One catch-up draw after an animation has let go of the markup (see renderTranscript).
+let holdCatchUp = 0;
+
 /** Let the next render replace the conversation even if a selection is in it. */
 export function forceNextRender() {
   renderOnce = true;
@@ -104,6 +107,21 @@ export function forceNextRender() {
 export function renderTranscript() {
   const el = $('transcript');
   if (!el) return;
+  // A fold or the thinking pane is opening or closing, and the animation owns the markup for
+  // a quarter of a second. Drawing now would replace the element mid-move — which is what
+  // made a fold impossible to close while the pane was being written to: every delta drew
+  // the fold back to its old state. The pane's own words do not need a redraw (its own frame
+  // loop writes them), so nothing stalls while this waits.
+  const holdUntil = Number(state.renderHoldUntil) || 0;
+  if (holdUntil > Date.now()) {
+    if (!holdCatchUp) {
+      holdCatchUp = setTimeout(() => {
+        holdCatchUp = 0;
+        renderTranscript();
+      }, holdUntil - Date.now() + 16);
+    }
+    return;
+  }
   if (!renderOnce && selectionInChat()) {
     state.renderPaused = true;
     return;

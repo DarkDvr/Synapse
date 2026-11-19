@@ -121,7 +121,7 @@ import {
 } from './transcript.js';
 import { toast } from './toast.js';
 import { installContextMenu } from './context-menu.js';
-import { installFoldMotion } from './folds.js';
+import { installFoldMotion, animateHeight, FOLD_MS } from './folds.js';
 import { paneWiring, paneToggle } from './thinking-pane.js';
 import {
   renderComposer,
@@ -2083,9 +2083,37 @@ document.addEventListener('keydown', (e) => {
   // Collapse or open one trace's thinking pane. The flag lives on the trace, so it
   // survives a re-render; a new pane is drawn open, because the operator's choice
   // was about the pane they were reading (9 Nov).
+  //
+  // The pane is two different shapes — the open window and the one-line row — so the movement
+  // is on the wrapper: shrink the window to nothing, then draw the row; and in reverse, draw
+  // the window and grow it in from zero (19 Nov). The page holds its redraws while it moves,
+  // or the next delta would replace the element mid-slide.
   function toggleThinking(key) {
     const trace = state.sessionTrace?.key === key ? state.sessionTrace : state.traces.get(key);
-    if (trace) paneToggle(trace);
+    if (!trace) return;
+    const sel = `[data-pane="${CSS.escape(String(key))}"]`;
+    const shown = document.querySelector(sel);
+    const wrap = shown ? shown.closest('.think-wrap') : null;
+    const hold = () => {
+      state.renderHoldUntil = Math.max(Number(state.renderHoldUntil) || 0, Date.now() + FOLD_MS + 100);
+    };
+    if (wrap && !trace.thinkCollapsed) {
+      hold();
+      animateHeight(wrap, 0, () => {
+        // Let the draw through before the flip, or `paneToggle`'s own render waits behind the
+        // hold and the one-line row never appears.
+        state.renderHoldUntil = 0;
+        paneToggle(trace);
+      });
+      return;
+    }
+    paneToggle(trace);
+    const fresh = document.querySelector(sel);
+    const opened = fresh ? fresh.closest('.think-wrap') : null;
+    if (!opened) return;
+    const full = opened.scrollHeight;
+    hold();
+    animateHeight(opened, full, () => { state.renderHoldUntil = 0; }, 0);
   }
 
   $('transcript').addEventListener('click', (e) => {
@@ -2263,7 +2291,20 @@ document.addEventListener('keydown', (e) => {
   installContextMenu();
   // Reasoning folds open and close over 500ms instead of snapping. One listener on the
   // transcript, because its markup is replaced on every redraw and the folds with it.
-  installFoldMotion($('transcript'));
+  installFoldMotion($('transcript'), {
+    // The operator's choice is recorded now, not when the animation ends: a draw that lands
+    // in between must show the fold they asked for, not the one it was.
+    onToggle: (key, open) => {
+      if (!key) return;
+      if (open) state.open.add(key);
+      else state.open.delete(key);
+    },
+    // A redraw in the middle of the movement replaces the element that is moving, so nothing
+    // draws until it is done — one catch-up draw follows by itself.
+    hold: (ms) => {
+      state.renderHoldUntil = Math.max(Number(state.renderHoldUntil) || 0, Date.now() + ms);
+    },
+  });
   // Prefill and autofill off everywhere: the browser's memory of what was typed in this
   // app is not wanted, in any field — project names, addresses, paths (13 Nov).
   const noFill = (el) => {
