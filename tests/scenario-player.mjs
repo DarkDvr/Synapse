@@ -1,16 +1,84 @@
 // Play a chat scenario against the page's own renderer, with no server and no browser.
 //
 // A scenario is the conversation as the page is given it: messages arriving, a trace
-// growing, the operator opening a fold, the next render. The player applies each step
-// (tests/scenario-steps.mjs, shared with the browser lab) and calls the same entry point
-// the app calls, so what comes out is what the operator would have seen.
+// growing, the operator opening a fold, the next render. The player applies each step to
+// the page's state and calls the same entry point the app calls, so what comes out is what
+// the operator would have seen.
 //
 // Why this exists: the chat rewrite has to prove two things — the new renderer draws the
 // same conversation, and it keeps the promises the old one breaks. Both are assertions
 // over the frames this returns (tests/scenario.test.mjs holds the cases; the scenario
 // files are in tests/scenarios/). Fed by hand now, by a recording later.
 import { installPage } from './fake-page.mjs';
-import { resetState, applyStep } from './scenario-steps.mjs';
+
+/** The page state a transcript render reads. Reset before every scenario. */
+function reset(state) {
+  state.sessionId = 'ses_scenario';
+  state.view = 'session';
+  state.projects = [{ id: 'p1', name: 'Scenario', directory: 'F:/scenario', sessions: [{ id: 'ses_scenario' }] }];
+  state.messages = [];
+  state.forms = [];
+  state.permissions = [];
+  state.alarms = [];
+  state.traces = new Map();
+  state.leases = new Map();
+  state.downloads = new Map();
+  state.sessionTrace = { key: '', stream: null };
+  state.open = new Set();
+  state.renderSig = '';
+  state.renderPaused = false;
+  state.decisionSeq = 0;
+  state.downloadSeq = 0;
+  state.liveTool = null;
+  state.compacting = false;
+}
+
+function apply(state, step) {
+  switch (step.do) {
+    case 'messages':
+      state.messages = step.messages || [];
+      break;
+    case 'trace':
+      state.traces.set(step.trace.key, step.trace);
+      break;
+    case 'trace-update': {
+      const trace = state.traces.get(step.key);
+      if (!trace) throw new Error(`scenario: no trace "${step.key}" to update`);
+      Object.assign(trace, step.patch || {});
+      break;
+    }
+    case 'note': {
+      const trace = state.traces.get(step.key);
+      if (!trace) throw new Error(`scenario: no trace "${step.key}" for a note`);
+      trace.notes = [...(trace.notes || []), step.note];
+      break;
+    }
+    case 'alarm':
+      state.alarms.push(step.alarm);
+      break;
+    case 'lease':
+      state.leases.set(step.key, step.lease);
+      break;
+    case 'open':
+      state.open.add(step.key);
+      break;
+    case 'close':
+      state.open.delete(step.key);
+      break;
+    case 'stream': {
+      state.sessionTrace.key = step.key;
+      const stream = state.sessionTrace.stream || { kind: 'think', text: '', offset: 0 };
+      stream.kind = step.kind || 'think';
+      stream.text += step.delta || '';
+      state.sessionTrace.stream = stream;
+      break;
+    }
+    case 'render':
+      break;
+    default:
+      throw new Error(`scenario: unknown step "${step.do}"`);
+  }
+}
 
 /**
  * Play a scenario and return every frame it drew.
@@ -35,11 +103,11 @@ export async function play(scenario) {
   chatScrollWiring({ renderTranscript, traceOf: () => null, currentRun: () => null, askHost: () => null });
   tracesWiring({ renderTranscript });
 
-  resetState(state);
+  reset(state);
   const el = page.el('transcript');
   const frames = [];
   for (const [index, step] of (scenario.steps || []).entries()) {
-    applyStep(state, step);
+    apply(state, step);
     // Opening a fold is not a render: the operator's click does not redraw the chat.
     if (step.do === 'open' || step.do === 'close') continue;
     // A `render` step means "the app draws now" — a poll, a delta, a new message. The

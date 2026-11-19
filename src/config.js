@@ -168,11 +168,6 @@ export const DEFAULTS = {
     // Off returns the old plain-text note; it is a rendering switch, so changing it
     // takes effect on the next render, not a restart.
     workerCards: true,
-    // Does the chat animate? `system` follows the browser's reduced-motion answer, `on`
-    // animates whether or not the machine asks for less, `off` never does. The operator
-    // asked for motion twice while the machine said it was free to show it, so the choice
-    // is theirs rather than something nobody can see (19 Nov).
-    motion: 'system',
   },
   // Turning the machine off when the Architect has finished and said so. Off by
   // default, because a PC going down is the one action Synapse must never take on

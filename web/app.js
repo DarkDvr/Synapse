@@ -111,6 +111,7 @@ import {
   tracesWiring,
 } from './traces.js';
 import {
+  renderTranscript,
   selectionInChat,
   toggleTool,
   attachmentImage,
@@ -118,12 +119,9 @@ import {
   endsInProseToolCall,
   transcriptWiring,
 } from './transcript.js';
-// The chat's renderer is behind one switch: `?chat=v2` draws the rebuild, and every call
-// site below still says `renderTranscript()` (docs/notes/chat-inventory.md, §9).
-import { renderTranscript, chatIsV2, mountChatView } from './chat-render.js';
 import { toast } from './toast.js';
 import { installContextMenu } from './context-menu.js';
-import { paneWiring, paneToggle, paneEnded } from './thinking-pane.js';
+import { paneWiring, paneToggle } from './thinking-pane.js';
 import {
   renderComposer,
   send,
@@ -1223,9 +1221,6 @@ function connectStream() {
       // keeps showing a number nobody budgets for (7 Nov).
       const windowsBefore = windowSignature(state.config);
       state.config = ev.config || state.config;
-      // The chat's question panel counts down from this number; the model reads it as a
-      // plain field, so it follows the settings rather than being copied once at boot.
-      state.answerWaitSec = answerWaitSec();
       if (windowSignature(state.config) !== windowsBefore) loadModels().catch(() => {});
       const mine = Boolean(ev.byId) && ev.byId === state.clientId;
       if (!$('settingsModal').hidden && !mine) {
@@ -1606,11 +1601,9 @@ function connectStream() {
       } else if (ev.type === EV.textEnded || ev.type === EV.reasoningEnded) {
         endStream();
       } else if (turnEnded(ev.type)) {
-        // The turn is over, and the pane keeps the step's words: it goes dim and stays under
-        // the post until the next turn opens, which is where the operator's green rule splits
-        // (their rule, 19 Nov). Nothing streams into it any more — `paneEnded` says so in the
-        // one place the pane's shape is decided.
-        paneEnded(state.sessionTrace);
+        // The turn is over: nothing may stream into it any more.
+        state.sessionTrace.stream = null;
+        state.sessionTrace.key = '';
       }
     }
     // The Architect's own card gets the same number from the same event. Its
@@ -1683,11 +1676,6 @@ function connectStream() {
         }
         if (ev.type === EV.executionStarted) {
           state.busy = true;
-          // A new turn: the last turn's pane has had its moment under the finished post, and
-          // this turn's pane starts empty. It is cleared here rather than when the last turn
-          // ended, so the words stay on screen until the green rule splits (19 Nov).
-          state.sessionTrace.stream = null;
-          state.sessionTrace.key = '';
           // Open the post now, not on the first delta: the model can spend many
           // seconds reading its prompt before it says anything, and the chat used to
           // sit empty for that whole time (11 Nov). The placeholder says "Thinking…"
@@ -2063,56 +2051,24 @@ document.addEventListener('keydown', (e) => {
     if (trace) paneToggle(trace);
   }
 
-  // The rebuild's renderer, when the address asks for it. It draws into the same element,
-  // and it owns the clicks inside it: a card, the pane's own switch and a question's Submit
-  // are all the view's, and the app supplies only what each of them means — the state, the
-  // pane's flag, the reply. The old chat's handlers below would otherwise answer the same
-  // click a second time, which is how a card used to open and close at once.
-  const rebuilt = chatIsV2();
-  if (rebuilt) {
-    mountChatView($('transcript'), {
-      // A card's open state is the page's, exactly as it is for the old renderer.
-      onToggle: (key, open) => {
-        if (open) state.open.add(key);
-        else state.open.delete(key);
-      },
-      // The pane's switch: the pane in a post is the open session's own step, and a pane in
-      // a trace is that worker's, so the key says which trace to fold.
-      onPaneToggle: (key) => {
-        const id = String(key || '').replace(/:stream$/, '');
-        const trace = (id && id !== 'pane' && (state.sessionTrace?.key === id ? state.sessionTrace : state.traces.get(id))) || state.sessionTrace;
-        if (trace) paneToggle(trace);
-      },
-      // The panel keeps its answers; the reply is the page's, and it already knows how to
-      // send one and how to read the two answers that are not an answer (409, not found).
-      onSubmit: (form, answer) => replyForm(form.id, answer),
-    });
-    // A picture chip in the operator's own message still opens its preview: the chip is a
-    // fact about the message, and the preview is the app's (web/composer.js).
-    $('transcript').addEventListener('click', (e) => {
-      const chip = e.target.closest('.chat-image');
-      if (chip) showChatImagePreview(chip);
-    });
-  } else {
-    $('transcript').addEventListener('click', (e) => {
-      // The ask panel is *inside* the transcript while a question is up, and it has
-      // its own handler above: letting the click through here sent the answer twice
-      // (6 Nov). The guard in replyForm is the belt to this brace.
-      if (e.target.closest('.ask-panel')) return;
-      const formBtn = e.target.closest('[data-form-reply]');
-      if (formBtn) { replyForm(formBtn.dataset.formReply); return; }
-      if (e.target.closest('[data-error]')) return; // the error button is not a toggle
-      const think = e.target.closest('[data-think-toggle]');
-      if (think) { toggleThinking(think.dataset.thinkToggle); return; }
-      const head = e.target.closest('[data-tool-toggle]');
-      if (head) toggleTool(head.dataset.toolToggle);
-    });
-    $('transcript').addEventListener('keydown', (e) => {
-      if (e.key !== 'Enter' && e.key !== ' ') return;
-      const head = e.target.closest('[data-tool-toggle]');
-      if (head) { e.preventDefault(); toggleTool(head.dataset.toolToggle); }
-    });
-  }
+  $('transcript').addEventListener('click', (e) => {
+    // The ask panel is *inside* the transcript while a question is up, and it has
+    // its own handler above: letting the click through here sent the answer twice
+    // (6 Nov). The guard in replyForm is the belt to this brace.
+    if (e.target.closest('.ask-panel')) return;
+    const formBtn = e.target.closest('[data-form-reply]');
+    if (formBtn) { replyForm(formBtn.dataset.formReply); return; }
+    if (e.target.closest('[data-error]')) return; // the error button is not a toggle
+    const think = e.target.closest('[data-think-toggle]');
+    if (think) { toggleThinking(think.dataset.thinkToggle); return; }
+    const head = e.target.closest('[data-tool-toggle]');
+    if (head) toggleTool(head.dataset.toolToggle);
+  });
+  $('transcript').addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    const head = e.target.closest('[data-tool-toggle]');
+    if (head) { e.preventDefault(); toggleTool(head.dataset.toolToggle); }
+  });
   // <details> fires `toggle` (no bubbling), so capture it to remember which
   // Reasoning blocks and which compact post the operator opened. The post is a
   // single block with a fixed key; without this branch a poll re-render shut it
@@ -2642,8 +2598,6 @@ async function bootPage() {
   // this a resize left the old height in place and the page grew a scrollbar.
   window.addEventListener('resize', fitStageHeight);
   state.config = await api('GET', '/api/config').catch(() => null);
-  // The panel's countdown reads this, and the chat's model takes it as a plain field.
-  state.answerWaitSec = answerWaitSec();
   applyChatText();
   applyLanguage();
   renderLlmStatus();

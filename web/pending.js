@@ -11,9 +11,7 @@ import { state } from './state.js';
 import { $ } from './dom.js';
 import { api } from './api.js';
 import { currentForm } from './run-view.js';
-// The chat's renderer, behind the switch: this module draws the conversation after it
-// changes something, and which renderer answers is not its business (web/chat-render.js).
-import { renderTranscript } from './chat-render.js';
+import { renderTranscript } from './transcript.js';
 import { renderComposer } from './composer.js';
 import { renderAskPanel, refreshAskPanel } from './ask-panel.js';
 import { currentRun } from './run-view.js';

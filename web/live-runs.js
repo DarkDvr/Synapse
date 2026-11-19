@@ -18,9 +18,7 @@ import { toast } from './toast.js';
 import { dirKey, currentRun, currentProject, roleLabel, modelByRef, selectionFor, groupTurns } from './run-view.js';
 import { findSession, isBusy, renderTree } from './projects.js';
 import { renderPlan } from './plan-pane.js';
-// The chat's renderer, behind the switch: this module draws the conversation after it
-// changes something, and which renderer answers is not its business (web/chat-render.js).
-import { renderTranscript } from './chat-render.js';
+import { renderTranscript } from './transcript.js';
 import { chatScroller, foldStream, renderChatNav } from './chat-scroll.js';
 import { paneEnded } from './thinking-pane.js';
 import { noteCompaction, noteLoop, steerLine, steerNotes, traceFor, traceKeyOf, traceOf } from './traces.js';

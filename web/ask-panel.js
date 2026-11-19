@@ -17,10 +17,7 @@ import { toast } from './toast.js';
 import { askHeadNote, answerTimeline } from './ask-note.js';
 import { placeAskHost } from './chat-scroll.js';
 import { currentForm } from './run-view.js';
-import { forceNextRender } from './transcript.js';
-// The chat's renderer, behind the switch: this module draws the conversation after a reply,
-// and which renderer answers is not its business (web/chat-render.js).
-import { renderTranscript } from './chat-render.js';
+import { renderTranscript, forceNextRender } from './transcript.js';
 import { renderComposer } from './composer.js';
 
 const missing = (name) => () => {
@@ -480,7 +477,7 @@ export function syncAskCustoms(target) {
 // the case where another window answered first.
 export const replyingForms = new Set();
 
-export async function replyForm(formId, given) {
+export async function replyForm(formId) {
   if (replyingForms.has(formId)) return;
   const form = currentForm();
   if (!form || form.id !== formId) return;
@@ -488,10 +485,7 @@ export async function replyForm(formId, given) {
   // The form's own session, not the open one: a worker's question is answered
   // in the session that asked it.
   const sessionId = form.sessionId || state.sessionId;
-  // The answers come from the panel that asked, unless the caller already has them: the
-  // new renderer keeps the panel's answers itself and hands them over, so the page does not
-  // have to read a DOM it did not build (19 Nov).
-  const answer = given && typeof given === 'object' ? given : collectAskAnswer(form);
+  const answer = collectAskAnswer(form);
   const btn = document.querySelector(`[data-form-reply="${CSS.escape(formId)}"]`);
   if (btn) btn.disabled = true;
   try {

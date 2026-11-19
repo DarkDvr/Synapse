@@ -9,9 +9,7 @@
 import { esc } from './format.js';
 import { $ } from './dom.js';
 import { state } from './state.js';
-// The chat's renderer, behind the switch: this module draws the conversation after it
-// changes something, and which renderer answers is not its business (web/chat-render.js).
-import { renderTranscript } from './chat-render.js';
+import { renderTranscript } from './transcript.js';
 
 // ── error popup ─────────────────────────────────────────────────
 export function openError(title, text, opts = {}) {

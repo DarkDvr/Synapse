@@ -43,11 +43,11 @@ more — open a note for it.
 
 ## Elsewhere
 
-- **The chat rebuild is on main, behind `?chat=v2`** (1.63.0). The old chat is what the app
-  draws unless the address asks for the new one; the contract, the decisions, the measurements
-  and the status are in `docs/notes/chat-inventory.md` (§7 the item model, §9 where it stands
-  and what the first real conversation found).
+- **The chat rebuild was cut on 19 Nov** after the operator's judgement that it was a
+  regression from the chat that ships. Its code is on branch `chat-v2` and in the history; the
+  *inventory* it produced — every thing the conversation can show, with the defect each row
+  still has — is `docs/notes/chat-inventory.md`, and §5 there is the list of defects it found
+  in the chat we kept. That list is where the chat work goes from here.
 
-- **The rail, role cards and plan pane will want the same primitives.** They read the
-  same state and draw the same cards; the vocabulary in `chat-inventory.md` is built so
-  they can follow, but they are the next job after the chat, not part of it.
+- **The rail, role cards and plan pane** read the same state the chat does. They are not part
+  of the chat work, and there is no plan for them beyond the cases in `chat-inventory.md`.

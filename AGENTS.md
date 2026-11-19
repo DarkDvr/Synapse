@@ -178,7 +178,7 @@ an agent does not know to open is a document that does not exist:
 | `docs/notes/models-and-tools.md` | touching model choice, the catalog cache, the probe or the engine update — context limits, variants, marks, ask counters |
 | `docs/notes/runtime-scope.md` | before starting work on Synapse's own runtime (independence from OpenCode) — what the runtime does, what a replacement costs, the staged path |
 | `docs/notes/ui-lessons.md` | touching `web/` — layout invariants, the chat dock, the ask panel, the cards and the picker, with the measurements that prove them |
-| `docs/notes/chat-inventory.md` | starting the chat rebuild, or checking a chat behaviour rather than guessing it — every thing the conversation can show, the six primitives, and the scenario that tests each row |
+| `docs/notes/chat-inventory.md` | changing a chat behaviour rather than guessing it — every thing the conversation can show, what each must do, and the defect each row still has (the rebuild it was written for was cut; §5 is the list of defects in the chat that ships) |
 | `docs/notes/runbook.md` | running, restarting or debugging it; anything that kills a process |
 | `docs/notes/desktop-app.md` | touching `shell\`, `Synapse.exe`, `bin\node`, npm or any dependency — the good-tenant rule, the process model, exit codes, where the console lives |
 | `docs/notes/remote-access.md` | the LAN switch, the token or the login page, or changing what the HTTP listener binds |
