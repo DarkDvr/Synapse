@@ -1223,6 +1223,9 @@ function connectStream() {
       // keeps showing a number nobody budgets for (7 Nov).
       const windowsBefore = windowSignature(state.config);
       state.config = ev.config || state.config;
+      // The chat's question panel counts down from this number; the model reads it as a
+      // plain field, so it follows the settings rather than being copied once at boot.
+      state.answerWaitSec = answerWaitSec();
       if (windowSignature(state.config) !== windowsBefore) loadModels().catch(() => {});
       const mine = Boolean(ev.byId) && ev.byId === state.clientId;
       if (!$('settingsModal').hidden && !mine) {
@@ -2077,6 +2080,12 @@ document.addEventListener('keydown', (e) => {
       // send one and how to read the two answers that are not an answer (409, not found).
       onSubmit: (form, answer) => replyForm(form.id, answer),
     });
+    // A picture chip in the operator's own message still opens its preview: the chip is a
+    // fact about the message, and the preview is the app's (web/composer.js).
+    $('transcript').addEventListener('click', (e) => {
+      const chip = e.target.closest('.chat-image');
+      if (chip) showChatImagePreview(chip);
+    });
   } else {
     $('transcript').addEventListener('click', (e) => {
       // The ask panel is *inside* the transcript while a question is up, and it has
@@ -2626,6 +2635,8 @@ async function bootPage() {
   // this a resize left the old height in place and the page grew a scrollbar.
   window.addEventListener('resize', fitStageHeight);
   state.config = await api('GET', '/api/config').catch(() => null);
+  // The panel's countdown reads this, and the chat's model takes it as a plain field.
+  state.answerWaitSec = answerWaitSec();
   applyChatText();
   applyLanguage();
   renderLlmStatus();

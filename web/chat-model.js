@@ -20,6 +20,7 @@
 // disagreement is a bug in one of them.
 import { state as pageState } from './state.js';
 import { downloadAt } from './downloads.js';
+import { toolTarget } from './format.js';
 
 /** What "the end" means for something that has no time of its own. */
 const END = Number.MAX_SAFE_INTEGER;
@@ -130,12 +131,20 @@ function groupTurns(messages, breakBefore) {
 
 // ── blocks ───────────────────────────────────────────────────────
 
-/** A fold's summary: its first sentence, cut to a line. */
+/**
+ * A fold's summary: its first sentence, whole.
+ *
+ * The same rule the old chat's `reasoningGist` uses (web/format.js): flattened onto one line
+ * and cut at the first full stop. Whole, not clipped at a character count — a fold that ends
+ * mid-word in the summary is a fold the operator has to open to understand, and it made the
+ * two chats draw different words for the same reasoning block (19 Nov, measured at 172
+ * characters on one fold).
+ */
 function firstLine(text) {
-  const first = String(text || '').trim().split(/\r?\n/).find((line) => line.trim()) || '';
-  const sentence = /^(.+?[.!?…])\s/.exec(first);
-  const cut = (sentence ? sentence[1] : first).trim();
-  return cut.length > 110 ? `${cut.slice(0, 109)}…` : cut;
+  const flat = String(text || '').replace(/\s+/g, ' ').trim();
+  if (!flat) return '';
+  const end = flat.search(/[.!?](?:\s|$)/);
+  return end > 0 ? flat.slice(0, end + 1) : flat;
 }
 
 /** A tool part as card data: the raw facts, never the sentence — the renderer words it. */
@@ -148,6 +157,9 @@ function toolish(part) {
     error: part.error || null,
     exitCode: typeof part.exitCode === 'number' ? part.exitCode : null,
     failed: Boolean(part.failed),
+    // The one-line target, from the one function that words it (web/format.js): the card
+    // clips it with CSS, so the full command stays in the element for a hover or a copy.
+    target: toolTarget(part),
   };
 }
 
@@ -483,16 +495,17 @@ export function buildChat(src = pageState) {
     .filter((p) => p.requestId)
     .map((p) => ({ kind: 'card', key: `perm:${p.requestId}`, card: 'permission', props: { ...p }, open: false }));
 
-  const handover = src.handover
+  const compacted = src.handover || compactedOf(src);
+  const handover = compacted
     ? {
         kind: 'fold',
         key: 'compact-post',
         tone: 'handover',
-        summary: handoverSummary(src.handover),
+        summary: handoverSummary(compacted),
         format: 'markdown',
-        body: String(src.handover.summary || ''),
+        body: String(compacted.summary || ''),
         open: isOpen(src, 'compact-post'),
-        at: Number(src.handover.at) || 0,
+        at: Number(compacted.at) || 0,
       }
     : null;
 
@@ -547,7 +560,10 @@ function postFor(src, m, { mine, pane }) {
   if (m.type === 'user') {
     // A steer keeps the engine's marker in its text; the chat shows the tag, not the marker.
     const steer = /^\[steer\]\s*([\s\S]*)$/.exec(String(m.text || ''));
-    blocks.push({ kind: 'prose', key: `${m.id}:text`, text: steer ? steer[1] : String(m.text || ''), answer: false });
+    // Plain, not markdown: these are the operator's own words, and the old chat has always
+    // shown them as typed. A list of "1. …" turned into a numbered list is not the message
+    // they sent (19 Nov, seen on a real conversation the moment the switch went on).
+    blocks.push({ kind: 'prose', key: `${m.id}:text`, text: steer ? steer[1] : String(m.text || ''), format: 'plain', answer: false });
   } else if (m.type === 'synthetic') {
     const body = String(m.text || '').replace(/^\s*\[harness\]\s*/i, '');
     const label = String(m.description || '');
@@ -594,6 +610,9 @@ function postFor(src, m, { mine, pane }) {
     // What the message carries besides its words: the operator's own post shows what was
     // attached, and can be copied back into the composer.
     files: Array.isArray(m.files) ? m.files.map((f) => ({ name: String(f?.name || ''), mime: String(f?.mime || '') })) : [],
+    // A worker's report says which run it came from: "Synapse · worker t1 (coder-1) completed"
+    // is the header the old chat draws, and without it a report has no author.
+    title: m.type === 'synthetic' ? String(m.description || '') : '',
     steer: /^\[steer\]\s*/.test(String(m.text || '')),
     reuseId: m.type === 'user' && m.id ? m.id : null,
     blocks,
@@ -605,5 +624,22 @@ function handoverSummary(h) {
     ? new Date(Number(h.at)).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
     : '';
   const count = h.messages ? `${h.messages} messages — ` : '';
-  return `Compacted ${when} · ${count}the handover is in the project document`;
+  // The same sentence the old chat's compact post carries, dash for dash: this is the one
+  // line that tells the operator the conversation above it was folded away.
+  return `Compacted ${when} — ${count}the handover is in the project document`;
+}
+
+/**
+ * The compact post, as the session records it.
+ *
+ * The old chat reads the same record (`web/compact.js`, `compactPostOf`): the session's own
+ * metadata says when the conversation was folded and how many messages went with it. The
+ * model reads it here rather than being handed it, so a switched page draws the compact post
+ * without any of the app's glue being taught about the new renderer.
+ */
+function compactedOf(src) {
+  const sessions = (src.projects || []).flatMap((p) => (p && p.sessions) || []);
+  const meta = sessions.find((s) => s && s.id === src.sessionId)?.metadata?.synapse?.compacted;
+  if (!meta || !meta.summary) return null;
+  return { at: Number(meta.at) || 0, summary: String(meta.summary), messages: Number(meta.messages) || 0 };
 }

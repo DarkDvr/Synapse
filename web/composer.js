@@ -15,7 +15,10 @@ import { toast } from './toast.js';
 import { addChatError } from './chat-notes.js';
 import { chatScroller, animateScroll } from './chat-scroll.js';
 import { currentProject, currentRun, roleLabel, currentForm, selectionFor, modelByRef } from './run-view.js';
-import { renderTranscript, attachmentImage } from './transcript.js';
+import { attachmentImage } from './transcript.js';
+// The chat's renderer, behind the switch: the composer draws the conversation after it adds
+// or takes away something, and which renderer answers is not its business.
+import { renderTranscript } from './chat-render.js';
 import { traceOf, steerLine } from './traces.js';
 
 const missing = (name) => () => {

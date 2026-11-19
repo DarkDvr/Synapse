@@ -13,6 +13,7 @@ import { renderMarkdown } from './md.js';
 import { roleLabel } from './run-view.js';
 import { askHeadNote, answerTimeline } from './ask-note.js';
 import { serverNow } from './api.js';
+import { fileChip } from './format.js';
 import { formatBytes, progressBar, downloadLabel } from './downloads.js';
 
 /** HH:MM, in the operator's own 24-hour clock. */
@@ -198,11 +199,18 @@ function animateDetail(card, head, detail, opening) {
   setTimeout(done, 170);
 }
 
+/**
+ * The card's one line of target.
+ *
+ * The model words it with the same function the old chat uses (`toolTarget`), and the line
+ * is clipped by the stylesheet, not by cutting the string: a command the operator wants to
+ * copy out of a card has to be the whole command, and a hover shows it.
+ */
 function targetOf(p) {
+  if (p && typeof p.target === 'string' && p.target) return p.target;
   const input = p.input && typeof p.input === 'object' ? p.input : {};
-  const raw = input.description || input.command || input.filePath || input.file_path || input.path || input.url || input.query || '';
-  const text = String(raw || p.name || '').replace(/\s+/g, ' ').trim();
-  return text.length > 90 ? `${text.slice(0, 89)}…` : text;
+  const raw = input.command || input.path || input.filePath || input.pattern || input.query || input.url || input.name || '';
+  return String(raw || p.name || '').replace(/\s+/g, ' ').trim();
 }
 
 function pre(text, cls = '') {
@@ -851,6 +859,14 @@ function blockNode(block) {
         node.textContent = String(block.text || '');
         return node;
       }
+      // The operator's own words, as typed: a numbered list they wrote by hand is their
+      // message, and re-lettering it into a list is not a render (19 Nov, seen at once on a
+      // real conversation the moment the switch went on).
+      if (block.format === 'plain') {
+        const node = el('span', 'msg-text');
+        node.textContent = String(block.text || '');
+        return node;
+      }
       const node = prose(block.text);
       if (block.answer) node.classList.add('is-answer');
       return node;
@@ -890,7 +906,9 @@ function fillPost(post, item) {
     body.append(body._time, body._role, body._start, body._mark);
     post.append(body);
   }
-  const speaker = item.speaker === 'you' ? 'You' : item.speaker === 'synapse' ? 'Synapse' : 'Architect';
+  // A worker's report says which run it came from: "Synapse · worker t1 (coder-1) completed"
+  // is the header the old chat draws, and without it a report has no author.
+  const speaker = item.speaker === 'you' ? 'You' : item.speaker === 'synapse' ? `Synapse · ${item.title || 'report'}` : 'Architect';
   const clock = CLOCK(item.at);
   if (body._time.textContent !== clock) body._time.textContent = clock;
   if (body._role.textContent !== speaker) body._role.textContent = speaker;
@@ -907,6 +925,19 @@ function fillPost(post, item) {
     body._steer = null;
   }
   fillBlocks(body, item.blocks, post._blocks || (post._blocks = new Map()), body._start, body._mark);
+  // What the operator attached is part of the message, not a footnote to it: the same chips
+  // the old chat draws, from the one function that draws them (web/format.js). A chip keeps
+  // the message and the file's index, so a picture opens from the bytes the message holds.
+  if (item.speaker === 'you' && item.files && item.files.length) {
+    if (!body._files) body._files = el('span', 'msg-files');
+    body._files.innerHTML = item.files
+      .map((f, index) => fileChip({ name: f.name, mime: f.mime }, { msgId: item.reuseId || '', index }))
+      .join('');
+    if (body._files.previousSibling !== body._mark) body.insertBefore(body._files, body._reuse || null);
+  } else if (body._files) {
+    body._files.remove();
+    body._files = null;
+  }
   // The operator's own message can be put back in the composer, attachments and all — after
   // the words, where the old chat puts it. Built on arrival, then kept.
   if (item.speaker === 'you' && item.reuseId) {

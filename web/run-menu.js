@@ -14,7 +14,9 @@ import { automationWaitSec } from './mode.js';
 import { toast } from './toast.js';
 import { automationChecked, automationDisabled, automationTone, AUTOMATION_ROWS, AUTOMATION_DEFAULTS } from './automation.js';
 import { findSession } from './projects.js';
-import { renderTranscript } from './transcript.js';
+// The chat's renderer, behind the switch: this module draws the conversation after it
+// changes something, and which renderer answers is not its business (web/chat-render.js).
+import { renderTranscript } from './chat-render.js';
 
 /**
  * The automation switches, behind the cog between Stop and Send.

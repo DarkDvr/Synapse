@@ -13,7 +13,6 @@ import { state } from './state.js';
 import { renderTranscript as renderV1 } from './transcript.js';
 import { buildChat } from './chat-model.js';
 import { createChatView } from './chat-view.js';
-import { answerWaitSec } from './mode.js';
 
 /** `v2` only when the address asks for it, and by its full name: no half-switched chat. */
 export const chatRenderer = () => {
@@ -50,9 +49,5 @@ export function mountChatView(host, wired = {}) {
  */
 export function renderTranscript() {
   if (!view) return renderV1();
-  // The model reads the panel's wait as a plain number, and the page's own settings are the
-  // truth for it: read here rather than copied at boot, so a changed setting is never a
-  // countdown measured against last week's answer.
-  state.answerWaitSec = answerWaitSec();
   view.update(buildChat(state));
 }

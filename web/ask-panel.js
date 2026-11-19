@@ -17,7 +17,10 @@ import { toast } from './toast.js';
 import { askHeadNote, answerTimeline } from './ask-note.js';
 import { placeAskHost } from './chat-scroll.js';
 import { currentForm } from './run-view.js';
-import { renderTranscript, forceNextRender } from './transcript.js';
+import { forceNextRender } from './transcript.js';
+// The chat's renderer, behind the switch: this module draws the conversation after a reply,
+// and which renderer answers is not its business (web/chat-render.js).
+import { renderTranscript } from './chat-render.js';
 import { renderComposer } from './composer.js';
 
 const missing = (name) => () => {

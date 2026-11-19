@@ -32,17 +32,21 @@ more — open a note for it.
 - **A post's time is `HH:MM` only.** A conversation that crosses midnight shows 23:58
   above 00:03 with no date; the engine has the date. A candidate for the new header.
   (18 Nov, `web/transcript.js`.)
+- **The compact post runs its time into its count**: "Compacted 28 Oct, 20:5482 messages —
+  the handover is in the project document". The separator between `when` and the count is
+  missing, so the clock and the message count read as one number (measured 19 Nov in a real
+  conversation). The new chat writes "20:54 — 82 messages"; the old one should too.
+  (`web/transcript.js`, the compact post's summary.)
 - **The context menu is the page's own now** (Copy, Select All, Cut/Paste in fields).
   The new chat may want richer items — "Copy message", "Copy as Markdown", "Quote in
   composer" — but that is a design, not a finding.
 
 ## Elsewhere
 
-- **The chat rebuild is on branch `chat-v2`**, in its own worktree at
-  `F:\dev\Synapse.worktrees\chat-v2` — the running app's folder is untouched. The contract,
-  the decisions, the measurements and the status are in that branch's
-  `docs/notes/chat-inventory.md` (§7 the item model, §9 where it stands and how to run it).
-  Main is still the old chat; nothing of the rebuild is live.
+- **The chat rebuild is on main, behind `?chat=v2`** (1.63.0). The old chat is what the app
+  draws unless the address asks for the new one; the contract, the decisions, the measurements
+  and the status are in `docs/notes/chat-inventory.md` (§7 the item model, §9 where it stands
+  and what the first real conversation found).
 
 - **The rail, role cards and plan pane will want the same primitives.** They read the
   same state and draw the same cards; the vocabulary in `chat-inventory.md` is built so

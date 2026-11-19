@@ -14,7 +14,9 @@ import { $ } from './dom.js';
 import { api } from './api.js';
 import { toast } from './toast.js';
 import { modelByRef, selectionFor, topEfforts, variantsOf, ROLES, architectSelection, currentProject, dirKey } from './run-view.js';
-import { renderTranscript } from './transcript.js';
+// The chat's renderer, behind the switch: this module draws the conversation after it
+// changes something, and which renderer answers is not its business (web/chat-render.js).
+import { renderTranscript } from './chat-render.js';
 import { pickers, syncPickerInput } from './model-picker.js';
 import { clearRoleRate } from './role-rate-store.js';
 

@@ -519,14 +519,35 @@ into the branch whenever it moves (`b04d091` merged `8be801d`).
 | The pane folds to one line and comes back | yes | 245 → 63 → 245 px, same 127 characters, then 172 (pane-collapse) |
 | The question panel arrives, and its clock ticks in place | — | arrives on 120 ms, 27 → 26 → 25 seconds, panel untouched (form-tick) |
 
+**The first real conversation, and what it found (19 Nov).** Switching on over a 32-message
+chat (the Fever Tracker run, 8 Aug–28 Oct, with a compact post, 96 tool cards and 73 folds)
+drew the old chat: **nine modules import the old renderer directly** — `ask-panel`, `compact`,
+`composer`, `dialog`, `live-runs`, `pending`, `role-models`, `run-menu`, `tool-panels` — so
+opening a session painted v1 over v2 a moment later. They all import `web/chat-render.js` now.
+With the switch actually drawing, the conversation was short by 20,432 characters, and every
+character of it was a promise the model had not been taught:
+
+- the operator's attachments (the `msg-files` chips) were not drawn at all;
+- the compact post was missing — the model looked for `state.handover`, which the app never
+  sets; it reads the session's own `metadata.synapse.compacted` now, the same record `web/compact.js`
+  reads;
+- a worker's report lost its author: `Synapse · worker t1 (coder-1) completed` was just `Synapse`;
+- the operator's own words were rendered as **markdown**, so a hand-written "1. …" became a
+  numbered list and the numbers vanished — plain text, as before;
+- tool cards were cut at 90 characters, where the old chat clips with CSS and keeps the whole
+  command in the element;
+- a reasoning fold's summary was cut at 110 characters instead of its first sentence.
+
+After those, the two renderers agree on **395,073 characters of 395,072** — the one extra is
+the compact summary, where the old chat writes `20:5482 messages` with no separator and the
+new one writes `20:54 — 82 messages`. That is the new chat being right (see `findings.md`).
+
 **What is left**, in order:
 
-1. **The switch has not been run on a real turn yet.** `?chat=v2` boots the page and mounts
-   the view (checked on a worktree server at 8710: the landing page, no boot error), but no
-   real conversation has been drawn by it inside the app. The first thing to do after the
-   branch reaches main is one real turn with the switch on: a message, a delta, a card, a
-   question. The lab cannot see the app's own wiring — `replyForm`, `paneToggle`, the
-   download patch — and that is exactly where an integration fault would hide.
+1. **A live turn on the switch**: a message sent, a delta arriving, a card landing, a question
+   asked, a download. The static conversation is identical; what has not been watched is the
+   page's own wiring doing its job while the new renderer draws — `replyForm`, `paneToggle`,
+   the chip preview, the fold's `toggle`.
 2. **The operator's judgement**: the same conversation, both chats, and their answer to which
    one to keep. The lab's numbers are the evidence; the judgement is theirs.
 3. Only then: the rail, the role cards and the plan pane on the same primitives.
@@ -551,6 +572,11 @@ into the branch whenever it moves (`b04d091` merged `8be801d`).
   itself, so a switched page would toggle a card open and shut at once, and submit a question
   twice. In `v2` they stand down and the view's own handlers answer; the fold's `toggle`
   capture stays, because that is how the page remembers what the operator opened.
+- **Every module that draws the chat calls the renderer by name.** Nine of them imported
+  `renderTranscript` from `./transcript.js`, so a switched page drew the new chat and then had
+  it painted over by the old one on the next poll — the symptom was simply "v2 is not on".
+  They import `./chat-render.js`; anything that renders the conversation must, or it is
+  drawing a renderer the page did not choose.
 - **`data-pane` is how the old pane finds its box.** The new pane deliberately carries no
   `data-pane`: the old pane code would find it, and slide the words with a transform while the
   new one scrolls them, so every line would move twice.
