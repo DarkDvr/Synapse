@@ -1572,7 +1572,10 @@ body[data-mode="single"] #runAuto { display: none; }
   line-height: 1.45;
 }
 .trace-flow-view {
-  max-height: calc(11 * 1.45em);
+  /* Full height from the pane's first word, not a box that grows line by line: the chat
+     below it stops moving while the thinking is written, and a short thought sits at the
+     bottom of the window where the next line will land (19 Nov). */
+  height: calc(11 * 1.45em);
   overflow: hidden;
 }
 /* The top line leaves through a fade, and only while it is leaving: a hard cut at a
@@ -1607,6 +1610,20 @@ body[data-mode="single"] #runAuto { display: none; }
 }
 .think-line .think-toggle { position: static; padding: 0; font: inherit; font-size: calc(var(--chat-fs) * 0.92); font-style: italic; color: #6a6f77; }
 .think-line .status-dot.live { width: 6px; height: 6px; }
+/* The way back to the newest words after the operator has scrolled up inside the pane. It
+   sits inside the box's bottom-right corner, clear of the ▾ in the top corner. Yellow on its
+   own dark pill: the live path's colour, never orange text on a violet fill. */
+.think-new {
+  position: absolute; right: 30px; bottom: 4px; z-index: 3;
+  border: 1px solid rgba(237, 194, 90, 0.55); border-radius: 999px;
+  background: #24211a; color: var(--yellow);
+  font: inherit; font-size: calc(var(--chat-fs) * 0.78); line-height: 1.5;
+  padding: 0 8px; cursor: pointer;
+}
+.think-new:hover, .think-new:focus-visible { border-color: var(--yellow); }
+/* Reading: the view scrolls under the operator's hand, so the pane must not also be a
+   scroll container's sibling — the border stays, the text does the moving. */
+.think-wrap.is-reading .trace-flow-view { overflow-y: auto; }
 /* A pane that has been full stays full until the run ends: the words swap between
    steps, the box does not, so the chat is not dropped by ten lines twice a step
    (9 Nov). */

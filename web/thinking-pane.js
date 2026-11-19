@@ -17,6 +17,10 @@
 // The pure parts — `paneEase` and `paneTrim` — are tested in
 // `tests/thinking-pane.test.mjs`; the rest is DOM, and is looked at in the page.
 import { esc } from './format.js';
+import { state } from './state.js';
+
+/** The trace a pane belongs to: the open session's own step, or a worker's. */
+const traceFor = (key) => (state.sessionTrace?.key === key ? state.sessionTrace : state.traces.get(key)) || null;
 
 const TAU = 0.12; // seconds for ~63% of the remaining distance
 const SNAP = 0.5; // px: closer than this and it has arrived
@@ -66,7 +70,15 @@ export function paneMarkup(trace) {
     return `<div class="think-line"><span class="status-dot live" role="img" aria-label="thinking"></span><button type="button" class="think-toggle" data-think-toggle="${key}" title="Show what it is thinking">Thinking…</button></div>`;
   }
   const cls = `trace-flow${s.kind === 'think' ? ' is-think' : ''}${s.ended ? ' is-idle' : ''}${trace.reserved ? ' is-reserved' : ''}`;
-  return `<div class="think-wrap"><div class="${cls}" data-pane="${key}"><div class="trace-flow-view"><div class="trace-flow-body">${esc(s.text)}</div></div></div><button type="button" class="think-toggle" data-think-toggle="${key}" title="Hide the thinking" aria-label="Hide the thinking">▾</button></div>`;
+  // The box is full height from its first word (synapse.css), so nothing below it moves while
+  // it is written to. The chip is the way back after the operator has scrolled up inside it.
+  return (
+    `<div class="think-wrap${s.scrolled ? ' is-reading' : ''}">` +
+    `<div class="${cls}" data-pane="${key}"><div class="trace-flow-view"><div class="trace-flow-body">${esc(s.text)}</div></div></div>` +
+    `<button type="button" class="think-new" data-think-new="${key}"${s.scrolled ? '' : ' hidden'}>new content ↓</button>` +
+    `<button type="button" class="think-toggle" data-think-toggle="${key}" title="Hide the thinking" aria-label="Hide the thinking">▾</button>` +
+    `</div>`
+  );
 }
 
 /** New words. The frame loop picks them up; nothing is rendered here. */
@@ -95,14 +107,122 @@ export function paneEnded(trace) {
   schedule();
 }
 
+/**
+ * The reader takes the pane: the wheel moves the text, and the slide stops chasing the end.
+ *
+ * The slide is a transform and a transform cannot be scrolled, so the two modes show the same
+ * pixels in different ways: while following, the body is one block moved up by `offset`; while
+ * reading, the body stays put and the view scrolls to the same place (`scrollTop = offset`).
+ * The switch is exact, which is what keeps it from jumping.
+ */
+function takeOver(trace, event) {
+  const s = trace.stream;
+  const node = nodeFor(trace.key);
+  const view = node?.querySelector('.trace-flow-view');
+  const body = node?.querySelector('.trace-flow-body');
+  if (!s || !view || !body) return false;
+  const max = Math.max(0, body.offsetHeight - view.clientHeight);
+  if (max <= 2) return false; // nothing to read back: the wheel belongs to the chat
+  // The frame loop follows `active`: taking the pane makes this trace the one it watches.
+  active = trace;
+  if (!s.scrolled) {
+    s.scrolled = true;
+    node.parentElement?.classList.add('is-reading');
+    view.style.overflowY = 'auto';
+    body.style.transform = 'none';
+    view.scrollTop = Math.max(0, Math.min(Number(s.offset) || 0, max));
+  }
+  if (event) {
+    view.scrollTop = Math.max(0, Math.min(view.scrollTop + event.deltaY, max));
+    event.preventDefault();
+    event.stopPropagation();
+  }
+  schedule();
+  return true;
+}
+
+/** Back to the newest words: the slide resumes from the end. */
+function dropBack(trace) {
+  const s = trace.stream;
+  if (!s) return;
+  const node = nodeFor(trace.key);
+  const view = node?.querySelector('.trace-flow-view');
+  const body = node?.querySelector('.trace-flow-body');
+  const max = view && body ? Math.max(0, body.offsetHeight - view.clientHeight) : 0;
+  s.scrolled = false;
+  s.snap = true;
+  s.offset = max;
+  node?.parentElement?.classList.remove('is-reading');
+  const chip = node?.parentElement?.querySelector('.think-new');
+  if (chip) chip.hidden = true;
+  if (view) {
+    view.style.overflowY = '';
+    view.scrollTop = 0;
+  }
+  if (body) body.style.transform = `translate3d(0, ${-max}px, 0)`;
+  schedule();
+}
+
+/** Wire one drawn pane: the wheel that takes it, the chip that gives it back, its place. */
+function wirePane(node, trace) {
+  const view = node.querySelector('.trace-flow-view');
+  const write = node.querySelector('.trace-flow-body');
+  const chip = node.parentElement?.querySelector('.think-new');
+  if (view && !view._paneWired) {
+    view._paneWired = true;
+    view.addEventListener('wheel', (event) => { takeOver(trace, event); }, { passive: false });
+  }
+  if (chip && !chip._paneWired) {
+    chip._paneWired = true;
+    chip.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      dropBack(trace);
+    });
+  }
+  if (!view || !write) return;
+  if (trace.stream?.scrolled) {
+    // A draw put the text back at the top: put the reader back where they were.
+    view.style.overflowY = 'auto';
+    write.style.transform = 'none';
+    view.scrollTop = Math.max(0, Number(trace.stream.offset) || 0);
+    if (chip) chip.hidden = false;
+  }
+}
+
 /** After any transcript render: re-point at the new node and keep sliding. */
 export function paneAfterRender() {
+  // Every pane this draw produced is wired, whatever the frame loop is pointed at: on the
+  // first draw of a turn `active` may not be set yet, and a pane the wheel cannot reach is a
+  // pane the operator cannot read back.
+  let adopted = null;
+  for (const node of document.querySelectorAll('.trace-flow[data-pane]')) {
+    const key = String(node.dataset.pane || '');
+    const trace = traceFor(key) || (active && String(active.key) === key ? active : null);
+    if (!trace) continue;
+    wirePane(node, trace);
+    // The open session's own pane is the one the loop should watch when nothing told it yet.
+    if (trace === state.sessionTrace || !adopted) adopted = trace;
+  }
+  if (!active && adopted) active = adopted;
   const trace = active;
   if (!trace?.stream || trace.thinkCollapsed || !trace.stream.text) return;
   const node = nodeFor(trace.key);
-  const body = node?.querySelector('.trace-flow-body');
-  if (!body) return;
-  body.style.transform = `translate3d(0, ${-(Number(trace.stream.offset) || 0)}px, 0)`;
+  const view = node?.querySelector('.trace-flow-view');
+  const write = node?.querySelector('.trace-flow-body');
+  if (!view) return;
+  if (!view._paneStarted) {
+    view._paneStarted = true;
+    // A pane that was just drawn starts at its end, not sliding in from the middle: the box
+    // is full height from its first word, so the first paint is a placement, not a movement.
+    trace.stream.snap = true;
+  }
+  if (!write) return;
+  if (trace.stream.scrolled) {
+    schedule();
+    return;
+  }
+  write.style.transform = `translate3d(0, ${-(Number(trace.stream.offset) || 0)}px, 0)`;
   schedule();
 }
 
@@ -110,6 +230,8 @@ export function paneAfterRender() {
 export function paneToggle(trace) {
   if (!trace?.stream) return;
   trace.thinkCollapsed = !trace.thinkCollapsed;
+  // Opening a pane starts at its newest words, not wherever the last reading stopped.
+  trace.stream.scrolled = false;
   if (!trace.thinkCollapsed) trace.stream.snap = true;
   active = trace;
   wired.renderTranscript();
@@ -140,7 +262,28 @@ function paneFrame(now) {
     else node.data = s.text;
   }
   const view = body.parentElement;
-  const target = Math.max(0, body.offsetHeight - view.clientHeight);
+  // The box is a fixed window now, so a short text has a negative reach: the body is pushed
+  // down until its last line is the window's last line, and the words arrive at the bottom.
+  const target = body.offsetHeight - view.clientHeight;
+  panel.classList.toggle('is-idle', Boolean(s.ended));
+  panel.classList.toggle('is-scrolling', target > 0.5);
+  const chip = panel.parentElement?.querySelector('.think-new');
+  if (s.scrolled) {
+    // The reader has the pane: words are appended, their place is left alone, and the chip
+    // says there is more below. Catching the end by hand puts the slide back.
+    s.offset = Math.min(view.scrollTop, Math.max(0, target));
+    const atEnd = view.scrollHeight - view.scrollTop - view.clientHeight <= 4;
+    if (atEnd) {
+      s.scrolled = false;
+      panel.parentElement?.classList.remove('is-reading');
+      view.style.overflowY = '';
+      view.scrollTop = 0;
+      if (chip) chip.hidden = true;
+    } else {
+      if (chip) chip.hidden = false;
+      return;
+    }
+  }
   // Never be past the end. A trim cuts the top away and the old offset would point
   // beyond the new text, which draws an empty box for a frame (seen in a 40ms screen
   // recording: one frame blank, then the text back further along). The clamp makes
@@ -156,8 +299,6 @@ function paneFrame(now) {
   body.style.transform = `translate3d(0, ${-s.offset}px, 0)`;
   // State on the node, never through a render: a rebuilt pane would restart the
   // slide and move the chat (9 Nov).
-  panel.classList.toggle('is-idle', Boolean(s.ended));
-  panel.classList.toggle('is-scrolling', target > 0.5);
   if (target > 0.5 && !trace.reserved) {
     trace.reserved = true;
     panel.classList.add('is-reserved');
