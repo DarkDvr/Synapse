@@ -665,6 +665,8 @@ function notePause(reason) {
  * end of the conversation, where the operator was going to end up anyway (their call, 19 Nov).
  */
 function continueChat() {
+  if (resumeTimer) clearTimeout(resumeTimer);
+  resumeTimer = 0;
   clearSelection();
   state.renderPaused = false;
   state.frozen = false;
@@ -674,6 +676,12 @@ function continueChat() {
   renderTranscript();
   scrollChatToBottom();
 }
+
+// A selection that goes away is often a misclick on the way to a better one. The pause waits a
+// second before it lets go: a chat that jumps and scrolls out from under a second selection is
+// worse than a pause that lasts a moment too long (19 Nov).
+let resumeTimer = 0;
+const RESUME_GRACE_MS = 1000;
 
 // Auto-Answer answers a waiting question after a wait, and an unanswered permission card is
 // allowed once when its timer runs out. Both are the harness acting for the operator after a
@@ -2375,8 +2383,20 @@ document.addEventListener('keydown', (e) => {
   // The pause is the operator's, and now it is visible: a yellow glow on the dock and a bar
   // that says why, what is waiting, and offers the way out (web/pause.js).
   document.addEventListener('selectionchange', () => {
-    if (!state.renderPaused || selectionInChat()) return;
-    continueChat();
+    // A chat frozen by the second Stop is let go by Continue only: selecting something to read
+    // in it must not start it drawing again.
+    if (!state.renderPaused || state.frozen) return;
+    if (selectionInChat()) {
+      // They are selecting again: the pause was never going to drop.
+      if (resumeTimer) clearTimeout(resumeTimer);
+      resumeTimer = 0;
+      return;
+    }
+    if (resumeTimer) return;
+    resumeTimer = setTimeout(() => {
+      resumeTimer = 0;
+      if (!selectionInChat() && !state.frozen) continueChat();
+    }, RESUME_GRACE_MS);
   });
   // The bar's Continue is the same act as clicking away.
   installPause($('chatDock'), { onContinue: () => continueChat() });
