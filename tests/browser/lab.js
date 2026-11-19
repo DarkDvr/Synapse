@@ -195,6 +195,12 @@ function frame(step, model, picked) {
     // What the operator had selected, and whether it is still there after the draw.
     picked,
     selection: selectionNow(),
+    // The question panel: whether it is there, what it says, and whether it just arrived.
+    form: {
+      present: Boolean(newHost.querySelector('.ask-panel')),
+      note: newHost.querySelector('.ask-head-note')?.textContent || '',
+      arriving: Boolean(newHost.querySelector('.ask-panel.is-enter')),
+    },
   };
 }
 
@@ -226,6 +232,11 @@ window.__labRun = async (name, only, selectPanel) => {
       const panel = selectPanel || step.panel || 'new';
       if (!select(step.text, panel)) throw new Error(`no text "${step.text}" to select in the ${panel} panel`);
       picked = { panel, text: String(step.text) };
+      continue;
+    }
+    // Time passing between two renders: the countdown's own step. Nothing is drawn.
+    if (step.do === 'wait') {
+      await new Promise((resolve) => setTimeout(resolve, Number(step.ms) || 0));
       continue;
     }
     applyStep(state, step);
@@ -361,6 +372,42 @@ window.__labCheck = async () => {
       : wasKept < past.length
         ? `lost the selection in ${past.length - wasKept} of ${past.length} frames`
         : `kept it by not drawing: the post stayed at ${past[0].old.text} characters while the conversation reached ${past.at(-1).new.text}`,
+  );
+
+  // The question panel is the one thing in the chat that is waiting for the operator, so it
+  // is the one thing that arrives on the chat's own 120ms; and it carries a clock. The number
+  // has to fall while the operator reads, and the panel must not be rebuilt to do it — a
+  // panel redrawn every second would take the answer being typed into it.
+  const question = await window.__labRun('form-tick');
+  const arrived = question.find((f) => f.form.present) || null;
+  const ticks = question.filter((f) => f.form.present).map((f) => Number((/(\d+) seconds/.exec(f.form.note) || [])[1]));
+  // Two renders inside one second show the same number: the clock may hold, it may fall, it
+  // must never go up and it must be lower at the end than at the start.
+  const steadier = ticks.length >= 3 && ticks.every((n, i) => Number.isFinite(n) && (i === 0 || n <= ticks[i - 1])) && ticks.at(-1) < ticks[0];
+  caseFor(
+    'the question panel arrives, and its countdown ticks in place',
+    Boolean(arrived && arrived.form.arriving && steadier),
+    !arrived
+      ? 'the panel never arrived'
+      : `${arrived.form.arriving ? 'arrived' : 'appeared without its motion'}, ${ticks.join(' → ')} seconds left`,
+  );
+
+  // An answer the operator has already given stays given: the panel is moved, never rebuilt,
+  // so the control they touched is still the same element after a repaint — and so is the
+  // choice inside it.
+  await window.__labRun('form-tick', 5);
+  const panelBefore = newHost.querySelector('.ask-panel');
+  const radio = panelBefore?.querySelector('input[type="radio"]') || null;
+  if (radio) radio.checked = true;
+  window.__labUpdate();
+  const panelAfter = newHost.querySelector('.ask-panel');
+  const stillChecked = Boolean(panelAfter && radio && panelAfter.querySelector('input[type="radio"]:checked') === radio);
+  caseFor(
+    'the panel keeps its answer through a repaint',
+    Boolean(panelBefore && panelAfter === panelBefore && stillChecked),
+    !panelBefore
+      ? 'no panel to type into'
+      : `${panelAfter === panelBefore ? 'same panel' : 'a new panel'}, the choice ${stillChecked ? 'kept' : 'lost'}`,
   );
 
   return { cases, pass: cases.every((c) => c.ok) };

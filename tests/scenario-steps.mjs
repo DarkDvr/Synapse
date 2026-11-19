@@ -18,6 +18,7 @@ export function resetState(state) {
   state.leases = new Map();
   state.downloads = new Map();
   state.sessionTrace = { key: '', stream: null };
+  state.answerWaitSec = 0;
   state.open = new Set();
   state.renderSig = '';
   state.renderPaused = false;
@@ -90,8 +91,15 @@ export function applyStep(state, step) {
     case 'lease':
       state.leases.set(step.key, step.lease);
       return;
-    case 'form':
-      state.forms = step.form ? [step.form] : [];
+    case 'form': {
+      // The countdown is measured from the server's clock, so a scenario says when the first
+      // page appeared the same way a message says when it was written.
+      if (Number(step.wait)) state.answerWaitSec = Number(step.wait);
+      state.forms = step.form ? [{ ...step.form, autoAnswerFirstAt: stamp(step.form.autoAnswerFirstAt) }] : [];
+      return;
+    }
+    // Time passing between two renders: the countdown's own step. Nothing in the state moves.
+    case 'wait':
       return;
     case 'permission':
       state.permissions = step.permission ? [step.permission] : [];

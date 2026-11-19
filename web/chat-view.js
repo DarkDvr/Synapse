@@ -11,7 +11,8 @@
 // side with one stylesheet, and so nothing here is a second design language.
 import { renderMarkdown } from './md.js';
 import { roleLabel } from './run-view.js';
-import { askHeadNote } from './ask-note.js';
+import { askHeadNote, answerTimeline } from './ask-note.js';
+import { serverNow } from './api.js';
 import { formatBytes, progressBar, downloadLabel } from './downloads.js';
 
 /** HH:MM, in the operator's own 24-hour clock. */
@@ -336,10 +337,14 @@ function animateFold(details, summary, body) {
     body.getBoundingClientRect();
     body.style.transition = 'height 120ms ease-out';
     body.style.height = `${end}px`;
+    // A repaint that lands in the middle of this must not put `open` back: the body is
+    // still shrinking, and closing it now would take the content away before it moved.
+    details._folding = true;
     let finished = false;
     const done = () => {
       if (finished) return;
       finished = true;
+      details._folding = false;
       body.style.transition = '';
       body.style.height = '';
       body.style.overflow = '';
@@ -361,6 +366,7 @@ function animateFold(details, summary, body) {
 let panelNode = null;
 let panelSig = '';
 let panelPage = 0;
+let panelClock = 0;
 let submitForm = () => {};
 
 const fieldSig = (form) =>
@@ -488,13 +494,44 @@ function applyPage(panel, form) {
   if (submit) submit.hidden = many && panelPage < last;
 }
 
+/**
+ * The line beside the title: whose question it is, and how long Auto-Answer has left.
+ *
+ * The number is measured against the server's clock (`firstAt` comes from the server), so a
+ * slow sweep or a reload does not restart it, and it is painted from a one-second interval
+ * rather than from a render: a question that is waiting does not change the conversation.
+ */
+function paintNote(panel, form) {
+  const note = panel && panel._note;
+  if (!note) return;
+  const auto = Boolean(form.autoAnswer);
+  const left = auto && form.firstAt ? answerTimeline({ firstAt: form.firstAt, wait: form.wait, pages: form.pages, now: serverNow() }).seconds : 0;
+  const text = askHeadNote({ here: Boolean(form.here), worker: Boolean(form.worker), autoAnswer: auto, seconds: left });
+  if (note.textContent !== text) note.textContent = text;
+}
+
+function stopPanelClock() {
+  if (panelClock) clearInterval(panelClock);
+  panelClock = 0;
+}
+
+function startPanelClock(panel, form) {
+  stopPanelClock();
+  paintNote(panel, form);
+  if (!form.autoAnswer || !form.firstAt) return;
+  panelClock = setInterval(() => paintNote(panel, form), 1000);
+  // A timer is not a reason for a process to stay alive.
+  panelClock?.unref?.();
+}
+
 function buildForm(form) {
   const panel = el('div', 'ask-panel');
   panel.setAttribute('role', 'dialog');
   panel.dataset.ask = form.id;
   const head = el('div', 'ask-head');
   head.append(el('span', 'ask-dot'), el('span', 'ask-head-title', form.title));
-  head.append(el('span', 'ask-head-note', askHeadNote({ here: Boolean(form.here), worker: form.worker })));
+  panel._note = el('span', 'ask-head-note');
+  head.append(panel._note);
   const fields = el('div', 'ask-fields');
   form.fields.forEach((field, index) => fields.append(fieldNode(field, index)));
   const actions = el('div', 'ask-actions');
@@ -923,7 +960,8 @@ function fillTrace(root, item) {
       root._lines = lines;
       animateFold(root, summary, body);
     }
-    root.open = Boolean(item.open);
+    // Not while it is folding: the animation owns `open` until its last frame.
+    if (!root._folding) root.open = Boolean(item.open);
     if (root._role.textContent !== label) root._role.textContent = label;
     if (root._after.data !== `${rest}${figures}`) root._after.data = `${rest}${figures}`;
     root._summary.title = `${label}${rest}${figures}`;
@@ -1051,14 +1089,22 @@ export function createChatView(host, { onToggle, onSubmit } = {}) {
         panelNode = buildForm(model.form);
         panelNode.dataset.sig = sig;
         panelPage = 0;
+        // A question arriving is the one thing in the chat that is waiting for the operator:
+        // it comes in on the same 120ms as everything else rather than appearing mid-frame.
+        appear(panelNode);
+        startPanelClock(panelNode, model.form);
       }
       wanted.push(panelNode);
     } else if (panelNode) {
       panelNode.remove();
       panelNode = null;
       panelSig = '';
+      stopPanelClock();
     }
-    if (panelNode) applyPage(panelNode, model.form);
+    if (panelNode) {
+      applyPage(panelNode, model.form);
+      paintNote(panelNode, model.form);
+    }
 
     // Put the wanted nodes in order: appendChild moves an existing node, so this both
     // orders and inserts, and it never touches a node that is already in place.

@@ -144,9 +144,9 @@ Ids are stable: they are the ticket names and the scenario names. `M` = must,
 | H1 | A pending form | Panel: dot, title, note, fields, actions | M: one node, moved never rebuilt, so answers survive a poll |
 | H2 | Fields | radio, checkbox, boolean, text, number, external link, "Something Else…" | M: a `when` rule hides a field that is not answerable yet; hidden fields answer nothing |
 | H3 | A multi-question form | One question per page, "Question N of M", Back/Next/Submit | M: paging hides by class, not `hidden`, so answers survive; required fields gate the right button |
-| H4 | Auto-Answer | "Auto-Answering in N seconds…", page advance, the reply after the last page | M: the countdown is the server's clock; a manual answer wins |
+| H4 | Auto-Answer | "Auto-Answering in N seconds…", page advance, the reply after the last page | M: the countdown is the server's clock; a manual answer wins. The number is done on chat-v2 (measured: 27 → 26 → 25 seconds while the panel stands, `form-tick`); the page advance and the reply stay in `web/ask-panel.js` until the app wires the view |
 | H5 | A worker's question | The same panel, note says "a worker is waiting — answer here" | M: answerable from the operator's chat; no "open that chat" that does not exist |
-| H6 | The panel arriving | At the end, report above it | M: placed only after the transcript has the report; the head visible when the panel is taller than the chat; the composer disabled, Stop live |
+| H6 | The panel arriving | At the end, report above it | M: placed only after the transcript has the report; the head visible when the panel is taller than the chat; the composer disabled, Stop live. On chat-v2 it also arrives on the chat's own 120ms (`is-enter`), and the panel is moved rather than rebuilt, so a choice made in it survives the next repaint (measured, `form-tick`) |
 | H7 | The answer sent | The panel goes, the chat carries on, the card stays | M: no double POST; a 409 is "already answered", not an error |
 
 ### I. The dock
@@ -289,19 +289,20 @@ renderer with no server and no browser, and `tests/scenario.test.mjs` holds the 
 next update. It fails on the renderer before 1.62.14 and passes after it, which is how we
 know the harness can see the thing it is for.
 
-Nine cases exist so far. Two of them are locks rather than faults — they pin behaviour the
+Eleven cases exist so far. Two of them are locks rather than faults — they pin behaviour the
 chat already gets right, so the rebuild cannot lose it quietly: `download-placement.json`
 (a saved download is drawn inside the post it happened in) and `alarm-split.json` (a
 prohibition splits the turn it arrived in, instead of sliding to the end of it). The rest are
 the promises the rebuild is for: `stream-burst` (the pane's fixed window), `pane-scroll` (the
 "new words" hint), `anchor` (the reader's line), `form` (the panel keeps typed answers),
-`selection` (a selection survives the delta after it) and `pane-collapse` (the pane's two
-shapes, and the words coming back).
+`selection` (a selection survives the delta after it), `pane-collapse` (the pane's two shapes,
+and the words coming back) and `form-tick` (the panel arriving, and its clock ticking where it
+stands).
 
 `node scripts/chat-lab.mjs --check` answers the ones that can be pass/fail — text identity
-between the two renderers on every frame, the selection against each of them, the pane's fold
-— and exits non-zero when one breaks. It needs a browser, so it is a lab command, not part of
-`scripts/checks.mjs`.
+between the two renderers on every frame, the selection against each of them, the pane's fold,
+the panel's arrival and its countdown, and an answer surviving a repaint — and exits non-zero
+when one breaks. It needs a browser, so it is a lab command, not part of `scripts/checks.mjs`.
 
 Every scenario runs at: normal speed, 10× speed, and paused on each frame boundary
 (for screenshots). Each produces a screenshot pair (old/new) at 1280 and 1600, and the
@@ -492,10 +493,10 @@ into the branch whenever it moves (`b04d091` merged `8be801d`).
   `handover`, `open`, `close`, `stream`, `stream-flag`, `render`, and the lab's `scrollTo`,
   `scrollPane`, `select`.
 - `tests/scenarios/` — `S1-folds`, `download-placement`, `alarm-split`, `stream-burst`,
-  `pane-scroll`, `anchor`, `form`, `selection`, `pane-collapse`.
+  `pane-scroll`, `anchor`, `form`, `selection`, `pane-collapse`, `form-tick`.
 - `tests/chat-model.test.mjs` and `tests/scenario.test.mjs` — the model and the frames.
 
-**What is proved**, both renderers, one state (`node scripts/chat-lab.mjs --check`, 10 cases):
+**What is proved**, both renderers, one state (`node scripts/chat-lab.mjs --check`, 12 cases):
 
 | Promise | Old | New |
 |---|---|---|
@@ -507,17 +508,16 @@ into the branch whenever it moves (`b04d091` merged `8be801d`).
 | The reader's line holds still | 44 px | 1 px (anchor) |
 | The pane says there are new words | no | yes (pane-scroll) |
 | Folds and cards open in 120 ms | instant | 0→55→56 px; 1→56→96→1 px |
-| The question panel keeps typed answers | yes | yes (form) |
+| The question panel keeps typed answers | yes | yes, and the same element after a repaint (form, form-tick) |
 | A selection survives the delta that follows it | kept by *not drawing*: the post froze at 39 characters | kept while drawing: 109 → 221 characters (selection) |
 | The pane folds to one line and comes back | yes | 245 → 63 → 245 px, same 127 characters, then 172 (pane-collapse) |
+| The question panel arrives, and its clock ticks in place | — | arrives on 120 ms, 27 → 26 → 25 seconds, panel untouched (form-tick) |
 
 **What is left**, in order:
 
-1. **The panel's arrival animation**, and the question countdown in v2 — `firstAt` and
-   `wait` are in the model, the ticking is not.
-2. **The app switch**: `chat.renderer: v1 | v2`, the ask host and the permission cards wired
+1. **The app switch**: `chat.renderer: v1 | v2`, the ask host and the permission cards wired
    to the view, then the operator's side-by-side judgement and the decision.
-3. Only then: the rail, the role cards and the plan pane on the same primitives.
+2. Only then: the rail, the role cards and the plan pane on the same primitives.
 
 **Traps that cost time here.**
 - The lab's panels must beat the app's `body[data-view] .chat-dock` rules, so the lab's rules

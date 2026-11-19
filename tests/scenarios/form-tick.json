@@ -1,0 +1,47 @@
+{
+  "name": "S8 — the question panel arrives, and its countdown ticks where it stands",
+  "why": "A question is the one thing in the chat that is waiting for the operator, so it is the one thing that may come in with a movement of its own. And it carries a clock: Auto-Answer will take the page when the seconds run out, so the number has to be right, has to keep counting while the operator reads, and must not redraw the panel around it — a panel that is rebuilt every second loses the answer being typed into it.",
+  "steps": [
+    {
+      "do": "messages",
+      "messages": [
+        {
+          "id": "m1",
+          "type": "assistant",
+          "created": 1000,
+          "completed": 1500,
+          "parts": [{ "type": "text", "text": "Two routes qualify. Which one should the run take?" }]
+        }
+      ]
+    },
+    { "do": "render" },
+    {
+      "do": "form",
+      "wait": 30,
+      "form": {
+        "id": "f1",
+        "sessionId": "ses_scenario",
+        "title": "Which route?",
+        "autoAnswer": true,
+        "autoAnswerFirstAt": "now-3000",
+        "autoAnswerPages": 1,
+        "fields": [
+          {
+            "key": "route",
+            "title": "Which route?",
+            "type": "string",
+            "options": [
+              { "value": "north", "label": "The north road" },
+              { "value": "south", "label": "The south road" }
+            ]
+          }
+        ]
+      }
+    },
+    { "do": "render" },
+    { "do": "wait", "ms": 1200 },
+    { "do": "render" },
+    { "do": "wait", "ms": 1200 },
+    { "do": "render" }
+  ]
+}
