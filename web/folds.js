@@ -92,10 +92,13 @@ export function animateHeight(el, to, done, from = null) {
 }
 
 /**
- * Teach one container to animate its reasoning folds.
+ * Teach one container to animate every fold it draws.
  *
  * The listener is on the container, not on each fold, because the chat's markup is replaced
- * on every redraw — one listener survives a hundred of them.
+ * on every redraw — one listener survives a hundred of them. A fold is any `<details>` that
+ * carries a body marked `data-fold-body`: a reasoning block, the archive, a loaded file, a
+ * refusal, the compact post, a finished trace. One movement everywhere, which is the point
+ * (19 Nov).
  *
  * `wired.onToggle(key, open)` records the operator's choice; `wired.hold(ms)` keeps redraws
  * off the markup until the animation is done. Both are the page's, not this module's.
@@ -106,10 +109,12 @@ export function installFoldMotion(root, wired = {}) {
     const summary = event.target?.closest?.('summary');
     if (!summary) return;
     const details = summary.parentElement;
-    if (!details || details.tagName !== 'DETAILS' || !details.classList.contains('reasoning')) return;
-    const body = details.querySelector('.fold-wrap');
+    if (!details || details.tagName !== 'DETAILS') return;
+    const body = details.querySelector('[data-fold-body]');
+    if (!body) return; // a fold with no body of its own is left to the browser
+    const key = details.dataset.k || details.dataset.trace || '';
     const opening = !details.open;
-    if (typeof wired.onToggle === 'function') wired.onToggle(String(details.dataset.k || ''), opening);
+    if (typeof wired.onToggle === 'function') wired.onToggle(String(key), opening);
     if (typeof wired.hold === 'function') wired.hold(FOLD_MS + 80);
     // `preventDefault` is what stops `<details>` toggling instantly under the animation.
     if (animateFold(details, body)) event.preventDefault();

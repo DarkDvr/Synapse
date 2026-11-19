@@ -384,7 +384,7 @@ export function renderMessage(m, tail = '', extras = '') {
         ${stamp}<span class="msg-role">Synapse · ${label}</span>
         <details class="chat-post" data-k="${esc(key)}"${state.open.has(key) ? ' open' : ''}>
           <summary><span class="chat-post-note" title="${esc(full)}">Instructions from ${esc(short)}</span></summary>
-          <div class="chat-post-body">${renderMarkdown(rest)}</div>
+          <div class="chat-post-body" data-fold-body>${renderMarkdown(rest)}</div>
         </details>
       </div></div>`;
     }
@@ -399,7 +399,7 @@ export function renderMessage(m, tail = '', extras = '') {
         ${stamp}<span class="msg-role">Synapse</span>
         <details class="chat-post is-refusal" data-k="${esc(key)}"${state.open.has(key) ? ' open' : ''}>
           <summary title="${esc(sentence)}"><span class="chat-post-note">⛔ PROHIBITED · the protected list refused this change</span></summary>
-          <div class="chat-post-body">${esc(String(body || ''))}</div>
+          <div class="chat-post-body" data-fold-body>${esc(String(body || ''))}</div>
         </details>
       </div></div>`;
     }
@@ -492,14 +492,14 @@ export function renderMessage(m, tail = '', extras = '') {
           body.push(
             `<details class="reasoning is-archive" data-k="${esc(archiveKey)}"${state.open.has(archiveKey) ? ' open' : ''}>` +
               `<summary>${olderReasoning.length} earlier reasoning</summary>` +
-              `<div class="fold-wrap">${olderReasoning.map((n) => `<pre>${esc(parts[n].text)}</pre>`).join('')}</div>` +
+              `<div class="fold-wrap" data-fold-body>${olderReasoning.map((n) => `<pre>${esc(parts[n].text)}</pre>`).join('')}</div>` +
               `</details>`,
           );
         } else if (recentReasoning.has(i) || state.open.has(part._k)) {
           body.push(
             `<details class="reasoning" data-k="${esc(part._k)}"${state.open.has(part._k) ? ' open' : ''}>` +
               `<summary>${esc(reasoningGist(part.text))}</summary>` +
-              `<div class="fold-wrap"><pre>${esc(part.text)}</pre></div></details>`,
+              `<div class="fold-wrap" data-fold-body><pre>${esc(part.text)}</pre></div></details>`,
           );
         }
       }
@@ -728,7 +728,7 @@ export function compactPostHtml(post) {
   return `<details class="chat-post"${open}><summary><span class="chat-post-mark">Compacted ${esc(
     when,
   )}</span><span class="chat-post-note">${esc(count)}the handover is in the project document</span></summary>` +
-    `<div class="chat-post-body">${renderMarkdown(post.summary)}</div></details>`;
+    `<div class="chat-post-body" data-fold-body>${renderMarkdown(post.summary)}</div></details>`;
 }
 
 /** The tag a chip carries: the file's extension, not a generic word. PNG says

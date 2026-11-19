@@ -190,16 +190,28 @@ export function renderTrace(t) {
   // the line rather than thrown away with the panel. Twelve open lines was the
   // first cut and it read as a wall: the operator counted them (8 Nov).
   const reasons = Array.isArray(t.reasons) ? t.reasons : [];
-  const recentReasons = reasons.slice(-10);
-  const olderReasons = reasons.slice(0, Math.max(0, reasons.length - 10));
   // The key is what the toggle handler stores, and the open state is read back from it:
   // without this a trace's reasoning shut itself on the next render, which the operator
   // met as "the chat collapsed my history" (18 Nov).
   const foldKey = (suffix) => `${t.key}:${suffix}`;
   const foldOpen = (key) => (state.open.has(key) ? ' open' : '');
+  const reasonKey = (r) => foldKey(`r${Number(r.at) || 0}`);
+  // What the worker finished thinking: the chat's rule exactly — the newest ten as
+  // folds of their own, everything older as one "N earlier reasoning" fold. The
+  // trace is the only record of a worker's reasoning, so the words are kept behind
+  // the line rather than thrown away with the panel. Twelve open lines was the
+  // first cut and it read as a wall: the operator counted them (8 Nov).
+  //
+  // A fold the operator has open is never archived, here either: the archive is one closed
+  // fold, so rolling an open one into it is the chat shutting what they are reading — which
+  // is exactly what happened to a coder's thinking in a live run (19 Nov).
+  const olderReasons = reasons
+    .slice(0, Math.max(0, reasons.length - 10))
+    .filter((r) => !state.open.has(reasonKey(r)));
+  const recentReasons = reasons.filter((r) => !olderReasons.includes(r));
   const reasonFold = (r) =>
-    `<details class="reasoning is-trace" data-k="${esc(foldKey(`r${Number(r.at) || 0}`))}"${foldOpen(foldKey(`r${Number(r.at) || 0}`))}>` +
-    `<summary>${esc(reasoningGist(r.text))}</summary><pre>${esc(r.text)}</pre></details>`;
+    `<details class="reasoning is-trace" data-k="${esc(reasonKey(r))}"${foldOpen(reasonKey(r))}>` +
+    `<summary>${esc(reasoningGist(r.text))}</summary><div class="fold-wrap" data-fold-body><pre>${esc(r.text)}</pre></div></details>`;
   // Steps and thinking are one timeline: a tool call belongs between the thought
   // that asked for it and the thought after it. They used to be two lists — every
   // tool line above every fold — so a long run read as "all the tools, then all the
@@ -220,7 +232,7 @@ export function renderTrace(t) {
       html:
         `<details class="trace-archive" data-k="${esc(foldKey('older'))}"${foldOpen(foldKey('older'))}>` +
         `<summary>Older entries (${older.length})</summary>` +
-        `${older.map((e) => e.html).join('')}</details>`,
+        `<div class="fold-wrap" data-fold-body>${older.map((e) => e.html).join('')}</div></details>`,
     });
   }
   for (const n of tail) entries.push({ at: when(n), html: note(n) });
@@ -295,7 +307,7 @@ export function renderTrace(t) {
   const foldHead = [name, t.task, t.title].filter(Boolean).join(' · ');
   return `<details class="trace is-fold" data-trace="${esc(t.key)}" data-k="${esc(foldKey('fold'))}"${foldOpen(foldKey('fold'))}>
     <summary title="${esc(foldHead)}"><span class="trace-role">${esc(name)}</span>${rest ? esc(` · ${rest}`) : ''}${took}${written}${packedNote}${loopedNote}${steeredNote}</summary>
-    <div class="trace-lines">${body}</div>
+    <div class="trace-lines" data-fold-body>${body}</div>
   </details>`;
 }
 

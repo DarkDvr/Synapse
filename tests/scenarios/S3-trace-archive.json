@@ -1,0 +1,38 @@
+{
+  "name": "S3 — a coder's reasoning fold is not archived while it is open",
+  "why": "A worker's trace keeps its newest ten thinking blocks as folds of their own and rolls the rest into 'Older entries'. A block the operator opened rolled in and disappeared mid-run — the same fault the Architect's reasoning had, seen in a coder's trace (19 Nov). An open fold is never archived, in a trace either.",
+  "steps": [
+    { "do": "messages", "messages": [{ "id": "m1", "type": "user", "created": 1, "text": "go" }] },
+    {
+      "do": "trace",
+      "trace": {
+        "key": "k1",
+        "dir": "F:/scenario",
+        "role": "coder-1",
+        "task": "t1",
+        "startedAt": 1,
+        "notes": [],
+        "reasons": [
+        { "at": 100, "text": "Coder thought 1 about the status writer and its speed." },
+        { "at": 200, "text": "Coder thought 2 about the status writer and its speed." },
+        { "at": 300, "text": "Coder thought 3 about the status writer and its speed." },
+        { "at": 400, "text": "Coder thought 4 about the status writer and its speed." },
+        { "at": 500, "text": "Coder thought 5 about the status writer and its speed." },
+        { "at": 600, "text": "Coder thought 6 about the status writer and its speed." },
+        { "at": 700, "text": "Coder thought 7 about the status writer and its speed." },
+        { "at": 800, "text": "Coder thought 8 about the status writer and its speed." },
+        { "at": 900, "text": "Coder thought 9 about the status writer and its speed." },
+        { "at": 1000, "text": "Coder thought 10 about the status writer and its speed." },
+        { "at": 1100, "text": "Coder thought 11 about the status writer and its speed." }
+        ]
+      }
+    },
+    { "do": "render" },
+    { "do": "open", "key": "k1:r200" },
+    { "do": "render" },
+    { "do": "reasons", "key": "k1", "add": [{ "at": 1200, "text": "One more thought, which pushes the oldest into the archive." }] },
+    { "do": "render" },
+    { "do": "reasons", "key": "k1", "add": [{ "at": 1300, "text": "And another, so the archive has two entries." }] },
+    { "do": "render" }
+  ]
+}

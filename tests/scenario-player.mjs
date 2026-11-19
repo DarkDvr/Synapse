@@ -62,6 +62,14 @@ function apply(state, step) {
       trace.notes = [...(trace.notes || []), step.note];
       break;
     }
+    case 'reasons': {
+      // A worker's thinking gaining a block: the trace's own folds move past the point where
+      // the oldest would be rolled into "Older entries".
+      const trace = state.traces.get(step.key);
+      if (!trace) throw new Error(`scenario: no trace "${step.key}" to think in`);
+      trace.reasons = [...(trace.reasons || []), ...(step.add || [])];
+      break;
+    }
     case 'alarm':
       state.alarms.push(step.alarm);
       break;

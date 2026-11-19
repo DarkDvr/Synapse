@@ -63,3 +63,19 @@ test('a reasoning fold the operator has open is never archived', async () => {
   // ten kept, three candidates of which one is open, so two are archived.
   assert.match(frames.at(-1).html, /2 earlier reasoning/, 'the archive holds the wrong number of blocks');
 });
+
+// The same rule in a worker's trace: Multi draws a coder's thinking as its own folds, and its
+// "Older entries" fold swallowed an open one the same way.
+test("a coder's reasoning fold the operator has open is never archived", async () => {
+  const traceScenario = read('S3-trace-archive.json');
+  const { frames } = await play(traceScenario);
+  assert.ok(frames.length >= 4, `only ${frames.length} frames were drawn`);
+  const opened = traceScenario.steps.findIndex((s) => s.do === 'open' && s.key === 'k1:r200');
+  const after = frames.filter((f) => f.step > opened);
+  assert.ok(after.length >= 3, 'the scenario never grew the trace after the fold was opened');
+  for (const frame of after) {
+    assert.match(frame.html, /data-k="k1:r200"/, `the open fold was archived at step ${frame.step}`);
+    assert.equal(foldOpen(frame.html, 'k1:r200'), true, `the open fold closed at step ${frame.step}`);
+  }
+  assert.match(frames.at(-1).html, /Older entries \(2\)/, 'the archive holds the wrong number of entries');
+});

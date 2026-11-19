@@ -740,17 +740,25 @@ function dropLivePost() {
  */
 function closeReasoningFolds() {
   const ids = new Set((state.messages || []).map((m) => String(m?.id || '')).filter(Boolean));
-  if (!ids.size) return false;
+  // A worker's trace is a role's own turn, and its folds are that role's reasoning: the same
+  // deadline closes them (the operator reads a coder's thinking in Multi exactly as they read
+  // the Architect's in Single — 19 Nov).
+  const traces = new Set([...state.traces.values()].map((t) => String(t?.key || '')).filter(Boolean));
+  if (state.sessionTrace?.key) traces.add(String(state.sessionTrace.key));
+  if (!ids.size && !traces.size) return false;
   let closed = 0;
   for (const key of [...state.open]) {
     const k = String(key);
     const archive = /^reasoning:(.+)$/.exec(k);
     const cut = k.lastIndexOf(':');
     const owner = archive ? archive[1] : k.slice(0, cut);
-    // Only `id:number` and `reasoning:id` are reasoning folds; anything else is the
-    // operator's other business and is left open.
-    if (!archive && (cut <= 0 || !/^\d+$/.test(k.slice(cut + 1)))) continue;
-    if (!ids.has(owner)) continue;
+    const suffix = k.slice(cut + 1);
+    // A message's reasoning is `<messageId>:<part>`, a trace's is `<traceKey>:r<at>`, and an
+    // archive is `reasoning:<id>` or `<traceKey>:older`. Anything else — a tool card, a loaded
+    // file, a refusal, a finished trace — is the operator's other business and stays open.
+    const reasoning =
+      Boolean(archive) || (ids.has(owner) && /^\d+$/.test(suffix)) || (traces.has(owner) && (/^r\d+$/.test(suffix) || suffix === 'older'));
+    if (!reasoning) continue;
     state.open.delete(k);
     closed += 1;
   }

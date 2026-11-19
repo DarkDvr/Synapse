@@ -87,7 +87,7 @@ export function renderAlarm(a) {
       <span class="chat-alarm-mark">⛔</span>
       <span class="chat-alarm-text">PROHIBITED · ${esc(a.action)}${firstLine ? ` · ${esc(firstLine)}` : ''}</span>
     </summary>
-    <div class="chat-alarm-body">${detail || '<div class="chat-alarm-call">no path recorded</div>'}</div>
+    <div class="chat-alarm-body" data-fold-body>${detail || '<div class="chat-alarm-call">no path recorded</div>'}</div>
   </details>`;
   }
   // The amber alarm is the same shape and the same rule: the line runs to the chat's
