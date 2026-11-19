@@ -122,6 +122,7 @@ import {
 import { toast } from './toast.js';
 import { installContextMenu } from './context-menu.js';
 import { installFoldMotion, animateHeight, FOLD_MS } from './folds.js';
+import { installPause, showPause, hidePause } from './pause.js';
 import { paneWiring, paneToggle } from './thinking-pane.js';
 import {
   renderComposer,
@@ -635,10 +636,85 @@ function setView() {
 }
 
 
+
+// ── pausing the chat ─────────────────────────────────────────────
+//
+// A selection in the conversation holds the redraw back (the range dies with the nodes), and
+// the second Stop holds it on purpose. Both are the operator reading, so both get the same
+// sign and the same way out, and both hold the timers that would otherwise act for them
+// (web/pause.js, src/hold.js).
+
+/**
+ * Draw a pause the operator can see, and hold the timers behind it.
+ *
+ * `renderTranscript` calls this every time it holds a draw, so the count in the bar is the
+ * number of updates that have piled up since the chat stopped.
+ */
+function notePause(reason) {
+  const waiting = (state.forms?.length || 0) + (state.permissions?.length || 0);
+  showPause({
+    reason: reason || (state.frozen ? 'stopped' : 'selection'),
+    updates: Number(state.heldDraws) || 0,
+    waiting,
+  });
+  holdTimers();
+}
+
+/**
+ * Let the chat run again: one redraw with everything that happened while it was held, then the
+ * end of the conversation, where the operator was going to end up anyway (their call, 19 Nov).
+ */
+function continueChat() {
+  clearSelection();
+  state.renderPaused = false;
+  state.frozen = false;
+  state.heldDraws = 0;
+  hidePause();
+  releaseTimers();
+  renderTranscript();
+  scrollChatToBottom();
+}
+
+// Auto-Answer answers a waiting question after a wait, and an unanswered permission card is
+// allowed once when its timer runs out. Both are the harness acting for the operator after a
+// delay, which is wrong while they are deliberately standing still. The server holds both
+// (`POST /api/hold`), for a deadline this page renews: if the page dies, the hold ends by
+// itself instead of leaving the automation off (src/hold.js).
+const HOLD_MS = 120_000;
+let holdTimer = 0;
+function holdTimers() {
+  if (!state.sessionId) return;
+  api('POST', '/api/hold', { on: true, ms: HOLD_MS }).catch(() => {});
+  if (holdTimer) return;
+  holdTimer = setInterval(() => {
+    if (!state.renderPaused && !state.frozen) return;
+    api('POST', '/api/hold', { on: true, ms: HOLD_MS }).catch(() => {});
+  }, 30_000);
+}
+function releaseTimers() {
+  if (holdTimer) clearInterval(holdTimer);
+  holdTimer = 0;
+  api('POST', '/api/hold', { on: false }).catch(() => {});
+}
+
+function clearSelection() {
+  try {
+    window.getSelection()?.removeAllRanges();
+  } catch {
+    // A page with no selection API has nothing to clear.
+  }
+}
 async function openSession(id) {
   // The previous chat's reading belongs to it: write it before the swap, including a
   // running `since`, so coming back later still knows when its turn began (16 Nov).
   flushClocks();
+  // A pause belongs to the chat it happened in: opening another one is the operator moving
+  // on, so the sign comes down and the timers run again.
+  state.frozen = false;
+  state.renderPaused = false;
+  state.heldDraws = 0;
+  hidePause();
+  releaseTimers();
   state.view = 'session';
   state.sessionId = id;
   // The project lock belongs to the chat that was open, like the permissions and the
@@ -1716,6 +1792,14 @@ function connectStream() {
           state.busy = true;
           // A new turn: the last turn's cut, if there was one, is no longer the news.
           state.hardStop = false;
+          // A frozen chat is the operator reading; a new turn means they have moved on, so the
+          // sign comes down and the drawing resumes.
+          if (state.frozen) {
+            state.frozen = false;
+            state.heldDraws = 0;
+            hidePause();
+            releaseTimers();
+          }
           // Open the post now, not on the first delta: the model can spend many
           // seconds reading its prompt before it says anything, and the chat used to
           // sit empty for that whole time (11 Nov). The placeholder says "Thinking…"
@@ -2287,11 +2371,15 @@ document.addEventListener('keydown', (e) => {
   // A selection pauses the conversation: `renderTranscript` holds the render back while
   // the operator has a range in the chat, and this is what catches it up — the moment
   // they click away, select elsewhere, or collapse it (18 Nov).
+  //
+  // The pause is the operator's, and now it is visible: a yellow glow on the dock and a bar
+  // that says why, what is waiting, and offers the way out (web/pause.js).
   document.addEventListener('selectionchange', () => {
     if (!state.renderPaused || selectionInChat()) return;
-    state.renderPaused = false;
-    renderTranscript();
+    continueChat();
   });
+  // The bar's Continue is the same act as clicking away.
+  installPause($('chatDock'), { onContinue: () => continueChat() });
   // Right-click is the page's own menu now: Copy and Select All, and Cut/Paste in a
   // field — never the browser's Print/Reload/Save As. It was switched off on 13 Nov
   // because the menu it opened everywhere was the project list; that took copy with it
@@ -2623,6 +2711,8 @@ async function bootPage() {
     mountAskPost,
     renderPermissions,
     compactPostOf,
+    // The render held a draw back: say why on screen, and hold the timers behind it.
+    onPause: () => notePause(),
     // The window, for the compaction line: the same figure the Architect's card uses.
     architectLimit: () => Number(modelByRef(selectionFor('architect').ref)?.context) || 0,
   });

@@ -166,6 +166,11 @@ export const state = {
   // (see selectionInChat in web/transcript.js). Cleared when the selection is
   // released, and the conversation catches up then.
   renderPaused: false,
+  // How many draws were held back while the chat was paused — what the pause bar counts.
+  heldDraws: 0,
+  // True when the operator cut the run with the second Stop: the conversation is held exactly
+  // where they left it, and nothing closes or redraws until they say continue (app.js).
+  frozen: false,
   // Until when a fold or the thinking pane owns the markup (a timestamp, 0 when nothing
   // is moving). A redraw in that window would replace the element mid-animation, so it
   // waits and draws once when the animation is done (web/transcript.js).

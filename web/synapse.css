@@ -2393,6 +2393,42 @@ body.is-stopping .chat-dock { animation: stop-glow 0.7s ease-in-out infinite; }
 .stop-notice span { display: block; margin-top: 2px; font-size: 10.5px; line-height: 1.45; color: #c7c9cf; }
 @keyframes stop-dot { 50% { opacity: 0.4; } }
 
+/* ── the chat paused ────────────────────────────────────────────────────
+   A selection in the conversation holds the redraw back, and the freezes the operator could
+   not see read as the chat dying. The same glow the Stop draws, in yellow: yellow is the live
+   path's colour, and this is the chat standing still on purpose. The bar names the reason and
+   carries the way out; it never takes focus, because the operator's selection is the point. */
+body.is-paused .chat-dock { animation: pause-glow 1.6s ease-in-out infinite; }
+@keyframes pause-glow {
+  0%, 100% { box-shadow: inset 0 0 0 2px rgba(237, 194, 90, 0.35), 0 0 16px rgba(237, 194, 90, 0.12); }
+  50% { box-shadow: inset 0 0 0 2px rgba(237, 194, 90, 0.8), 0 0 26px rgba(237, 194, 90, 0.3); }
+}
+@media (prefers-reduced-motion: reduce) {
+  body.is-paused .chat-dock { animation: none; box-shadow: inset 0 0 0 2px var(--yellow); }
+}
+.pause-notice {
+  position: absolute; top: 8px; left: 50%; transform: translateX(-50%); z-index: 6;
+  display: flex; align-items: center; gap: 9px;
+  max-width: min(620px, calc(100% - 24px));
+  padding: 5px 7px 5px 11px;
+  background: #24211a; border: 1px solid var(--yellow); border-radius: 999px;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
+  font-size: calc(var(--chat-fs) * 0.82); color: #d9d3c4;
+}
+.pause-notice[hidden] { display: none; }
+.pause-mark {
+  width: 7px; height: 7px; flex: none; border-radius: 50%;
+  background: var(--yellow); box-shadow: 0 0 0 4px rgba(237, 194, 90, 0.16);
+  animation: stop-dot 1.6s ease-in-out infinite;
+}
+.pause-text { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pause-text strong { color: var(--yellow); font-weight: 700; letter-spacing: 0.02em; }
+.pause-go {
+  flex: none; border: 1px solid rgba(237, 194, 90, 0.55); border-radius: 999px;
+  background: transparent; color: var(--yellow); font: inherit; padding: 1px 9px; cursor: pointer;
+}
+.pause-go:hover, .pause-go:focus-visible { background: var(--yellow); color: #241f16; }
+
 /* A failure, in the conversation and in red: the same rule-down-the-left as an
    alarm, because they are the same kind of line — something the harness noticed
    rather than a step in the work. Red because it cost the operator their message. */

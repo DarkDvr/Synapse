@@ -18,6 +18,7 @@ import { createRunner } from './runs.js';
 import { createEngineUpdate } from './engine-update.js';
 import { createHarnessGuard } from './harness.js';
 import { createPermissionGate } from './permission-gate.js';
+import { isHeld } from './hold.js';
 import { createDesk } from './desk.js';
 import { createPermissionMemory } from './permission-memory.js';
 import { braveEntries, protectionFor } from './protection.js';
@@ -420,6 +421,9 @@ async function main() {
     desk,
     getProtection: () => protectionFor(currentConfig),
     getTimeoutMs: () => permissionsTimeoutMs(currentConfig),
+    // A paused page is an operator reading; its cards are not allowed behind their back
+    // (src/hold.js).
+    isHeld,
     onDecision: (entry) => {
       permissionLog.record(entry);
       if (entry.decided) {

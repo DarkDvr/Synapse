@@ -24,10 +24,15 @@ export function createFormAuto({
   listForms = null,
   timeoutMs = FULL_AUTO_MS,
   getTimeoutMs = null,
+  // True while the page is paused: the sweep still looks, and answers nothing.
+  isHeld = () => false,
   now = Date.now,
 } = {}) {
   const log = logger?.channel?.('app');
   const fullAuto = new Set();
+  // When the sweep last looked, so a held tick can push every clock forward by exactly the
+  // time the operator spent reading: the countdown resumes where it stopped.
+  let lastLook = 0;
   // The project's explicit answer, from the chat the operator flipped. A worker's
   // form is in the same directory, and its own session metadata does not carry
   // the switch; `true`/`false` here decides before that metadata is consulted.
@@ -120,6 +125,18 @@ export function createFormAuto({
    */
   async function tick() {
     if (busy) return { answered: 0, waiting: 0, busy: true };
+    // The operator is reading: nothing is answered for them, and every clock waits with
+    // them — the wait is measured from when the sweep first saw the form, so moving those
+    // stamps forward by the time spent held is what pauses the countdown instead of letting
+    // it expire while nobody was looking.
+    if (isHeld()) {
+      const at = now();
+      const gap = lastLook ? Math.min(10_000, Math.max(0, at - lastLook)) : 0;
+      if (gap) for (const rec of seen.values()) rec.at += gap;
+      lastLook = at;
+      return { answered: 0, waiting: 0, held: true };
+    }
+    lastLook = now();
     busy = true;
     try {
     let forms;

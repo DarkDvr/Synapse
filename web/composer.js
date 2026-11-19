@@ -767,8 +767,10 @@ export async function interrupt() {
       state.stopping = true;
       // The second press is "stop now, I am reading something". The page records it so the
       // turn's end does not close the operator's folds or redraw over what they are
-      // reading (`closeReasoningFolds` in app.js).
+      // reading (`closeReasoningFolds` in app.js), and freezes the chat until they say
+      // continue — the same sign a held selection shows (web/pause.js).
       state.hardStop = true;
+      state.frozen = true;
     } else {
       const r = await api('POST', `/api/sessions/${encodeURIComponent(state.sessionId)}/stop`);
       state.stopping = Boolean(r?.stopping);

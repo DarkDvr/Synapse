@@ -124,10 +124,20 @@ export function renderTranscript() {
   }
   if (!renderOnce && selectionInChat()) {
     state.renderPaused = true;
+    state.heldDraws = (Number(state.heldDraws) || 0) + 1;
+    wired.onPause?.();
+    return;
+  }
+  // The operator cut the run with the second Stop: the conversation is held where they left
+  // it until they say continue (app.js).
+  if (state.frozen && !renderOnce) {
+    state.heldDraws = (Number(state.heldDraws) || 0) + 1;
+    wired.onPause?.();
     return;
   }
   renderOnce = false;
   state.renderPaused = false;
+  state.heldDraws = 0;
   toolSeq = 0;
   // Read the reader's intent BEFORE anything below can move the box. A dock that
   // shrinks makes the transcript look "scrolled up" even though nobody moved —

@@ -6,6 +6,7 @@ import { spawn } from 'node:child_process';
 import { appendRun, readPlan, readRuns, runLedger, briefSession, logPlanState, BRIEF_KEY, HARNESS_KEY, harnessCore } from './plans.js';
 import { ensureProjectDoc, appendRequest as appendProjectRequest, appendChat, appendDecision as appendProjectDecision, appendEntry, setHandover } from './project-doc.js';
 import { createFormAuto } from './form-auto.js';
+import { setHold as holdTimers, clearHold as releaseTimers, isHeld } from './hold.js';
 import { answerTimeoutMs, formPages } from './auto-answer.js';
 import { AUTOMATION_DEFAULTS, AUTOMATION_KEYS, cleanAutomation, nextSynapse, readAutomation, mayEnableAutoShutdown } from './automation.js';
 import { keepAttachments } from './keep-attachments.js';
@@ -810,6 +811,9 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
     logger,
     listForms: formsEverywhere,
     getTimeoutMs: () => answerTimeoutMs(getConfig()),
+    // While the page is paused the operator is reading something: a question is not answered
+    // on their behalf, and its clock waits with them (src/hold.js).
+    isHeld,
     onAnswered: async ({ form, sessionId, answer }) => {
       const signature = formSignature(form);
       if (signature) {
@@ -2550,13 +2554,12 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
       }),
 
     /**
-     * The cog's "Keep PC Awake".
-     *
-     * It is not a per-project switch like the four above: the machine is one
-     * machine. The cog toggles the global answer and it is written to the config,
-     * so it survives a restart; Settings > Automation has the same switch plus the
-     * amplified one (keep the monitor on too).
+     * Hold the timers that act on the operator's behalf — Auto-Answer, an unanswered
+     * permission card — while the page is paused. `ms` is a deadline the page renews, so a
+     * closed page cannot leave the automation stuck off (src/hold.js).
      */
+    setHold: async (body) => (body?.on === false ? releaseTimers() : holdTimers(body?.ms)),
+
     setPower: async (body) => {
       const awake = body?.awake === true;
       const current = getConfig() || {};

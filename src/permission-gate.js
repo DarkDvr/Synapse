@@ -41,6 +41,9 @@ export function createPermissionGate({
   // the next ask without a restart. Zero is valid: no card is shown at all.
   permissionTimeoutMs = 20_000,
   getTimeoutMs = null,
+  // True while the page is paused: the card's clock stops with the operator's reading, and
+  // the countdown it shows is pushed forward by the same second so it resumes where it was.
+  isHeld = () => false,
 }) {
   const log = logger.channel('app');
   // sessionId -> { directory, role, task, title }. The directory never changes
@@ -288,6 +291,13 @@ export function createPermissionGate({
 
   async function fire(p) {
     if (!pendingAsks.has(p.request.requestId)) return;
+    if (isHeld()) {
+      // Reading: the card is not allowed on the operator's behalf, and its clock waits.
+      if (p.autoAt) p.autoAt += 1000;
+      p.timer = setTimeout(() => fire(p), 1000);
+      p.timer.unref?.();
+      return;
+    }
     // The switch may have been turned off during the wait: then the card is the
     // operator's again, and nothing is answered behind their back.
     if (!autoPermissionsEnabled(p.request.sessionId, p.info)) {

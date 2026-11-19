@@ -438,6 +438,14 @@ export function createServer({ api, engine, logger, config, remote, onRemote }) 
       return sendJson(res, 200, await api.setPower(await readBody(req)));
     }
 
+    // POST /api/hold — the page is paused (a selection is held, or the operator stopped the
+    // run to read) and the timers behind Auto-Answer and unanswered permission cards must not
+    // fire while it is. A deadline, renewed by the page: if the page goes away, the hold ends
+    // by itself and the automation is back.
+    if (seg[0] === 'hold' && seg.length === 1 && method === 'POST') {
+      return sendJson(res, 200, await api.setHold(await readBody(req)));
+    }
+
     // The engine: is there a newer one, and do it.
     //   GET  /api/engine/update        what we already know (no network)
     //   POST /api/engine/update/check  ask npm (the operator's click)
