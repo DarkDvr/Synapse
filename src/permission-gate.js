@@ -26,7 +26,6 @@ export function createPermissionGate({
   logger,
   root,
   home = os.homedir(),
-  scratchRoot = null,
   onDecision,
   memory,
   // The enabled PROHIBITED list, read per request so a Settings change applies to
@@ -443,7 +442,6 @@ export function createPermissionGate({
       cwd: info.directory,
       projectRoot: info.directory,
       harnessRoot: root,
-      scratchRoot,
       home,
       protection: getProtection?.() || [],
       // The screen is the operator's, not the policy's: a command that would take

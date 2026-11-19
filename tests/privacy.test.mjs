@@ -46,13 +46,15 @@ test('a private folder and its sessions are recognised in free text', () => {
   reset();
 });
 
-test('a private project keeps its scratch inside its own folder', () => {
+test('every project keeps its scratch inside its own folder', () => {
   const dir = path.join(tmpdir('synapse-private-scratch-'), 'project');
   fs.mkdirSync(dir, { recursive: true });
-  assert.ok(scratchDir(dir).toLowerCase().includes('_scratch'), 'ordinary projects use the shared root');
-  setMarker(dir, true);
   const inside = scratchDir(dir);
   assert.equal(path.resolve(inside), path.resolve(dir, '.project', 'scratch'));
+  // Private or not, the answer is the same: there is no shared scratch root any more.
+  assert.equal(scratchDir(dir).toLowerCase().includes('_scratch'), false);
+  setMarker(dir, true);
+  assert.equal(path.resolve(scratchDir(dir)), path.resolve(dir, '.project', 'scratch'));
   setMarker(dir, false);
   fs.rmSync(path.dirname(dir), { recursive: true, force: true });
 });

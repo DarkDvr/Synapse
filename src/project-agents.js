@@ -84,8 +84,8 @@ export function headerText(dir, { scratch = '', harness = ROOT } = {}) {
     }
   }
   const scratchLine = scratchPath
-    ? `Scratch for probes and throwaway files: \`${slash(scratchPath)}\`.`
-    : 'Probe scripts and throwaway files go in the scratch folder the harness gives this project.';
+    ? `Scratch for probes and throwaway files: \`${slash(scratchPath)}\` — inside the project, ignored by git.`
+    : 'Probe scripts and throwaway files go in `.project/scratch`, inside the project.';
   return [
     BEGIN,
     `# ${name} — how this project works`,
@@ -94,9 +94,9 @@ export function headerText(dir, { scratch = '', harness = ROOT } = {}) {
     'edit it; everything below the end marker is the project\'s own notes.',
     '',
     '**Your fence.** You may read anything in this project. You may write and run in the',
-    `project folder \`${root}\` — except \`${PLAN_DIR}/\`, which is the record: one folder per role,`,
-    'and nobody writes another role\'s folder. ' +
-      scratchLine,
+    `project folder \`${root}\` — including \`${PLAN_DIR}/scratch\`, which is everyone's. Inside`,
+    `\`${PLAN_DIR}/\` the rest is the record: one folder per role, and nobody writes another`,
+    `role's folder. ${scratchLine}`,
     `\`${slash(harness)}\` (Synapse\'s own folder) is readable, never writable. Anything else`,
     'on this machine asks the operator.',
     '',
@@ -195,13 +195,13 @@ export function notepadOf(text) {
  * Never throws: a read-only folder still becomes a project the operator can see and
  * fix, the same rule as the plan file.
  */
-export function ensureAgents(dir, { scratchRoot = null, harness = ROOT, log = null } = {}) {
+export function ensureAgents(dir, { harness = ROOT, log = null } = {}) {
   const target = String(dir || '');
   if (!target.trim()) return { path: '', created: false, updated: false, error: 'no project folder' };
   const file = agentsPath(target);
   let scratch = '';
   try {
-    scratch = slash(scratchRoot ? scratchDir(target, scratchRoot) : scratchDir(target));
+    scratch = slash(scratchDir(target));
   } catch {
     // The map can be written without a scratch path; the zone checks own that error.
     scratch = '';

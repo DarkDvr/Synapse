@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
-import { DATA_DIR, LOGS_DIR, WORKSPACE_DIR, GENERAL_DIR, ENGINE_HOME, PID_FILE, PROJECTS_FILE, TOOL_STATS_FILE, PROBE_DIR, PROBE_FILE, MODEL_CACHE_FILE, TRACE_REASONS_FILE, NPM_ATTEMPT_FILE, PERMISSION_MEMORY_FILE, REMOTE_TOKEN_FILE, ROOT, PROJECTS_ROOT, SCRATCH_ROOT, scratchDir, scratchRootName } from './paths.js';
+import { DATA_DIR, LOGS_DIR, WORKSPACE_DIR, GENERAL_DIR, ENGINE_HOME, PID_FILE, PROJECTS_FILE, TOOL_STATS_FILE, PROBE_DIR, PROBE_FILE, MODEL_CACHE_FILE, TRACE_REASONS_FILE, NPM_ATTEMPT_FILE, PERMISSION_MEMORY_FILE, REMOTE_TOKEN_FILE, ROOT, PROJECTS_ROOT, TEMP_DIR } from './paths.js';
 import { loadConfig, saveConfig, repairMachinePaths, providerApiKey } from './config.js';
 import { logger } from './logger.js';
 import { createEngine } from './engines/index.js';
@@ -101,23 +101,22 @@ async function ensureNpm() {
 
 async function main() {
   // ── directories ──────────────────────────────────────────────
-  for (const dir of [DATA_DIR, LOGS_DIR, WORKSPACE_DIR, ENGINE_HOME, PROBE_DIR, SCRATCH_ROOT]) {
+  for (const dir of [DATA_DIR, LOGS_DIR, WORKSPACE_DIR, ENGINE_HOME, PROBE_DIR, TEMP_DIR]) {
     fs.mkdirSync(dir, { recursive: true });
   }
-  // The models' scratch root is the process temp as well. The engine inherits
-  // TEMP/TMP when it is spawned, and every shell it starts inherits them; the
-  // permission analyser expands `$env:TEMP` from this same process env, so the
-  // child that writes and the judge that approves see one folder. On Windows
-  // Node reads TEMP, not TMPDIR — which is why the engine used the machine's
-  // %LOCALAPPDATA%\Temp\opencode before this, another app's space.
-  process.env.TEMP = SCRATCH_ROOT;
-  process.env.TMP = SCRATCH_ROOT;
+  // Synapse's own temp — not a model's. The engine inherits TEMP/TMP when it is
+  // spawned, and every shell it starts inherits them; on Windows Node reads TEMP, not
+  // TMPDIR. One engine serves every project, so this cannot be a per-project path: it
+  // is the plumbing a compiler or a runtime uses, it lives in `data` where no model may
+  // write, and the housekeeping sweeps it. A model's scratch is `.project/scratch`
+  // inside its own project (the brief says so).
+  process.env.TEMP = TEMP_DIR;
+  process.env.TMP = TEMP_DIR;
   // Stable roots for every tool shell and every check process. They are process
   // environment, not per project: SYNAPSE_PROJECT would be wrong in one engine that
   // serves all projects. The project root is the shell's own $PWD.
   process.env.SYNAPSE_HARNESS = ROOT;
   process.env.SYNAPSE_PROJECTS_ROOT = PROJECTS_ROOT;
-  process.env.SYNAPSE_SCRATCH_ROOT = SCRATCH_ROOT;
 
   // ── config ───────────────────────────────────────────────────
   const { config, created, error } = loadConfig();
@@ -198,7 +197,6 @@ async function main() {
     rootDir: WORKSPACE_DIR,
     legacyGeneralDir: GENERAL_DIR,
     harnessDir: ROOT,
-    scratchRoot: SCRATCH_ROOT,
     logger,
   });
   // The projects folder is the registry's source too: a folder the operator put
@@ -230,7 +228,7 @@ async function main() {
     requestConsolePurge(project.directory);
   }
   app.info(`projects: ${projects.list().length}${discovered.length ? ` (${discovered.length} found in the folder)` : ''}`);
-  app.info(`scratch: ${SCRATCH_ROOT}`);
+  app.info(`temp: ${TEMP_DIR}`);
   // Every project owns a plan file, and a root AGENTS.md whose generated header names
   // the fence. Create the ones that are missing rather than waiting for the first
   // session: an empty, valid file is a better starting point than a missing one, and
@@ -419,7 +417,6 @@ async function main() {
     engine,
     logger,
     root: ROOT,
-    scratchRoot: SCRATCH_ROOT,
     memory: permissionMemory,
     desk,
     getProtection: () => protectionFor(currentConfig),
@@ -1066,15 +1063,10 @@ async function main() {
   // (196 MB each). See housekeeping.js for exactly what it may and may not touch.
   setTimeout(() => {
     try {
-      // The scratch folders of the projects that exist now: everything else that
-      // carries the harness's naming shape is a deleted (or moved) project's, and
-      // a week-old one is worth more as disk space (see housekeeping.js). Both names
-      // are kept — where the scratch is today, and the shared-root name a private
-      // project had before it moved inside.
-      const keepScratch = projects
-        .list()
-        .flatMap((p) => [path.basename(scratchDir(p.directory)), scratchRootName(p.directory)]);
-      const report = housekeeping.run({ keepScratch });
+      // `dist` keeps every release zip and an applied update leaves staging behind; the
+      // temp folder holds a compiler's debris. There is no shared scratch to sweep any
+      // more: a project's scratch dies with the project (see housekeeping.js).
+      const report = housekeeping.run();
       if (report.removed) {
         app.info(`housekeeping: ${report.removed} item(s), ${Math.round(report.bytes / (1024 * 1024))} MB freed`);
       }
@@ -1083,25 +1075,21 @@ async function main() {
     }
   }, 2000).unref?.();
 
-  // And the scratch root again, every half hour. The operator's rule is that anything
-  // in it no project claims goes *now*, not after a week — a task's build debris, a
-  // worker's proof folder at the root, a dotnet temp tree. It cannot run at boot only:
-  // this app stays up for days. The sweep reads a directory and stats it; the folders a
-  // live project owns are never touched, so a running task's scratch is safe.
-  const scratchWatch = setInterval(() => {
+  // And the temp folder again, every half hour: a compiler's intermediates, a render's
+  // throwaway profile, a tool that wrote to %TEMP% and left it. It cannot run at boot
+  // only — this app stays up for days — and it never touches a project's scratch, which
+  // is inside the project and swept by the run that made it.
+  const tempWatch = setInterval(() => {
     try {
-      const keepScratch = projects
-        .list()
-        .map((p) => path.basename(scratchDir(p.directory)));
-      const r = housekeeping.sweepUnclaimedScratch({ keep: keepScratch });
+      const r = housekeeping.sweepTemp({ olderThanMs: 6 * 60 * 60 * 1000 });
       if (r.removed) {
-        app.info(`housekeeping: ${r.removed} folder(s) no project claims, ${Math.round(r.bytes / (1024 * 1024))} MB`);
+        app.info(`housekeeping: ${r.removed} temp item(s), ${Math.round(r.bytes / (1024 * 1024))} MB`);
       }
     } catch (err) {
-      app.warn(`scratch sweep failed: ${err.message}`);
+      app.warn(`temp sweep failed: ${err.message}`);
     }
   }, 30 * 60 * 1000);
-  scratchWatch.unref?.();
+  tempWatch.unref?.();
 
   if (currentConfig.server.openBrowser && process.env.SYNAPSE_SUPERVISED !== '1') openBrowser(url);
 }

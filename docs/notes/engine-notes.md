@@ -1022,10 +1022,10 @@ Three zones, one policy file, and the engine's `ask` as the hook:
 | shell | allow while it stays inside | toolbox scripts and read verbs; else denied | the operator is asked |
 | execute | asked | asked | asked |
 
-The scratch root is a fourth, narrow zone: read, write and shell are allowed
-there without asking, because it exists precisely so a probe script has somewhere
-to go that is neither the project nor the machine's temp. It is not inside the
-harness, so the harness deny is untouched.
+There is no fourth zone any more (20 Nov). A model's scratch is .project/scratch
+inside its project, so read, write and shell there are the project's rules — the
+engine's role ruleset allows that folder explicitly, because it denies .project/**
+first. One writable place, and the fence needs no exception beside the projects.
 
 The ruleset is four broad asks (`edit`, `shell`, `execute`, `read`) plus the
 credential denies; `src/permission-gate.js` answers each `permission.asked` from
@@ -1047,16 +1047,16 @@ the same scratch script with `-ExecutionPolicy Bypass` or a pipe, and every
 variant asked again until this. A different file, executable or kind of command
 still asks. The card's tooltip says which of the two it is.
 
-**The models' temp is the harness's, not the machine's.** `TMPDIR` alone did
-nothing on Windows: Node reads `TEMP`/`TMP`, so the engine and its shells wrote
-`%LOCALAPPDATA%\Temp\opencode`. The server now sets `TEMP`/`TMP` to
-`Projects\_scratch` — a sibling of the projects and outside the harness — before
-it spawns the engine, and the permission analyser expands `$env:TEMP` from the
-same process env, so the writer and the judge see one folder. Each project gets
-`_scratch\<name>-<hash>` (created at boot and in `createProject`, named in its
-brief); the policy treats that root as a **scratch zone**: read, write and shell
-are allowed there without asking, while the harness stays denied. The machine's
-temp folder is no longer used.
+**Synapse's temp is the harness's, not the machine's, and not a model's.** `TMPDIR`
+alone did nothing on Windows: Node reads `TEMP`/`TMP`, so the engine and its shells
+wrote `%LOCALAPPDATA%\Temp\opencode`. The server sets `TEMP`/`TMP` to `data\temp` —
+inside the harness, swept by housekeeping — before it spawns the engine, and the
+permission analyser expands `$env:TEMP` from the same process env, so the writer and
+the judge see one folder. One engine serves every project, so this cannot be a
+per-project path: it is the plumbing a compiler or a runtime uses, it lives where no
+model may write, and what lands there is debris (20 Nov). A model's scratch is
+`.project/scratch` inside its project, created at boot and in `createProject` and
+named in its brief; a command that needs a temp directory points `TEMP` there.
 
 **Full auto can answer for the operator (28 Oct).** With the session's
 `synapse.fullAuto` on — the cog's second switch — a request left to the operator
@@ -2229,11 +2229,13 @@ what it likes.
 The project brief was doing two jobs: teaching the harness and carrying the project. Split
 them.
 
-- **Three roots are process environment**, set in `src/index.js`: `SYNAPSE_HARNESS`,
-  `SYNAPSE_PROJECTS_ROOT`, `SYNAPSE_SCRATCH_ROOT`. The engine and the check processes
-  inherit them, so a shell and the check that judges it see one answer. There is deliberately
-  no `SYNAPSE_PROJECT`: one engine serves every project, and a global value would be the
-  wrong project's. `$PWD` is the per-shell project root.
+- **Two roots are process environment**, set in `src/index.js`: `SYNAPSE_HARNESS` and
+  `SYNAPSE_PROJECTS_ROOT`. The engine and the check processes inherit them, so a shell and
+  the check that judges it see one answer. There is deliberately no `SYNAPSE_PROJECT`: one
+  engine serves every project, and a global value would be the wrong project's. `$PWD` is
+  the per-shell project root. `SYNAPSE_SCRATCH_ROOT` is gone with the shared scratch root
+  (20 Nov): a project's scratch is `.project/scratch` inside it, so there is no global name
+  for it to export.
 - **`synapse.harness`** is a second instruction entry, ~400 characters, set beside
   `synapse.plan` for every session. It names the roots and the rule that a relative shell
   path is judged from the working directory, not from a script's own `Push-Location`; for a

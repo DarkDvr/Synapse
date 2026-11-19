@@ -32,7 +32,7 @@ import {
 } from './project-agents.js';
 export { EVIDENCE_DIR, SHARED_DIR };
 import { MIRROR_RULE } from './shell-mirror.js';
-import { scratchDir, ROOT, PROJECTS_ROOT, SCRATCH_ROOT } from './paths.js';
+import { scratchDir, ROOT, PROJECTS_ROOT } from './paths.js';
 import { parseChecks, CHECK_MAX } from './checks.js';
 // The plan's shape (a `t2a` belongs to its `t2`) is one rule, shared with the page that
 // draws the rail: web/plan-order.js. Same file, same answer in both runtimes.
@@ -100,10 +100,10 @@ export const HARNESS_KEY = 'synapse.harness';
 export function harnessCore({ browser = false } = {}) {
   const harness = process.env.SYNAPSE_HARNESS || ROOT;
   const projects = process.env.SYNAPSE_PROJECTS_ROOT || PROJECTS_ROOT;
-  const scratch = process.env.SYNAPSE_SCRATCH_ROOT || SCRATCH_ROOT;
   const lines = [
-    `Harness roots: SYNAPSE_HARNESS=${harness}; SYNAPSE_PROJECTS_ROOT=${projects}; SYNAPSE_SCRATCH_ROOT=${scratch}.`,
+    `Harness roots: SYNAPSE_HARNESS=${harness}; SYNAPSE_PROJECTS_ROOT=${projects}.`,
     `The project root is $PWD (PowerShell) or %CD% (cmd). A relative path in a shell command is resolved from the working directory, not from a script's own folder. For a script's output folder, use an absolute path inside the project — for example, "$PWD\\bin".`,
+    `Scratch is ${PLAN_DIR}/scratch, nowhere else. If a command needs a temp directory, set it there: $env:TEMP = "$PWD/${PLAN_DIR}/scratch/temp".`,
   ];
   if (browser) {
     lines.push(
@@ -964,19 +964,12 @@ export function roleWriteRules(dir, role) {
     // tamper check then reported its own compliance as tampering (11 Nov).
     rules.push({ action: 'edit', resource: `${base}/reports/**`, effect: 'allow' });
   }
-  // A private project's scratch lives inside the project (`.project/scratch`), where
-  // the deny above would refuse the folder the brief tells every role to write. The
-  // scratch is the role's own working space, not the record, so it is allowed.
-  try {
-    const scratch = scratchDir(dir).replace(/\\/g, '/');
-    if (scratch.startsWith(`${root}/${PLAN_DIR}/`)) {
-      const rel = scratch.slice(root.length + 1);
-      rules.push({ action: 'edit', resource: `${rel}/**`, effect: 'allow' });
-      rules.push({ action: 'edit', resource: `${scratch}/**`, effect: 'allow' });
-    }
-  } catch {
-    // No scratch folder is a project the zone checks catch; the fence is extra.
-  }
+  // Scratch is the project's own: `.project/scratch`, where the deny above would
+  // otherwise refuse the folder the brief tells every role to write. It is the role's
+  // working space, not the record, so it is allowed — and since 20 Nov there is no
+  // other scratch for a model to choose between.
+  rules.push({ action: 'edit', resource: `${PLAN_DIR}/scratch/**`, effect: 'allow' });
+  rules.push({ action: 'edit', resource: `${root}/${PLAN_DIR}/scratch/**`, effect: 'allow' });
   // The map and the notepad are the Architect's. A worker can read AGENTS.md — the
   // whole point is that it reads it — and may not edit it: the header is repaired on
   // the next session, but a note a worker rewrote is not, and two authors on one file
@@ -1104,13 +1097,12 @@ export function briefSession({ dir, role = 'architect', auto = false, single = f
 
   lines.push(`Synapse project: ${path.basename(String(dir || '')) || 'unknown'}`);
 
-  // The scratch folder this project's models may write. It is outside the project
-  // and outside the harness, so a probe script or a screenshot goes there instead
-  // of into either — and instead of the machine's temp folder, which is another
-  // app's space. Boot and `createProject` make it; the path is the brief's.
+  // Scratch is the project's own folder, made at boot and by `createProject`. The
+  // brief names it because it is not somewhere a model would guess: inside `.project`,
+  // beside the records, and ignored by git.
   const scratch = scratchDir(dir);
   lines.push(
-    `Scratch folder: ${scratch}. Probe scripts, screenshots and temporary data go there — never the machine's temp folder. It is yours to write, and it is outside the project.`,
+    `Scratch folder: ${scratch}. Probe scripts, screenshots and temporary data go there — never the machine's temp folder. It is yours, and it is inside the project.`,
   );
   // "Keep" on an attachment writes a deliberate copy under the project. It is
   // not in the transcript, so the next session can only find it by being told

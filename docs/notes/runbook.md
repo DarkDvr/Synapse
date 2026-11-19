@@ -335,8 +335,8 @@ It removes only what it can prove is dead:
 |---|---|---|
 | an applied update's staging: the zip, the extracted tree, the helper copies | `data\update\last.json` says `ok`, and it is more than a minute old | the update has copied the files out and Synapse is running; the helper starts Synapse *before* it writes that record, which is why the minute matters. A failed update is left alone — its staging is the diagnosis. The newest `data\backups` folder is kept; older ones go. "Newest" is its timestamp, and a tie — two folders written in the same breath — is settled by the version and the clock in the name, never by whichever one the directory listed first. |
 | old release zips in `dist` | more than one exists | one release is enough; the code is in git and the asset is on GitHub. `SHA256SUMS` is rewritten for the one that stayed. `make-release.ps1` does the same when it builds. |
-| spent render profiles in `..\Synapse.Projects\_scratch` | a `visual-review-*` folder is more than a day old | each is Chrome's throwaway profile for one render (~12 MB), not work. The renderer deletes its own, but Windows often keeps a file locked, so they pile up. |
-| a scratch folder whose project is gone (`<project>-<hash>`) | no registered project claims the name, it is a week old, and it matches the harness's own naming shape | deleting a project in Synapse removes its scratch with it, so this only catches folders whose project folder was moved or removed outside Synapse. One project's scratch alone reached 12 GB (4 Nov). The rest of `_scratch` is the engine's temp and is not pruned by name. |
+| spent render profiles and build debris in `data\temp` | an entry is more than six hours old | each is a throwaway browser profile for one render (~12 MB) or a compiler's intermediate files, not work. The renderer deletes its own, but Windows often keeps a file locked, so they pile up. A live render or build is always in use, so anything written in the last six hours stays. |
+
 
 The engine's own store is not in this pass, because it must be deleted while the
 engine is down:
@@ -356,13 +356,12 @@ folders and my own probe screenshots.
 
 **Deliberately not touched:**
 
-- **A live project's scratch** (`..\Synapse.Projects\_scratch\<project>-<hash>`) —
-  where a model may leave work it is told to keep, and the operator may resume a
-  project days later. No age-based deletion applies to it. A project's scratch now
-  goes when the project is deleted (the folder is outside the project, so the
-  Recycle Bin never sees it), and an orphan nobody claims is swept after a week;
-  nothing clears it on compaction, because compaction happens mid-run and the
-  scratch is often the working set of the worker being compacted.
+- **A live project's scratch** (`<project>\.project\scratch`) — it is inside the project,
+  where a model may leave work it is told to keep, and the operator may resume a project
+  days later. No age-based deletion applies to it. A finished task's own folder goes when
+  the task completes (see the debris rules below); nothing clears it on compaction,
+  because compaction happens mid-run and the scratch is often the working set of the
+  worker being compacted.
 - **The engine's `snapshot` store** (`data\engine\opencode\data\opencode\snapshot`,
   347 MB and growing) — it is the engine's own undo history. Deleting it needs the
   engine stopped and is a separate, explicit action, not a boot sweep.
@@ -393,23 +392,20 @@ The operator's decision: this is automatic. A cleanup task at the end of a plan 
 worker run on files the harness can name by rule, and the model that made the mess is the
 one deciding what the mess is.
 
-**A finished task's scratch goes.** `<project>-<hash>\<task>` under
-`F:\dev\Synapse.Projects\_scratch` is where the work was built; nobody reopens it. One
-task folder measured 1.3 GB. A task that **failed or was stopped** keeps its folder: the
-wreckage is evidence. (`src/cleanup.js`, `removeTaskScratch`.)
+**A finished task's scratch goes.** .project\scratch\<task> inside the project is where
+the work was built; nobody reopens it. One task folder measured 1.3 GB. A task that
+**failed or was stopped** keeps its folder: the wreckage is evidence. (src/cleanup.js,
+emoveTaskScratch.)
 
-**Anything in the scratch root that no live project claims is deleted — now.** Not after
-a week: the folder is Synapse's own, so a folder in it that is not a project's is debris.
-What was there on the day: 494 MB a worker wrote at the root, 258 MB of dotnet temp,
-240 MB of an editor download, 29 MB under a name with no hash. Two exceptions, both
-named rather than guessed: `opencode` (the engine's temp root, in use while the engine
-runs) and anything written in the last ten minutes (a render or a download may be inside
-it). It runs at boot and every half hour, because this app stays up for days.
-(`src/housekeeping.js`, `sweepUnclaimedScratch`.)
+**The temp folder is swept, and it is not a scratch.** data\temp holds what a compiler
+or a render leaves behind — a throwaway browser profile, intermediate build files. A model
+may not write there (it is under data), so nothing in it is anyone's work, and an entry
+more than six hours old goes. The sweep runs at boot and every half hour, because this app
+stays up for days. (src/housekeeping.js, sweepTemp.)
 
-**Deleting a project deletes its scratch**, already: `api.deleteProject` removes
-`scratchDir(dir)` after the folder goes to the Recycle Bin.
-
+**Deleting a project takes its scratch with it**, already: the whole folder goes to the
+Recycle Bin, and pi.deleteProject empties .project\scratch first so a deleted project
+does not carry gigabytes into the bin.
 **A stray file in the project root is moved, never deleted.** Only names the harness can
 prove are debris: its own files at the wrong level (`plan.json`, `features.json`,
 `project.md`, `runs.jsonl`), a log, or a proof file. They go to

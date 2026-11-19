@@ -14,7 +14,7 @@ import {
   normalizeSession,
   parseModelRef,
 } from './base.js';
-import { ROOT, SEARCH_SERVER, DELEGATE_SERVER, LEASE_SERVER, GIT_SERVER, PROCESS_SERVER, BROWSER_SERVER, ENGINE_PID_FILE, SKILLS_DIR, VENDOR_ENGINE } from '../paths.js';
+import { ROOT, TEMP_DIR, SEARCH_SERVER, DELEGATE_SERVER, LEASE_SERVER, GIT_SERVER, PROCESS_SERVER, BROWSER_SERVER, ENGINE_PID_FILE, SKILLS_DIR, VENDOR_ENGINE } from '../paths.js';
 import { providerApiKey } from '../config.js';
 import { vacuumStore } from '../engine-store.js';
 import { purgeProjectTraces } from '../engine-project-purge.js';
@@ -457,7 +457,7 @@ export class OpenCodeEngine extends Engine {
       XDG_CONFIG_HOME: home.config,
       XDG_DATA_HOME: home.data,
       XDG_STATE_HOME: home.state,
-      TMPDIR: home.tmp,
+      TMPDIR: TEMP_DIR,
       ...(nodeThere || gitThere
         ? {
             PATH: [nodeThere ? nodeDir : '', gitThere ? gitDir : '', process.env.PATH || '']

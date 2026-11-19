@@ -16,7 +16,7 @@ import { tmpdir } from './tmpdir.mjs';
 const HOME = 'C:/Users/tester';
 const PROJECT = 'F:/dev/Synapse.Projects/demo';
 const HARNESS = 'F:/dev/Synapse';
-const SCRATCH = 'F:/dev/Synapse.Projects/_scratch';
+const SCRATCH = 'F:/dev/Synapse.Projects/demo/.project/scratch';
 const CWD = 'F:\\dev\\Synapse.Projects\\demo';
 
 const call = (action, resource, extra = {}) =>
@@ -46,7 +46,7 @@ test('no project reads or changes another project', () => {
   assert.equal(read.scope, 'prohibited');
   // Plain words and the two constants: the folder, the allowed places, nothing to infer.
   assert.match(read.reason, /outside your project folder/);
-  assert.match(read.reason, /SYNAPSE_SCRATCH_ROOT/);
+  assert.match(read.reason, /\.project\/scratch/);
   assert.match(read.reason, /SYNAPSE_PROJECTS_ROOT/);
   assert.doesNotMatch(read.reason, /another project/i);
   assert.equal(call('read', sibling).effect, 'deny');
@@ -56,9 +56,9 @@ test('no project reads or changes another project', () => {
   // The project in use is the permitted subfolder...
   assert.equal(call('read', `${PROJECT}/src/app.js`).effect, 'allow');
   assert.equal(call('write', `${PROJECT}/src/new.js`).effect, 'allow');
-  // ...and so is the scratch folder the brief hands the worker.
-  const own = scratchDir(PROJECT, SCRATCH);
-  assert.equal(call('read', `${own}/probe.ps1`, { scratchRoot: SCRATCH }).effect, 'allow');
+  // ...and so is the scratch folder the brief hands the worker, which is inside it.
+  const own = scratchDir(PROJECT);
+  assert.equal(call('read', `${own}/probe.ps1`).effect, 'allow');
 });
 
 test('refusals about folders use one wording: the folder, its constant, and where you may work', () => {
@@ -70,7 +70,7 @@ test('refusals about folders use one wording: the folder, its constant, and wher
   assert.doesNotMatch(build.reason, /the projects root/i);
   assert.doesNotMatch(build.reason, /another project/i);
   assert.match(build.reason, /\$PWD/);
-  assert.match(build.reason, /SYNAPSE_SCRATCH_ROOT \(F:\\dev\\Synapse\.Projects\\_scratch\)/);
+  assert.match(build.reason, /\.project\/scratch/);
   assert.match(build.reason, /SYNAPSE_PROJECTS_ROOT/);
 
   // The harness gets the same shape, with its own constant. (Its sources are readable —
@@ -79,7 +79,7 @@ test('refusals about folders use one wording: the folder, its constant, and wher
   assert.equal(inside.effect, 'deny');
   assert.match(inside.reason, /inside SYNAPSE_HARNESS \(F:\\dev\\Synapse\)/);
   assert.match(inside.reason, /\$PWD/);
-  assert.match(inside.reason, /SYNAPSE_SCRATCH_ROOT/);
+  assert.match(inside.reason, /\.project\/scratch/);
   assert.doesNotMatch(inside.reason, /private files/i);
 });
 
@@ -150,25 +150,23 @@ test('a write into a credential store is denied', () => {
   assert.equal(call('edit', 'C:/Users/tester/.ssh/authorized_keys').effect, 'deny');
 });
 
-// The scratch folder is the one place outside the project a model may write: it
-// exists so a probe script never has to go into the machine's temp folder or the
-// project's own git tree.
-test('the scratch folder is writable without asking, and is not the harness', () => {
+// Scratch is inside the project and is the only place a model writes throwaway files:
+// it exists so a probe never has to go into the machine's temp folder or the product's
+// own files.
+test('the project scratch is writable without asking, and is not the harness', () => {
   const base = {
     cwd: CWD,
     projectRoot: PROJECT,
     harnessRoot: HARNESS,
-    scratchRoot: SCRATCH,
     home: HOME,
     protection: [{ path: HARNESS, label: 'Synapse', write: false, read: true }],
   };
-  const file = `${scratchDir(PROJECT, SCRATCH)}/probe.ps1`;
-  assert.equal(zoneOf(file, { projectRoot: PROJECT, harnessRoot: HARNESS, scratchRoot: SCRATCH }), 'scratch');
+  const file = `${scratchDir(PROJECT)}/probe.ps1`;
+  assert.equal(zoneOf(file, { projectRoot: PROJECT, harnessRoot: HARNESS }), 'project');
   const write = decide({ ...base, action: 'edit', resources: [file] });
   assert.equal(write.effect, 'allow');
   assert.equal(write.outside, false);
-  assert.equal(write.scope, 'scratch');
-  assert.match(write.reason, /scratch folder/);
+  assert.equal(write.scope, 'project');
   const shell = decide({ ...base, action: 'shell', resources: [`Set-Content "${file}" hi`] });
   assert.equal(shell.effect, 'allow');
   // The harness is still denied, though it is not far away.
@@ -531,14 +529,13 @@ test('reading AppData while writing in the project does not ask', () => {
 test('an outside read beside a scratch delete does not ask', () => {
   const command =
     `Get-ChildItem "D:\\temp\\fever tracker" -File\n` +
-    `Remove-Item "${scratchDir(PROJECT, SCRATCH)}/q2.png" -Force`;
+    `Remove-Item "${scratchDir(PROJECT)}/q2.png" -Force`;
   const answer = decide({
     action: 'shell',
     resources: [command],
     cwd: CWD,
     projectRoot: PROJECT,
     harnessRoot: HARNESS,
-    scratchRoot: SCRATCH,
     home: HOME,
   });
   assert.equal(answer.effect, 'allow');
@@ -554,7 +551,6 @@ test('an outside write next to an AppData read still asks, with the right reason
     cwd: CWD,
     projectRoot: PROJECT,
     harnessRoot: HARNESS,
-    scratchRoot: SCRATCH,
     home: HOME,
   });
   assert.equal(answer.effect, 'ask');
@@ -926,8 +922,8 @@ test('a method call\'s closing parenthesis is not part of the path', () => {
   // project" (the ExtractToDirectory refusal of 16 Nov).
   const scratch = scratchDir(PROJECT);
   const project = shell(`[System.IO.Compression.ZipFile]::ExtractToDirectory($zip, "${PROJECT}")`);
-  const own = shell(`[System.IO.Compression.ZipFile]::ExtractToDirectory($zip, "${scratch}")`, { scratchRoot: SCRATCH });
+  const own = shell(`[System.IO.Compression.ZipFile]::ExtractToDirectory($zip, "${scratch}")`);
   assert.equal(project.effect, 'allow', project.reason);
   assert.equal(own.effect, 'allow', own.reason);
-  assert.equal(own.scope, 'scratch');
+  assert.equal(own.scope, 'project');
 });

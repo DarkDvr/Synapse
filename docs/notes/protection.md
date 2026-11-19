@@ -257,9 +257,12 @@ It can, so the fence is **two entries, not a new policy**:
 
 - the **projects root** (`F:\dev\Synapse.Projects`) is a protected entry with **both boxes
   refused** — writes and reads;
-- the **project in use** is a more specific permitted subfolder of it, and so is the
-  **scratch folder** the brief hands a worker (`_scratch\<name>-<hash>`), or the fence would
-  block the probe scripts the brief tells the model to write.
+- the **project in use** is a more specific permitted subfolder of it.
+
+Since 20 Nov there is no second exception: a model's scratch is `.project/scratch` inside
+its own project, so the fence needs no entry for a folder beside the projects. Before that
+the shared `_scratch` root had to be permitted as well, which meant the fence made an
+exception for a subfolder of the very root it calls off limits.
 
 The two permitted entries are appended per request (`withProjectFence` in
 `src/permissions.js`), because "the project in use" is not a property of the machine. The
@@ -299,21 +302,21 @@ shared folder that holds every project" explained a concept it does not need, an
 mentioned other projects at all. The last one named the folder but still left the reader
 to join the dots.
 
-What it says now, and the whole of it:
+What it says now, and the whole of it (rewritten 20 Nov, when the shared scratch root went):
 
 > PROHIBITED: `F:\dev\Synapse.Projects` and `SYNAPSE_PROJECTS_ROOT` are outside your
 > project folder and are not permitted for you to browse. You should work only inside your
-> project folder (`$PWD`, or `%CD%` in cmd) or `SYNAPSE_SCRATCH_ROOT`
-> (`F:\dev\Synapse.Projects\_scratch`).
+> project folder (`$PWD`, or `%CD%` in cmd); scratch is `.project/scratch` inside it, and
+> there is nowhere else to write.
 
 The harness uses the same shape for its own folder:
 
 > PROHIBITED: that path is inside `SYNAPSE_HARNESS` (`F:\dev\Synapse`), Synapse's own
 > folder, and is not permitted for you to read. You should work only inside your project
-> folder (`$PWD`, or `%CD%` in cmd) or `SYNAPSE_SCRATCH_ROOT` (`…\_scratch`).
+> folder (`$PWD`, or `%CD%` in cmd); scratch is `.project/scratch` inside it.
 
 Four facts, no concept: the folder and its constant, that it is not for browsing, the
-project folder's own name (`$PWD`), and the scratch folder with its path. The constants are
+project folder's own name (`$PWD`), and where scratch is. The constants are
 the ones the core instruction gives every role, so the sentence and the instructions share
 one vocabulary.
 

@@ -9,7 +9,7 @@ import path from 'node:path';
 import { repairMachinePaths } from '../src/config.js';
 import { createProjectStore } from '../src/projects.js';
 import { OpenCodeEngine } from '../src/engines/opencode.js';
-import { VENDOR_ENGINE, PROJECTS_ROOT, SCRATCH_ROOT, scratchDir } from '../src/paths.js';
+import { VENDOR_ENGINE, PROJECTS_ROOT, scratchDir } from '../src/paths.js';
 import { tmpdir } from './tmpdir.mjs';
 
 const quiet = { channel: () => ({ info() {}, warn() {}, error() {}, debug() {} }) };
@@ -35,14 +35,15 @@ test('a runtime path that is on this machine is left alone', () => {
   assert.equal(cfg.engine.opencode.home, path.dirname(here));
 });
 
-test('the scratch root is a sibling of the projects, and each project has its own folder', () => {
-  assert.equal(path.dirname(SCRATCH_ROOT), PROJECTS_ROOT, 'the scratch root travels with the projects root');
+test('scratch is inside each project, so it travels with the project', () => {
   const a = scratchDir('F:/dev/Synapse.Projects/demo');
   const b = scratchDir('F:/dev/Synapse.Projects/demo');
   const c = scratchDir('D:/work/demo');
   assert.equal(a, b, 'the same project always gets the same folder');
   assert.notEqual(a, c, 'two projects with the same name do not share scratch space');
-  assert.ok(a.startsWith(SCRATCH_ROOT));
+  const flat = (p) => p.replace(/\\/g, '/');
+  assert.ok(flat(a).startsWith('F:/dev/Synapse.Projects/demo/'), 'the scratch is not inside its project');
+  assert.ok(flat(a).endsWith('.project/scratch'), 'the scratch has the wrong shape');
 });
 
 test('a project whose folder is gone is not listed, and the registry forgets it', () => {

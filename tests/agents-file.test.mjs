@@ -18,7 +18,7 @@ import {
   ensureAgents,
   notepadTemplate,
 } from '../src/project-agents.js';
-import { SCRATCH_ROOT, scratchDir } from '../src/paths.js';
+import { scratchDir } from '../src/paths.js';
 
 const BEGIN = '<!-- synapse:agents:begin -->';
 const END = '<!-- synapse:agents:end -->';
@@ -165,20 +165,21 @@ test('a worker may read the map and may not edit it', () => {
   }
 });
 
-test('a private project\'s scratch is writable, though it lives inside .project', () => {
+test('the scratch lives inside the project, and every role may write there', () => {
   const dir = project();
-  fs.mkdirSync(path.join(dir, '.project'), { recursive: true });
-  fs.writeFileSync(path.join(dir, '.project', 'private'), '', 'utf8');
   const scratch = scratchDir(dir);
-  assert.ok(scratch.toLowerCase().startsWith(path.join(dir, '.project').toLowerCase()), 'the fixture is not private scratch');
-  const allowed = allows(dir, 'coder-1').map((r) => r.replace(/\\/g, '/').toLowerCase());
-  assert.ok(allowed.includes('.project/scratch/**'), `the role fence refuses the brief's scratch: ${allowed.join(', ')}`);
-  assert.ok(allowed.includes(`${scratch.replace(/\\/g, '/').toLowerCase()}/**`), 'the absolute scratch path is refused');
-  // A normal (non-private) project keeps its scratch outside the project, and the
-  // rule about .project does not change.
-  const plain = project();
-  assert.equal(allows(plain, 'coder-1').some((r) => r.includes('scratch')), false);
-  assert.equal(scratchDir(plain).toLowerCase().startsWith(SCRATCH_ROOT.toLowerCase()), true);
+  assert.ok(
+    scratch.toLowerCase().startsWith(path.join(dir, '.project').toLowerCase()),
+    'scratch is not inside the project',
+  );
+  assert.ok(scratch.toLowerCase().endsWith('scratch'), 'the folder is not named scratch');
+  for (const role of ['coder-1', 'designer', 'qc', 'inventor']) {
+    const allowed = allows(dir, role).map((r) => r.replace(/\\/g, '/').toLowerCase());
+    assert.ok(allowed.includes('.project/scratch/**'), `${role} may not write its scratch`);
+    assert.ok(allowed.includes(`${scratch.replace(/\\/g, '/').toLowerCase()}/**`), `${role}'s absolute scratch path is refused`);
+  }
+  // And there is no shared root beside the projects any more.
+  assert.equal(scratchDir(dir).includes('_scratch'), false);
 });
 
 test('the notepad template stays small enough to be worth reading', () => {

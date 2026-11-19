@@ -2,9 +2,7 @@
 // Everything lives under F:\dev\Synapse; nothing is written outside it
 // except the recycled engine binary we locate (node_modules) and the browser.
 import path from 'node:path';
-import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { hasMarker } from './privacy.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -54,42 +52,23 @@ export const GENERAL_DIR = path.join(PROJECTS_ROOT, 'general');
 // needs a location that exists, and this is the one place all projects live.
 export const WORKSPACE_DIR = PROJECTS_ROOT;
 
-// Scratch space the harness gives the models, a sibling of the projects. It is
-// deliberately NOT inside the harness: a model may write here (the policy treats
-// it as a scratch zone), and nothing a model writes belongs beside the product's
-// code or config. It is also not inside a project, so a probe script or a
-// screenshot never pollutes a project's own git status. Each project gets a
-// folder by name, and the engine's own temp (TEMP/TMP) points at the root, so the
-// machine's %TEMP% — another app's space — is never touched.
-export const SCRATCH_ROOT = path.join(PROJECTS_ROOT, '_scratch');
-
-/** One project's scratch folder: its name plus a hash of its path, so two
- *  projects that share a folder name cannot share scratch space. The root can be
- *  passed for a store built somewhere else (tests), and defaults to the real one.
- *
- *  A **private** project keeps its scratch inside its own folder instead: the marker
- *  promises that nothing about the project lands outside it (15 Nov). */
-/**
- * The folder name a project owns in the shared scratch root.
- *
- * A private project's scratch lives inside the project now (see `scratchDir`), but the
- * shared-root folder it had before can still hold work. Housekeeping keeps this name for
- * every project — a sweep that only knew the current location would treat that older
- * folder as debris, and it did: `skyrim_modlist-<hash>` was swept on 17 Nov when the
- * project had moved its scratch inside.
- */
-export function scratchRootName(dir) {
-  const base = path.basename(String(dir || '')) || 'project';
-  const hash = createHash('sha1').update(path.resolve(String(dir || '')).toLowerCase()).digest('hex').slice(0, 8);
-  return `${base}-${hash}`;
+// Scratch is the project's own, always: `<project>\.project\scratch`. There is no
+// shared root any more (20 Nov). One writable place — the project — means the policy
+// needs no exception for a folder that is a sibling of every project, the folder dies
+// with the project, and a model has nothing to choose between. It is also outside the
+// product's own files because `.project` already is, and the harness keeps a
+// `.gitignore` in it so a project that tracks `.project` never sees it.
+export function scratchDir(dir) {
+  return path.join(path.resolve(String(dir || '')), '.project', 'scratch');
 }
 
-export function scratchDir(dir, root = SCRATCH_ROOT) {
-  if (root === SCRATCH_ROOT && hasMarker(dir)) {
-    return path.join(path.resolve(String(dir || '')), '.project', 'scratch');
-  }
-  return path.join(root, scratchRootName(dir));
-}
+// Synapse's own temp: the server's and the engine's plumbing — a compiler's intermediate
+// files, a runtime's scratch, the throwaway profile a render launches. It is NOT a
+// scratch folder for models: it lives in `data`, where they may not write, and what
+// lands there is debris the housekeeping sweeps. One place, inside the folder that is
+// ours, so the machine's %TEMP% — another app's space, in the user profile — is never
+// touched.
+export const TEMP_DIR = path.join(DATA_DIR, 'temp');
 
 // Isolated engine home (config/data/state/tmp) so the engine never touches
 // the machine-wide ~/.config/opencode or ~/.local/share/opencode.

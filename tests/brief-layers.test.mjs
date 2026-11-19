@@ -105,7 +105,8 @@ test('the harness core is small, and says where the project root is', () => {
   assert.ok(core.length < 700, `the core is ${core.length} characters`);
   assert.match(core, /SYNAPSE_HARNESS=/);
   assert.match(core, /SYNAPSE_PROJECTS_ROOT=/);
-  assert.match(core, /SYNAPSE_SCRATCH_ROOT=/);
+  assert.match(core, /\.project\/scratch/);
+  assert.doesNotMatch(core, /SYNAPSE_SCRATCH_ROOT/);
   assert.match(core, /\$PWD/);
   assert.match(core, /working directory/);
   assert.doesNotMatch(core, /SYNAPSE_PROJECT=/);
@@ -162,11 +163,14 @@ test('the browser and search tools are named in the core, and only while the bro
   assert.doesNotMatch(briefSession({ dir: 'F:/dev/Synapse.Projects/__no_such_project__', role: 'coder-1' }), /synapse-browser_/);
 });
 
-test('the server exports the three roots to shells and check processes', () => {
+test('the server exports two roots to shells and keeps its own temp out of the projects', () => {
   const src = fs.readFileSync(new URL('../src/index.js', import.meta.url), 'utf8');
   assert.match(src, /process\.env\.SYNAPSE_HARNESS = ROOT/);
   assert.match(src, /process\.env\.SYNAPSE_PROJECTS_ROOT = PROJECTS_ROOT/);
-  assert.match(src, /process\.env\.SYNAPSE_SCRATCH_ROOT = SCRATCH_ROOT/);
+  // There is no global scratch any more: a model's scratch is inside its project, so a
+  // shared root variable would be a second place to write.
+  assert.doesNotMatch(src, /SYNAPSE_SCRATCH_ROOT/);
+  assert.match(src, /process\.env\.TEMP = TEMP_DIR/);
 });
 
 test('the Architect’s brief is the expensive one, and the layers are in it', () => {

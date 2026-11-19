@@ -92,8 +92,8 @@ A red run is not made quieter by that; it is made quieter by being green.
 throws never reaches its own `finally` — so a failing fixture folder stayed in `%TEMP%`.
 Counted on 10 Nov: **15,638 folders, 61 MB**, about 145 more per full run, with names
 like `synapse-doc-*`, `synapse-perm-*`, `synapse-round-*`. Clutter, never a fault in the
-app: the app points its own `TEMP` at the projects scratch root, so `%TEMP%` was only
-ever the suite's.
+app: the app points its own `TEMP` at `data\temp` (20 Nov; before, the projects scratch
+root), so `%TEMP%` was only ever the suite's.
 
 Every fixture folder now goes through **`tmpdir(prefix)`** in `tests/tmpdir.mjs`: it makes
 the folder, remembers it, and a `process.on('exit')` hook empties it. A test may still

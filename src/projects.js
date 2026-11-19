@@ -10,7 +10,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { ensurePlan } from './plans.js';
 import { ensureAgents } from './project-agents.js';
-import { SCRATCH_ROOT, scratchDir } from './paths.js';
+import { scratchDir } from './paths.js';
 import { hasMarker, setMarker } from './privacy.js';
 
 const idFor = (dir) => crypto.createHash('sha1').update(dir.toLowerCase()).digest('hex').slice(0, 12);
@@ -139,9 +139,9 @@ export function migrateProjectState(dir, { log } = {}) {
   return { migrated: true, leftover };
 }
 
-// A leading underscore is the harness's namespace. `_scratch` and `_probe` are
-// the two it uses today; treating the whole prefix as reserved means a folder it
-// adds later cannot turn into a project in the rail.
+// A leading underscore is the harness's namespace. `_probe` is the one it uses today;
+// treating the whole prefix as reserved means a folder it adds later cannot turn into a
+// project in the rail.
 const RESERVED_PROJECT_PREFIX = '_';
 
 /** Dot folders, drive metadata and the harness's underscore namespace are not projects. */
@@ -172,12 +172,15 @@ const isFolderEntry = (entry, root) => {
  * A project is usable the moment it is registered, so discovery and Add Project
  * both call this: `.project\plan.json` is the file the Architect starts from,
  * `AGENTS.md` is the map and notepad every session starts with (the header is kept
- * current here, so a build that changes it reaches every project at boot), and the
- * scratch folder is named in the header. An existing file is never rewritten beyond
- * its generated block; a failure is reported, not thrown, so a read-only folder
- * still becomes a project the operator can see and fix.
+ * current here, so a build that changes it reaches every project at boot), and
+ * `.project\scratch` is the one place models may put probes and throwaway files —
+ * inside the project, with a `.gitignore` so a project that tracks `.project` never
+ * sees it, and a `temp` folder under it for a command that needs a temp directory.
+ * An existing file is never rewritten beyond its generated block; a failure is
+ * reported, not thrown, so a read-only folder still becomes a project the operator
+ * can see and fix.
  */
-export function ensureProjectFolders(dir, { scratchRoot = SCRATCH_ROOT } = {}) {
+export function ensureProjectFolders(dir) {
   const target = normalizeDir(dir);
   const state = migrateProjectState(target);
   if (state.error) {
@@ -190,12 +193,14 @@ export function ensureProjectFolders(dir, { scratchRoot = SCRATCH_ROOT } = {}) {
     };
   }
   const plan = ensurePlan(target);
-  const agents = ensureAgents(target, { scratchRoot });
+  const agents = ensureAgents(target);
   let scratch = '';
   let error = plan.error || agents.error || '';
   try {
-    scratch = scratchDir(target, scratchRoot);
-    fs.mkdirSync(scratch, { recursive: true });
+    scratch = scratchDir(target);
+    fs.mkdirSync(path.join(scratch, 'temp'), { recursive: true });
+    const ignore = path.join(scratch, '.gitignore');
+    if (!fs.existsSync(ignore)) fs.writeFileSync(ignore, '# Synapse scratch: never committed.\n*\n', 'utf8');
   } catch (err) {
     error ||= `could not create ${scratch || 'the scratch folder'}: ${err.message}`;
   }
@@ -233,7 +238,7 @@ export function mayRecycleFolder(dir, { projectsRoot = '', harness = '' } = {}) 
   return { ok: true, reason: '' };
 }
 
-export function createProjectStore({ file, rootDir, legacyGeneralDir = null, harnessDir = null, scratchRoot = SCRATCH_ROOT, logger }) {
+export function createProjectStore({ file, rootDir, legacyGeneralDir = null, harnessDir = null, logger }) {
   const log = logger.channel('app');
 
   // The projects root is ours and lives inside the harness's sibling folder; a
@@ -341,7 +346,7 @@ export function createProjectStore({ file, rootDir, legacyGeneralDir = null, har
       raw.push(project);
       known.add(key(dir));
       adopted.push(project);
-      const folders = ensureProjectFolders(dir, { scratchRoot });
+      const folders = ensureProjectFolders(dir);
       if (folders.error) log.warn(`could not give ${entry.name} its folders (${folders.error})`);
     }
     if (!adopted.length) return [];
@@ -453,7 +458,7 @@ export function createProjectStore({ file, rootDir, legacyGeneralDir = null, har
       directory: dir,
       created: Date.now(),
     };
-    const folders = ensureProjectFolders(dir, { scratchRoot });
+    const folders = ensureProjectFolders(dir);
     if (folders.error) log.warn(`could not give ${project.name} its folders (${folders.error})`);
     writeRaw([...readRaw(), project]);
     log.info(`project added: ${project.name} -> ${dir}${created ? ' (directory created)' : ''}`);

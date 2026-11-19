@@ -21,7 +21,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { covers } from './protection.js';
-import { ROOT, PROJECTS_ROOT, SCRATCH_ROOT, scratchDir } from './paths.js';
+import { ROOT, PROJECTS_ROOT } from './paths.js';
 
 const WRITE_ACTIONS = new Set(['edit', 'write', 'patch', 'create']);
 const SHELL_ACTIONS = new Set(['shell', 'bash']);
@@ -128,10 +128,10 @@ export function inside(child, parent) {
 /** The user-profile stores an app's data must not use: AppData and ProgramData. */
 const isUserDataPath = (value) => /(?:^|\/)(?:appdata|programdata)(?:\/|$)/i.test(slash(value));
 
-/** Which of the three zones a resolved path belongs to. */
-export function zoneOf(target, { projectRoot, harnessRoot, scratchRoot }) {
+/** Which zone a resolved path belongs to. Two now: a project is the only writable
+ *  place a model has, so there is no scratch zone outside it to tell apart. */
+export function zoneOf(target, { projectRoot, harnessRoot }) {
   if (inside(target, projectRoot)) return 'project';
-  if (scratchRoot && inside(target, scratchRoot)) return 'scratch';
   if (inside(target, harnessRoot)) return 'harness';
   return 'outside';
 }
@@ -386,15 +386,15 @@ function decidingEntry(target, ctx) {
  * The protected list already answers "most specific path wins", so this is two
  * entries rather than a new rule: the projects root is prohibited (`src/protection.js`
  * keeps that entry mandatory — it is not the operator's to switch off), and the project
- * in use is a permitted subfolder of it. The scratch folder the brief hands a worker is
- * the second permitted subfolder; without it the fence would block the probe scripts the
- * brief tells it to write.
+ * in use is a permitted subfolder of it. Since 20 Nov there is no second exception:
+ * a model's scratch is `.project/scratch` inside its own project, so the fence needs
+ * no entry for a folder beside every project.
  *
  * Added per request because "the project in use" is not a property of the machine. The
  * operator's own entries come first in the list, so one they added inside their project
  * still wins by being more specific (15 Nov).
  */
-function withProjectFence(protection, { projectRoot, scratchRoot } = {}) {
+function withProjectFence(protection, { projectRoot } = {}) {
   const list = Array.isArray(protection) ? [...protection] : [];
   if (!projectRoot) return list;
   // The root is a mandatory built-in entry (src/protection.js). A caller that did not
@@ -404,14 +404,6 @@ function withProjectFence(protection, { projectRoot, scratchRoot } = {}) {
     list.push({ id: 'projects', path: PROJECTS_ROOT, label: 'Another project', read: false, write: false });
   }
   list.push({ id: 'this-project', path: projectRoot, label: 'this project', read: true, write: true });
-  try {
-    const own = scratchDir(projectRoot, scratchRoot || SCRATCH_ROOT);
-    if (own) {
-      list.push({ id: 'this-scratch', path: own, label: 'your scratch folder', read: true, write: true });
-    }
-  } catch {
-    // A project with no usable path is caught by the zone checks; the fence is extra.
-  }
   return list;
 }
 
@@ -425,10 +417,9 @@ function prohibitedRead(target, ctx) {
   return entry && entry.read === false ? entry : null;
 }
 
-const foldersText = () => {
-  const scratch = process.env.SYNAPSE_SCRATCH_ROOT || SCRATCH_ROOT;
-  return `You should work only inside your project folder ($PWD, or %CD% in cmd) or SYNAPSE_SCRATCH_ROOT (${scratch}).`;
-};
+const foldersText = () =>
+  'You should work only inside your project folder ($PWD, or %CD% in cmd); scratch is ' +
+  '.project/scratch inside it, and there is nowhere else to write.';
 
 /**
  * The sentence a refusal about the projects folder uses. That folder is not the
@@ -580,9 +571,6 @@ function decideWrite(resources, ctx) {
       'outside',
     );
   }
-  if (zones.length && zones.every((z) => z === 'scratch')) {
-    return allow('This is the scratch folder the harness gave you.', false, 'scratch');
-  }
   return allow('This is in the project folder.', false, 'project');
 }
 
@@ -663,7 +651,7 @@ function scriptTakesScreen(segments, ctx) {
     for (const raw of scriptsRun(part)) {
       const target = resolvePath(raw, part.dir || ctx.cwd, { home: ctx.home });
       if (!target || target.unknown || !target.path) continue;
-      if (zoneOf(target.path, ctx) !== 'project' && zoneOf(target.path, ctx) !== 'scratch') continue;
+      if (zoneOf(target.path, ctx) !== 'project') continue;
       try {
         const stat = fs.statSync(target.path);
         if (!stat.isFile() || stat.size > SCRIPT_MAX_BYTES) continue;
@@ -692,7 +680,7 @@ function scriptStopsProcesses(segments, ctx) {
       const target = resolvePath(raw, part.dir || ctx.cwd, { home: ctx.home });
       if (!target || target.unknown || !target.path) continue;
       const zone = zoneOf(target.path, ctx);
-      if (zone !== 'project' && zone !== 'scratch') continue;
+      if (zone !== 'project') continue;
       try {
         const stat = fs.statSync(target.path);
         if (!stat.isFile() || stat.size > SCRIPT_MAX_BYTES) continue;
@@ -1051,7 +1039,7 @@ function decideShell(resources, ctx) {
   const redirectZones = info.redirects.map((p) => zoneOf(p, ctx));
   // The scratch zone is ours and is meant to be written: it counts as "inside"
   // for the decision, and the sentence at the end says which zone it was.
-  const insideZones = (z) => z === 'project' || z === 'scratch';
+  const insideZones = (z) => z === 'project';
   const outside = [...zones, ...redirectZones].some((z) => !insideZones(z));
   const scope = zones.includes('harness') || redirectZones.includes('harness')
     ? 'harness'
@@ -1284,18 +1272,10 @@ function decideShell(resources, ctx) {
   }
 
   if (copies.size && !outside) {
-    const toScratch = zones.length > 0 && zones.every((z) => z === 'scratch');
-    return allow(
-      toScratch ? 'This copies a shipped skill into the scratch folder.' : 'This copies a shipped skill into the project.',
-      false,
-      toScratch ? 'scratch' : 'project',
-    );
+    return allow('This copies a shipped skill into the project.', false, 'project');
   }
   if (zones.length === 0 && redirectZones.length === 0) {
     return allow('This runs in the project folder.', false, 'project');
-  }
-  if (zones.length && zones.every((z) => z === 'scratch') && redirectZones.every((z) => z === 'scratch')) {
-    return allow('This runs in the scratch folder.', false, 'scratch');
   }
   return allow(
     outside
@@ -1332,7 +1312,7 @@ function decideRead(resources, ctx) {
     const target = resolvePath(first(value), ctx.cwd, { home: ctx.home });
     if (!target || target.unknown) return ask('The harness cannot tell which folder this is.', true, 'unknown');
     const zone = zoneOf(target.path, ctx);
-    if (zone !== 'project' && zone !== 'scratch') outside = true;
+    if (zone !== 'project') outside = true;
     if (zone === 'harness') scope = 'harness';
     else if (zone === 'outside' && scope !== 'harness') scope = 'outside';
     if (isSecret(target.path, ctx)) return deny('The harness never opens saved-password folders.', outside, 'secret');
@@ -1402,7 +1382,7 @@ export function decide({ action, resources, cwd, projectRoot, harnessRoot, scrat
     harnessRoot,
     scratchRoot,
     home,
-    protection: withProjectFence(protection, { projectRoot, scratchRoot }),
+    protection: withProjectFence(protection, { projectRoot }),
     deskHeld,
   };
   if (WRITE_ACTIONS.has(a)) return decideWrite(resources, ctx);

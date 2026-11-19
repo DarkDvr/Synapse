@@ -17,7 +17,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { createHousekeeping } from '../src/housekeeping.js';
-import { scratchDir, scratchRootName } from '../src/paths.js';
+import { scratchDir } from '../src/paths.js';
 import { reclaimSnapshotStore } from '../src/engines/opencode.js';
 import { tmpdir } from './tmpdir.mjs';
 
@@ -47,7 +47,7 @@ function stagedUpdate(dir, { ok = true, at = new Date(Date.now() - 10 * 60 * 100
 }
 
 const house = (dir, extra = {}) =>
-  createHousekeeping({ root: dir, scratchRoot: path.join(dir, 'scratch'), log: { info() {}, warn() {} }, ...extra });
+  createHousekeeping({ root: dir, tempDir: path.join(dir, 'temp'), log: { info() {}, warn() {} }, ...extra });
 
 test('a settled successful update drops its staging and older backups', () => {
   const dir = root();
@@ -162,126 +162,44 @@ test('a dry run reports what it would free and deletes nothing', () => {
   }
 });
 
-// 3: the renderer's browser profiles are not work; a project's own scratch is.
-test('spent render profiles go, a live one stays, and a project’s scratch is never touched', () => {
+// 3: the temp folder is Synapse's own plumbing, not a model's scratch.
+test('spent temp items go, a fresh one stays, and a project scratch is never touched', () => {
   const dir = root();
   try {
-    const scratch = path.join(dir, 'scratch');
-    const oldProfile = path.join(scratch, 'visual-review-111-390-1700000000000');
-    const liveProfile = path.join(scratch, 'visual-review-222-390-1790000000000');
-    const projectScratch = path.join(scratch, 'test6-1234abcd');
-    const nuget = path.join(scratch, 'NuGetScratch');
+    const tempDir = path.join(dir, 'temp');
+    const oldProfile = path.join(tempDir, 'visual-review-111-390');
+    const oldBuild = path.join(tempDir, 'dotnet-build');
+    const fresh = path.join(tempDir, 'fresh');
+    const projectScratch = path.join(dir, 'demo', '.project', 'scratch');
     write(path.join(oldProfile, 'Default', 'Cache', 'data_0'), 'x'.repeat(4096));
-    write(path.join(liveProfile, 'Default', 'Cache', 'data_0'), 'x');
+    write(path.join(oldBuild, 'obj', 'a.dll'), 'x');
+    write(path.join(fresh, 'a.txt'), 'still being written');
     write(path.join(projectScratch, 'probe.mjs'), 'the model kept this');
-    write(path.join(nuget, 'packages', 'a.nupkg'), 'cache');
-    const longAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
-    for (const p of [oldProfile, projectScratch, nuget]) fs.utimesSync(p, longAgo, longAgo);
+    const longAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    for (const p of [oldProfile, oldBuild]) fs.utimesSync(p, longAgo, longAgo);
 
-    const report = house(dir).sweepScratchProfiles();
-    assert.equal(report.removed, 1);
+    const report = house(dir).sweepTemp({ olderThanMs: 6 * 60 * 60 * 1000 });
+    assert.equal(report.removed, 2);
     assert.ok(report.bytes >= 4096);
-    assert.equal(fs.existsSync(oldProfile), false);
-    assert.equal(fs.existsSync(liveProfile), true, 'a profile a render may still be using stays');
-    assert.equal(fs.existsSync(path.join(projectScratch, 'probe.mjs')), true, 'a project’s own scratch is work');
-    assert.equal(fs.existsSync(nuget), true, 'only visual-review-* is this pass’s business');
+    assert.equal(fs.existsSync(oldProfile), false, 'a spent render profile survived');
+    assert.equal(fs.existsSync(oldBuild), false, 'build debris survived');
+    assert.equal(fs.existsSync(fresh), true, 'a folder being written now stays');
+    assert.equal(fs.existsSync(path.join(projectScratch, 'probe.mjs')), true, 'the project scratch is not temp');
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
 
-// 5: a project that is gone takes its scratch with it; a folder nobody can claim
-// and that nothing has touched for a week is the same thing. The rest of the
-// scratch root is the engine's temp and is not pruned by name.
-test('orphaned project scratch goes, a live project’s and a fresh one stay', () => {
+test('the project scratch is inside the project, and the temp sweep never touches it', () => {
   const dir = root();
   try {
-    const scratch = path.join(dir, 'scratch');
-    const orphan = path.join(scratch, 'gone-1234abcd');
-    const kept = path.join(scratch, 'live-1234abcd');
-    const fresh = path.join(scratch, 'fresh-1234abcd');
-    const temp = path.join(scratch, 'NuGetScratch');
-    const profile = path.join(scratch, 'visual-review-111-390-1700000000000');
-    write(path.join(orphan, 'proof', 'download.zip'), 'x'.repeat(2048));
-    write(path.join(kept, 'probe.mjs'), 'mine');
-    write(path.join(fresh, 'probe.mjs'), 'mine too');
-    write(path.join(temp, 'packages', 'a.nupkg'), 'cache');
-    write(path.join(profile, 'Default', 'Cache', 'data_0'), 'x');
-    const longAgo = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000);
-    for (const p of [orphan, kept, temp, profile]) fs.utimesSync(p, longAgo, longAgo);
-
-    const report = house(dir).sweepOrphanScratch({ keep: ['live-1234abcd'] });
-    assert.equal(report.removed, 1);
-    assert.ok(report.bytes >= 2048);
-    assert.equal(fs.existsSync(orphan), false, 'the dead project’s scratch is gone');
-    assert.equal(fs.existsSync(kept), true, 'a project that still exists keeps its working set');
-    assert.equal(fs.existsSync(fresh), true, 'a fresh folder may be a project about to be re-added');
-    assert.equal(fs.existsSync(temp), true, 'the engine’s temp is not this pass’s business');
-    assert.equal(fs.existsSync(profile), true, 'render profiles are swept by their own pass');
-  } finally {
-    fs.rmSync(dir, { recursive: true, force: true });
-  }
-});
-
-// 5: the engine's undo store is dropped before the engine starts.
-test('the engine snapshot store is emptied before start and its folder kept', () => {
-  const dir = tmpdir('synapse-snap-');
-  try {
-    const dataHome = path.join(dir, 'data');
-    const globalDir = path.join(dataHome, 'opencode', 'snapshot', 'global');
-    write(path.join(globalDir, 'ad11920401e0', 'objects', 'aa', 'bb'), 'x'.repeat(8192));
-    write(path.join(dataHome, 'opencode', 'opencode.db'), 'the chats');
-    const freed = reclaimSnapshotStore(dataHome);
-    assert.ok(freed >= 8192, `freed ${freed}`);
-    assert.deepEqual(fs.readdirSync(globalDir), [], 'the global folder stays for the engine to rebuild in');
-    assert.equal(fs.existsSync(path.join(dataHome, 'opencode', 'opencode.db')), true, 'the database is never touched');
-    assert.equal(reclaimSnapshotStore(path.join(dir, 'missing')), 0, 'a missing store is not an error');
-  } finally {
-    fs.rmSync(dir, { recursive: true, force: true });
-  }
-});
-
-// 6: the unclaimed sweep, and the two names a private project owns.
-test('a folder no project claims goes; a live name, the engine temp and a fresh folder stay', () => {
-  const dir = root();
-  try {
-    const scratch = path.join(dir, 'scratch');
-    const dead = path.join(scratch, 'nobody-1234abcd');
-    const live = path.join(scratch, 'live-1234abcd');
-    const engineTemp = path.join(scratch, 'opencode');
-    const fresh = path.join(scratch, 'fresh-1234abcd');
-    write(path.join(dead, 'a.txt'), 'x'.repeat(1024));
-    write(path.join(live, 'a.txt'), 'keep me');
-    write(path.join(engineTemp, 'a.txt'), 'in use');
-    write(path.join(fresh, 'a.txt'), 'just written');
-    const old = new Date(Date.now() - 24 * 60 * 60 * 1000);
-    for (const p of [dead, live, engineTemp]) fs.utimesSync(p, old, old);
-
-    const report = house(dir).sweepUnclaimedScratch({ keep: ['live-1234abcd'] });
-    assert.equal(report.removed, 1);
-    assert.equal(fs.existsSync(dead), false, 'the unclaimed folder is gone');
-    assert.equal(fs.existsSync(live), true, 'a project’s scratch is kept');
-    assert.equal(fs.existsSync(engineTemp), true, 'the engine’s temp root is never swept by this pass');
-    assert.equal(fs.existsSync(fresh), true, 'a folder written within the grace period is left alone');
-  } finally {
-    fs.rmSync(dir, { recursive: true, force: true });
-  }
-});
-
-test('a private project owns two scratch names, and housekeeping keeps both', () => {
-  const dir = tmpdir('synapse-private-');
-  try {
-    fs.mkdirSync(path.join(dir, '.project'), { recursive: true });
-    fs.writeFileSync(path.join(dir, '.project', 'private'), '');
-    const legacy = scratchRootName(dir);
-    assert.match(legacy, /^synapse-private-.*-[0-9a-f]{8}$/, 'the shared-root name still has the harness shape');
-    assert.notEqual(path.basename(scratchDir(dir)), legacy, 'the live scratch moved inside the project');
-    // And the hand-run CLI must read the registry: without it, a project's working set
-    // is debris. The boot passes the same list.
-    const src = fs.readFileSync(new URL('../src/housekeeping.js', import.meta.url), 'utf8');
-    const cli = src.slice(src.indexOf('process.argv[1]'));
-    assert.match(cli, /registry\.projects/, 'the registry is read');
-    assert.match(cli, /run\(\{ keepScratch \}\)/, 'and passed to the sweep');
+    const project = path.join(dir, 'a-project');
+    const scratch = scratchDir(project);
+    assert.ok(scratch.startsWith(path.join(project, '.project')), 'the scratch left the project');
+    write(path.join(scratch, 't1', 'build.bin'), 'x'.repeat(1024));
+    const report = house(dir).sweepTemp();
+    assert.equal(report.removed, 0, 'the temp sweep removed something');
+    assert.equal(fs.existsSync(path.join(scratch, 't1', 'build.bin')), true);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
@@ -290,32 +208,30 @@ test('a private project owns two scratch names, and housekeeping keeps both', ()
 test('one locked folder does not abort the rest of the sweep', () => {
   const dir = root();
   try {
-    const scratch = path.join(dir, 'scratch');
-    // The locked one sorts first: if the sweep throws on it, nothing after it is tried —
-    // which is what happened on every boot with `bobe1t4p` and a 300-folder pile.
-    const locked = path.join(scratch, 'a-locked-1234abcd');
-    const later = path.join(scratch, 'z-later-1234abcd');
+    const tempDir = path.join(dir, 'temp');
+    // The locked one sorts first: if the sweep throws on it, nothing after it is tried.
+    const locked = path.join(tempDir, 'a-locked');
+    const later = path.join(tempDir, 'z-later');
     write(path.join(locked, 'held.txt'), 'x'.repeat(1024));
     write(path.join(later, 'a.txt'), 'y'.repeat(1024));
     const old = new Date(Date.now() - 24 * 60 * 60 * 1000);
     for (const p of [locked, later]) fs.utimesSync(p, old, old);
 
-    // Windows' EPERM, exactly: the one folder cannot be removed. A real open handle does
-    // not reproduce it here (Node opens with FILE_SHARE_DELETE), so the failure is
-    // injected at the call that would raise it.
+    // Windows' EPERM, exactly: one folder cannot be removed. A real open handle does
+    // not reproduce it here (Node opens with FILE_SHARE_DELETE), so it is injected.
     const realRm = fs.rmSync;
     let attempts = 0;
     try {
       fs.rmSync = (target, opts) => {
         attempts += 1;
-        if (String(target).includes('a-locked-1234abcd')) {
+        if (String(target).includes('a-locked')) {
           const err = new Error('EPERM: operation not permitted');
           err.code = 'EPERM';
           throw err;
         }
         return realRm(target, opts);
       };
-      const report = house(dir).sweepUnclaimedScratch({ keep: [] });
+      const report = house(dir).sweepTemp({ olderThanMs: 60 * 1000 });
       assert.equal(fs.existsSync(later), false, 'the folder after the locked one was still swept');
       assert.equal(fs.existsSync(locked), true, 'the locked folder stays for the next pass');
       assert.equal(report.skipped, 1, 'and the skip is counted, not thrown');

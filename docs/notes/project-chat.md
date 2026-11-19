@@ -197,9 +197,33 @@ the Architect knew no map at all and composed tasks that crossed another role's 
   on `AGENTS.md` (relative and absolute), and the header is repaired on the next
   session while a rewritten note would not be. The size the brief quotes is the
   notepad alone; the cap (6,000 characters) applies to it, not to the block.
-- **A bug this surfaced:** a private project's scratch is `<project>\.project\scratch`,
-  where the role fence denied every worker's write. `roleWriteRules` now allows that
-  folder when it is the project's own scratch, so the brief and the fence agree.
+- **A bug this surfaced:** a private project's scratch was `<project>\.project\scratch`,
+  where the role fence denied every worker's write. That is now fixed for every project —
+  and on 20 Nov the scratch became the project's own folder for all of them, so the brief
+  and the fence agree without an exception.
+
+## Scratch is the project's (20 Nov)
+
+Before: `F:\dev\Synapse.Projects\_scratch`, one folder per project inside a sibling of
+every project — a subfolder of the folder the fence calls prohibited, with an exception
+carved out for it, and 26.7 GB of accumulated debris by the day it went. A model had two
+places it might write, and the brief had to name an absolute path inside a folder it was
+told not to browse.
+
+Now: `<project>\.project\scratch`, made at boot and on Add Project, with a `.gitignore`
+(`*`, so a project that tracks `.project` never sees it) and a `temp` folder for a command
+that needs a temp directory. One writable place, and every rule follows from it:
+
+- `roleWriteRules` allows `.project/scratch/**` for every role (the engine ruleset denies
+  `.project/**` first), so the brief cannot name a folder the fence refuses;
+- `withProjectFence` needs no exception, and `zoneOf` has two zones again;
+- the temp sweep (`sweepTemp`) watches `data\temp`, which is Synapse's plumbing — a
+  compiler's intermediates, a render's throwaway profile — never a model's work;
+- a finished task's `.project\scratch\<task>` is removed as before, and a deleted project
+  takes its scratch to the Recycle Bin with it;
+- `SYNAPSE_SCRATCH_ROOT` is gone, `TEMP`/`TMP` point at `data\temp`, and the brief's one
+  line says the rest: scratch is `.project/scratch`, and a command that needs a temp
+  directory sets `$env:TEMP` there.
 
 ---
 
@@ -336,13 +360,13 @@ used Add Project, even though a project **is** its directory. At boot
 `projects.discover()` now scans the immediate children and registers the ones the
 registry does not name:
 
-- A leading underscore is the harness's namespace: `_scratch`, `_probe` and any
-  future harness folder are never adopted. Dot folders, `$` folders and drive
-  metadata are skipped, and a junction back to the harness (or to a folder
-  containing it) is refused and logged.
-- A discovered project gets the same two things Add Project gives one:
-  `.project\plan.json` when it is missing, and its scratch folder under
-  `_scratch`. An existing plan, name and created stamp are never touched.
+- A leading underscore is the harness's namespace: `_probe` and any future harness folder
+  are never adopted (`_scratch` is gone). Dot folders, `$` folders and drive metadata are
+  skipped, and a junction back to the harness (or to a folder containing it) is refused
+  and logged.
+- A discovered project gets the same things Add Project gives one: `AGENTS.md`,
+  `.project\plan.json` when it is missing, and `.project\scratch` with its
+  `.gitignore`. An existing plan, name and created stamp are never touched.
 - Discovery runs before `pruneMissing()`, so a folder that came back keeps its
   registry name instead of being pruned and re-added as the folder name.
 - The boot line reports the count: `projects: 4 (2 found in the folder)`.
@@ -556,8 +580,9 @@ With the marker on, Synapse writes nothing about the project outside its folder:
 - **no permission memory**: an answer still holds for that gate run, but it is not written
   to `data\permission-memory.json`;
 - **no provider diary**: failures are not written to `data\provider-errors.log`;
-- **no scratch folder outside**: a private project's scratch is `<project>\.project\scratch`
-  instead of the shared `_scratch` root.
+- **scratch is inside the project for every project** (20 Nov), so there is nothing
+  shared to keep out of a private one; only a private project's `.project\scratch` is
+  purged with the rest of its traces.
 
 **Switching it on also removes what is already there.** The marker stops new traces; the
 toggle is not a promise about the past, so it (1) rewrites every `logs\*.log` and

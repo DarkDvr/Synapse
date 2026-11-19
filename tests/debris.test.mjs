@@ -33,11 +33,11 @@ test('a finished task loses its scratch, and only its own', () => {
   fs.mkdirSync(path.join(folder, 't7'), { recursive: true });
   fs.writeFileSync(path.join(folder, 't6', 'build.bin'), 'x');
   assert.ok(fs.existsSync(path.join(folder, 't6')));
-  removeTaskScratch(dir, 't6', { root: scratchRoot });
+  removeTaskScratch(dir, 't6');
   assert.ok(!fs.existsSync(path.join(folder, 't6')), 'the finished task kept its scratch');
   assert.ok(fs.existsSync(path.join(folder, 't7')), 'a finished task took another task with it');
   // A task with no folder is not an error: most tasks never build anything.
-  assert.equal(removeTaskScratch(dir, 't9', { root: scratchRoot }), null);
+  assert.equal(removeTaskScratch(dir, 't9'), null);
 });
 
 test('a stray file in the project root is moved, never deleted', () => {
@@ -69,21 +69,19 @@ test('a stray file in the project root is moved, never deleted', () => {
   assert.ok(fs.existsSync(path.join(into, 't9-proof-2.txt')), 'the second proof overwrote the first');
 });
 
-test('the scratch root keeps what a project owns, and takes the rest', () => {
-  const scratchRoot = tmp();
-  fs.mkdirSync(path.join(scratchRoot, 'live-project-1234abcd', 't1'), { recursive: true });
-  fs.writeFileSync(path.join(scratchRoot, 'live-project-1234abcd', 't1', 'work.bin'), 'x');
-  fs.mkdirSync(path.join(scratchRoot, 'proofs-a-worker-made'), { recursive: true });
-  fs.mkdirSync(path.join(scratchRoot, 'opencode'), { recursive: true });
-  fs.mkdirSync(path.join(scratchRoot, 'visual-review-1234'), { recursive: true });
-  const old = Date.now() - 60 * 60 * 1000;
-  for (const name of ['proofs-a-worker-made', 'visual-review-1234']) {
-    fs.utimesSync(path.join(scratchRoot, name), new Date(old / 1000), new Date(old / 1000));
+test('the temp folder keeps what is being written, and takes the rest', () => {
+  const tempDir = tmp();
+  fs.mkdirSync(path.join(tempDir, 'visual-review-1234'), { recursive: true });
+  fs.mkdirSync(path.join(tempDir, 'dotnet-build'), { recursive: true });
+  fs.mkdirSync(path.join(tempDir, 'fresh'), { recursive: true });
+  const old = Date.now() - 7 * 60 * 60 * 1000;
+  for (const name of ['visual-review-1234', 'dotnet-build']) {
+    fs.utimesSync(path.join(tempDir, name), new Date(old / 1000), new Date(old / 1000));
   }
-  const house = createHousekeeping({ root: scratchRoot, scratchRoot, log: { info() {}, warn() {} } });
-  const report = house.sweepUnclaimedScratch({ keep: ['live-project-1234abcd'], graceMs: 10 * 60 * 1000 });
-  assert.equal(report.removed, 2, `removed ${report.removed}: ${report.names.join(', ')}`);
-  assert.ok(fs.existsSync(path.join(scratchRoot, 'live-project-1234abcd')), 'a live project lost its scratch');
-  assert.ok(fs.existsSync(path.join(scratchRoot, 'opencode')), 'the engine temp was removed');
-  assert.ok(!fs.existsSync(path.join(scratchRoot, 'proofs-a-worker-made')), 'an unclaimed folder survived');
+  const house = createHousekeeping({ root: tempDir, tempDir, log: { info() {}, warn() {} } });
+  const report = house.sweepTemp({ olderThanMs: 60 * 60 * 1000 });
+  assert.equal(report.removed, 2, `removed ${report.removed}`);
+  assert.ok(!fs.existsSync(path.join(tempDir, 'visual-review-1234')), 'a spent render profile survived');
+  assert.ok(!fs.existsSync(path.join(tempDir, 'dotnet-build')), 'build debris survived');
+  assert.ok(fs.existsSync(path.join(tempDir, 'fresh')), 'a folder being written now was removed');
 });

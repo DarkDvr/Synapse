@@ -15,7 +15,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { ROOT, scratchDir } from './paths.js';
+import { ROOT } from './paths.js';
 import { decide } from './permissions.js';
 import { protectionFor } from './protection.js';
 
@@ -55,7 +55,6 @@ export function checkDecision(command, { dir, config }) {
     cwd: dir,
     projectRoot: dir,
     harnessRoot: ROOT,
-    scratchRoot: scratchDir(dir),
     home: os.homedir(),
     protection: protectionFor(config),
   });

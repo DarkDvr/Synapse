@@ -25,7 +25,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
-import { ROOT, SCRATCH_ROOT, PROJECTS_FILE, scratchDir, scratchRootName } from './paths.js';
+import { ROOT, TEMP_DIR, PROJECTS_FILE } from './paths.js';
 
 const MINUTE = 60 * 1000;
 const DAY = 24 * 60 * 60 * 1000;
@@ -47,7 +47,7 @@ const sizeOf = (target) => {
   }
 };
 
-export function createHousekeeping({ root = ROOT, scratchRoot = SCRATCH_ROOT, log = null, now = Date.now, dryRun = false } = {}) {
+export function createHousekeeping({ root = ROOT, tempDir = TEMP_DIR, log = null, now = Date.now, dryRun = false } = {}) {
   const dataDir = path.join(root, 'data');
   const updateDir = path.join(dataDir, 'update');
   const backupsDir = path.join(dataDir, 'backups');
@@ -165,134 +165,45 @@ export function createHousekeeping({ root = ROOT, scratchRoot = SCRATCH_ROOT, lo
   }
 
   /**
-   * Browser profiles the renderer left in the shared scratch.
+   * Synapse's own temp, swept.
    *
-   * Every render starts Edge with a throwaway profile (`visual-review-<pid>-
-   * <width>-<time>`) under TEMP, which for every model is the projects' scratch
-   * root. The renderer deletes it when the render ends, but on Windows the browser
-   * often still holds a file, so the folder survives — about 12 MB each, 108 of
-   * them by 30 Oct. They are not work: no file in one is a project's.
+   * It holds what a compiler, a runtime or a throwaway browser profile leaves behind —
+   * the renderer starts Edge with a profile (isual-review-…) that Windows sometimes
+   * keeps open after the render, and a build writes intermediates. None of it is work:
+   * nothing here is a project's file, and no model may write here (it is under data).
+   * A project's scratch is inside the project and dies with the run that made it, so
+   * this sweep never has to know which project owns what.
    *
-   * A **project's** scratch folder (`<project>-<hash>`) is never touched, however
-   * old: the brief tells a model it may write there, and a project can be resumed
-   * days later.
+   * Only entries older than the cutoff go: a build or a render may still be using one.
    */
-  function sweepScratchProfiles({ olderThanMs = DAY } = {}) {
+  function sweepTemp({ olderThanMs = 6 * 60 * 60 * 1000 } = {}) {
     const report = { removed: 0, bytes: 0, skipped: null };
-    if (!scratchRoot || !fs.existsSync(scratchRoot)) return { ...report, skipped: 'no scratch root' };
+    if (!tempDir || !fs.existsSync(tempDir)) return { ...report, skipped: 'no temp folder' };
     const cutoff = now() - olderThanMs;
     let entries = [];
     try {
-      entries = fs.readdirSync(scratchRoot, { withFileTypes: true });
+      entries = fs.readdirSync(tempDir, { withFileTypes: true });
     } catch {
-      return { ...report, skipped: 'the scratch root cannot be read' };
+      return { ...report, skipped: 'the temp folder cannot be read' };
     }
     for (const entry of entries) {
-      if (!/^visual-review-/i.test(entry.name)) continue;
-      const target = path.join(scratchRoot, entry.name);
+      const target = path.join(tempDir, entry.name);
       let at = 0;
       try {
         at = fs.statSync(target).mtimeMs;
       } catch {
-        continue;
-      }
-      if (at > cutoff) continue; // a render may still be running
-      drop(target, report);
-    }
-    return report;
-  }
-
-  /**
-   * Scratch folders whose project is gone.
-   *
-   * Every project owns `<name>-<hash>` under the scratch root (paths.js), and
-   * deleting a project in Synapse takes its folder with it. A project whose folder
-   * the operator moved or removed outside Synapse leaves its scratch behind — and
-   * on 4 Nov one project's scratch alone held 12 GB. Only the harness's own naming
-   * shape is considered: the rest of the root is the engine's temp, which is not
-   * ours to prune by name. A folder nobody claims must also be a week old, so a
-   * project that is about to be re-added keeps its working set.
-   */
-  function sweepOrphanScratch({ keep = [], olderThanMs = 7 * DAY } = {}) {
-    const report = { removed: 0, bytes: 0, skipped: null };
-    if (!scratchRoot || !fs.existsSync(scratchRoot)) return { ...report, skipped: 'no scratch root' };
-    const keepSet = new Set((keep || []).map((name) => String(name || '').toLowerCase()));
-    const cutoff = now() - olderThanMs;
-    let entries = [];
-    try {
-      entries = fs.readdirSync(scratchRoot, { withFileTypes: true });
-    } catch {
-      return { ...report, skipped: 'the scratch root cannot be read' };
-    }
-    for (const entry of entries) {
-      if (!entry.isDirectory()) continue;
-      if (!/^.+-(?:[0-9a-f]{8})$/i.test(entry.name)) continue;
-      if (keepSet.has(entry.name.toLowerCase())) continue;
-      const target = path.join(scratchRoot, entry.name);
-      let at = 0;
-      try {
-        at = fs.statSync(target).mtimeMs;
-      } catch {
+        // Gone between the listing and the stat: the sweep won, or a build cleaned up.
         continue;
       }
       if (at > cutoff) continue;
-      drop(target, report);
-    }
-    return report;
-  }
-
-  /**
-   * Everything in the scratch root that no live project claims, gone now.
-   *
-   * The operator's rule (10 Nov): the scratch root is Synapse's own folder, so a
-   * folder in it that does not belong to a project is debris — not after a week, now.
-   * What it found on the day: 494 MB a worker wrote at the root, 258 MB of dotnet
-   * temp, a 240 MB editor download, 29 MB under a name with no hash, and a task folder
-   * of 1.3 GB that belonged to nobody. `keep` is the live projects' folder names; the
-   * engine's own temp (`opencode`) and a render being written this minute are the only
-   * two exceptions, and both are named rather than guessed.
-   */
-  function sweepUnclaimedScratch({ keep = [], graceMs = 10 * 60 * 1000 } = {}) {
-    const report = { removed: 0, bytes: 0, skipped: null, names: [] };
-    if (!scratchRoot || !fs.existsSync(scratchRoot)) return { ...report, skipped: 'no scratch root' };
-    const keepSet = new Set((keep || []).map((n) => String(n || '').toLowerCase()));
-    const cutoff = now() - Math.max(0, Number(graceMs) || 0);
-    let entries = [];
-    try {
-      entries = fs.readdirSync(scratchRoot, { withFileTypes: true });
-    } catch {
-      // Reported, not swallowed: a scratch root that cannot be read is a fact about
-      // the machine, and the sweep saying why is how it stops looking like nothing to do.
-      return { ...report, skipped: 'the scratch root cannot be read' };
-    }
-    for (const entry of entries) {
-      if (!entry.isDirectory()) continue;
-      const name = String(entry.name || '');
-      if (keepSet.has(name.toLowerCase())) continue;
-      // The engine's temp root: ours, but in use while the engine runs.
-      if (/^opencode$/i.test(name)) continue;
-      const target = path.join(scratchRoot, name);
-      let at = 0;
-      try {
-        at = fs.statSync(target).mtimeMs;
-      } catch {
-        // Gone between the listing and the stat: on a machine that is using this
-        // folder, that is the sweep already having won, not an error.
-        continue;
-      }
-      // Written in the last few minutes: a render or a download may be inside it. This
-      // is not a grace period for debris, it is the only way to avoid pulling a folder
-      // out from under a process that is still writing.
-      if (at > cutoff) continue;
-      report.names.push(name);
       drop(target, report);
     }
     return report;
   }
 
   /** Everything, in the order that keeps the record of an update. */
-  function run({ update = true, releases = true, scratch = true, keepScratch = [] } = {}) {
-    const result = { removed: 0, bytes: 0, update: null, releases: null, scratch: null };
+  function run({ update = true, releases = true, temp = true } = {}) {
+    const result = { removed: 0, bytes: 0, update: null, releases: null, temp: null };
     if (update) {
       const r = sweepUpdate();
       result.update = r;
@@ -314,39 +225,19 @@ export function createHousekeeping({ root = ROOT, scratchRoot = SCRATCH_ROOT, lo
         );
       }
     }
-    if (scratch) {
-      const r = sweepScratchProfiles();
-      result.scratch = r;
+    if (temp) {
+      const r = sweepTemp();
+      result.temp = r;
       result.removed += r.removed;
       result.bytes += r.bytes;
       if (r.removed) {
-        say(`housekeeping: ${dryRun ? 'would remove' : 'removed'} ${r.removed} spent render profile(s), ${mb(r.bytes)}`);
-      }
-      const orphans = sweepOrphanScratch({ keep: keepScratch });
-      result.scratchProjects = orphans;
-      result.removed += orphans.removed;
-      result.bytes += orphans.bytes;
-      if (orphans.removed) {
-        say(
-          `housekeeping: ${dryRun ? 'would remove' : 'removed'} ${orphans.removed} scratch folder(s) of ` +
-            `projects that no longer exist, ${mb(orphans.bytes)}`,
-        );
-      }
-      const unclaimed = sweepUnclaimedScratch({ keep: keepScratch });
-      result.scratchUnclaimed = unclaimed;
-      result.removed += unclaimed.removed;
-      result.bytes += unclaimed.bytes;
-      if (unclaimed.removed) {
-        say(
-          `housekeeping: ${dryRun ? 'would remove' : 'removed'} ${unclaimed.removed} folder(s) in the scratch root ` +
-            `that no project claims, ${mb(unclaimed.bytes)}`,
-        );
+        say(`housekeeping: ${dryRun ? 'would remove' : 'removed'} ${r.removed} temp item(s), ${mb(r.bytes)}`);
       }
     }
     return result;
   }
 
-  return { run, sweepUpdate, pruneReleases, sweepScratchProfiles, sweepOrphanScratch, sweepUnclaimedScratch };
+  return { run, sweepUpdate, pruneReleases, sweepTemp };
 }
 
 const mb = (bytes) => `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
@@ -359,27 +250,12 @@ function createSha256(file) {
 
 // Run by hand: `bin\node\node.exe src\housekeeping.js [--dry-run]`.
 //
-// The boot passes the live projects' scratch names, and so must this: without them the
-// sweep treats a project's working set as debris. It did — a hand run would have deleted
-// every project's scratch older than the ten-minute grace, which is the folder a model
-// may still resume from. The registry is the same source the boot reads, so the two
-// cannot disagree about what a project owns.
+// Nothing here needs to know which project owns what: a project's scratch is inside
+// the project, and the only folder this sweep touches is Synapse's own temp.
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const dryRun = process.argv.includes('--dry-run');
   const log = { info: (m) => console.log(m), warn: (m) => console.warn(m) };
-  let keepScratch = [];
-  try {
-    const registry = JSON.parse(fs.readFileSync(PROJECTS_FILE, 'utf8'));
-    // Both names a project may own: where its scratch is now, and the shared-root name
-    // it had before a private project moved its scratch inside. The sweep keeps both.
-    keepScratch = (registry.projects || []).flatMap((p) => [
-      path.basename(scratchDir(p.directory)),
-      scratchRootName(p.directory),
-    ]).filter(Boolean);
-  } catch {
-    // No registry yet (a fresh folder): there are no projects to keep.
-  }
-  const result = createHousekeeping({ dryRun, log }).run({ keepScratch });
+  const result = createHousekeeping({ dryRun, log }).run();
   const freed = dryRun ? 'would free' : 'freed';
   console.log(`housekeeping: ${result.removed} item(s), ${freed} ${mb(result.bytes)}${dryRun ? ' (dry run)' : ''}`);
 }

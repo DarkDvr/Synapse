@@ -31,7 +31,7 @@ const BASELINE = {
   'src/fetch.js': 5,
   'src/form-auto.js': 1,
   'src/harness.js': 1,
-  'src/housekeeping.js': 8,
+  'src/housekeeping.js': 5,
   'src/index.js': 1,
   'src/mcp/delegate-server.js': 1,
   'src/mcp/lease-server.js': 1,

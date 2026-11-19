@@ -60,7 +60,7 @@ try {
   expect('Single keeps the question tool convention', single.includes('(Recommended)'));
   expect(
     'Single names a scratch folder and refuses the machine temp',
-    /Scratch folder: .*_scratch/.test(single) && /never the machine's temp folder/.test(single),
+    /Scratch folder: .*\.project[\\/]scratch/.test(single) && /never the machine's temp folder/.test(single),
     single.slice(0, 260),
   );
   expect(

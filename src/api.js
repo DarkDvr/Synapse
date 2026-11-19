@@ -14,7 +14,7 @@ import { keepAttachments } from './keep-attachments.js';
 import { skillRules, describeSkills } from './skills.js';
 import { rulesFor, decide, resolvePath, refusalNote, SINGLE_RULES } from './permissions.js';
 import { stopTargets, createStopper } from './stop.js';
-import { PROJECTS_ROOT, SKILLS_DIR, ROOT, SCRATCH_ROOT, scratchDir, normDir, BROWSER_DIR, WEB_DIR } from './paths.js';
+import { PROJECTS_ROOT, SKILLS_DIR, ROOT, scratchDir, normDir, BROWSER_DIR, WEB_DIR } from './paths.js';
 import { EV } from '../web/events.js';
 import { fail, refuseBusy } from './errors.js';
 import { createTurnGuard } from './turn-guard.js';
@@ -112,8 +112,8 @@ export function binContents(dir) {
  *
  * That folder is inside the project, so the Recycle Bin takes it along with
  * everything else. Measured 16 Nov: a drawing a deleted project had made was
- * still readable from the bin afterwards. The scratch folder beside the projects
- * (`_scratch`) is removed separately, after the move.
+ * still readable from the bin afterwards. Emptying it first keeps gigabytes of
+ * build debris out of the bin.
  */
 function emptyProjectScratch(dir) {
   const scratch = path.join(dir, '.project', 'scratch');
@@ -2003,10 +2003,9 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
             : `deleted project folder to the Recycle Bin: ${current.directory}`,
         );
       }
-      // The project's scratch folder lives beside the projects, not inside the
-      // folder the Recycle Bin takes, and it belongs to this project and nothing
-      // else. A deleted project must not leave gigabytes behind: one project's
-      // scratch alone had reached 12 GB (4 Nov).
+      // The project's scratch folder is inside the project, but the Recycle Bin takes
+      // the folder whole — so emptying it first keeps gigabytes out of a deleted
+      // project's bin. It belongs to this project and nothing else.
       try {
         const scratch = scratchDir(current.directory);
         if (fs.existsSync(scratch)) {
@@ -2903,7 +2902,6 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
                 cwd: directory,
                 projectRoot: directory,
                 harnessRoot: ROOT,
-                scratchRoot: SCRATCH_ROOT,
                 protection: protectionFor(getConfig() || {}),
               })
             : null;
