@@ -370,8 +370,15 @@ That derivation is the **item model**: a pure function of the page's state and t
 operator's open folds.
 
 ```js
-buildChat(state) -> { items: Item[] }
+buildChat(state) -> { handover, items, pending, form }
 ```
+
+- `items` is the column: posts, traces and lines.
+- `handover` is the compact post at the top, or null.
+- `pending` is the operator's permission cards, after the conversation.
+- `form` is the question panel, or null. It is **not** in the column: it is the last thing on
+  screen, it is moved rather than rebuilt, and its fields keep what the operator typed — the
+  one part of the chat whose state lives in the DOM on purpose.
 
 It does grouping, windowing, ordering and keying — every rule in this document that is not
 a pixel. The renderer then only walks the list.

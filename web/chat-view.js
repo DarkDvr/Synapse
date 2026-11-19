@@ -11,6 +11,7 @@
 // side with one stylesheet, and so nothing here is a second design language.
 import { renderMarkdown } from './md.js';
 import { roleLabel } from './run-view.js';
+import { askHeadNote } from './ask-note.js';
 import { formatBytes, progressBar, downloadLabel } from './downloads.js';
 
 /** HH:MM, in the operator's own 24-hour clock. */
@@ -350,6 +351,175 @@ function animateFold(details, summary, body) {
   return details;
 }
 
+// ── the question panel ──────────────────────────────────────────
+//
+// The panel is not part of the column: it is the last thing on screen, it owns its answers,
+// and a repaint must not take them away. It is built once per form and *moved* to the end
+// of the list on every update; only a new form (or the same form with different fields)
+// rebuilds it.
+
+let panelNode = null;
+let panelSig = '';
+let panelPage = 0;
+let submitForm = () => {};
+
+const fieldSig = (form) =>
+  `${form.id}|${form.fields.map((f) => `${f.key}:${f.type}:${f.options.map((o) => o.value).join(',')}`).join(';')}`;
+
+const squashText = (text) => String(text || '').replace(/\s+/g, ' ').trim();
+
+/** One field, as the control its type deserves. */
+function fieldNode(field, index) {
+  const name = `ask-${field.key}`;
+  const box = el('div', 'ask-field');
+  box.dataset.askField = field.key;
+  box.dataset.askIndex = String(index);
+  box.dataset.askType = field.type;
+  if (field.required) box.dataset.askRequired = '1';
+  if (field.when) box.dataset.askWhen = JSON.stringify(field.when);
+  const showTitle = field.title && (field.title !== field.description);
+  if (showTitle) box.append(el('p', 'ask-q-title', field.title));
+  if (field.description) box.append(el('p', 'ask-q-text', field.description));
+  if (field.required) box.append(el('span', 'ask-req', 'required'));
+
+  const option = (kind, value, label, description, custom = false) => {
+    const row = el('label', 'ask-opt');
+    const input = document.createElement('input');
+    input.type = kind;
+    input.name = name;
+    input.value = value;
+    if (custom) { input.dataset.askCustom = '1'; }
+    const text = el('span', 'ask-opt-text');
+    text.append(el('span', 'ask-opt-label', label));
+    if (description) text.append(el('span', 'ask-opt-desc', description));
+    row.append(input, text);
+    return row;
+  };
+
+  if (field.type === 'boolean') {
+    const opts = el('div', 'ask-opts');
+    opts.append(option('checkbox', 'true', field.title || 'Yes', ''));
+    box.append(opts);
+  } else if (field.type === 'multiselect') {
+    const opts = el('div', 'ask-opts');
+    for (const o of field.options) opts.append(option('checkbox', o.value, o.label, o.description));
+    if (field.custom) opts.append(option('checkbox', '__custom', 'Something Else…', '', true));
+    box.append(opts);
+  } else if (field.options.length) {
+    const opts = el('div', 'ask-opts');
+    for (const o of field.options) opts.append(option('radio', o.value, o.label, o.description));
+    if (field.custom) opts.append(option('radio', '__custom', 'Something Else…', '', true));
+    box.append(opts);
+  } else if (field.type === 'external') {
+    const link = el('a', 'ask-link', field.title || field.url || 'Open');
+    link.href = field.url || '#';
+    link.target = '_blank';
+    link.rel = 'noreferrer noopener';
+    box.append(link);
+  } else if (field.type === 'number' || field.type === 'integer') {
+    const input = el('input', 'ask-input');
+    input.type = 'number';
+    input.dataset.askKey = field.key;
+    if (field.minimum !== null) input.min = String(field.minimum);
+    if (field.maximum !== null) input.max = String(field.maximum);
+    input.value = field.default ?? '';
+    box.append(input);
+  } else {
+    const input = el('input', 'ask-input');
+    input.type = 'text';
+    input.dataset.askKey = field.key;
+    input.placeholder = field.placeholder || '';
+    input.value = field.default ?? '';
+    box.append(input);
+  }
+  return box;
+}
+
+/** The answers, in the shape the engine's form reply wants. */
+function collectAnswers(panel, form) {
+  const answer = {};
+  for (const field of form.fields) {
+    const holder = panel.querySelector(`[data-ask-field="${CSS.escape(field.key)}"]`);
+    if (!holder || holder.hidden || holder.classList.contains('ask-page-off')) continue;
+    if (field.type === 'external') continue;
+    if (field.type === 'boolean') {
+      answer[field.key] = Boolean(holder.querySelector('input[type="checkbox"]')?.checked);
+    } else if (field.type === 'multiselect') {
+      const picked = [...holder.querySelectorAll('input[type="checkbox"]:checked')]
+        .filter((n) => !n.hasAttribute('data-ask-custom'))
+        .map((n) => n.value);
+      const other = holder.querySelector('.ask-other-text');
+      if (other && other.value.trim()) picked.push(other.value.trim());
+      answer[field.key] = picked;
+    } else if (field.options.length) {
+      const checked = holder.querySelector('input[type="radio"]:checked');
+      if (!checked) continue;
+      if (checked.hasAttribute('data-ask-custom')) {
+        const other = holder.querySelector('.ask-other-text');
+        answer[field.key] = String(other?.value || '').trim();
+      } else answer[field.key] = checked.value;
+    } else {
+      const input = holder.querySelector('[data-ask-key]');
+      answer[field.key] = field.type === 'number' || field.type === 'integer' ? (input?.value === '' ? null : Number(input.value)) : String(input?.value ?? '');
+    }
+  }
+  return answer;
+}
+
+/** Show the current question and the right buttons for it. */
+function applyPage(panel, form) {
+  const holders = [...panel.querySelectorAll('.ask-field')];
+  const pages = holders.filter((h) => !h.hidden);
+  const last = Math.max(0, pages.length - 1);
+  panelPage = Math.max(0, Math.min(panelPage, last));
+  const active = pages[panelPage] || null;
+  for (const holder of holders) holder.classList.toggle('ask-page-off', Boolean(active) && holder !== active);
+  const many = pages.length > 1;
+  const progress = panel.querySelector('[data-ask-progress]');
+  if (progress) {
+    progress.hidden = !many;
+    progress.textContent = many ? `Question ${panelPage + 1} of ${pages.length}` : '';
+  }
+  const back = panel.querySelector('[data-ask-back]');
+  const next = panel.querySelector('[data-ask-next]');
+  const submit = panel.querySelector('[data-form-reply]');
+  if (back) back.hidden = !many || panelPage === 0;
+  if (next) next.hidden = !many || panelPage >= last;
+  if (submit) submit.hidden = many && panelPage < last;
+}
+
+function buildForm(form) {
+  const panel = el('div', 'ask-panel');
+  panel.setAttribute('role', 'dialog');
+  panel.dataset.ask = form.id;
+  const head = el('div', 'ask-head');
+  head.append(el('span', 'ask-dot'), el('span', 'ask-head-title', form.title));
+  head.append(el('span', 'ask-head-note', askHeadNote({ here: Boolean(form.here), worker: form.worker })));
+  const fields = el('div', 'ask-fields');
+  form.fields.forEach((field, index) => fields.append(fieldNode(field, index)));
+  const actions = el('div', 'ask-actions');
+  const note = el('span', 'ask-state');
+  const progress = el('span', 'ask-progress');
+  progress.dataset.askProgress = '';
+  progress.hidden = true;
+  const back = el('button', 'btn btn-back btn-sm', 'Back');
+  back.type = 'button';
+  back.dataset.askBack = '';
+  const next = el('button', 'btn btn-ask btn-sm', 'Next');
+  next.type = 'button';
+  next.dataset.askNext = '';
+  const submit = el('button', 'btn btn-ask btn-sm', 'Submit Answer');
+  submit.type = 'button';
+  submit.dataset.formReply = form.id;
+  actions.append(note, progress, back, next, submit);
+  panel.append(head, fields, actions);
+  back.onclick = () => { panelPage -= 1; applyPage(panel, form); };
+  next.onclick = () => { panelPage += 1; applyPage(panel, form); };
+  submit.onclick = () => submitForm({ ...form }, collectAnswers(panel, form));
+  panel.addEventListener('input', () => applyPage(panel, form));
+  return panel;
+}
+
 /** Mark a node as just arrived. Only a genuinely new node gets this — a repaint is not an arrival. */
 function appear(node) {
   if (!node || !node.classList) return node;
@@ -617,8 +787,9 @@ function itemNode(item) {
  * is repainted in place, and a node that is gone is removed. That is what makes the
  * conversation stable under a live update, and it is the whole point of the rebuild.
  */
-export function createChatView(host, { onToggle } = {}) {
+export function createChatView(host, { onToggle, onSubmit } = {}) {
   if (typeof onToggle === 'function') viewToggle = onToggle;
+  if (typeof onSubmit === 'function') submitForm = onSubmit;
   const made = new Map(); // key -> { node, sig }
 
   function paint(item) {
@@ -686,6 +857,21 @@ export function createChatView(host, { onToggle } = {}) {
     if (model.handover) wanted.push(paint({ ...model.handover, key: 'compact-post' }));
     for (const item of model.items || []) wanted.push(paint(item));
     for (const card of model.pending || []) wanted.push(paint(card));
+    // The panel is moved, never rebuilt: its answers live in its fields.
+    if (model.form) {
+      const sig = fieldSig(model.form);
+      if (!panelNode || panelNode.dataset.sig !== sig) {
+        panelNode = buildForm(model.form);
+        panelNode.dataset.sig = sig;
+        panelPage = 0;
+      }
+      wanted.push(panelNode);
+    } else if (panelNode) {
+      panelNode.remove();
+      panelNode = null;
+      panelSig = '';
+    }
+    if (panelNode) applyPage(panelNode, model.form);
 
     // Put the wanted nodes in order: appendChild moves an existing node, so this both
     // orders and inserts, and it never touches a node that is already in place.

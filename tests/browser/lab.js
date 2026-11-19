@@ -19,6 +19,10 @@ import { tracesWiring } from './web/traces.js';
 const oldHost = document.getElementById('transcript');
 const newHost = document.getElementById('transcript-v2');
 const view = createChatView(newHost, {
+  // A submission is the app's to send; the lab just records it.
+  onSubmit: (form, answer) => {
+    window.__submitted = { form: form.id, answer };
+  },
   // Opening a card is the page's business, not the renderer's: the state keeps the answer.
   onToggle: (key, open) => {
     if (open) state.open.add(key);
@@ -151,6 +155,21 @@ window.__labTexts = () => ({
 
 /** The markup of the new panel, for a check that needs to read rather than measure. */
 window.__labHTML = () => newHost.innerHTML;
+
+/** Rebuild the model and paint again, without resetting the scenario. */
+window.__labUpdate = () => {
+  const model = buildChat(state);
+  state.renderSig = '';
+  renderTranscript();
+  view.update(model);
+  return {
+    form: Boolean(model.form),
+    fields: newHost.querySelectorAll('.ask-field').length,
+    note: newHost.querySelector('.ask-head-note')?.textContent || '',
+    progress: newHost.querySelector('[data-ask-progress]')?.textContent || '',
+    panelAtEnd: Boolean(newHost.lastElementChild && newHost.lastElementChild.classList.contains('ask-panel')),
+  };
+};
 
 /** Scroll both panels to the same fraction of their height. */
 window.__labScrollTo = (fraction = 0.5) => {

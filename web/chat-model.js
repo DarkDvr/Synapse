@@ -489,7 +489,48 @@ export function buildChat(src = pageState) {
       }
     : null;
 
-  return { handover, items, pending };
+  // The question panel is not part of the column: it is the last thing on screen, and it
+  // owns its answers. The model says what to draw; the view keeps the DOM (and the input)
+  // across updates.
+  return { handover, items, pending, form: formItem(src) };
+}
+
+/** The form waiting on the operator: the open chat's own, or a worker's. */
+function formItem(src) {
+  const forms = (src.forms || []).filter((f) => f && f.id);
+  const form = forms.find((f) => f.sessionId === src.sessionId) || forms[0];
+  if (!form) return null;
+  const runs = src.runs instanceof Map ? [...src.runs.values()] : [];
+  return {
+    kind: 'form',
+    key: `form:${form.id}`,
+    id: String(form.id),
+    sessionId: String(form.sessionId || ''),
+    title: String(form.title || 'Input Needed'),
+    fields: (form.fields || []).map((field, index) => ({
+      key: String(field.key ?? `q${index}`),
+      title: String(field.title || ''),
+      description: String(field.description || ''),
+      type: String(field.type || 'string'),
+      options: Array.isArray(field.options) ? field.options.map((o) => ({ value: String(o.value), label: String(o.label ?? o.value), description: String(o.description || '') })) : [],
+      custom: Boolean(field.custom),
+      required: Boolean(field.required),
+      when: Array.isArray(field.when) ? field.when : null,
+      minimum: field.minimum ?? null,
+      maximum: field.maximum ?? null,
+      default: field.default ?? null,
+      placeholder: String(field.placeholder || ''),
+      url: String(field.url || ''),
+      hidden: Boolean(field.hidden),
+    })),
+    // A worker's question has no chat to open: it is answered here, over the Architect's.
+    here: form.sessionId === src.sessionId,
+    worker: runs.some((r) => r && r.workerId === form.sessionId),
+    autoAnswer: (form.autoAnswer ?? src.automation?.autoAnswer) === true,
+    firstAt: Number(form.autoAnswerFirstAt) || null,
+    wait: Number(src.answerWaitSec) || 0,
+    pages: Math.max(1, Number(form.autoAnswerPages) || 1),
+  };
 }
 
 function postFor(src, m, { mine, pane }) {
