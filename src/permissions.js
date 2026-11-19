@@ -21,7 +21,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { covers } from './protection.js';
-import { ROOT, PROJECTS_ROOT } from './paths.js';
+import { ROOT, PROJECTS_ROOT, TEMP_DIR } from './paths.js';
 
 const WRITE_ACTIONS = new Set(['edit', 'write', 'patch', 'create']);
 const SHELL_ACTIONS = new Set(['shell', 'bash']);
@@ -135,6 +135,12 @@ export function zoneOf(target, { projectRoot, harnessRoot }) {
   if (inside(target, harnessRoot)) return 'harness';
   return 'outside';
 }
+
+/** Is this path inside Synapse's own temp? Plumbing, never a model's. */
+const isOwnTemp = (target) => Boolean(TEMP_DIR) && inside(target, TEMP_DIR);
+
+/** What a refusal about the temp folder says in the log; the way out is in the note. */
+const TEMP_REASON = 'That is Synapse\'s own temp, not a place a model writes.';
 
 /** Is this path inside a credential store? Checked before any zone. */
 export function isSecret(target, { home = os.homedir() } = {}) {
@@ -504,6 +510,16 @@ export function refusalNote({ role, scope, reason, single = false, policy = fals
     }
     return `${base} Try a different approach and keep working — this is not a Stop. If you are blocked, say what you need.`;
   }
+  if (scope === 'temp') {
+    // The one refusal whose whole point is the next step, not the stop: the model is
+    // looking for a file a build left behind, and the answer is a different folder.
+    return (
+      'That is Synapse\'s own temp folder, not yours — nothing of a model\'s belongs there and nothing in it is ' +
+      'kept. A command that needs a temp directory writes into your project: set it for that command, e.g. ' +
+      '`$env:TEMP = "$PWD\\.project\\scratch\\temp"` in PowerShell or `set TEMP=%CD%\\.project\\scratch\\temp` ' +
+      'in cmd, then run it again and look there.'
+    ) + said;
+  }
   if (scope === 'desk') {
     return (
       'The operator did not give you their screen. That is their machine, their mouse and their keyboard, and ' +
@@ -549,6 +565,11 @@ function decideWrite(resources, ctx) {
   for (const value of list) {
     const target = resolvePath(first(value), ctx.cwd, { home: ctx.home });
     if (!target || target.unknown) return ask('The harness cannot tell which folder this is.', true, 'unknown');
+    // Before PROHIBITED, though it is inside the harness too: the temp folder has an
+    // answer ("your own scratch, set TEMP there"), and the protected list's sentence is
+    // not one. It is still a refusal, so the rule that PROHIBITED outranks the others
+    // is not weakened.
+    if (isOwnTemp(target.path)) return deny(TEMP_REASON, true, 'temp');
     // PROHIBITED beats every other rule: no card, no remembered grant, no answer.
     const guarded = prohibitedWrite(target.path, ctx);
     if (guarded) return guarded.id === 'projects' ? fenceDeny(guarded) : deny(`PROHIBITED: ${guarded.label} is on the protected list.`, true, 'prohibited');
@@ -955,6 +976,15 @@ function decideShell(resources, ctx) {
     ? info.segments
     : [{ paths: info.paths, redirects: info.redirects, readsOnly: info.readsOnly }];
 
+  // Synapse's own temp, in one sentence and with the way out. It is inside the harness,
+  // so the protected list would refuse it too — but "Synapse is the app itself" is not
+  // an answer to "where did my build's temp files go". A model sets TEMP per command;
+  // this is the one place it is told that.
+  const tempPath = segments
+    .flatMap((part) => [...(part.paths || []), ...(part.redirects || [])])
+    .find(isOwnTemp);
+  if (tempPath) return deny(TEMP_REASON, true, 'temp');
+
   // Elevation is neither a path nor a kill: `Start-Process … -Verb RunAs` asks
   // Windows for administrator rights, and the UAC prompt is a thing only the
   // operator can answer. It used to be judged as a write into Windows and refused
@@ -1316,6 +1346,9 @@ function decideRead(resources, ctx) {
     if (zone === 'harness') scope = 'harness';
     else if (zone === 'outside' && scope !== 'harness') scope = 'outside';
     if (isSecret(target.path, ctx)) return deny('The harness never opens saved-password folders.', outside, 'secret');
+    // Synapse's own temp is plumbing: a model looking for the file its build left
+    // behind is told where its own temp goes, not that Synapse's files are private.
+    if (isOwnTemp(target.path)) return deny(TEMP_REASON, true, 'temp');
     // A protected entry whose Read box is unticked is not read either: the browser
     // treats a read as a touch. Every other protected path is readable — that is
     // the point of the tier, so OS logs and drivers can be inspected.

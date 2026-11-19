@@ -293,6 +293,23 @@ Audited at the same time, because the report asked what else could be caught: **
 writes never went through the protected list at all — the two delete paths were its only
 callers. Model actions still go through `decide`, where the fence holds.
 
+## Synapse's own temp is not a folder to work in (20 Nov)
+
+`data\temp` is the engine's plumbing — a compiler's intermediates, a render's throwaway
+browser profile — and it is inside the harness, so the protected list already refused it
+with "Synapse is the app itself". That is not an answer to "where did my build's temp
+files go". A read, write or command that names it is now refused **as temp**, with the
+folder to use instead:
+
+> That is Synapse's own temp folder, not yours — nothing of a model's belongs there and
+> nothing in it is kept. A command that needs a temp directory writes into your project:
+> set it for that command, e.g. `$env:TEMP = "$PWD\.project\scratch\temp"` in PowerShell
+> or `set TEMP=%CD%\.project\scratch\temp` in cmd, then run it again and look there.
+
+The refusal is checked before the protected list in all three deciders, because its
+sentence is the useful one — it is still a refusal, so nothing about PROHIBITED outranking
+the other rules changes. The path the note names is allowed, which is the test's point.
+
 ## One wording for every folder refusal (17 Nov)
 
 A worker wrote `..\p3-browser-output.txt`, was refused, and then asked the operator "which

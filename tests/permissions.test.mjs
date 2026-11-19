@@ -150,6 +150,24 @@ test('a write into a credential store is denied', () => {
   assert.equal(call('edit', 'C:/Users/tester/.ssh/authorized_keys').effect, 'deny');
 });
 
+// Synapse's own temp is plumbing. A model that goes looking for a build's temp files is
+// told where its own temp goes, in one sentence, instead of "Synapse is the app itself".
+test('Synapse\'s own temp is refused, and the note names the folder to use', () => {
+  const file = `${HARNESS}/data/temp/obj/x.dll`;
+  const write = call('edit', file);
+  assert.equal(write.effect, 'deny');
+  assert.equal(write.scope, 'temp', 'the temp folder is answered as temp, not as the harness');
+  assert.equal(call('read', file).scope, 'temp');
+  assert.equal(shell(`Set-Content "${HARNESS}/data/temp/x.txt" hi`).scope, 'temp');
+  const note = refusalNote({ scope: 'temp', policy: true });
+  assert.match(note, /Synapse's own temp folder, not yours/);
+  assert.match(note, /\.project\\scratch\\temp/, 'the note does not say where to put it');
+  assert.match(note, /\$env:TEMP/, 'the note does not show how to point TEMP there');
+  // And the folder the note points at is allowed: the note must not send it somewhere
+  // the policy refuses in turn.
+  assert.equal(call('edit', `${PROJECT}/.project/scratch/temp/x.dll`).effect, 'allow');
+});
+
 // Scratch is inside the project and is the only place a model writes throwaway files:
 // it exists so a probe never has to go into the machine's temp folder or the product's
 // own files.
