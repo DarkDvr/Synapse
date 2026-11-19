@@ -209,7 +209,7 @@ export function installPage() {
     scrollTo() {},
     matchMedia: () => ({ matches: false, addEventListener() {}, removeEventListener() {} }),
     chrome: undefined,
-    location: { href: 'http://127.0.0.1/', reload() {} },
+    location: { href: 'http://127.0.0.1/', search: '', reload() {} },
     navigator: { clipboard: { writeText: async () => {} } },
     localStorage: { getItem: () => null, setItem() {}, removeItem() {} },
     getComputedStyle: () => ({ getPropertyValue: () => '', fontSize: '13px' }),

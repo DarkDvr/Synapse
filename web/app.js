@@ -111,7 +111,6 @@ import {
   tracesWiring,
 } from './traces.js';
 import {
-  renderTranscript,
   selectionInChat,
   toggleTool,
   attachmentImage,
@@ -119,6 +118,9 @@ import {
   endsInProseToolCall,
   transcriptWiring,
 } from './transcript.js';
+// The chat's renderer is behind one switch: `?chat=v2` draws the rebuild, and every call
+// site below still says `renderTranscript()` (docs/notes/chat-inventory.md, §9).
+import { renderTranscript, chatIsV2, mountChatView } from './chat-render.js';
 import { toast } from './toast.js';
 import { installContextMenu } from './context-menu.js';
 import { paneWiring, paneToggle } from './thinking-pane.js';
@@ -2051,24 +2053,50 @@ document.addEventListener('keydown', (e) => {
     if (trace) paneToggle(trace);
   }
 
-  $('transcript').addEventListener('click', (e) => {
-    // The ask panel is *inside* the transcript while a question is up, and it has
-    // its own handler above: letting the click through here sent the answer twice
-    // (6 Nov). The guard in replyForm is the belt to this brace.
-    if (e.target.closest('.ask-panel')) return;
-    const formBtn = e.target.closest('[data-form-reply]');
-    if (formBtn) { replyForm(formBtn.dataset.formReply); return; }
-    if (e.target.closest('[data-error]')) return; // the error button is not a toggle
-    const think = e.target.closest('[data-think-toggle]');
-    if (think) { toggleThinking(think.dataset.thinkToggle); return; }
-    const head = e.target.closest('[data-tool-toggle]');
-    if (head) toggleTool(head.dataset.toolToggle);
-  });
-  $('transcript').addEventListener('keydown', (e) => {
-    if (e.key !== 'Enter' && e.key !== ' ') return;
-    const head = e.target.closest('[data-tool-toggle]');
-    if (head) { e.preventDefault(); toggleTool(head.dataset.toolToggle); }
-  });
+  // The rebuild's renderer, when the address asks for it. It draws into the same element,
+  // and it owns the clicks inside it: a card, the pane's own switch and a question's Submit
+  // are all the view's, and the app supplies only what each of them means — the state, the
+  // pane's flag, the reply. The old chat's handlers below would otherwise answer the same
+  // click a second time, which is how a card used to open and close at once.
+  const rebuilt = chatIsV2();
+  if (rebuilt) {
+    mountChatView($('transcript'), {
+      // A card's open state is the page's, exactly as it is for the old renderer.
+      onToggle: (key, open) => {
+        if (open) state.open.add(key);
+        else state.open.delete(key);
+      },
+      // The pane's switch: the pane in a post is the open session's own step, and a pane in
+      // a trace is that worker's, so the key says which trace to fold.
+      onPaneToggle: (key) => {
+        const id = String(key || '').replace(/:stream$/, '');
+        const trace = (id && id !== 'pane' && (state.sessionTrace?.key === id ? state.sessionTrace : state.traces.get(id))) || state.sessionTrace;
+        if (trace) paneToggle(trace);
+      },
+      // The panel keeps its answers; the reply is the page's, and it already knows how to
+      // send one and how to read the two answers that are not an answer (409, not found).
+      onSubmit: (form, answer) => replyForm(form.id, answer),
+    });
+  } else {
+    $('transcript').addEventListener('click', (e) => {
+      // The ask panel is *inside* the transcript while a question is up, and it has
+      // its own handler above: letting the click through here sent the answer twice
+      // (6 Nov). The guard in replyForm is the belt to this brace.
+      if (e.target.closest('.ask-panel')) return;
+      const formBtn = e.target.closest('[data-form-reply]');
+      if (formBtn) { replyForm(formBtn.dataset.formReply); return; }
+      if (e.target.closest('[data-error]')) return; // the error button is not a toggle
+      const think = e.target.closest('[data-think-toggle]');
+      if (think) { toggleThinking(think.dataset.thinkToggle); return; }
+      const head = e.target.closest('[data-tool-toggle]');
+      if (head) toggleTool(head.dataset.toolToggle);
+    });
+    $('transcript').addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      const head = e.target.closest('[data-tool-toggle]');
+      if (head) { e.preventDefault(); toggleTool(head.dataset.toolToggle); }
+    });
+  }
   // <details> fires `toggle` (no bubbling), so capture it to remember which
   // Reasoning blocks and which compact post the operator opened. The post is a
   // single block with a fixed key; without this branch a poll re-render shut it

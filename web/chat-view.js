@@ -134,6 +134,9 @@ function toolCard(item) {
   const running = /run|stream|pend|progress/.test(String(p.status || ''));
   const cls = running ? 'warn' : failed ? 'err' : 'ok';
   const card = el('div', `tool-card${item.open ? ' open' : ''}`);
+  // What this card is showing, on the element itself: a repaint that lands after the
+  // operator's own click must not animate the same opening a second time.
+  card.dataset.open = String(Boolean(item.open));
   const head = el('div', 'tool-head');
   head.dataset.toolToggle = item.key;
   head.setAttribute('role', 'button');
@@ -158,6 +161,7 @@ function toolCard(item) {
   if (!item.open) card.classList.add('is-collapsed');
   head.addEventListener('click', () => {
     const opening = card.classList.contains('is-collapsed');
+    card.dataset.open = String(Boolean(opening));
     animateDetail(card, head, detail, opening);
     viewToggle(item.key, Boolean(opening));
   });
@@ -309,6 +313,9 @@ const paneFollow = new Map();
 // What the view does when the operator opens a card: it tells the page, and the page owns
 // the state (state.open). The view never keeps the answer for itself.
 let viewToggle = () => {};
+// The pane's own switch: which trace it belongs to is the page's business, because the pane
+// in a post is the open session's step and a pane in a trace is that worker's.
+let viewPaneToggle = () => {};
 
 /** Is the page's own motion preference off? Then every fold snaps, as the browser should. */
 const motionOff = () => Boolean(window.matchMedia?.('(prefers-reduced-motion: reduce)').matches);
@@ -582,13 +589,16 @@ function streamNode(item) {
     const button = el('button', 'think-toggle', 'Thinking…');
     button.type = 'button';
     button.dataset.thinkToggle = item.key;
+    button.addEventListener('click', () => viewPaneToggle(item.key));
     row.append(el('span', 'status-dot live'), button);
     return row;
   }
   if (!paneFollow.has(item.key)) paneFollow.set(item.key, { follow: true });
   const wrap = el('div', 'think-wrap');
   const flow = el('div', 'trace-flow');
-  flow.dataset.pane = item.key;
+  // No `data-pane` on this pane, and that is on purpose: the old chat's pane code finds its
+  // pane by that attribute and slides the text with a transform. This pane scrolls natively,
+  // and two owners of one box is how the words end up moving twice as fast as they arrive.
   const view = el('div', 'trace-flow-view');
   // The height is set here, not only in the stylesheet: the old rule is a max-height, and a
   // max-height is exactly the growth this pane must not have.
@@ -630,6 +640,7 @@ function streamNode(item) {
   toggle.dataset.thinkToggle = item.key;
   toggle.title = 'Hide the thinking';
   toggle.setAttribute('aria-label', 'Hide the thinking');
+  toggle.addEventListener('click', () => viewPaneToggle(item.key));
   wrap.append(toggle);
   view.addEventListener('scroll', () => {
     const state = paneFollow.get(item.key) || { follow: true };
@@ -780,7 +791,14 @@ function fillBlocks(container, blocks, held, start = null, end = null) {
       continue;
     }
     if (prev && prev.base === base && block.kind === 'card' && prev.open !== block.open) {
-      // Everything but the open state is the same: keep the node and let it animate.
+      // Everything but the open state is the same: keep the node and let it animate — unless
+      // the operator's own click already drew this, in which case there is nothing to animate
+      // and animating anyway would close it and open it again under their hand.
+      if (prev.node.dataset.open === String(Boolean(block.open))) {
+        held.set(key, { ...prev, sig, base, open: block.open });
+        nodes.push(prev.node);
+        continue;
+      }
       const detail = prev.node.querySelector('.tool-detail');
       const head = prev.node.querySelector('.tool-head');
       if (detail && head) animateDetail(prev.node, head, detail, Boolean(block.open));
@@ -1009,9 +1027,10 @@ function itemNode(item) {
  * is repainted in place, and a node that is gone is removed. That is what makes the
  * conversation stable under a live update, and it is the whole point of the rebuild.
  */
-export function createChatView(host, { onToggle, onSubmit } = {}) {
+export function createChatView(host, { onToggle, onSubmit, onPaneToggle } = {}) {
   if (typeof onToggle === 'function') viewToggle = onToggle;
   if (typeof onSubmit === 'function') submitForm = onSubmit;
+  if (typeof onPaneToggle === 'function') viewPaneToggle = onPaneToggle;
   const made = new Map(); // key -> { node, sig }
 
   function paint(item) {

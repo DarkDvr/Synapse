@@ -477,7 +477,7 @@ export function syncAskCustoms(target) {
 // the case where another window answered first.
 export const replyingForms = new Set();
 
-export async function replyForm(formId) {
+export async function replyForm(formId, given) {
   if (replyingForms.has(formId)) return;
   const form = currentForm();
   if (!form || form.id !== formId) return;
@@ -485,7 +485,10 @@ export async function replyForm(formId) {
   // The form's own session, not the open one: a worker's question is answered
   // in the session that asked it.
   const sessionId = form.sessionId || state.sessionId;
-  const answer = collectAskAnswer(form);
+  // The answers come from the panel that asked, unless the caller already has them: the
+  // new renderer keeps the panel's answers itself and hands them over, so the page does not
+  // have to read a DOM it did not build (19 Nov).
+  const answer = given && typeof given === 'object' ? given : collectAskAnswer(form);
   const btn = document.querySelector(`[data-form-reply="${CSS.escape(formId)}"]`);
   if (btn) btn.disabled = true;
   try {

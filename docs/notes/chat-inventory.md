@@ -495,6 +495,12 @@ into the branch whenever it moves (`b04d091` merged `8be801d`).
 - `tests/scenarios/` — `S1-folds`, `download-placement`, `alarm-split`, `stream-burst`,
   `pane-scroll`, `anchor`, `form`, `selection`, `pane-collapse`, `form-tick`.
 - `tests/chat-model.test.mjs` and `tests/scenario.test.mjs` — the model and the frames.
+- `web/chat-render.js` — the switch: `?chat=v2` draws the conversation with the new renderer
+  in the same element, and every call site in `app.js` still says `renderTranscript()`. The
+  page's own click handlers stand down while it is on, because the view owns its clicks; the
+  panel's reply, the pane's flag and a card's open state are the page's state, as before.
+  `tests/chat-render.test.mjs` holds the switch: v1 unless the address says `v2`, a typo is
+  not a switch, and a page that asked but mounted nothing still draws a chat.
 
 **What is proved**, both renderers, one state (`node scripts/chat-lab.mjs --check`, 12 cases):
 
@@ -515,9 +521,15 @@ into the branch whenever it moves (`b04d091` merged `8be801d`).
 
 **What is left**, in order:
 
-1. **The app switch**: `chat.renderer: v1 | v2`, the ask host and the permission cards wired
-   to the view, then the operator's side-by-side judgement and the decision.
-2. Only then: the rail, the role cards and the plan pane on the same primitives.
+1. **The switch has not been run on a real turn yet.** `?chat=v2` boots the page and mounts
+   the view (checked on a worktree server at 8710: the landing page, no boot error), but no
+   real conversation has been drawn by it inside the app. The first thing to do after the
+   branch reaches main is one real turn with the switch on: a message, a delta, a card, a
+   question. The lab cannot see the app's own wiring — `replyForm`, `paneToggle`, the
+   download patch — and that is exactly where an integration fault would hide.
+2. **The operator's judgement**: the same conversation, both chats, and their answer to which
+   one to keep. The lab's numbers are the evidence; the judgement is theirs.
+3. Only then: the rail, the role cards and the plan pane on the same primitives.
 
 **Traps that cost time here.**
 - The lab's panels must beat the app's `body[data-view] .chat-dock` rules, so the lab's rules
@@ -535,6 +547,13 @@ into the branch whenever it moves (`b04d091` merged `8be801d`).
   a block's node without removing the old one drew the same reasoning archive twice — the
   lab caught it as 163 extra characters, and the fix is `replaceWith` plus a run that ends at
   a marker.
+- **The old chat's click handlers answer the same click.** They are bound to `#transcript`
+  itself, so a switched page would toggle a card open and shut at once, and submit a question
+  twice. In `v2` they stand down and the view's own handlers answer; the fold's `toggle`
+  capture stays, because that is how the page remembers what the operator opened.
+- **`data-pane` is how the old pane finds its box.** The new pane deliberately carries no
+  `data-pane`: the old pane code would find it, and slide the words with a transform while the
+  new one scrolls them, so every line would move twice.
 - **An empty placeholder element is not free.** A permanently present `msg-steer` span made
   every assistant post 2 px taller than the old chat's; an empty inline-flex box still takes
   a line. The header span is built when a turn is steered and removed when it is not.
