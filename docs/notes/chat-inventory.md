@@ -62,7 +62,7 @@ Ids are stable: they are the ticket names and the scenario names. `M` = must,
 | A10 | A `synthetic` message | "Synapse · <label>", yellow rule | M: four variants: report, loaded instructions (one line + fold), PROHIBITED (one red line, folds open), plain |
 | A11 | A compaction | A post at the top of the new chat: "Compacted <when> · N messages", summary behind it | M: survives a reload; replaced by the next compact; the only thing in a fresh chat |
 | A12 | Consecutive assistant steps | One post | M: a line that arrived between two steps must not move to the end of the turn (an alarm splits the post); the live pane belongs to the newest assistant post even if a line follows it; P: the merge hides which step a card came from, and an alarm is the one visible seam |
-| A13 | Any post rebuilt | — | M: **nothing the operator opened closes**, across a poll, a regroup or a trace update; P: three holes — two closed on chat-v2 (1.62.14: a trace's reasoning fold and its archive read their keys, and a folded trace has one), and the third still open: a message fold that rolls into the archive loses its own key |
+| A13 | Any post rebuilt | — | M: **nothing the operator opened closes**, across a poll, a regroup or a trace update; P: three holes — two closed in 1.62.14 (a trace's reasoning fold and its archive read their keys, and a folded trace has one), and the third still open: a message fold that rolls into the archive loses its own key |
 
 ### B. Prose blocks
 
@@ -71,7 +71,7 @@ Ids are stable: they are the ticket names and the scenario names. `M` = must,
 | B1 | Any text part | Markdown: headings, lists (incl. task lists), GFM tables, blockquotes, fenced code, rules, inline code, bold/italic/strike, links | M: escaped first (no injected markup); a table never widens the column; code scrolls inside itself |
 | B2 | An image written inline or on its own line | A chip in the sentence, the picture on hover | M: the chip joins the paragraph it illustrates; a `javascript:` or missing file is not a chip |
 | B3 | Text as it arrives | — | M: prose that is still growing is drawn where it is, not re-lettered below the reader (see G3/G4) |
-| B4 | A selection the operator is making | The native selection | M: **a live update never takes it away**. Done on chat-v2: the paragraph keeps its node and only the words that arrived are appended to its text node, so the highlight stays on the words the operator chose (measured: held in 6 of 6 frames while the post grew 109 → 221 characters, `selection`). The old chat keeps it only by refusing to draw — `web/transcript.js` pauses the render while a selection is in the chat, and the post stays frozen at 39 characters |
+| B4 | A selection the operator is making | The native selection | M: **a live update never takes it away**. Today it is kept only by refusing to draw: `web/transcript.js` pauses the whole render while a selection rests in the chat, so the answer on screen stops being the answer (measured on the rebuild: the post froze at 39 characters while the conversation reached 221). The fix that was tried and lost with the rebuild: write the new words into the text node the paragraph already has, so the highlight stays while the chat keeps drawing (§5) |
 | B5 | A right-click | The page's own menu: Copy, Select All; Cut/Copy/Paste/Select All in a field | M: Copy puts exactly the selection on the clipboard, in the operator's own text; the menu never appears as the browser's default (no Print/Reload/Save As/Inspect); today right-click is switched off everywhere |
 | B6 | Copying from a card | The menu over a `<pre>` (tool output, code) | M: Copy takes the text, not the card's chrome |
 
@@ -79,13 +79,13 @@ Ids are stable: they are the ticket names and the scenario names. `M` = must,
 
 | Id | Comes from | What appears | Must / Pain |
 |---|---|---|---|
-| C1 | A `reasoning` part | A fold, summary = its first sentence; the newest ten keep their own | M: open state survives every render; opening one does not move the reader's line. **Fixed on chat-v2** (1.62.14): a trace's fold reads its own key and is drawn open |
-| C2 | Older reasoning / older trace entries | One "N earlier reasoning" / "Older entries (N)" fold | M: contents kept, key stable, opening it does not close anything else; P: the trace archive ignored its key until chat-v2 (1.62.14); the message archive honours it, but a message fold that rolls into the archive still loses its own key, which reads as "the chat collapsed my history" |
+| C1 | A `reasoning` part | A fold, summary = its first sentence; the newest ten keep their own | M: open state survives every render; opening one does not move the reader's line. **Fixed in 1.62.14**: a trace's fold reads its own key and is drawn open |
+| C2 | Older reasoning / older trace entries | One "N earlier reasoning" / "Older entries (N)" fold | M: contents kept, key stable, opening it does not close anything else; P: the trace archive ignored its key until 1.62.14; the message archive honours it, but a message fold that rolls into the archive still loses its own key, which reads as "the chat collapsed my history" |
 | C3 | Loaded instructions | One line + fold with the file's text | M: one line in the chat; the path is in the tooltip; the text is behind it |
 | C4 | A tool card | Detail: input, output, error, exit code | M: stays open across renders; body is `<pre>`; failures colour the body, not the whole card |
 | C5 | A browser group | Rows of calls | M: open state survives; P: its key is positional (`browser-group-N`), not the calls' own ids, so it only survives while the whole turn renders identically |
 | C6 | A permission diff | "N files · +A −D" + patch | M: closed by default; opening does not move the reader |
-| C7 | A finished trace | Its fold: role · task · title · took · files · compacted ×N · looped ×N · steered | M: opening it stays open across the next event, and the line says enough that it does not need opening; P: the fold had no key and no `open` state, so the next render shut it — fixed on chat-v2 (1.62.14) |
+| C7 | A finished trace | Its fold: role · task · title · took · files · compacted ×N · looped ×N · steered | M: opening it stays open across the next event, and the line says enough that it does not need opening; P: the fold had no key and no `open` state, so the next render shut it — fixed in 1.62.14 |
 
 ### D. Cards
 
@@ -132,7 +132,7 @@ Ids are stable: they are the ticket names and the scenario names. `M` = must,
 | Id | Comes from | What appears | Must / Pain |
 |---|---|---|---|
 | G1 | The first delta of a turn | A post with the pane | M: the post does not appear twice, and a compaction line arriving mid-turn does not hide the pane |
-| G2 | Reasoning deltas | The pane: a window of about eleven lines, tail, eased slide, "Thinking…" when collapsed, dim when idle | M: a fixed window — growth moves nothing outside it; the words stay when the step ends; the ▾ hides it and clicking again brings the same words back. Done on chat-v2: the two shapes are two elements and the view rebuilds when the shape changes (measured: 245 → 63 → 245 px, the same 127 characters back, then 172 with the next delta, `pane-collapse`) |
+| G2 | Reasoning deltas | The pane: a window of about eleven lines, tail, eased slide, "Thinking…" when collapsed, dim when idle | M: a fixed window — growth moves nothing outside it; the words stay when the step ends; the ▾ hides it and clicking again brings the same words back. P: it grows line by line and pushes the post below it down, and the wheel does not move it — its text is slid by a transform (§5) |
 | G3 | Words arriving faster than they are read | — | M: the pane follows only while the reader is at the pane's end; a reader who scrolls up is left where they are and told new words are waiting; P: it pins to the bottom every frame, so it cannot be read or scrolled |
 | G4 | The step's message landing | The words also exist in the message | M: no duplicate, no flicker, no re-lettering; the pane's words are the same words as the fold's, once |
 | G5 | A live tool | A waiting line from the tool's own input | M: appears without a render of the whole chat |
@@ -145,9 +145,9 @@ Ids are stable: they are the ticket names and the scenario names. `M` = must,
 | H1 | A pending form | Panel: dot, title, note, fields, actions | M: one node, moved never rebuilt, so answers survive a poll |
 | H2 | Fields | radio, checkbox, boolean, text, number, external link, "Something Else…" | M: a `when` rule hides a field that is not answerable yet; hidden fields answer nothing |
 | H3 | A multi-question form | One question per page, "Question N of M", Back/Next/Submit | M: paging hides by class, not `hidden`, so answers survive; required fields gate the right button |
-| H4 | Auto-Answer | "Auto-Answering in N seconds…", page advance, the reply after the last page | M: the countdown is the server's clock; a manual answer wins. The number is done on chat-v2 (measured: 27 → 26 → 25 seconds while the panel stands, `form-tick`); the page advance and the reply stay in `web/ask-panel.js` until the app wires the view |
+| H4 | Auto-Answer | "Auto-Answering in N seconds…", page advance, the reply after the last page | M: the countdown is the server's clock; a manual answer wins. The countdown, the page advance and the reply are all in `web/ask-panel.js` and have been since 1.62.0 |
 | H5 | A worker's question | The same panel, note says "a worker is waiting — answer here" | M: answerable from the operator's chat; no "open that chat" that does not exist |
-| H6 | The panel arriving | At the end, report above it | M: placed only after the transcript has the report; the head visible when the panel is taller than the chat; the composer disabled, Stop live. On chat-v2 it also arrives on the chat's own 120ms (`is-enter`), and the panel is moved rather than rebuilt, so a choice made in it survives the next repaint (measured, `form-tick`) |
+| H6 | The panel arriving | At the end, report above it | M: placed only after the transcript has the report; the head visible when the panel is taller than the chat; the composer disabled, Stop live. P: it appears instantly, and a render rebuilds it — a choice made in it survives only because the render is held |
 | H7 | The answer sent | The panel goes, the chat carries on, the card stays | M: no double POST; a 409 is "already answered", not an error |
 
 ### I. The dock
@@ -305,9 +305,9 @@ against two renderers went with the rebuild (§6).
 The rebuild ran to a working switch (`?chat=v2`) and was cut on 19 Nov by the operator's
 judgement: it was a regression from the old chat in the things that matter while reading —
 the pane, the selection, the sense of motion — and getting back to parity was costing more
-than fixing the old chat directly. The code is on branch `chat-v2` and in the history if it is
-ever wanted again. What it *found* stays useful, and these are the defects it found in the
-chat that ships:
+than fixing the old chat directly. The code is in the history before 1.64.0 (`git show
+16b2ef5:web/chat-view.js`) if it is ever wanted again; the branch and its worktree are gone.
+What it *found* stays useful, and these are the defects it found in the chat that ships:
 
 - **A fold that rolls into the reasoning archive loses its own key**, so the next render shuts
   it (row C2). The one rule the old chat still breaks: "nothing the operator opened closes".

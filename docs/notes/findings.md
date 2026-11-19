@@ -44,10 +44,11 @@ more — open a note for it.
 ## Elsewhere
 
 - **The chat rebuild was cut on 19 Nov** after the operator's judgement that it was a
-  regression from the chat that ships. Its code is on branch `chat-v2` and in the history; the
-  *inventory* it produced — every thing the conversation can show, with the defect each row
-  still has — is `docs/notes/chat-inventory.md`, and §5 there is the list of defects it found
-  in the chat we kept. That list is where the chat work goes from here.
+  regression from the chat that ships. Its code is in the history before 1.64.0; the branch,
+  its worktree and its tests are gone. The *inventory* it produced — every thing the
+  conversation can show, with the defect each row still has — is
+  `docs/notes/chat-inventory.md`, and §5 there is the list of defects it found in the chat we
+  kept. That list is where the chat work goes from here.
 
 - **The rail, role cards and plan pane** read the same state the chat does. They are not part
   of the chat work, and there is no plan for them beyond the cases in `chat-inventory.md`.
