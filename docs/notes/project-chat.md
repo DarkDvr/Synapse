@@ -162,32 +162,42 @@ Updated:        the stamp of the last write
 
 ---
 
-## The facts file (17 Nov)
+## The project's AGENTS.md (20 Nov)
 
-`.project/facts.md` is reference, not a second plan: what a run taught that will
-still be true next week — a command that fails here, a path that resolves oddly, an
-account or tool the project depends on, a limit the operator set. It is separate from
-`project.md` because compaction rewrites that document, so a fact recorded only in
-the handover can be summarised away; this file survives.
+`AGENTS.md` at the project root is the one file every session starts with: the
+generated map of who may write where, and the notepad of durable facts. It replaced
+`.project/facts.md`, which only the Architect ever opened.
 
-- Created by `ensureProjectFolders` (`src/project-facts.js`), so every project has it
-  before its first session — headings and the rule, no facts.
-- **The Architect owns it.** The worker write fence denies `edit` on `.project/**` for
-  every other role, so a worker's lesson reaches the file through its report, which
-  the Architect already reads. No new permission rule, no tamper exemption.
-- One line in the Architect's brief: the path, the ownership, the cap (6,000
-  characters) and the size the file is at now. Over the cap, the same line says so and
-  tells the Architect to condense before adding. What belongs in the file and how to
-  keep it are written **in the file**, not in the brief — repeating them would charge
-  every step for a paragraph the Architect reads once when it opens the file.
-- Nothing else reads it: it is not inlined in a brief and not part of the digest. That
-  is the point — opening it is a choice, and the cap keeps it worth opening.
-- Cost: 107 characters in the Architect's bare brief (`BARE_BRIEF_LIMIT` moved
-  15,500 → 15,650) and nothing in a worker's.
+The reason it exists: the fence was **generated** and the explanation **hand-written**,
+and the two met only at the refusal. A worker wrote where it thought a file belonged,
+the engine said no, and the model spent turns going around the refusal or re-orienting;
+the Architect knew no map at all and composed tasks that crossed another role's folder
+(20 Nov, vpa: QC was told to rewrite the design sheet it may not write).
 
-Open question, to be checked after a few Architect turns: does a file of headers get
-used, or does it stay the template? If it stays empty the pointer is too weak; if it
-fills with task status the headings are wrong.
+- **The file's name is the delivery.** The engine reads `AGENTS.md` from the session's
+  directory, so the map is in context before the first tool call — for the Architect
+  and every worker — without a line of brief.
+- **The block is generated from the rules.** `headerText` in `src/project-agents.js`
+  builds it from `OWNED_DIR`, `SHARED_DIR`, `EVIDENCE_DIR` and `scratchDir`, the same
+  constants that build `roleWriteRules`, so the map cannot describe a fence the ruleset
+  does not enforce. The role table, the project path, the scratch path and the harness
+  path are all derived; nothing is typed twice.
+- **Kept current by comparison, not by a version.** Two markers delimit the block; on
+  boot, on Add Project and before a session is created, Synapse regenerates it and
+  rewrites only the block when its text differs. Change the header in a new build and
+  every project takes it on the next open; a model that edited the block is corrected
+  the same way. An unmarked file — a project's own AGENTS.md, or a marker an edit ate —
+  keeps every word: the block is prepended and the whole file becomes the notepad.
+- **The notepad is the old facts file.** `facts.md` is folded into the notepad and
+  deleted once the new file is on disk, and the header says where facts live now, so
+  the next model to look for them is told instead of finding a stale file.
+- **One author.** The Architect keeps the notepad; every other role is denied `edit`
+  on `AGENTS.md` (relative and absolute), and the header is repaired on the next
+  session while a rewritten note would not be. The size the brief quotes is the
+  notepad alone; the cap (6,000 characters) applies to it, not to the block.
+- **A bug this surfaced:** a private project's scratch is `<project>\.project\scratch`,
+  where the role fence denied every worker's write. `roleWriteRules` now allows that
+  folder when it is the project's own scratch, so the brief and the fence agree.
 
 ---
 

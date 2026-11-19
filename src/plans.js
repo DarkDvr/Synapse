@@ -19,7 +19,18 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { digest as projectDigest, DOC_RELATIVE } from './project-doc.js';
-import { FACTS_RELATIVE, FACTS_LIMIT, factsStatus } from './project-facts.js';
+// The folder map and the project's AGENTS.md live together: the header that names
+// the fence is generated from these constants, so the file cannot describe a rule
+// the ruleset does not enforce.
+import {
+  AGENTS_LIMIT,
+  AGENTS_RELATIVE,
+  EVIDENCE_DIR,
+  OWNED_DIR,
+  SHARED_DIR,
+  agentsStatus,
+} from './project-agents.js';
+export { EVIDENCE_DIR, SHARED_DIR };
 import { MIRROR_RULE } from './shell-mirror.js';
 import { scratchDir, ROOT, PROJECTS_ROOT, SCRATCH_ROOT } from './paths.js';
 import { parseChecks, CHECK_MAX } from './checks.js';
@@ -913,24 +924,6 @@ const QC_PROPORTION =
   'the operator, not a reason for another fix round, and a re-run is a check of the ids already listed, not a ' +
   'second hunt.';
 
-/** Where a role may write inside .project, and nowhere else there. */
-const OWNED_DIR = {
-  inventor: `${PLAN_DIR}/ideas`,
-  designer: `${PLAN_DIR}/design`,
-  qc: `${PLAN_DIR}/qc_findings`,
-};
-
-/** A folder every role may write: screenshots the visual-review skill produces. It
- *  used to point at `.project/design/shots/`, which is the Designer's folder — so a
- *  coder that rendered the page tripped the write rules and the harness alarm. */
-export const SHARED_DIR = `${PLAN_DIR}/shots`;
-
-/** The folder every role keeps evidence in, and the brief says so to every role. It
- *  is a shared folder for the same reason `shots` is: the worker that produced the
- *  proof owns it, not the role's own directory. A rule that denied it made the
- *  brief a lie — see roleWriteRules. */
-export const EVIDENCE_DIR = `${PLAN_DIR}/reports`;
-
 /** The folder inside .project that a role owns, or '' for none. */
 export function ownedFolder(role) {
   const dir = OWNED_DIR[role];
@@ -970,6 +963,27 @@ export function roleWriteRules(dir, role) {
     // lie: a coder's `write` was refused, it fell back to a shell redirect, and the
     // tamper check then reported its own compliance as tampering (11 Nov).
     rules.push({ action: 'edit', resource: `${base}/reports/**`, effect: 'allow' });
+  }
+  // A private project's scratch lives inside the project (`.project/scratch`), where
+  // the deny above would refuse the folder the brief tells every role to write. The
+  // scratch is the role's own working space, not the record, so it is allowed.
+  try {
+    const scratch = scratchDir(dir).replace(/\\/g, '/');
+    if (scratch.startsWith(`${root}/${PLAN_DIR}/`)) {
+      const rel = scratch.slice(root.length + 1);
+      rules.push({ action: 'edit', resource: `${rel}/**`, effect: 'allow' });
+      rules.push({ action: 'edit', resource: `${scratch}/**`, effect: 'allow' });
+    }
+  } catch {
+    // No scratch folder is a project the zone checks catch; the fence is extra.
+  }
+  // The map and the notepad are the Architect's. A worker can read AGENTS.md — the
+  // whole point is that it reads it — and may not edit it: the header is repaired on
+  // the next session, but a note a worker rewrote is not, and two authors on one file
+  // is how the notepad stops being a record.
+  if (role !== 'architect') {
+    rules.push({ action: 'edit', resource: AGENTS_RELATIVE, effect: 'deny' });
+    rules.push({ action: 'edit', resource: `${root}/${AGENTS_RELATIVE}`, effect: 'deny' });
   }
   return rules;
 }
@@ -1348,15 +1362,16 @@ export function briefSession({ dir, role = 'architect', auto = false, single = f
   );
 
   if (isArchitect) {
-    // The facts file is reference, not a second plan: what a run learned that will
+    // AGENTS.md is the one file every session starts with: the generated block names
+    // the fence, and the notepad below it is reference — what a run taught that will
     // still be true next week. The brief carries only what the file cannot say about
-    // itself — that it exists, whose it is, and how big it is now. What belongs in it
-    // and how to keep it are written in the file, so they are not repeated here.
-    const facts = factsStatus(dir);
+    // itself: that it exists, whose it is, and how big the notepad is now. What
+    // belongs in it, and how to keep it, are written in the file.
+    const agents = agentsStatus(dir);
     lines.push(
-      `Project facts: ${FACTS_RELATIVE} - you own it and you are its only writer. Read it before you plan. ` +
-        `Cap ${FACTS_LIMIT} characters; it is ${facts.chars} now` +
-        (facts.over ? ' - over the cap: condense it before you add.' : '.'),
+      `Project facts: ${AGENTS_RELATIVE} - the notepad under the generated header; it is the only copy. ` +
+        `You own it and every role reads it. Cap ${AGENTS_LIMIT} characters; it is ${agents.chars} now` +
+        (agents.over ? ' - over the cap: condense it before you add.' : '.'),
     );
     lines.push(
       'The harness records each run\'s change as a diff under .project/reports/diffs, named in the report. Read ' +

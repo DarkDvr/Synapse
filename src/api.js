@@ -5,6 +5,7 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { appendRun, readPlan, readRuns, runLedger, briefSession, logPlanState, BRIEF_KEY, HARNESS_KEY, harnessCore } from './plans.js';
 import { ensureProjectDoc, appendRequest as appendProjectRequest, appendChat, appendDecision as appendProjectDecision, appendEntry, setHandover } from './project-doc.js';
+import { ensureAgents } from './project-agents.js';
 import { createFormAuto } from './form-auto.js';
 import { setHold as holdTimers, clearHold as releaseTimers, isHeld } from './hold.js';
 import { answerTimeoutMs, formPages } from './auto-answer.js';
@@ -2075,6 +2076,10 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
         throw fail(400, 'choose a project first');
       }
       const location = project.directory;
+      // Before the turn, not after a refusal: the engine reads `AGENTS.md` from the
+      // session's directory, so the map has to be current when the session exists.
+      // A read and a compare when nothing changed, which is the usual case.
+      ensureAgents(location, { log: app });
       const session = await engine.createSession({
         // The engine's own title is never shown: the rail names the project. It is
         // set to the project's name so the engine's list is readable in an audit.

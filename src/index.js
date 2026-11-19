@@ -231,15 +231,18 @@ async function main() {
   }
   app.info(`projects: ${projects.list().length}${discovered.length ? ` (${discovered.length} found in the folder)` : ''}`);
   app.info(`scratch: ${SCRATCH_ROOT}`);
-  // Every project owns a plan file. Create the ones that are missing rather than
-  // waiting for the first session: an empty, valid file is a better starting
-  // point than a missing one, and it makes the file discoverable. The facts file
-  // is created the same way, empty but for its headings.
+  // Every project owns a plan file, and a root AGENTS.md whose generated header names
+  // the fence. Create the ones that are missing rather than waiting for the first
+  // session: an empty, valid file is a better starting point than a missing one, and
+  // it makes the file discoverable. A header that changed in a new build is rewritten
+  // here, so every project takes it without anyone opening it.
   for (const project of projects.list()) {
     if (!project.exists) continue;
     const folders = ensureProjectFolders(project.directory);
     if (folders.plan.created) app.info(`plan file created: ${folders.plan.path}`);
-    if (folders.facts?.created) app.info(`facts file created: ${folders.facts.path}`);
+    if (folders.agents?.created) app.info(`project map created: ${folders.agents.path}`);
+    if (folders.agents?.migrated) app.info(`project facts moved into AGENTS.md: ${project.name}`);
+    if (folders.agents?.updated) app.info(`project map updated: ${folders.agents.path}`);
     if (folders.error) app.warn(`could not give ${project.name} its folders (${folders.error})`);
   }
 
