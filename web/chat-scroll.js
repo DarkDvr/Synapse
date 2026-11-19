@@ -390,7 +390,10 @@ export function placeAskHost(host) {
  * (reported 2 Nov).
  */
 const navMessages = () => {
-  const list = [...document.querySelectorAll('#transcript .msg[data-msg]')];
+  // A post is a post whichever renderer drew it: the old one marks its posts `data-msg`,
+  // the new one `data-key`. Asking for both is what keeps the four jump buttons alive when
+  // the page is switched (`?chat=v2`), instead of leaving a corner of dead buttons.
+  const list = [...document.querySelectorAll('#transcript .msg[data-msg], #transcript .msg[data-key]')];
   const ask = wired.askHost();
   if (ask && !ask.hidden && ask.parentElement && ask.parentElement.id === 'transcript') list.push(ask);
   return list;

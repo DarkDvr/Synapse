@@ -13,6 +13,7 @@ import { state } from './state.js';
 import { renderTranscript as renderV1 } from './transcript.js';
 import { buildChat } from './chat-model.js';
 import { createChatView } from './chat-view.js';
+import { renderChatNav } from './chat-scroll.js';
 
 /** `v2` only when the address asks for it, and by its full name: no half-switched chat. */
 export const chatRenderer = () => {
@@ -50,4 +51,8 @@ export function mountChatView(host, wired = {}) {
 export function renderTranscript() {
   if (!view) return renderV1();
   view.update(buildChat(state));
+  // The four jump buttons are the dock's, not the transcript's, and they read the posts to
+  // find out where they can go. The old renderer calls this itself; the new one has to ask
+  // for it, or the corner of the chat is buttons that answer nothing.
+  renderChatNav();
 }
