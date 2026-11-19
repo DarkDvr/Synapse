@@ -29,12 +29,19 @@ test('the pane survives a step that begins like the last one', () => {
   assert.match(renderSessionStream(), /is-live/, 'the pane is drawn');
 });
 
-test('the pane goes once the step itself carries the words', () => {
+// The operator's rule, twice over (14 Nov, and again at 20:03 on 19 Nov when they photographed
+// the pane vanishing and coming back mid-turn): the pane stays for the whole turn. The step's
+// own words reaching the message is not a reason to hide it — the message's copy is a closed
+// fold, and a step boundary is not the operator's idea of "the turn is over".
+test('the pane stays while the step itself carries the same words', () => {
   state.sessionId = 'sess_test';
+  state.busy = true;
   const text = 'Reading the file now.';
   state.messages = [{ id: 'm2', type: 'assistant', completed: false, parts: [{ type: 'reasoning', text }] }];
   state.sessionTrace = streamOf(text, 'm2');
-  assert.equal(renderSessionStream(), '', 'no duplicate of the same step');
+  assert.match(renderSessionStream(), /is-live/, 'the pane hid itself mid-turn');
+  state.busy = false;
+  state.sessionTrace = null;
 });
 
 // The operator's rule (14 Nov): once the pane has built to its full height it stays

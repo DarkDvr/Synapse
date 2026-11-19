@@ -500,12 +500,12 @@ export function traceSig() {
 /**
  * The open session's own live step, drawn in the panel the workers get.
  *
- * Once the step's message carries the same words, the message is the record and the
- * panel goes — otherwise the paragraph would be on screen twice. **Except once the
- * panel has filled**: a full-height pane stays until the turn ends, even while the
- * finished step's words are also in the message. Hiding it for the message and bringing
- * it back for the next step moved the whole chat by eleven lines twice a step — the
- * operator's "it jumps up and down so much I can't read" (14 Nov).
+ * It belongs to the turn and stays for all of it. It used to hide itself the moment the
+ * step's words reached the message — the message is the record, so the paragraph would
+ * otherwise be on screen twice — and the next delta brought it back: the pane vanished and
+ * reappeared at every step boundary, which the operator saw in a live Architect turn and
+ * named as the one thing that must never happen (19 Nov). The two ways it may go are the
+ * turn ending, and nothing else.
  */
 export function renderSessionStream() {
   const t = state.sessionTrace;
@@ -521,18 +521,6 @@ export function renderSessionStream() {
     t.key = '';
     return '';
   }
-  // Only the step being written can be the same words twice. Comparing against the
-  // whole transcript hid the pane whenever a model began a step the way it began an
-  // earlier one — measured 12 Nov: after a tool call the pane vanished and only the
-  // folded Reasoning lines were left.
-  const msgs = state.messages || [];
-  const last = msgs[msgs.length - 1];
-  const stepParts = last && last.type === 'assistant' ? last.parts || [] : [];
-  const seen = stepParts
-    .filter((p) => p.type === 'reasoning' || p.type === 'text')
-    .map((p) => String(p.text || ''))
-    .join('\n');
-  if (!t.reserved && seen.length >= text.length && seen.includes(text.slice(0, 40))) return '';
   // No head line and no rule of its own: this panel sits *inside* the Architect's
   // post, so the post's green line is the only rule and the reasoning keeps its
   // grey. `is-own` is the whole difference from a worker's trace.
