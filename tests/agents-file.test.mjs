@@ -111,6 +111,24 @@ test('an existing facts file is folded in and then deleted', () => {
   assert.equal(fs.existsSync(path.join(dir, '.project', 'facts.md')), false, 'the old facts file is still there');
 });
 
+test('a project that already had its own map still loses the facts file, once', () => {
+  const dir = project();
+  const mine = '# Our map\n\nWe build a widget.\n';
+  fs.writeFileSync(agentsFile(dir), mine, 'utf8');
+  const facts = '## Harness quirks\n\n- 20 Nov: the deploy step needs `--force`.\n';
+  fs.mkdirSync(path.join(dir, '.project'), { recursive: true });
+  fs.writeFileSync(path.join(dir, '.project', 'facts.md'), facts, 'utf8');
+  const out = ensureAgents(dir);
+  assert.equal(out.migrated, true);
+  const text = read(dir);
+  assert.ok(text.includes('We build a widget.'), 'their map was rewritten');
+  assert.equal(text.split('needs `--force`').length - 1, 1, 'the facts were appended twice');
+  assert.equal(fs.existsSync(path.join(dir, '.project', 'facts.md')), false, 'the facts file survived');
+  // And a second pass does not append them again.
+  ensureAgents(dir);
+  assert.equal(read(dir).split('needs `--force`').length - 1, 1, 'a second pass duplicated the facts');
+});
+
 test('the size the brief quotes is the notepad only, and the cap is real', () => {
   const dir = project();
   ensureAgents(dir);

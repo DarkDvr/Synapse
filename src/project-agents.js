@@ -214,28 +214,33 @@ export function ensureAgents(dir, { scratchRoot = null, harness = ROOT, log = nu
       // No file is the normal first case: the block and the template are written below.
       existing = '';
     }
-    // The facts file is folded in only when the project has no AGENTS.md yet: an
-    // existing file's notepad is the record, and re-importing would duplicate it.
+    // The old facts file is folded in whether or not the project already had an
+    // AGENTS.md: a project whose own map came first (attendance-tracker, router-vpn)
+    // would otherwise keep a second copy of its facts, which is the one thing this
+    // file exists to end. Content already in the file is not appended twice.
     const factsFile = path.join(target, PLAN_DIR, 'facts.md');
     let facts = null;
-    if (!existing.trim()) {
-      try {
-        facts = fs.readFileSync(factsFile, 'utf8');
-      } catch {
-        // No old facts file: the notepad starts from the template.
-        facts = null;
-      }
+    try {
+      facts = fs.readFileSync(factsFile, 'utf8');
+    } catch {
+      // No old facts file: the notepad starts from the template.
+      facts = null;
     }
-    const next = compose(target, existing, { scratch, harness, facts });
+    const factsText = facts && facts.trim() ? facts.trim() : '';
+    let next = compose(target, existing, { scratch, harness, facts: existing.trim() ? null : facts });
+    if (existing.trim() && factsText && !next.includes(factsText)) {
+      next = `${next.trimEnd()}\n\n${factsText}\n`;
+    }
     const changed = next !== existing;
     if (!changed) {
       return { path: file, created: false, updated: false, migrated: false };
     }
     fs.mkdirSync(path.dirname(file), { recursive: true });
     fs.writeFileSync(file, next, 'utf8');
-    // Only after the new file is on disk: a failed write must not cost the notes.
+    // Only after the new file is on disk, and only when the facts are really in it:
+    // a failed write must not cost the notes.
     let migrated = false;
-    if (!existing.trim() && facts && String(facts).trim()) {
+    if (factsText && next.includes(factsText)) {
       try {
         fs.rmSync(factsFile, { force: true });
         migrated = true;

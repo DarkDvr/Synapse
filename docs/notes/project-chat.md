@@ -189,8 +189,10 @@ the Architect knew no map at all and composed tasks that crossed another role's 
   the same way. An unmarked file — a project's own AGENTS.md, or a marker an edit ate —
   keeps every word: the block is prepended and the whole file becomes the notepad.
 - **The notepad is the old facts file.** `facts.md` is folded into the notepad and
-  deleted once the new file is on disk, and the header says where facts live now, so
-  the next model to look for them is told instead of finding a stale file.
+  deleted once the new file is on disk — including in a project that already had its
+  own `AGENTS.md`, which is how the two copies ended. Content already in the file is
+  not appended twice. The header says where facts live now, so the next model to look
+  for them is told instead of finding a stale file.
 - **One author.** The Architect keeps the notepad; every other role is denied `edit`
   on `AGENTS.md` (relative and absolute), and the header is repaired on the next
   session while a rewritten note would not be. The size the brief quotes is the
