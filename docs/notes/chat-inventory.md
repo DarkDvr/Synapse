@@ -457,3 +457,64 @@ list — and a disagreement between the two is a bug in one of them, not a matte
   (G3/G6), nothing closes on its own (A13/C5/C7), motion on every state change (K6),
   one measured spine (K1/K2/K3) — plus text that behaves like text (B4–B6).
 - A screenshot pair per category, at two widths, reviewed before the next phase.
+
+---
+
+## 9. Where it stands, and how to run it
+
+**The branch.** `chat-v2`, in its own worktree at `F:\dev\Synapse.worktrees\chat-v2` so the
+running app's folder is never touched. Main still draws the old chat; the branch is ahead of
+`bf7cb95`. The last commit is `a1fd9a6`.
+
+**What is built.**
+- `web/chat-model.js` — the item model (§7): `{ handover, items, pending, form }`.
+- `web/chat-view.js` — the keyed renderer: posts, traces, lines, prose, folds, cards,
+  streams, the question panel. One element per key, and a repaint keeps the node.
+- `tests/browser/lab.html` + `lab.js` — both renderers, one state, side by side, with the
+  anchor, the pane, the hint and the motion measured on every frame.
+- `scripts/chat-lab.mjs` — stages the page into `%TEMP%\synapse-chat-lab` and runs it:
+  `node scripts/chat-lab.mjs <scenario> [--shot] [--motion] [--width N --height N]`.
+- `tests/scenario-steps.mjs` + `tests/scenario-player.mjs` — one scenario, applied in Node
+  against the old renderer or in the lab against both. Steps: `messages`, `parts`, `trace`,
+  `trace-update`, `note`, `download`, `alarm`, `lease`, `form`, `permission`, `handover`,
+  `open`, `close`, `stream`, `render`, and the lab's `scrollTo` / `scrollPane`.
+- `tests/scenarios/` — `S1-folds`, `download-placement`, `alarm-split`, `stream-burst`,
+  `pane-scroll`, `anchor`, `form`.
+- `tests/chat-model.test.mjs` and `tests/scenario.test.mjs` — the model and the frames.
+
+**What is proved**, both renderers, one state:
+
+| Promise | Old | New |
+|---|---|---|
+| Folds the operator opened stay open | closes | open (S1) |
+| A download sits inside its post | yes | yes (download-placement) |
+| A prohibition splits the turn it landed in | yes | yes (alarm-split) |
+| The two render the same characters | — | identical text on every frame |
+| The pane grows without moving the chat | post 45 → 162 px | 245 px throughout (stream-burst) |
+| The reader's line holds still | 44 px | 1 px (anchor) |
+| The pane says there are new words | no | yes (pane-scroll) |
+| Folds and cards open in 120 ms | instant | 0→55→56 px; 1→56→96→1 px |
+| The question panel keeps typed answers | yes | yes (form) |
+
+**What is left**, in order:
+
+1. **Per-block text updates**, so a selection inside a paragraph survives that paragraph
+   growing. It is the one promise still unproven: a changed block is rebuilt today.
+2. **The panel's arrival animation**, and the question countdown in v2 — `firstAt` and
+   `wait` are in the model, the ticking is not.
+3. **The app switch**: `chat.renderer: v1 | v2`, the ask host and the permission cards wired
+   to the view, then the operator's side-by-side judgement and the decision.
+4. Only then: the rail, the role cards and the plan pane on the same primitives.
+
+**Traps that cost time here.**
+- The lab's panels must beat the app's `body[data-view] .chat-dock` rules, so the lab's rules
+  carry `#lab`. Without it the panels grow to their content and nothing can be scrolled.
+- Headless Chromium reports `prefers-reduced-motion: reduce`, so every transition measures
+  as *none*; `--motion` on `shot.mjs` emulates no-preference, and the lab reports the
+  preference in every frame so a measured zero cannot be misread.
+- A closed `<details>` still *measures* its content (content-visibility), so a fold's body
+  needs `display: none` while closed or the animation has nothing to grow from.
+- The view's anchor is a **text identity** and a **viewport offset**. A content offset changes
+  whenever anything above grows — that is geometry, not movement.
+- A closing fold has to stay `open` until its body has shrunk, or the content disappears
+  before anything can move.
