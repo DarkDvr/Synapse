@@ -312,6 +312,23 @@ function settingsGeneral(c) {
           'ui.workerCards',
           "Draw a worker's tool calls as the Architect's one-line cards, and its prose as a paragraph, instead of grey sentences that vanish. Off restores the silent trace; the switch takes effect on the next render.",
           readPath(c, 'ui.workerCards') !== false,
+        ) +
+        setSelect(
+          c,
+          'Motion',
+          'ui.motion',
+          [
+            { v: 'system', l: 'Follow Windows' },
+            { v: 'on', l: 'Always' },
+            { v: 'off', l: 'Never' },
+          ],
+          {
+            value: String(readPath(c, 'ui.motion') || 'system'),
+            hint:
+              'Whether the chat animates: folds opening, cards opening, a post or a question arriving. ' +
+              'Follow Windows uses the machine’s reduced-motion setting — if animations look absent, ' +
+              'that setting is the first thing to check, and Always shows them regardless.',
+          },
         ),
       undefined,
       'Scales the whole conversation, headings and code included. The smallest that still reads is ' +

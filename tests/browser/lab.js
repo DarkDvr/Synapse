@@ -221,6 +221,10 @@ window.__labRun = async (name, only, selectPanel) => {
   if (!res.ok) throw new Error(`no scenario "${name}" (${res.status})`);
   const scenario = await res.json();
   resetState(state);
+  // The frames are geometry, and an animation in flight is not geometry: the pane's glide
+  // would be caught half way and every measurement would depend on when it was taken. Motion
+  // is measured on its own, with `__labMotionOn(true)` before the probe.
+  state.config = { ui: { motion: 'off' } };
   view.update(buildChat(state));
   const frames = [];
   let picked = null;
@@ -301,6 +305,12 @@ window.__labBox = (key) => {
 /** Select words by hand and read back where the selection is: for a check that needs to know. */
 window.__labPick = (words, panel) => select(words, panel || 'new');
 window.__labSel = () => selectionNow();
+
+/** Turn the chat's own motion on or off for an animation probe, whatever the machine says. */
+window.__labMotionOn = (on = true) => {
+  state.config = { ui: { motion: on ? 'on' : 'off' } };
+  return state.config.ui.motion;
+};
 
 /**
  * The promises that need a browser, as cases that fail rather than as numbers to read.

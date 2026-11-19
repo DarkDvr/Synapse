@@ -15,6 +15,7 @@ import { askHeadNote, answerTimeline } from './ask-note.js';
 import { serverNow } from './api.js';
 import { fileChip } from './format.js';
 import { formatBytes, progressBar, downloadLabel } from './downloads.js';
+import { state } from './state.js';
 
 /** HH:MM, in the operator's own 24-hour clock. */
 const CLOCK = (at) => new Date(Number(at) || 0).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
@@ -336,16 +337,28 @@ let viewToggle = () => {};
 // in a post is the open session's step and a pane in a trace is that worker's.
 let viewPaneToggle = () => {};
 
-/** Is the page's own motion preference off? Then every fold snaps, as the browser should. */
-const motionOff = () => Boolean(window.matchMedia?.('(prefers-reduced-motion: reduce)').matches);
+/**
+ * Does the chat animate?
+ *
+ * Three answers, and the config file is the truth (`ui.motion`): `system` follows the page's
+ * own preference, `on` animates whether or not the machine asks for less, `off` never does.
+ * The operator has now twice said "I see no animations" while the machine said it was happy
+ * to show them, so the switch is theirs rather than something nobody can see.
+ */
+const motionOff = () => {
+  const mode = String(state?.config?.ui?.motion || 'system').toLowerCase();
+  if (mode === 'off') return true;
+  if (mode === 'on') return false;
+  return Boolean(window.matchMedia?.('(prefers-reduced-motion: reduce)').matches);
+};
 
-// Said once, in the console the app already has: a page that is told "no motion" draws no
-// motion, and "I see no animations" must not be a mystery to the next person reading the log.
+// Said once, in the browser's console: a page that is told "no motion" draws no motion, and
+// "I see no animations" must not be a mystery to the next person reading the log.
 let motionSaid = false;
 const noteMotion = () => {
   if (motionSaid || !motionOff()) return;
   motionSaid = true;
-  console.info('chat: this machine asks for reduced motion, so folds, cards and arrivals do not animate');
+  console.info('chat: motion is off here (ui.motion or the browser\'s reduced-motion setting), so folds, cards and arrivals do not animate');
 };
 
 /**
@@ -612,6 +625,46 @@ function appear(node) {
 const PANE_LINES = 11;
 const PANE_LINE_EM = 1.45;
 
+/**
+ * Slide a pane's scroll to its end instead of jumping there.
+ *
+ * The old chat's pane slid its words with an eased transform, which is why its text arrived as
+ * a movement rather than as a block appearing. This pane scrolls natively, so the same easing
+ * has to be done to `scrollTop`: a delta that lands 200 characters at once should arrive as a
+ * slide of about 120ms, not as a cut. A reader who scrolled up is never moved — this is only
+ * called while the pane is following its own end.
+ */
+const paneGlide = new WeakMap();
+
+function glidePane(view, instant = false) {
+  if (!view) return;
+  const target = Math.max(0, view.scrollHeight - view.clientHeight);
+  const running = paneGlide.get(view);
+  if (running?.raf) cancelAnimationFrame(running.raf);
+  if (instant || motionOff() || target - view.scrollTop <= 1) {
+    view._gliding = false;
+    view.scrollTop = target;
+    paneGlide.set(view, { raf: 0 });
+    return;
+  }
+  const step = () => {
+    const left = target - view.scrollTop;
+    if (left <= 1) {
+      view._gliding = false;
+      view.scrollTop = target;
+      paneGlide.set(view, { raf: 0 });
+      return;
+    }
+    // A fifth of what is left each frame, never less than two pixels: an eased arrival that
+    // still keeps up with a burst.
+    view._gliding = true;
+    view.scrollTop += Math.max(2, left * 0.35);
+    paneGlide.set(view, { raf: requestAnimationFrame(step) });
+  };
+  view._gliding = true;
+  paneGlide.set(view, { raf: requestAnimationFrame(step) });
+}
+
 function streamNode(item) {
   if (item.collapsed) {
     const row = el('div', 'think-line');
@@ -656,7 +709,7 @@ function streamNode(item) {
   hint.hidden = true;
   hint.title = 'Jump to the newest thought';
   hint.addEventListener('click', () => {
-    view.scrollTop = view.scrollHeight;
+    glidePane(view);
     const s = paneFollow.get(item.key) || { follow: true };
     s.follow = true;
     s.lastLen = String(item.text || '').length;
@@ -672,6 +725,9 @@ function streamNode(item) {
   toggle.addEventListener('click', () => viewPaneToggle(item.key));
   wrap.append(toggle);
   view.addEventListener('scroll', () => {
+    // Our own glide fires scroll events too: only the operator's hand may change the answer
+    // to "is the reader at the end".
+    if (view._gliding) return;
     const state = paneFollow.get(item.key) || { follow: true };
     state.follow = view.scrollHeight - view.scrollTop - view.clientHeight <= 4;
     paneFollow.set(item.key, state);
@@ -716,7 +772,9 @@ function fillStreamNode(node, item) {
     }
   }
   if (view && (atEnd || fresh)) {
-    view.scrollTop = view.scrollHeight;
+    // Following: slide to the newest line rather than cutting to it. A fresh element is the
+    // one case that jumps — there is nothing on screen to glide from.
+    glidePane(view, fresh);
     state.follow = true;
   } else {
     state.follow = false;
