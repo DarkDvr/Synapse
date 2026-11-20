@@ -9,7 +9,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { runGit } from '../src/git.js';
-import { commitLabel, commitVcs, designMismatch, ensureVcs, hasVcs, pruneVcs, VCS_KEEP } from '../src/project-vcs.js';
+import { changedInVcs, commitLabel, commitVcs, designMismatch, ensureVcs, hasVcs, pruneVcs, VCS_KEEP } from '../src/project-vcs.js';
 import { tmpdir } from './tmpdir.mjs';
 
 const project = () => {
@@ -91,6 +91,20 @@ test('history is pruned to the newest commits, and the working tree is untouched
   assert.match((await git(dir, ['show', 'HEAD:plan.json'])).out, /"i":11/);
 });
 
+test('a pair of commits names what a run changed in the records', async () => {
+  const dir = project();
+  await ensureVcs(dir);
+  write(path.join(dir, '.project', 'design', 'mock.html'), '<p>one</p>');
+  const first = await commitVcs(dir, 'before');
+  write(path.join(dir, '.project', 'design', 'mock.html'), '<p>two</p>');
+  write(path.join(dir, '.project', 'plan.json'), '{"version":1}');
+  const second = await commitVcs(dir, 'after');
+  assert.equal(first.committed, true);
+  assert.equal(second.committed, true);
+  const changed = await changedInVcs(dir, first.sha, second.sha);
+  assert.deepEqual(changed.sort(), ['design/mock.html', 'plan.json']);
+});
+
 test('the design sheet and the run are compared, and only a real mismatch speaks', async () => {
   const dir = project();
   write(
@@ -101,6 +115,8 @@ test('the design sheet and the run are compared, and only a real mismatch speaks
   assert.match(nag, /^Warning: /, 'the report line must start with Warning');
   assert.match(nag, /mock-2\.html/);
   assert.match(nag, /mock-4\.html/);
+  // The records' paths (design/...) are the form the commit log gives, and they work too.
+  assert.match(designMismatch(dir, ['design/mock-2.html']), /^Warning: /);
   // The sheet naming the file the run wrote is the right shape: no line.
   assert.equal(designMismatch(dir, ['.project/design/mock-4.html']), '');
   // A run that only touched source says nothing.

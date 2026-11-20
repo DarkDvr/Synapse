@@ -201,6 +201,18 @@ export async function pruneVcs(projectDir, { keep = VCS_KEEP, at = VCS_PRUNE_AT,
   return { pruned: true, kept: kept.length, dropped: total - kept.length };
 }
 
+/** The paths a pair of commits changed, relative to `.project`. */
+export async function changedInVcs(projectDir, from, to) {
+  if (!hasVcs(projectDir)) return [];
+  const args = ['diff', '--name-only'];
+  if (from && to && from !== to) args.push(from, to);
+  else if (from) args.push(from, 'HEAD');
+  else if (to) args.push(`${to}~1`, to);
+  else return [];
+  const r = await runGit(args, { cwd: repoDir(projectDir), timeoutMs: 20_000 });
+  return r.ok ? r.out.split('\n').map((s) => s.trim()).filter(Boolean) : [];
+}
+
 /**
  * The line the report says when a run's design files and the design sheet disagree.
  *
@@ -209,11 +221,17 @@ export async function pruneVcs(projectDir, { keep = VCS_KEEP, at = VCS_PRUNE_AT,
  * saw a file with the right name. The harness knows both lists, so it says so — and
  * only when it is true, with `Warning:` first because it is the one line in the report
  * that asks the Architect to look.
+ *
+ * `files` are the paths the records commit changed (`design/mock-2.html`) or the
+ * project's diff named (`.project/design/mock-2.html`); both are accepted.
  */
 export function designMismatch(projectDir, files = []) {
   const design = (Array.isArray(files) ? files : [])
     .map((f) => String(f || '').replace(/\\/g, '/'))
-    .filter((f) => f.startsWith(`${PLAN_DIR}/design/`) && /\.(?:html?|png|svg)$/i.test(f));
+    .filter((f) => {
+      const inDesign = f.startsWith(`${PLAN_DIR}/design/`) ? f.slice(PLAN_DIR.length + 1) : f;
+      return inDesign.startsWith('design/') && /\.(?:html?|png|svg)$/i.test(f);
+    });
   if (!design.length) return '';
   let sheet = '';
   try {

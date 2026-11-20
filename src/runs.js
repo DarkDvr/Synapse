@@ -58,7 +58,7 @@ import { normDir } from './paths.js';
 import { report } from './report.js';
 import { runTaskChecks, checkNudge } from './checks.js';
 import { treeOf, changeSince, createCheckpoint, dropCheckpoint, isRepo, ensureRepo } from './git.js';
-import { commitLabel, commitVcs, designMismatch, ensureVcs, pruneVcs } from './project-vcs.js';
+import { changedInVcs, commitLabel, commitVcs, designMismatch, ensureVcs, pruneVcs } from './project-vcs.js';
 import { tokens, ranFor } from './words.js';
 import { skillRules, describeSkills, roleMustLoad } from './skills.js';
 import { rulesFor } from './permissions.js';
@@ -1718,9 +1718,11 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     // The records get their own commit before the worker touches anything: the state
     // a bad run is judged against, and the bytes a file it overwrites used to hold.
     // The project's own repository is never committed to — this is `.project\.git`.
+    let vcsBefore = '';
     try {
       await ensureVcs(dir, { log });
-      await commitVcs(dir, commitLabel({ task: task.id, attempt: attempts + 1, event: 'before' }), { log });
+      const before = await commitVcs(dir, commitLabel({ task: task.id, attempt: attempts + 1, event: 'before' }), { log });
+      if (before?.sha) vcsBefore = before.sha;
     } catch { /* no git, or a records folder that cannot be written: commits are off */ }
 
     // A restore point first, then a clean baseline: the harness is committed as it
@@ -2545,8 +2547,12 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     // a mock the sheet does not name is the incident this repository exists for.
     let vcsWarning = '';
     try {
-      vcsWarning = designMismatch(dir, change?.files || []);
-      await commitVcs(dir, commitLabel({ task: task.id, attempt: attempts + 1, event: outcome }), { log });
+      const after = await commitVcs(dir, commitLabel({ task: task.id, attempt: attempts + 1, event: outcome }), { log });
+      // The design comparison reads the *records* history, not the project's diff: the
+      // project's tree deliberately excludes `.project`, so a mock a designer wrote
+      // appears in the records commit and nowhere else.
+      const designFiles = await changedInVcs(dir, vcsBefore, after?.sha || '');
+      vcsWarning = designMismatch(dir, designFiles);
       await pruneVcs(dir, { log });
     } catch (err) {
       log.warn(`could not commit the records for ${request.task}: ${err.message}`);
