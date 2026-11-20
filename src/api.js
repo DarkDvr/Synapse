@@ -2915,6 +2915,11 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
         const known = await safe(() => engine.listSessions(), []);
         for (const s of known || []) if (isPrivateDir(s.directory)) privateSessions.add(s.id);
       }
+      // A private chat is not the remote view's to look at, even by naming its session:
+      // no queue line, no Stop state, no title. A queued message's holder text carries
+      // the project name, so it is dropped with the rest (21 Nov, the queue's private
+      // path).
+      if (remote && focusSessionId && privateSessions.has(focusSessionId)) focusSessionId = null;
       const [permissions, active] = await Promise.all([
         safe(() => engine.listPendingPermissions(), []),
         safe(() => engine.listActiveSessions(), []),
@@ -3143,7 +3148,13 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
         stopping,
         // This chat's place in the local server's queue, if it is in one. The page
         // draws its waiting post from this, so the post survives a switch or a reload.
-        lease: focusDir && localLease ? localLease.forDir(focusDir, focusSessionId) : null,
+        // A remote view never sees a private project named in the queue ahead of it.
+        lease:
+          focusDir && localLease
+            ? localLease.forDir(focusDir, focusSessionId, {
+                skip: remote ? (dir) => isPrivateDir(dir) : null,
+              })
+            : null,
       };
     },
 

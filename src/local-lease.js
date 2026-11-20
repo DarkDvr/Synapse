@@ -194,23 +194,30 @@ export function createLocalLease({ log = null, notify = null, maxHoldMs = 6 * 60
    * memory the server owns, which is what lets the post survive switching projects and
    * a page reload.
    */
-  function forDir(dir, sessionId = null) {
+  function forDir(dir, sessionId = null, { skip = null } = {}) {
     const key = norm(dir);
     const idx = queue.findIndex(
       (w) => (sessionId && w.sessionId === sessionId) || (key && norm(w.dir) === key),
     );
     if (idx < 0) return null;
     const waiter = queue[idx];
+    if (skip && skip(waiter.dir)) return null;
     const owner = held.get(waiter.key) || null;
     // Who is ahead of this turn, in order: the answer the post needs to be honest about
     // — "VPA has it" alone is a lie once two more projects are queued in front (21 Nov).
+    // `skip` keeps a private project's name out of a remote view's post.
     const ahead = queue
       .slice(0, idx)
-      .filter((w) => w.key === waiter.key)
+      .filter((w) => w.key === waiter.key && !(skip && skip(w.dir)))
       .map((w) => w.holder || 'another turn');
+    const heldView = owner
+      ? skip && skip(owner.dir)
+        ? { server: owner.label, holder: 'another chat', since: owner.at || 0 }
+        : { server: owner.label, holder: owner.holder || '', since: owner.at || 0 }
+      : null;
     return {
       waiting: { server: waiter.label, holder: waiter.holder || '', since: waiter.at || Date.now(), kind: waiter.kind || 'turn' },
-      held: owner ? { server: owner.label, holder: owner.holder || '', since: owner.at || 0 } : null,
+      held: heldView,
       ahead,
       aheadCount: ahead.length,
     };
