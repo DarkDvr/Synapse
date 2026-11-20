@@ -1081,14 +1081,21 @@ function updateBusyFromMessages() {
   if (state.streaming) return;
   const convo = state.messages.filter((m) => m.type === 'user' || m.type === 'assistant');
   const last = convo[convo.length - 1];
-  state.busy = Boolean(last && last.type === 'assistant' && !last.completed && !last.error);
+  // The engine's active list is the authority on a live turn. A transcript can end
+  // with an assistant message that never completed — the app was restarted mid-turn —
+  // and reading that as "still working" left the project breathing for ever over a
+  // tool call that would never finish (reported 21 Nov). The poll sets it again if
+  // the turn really is running.
+  const activeNow = Boolean(state.sessionId) && state.busySessions.has(state.sessionId);
+  state.busy = activeNow && Boolean(last && last.type === 'assistant' && !last.completed && !last.error);
 
   // Seed "a tool is running" from the transcript too, so a reload in the middle
-  // of a long tool does not look like a stall.
+  // of a long tool does not look like a stall — but only for a session the engine
+  // still reports as active.
   if (state.sessionId) {
-    const running = (last?.parts || []).some(
-      (p) => p.type === 'tool' && /run|stream|pend|progress/i.test(String(p.status || '')),
-    );
+    const running =
+      activeNow &&
+      (last?.parts || []).some((p) => p.type === 'tool' && /run|stream|pend|progress/i.test(String(p.status || '')));
     if (running) state.toolsInFlight.add(state.sessionId);
     else state.toolsInFlight.delete(state.sessionId);
   }
@@ -1197,10 +1204,27 @@ function connectStream() {
       // next usage figure would subtract a total from another step, and the card would
       // read two steps' tokens over one step's window (13 Nov).
       forgetUsageSamples();
+      // A reconnect usually means the server was restarted, and a restart ends every
+      // turn: nothing in the page's live state can still be true. A thinking pane, a
+      // tool "in flight" and a busy flag left over from before the restart read as a
+      // project still working for ever, and the pane could outlive the chat it was
+      // written in (reported 21 Nov). They are re-derived from the server's own lists
+      // and the transcript, which are clean.
+      state.sessionTrace = { key: '', stream: null };
+      state.toolsInFlight.clear();
+      state.archCtx = null;
+      state.busy = false;
+      state.stopping = false;
+      state.stoppingReason = null;
+      renderComposer();
       // A reconnect is exactly when a `run.finished` was missed: the stream that
       // would have carried it died first. Ask what is actually running.
       syncRuns().catch(() => {});
       loadDesk().catch(() => {});
+      // The transcript of the open chat is a snapshot from before the restart: any
+      // message that was mid-turn is now finished, interrupted or gone.
+      if (state.sessionId) loadMessages().catch(() => {});
+      refreshPending();
       // The same is true of the version: a reconnect usually means the server was
       // restarted onto a new build, and the About page would otherwise keep the
       // number it read when the tab was opened.
@@ -2889,6 +2913,9 @@ async function restoreOpenSession() {
     if (chat) target = chat.id;
   }
   if (!target) return;
+  // The operator picked a project while the remembered one was being looked up: their
+  // click wins, or the late restore opens a chat over it (21 Nov).
+  if (state.sessionId) return;
   await openSession(target);
 }
 

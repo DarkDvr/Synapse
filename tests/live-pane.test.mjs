@@ -18,7 +18,7 @@ import { turnLive } from '../web/turn-live.js';
 
 const source = (rel) => fs.readFileSync(new URL(`../web/${rel}`, import.meta.url), 'utf8');
 const step = (id, text, completed = true) => ({ id, type: 'assistant', completed, parts: [{ type: 'reasoning', text }] });
-const streamOf = (text, stepId) => ({ key: 'sess:test', stream: { kind: 'think', text, step: stepId, ended: false } });
+const streamOf = (text, stepId) => ({ key: `sess:${state.sessionId}`, stream: { kind: 'think', text, step: stepId, ended: false } });
 
 test('the pane survives a step that begins like the last one', () => {
   state.sessionId = 'sess_test';

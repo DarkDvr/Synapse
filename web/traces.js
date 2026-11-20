@@ -514,6 +514,10 @@ export function renderSessionStream() {
   const t = state.sessionTrace;
   const text = String(t?.stream?.text || '');
   if (!t?.key || !text.trim()) return '';
+  // The pane is this chat's or it is not drawn: a key from another session — a
+  // reconnect across a switch, a turn that outlived its chat — must never sit under
+  // this post (reported 21 Nov).
+  if (String(t.key).startsWith('sess:') && t.key !== `sess:${state.sessionId}`) return '';
   // The pane belongs to a live turn. Once the turn is over its reasoning is the
   // message's own folds, and a pane that outlived it is a stray box under a finished
   // post — the operator's one-line "digit-count computations depend" under the
