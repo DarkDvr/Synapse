@@ -182,7 +182,7 @@ Ids are stable: they are the ticket names and the scenario names. `M` = must,
 | K3 | Spacing is in line units (¼, ½, 1, 2), not in ad-hoc pixels; P: the Compacting line's inset does not match a post's |
 | K4 | Both layouts (wide, stacked), the zoom control and every font size are the same design, measured at 1280/1460/1600 |
 | K5 | No horizontal scrollbar ever; the scrollbar gutter is stable; long words wrap or scroll inside their own block |
-| K6 | Motion: 120ms, ease-out, transform/height only; only state changes animate (a fold opening, a card expanding, the panel arriving, a report settling), never the scroll while text arrives; honour reduced motion |
+| K6 | Motion: 120ms for a fold or a card, 200ms for a row that has just arrived (a post, a reasoning line, a tool card, a trace line); ease-out, opacity/transform/height only; a row's slide moves nothing around it, so the bottom edge and the scroll hold still while text arrives; honour reduced motion |
 
 ### L. What survives
 

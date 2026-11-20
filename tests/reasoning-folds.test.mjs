@@ -241,7 +241,7 @@ test('a worker tool note is a card, and the switch brings the old line back', ()
   state.config = { ui: { workerCards: false } };
   const off = renderTrace(trace);
   assert.doesNotMatch(off, /class="tool-card trace-card"/);
-  assert.match(off, /class="trace-line">shell cd/);
+  assert.match(off, /class="trace-line"[^>]*>shell cd/);
   state.config = null;
 });
 

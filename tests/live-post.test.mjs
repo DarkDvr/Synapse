@@ -113,7 +113,9 @@ check(
   // The same card and the same chip the Architect's tool call wears, not a second
   // row shape: a tool head, the action as the name, what it named as the target, and
   // the shared chip with the sentence — refusal reason included — in its title.
-  check('the answer is the Architect\'s tool card', /<div class="tool-card trace-card"><div class="tool-head">/.test(html), html.slice(0, 240));
+  // The row also carries its own name (`data-line`, so a line that arrives can slide
+  // in); the shape after it is what this asks about, not the exact attribute run.
+  check('the answer is the Architect\'s tool card', /<div class="tool-card trace-card"[^>]*><div class="tool-head">/.test(html), html.slice(0, 240));
   check('the action is the tool name', /class="tool-name">shell</.test(html));
   check('and what it named is the target', /class="tool-target"[^>]*>Stop-Process -Name python</.test(html));
   check('it wears the shared permission chip', /class="tool-perm state-pill err" title="/.test(html), 'no chip, or the wrong colour');

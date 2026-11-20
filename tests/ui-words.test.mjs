@@ -686,6 +686,11 @@ contract('a compaction is a line in the chat, in the trace format Multi uses', a
   assert.match(done, /class="trace-line is-compact"/, 'the run trace\'s own line, not a harness block');
   assert.match(done, /Compacted ×1/, 'the count, as Multi prints it');
   assert.match(done, /context at 167K/, 'and the size when it can be true');
+  // The post's own name, and a whole tag: the compaction's sentence used to be the
+  // variable `line`, which the slide's attribute took over — the tag was left as
+  // `class="trace"Compacted ×1`. A pattern that only looked for the sentence still
+  // passed, so this asks for the attribute after the class (20 Nov).
+  assert.match(done, /class="trace"\s+data-line="msg:c1"/, 'the post lost its name, or the tag is broken');
   // The transcript holds the first one by the time the second is written — that is what
   // makes it the second, and the count is the chat´s, not this render´s.
   state.messages.push({ id: 'c1', type: 'compaction', created: 2000, raw: { status: 'completed', tokens: {} } });

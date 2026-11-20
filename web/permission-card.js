@@ -116,7 +116,10 @@ export function renderPermissionCards() {
       // command — so it has its own two buttons and no "Always Allow".
       const screen = p.scope === 'desk';
       const browserAsk = p.scope === 'browser';
-      return `<div class="perm-card${screen ? ' is-screen' : ''}">
+      // The request is the card's name, so a card that arrives can slide in — and the
+      // same card redrawn by the next poll is the same row, not a new one (20 Nov).
+      const line = p.requestId ? ` data-line="perm:${esc(p.requestId)}"` : '';
+      return `<div class="perm-card${screen ? ' is-screen' : ''}"${line}>
         <div class="perm-head"><span class="status-dot warn" role="img" aria-label="waiting"></span><span class="perm-head-text">${esc(
           actor,
         )} needs your ${browserAsk ? 'sign-in' : screen ? 'screen' : 'permission'}</span>${

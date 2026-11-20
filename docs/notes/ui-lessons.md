@@ -2840,3 +2840,46 @@ inside a freshness gate.
 One trap found on the way: the delta window is shared state. `measureSession` consumed it
 for the worker path too, so the card's own sample found no window and dropped out; the
 caller now owns the window (`consumeWindow`).
+
+## A line that arrives (20 Nov)
+
+The operator: "when we get a new line in chat like a new reasoning line or a tool call, or
+even a post — can we add animation to that? Something that's not an abrupt 1-frame update."
+
+The conversation is one HTML string rebuilt on every delta, so there is nothing for the
+browser to animate: the node showing the new line did not exist in the previous frame, and
+the one that appears has no "before" to move from. The page has to know what is new.
+
+- **A row that can arrive carries its name.** A post is `data-line="msg:<id>"`; an answer or
+  a reasoning block is `data-line="part:<message>:<index>"`; a tool card is its own
+  `data-tool-card`; a trace is its `data-trace`; a trace line is its moment plus a hash of
+  what it says; a permission card is its request; folds keep the `data-k` they already had
+  for their open state. `lineKey` is the one reader, and it is why the same rule covers a
+  post, a card and one line of a worker's trace.
+- **New means "not on screen before this draw".** The names are collected before `innerHTML`
+  is replaced and compared after; nothing is remembered between draws, so a row that was
+  already there cannot animate twice.
+- **A row inside a new row does not slide on its own.** A tool card in a post that has just
+  appeared is carried by the post's slide; two transforms on one block read as a shake.
+- **A row that takes another's place continues it.** The page's own echo, and the post it
+  opens on a turn's first token, are replaced by the engine's message a few hundred
+  milliseconds later. A new name standing where an old name was, at the same place in the
+  list, keeps the old row's slide — otherwise the operator's own sentence dipped twice.
+  (Measured 20 Nov: 70 ms in, the successor carried `animation-delay: -72ms` and no second
+  slide started.)
+- **A row rebuilt mid-slide continues it.** A delta replaces every node, so the row that
+  began sliding 40 ms ago is a *new node* with no animation — it would snap to its final
+  place and the line would flicker. The arrival time is kept for 200 ms and handed back as a
+  negative `animation-delay`, which puts the fresh node exactly where its predecessor was.
+- **Opening a chat is not an arrival.** `drawnFor` holds the open chat's directory: the first
+  draw of another chat is drawn as it is, or a switch would play a wall of posts falling in.
+- **A burst is history, not an event.** More than eight new rows in one draw — a reload that
+  replaced the local echo, a replayed turn — are drawn plainly. A wave of fading lines says
+  "everything just happened at once", which is exactly wrong.
+- **The animation must not touch layout.** Opacity and a 7px `transform` only. The chat's
+  bottom edge is glued to the composer, so anything that changed height here would move the
+  words under the reader's eyes — the rule the thinking pane and the folds already keep.
+
+200 ms, ease-out, `.is-arriving` in `synapse.css`; `prefers-reduced-motion` turns it off.
+The decision is `planArrivals` in `web/transcript.js` and is tested in
+`tests/arrivals.test.mjs`; the drawing is one keyframe.

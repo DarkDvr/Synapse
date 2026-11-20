@@ -3788,3 +3788,17 @@ body.is-disconnected .app-shell { filter: blur(2px) brightness(0.45); pointer-ev
   .msg-wait .msg-body::after { animation: none; opacity: 0.7; }
 }
 .msg-wait .msg-wait-note { display: block; color: var(--muted); line-height: 1.5; }
+
+/* A row that has just appeared slides up into place, instead of existing between two
+   frames. The renderer decides which rows are new and how far into their slide a rebuilt
+   row already is (web/transcript.js, "a line that arrives"); this only draws it.
+   Opacity and transform alone: the layout never changes, so the chat's bottom edge holds
+   still and a reader sitting at the end keeps their place. */
+@keyframes line-in {
+  from { opacity: 0; transform: translateY(7px); }
+  to { opacity: 1; transform: none; }
+}
+.is-arriving { animation: line-in 200ms cubic-bezier(0.22, 0.61, 0.36, 1) both; }
+@media (prefers-reduced-motion: reduce) {
+  .is-arriving { animation: none; }
+}

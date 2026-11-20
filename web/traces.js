@@ -76,22 +76,22 @@ export function steerLine(text) {
   return said.length > 300 ? `${said.slice(0, 299)}…` : said;
 }
 
-function compactMark(mark) {
+function compactMark(mark, key = '') {
   const count = Math.max(1, Number(mark.count) || 1);
   const size = Number(mark.size) || 0;
   const limit = Number(mark.limit) || 0;
   const where = size ? ` · context at ${fmtTokens(size)}${limit ? `/${fmtTokens(limit)}` : ''}` : '';
   const line = mark.running ? `Compacting ×${count}` : `Compacted ×${count}`;
-  return `<div class="trace-line is-compact"><span class="trace-mark">⏳</span>${esc(line)}${esc(where)}</div>`;
+  return `<div class="trace-line is-compact"${key ? ` data-line="${esc(key)}"` : ''}><span class="trace-mark">⏳</span>${esc(line)}${esc(where)}</div>`;
 }
 
-function loopMark(mark) {
+function loopMark(mark, key = '') {
   const count = Math.max(1, Number(mark.count) || 1);
   const limit = Math.max(1, Number(mark.limit) || 3);
   const tail = mark.stop || count >= limit
     ? ' — marked ISSUES, next coder'
     : ` of ${limit} — asking it to carry on`;
-  return `<div class="trace-line is-loop"><span class="trace-mark">↻</span>Loop detected ×${count}${esc(tail)}</div>`;
+  return `<div class="trace-line is-loop"${key ? ` data-line="${esc(key)}"` : ''}><span class="trace-mark">↻</span>Loop detected ×${count}${esc(tail)}</div>`;
 }
 
 export function renderTrace(t) {
@@ -103,18 +103,20 @@ export function renderTrace(t) {
   const cardsOn = () => state.config?.ui?.workerCards !== false;
   // A lease this worker is holding: its countdown rides the call that asked for it.
   const lease = leaseFor({ dir: t.dir, task: t.task });
-  const toolLine = (tool, fallback) => {
+  const toolLine = (tool, fallback, line = '') => {
     const name = String(tool?.name || '').trim();
     const target = String(tool?.target || '').trim() || fallback;
-    if (!name) return `<div class="trace-line">${esc(fallback)}</div>`;
+    if (!name) return `<div class="trace-line"${line}>${esc(fallback)}</div>`;
     // The Architect's tool card, exactly: the same classes, the same 9px dot in the
     // same flex head, the same type. A worker's call arrives as a name and a target
     // with no detail to open, so the head stands alone — but it is one component in
     // one place, not a lookalike (8 Nov).
-    return `<div class="tool-card trace-card"><div class="tool-head"><span class="status-dot ok" role="img" aria-label="tool call"></span><span class="tool-name">${esc(name)}</span>${leaseClock(tool, lease)}<span class="tool-target" title="${esc(target)}">${esc(target)}</span></div></div>`;
+    return `<div class="tool-card trace-card"${line}><div class="tool-head"><span class="status-dot ok" role="img" aria-label="tool call"></span><span class="tool-name">${esc(name)}</span>${leaseClock(tool, lease)}<span class="tool-target" title="${esc(target)}">${esc(target)}</span></div></div>`;
   };
-  const note = (n) => {
-    if (n?.perm) return permLine(n.perm);
+  const note = (n, k = '') => {
+    // The name this line slides in under; a redraw of the same step is the same name.
+    const line = k ? ` data-line="${esc(k)}"` : '';
+    if (n?.perm) return permLine(n.perm, line);
     const text = typeof n === 'string' ? n : String(n?.text || '');
     const steer = typeof n === 'object' && n?.steer === true;
     // A steer is the operator's own instruction: its own line shape, so the tag
@@ -136,16 +138,16 @@ export function renderTrace(t) {
       // reports it, or the line comes off if it failed.
       const state = n.pending ? ' is-pending' : '';
       const tip = n.pending ? 'Sent — the worker reads it at its next step.' : '';
-      return `<div class="trace-line is-steer${state}"${tip ? ` title="${esc(tip)}"` : ''}><span class="msg-steer">STEER:</span><span class="trace-steer-text">${esc(said)}</span>${chips}</div>`;
+      return `<div class="trace-line is-steer${state}"${line}${tip ? ` title="${esc(tip)}"` : ''}><span class="msg-steer">STEER:</span><span class="trace-steer-text">${esc(said)}</span>${chips}</div>`;
     }
     if (n?.prose) {
       // The worker's own words, drawn exactly like an Architect answer: same
       // markdown, same type. Off with the same switch, so the old silent trace is
       // one click away (8 Nov).
-      return cardsOn() ? `<div class="trace-prose msg-answer">${renderMarkdown(String(n.text || ''))}</div>` : '';
+      return cardsOn() ? `<div class="trace-prose msg-answer"${line}>${renderMarkdown(String(n.text || ''))}</div>` : '';
     }
-    if (cardsOn() && n?.tool) return toolLine(n.tool, text);
-    return `<div class="trace-line">${esc(text)}</div>`;
+    if (cardsOn() && n?.tool) return toolLine(n.tool, text, line);
+    return `<div class="trace-line"${line}>${esc(text)}</div>`;
   };
   // A permission the worker asked for and the harness's answer — the Architect's
   // component, not a lookalike: the same tool card with the same chip in the same
@@ -153,11 +155,11 @@ export function renderTrace(t) {
   // how the two drift apart (10 Nov). The card has no detail to open because a
   // worker's answer is the whole record; the tool name is the action and the target
   // is what it named.
-  const permLine = (d) => {
+  const permLine = (d, line = '') => {
     const action = String(d.action || 'tool').toLowerCase();
     const target = (d.resolved && d.resolved.length ? d.resolved : d.resources || []).join(' ');
     const cls = d.effect === 'deny' ? 'err' : d.asked ? 'warn' : 'ok';
-    return `<div class="tool-card trace-card"><div class="tool-head">` +
+    return `<div class="tool-card trace-card"${line}><div class="tool-head">` +
       `<span class="status-dot ${cls}" role="img" aria-label="${esc(d.effect === 'deny' ? 'refused' : 'allowed')}"></span>` +
       `<span class="tool-name">${esc(action)}</span>` +
       `<span class="tool-target" title="${esc(target)}">${esc(target)}</span>` +
@@ -221,6 +223,19 @@ export function renderTrace(t) {
   // thinking" (8 Nov). Each entry carries its own `at`; an entry without one sorts
   // first, which is where its line already was.
   const when = (x) => Number(x?.at) || 0;
+  // The name a line slides in under: its moment and what it says. The words do not
+  // change once the line is on screen, so a redraw is the same row and does not move
+  // again — only a line that is genuinely new slides in (20 Nov).
+  const textHash = (text) => {
+    let h = 2166136261;
+    for (let i = 0; i < text.length; i += 1) h = Math.imul(h ^ text.charCodeAt(i), 16777619);
+    return (h >>> 0).toString(36);
+  };
+  const noteKey = (n) => {
+    const text = typeof n === 'string' ? n : String(n?.text || '');
+    const tool = n?.tool ? `${n.tool.name || ''} ${n.tool.target || ''}` : '';
+    return `${t.key}:n:${when(n)}:${textHash(`${text}|${tool}`)}`;
+  };
   const entries = [];
   // Everything older is ONE fold, not two. "12 earlier steps" above "9 earlier
   // reasoning" was two headers for one idea — the run's history — and which of them
@@ -238,13 +253,14 @@ export function renderTrace(t) {
         `<div class="fold-wrap" data-fold-body>${older.map((e) => e.html).join('')}</div></details>`,
     });
   }
-  for (const n of tail) entries.push({ at: when(n), html: note(n) });
+  for (const n of tail) entries.push({ at: when(n), html: note(n, noteKey(n)) });
   for (const r of recentReasons) entries.push({ at: when(r), html: reasonFold(r) });
-  for (const s of steers) entries.push({ at: when(s), html: note(s) });
+  for (const s of steers) entries.push({ at: when(s), html: note(s, noteKey(s)) });
   // A compaction is a moment in the run, not a permanent footer. Each one sits where
   // it happened, like a steer or a step, and stays there when the run folds.
   for (const mark of (t.marks || []).filter((m) => m && (m.kind === 'compact' || m.kind === 'loop'))) {
-    entries.push({ at: when(mark), html: mark.kind === 'loop' ? loopMark(mark) : compactMark(mark) });
+    const key = `${t.key}:${mark.kind}:${when(mark)}:${Number(mark.count) || 1}`;
+    entries.push({ at: when(mark), html: mark.kind === 'loop' ? loopMark(mark, key) : compactMark(mark, key) });
   }
   entries.sort((a, b) => a.at - b.at || (a.html < b.html ? -1 : a.html > b.html ? 1 : 0));
   const timeline = entries.map((e) => e.html).join('');

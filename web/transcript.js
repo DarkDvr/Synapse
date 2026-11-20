@@ -105,6 +105,122 @@ export function forceNextRender() {
   renderOnce = true;
 }
 
+// ── a line that arrives ─────────────────────────────────────────
+//
+// The conversation is rebuilt from one HTML string on every delta, so a new reasoning
+// block, a tool card or a whole post is a brand-new element each time: the browser has
+// nothing to animate, and the line simply exists between two frames — the "abrupt
+// 1-frame update" the operator reported (20 Nov).
+//
+// The renderer is the one thing that knows which rows are new, because every row that
+// can arrive carries its own name (`lineKey`). It hands that one fact to the stylesheet,
+// which slides the row into place in 200ms. Nothing here decides what a row looks like.
+//
+// A row that is rebuilt while it is still sliding must not start again. The negative
+// `animation-delay` is how far into its own slide it already is, so the next render —
+// a delta, milliseconds later — continues the movement instead of restarting it.
+
+const ARRIVE_MS = 200;
+
+// More than this many new rows in one draw is not one thing happening: it is a chat
+// catching up (a replayed turn, a reload that replaced the local echo). Those rows
+// appear as they are, without a wave of fading lines.
+const ARRIVE_MAX = 8;
+
+/** The rows that can arrive. A row with none of these names is part of another row. */
+const ROWS =
+  '[data-line], [data-trace], [data-tool-card], [data-download-card], [data-wait-post], ' +
+  'details.reasoning[data-k], details.chat-post[data-k], details.chat-alarm[data-k]';
+
+/** When each row on screen first arrived, for as long as its slide lasts. */
+const arrivedAt = new Map();
+
+/** The chat the conversation on screen belongs to. Opening another is not an arrival. */
+let drawnFor = '';
+
+/** The name a row travels under: its post, its part, its trace, its card. */
+export function lineKey(node) {
+  const data = node?.dataset || {};
+  if (data.line) return `line:${data.line}`;
+  if (data.trace) return `trace:${data.trace}`;
+  if (data.toolCard) return `tool:${data.toolCard}`;
+  if (data.downloadCard) return `file:${data.downloadCard}`;
+  if (data.waitPost !== undefined) return 'wait-post';
+  if (data.k) return `fold:${data.k}`;
+  return '';
+}
+
+/**
+ * Which rows are new in this draw, and how far into their slide they are.
+ *
+ * `before` is the row names the page had, in document order. A row that arrives inside
+ * a new row — a tool card in a brand-new post — is not an arrival of its own: the post's
+ * slide carries it, and two slides on one block read as a shake.
+ *
+ * A new name standing where an old name was, at the same place in the list, is the same
+ * row under a new name — the page's own echo replaced by the engine's message, or the
+ * post it opened for a turn replaced by the turn itself. It keeps the slide it already
+ * had, or none if it was settled: otherwise the operator's own sentence would dip twice.
+ *
+ * Exported because this is the whole decision; the DOM part only applies its answer.
+ */
+export function planArrivals(rows, before, now) {
+  const seen = new Set(before);
+  const current = new Set(rows.map((row) => row.key));
+  const fresh = [];
+  rows.forEach((row, i) => {
+    if (seen.has(row.key) || arrivedAt.has(row.key)) return;
+    if (row.holder && !seen.has(row.holder)) return;
+    const was = before[i];
+    if (was && !current.has(was)) {
+      const at = arrivedAt.get(was);
+      // The row that was here is gone and this one took its place: it is that row
+      // continuing. If it had finished its slide, it does not start another.
+      if (at !== undefined) arrivedAt.set(row.key, at);
+      return;
+    }
+    fresh.push(row.key);
+  });
+  if (fresh.length <= ARRIVE_MAX) {
+    for (const key of fresh) arrivedAt.set(key, now);
+  }
+  const plan = new Map();
+  for (const row of rows) {
+    const at = arrivedAt.get(row.key);
+    if (at === undefined) continue;
+    const age = now - at;
+    if (age >= ARRIVE_MS) {
+      arrivedAt.delete(row.key);
+      continue;
+    }
+    plan.set(row.key, age);
+  }
+  // A row that left the screen mid-slide is not coming back.
+  for (const [key, at] of arrivedAt) if (now - at >= ARRIVE_MS) arrivedAt.delete(key);
+  return plan;
+}
+
+/** Hand the new rows to the stylesheet, with their slide's head start. */
+function arrive(el, before, firstDraw) {
+  // Opening a chat is the conversation, not one line arriving in it.
+  if (firstDraw) return;
+  const rows = [];
+  for (const node of el.querySelectorAll(ROWS)) {
+    const key = lineKey(node);
+    if (!key) continue;
+    const holder = node.parentElement?.closest(ROWS);
+    rows.push({ node, key, holder: holder ? lineKey(holder) : '' });
+  }
+  const now = Date.now();
+  const plan = planArrivals(rows, before, now);
+  for (const row of rows) {
+    const age = plan.get(row.key);
+    if (age === undefined) continue;
+    row.node.style.animationDelay = `-${Math.round(age)}ms`;
+    row.node.classList.add('is-arriving');
+  }
+}
+
 export function renderTranscript() {
   const el = $('transcript');
   if (!el) return;
@@ -251,6 +367,8 @@ export function renderTranscript() {
     // the composer and the empty space above it belongs to the cards/napkin
     el.innerHTML = '';
     el.classList.add('is-empty');
+    // The next thing drawn in this chat is a beginning, not an arrival.
+    drawnFor = '';
     renderChatNav();
     return;
   }
@@ -308,7 +426,18 @@ export function renderTranscript() {
   const orphanDownloads = downloads.filter((d) => !placedDownloads.has(d.id)).map(downloadCard).join('');
   html += orphanDownloads;
   html += leasesHere().map(renderLease).join('');
+  // What is on screen now, read before the draw replaces it: a row whose name is not
+  // in here is a row that just arrived ("a line that arrives", above).
+  const seenRows = [];
+  for (const node of el.querySelectorAll(ROWS)) {
+    const key = lineKey(node);
+    if (key) seenRows.push(key);
+  }
+  const chat = String(currentProject()?.directory || '');
+  const firstDraw = chat !== drawnFor;
+  drawnFor = chat;
   el.innerHTML = html + waitPost + pending;
+  arrive(el, seenRows, firstDraw);
   // The live panel's slide is a transform on a node this rebuild just replaced, so
   // the offset has to be put back or the text snaps to its first line.
   restoreStreamView();
@@ -326,6 +455,9 @@ export function renderTranscript() {
 export function renderMessage(m, tail = '', extras = '') {
   const t = hhmm(m.created);
   const stamp = t ? `<span class="msg-time">${t}</span>` : '';
+  // The name this post travels under while it slides in. Every message the page draws
+  // has an id — the engine's, or the `local-` one an echo carries until the reload.
+  const line = m.id ? ` data-line="msg:${esc(m.id)}"` : '';
 
   if (m.type === 'user') {
     // What was attached is part of the message, not a footnote to it: the operator
@@ -362,7 +494,7 @@ export function renderMessage(m, tail = '', extras = '') {
     // sentence, so the browser aligns it with the first line by itself instead of
     // a flex row's top edge lifting a 9.5px word above a 13.5px one (30 Oct).
     const lead = steer ? '<span class="msg-steer">STEER:</span> ' : '';
-    return `<div class="msg user${steer ? ' is-steer' : ''}" data-msg="user"><div class="msg-body">
+    return `<div class="msg user${steer ? ' is-steer' : ''}"${line} data-msg="user"><div class="msg-body">
       ${stamp}<span class="msg-role">You</span><span class="msg-text">${lead}${esc(said)}</span>${chips}${reuse}
     </div></div>`;
   }
@@ -394,7 +526,7 @@ export function renderMessage(m, tail = '', extras = '') {
       const full = String(/^instructions from:\s*(.*)$/i.exec(head)?.[1] || '').trim();
       const short = full.split(/[\\/]/).filter(Boolean).slice(-2).join('\\') || full;
       const key = `loaded:${m.id}`;
-      return `<div class="msg harness" data-msg="synapse"><div class="msg-body">
+      return `<div class="msg harness"${line} data-msg="synapse"><div class="msg-body">
         ${stamp}<span class="msg-role">Synapse · ${label}</span>
         <details class="chat-post" data-k="${esc(key)}"${state.open.has(key) ? ' open' : ''}>
           <summary><span class="chat-post-note" title="${esc(full)}">Instructions from ${esc(short)}</span></summary>
@@ -409,7 +541,7 @@ export function renderMessage(m, tail = '', extras = '') {
     if (prohibited) {
       const key = `refused:${m.id}`;
       const sentence = String(body || '').split(/\r?\n/).map((l) => l.trim()).find(Boolean) || '';
-      return `<div class="${cls}" data-msg="synapse"><div class="msg-body">
+      return `<div class="${cls}"${line} data-msg="synapse"><div class="msg-body">
         ${stamp}<span class="msg-role">Synapse</span>
         <details class="chat-post is-refusal" data-k="${esc(key)}"${state.open.has(key) ? ' open' : ''}>
           <summary title="${esc(sentence)}"><span class="chat-post-note">⛔ PROHIBITED · the protected list refused this change</span></summary>
@@ -417,7 +549,7 @@ export function renderMessage(m, tail = '', extras = '') {
         </details>
       </div></div>`;
     }
-    return `<div class="${cls}" data-msg="synapse"><div class="msg-body">
+    return `<div class="${cls}"${line} data-msg="synapse"><div class="msg-body">
       ${stamp}<span class="msg-role">Synapse · ${label}</span>
       <div class="msg-answer">${renderMarkdown(body)}</div>
     </div></div>`;
@@ -450,9 +582,10 @@ export function renderMessage(m, tail = '', extras = '') {
     // No number is better than a wrong one, so the line then says only that it happened.
     const size = summed && (!limit || summed <= limit) ? summed : 0;
     const where = size ? ` · context at ${compactK(size)}${limit ? `/${compactK(limit)}` : ''}` : '';
-    const line = running ? `Compacting ×${index}` : `Compacted ×${index}`;
-    return `<div class="trace" data-msg="synapse"><div class="trace-lines">
-      <div class="trace-line is-compact"><span class="trace-mark">⏳</span>${esc(line)}${esc(where)}</div>
+    // `says`, not `line`: the attribute this post travels under is `line` (above).
+    const says = running ? `Compacting ×${index}` : `Compacted ×${index}`;
+    return `<div class="trace"${line} data-msg="synapse"><div class="trace-lines">
+      <div class="trace-line is-compact"><span class="trace-mark">⏳</span>${esc(says)}${esc(where)}</div>
     </div></div>`;
   }
   if (m.type === 'assistant') {
@@ -497,7 +630,8 @@ export function renderMessage(m, tail = '', extras = '') {
       // only exists when there was work in this turn to separate it from.
       if (part.type === 'text') {
         const answer = i === lastText && workBefore && !toolAfter ? ' is-answer' : '';
-        body.push(`<div class="msg-answer${answer}">${renderMarkdown(part.text)}</div>`);
+        const name = part._k ? ` data-line="part:${esc(part._k)}"` : '';
+        body.push(`<div class="msg-answer${answer}"${name}>${renderMarkdown(part.text)}</div>`);
       }
       else if (part.type === 'reasoning') {
         // The archive takes the place of the oldest block, so the turn still reads
@@ -511,7 +645,7 @@ export function renderMessage(m, tail = '', extras = '') {
           );
         } else if (recentReasoning.has(i) || state.open.has(part._k)) {
           body.push(
-            `<details class="reasoning" data-k="${esc(part._k)}"${state.open.has(part._k) ? ' open' : ''}>` +
+            `<details class="reasoning" data-k="${esc(part._k)}" data-line="part:${esc(part._k)}"${state.open.has(part._k) ? ' open' : ''}>` +
               `<summary>${esc(reasoningGist(part.text))}</summary>` +
               `<div class="fold-wrap" data-fold-body><pre>${esc(part.text)}</pre></div></details>`,
           );
@@ -524,7 +658,7 @@ export function renderMessage(m, tail = '', extras = '') {
           if (previous && previous.type === 'tool' && isBrowserTool(previous)) continue;
           const group = [];
           for (let j = i; j < parts.length && parts[j].type === 'tool' && isBrowserTool(parts[j]); j += 1) group.push(parts[j]);
-          body.push(group.length > 1 ? renderBrowserGroup(group) : renderTool(part));
+          body.push(group.length > 1 ? renderBrowserGroup(group, group[0]._k) : renderTool(part));
         } else body.push(renderTool(part));
       }
     }
@@ -548,12 +682,12 @@ export function renderMessage(m, tail = '', extras = '') {
       );
     }
     if (m.error) body.push(`<div class="msg-error">${esc(m.error)}</div>`);
-    return `<div class="msg assistant" data-msg="assistant"><div class="msg-body">${body.join('')}${tail}${extras}</div></div>`;
+    return `<div class="msg assistant"${line} data-msg="assistant"><div class="msg-body">${body.join('')}${tail}${extras}</div></div>`;
   }
   const body = m.error
     ? `<div class="msg-error">${esc(m.error)}</div>`
     : `<span class="msg-text">${esc(m.text)}</span>`;
-  return `<div class="msg"><div class="msg-body">${stamp}<span class="msg-role">${esc(m.type)}</span>${body}</div></div>`;
+  return `<div class="msg"${line}><div class="msg-body">${stamp}<span class="msg-role">${esc(m.type)}</span>${body}</div></div>`;
 }
 
 let toolSeq = 0;
@@ -608,9 +742,12 @@ export function isBrowserTool(part) {
  * says how many, with the calls inside it, keeps the turn readable — and a single call
  * still renders as itself.
  */
-export function renderBrowserGroup(items) {
+export function renderBrowserGroup(items, key = '') {
   const id = `browser-group-${toolSeq++}`;
   const open = state.open.has(id);
+  // The group's own name for the slide is its first call's, not the drawn id: the id
+  // is a counter that starts again at every render, the part's is the call (20 Nov).
+  const line = key ? ` data-line="part:${esc(key)}"` : '';
   const failed = items.filter((p) => Boolean(p.failed) || /error|fail/.test(String(p.status || '')));
   const running = items.some((p) => /run|stream|pend|progress/.test(String(p.status || '')));
   const cls = running ? 'warn' : failed.length ? 'err' : 'ok';
@@ -622,7 +759,7 @@ export function renderBrowserGroup(items) {
       `<span class="tool-group-name">${esc(toolLabel(part))}</span>` +
       `<span class="tool-group-target" title="${esc(target)}">${esc(target || '—')}</span></div>`;
   }).join('');
-  return `<div class="tool-card tool-group${open ? ' open' : ''}" data-tool-card="${esc(id)}">
+  return `<div class="tool-card tool-group${open ? ' open' : ''}"${line} data-tool-card="${esc(id)}">
     <div class="tool-head" role="button" tabindex="0" data-tool-toggle="${esc(id)}" aria-expanded="${open}" aria-controls="${esc(id)}-detail">
       <span class="status-dot ${cls}" role="img" aria-label="${esc(label)}"></span>
       <span class="tool-name">SynaBrowse</span>
