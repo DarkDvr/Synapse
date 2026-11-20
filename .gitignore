@@ -42,7 +42,8 @@ obj/
 dist/
 
 # Vendored build caches (vendor-node.ps1, vendor-nuget.ps1) - they travel with the folder
-vendor/
+# The root vendor folder only: web/vendor holds the fonts and their licences.
+/vendor/
 
 # The operator's recycle bin: things moved out of the tree and kept until they
 # delete them for good. Not part of the program, and it never travels.

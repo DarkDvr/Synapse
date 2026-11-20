@@ -771,6 +771,19 @@ async function openSession(id) {
   releaseTimers();
   state.view = 'session';
   state.sessionId = id;
+  // Nothing of the previous chat may paint for a frame under this one. The messages
+  // are replaced by the fetch, but the cards, the clock and the Architect's context
+  // are computed from `state.messages` and `state.archCtx`, which still hold the old
+  // chat until it lands — a Single project opened with the working project's ctx,
+  // cache and timer on its Architect card (21 Nov).
+  state.messages = [];
+  state.archCtx = null;
+  state.lease = null;
+  // A draft belongs to the chat it was typed in. Carrying it across the switch sent
+  // one project's words into another as a Steer (21 Nov): the box goes with the chat.
+  if ($('promptInput')) $('promptInput').value = '';
+  state.attachments = [];
+  renderAttachments();
   // The project lock belongs to the chat that was open, like the permissions and the
   // trace. Keeping it let the previous chat's "busy" answer read as this chat's work,
   // which armed the finished-work chime and sounded it when the poll caught up (14 Nov).
