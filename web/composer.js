@@ -10,6 +10,7 @@
 import { state } from './state.js';
 import { esc, fmtBytes, shortName } from './format.js';
 import { $ } from './dom.js';
+import { namePasted } from './attach-names.js';
 import { api } from './api.js';
 import { toast } from './toast.js';
 import { addChatError } from './chat-notes.js';
@@ -506,7 +507,10 @@ export async function addAttachmentFiles(files) {
       toast('Could Not Read That File', err.message);
     }
   }
-  if (added) renderAttachments();
+  if (added) {
+    namePasted(state.attachments);
+    renderAttachments();
+  }
   return added;
 }
 

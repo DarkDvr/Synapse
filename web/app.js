@@ -120,6 +120,7 @@ import {
   transcriptWiring,
 } from './transcript.js';
 import { toast } from './toast.js';
+import { namePasted } from './attach-names.js';
 import { installContextMenu } from './context-menu.js';
 import { installFoldMotion, animateHeight, FOLD_MS } from './folds.js';
 import { installPause, showPause, hidePause } from './pause.js';
@@ -1947,6 +1948,7 @@ function wire() {
     const x = e.target.closest('[data-detach]');
     if (!x) return;
     state.attachments = state.attachments.filter((f) => f.id !== x.dataset.detach);
+    namePasted(state.attachments);
     hideAttachPreview();
     renderAttachments();
   });
