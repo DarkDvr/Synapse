@@ -74,6 +74,62 @@ export const runIn = (project) => (project ? state.runs.get(dirKey(project.direc
 export const currentRun = () => runIn(currentProject());
 export const roleLabel = (id) => ROLES.find((r) => r.id === id)?.name || String(id || '');
 
+// ── what belongs to a chat ──────────────────────────────────────
+// A chat is one project, and a project is one directory: that is the key. Every
+// card, question, stop and "is it working" answer belongs to exactly one chat, and
+// these are the one set of functions that decides which. They exist because a page
+// with two chats open must never draw one's ask in the other (20 Nov) — and because
+// a worker's ask was looked up by *session*, so a hidden worker's card never marked
+// its project in the rail.
+export const chatDir = () => dirKey(currentProject()?.directory || '');
+
+/** The chat an ask belongs to: its own directory, else the session that asked. */
+export function askDir(ask) {
+  if (ask?.directory) return dirKey(ask.directory);
+  const sessionId = ask?.sessionId;
+  if (!sessionId) return '';
+  const project = projectOf(sessionId);
+  if (project) return dirKey(project.directory);
+  // A worker's session is not in the project list (the server hides scaffolding).
+  // Its run record carries the directory, which is the same fact.
+  for (const run of state.runs?.values?.() || []) {
+    if (run && (run.workerId === sessionId || run.architect === sessionId)) return dirKey(run.dir);
+  }
+  return '';
+}
+
+export const inChat = (ask, dir = chatDir()) => {
+  if (!dir) return false;
+  const at = askDir(ask);
+  if (at) return at === dir;
+  // An ask that cannot name a chat is drawn in the open one rather than lost: the
+  // tool that asked is blocked until it is answered, and "no card anywhere" is worse
+  // than "in the chat you are looking at". Only the browser can ask without a
+  // project, and its server normally knows the folder it was started in.
+  return ask?.scope === 'browser';
+};
+
+/** Is this directory the chat on screen? For events that carry only a folder. */
+export const sameChat = (dir) => Boolean(dir) && chatDir() === dirKey(dir);
+
+/** The cards and questions waiting in this chat, and nowhere else. */
+export const permissionsHere = (dir = chatDir()) => (state.permissions || []).filter((p) => inChat(p, dir));
+export const formsHere = (dir = chatDir()) => (state.forms || []).filter((f) => inChat(f, dir));
+
+/**
+ * What a directory's chat is waiting on: 'answer', 'decision', or null.
+ *
+ * The rail asks this by directory. By session it missed a hidden worker asking in
+ * the same project, which is exactly the case the mark exists for.
+ */
+export function waitingIn(dir) {
+  const key = dirKey(dir);
+  if (!key) return null;
+  if ((state.forms || []).some((f) => askDir(f) === key)) return 'answer';
+  if ((state.permissions || []).some((p) => askDir(p) === key)) return 'decision';
+  return null;
+}
+
 /**
  * The engine emits one assistant message per *step* — a reasoning turn, a tool
  * call, another reasoning turn — not one per conversational turn. Rendering
@@ -101,14 +157,15 @@ export function groupTurns(messages, { breakBefore = new Set() } = {}) {
   return out;
 }
 
-/** The form waiting on the operator.
+/** The form waiting on the operator **in this chat**.
  *
- *  The open session's own form wins, but any pending form is shown: a hidden
- *  worker session has the same toolset, and if one of those asks something the
- *  operator has to be able to answer it — otherwise the worker sits there until
- *  its timeout reports a failure nobody could see coming. The head says which.
+ *  The open session's own form wins, but a form from a worker in the same project
+ *  is shown too: a hidden worker runs in the same chat, and if it asks something
+ *  the operator has to be able to answer it — otherwise the worker sits there until
+ *  its timeout reports a failure nobody could see coming. Another chat's question
+ *  is not this chat's, and is announced in the rail and a toast instead.
  */
 export const currentForm = () => {
-  const forms = state.forms || [];
-  return forms.find((f) => f.sessionId === state.sessionId) || forms[0] || null;
+  const chat = formsHere();
+  return chat.find((f) => f.sessionId === state.sessionId) || chat[0] || null;
 };

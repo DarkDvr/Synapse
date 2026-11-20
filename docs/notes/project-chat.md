@@ -521,6 +521,52 @@ The fix is not to special-case Single at every call site. It is to ask the quest
 top, decide explicitly, and write the answer down: in the commit ("Single only, because…",
 "both, and the session path is new"), and in the note that owns the feature.
 
+## A card, a question and a stop belong to their chat (20 Nov)
+
+Once two projects can work at the same time, every piece of the page that "waits on the
+operator" has to say **which chat it is waiting in**. The first version of the page was
+built when only one project could be interesting at a time, and it kept that state
+globally: a permission card from either project was drawn in whichever chat was open, any
+project's card disabled the composer, a question from another project fell back into this
+chat's panel, "Stopping…" was one flag for the whole page, and the finished-work chime
+listened only to the chat on screen. Each of those is a small lie that becomes a real one
+when two chats are live.
+
+The scope is **the project's folder** — the same key as `state.runs` and the records. A chat
+is a directory; its Architect session and any of its worker sessions are the same chat. So:
+
+- `web/run-view.js` is the one place that answers "which chat is this ask in":
+  `askDir()`, `inChat()`, `sameChat()`, `permissionsHere()`, `formsHere()`, `waitingIn()`.
+  Every renderer and every event handler uses them; nothing filters by session id except
+  `currentForm()`'s "this session's own question first".
+- **A card is drawn only in its chat**, at the end of that chat's transcript, under the
+  post it is about — the same placement the question panel already had (18 Nov). Another
+  project's card is never drawn here; its rail row carries `?` and one toast names the
+  project. Answering always posts to the asking session, so a card is answerable where it
+  is drawn.
+- **The composer is blocked by its own chat's cards and question only.** Another project
+  waiting is not this chat's block.
+- **The question panel belongs to the chat.** `currentForm()` takes this session's form,
+  then a form from a worker in the same folder, and nothing else. Switching chats redraws
+  the panel explicitly: it is moved, never rebuilt, so a stale panel would otherwise sit
+  under the new chat's report.
+- **Stop is per chat.** Every `stop.*` and `run.stopping` event carries a folder; an event
+  for another project does not set or clear this chat's notice, and opening a chat resets
+  it before the server's own per-chat answer arrives.
+- **The rail marks a project by folder**, so a hidden worker's card marks the project it
+  belongs to, not the chat session it is not.
+- **Sounding it**: `web/attention.js` watches every chat and reports two transitions —
+  a chat that finished (after a grace, so the gap between two tasks is not a finish) and a
+  chat that became blocked (after a shorter grace, so a card the gate answers itself does
+  not knock). A chat the operator stopped is quiet. The open chat's finish stays with
+  `noteWorking`, which has the plan in hand.
+- **A sign-in card** is drawn by the browser's own MCP server. That server starts in the
+  project's folder, so it sends its directory with the ask; an ask that cannot name a chat
+  is drawn in the open chat rather than lost, and is the only case where that happens.
+
+What this does **not** change: one worker per project, the screen lease, and the fact that
+a project's own conversation is the only place its work appears.
+
 ## Three kinds of session, one of them is the chat (13 Nov)
 
 A project's folder holds three kinds of engine session, and only the first is the

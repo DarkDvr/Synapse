@@ -220,7 +220,7 @@ export function installPage() {
   globalThis.requestAnimationFrame = windowStub.requestAnimationFrame;
   globalThis.cancelAnimationFrame = windowStub.cancelAnimationFrame;
   globalThis.getComputedStyle = windowStub.getComputedStyle;
-  globalThis.CSS = { escape: (s) => String(s).replace(/[^\w-]/g, (c) => `\\${c}`) };
+  globalThis.CSS = { escape: (s) => String(s).replace(/[^\w-]/g, (c) => `\\${c}`), supports: () => false };
   globalThis.Node = { TEXT_NODE: 3, ELEMENT_NODE: 1 };
   // `navigator`, `location` and `localStorage` are getter-only on a modern Node, so
   // they are defined rather than assigned — assigning throws and would fail a test for

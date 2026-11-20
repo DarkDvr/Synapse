@@ -14,7 +14,7 @@ import { currentForm } from './run-view.js';
 import { renderTranscript } from './transcript.js';
 import { renderComposer } from './composer.js';
 import { renderAskPanel, refreshAskPanel } from './ask-panel.js';
-import { currentRun } from './run-view.js';
+import { currentRun, permissionsHere, formsHere, inChat, askDir, roleLabel, dirKey } from './run-view.js';
 import { findSession, renderTree } from './projects.js';
 import { renderMode } from './mode.js';
 import { syncRuns } from './live-runs.js';
@@ -73,8 +73,11 @@ export function schedulePermissionRender() {
  * is re-measured before that guard is reached.
  */
 export function paneSig() {
-  const perms = (state.permissions || []).map((p) => `${p.requestId}:${p.scope}`).join(',');
-  const forms = (state.forms || []).map((f) => `${f.id}:${f.sessionId}`).join(',');
+  // Only this chat's cards and questions: another project's ask must not repaint this
+  // transcript (or re-measure the dock) — the rail and a toast are how it is announced
+  // (20 Nov).
+  const perms = permissionsHere().map((p) => `${p.requestId}:${p.scope}`).join(',');
+  const forms = formsHere().map((f) => `${f.id}:${f.sessionId}`).join(',');
   const info = state.busyInfo || {};
   return [
     perms,
@@ -145,9 +148,9 @@ export async function refreshPending() {
     renderComposer();
   }
   // The project lock is part of "is this chat working?", and a poll is the only
-  // thing that sees it let go: without this, a turn that ends while the lock is
-  // still held would go quiet with no chime, and nothing later would notice.
-  wired.noteWorking();
+  // thing that sees it let go. The evaluation runs after the cards and questions
+  // below have been read in, because "needs you" is one of its two events and a
+  // stale list would miss the moment the operator is needed (20 Nov).
 
   const previousPermissions = new Set((state.permissions || []).map((p) => p.requestId));
   state.permissions = (p.permissions || []).map((x) => ({
@@ -171,14 +174,18 @@ export async function refreshPending() {
     browserUrl: x.browserUrl || '',
   }));
   state.forms = p.forms || [];
+  // Now that every chat's work and every waiting card are in hand, the watcher can
+  // say what changed anywhere — a chat that finished, or one that needs the operator.
+  wired.noteWorking();
 
-  // A worker's request is a card in a transcript nobody has open, so it is
-  // announced once here — otherwise the worker blocks until its timeout and the
-  // only evidence is a log line. The open session's own asks are not announced:
-  // the card is already on screen.
+  // A card in a chat nobody has open is news: the run blocks until it is answered, and
+  // the only other evidence is a log line. A card in the open chat is not announced —
+  // it is on screen, at the end of the chat, under the post it is about.
+  const nameOf = (dir) => state.projects.find((p) => dirKey(p.directory) === dirKey(dir))?.name || '';
   for (const perm of state.permissions) {
     if (previousPermissions.has(perm.requestId) || state.announcedPermissions.has(perm.requestId)) continue;
     state.announcedPermissions.add(perm.requestId);
+    const here = inChat(perm);
     // A card that waits for a person is news in the taskbar too — but only when the
     // thing waiting has no automatic answer and only when the window is not in
     // front (the shell decides that part). A browser sign-in never answers itself,
@@ -186,31 +193,37 @@ export async function refreshPending() {
     // Auto-Permissions is on for its project, which is what autoPermissionsAt says
     // (12 Nov).
     const wantsPerson = perm.scope === 'browser' || perm.scope === 'desk' || !perm.autoPermissionsAt;
-    // A sign-in card is the one that asks to open a window: it has its own sound, the two
-    // hollow knocks, and it is always on screen — the operator is the one who must act.
+    // A sign-in card is the one that asks to open a window. Its knock comes from the
+    // attention watcher, with every other blocked chat (one sound, one meaning); the
+    // exception is an ask the server could not place in a project, which no chat can
+    // claim and the watcher therefore cannot see.
     if (perm.scope === 'browser') {
       if (wantsPerson) wired.blinkTaskbar?.('a sign-in is waiting');
-      wired.playSound?.('hollow');
-      continue;
+      if (!perm.directory) wired.playSound?.('hollow');
+    } else if (wantsPerson) {
+      wired.blinkTaskbar?.(perm.scope === 'desk' ? 'the screen is asked for' : 'a permission is waiting');
     }
-    if (wantsPerson) wired.blinkTaskbar?.(perm.scope === 'desk' ? 'the screen is asked for' : 'a permission is waiting');
-    if (state.view === 'session' && perm.sessionId === state.sessionId) continue;
-    const who = [perm.role, perm.task].filter(Boolean).join(' · ') || perm.title || 'A chat';
-    toast('Permission Needed', `${who} is waiting on ${perm.action}. Open it in the rail to answer.`);
+    if (here) continue;
+    const who =
+      [perm.role ? roleLabel(perm.role) : '', perm.task].filter(Boolean).join(' · ') || perm.title || 'A chat';
+    const project = nameOf(perm.directory);
+    toast(
+      'Permission Needed',
+      `${project ? `${project} — ` : ''}${who} is waiting on ${perm.action}. Open its chat to answer.`,
+    );
   }
 
-  // A question must not be able to hide. The panel lives inside the session
-  // view and a reload opens no session, so a waiting question says so once —
-  // and the rail carries a mark on the session that asked it, so a page left
-  // open on the project list still shows where the run is stuck.
+  // A question must not be able to hide. It is answered in its own chat, at the end
+  // under the post it is about; the rail marks the project and this says so once.
   for (const form of state.forms) {
     if (state.announcedForms.has(form.id)) continue;
     state.announcedForms.add(form.id);
     // A question with no automatic answer waits for a person: the same blink.
     if (!form.autoAnswerAt) wired.blinkTaskbar?.('a question is waiting');
-    if (state.view === 'session') continue; // the panel is on screen already
-    const who = findSession(form.sessionId)?.title || 'this conversation';
-    toast('Answer Needed', `${who} is waiting on a question. Open it in the rail to answer.`);
+    if (inChat(form)) continue; // the panel is on screen already
+    const project = nameOf(form.directory) || findSession(form.sessionId)?.title || 'A chat';
+    const who = [form.role ? roleLabel(form.role) : '', form.task].filter(Boolean).join(' · ');
+    toast('Answer Needed', `${project}${who ? ` — ${who}` : ''} is waiting on a question. Open its chat to answer.`);
   }
 
   // The same poll is the only place that knows, for certain, that nothing is

@@ -104,9 +104,9 @@ the cards and the commits, not the code. One reason per sentence, not a chain.
   sees a chip that opens the picture full size.
 - **Use Edge, but surgically** — one session, reused; few screenshots.
 - **Stage the delivery.** Each stage is reviewed before the next starts.
-- **Every change answers the mode question: Single, Multi, or both?** Multi adds *runs*, and
-  anything hanging off one (`state.runs`, `currentRun()`, `traceForSession()`) is invisible in
-  Single. Say which in the commit; detail in `docs/notes/project-chat.md`, "One code path, two modes".
+- **Every change answers the mode question: Single, Multi, or both?** Multi adds *runs*,
+  invisible in Single; say which in the commit (detail: `project-chat.md`, "One code path, two modes").
+- **A card, a question and a stop belong to their chat**, not to the page (see `project-chat.md`).
 
 ### Version control
 
@@ -185,7 +185,7 @@ an agent does not know to open is a document that does not exist:
 | `docs/notes/multi-user.md` | two views at once — what "busy" means, who may send, Stop as the takeover, and the Settings lock |
 | `docs/notes/web-reading.md` | before promising to read a signed-in site, or touching any browser — every cookie route was measured, one destroyed the operator's browser data, and Brave is never touched |
 | `docs/notes/browser.md` | before touching `src/browser/`, `src/mcp/browser-server.js` or the Browser tab — SynaBrowse's flags, its profile, the Sites record and the hand-off |
-| `docs/notes/project-chat.md` | before changing how a project, a chat or a compaction works — the one-chat-per-project scope, the project document, phases, and Private |
+| `docs/notes/project-chat.md` | before changing how a project, a chat or a compaction works — the one-chat-per-project scope, what belongs to a chat (cards, questions, stops), the project document, phases, and Private |
 | `docs/notes/protection.md` | before touching `src/protection.js`, the prohibited list, or the Brave rule — what is refused without asking, and what the fence cannot see |
 | `docs/notes/tests.md` | before adding a test, or when CI is red — the one rule a test must keep, and how the suite runs |
 | `docs/notes/git.md` | before touching git, the diff or a checkpoint — who commits, what the private MinGit installs, and what the harness never does |

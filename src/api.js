@@ -941,10 +941,22 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
    * with **no time limit**. A session created there is recorded and the window goes;
    * a window closed without one is a rejection.
    */
-  async function browserSignInAsk({ host = '', url = '', what = '' } = {}) {
+  async function browserSignInAsk({ host = '', url = '', what = '', directory = '' } = {}) {
     const target = String(url || '').trim();
     if (!/^https?:\/\//i.test(target)) return { ok: false, error: 'there is no address to open' };
-    const answer = await browserAsks.ask({ host: String(host || '').replace(/^https?:\/\//i, '').split('/')[0], url: target, what });
+    // The asking chat, if the caller knows it. Only a folder that is really under the
+    // projects root is taken: a card must never be attributed to a path that is not a
+    // project, or it would be shown in no chat at all (20 Nov).
+    const askedIn = String(directory || '').trim();
+    const underRoot = askedIn
+      ? path.resolve(askedIn).toLowerCase().startsWith(`${path.resolve(PROJECTS_ROOT).toLowerCase()}${path.sep}`)
+      : false;
+    const answer = await browserAsks.ask({
+      host: String(host || '').replace(/^https?:\/\//i, '').split('/')[0],
+      url: target,
+      what,
+      directory: underRoot ? askedIn : '',
+    });
     if (!answer.allow) {
       return {
         ok: false,
@@ -2961,6 +2973,21 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
         ? active.filter((id) => !privateSessions.has(typeof id === 'string' ? id : id?.id))
         : active;
 
+      // A question belongs to the chat that asked it, and the page cannot work out
+      // which chat that is from a session id alone: a worker's session is scaffolding
+      // the project list hides. The directory, the role and the task are read from the
+      // asking session here, once, and every form carries them (20 Nov).
+      const formSessionIds = [...new Set(visibleForms.map((f) => f.sessionID).filter(Boolean))]
+        .filter((id) => !sessionInfo.has(id));
+      await Promise.all(
+        formSessionIds.map(async (id) => {
+          try {
+            const s = await engine.getSession(id);
+            if (s) sessionInfo.set(id, s);
+          } catch { /* gone between the two calls */ }
+        }),
+      );
+
       return {
         permissions: [...visiblePermissions, ...visibleAsks],
         forms: await Promise.all(
@@ -2977,10 +3004,17 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
             const waitMs = answerTimeoutMs(getConfig());
             const pages = formPages(f);
             const firstAt = Number(seen) || Date.now();
+            const asking = sessionInfo.get(f.sessionID) || null;
+            const meta = asking?.metadata?.synapse || {};
             return {
               id: f.id,
               sessionId: f.sessionID,
               title: f.title || 'Input needed',
+              // The chat it belongs to. Without this the page had to show "any
+              // pending form", and one project's question appeared in another.
+              directory: asking?.directory || null,
+              role: meta.role || null,
+              task: meta.task || null,
               fields: Array.isArray(f.fields) ? f.fields : [],
               autoAnswer,
               autoAnswerFirstAt: autoAnswer ? firstAt : null,

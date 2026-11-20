@@ -15,7 +15,7 @@ import { api } from './api.js';
 import { toast } from './toast.js';
 import { addChatError } from './chat-notes.js';
 import { chatScroller, animateScroll } from './chat-scroll.js';
-import { currentProject, currentRun, roleLabel, currentForm, selectionFor, modelByRef } from './run-view.js';
+import { currentProject, currentRun, roleLabel, currentForm, selectionFor, modelByRef, permissionsHere, inChat } from './run-view.js';
 import { renderTranscript, attachmentImage } from './transcript.js';
 import { traceOf, steerLine } from './traces.js';
 
@@ -70,17 +70,20 @@ export function renderComposer() {
   const asking = Boolean(currentForm());
   // A permission card blocks the composer exactly as a question does: the turn
   // cannot read a message while it waits on the operator, and a half-dead composer
-  // invites a click that goes nowhere (3 Nov).
-  const awaitingPermission = (state.permissions || []).length > 0;
+  // invites a click that goes nowhere (3 Nov). Only this chat's cards do: another
+  // project waiting is not this chat's block, and freezing this composer for it
+  // was the bug (20 Nov).
+  const awaitingPermission = permissionsHere().length > 0;
   const blocked = asking || awaitingPermission;
   const held = Boolean(state.busyInfo?.busy) || Boolean(currentRun());
   // The stop's own life is the server's: it clears when the project is quiet (or
   // when the operator speaks), not when this page guesses from the run cards. The
   // old guess is what made the notice vanish while the engine kept retrying.
   const target = steerTarget();
-  // Any pending question blocks this composer, whoever asked it: the operator's
-  // attention is the thing the run is waiting on, and a worker's question is no
-  // different from the Architect's in that respect.
+  // Any question in this chat blocks this composer, whoever asked it: the
+  // operator's attention is the thing the run is waiting on, and a worker's question
+  // in the same project is no different from the Architect's in that respect. A
+  // question in another project is that project's, and does not reach this box.
   //
   // No sentence explains it. One used to sit above the controls ("fever-tracker is
   // working — started from 192.0.2.115"), and the operator asked for it to go:

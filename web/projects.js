@@ -12,7 +12,7 @@ import { esc } from './format.js';
 import { $ } from './dom.js';
 import { api } from './api.js';
 import { toast } from './toast.js';
-import { projectOf, runIn, dirKey } from './run-view.js';
+import { projectOf, runIn, dirKey, waitingIn } from './run-view.js';
 import { pruneRoleRates } from './role-rate-store.js';
 
 const missing = (name) => () => {
@@ -145,20 +145,10 @@ export function liveDot(sessionId, { clickable = true } = {}) {
   return '<span class="tree-live on stalled" title="Stalled"></span>';
 }
 
-/**
- * What a session is stopped on, if anything.
- *
- * A session waiting on an answer emits nothing, exactly like an idle one, and
- * the question panel only exists inside an open session — so after a reload a
- * blocked session used to look like any other and the operator had no way to
- * know a question was sitting there. The rail says it instead.
- */
-export function waitingFor(sessionId) {
-  if (!sessionId) return null;
-  if ((state.forms || []).some((f) => f.sessionId === sessionId)) return 'answer';
-  if ((state.permissions || []).some((p) => p.sessionId === sessionId)) return 'decision';
-  return null;
-}
+// What a project is stopped on is asked by **directory**, not by the chat session:
+// a worker is a hidden session in the same project, so asking by the chat missed the
+// one case the mark is for. `waitingIn` (run-view.js) is the rule, and the row below
+// is the rail's call (20 Nov).
 
 // Every project is one conversation: there is no session list and no "New
 // Session" row. Clicking a project opens its chat, and the chat is the newest
@@ -216,7 +206,7 @@ export function renderTree() {
       const chat = newestSession(p);
       const current = Boolean(chat) && state.view === 'session' && chat.id === state.sessionId;
       const working = Boolean(chat) && sessionWorking(chat.id);
-      const waiting = chat ? waitingFor(chat.id) : null;
+      const waiting = waitingIn(p.directory);
       const waitNote =
         waiting === 'answer' ? ' · waiting on your answer' : waiting === 'decision' ? ' · waiting for your decision' : '';
       const title = `${p.name}${p.private ? ' · private' : ''}${working ? ' · working' : ''}${waitNote}${p.exists === false ? ' · folder missing' : ''}`;

@@ -15,7 +15,7 @@ import { esc, shortSpan, fmtBytes, hhmm } from './format.js';
 import { $ } from './dom.js';
 import { api } from './api.js';
 import { toast } from './toast.js';
-import { dirKey, currentRun, currentProject, roleLabel, modelByRef, selectionFor, groupTurns } from './run-view.js';
+import { dirKey, currentRun, currentProject, roleLabel, modelByRef, selectionFor, groupTurns, sameChat } from './run-view.js';
 import { findSession, isBusy, renderTree } from './projects.js';
 import { renderPlan } from './plan-pane.js';
 import { renderTranscript } from './transcript.js';
@@ -584,7 +584,9 @@ export async function syncRuns() {
     state.runs.set(key, rest);
   }
   if (!drop.length && !add.length) return;
-  state.stopping = false;
+  // `state.stopping` is not cleared here: a run list changing anywhere is not this
+  // chat's stop ending. The pending poll carries the server's own per-chat answer,
+  // and `run.finished` clears it for the chat it is about (20 Nov).
   renderRoleActivity();
   renderTree();
   renderPlan();
@@ -658,8 +660,10 @@ export function handleRunEvent(ev) {
     return;
   }
   // Another view pressed Stop first: the run is finishing its step. The notice
-  // and the glow are shared so nobody presses again thinking nothing happened.
+  // and the glow are shared so nobody presses again thinking nothing happened —
+  // but they are this chat's, not a blanket over whatever is on screen.
   if (ev.type === 'run.stopping') {
+    if (!sameChat(ev.dir)) return;
     state.stopping = true;
     // A stop is not a finish: no sound for work the operator ended on purpose.
     state.workEndQuiet = true;
@@ -763,7 +767,9 @@ export function handleRunEvent(ev) {
     // A finished, successful run is the role working again; a run that failed is
     // the one case where the red line stays until the next attempt.
     if (ev.role && ev.outcome === 'completed') state.roleErrors.delete(`${key}|${ev.role}`);
-    state.stopping = false;
+    // A stop notice belongs to the chat it is about. A run ending in another
+    // project must not take this chat's notice away, or put one up (20 Nov).
+    if (sameChat(ev.dir)) state.stopping = false;
     const done = state.runs.get(key);
     const trace = done ? traceOf(done) : null;
     if (trace) {

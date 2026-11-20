@@ -29,8 +29,9 @@ sleeps therefore cannot hold a project. Nothing to expire, nothing to leak.
 1. **Any view may steer while the project is busy.** The message joins the running
    turn at its next step: it is guidance for the work in flight, not a second
    conversation. The composer says **Steer** with a yellow border, whoever is
-   typing. Cards and questions still block the composer — answer those first.
-   Stop is unchanged, and always available.
+   typing. Cards and questions still block the composer — **that project's cards and
+   questions, in that project's chat**; another project waiting on a card blocks only
+   itself, and the rail marks it. Stop is unchanged, and always available.
 2. **Cards are answerable from any view, busy or not.** The first answer wins and
    is broadcast: every other view closes the panel and repaints the chip. A
    second answer is a no-op, not an error.

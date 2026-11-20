@@ -93,6 +93,8 @@ import {
   roleLabel,
   groupTurns,
   currentForm,
+  sameChat,
+  chatDir,
 } from './run-view.js';
 import {
   forgetConversation,
@@ -120,6 +122,11 @@ import {
   transcriptWiring,
 } from './transcript.js';
 import { toast } from './toast.js';
+// The permission card lives in its own module: it is the one piece of the chat that
+// decides which project draws it, and that rule is tested without a page.
+import { renderPermissionCards } from './permission-card.js';
+// What every chat is doing, and the two events worth a sound (20 Nov).
+import { chatStates, createAttention } from './attention.js';
 import { namePasted } from './attach-names.js';
 import { installContextMenu } from './context-menu.js';
 import { installFoldMotion, animateHeight, FOLD_MS } from './folds.js';
@@ -319,6 +326,42 @@ function playDoneSound(value = state.config?.notify?.doneSound) {
   playSound(doneSoundName(String(value ?? 'off')));
 }
 
+/**
+ * The other chats' two sounds.
+ *
+ * The finished-work chime used to listen only to the chat on screen, so a project
+ * that finished while another was open said nothing. The same is true of a chat that
+ * stops on a card: the rail marks it, but the operator looking elsewhere heard
+ * nothing. Both are one event per chat, never per card or per step (20 Nov).
+ *
+ * A blocked chat gets the hollow knock — the sound a sign-in card already made, now
+ * with the one meaning it always had: the harness needs you.
+ */
+const attention = createAttention({
+  onFinished: (dir) => {
+    playDoneSound();
+    blinkTaskbar('work finished');
+  },
+  onBlocked: (dir) => {
+    playSound('hollow');
+    blinkTaskbar('a chat needs you');
+  },
+});
+
+/** Read every chat's state and let the watcher say what changed. */
+function noteAttention() {
+  attention.note(
+    chatStates({
+      projects: state.projects,
+      runs: state.runs,
+      busySessions: state.busySessions,
+      permissions: state.permissions,
+      forms: state.forms,
+    }),
+    { openDir: chatDir() },
+  );
+}
+
 // One chime per finished piece of work, and none for a stop or a failure: the sound
 // means "the Architect is done", so it must not say that when the work was cut short.
 // The memory itself is `state.workWasLive` / `state.workEndQuiet`, because the run
@@ -337,6 +380,9 @@ function playDoneSound(value = state.config?.notify?.doneSound) {
  * soon as the plan catches up and says it is).
  */
 function noteWorking() {
+  // Every chat, not just this one: a project that finished, or stopped on a card,
+  // while another was open is exactly what this now watches (20 Nov).
+  noteAttention();
   const live = state.view === 'session' && Boolean(state.sessionId) && sessionWorking(state.sessionId);
   // Which chat was working when this was last evaluated. Opening another project is not
   // the work finishing — that reading belonged to a different session, and the chime
@@ -731,6 +777,12 @@ async function openSession(id) {
   // which armed the finished-work chime and sounded it when the poll caught up (14 Nov).
   state.busyInfo = null;
   state.busyInfoSession = null;
+  // A stop notice belongs to the chat it was pressed in, and the poll that follows
+  // this swap asks the server for this chat's own answer. Without the reset the old
+  // chat's "Stopping…" sat over a chat where nothing was stopping (20 Nov).
+  state.stopping = false;
+  state.stoppingPhase = null;
+  state.stoppingReason = null;
   // The next page load opens this one again (see restoreOpenSession).
   rememberSession(id);
   state.permissions = [];
@@ -771,6 +823,11 @@ async function openSession(id) {
   // The place to keep is the end of the conversation just opened.
   captureChatSlack();
   refreshPending();
+  // The question panel is moved, never rebuilt, so a chat switch has to redraw it
+  // explicitly: the previous chat's question must not stay under this chat's report,
+  // and this chat's own question has to appear even when the poll learned nothing and
+  // its signature therefore did not change (20 Nov).
+  renderAskPanel();
   renderToolUsage();
   loadPlan();
 }
@@ -1022,156 +1079,6 @@ function updateBusyFromMessages() {
 }
 
 
-// The engine blocks the session until every permission request is answered. A
-// worker's request is as real as the open session's — and a worker session is
-// hidden from the rail, so if its request were filtered to the open session the
-// worker would sit blocked until its timeout with nothing on screen. Every
-// pending request is shown, with the name of who is asking.
-/** What this role is asking to do, in one sentence. Scope comes from the policy,
- *  so the sentence never claims the operator is the one outside their project. */
-function permissionLead(p) {
-  const actor = p.role ? roleLabel(p.role) : 'The Architect';
-  // The screen is not a file, and the sentence has to say so: this card is the
-  // "may I use your PC" question, and it is the only one that takes the mouse.
-  if (p.scope === 'desk') return `${actor} wants to use your screen.`;
-  // A sign-in is a window on the operator's own desktop, so the sentence names the site
-  // and says what the window is for (12 Nov).
-  if (p.scope === 'browser') {
-    const site = String(p.browserHost || p.browserUrl || '').replace(/^https?:\/\//i, '').split('/')[0];
-    return `${actor} wants to open a browser window so you can sign in${site ? ` to ${site}` : ''}.`;
-  }
-  const action = String(p.action || '').toLowerCase();
-  const verb =
-    action === 'read'
-      ? 'read a file'
-      : action === 'shell' || action === 'bash'
-        ? 'run a command'
-        : action === 'execute'
-          ? 'run code'
-          : /^(edit|write|patch|create)$/.test(action)
-            ? (p.files?.[0]?.status === 'added' ? 'create a file' : 'change a file')
-            : 'use a tool';
-  const where =
-    p.scope === 'harness'
-      ? ' inside Synapse'
-      : p.scope === 'secret'
-        ? ' in a saved-password folder'
-        : p.scope === 'outside'
-          ? ' outside this project'
-          : p.scope === 'project'
-            ? ' in this project'
-            : '';
-  return where
-    ? `${actor} wants to ${verb}${where}.`
-    : `${actor} wants to ${verb}, and the harness cannot tell where it lands.`;
-}
-
-function renderPermissions() {
-  // A wake click is only dangerous on a card that appeared as the window came
-  // forward; one that has been on screen has been read. Remember when each card
-  // was first drawn so the next click can tell the two apart.
-  const now = Date.now();
-  const seen = state.permSeen || (state.permSeen = new Map());
-  const live = new Set((state.permissions || []).map((p) => p.requestId).filter(Boolean));
-  for (const id of live) if (!seen.has(id)) seen.set(id, now);
-  for (const id of [...seen.keys()]) if (!live.has(id)) { seen.delete(id); state.permWakeOk?.delete(id); }
-  const html = (state.permissions || [])
-    .map((p) => {
-      const actor = p.role ? roleLabel(p.role) : 'The Architect';
-      const task = p.task || '';
-      const paths = p.resolved && p.resolved.length ? p.resolved : p.resources || [];
-      const files = p.files || [];
-      const adds = files.reduce((n, f) => n + (f.additions || 0), 0);
-      const dels = files.reduce((n, f) => n + (f.deletions || 0), 0);
-      const diff = files.length
-        ? `<details class="perm-diff"><summary>${files.length} file${files.length === 1 ? '' : 's'} · +${adds} −${dels}</summary><pre class="perm-res">${esc(
-            files.map((f) => f.patch || f.file).join('\n'),
-          )}</pre></details>`
-        : '';
-      const due = Number(p.autoPermissionsAt) || null;
-      // The screen is a different question from a file: it is the operator's mouse,
-      // keyboard and focus, and the answer lasts for the run rather than for one
-      // command — so it has its own two buttons and no "Always Allow".
-      const screen = p.scope === 'desk';
-      const browserAsk = p.scope === 'browser';
-      return `<div class="perm-card${screen ? ' is-screen' : ''}">
-        <div class="perm-head"><span class="status-dot warn" role="img" aria-label="waiting"></span><span class="perm-head-text">${esc(
-          actor,
-        )} needs your ${browserAsk ? 'sign-in' : screen ? 'screen' : 'permission'}</span>${
-          // The switch is on for the asking project: count down to the moment it is
-          // allowed, in the head's right corner like the question's own note (3 Nov).
-          due ? `<span class="perm-head-note" data-perm-due="${due}">${esc(permissionNote(due, serverNow()))}</span>` : ''
-        }${task ? `<span class="perm-who">${esc(task)}</span>` : ''}</div>
-        <p class="perm-lead">${esc(permissionLead(p))}</p>
-        ${paths.length ? `<pre class="perm-res">${esc(paths.join('\n'))}</pre>` : ''}
-        ${p.reason ? `<p class="perm-why">${esc(p.reason)}</p>` : ''}
-        ${diff}
-        <div class="perm-actions">
-          <button class="btn btn-allow btn-sm" data-perm="once" data-perm-id="${esc(
-            p.requestId,
-          )}" title="${
-            screen
-              ? 'Let it use your mouse, keyboard and focus for the rest of this run. You can take the screen back from the badge at any time.'
-              : browserAsk
-                ? 'Open a window on the monitor you are looking at. It waits as long as you need; close it without signing in and this counts as a rejection.'
-                : 'Do it this time only.'
-          }">${screen ? 'Allow Screen' : browserAsk ? 'Allow Sign-In' : 'Allow Once'}</button>
-          ${
-            screen || browserAsk
-              ? ''
-              : `<button class="btn btn-warn btn-sm" data-perm="always" data-perm-id="${esc(
-                  p.requestId,
-                )}" title="${
-                  p.action === 'shell' || p.action === 'bash'
-                    ? 'Do it, and stop asking for this command and the files it names in this chat — extra arguments do not ask again.'
-                    : 'Do it, and stop asking for this exact request in this chat.'
-                }">Always Allow</button>`
-          }
-          <button class="btn btn-warn btn-sm" data-perm="reject" data-perm-id="${esc(
-            p.requestId,
-          )}" title="Say no. The role is told and carries on.">Reject</button>
-          <button class="btn btn-warn btn-sm" data-perm-reason-open="${esc(
-            p.requestId,
-          )}" title="Say no, and tell the role why in your own words.">Reject With Reason</button>
-          <button class="btn btn-stop btn-sm" data-perm-stop="${esc(
-            p.requestId,
-          )}" title="Stop the whole task.">Stop Run</button>
-        </div>
-      </div>`;
-    })
-    .join('');
-  // A card that is going to be allowed by itself carries a countdown; the ticker
-  // runs only while one is on screen.
-  if (/data-perm-due="/.test(html)) startPermCountdown();
-  else stopPermCountdown();
-  return html;
-}
-
-// ── the permission countdown ────────────────────────────────────
-// "Auto-Permission: Allow Once will be picked in 7 seconds…", the same idea as the
-// question's head: a number that moves is a claim the operator can check. Started
-// when such a card is drawn, stopped when none is.
-let permTick = 0;
-
-function paintPermissionNotes() {
-  const notes = document.querySelectorAll('[data-perm-due]');
-  if (!notes.length) {
-    stopPermCountdown();
-    return;
-  }
-  for (const el of notes) el.textContent = permissionNote(el.dataset.permDue, serverNow());
-}
-
-function startPermCountdown() {
-  if (!permTick) permTick = setInterval(paintPermissionNotes, 1000);
-}
-
-function stopPermCountdown() {
-  if (permTick) {
-    clearInterval(permTick);
-    permTick = 0;
-  }
-}
 
 // ── reject with reason ─────────────────────────────────────────
 // The refusal's sentence, typed in a small dialog rather than in the card. The
@@ -1428,7 +1335,15 @@ function connectStream() {
     // over any more: it hears `stop.done` when the project is really quiet, and
     // `stop.stuck` when the engine will not let go — which is the state that used
     // to look like a frozen event list and a Stop button that did nothing.
+    //
+    // Every stop event carries the folder it is about. Another project's stop is
+    // that project's news: drawing "Stopping…" over this chat because a different
+    // one is being stopped was one of the ways the page confused its chats (20 Nov).
     if (ev.kind === 'stop') {
+      // A stop is the operator saying "not this one finished". The chat's end must
+      // stay quiet wherever it is on screen (20 Nov).
+      if (ev.dir && ev.type === 'stop.started') attention.quietUntil(ev.dir);
+      if (ev.dir && !sameChat(ev.dir)) return;
       if (ev.type === 'stop.started') {
         state.stopping = true;
         state.stoppingReason = null;
@@ -1662,6 +1577,9 @@ function connectStream() {
     // Delegated work: the runner's own events, one per project, adding up to the
     // live path and the cards' state. Nothing here is a session event.
     if (ev.kind === 'run') {
+      // A run that is stopping was ended by the operator: its finish must not chime,
+      // in this chat or any other (see attention.js).
+      if (ev.type === 'run.stopping') attention.quietUntil(ev.dir);
       handleRunEvent(ev);
       // A run ending can leave the chat idle without a session event (the Architect's
       // turn was already over), so the answer to "is anything still happening?" is
@@ -2731,7 +2649,7 @@ async function bootPage() {
   transcriptWiring({
     renderRoleActivity,
     mountAskPost,
-    renderPermissions,
+    renderPermissions: renderPermissionCards,
     compactPostOf,
     // The render held a draw back: say why on screen, and hold the timers behind it.
     onPause: () => notePause(),

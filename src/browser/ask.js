@@ -18,7 +18,7 @@ export function createBrowserAsks({ notify = null, log = null } = {}) {
   const pending = new Map();
 
   /** Ask the operator. Resolves `{ allow, message }` — never times out. */
-  function ask({ host, url, what = '', role = 'architect', task = '' } = {}) {
+  function ask({ host, url, what = '', role = 'architect', task = '', directory = '' } = {}) {
     const id = `browser_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
     const entry = {
       id,
@@ -27,6 +27,8 @@ export function createBrowserAsks({ notify = null, log = null } = {}) {
       what: String(what || ''),
       role,
       task,
+      // The project's folder, when the caller knows it: a card belongs to its chat.
+      directory: String(directory || ''),
       at: Date.now(),
     };
     const promise = new Promise((resolve) => { entry.resolve = resolve; });
@@ -54,6 +56,9 @@ export function createBrowserAsks({ notify = null, log = null } = {}) {
       action: 'browser',
       role: entry.role,
       task: entry.task,
+      // Which chat the card belongs to. A sign-in asked from one project must not be
+      // drawn in another; the page filters cards by this (20 Nov).
+      directory: entry.directory || '',
       resources: entry.url ? [entry.url] : [],
       reason: entry.what
         ? `${String(entry.what).replace(/\.?$/, '.')} Opening the window is your decision, and a sign-in you finish is kept in SynaBrowse's own profile.`

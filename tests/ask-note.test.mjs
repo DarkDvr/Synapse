@@ -102,8 +102,8 @@ test('a permission card counts down to its automatic Allow Once', () => {
   assert.equal(permissionNote(now + 1_400, now), 'Auto-Permission: Allow Once will be picked in 2 seconds… ');
   assert.equal(permissionNote(now - 500, now), 'Auto-Permission: Allow Once will be picked now… ');
   const js = read('web/app.js');
-  assert.match(read('web/app.js'), /data-perm-due=/);
-  assert.match(js, /permTick = setInterval\(paintPermissionNotes, 1000\)/);
+  assert.match(read('web/permission-card.js'), /data-perm-due=/);
+  assert.match(read('web/permission-card.js'), /permTick = setInterval\(paintPermissionNotes, 1000\)/);
   // The sentence is written once, in the module, like the question's.
   assert.match(read('src/api.js'), /autoPermissionsAt: permissionGate\?\.autoAllowAt/);
   assert.match(read('src/permission-gate.js'), /autoAllowAt: \(id\) => pendingAsks\.get\(id\)\?\.autoAt \?\? null/);
@@ -114,9 +114,9 @@ test('a permission card counts down to its automatic Allow Once', () => {
 // both clocks have to be reconciled — the HTTP Date header is the reconciler.
 test('every countdown runs on the server’s clock, not the page’s', () => {
   const js = read('web/ask-panel.js');
-  // 6 Nov: the question's clock moved to ./ask-panel.js, the permission card's stayed
-  // in app.js — both read serverNow, so both are checked.
-  const permissionCard = read('web/app.js');
+  // 6 Nov: the question's clock moved to ./ask-panel.js. 20 Nov: the permission card
+  // moved to ./permission-card.js, so it draws its own countdown there.
+  const permissionCard = read('web/permission-card.js');
   // serverNow moved to web/api.js with the fetch wrapper; it is still the same
   // function, so the assertion follows it there.
   assert.match(read('web/api.js'), /export const serverNow = \(\) => Date\.now\(\) \+ \(Number\(state\.clockSkew\) \|\| 0\)/);

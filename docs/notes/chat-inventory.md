@@ -98,7 +98,7 @@ Ids are stable: they are the ticket names and the scenario names. `M` = must,
 | D5 | The `question` tool | A card whose target is the first question | M: a record, not the interface — the panel is where it is answered |
 | D6 | Two or more consecutive browser calls | "SynaBrowse · N calls" with the calls inside | M: one card, one intention; a single call is itself |
 | D7 | A browser download | Live: name, bar, bytes, path. Done: one line, "Saved" | M: belongs inside the post whose time window it falls in; folds on completion; a page opened mid-download shows it |
-| D8 | A pending permission | Card: actor + "needs your permission/screen/sign-in", task, lead sentence, paths, reason, diff, buttons | M: four button sets — file/shell (Allow Once, Always Allow, Reject, Reject With Reason, Stop Run), screen (Allow Screen, Reject, Stop Run), sign-in (Allow Sign-In, Reject, Stop Run); the countdown says when Auto-Permissions will take it; the card is the operator's, never the gate's |
+| D8 | A pending permission | Card: actor + "needs your permission/screen/sign-in", task, lead sentence, paths, reason, diff, buttons. Drawn only in the asking project's chat | M: four button sets — file/shell (Allow Once, Always Allow, Reject, Reject With Reason, Stop Run), screen (Allow Screen, Reject, Stop Run), sign-in (Allow Sign-In, Reject, Stop Run); the countdown says when Auto-Permissions will take it; the card is the operator's, never the gate's; another project's card is never drawn here (rail `?` + a toast names it) |
 | D9 | An answered permission | The card goes; the decision stays on the tool chip | M: no flash of a card that was answered elsewhere |
 
 ### E. Lines
@@ -146,7 +146,7 @@ Ids are stable: they are the ticket names and the scenario names. `M` = must,
 | H2 | Fields | radio, checkbox, boolean, text, number, external link, "Something Else…" | M: a `when` rule hides a field that is not answerable yet; hidden fields answer nothing |
 | H3 | A multi-question form | One question per page, "Question N of M", Back/Next/Submit | M: paging hides by class, not `hidden`, so answers survive; required fields gate the right button |
 | H4 | Auto-Answer | "Auto-Answering in N seconds…", page advance, the reply after the last page | M: the countdown is the server's clock; a manual answer wins. The countdown, the page advance and the reply are all in `web/ask-panel.js` and have been since 1.62.0 |
-| H5 | A worker's question | The same panel, note says "a worker is waiting — answer here" | M: answerable from the operator's chat; no "open that chat" that does not exist |
+| H5 | A worker's question | The same panel, in the worker's own project's chat; note says "a worker is waiting — answer here" | M: a worker runs in its project's chat, so its question is shown there and answerable there; another project's question is never drawn here (announced by the rail and a toast instead) |
 | H6 | The panel arriving | At the end, report above it | M: placed only after the transcript has the report; the head visible when the panel is taller than the chat; the composer disabled, Stop live. P: it appears instantly, and a render rebuilds it — a choice made in it survives only because the render is held |
 | H7 | The answer sent | The panel goes, the chat carries on, the card stays | M: no double POST; a 409 is "already answered", not an error |
 
@@ -190,7 +190,7 @@ Ids are stable: they are the ticket names and the scenario names. `M` = must,
 |---|---|---|
 | L1 | A reload | Messages, compact post, chat errors, steers, downloads, forms, permissions survive; the pane is rebuilt from the live stream; open folds and scroll position do not (today) |
 | L2 | A reload mid-turn | The page rejoins the turn: the post, the pane from the next delta, the composer says Working |
-| L3 | Switching chats and back | Nothing of the old chat leaks in: no trace, no pane, no pending steers, no clocks; a chat opens at its **end**, never at a remembered offset (Q3: decided) |
+| L3 | Switching chats and back | Nothing of the old chat leaks in: no trace, no pane, no pending steers, no clocks, **no card, no question and no "Stopping…"** — those belong to their own chat (20 Nov); a chat opens at its **end**, never at a remembered offset (Q3: decided) |
 
 ### M. Time
 
@@ -233,8 +233,9 @@ a model or a file wrote it.
   column. **Assert: no horizontal scrollbar, no clipping.**
 - S8 resize 1280 ↔ 1600 while the pane and a form are live. **Assert: the anchor and
   the panel stay put.**
-- S9 a worker's question arriving in another project's chat. **Assert: it is shown,
-  answerable, and says who asked.**
+- S9 a worker's question arriving while another project is on screen. **Assert: it is not
+  drawn in that chat; its own project's rail row carries `?` and one toast names the
+  project; opening that project shows it at the end, under its report.**
 - S10 a compact with an open fold and a scrolled-up reader. **Assert: nothing jumps,
   nothing reopens.**
 - S11 no chat: no project open, a chat that was deleted, a transcript load that failed.

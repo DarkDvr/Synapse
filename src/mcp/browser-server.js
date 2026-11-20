@@ -441,6 +441,11 @@ async function handle(msg) {
                   url: args.url || (await browser.tabs())[0]?.url || '',
                   host: args.host || '',
                   what: args.what || '',
+                  // The chat that asked. This server starts in the project's folder,
+                  // and a card that cannot name its chat is drawn in whichever one is
+                  // open — which is how a sign-in for one project appeared in another
+                  // (20 Nov). Empty when the server was started outside a project.
+                  directory: IN_PROJECT ? START_DIR : '',
                 }),
               });
               answer = await res.json();

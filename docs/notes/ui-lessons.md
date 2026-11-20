@@ -60,6 +60,12 @@ answering meant guessing what had been said. As a post, the answer is one scroll
   last, putting the page back to a chat with no report in it — only the newest answer may
   write `state.messages` (`messagesAsked`). The blocked turn has no later event to fetch
   again, so any of the three meant the report stayed missing until the answer.
+- **The panel is per chat, and a chat switch redraws it.** `currentForm()` takes this
+  session's form, then a form from a worker session in the same project folder, and
+  nothing else — one project's question used to fall back into another project's panel
+  (20 Nov). Because the node is moved and never rebuilt, opening another chat calls
+  `renderAskPanel()` explicitly: the poll's signature can be unchanged (both chats have no
+  card), and the old question would otherwise still be mounted under the new report.
 - **Dense, not boxed.** Every answer used to be its own orange-bordered box inside an
   orange-bordered panel — too much orange, and three options took a screenful. The panel
   keeps its orange border (that is what marks it as a question), the fill is neutral, and
@@ -268,9 +274,12 @@ an answered card never looks like one that vanished.
 
 Two invariants:
 
-- **A worker's request is shown too.** Hidden from the rail is not hidden from the
-  operator: filtered to the open session, a worker's request blocked the worker
-  until its timeout with nothing on screen.
+- **A worker's request is shown too — in its own project's chat.** A worker session is
+  hidden from the rail, so filtering to the open *session* left it blocking until its
+  timeout with nothing on screen. The filter is the project's folder, not the session id
+  (20 Nov): the Architect's turn and its workers share one chat, so both are shown there;
+  another project's card belongs to that project's chat, and is announced by its rail row
+  and a toast instead of being drawn here.
 - **An auto-answered request must not flash.** The gate answers in the same second,
   so the card is drawn after a 200ms refresh rather than painted straight from the
   event. A request the policy allows never appears; a real ask appears without a
