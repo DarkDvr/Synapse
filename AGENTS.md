@@ -114,7 +114,7 @@ the cards and the commits, not the code. One reason per sentence, not a chain.
   again when it works. Small commits; the message says what changed and why.
 - **`data/`, `logs/` and the projects root stay out of git** — PIDs, probe output,
   session logs and scratch projects, all local and regenerable.
-- **Check `git status` before and after**; no build junk, no filled-in config.
+- **Check `git status` before and after**; no build junk, and no keys in the config (tracked since 21 Nov).
 - **Remote: `origin` → `github.com/DarkDvr/Synapse` (private).** Push `main`; never force-push or rewrite history. The suite, and the run it triggers there, is `docs/notes/tests.md`.
 
 ### Versioning: commit, bump, tag, push

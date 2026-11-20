@@ -1349,6 +1349,13 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
     toolchain: async ({ force = false } = {}) => probeToolchain({ force }),
 
     saveConfig: async (body, actor = null) => {
+      // A body with no roles is not a config. On 21 Nov a caller sent {config: …},
+      // the route took the wrapper as the config, and the operator's file was
+      // replaced with one that had no roles and no providers — a save with no undo.
+      // Refuse it before anything is written.
+      if (!body || typeof body !== 'object' || !Object.keys(body.roles || {}).length) {
+        throw fail(400, 'this save has no roles, so it is not a config. Nothing was written.');
+      }
       // Which roles had a different model before this save. A run of that role
       // asleep in a provider backoff (a usage cap, a rate limit) is waiting on a
       // clock that the operator has just made irrelevant: the runner wakes it and

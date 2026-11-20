@@ -751,6 +751,12 @@ export const configSavedAt = () => lastSaveAt;
 export function saveConfig(cfg) {
   const normalized = normalize(cfg);
   fs.mkdirSync(CONFIG_DIR, { recursive: true });
+  // One generation of undo. On 21 Nov a bad save (a wrapped body, no roles) replaced
+  // the operator's answers and there was no copy to go back to; the previous file is
+  // kept beside this one from now on. A failure to copy never stops the save.
+  try {
+    if (fs.existsSync(CONFIG_FILE)) fs.copyFileSync(CONFIG_FILE, path.join(CONFIG_DIR, 'synapse.config.bak.json'));
+  } catch { /* the backup is a courtesy, the save is not */ }
   const tmp = path.join(CONFIG_DIR, `.project.config.${process.pid}.tmp`);
   fs.writeFileSync(tmp, JSON.stringify(normalized, null, 2) + '\n', 'utf8');
   fs.renameSync(tmp, CONFIG_FILE);
