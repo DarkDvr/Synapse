@@ -831,12 +831,10 @@ async function openSession(id) {
   renderToolUsage();
   loadPlan();
   // The dock and the stage settle a beat after this — the role cards' row, the plan
-  // pane and the transcript are measured in that order — and a scroll to the end
-  // taken before then lands short: opening a Multi project left the chat a screen
-  // above its last line every time (reported 21 Nov). Follow the end again once the
-  // layout has stopped moving, unless the reader has scrolled meanwhile.
+  // pane and the transcript are measured in that order. The first scroll lands where
+  // the box is now; the ResizeObserver keeps the end glued while the box changes, so
+  // nothing jumps afterwards (reported 21 Nov).
   requestAnimationFrame(() => { if (chatFollows()) scrollChatToBottom(); });
-  setTimeout(() => { if (chatFollows()) scrollChatToBottom(); }, 360);
 }
 
 // ── the Architect's post, opened on its first token ─────────────
@@ -2581,6 +2579,21 @@ document.addEventListener('keydown', (e) => {
   }));
   // The plan's own scroller: the fade has to go the moment the last row is in view.
   $('planBody')?.addEventListener('scroll', updatePlanOverflow, { passive: true });
+
+  // A box that changes under the reader — the role cards opening, the plan pane
+  // arriving, the window resizing — used to re-wrap the text first and be corrected
+  // after, which read as an abrupt jump to the end. While the chat is following, the
+  // end is written on every frame the box changes: the bottom edge stays glued to the
+  // composer and only the top edge moves (reported 21 Nov).
+  if (window.ResizeObserver) {
+    const transcript = $('transcript');
+    if (transcript) {
+      new ResizeObserver(() => {
+        if (state.view !== 'session') return;
+        if (chatFollows() || chatAtBottom(48)) transcript.scrollTop = transcript.scrollHeight;
+      }).observe(transcript);
+    }
+  }
 
   // The card heights change after the fonts load (and with any content change),
   // which used to leave the wrapper's max-height stale by a pixel or two — the
