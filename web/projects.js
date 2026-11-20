@@ -201,7 +201,7 @@ export function projectUsed(project) {
 export function renderTree() {
   const el = $('projectTree');
   if (!el) return;
-  el.innerHTML = state.projects
+  const html = state.projects
     .map((p) => {
       const chat = newestSession(p);
       const current = Boolean(chat) && state.view === 'session' && chat.id === state.sessionId;
@@ -224,6 +224,15 @@ export function renderTree() {
       </div>`;
     })
     .join('');
+  // The rail is rebuilt on every poll and every event. Writing identical markup
+  // restarts the working row's yellow animation from zero, which the operator sees
+  // as a stutter every few seconds (reported 21 Nov). The markup only changes when a
+  // row does, so it is compared first — stored on the element, so a fresh page or a
+  // test's new element always paints.
+  if (el._treeSig !== html) {
+    el._treeSig = html;
+    el.innerHTML = html;
+  }
   renderEmpty();
 }
 

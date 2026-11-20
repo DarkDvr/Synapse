@@ -830,6 +830,13 @@ async function openSession(id) {
   renderAskPanel();
   renderToolUsage();
   loadPlan();
+  // The dock and the stage settle a beat after this — the role cards' row, the plan
+  // pane and the transcript are measured in that order — and a scroll to the end
+  // taken before then lands short: opening a Multi project left the chat a screen
+  // above its last line every time (reported 21 Nov). Follow the end again once the
+  // layout has stopped moving, unless the reader has scrolled meanwhile.
+  requestAnimationFrame(() => { if (chatFollows()) scrollChatToBottom(); });
+  setTimeout(() => { if (chatFollows()) scrollChatToBottom(); }, 360);
 }
 
 // ── the Architect's post, opened on its first token ─────────────

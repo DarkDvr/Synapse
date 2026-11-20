@@ -123,6 +123,22 @@ function takeOver(trace, event) {
   if (!s || !view || !body) return false;
   const max = Math.max(0, body.offsetHeight - view.clientHeight);
   if (max <= 2) return false; // nothing to read back: the wheel belongs to the chat
+  const delta = event ? Number(event.deltaY) || 0 : 0;
+  const from = s.scrolled ? view.scrollTop : Math.max(0, Math.min(Number(s.offset) || 0, max));
+  const to = Math.max(0, Math.min(from + delta, max));
+  if (event && Math.abs(to - from) < 1) {
+    // The pane is at its last line (or its first) and the wheel pushes past it.
+    // At the end the wheel is swallowed: there is nothing to read back, and taking
+    // the pane anyway flipped it into "reading" and put the new-words chip up on a
+    // wheel it could not use, with the chat fighting the follow several times a
+    // second (reported 21 Nov). At the top, upward is the chat's: it reads as
+    // scrolling back through the conversation, so it is left to bubble.
+    if (delta > 0) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+    return false;
+  }
   // The frame loop follows `active`: taking the pane makes this trace the one it watches.
   active = trace;
   if (!s.scrolled) {
@@ -130,10 +146,10 @@ function takeOver(trace, event) {
     node.parentElement?.classList.add('is-reading');
     view.style.overflowY = 'auto';
     body.style.transform = 'none';
-    view.scrollTop = Math.max(0, Math.min(Number(s.offset) || 0, max));
+    view.scrollTop = from;
   }
   if (event) {
-    view.scrollTop = Math.max(0, Math.min(view.scrollTop + event.deltaY, max));
+    view.scrollTop = to;
     event.preventDefault();
     event.stopPropagation();
   }

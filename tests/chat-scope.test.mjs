@@ -136,6 +136,19 @@ test('the rail marks the project whose worker is waiting', async () => {
   assert.doesNotMatch(row('a'), /tree-wait/, 'the mark landed on the wrong project');
 });
 
+test('an unchanged rail is not rebuilt, so its animation does not restart', async () => {
+  page();
+  const { renderTree } = await import('../web/projects.js');
+  renderTree();
+  const el = globalThis.document.getElementById('projectTree');
+  el.innerHTML = 'sentinel';
+  renderTree(); // nothing changed in the page's state
+  assert.equal(el.innerHTML, 'sentinel', 'the rail was rebuilt for nothing and restarted its animation');
+  state.view = 'none'; // a change must paint
+  renderTree();
+  assert.notEqual(el.innerHTML, 'sentinel', 'a rail that changed was not redrawn');
+});
+
 test('states are per chat, and a finished chat is reported once', () => {
   const projects = [
     { directory: A, sessions: [{ id: 'ses_a' }] },
