@@ -24,6 +24,7 @@ import { mayRecycleFolder } from './projects.js';
 import { fetchProviderModels } from './providers.js';
 import { providerId } from './providers.js';
 import { isLocalProvider, providerUp } from './providers.js';
+import { localServer } from './local-lease.js';
 import { providerApiKey } from './config.js';
 import { configureBrowserAsks } from './browser/ask.js';
 import * as windows from './windows.js';
@@ -250,7 +251,7 @@ export function folderNameProblem(folder) {
   return null;
 }
 
-export function createApi({ getConfig, applyConfig, power, engine, logger, getBootError, projects, toolStats, probe, modelCache, traceReasons, inspectModel: inspectRef, probeDir, runs, desk, engineUpdate, synapseUpdate, restart, stopSelf, pcShutdown, notify, providerSync, permissionLog, permissionGate, permissionMemory }) {
+export function createApi({ getConfig, applyConfig, power, engine, logger, getBootError, projects, toolStats, probe, modelCache, traceReasons, inspectModel: inspectRef, probeDir, runs, desk, localLease, engineUpdate, synapseUpdate, restart, stopSelf, pcShutdown, notify, providerSync, permissionLog, permissionGate, permissionMemory }) {
   const app = logger.channel('app');
   // One guard per chat the operator drives: the Architect's own turn has no run, and
   // nothing was watching it (13 Nov).
@@ -2322,8 +2323,40 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
       // they want the work resumed or changed, they say so here.
       // The guard watches this turn only: a chat carries every earlier turn, and the
       // first poll used to nudge a fresh turn for the previous one's last twelve calls.
+      // A local model server takes one turn at a time. If another project's turn is on
+      // it, this message waits for that turn to end rather than sending a second prompt
+      // the server must re-read (20 Nov). The wait is bounded: a run can hold the server
+      // for an hour, and parking a message that long is not waiting, it is losing it.
+      const architectServer = localServer(getConfig() || {}, architectRef);
+      if (architectServer && localLease) {
+        const lease = await localLease.acquire({
+          serverKey: architectServer.key,
+          label: architectServer.label,
+          sessionId,
+          holder: `${path.basename(String(directory || ''))} - Architect`,
+          dir: directory,
+          waitMs: 120_000,
+        });
+        if (!lease) {
+          const owner = localLease.holderOf(architectServer.key);
+          const ownerText = owner?.holder ? ` It is busy with ${owner.holder}.` : '';
+          const err = fail(
+            409,
+            `${architectServer.label} is a local server and takes one turn at a time.${ownerText} ` +
+              `Send again when that turn ends.`,
+          );
+          err.serverBusy = { server: architectServer.label, holder: owner?.holder || null };
+          throw err;
+        }
+      }
       const turnStartedAt = Date.now();
-      await engine.prompt(sessionId, text, { files: attachments });
+      try {
+        await engine.prompt(sessionId, text, { files: attachments });
+      } catch (err) {
+        // The prompt never started: the lease must not sit on a turn nobody has.
+        localLease?.releaseSession(sessionId);
+        throw err;
+      }
       // From here the turn is the engine's: the runner is not waiting on it, so the loop
       // guard has to be a watcher of its own (13 Nov).
       watchTurn(sessionId, String(directory || ''), turnStartedAt);

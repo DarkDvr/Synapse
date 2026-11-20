@@ -1574,6 +1574,20 @@ function connectStream() {
       return;
     }
 
+    // A local model server takes one turn at a time. Its queue is news the moment a
+    // run has to wait: without it the card just sits on the same task and the
+    // operator reads "why is this slow" (20 Nov).
+    if (ev.kind === 'lease-server') {
+      if (ev.type === 'lease.waiting') {
+        toast(
+          'Waiting For The Local Server',
+          `${ev.holder || 'Another turn'} is using ${ev.server}. ${ev.waiter ? `${ev.waiter} starts` : 'This turn starts'} when it ends.`,
+          7000,
+        );
+      }
+      return;
+    }
+
     // Delegated work: the runner's own events, one per project, adding up to the
     // live path and the cards' state. Nothing here is a session event.
     if (ev.kind === 'run') {

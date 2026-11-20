@@ -2289,3 +2289,18 @@ turns finding that out on its own (VPA, 17 Nov).
   the file.
 - The file is still never repaired by the harness: the Architect owns it, and a silently
   mended plan is a plan nobody understands.
+
+## One turn at a time per local server (20 Nov)
+
+Two turns on one local server do not queue inside the server: each sends its whole
+prompt, so both are re-read and a model swap can reload in between — "the model got
+slow" was often two turns on one server. `src/local-lease.js` holds one lease per
+server, keyed by the provider's base URL (a localhost address is local whatever its
+type says). A turn takes the lease before its prompt and releases it on the engine's
+own `idle` in `src/index.js` — one release point, so the operator's send, a worker run
+and the Architect's wake are all covered, including a turn that is stopped or fails.
+
+An operator's message waits up to two minutes and is then refused with the holder's
+name (the text stays in the composer); a run or a wake waits until Stop cancels it. A
+lease nobody releases lets go after six hours. Two different local servers, and every
+cloud model, never wait.

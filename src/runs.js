@@ -70,6 +70,7 @@ import { orderPlan, taskReady } from '../web/plan-order.js';
 import { sweepProject, sweepScratch, removeTaskScratch, tidyProjectRoot } from './cleanup.js';
 import { classifyFailure, recordProviderError, pruneProviderLog } from './provider-errors.js';
 import { providerType } from './providers.js';
+import { localServer } from './local-lease.js';
 import { knownWindow, declaredWindow, refreshWindow, resolveWindow, splitRef } from './windows.js';
 
 // Which window a model has is `windows.js`'s question now; the runner only turns
@@ -705,7 +706,7 @@ export function windowAction(state, ctx, room) {
   return ctx < room * 0.7 ? 'arm' : 'none';
 }
 
-export function createRunner({ engine, logger, getConfig, guard, notify, modelCache, onModelWindow, desk }) {
+export function createRunner({ engine, logger, getConfig, guard, notify, modelCache, onModelWindow, desk, localLease }) {
   const log = logger.channel('tools');
   // The same milestones into the app channel, which is mirrored to the console:
   // a bat file leaves a window open all day, and "what is it doing" should be
@@ -1833,6 +1834,21 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
       before = markOf(await engine.getMessages(worker.id));
       live.retry = { attempt: resets, at: Date.now(), message: reason, reason: 'compaction' };
       emit('run.progress', { ...live });
+      // The replaced session never sends its own idle, so its lease would stay held
+      // for the rest of the evening: hand it on before the handover prompt.
+      localLease?.releaseSession(old?.id);
+      if (localLease && modelRef) {
+        const server = localServer(getConfig() || {}, modelRef);
+        if (server) {
+          await localLease.acquire({
+            serverKey: server.key,
+            label: server.label,
+            sessionId: worker.id,
+            holder: `${project} - ${role} ${request.task}`,
+            dir,
+          });
+        }
+      }
       await engine.prompt(worker.id, workerHandover({ task, note: request.note, goal: plan.plan?.goal, reason, lastSaid }));
       live.retry = null;
       emit('run.progress', { ...live });
@@ -1892,6 +1908,26 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
         emit('run.progress', { ...live });
 
         before = markOf(await engine.getMessages(worker.id));
+        // A local model server takes one turn at a time. This run waits its turn in
+        // the queue rather than sending a prompt the server would have to re-read
+        // beside another project's (20 Nov). The wait is cancelable: Stop ends it.
+        if (localLease && modelRef) {
+          const server = localServer(getConfig() || {}, modelRef);
+          if (server) {
+            const lease = await localLease.acquire({
+              serverKey: server.key,
+              label: server.label,
+              sessionId: worker.id,
+              holder: `${project} - ${role} ${request.task}`,
+              dir,
+              signal,
+            });
+            if (!lease) {
+              outcome = 'stopped';
+              break;
+            }
+          }
+        }
         await engine.prompt(worker.id, workerPrompt({ task, note: request.note, goal: plan.plan?.goal }));
         // The measurement above ran before the prompt, so a server that swaps its
         // loaded model on demand still reported the old one. This asks again once it
@@ -2498,6 +2534,10 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     } finally {
       busy.delete(dir);
       controls.delete(normDir(dir));
+      // A run that failed before its turn ever started holds no lease; one whose
+      // session vanished may never send an idle, so the release is said out loud here
+      // as well as by the engine's own turn end (20 Nov).
+      localLease?.releaseSession(worker?.id);
       // The card goes back to idle and the path is erased as soon as the worker
       // stops — before the Architect is woken, so the two never disagree.
       running.delete(normDir(dir));
@@ -3748,10 +3788,27 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
       } catch { /* the send below will surface it */ }
 
       try {
+        // The wake is a turn on the Architect's model. On a local server it waits its
+        // turn like any other, and Stop cancels the wait (20 Nov).
+        if (localLease) {
+          const server = localServer(getConfig() || {}, getConfig()?.roles?.architect?.ref);
+          if (server) {
+            const lease = await localLease.acquire({
+              serverKey: server.key,
+              label: server.label,
+              sessionId: architectId,
+              holder: `${path.basename(dir)} - Architect`,
+              dir,
+              signal,
+            });
+            if (!lease) return { ok: false, stopped: true };
+          }
+        }
         await engine.synthetic(architectId, tries === 0 ? text : WAKE_NUDGE, {
           description: tries === 0 ? description : `${description} (retry)`,
         });
       } catch (err) {
+        localLease?.releaseSession(architectId);
         const cls = classifyFailure(err.message);
         // Nothing to wake: the Architect's session was deleted under us, which is
         // the operator's own cancellation. Quiet on purpose — a red card for work

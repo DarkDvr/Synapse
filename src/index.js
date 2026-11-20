@@ -15,6 +15,7 @@ import { purgePrivateTraces, requestConsolePurge } from './privacy-purge.js';
 import { createToolStats } from './toolstats.js';
 import { readPlan, logPlanState } from './plans.js';
 import { createRunner } from './runs.js';
+import { createLocalLease } from './local-lease.js';
 import { commitLabel, commitVcs, ensureVcs, hasCommits } from './project-vcs.js';
 import { createEngineUpdate } from './engine-update.js';
 import { createHarnessGuard } from './harness.js';
@@ -553,6 +554,14 @@ async function main() {
   const traceReasons = createTraceReasons(TRACE_REASONS_FILE, { log: app });
   traceReasons.prune();
 
+  // One turn at a time per local model server. The lease is created before the runner
+  // and the API because both start turns; its release point is the engine's own `idle`
+  // for every session (see the event handler below) — one place, all turns.
+  const localLease = createLocalLease({
+    log: app,
+    notify: (ev) => http?.broadcast({ ...ev, ts: Date.now() }),
+  });
+
   const runner = createRunner({
     engine,
     logger,
@@ -560,6 +569,7 @@ async function main() {
     guard,
     modelCache,
     desk,
+    localLease,
     notify: (ev) => http?.broadcast({ ...ev, ts: Date.now() }),
     // A model reloaded in its own app while we run: the measurement is used for
     // this run either way, and this keeps the config file in step so the next
@@ -808,7 +818,13 @@ async function main() {
       engine.interrupt(ev.sessionId).catch(() => { /* already gone */ });
       app.warn(`cut a retired worker session that started again: ${ev.sessionId}`);
     }
-    if (turnEnded(type)) afterTurn(ev.sessionId, type);
+    if (turnEnded(type)) {
+      // The turn is over: whatever local server it held is free for the next one. This
+      // is the one release point, so a turn that was stopped or failed cannot leave a
+      // server owned by nobody (20 Nov).
+      localLease.releaseSession(ev.sessionId);
+      afterTurn(ev.sessionId, type);
+    }
   });
 
   // Two kinds of unfinished delegation survive a restart, and they need opposite
@@ -944,6 +960,7 @@ async function main() {
     probeDir: PROBE_DIR,
     runs: runner,
     desk,
+    localLease,
     synapseUpdate,
     engineUpdate,
     // Settings > Save Changes offers a restart, so the server can hand its own

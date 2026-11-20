@@ -218,14 +218,15 @@ export async function send() {
     await wired.loadMessages();
     scrollChatToEnd();
   } catch (err) {
-    // A refused send is not a lost message: the server said the project is busy,
-    // so the words go back in the box exactly as they were.
-    if (err.status === 409 && err.body?.busy) {
+    // A refused send is not a lost message: the server said the project is busy (or
+    // a local server is taking one turn at a time), so the words go back in the box
+    // exactly as they were. Any 409 keeps them — the sentence says why.
+    if (err.status === 409) {
       input.value = text;
       state.attachments = files;
       renderAttachments();
       autoGrow(input);
-      state.busyInfo = err.body.busy;
+      if (err.body?.busy) state.busyInfo = err.body.busy;
     }
     // The send failed, so the work the rail was told about is not happening.
     state.busySessions.delete(state.sessionId);
