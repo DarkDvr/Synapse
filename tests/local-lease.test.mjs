@@ -133,3 +133,18 @@ test('a wait that times out is null, not a turn', async () => {
   assert.equal(lease.holderOf(server.key)?.sessionId, 's1', 'and took nothing');
   lease.release(held);
 });
+
+test('the queue says how many turns are ahead of a waiting one', async () => {
+  const lease = createLocalLease();
+  const server = localServer(CONFIG, 'polystrata/a');
+  const first = await lease.acquire({ serverKey: server.key, label: server.label, sessionId: 's1', holder: 'VPA - coder-1 b1', dir: 'F:\\p\\vpa' });
+  const second = lease.acquire({ serverKey: server.key, label: server.label, sessionId: 's2', holder: 'test - your message', dir: 'F:\\p\\test', kind: 'send' });
+  const third = lease.acquire({ serverKey: server.key, label: server.label, sessionId: 's3', holder: 'beta - your message', dir: 'F:\\p\\beta', kind: 'send' });
+  assert.equal(lease.forDir('F:\\p\\test').aheadCount, 0, 'next in line is next in line');
+  const behind = lease.forDir('F:\\p\\beta');
+  assert.equal(behind.aheadCount, 1, 'the third project waits for two turns');
+  assert.deepEqual(behind.ahead, ['test - your message']);
+  lease.release(first);
+  lease.release(await second);
+  lease.release(await third);
+});

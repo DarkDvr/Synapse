@@ -1942,6 +1942,10 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
           throw e;
         }
       }
+      // A message waiting for the local server belongs to this project: it goes with the
+      // project, rather than firing at a session inside a folder that is being deleted
+      // (21 Nov, an evil path the operator asked to test).
+      localLease?.dropDir(current.directory);
       const bin = binContents(current.directory);
       // Enforced here as well as in the dialog: the checkbox is the operator's
       // consent, and a request may not assert one it was never asked for.
@@ -3101,7 +3105,7 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
         stopping,
         // This chat's place in the local server's queue, if it is in one. The page
         // draws its waiting post from this, so the post survives a switch or a reload.
-        lease: focusDir && localLease ? localLease.forDir(focusDir) : null,
+        lease: focusDir && localLease ? localLease.forDir(focusDir, focusSessionId) : null,
       };
     },
 

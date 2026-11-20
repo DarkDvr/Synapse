@@ -258,3 +258,16 @@ test('a stopped chat does not chime, and the open chat is left to noteWorking', 
   attention.note(map(false, false), { openDir: A });
   assert.deepEqual(events, [], 'a stopped chat, or the open chat, chimed');
 });
+
+test('the waiting post says how many turns are ahead', async () => {
+  const { waitPostHtml } = await import('../web/wait-post.js');
+  const html = waitPostHtml({
+    waiting: { server: 'PolyStrata', holder: 'gamma - your message', kind: 'send' },
+    held: { server: 'PolyStrata', holder: 'VPA - coder-1 b1' },
+    ahead: ['test - your message', 'beta - your message'],
+    aheadCount: 2,
+  });
+  assert.match(html, /2 turns are ahead of this one/, 'the post promised a start three turns away');
+  assert.match(html, /test - your message, then beta - your message/);
+  assert.doesNotMatch(html, /starts when that turn ends/, 'only the next in line may say that');
+});
