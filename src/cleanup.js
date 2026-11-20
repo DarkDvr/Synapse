@@ -265,6 +265,9 @@ export function findScratch(dir, { named = [] } = {}) {
     for (const entry of entries) {
       const full = path.join(at, entry.name);
       if (entry.isDirectory()) {
+        // The records repository is not scratch: its object files are the history of
+        // every record, and a sweep that "cleaned" it would destroy the undo.
+        if (entry.name === '.git') continue;
         // `.project` inside `.project` is a doubled relative path, not structure.
         if (entry.name === '.project') {
           out.push({ path: full, why: 'nested .project (a relative path doubled)' });

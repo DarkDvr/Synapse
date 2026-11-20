@@ -1002,6 +1002,10 @@ export function roleReadRules(dir, role) {
  * turn so a write that went around the path rules — a shell redirect, the `execute`
  * tool, an absolute path — is still seen and reported, the way the harness
  * watchdog compares the repository.
+ *
+ * `.git` is skipped: since 20 Nov the records are a git repository the harness commits
+ * to around every run, and its object files change on their own — a fingerprint that
+ * counted them would report the harness's own commit as the worker's stray write.
  */
 export function synapseFingerprint(dir) {
   const base = path.join(String(dir || ''), PLAN_DIR);
@@ -1015,8 +1019,10 @@ export function synapseFingerprint(dir) {
     }
     for (const entry of entries) {
       const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
-      if (entry.isDirectory()) walk(path.join(folder, entry.name), rel);
-      else {
+      if (entry.isDirectory()) {
+        if (entry.name === '.git' && !prefix) continue;
+        walk(path.join(folder, entry.name), rel);
+      } else {
         try {
           const stat = fs.statSync(path.join(folder, entry.name));
           out[rel] = `${stat.size}:${Math.round(stat.mtimeMs)}`;

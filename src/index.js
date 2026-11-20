@@ -15,6 +15,7 @@ import { purgePrivateTraces, requestConsolePurge } from './privacy-purge.js';
 import { createToolStats } from './toolstats.js';
 import { readPlan, logPlanState } from './plans.js';
 import { createRunner } from './runs.js';
+import { ensureVcs } from './project-vcs.js';
 import { createEngineUpdate } from './engine-update.js';
 import { createHarnessGuard } from './harness.js';
 import { createPermissionGate } from './permission-gate.js';
@@ -241,6 +242,12 @@ async function main() {
     if (folders.agents?.created) app.info(`project map created: ${folders.agents.path}`);
     if (folders.agents?.migrated) app.info(`project facts moved into AGENTS.md: ${project.name}`);
     if (folders.agents?.updated) app.info(`project map updated: ${folders.agents.path}`);
+    try {
+      const vcs = await ensureVcs(project.directory, { log: app });
+      if (vcs.created) app.info(`records history created: ${path.join(project.directory, '.project', '.git')}`);
+    } catch (err) {
+      app.warn(`could not give ${project.name} its records history (${err.message})`);
+    }
     if (folders.error) app.warn(`could not give ${project.name} its folders (${folders.error})`);
   }
 

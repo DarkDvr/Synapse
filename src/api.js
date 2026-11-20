@@ -6,6 +6,7 @@ import { spawn } from 'node:child_process';
 import { appendRun, readPlan, readRuns, runLedger, briefSession, logPlanState, BRIEF_KEY, HARNESS_KEY, harnessCore } from './plans.js';
 import { ensureProjectDoc, appendRequest as appendProjectRequest, appendChat, appendDecision as appendProjectDecision, appendEntry, setHandover } from './project-doc.js';
 import { ensureAgents } from './project-agents.js';
+import { commitLabel, commitVcs, ensureVcs } from './project-vcs.js';
 import { createFormAuto } from './form-auto.js';
 import { setHold as holdTimers, clearHold as releaseTimers, isHeld } from './hold.js';
 import { answerTimeoutMs, formPages } from './auto-answer.js';
@@ -2079,6 +2080,7 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
       // session's directory, so the map has to be current when the session exists.
       // A read and a compare when nothing changed, which is the usual case.
       ensureAgents(location, { log: app });
+      await ensureVcs(location, { log: app });
       const session = await engine.createSession({
         // The engine's own title is never shown: the rail names the project. It is
         // set to the project's name so the engine's list is readable in an audit.
@@ -2195,6 +2197,17 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
         directory = session?.directory || '';
         // Log lines from here on are filtered by session id as well as by folder.
         if (directory) addSession(sessionId, directory);
+        // The records as the Architect's turn starts: whatever the last turn (or the
+        // operator, editing a file by hand) left. Commit-if-dirty, so a turn that
+        // changes nothing costs nothing. The project's own repository is never touched.
+        if (directory) {
+          try {
+            await ensureVcs(directory, { log: app });
+            await commitVcs(directory, commitLabel({ event: 'architect turn' }), { log: app });
+          } catch (err) {
+            app.warn(`could not commit the records before a turn: ${err.message}`);
+          }
+        }
         sessionModel = String(session?.model || '');
         const applied = session?.single === true ? 'single' : 'multi';
         single = asked ? asked === 'single' : applied === 'single';

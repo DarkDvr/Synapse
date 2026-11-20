@@ -404,8 +404,15 @@ more than six hours old goes. The sweep runs at boot and every half hour, becaus
 stays up for days. (src/housekeeping.js, sweepTemp.)
 
 **Deleting a project takes its scratch with it**, already: the whole folder goes to the
-Recycle Bin, and pi.deleteProject empties .project\scratch first so a deleted project
+Recycle Bin, and `api.deleteProject` empties `.project\scratch` first so a deleted project
 does not carry gigabytes into the bin.
+
+**The records have a history of their own.** `.project\.git` is a repository the harness
+commits to around every run (`docs/notes/git.md`), and it is the undo for a mock a worker
+overwrote. It is not debris: `findScratch`, the temp sweep and `synapseFingerprint` all
+skip `.git`, and deleting the folder by hand deletes the history. The newest 80 commits
+are kept; a prune at 100 rewrites only that branch, and `gc` reclaims the rest.
+
 **A stray file in the project root is moved, never deleted.** Only names the harness can
 prove are debris: its own files at the wrong level (`plan.json`, `features.json`,
 `project.md`, `runs.jsonl`), a log, or a proof file. They go to

@@ -316,7 +316,7 @@ export function analyzeCommand(command, cwd, { home = os.homedir() } = {}) {
       continue;
     }
 
-    if (!READ_VERBS.test(words[0])) {
+    if (!READ_VERBS.test(words[0]) && !gitReadOnly(words)) {
       part.readsOnly = false;
       part.verbRead = false;
     }
@@ -953,6 +953,51 @@ const LIST_VERBS = new Set(['get-process', 'ps', 'tasklist', 'get-nettcpconnecti
 
 /** Windows tools whose /Switch is a switch, never a path. */
 const SLASH_SWITCH_TOOLS = new Set(['taskkill', 'wmic', 'sc', 'net', 'reg', 'shutdown', 'robocopy', 'icacls', 'schtasks']);
+
+// Git is the awkward one: `git status` is a read and `git checkout` is not, so the whole
+// command used to be judged as a possible write — which meant the first time a model
+// looked at the history the operator had to answer a card, and models stopped looking.
+// The subcommands that cannot write are reads now (20 Nov, when the project's records
+// became a repository the models are told to use). Anything that can move HEAD, the
+// index or a ref still asks, and a write anywhere in the command still asks because a
+// redirect is judged where it lands.
+const GIT_READ_SUBCOMMANDS = new Set([
+  'status', 'log', 'show', 'diff', 'rev-parse', 'ls-files', 'ls-tree', 'cat-file',
+  'blame', 'shortlog', 'describe', 'whatchanged', 'grep', 'help', 'version',
+]);
+
+/**
+ * Is this statement a git command that only reads?
+ *
+ * The subcommand is the first word that is not a global option; `-C <path>`, `-c
+ * <name=value>`, `--git-dir <path>` and `--work-tree <path>` take a value, so the word
+ * after them is skipped rather than read as the subcommand. A bare `branch` lists (a
+ * read); `branch x` creates, and asks like every other write.
+ */
+function gitReadOnly(words = []) {
+  if (String(words[0] || '').toLowerCase() !== 'git') return false;
+  let at = 1;
+  while (at < words.length) {
+    const word = String(words[at]);
+    if (word === '-C' || word === '-c' || word === '--git-dir' || word === '--work-tree' || word === '--namespace') {
+      at += 2;
+      continue;
+    }
+    if (/^(?:--git-dir|--work-tree|--namespace)=/.test(word)) {
+      at += 1;
+      continue;
+    }
+    if (/^-/.test(word)) {
+      at += 1;
+      continue;
+    }
+    break;
+  }
+  const sub = String(words[at] || '').toLowerCase();
+  if (!sub) return true; // `git` alone prints its usage
+  if (sub === 'branch') return words[at + 1] === undefined;
+  return GIT_READ_SUBCOMMANDS.has(sub);
+}
 
 function decideShell(resources, ctx) {
   // A shell command may arrive as one string or as its lines, one resource per

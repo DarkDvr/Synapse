@@ -192,6 +192,25 @@ test('the project scratch is writable without asking, and is not the harness', (
 });
 
 // ── shell ───────────────────────────────────────────────────────
+test('git is a read when it only looks, and a write when it can change things', () => {
+  for (const command of [
+    'git status',
+    'git log --oneline -5',
+    'git -C .project log -- design/mock-2.html',
+    'git -C .project show HEAD~1:design/design.md',
+    'git diff HEAD~1',
+    'git rev-parse HEAD',
+    'git branch',
+  ]) {
+    const answer = shell(command);
+    assert.equal(answer.effect, 'allow', `${command}: ${answer.reason}`);
+  }
+  // The distinction has teeth when the command names the harness: a history read is a
+  // read of readable files, while a write subcommand is the harness write it is.
+  assert.equal(shell('git -C "F:\\dev\\Synapse" log --oneline -3').effect, 'allow');
+  assert.equal(shell('git -C "F:\\dev\\Synapse" add -A').effect, 'deny');
+});
+
 test('a command that touches nothing is allowed', () => {
   assert.equal(shell('echo probe-shell-ok').effect, 'allow');
   assert.equal(shell('npm test').effect, 'allow');

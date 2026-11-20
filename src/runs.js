@@ -58,6 +58,7 @@ import { normDir } from './paths.js';
 import { report } from './report.js';
 import { runTaskChecks, checkNudge } from './checks.js';
 import { treeOf, changeSince, createCheckpoint, dropCheckpoint, isRepo, ensureRepo } from './git.js';
+import { commitLabel, commitVcs, designMismatch, ensureVcs, pruneVcs } from './project-vcs.js';
 import { tokens, ranFor } from './words.js';
 import { skillRules, describeSkills, roleMustLoad } from './skills.js';
 import { rulesFor } from './permissions.js';
@@ -1714,6 +1715,14 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
       if (changeBefore) checkpoint = await createCheckpoint(dir, changeBefore, `${task.id}-${startedAt}`);
     } catch { /* no repository or no git: the report says nothing about a change */ }
 
+    // The records get their own commit before the worker touches anything: the state
+    // a bad run is judged against, and the bytes a file it overwrites used to hold.
+    // The project's own repository is never committed to — this is `.project\.git`.
+    try {
+      await ensureVcs(dir, { log });
+      await commitVcs(dir, commitLabel({ task: task.id, attempt: attempts + 1, event: 'before' }), { log });
+    } catch { /* no git, or a records folder that cannot be written: commits are off */ }
+
     // A restore point first, then a clean baseline: the harness is committed as it
     // stands, so anything it shows once the worker has stopped is the worker's
     // doing and can be put back. Both calls are cheap and neither is on the
@@ -2528,6 +2537,20 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     } catch (err) {
       log.warn(`could not record the project's diff for ${request.task}: ${err.message}`);
     }
+
+    // The records, committed as the run left them: the "after" of the pair, and the
+    // point a later run compares against. It runs before the cleanup below, so the
+    // harness's own moving of stray files is not in the commit. `designMismatch` is the
+    // one line that turns this history into a review instruction: a designer that adds
+    // a mock the sheet does not name is the incident this repository exists for.
+    let vcsWarning = '';
+    try {
+      vcsWarning = designMismatch(dir, change?.files || []);
+      await commitVcs(dir, commitLabel({ task: task.id, attempt: attempts + 1, event: outcome }), { log });
+      await pruneVcs(dir, { log });
+    } catch (err) {
+      log.warn(`could not commit the records for ${request.task}: ${err.message}`);
+    }
     // A clean, checked run keeps no rollback point: the work is wanted. A failed,
     // stopped or unproven one keeps it, and the newest such point is what the
     // Architect's restore tool can put back.
@@ -2854,6 +2877,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
         workerId: worker?.id,
         planTouched,
         synapseTouched: strayWrites,
+        vcsWarning,
         qcRound: qcRoundsUsed(dir),
         skillsRequired,
         skillsMissing,

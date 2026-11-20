@@ -19,7 +19,7 @@
 import { QC_ROUNDS } from './plans.js';
 import { tokens } from './words.js';
 
-export function report({ task, role, insteadOf, startedBelow = false, skipped, outcome, harnessStop, text, files, context, workerId, planTouched, synapseTouched, qcRound, skillsRequired, skillsMissing, auto, stallSec, retries, resumes, loops = 0, loopCount = 0, loopMarked = false, loopRole = null, loopModel = null, modelRef = '', error, stoppedBy, lastTurnError, steers, deferred, checks, change, checkpoint }) {
+export function report({ task, role, insteadOf, startedBelow = false, skipped, outcome, harnessStop, text, files, context, workerId, planTouched, synapseTouched, qcRound, skillsRequired, skillsMissing, auto, stallSec, retries, resumes, loops = 0, loopCount = 0, loopMarked = false, loopRole = null, loopModel = null, modelRef = '', error, stoppedBy, lastTurnError, steers, deferred, checks, change, checkpoint, vcsWarning = '' }) {
     const head =
       outcome === 'completed'
         ? checks?.failed
@@ -224,6 +224,7 @@ export function report({ task, role, insteadOf, startedBelow = false, skipped, o
           `check what changed before trusting the file.`,
       );
     }
+    if (vcsWarning) lines.push(vcsWarning);
     if (Array.isArray(synapseTouched) && synapseTouched.length) {
       lines.push(
         `Warning: these files changed inside .project while the worker ran, and they are not this role's to ` +

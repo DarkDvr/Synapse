@@ -6,15 +6,50 @@ is what the Architect can read.
 
 ## Who does what
 
-- **The harness** initialises the repository (once per loaded project, at boot; and
-  again for a folder first seen later), reads the tree, writes the diff, and keeps
-  checkpoints. It never commits a project, never pushes, never moves HEAD, and never
-  edits a project's `.git/config`.
-- **A model** may use git to inspect its work: `git status`, `git diff`, `git log`.
-  It does not commit or push unless the task or the operator asks for it. A commit
-  is a judgement about what the work is; that belongs to the operator.
+- **The harness** initialises the project's repository (once per loaded project, at boot;
+  and again for a folder first seen later), reads the tree, writes the diff, and keeps
+  checkpoints. It never commits **the project**, never pushes, never moves HEAD, and never
+  edits a project's `.git/config`. Since 20 Nov it does commit **the records**, in a
+  repository of their own (see below).
+- **A model** may use git to inspect its work: `git status`, `git diff`, `git log`. It
+  does not commit or push unless the task or the operator asks for it. A commit is a
+  judgement about what the work is; that belongs to the operator.
 - **The operator** owns the history. The harness's diff is a record beside it, not
   a commit in it.
+
+## The records repository (20 Nov)
+
+`.project` gets its **own** repository — `git init` inside `.project`, nested, invisible
+to the project's repo (the harness already excludes `.project/` there) and never pushed. It
+exists because the records were the one thing with no history: the design sheet, the
+mocks, the plan and the reports are outside the project's tree and outside its
+`.gitignore`, so a worker that "updated" a mock destroyed the previous bytes, and the
+Architect reviewed a file whose name it trusted (20 Nov: the sheet named `mock-4.html`, the
+coder wired `mock-2.html`, and the newest was neither).
+
+- **The harness commits; no model has to remember.** Before and after every worker run,
+  and before an Architect turn, `commitVcs()` commits if the tree is dirty — an empty
+  commit is never made. The identity is `Synapse <synapse@local>`, per command, so the
+  operator's config is never read or written.
+- **The label reads without a rule:** `2026-11-20 03:12 t3#2 before` — date, task, attempt
+  (the redo ladder's count), event. The commit sha is what makes a commit unique; the
+  message is for the reader.
+- **What is versioned:** `plan.json`, `design/`, `ideas/`, `qc_findings/`, `reports/*` and
+  `project.md`. What is not: `scratch/`, `shots/`, `attachments/`, `reports/diffs/`,
+  `runs.jsonl`, `cache/` and `*.log` — debris, binaries and the harness's own ledger.
+- **Retention:** the newest 80 commits, pruned at 100 by rewriting *this* branch
+  (`commit-tree` re-creates the kept commits; the working tree is never touched). A
+  rewrite is safe here because the repository is ours — the rule against rewriting the
+  operator's history stands.
+- **The models are told, once, in the header** every session starts with: an earlier
+  version is `git -C .project log -- <file>` and `show <rev>:<file>`; update the file
+  instead of keeping a copy. The policy judges the read-only subcommands (`log`, `show`,
+  `diff`, …) as reads; anything that can write still asks.
+- **The report warns when the sheet and the run disagree:** `designMismatch()` compares
+  the run's changed design files with the names in `design.md` and adds one `Warning:`
+  line. It is the review instruction the incident needed, and it is silent when the two
+  agree.
+
 
 ## What a run records
 
@@ -78,9 +113,12 @@ Node and the engine, not a prerequisite.
 
 ## What it deliberately does not do
 
-- **No commit, no checkout, no reset.** A diff and a checkpoint need no HEAD move.
+- **No commit, no checkout, no reset — in the operator's repository.** A diff and a
+  checkpoint need no HEAD move. (The records repository is a different thing, and the
+  harness owns it; see above.)
 - **No hooks.** The harness's operations do not run a project's hooks.
 - **No operation outside the project.** Every command runs with the project as its
   working directory and every artefact is written inside it.
-- **No history rewriting.** A project's commits are the operator's; the harness
-  never amends, rebases or force-pushes.
+- **No history rewriting — of the operator's.** A project's commits are the operator's;
+  the harness never amends, rebases or force-pushes them. Its own records history is
+  pruned to 80 commits, and that is the one branch it may rewrite.
