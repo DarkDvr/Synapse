@@ -762,8 +762,8 @@
   },
   "roles": {
     "architect": {
-      "ref": "polystrata/qwen3.8-flash-next-IQ2_XS-GSQ-200k",
-      "variant": "high",
+      "ref": "oc-zen/deepseek-v4.1-flash-free",
+      "variant": "medium",
       "skills": [
         "app-check",
         "find-skills",
