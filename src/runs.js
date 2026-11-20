@@ -1581,7 +1581,14 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     let stopRequestedAt = 0;
     controls.set(normDir(dir), {
       role,
-      abort: () => controller.abort(),
+      abort: (why) => {
+        // Who ended it, in one line. The run's own reports say the outcome, but not
+        // the caller: a stop, a cancel, the rail's interrupt and a guard all look the
+        // same afterwards, and on 20 Nov a run ended "completed" with the Architect
+        // never told and nothing in the logs naming the reason (20 Nov).
+        out.warn(`run ${request.task} (${role}) aborted: ${why || 'stop requested without a reason'}`);
+        controller.abort();
+      },
       // The operator changed this role's model while its run was asleep in a
       // provider backoff. The session is still bound to the model it was created
       // with, so the wait is ended, the session moves to the new model, and the
@@ -2954,6 +2961,20 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     // report as any other; the project is held, so it cannot delegate from it.
     // The report was delivered. The marker is what lets the next boot tell a
     // delivered report from one the crash interrupted (see recoverLostReports).
+    // Whether the Architect heard it, in one line. This is the answer to "the
+    // workflow just stopped — why": a run can complete and its report can be the one
+    // thing that never arrived (20 Nov), and it must be visible without a debug hunt.
+    if (told?.ok) out.info(`run ${request.task}: the Architect was told it finished`);
+    else {
+      out.warn(
+        `run ${request.task}: the Architect was NOT told — ` +
+          (told?.stopped
+            ? 'the wake was stopped'
+            : told?.gone
+              ? 'its chat is gone'
+              : told?.error || 'the wake produced no answer'),
+      );
+    }
     if (told?.ok) appendRun(dir, { kind: 'wake', callId: request.callId, at: Date.now(), status: 'done' });
   }
 
@@ -3781,7 +3802,12 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     let tries = 0;
     let usageSince = 0;
     for (;;) {
-      if (signal?.aborted) return { ok: false, stopped: true };
+      if (signal?.aborted) {
+        // The one silent path. On 20 Nov a run finished and the Architect was never
+        // told; nothing in the logs said why. It says now (20 Nov).
+        out.warn(`wake for ${dir} was NOT sent: it was stopped before the Architect heard anything`);
+        return { ok: false, stopped: true };
+      }
       let before = '';
       try {
         before = markOf(await engine.getMessages(architectId));
@@ -3807,6 +3833,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
         await engine.synthetic(architectId, tries === 0 ? text : WAKE_NUDGE, {
           description: tries === 0 ? description : `${description} (retry)`,
         });
+        out.info(`wake sent to the Architect for ${dir}: ${description}`);
       } catch (err) {
         localLease?.releaseSession(architectId);
         const cls = classifyFailure(err.message);
@@ -4059,7 +4086,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     // started anyway, which is what the operator saw as "it just retries later".
     stoppedByOperator.add(key);
     const live = running.get(key);
-    control.abort();
+    control.abort('the operator pressed Stop');
     if (live?.workerId) {
       engine.interrupt(live.workerId).catch(() => { /* already gone */ });
     }
