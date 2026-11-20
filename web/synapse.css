@@ -1376,7 +1376,7 @@ body[data-mode="single"] #runAuto { display: none; }
      type size below the baseline is the same fraction at 12px and at 24px. */
   transform: translateY(0.04em);
 }
-.msg.user .msg-text { flex: 0 1 auto; min-width: 0; }
+.msg.user .msg-text { flex: 1 1 0; min-width: 12ch; }
 /* A chip and a pill are boxes, not words: they centre on the line rather than sit on a
    baseline, or their borders hang below the sentence. */
 .msg.user .msg-files, .msg.user .msg-reuse { flex: 0 0 auto; align-self: center; }
@@ -1388,7 +1388,20 @@ body[data-mode="single"] #runAuto { display: none; }
   float: none;
   position: static;
   margin-left: auto;
-  order: 99;
+  order: 5;
+}
+.msg.user .msg-body { flex-wrap: wrap; }
+/* The attachments take their own line (20 Nov).
+   The chips row is `flex: 0 0 auto`, so six of them held 711px of a 374px message row;
+   the text was `flex: 0 1 auto; min-width: 0` and collapsed to zero width, breaking one
+   character per line — a 1,363-character post rendered 26,952px tall (found 20 Nov).
+   A full-width row under the text cannot do that: the text keeps the line and a 12ch
+   floor, and however many chips arrive they wrap under it. */
+.msg.user .msg-files {
+  flex: 0 0 100%;
+  order: 6;
+  align-self: start;
+  margin: 6px 0 0;
 }
 .msg.assistant { --speaker: var(--green); }
 .msg.harness { --speaker: var(--yellow); }

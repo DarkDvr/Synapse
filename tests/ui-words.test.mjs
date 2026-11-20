@@ -153,7 +153,10 @@ contract('a You message keeps its parts on one baseline', () => {
   // right at one chat size and wrong at the next (13 Nov, after three attempts).
   assert.match(css, /\.msg\.user \.msg-body\s*\{[^}]*align-items: baseline/);
   assert.match(css, /\.msg\.user \.msg-role\s*\{[^}]*vertical-align: baseline/);
-  assert.match(css, /\.msg\.user \.msg-time\s*\{[^}]*order: 99/);
+  // The clock is last in the row (it is first in the markup), and the attachment chips
+  // take the line after it so they cannot squeeze the text (20 Nov).
+  assert.match(css, /\.msg\.user \.msg-time\s*\{[^}]*order: 5/);
+  assert.match(css, /\.msg\.user \.msg-files \{[^}]*order: 6/);
 });
 
 contract('the attachment budget is total size, with a count sanity cap', () => {
@@ -713,6 +716,18 @@ contract('the steer label sits level with its sentence', () => {
   assert.match(css, /\.msg\.user \.msg-body \{[^}]*align-items: baseline/, 'the row is baseline aligned');
   assert.match(css, /\.msg\.user \.msg-role \{[^}]*vertical-align: baseline/, 'and the label sits on it');
   assert.doesNotMatch(css, /\.msg\.user\.is-steer \.msg-role \{[^}]*top: [0-9]/, 'no pixel nudge is left');
+});
+
+// A post with attachments rendered one character per line (20 Nov): six chips held 711px
+// of a 374px row because the chips were `flex: 0 0 auto`, and the text — `min-width: 0` —
+// collapsed to zero width and broke every character. The chips now take a full-width line
+// of their own and the text keeps a floor, so no number of attachments can squeeze it.
+contract('attachments sit under the text, never beside it', () => {
+  const css = fs.readFileSync(path.join(ROOT, 'web', 'synapse.css'), 'utf8');
+  assert.match(css, /\.msg\.user \.msg-body \{ flex-wrap: wrap; \}/, 'the row may wrap');
+  assert.match(css, /\.msg\.user \.msg-text \{[^}]*min-width: 12ch/, 'the text has a floor');
+  assert.match(css, /\.msg\.user \.msg-files \{[^}]*flex: 0 0 100%/, 'the chips hold a full line');
+  assert.match(css, /\.msg\.user \.msg-files \{[^}]*order: 6/, 'and land after the text');
 });
 
 // A failed delete told the operator to close the project's chat — which is not what holds
