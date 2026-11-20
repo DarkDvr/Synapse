@@ -69,6 +69,16 @@ export function hasVcs(projectDir) {
   }
 }
 
+/** Does this records repository have a commit yet? An empty one reads as untracked. */
+export async function hasCommits(projectDir) {
+  if (!hasVcs(projectDir)) return false;
+  const head = await runGit(['rev-parse', '--verify', 'HEAD'], {
+    cwd: repoDir(projectDir),
+    timeoutMs: 10_000,
+  });
+  return head.ok;
+}
+
 /**
  * Make sure the project's records have a repository, with its ignore file.
  *

@@ -15,7 +15,7 @@ import { purgePrivateTraces, requestConsolePurge } from './privacy-purge.js';
 import { createToolStats } from './toolstats.js';
 import { readPlan, logPlanState } from './plans.js';
 import { createRunner } from './runs.js';
-import { commitLabel, commitVcs, ensureVcs } from './project-vcs.js';
+import { commitLabel, commitVcs, ensureVcs, hasCommits } from './project-vcs.js';
 import { createEngineUpdate } from './engine-update.js';
 import { createHarnessGuard } from './harness.js';
 import { createPermissionGate } from './permission-gate.js';
@@ -244,8 +244,11 @@ async function main() {
     if (folders.agents?.updated) app.info(`project map updated: ${folders.agents.path}`);
     try {
       const vcs = await ensureVcs(project.directory, { log: app });
-      if (vcs.created) {
-        app.info(`records history created: ${path.join(project.directory, '.project', '.git')}`);
+      if (vcs.created) app.info(`records history created: ${path.join(project.directory, '.project', '.git')}`);
+      // A repository with no commit shows every file as untracked, which is not a
+      // history. The first commit is the state the project was in when it arrived —
+      // and it is the baseline a later overwrite is compared against.
+      if (!(await hasCommits(project.directory))) {
         await commitVcs(project.directory, commitLabel({ event: 'history begins' }), { log: app });
       }
     } catch (err) {
