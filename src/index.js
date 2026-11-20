@@ -1025,6 +1025,16 @@ async function main() {
   }, 5000);
   answerTimer.unref?.();
 
+  // Messages that were waiting for a busy local server when the app stopped: they are
+  // in `data\queued-sends.json`, and this is the moment there is an engine to send them
+  // to. A restart used to erase them without a trace (21 Nov).
+  api
+    .resumeQueuedSends?.()
+    .then((count) => {
+      if (count) bootLog.info(`resumed ${count} message(s) that were waiting for the local server`);
+    })
+    .catch((err) => bootLog.warn(`could not resume queued messages: ${err.message}`));
+
   // Auto-Shutdown: one sweep every ten seconds. The idle delay inside it is in
   // minutes, so ten seconds is fine enough to notice the machine going quiet —
   // and it keeps the check off the request path.

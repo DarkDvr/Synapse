@@ -25,6 +25,7 @@ import { fetchProviderModels } from './providers.js';
 import { providerId } from './providers.js';
 import { isLocalProvider, providerUp } from './providers.js';
 import { localServer } from './local-lease.js';
+import { loadQueued, putQueued, dropQueued } from './queued-sends.js';
 import { providerApiKey } from './config.js';
 import { configureBrowserAsks } from './browser/ask.js';
 import * as windows from './windows.js';
@@ -2347,22 +2348,33 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
         const underway = `${path.basename(String(directory || ''))} - Architect`;
         const owner = localLease.holderOf(architectServer.key);
         if (owner) {
+          const holder = `${path.basename(String(directory || ''))} - your message`;
+          // On disk before this request returns: a restart must not erase a message the
+          // operator has been told is queued, and the next boot sends it (21 Nov).
+          putQueued({ sessionId, dir: directory, text, files: attachments, ref: architectRef, label: holder, at: Date.now() });
           localLease
             .acquire({
               serverKey: architectServer.key,
               label: architectServer.label,
               sessionId,
-              holder: `${path.basename(String(directory || ''))} - your message`,
+              holder,
               dir: directory,
               kind: 'send',
             })
             .then((lease) => {
-              if (!lease) return;
+              if (!lease) {
+                dropQueued(sessionId);
+                return;
+              }
               const at = Date.now();
               engine
                 .prompt(sessionId, text, { files: attachments })
-                .then(() => watchTurn(sessionId, String(directory || ''), at))
+                .then(() => {
+                  dropQueued(sessionId);
+                  watchTurn(sessionId, String(directory || ''), at);
+                })
                 .catch((err) => {
+                  dropQueued(sessionId);
                   localLease.releaseSession(sessionId);
                   app.warn(`a queued message in ${directory} could not start: ${err.message}`);
                 });
@@ -3179,6 +3191,73 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
         toolset: s.toolset || [],
         cases: probe ? probe.cases.map((c) => ({ id: c.id, tool: c.tool })) : [],
       };
+    },
+
+    /**
+     * Send the messages that were waiting for the local server when Synapse stopped.
+     *
+     * The queue is memory, so a restart erased it; the ledger in `data\queued-sends.json`
+     * is what makes "your message starts when that turn ends" survive a restart. Each
+     * entry is re-queued in the order it was written; one whose session is gone (the
+     * project was deleted, or its chat compacted) is dropped rather than sent into nothing.
+     */
+    resumeQueuedSends: async () => {
+      const list = loadQueued();
+      if (!list.length) return 0;
+      let resumed = 0;
+      for (const entry of list) {
+        try {
+          const session = await engine.getSession(entry.sessionId).catch(() => null);
+          if (!session?.directory) {
+            dropQueued(entry.sessionId);
+            continue;
+          }
+          const dir = session.directory;
+          const ref = String(getConfig()?.roles?.architect?.ref || entry.ref || '');
+          const server = localServer(getConfig() || {}, ref);
+          const send = () =>
+            engine.prompt(entry.sessionId, entry.text, { files: Array.isArray(entry.files) ? entry.files : [] });
+          if (!server || !localLease) {
+            // The model is no longer local: nothing to wait for.
+            await send();
+            watchTurn(entry.sessionId, dir, Date.now());
+            dropQueued(entry.sessionId);
+            resumed += 1;
+            continue;
+          }
+          localLease
+            .acquire({
+              serverKey: server.key,
+              label: server.label,
+              sessionId: entry.sessionId,
+              holder: entry.label || `${path.basename(dir)} - your message`,
+              dir,
+              kind: 'send',
+            })
+            .then((lease) => {
+              if (!lease) {
+                dropQueued(entry.sessionId);
+                return;
+              }
+              const at = Date.now();
+              send()
+                .then(() => {
+                  dropQueued(entry.sessionId);
+                  watchTurn(entry.sessionId, dir, at);
+                })
+                .catch((err) => {
+                  dropQueued(entry.sessionId);
+                  localLease.releaseSession(entry.sessionId);
+                  app.warn(`a message queued before the restart could not start in ${dir}: ${err.message}`);
+                });
+            });
+          resumed += 1;
+          app.info(`queued message resumed in ${dir}: waiting for ${server.label}`);
+        } catch (err) {
+          app.warn(`could not resume a queued message in ${entry.dir || entry.sessionId}: ${err.message}`);
+        }
+      }
+      return resumed;
     },
 
     /**
