@@ -204,13 +204,12 @@ export async function refreshPending() {
       wired.blinkTaskbar?.(perm.scope === 'desk' ? 'the screen is asked for' : 'a permission is waiting');
     }
     if (here) continue;
-    const who =
-      [perm.role ? roleLabel(perm.role) : '', perm.task].filter(Boolean).join(' · ') || perm.title || 'A chat';
     const project = nameOf(perm.directory);
-    toast(
-      'Permission Needed',
-      `${project ? `${project} — ` : ''}${who} is waiting on ${perm.action}. Open its chat to answer.`,
-    );
+    // The project name is already the sentence's subject; a chat whose title is the
+    // project's would otherwise read "test — test is waiting on shell" (20 Nov).
+    const label = [perm.role ? roleLabel(perm.role) : '', perm.task].filter(Boolean).join(' · ');
+    const who = label || (perm.title && perm.title !== project ? perm.title : 'A session');
+    toast('Permission Needed', `${project ? `${project} — ` : ''}${who} is waiting on ${perm.action}. Open its chat to answer.`);
   }
 
   // A question must not be able to hide. It is answered in its own chat, at the end
