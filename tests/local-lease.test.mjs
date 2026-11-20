@@ -95,6 +95,34 @@ test('two different local servers do not wait for each other', async () => {
   lease.release(second);
 });
 
+test('a waiting chat is described, and the description goes when its turn starts', async () => {
+  const lease = createLocalLease();
+  const server = localServer(CONFIG, 'polystrata/a');
+  const held = await lease.acquire({
+    serverKey: server.key,
+    label: server.label,
+    sessionId: 's1',
+    holder: 'VPA - coder-1 b1',
+    dir: 'F:\\p\\vpa',
+  });
+  const waiting = lease.acquire({
+    serverKey: server.key,
+    label: server.label,
+    sessionId: 's2',
+    holder: 'test - your message',
+    dir: 'F:\\p\\test',
+    kind: 'send',
+  });
+  const described = lease.forDir('F:\\p\\test');
+  assert.equal(described.waiting.kind, 'send');
+  assert.match(described.held.holder, /VPA/);
+  assert.equal(lease.forDir('F:\\p\\vpa'), null, 'the holder is not waiting');
+  lease.release(held);
+  const granted = await waiting;
+  assert.equal(lease.forDir('F:\\p\\test'), null, 'the post must go when the turn starts');
+  lease.release(granted);
+});
+
 test('a wait that times out is null, not a turn', async () => {
   const lease = createLocalLease();
   const server = localServer(CONFIG, 'polystrata/a');

@@ -3761,3 +3761,30 @@ body.is-disconnected .app-shell { filter: blur(2px) brightness(0.45); pointer-ev
 }
 .ctx-item:hover:not(:disabled) { background: var(--violet-soft); }
 .ctx-item:disabled { opacity: 0.4; cursor: default; }
+
+/* ── a chat waiting for a busy local server — 20 Nov ──────────────────────
+   One Synapse post, in the harness's own colours, that breathes: "nothing is
+   happening" has to be visibly "waiting for PolyStrata", not a chat that looks
+   dead while another project has the model. The sheen is the same yellow as the
+   live path; it is a state, so it never sits still and never shouts. */
+.msg-wait .msg-body { position: relative; overflow: clip; }
+.msg-wait .msg-body::after {
+  content: '';
+  position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+  background: linear-gradient(
+    100deg,
+    transparent 25%,
+    rgba(237, 194, 90, 0.08) 42%,
+    rgba(237, 194, 90, 0.18) 50%,
+    rgba(237, 194, 90, 0.08) 58%,
+    transparent 75%
+  );
+  background-size: 220% 100%;
+  animation: wait-sheen 2.8s linear infinite, wait-breathe 2.8s ease-in-out infinite;
+}
+@keyframes wait-sheen { from { background-position: 120% 0; } to { background-position: -120% 0; } }
+@keyframes wait-breathe { 0%, 100% { opacity: 0.55; } 50% { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .msg-wait .msg-body::after { animation: none; opacity: 0.7; }
+}
+.msg-wait .msg-wait-note { display: block; color: var(--muted); line-height: 1.5; }

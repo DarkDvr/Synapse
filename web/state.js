@@ -110,6 +110,9 @@ export const state = {
   // does not re-measure the wrapper and jiggle the chat.
   roleSig: '',
   forms: [],
+  // This chat's place in the local server's queue, from GET /api/pending: the
+  // waiting post is drawn from it, and it survives a switch or a reload (20 Nov).
+  lease: null,
   // Form ids already announced since this page loaded, so a waiting question is
   // announced once rather than on every poll.
   announcedForms: new Set(),

@@ -2324,30 +2324,60 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
       // The guard watches this turn only: a chat carries every earlier turn, and the
       // first poll used to nudge a fresh turn for the previous one's last twelve calls.
       // A local model server takes one turn at a time. The operator's message is not
-      // parked on the queue: a prompt that has not reached the engine is not a message
-      // in the chat, so switching projects erased it and the wait read as work that
-      // finished (20 Nov, their report). It is refused at once, with who holds the
-      // server; the page keeps the words in the composer.
+      // parked invisibly: if another project has the server, this chat gets a waiting
+      // post (drawn from `GET /api/pending`) and the message starts when the turn holding
+      // it ends. The post survives switching projects and a reload because the queue is
+      // the server's (20 Nov, their ask).
       const architectServer = localServer(getConfig() || {}, architectRef);
       if (architectServer && localLease) {
+        if (localLease.waiting(sessionId)) {
+          throw fail(409, 'this chat already has a message waiting for the local server.');
+        }
+        const underway = `${path.basename(String(directory || ''))} - Architect`;
+        const owner = localLease.holderOf(architectServer.key);
+        if (owner) {
+          localLease
+            .acquire({
+              serverKey: architectServer.key,
+              label: architectServer.label,
+              sessionId,
+              holder: `${path.basename(String(directory || ''))} - your message`,
+              dir: directory,
+              kind: 'send',
+            })
+            .then((lease) => {
+              if (!lease) return;
+              const at = Date.now();
+              engine
+                .prompt(sessionId, text, { files: attachments })
+                .then(() => watchTurn(sessionId, String(directory || ''), at))
+                .catch((err) => {
+                  localLease.releaseSession(sessionId);
+                  app.warn(`a queued message in ${directory} could not start: ${err.message}`);
+                });
+            });
+          app.info(
+            `message queued in ${directory}: ${architectServer.label} is busy with ${owner.holder || 'another turn'}`,
+          );
+          return { ok: true, kept, queued: true };
+        }
         const lease = await localLease.acquire({
           serverKey: architectServer.key,
           label: architectServer.label,
           sessionId,
-          holder: `${path.basename(String(directory || ''))} - Architect`,
+          holder: underway,
           dir: directory,
-          waitMs: 1, // free now or not at all: no queue for a message nobody can see yet
+          waitMs: 1, // free now or not at all: the queued path above handles busy
           quiet: true,
         });
         if (!lease) {
-          const owner = localLease.holderOf(architectServer.key);
-          const ownerText = owner?.holder ? ` It is busy with ${owner.holder}.` : '';
+          const raced = localLease.holderOf(architectServer.key);
           const err = fail(
             409,
-            `${architectServer.label} is a local server and takes one turn at a time.${ownerText} ` +
-              `Send again when that turn ends.`,
+            `${architectServer.label} is a local server and takes one turn at a time.` +
+              (raced?.holder ? ` It is busy with ${raced.holder}.` : '') +
+              ` Send again in a moment.`,
           );
-          err.serverBusy = { server: architectServer.label, holder: owner?.holder || null };
           throw err;
         }
       }
@@ -2855,6 +2885,13 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
       let canStop = false;
       let activeHere = 0;
       let focusDir = null;
+      // The open chat's folder is needed even while nothing runs: a message waiting for
+      // the local server has no turn to show, and its post is drawn from this answer.
+      if (focusSessionId) {
+        try {
+          focusDir = (await engine.getSession(focusSessionId))?.directory || null;
+        } catch { /* the button and the post stay off rather than guessing */ }
+      }
       if (focusSessionId && active.length) {
         try {
           const focus = await engine.getSession(focusSessionId);
@@ -3062,6 +3099,9 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
         canStop,
         activeHere,
         stopping,
+        // This chat's place in the local server's queue, if it is in one. The page
+        // draws its waiting post from this, so the post survives a switch or a reload.
+        lease: focusDir && localLease ? localLease.forDir(focusDir) : null,
       };
     },
 

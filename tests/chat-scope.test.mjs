@@ -149,6 +149,20 @@ test('an unchanged rail is not rebuilt, so its animation does not restart', asyn
   assert.notEqual(el.innerHTML, 'sentinel', 'a rail that changed was not redrawn');
 });
 
+test('the waiting post names the server and who has it', async () => {
+  const { waitPostHtml } = await import('../web/wait-post.js');
+  assert.equal(waitPostHtml(null), '', 'no lease, no post');
+  assert.equal(waitPostHtml({ waiting: null }), '');
+  const html = waitPostHtml({
+    waiting: { server: 'PolyStrata', holder: 'VPA - coder-1 b1', kind: 'send' },
+    held: { server: 'PolyStrata', holder: 'VPA - coder-1 b1' },
+  });
+  assert.match(html, /waiting for the local server/);
+  assert.match(html, /PolyStrata/);
+  assert.match(html, /VPA - coder-1 b1/);
+  assert.match(html, /starts when that turn ends/, 'the post must say what happens next');
+});
+
 test('states are per chat, and a finished chat is reported once', () => {
   const projects = [
     { directory: A, sessions: [{ id: 'ses_a' }] },

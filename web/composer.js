@@ -203,6 +203,21 @@ export async function send() {
       // the operator's message rather than something the harness put on disk.
       files: files.map((f) => ({ name: f.name, mime: f.mime, data: f.data, keep: f.keep === true })),
     });
+    if (sent?.queued) {
+      // It is in the local server's queue, not in the engine yet. The chat says so in
+      // Synapse's own post (drawn from the server's answer); the operator's echo goes,
+      // because a post that looks sent but is not in the transcript is the one the next
+      // load erased (20 Nov).
+      state.messages = (state.messages || []).filter(
+        (m) => !(String(m.id).startsWith('local-') && m.type === 'user' && m.text === text),
+      );
+      renderTranscript();
+      toast(
+        'Waiting For The Local Server',
+        'Another project has it. Your message starts when that turn ends — the chat says so while it waits.',
+        7000,
+      );
+    }
     if (sent?.kept?.length) {
       toast(
         'Kept In The Project',

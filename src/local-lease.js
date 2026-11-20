@@ -105,12 +105,13 @@ export function createLocalLease({ log = null, notify = null, maxHoldMs = 6 * 60
     waitMs = 0,
     signal = null,
     quiet = false,
+    kind = 'turn',
   } = {}) {
     if (!serverKey) return Promise.resolve(null);
     // A session has one turn open at a time, so a second ask from it is the same lease.
     const existing = sessionId ? bySession.get(sessionId) : null;
     if (existing) return Promise.resolve(existing);
-    const waiter = { id: ++seq, key: serverKey, label, sessionId, holder, dir, quiet, signal };
+    const waiter = { id: ++seq, key: serverKey, label, sessionId, holder, dir, quiet, signal, kind };
     return new Promise((resolve) => {
       waiter.resolve = resolve;
       if (waitMs > 0) {
@@ -184,10 +185,31 @@ export function createLocalLease({ log = null, notify = null, maxHoldMs = 6 * 60
 
   const holderOf = (serverKey) => held.get(serverKey) || null;
   const waiting = (sessionId) => queue.some((w) => w.sessionId === sessionId);
+  const norm = (dir) => String(dir || '').replace(/[\\/]+$/, '').toLowerCase();
+  /**
+   * What is happening on this project's behalf, for the chat's waiting post.
+   *
+   * `waiting` is this project's turn standing in the queue (the operator's message,
+   * usually); `held` is who has the server while it waits. Everything here comes from
+   * memory the server owns, which is what lets the post survive switching projects and
+   * a page reload.
+   */
+  function forDir(dir) {
+    const key = norm(dir);
+    if (!key) return null;
+    const waiter = queue.find((w) => norm(w.dir) === key);
+    if (!waiter) return null;
+    const owner = held.get(waiter.key) || null;
+    return {
+      waiting: { server: waiter.label, holder: waiter.holder || '', since: waiter.at || Date.now(), kind: waiter.kind || 'turn' },
+      held: owner ? { server: owner.label, holder: owner.holder || '', since: owner.at || 0 } : null,
+      queue: queue.map((w) => ({ server: w.label, holder: w.holder || '', dir: w.dir || null })),
+    };
+  }
   const state = () => ({
     held: [...held.values()].map((h) => ({ server: h.label, holder: say(h), dir: h.dir || null, since: h.at })),
     queue: queue.map((w) => ({ server: w.label, waiter: w.holder || '', dir: w.dir || null, since: w.at || Date.now() })),
   });
 
-  return { acquire, release, releaseSession, holderOf, waiting, state };
+  return { acquire, release, releaseSession, holderOf, waiting, forDir, state };
 }

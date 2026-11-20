@@ -16,6 +16,7 @@ import { esc, hhmm, toolTarget, fileChip, shortName, reasoningGist } from './for
 /** 172000 → "172K": one number, in the chat's own units. */
 const compactK = (n) => (!n ? '0' : n >= 1000000 ? `${(n / 1000000).toFixed(1)}M` : n >= 1000 ? `${Math.round(n / 1000)}K` : String(n));
 import { renderMarkdown } from './md.js';
+import { waitPostHtml } from './wait-post.js';
 import { serverNow } from './api.js';
 import { permissionNote, permissionChip } from './ask-note.js';
 import { alarmsHere, renderAlarm, leasesHere, renderLease, chatErrorsHere, renderChatError, leaseClock, leaseFor } from './chat-notes.js';
@@ -198,6 +199,9 @@ export function renderTranscript() {
   // over the chat, and a card here would both duplicate it and change the
   // transcript's height the moment it appeared.
   const pending = wired.renderPermissions();
+  // A turn queued for a busy local server is a post of its own, drawn from the
+  // server's queue so it survives a switch and a reload (20 Nov).
+  const waitPost = waitPostHtml(state.lease);
   // The post a compact left: the only thing the new chat starts with. It is not
   // a message — no speaker — and it comes from this chat's own metadata, so it
   // survives a reload and is gone when the next compact replaces the chat.
@@ -209,7 +213,7 @@ export function renderTranscript() {
   // hanging outside it. A form is something to read, so the dock opens for it.
   const downloads = downloadsForProject();
   const hasHistory =
-    showable.length > 0 || Boolean(postHtml) || Boolean(pending) || Boolean(currentForm()) || alarmsHere().length > 0 || downloads.length > 0;
+    showable.length > 0 || Boolean(postHtml) || Boolean(pending) || Boolean(waitPost) || Boolean(currentForm()) || alarmsHere().length > 0 || downloads.length > 0;
   // The dock is a bare composer while empty and fills the stage once there is
   // anything to show; the CSS keys off this class, so set it on every render.
   $('chatDock')?.classList.toggle('has-history', hasHistory);
@@ -232,7 +236,7 @@ export function renderTranscript() {
       .join(',');
   };
   const sig = hasHistory
-    ? `${showable.map((m) => `${m.id}:${m.completed || 0}:${messageSig(m)}`).join(',')}|${pending.length}|${state.streaming}|${traceSig()}|${alarmsHere().length}|${state.decisionSeq}|${state.downloadSeq}|${
+    ? `${showable.map((m) => `${m.id}:${m.completed || 0}:${messageSig(m)}`).join(',')}|${pending.length}|${waitPost ? 1 : 0}|${state.streaming}|${traceSig()}|${alarmsHere().length}|${state.decisionSeq}|${state.downloadSeq}|${
         compactPost ? `${compactPost.at}:${compactPost.summary.length}` : ''
       }`
     : '';
@@ -304,7 +308,7 @@ export function renderTranscript() {
   const orphanDownloads = downloads.filter((d) => !placedDownloads.has(d.id)).map(downloadCard).join('');
   html += orphanDownloads;
   html += leasesHere().map(renderLease).join('');
-  el.innerHTML = html + pending;
+  el.innerHTML = html + waitPost + pending;
   // The live panel's slide is a transform on a node this rebuild just replaced, so
   // the offset has to be put back or the text snaps to its first line.
   restoreStreamView();

@@ -559,16 +559,13 @@ function applyRoleCardsLayout() {
 function applyMode(mode) {
   if (mode !== 'single' && mode !== 'multi') return;
   if (state.mode === mode) return;
-  // Keep the last line showing. Not the scroll offset: the chat's width and height
-  // both change across a switch, so the text re-wraps and the same offset lands on
-  // different words. What is remembered is the *element* at the bottom edge and
-  // how far its bottom sits above the scroller's bottom — put back after the reflow
-  // and that same line is again the last one you can see.
+  // A mode switch is a layout change the operator asked for, so the chat lands at
+  // its own end. It used to keep the last line where it was, which meant a chat
+  // scrolled up in Single opened scrolled up in Multi — the other mode's offset
+  // leaking into this one (reported 21 Nov). The ResizeObserver keeps the end glued
+  // while the panel narrows; a wheel during the switch still wins.
   const scroller = $('transcript');
-  const anchor = bottomAnchor(scroller);
   let interfered = false;
-  // If the reader scrolls during the quarter second of the switch, their place
-  // wins: the restore is cancelled rather than yanking them back.
   const cancel = () => { interfered = true; };
   scroller?.addEventListener('wheel', cancel, { passive: true, once: true });
   scroller?.addEventListener('touchmove', cancel, { passive: true, once: true });
@@ -584,7 +581,9 @@ function applyMode(mode) {
   renderMode();
   renderPlan();
   setView();
-  settleBottomLine(scroller, anchor, () => interfered);
+  // The switch's own reflow is followed by the ResizeObserver on the transcript; this
+  // is the first frame, so there is something to follow from.
+  requestAnimationFrame(() => { if (!interfered) scrollChatToBottom(); });
 }
 
 /** The last transcript element whose bottom edge is inside the scroller, and the

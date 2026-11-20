@@ -78,10 +78,16 @@ export function paneSig() {
   // (20 Nov).
   const perms = permissionsHere().map((p) => `${p.requestId}:${p.scope}`).join(',');
   const forms = formsHere().map((f) => `${f.id}:${f.sessionId}`).join(',');
+  // The waiting post appears and disappears with this chat's place in the server's
+  // queue; its start time makes a new wait a new signature.
+  const lease = state.lease?.waiting
+    ? `lease:${state.lease.waiting.since}:${state.lease.waiting.holder || ''}`
+    : '';
   const info = state.busyInfo || {};
   return [
     perms,
     forms,
+    lease,
     state.busy ? 1 : 0,
     state.canStop ? 1 : 0,
     info.busy ? 1 : 0,
@@ -174,6 +180,7 @@ export async function refreshPending() {
     browserUrl: x.browserUrl || '',
   }));
   state.forms = p.forms || [];
+  state.lease = p.lease || null;
   // Now that every chat's work and every waiting card are in hand, the watcher can
   // say what changed anywhere — a chat that finished, or one that needs the operator.
   wired.noteWorking();
