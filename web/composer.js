@@ -169,11 +169,11 @@ export async function send() {
 
   input.value = '';
   autoGrow(input);
-  // Sending is the moment the operator knows work is starting, and the rail should
-  // say so on the same click — the engine's first status event can arrive a second
-  // later, and a green row after pressing Send reads as "nothing happened".
-  state.busySessions.add(state.sessionId);
-  wired.renderTree();
+  // No optimistic "busy" mark here. It used to colour the rail on the same click, but
+  // it is a claim the engine has not made: the next poll replaces the busy list, the
+  // chat drops from "working" to "idle", and the watcher played the finished-work
+  // chime for a message that was still waiting to be sent — or was refused (20 Nov).
+  // The engine's own `execution.started` is what marks the chat working.
   try {
     await ensureSession();
     state.streaming = true;
@@ -230,6 +230,12 @@ export async function send() {
     }
     // The send failed, so the work the rail was told about is not happening.
     state.busySessions.delete(state.sessionId);
+    // The local echo is not a message: the engine never got it, and switching chats
+    // reloads it away while "Message not sent" stays. It goes with the failure that
+    // explains it, and the words are back in the composer (20 Nov).
+    state.messages = (state.messages || []).filter(
+      (m) => !(String(m.id).startsWith('local-') && m.type === 'user' && m.text === text),
+    );
     wired.renderTree();
     // In the conversation, in red, and kept: a toast is gone in four seconds and
     // this is the message they just lost.

@@ -2300,7 +2300,9 @@ type says). A turn takes the lease before its prompt and releases it on the engi
 own `idle` in `src/index.js` — one release point, so the operator's send, a worker run
 and the Architect's wake are all covered, including a turn that is stopped or fails.
 
-An operator's message waits up to two minutes and is then refused with the holder's
-name (the text stays in the composer); a run or a wake waits until Stop cancels it. A
-lease nobody releases lets go after six hours. Two different local servers, and every
-cloud model, never wait.
+An operator's message is refused at once, naming who holds the server, and the words
+stay in the composer: a prompt that has not reached the engine is not a post in the
+chat, so parking it erased the post on the next switch and read as work that finished
+(20 Nov). Runs and wakes wait in the queue until Stop cancels them; a lease nobody
+releases lets go after six hours. Two different local servers, and every cloud model,
+never wait.

@@ -2323,10 +2323,11 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
       // they want the work resumed or changed, they say so here.
       // The guard watches this turn only: a chat carries every earlier turn, and the
       // first poll used to nudge a fresh turn for the previous one's last twelve calls.
-      // A local model server takes one turn at a time. If another project's turn is on
-      // it, this message waits for that turn to end rather than sending a second prompt
-      // the server must re-read (20 Nov). The wait is bounded: a run can hold the server
-      // for an hour, and parking a message that long is not waiting, it is losing it.
+      // A local model server takes one turn at a time. The operator's message is not
+      // parked on the queue: a prompt that has not reached the engine is not a message
+      // in the chat, so switching projects erased it and the wait read as work that
+      // finished (20 Nov, their report). It is refused at once, with who holds the
+      // server; the page keeps the words in the composer.
       const architectServer = localServer(getConfig() || {}, architectRef);
       if (architectServer && localLease) {
         const lease = await localLease.acquire({
@@ -2335,7 +2336,8 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
           sessionId,
           holder: `${path.basename(String(directory || ''))} - Architect`,
           dir: directory,
-          waitMs: 120_000,
+          waitMs: 1, // free now or not at all: no queue for a message nobody can see yet
+          quiet: true,
         });
         if (!lease) {
           const owner = localLease.holderOf(architectServer.key);
