@@ -8,7 +8,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { loadQueued, saveQueued, putQueued, dropQueued } from '../src/queued-sends.js';
+import { loadQueued, saveQueued, putQueued, dropQueued, renameQueuedDir } from '../src/queued-sends.js';
 
 const tmp = () => path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'synapse-queue-')), 'queued.json');
 
@@ -44,4 +44,14 @@ test('a broken or empty ledger is empty, not a crash', () => {
   assert.deepEqual(loadQueued(file).map((e) => e.sessionId), ['s1'], 'an entry with no session is dropped');
   saveQueued([], file);
   assert.deepEqual(loadQueued(file), []);
+});
+
+test('a rename moves a waiting message on disk too', () => {
+  const file = tmp();
+  putQueued({ sessionId: 'ses_a', dir: 'F:\\p\\queue-f', text: 'hi', label: 'queue-f - your message', at: 1 }, file);
+  assert.equal(renameQueuedDir('F:\\p\\queue-f', 'F:\\p\\queue-f2', file), 1);
+  const entry = loadQueued(file)[0];
+  assert.equal(entry.dir, 'F:\\p\\queue-f2');
+  assert.equal(entry.label, 'queue-f2 - your message');
+  assert.equal(renameQueuedDir('F:\\p\\nope', 'F:\\p\\x', file), 0);
 });

@@ -25,7 +25,7 @@ import { fetchProviderModels } from './providers.js';
 import { providerId } from './providers.js';
 import { isLocalProvider, providerUp } from './providers.js';
 import { localServer } from './local-lease.js';
-import { loadQueued, putQueued, dropQueued } from './queued-sends.js';
+import { loadQueued, putQueued, dropQueued, renameQueuedDir } from './queued-sends.js';
 import { providerApiKey } from './config.js';
 import { configureBrowserAsks } from './browser/ask.js';
 import * as windows from './windows.js';
@@ -1147,6 +1147,10 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
     }
     if (lastError) throw fail(500, `the folder could not be moved: ${lastError.message}`);
     const engineMove = await safe(() => engine.moveProject(from, to), null);
+    // A message waiting for the local server is still that project's: its queue entry
+    // and its ledger line follow the new folder, name included (21 Nov, an evil path).
+    localLease?.renameDir(from, to);
+    renameQueuedDir(from, to);
     app.info(
       `project folder renamed: ${from} -> ${to}` +
         (engineMove ? ` (chats moved: ${engineMove.sessions})` : ''),
@@ -2707,6 +2711,14 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
       // A compact is a request plus a wait; Stop must end that wait, or the page
       // sits on "Compacting…" until the three-minute timeout.
       if (cancelCompact(sessionId)) app.info(`compact cancelled for ${sessionId}`);
+      // A message waiting for the local server is not a turn, so there is nothing to
+      // interrupt — but Stop is the one way out of the queue, and it must take it.
+      if (localLease?.waiting(sessionId)) {
+        localLease.releaseSession(sessionId);
+        dropQueued(sessionId);
+        app.info(`cancelled the message waiting for the local server in ${sessionId}`);
+        return { ok: true, cancelledQueued: true, stopping: null, phase: null };
+      }
       const out = await stopper.stop({ sessionId, hard: true });
       return { ok: true, stoppedRun: false, stopped: [sessionId], stopping: out.stopping, phase: out.phase };
     },
@@ -2726,6 +2738,13 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
       // it; the gentle one did not, so Stop during a compact sat behind the grace
       // while the page said "Compacting…".
       if (cancelCompact(sessionId)) app.info(`compact cancelled for ${sessionId}`);
+      // The queue is not a turn: the gentle Stop still means "do not send it".
+      if (localLease?.waiting(sessionId)) {
+        localLease.releaseSession(sessionId);
+        dropQueued(sessionId);
+        app.info(`cancelled the message waiting for the local server in ${sessionId}`);
+        return { ok: true, cancelledQueued: true, stopping: null };
+      }
       const busy = await busyFor(sessionId);
       if (busy.engineDown) throw fail(503, 'The engine is not answering, so there is nothing to stop.');
       if (!busy.busy) {

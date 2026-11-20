@@ -52,3 +52,21 @@ export function dropQueued(sessionId, file = QUEUED_SENDS_FILE) {
   if (left.length !== list.length) saveQueued(left, file);
   return left;
 }
+
+/** A project was renamed: its waiting message follows the folder, and so does the
+ *  label the waiting post shows. */
+export function renameQueuedDir(from, to, file = QUEUED_SENDS_FILE) {
+  const list = loadQueued(file);
+  const key = String(from || '').replace(/[\\/]+$/, '').toLowerCase();
+  const base = String(to || '').split(/[\\/]/).filter(Boolean).pop() || '';
+  let changed = 0;
+  for (const entry of list) {
+    if (String(entry.dir || '').replace(/[\\/]+$/, '').toLowerCase() !== key) continue;
+    const tail = String(entry.label || '').split(' - ').slice(1).join(' - ') || 'your message';
+    entry.dir = to;
+    entry.label = `${base} - ${tail}`;
+    changed += 1;
+  }
+  if (changed) saveQueued(list, file);
+  return changed;
+}

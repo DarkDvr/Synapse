@@ -148,3 +148,16 @@ test('the queue says how many turns are ahead of a waiting one', async () => {
   lease.release(await second);
   lease.release(await third);
 });
+
+test('a rename moves the queued turn and the name it shows', async () => {
+  const lease = createLocalLease();
+  const server = localServer(CONFIG, 'polystrata/a');
+  const held = await lease.acquire({ serverKey: server.key, label: server.label, sessionId: 's1', holder: 'VPA - Architect', dir: 'F:\\p\\vpa' });
+  const waiting = lease.acquire({ serverKey: server.key, label: server.label, sessionId: 's2', holder: 'queue-f - your message', dir: 'F:\\p\\queue-f', kind: 'send' });
+  assert.equal(lease.renameDir('F:\\p\\queue-f', 'F:\\p\\queue-f2'), 1);
+  const named = lease.forDir('F:\\p\\queue-f2');
+  assert.equal(named.waiting.holder, 'queue-f2 - your message');
+  assert.equal(lease.forDir('F:\\p\\queue-f'), null, 'the old folder no longer finds it');
+  lease.release(held);
+  lease.release(await waiting);
+});

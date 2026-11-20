@@ -229,10 +229,27 @@ export function createLocalLease({ log = null, notify = null, maxHoldMs = 6 * 60
     }
     return dropped;
   }
+
+  /** A project was renamed: its queued turns follow the folder, and the name the
+   *  waiting post shows follows too (a rename used to leave "queue-f - your message"). */
+  function renameDir(from, to) {
+    const key = norm(from);
+    if (!key) return 0;
+    const base = String(to || '').split(/[\\/]/).filter(Boolean).pop() || '';
+    let renamed = 0;
+    for (const waiter of queue) {
+      if (norm(waiter.dir) !== key) continue;
+      const tail = String(waiter.holder || '').split(' - ').slice(1).join(' - ') || 'your message';
+      waiter.dir = to;
+      waiter.holder = `${base} - ${tail}`;
+      renamed += 1;
+    }
+    return renamed;
+  }
   const state = () => ({
     held: [...held.values()].map((h) => ({ server: h.label, holder: say(h), dir: h.dir || null, since: h.at })),
     queue: queue.map((w) => ({ server: w.label, waiter: w.holder || '', dir: w.dir || null, since: w.at || Date.now() })),
   });
 
-  return { acquire, release, releaseSession, holderOf, waiting, forDir, dropDir, state };
+  return { acquire, release, releaseSession, holderOf, waiting, forDir, dropDir, renameDir, state };
 }

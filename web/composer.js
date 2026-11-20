@@ -76,6 +76,9 @@ export function renderComposer() {
   const awaitingPermission = permissionsHere().length > 0;
   const blocked = asking || awaitingPermission;
   const held = Boolean(state.busyInfo?.busy) || Boolean(currentRun());
+  // A message waiting for a busy local server is not "working" and not blocked: this
+  // chat's turn has not started. Stop is its way out (21 Nov).
+  const queued = Boolean(state.lease?.waiting);
   // The stop's own life is the server's: it clears when the project is quiet (or
   // when the operator speaks), not when this page guesses from the run cards. The
   // old guess is what made the notice vanish while the engine kept retrying.
@@ -99,7 +102,7 @@ export function renderComposer() {
   // open session is idle — that is exactly when it is the only way out. `canStop`
   // is the engine's answer for this project, so a hidden worker enables it even
   // when no run record is left.
-  $('stopBtn').disabled = !hasSession || !(state.busy || currentRun() || state.canStop || state.compacting);
+  $('stopBtn').disabled = !hasSession || !(state.busy || currentRun() || state.canStop || state.compacting || Boolean(state.lease?.waiting));
   const input = $('promptInput');
   if (input) {
     input.disabled = blocked;
@@ -115,7 +118,9 @@ export function renderComposer() {
               ? 'Waiting on the provider — Stop or wait'
               : held
                 ? 'Working — Stop to take over'
-                : 'CTRL+Enter to send';
+                : queued
+                  ? 'Waiting for the local server — Stop to cancel'
+                  : 'CTRL+Enter to send';
   }
   // A pending question takes the whole composer, not just the text box: Attach, the
   // mode switch and the run menu are all "start something else", and a half-dead
@@ -803,6 +808,11 @@ export async function interrupt() {
     } else {
       const r = await api('POST', `/api/sessions/${encodeURIComponent(state.sessionId)}/stop`);
       state.stopping = Boolean(r?.stopping);
+      // The one thing a gentle Stop can end with no turn behind it: a message queued
+      // for a busy local server (21 Nov).
+      if (r?.cancelledQueued) {
+        toast('Message Cancelled', 'It will not be sent when the local server is free.');
+      }
     }
     renderComposer();
     // The engine takes a moment to close the turns; refresh once now and again
