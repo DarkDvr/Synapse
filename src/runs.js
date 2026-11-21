@@ -3908,6 +3908,24 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
         null,
         signal,
         { window: contextWindow(archRef),
+          leaseGraceMs: settings.leaseGraceSec * 1000,
+          // The Architect can take a lease too, and this is the turn where it matters:
+          // the report it is reading may make it run a long command, and this watch
+          // *does* have a stall clock — without the lease, silence during that command
+          // was reported as a stall (21 Nov, a 3-minute lease the model believed in and
+          // the harness ignored). Its notes carry no task: a chat has no trace, so the
+          // lease line at the bottom of the conversation is where it is drawn.
+          onLease: (lease) => {
+            emit('run.note', {
+              dir,
+              role: 'architect',
+              task: '',
+              startedAt: Date.now(),
+              ...lease,
+              kind: 'lease',
+              leaseKind: lease.kind,
+            });
+          },
           // The Architect can take the screen too (a window launch it runs itself),
           // and the lease must end when that call does — the same rule as a worker's.
           onPoll: (messages) => {

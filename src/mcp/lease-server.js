@@ -21,9 +21,10 @@ const TOOL = {
     'Tell Synapse that the command you are about to run will take a long time, so it does not ' +
     'mistake silence for a stall. Call it once, immediately BEFORE a download, build, install or ' +
     'any other command you expect to run longer than about ten minutes. Give your honest estimate ' +
-    'in minutes and a one-line reason. Synapse holds the stall clock off until the lease ends; if ' +
-    'it ends while you are still working, it asks you, and you may call lease once more for the ' +
-    'time you need. This does not start or run anything — it is only a warning with a clock.',
+    'in minutes and a one-line reason. A run that reads the lease holds its stall clock off until ' +
+    'it ends; if it ends while you are still working, you are asked, and you may call lease once ' +
+    'more for the time you need. This does not start or run anything — it is only a warning with ' +
+    'a clock, and a chat turn is not timed, so there it is an estimate on the record.',
   inputSchema: {
     type: 'object',
     properties: {
@@ -92,12 +93,16 @@ async function handle(msg) {
       }
       process.stderr.write(`lease ${minutes} min${reason ? ` — ${reason}` : ''}\n`);
       const shown = minutes >= 1 ? `${Math.round(minutes)} minute(s)` : `${Math.round(minutes * 60)} second(s)`;
+      // Say exactly where the lease applies. It was answering "Synapse will not treat
+      // silence as a stall until it ends, and you will be asked" to a session that had
+      // no stall clock at all — the operator's own chat turn — and the model reasoned
+      // for several turns on a protection that did not exist (21 Nov).
       return toolText(
         id,
         `Lease noted: ${shown}${reason ? ` — ${reason}` : ''}.\n` +
-          `Synapse will not treat silence as a stall until it ends. If it ends while you are still ` +
-          `working, you will be asked; call lease once more with the time you need (one extension). ` +
-          `If you are stuck, say so and stop instead.`,
+          `A delegated run holds its stall clock off until it ends, and asks you for more time if it ` +
+          `ends while you are still working (one extension). The operator's own chat turn is not timed, ` +
+          `so there this is an estimate on the record. Nothing is started or run by this call.`,
       );
     }
 

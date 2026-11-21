@@ -66,6 +66,11 @@ test('the lease tool is a receipt with a clock, not an action', async () => {
     assert.match(text, /Lease noted: 90 minute/);
     assert.match(text, /downloading a 200 GB archive/);
     assert.match(text, /one extension/, 'the model is told about the one extension');
+    // Where it applies, exactly: the receipt used to promise a stalled-silence watch to a
+    // session that had none — the operator's own chat turn — and the model reasoned on it
+    // (21 Nov).
+    assert.match(text, /delegated run holds its stall clock off/, 'the receipt does not say where the lease applies');
+    assert.match(text, /chat turn is not timed/, 'the receipt still promises a clock a chat does not have');
     assert.equal(granted.result.isError, false);
 
     const bad = await ask(child, {
@@ -111,6 +116,14 @@ test('the engine is handed the lease server, and the runner reads it', () => {
   // card to show for it (21 Nov).
   assert.match(runs, /\.\.\.lease,\s*kind: 'lease',\s*leaseKind: lease\.kind,/, 'the lease note\'s kind is overwritten by the lease');
   assert.match(runs, /LEASE_QUESTION/);
+  // The Architect's own turn on a report is watched with a stall clock, and it used to
+  // read no lease: a model believed it had 3 minutes while the watch would have called the
+  // silence a stall (21 Nov).
+  assert.match(
+    runs,
+    /leaseGraceMs: settings\.leaseGraceSec \* 1000,[\s\S]{0,900}?onLease: \(lease\) => \{[\s\S]{0,400}?role: 'architect'/,
+    'the Architect\'s watch ignores its own lease',
+  );
   assert.match(runs, /overSteps/);
   // 6 Nov: the lease line moved to ./chat-notes.js with the alarms and the kept
   // errors — they are the same kind of thing, drawn in the same place.
