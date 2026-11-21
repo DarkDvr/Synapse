@@ -105,6 +105,11 @@ test('the engine is handed the lease server, and the runner reads it', () => {
   assert.match(engine, /LEASE_SERVER/);
   const runs = fs.readFileSync(path.join(ROOT, 'src', 'runs.js'), 'utf8');
   assert.match(runs, /_lease\$\/i\.test/, 'the lease call is matched by suffix');
+  // The note's own type has to be written *after* the lease's fields: `...lease` carries a
+  // `kind` of its own, and writing it first made every note arrive as "granted". The page
+  // switches on "lease", so it never saw one — the lease held the stall clock off with no
+  // card to show for it (21 Nov).
+  assert.match(runs, /\.\.\.lease,\s*kind: 'lease',\s*leaseKind: lease\.kind,/, 'the lease note\'s kind is overwritten by the lease');
   assert.match(runs, /LEASE_QUESTION/);
   assert.match(runs, /overSteps/);
   // 6 Nov: the lease line moved to ./chat-notes.js with the alarms and the kept

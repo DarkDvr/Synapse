@@ -98,6 +98,12 @@ answering meant guessing what had been said. As a post, the answer is one scroll
 - **A new question takes the chat's place.** On a new form signature the page arms
   the follow and scrolls to the end, because that is what the run is waiting on. The
   rest of the time the reader's position is respected as everywhere else.
+- **Stop ends the work, not the conversation.** A repeated Stop used to freeze the chat
+  as well — the dock glowed yellow and a bar said "Chat paused · N updates waiting" —
+  on the theory that the operator cut the turn to read something. They cut it to end
+  something: the chat stopped being the chat, and it stayed that way until Continue was
+  found (21 Nov). The pause is now the operator's selection and nothing else; the one
+  thing a hard Stop still does is leave the folds they opened alone at the turn's end.
 - **The panel is polled, so it must never rebuild for nothing.** `refreshPending`
   runs every 8s; rebuilding the panel's HTML threw away answers the operator had
   already given (reproduced: pick a radio, wait for a poll, the radio cleared and

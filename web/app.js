@@ -717,10 +717,10 @@ function setView() {
 
 // ── pausing the chat ─────────────────────────────────────────────
 //
-// A selection in the conversation holds the redraw back (the range dies with the nodes), and
-// the second Stop holds it on purpose. Both are the operator reading, so both get the same
-// sign and the same way out, and both hold the timers that would otherwise act for them
-// (web/pause.js, src/hold.js).
+// A selection in the conversation holds the redraw back — the range lives in nodes that
+// a redraw replaces — so the chat says why and offers the way out. A Stop does not pause
+// anything: it ends the work, and the conversation keeps drawing (21 Nov).
+// The sign is web/pause.js, the timers it holds are src/hold.js.
 
 /**
  * Draw a pause the operator can see, and hold the timers behind it.
@@ -728,10 +728,9 @@ function setView() {
  * `renderTranscript` calls this every time it holds a draw, so the count in the bar is the
  * number of updates that have piled up since the chat stopped.
  */
-function notePause(reason) {
+function notePause() {
   const waiting = (state.forms?.length || 0) + (state.permissions?.length || 0);
   showPause({
-    reason: reason || (state.frozen ? 'stopped' : 'selection'),
     updates: Number(state.heldDraws) || 0,
     waiting,
   });
@@ -747,7 +746,6 @@ function continueChat() {
   resumeTimer = 0;
   clearSelection();
   state.renderPaused = false;
-  state.frozen = false;
   state.heldDraws = 0;
   hidePause();
   releaseTimers();
@@ -773,7 +771,7 @@ function holdTimers() {
   api('POST', '/api/hold', { on: true, ms: HOLD_MS }).catch(() => {});
   if (holdTimer) return;
   holdTimer = setInterval(() => {
-    if (!state.renderPaused && !state.frozen) return;
+    if (!state.renderPaused) return;
     api('POST', '/api/hold', { on: true, ms: HOLD_MS }).catch(() => {});
   }, 30_000);
 }
@@ -796,7 +794,6 @@ async function openSession(id) {
   flushClocks();
   // A pause belongs to the chat it happened in: opening another one is the operator moving
   // on, so the sign comes down and the timers run again.
-  state.frozen = false;
   state.renderPaused = false;
   state.heldDraws = 0;
   hidePause();
@@ -1806,14 +1803,6 @@ function connectStream() {
           state.busy = true;
           // A new turn: the last turn's cut, if there was one, is no longer the news.
           state.hardStop = false;
-          // A frozen chat is the operator reading; a new turn means they have moved on, so the
-          // sign comes down and the drawing resumes.
-          if (state.frozen) {
-            state.frozen = false;
-            state.heldDraws = 0;
-            hidePause();
-            releaseTimers();
-          }
           // Open the post now, not on the first delta: the model can spend many
           // seconds reading its prompt before it says anything, and the chat used to
           // sit empty for that whole time (11 Nov). The placeholder says "Thinking…"
@@ -1827,9 +1816,8 @@ function connectStream() {
           // with the turn. The reload below puts the real one back when there is one.
           if (dropLivePost()) renderTranscript();
           // The turn is over, so close what the operator left open in its reasoning —
-          // except after the second Stop. That Stop means "stop now, I am reading
-          // something", so the chat is not touched: nothing closes, nothing redraws
-          // beyond the placeholder going, and the next turn's end closes the folds.
+          // except after a hard Stop. They cut the work to read something, so the chat
+          // is not touched: nothing closes, and the next turn's end closes the folds.
           if (!state.hardStop && closeReasoningFolds()) renderTranscript();
         }
         // A turn that failed or was interrupted is not "done": the chime stays quiet
@@ -2390,9 +2378,7 @@ document.addEventListener('keydown', (e) => {
   // The pause is the operator's, and now it is visible: a yellow glow on the dock and a bar
   // that says why, what is waiting, and offers the way out (web/pause.js).
   document.addEventListener('selectionchange', () => {
-    // A chat frozen by the second Stop is let go by Continue only: selecting something to read
-    // in it must not start it drawing again.
-    if (!state.renderPaused || state.frozen) return;
+    if (!state.renderPaused) return;
     if (selectionInChat()) {
       // They are selecting again: the pause was never going to drop.
       if (resumeTimer) clearTimeout(resumeTimer);
@@ -2402,7 +2388,7 @@ document.addEventListener('keydown', (e) => {
     if (resumeTimer) return;
     resumeTimer = setTimeout(() => {
       resumeTimer = 0;
-      if (!selectionInChat() && !state.frozen) continueChat();
+      if (!selectionInChat()) continueChat();
     }, RESUME_GRACE_MS);
   });
   // The bar's Continue is the same act as clicking away.

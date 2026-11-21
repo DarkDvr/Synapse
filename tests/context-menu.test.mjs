@@ -50,7 +50,10 @@ test('a held selection pauses the conversation, and releasing it catches up', ()
   assert.match(js, /export function forceNextRender\(\)/, 'a question cannot outrank a selection');
   assert.match(read('web/ask-panel.js'), /forceNextRender\(\)/, 'the question panel does not force its render');
   const app = read('web/app.js');
-  assert.match(app, /if \(!state\.renderPaused \|\| state\.frozen\) return;/, 'a frozen chat must not be released by selecting');
+  // A Stop is not a pause (21 Nov): the chat is only ever held for a selection, so the
+  // sign cannot outlive the reading it was drawn for.
+  assert.match(app, /if \(!state\.renderPaused\) return;/, 'the pause is not released by moving the caret');
+  assert.doesNotMatch(app, /state\.frozen/, 'a Stop still freezes the chat');
   assert.match(app, /if \(selectionInChat\(\)\) \{[\s\S]{0,400}?clearTimeout\(resumeTimer\)/, 'a new selection does not keep the pause');
   assert.match(app, /RESUME_GRACE_MS/, 'there is no grace before the pause drops');
   assert.match(app, /function continueChat\(\) \{[\s\S]*?state\.renderPaused = false;[\s\S]*?renderTranscript\(\);/, 'the chat does not catch up when the selection is released');

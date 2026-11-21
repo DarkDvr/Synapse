@@ -799,12 +799,15 @@ export async function interrupt() {
       // stop that did not take still looked successful.
       await api('POST', `/api/sessions/${encodeURIComponent(state.sessionId)}/interrupt`);
       state.stopping = true;
-      // The second press is "stop now, I am reading something". The page records it so the
-      // turn's end does not close the operator's folds or redraw over what they are
-      // reading (`closeReasoningFolds` in app.js), and freezes the chat until they say
-      // continue — the same sign a held selection shows (web/pause.js).
+      // The second press is "stop now". The page records it so the turn's end does not
+      // close the operator's folds or redraw over what they are reading
+      // (`closeReasoningFolds` in app.js).
+      //
+      // It does not freeze the chat. A repeated Stop is the operator telling the work to
+      // end, not asking for the conversation to stand still: freezing it here meant the
+      // chat quietly stopped being the chat — a yellow glow, "Chat paused · N updates
+      // waiting", and nothing new on screen until they found Continue (21 Nov).
       state.hardStop = true;
-      state.frozen = true;
     } else {
       const r = await api('POST', `/api/sessions/${encodeURIComponent(state.sessionId)}/stop`);
       state.stopping = Boolean(r?.stopping);

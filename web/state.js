@@ -171,15 +171,13 @@ export const state = {
   renderPaused: false,
   // How many draws were held back while the chat was paused — what the pause bar counts.
   heldDraws: 0,
-  // True when the operator cut the run with the second Stop: the conversation is held exactly
-  // where they left it, and nothing closes or redraws until they say continue (app.js).
-  frozen: false,
   // Until when a fold or the thinking pane owns the markup (a timestamp, 0 when nothing
   // is moving). A redraw in that window would replace the element mid-animation, so it
   // waits and draws once when the animation is done (web/transcript.js).
   renderHoldUntil: 0,
-  // True after the second Stop — "stop now, I am reading". The turn's end then leaves the
-  // conversation exactly as it is instead of closing the folds (app.js).
+  // True after the second Stop — "stop now". The turn's end then leaves the
+  // conversation exactly as it is instead of closing the folds (app.js). It does not
+  // freeze the chat: a Stop ends the work, it does not stop the conversation (21 Nov).
   hardStop: false,
   // A provider failure shown on a role's card, keyed `${dirKey}|${role}`: red
   // *text*, never a border, and cleared when that role works again.

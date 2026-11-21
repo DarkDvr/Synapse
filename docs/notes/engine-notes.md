@@ -1750,6 +1750,15 @@ beside the thinking: the Architect's tool-card shape, a breathing dot, the same
 `data-lease-until` clock the line uses, and the reason. The line itself is only for a lease
 whose run has folded or is not on the page, so one lease is never said twice.
 
+**The note's `kind` is the page's switch, and the lease had overwritten it (21 Nov).** The
+card was still invisible in a live run, and the operator asked a second time. `onLease` emits
+`run.note` with `kind: 'lease'` and then spreads the lease's own fields — which carry a `kind`
+of `granted`, `extended` or `expired` — so every note arrived as `granted` and `noteLease`
+never ran. The stall clock was held off correctly (that reads the poll, not the note), and
+nothing was drawn: only a page opened mid-lease had a card, because `/api/runs` carries
+`run.lease`. The lease's own state now rides as `leaseKind`, after the spread, and `traceSig()`
+includes the leases so a grant or an expiry redraws on its own.
+
 At the end the worker is **asked**, not killed: a synthetic says the lease is over
 and that it may call `lease` once more for the time it needs. Any assistant message
 after the question is an answer and earns the one extension; a second lease call

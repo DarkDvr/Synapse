@@ -11,7 +11,7 @@ import { installPage } from './fake-page.mjs';
 
 const page = installPage();
 const { state } = await import('../web/state.js');
-const { chatNotesWiring, leaseFor, leaseClock, renderLease } = await import('../web/chat-notes.js');
+const { chatNotesWiring, leaseFor, leaseClock, renderLease, noteLease } = await import('../web/chat-notes.js');
 const { tracesWiring, renderTrace } = await import('../web/traces.js');
 
 chatNotesWiring({
@@ -86,6 +86,30 @@ test('only the lease card wears a clock — another call in the same run does no
   assert.equal(clocks, 1, 'one lease, one clock');
   const beforeCard = html.slice(0, html.indexOf('is-lease'));
   assert.doesNotMatch(beforeCard, /tool-lease-clock/, 'the shell call wears a clock it did not ask for');
+});
+
+test('the note the runner sends reaches the store, so a live lease has a card', () => {
+  state.leases = new Map();
+  const until = Date.now() + 1_800_000;
+  // The shape the runner emits: `kind` is the note's own type, `leaseKind` the lease's state.
+  // It used to arrive as `kind: 'granted'` — the lease's fields were spread over the note's
+  // own type — and this page, which switches on "lease", dropped it on the floor: the stall
+  // clock was held off and the chat drew nothing at all. Only a page opened mid-lease saw a
+  // card, because `/api/runs` carries `run.lease` (21 Nov, second report).
+  noteLease({
+    kind: 'lease',
+    leaseKind: 'granted',
+    dir: 'F:/scenario',
+    task: 't1',
+    role: 'coder-1',
+    minutes: 30,
+    reason: 're-running the suites',
+    until,
+  });
+  assert.ok(leaseFor({ dir: 'F:/scenario', task: 't1' }), 'the granted lease never reached the page');
+  assert.match(renderTrace(trace()), /class="tool-card trace-card is-lease"/, 'the trace has no card for a live lease');
+  noteLease({ kind: 'lease', leaseKind: 'expired', dir: 'F:/scenario', task: 't1' });
+  assert.match(renderTrace(trace()), /is-lease is-expired/, 'the expiry never reached the page');
 });
 
 test('the lease line and the card read the same clock', () => {

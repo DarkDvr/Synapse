@@ -1984,13 +1984,22 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
               onLease: (lease) => {
                 live.lease = { ...lease, at: Date.now() };
                 emit('run.progress', { ...live });
+                // The note's own type is `kind`, and the page switches on it; the lease's
+                // kind (granted, extended, expired) rides beside it as `leaseKind`.
+                //
+                // `...lease` carries a `kind` of its own, so writing `kind: 'lease'`
+                // *before* the spread meant every note arrived as "granted" and no reader
+                // recognised it: the lease held the stall clock off, and the chat drew no
+                // card for it. Only a page opened mid-lease saw one, because `/api/runs`
+                // carries `run.lease` (21 Nov, the second report of an invisible lease).
                 emit('run.note', {
                   dir,
                   role,
                   task: request.task,
                   startedAt,
-                  kind: 'lease',
                   ...lease,
+                  kind: 'lease',
+                  leaseKind: lease.kind,
                 });
               },
               // The first sign of life clears whatever the card was still saying

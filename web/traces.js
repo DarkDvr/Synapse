@@ -517,6 +517,12 @@ export function traceSig() {
       )
       .join(';'),
     sessionPart,
+    // A lease changes no note, no stream and no mark: on its own it is invisible to
+    // this signature, so a grant or an expiry arrived, asked for a redraw, found
+    // nothing new and returned — the card never appeared (21 Nov).
+    [...state.leases.values()]
+      .map((l) => `${l.task}:${l.until}:${l.expired ? 1 : 0}:${String(l.reason || '').length}`)
+      .join('.'),
   ].join(';');
 }
 

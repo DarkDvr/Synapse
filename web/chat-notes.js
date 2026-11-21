@@ -107,7 +107,10 @@ export function renderAlarm(a) {
  */
 export function noteLease(ev) {
   const key = `${wired.dirKey(ev.dir)}|${ev.task || ''}`;
-  if (ev.kind === 'granted' || ev.kind === 'extended') {
+  // `kind` on a `run.note` is the note's type ("lease"), so the lease's own state
+  // arrives as `leaseKind` (granted, extended, expired).
+  const what = String(ev.leaseKind || ev.kind || '');
+  if (what === 'granted' || what === 'extended') {
     state.leases.set(key, {
       dir: ev.dir || null,
       task: ev.task || '',
@@ -119,7 +122,7 @@ export function noteLease(ev) {
       expired: false,
       at: Date.now(),
     });
-  } else if (ev.kind === 'expired') {
+  } else if (what === 'expired') {
     const lease = state.leases.get(key);
     if (lease) lease.expired = true;
   }

@@ -246,7 +246,7 @@ export function paintAskNote() {
   // A paused chat is an operator reading: this clock stops with it, so no page is turned and
   // nothing is answered for them while the chat stands still (19 Nov — the server holds its
   // own timers for the same reason).
-  if (state.renderPaused || state.frozen) return;
+  if (state.renderPaused) return;
   // Auto-Answer turns the page when a page's wait runs out — that is the whole of
   // it: wait, take the recommended options on this page, "click" Next, and the
   // reply goes to the engine after the last page. Paging is never skipped, so every

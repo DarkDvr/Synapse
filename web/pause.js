@@ -53,20 +53,22 @@ export function installPause(dock, { onContinue } = {}) {
 /**
  * Say why the chat is paused, and what is waiting for it.
  *
- * `reason` is `selection` (the operator is holding a selection) or `stopped` (they cut a turn
- * with the second Stop to read something). `updates` is how many draws were held, `waiting`
- * how many questions and permission cards are on screen waiting for an answer.
+ * A pause is the operator's selection: the chat holds its draw while a range rests in it,
+ * so the bar says that and offers the way out. A Stop is not a pause — it ends the work
+ * and the conversation keeps drawing (21 Nov, when a repeated Stop left the chat glowing
+ * and did not catch up until someone found Continue).
+ *
+ * `updates` is how many draws were held, `waiting` how many questions and permission cards
+ * are on screen waiting for an answer.
  */
-export function showPause({ reason = 'selection', updates = 0, waiting = 0 } = {}) {
+export function showPause({ updates = 0, waiting = 0 } = {}) {
   if (!node) return;
-  const stopped = reason === 'stopped';
-  title.textContent = stopped ? 'Chat stopped' : 'Chat paused';
-  const parts = [];
-  parts.push(stopped ? 'held where you left it' : 'clear the selection to continue');
+  title.textContent = 'Chat paused';
+  const parts = ['clear the selection to continue'];
   if (updates > 0) parts.push(`${updates} update${updates === 1 ? '' : 's'} waiting`);
   if (waiting > 0) parts.push(`${waiting} question${waiting === 1 ? '' : 's'} waiting`);
   detail.textContent = ` — ${parts.join(' · ')}`;
-  node.dataset.reason = reason;
+  node.dataset.reason = 'selection';
   node.hidden = false;
   document.body.classList.add('is-paused');
 }
