@@ -762,7 +762,7 @@
   },
   "roles": {
     "architect": {
-      "ref": "oc-zen/deepseek-v4.1-flash-free",
+      "ref": "oc-zen/hy4-flash-free",
       "variant": "medium",
       "skills": [
         "app-check",
