@@ -127,7 +127,7 @@ import { toast } from './toast.js';
 // decides which project draws it, and that rule is tested without a page.
 import { renderPermissionCards } from './permission-card.js';
 // What every chat is doing, and the two events worth a sound (20 Nov).
-import { chatStates, createAttention } from './attention.js';
+import { chatStates, createAttention, holdFinish } from './attention.js';
 import { namePasted } from './attach-names.js';
 import { installContextMenu } from './context-menu.js';
 import { installFoldMotion, animateHeight, FOLD_MS } from './folds.js';
@@ -363,6 +363,27 @@ function noteAttention() {
   );
 }
 
+/**
+ * The open chat's finish, held back for the same grace every other chat gets.
+ *
+ * With Keep Building off, the plan is right that no task is left and the turn that follows
+ * is the Architect judging the report it was just handed — work, not the end of the job. On
+ * 21 Nov the finished-work chime played over exactly that gap.
+ */
+let heldFinish = null;
+
+function cancelHeldFinish() {
+  heldFinish?.cancel();
+  heldFinish = null;
+}
+
+/** Still going? The chat working again, the plan saying there is more, or a stop. */
+function workStillGoing() {
+  if (state.view === 'session' && state.sessionId && sessionWorking(state.sessionId)) return true;
+  if (workWillContinue({ mode: state.mode, auto: state.automation?.keepBuilding === true, tasks: state.planState?.plan?.tasks || [] })) return true;
+  return Boolean(state.workEndQuiet);
+}
+
 // One chime per finished piece of work, and none for a stop or a failure: the sound
 // means "the Architect is done", so it must not say that when the work was cut short.
 // The memory itself is `state.workWasLive` / `state.workEndQuiet`, because the run
@@ -396,6 +417,8 @@ function noteWorking() {
     // chime when the lock goes — for a turn that failed.
     if (!state.workWasLive) state.workEndQuiet = false;
     state.workWasLive = true;
+    // The gap it was waiting out has closed: this chat is working again.
+    cancelHeldFinish();
     // Work has resumed, so the Architect is not finished after all: a shutdown
     // waiting on silence is waiting on nothing. (The first evaluation, before any
     // work has run, also lands here — and disarms nothing that was not armed.)
@@ -408,18 +431,26 @@ function noteWorking() {
   if (state.workLiveSession && state.workLiveSession !== state.sessionId) {
     state.workWasLive = false;
     state.workLiveSession = null;
+    cancelHeldFinish();
     return;
   }
   if (workWillContinue({ mode: state.mode, auto: state.automation?.keepBuilding === true, tasks: state.planState?.plan?.tasks || [] })) return;
   state.workWasLive = false;
   if (state.workEndQuiet) {
     state.workEndQuiet = false;
+    cancelHeldFinish();
     return;
   }
-  // The sound and the taskbar blink are the same news: the work ended while the
-  // operator was looking elsewhere (12 Nov).
-  blinkTaskbar('work finished');
-  playDoneSound();
+  // Work has stopped, but a stop is not an end until the gap is over: the Architect may
+  // be reading the report it was just handed.
+  if (heldFinish) return;
+  heldFinish = holdFinish(workStillGoing, () => {
+    heldFinish = null;
+    // The sound and the taskbar blink are the same news: the work ended while the
+    // operator was looking elsewhere (12 Nov).
+    blinkTaskbar('work finished');
+    playDoneSound();
+  });
 }
 
 // ── the timed shutdown ──────────────────────────────────────────────────

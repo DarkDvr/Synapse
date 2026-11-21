@@ -2941,3 +2941,19 @@ Two rules were reading the same thing wrongly.
 
 Both are one-line rules with tests: `turnOver` in `web/events.js`, `busyNow` in
 `web/turn-live.js`.
+
+### The open chat needs the gap too (21 Nov)
+
+The finished-work chime played over a worker's report while the Architect was already reading
+it and the workflow went on. Keep Building was **off** in that project, and that is the tell.
+
+The rule "a gap is not a finish" was already there, twice: `createAttention` holds a finished
+chat for four seconds, and `noteWorking` asked `workWillContinue` about the plan. But the
+watcher skips the chat on screen (`key !== open`), and the plan rule needs Keep Building on —
+with it off the plan is *right* that no task is left, and yet the Architect still owes its
+turn: the report it was just handed is judged and answered a second or two later. So the open
+chat chimed the instant the worker stopped, into exactly the gap the other rule waits out.
+
+`holdFinish()` is that rule, in one place: ask `stillGoing()` now and again when the grace is
+up, run the sound only if the answer is still no, and let work resuming cancel the hold. The
+open chat now uses it with the same four seconds (`FINISH_GRACE_MS`) the other chats get.

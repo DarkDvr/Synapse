@@ -63,6 +63,47 @@ export function transitions(before, after, { skipFinished = new Set() } = {}) {
 }
 
 /**
+ * How long a finish is held back before it is worth a sound.
+ *
+ * A gap is not a finish: the Architect reads a worker's report and starts the next turn
+ * a second or two later, and with Keep Building on it starts the next task.
+ */
+export const FINISH_GRACE_MS = 4000;
+
+/**
+ * Wait out the gap before saying a chat has finished — the same rule for the open chat.
+ *
+ * `stillGoing()` is asked now and again when the grace is up: a chat that started working
+ * in between is not finished and must make no sound. `cancel()` is what "work resumed"
+ * calls; `run()` fires only when the gap turned out to be an end.
+ *
+ * The open chat used to chime the moment its work stopped, with the plan as its only
+ * guard (`workWillContinue`). With Keep Building off the plan is *right* that no task is
+ * left — and yet the Architect still owes its turn, judging the report it was just handed.
+ * On 21 Nov the chime played into exactly that gap, over a report the Architect was
+ * reading, and the workflow went on (21 Nov).
+ */
+export function holdFinish(stillGoing, run, {
+  delayMs = FINISH_GRACE_MS,
+  setTimer = (fn, ms) => setTimeout(fn, ms),
+  clearTimer = (handle) => clearTimeout(handle),
+} = {}) {
+  if (typeof stillGoing === 'function' && stillGoing()) return { cancel() {} };
+  let handle = setTimer(() => {
+    handle = 0;
+    if (typeof stillGoing === 'function' && stillGoing()) return;
+    run?.();
+  }, delayMs);
+  return {
+    cancel() {
+      if (!handle) return;
+      clearTimer(handle);
+      handle = 0;
+    },
+  };
+}
+
+/**
  * The page's watcher: reads the states, waits out the gap, and calls back once.
  *
  * `setTimer`/`clearTimer` are injectable so a test can run the callbacks at once.
@@ -74,7 +115,7 @@ export function createAttention({
   onBlocked = null,
   setTimer = (fn, ms) => setTimeout(fn, ms),
   clearTimer = (handle) => clearTimeout(handle),
-  finishDelayMs = 4000,
+  finishDelayMs = FINISH_GRACE_MS,
   blockDelayMs = 1200,
 } = {}) {
   let last = null;
