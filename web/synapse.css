@@ -3462,50 +3462,57 @@ body.dark .sidebar {
   background-position: center;
 }
 
-/* ── the chat's own ground (21 Nov) ──────────────────────────────────────
-   The chat panel was one flat grey (#1d1f23), the same plane as everything else,
-   and the operator asked for it darker and slightly transparent, with one of the
-   reference grounds behind it — faint enough that it never fights the words.
+/* ── the working area's ground (21 Nov) ──────────────────────────────────
+   The operator asked for a reference ground across the whole centre/right panel,
+   with the conversation, the role cards and the plan laid over it — a little
+   transparent, so the image reads between them and never through the prose.
 
-   Three layers, and the order is the point:
-     1. a near-black base — the panel is darker than the stage now, so it reads as
-        a well the conversation sits in rather than a card on a page;
-     2. the ground at `--ground-strength`, so the image is a suggestion at the
-        edges and nothing at all under the text (both reference images are empty
-        in the middle by design);
-     3. a veil over the transcript only, tuned so the brightest ribbon still gives
-        the text its contrast. 0.55 × 0.74 leaves about 14% of the image.
-   The veil is on the transcript, not the panel: a scrim over the whole dock would
-   also dull the composer, and the composer is controls, not prose. */
+   Three strengths, and they are the whole design:
+     --panel-fill   how opaque a panel is over the ground. Enough to keep a card's
+                    own text crisp, thin enough that the image is felt in the gaps.
+     --chat-veil    the transcript only. Prose over a picture is a contrast problem,
+                    so the conversation is darker than the panels it sits between.
+     the veil in the stage gradient: the image is at full strength nowhere, because
+                    a background that competes with a coloured status pill is worse
+                    than no background.
+
+   The ground is a background on `.main-content` itself, never a pseudo-element.
+   `.chat-dock` is a grid whose children include absolutely-positioned ones (the
+   chat tools, the toast region, the ask host); an extra layer that promoted them
+   into the grid put the composer's explicit `grid-row: 2` above the transcript and
+   the whole bottom panel jumped to the top (21 Nov). A background cannot do that. */
 
 :root {
-  --ground-strength: 0.55;
-  --chat-veil: rgba(8, 10, 13, 0.74);
-  --chat-base: #070a0e;
+  --panel-fill: rgba(18, 21, 26, 0.8);
+  --chat-veil: rgba(9, 11, 15, 0.72);
 }
 
-.chat-dock { background-color: var(--chat-base); }
-.chat-dock::before {
-  content: '';
-  position: absolute; inset: 0; z-index: 0;
-  background-image: var(--ground, none);
-  background-size: cover;
-  background-position: center;
-  background-repeat: no-repeat;
-  opacity: var(--ground-strength);
-  pointer-events: none;
+.control-room .main-content {
+  background-color: #05070a;
+  /* The gradient is the stage's own veil: top a little lighter than the bottom, so
+     the panel stack has depth and the image never sits at full strength anywhere. */
+  background-image: linear-gradient(rgba(5, 7, 10, 0.18), rgba(5, 7, 10, 0.5)), var(--ground, none);
+  background-size: auto, cover;
+  background-position: center, center;
+  background-repeat: no-repeat, no-repeat;
 }
-/* The two real children take their own layer above the ground. */
-.chat-dock > * { position: relative; z-index: 1; }
 
-/* The conversation's veil. A flat colour, not a gradient: the transcript scrolls,
-   and a gradient would move with the words as if the light changed while reading. */
+/* The panels, laid over it. One fill for all three, so they read as the same kind
+   of surface; the borders and corners they already have are untouched. `.rail-panel`
+   rather than every `.panel`: the plan, the tools and the probe are the panels in
+   this area, and a dialog is not part of the picture. */
+.chat-dock,
+.role-card,
+.rail-panel { background: var(--panel-fill); }
+
+/* The conversation is the one surface that must stay quiet. A flat colour, not a
+   gradient: the transcript scrolls, and a gradient would move with the words. */
 .chat-scroll { background: var(--chat-veil); }
 
-/* The controls keep their own surface, a little translucent so the panel reads as
-   one thing, but the text box inside stays opaque — the words the operator types
-   are never laid over a picture. */
-.composer { background: rgba(22, 24, 29, 0.88); }
+/* The controls keep their place in the panel, a shade more solid than the panel
+   itself; the text box inside stays opaque — words the operator types are never
+   laid over a picture. */
+.composer { background: rgba(26, 28, 33, 0.92); }
 
 /* Which ground. `bg-center.jpg` is blue and teal only, and its empty middle is the
    chat's middle; `bg-center2.jpg` is the neural field with orange and green nodes,
