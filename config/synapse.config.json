@@ -487,6 +487,10 @@
               "name": "Nano Banana 2.1"
             },
             {
+              "id": "gemini-omni-1.2-flash",
+              "name": "Gemini Omni 1.2 Flash"
+            },
+            {
               "id": "glm-5.3",
               "name": "GLM-5.3"
             },
