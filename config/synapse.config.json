@@ -766,7 +766,7 @@
   },
   "roles": {
     "architect": {
-      "ref": "oc-zen/hy4-flash-free",
+      "ref": "polystrata/qwen3.8-flash-next-IQ2_XS-GSQ-200k-uncensored",
       "variant": "high",
       "skills": [
         "app-check",
@@ -860,7 +860,14 @@
   "browser": {
     "enabled": true,
     "profile": "",
-    "sites": [],
+    "sites": [
+      {
+        "host": "www.nexusmods.com",
+        "url": "https://www.nexusmods.com/skyrimspecialedition/mods/4625?tab=files",
+        "signedInAt": 1795301052515,
+        "lastUsedAt": 1795301052515
+      }
+    ],
     "idleMinutes": 5
   },
   "automation": {

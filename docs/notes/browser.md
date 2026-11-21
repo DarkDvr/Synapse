@@ -490,3 +490,40 @@ alone returns the viewport (measured: a page 888 px tall came back 1280x800). It
 `Page.getLayoutMetrics` for the content size and clips to it, so a full-page image is the
 document (888 tall for that page, 1265 wide — the width excludes the scrollbar, which is
 why a full-image x is a document x and not a viewport one).
+
+## A download row is not a link (22 Nov)
+
+The skyrim_modlist run tried to fetch an 86 KB mod archive from Nexus and could not, and the
+tools were part of the reason. What the transcript shows:
+
+- `click {x:1078,y:432}` — the point was inside the download row's *box*, so the snap
+  measured **0 px** and clicked the row's centre; it landed **83 px away on "Version
+  history"**, and the answer said only "0 px away", which reads as a hit;
+- `click {text:"Manual download"}` — refused: the FILES tab had not been opened, so the row
+  was not in the DOM (the `?tab=files` address does not switch Nexus's tab on a fresh load);
+- `open` of the DownloadPopUp widget URL — it is an **iframe widget**, so navigating to it
+  lands on the mod page again;
+- `read` listed links only, so the row and the FILES tab were not visible as things to
+  click, and three calls answered with **no text at all**.
+
+Four changes, each measured against that page afterwards:
+
+- **`read` lists controls, not just links.** Buttons, tabs, menu items and anything that
+  draws a pointer, on screen, with the coordinate a click uses as it is. On the Nexus page
+  that is `FILES 2 (273,658)` and the download row, where before it was silence.
+- **A click accepts anything that behaves clickable**: `[role=tab]`, `[role=link]`,
+  `[onclick]`, and any ancestor with `cursor: pointer`. A point *inside* such an element is
+  the operator's aim, not a near-miss, so it is clicked where it was asked.
+- **The answer tells the truth about distance**: the number is how far the click landed from
+  the point asked for (83 px, not 0), and the point is named. When nothing can be clicked,
+  it says which absence it found: the words are on the page but not on a control, or the
+  page does not contain them yet.
+- **`open` waits for words.** A storefront renders its text after `load`; the page was read
+  as `(no title)` with an empty body, so the model clicked into nothing. `goto` now waits
+  (up to 3 s) for ~120 characters before returning.
+
+Still open, in the order they would help: a **`save`/`fetch` tool that downloads a URL with
+the page's own cookies** (a direct file address often needs the session); **frame targeting**
+for widget iframes (the DownloadPopUp); and a download journey that says plainly when a site
+demands a human (a captcha), so the model hands off instead of flailing.
+

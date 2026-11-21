@@ -107,8 +107,9 @@ export function clickSummary(res) {
   if (!res || typeof res !== 'object') return '';
   const at = Array.isArray(res.at) ? res.at : null;
   const where = at ? ` at ${at[0]},${at[1]}` : '';
+  const asked = Array.isArray(res.requested) && res.snapped ? ` of the ${res.requested[0]},${res.requested[1]} asked for` : '';
   const snap = res.snapped
-    ? ` (the point missed a control, so the nearest one was used: ${res.snapped.label ? `"${res.snapped.label}" ` : ''}${res.snapped.px} px away)`
+    ? ` (the click landed ${res.snapped.px} px from the point, on ${res.snapped.label ? `"${res.snapped.label}"` : 'another element'}${asked})`
     : res.clamped
       ? ' (the point was outside the viewport, so it was clamped into it)'
       : '';
@@ -465,6 +466,17 @@ export function createBrowser({
     // Sub-resources and a client-side render happen after load; the page is not readable
     // the instant the event fires. This is a settle, not a wait-for-the-work.
     await new Promise((r) => setTimeout(r, settle));
+    // A page whose text arrives after its document (a storefront, a forum, a shop) was read
+    // as "(no title)" with an empty body: the model then clicked into nothing and started
+    // guessing coordinates (22 Nov, Nexus). Give the words a few seconds to exist.
+    for (let i = 0; i < 20; i += 1) {
+      let words = 0;
+      try {
+        words = await p.evaluate("String(document.body && document.body.innerText || '').trim().length");
+      } catch { break; /* the page went away mid-wait; the address read below will say so */ }
+      if (Number(words) > 120) break;
+      await new Promise((r) => setTimeout(r, 150));
+    }
     return p.evaluate('location.href');
   }
 
@@ -565,9 +577,38 @@ export function createBrowser({
         return { text: label, href, at: [Math.round(box.x + box.width / 2), Math.round(box.y + box.height / 2)] };
       }).filter(Boolean).slice(0, ${Number(links)});
 
+      // What can be *clicked* and is not a link: buttons, tabs, menu items, and anything that
+      // draws a pointer because a handler is on it. A model reading only links could not see
+      // the download row on Nexus, tried coordinates from a picture, and had its click moved
+      // 83 px onto a neighbouring link (22 Nov). Only what is on screen is listed, because
+      // these are viewport coordinates a click uses as they are.
+      const seenControl = new Set();
+      const controlSel = 'button,[role=button],[role=tab],[role=menuitem],[role=link],input[type=submit],input[type=button],select,summary';
+      const controls = [];
+      const addControl = (el) => {
+        if (el.closest('a[href]')) return;         // already listed as a link
+        const box = el.getBoundingClientRect();
+        if (box.width < 6 || box.height < 6) return;
+        if (box.bottom < 0 || box.top > innerHeight) return;
+        const label = clean(el.innerText || el.value || el.getAttribute('aria-label') || '').slice(0, 60);
+        if (!label || label.length < 2) return;
+        const key = label.toLowerCase();
+        if (seenControl.has(key)) return;
+        seenControl.add(key);
+        controls.push({ text: label, at: [Math.round(box.x + box.width / 2), Math.round(box.y + box.height / 2)] });
+      };
+      for (const el of document.querySelectorAll(controlSel)) addControl(el);
+      for (const el of document.querySelectorAll('div,span,li')) {
+        if (controls.length >= 40) break;
+        const text = clean(el.innerText || '');
+        if (!text || text.length > 70 || el.children.length > 3) continue;
+        try { if (getComputedStyle(el).cursor !== 'pointer') continue; } catch { continue; /* a detached node */ }
+        addControl(el);
+      }
+
       // total is what the page held, chars is what this read returns: the tool says
       // the difference so a model knows it is reading a cut (13 Nov).
-      return { url: location.href, title: document.title, text, links: anchor, wall, chars: text.length, total: full.length };
+      return { url: location.href, title: document.title, text, links: anchor, controls: controls.slice(0, 40), wall, chars: text.length, total: full.length };
     })()`);
     return page;
   }
@@ -641,31 +682,84 @@ export function createBrowser({
         };
         if (${JSON.stringify(selector)}) return pick(document.querySelector(${JSON.stringify(selector)}));
         const want = ${JSON.stringify(text)}.toLowerCase();
-        const candidates = [...document.querySelectorAll('a,button,[role="button"],input[type="submit"],summary,label')];
-        return pick(candidates.find((el) => clean(el.innerText || el.value || '').toLowerCase() === want))
-          || pick(candidates.find((el) => clean(el.innerText || el.value || '').toLowerCase().includes(want)));
+        const candidates = [...document.querySelectorAll('a,button,[role="button"],[role="tab"],[role="link"],[role="menuitem"],[onclick],input[type="submit"],summary,label')];
+        const hit = candidates.find((el) => clean(el.innerText || el.value || '').toLowerCase() === want)
+          || candidates.find((el) => clean(el.innerText || el.value || '').toLowerCase().includes(want));
+        if (hit) return pick(hit);
+        // Then anything that behaves clickable: a div with a pointer cursor and a handler
+        // (a download row, a card, a tab built out of spans) is a control to the operator.
+        // The words are usually on a leaf whose own cursor is auto, with the handler on
+        // the box around it, so the leaf is climbed until something behaves like a control.
+        const clickable = (el) => {
+          let node = el;
+          for (let i = 0; node && i < 5; i += 1, node = node.parentElement) {
+            if (node.matches && node.matches('a,button,[role],[onclick],[tabindex]')) return node;
+            try {
+              if (getComputedStyle(node).cursor === 'pointer' && node.getBoundingClientRect().height >= 4) return node;
+            } catch { /* detached */ }
+          }
+          return null;
+        };
+        const holds = [...document.querySelectorAll('*')].filter((el) => {
+          const text = clean(el.innerText || '');
+          return text && text.length <= 120 && text.toLowerCase().includes(want);
+        }).sort((a, b) => clean(a.innerText).length - clean(b.innerText).length);
+        for (const el of holds.slice(0, 30)) {
+          const box = clickable(el);
+          if (box) return pick(box);
+        }
+        return pick(null);
       })()`);
       // A page can show text that is not a control — a hint, a label, an overlay's
-      // message. Saying which is what turns a failed click into the next step.
+      // message. Saying which is what turns a failed click into the next step, and so is
+      // saying whether the words are on the page at all: "not a control" and "not loaded
+      // yet" are two different next moves (22 Nov, Nexus read as an empty page).
       if (!found) {
-        throw new Error(
-          `nothing to click: ${selector || text}. That is not a link, a button or a form control — ` +
-            'use an x/y from read, or a CSS selector.',
-        );
+        const seen = await p.evaluate(`(() => {
+          const want = ${JSON.stringify(String(text || '')).toLowerCase()};
+          const all = String(document.body ? document.body.innerText : '');
+          if (!want) return { where: 'none' };
+          const at = all.toLowerCase().indexOf(want);
+          if (at < 0) return { where: 'missing', chars: all.trim().length };
+          const line = all.slice(Math.max(0, at - 40), at + want.length + 40).replace(/\\s+/g, ' ').trim();
+          return { where: 'text', line };
+        })()`).catch(() => ({ where: 'none' }));
+        const why = seen?.where === 'missing'
+          ? ` The page's text does not contain it either (${Number(seen.chars) || 0} characters on the page) — it may still be loading: wait, then read again.`
+          : seen?.where === 'text'
+            ? ` It is in the page's text (…${seen.line}…) but not on a control — scroll it into view with read's coordinates, or click a CSS selector.`
+            : ' That is not a link, a button or a form control — use an x/y from read, or a CSS selector.';
+        throw new Error(`nothing to click: ${selector || text}.${why}`);
       }
       point = found;
     }
     const [wantedX, wantedY] = point;
     const aim = await p.evaluate(`(() => {
       const snapPx = ${Number(snapPx) || 0};
-      const control = 'a,button,[role=button],input,select,textarea,summary,label';
+      // What can be clicked is not only a link or a button: a row that starts a download can
+      // be a div with a pointer cursor and a handler (Nexus's file rows are exactly that),
+      // and the old list could not see it — the model's aim was thrown at the nearest link
+      // instead, 83 px away, and the answer said it had landed (22 Nov).
+      const control = 'a,button,[role=button],[role=tab],[role=link],[role=menuitem],[onclick],input,select,textarea,summary,label';
       const clamp = (v, lo, hi) => Math.min(Math.max(v, lo), hi);
       const x = Math.round(clamp(${Number(wantedX)}, 0, Math.max(0, innerWidth - 2)));
       const y = Math.round(clamp(${Number(wantedY)}, 0, Math.max(0, innerHeight - 2)));
       const label = (el) => String(el?.innerText || el?.value || el?.getAttribute?.('aria-label') || '')
         .replace(/\s+/g, ' ').trim().slice(0, 60);
       const under = document.elementFromPoint(x, y);
-      const direct = under && under.closest(control);
+      // The nearest thing above the point that behaves like a control, however it is built.
+      const behavesClickable = (el) => {
+        let node = el;
+        for (let i = 0; node && i < 6; i += 1, node = node.parentElement) {
+          if (node.matches && node.matches(control)) return node;
+          try {
+            const cs = getComputedStyle(node);
+            if (cs.cursor === 'pointer' && node.getBoundingClientRect().height >= 4) return node;
+          } catch { /* a detached node */ }
+        }
+        return null;
+      };
+      const direct = under ? behavesClickable(under) : null;
       if (direct) return { x, y, snapped: null, clamped: [x !== ${Number(wantedX)}, y !== ${Number(wantedY)}] };
       let best = null;
       let bestD = snapPx * snapPx;
@@ -682,7 +776,11 @@ export function createBrowser({
       const r = best.getBoundingClientRect();
       const tx = Math.round(r.left + r.width / 2);
       const ty = Math.round(r.top + r.height / 2);
-      return { x: tx, y: ty, snapped: { from: [x, y], to: [tx, ty], px: Math.round(Math.sqrt(bestD)), label: label(best) },
+      // The number that matters is how far the click will land from where it was asked. The
+      // distance to the element's *box* said "0 px away" for a click that moved 83 px to the
+      // middle of that box, which is how a model came to believe it had hit the row.
+      const away = Math.round(Math.sqrt((tx - x) ** 2 + (ty - y) ** 2));
+      return { x: tx, y: ty, snapped: { from: [x, y], to: [tx, ty], px: away, label: label(best) },
                clamped: [x !== ${Number(wantedX)}, y !== ${Number(wantedY)}] };
     })()`);
     const x = Number(aim?.x ?? wantedX);

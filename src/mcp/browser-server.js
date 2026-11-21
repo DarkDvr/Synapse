@@ -146,6 +146,13 @@ const outline = (page, { maxChars = 6000, links = 60 } = {}) => {
     lines.push('', 'Links:');
     for (const link of page.links.slice(0, links)) lines.push(`- ${link.text} -> ${link.href} (${link.at.join(',')})`);
   }
+  // Not everything clickable is a link. A button, a tab or a row that behaves like one is
+  // listed with its coordinate, so a model clicks what it read instead of guessing from a
+  // picture: the Nexus download row was invisible here, and the guess landed on a link.
+  if (page.controls?.length) {
+    lines.push('', 'Buttons and tabs (click by text, or by x,y as it is):');
+    for (const c of page.controls) lines.push(`- ${c.text} (${c.at.join(',')})`);
+  }
   return lines.join('\n');
 };
 
