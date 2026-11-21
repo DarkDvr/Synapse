@@ -767,7 +767,7 @@
   "roles": {
     "architect": {
       "ref": "oc-zen/hy4-flash-free",
-      "variant": "medium",
+      "variant": "high",
       "skills": [
         "app-check",
         "find-skills",
