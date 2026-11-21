@@ -2910,3 +2910,34 @@ Two things were true at once.
 The division is the lesson: the wheel decides **where** to be, `paneShown` decides what the end
 **is**. Both are pure and tested in `tests/thinking-pane.test.mjs`; the pane's DOM wiring is
 looked at in the page.
+
+### A completed step is not a finished turn (21 Nov)
+
+In Single mode the thinking pane vanished right after a shell call, and the chat jumped: the
+words below the pane moved up, and the next step put a fresh, shorter pane back.
+
+Two rules were reading the same thing wrongly.
+
+- **`busy` was read out of the transcript.** `updateBusyFromMessages` set it from "the last
+  assistant message is not completed", which is true for the whole turn *except* between two
+  of its steps: a step's message completes when it issues its tool call, and the tool then
+  runs for ten seconds. So right after every tool call `busy` went false, `turnLive()` went
+  false with it, and the pane — which belongs to a live turn — was dropped and its stream
+  nulled. It came back only when the poll set `busy` again (up to eight seconds) or the next
+  words opened a new pane. Fixed by `busyNow()`: the engine's own list of active sessions is
+  the answer, and it says "active" for the whole turn. That list is also what stops a
+  restarted app breathing for ever — after a restart it is empty, and an incomplete message
+  in the transcript means nothing (which is why the transcript was there in the first place).
+  The page only takes this path when it did not send the turn itself (`state.streaming`), so
+  a reload mid-turn is where it bites.
+- **An interrupt was treated as the end of the turn.** `turnEnded()` includes
+  `session.execution.interrupted`, and the engine interrupts an execution and starts the next
+  one in the same millisecond — a rejected permission is the everyday case. On the interrupt
+  the page cleared `busy` and nulled the pane's stream; the new execution then had to open a
+  new pane. `turnOver()` now answers the page: succeeded, failed and `session.idle` end the
+  turn, an interrupt does not. If nothing follows an interrupt (a Stop), the pending poll
+  clears `busy` and the pane goes with it — the operator's rule is that a pane ends with the
+  post, not that it outlives one.
+
+Both are one-line rules with tests: `turnOver` in `web/events.js`, `busyNow` in
+`web/turn-live.js`.

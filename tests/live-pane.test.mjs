@@ -14,7 +14,7 @@ import { state } from '../web/state.js';
 import { renderSessionStream } from '../web/traces.js';
 import { alarmBreaks, panePostIndex } from '../web/transcript.js';
 import { groupTurns } from '../web/run-view.js';
-import { turnLive } from '../web/turn-live.js';
+import { turnLive, busyNow } from '../web/turn-live.js';
 
 const source = (rel) => fs.readFileSync(new URL(`../web/${rel}`, import.meta.url), 'utf8');
 const step = (id, text, completed = true) => ({ id, type: 'assistant', completed, parts: [{ type: 'reasoning', text }] });
@@ -85,6 +85,27 @@ test('the pane is drawn while the turn runs, whatever the last message says', ()
 test('a late delta cannot open a pane again, and a new chat starts with none', () => {
   assert.match(source('chat-scroll.js'), /if \(!isWorker\(trace\) && !turnLive\(\)\) return;/, 'deltas for a finished turn are refused');
   assert.match(source('app.js'), /state\.sessionTrace = \{ key: '', stream: null \};/, 'opening a chat drops the last one\'s pane');
+});
+
+// The pane vanished right after a shell call in Single mode (21 Nov): the page's `busy` was
+// being read out of the transcript, and between two steps of one turn the transcript's last
+// message is complete — that is the step which issued the tool call. The engine's own list of
+// active sessions is the answer, and it says "active" for the whole turn.
+test('a completed step is not a finished turn', () => {
+  const active = new Set(['sess_test']);
+  assert.equal(busyNow('sess_test', active), true, 'the engine says the session is working');
+  assert.equal(busyNow('sess_test', new Set()), false, 'nothing active: a restart, or a turn that ended');
+  assert.equal(busyNow(null, active), false, 'no session, no turn');
+
+  // And the pane is drawn for the same reason: busy, so the turn is live, whatever the last
+  // message of the transcript says.
+  state.sessionId = 'sess_test';
+  state.busy = busyNow('sess_test', active);
+  state.messages = [step('m6', 'Let me check help quickly, then run backup.')];
+  state.sessionTrace = { key: 'sess:sess_test', stream: { kind: 'think', text: 'Let me check help quickly, then run backup.' } };
+  assert.match(renderSessionStream(), /trace-flow/, 'a completed step took the pane away');
+  state.busy = false;
+  state.sessionTrace = null;
 });
 
 // The pane used to be drawn only when the assistant post happened to be the *last*

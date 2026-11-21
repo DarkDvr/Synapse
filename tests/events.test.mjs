@@ -10,7 +10,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { EV, EXECUTION_ENDED, turnEnded } from '../web/events.js';
+import { EV, EXECUTION_ENDED, turnEnded, turnOver } from '../web/events.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -28,6 +28,18 @@ test('the execution endings are one list, and turnEnded answers for all of them'
   assert.equal(turnEnded(EV.executionInterrupted), true);
   assert.equal(turnEnded(EV.executionStarted), false);
   assert.equal(turnEnded(EV.idle), false, 'an idle message is a message, not an event');
+});
+
+// The engine interrupts an execution and starts the next one a millisecond later — a rejected
+// permission is the everyday case. That is not the end of the turn, and treating it as one tore
+// the thinking pane down between the two events (reported 21 Nov).
+test('an interrupted execution is not the turn ending on the page', () => {
+  assert.equal(turnOver(EV.executionInterrupted), false, 'the next execution is already starting');
+  assert.equal(turnOver(EV.executionSucceeded), true);
+  assert.equal(turnOver(EV.executionFailed), true);
+  assert.equal(turnOver(EV.idle), true, 'the engine says the session went quiet');
+  assert.equal(turnOver(EV.executionStarted), false);
+  assert.equal(turnOver(EV.textDelta), false);
 });
 
 test('no file types a session event name out by hand', () => {

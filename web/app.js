@@ -9,7 +9,8 @@
 // wired yet — the orchestration layer will drive them (stage 3+).
 
 import { renderMarkdown } from './md.js';
-import { EV, turnEnded, shortEvent } from './events.js';
+import { EV, turnEnded, turnOver, shortEvent } from './events.js';
+import { busyNow } from './turn-live.js';
 import { state } from './state.js';
 import { esc, relTime, hhmm, hhmmss, toolTarget, versionTag, shortSpan, fmtBytes, samePath, ago, shortName } from './format.js';
 import { loadPlan, renderPlan, updatePlanOverflow, planPaneWiring } from './plan-pane.js';
@@ -1079,15 +1080,14 @@ async function loadMessages() {
 
 function updateBusyFromMessages() {
   if (state.streaming) return;
+  // The engine's active list is the authority on a live turn — it says "active" for the whole
+  // of one, while the transcript's last message is complete between two steps of the same turn
+  // (the step that issued the tool call). Reading the transcript cleared `busy` right after
+  // every tool call: Stop went, and the thinking pane was dropped and rebuilt (21 Nov).
+  const activeNow = busyNow(state.sessionId, state.busySessions);
+  state.busy = activeNow;
   const convo = state.messages.filter((m) => m.type === 'user' || m.type === 'assistant');
   const last = convo[convo.length - 1];
-  // The engine's active list is the authority on a live turn. A transcript can end
-  // with an assistant message that never completed — the app was restarted mid-turn —
-  // and reading that as "still working" left the project breathing for ever over a
-  // tool call that would never finish (reported 21 Nov). The poll sets it again if
-  // the turn really is running.
-  const activeNow = Boolean(state.sessionId) && state.busySessions.has(state.sessionId);
-  state.busy = activeNow && Boolean(last && last.type === 'assistant' && !last.completed && !last.error);
 
   // Seed "a tool is running" from the transcript too, so a reload in the middle
   // of a long tool does not look like a stall — but only for a session the engine
@@ -1696,8 +1696,9 @@ function connectStream() {
         appendStream('think', ev.raw?.data?.delta);
       } else if (ev.type === EV.textEnded || ev.type === EV.reasoningEnded) {
         endStream();
-      } else if (turnEnded(ev.type)) {
-        // The turn is over: nothing may stream into it any more.
+      } else if (turnOver(ev.type)) {
+        // The turn is over: nothing may stream into it any more. An interrupt is not the
+        // end — the engine starts the next execution at once — so it does not come here.
         state.sessionTrace.stream = null;
         state.sessionTrace.key = '';
       }
@@ -1753,7 +1754,7 @@ function connectStream() {
       if (ev.sessionId) {
         const busy = state.busySessions.has(ev.sessionId);
         if (ev.type === EV.executionStarted && !busy) { state.busySessions.add(ev.sessionId); changed = true; }
-        else if (turnEnded(ev.type) && busy) {
+        else if (turnOver(ev.type) && busy) {
           state.busySessions.delete(ev.sessionId);
           changed = true;
         }
@@ -1788,7 +1789,7 @@ function connectStream() {
           // until the first reasoning or tool arrives.
           if (ensureLivePost()) renderTranscript();
         }
-        else if (turnEnded(ev.type) || ev.type === EV.idle) {
+        else if (turnOver(ev.type)) {
           state.busy = false;
           // A turn that ended without the engine ever writing its message would
           // leave the page's placeholder as an empty "Architect" post, so it goes

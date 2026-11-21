@@ -48,6 +48,19 @@ export const EXECUTION_ENDED = [EV.executionSucceeded, EV.executionFailed, EV.ex
 /** Is this event one of the ways a turn ends? */
 export const turnEnded = (type) => EXECUTION_ENDED.includes(type);
 
+/**
+ * Is the turn itself over on this page?
+ *
+ * An execution that was *interrupted* is not a turn that ended: the engine interrupts one
+ * it is about to cut and starts the next at once. A rejected permission is the everyday
+ * case — the refusal is handed back to the model as a new execution, a millisecond later.
+ * Treating that as the end cleared `busy` and tore down the thinking pane between the two
+ * events, so the pane vanished and came back with the next words (reported 21 Nov). The
+ * turn is over on succeeded, failed and idle; an interrupt is settled by whatever follows
+ * it, and the pending poll is the backstop for one that is never followed.
+ */
+export const turnOver = (type) => type === EV.idle || (turnEnded(type) && type !== EV.executionInterrupted);
+
 /** The prefix tests use to find a bare literal that should have been a name. */
 export const PREFIX = 'session.';
 
