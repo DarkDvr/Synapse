@@ -3462,6 +3462,58 @@ body.dark .sidebar {
   background-position: center;
 }
 
+/* ── the chat's own ground (21 Nov) ──────────────────────────────────────
+   The chat panel was one flat grey (#1d1f23), the same plane as everything else,
+   and the operator asked for it darker and slightly transparent, with one of the
+   reference grounds behind it — faint enough that it never fights the words.
+
+   Three layers, and the order is the point:
+     1. a near-black base — the panel is darker than the stage now, so it reads as
+        a well the conversation sits in rather than a card on a page;
+     2. the ground at `--ground-strength`, so the image is a suggestion at the
+        edges and nothing at all under the text (both reference images are empty
+        in the middle by design);
+     3. a veil over the transcript only, tuned so the brightest ribbon still gives
+        the text its contrast. 0.55 × 0.74 leaves about 14% of the image.
+   The veil is on the transcript, not the panel: a scrim over the whole dock would
+   also dull the composer, and the composer is controls, not prose. */
+
+:root {
+  --ground-strength: 0.55;
+  --chat-veil: rgba(8, 10, 13, 0.74);
+  --chat-base: #070a0e;
+}
+
+.chat-dock { background-color: var(--chat-base); }
+.chat-dock::before {
+  content: '';
+  position: absolute; inset: 0; z-index: 0;
+  background-image: var(--ground, none);
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  opacity: var(--ground-strength);
+  pointer-events: none;
+}
+/* The two real children take their own layer above the ground. */
+.chat-dock > * { position: relative; z-index: 1; }
+
+/* The conversation's veil. A flat colour, not a gradient: the transcript scrolls,
+   and a gradient would move with the words as if the light changed while reading. */
+.chat-scroll { background: var(--chat-veil); }
+
+/* The controls keep their own surface, a little translucent so the panel reads as
+   one thing, but the text box inside stays opaque — the words the operator types
+   are never laid over a picture. */
+.composer { background: rgba(22, 24, 29, 0.88); }
+
+/* Which ground. `bg-center.jpg` is blue and teal only, and its empty middle is the
+   chat's middle; `bg-center2.jpg` is the neural field with orange and green nodes,
+   which this palette reserves for meaning (amber = needs you, green = allowed). */
+body[data-ground="nebula"] { --ground: url("/assets/bg-center.jpg"); }
+body[data-ground="neural"] { --ground: url("/assets/bg-center2.jpg"); }
+body[data-ground="none"] { --ground: none; }
+
 /* ── one corner, everywhere ──────────────────────────────────────────────
    Every panel used its own radius - 16 on the chat dock, 14 on the plan, 12 in
    places, 10 on chips - so a column of them had four different fillets and read
