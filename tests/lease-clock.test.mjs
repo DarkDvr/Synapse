@@ -124,6 +124,21 @@ test('the call in the conversation wears the timer, and says ended when it passe
   assert.equal(callLeaseClock({ name: 'shell' }, live), '');
 });
 
+test('the stream line is the event, and the head carries the state while it is in force', () => {
+  state.leases = new Map([['f:/scenario|t1', lease()]]);
+  const t = trace();
+  noteLeaseLine(t, { kind: 'lease', leaseKind: 'granted', dir: 'F:/scenario', task: 't1', role: 'coder-1', minutes: 30, reason: 're-running the suites', until: lease().until });
+  const html = renderTrace(t);
+  const head = html.slice(0, html.indexOf('trace-lines'));
+  // The line moved up into "12 earlier steps" after the lease was taken, and the operator
+  // asked where it had gone — a state that can fold away is a state you cannot see (21 Nov).
+  assert.match(head, /class="trace-lease"/, 'the head does not say a lease is in force');
+  assert.match(head, /data-lease-until="\d+"/, 'the head chip is not on the page ticker');
+  assert.match(html, /is-lease/, 'the stream line went missing');
+  state.leases.set('f:/scenario|t1', lease({ expired: true }));
+  assert.doesNotMatch(renderTrace(t), /class="trace-lease"/, 'an ended lease still sits on the head');
+});
+
 test('the lease line and the card read the same clock', () => {
   state.leases = new Map([['f:/scenario|t1', lease()]]);
   const t = trace();

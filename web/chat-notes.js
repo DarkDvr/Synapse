@@ -212,7 +212,25 @@ export function leaseClock(tool, lease) {
  * card. When the time is up it says so instead of vanishing: a card that asked for thirty
  * minutes and now shows nothing reads as a bug, and the operator asked for "same format,
  * just this one has a timer".
+ *//**
+ * The lease as a chip on the run's own head line.
+ *
+ * The line in the stream is the *event* — it posts where the call happened and moves up with
+ * the rest, which is right. The head is the *state*: a lease is in force right now, and a
+ * state that has rolled into "12 earlier steps" is a state the operator cannot see. They
+ * looked for it four times in one day, so the countdown also sits where the run's name is.
  */
+export function leaseChip(lease) {
+  if (!lease || lease.expired) return '';
+  const until = Number(lease.until) || 0;
+  if (!until) return '';
+  if (until <= Date.now()) return '';
+  const reason = String(lease.reason || '').trim();
+  const role = wired.roleLabel(lease.role) || 'Worker';
+  const left = hhmmss(until - Date.now());
+  return `<span class="trace-lease" data-lease-until="${until}" title="${esc(`${role} holds a lease${reason ? ` — ${reason}` : ''}; the stall clock is off until it ends`)}">⏱ ${esc(left)}</span>`;
+}
+
 export function callLeaseClock(tool, lease) {
   if (!lease) return '';
   if (!/(^|[_:])lease$/i.test(String(tool?.name || '').trim())) return '';

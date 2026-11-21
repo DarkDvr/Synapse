@@ -90,6 +90,11 @@ export function wheelIntent(reading, delta, from, max) {
   const step = Number(delta) || 0;
   if (end <= 2) return { action: 'chat' }; // nothing to read back: the wheel belongs to the chat
   if (!reading && step > 0) return { action: 'stay' };
+  // Down at the end is the reader asking for the newest words again: hand the pane back to
+  // the follow explicitly. Leaving it to the frame loop's "am I at the end yet" check left a
+  // pane parked at a scroll position it could not quite reach, with the text short of the
+  // bottom of its box and a band of empty space under it (21 Nov).
+  if (reading && step > 0 && at >= end - 2) return { action: 'follow' };
   const to = Math.max(0, Math.min(at + step, end));
   if (Math.abs(to - at) < 1) return { action: step > 0 ? 'stay' : 'chat' };
   return { action: 'read', to };
@@ -175,6 +180,12 @@ function takeOver(trace, event) {
     swallow();
     return false;
   }
+  if (want.action === 'follow') {
+    // Down at the end: the newest words, and the slide takes over again.
+    dropBack(trace);
+    swallow();
+    return true;
+  }
   if (want.action !== 'read') return false; // the chat's wheel, or no wheel at all
   // The frame loop follows `active`: taking the pane makes this trace the one it watches.
   active = trace;
@@ -242,9 +253,25 @@ function wirePane(node, trace) {
   }
 }
 
+/**
+ * Put a pane's text where it belongs at rest: its last line on the window's bottom edge.
+ *
+ * The window is eleven lines tall from the first word, so a short thought is a few lines at
+ * the bottom of a mostly empty box, and a long one shows its newest words. That is what the
+ * frame loop does for the pane it watches; this is the same placement for the panes it does
+ * not, which otherwise kept their first paint.
+ */
+function placePane(node, trace) {
+  const view = node.querySelector('.trace-flow-view');
+  const body = node.querySelector('.trace-flow-body');
+  if (!view || !body) return;
+  const target = body.offsetHeight - view.clientHeight;
+  trace.stream.offset = target;
+  body.style.transform = `translate3d(0, ${-target}px, 0)`;
+}
+
 /** After any transcript render: re-point at the new node and keep sliding. */
-export function paneAfterRender() {
-  // Every pane this draw produced is wired, whatever the frame loop is pointed at: on the
+export function paneAfterRender() {  // Every pane this draw produced is wired, whatever the frame loop is pointed at: on the
   // first draw of a turn `active` may not be set yet, and a pane the wheel cannot reach is a
   // pane the operator cannot read back.
   let adopted = null;
@@ -253,6 +280,12 @@ export function paneAfterRender() {
     const trace = traceFor(key) || (active && String(active.key) === key ? active : null);
     if (!trace) continue;
     wirePane(node, trace);
+    // Place it now, not only when the frame loop gets round to it. One frame loop watches one
+    // pane, so every *other* pane sat at its first paint: a short thought at the top of a
+    // box eleven lines tall, with the rest of the box empty under it, and a long one showing
+    // its first lines instead of its newest. The operator met the empty band after wheeling
+    // in a pane (21 Nov).
+    if (trace.stream && !trace.stream.scrolled && trace !== active) placePane(node, trace);
     // The open session's own pane is the one the loop should watch when nothing told it yet.
     if (trace === state.sessionTrace || !adopted) adopted = trace;
   }

@@ -3872,6 +3872,15 @@ body.is-disconnected .app-shell { filter: blur(2px) brightness(0.45); pointer-ev
    thirty minutes and the answer is "that time has passed". */
 .tool-lease-clock.is-ended { color: var(--amber); }
 
+/* The same lease, on the run's head line: the line in the stream is the event and moves up
+   with the steps — this is the state, so it stays where the run's name is while the time is
+   still running. */
+.trace-lease {
+  margin-left: 8px; color: var(--yellow);
+  font-family: var(--mono); font-size: 0.94em; font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 /* The same lease, on the run's head line. A trace with ten reasoning folds in it is taller
    than the window, so the card at its bottom was 287px below the head on a live run: the
    operator read the thinking about the lease and saw no lease (21 Nov). The head is the one

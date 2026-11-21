@@ -57,7 +57,11 @@ test('a wheel while the pane follows either reads back or stays, never takes a d
   assert.deepEqual(wheelIntent(false, 120, 300, atEnd), { action: 'stay' }, 'down while the slide lags still stays');
   assert.deepEqual(wheelIntent(false, -120, atEnd, atEnd), { action: 'read', to: 280 }, 'up takes the pane');
   assert.deepEqual(wheelIntent(true, 120, 100, atEnd), { action: 'read', to: 220 }, 'reading moves under the wheel');
-  assert.deepEqual(wheelIntent(true, 120, atEnd, atEnd), { action: 'stay' }, 'down at the end of a read pane stays');
+  // Down at the end of a pane the operator took: hand it back to the follow. Parking it at
+  // the last scroll position left the text short of the box's bottom edge, with a band of
+  // empty space under it, until something else moved the pane (21 Nov).
+  assert.deepEqual(wheelIntent(true, 120, atEnd, atEnd), { action: 'follow' }, 'down at the end does not resume the follow');
+  assert.deepEqual(wheelIntent(true, 120, atEnd - 1, atEnd), { action: 'follow' }, 'a wheel that cannot move is a request for the end');
   assert.deepEqual(wheelIntent(true, -120, 0, atEnd), { action: 'chat' }, 'up at the top is the conversation');
   assert.deepEqual(wheelIntent(false, -120, 0, 0), { action: 'chat' }, 'a pane with nothing to read back is the chat');
 });
