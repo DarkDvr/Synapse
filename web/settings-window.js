@@ -25,7 +25,7 @@ import { modelByRef, topEfforts } from './run-view.js';
 import { renderKeep } from './run-menu.js';
 import { renderToolUsage } from './tool-panels.js';
 import { schedulePermissionRender } from './pending.js';
-import { applyChatText, applyLanguage } from './ui-prefs.js';
+import { applyChatText, applyLanguage, applyLooks } from './ui-prefs.js';
 
 const missing = (name) => () => {
   throw new Error(`settings-window.js: ${name} was not wired at boot`);
@@ -284,6 +284,28 @@ export function onSettingsInput(e) {
     if (says) says.textContent = `${e.target.value} px`;
     return;
   }
+  // The look's three fields are the same kind of preview: a percentage says nothing
+  // about whether the chat still reads over the picture, so it is applied as it moves.
+  // The draft is not touched — Save is still the write.
+  if (['ui.background', 'ui.panelOpacity', 'ui.backgroundStrength'].includes(e.target?.dataset?.path)) {
+    const body = $('settingsBody');
+    const read = (path) => body?.querySelector(`[data-path="${path}"]`)?.value;
+    applyLooks({
+      ui: {
+        background: read('ui.background'),
+        panelOpacity: read('ui.panelOpacity'),
+        backgroundStrength: read('ui.backgroundStrength'),
+      },
+    });
+    if (e.target.type === 'range') {
+      const min = Number(e.target.min);
+      const max = Number(e.target.max);
+      e.target.style.setProperty('--fill', `${((Number(e.target.value) - min) / (max - min || 1)) * 100}%`);
+      const says = body?.querySelector(`[data-says="${e.target.dataset.path}"]`);
+      if (says) says.textContent = `${e.target.value} %`;
+    }
+    return;
+  }
   const el = e.target.closest('[data-prov]');
   if (!el) return;
   const p = providerAt(state.setProvSelected);
@@ -539,6 +561,7 @@ export async function saveSettings({ close = false, restart = false } = {}) {
     // for changes: this is the one place the file becomes the page's truth.
     applyChatText();
     applyLanguage();
+    applyLooks();
     // The Auto-Shutdown delays are read by the server on its next sweep, so a
     // saved change needs nothing here. A save is also the moment to re-draw the
     // cog: the waits it names may have moved.
@@ -682,6 +705,7 @@ export async function revertSavedSettings() {
   try {
     state.config = await api('PUT', '/api/config', state.settingsSnapshot);
     applyChatText();
+    applyLooks();
     state.setDraft = JSON.parse(JSON.stringify(state.config));
     state.setProvSelected = null;
     state.setKeyRevealed = false;
@@ -748,6 +772,7 @@ export function closeSettings({ force = false } = {}) {
   state.setDraft = null;
   // An unsaved chat size was a preview; closing the window puts back the saved one.
   applyChatText();
+  applyLooks();
   api('POST', '/api/settings/lock', { action: 'release' }).catch(() => {});
   state.settingsLock = null;
 }
@@ -762,5 +787,6 @@ export function revertSettings() {
   // A size that was typed but not saved must go back too: the preview is the only
   // part of this form that changes the page before Save.
   applyChatText();
+  applyLooks();
   toast('Changes Discarded', 'The form shows what is saved in the config file.');
 }

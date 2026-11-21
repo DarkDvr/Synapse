@@ -3444,37 +3444,19 @@ body:has(.modal-backdrop:not([hidden])) { overflow: hidden; }
 
 /* ── 16. faint grounds ──────────────────────────────────────────────────── */
 
-/* The central pane is one flat colour. It carried the framed photograph for a
-   while; the operator's call was that a background belongs to the sidebar only,
-   and that the working area should be a single dark plane so the cards and the
-   chat are the only things with edges. */
+/* The central pane's base colour, for the one state that has no picture (below). */
 .control-room .main-content { background: #0e161e; }
-/* The sidebar's ground, used exactly as drawn: a 259x931 image made for this
-   panel, at 100%, no overlay. `100% 100%` rather than `cover` so it fills the
-   column at any window height without cropping the ribbon's curve — a soft
-   abstract tolerates the stretch and cannot lose an edge.
-   `body.dark .sidebar`, not `.sidebar`: the locked baseline sets that background
-   with a two-class selector and a shorthand, which would reset the image. */
-body.dark .sidebar {
-  background-image: url("/assets/bg-left2.png");
-  background-size: 100% 100%;
-  background-repeat: no-repeat;
-  background-position: center;
-}
 
 /* ── the working area's ground (21 Nov) ──────────────────────────────────
-   The operator asked for a reference ground across the whole centre/right panel,
-   with the conversation, the role cards and the plan laid over it — a little
-   transparent, so the image reads between them and never through the prose.
+   One picture behind the whole centre/right area, and one translucent surface over
+   it for the conversation, the role cards and the plan — the same colour at the same
+   opacity, so the three read as one material rather than three shades of grey.
 
-   Three strengths, and they are the whole design:
-     --panel-fill   how opaque a panel is over the ground. Enough to keep a card's
-                    own text crisp, thin enough that the image is felt in the gaps.
-     --chat-veil    the transcript only. Prose over a picture is a contrast problem,
-                    so the conversation is darker than the panels it sits between.
-     the veil in the stage gradient: the image is at full strength nowhere, because
-                    a background that competes with a coloured status pill is worse
-                    than no background.
+   Two numbers decide it, and both are settings (Settings → General → Looks):
+     --panel-alpha       how opaque that surface is over the picture,
+     --ground-strength   how much of the picture the stage keeps.
+   The rail carries its own picture (a vertical ribbon, made for a column) with the
+   same surface over it, so it is as transparent as everything else.
 
    The ground is a background on `.main-content` itself, never a pseudo-element.
    `.chat-dock` is a grid whose children include absolutely-positioned ones (the
@@ -3483,46 +3465,59 @@ body.dark .sidebar {
    the whole bottom panel jumped to the top (21 Nov). A background cannot do that. */
 
 :root {
-  --panel-fill: rgba(18, 21, 26, 0.8);
-  --chat-veil: rgba(9, 11, 15, 0.72);
+  --panel-alpha: 0.94;
+  --ground-strength: 0.66;
 }
 
 .control-room .main-content {
   background-color: #05070a;
-  /* The gradient is the stage's own veil: top a little lighter than the bottom, so
-     the panel stack has depth and the image never sits at full strength anywhere.
-     The stops are the transmission the operator asked for, not a taste: 0.34 and
-     0.60 leave 82% and 50% of the light, so the ground is 20% darker than the first
-     cut (16:15, "darker by about 20%") and the panels' share of it darkens with it. */
-  background-image: linear-gradient(rgba(5, 7, 10, 0.34), rgba(5, 7, 10, 0.6)), var(--ground, none);
+  /* The stage's own veil: a touch lighter at the top so the panel stack has depth, and
+     multiplied down the page so the picture is never at full strength under a card. */
+  background-image:
+    linear-gradient(
+      rgba(5, 7, 10, calc(1 - var(--ground-strength))),
+      rgba(5, 7, 10, calc(1 - var(--ground-strength) * 0.6))
+    ),
+    var(--ground, none);
   background-size: auto, cover;
   background-position: center, center;
   background-repeat: no-repeat, no-repeat;
 }
 
-/* The panels, laid over it. One fill for all three, so they read as the same kind
-   of surface; the borders and corners they already have are untouched. `.rail-panel`
-   rather than every `.panel`: the plan, the tools and the probe are the panels in
-   this area, and a dialog is not part of the picture. */
+/* One surface for the conversation, the cards and the plan. */
 .chat-dock,
 .role-card,
-.rail-panel { background: var(--panel-fill); }
+.rail-panel { background: rgba(11, 13, 18, var(--panel-alpha)); }
 
-/* The conversation is the one surface that must stay quiet. A flat colour, not a
-   gradient: the transcript scrolls, and a gradient would move with the words. */
-.chat-scroll { background: var(--chat-veil); }
+/* The composer is part of that surface: its border is the only line between it and the
+   transcript, the same way the panel's edge is. The text box inside stays opaque. */
+.composer { background: transparent; }
 
-/* The controls keep their place in the panel, a shade more solid than the panel
-   itself; the text box inside stays opaque — words the operator types are never
-   laid over a picture. */
-.composer { background: rgba(26, 28, 33, 0.92); }
+/* The rail's own picture, with the same surface over it. `cover` rather than `100% 100%`:
+   the reference is a tall portrait, and stretching it into a 256px column would smear the
+   ribbon. The crop takes the empty right side, which is why it is a left-rail image. */
+body.dark .sidebar {
+  background-image:
+    linear-gradient(rgba(11, 13, 18, var(--panel-alpha)), rgba(11, 13, 18, var(--panel-alpha))),
+    url("/assets/bg-left.jpg");
+  background-size: cover, cover;
+  background-position: center, center;
+  background-repeat: no-repeat, no-repeat;
+}
 
-/* Which ground. `bg-center.jpg` is blue and teal only, and its empty middle is the
-   chat's middle; `bg-center2.jpg` is the neural field with orange and green nodes,
-   which this palette reserves for meaning (amber = needs you, green = allowed). */
+/* Which picture. */
 body[data-ground="nebula"] { --ground: url("/assets/bg-center.jpg"); }
 body[data-ground="neural"] { --ground: url("/assets/bg-center2.jpg"); }
 body[data-ground="none"] { --ground: none; }
+
+/* None: the dark blue-grey the app had before the pictures, exactly — the stage, the
+   panels and the rail, with the composer's own shade back. */
+body[data-ground="none"] .control-room .main-content { background: #0e161e; background-image: none; }
+body[data-ground="none"] .chat-dock,
+body[data-ground="none"] .role-card,
+body[data-ground="none"] .rail-panel { background: var(--surface); }
+body[data-ground="none"] .composer { background: #1a1c20; }
+body[data-ground="none"] .sidebar { background-image: none; background-color: #191b1f; }
 
 /* ── one corner, everywhere ──────────────────────────────────────────────
    Every panel used its own radius - 16 on the chat dock, 14 on the plan, 12 in

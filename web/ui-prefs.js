@@ -24,6 +24,62 @@ export function chatTextPx(value) {
   return Math.min(CHAT_TEXT_MAX, Math.max(CHAT_TEXT_MIN, Math.round(n)));
 }
 
+// ── the look: one picture, one panel, two numbers ───────────────────────
+//
+// The working area carries a picture; the chat, the role cards and the plan are one
+// translucent surface over it. Two numbers decide the result — how opaque that surface
+// is, and how strong the picture is on the stage — and one choice says which picture,
+// or none at all (the dark blue-grey it was before). They live here for the same reason
+// the text size does: the Settings pane draws them and the page applies them, at boot,
+// on every change in the field, and after Save.
+
+export const GROUNDS = [
+  { v: 'nebula', l: 'Nebula' },
+  { v: 'neural', l: 'Neural' },
+  { v: 'none', l: 'None (dark blue-grey)' },
+];
+
+export const PANEL_OPACITY_DEFAULT = 94;
+export const PANEL_OPACITY_MIN = 70;
+export const PANEL_OPACITY_MAX = 98;
+export const GROUND_STRENGTH_DEFAULT = 66;
+export const GROUND_STRENGTH_MIN = 20;
+export const GROUND_STRENGTH_MAX = 100;
+
+const clamp = (n, lo, hi) => Math.min(hi, Math.max(lo, n));
+
+/** A number, or NaN for "not set" — the settings form hands a missing path back as an
+ *  empty string, and `Number('')` is 0, which would read as "the minimum". */
+const toNumber = (value) => (value === '' || value === null || value === undefined ? NaN : Number(value));
+
+/** How opaque the panels are over the picture, in percent. */
+export function panelOpacity(value) {
+  const n = toNumber(value);
+  return Number.isFinite(n) ? clamp(n, PANEL_OPACITY_MIN, PANEL_OPACITY_MAX) : PANEL_OPACITY_DEFAULT;
+}
+
+/** How strong the picture is on the stage, in percent. */
+export function groundStrength(value) {
+  const n = toNumber(value);
+  return Number.isFinite(n) ? clamp(n, GROUND_STRENGTH_MIN, GROUND_STRENGTH_MAX) : GROUND_STRENGTH_DEFAULT;
+}
+
+/**
+ * Apply the look.
+ *
+ * One attribute and two custom properties: the stylesheet owns what they mean, this
+ * only hands it the chosen numbers. Called at boot, on every change in the Looks pane
+ * (so the operator judges it while choosing) and after a save.
+ */
+export function applyLooks(config = state.config) {
+  const ui = config?.ui || {};
+  const ground = GROUNDS.some((g) => g.v === ui.background) ? ui.background : GROUNDS[0].v;
+  document.body.dataset.ground = ground;
+  const root = document.documentElement.style;
+  root.setProperty('--panel-alpha', (panelOpacity(ui.panelOpacity) / 100).toFixed(2));
+  root.setProperty('--ground-strength', (groundStrength(ui.backgroundStrength) / 100).toFixed(2));
+}
+
 /**
  * Apply the chat's text size, and nothing else's.
  *

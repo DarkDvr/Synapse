@@ -268,7 +268,7 @@ import { askHeadNote, answerTimeline, permissionNote } from './ask-note.js';
 import { AUTOMATION_DEFAULTS, AUTOMATION_ROWS, anyAutomationOn } from './automation.js';
 import { reconcileRuns } from './runs-sync.js';
 import { SETTINGS_TABS, PANES, panesWiring } from './settings-panes.js';
-import { applyChatText, applyLanguage } from './ui-prefs.js';
+import { applyChatText, applyLanguage, applyLooks } from './ui-prefs.js';
 import { installChatZoom } from './chat-zoom.js';
 
 
@@ -2821,6 +2821,7 @@ async function bootPage() {
   state.config = await api('GET', '/api/config').catch(() => null);
   applyChatText();
   applyLanguage();
+  applyLooks();
   renderLlmStatus();
   // every new session starts Single; an opened session sets its own mode
   state.mode = 'single';

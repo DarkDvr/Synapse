@@ -22,6 +22,17 @@ export const CHAT_TEXT_MAX = 20;
 /** One notch of the slider, and one notch of Ctrl+wheel or Ctrl+plus. */
 export const CHAT_TEXT_STEP = 1;
 
+/** The pictures the working area can carry — the same names web/ui-prefs.js offers. */
+export const BACKGROUNDS = ['nebula', 'neural', 'none'];
+/** The panels' opacity over the picture, in percent. Below the floor the prose sits on
+ *  the image; above the ceiling the picture is not there at all. */
+export const PANEL_OPACITY_MIN = 70;
+export const PANEL_OPACITY_MAX = 98;
+/** The picture's strength on the stage, in percent. The floor keeps a trace of it; the
+ *  ceiling is the image as drawn, which is brighter than this interface wants. */
+export const GROUND_STRENGTH_MIN = 20;
+export const GROUND_STRENGTH_MAX = 100;
+
 /** The interface languages Synapse actually has strings for. English only until the
  *  Russian translation lands; `web/app.js` builds its selector from the same list. */
 const UI_LANGUAGES = ['en'];
@@ -168,6 +179,15 @@ export const DEFAULTS = {
     // Off returns the old plain-text note; it is a rendering switch, so changing it
     // takes effect on the next render, not a restart.
     workerCards: true,
+    // The picture behind the working area, how opaque the panels are over it, and how
+    // strong it is. `nebula` is the blue-and-teal one; `neural` is the field with
+    // orange and green nodes; `none` is the dark blue-grey the app had before. The
+    // numbers are percent: 94% opaque is the surface the chat, the cards and the plan
+    // share, and 66% strength is the stage's share of the image (see web/ui-prefs.js
+    // and the "ground" section of web/synapse.css).
+    background: 'nebula',
+    panelOpacity: 94,
+    backgroundStrength: 66,
   },
   // Turning the machine off when the Architect has finished and said so. Off by
   // default, because a PC going down is the one action Synapse must never take on
@@ -404,6 +424,22 @@ export function normalize(raw) {
   {
     const picked = String(cfg.ui.language ?? '').trim().toLowerCase();
     cfg.ui.language = UI_LANGUAGES.includes(picked) ? picked : DEFAULTS.ui.language;
+  }
+  // The look: which picture, how opaque the panels over it, how strong the picture is.
+  // Clamped here as well as in the form — a hand-edited config must not make the chat
+  // see-through enough to lose its text, and an unknown picture name falls back rather
+  // than leaving the page with no background at all.
+  {
+    const picked = String(cfg.ui.background ?? '').trim().toLowerCase();
+    cfg.ui.background = BACKGROUNDS.includes(picked) ? picked : DEFAULTS.ui.background;
+    const panel = Number(cfg.ui.panelOpacity);
+    cfg.ui.panelOpacity = Number.isFinite(panel)
+      ? Math.min(PANEL_OPACITY_MAX, Math.max(PANEL_OPACITY_MIN, Math.round(panel)))
+      : DEFAULTS.ui.panelOpacity;
+    const strength = Number(cfg.ui.backgroundStrength);
+    cfg.ui.backgroundStrength = Number.isFinite(strength)
+      ? Math.min(GROUND_STRENGTH_MAX, Math.max(GROUND_STRENGTH_MIN, Math.round(strength)))
+      : DEFAULTS.ui.backgroundStrength;
   }
   // The timed shutdown. A value in minutes, kept inside a range where the operator
   // can still act: under a minute the countdown is the warning, and over three

@@ -9,7 +9,21 @@ import { esc } from './format.js';
 import { readPath } from './settings-data.js';
 import { setField, setSlider, setSelect, setCheck, setGroup } from './settings-form.js';
 import { DONE_SOUNDS, DONE_SOUND_DEFAULT, doneSoundName } from './notify.js';
-import { CHAT_TEXT_DEFAULT, CHAT_TEXT_MIN, CHAT_TEXT_MAX, CHAT_TEXT_STEP, chatTextPx, LANGUAGES } from './ui-prefs.js';
+import {
+  CHAT_TEXT_DEFAULT,
+  CHAT_TEXT_MIN,
+  CHAT_TEXT_MAX,
+  CHAT_TEXT_STEP,
+  chatTextPx,
+  LANGUAGES,
+  GROUNDS,
+  PANEL_OPACITY_MIN,
+  PANEL_OPACITY_MAX,
+  GROUND_STRENGTH_MIN,
+  GROUND_STRENGTH_MAX,
+  panelOpacity,
+  groundStrength,
+} from './ui-prefs.js';
 
 // Three things in this module come from app.js: the two halves of the update page,
 // and whether an update check is running. They are wired once at boot rather than
@@ -320,6 +334,39 @@ function settingsGeneral(c) {
     // Notices lived in their own tab until 2 Nov. One setting does not need a
     // tab, and a tab that holds one setting is a place the operator forgets to
     // look. Same fields, same words.
+    setGroup(
+      'Looks',
+      setSelect(c, 'Background', 'ui.background', GROUNDS, {
+        value: String(readPath(c, 'ui.background') || GROUNDS[0].v),
+        hint:
+          'The picture behind the working area, from the assets shipped with the app. Nebula is the ' +
+          'blue-and-teal one; Neural is the field with orange and green nodes; None keeps the dark ' +
+          'blue-grey the app had before.',
+      }) +
+        setSlider(c, 'Panel Opacity', 'ui.panelOpacity', {
+          min: PANEL_OPACITY_MIN,
+          max: PANEL_OPACITY_MAX,
+          step: 1,
+          unit: '%',
+          value: panelOpacity(readPath(c, 'ui.panelOpacity')),
+          hint:
+            'How opaque the conversation, the role cards and the plan are over the picture — one surface ' +
+            'for all three. Lower lets more of the picture through, and asks more of the text.',
+        }) +
+        setSlider(c, 'Background Strength', 'ui.backgroundStrength', {
+          min: GROUND_STRENGTH_MIN,
+          max: GROUND_STRENGTH_MAX,
+          step: 2,
+          unit: '%',
+          value: groundStrength(readPath(c, 'ui.backgroundStrength')),
+          hint:
+            'How strong the picture is on the stage behind the panels. The panels keep their own share of ' +
+            'it, so this darkens them with it.',
+        }),
+      undefined,
+      'One picture behind everything, one translucent surface over it. Both sliders apply as you drag; Save is ' +
+        'still the write.',
+    ),
     setGroup(
       'Finished Work',
       setSelect(c, 'Sound', 'notify.doneSound', DONE_SOUNDS, {
