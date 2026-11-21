@@ -3490,8 +3490,11 @@ body.dark .sidebar {
 .control-room .main-content {
   background-color: #05070a;
   /* The gradient is the stage's own veil: top a little lighter than the bottom, so
-     the panel stack has depth and the image never sits at full strength anywhere. */
-  background-image: linear-gradient(rgba(5, 7, 10, 0.18), rgba(5, 7, 10, 0.5)), var(--ground, none);
+     the panel stack has depth and the image never sits at full strength anywhere.
+     The stops are the transmission the operator asked for, not a taste: 0.34 and
+     0.60 leave 82% and 50% of the light, so the ground is 20% darker than the first
+     cut (16:15, "darker by about 20%") and the panels' share of it darkens with it. */
+  background-image: linear-gradient(rgba(5, 7, 10, 0.34), rgba(5, 7, 10, 0.6)), var(--ground, none);
   background-size: auto, cover;
   background-position: center, center;
   background-repeat: no-repeat, no-repeat;
