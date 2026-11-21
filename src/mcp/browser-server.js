@@ -18,8 +18,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { DATA_DIR, WEB_DIR, PROJECTS_ROOT } from '../paths.js';
 import { artifactDir } from '../browser/artifacts.js';
-import { clickSummary, createBrowser, findEdge } from '../browser/browser.js';
-import { formatBytes } from '../browser/downloads.js';
+import { clickSummary, createBrowser, findEdge, savedAnswer } from '../browser/browser.js';
+import { formatBytes, safeDownloadName, uniqueDownloadPath } from '../browser/downloads.js';
 import { checkUrl, hostOf, localPageAllowed } from '../browser/allow.js';
 import { askOperator } from '../browser/handoff.js';
 import { watchForSignIn } from '../browser/session-watch.js';
@@ -115,7 +115,17 @@ function send(message) {
   process.stdout.write(`${JSON.stringify(message)}\n`);
 }
 const result = (id, payload) => send({ jsonrpc: '2.0', id, result: payload });
-const toolText = (id, text, isError = false) => result(id, { content: [{ type: 'text', text }], isError });
+// The call in flight, for the one line that says how long it took and whether it worked. A
+// tool that answers nothing is invisible in the logs; a tool that answers "click 41ms failed"
+// is a bug with a shape.
+let timing = null;
+const toolText = (id, text, isError = false) => {
+  if (timing) {
+    process.stderr.write(`tool ${timing.name} ${Date.now() - timing.began}ms ${isError ? 'failed' : 'ok'}\n`);
+    timing = null;
+  }
+  return result(id, { content: [{ type: 'text', text }], isError });
+};
 
 // ── helpers ──────────────────────────────────────────────────────
 const stamp = () => new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
@@ -247,6 +257,10 @@ async function handle(msg) {
     case 'tools/call': {
       const name = String(params?.name || '');
       const args = params?.arguments || {};
+      // Every call is timed, and every call answers in words. Three clicks came back with no
+      // text at all on 22 Nov, which leaves a model with nothing to act on; the log line is
+      // how the next one is found instead of guessed at.
+      timing = { name, began: Date.now() };
       try {
         if (!cfg.enabled) {
           return toolText(id, 'SynaBrowse is switched off. The operator turns it on in Settings > Browser.', true);
@@ -357,14 +371,44 @@ async function handle(msg) {
               rec = active ? await browser.waitForDownload({ since: active.startedAt, graceMs: 1000, timeoutMs }) : null;
             }
             if (!rec) {
+              // The click may have been answered by a wall instead of a file: say which.
+              const wall = await browser.read({ maxChars: 800, links: 0 }).then((p) => p?.wall || '').catch(() => '');
               return toolText(
                 id,
-                'No download started. If the file is behind a button, click it (click waits for the download); ' +
-                  'if it is a direct address, call download with that url.',
+                wall
+                  ? `No download started: the page is now ${wall}. A person has to clear it — use handoff, ` +
+                      'or ask the operator to take the download from here.'
+                  : 'No download started. If the file is behind a button, click it (click waits for the download); ' +
+                      'if it is a direct address, call download with that url, or save to fetch it through the page.',
                 true,
               );
             }
             return toolText(id, downloadAnswer(rec), rec.state === 'canceled' || rec.state === 'interrupted');
+          }
+          case 'save': {
+            const url = String(args.url || '').trim();
+            if (!url) return toolText(id, 'save needs a url.', true);
+            guard(url);
+            const dir = browser.saveDir && browser.saveDir();
+            if (!dir) {
+              return toolText(id, 'This browser session is not inside a project, so there is nowhere to put a file.', true);
+            }
+            const timeoutMs = Math.min(300_000, Math.max(1000, Number(args.timeoutMs) || 120_000));
+            const rec = await browser.saveFrom(url, { timeoutMs });
+            const answer = savedAnswer(rec);
+            if (answer?.isError) return toolText(id, answer.text, true);
+            fs.mkdirSync(dir, { recursive: true });
+            const name = safeDownloadName(
+              rec.name || decodeURIComponent((String(url).split('?')[0].split('/').pop() || '').slice(0, 120)) || 'download',
+            );
+            const file = uniqueDownloadPath(dir, name);
+            fs.writeFileSync(file, Buffer.from(String(rec.b64 || ''), 'base64'));
+            const bytes = fs.statSync(file).size;
+            const rel = path.relative(START_DIR, file).replace(/\\/g, '/');
+            noteUsed(url);
+            process.stderr.write(`save ${url} -> ${rel} (${bytes} bytes)\n`);
+            const done = savedAnswer({ ...rec, size: bytes, name: path.basename(file) || name }, { dir, rel });
+            return toolText(id, done.text, done.isError);
           }
           case 'type':
             await browser.type({ text: args.text, selector: args.selector || null, submit: args.submit === true });
@@ -482,8 +526,12 @@ async function handle(msg) {
             return toolText(id, `Unknown tool: ${name}`, true);
         }
       } catch (err) {
-        process.stderr.write(`${name} failed: ${err.message}\n`);
-        return toolText(id, `${name} failed: ${err.message}`, true);
+        // An error with no message used to answer with an empty string — a model has nothing
+        // to act on, and the log had a blank line where the reason should be (22 Nov).
+        const why = String(err?.message || err?.description || err || '').trim()
+          || 'the browser did not say why — read the page and try again';
+        process.stderr.write(`${name} failed: ${why}\n`);
+        return toolText(id, `${name} failed: ${why}`, true);
       }
     }
 

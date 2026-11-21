@@ -527,3 +527,23 @@ the page's own cookies** (a direct file address often needs the session); **fram
 for widget iframes (the DownloadPopUp); and a download journey that says plainly when a site
 demands a human (a captcha), so the model hands off instead of flailing.
 
+### And then they were built (22 Nov)
+
+- **`save`** fetches the address *in the page's own context* (`fetch` with
+  `credentials: 'include'`), so the request carries the session's cookies, the site's origin
+  and the browser's headers — the three things a Node-side fetch cannot supply. It writes
+  under `.project/downloads` and answers the path. Measured on the Nexus page: a real file
+  (`favicon.ico`, 15086 bytes) came back in **84 ms**, and `…&file_id=245273&action=download`
+  was refused as **"answered a page, not a file (text/html, 222 KB)"** with the next move to
+  make. That refusal is the point: an address that ends in a file name is not a file.
+- **Frames are listed.** `read` names each visible iframe with its src, size and the
+  coordinate a click uses, because a widget's words are not in the parent document and
+  navigating to the widget's src is what lost the turn.
+- **A bot check is named, never worked around.** `botWall()` recognises a captcha or
+  "checking your browser" wall from the page's text and its frame/script sources; the answer
+  says a person has to clear it and points at `handoff`.
+- **A call always answers.** Every tool call is timed to stderr (`tool click 41ms failed`),
+  and an error with no message now says "the browser did not say why" instead of an empty
+  string — three calls answered with nothing in the Nexus run.
+
+

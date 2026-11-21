@@ -31,18 +31,6 @@
           "apiKey": "",
           "models": [
             {
-              "id": "ornith-1.5-35b-A3B-APEX-Quality-Heretic-120k",
-              "name": "ornith-1.5-35b-A3B-APEX-Quality-Heretic-120k",
-              "context": 122880,
-              "output": 32000
-            },
-            {
-              "id": "ornith-1.5-35b-A3B-APEX-Quality-Heretic-262k",
-              "name": "ornith-1.5-35b-A3B-APEX-Quality-Heretic-262k",
-              "context": 262144,
-              "output": 32000
-            },
-            {
               "id": "qwen3.8-flash-next-IQ2_XS-GSQ-126k-uncensored",
               "name": "qwen3.8-flash-next-IQ2_XS-GSQ-126k-uncensored",
               "context": 126976,

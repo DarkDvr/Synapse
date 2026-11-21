@@ -34,15 +34,20 @@ export const TOOLS = [
   {
     name: 'read',
     description:
-      'Read the current page: its text as a person sees it, and the links that can be clicked, ' +
-      'each with its address and its x/y. The text is cut at maxChars — 6000 by default, ' +
-      '100000 at most — and a cut is marked in the answer with how much was left out. ' +
+      'Read the current page: its text as a person sees it, the links that can be clicked (each ' +
+      'with its address and x/y), and the **buttons, tabs and rows that behave clickable** (each ' +
+      'with the x/y a click uses as it is — not everything clickable is a link). Widgets in ' +
+      'their own frame are named with their src and the coordinate to click inside them, because ' +
+      'a frame\'s words are not in this page\'s text. ' +
+      'The text is cut at maxChars — 6000 by default, 100000 at most — and a cut is marked in ' +
+      'the answer with how much was left out. ' +
       'mode "article" (default) picks the main prose and drops the page around it; mode "text" ' +
       'keeps the whole page in the order it lays out, one line per block, so authors, dates ' +
       'and each comment keep their own lines — use it for a thread, a forum or a profile. ' +
       'For a long page (a thread with hundreds of comments) pass full: true instead: the ' +
       'harness scrolls to the end, saves the whole text in the project, and answers its path, ' +
-      'so you can read or grep it in pieces rather than stitching several reads together.',
+      'so you can read or grep it in pieces rather than stitching several reads together. ' +
+      'It also says when the page is a sign-in wall, or a bot check a human has to clear.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -58,8 +63,11 @@ export const TOOLS = [
     name: 'click',
     description:
       'Click something on the page: a CSS selector, the visible text of a link or button, or an ' +
-      'x/y pair from `read`. Clicks are synthetic — the operator\'s cursor never moves. Answers the ' +
-      'address afterwards, so you can see whether it navigated.',
+      'x/y pair from `read`. Anything that behaves clickable counts — a button, a tab, a link, ' +
+      'or a row with a pointer cursor and a handler — and a point inside one is clicked where ' +
+      'it was asked. Clicks are synthetic — the operator\'s cursor never moves. Answers the ' +
+      'address afterwards and, when the click was moved to find a control, how far it landed ' +
+      'from where you asked.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -196,6 +204,28 @@ export const TOOLS = [
         url: { type: 'string', description: 'A direct http(s) file address. Leave it out to wait for a download already in flight.' },
         timeoutMs: { type: 'integer', description: 'How long to wait for the file (1000-600000, default 120000).', minimum: 1000, maximum: 600000 },
       },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'save',
+    description:
+      'Save what a URL returns into the project, under .project/downloads, and answer its path. ' +
+      'The fetch runs **inside the page**, so it carries the session\'s cookies and the site\'s ' +
+      'own origin — the way a direct file address works in the tab and not from anywhere else. ' +
+      'Use it for a file address you have (a "download" route, an API URL, a link from a page), ' +
+      'especially on a site you are signed in to. It says plainly when the address answers a ' +
+      '**page** instead of a file: a route like "…&action=download" often returns the page it ' +
+      'belongs to, and then the page\'s own download control is the way through (use click — a ' +
+      'click waits for the file). A captcha or "checking your browser" wall is reported rather ' +
+      'than worked around: a human solves that, with handoff.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        url: { type: 'string', description: 'The http(s) address to fetch through the page.' },
+        timeoutMs: { type: 'integer', description: 'How long to wait for it (1000-300000, default 120000).', minimum: 1000, maximum: 300000 },
+      },
+      required: ['url'],
       additionalProperties: false,
     },
   },

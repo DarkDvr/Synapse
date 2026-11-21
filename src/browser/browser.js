@@ -17,7 +17,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { connect, connectBrowser, waitForPort, readPort } from './cdp.js';
-import { safeDownloadName, uniqueDownloadPath } from './downloads.js';
+import { safeDownloadName, uniqueDownloadPath, formatBytes } from './downloads.js';
 import { screenState, restoreFocus, hideBrowserWindow } from './handoff.js';
 
 const EDGE_CANDIDATES = [
@@ -35,8 +35,64 @@ export function findEdge() {
   return null;
 }
 
-const HIDDEN_FLAGS = [
-  '--no-first-run',
+/**
+ * A page that wants a person, not a tool: a captcha, a "checking your browser" challenge, a
+ * "verify you are human" interstitial.
+ *
+ * Two reasons this is a named answer rather than something the model discovers: a site's bot
+ * check is the one wall the harness must not try to get around (a human solves it or the work
+ * waits), and a model driving a captcha is a model clicking into a dead end for ten minutes
+ * (22 Nov, Nexus's slow-download page). The sentence it gets says which kind of wall it is and
+ * that handoff is the way through it.
+ */
+export function botWall(text, srcs = '') {
+  const said = `${String(text || '')} ${String(srcs || '')}`;
+  if (/(recaptcha|hcaptcha|cf-turnstile|challenge-platform|checking your browser|verify (that )?you are (a )?human|are you a robot|cf-challenge)/i.test(said)) {
+    return 'a bot check — a captcha or a “checking your browser” wall';
+  }
+  return '';
+}
+
+/** What a saved file's answer says: path, size, type, and whether it was a page after all. */
+export function savedAnswer(rec, { dir = '', rel = '' } = {}) {
+  if (!rec) return null;
+  if (rec.tooBig) {
+    return {
+      text: `That is ${formatBytes(rec.tooBig)} — larger than a fetch may pull through the page. ` +
+        'Use download with the address instead: a real download streams to disk without the whole file in memory.',
+      isError: true,
+    };
+  }
+  if (rec.ok === false) {
+    const said = String(rec.said || '').trim();
+    return {
+      text: `The address answered ${rec.status || 'an error'}${said ? `: “${said}”` : ''}. ` +
+        'Nothing was saved. If that page is the one that holds the file, click its download control instead — ' +
+        'a file address that answers a page is usually a route that needs the site’s own button.',
+      isError: true,
+    };
+  }
+  const type = String(rec.type || '');
+  const size = formatBytes(rec.size || 0);
+  const looksHtml = /text\/html/i.test(type) || (rec.head && /^</.test(String(rec.head).trim()));
+  if (looksHtml) {
+    const head = String(rec.head || '').replace(/\s+/g, ' ').trim().slice(0, 200);
+    return {
+      text: `That address answered a **page**, not a file** (${type || 'html'}, ${size})**${head ? `: “${head}…”` : ''}. ` +
+        'Nothing was saved: a route like “…&action=download” often returns the page it belongs to. ' +
+        'Find the page’s own download control with `read` and click it — a click waits for the file.',
+      isError: true,
+    };
+  }
+  const where = rel || (dir ? String(dir) : '');
+  return {
+    text: `Saved ${rec.name || 'the file'} (${size}${type ? `, ${type}` : ''}) to ${where || 'the project’s downloads folder'}.` +
+      (rec.from ? `\nIt came from ${rec.from}.` : ''),
+    isError: false,
+  };
+}
+
+const HIDDEN_FLAGS = [  '--no-first-run',
   '--no-default-browser-check',
   '--disable-session-crashed-bubble',
   // The bubble the operator met at the top-left of the primary screen after a kill:
@@ -336,6 +392,63 @@ export function createBrowser({
     return [...downloads.values()].sort((a, b) => a.startedAt - b.startedAt);
   };
 
+  /**
+   * Save a URL's bytes into the project, fetching **through the page**.
+   *
+   * The request runs in the page's own context (`fetch` with `credentials: 'include'`), so it
+   * carries the session's cookies, the site's origin and the browser's own headers — the
+   * three things a Node-side fetch cannot supply, and the reason a direct file address that
+   * works in the tab answers "a page" or 403 from anywhere else. An 86 KB archive from a
+   * site behind a sign-in is exactly the case this exists for (22 Nov).
+   *
+   * What comes back is either bytes (base64 over the wire, capped) or the page the address
+   * really points at. "An address that ends in a file name is not a file" is the trap this
+   * refuses to fall into silently: an HTML answer is reported as an HTML answer, with the
+   * first of its text, so a model can see it was given a page.
+   */
+  async function saveFrom(url, { timeoutMs = 120_000, maxBytes = 48 * 1024 * 1024 } = {}) {
+    const p = await start();
+    used();
+    const got = await p.evaluate(`(async () => {
+      const url = ${JSON.stringify(String(url))};
+      try {
+        const res = await fetch(url, { credentials: 'include', cache: 'no-store' });
+        const type = res.headers.get('content-type') || '';
+        const disposition = res.headers.get('content-disposition') || '';
+        const named = disposition.match(/filename\\*?=(?:UTF-8'')?"?([^";]+)/i);
+        if (!res.ok) {
+          let said = '';
+          try { said = (await res.text()).replace(/<[^>]+>/g, ' ').replace(/\\s+/g, ' ').trim().slice(0, 240); } catch { /* no body to read */ }
+          return { ok: false, status: res.status, type, said };
+        }
+        const buf = await res.arrayBuffer();
+        const bytes = new Uint8Array(buf);
+        if (bytes.length > ${Number(maxBytes)}) return { ok: false, tooBig: bytes.length, type };
+        let binary = '';
+        const step = 0x8000;
+        for (let i = 0; i < bytes.length; i += step) binary += String.fromCharCode.apply(null, bytes.subarray(i, i + step));
+        const head = new TextDecoder().decode(bytes.subarray(0, 400));
+        return {
+          ok: true,
+          status: res.status,
+          type,
+          size: bytes.length,
+          name: named ? decodeURIComponent(named[1]) : '',
+          from: res.url || url,
+          head: /</.test(head) ? head.replace(/\\s+/g, ' ').slice(0, 160) : '',
+          b64: btoa(binary),
+        };
+      } catch (err) {
+        return { ok: false, error: String((err && err.message) || err) };
+      }
+    })()`, { timeoutMs });
+    if (!got) throw new Error('the page did not answer the fetch');
+    return got;
+  }
+
+  /** Where a saved file goes, under the project. Null when the server has no project. */
+  const saveDir = () => downloadDir;
+
   const launchArgs = ({ position }) => [
     `--user-data-dir=${profile}`,
     '--remote-debugging-port=0',
@@ -606,10 +719,32 @@ export function createBrowser({
         addControl(el);
       }
 
+      // A widget in its own frame: its words are not in this document, so it is named with
+      // the coordinate a click uses. A download popup, a payment box and a map are all this,
+      // and navigating to the frame's src is what a model tried and lost a turn to (22 Nov).
+      const frames = [...document.querySelectorAll('iframe')].map((f) => {
+        const box = f.getBoundingClientRect();
+        if (box.width < 40 || box.height < 40) return null;
+        if (box.bottom < 0 || box.top > innerHeight) return null;
+        return {
+          name: clean(f.getAttribute('title') || f.name || '') || 'a frame with no name',
+          src: String(f.src || '').slice(0, 160),
+          at: [Math.round(box.x + box.width / 2), Math.round(box.y + box.height / 2)],
+          size: [Math.round(box.width), Math.round(box.height)],
+        };
+      }).filter(Boolean).slice(0, 6);
+
+      // The sources of the page's frames and scripts: what a bot check is built out of.
+      const srcs = [...document.querySelectorAll('iframe[src],script[src]')]
+        .map((el) => String(el.src || '')).join(' ').slice(0, 4000);
+
       // total is what the page held, chars is what this read returns: the tool says
       // the difference so a model knows it is reading a cut (13 Nov).
-      return { url: location.href, title: document.title, text, links: anchor, controls: controls.slice(0, 40), wall, chars: text.length, total: full.length };
+      return { url: location.href, title: document.title, text, links: anchor, controls: controls.slice(0, 40), frames, srcs, wall, chars: text.length, total: full.length };
     })()`);
+    // A captcha is the one wall a tool must not try to get past. Named here, in Node, so the
+    // sentence can be tested without a browser.
+    page.wall = page.wall || botWall(page.text, page.srcs);
     return page;
   }
 
@@ -1102,5 +1237,5 @@ export function createBrowser({
   }, 30000);
   reaper.unref?.();
 
-  return { start, running, alive, pageState, goto, read, captureFull, click, type, press, wait, scroll, screenshot, watch, tabs, clearSite, hideWindow, stop, downloadFrom, waitForDownload, downloads: downloadList, profile };
+  return { start, running, alive, pageState, goto, read, captureFull, click, type, press, wait, scroll, screenshot, watch, tabs, clearSite, hideWindow, stop, downloadFrom, waitForDownload, saveFrom, saveDir, downloads: downloadList, profile };
 }
