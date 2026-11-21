@@ -59,6 +59,42 @@ export function paneTrim(text) {
   return s.slice(at);
 }
 
+/**
+ * What the pane shows: the log without the blank lines a pause left at its end.
+ *
+ * The model writes a paragraph break before the paragraph, so the newest text ends in
+ * "\n\n" for as long as it takes to start the next one. Those lines are part of the body,
+ * and the follow pins the body's bottom to the window — so the words sat two or three
+ * lines above it with empty space below, and reading to the end showed the same gap: the
+ * pane looked scrolled past its own text, and a wheel down "scrolled below the text"
+ * (reported 21 Nov, with a recording; measured: each trailing newline was 20px of body).
+ *
+ * The lines stay in `s.text`, because they are the paragraph break and the next words need
+ * them. Only the pane's end ignores them.
+ */
+export const paneShown = (text) => String(text ?? '').replace(/\s+$/, '');
+
+/**
+ * What a wheel over the pane should do: `stay` swallows it, `read` moves the pane and takes
+ * it, `chat` leaves it to the conversation.
+ *
+ * Downward while following is `stay`, never `read`. At 100+ tokens a second the slide is a
+ * few hundred pixels behind the newest words, so there is a scroll position below the follow
+ * and the wheel would take the pane there — the operator scrolled down to see what was being
+ * written, and the pane stopped following instead (21 Nov). Upward is still `read`: that is
+ * the operator going back to something they missed.
+ */
+export function wheelIntent(reading, delta, from, max) {
+  const end = Math.max(0, Number(max) || 0);
+  const at = Math.max(0, Math.min(Number(from) || 0, end));
+  const step = Number(delta) || 0;
+  if (end <= 2) return { action: 'chat' }; // nothing to read back: the wheel belongs to the chat
+  if (!reading && step > 0) return { action: 'stay' };
+  const to = Math.max(0, Math.min(at + step, end));
+  if (Math.abs(to - at) < 1) return { action: step > 0 ? 'stay' : 'chat' };
+  return { action: 'read', to };
+}
+
 const nodeFor = (key) => document.querySelector(`.trace-flow[data-pane="${CSS.escape(key)}"]`);
 
 /** The pane's markup: the log while open, one breathing line while collapsed. */
@@ -74,7 +110,7 @@ export function paneMarkup(trace) {
   // it is written to. The chip is the way back after the operator has scrolled up inside it.
   return (
     `<div class="think-wrap${s.scrolled ? ' is-reading' : ''}">` +
-    `<div class="${cls}" data-pane="${key}"><div class="trace-flow-view"><div class="trace-flow-body">${esc(s.text)}</div></div></div>` +
+    `<div class="${cls}" data-pane="${key}"><div class="trace-flow-view"><div class="trace-flow-body">${esc(paneShown(s.text))}</div></div></div>` +
     `<button type="button" class="think-new" data-think-new="${key}"${s.scrolled ? '' : ' hidden'}>new content ↓</button>` +
     `<button type="button" class="think-toggle" data-think-toggle="${key}" title="Hide the thinking" aria-label="Hide the thinking">▾</button>` +
     `</div>`
@@ -114,6 +150,8 @@ export function paneEnded(trace) {
  * pixels in different ways: while following, the body is one block moved up by `offset`; while
  * reading, the body stays put and the view scrolls to the same place (`scrollTop = offset`).
  * The switch is exact, which is what keeps it from jumping.
+ *
+ * Which of those a wheel asks for is `wheelIntent`'s decision, not this function's.
  */
 function takeOver(trace, event) {
   const s = trace.stream;
@@ -122,23 +160,22 @@ function takeOver(trace, event) {
   const body = node?.querySelector('.trace-flow-body');
   if (!s || !view || !body) return false;
   const max = Math.max(0, body.offsetHeight - view.clientHeight);
-  if (max <= 2) return false; // nothing to read back: the wheel belongs to the chat
+  const reading = Boolean(s.scrolled);
   const delta = event ? Number(event.deltaY) || 0 : 0;
-  const from = s.scrolled ? view.scrollTop : Math.max(0, Math.min(Number(s.offset) || 0, max));
-  const to = Math.max(0, Math.min(from + delta, max));
-  if (event && Math.abs(to - from) < 1) {
-    // The pane is at its last line (or its first) and the wheel pushes past it.
-    // At the end the wheel is swallowed: there is nothing to read back, and taking
-    // the pane anyway flipped it into "reading" and put the new-words chip up on a
-    // wheel it could not use, with the chat fighting the follow several times a
-    // second (reported 21 Nov). At the top, upward is the chat's: it reads as
-    // scrolling back through the conversation, so it is left to bubble.
-    if (delta > 0) {
-      event.preventDefault();
-      event.stopPropagation();
-    }
+  const from = reading ? view.scrollTop : Math.max(0, Math.min(Number(s.offset) || 0, max));
+  const want = wheelIntent(reading, delta, from, max);
+  const swallow = () => {
+    if (!event) return;
+    event.preventDefault();
+    event.stopPropagation();
+  };
+  if (want.action === 'stay') {
+    // The pane is at its last line: there is nothing below the newest words, and while they
+    // are still arriving the conversation is not this wheel's to scroll either.
+    swallow();
     return false;
   }
+  if (want.action !== 'read') return false; // the chat's wheel, or no wheel at all
   // The frame loop follows `active`: taking the pane makes this trace the one it watches.
   active = trace;
   if (!s.scrolled) {
@@ -149,9 +186,8 @@ function takeOver(trace, event) {
     view.scrollTop = from;
   }
   if (event) {
-    view.scrollTop = to;
-    event.preventDefault();
-    event.stopPropagation();
+    view.scrollTop = want.to;
+    swallow();
   }
   schedule();
   return true;
@@ -272,10 +308,13 @@ function paneFrame(now) {
   const node = body.firstChild;
   if (!node || node.nodeType !== Node.TEXT_NODE) return;
   const following = wired.atBottom ? wired.atBottom() : false;
-  // Append only what is missing: rewriting the whole text re-breaks every line.
-  if (node.data !== s.text) {
-    if (s.text.startsWith(node.data)) node.data += s.text.slice(node.data.length);
-    else node.data = s.text;
+  // Append only what is missing: rewriting the whole text re-breaks every line. What is
+  // missing is the shown text, not the raw log — a paragraph break waiting for its
+  // paragraph is not the end of the pane (paneShown).
+  const shown = paneShown(s.text);
+  if (node.data !== shown) {
+    if (shown.startsWith(node.data)) node.data += shown.slice(node.data.length);
+    else node.data = shown;
   }
   const view = body.parentElement;
   // The box is a fixed window now, so a short text has a negative reach: the body is pushed

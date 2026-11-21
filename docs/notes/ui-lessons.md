@@ -2883,3 +2883,30 @@ the one that appears has no "before" to move from. The page has to know what is 
 200 ms, ease-out, `.is-arriving` in `synapse.css`; `prefers-reduced-motion` turns it off.
 The decision is `planArrivals` in `web/transcript.js` and is tested in
 `tests/arrivals.test.mjs`; the drawing is one keyframe.
+
+### The pane's end is its last word, and a wheel down never takes it (21 Nov)
+
+The operator: "Scrolling down with a mouse in a thinking pane still tries to scroll below text
+when it's actively populating into the pane", with a 5.6s recording of a worker's pane.
+
+Two things were true at once.
+
+- **A paragraph break is written before the paragraph.** For as long as the next words take to
+  arrive, the newest text ends in "\n\n". Those lines are part of the body, and the follow pins
+  the *body's* bottom to the window — so the words sat two or three lines above the bottom edge
+  with empty space below, in follow mode, with no scrollbar: the pane looked scrolled past its
+  own text. Reading to the end showed the same gap, because that gap was the end. Measured in
+  the running page: `body.offsetHeight` grew 20px per trailing newline (40px for two), and the
+  live step that ended in "\n" drew its words at the bottom edge (`gapBelowWords: -4px`) only
+  once `paneShown` trimmed the **display** — `s.text` keeps the newlines, because the next words
+  need them to start their own paragraph.
+- **A downward wheel while following took the pane.** At 100+ tokens a second the slide is
+  hundreds of pixels behind the end, so there *is* a scroll position below the follow and
+  `takeOver` moved to it: the pane stopped following and raised "new content ↓" on a wheel the
+  operator used to keep up. That is the "when it's actively populating" half. `wheelIntent` now
+  answers the wheel: downward while following is `stay` (swallowed), upward is `read`, and the
+  top of a read pane hands the wheel back to the conversation.
+
+The division is the lesson: the wheel decides **where** to be, `paneShown` decides what the end
+**is**. Both are pure and tested in `tests/thinking-pane.test.mjs`; the pane's DOM wiring is
+looked at in the page.
