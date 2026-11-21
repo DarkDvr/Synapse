@@ -16,7 +16,7 @@ import { permissionChip } from './ask-note.js';
 import { esc, shortSpan, fileChip, reasoningGist } from './format.js';
 import { renderMarkdown } from './md.js';
 import { paneMarkup } from './thinking-pane.js';
-import { leaseClock, leaseFor, leaseCard, leaseChip } from './chat-notes.js';
+import { leaseClock, leaseFor, leaseCard } from './chat-notes.js';
 import { turnLive } from './turn-live.js';
 import { fmtTokens, dirKey, roleLabel } from './run-view.js';
 
@@ -117,6 +117,9 @@ export function renderTrace(t) {
     // The name this line slides in under; a redraw of the same step is the same name.
     const line = k ? ` data-line="${esc(k)}"` : '';
     if (n?.perm) return permLine(n.perm, line);
+    // A lease the run posted itself: the same card the call would have worn, in the same
+    // place in the stream, with the countdown on it.
+    if (n?.lease && typeof n.lease === 'object') return leaseCard(n.lease, line);
     const text = typeof n === 'string' ? n : String(n?.text || '');
     const steer = typeof n === 'object' && n?.steer === true;
     // A steer is the operator's own instruction: its own line shape, so the tag
@@ -304,17 +307,14 @@ export function renderTrace(t) {
   const hasLoopMarks = (t.marks || []).some((m) => m && m.kind === 'loop');
   // The fallback footer is only for a trace whose marks did not survive a reload.
   const pinned = `${hasMarks ? '' : compactLine}${hasLoopMarks ? '' : loopLine}`;
-  // A lease is a state, not a step, so it sits at the bottom of the trace next to the thinking
-  // rather than in the timeline: the operator is watching this box, and the clock is about now
-  // (21 Nov). Drawn from the lease itself, because a worker's lease call never reaches the trace.
-  const leaseNote = lease !== undefined ? leaseCard(lease) : '';
-  const body = `${timeline}${pinned}${leaseNote}${streaming}`;
+  // A lease is one line in the stream, like the call that asked for it: `noteLeaseLine` puts
+  // it in the timeline at its moment, so it arrives as the newest line and moves up with
+  // everything else (21 Nov).
+  const body = `${timeline}${pinned}${streaming}`;
   const rest = [t.task, t.title].filter(Boolean).join(' · ');
   if (!t.finishedAt) {
-    // The countdown sits on the head line as well as at the bottom of the trace: a long
-    // run's card is a scroll away from the thinking that mentions it (21 Nov).
     return `<div class="trace is-live" data-trace="${esc(t.key)}">
-      <div class="trace-head" title="${esc(head.join(' · '))}"><span class="trace-role">${esc(name)}</span>${rest ? esc(` · ${rest}`) : ''}${leaseChip(lease)}</div>
+      <div class="trace-head" title="${esc(head.join(' · '))}"><span class="trace-role">${esc(name)}</span>${rest ? esc(` · ${rest}`) : ''}</div>
       <div class="trace-lines">${body || '<div class="trace-line">starting…</div>'}</div>
     </div>`;
   }
@@ -410,10 +410,51 @@ export function noteCompaction(trace, { times, used, context, at = 0 } = {}) {
   });
 }
 
+/**
+ * A lease on the run's timeline, as one more line in the stream of calls.
+ *
+ * The card posts when the lease is granted — it is the newest line, so it sits directly
+ * above the thinking pane, and it moves up like any tool call as the run goes on. A second
+ * call is an extension: the older card loses its clock and keeps its estimate. `expired`
+ * is the harness asking whether it needs more, on the card that is still the newest.
+ */
+export function noteLeaseLine(trace, ev = {}) {
+  if (!trace) return false;
+  const what = String(ev.leaseKind || ev.kind || '');
+  trace.notes = Array.isArray(trace.notes) ? trace.notes : [];
+  if (what === 'expired') {
+    const last = [...trace.notes].reverse().find((n) => n && n.lease);
+    if (!last) return false;
+    last.lease.expired = true;
+    return true;
+  }
+  if (what !== 'granted' && what !== 'extended') return false;
+  const until = Number(ev.until) || 0;
+  const minutes = Number(ev.minutes) || 0;
+  if (!until && !minutes) return false;
+  // One clock at a time: the card a later call replaced keeps its estimate, no countdown.
+  for (const n of trace.notes) if (n && n.lease) n.lease.past = true;
+  trace.notes.push({
+    at: Number(ev.at) || Date.now(),
+    lease: {
+      dir: ev.dir || trace.dir || null,
+      task: ev.task || trace.task || '',
+      role: ev.role || trace.role || '',
+      minutes,
+      reason: String(ev.reason || ''),
+      until: until || Date.now() + minutes * 60_000,
+      extended: Boolean(ev.extended) || what === 'extended',
+      expired: false,
+      past: false,
+    },
+  });
+  if (trace.notes.length > 60) trace.notes.splice(0, trace.notes.length - 60);
+  return true;
+}
+
 /** One loop rescue, on a trace. Like a compaction, the count only goes up: a
  *  re-sent event must not turn one rescue into "×2". `to` is the effort it was
- *  lowered to; no `to` means there was nowhere left to go. */
-export function noteLoop(trace, { times, limit, at = 0 } = {}) {
+ *  lowered to; no `to` means there was nowhere left to go. */export function noteLoop(trace, { times, limit, at = 0 } = {}) {
   const counted = Number(times) || 0;
   const known = Number(trace.loops) || 0;
   trace.loops = counted > known ? counted : known || 1;

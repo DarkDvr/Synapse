@@ -19,7 +19,7 @@ import { renderMarkdown } from './md.js';
 import { waitPostHtml } from './wait-post.js';
 import { serverNow } from './api.js';
 import { permissionNote, permissionChip } from './ask-note.js';
-import { alarmsHere, renderAlarm, leasesHere, renderLease, chatErrorsHere, renderChatError, leaseClock, leaseFor } from './chat-notes.js';
+import { alarmsHere, renderAlarm, leasesHere, renderLease, chatErrorsHere, renderChatError, leaseClock, leaseFor, callLeaseClock, leaseOfMessages } from './chat-notes.js';
 import { chatAtBottom, chatFollows, scrollChatToBottom, renderChatNav, captureChatSlack, restoreStreamView } from './chat-scroll.js';
 import { currentProject, roleLabel, groupTurns, currentForm } from './run-view.js';
 import { renderTrace, tracesFor, traceSig, renderSessionStream } from './traces.js';
@@ -814,10 +814,22 @@ export function questionSummary(part) {
   return `${head.length > 88 ? `${head.slice(0, 87)}…` : head}${more}`;
 }
 
+// The open chat's own lease. A chat turn is not a run, so the server never sends a note
+// for it; the call in the conversation is the record, and this reads it once per draw
+// rather than scanning every part of every card.
+let leaseCache = { sig: '', lease: null };
+function sessionLease() {
+  const messages = state.messages || [];
+  const sig = `${messages.length}:${Number(messages[messages.length - 1]?.created) || 0}`;
+  if (leaseCache.sig !== sig) {
+    leaseCache = { sig, lease: leaseOfMessages(messages) };
+  }
+  return leaseCache.lease;
+}
+
 // A tool call is one line until you ask for the detail — you rarely need the
 // full payload, and a busy turn produces dozens of them.
-export function renderTool(part) {
-  const status = String(part.status || 'unknown').toLowerCase();
+export function renderTool(part) {  const status = String(part.status || 'unknown').toLowerCase();
   const failed = Boolean(part.failed) || /error|fail/.test(status);
   const running = /run|stream|pend|progress/.test(status);
   const cls = running ? 'warn' : failed ? 'err' : 'ok';
@@ -848,7 +860,7 @@ export function renderTool(part) {
     <div class="tool-head" role="button" tabindex="0" data-tool-toggle="${esc(id)}" aria-expanded="${open}" aria-controls="${esc(id)}-detail">
       <span class="status-dot ${cls}" role="img" aria-label="${esc(label)}"></span>
       <span class="tool-name">${esc(toolLabel(part))}</span>
-      ${leaseClock(part, leaseFor({ dir: currentProject()?.directory }))}
+      ${callLeaseClock(part, leaseFor({ dir: currentProject()?.directory }) || sessionLease())}
       <span class="tool-target" title="${esc(target)}">${esc(target)}</span>
       ${permChip}
       <span class="tool-state state-pill ${cls}">${esc(label)}</span>

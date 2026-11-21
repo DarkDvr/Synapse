@@ -11,8 +11,8 @@ import { installPage } from './fake-page.mjs';
 
 const page = installPage();
 const { state } = await import('../web/state.js');
-const { chatNotesWiring, leaseFor, leaseClock, renderLease, noteLease } = await import('../web/chat-notes.js');
-const { tracesWiring, renderTrace } = await import('../web/traces.js');
+const { chatNotesWiring, leaseFor, leaseClock, renderLease, noteLease, callLeaseClock, leaseOfMessages } = await import('../web/chat-notes.js');
+const { tracesWiring, renderTrace, noteLeaseLine } = await import('../web/traces.js');
 
 chatNotesWiring({
   currentProject: () => ({ directory: 'F:/scenario' }),
@@ -56,47 +56,11 @@ test('a lease that has ended leaves no clock behind', () => {
   assert.equal(leaseClock({ name: 'synapse-lease_lease' }, leaseFor({ dir: 'F:/scenario', task: 't1' })), '');
 });
 
-test('the lease card is drawn from the lease, not from the call that asked', () => {
-  state.leases = new Map([['f:/scenario|t1', lease()]]);
-  // The worker's MCP lease call never reaches the trace: the page's tool notes are the polled
-  // shell calls, and this call is over in forty milliseconds. The card still appears (21 Nov —
-  // the operator watched a worker say "call the lease" and saw nothing).
-  const bare = trace();
-  bare.notes = [{ at: 10, text: 'read a file', tool: { name: 'read', target: 'src/app.js' } }];
-  const html = renderTrace(bare);
-  assert.match(html, /class="tool-card trace-card is-lease"/, 'no lease card for a run holding a lease');
-  assert.match(html, /tool-lease-clock/, 'the card has no countdown');
-  assert.match(html, /re-running the suites/, 'the card does not say what the time is for');
-});
-
-test('an ended lease says so on its card, and keeps no clock', () => {
-  state.leases = new Map([['f:/scenario|t1', lease({ expired: true })]]);
-  const html = renderTrace(trace());
-  assert.match(html, /is-lease is-expired/, 'the ended lease is not marked');
-  assert.match(html, /ended .* asking whether it needs more/, 'the card does not say what happened');
-  assert.doesNotMatch(html, /tool-lease-clock/, 'a clock is left on an ended lease');
-});
-
-test('only the lease card wears a clock — another call in the same run does not', () => {
-  state.leases = new Map([['f:/scenario|t1', lease()]]);
-  const other = trace();
-  other.notes = [{ at: 10, text: 'call', tool: { name: 'shell', target: 'npm test' } }];
-  const html = renderTrace(other);
-  const clocks = (html.match(/tool-lease-clock/g) || []).length;
-  assert.equal(clocks, 1, 'one lease, one clock');
-  const beforeCard = html.slice(0, html.indexOf('is-lease'));
-  assert.doesNotMatch(beforeCard, /tool-lease-clock/, 'the shell call wears a clock it did not ask for');
-});
-
-test('the note the runner sends reaches the store, so a live lease has a card', () => {
-  state.leases = new Map();
-  const until = Date.now() + 1_800_000;
-  // The shape the runner emits: `kind` is the note's own type, `leaseKind` the lease's state.
-  // It used to arrive as `kind: 'granted'` — the lease's fields were spread over the note's
-  // own type — and this page, which switches on "lease", dropped it on the floor: the stall
-  // clock was held off and the chat drew nothing at all. Only a page opened mid-lease saw a
-  // card, because `/api/runs` carries `run.lease` (21 Nov, second report).
-  noteLease({
+test('a lease posts in the stream, at its moment, above the thinking pane', () => {
+  const t = trace();
+  t.notes = [{ at: 10, text: 'read a file', tool: { name: 'read', target: 'src/app.js' } }];
+  t.stream = { text: 'thinking about the suites', ended: false };
+  const ok = noteLeaseLine(t, {
     kind: 'lease',
     leaseKind: 'granted',
     dir: 'F:/scenario',
@@ -104,35 +68,68 @@ test('the note the runner sends reaches the store, so a live lease has a card', 
     role: 'coder-1',
     minutes: 30,
     reason: 're-running the suites',
-    until,
+    until: Date.now() + 1_800_000,
   });
-  assert.ok(leaseFor({ dir: 'F:/scenario', task: 't1' }), 'the granted lease never reached the page');
-  assert.match(renderTrace(trace()), /class="tool-card trace-card is-lease"/, 'the trace has no card for a live lease');
-  noteLease({ kind: 'lease', leaseKind: 'expired', dir: 'F:/scenario', task: 't1' });
-  assert.match(renderTrace(trace()), /is-lease is-expired/, 'the expiry never reached the page');
+  assert.ok(ok, 'the lease never reached the timeline');
+  const html = renderTrace(t);
+  // The operator asked for exactly this: a lease that posts like any other tool call, so it
+  // is the newest line, sits above the thinking pane, and moves up as the work goes on.
+  const card = html.indexOf('is-lease');
+  const pane = html.indexOf('thinking about the suites');
+  assert.ok(card > 0, 'no lease card in the stream');
+  assert.ok(pane === -1 || card < pane, 'the lease card is not above the thinking pane');
+  assert.match(html, /tool-lease-clock/, 'the card has no countdown');
+  assert.match(html, /re-running the suites/, 'the card does not say what the time is for');
 });
 
-test('the run’s head line carries the lease, because the card is a scroll away', () => {
-  state.leases = new Map([['f:/scenario|t1', lease()]]);
-  const html = renderTrace(trace());
-  // Measured on a live run: the card sat 287px below the trace's head, under ten reasoning
-  // folds. The operator read the thinking that said "the lease has 25 minutes remaining" and
-  // saw no lease (21 Nov, third report). The head is always in view.
-  const head = html.slice(0, html.indexOf('trace-lines'));
-  assert.match(head, /class="trace-lease"/, 'the head carries no lease');
-  assert.match(head, /data-lease-until="\d+"/, 'the head chip is not wired to the page ticker');
-  assert.equal((html.match(/class="trace-lease"/g) || []).length, 1, 'the head shows the lease twice');
+test('the newest lease keeps the clock, and the card it replaced keeps its estimate', () => {
+  const t = trace();
+  const now = Date.now();
+  noteLeaseLine(t, { kind: 'lease', leaseKind: 'granted', dir: 'F:/scenario', task: 't1', role: 'coder-1', minutes: 5, reason: 'first stretch', until: now + 300_000 });
+  noteLeaseLine(t, { kind: 'lease', leaseKind: 'extended', dir: 'F:/scenario', task: 't1', role: 'coder-1', minutes: 10, reason: 'more time', until: now + 600_000, extended: true });
+  const html = renderTrace(t);
+  assert.equal((html.match(/tool-lease-clock/g) || []).length, 1, 'two leases ticking at once');
+  assert.match(html, /is-lease is-past/, 'the replaced card still claims to be the lease');
+  assert.match(html, /00:05:00/, 'the replaced card lost its estimate');
 });
 
-test('an ended lease leaves no chip on the head', () => {
-  state.leases = new Map([['f:/scenario|t1', lease({ expired: true })]]);
-  assert.doesNotMatch(renderTrace(trace()), /class="trace-lease"/, 'an ended lease still wears a countdown');
+test('the harness asking for more time marks the card that is waiting', () => {
+  const t = trace();
+  noteLeaseLine(t, { kind: 'lease', leaseKind: 'granted', dir: 'F:/scenario', task: 't1', role: 'coder-1', minutes: 30, reason: 'the suites', until: Date.now() - 1000 });
+  noteLeaseLine(t, { kind: 'lease', leaseKind: 'expired', dir: 'F:/scenario', task: 't1' });
+  const html = renderTrace(t);
+  assert.match(html, /is-lease is-expired/, 'the ended lease is not marked');
+  assert.match(html, /asking whether it needs more/, 'the card does not say what happened');
+  assert.doesNotMatch(html, /tool-lease-clock/, 'a clock is left on an ended lease');
+});
+
+test('only the lease card wears a clock — another call in the same run does not', () => {
+  const t = trace();
+  t.notes = [{ at: 10, text: 'shell', tool: { name: 'shell', target: 'npm test' } }];
+  noteLeaseLine(t, { kind: 'lease', leaseKind: 'granted', dir: 'F:/scenario', task: 't1', role: 'coder-1', minutes: 30, reason: 're-running the suites', until: Date.now() + 1_800_000 });
+  const html = renderTrace(t);
+  assert.equal((html.match(/tool-lease-clock/g) || []).length, 1, 'one lease, one clock');
+});
+
+test('the call in the conversation wears the timer, and says ended when it passes', () => {
+  // A chat turn is not a run: nothing sends a note, so the call itself is the record.
+  const at = Date.now() - 60_000;
+  const call = { type: 'tool', name: 'synapse-lease_lease', input: { minutes: 30, reason: 'the suite' } };
+  const live = leaseOfMessages([{ created: at, parts: [call] }]);
+  assert.equal(live.minutes, 30, 'the call did not become a lease');
+  assert.match(callLeaseClock({ name: 'synapse-lease_lease' }, live), /data-lease-until="\d+"/, 'no timer on the call');
+  const old = leaseOfMessages([{ created: at - 40 * 60_000, parts: [call] }]);
+  assert.match(callLeaseClock({ name: 'synapse-lease_lease' }, old), /is-ended/, 'a passed lease shows a number');
+  // Another tool is not a lease and never wears one.
+  assert.equal(callLeaseClock({ name: 'shell' }, live), '');
 });
 
 test('the lease line and the card read the same clock', () => {
   state.leases = new Map([['f:/scenario|t1', lease()]]);
+  const t = trace();
+  noteLeaseLine(t, { kind: 'lease', leaseKind: 'granted', dir: 'F:/scenario', task: 't1', role: 'coder-1', minutes: 30, reason: 're-running the suites', until: lease().until });
   const line = renderLease(leaseFor({ dir: 'F:/scenario', task: 't1' }));
-  const card = renderTrace(trace());
+  const card = renderTrace(t);
   const from = (html) => (html.match(/data-lease-until="(\d+)"/) || [])[1];
   assert.equal(from(line), from(card), 'two clocks for one lease');
   assert.ok(page.document, 'the fake page is installed');

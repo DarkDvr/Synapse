@@ -141,6 +141,56 @@ export function leaseFor({ dir, task = '' } = {}) {
 }
 
 /**
+ * The lease a chat's own turn is holding, read from the call that asked for it.
+ *
+ * A chat turn is not a run, so nothing ever sends a note for its lease: the model calls
+ * `synapse-lease_lease`, the card for that call posts like any other tool call, and the
+ * timer was simply missing (21 Nov — "it says there's a lease again, I don't see it").
+ * The call *is* the lease: minutes from the moment it was made, so the card can count
+ * down without the server having to agree with the model about anything.
+ *
+ * `messages` is the open session's transcript; the newest such call wins, because a
+ * second call is an extension.
+ */
+export function leaseOfMessages(messages, at = 0) {
+  let found = null;
+  for (const m of Array.isArray(messages) ? messages : []) {
+    for (const part of m?.parts || []) {
+      if (part?.type !== 'tool' || !/(^|[_:])lease$/i.test(String(part.name || '').trim())) continue;
+      const minutes = Number(parseInput(part.input)?.minutes);
+      if (!Number.isFinite(minutes) || minutes <= 0) continue;
+      const when = Number(part.created) || Number(m.created) || 0;
+      if (at && when && when > at) continue;
+      found = {
+        dir: wired.currentProject()?.directory || null,
+        task: '',
+        role: '',
+        minutes,
+        reason: String(parseInput(part.input)?.reason || '').trim().slice(0, 200),
+        until: when + minutes * 60_000,
+        extended: Boolean(found),
+        expired: false,
+        at: when,
+      };
+    }
+  }
+  if (!found) return null;
+  found.expired = Boolean(found.until) && found.until <= Date.now();
+  return found;
+}
+
+/** A tool part's arguments arrive as an object or as a JSON string, depending on the engine. */
+function parseInput(input) {
+  if (input && typeof input === 'object') return input;
+  if (typeof input !== 'string' || !input.trim()) return null;
+  try {
+    return JSON.parse(input);
+  } catch {
+    return null;
+  }
+}
+
+/**
  * The countdown a lease puts on the tool call that asked for it.
  *
  * A card that says "completed" while the worker still holds the operator's screen says nothing
@@ -158,46 +208,51 @@ export function leaseClock(tool, lease) {
 }
 
 /**
- * The lease as a chip on the run's own head line.
- *
- * The card at the bottom of the trace is the explanation, but a trace with ten reasoning
- * folds in it is taller than the window, and the card measured 287px below the head on a
- * live run: the operator read the thinking that said "the lease has 25 minutes remaining"
- * and saw no lease, for the third time (21 Nov). A run's head is the one line always in
- * view while its trace is on screen, so the countdown lives there too, in the same
- * `data-lease-until` element the page's one-second ticker already keeps honest.
+ * The clock on the call itself — in the conversation, where the call is an ordinary tool
+ * card. When the time is up it says so instead of vanishing: a card that asked for thirty
+ * minutes and now shows nothing reads as a bug, and the operator asked for "same format,
+ * just this one has a timer".
  */
-export function leaseChip(lease) {
-  if (!lease || lease.expired) return '';
+export function callLeaseClock(tool, lease) {
+  if (!lease) return '';
+  if (!/(^|[_:])lease$/i.test(String(tool?.name || '').trim())) return '';
   const until = Number(lease.until) || 0;
   if (!until) return '';
-  const left = hhmmss(Math.max(0, until - Date.now()));
-  const reason = String(lease.reason || '').trim();
-  const role = wired.roleLabel(lease.role) || 'Worker';
-  return `<span class="trace-lease" data-lease-until="${until}" title="${esc(`${role} holds a lease${reason ? ` — ${reason}` : ''}; the stall clock is off until it ends`)}">⏱ ${esc(left)}</span>`;
+  if (until <= Date.now()) {
+    return '<span class="tool-lease-clock is-ended" title="The time this call asked for has passed">ended</span>';
+  }
+  return leaseClock(tool, lease);
 }
 
 /**
- * The lease as the tool card it is, where the work is.
+ * The lease as the tool card it is, in the stream where the calls are.
  *
- * The countdown used to ride only the *call* that asked for the lease, and a worker's lease
- * call never reaches the trace: the page's tool notes are the polled shell calls, and an MCP
- * call that takes forty milliseconds falls between two polls. So a worker said "call the
- * lease" in its thinking, the lease was granted and held, and the operator saw no card at
- * all (21 Nov — the model was telling the truth and the card was not there).
+ * A worker's lease call never reaches the trace — the page's tool notes are the polled
+ * shell calls, and an MCP call that takes forty milliseconds falls between two polls — so
+ * the run posts this card itself, at the moment the lease is granted. It is an ordinary
+ * line in the timeline: newest, so it appears just above the thinking pane, and it moves
+ * up with everything else as the run goes on (21 Nov, asked for exactly that).
  *
- * This is drawn from the lease itself, pinned at the bottom of the run's trace beside the
- * thinking, so it does not depend on the call ever being polled. The clock is the same element
- * the lease line uses, so the page's one-second ticker keeps it honest.
+ * `past` is a lease that a later call replaced: it keeps its estimate and loses the clock,
+ * because one lease is ticking at a time.
  */
-export function leaseCard(lease) {
+export function leaseCard(lease, line = '') {
   if (!lease) return '';
   const role = wired.roleLabel(lease.role) || 'Worker';
   const reason = String(lease.reason || '').trim();
   const at = esc(`${lease.dir}|${lease.task}`);
   const asked = lease.minutes ? hhmmss(Math.max(0, Number(lease.minutes) * 60_000)) : '';
+  if (lease.past) {
+    return `<div class="tool-card trace-card is-lease is-past" data-lease-card="${at}"${line}>
+      <div class="tool-head" title="${esc(`${role} asked for ${asked || 'a lease'}${reason ? ` — ${reason}` : ''}`)}">
+        <span class="status-dot idle" role="img" aria-label="lease"></span>
+        <span class="tool-name">lease</span>
+        <span class="tool-target">${esc(asked ? `${asked} — ` : '')}${esc(reason || 'a stretch of time for a long command')}</span>
+      </div>
+    </div>`;
+  }
   if (lease.expired) {
-    return `<div class="tool-card trace-card is-lease is-expired" data-lease-card="${at}">
+    return `<div class="tool-card trace-card is-lease is-expired" data-lease-card="${at}"${line}>
       <div class="tool-head" title="${esc(`${role}'s lease ended; the stall clock is back`)}">
         <span class="status-dot warn" role="img" aria-label="lease ended"></span>
         <span class="tool-name">lease</span>
@@ -207,7 +262,7 @@ export function leaseCard(lease) {
   }
   const tip = `${role} asked for ${asked ? `a ${asked}` : 'a'} lease${reason ? ` — ${reason}` : ''}. ` +
     `Silence is not a stall until it ends.`;
-  return `<div class="tool-card trace-card is-lease" data-lease-card="${at}">
+  return `<div class="tool-card trace-card is-lease" data-lease-card="${at}"${line}>
     <div class="tool-head" title="${esc(tip)}">
       <span class="status-dot live" role="img" aria-label="lease held"></span>
       <span class="tool-name">lease</span>

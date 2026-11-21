@@ -3868,6 +3868,9 @@ body.is-disconnected .app-shell { filter: blur(2px) brightness(0.45); pointer-ev
 .tool-card.is-lease .tool-target { color: #c6cad1; }
 .tool-card.is-lease.is-expired { border-color: rgba(237, 194, 90, 0.2); }
 .tool-card.is-lease.is-expired .tool-name { color: var(--amber); }
+/* A call whose lease has run out keeps the word, not a frozen number: the card asked for
+   thirty minutes and the answer is "that time has passed". */
+.tool-lease-clock.is-ended { color: var(--amber); }
 
 /* The same lease, on the run's head line. A trace with ten reasoning folds in it is taller
    than the window, so the card at its bottom was 287px below the head on a live run: the

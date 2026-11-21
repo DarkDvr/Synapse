@@ -216,10 +216,11 @@ export function reconcileClocks({ busy = false, endedAt = null, fallbackMs = 0, 
 export function tickClocks() {
   const now = Date.now();
   wired.renderLastEventAge();
-  // The worker's lease clock: a plain text update, no rebuild.
+  // The lease clock: a plain text update, no rebuild. At zero it says so — a card that
+  // still says "00:00:00" reads as a broken countdown rather than as a lease that ended.
   for (const el of document.querySelectorAll('[data-lease-until]')) {
     const until = Number(el.dataset.leaseUntil) || 0;
-    const text = hhmmss(Math.max(0, until - now));
+    const text = until > now ? hhmmss(until - now) : 'ended';
     if (el.textContent !== text) el.textContent = text;
   }
   // The plan's per-step stopwatches, before the early return below: they are

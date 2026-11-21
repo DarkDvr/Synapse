@@ -430,7 +430,7 @@ test('a steer is pinned in the trace, centred and bright', () => {
   assert.match(app, /for \(const s of steers\) entries\.push/);
   // 21 Nov: the lease card is pinned between them, so the pane is still last and the steer
   // is still inside the timeline — which is the rule this line exists for.
-  assert.match(app, /const body = `\$\{timeline\}\$\{pinned\}\$\{leaseNote\}\$\{streaming\}`/);
+  assert.match(app, /const body = `\$\{timeline\}\$\{pinned\}\$\{streaming\}`/);
   assert.match(app, /trace-steer-text/);
   assert.match(css, /\.trace-line\.is-steer \{[^}]*align-items: center/);
   assert.match(css, /\.trace-line\.is-steer \{[^}]*white-space: normal/);

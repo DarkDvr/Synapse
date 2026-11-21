@@ -21,7 +21,7 @@ import { renderPlan } from './plan-pane.js';
 import { renderTranscript } from './transcript.js';
 import { chatScroller, foldStream, renderChatNav } from './chat-scroll.js';
 import { paneEnded } from './thinking-pane.js';
-import { noteCompaction, noteLoop, steerLine, steerNotes, traceFor, traceKeyOf, traceOf } from './traces.js';
+import { noteCompaction, noteLoop, noteLeaseLine, steerLine, steerNotes, traceFor, traceKeyOf, traceOf } from './traces.js';
 import { noteLease } from './chat-notes.js';
 import { paintRates, resetRate } from './rate-view.js';
 import { reconcileRuns } from './runs-sync.js';
@@ -535,6 +535,15 @@ export async function loadRuns() {
           loopStop: Boolean(run.loopStop),
         });
       }
+      // A lease taken before this page opened: the trace starts with the card, so a reload
+      // mid-lease shows the same line the live page would have (21 Nov).
+      if (run.lease && run.lease.kind !== 'expired' && Number(run.lease.until) > Date.now()) {
+        const trace = state.traces.get(key);
+        if (trace && !(trace.notes || []).some((n) => n && n.lease)) {
+          // The spread first, the note's own type last — `run.lease` carries a `kind` too.
+          noteLeaseLine(trace, { ...run.lease, kind: 'lease', leaseKind: run.lease.kind || 'granted' });
+        }
+      }
     }
   } catch { /* the stream will catch up */ }
   state.roleSig = '';
@@ -617,7 +626,10 @@ export function handleRunEvent(ev) {
     const trace = traceFor(ev);
     if (trace && ev.kind === 'compact') noteCompaction(trace, ev);
     if (trace && ev.kind === 'loop') noteLoop(trace, ev);
-    if (ev.kind === 'lease') noteLease(ev);
+    if (ev.kind === 'lease') {
+      noteLease(ev);
+      if (noteLeaseLine(trace, ev)) renderTranscript();
+    }
     renderTranscript();
     return;
   }
