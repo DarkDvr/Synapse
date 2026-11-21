@@ -16,7 +16,7 @@ import { permissionChip } from './ask-note.js';
 import { esc, shortSpan, fileChip, reasoningGist } from './format.js';
 import { renderMarkdown } from './md.js';
 import { paneMarkup } from './thinking-pane.js';
-import { leaseClock, leaseFor, leaseCard } from './chat-notes.js';
+import { leaseClock, leaseFor, leaseCard, leaseChip } from './chat-notes.js';
 import { turnLive } from './turn-live.js';
 import { fmtTokens, dirKey, roleLabel } from './run-view.js';
 
@@ -311,8 +311,10 @@ export function renderTrace(t) {
   const body = `${timeline}${pinned}${leaseNote}${streaming}`;
   const rest = [t.task, t.title].filter(Boolean).join(' · ');
   if (!t.finishedAt) {
+    // The countdown sits on the head line as well as at the bottom of the trace: a long
+    // run's card is a scroll away from the thinking that mentions it (21 Nov).
     return `<div class="trace is-live" data-trace="${esc(t.key)}">
-      <div class="trace-head" title="${esc(head.join(' · '))}"><span class="trace-role">${esc(name)}</span>${rest ? esc(` · ${rest}`) : ''}</div>
+      <div class="trace-head" title="${esc(head.join(' · '))}"><span class="trace-role">${esc(name)}</span>${rest ? esc(` · ${rest}`) : ''}${leaseChip(lease)}</div>
       <div class="trace-lines">${body || '<div class="trace-line">starting…</div>'}</div>
     </div>`;
   }

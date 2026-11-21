@@ -3868,3 +3868,13 @@ body.is-disconnected .app-shell { filter: blur(2px) brightness(0.45); pointer-ev
 .tool-card.is-lease .tool-target { color: #c6cad1; }
 .tool-card.is-lease.is-expired { border-color: rgba(237, 194, 90, 0.2); }
 .tool-card.is-lease.is-expired .tool-name { color: var(--amber); }
+
+/* The same lease, on the run's head line. A trace with ten reasoning folds in it is taller
+   than the window, so the card at its bottom was 287px below the head on a live run: the
+   operator read the thinking about the lease and saw no lease (21 Nov). The head is the one
+   line always in view, so the countdown rides there too — same element, same ticker. */
+.trace-lease {
+  margin-left: 8px; color: var(--yellow);
+  font-family: var(--mono); font-size: 0.94em; font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}

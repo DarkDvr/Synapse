@@ -112,6 +112,23 @@ test('the note the runner sends reaches the store, so a live lease has a card', 
   assert.match(renderTrace(trace()), /is-lease is-expired/, 'the expiry never reached the page');
 });
 
+test('the run’s head line carries the lease, because the card is a scroll away', () => {
+  state.leases = new Map([['f:/scenario|t1', lease()]]);
+  const html = renderTrace(trace());
+  // Measured on a live run: the card sat 287px below the trace's head, under ten reasoning
+  // folds. The operator read the thinking that said "the lease has 25 minutes remaining" and
+  // saw no lease (21 Nov, third report). The head is always in view.
+  const head = html.slice(0, html.indexOf('trace-lines'));
+  assert.match(head, /class="trace-lease"/, 'the head carries no lease');
+  assert.match(head, /data-lease-until="\d+"/, 'the head chip is not wired to the page ticker');
+  assert.equal((html.match(/class="trace-lease"/g) || []).length, 1, 'the head shows the lease twice');
+});
+
+test('an ended lease leaves no chip on the head', () => {
+  state.leases = new Map([['f:/scenario|t1', lease({ expired: true })]]);
+  assert.doesNotMatch(renderTrace(trace()), /class="trace-lease"/, 'an ended lease still wears a countdown');
+});
+
 test('the lease line and the card read the same clock', () => {
   state.leases = new Map([['f:/scenario|t1', lease()]]);
   const line = renderLease(leaseFor({ dir: 'F:/scenario', task: 't1' }));

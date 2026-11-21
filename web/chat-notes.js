@@ -158,6 +158,26 @@ export function leaseClock(tool, lease) {
 }
 
 /**
+ * The lease as a chip on the run's own head line.
+ *
+ * The card at the bottom of the trace is the explanation, but a trace with ten reasoning
+ * folds in it is taller than the window, and the card measured 287px below the head on a
+ * live run: the operator read the thinking that said "the lease has 25 minutes remaining"
+ * and saw no lease, for the third time (21 Nov). A run's head is the one line always in
+ * view while its trace is on screen, so the countdown lives there too, in the same
+ * `data-lease-until` element the page's one-second ticker already keeps honest.
+ */
+export function leaseChip(lease) {
+  if (!lease || lease.expired) return '';
+  const until = Number(lease.until) || 0;
+  if (!until) return '';
+  const left = hhmmss(Math.max(0, until - Date.now()));
+  const reason = String(lease.reason || '').trim();
+  const role = wired.roleLabel(lease.role) || 'Worker';
+  return `<span class="trace-lease" data-lease-until="${until}" title="${esc(`${role} holds a lease${reason ? ` — ${reason}` : ''}; the stall clock is off until it ends`)}">⏱ ${esc(left)}</span>`;
+}
+
+/**
  * The lease as the tool card it is, where the work is.
  *
  * The countdown used to ride only the *call* that asked for the lease, and a worker's lease
