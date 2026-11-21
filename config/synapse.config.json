@@ -882,7 +882,10 @@
   "ui": {
     "chatTextPx": 15,
     "language": "en",
-    "workerCards": true
+    "workerCards": true,
+    "background": "nebula",
+    "panelOpacity": 92,
+    "backgroundStrength": 40
   },
   "shutdown": {
     "whenDone": false,
