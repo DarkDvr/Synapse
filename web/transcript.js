@@ -425,7 +425,17 @@ export function renderTranscript() {
   if (liveTail && paneAt === -1) html += liveTail;
   const orphanDownloads = downloads.filter((d) => !placedDownloads.has(d.id)).map(downloadCard).join('');
   html += orphanDownloads;
-  html += leasesHere().map(renderLease).join('');
+  // A lease that belongs to a run still on this page is drawn in that run's trace, beside its
+  // thinking; the line is for a lease whose run has folded or is not here at all (21 Nov).
+  const liveRuns = new Set(
+    tracesFor(currentProject()?.directory)
+      .filter((t) => !t.finishedAt)
+      .map((t) => String(t.task || '')),
+  );
+  html += leasesHere()
+    .filter((lease) => !liveRuns.has(String(lease.task || '')))
+    .map(renderLease)
+    .join('');
   // What is on screen now, read before the draw replaces it: a row whose name is not
   // in here is a row that just arrived ("a line that arrives", above).
   const seenRows = [];

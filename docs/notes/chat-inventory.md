@@ -100,6 +100,7 @@ Ids are stable: they are the ticket names and the scenario names. `M` = must,
 | D7 | A browser download | Live: name, bar, bytes, path. Done: one line, "Saved" | M: belongs inside the post whose time window it falls in; folds on completion; a page opened mid-download shows it |
 | D8 | A pending permission | Card: actor + "needs your permission/screen/sign-in", task, lead sentence, paths, reason, diff, buttons. Drawn only in the asking project's chat | M: four button sets — file/shell (Allow Once, Always Allow, Reject, Reject With Reason, Stop Run), screen (Allow Screen, Reject, Stop Run), sign-in (Allow Sign-In, Reject, Stop Run); the countdown says when Auto-Permissions will take it; the card is the operator's, never the gate's; another project's card is never drawn here (rail `?` + a toast names it) |
 | D9 | An answered permission | The card goes; the decision stays on the tool chip | M: no flash of a card that was answered elsewhere |
+| D10 | A worker's live lease | The Architect's tool-card shape, pinned at the bottom of that run's trace: a live dot, "lease", the countdown, the reason | M: drawn from the lease itself, never from the call that asked for it — a worker's MCP call is over between two polls and never reaches the trace (21 Nov); the same clock the lease line uses (`data-lease-until`), so one ticker keeps both honest; an ended lease says "ended — asking whether it needs more" and keeps no clock |
 
 ### E. Lines
 

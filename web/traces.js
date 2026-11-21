@@ -16,7 +16,7 @@ import { permissionChip } from './ask-note.js';
 import { esc, shortSpan, fileChip, reasoningGist } from './format.js';
 import { renderMarkdown } from './md.js';
 import { paneMarkup } from './thinking-pane.js';
-import { leaseClock, leaseFor } from './chat-notes.js';
+import { leaseClock, leaseFor, leaseCard } from './chat-notes.js';
 import { turnLive } from './turn-live.js';
 import { fmtTokens, dirKey, roleLabel } from './run-view.js';
 
@@ -304,7 +304,11 @@ export function renderTrace(t) {
   const hasLoopMarks = (t.marks || []).some((m) => m && m.kind === 'loop');
   // The fallback footer is only for a trace whose marks did not survive a reload.
   const pinned = `${hasMarks ? '' : compactLine}${hasLoopMarks ? '' : loopLine}`;
-  const body = `${timeline}${pinned}${streaming}`;
+  // A lease is a state, not a step, so it sits at the bottom of the trace next to the thinking
+  // rather than in the timeline: the operator is watching this box, and the clock is about now
+  // (21 Nov). Drawn from the lease itself, because a worker's lease call never reaches the trace.
+  const leaseNote = lease !== undefined ? leaseCard(lease) : '';
+  const body = `${timeline}${pinned}${leaseNote}${streaming}`;
   const rest = [t.task, t.title].filter(Boolean).join(' · ');
   if (!t.finishedAt) {
     return `<div class="trace is-live" data-trace="${esc(t.key)}">

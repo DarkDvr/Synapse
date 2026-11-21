@@ -56,11 +56,36 @@ test('a lease that has ended leaves no clock behind', () => {
   assert.equal(leaseClock({ name: 'synapse-lease_lease' }, leaseFor({ dir: 'F:/scenario', task: 't1' })), '');
 });
 
-test('only a lease tool wears a clock — another call in the same run does not', () => {
+test('the lease card is drawn from the lease, not from the call that asked', () => {
+  state.leases = new Map([['f:/scenario|t1', lease()]]);
+  // The worker's MCP lease call never reaches the trace: the page's tool notes are the polled
+  // shell calls, and this call is over in forty milliseconds. The card still appears (21 Nov —
+  // the operator watched a worker say "call the lease" and saw nothing).
+  const bare = trace();
+  bare.notes = [{ at: 10, text: 'read a file', tool: { name: 'read', target: 'src/app.js' } }];
+  const html = renderTrace(bare);
+  assert.match(html, /class="tool-card trace-card is-lease"/, 'no lease card for a run holding a lease');
+  assert.match(html, /tool-lease-clock/, 'the card has no countdown');
+  assert.match(html, /re-running the suites/, 'the card does not say what the time is for');
+});
+
+test('an ended lease says so on its card, and keeps no clock', () => {
+  state.leases = new Map([['f:/scenario|t1', lease({ expired: true })]]);
+  const html = renderTrace(trace());
+  assert.match(html, /is-lease is-expired/, 'the ended lease is not marked');
+  assert.match(html, /ended .* asking whether it needs more/, 'the card does not say what happened');
+  assert.doesNotMatch(html, /tool-lease-clock/, 'a clock is left on an ended lease');
+});
+
+test('only the lease card wears a clock — another call in the same run does not', () => {
   state.leases = new Map([['f:/scenario|t1', lease()]]);
   const other = trace();
   other.notes = [{ at: 10, text: 'call', tool: { name: 'shell', target: 'npm test' } }];
-  assert.doesNotMatch(renderTrace(other), /tool-lease-clock/);
+  const html = renderTrace(other);
+  const clocks = (html.match(/tool-lease-clock/g) || []).length;
+  assert.equal(clocks, 1, 'one lease, one clock');
+  const beforeCard = html.slice(0, html.indexOf('is-lease'));
+  assert.doesNotMatch(beforeCard, /tool-lease-clock/, 'the shell call wears a clock it did not ask for');
 });
 
 test('the lease line and the card read the same clock', () => {

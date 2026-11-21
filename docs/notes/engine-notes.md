@@ -1739,6 +1739,17 @@ violet line with a live countdown — “Coder 1 asked for a 02:00:00 lease · 0
 left · ‘downloading a 200 GB archive’” — and `/api/runs` carries the lease so a
 reload rebuilds it.
 
+**The card is drawn from the lease, not from the call (21 Nov).** The countdown used to
+ride only the tool call that asked for it, and a worker's lease call never reaches the
+trace: the page's tool notes are the *polled* shell calls, and an MCP call that takes
+forty milliseconds falls between two polls. The operator watched a worker think "call the
+lease", saw no card, and asked whether the model was lying — it was not: the session had
+three `synapse-lease_lease` calls and `/api/runs` carried a live 15-minute lease. The card
+is now `leaseCard()`, built from `leaseFor()` and pinned at the bottom of the run's trace
+beside the thinking: the Architect's tool-card shape, a breathing dot, the same
+`data-lease-until` clock the line uses, and the reason. The line itself is only for a lease
+whose run has folded or is not on the page, so one lease is never said twice.
+
 At the end the worker is **asked**, not killed: a synthetic says the lease is over
 and that it may call `lease` once more for the time it needs. Any assistant message
 after the question is an answer and earns the one extension; a second lease call

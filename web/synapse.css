@@ -3802,3 +3802,12 @@ body.is-disconnected .app-shell { filter: blur(2px) brightness(0.45); pointer-ev
 @media (prefers-reduced-motion: reduce) {
   .is-arriving { animation: none; }
 }
+
+/* A lease wears the tool card it is: the card is the shape the operator knows, and the clock
+   in its head is the number they asked for. Yellow, like the live path, because this is the
+   one card about time passing; the dot breathes while the lease is held. */
+.tool-card.is-lease { border-color: rgba(237, 194, 90, 0.32); }
+.tool-card.is-lease .tool-name { color: var(--yellow); }
+.tool-card.is-lease .tool-target { color: #c6cad1; }
+.tool-card.is-lease.is-expired { border-color: rgba(237, 194, 90, 0.2); }
+.tool-card.is-lease.is-expired .tool-name { color: var(--amber); }

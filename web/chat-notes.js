@@ -154,6 +154,46 @@ export function leaseClock(tool, lease) {
   return `<span class="tool-lease-clock" data-lease-until="${until}" title="The lease on your screen ends in ${esc(left)}">${esc(left)}</span>`;
 }
 
+/**
+ * The lease as the tool card it is, where the work is.
+ *
+ * The countdown used to ride only the *call* that asked for the lease, and a worker's lease
+ * call never reaches the trace: the page's tool notes are the polled shell calls, and an MCP
+ * call that takes forty milliseconds falls between two polls. So a worker said "call the
+ * lease" in its thinking, the lease was granted and held, and the operator saw no card at
+ * all (21 Nov — the model was telling the truth and the card was not there).
+ *
+ * This is drawn from the lease itself, pinned at the bottom of the run's trace beside the
+ * thinking, so it does not depend on the call ever being polled. The clock is the same element
+ * the lease line uses, so the page's one-second ticker keeps it honest.
+ */
+export function leaseCard(lease) {
+  if (!lease) return '';
+  const role = wired.roleLabel(lease.role) || 'Worker';
+  const reason = String(lease.reason || '').trim();
+  const at = esc(`${lease.dir}|${lease.task}`);
+  const asked = lease.minutes ? hhmmss(Math.max(0, Number(lease.minutes) * 60_000)) : '';
+  if (lease.expired) {
+    return `<div class="tool-card trace-card is-lease is-expired" data-lease-card="${at}">
+      <div class="tool-head" title="${esc(`${role}'s lease ended; the stall clock is back`)}">
+        <span class="status-dot warn" role="img" aria-label="lease ended"></span>
+        <span class="tool-name">lease</span>
+        <span class="tool-target">ended${reason ? ` · ${esc(reason)}` : ''} — asking whether it needs more</span>
+      </div>
+    </div>`;
+  }
+  const tip = `${role} asked for ${asked ? `a ${asked}` : 'a'} lease${reason ? ` — ${reason}` : ''}. ` +
+    `Silence is not a stall until it ends.`;
+  return `<div class="tool-card trace-card is-lease" data-lease-card="${at}">
+    <div class="tool-head" title="${esc(tip)}">
+      <span class="status-dot live" role="img" aria-label="lease held"></span>
+      <span class="tool-name">lease</span>
+      ${leaseClock({ name: 'lease' }, lease)}
+      <span class="tool-target" title="${esc(reason)}">${esc(reason || 'holding the stall clock off')}</span>
+    </div>
+  </div>`;
+}
+
 export function renderLease(lease) {
   const role = wired.roleLabel(lease.role) || 'Worker';
   const reason = lease.reason ? ` · “${esc(lease.reason)}”` : '';
