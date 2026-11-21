@@ -19,7 +19,7 @@
 import { QC_ROUNDS } from './plans.js';
 import { tokens } from './words.js';
 
-export function report({ task, role, insteadOf, startedBelow = false, skipped, outcome, harnessStop, text, files, context, workerId, planTouched, synapseTouched, qcRound, skillsRequired, skillsMissing, auto, stallSec, retries, resumes, loops = 0, loopCount = 0, loopMarked = false, loopRole = null, loopModel = null, modelRef = '', error, stoppedBy, lastTurnError, steers, deferred, checks, change, checkpoint, vcsWarning = '' }) {
+export function report({ task, role, insteadOf, startedBelow = false, skipped, outcome, harnessStop, text, files, context, contextLimit = 0, workerId, planTouched, synapseTouched, qcRound, skillsRequired, skillsMissing, auto, stallSec, retries, resumes, loops = 0, loopCount = 0, loopMarked = false, loopRole = null, loopModel = null, modelRef = '', error, stoppedBy, lastTurnError, steers, deferred, checks, change, checkpoint, vcsWarning = '' }) {
     const head =
       outcome === 'completed'
         ? checks?.failed
@@ -175,24 +175,27 @@ export function report({ task, role, insteadOf, startedBelow = false, skipped, o
           `them before the first edit; judge whether the work is complete without them.`,
       );
     }
-    // reached 200k generated at half the rate of one that stayed under 50k, so a
-    // long run is mostly a big transcript — which is the signal to split it, not
-    // to doubt the model.
     // The time and the token spend are in the chat's header (see the wake's
-    // description), so they are not repeated here. What is left is the shape of
-    // the effort: how many turns, how big the context got, whether it was
-    // summarised. A long run that stayed under 50k generated is a big transcript,
-    // which is the signal to split it, not to doubt the model.
+    // description), so they are not repeated here. What is left is the shape of the
+    // effort: how many turns, how big the context got, whether it was summarised.
+    //
+    // It used to end with a verdict — "Past about 150k a run gets slower with every turn"
+    // — measured on one model at one provider and then said to every model. It is not true
+    // under prompt caching, not true for a model whose window starts at 200k, and it is a
+    // baked-in number about one model's speed, which this harness is not allowed to hold
+    // (removed 21 Nov; the measurement stays in docs/notes/engine-notes.md, where it
+    // belongs). The peak against its own window is a fact the Architect can judge with.
     if (context && context.turns) {
+      const room = Number(contextLimit) || 0;
+      const of = room && context.peak && context.peak <= room ? ` of its ${tokens(room)} window` : '';
+      const summarised = context.compactions
+        ? context.compactions === 1
+          ? ' and was summarised once.'
+          : ` and was summarised ${context.compactions} times.`
+        : '.';
       lines.push(
         `Effort: ${context.turns} turn${context.turns === 1 ? '' : 's'}; the context peaked at ` +
-          `${tokens(context.peak)}` +
-          (context.compactions
-            ? context.compactions === 1
-              ? ' and was summarised once.'
-              : ` and was summarised ${context.compactions} times.`
-            : '.') +
-          (context.peak > 150000 ? ' Past about 150k a run gets slower with every turn.' : ''),
+          `${tokens(context.peak)}${of}${summarised}`,
       );
     }
     // How much of the night went into this. A recovered run is not a bad run, and

@@ -2927,6 +2927,9 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
         text,
         files,
         context,
+        // The window the model actually had, so the report can say 162k *of 200k* instead
+        // of guessing what "big" means for it (21 Nov).
+        contextLimit: Number(contextWindow(modelRef)?.context) || 0,
         workerId: worker?.id,
         planTouched,
         synapseTouched: strayWrites,

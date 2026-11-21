@@ -39,9 +39,26 @@ test('a completed run says what it did, how big it got and what is next', () => 
 test('a run that was summarised says how many times', () => {
   const once = report({ ...base, context: { turns: 9, peak: 212000, compactions: 1 } });
   assert.match(once, /peaked at 212k and was summarised once\./);
-  assert.match(once, /Past about 150k a run gets slower/);
   const twice = report({ ...base, context: { turns: 9, peak: 1000, compactions: 2 } });
   assert.match(twice, /and was summarised 2 times\./);
+});
+
+// The report used to end with "Past about 150k a run gets slower with every turn" — measured
+// on one model and then said to every model, which is a number about a model's speed, a thing
+// this harness may not hold (removed 21 Nov). The peak against its own window is the fact.
+test('the peak is compared to the model\'s own window, and no verdict is offered', () => {
+  const windowed = report({ ...base, context: { turns: 3, peak: 162000 }, contextLimit: 200000 });
+  assert.match(windowed, /peaked at 162k of its 200k window\./);
+  assert.doesNotMatch(windowed, /slower/, 'the report tells the Architect how fast a model is');
+  assert.doesNotMatch(windowed, /150k/, 'the baked-in threshold is back');
+  const unknown = report({ ...base, context: { turns: 3, peak: 162000 } });
+  assert.match(unknown, /peaked at 162k\./, 'with no window known, the number is still the number');
+  // A provider can report a cumulative cache figure above the window; a fraction of a window
+  // it exceeds is not a fraction worth printing.
+  const over = report({ ...base, context: { turns: 3, peak: 270000 }, contextLimit: 200000 });
+  assert.match(over, /peaked at 270k\./);
+  const summarised = report({ ...base, context: { turns: 9, peak: 120000, compactions: 1 }, contextLimit: 200000 });
+  assert.match(summarised, /peaked at 120k of its 200k window and was summarised once\./);
 });
 
 test('a token count reads as a word, not as digits', () => {

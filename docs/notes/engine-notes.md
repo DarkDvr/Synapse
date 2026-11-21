@@ -940,11 +940,20 @@ thinking**; 13% of the time in tools, the rest in generation.
   every run (`Effort:` / `context` in `runs.jsonl`) so it can be measured, not
   guessed.
 - **So the harness reports the cost of each run.** The report the Architect gets,
-  and the chat, carry one line: `Effort: 130 turns, 118k tokens written (74%
-  thinking), context peaked at 212k`. It is also on the `runs.jsonl` result line as
+  and the chat, carry one line: `Effort: 130 turns; the context peaked at 118k of its
+  200k window`. It is also on the `runs.jsonl` result line as
   `context: {turns, peak, generated, thinking, compactions, thinkShare}` and in the
   app log, so an audit reads the run log instead of the engine database. Not on the
   role card: the operator asked for the chat and the log.
+  **The line used to end with a verdict** — "Past about 150k a run gets slower with
+  every turn" — and the operator asked why the model was being told that (21 Nov). It
+  was true of the model the 916 note above measured, and it was then said to every
+  model: false under prompt caching, false for a window that starts at 200k, and a
+  baked-in number about one model's speed. Removed; the window is printed when it is
+  known, and only when the peak fits inside it (a provider's cumulative cache figure
+  can exceed the window, and a fraction of a window it exceeds is not a fraction worth
+  printing). The measurement itself stays in this file, where an operator can read it
+  and decide.
 - **QC's default focus was dialled down.** `app` now judges the operator's own
   screen and machine, calls another hemisphere / another screen size / a
   hand-edited constant an observation rather than a finding, and says a minor or
