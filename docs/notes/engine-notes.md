@@ -1,112 +1,92 @@
 # Engine notes
 
-How Synapse talks to the engine, and the things that cost real time to discover.
-Split out of `AGENTS.md`; the file is read when work touches
-`src/api.js`, `src/runs.js`, `src/plans.js` or `src/engines/opencode.js`.
+How Synapse talks to the engine, and the things that cost real time to discover. Split out
+of `AGENTS.md`; read it when work touches `src/api.js`, `src/runs.js`, `src/plans.js` or
+`src/engines/opencode.js`.
+
+## The routes that cost time
+
+The schema dump is a starting point, not the truth; the running engine is.
+
+| route | reality |
+|---|---|
+| `PATCH /api/session/{id}` | only `title`, `metadata`, `permissions` — **not `agent`** — and **204 with an empty body**; do not parse it. `permissions: []` clears the ruleset, which is how Single→Multi is applied to an open session. |
+| `POST /api/session/{id}/model` | `{model:{providerID,id,variant?}}`; **204, empty**. Omitting `variant` stores **`"default"`**. |
+| `POST /api/session/{id}/generate` | one-shot completion, `{data:{text}}`, **adds nothing to the transcript**. |
+| `POST /api/session/{id}/prompt` | an inbox entry: returns in ~100 ms while a turn runs; takes `text, files, agents, skills, metadata, delivery, resume`. |
+| an attachment | **`{uri, name}`**; a `data:` URI is accepted. |
+| `GET /api/session/{id}/message` | **singular**, and `prompt` only *admits* the message — `POST /api/experimental/session/{id}/wait` blocks until idle. |
+| `GET /api/session/active` | the authority on what is running; survives a restart. |
+| `GET /api/form` | scoped by `x-opencode-directory`; from the workspace root it always answers `[]`. |
+| `GET /api/pending` | pending forms, and `canStop` for the open session's project. |
+| `DELETE /api/debug/location?location[directory]=<dir>` | a **deepObject** (`location%5Bdirectory%5D=…`, else 400 `Expected object`) and **asynchronous**. |
+| `POST /api/session/{id}/compact` | queued at the next step boundary, so from an idle chat it runs now. |
+
+**A form dies with the engine.** `question` opens a form the engine holds in memory: on 21 Oct a form was
+waiting, `GET /api/pending` came back empty, and the card still read **running** — a state that can never
+finish. A restart abandons a pending question and nothing recovers it, so say so before restarting a run
+that waits on the operator. **The question must be findable outside the open session**: the answer panel
+lives only inside a session view and a page load opens nothing, so the rail marks the waiting session
+(Answer / Decide) and announces it once.
 
 ## A tool call written as text
 
-A model sometimes ends a turn by printing the call into its answer (`<tool_call>` …
-`</tool_call>`). The engine sees no tool part, so nothing runs and the turn ends — the work
-stops for no visible reason (test_27b, 12 Nov, 15:58).
+A model sometimes prints the call into its answer (`<tool_call>` … `</tool_call>`); the engine sees no tool
+part, so nothing runs and the turn ends for no visible reason (test_27b, 12 Nov).
 
-- **A delegated run gets one nudge.** At the point where the run would be marked completed,
-  `src/model-slips.js` checks the transcript the wait already fetched: last message, no tool
-  part, last text **ending** in the closing tag with a `function=`/`<parameter` inside. It
-  must be the last thing in the message, so a model quoting the syntax mid-answer is not
-  matched. The nudge fires **once per task**, and only when the turn ended by itself — no
-  error, no graceful stop, no aborted signal. A run that was stopped, held or restarted is
-  never woken by it.
-- **The Architect's own turn gets a notice, not a nudge.** The harness does not send the
-  Architect a message after its turn: that is the shape of the wakes that once resurrected
-  stopped work, and the operator asked for it to stay that way. The page shows
-  `toast('The Model Wrote A Tool Call', …)` instead, from the same rule in `web/transcript.js`.
-  Saying "continue" is the operator's, one click.
+- **A delegated run gets one nudge.** Where the run would be marked completed, `src/model-slips.js` checks
+  the transcript the wait already fetched: last message, no tool part, last text **ending** in the closing
+  tag with a `function=`/`<parameter` inside — so quoting the syntax mid-answer is not matched. Once per
+  task, and only when the turn ended by itself.
+- **The outcome stays `completed` and the ladder does not move.** When the last text is nothing but a
+  tool-call block (`wroteToolCall`) and no file was written, the report quotes it instead of handing the
+  Architect raw XML.
+- **The Architect's own turn gets a notice, not a nudge.** The harness sends it no message after its turn —
+  that is the shape of the wakes that once resurrected stopped work. The page shows
+  `toast('The Model Wrote A Tool Call', …)` from the same rule in `web/transcript.js`; "continue" is the
+  operator's, one click.
 
 ## MCP: how the engine exposes tools to models
 
 Synapse registers its own MCP server in the engine's isolated config at
-`data\engine\opencode\config\opencode\opencode.json`, which it rewrites on every
-boot.
+`data\engine\opencode\config\opencode\opencode.json`, rewritten on every boot.
 
 ```json
-{
-  "mcp": { "servers": {
-    "synapse-search": {
-      "type": "local",
-      "command": ["<node>", "F:\\dev\\Synapse\\src\\mcp\\search-server.js"],
-      "codemode": false
-    }
-  } },
+{ "mcp": { "servers": { "synapse-search": {
+    "type": "local",
+    "command": ["<node>", "F:\\dev\\Synapse\\src\\mcp\\search-server.js"],
+    "codemode": false } } },
   "websearch": false,
-    "skills": { "paths": ["C:\\Users\\Andrew\\.agents\\skills"] }
-}
+  "skills": { "paths": ["C:\\Users\\Andrew\\.agents\\skills"] } }
 ```
 
-Two non-obvious things, both found by testing:
+- **`codemode` must be `false`.** Left on, the engine exposes MCP tools through code mode as
+  `tools["synapse-search"].websearch`, and the model calls that literal string as a tool name.
+- **`websearch: false` matters.** The built-in search needs a provider key and answers **HTTP 403** here;
+  with both present the model picks the broken one by name familiarity.
 
-- **`codemode` must be `false`.** Left on, the engine exposes MCP tools through
-  its code-mode tool as `tools["synapse-search"].websearch`, and the model tries
-  to call that literal string as a tool name — which the engine rejects.
-- **`websearch: false` matters.** The engine's built-in search needs a provider
-  key and answers **HTTP 403** here. With both present the model picks the
-  broken one by name familiarity; with only ours, it uses ours.
+MCP tools arrive **namespaced** (`synapse-search_websearch`). Match names by suffix, not equality.
 
-MCP tools arrive **namespaced** (`synapse-search_websearch`). Match
-names by suffix, not equality.
+**The name is a literal, so the brief has to say it (13 Nov).** An Architect called `delegate_delegate`,
+was answered `No tool named "delegate_delegate" is currently available`, and concluded the tool was
+missing — probing code mode (which lists only `opencode` and `browser`) and falling back to `subagent`. The
+brief now gives the exact names (`synapse-delegate_delegate`, `synapse-lease_lease`) and says that answer
+is a spelling error; it also rules `subagent` out for a plan task — no run, no plan row.
 
-**The name is a literal, so the brief has to say it (13 Nov).** On 13 Nov an Architect
-called `delegate_delegate`; the engine answered `No tool named "delegate_delegate" is
-currently available`, and the model concluded *the tool was missing* — it probed the
-code-mode `tools` object (which lists only the code-mode namespaces: `opencode`,
-`browser`) and fell back to the engine's own `subagent`. The same complaint had reached
-the operator twice that day. A model cannot invent a namespace, and it will not read the
-tool list as a spell-check when the brief used a generic word ("the delegate tool"). The
-brief now gives the exact name — `synapse-delegate_delegate` — where it tells the
-Architect to delegate, the way it already named the lease tool (`synapse-lease_lease`),
-and it says that a "No tool named" answer is a spelling error rather than an absence. It
-also rules the engine's `subagent` out for a plan task, in words: no run, no plan row,
-nothing for the operator to judge.
+**The same server carries `webfetch`**, because a search result is a URL and the engine's own fetcher
+returns the page, not the reading: measured 2 Nov, `github.com/DarkDvr/Synapse` is 302 KB of HTML with
+11 KB of text. `src/fetch.js` reads GitHub through its API, X posts through oEmbed, everything else through
+a reader that strips scripts and navigation, and reports its source (`github:repo`, `x:oembed`,
+`readability`). **It refuses walls instead of returning an empty page** — a bot challenge, a 403, a
+Cloudflare interstitial — because a model handed "" writes a confident report about nothing; the error
+names the wall and points at `docs/notes/web-reading.md`. **A dropped connection is retried once; an answer
+is not.**
 
-**The same server carries `webfetch`**, because a search result is a URL and the
-engine's own fetcher returns the page, not the reading. Measured on 2 Nov:
-`github.com/DarkDvr/Synapse` is 302 KB of HTML with 11 KB of text in it, most of
-the interesting part buried in a README among navigation — a model spends its turn
-reading chrome. `src/fetch.js` reads GitHub repositories, issues, pull requests and
-file links through GitHub's own API, X posts through oEmbed, and everything else
-through a reader that strips scripts, navigation and forms and keeps the prose as
-Markdown. Its source is reported (`github:repo`, `x:oembed`, `readability`), so a
-report can say where the words came from.
-
-**It refuses walls instead of returning an empty page.** Reddit answers a bot
-challenge, x.com a 403 and 4pda a Cloudflare interstitial; a model handed "" writes
-a confident report about nothing. The error names the wall and says a signed-in
-browser session would be needed, which is a thing the operator can act on — see the
-cookie findings in `docs/notes/web-reading.md`.
-
-**A dropped connection is retried once; an answer is not.** `raw.githubusercontent.com`
-failed once with a bare "fetch failed" and answered on the next call — so network
-failures get one quiet retry, while 403/404 return at once.
-
-**A tool with per-session state belongs in the transcript, not in a server.** An
-MCP server has no idea which session called it, so it cannot keep per-session
-state on its own. It does not have to: the engine records **every tool call, with
-its full input**, in the transcript, which Synapse reads back on each turn the
-way the census does. That is how the plan tool worked before the plan became a
-file — and `src/plans.js` still reads the tool calls the same way for anything
-else that needs them.
-
-Also: `engine.opencode.localSearch: false` used to `return` from the whole of
-`ensureEngineConfig`, which silently cost the model-limit overrides too. The
-guard now wraps only the search server.
-
-**Keep it to what is needed.** A `time` tool was added here as a special case
-for one question the operator asked while testing search, and he asked for it to
-be removed — it was not a real capability the product needed, and it was bloat.
-Ask before adding a special-case tool; add it only if it is genuinely useful for
-real agentic development work.
-
----
+**A tool with per-session state belongs in the transcript, not in a server.** The engine records **every
+tool call, with its full input**, which Synapse reads back each turn the way the census does. Also:
+`localSearch: false` used to `return` from all of `ensureEngineConfig`, silently losing the model-limit
+overrides; the guard now wraps only the search server. **Keep it to what is needed** — a `time` tool added
+for one test question was bloat and was removed.
 
 ## Briefing a session: the engine's instruction entries
 
@@ -118,614 +98,310 @@ GET    /api/experimental/session/{sessionID}/instructions/entries
 DELETE /api/experimental/session/{sessionID}/instructions/entries/{key}
 ```
 
-`key` matches `^[a-z0-9][a-z0-9._-]*$`; the reply is **204 with an empty body**;
-the value is any JSON value (a string is fine) and there is a size cap that
-answers **413** (`InstructionEntryValueTooLargeError`). The route's own summary
-says changes "announce as updates at the next step boundary". Verified live on
-2.0.30: PUT returned 204 and GET read the value back.
+`key` matches `^[a-z0-9][a-z0-9._-]*$`; the reply is **204 with an empty body**; the value is any JSON
+value and a size cap answers **413** (`InstructionEntryValueTooLargeError`). Changes "announce as updates
+at the next step boundary". Verified on 2.0.30: PUT 204, GET read back.
 
-**The 204 means accepted, and the event is a turn-start signal, not an acknowledgement
-(13 Nov).** On `calc-emperor` — a chat created in Single, switched to Multi and sent at
-once — the engine created the user message at `19:12:08.362` and applied the instruction
-entry at `.370`: eight milliseconds apart, in that order. The first turn behaved exactly
-as the Single brief says ("do the work yourself… there is no team… ignore a delegation
-tool if one is offered") and did the whole task alone; the next turn was told "The context
-under 'synapse.plan' changed and supersedes the previous value".
+**The 204 means accepted, and the event is a turn-start signal, not an acknowledgement (13 Nov).** On
+`calc-emperor` — created in Single, switched to Multi and sent at once — the engine created the user
+message at `19:12:08.362` and applied the entry at `.370`: **eight milliseconds apart**, in that order. The
+first turn obeyed the Single brief and did the task alone; the next was told "The context under
+'synapse.plan' changed and supersedes the previous value". A wait on `session.instructions.updated` before
+the prompt can never work: the event only arrives once a turn is starting, which the prompt itself does. A
+chat created in one mode and switched at send is an unreliable first turn; setting the mode while the chat
+is idle is the fix, and it is not taken yet.
 
-Which request saw which brief is not observable from here, and Synapse cannot make it
-deterministic: the engine emits `session.instructions.updated` when it *applies* an entry
-at a step boundary, and a write to an idle session emits nothing at all — a project's
-creation brief produced no event. A wait on that event before the prompt was tried for one
-release (1.58.8) and could never work — the event only arrives once a turn is starting,
-which the prompt itself does — while it cost every new project the 2 s timeout; removed
-the same night (1.58.9). What is certain is that a brief written in the same instant as a
-send may or may not reach that turn. A chat created in one mode and switched at send is
-therefore an unreliable first turn; setting the mode while the chat is idle, rather than
-at the send, is the change that would fix it, and it is not taken yet.
+This is how Synapse briefs a role — which project, where the plan file is, who may write it, how work is
+delivered. It is **per session**; it is **durable**, sent once and re-sent only when its text changes; and
+it **never appears in the transcript** — there is no system field in `prompt`, and `agents:[{name}]` does
+not switch the acting agent, so the alternative is prefixing the operator's message and making it read as
+if they had typed it.
 
-This is how Synapse briefs a role — which project, where the plan file is, who
-may write it, what the plan currently says, and how work is expected to be
-delivered. It is the right channel for three reasons:
-- **It is per session**, so the Architect and each worker can be told different
-  things without any of them knowing the others exist.
-- **It is durable**, so it is sent once and re-sent only when its text changes,
-  instead of riding on every message.
-- **It does not appear in the transcript.** `POST /api/session/{id}/prompt`
-  accepts only `text, files, agents, skills, metadata, delivery, resume` — there
-  is **no system field**, and `agents:[{name}]` does not switch the acting agent.
-  So the alternative would be prefixing the operator's message, which joins the
-  conversation and reads as if the operator had typed it.
-
-**Never put a lone backslash in text a model reads.** The first plan Synapse
-generated came back as invalid JSON because the brief said `bin\` and the model
-copied it verbatim into a JSON string, where `\ ` is an invalid escape. Model-
-facing paths use forward slashes (`bin/`, `.project/plan.json`).
-
----
+**Never put a lone backslash in text a model reads.** The first plan came back as invalid JSON because the
+brief said `bin\` and the model copied it into a JSON string, where `\ ` is an invalid escape. Model-facing
+paths use forward slashes (`bin/`, `.project/plan.json`).
 
 ## The project plan: a file the Architect owns
 
-`<project>\.project\plan.json` — goal + tasks (`id`, `title`, `role`, `status`,
-`detail`, `dependsOn`, `result`, `note`). The Architect writes it with the
-ordinary file tools; there is no tool and no store for it.
+`<project>\.project\plan.json` — goal + tasks (`id`, `title`, `role`, `status`, `detail`, `dependsOn`,
+`result`, `note`, `checks`, `origin`), written with the ordinary file tools; there is no tool and no store
+for it.
 
-- **One writer.** The Architect owns it. Workers are told it is read-only and
-  are handed their own task instead, so they never need to open it. The harness
-  fingerprints the file around a worker turn so a stray edit is visible.
-- **Synapse only reads it — it never repairs it.** Reading is tolerant and never
-  throws: a bad file becomes `error` (unparseable) or `problems` (it parsed but
-  breaks the shape), and the pane shows exactly what is wrong. The same sentence
-  goes into the Architect's brief, so **the model fixes its own document**;
-  verified live — one bare "Continue." closed the loop, because the brief was the
-  only thing that could have told it the file was broken.
-- **It belongs to the project, not the conversation**, so a new session
-  continues the same plan. It is created empty (`{"version":1,"goal":"","tasks":[]}`)
-  when a project is added and at boot for any project missing one.
-- **There is no built-in project.** The old General project (one workspace per
-  session, undeletable) is gone: every project is one workspace and one chat, and
-  an existing General folder is adopted as an ordinary project on the first boot
-  after the change. A project with no plan still gets one at boot; a project the
-  operator deletes takes its chat, its folder and its `.project` with it.
-- **`id` is required.** Delegation refers to tasks by id, and the Architect may
-  rewrite the file at any time; a task without one is flagged and skipped.
-- **It is the current request's checklist, not a diary.** A new operator request
-  starts a new plan: new goal, new rows; done rows from the last round are not
-  carried over (the run log is the history). Two to six rows, each a deliverable.
-  A `found` row is allowed only when the round cannot finish without it, one or
-  two at most. Every piece of work in Multi goes through the plan, even a single
-  file: write the row, delegate it, judge the report — the Architect does not
-  write the product itself (Single is the mode where it acts alone; on 28 Oct a
-  one-file request was written by the Architect and the plan pane still said "No
-  plan yet"). Row times are scoped to the round, so a t1 in a new plan starts at
-  0, not with the previous plan's t1. On 27–28 Oct the pane showed two rounds at
-  once — seven rows, NEW badges, a QC "verify" row from an earlier round — and the
-  operator could not read it as a list.
-- **A blocked note is two sentences.** What is stuck and what the operator must
-  decide. The pane clamps it to two lines (the rest is in the row's tooltip); a
-  wall of the Architect's reasoning turned the whole pane red on 28 Oct. Status
-  and note must agree: `done` has no note, `blocked` says what is needed.
-- **Titles over 80 characters are a `problem`, not a silent trim.** The pane
-  clamps a title to two lines with the full text on hover, and the brief carries
-  the complaint so the Architect shortens its own title. Clamping the grid item
-  directly is fine in Chromium (measured: 34px visible of 84px) even though
-  `getComputedStyle` reports its display as `flow-root` — do not wrap it in
-  another span on that reading, it clips either way.
-- **A title is the plan's human index: what the work *is*, not which file it lands
-  in.** The pane is read at a glance and by someone who has not read the project,
-  so `Write bin/wordfreq.py and bin/NOTES.md` is a `problem` and `Build the
-  word-frequency report` is not — the brief says so ("no file paths and no code
-  identifiers in a title: put them in detail") and `readPlan` enforces it in the
-  same `problems` channel the Architect already repairs a malformed file from.
-  The patterns are deliberately narrow: `FILEISH_TITLE`
-  (`/[A-Za-z0-9_-]+\.[A-Za-z]{1,5}\b/`) and `PATHISH_TITLE` (a leading
-  `bin|src|web|docs|config` + separator). A bare slash is a perfectly good title —
-  **`Audit the UI/UX` must not be flagged**, and is the test that proves it. Note
-  the flip side: an existing plan written before this rule shows the complaint in
-  the pane until the Architect rewrites its own titles.
-- **One line is loud: the step in hand.** Every title is muted (`#9aa0a8`, 600);
-  only a `doing` task is white and 700. A finished or blocked step is announced by
-  its dot and its border, not by brightness, so a four-line plan has exactly one
-  place to look. **The row's border is the dot's colour, at 2px** — at 1px and 0.34
-  alpha the operator's word for it was "too faint" — and the `tN` id carries the
-  same colour in text, which is what makes a plan readable without counting dots.
-  **Every dot is filled**: the step in hand used to be a yellow *ring* on a
-  transparent centre, which on a dark row reads as a black dot inside a ring —
-  two styles at once. Grey = not started, green = done, yellow = in hand, red =
-  blocked/failed.
-- **The step in hand is the run, not the file.** The Architect only writes the plan
-  when it *judges*, so during a worker run the file still says `todo` and the pane
-  showed the live step as a grey row. `renderPlan` overlays the runner's live run:
-  a task whose id is running renders as `doing` — yellow dot, yellow border, white
-  bold title — while the file stays the plan. Counts in the footer stay the file's
-  (they are the plan's truth); only the row is live.
-- **A result with a status that has not caught up is a `problem`.** test-project-3's
-  t1 got a full `result` and was left `todo`, so the pane showed a finished task as
-  untouched while the Architect's own message said it was marked done. `readPlan`
-  now flags "has a result but its status is \"todo\"" — a `blocked` or `failed` task
-  may legitimately carry a result (a timed-out worker still produced something), so
-  only `todo` and `doing` are flagged. It goes through the same `problems` channel,
-  so the Architect repairs its own file on its next turn.
-- **Plan problems are a labelled list, not a filled block.** They were an amber
-  panel with the complaints as amber paragraphs, and on a finished plan that read
-  as a rendering fault rather than a note — the operator's word for it was
-  "unexpected yellow artifacts". They are a left amber rule, a heading
-  ("`2 plan notes for the Architect`") and one bullet per problem now: unmistakably
-  deliberate, quiet enough to sit under a finished plan. The *brief* still carries
-  them in the same `problems` channel either way — this is only what the pane looks
-  like.
-- **A finished plan owes a customer-facing summary.** `summary` is a plan field the
-  Architect writes when it marks the last task done: one sentence a customer would
-  understand, with no file paths, tool names or code. The Architect's card shows it
-  under the **Done** chip (two lines, clamped, full text in the tooltip — it shares
-  the fixed three-line slot with the chip, so the card's height is unchanged:
-  measured 106.3px before and after). `readPlan` flags a finished plan with no
-  summary in the same `problems` channel, so the Architect writes its own.
-  **Why the Architect and not the harness:** it has the plan's context and it owns
-  the file; a `generate` call from Synapse would also work but would leave the text
-  nowhere to live that survives a restart.
-- **A task's `result` is not printed under its title.** One line per task keeps
-  the pane scannable; the result rides the title's tooltip. A `note` is the
-  exception and stays visible — a blocked task is the one case where the operator
-  is being asked for something, so the reason must not be behind a hover — **and
-  only while it is that reason**: on a `done` or `todo` task the text stays in the
-  file and in the tooltip, because the Architect moving on without clearing its own
-  note made a finished plan look like it was still asking.
-- **A finished project's folder can be deleted while Synapse runs — the engine has
-  to be told to let go.** The engine keeps a *location* loaded once it has served a
-  turn there, and that handle makes the directory undeletable: `Remove-Item` reports
-  "being used by another process" on the folder even after its sessions are gone and
-  the project is unregistered. The release is
-  `DELETE /api/debug/location?location[directory]=<dir>` (the parameter is a
-  **deepObject**, so the query is `location%5Bdirectory%5D=…`, not a bare
-  `location=`; a bare one answers 400 `Expected object`). Two facts measured: it
-  **works**, and it is **asynchronous** — an immediate delete after the call still
-  failed while the same delete a second later succeeded, so `evictLocation()` polls
-  `GET /api/debug/location` until the directory is gone (30 × 100ms) instead of
-  sleeping. `deleteProject` evicts and waits (281ms measured), and
-  `wipeProjectDir` evicts then retries `fs.rmSync` before failing with 423. The
-  operator's flow is now: delete the project in Synapse → take what you want out of
-  `bin/` → delete the folder. Nothing to stop first.
-- **There is no Project panel, and no path label anywhere.** The rail is Project
-  plan + Tools in use; a project is one row (a state dot and its name), and its
-  Browse/Cmd/Rename/Delete live in a `⋯` menu (right-click and Shift+F10 open the
-  same one). `POST /api/projects/{id}/open` spawns a detached GUI process (array
-  args, never a shell string), and both branches are validated before anything is
-  spawned.
-- **A command prompt needs `start`.** `spawn('cmd.exe', ['/K', 'cd', '/d', dir])`
-  exits with code 0 within a second and no window ever appears: a console
-  spawned directly by a process that has none has no console to inherit. The
-  working form is `cmd.exe /c start "" cmd.exe /K cd /d <dir>` — verified by
-  finding the new window's title, then closing it by PID.
-- **Explorer takes about a second to show a window**, and that is Explorer, not
-  us: `POST /open` answers in ~57ms. Because the delay is real but not ours, the
-  button carries an `:active` state so the click is acknowledged immediately.
-- **Speaker headers are yellow, and every turn has a hairline above it.** The
-  label is the speaker (`You` / `Architect` / `Synapse · …`), so a Synapse report
-  no longer repeats `[harness]` in its own text — and old messages are stripped
-  at render time. The three colours are `--violet-bright` (you), `--green`
-  (Architect) and `--yellow` (Synapse), and all three use the same block: no
-  panel fills exist any more. **`ui.answerBg` / `ui.harnessBg` and the Settings
-  → Chat group are gone** — `normalize()` deletes a `ui` block so an old config
-  does not carry a dead key.
-- **The product's name is Synapse; "harness" is what it is, not what it is
-  called.** Anything user-facing says Synapse. The code still says harness in
-  places (the `.msg.harness` class, `src/runs.js`), which is fine internally.
-- **A polled reader must not log on every poll.** `logPlanState` keys on a
-  signature of the state (issues + every task's id and status) and speaks only
-  when it changes; the pane reads the plan every few seconds, so anything dumber
-  writes the same sentence into app.log forever. Called from two places: the
-  plan route (a hand edit is noticed while a pane is open) and `afterTurn` (the
-  Architect writes during a turn, and that is the only place that notices with no
-  UI open). A session with no directory is not logged at all.
-- **Deliverables go in `bin/`** inside the project; everything else there is
-  scratch. It is in the brief so every role knows where work lands.
-
----
-
-## Why Synapse dispatches, and not the engine's `subagent` tool
-
-Settled, and the reason is per-role models: **the Architect cannot choose a
-subagent's model**, so leaning on `subagent` would leave every per-role pick
-decorative and hide the orchestration in a black box. Each step runs as a real
-engine session with that role's model and effort instead.
+- **One writer.** The Architect owns it; workers are told it is read-only and handed their own task, and
+  the harness fingerprints the file around a worker turn so a stray edit is visible.
+- **Synapse only reads it — it never repairs it.** Reading is tolerant and never throws: a bad file becomes
+  `error` (unparseable) or `problems` (it parsed but breaks the shape), and the same sentence goes into the
+  Architect's brief, so **the model fixes its own document** (verified: one bare "Continue." closed the
+  loop). A delegation reads the parse error first — `Nothing was run: plan.json is not valid JSON:
+  <message>. … A JSON string cannot contain a real newline: keep each string on one line, or write \n
+  instead. Fix the file, then ask again.`, journalled `bad-plan` — because a row was there in a file that
+  could not be read, and "the plan has no task t1" cost three turns (17 Nov).
+- **`id` is required.** Delegation refers to tasks by id and the Architect may rewrite the file at any
+  time; a task without one is flagged and skipped.
+- **It belongs to the project, not the conversation**, so a new session continues the same plan. Created
+  empty (`{"version":1,"goal":"","tasks":[]}`) when a project is added and at boot for one missing it.
+  `.project` belongs to the **directory**, which is why a project is one chat; deleting the project takes
+  its chat, folder and `.project` together. The old General project is gone — an existing General folder
+  is adopted as an ordinary project on first boot.
+- **It is the current request's checklist, not a diary.** A new request starts a new plan: new goal, new
+  rows, no done rows carried over (the run log is the history). Two to six rows, each a deliverable; a
+  `found` row only when the round cannot finish without it. Every piece of work in Multi goes through the
+  plan, even one file — on 28 Oct the Architect wrote a one-file request itself and the pane said "No plan
+  yet". Row times are scoped to the round, so a t1 in a new plan starts at 0. The brief asks the opposite
+  of what it once did: start with the work you can see, add items where they belong in the order, and say
+  in one line what you added. That is weaker than "I saw the whole plan" and stronger in practice, because
+  the old rule was broken productively every run — sixteen changes in one evening, `t3b` and `t3c` invented
+  to insert work. Scope is still the operator's: `features.json` is the contract.
+- **`phases` is gone.** Old plans keep the field and it is ignored on read; each task's role says whether
+  design was planned, and array order is work order. A delegation was once **refused** while a declared
+  phase had no task under it — right on Clock Test 3, where a two-task plan silently became ten, and a rule
+  against the behaviour that makes the harness good on a list that may grow. **`origin`** is `plan`, `found`
+  or `operator` — a fact, not a rating; the pane marks `found` rows with a quiet amber "added" chip, and an
+  unknown value reads as `plan`. A `priority` field was left out because a model asked to rate its own
+  additions rates them all high.
+- **A blocked note is two sentences.** What is stuck and what the operator must decide, clamped to two
+  lines (rest in the tooltip) — a wall of reasoning turned the pane red on 28 Oct. Status and note must
+  agree: `done` has no note, `blocked` says what is needed.
+- **A title is the plan's human index: what the work *is*, not which file it lands in.**
+  `Write bin/wordfreq.py and bin/NOTES.md` is a `problem`; `Build the word-frequency report` is not. The
+  brief says so ("no file paths and no code identifiers in a title: put them in detail") and `readPlan`
+  enforces it in the same `problems` channel. The patterns are deliberately narrow: `FILEISH_TITLE`
+  (`/[A-Za-z0-9_-]+\.[A-Za-z]{1,5}\b/`) and `PATHISH_TITLE` (a leading `bin|src|web|docs|config` +
+  separator). A bare slash is a good title — **`Audit the UI/UX` must not be flagged**, and is the test
+  that proves it. **Titles over 80 characters are a `problem`, not a silent trim**: the pane clamps to two
+  lines with the full text on hover, and the grid item must not be wrapped in another span on that
+  `flow-root` reading — it clips either way.
+- **A result with a status that has not caught up is a `problem`.** test-project-3's t1 got a full
+  `result` and was left `todo`. `readPlan` flags "has a result but its status is \"todo\""; a `blocked` or
+  `failed` task may legitimately carry one. **A done row owes a result**: `done` with no `result` is the
+  same kind of problem — *"one line saying what proved it, or it is a claim with nothing behind it"*. Both
+  wait for the file to stand still, because the two fields land in two writes.
+- **A finished plan owes a customer-facing summary.** One sentence a customer would understand, no paths or
+  code, under the **Done** chip and flagged by `readPlan` when missing. The Architect writes it because it
+  has the context and owns the file; a `generate` call would leave the text nowhere to live that survives a
+  restart.
+- **A task's `result` is not printed under its title** — it rides the tooltip. A `note` stays visible,
+  because a blocked task is where the operator is being asked for something — **and only while it is that
+  reason**. Problems are a labelled list, not a filled block: a left amber rule, a heading and one bullet
+  each, because an amber panel read as a rendering fault.
+- **The pane shows one loud row: the step in hand.** Titles are muted except a `doing` task, whose border
+  and `tN` id carry its dot's colour (2px); dots are grey not started, green done, yellow in hand, red
+  blocked/failed. **The step in hand is the run, not the file** — the Architect writes the plan only when it
+  *judges*, so `renderPlan` overlays the runner's live run and only the row is live. **A polled reader must
+  not log on every poll**: `logPlanState` keys on a signature of the state and speaks only when it changes.
+- **A finished project's folder can be deleted while Synapse runs — the engine has to let go.** A
+  *location* stays loaded once the engine has served a turn there, and that handle makes the directory
+  undeletable. The release is `DELETE /api/debug/location?location[directory]=<dir>`; it **works** and is
+  **asynchronous** (an immediate delete failed, the same delete a second later succeeded), so
+  `evictLocation()` polls `GET /api/debug/location` until it is gone (30 × 100ms). `deleteProject` evicts
+  and waits (281ms measured); `wipeProjectDir` evicts, retries `fs.rmSync`, then fails with 423.
+- **The project row is the whole project UI.** No panel, no path label: one row whose
+  Browse/Cmd/Rename/Delete live in a `⋯` menu, and `POST /api/projects/{id}/open` spawns a detached GUI
+  process with array args. **A command prompt needs `start`**: `spawn('cmd.exe', ['/K','cd','/d',dir])`
+  exits 0 in a second with no window; the working form is `cmd.exe /c start "" cmd.exe /K cd /d <dir>`.
+  **Explorer takes about a second** and that is Explorer, not us (`POST /open` answers in ~57ms).
+- **Speaker headers are yellow, and every turn has a hairline above it**: `You` / `Architect` /
+  `Synapse · …`, so a report no longer repeats `[harness]`. The old `ui.answerBg` / `ui.harnessBg` and
+  Settings → Chat group are gone — `normalize()` deletes a `ui` block so an old config carries no dead key.
+  Anything user-facing says Synapse.
+- **Deliverables go in `bin/`**; everything else in the project is scratch.
 
 ## Delegation: the Architect asks, the harness runs
 
-`delegate { task }` is a stateless MCP tool (src/mcp/delegate-server.js). The
-request is read out of the transcript on the turn boundary, exactly like the
-census, and answered once — the call id is written to `.project\runs.jsonl`
-**before** the worker starts, so a restart or a re-scan cannot run it twice.
-`src/runs.js` then creates a real session for the task's role, on that role's
-model and effort, briefs it with its own task, runs it, records the evidence, and
-wakes the Architect.
+Settled, and the reason is per-role models: **the Architect cannot choose a subagent's model**, so
+`subagent` would leave every per-role pick decorative. Each step runs as a real engine session with that
+role's model and effort.
 
-Non-obvious, all verified on 2.0.30:
+`delegate { task }` is a stateless MCP tool (`src/mcp/delegate-server.js`). The request is read from the
+transcript on the turn boundary, exactly like the census, and answered once — the call id goes to
+`.project\runs.jsonl` **before** the worker starts, so a restart or re-scan cannot run it twice.
+`src/runs.js` creates a session for the task's role and model, briefs it with its own task, runs it,
+records the evidence, and wakes the Architect.
 
-- **`POST /api/session/{id}/synthetic`** — "durably admit synthetic session input
-  and schedule execution". This is how the Architect is woken with nobody
-  typing: the message is its own transcript type (`synthetic`), which the UI
-  renders as **Harness · \<description\>** with an amber edge, never as the
-  operator. `sessionLog` records each one.
-- **`metadata` is accepted on `POST /api/session`** and is free-form, so
-  `metadata.synapse.internal` marks a worker session. `normalizeSession` exposes
-  it as `internal`, and the API filters those out of the rail *and* the project
-  session counts. The engine still lists them, so a worker transcript stays
-  inspectable at `/api/session` — that is how you audit a run.
-- **A worker's claim is not evidence.** The first delegated run reported writing
-  `bin/calendar_design.md`; no such file existed and `runs.jsonl` recorded
-  `files: []` from its own tool calls. The Architect checked the disk, kept the
-  task `todo`, wrote the reason into `note`, and re-delegated — attempt two wrote
-  the real file. This is why the report always prints `Files written: none.`
+- **`POST /api/session/{id}/synthetic`** is how the Architect is woken with nobody typing: the message is
+  its own transcript type, rendered as **Harness · \<description\>** with an amber edge, never as the
+  operator. **`metadata` on `POST /api/session`** is free-form, so `metadata.synapse.internal` marks a
+  worker session; the API filters those out of the rail and the counts, and the engine still lists them, so
+  a worker transcript stays inspectable at `/api/session`.
+- **A worker's claim is not evidence.** The first delegated run reported writing `bin/calendar_design.md`;
+  no such file existed and `runs.jsonl` recorded `files: []` from its own tool calls. Hence `Files written:
+  none.`
+- **A model that waits inside its turn for the run it just delegated deadlocks itself (13 Nov).**
+  `calc-emperor-strict`: the Architect called `delegate`, then read `plan.json` ten times over 35 seconds —
+  "still todo, let me wait a bit more" — while a delegation is read on the turn boundary, so the run could
+  not start. What the model reads is the **receipt**, whose first line now says to end the turn: "reading
+  the plan again... will never show it running."
+- **A delegation can be orphaned by a turn that never ends.** Fever Tracker, 22 Oct: the Architect
+  delegated and asked a question in the same turn; a restart cancelled the pending form (`Form not found:
+  frm_…`), the turn could not end, and the delegation stayed "Queued", unjournalled and unrun.
+  `recoverDelegations` makes one pass at boot (5 s in) over each project's newest conversation and runs
+  anything `requestsIn` still reports.
+- **A refusal or a deferral is also a journalled decision.** A delegate refused because a worker was
+  running was answered and forgotten, so the boot scan started it (27 Oct: a restart started t5 from a
+  stopped round). Every refusal path (`single-mode`, `unknown-task`, `qc-cap`, `keep-building-off`,
+  `stopped-by-operator`, `self-delegation`, `deferred`) is a line in `runs.jsonl`, which is what makes
+  "unread" mean unread. **A row whose role is the Architect is its own work** (11 Nov): it drew a
+  delegation from the Architect's card back to itself, so it is refused, journalled, and woken with "do it
+  here with your own tools".
+- **A deferral is reported with the run, not woken on its own.** Waking it with "ask again when it reports
+  back" cost a turn per duplicate ask (5 Nov: three delegate calls bought three Architect turns); the ask
+  rides the live run and is named in its report, once. **A form reply that answers `Form not found` means
+  the question is gone**: clear the panel and say so.
+- **Retry cap: 3 attempts per task**, then the harness refuses with a report telling the Architect to break
+  the task down, change the role/model, or mark it blocked. Refusals log an `outcome` and no `attempt`, so
+  they do not count. **A recoverable provider failure is not an attempt** (five rate limits then a finish is
+  attempt 1). **An operator stop is not an attempt, and neither is a restart** (`countedAttempts`): Fever
+  Tracker's t1 was "attempted" three times, two of them operator stops, so the cap was spent before the
+  design was judged. A stop or a restart does not move the task down the ladder either (`attemptFailed`).
+- **A free-plan usage cap gets ten minutes, not for ever.** Classified `unknown` it was retried
+  indefinitely (27 Oct: 13 retries, 51 minutes). It is `usage-limit` now, and both the worker's rescue loop
+  and the Architect's wake stop after `USAGE_LIMIT_MS` naming the model to switch. A hard model mark is
+  still only for `deprecated`.
+- **Caps are per round, not per project.** A round ends when every task is `done` **and** the summary is
+  written. That close is one `round` line (`closeRound`), written when the operator **sends the next
+  request**, before the brief — so the brief's QC allowance is the new round's and the finished plan keeps
+  its row times until then. The marker carries the plan's exact `mtime` (`planMtime`), not the wall clock,
+  because a plan written a millisecond later produced a second marker. Without it a mature project spent
+  its whole QC quota in its first three rounds (27 Oct: three `qc-cap` refusals) and a reused id reached the
+  attempt cap although every attempt had succeeded. The brief states the allowance ("QC: 0 of 3 …"), because
+  an Architect read a handover's "three rounds spent", refused to delegate t7, and wrote a refusal into the
+  plan that never happened.
+- **A coder that cannot do the job hands it down the line.** The coders are peers (`worker.ladder`, default
+  `coder-1 → coder-2`) and the harness moves the *same task* between them — the Architect cannot, because
+  the first thing it learns about a refused model is a report saying nothing happened. `candidatesFor()`:
+  **a provider refusal moves to the next peer inside the same delegation**, and **an attempt after the
+  first starts one rung further down**, because re-delegating the same task *is* the Architect's verdict. It
+  starts at the **role's own rung** — `slice(at + skip)`, not `slice(skip)`, so a coder-2 task no longer
+  began on coder-1 (test-project-1's f-string run). **A marked model** — a provider refusal, one that cannot
+  drive the tools, one that looped to its limit — is skipped from the start, so a coder-1 task opens on
+  coder-2 while coder-1 is out. A timeout does not loop: the worker may have produced something, and the
+  counter moves that case next time.
+- **Changing a role's model starts the task over on that role** (`modelChangedSinceAttempt`): the count and
+  the step-down reset. **It also ends the role's backoff**: `wakeRole(role, {ref, variant})` fires the run's
+  wake signal (separate from Stop's controller) and retries at once; only a run whose `retry` is set is
+  woken. The Architect's own loop is the same idea in `wake()`.
+- **The plan's `role` is never rewritten.** The report says *"this attempt ran on coder-2, not coder-1 — the
+  plan still says coder-1, judge the work on its merits"*, and `runs.jsonl` records `role`, `plannedRole` and
+  `ladder`. The invariant: a task's role is its *first rung*, and the ladder only ever moves down. **The
+  operator's own choice overrides the "write it for coder-1" rule** (30 Oct: "tell coder 2 to create…" was
+  silently rewritten): a row they asked for carries `origin: "operator"`, and the plan check accepts
+  `coder-2` there.
+- **Build tasks are planned for coder-1, and only coder-1.** The ladder is the harness's, so a plan naming
+  coder-2 spends the fallback on work the first coder could have done; `validatePlan` reports it. Shift Test
+  4: six build tasks spread across the coders while coder-1 was idle.
+- **The reason is visible in three places**, because "why is Coder 1 idle?" is what a card invites: the
+  provider's own sentence in the report, `skipped: [{ role, message }]` on the run so the card reads
+  `Skipped — <reason>`, and the model's badge in the picker. test-project-2's t1: 1.8s refusal → `coder-2`
+  in 87s, `role=coder-2 plannedRole=coder-1`.
+- **Single mode refuses.** Tool rulesets cannot hide an MCP tool, so a delegation in a Single session is
+  refused in the runner and the Architect is told to do it itself.
+- **One worker per project at a time** (`busy` set keyed by directory) — two Architects editing one plan
+  file is the one thing that can actually corrupt it.
+- **`runs.jsonl` is the project's, so a session's view of it is a ledger, not a sum.** Records carry
+  `architect`; older results are joined by `callId`. `runLedger(records, sessionId)` in `src/plans.js`
+  answers `spent` (the row's stopwatches) and `reported` (the dashed "handed back" mark), which used to be
+  summed by task id alone: on 27 Oct a rewritten three-row plan showed t2 and t3 already dashed with an hour
+  on them. Task ids repeat between sessions and plans, so nothing keyed by id alone may cross a session
+  boundary.
+- **"Keep building" is a session switch, not a setting.** `metadata.synapse.auto` (exposed as `auto`) is
+  toggled by the finish-line flag between Stop and Send and read in three places: the brief, every worker
+  report so a mid-run flip lands on the next judgement, and the runner at report time. Hidden in Single; on,
+  the remaining three tasks ran themselves in 12.8 minutes. **The flag is enforced**: after a free model
+  read "Keep building is OFF" three times and delegated anyway, the runner refuses when keep-building is off
+  **and the operator has not spoken since the last report** — `operatorSpokeSince()` compares the newest
+  `user` timestamp with the newest `synthetic` — unless the delegation is for **the task just reported**,
+  which is a retry. The refusal is logged, recorded as `outcome: 'keep-building-off'`, shown as a toast, and
+  does **not** wake the Architect.
+- **A worker is never killed for taking a long time.** There is no wall-clock ceiling: a designer turn of
+  forty minutes is normal. What is stopped is a turn that produces *nothing at all* — `waitForIdle` compares
+  a **signature of the transcript** (message and part counts, timestamps, text length) on every poll, and
+  when it has not changed for `worker.stallSec` (default 600 s) the turn is interrupted and **resumed**, not
+  failed: continue from where it stopped, up to `worker.resumeMax` times (default 4), then it is a timeout.
+  `roles.<id>.stallSec` overrides it. The old 600 s ceiling was the wrong shape: on 19 Oct three consecutive
+  turns hit it *while working* (48 tool calls and a 447-line contract). **A question for the operator is not
+  silence**: while a `question` tool part is running the stall clock is paused.
+- **A loop is one phrase held, or one call repeated. The harness counts it and never changes the effort.**
+  Tokens keep arriving, so the signature keeps changing; two rules. **Thinking**: the newest assistant
+  message is looked at only while it has written no text and called no tool — a last 320-character tail that
+  is periodic (the same 12–96 character phrase) and still the same ten seconds later is a loop. **Calls**:
+  the same tool with the same target four times inside the last twelve calls; a step that calls a tool ends
+  with a tool part, so the thinking check cannot see it (eight runs of `node bin/t1a-proof.js` were
+  `loops: 0` on 4 Nov because of that). The runner interrupts, sends a `synthetic` "stop repeating and carry
+  on", and counts it: `↻ Loop detected ×1 of 3 — asking it to carry on`. It **does not touch the model's
+  thinking effort** — walking the variant down made the model worse and was removed on 4 Nov. At
+  `worker.loopLimit` loops in one work order (three) the model is marked ISSUES (kind `loop`), the task moves
+  to the next coder **inside the same delegation**, and the log records `loopMark: { role, model }`. The
+  report names the coder that *was marked* — naming the run's *final* coder once told the Architect the one
+  that had just delivered was broken. `worker.loopGuard` turns the guard off; the rescues ride the run and
+  its result as `loops`.
+- **A changed answer is a new question, and a spent strike is spent (16 Nov).** Four runs of one test script
+  were called "the same target 4 times" while the model was editing between runs: the answers were a
+  traceback, two `#REF!`s and a pass. The target key now includes the answer digest; the strike carries its
+  own tool (it named an edit rather than the shell that repeated), the window is cleared when a nudge lands,
+  and the watcher starts at the send.
+- **Recoverable provider failures never end a run.** `src/provider-errors.js` classifies the sentence a
+  turn ended with. *Transient* — rate limit/429, connection reset, socket/network/DNS, 5xx, "overloaded", the
+  free-tier message, and **anything unrecognised** — is retried in the same session with exponential backoff
+  (`worker.retryBaseSec` 10 s doubling to `worker.retryCapSec` 300 s, ±20% jitter), indefinitely; it consumes
+  no attempt, moves no rung, and keeps every file written (`synthetic` "continue", not a new worker).
+  *Terminal* — deprecated/retired model, invalid key, explicit 400/422 — ends the delegation and moves the
+  rung. *Context* — the prompt did not fit — is a third kind: retrying fails identically and the run is not
+  over, so the harness asks the engine to compact and sends "continue from the summary, keep each turn
+  small". That is what a local server set to **Stop at Limit** returns; *Truncate Middle* silently drops the
+  middle of the conversation and *Rolling Window* the beginning. The context rule is tested before
+  `bad-request`, because OpenAI wraps an over-long prompt in a 400. (The engine's side changed on 6 Nov —
+  see "The engine retries on its own" — so the harness retry covers only what the engine gives up on.)
+- **A rate limit must not mark a model.** It used to write a `provider` issue and `candidatesFor()` skips
+  marked models, so one 429 made every role on that model look refused and the delegation moved to a retired
+  model. Only `deprecated` marks one; a 401 stops the turn and reports but is never a permanent mark.
+  **Guarded by `node tests\provider-retry.test.mjs`** — 26 checks over classification, retry, resume, stop
+  and the wake — because this decides whether an overnight run survives.
+- **A declined permission is not a provider failure (29 Oct).** The engine ends a declined step with "Step
+  interrupted"; the gate has already sent a refusal note and the worker often answers it with its report.
+  The runner used to read the *first* assistant error, retry, and tell the worker "the provider cut the
+  turn", which invited the same tool again. `turnErrorOf` reads the **last** assistant message and
+  `toolDeclined` stops a retry when a tool part says the permission was declined.
+- **The wake is watched, not fire-and-forget.** It used to admit the report and move on; on the clock run the
+  Architect's turn then failed on a rate limit two seconds later and the report sat unread. It now waits for
+  that turn and retries on the same schedule.
+- **A report's header names the task, the coder, the model and the cost**: "t6 completed by QC (<model
+  name>) · ran for 00:26:28 · used 12.4M tokens (58% was reasoning)", with `failed in`, `timed out in` and
+  `stopped in` in the same shape. The clock and token totals moved here *from* the report, so the chat says
+  each number once; the report keeps turns, peak context and compactions.
+- **An attempt belongs to the ask, not to the id.** A rebuilt plan reuses t1, t2, …, so on 4 Nov a rebuilt
+  plan refused its t1 because an earlier plan had spent the three attempts. A delegate carries the plan's
+  goal and the task's title, and `countedAttempts` counts only records whose stamp matches (`sameAsk`).
+- **A steer is on the trace before the model reads it.** The prompt does not come back until the next step,
+  so waiting left the chat silent for minutes after the button (4 Nov). The run line is pushed, journalled
+  and broadcast at the press; the prompt is awaited in the background, and a refusal takes the line back
+  with a toast. An Architect steer paints the sentence at once.
+- **An automatic answer is not the operator speaking.** After Auto-Answer replies, a synthetic line says
+  the operator is away and the harness chose the recommended options, because without it the next turn
+  reasoned about a decision nobody had made.
+- **Stop is the way out, and it is a run-level cancel.** `POST /api/runs/cancel` aborts an
+  `AbortController` for that directory: the poll and the backoff sleep see it next tick, the worker session
+  is interrupted, the result is `outcome: 'stopped'`, and **no wake is sent**. The button is enabled
+  whenever a run is live for the open project.
 
-- **A model that waits inside its turn for the run it just delegated deadlocks itself
-  (13 Nov).** `calc-emperor-strict`: the Architect wrote its plan, called `delegate` for
-  t1, then read `plan.json` ten times over 35 seconds — each read "still todo, let me wait
-  a bit more". A delegation is read on the turn boundary, so t1 could not start until that
-  turn ended, and the model kept the turn open. The operator stopped it. The tool's
-  description already said "then stop"; what the model actually reads is the **receipt**,
-  so the receipt's first line is now "End this turn now. The run starts when the turn does,
-  and it cannot start while the turn is open: reading the plan again... will never show it
-  running." A turn that never ends already had one failure mode here (below); this is the
-  polite version, and it needs no recovery pass because nothing was journalled.
-
-- **A delegation can be orphaned by a turn that never ends.** "Read on the turn
-  boundary" means `session.execution.succeeded|failed|interrupted` → `handleTurn`.
-  Fever Tracker, 22 Oct: the Architect delegated t8 and then asked the operator a
-  question in the same turn; Synapse was restarted, the engine rebuilt its
-  locations and **cancelled the pending form** (`Form not found: frm_…`), so the
-  turn could not end — and the delegation stayed in the transcript for ever,
-  answered "Queued", unjournalled and unrun. Nothing was running, t8 stayed
-  `todo`, and the Architect looked idle with the work "finished". `recoverDelegations`
-  now makes one pass at boot (5 s in) over each project's newest conversation and
-  runs anything `requestsIn` still reports — safe because a call id is journalled
-  before the worker starts, so a re-scan can never run one twice.
-  **A refusal or a deferral is also a journalled decision.** A delegate refused
-  because a worker was already running used to be answered and forgotten, so the
-  boot scan found it "unread" and started it: on 27 Oct a restart started t5 from a
-  round the operator had stopped because of permission friction. The busy branch now
-  records `outcome: 'deferred'`, and every refusal path (`single-mode`,
-  `unknown-task`, `qc-cap`, `keep-building-off`, `stopped-by-operator`,
-  `self-delegation`, `deferred`) is a line in `runs.jsonl`, which is what makes
-  "unread" mean unread.
-  **A row whose role is the Architect is its own work** (11 Nov). Delegating it asked
-  for a second Architect: the runner spawned a worker with the architect role, and the
-  page drew a delegation from the Architect's card back to itself — a yellow loop on
-  its own left edge. It is refused now, journalled, and woken with "do it here with
-  your own tools", because the row is still the Architect's to settle and silence
-  would leave it waiting for a report that cannot come.
-  **A deferral is reported with the run, not woken on its own.** The busy branch
-  used to wake the Architect with "ask again when it reports back", which cost a
-  whole turn per duplicate ask: three delegate calls in one turn bought three
-  Architect turns, two of them only to say "I'll hold" while the worker was still
-  working (5 Nov). The ask is journalled, remembered on the live run, and named in
-  that run's report — once, when the Architect is free to act on it.
-  The lesson for the UI: a form reply that answers `Form not found` means the
-  question is gone, so clear the panel and say so — never leave a dead form up.
-  rather than omitting the line, and why the harness never moves a task.
-- **Retry cap: 3 attempts per task**, then the harness refuses with a report
-  telling the Architect to break the task down, change the role/model, or mark it
-  blocked. Refusals are logged with an `outcome` and no `attempt` number, so they
-  do not count against the cap. A refusal is a real answer, not a silent retry.
-  A recoverable provider failure is not an attempt either: a task that was rate
-  limited five times and then finished is on attempt 1, because nothing about the
-  task failed. **An operator stop is not an attempt, and neither is a restart**
-  (`countedAttempts`): Fever Tracker's t1 was "attempted" three times — two of
-  them stops by the operator — so the cap was spent before the design had ever
-  been judged, and the Architect was then refused the retry it needed and had to
-  invent a new task. The harness did not spend those attempts; the operator
-  cancelled them, or Synapse died under the worker. For the same reason a stop or
-  a restart does not move the task down the ladder (`attemptFailed`): t3 dropped
-  a rung because a restart interrupted it, and no change to that role's model
-  could bring it back.
-- **A free-plan usage cap gets ten minutes, not for ever.** "Free usage limit
-  reached. Connect a provider or subscribe … switch models" classified as
-  `unknown` and was retried indefinitely: on 27 Oct t9 sat on it for 13 retries
-  and 51 minutes before the operator stopped it, while t8 recovered after about
-  five. It is `usage-limit` now (transient, not terminal), and both the worker's
-  rescue loop and the Architect's wake stop after `USAGE_LIMIT_MS` (10 minutes)
-  with a message naming the model to switch. A hard model mark is still only for
-  `deprecated`; a capped account says nothing about the model.
-- **Caps are per round, not per project.** A round ends when the Architect says
-  the plan is done: every task `done` **and** the customer-facing summary written.
-  That close is one `round` line in `runs.jsonl` (`closeRound`), written when the
-  operator **sends the next request**, before the brief — so the brief's QC
-  allowance is the new round's, and the finished plan keeps its row times until
-  that moment (a close at the end of the plan made its own rows read "not run").
-  The marker carries the plan file's exact `mtime`; the QC loop's three rounds
-  and every task's three attempts count only after it, and the plan's row times
-  do too. Without the boundary a
-  mature project spent its whole QC quota in its first three rounds and
-  self-verified every bugfix round after (27 Oct: three `qc-cap` refusals, and
-  only `qc-1` and `qc-2` on disk), and a task id reused by every new plan (t1,
-  t2, …) reached the attempt cap although every one of its attempts had
-  succeeded.
-  Two failures kept the reset from working: the dedupe compared against
-  `stat.mtimeMs`, which `readPlan` does not return (it is `stat.mtime`), so after
-  the first marker every later close returned false; and the runner did not
-  expose `closeRound`, so the send-time path was a no-op. Both fixed 27 Oct.
-  The marker is now bound to the plan's exact `mtime` (`planMtime`), not to the
-  wall clock: a plan written a millisecond after the close used to look newer and
-  produce a second marker.
-  The brief also states the round's allowance now ("QC: 0 of 3 …"): the Architect
-  had read the previous handover's "three rounds spent", refused to delegate t7
-  at all, and wrote "the delegation was refused" into the plan — a refusal that
-  never happened, so the round was self-verified for no reason.
-- **A coder that cannot do the job hands it down the line.** The two coder roles
-  are peers (`worker.ladder`, default `coder-1 → coder-2`), and the
-  harness moves the *same task* between them — the Architect cannot, because the
-  first thing it learns about a refused model is a report saying nothing happened.
-  `candidatesFor()` decides the rungs for an attempt, on two rules: **a provider
-  refusal moves to the next peer inside the same delegation** (same task, same
-  attempt, and retrying a retired model would only spend the Architect's turn), and
-  **an attempt after the first starts one rung further down**, because the Architect
-  re-delegating the same task *is* its verdict that the previous coder did not
-  deliver — the only verdict the harness can see. It starts at the **role's own
-  rung**: `ladder.slice(skip)` sliced from the ladder's start, so a task written for
-  coder-2 began on coder-1 and the report said "ran on coder-1, not coder-2" with
-  nothing having failed (caught in test-project-1's f-string run, fixed to
-  `slice(at + skip)`). A role whose model is marked — a provider refusal, a model
-  that cannot drive the tools, or one that looped to its limit in one work order —
-  is skipped from the start, so a task the Architect writes for coder-1 opens on
-  coder-2 while coder-1 is out, instead of paying for the same rescue on every task.
-  A timeout does not loop: the worker may
-  still have produced something, and the attempt counter moves that case next time.
-  **Changing a role's model starts the task over on that role**
-  (`modelChangedSinceAttempt`): a failure on the old model is not a reason to send
-  the task to the next coder once the operator has fixed the planned role. The
-  count and the step-down are reset for that task; a model the provider still
-  marks is skipped until the mark is cleared or another model is chosen.
-  The plan's `role` is never rewritten (the Architect owns the file); the report says
-  *"this attempt ran on coder-2, not coder-1 — the plan still says coder-1, judge the
-  work on its merits"*, and `runs.jsonl` records `role`, `plannedRole` and `ladder`.
-  **The operator's own choice overrides the "write it for coder-1" rule** (30 Oct:
-  "tell coder 2 to create…" was silently rewritten to coder-1): a row they asked
-  for carries `origin: "operator"`, the plan check accepts `coder-2` on
-  that row, and the brief tells the Architect to use the named coder, mark the row
-  and say so in its reply. The invariant is unchanged — the task's role is its
-  *first rung*, and the ladder only ever moves down from there (`nextRung` slices
-  from the role's own index), so a coder-2 task runs on coder-2 and never falls
-  back to coder-1.
-  **Changing a role's model mid-run also ends its backoff.** `wakeRole(role,
-  {ref, variant})` fires the run's wake signal (separate from Stop's controller),
-  switches that session to the new model and lets the retry happen at once; the
-  backoff counter resets because the failing model is gone. Only a run whose
-  `retry` is set is woken — a working turn is the engine's to switch at its next
-  prompt. The Architect's own retry loop is the same idea in `wake()`: a wake
-  entry per project, fired only while that loop is asleep, which switches the
-  chat's session and retries the report send immediately.
-  Verified through the real runner with a stubbed engine (19/19): a refusal moves,
-  attempt 2 starts a rung down, a marked model is skipped, a clean turn stays on
-  coder-1, and a role outside the ladder still reports a plain `error`.
-  **Re-verified 29 Oct** (`tests/ladder.test.mjs`): a terminal refusal really does
-  walk the ladder inside one delegation (the result names the rung it landed on),
-  a re-delegation starts on coder-2, and an operator Stop
-  stays on coder-1. The one failure that does **not** move at once is a usage cap:
-  it is retried in place for up to ten minutes because it can clear (it did on 27
-  and 29 Oct), and only an `outcome=error` after that grace hands the work to the
-  next rung. The emulator project's "the ladder didn't advance?" was a Stop *after*
-  the cap had cleared — not a broken ladder.
-  **The reason is visible in three places**, because "why is Coder 1 idle?" is the
-  question a card invites: the report carries the provider's own sentence
-  (`coder-1's model was refused: Model space-bunny-free has been deprecated…`), the
-  run state carries `skipped: [{ role, message }]` so the skipped role's card reads
-  `Skipped — <reason>` for as long as the run is live, and the model keeps its
-  badge in the picker. The first production run of this (`test-project-2`, t1) went
-  exactly that way: 1.8s refusal → `coder-2` in 87s, with the move written into
-  `runs.jsonl` as `role=coder-2 plannedRole=coder-1`.
-- **Build tasks are planned for coder-1, and only coder-1.** The ladder is the
-  harness's, not the Architect's, so a plan that names coder-2 starts on
-  that rung immediately (`candidatesFor` slices from the role's own rung) and spends
-  the fallback on work the first coder could have done — the operator pays for it. The
-  brief's `build:` rule now says so in those words, and `validatePlan` reports any
-  task written for coder-2 as a problem with the reason attached. Shift
-  Test 4 was the evidence: the Architect spread six build tasks across the
-  coders while coder-1 was idle, and the cheap model was never tried.
-- **Single mode refuses.** Tool rulesets cannot hide an MCP tool, so the promise
-  is kept in the runner: a delegation request in a Single session is refused out
-  loud and the Architect is told to ask for Multi.
-- **One worker per project at a time** (`busy` set keyed by directory) — two
-  Architects editing one plan file is the one thing that can actually corrupt it.
-- **`runs.jsonl` is the project's, so a session's view of it is a ledger, not a
-  sum.** Delegation records carry `architect` — the session that asked — and
-  results now carry it too; older results are joined to their delegation by
-  `callId`. `runLedger(records, sessionId)` in `src/plans.js` answers both
-  questions the plan pane asks: `spent` (the two stopwatches on a row) and
-  `reported` (the dashed "handed back, waiting for review" mark). Both used to be
-  summed by task id alone. On 27 Oct a new session opened a rewritten three-row
-  plan with t2 and t3 already dashed and over an hour on them, and the QC card
-  showed a clock while dimmed as unused: the ids had run in the previous session.
-  Task ids repeat between sessions and between plans, so nothing keyed by id alone
-  may cross a session boundary.
-- **"Keep building" is a session switch, not a setting.** `metadata.synapse.auto`
-  (normalizeSession exposes it as `auto`) is toggled by the finish-line flag
-  between Stop and Send, and read in three places: the brief tells the Architect
-  its mode for the next message, every worker report repeats it so a mid-run flip
-  lands on the next judgement, and the runner itself reads it at report time.
-  Hidden in Single via `body[data-mode="single"] .keep-toggle`. Verified live:
-  switched on, the remaining three tasks ran themselves in 12.8 minutes.
-  **The flag is enforced, not just asked.** A free model read "Keep building is
-  OFF: stop after judging this one" three times and delegated the next task anyway
-  (test-project-1's f-string run: all three tasks, no operator input, `auto: false`).
-  The runner now refuses a delegation when keep-building is off **and the operator
-  has not spoken since the last report** — `operatorSpokeSince()` compares the
-  newest `user` timestamp with the newest `synthetic` one, so nothing is stored —
-  unless the delegation is for **the task that was just reported**, which is a retry
-  and therefore the Architect's judgement. The refusal is logged, recorded in
-  `runs.jsonl` as `outcome: 'keep-building-off'`, and shown as a toast; it does
-  **not** wake the Architect, because waking it to say "stop" starts another turn
-  it can delegate in again.
-- **A worker is never killed for taking a long time.** There is no wall-clock
-  ceiling: a designer turn of forty minutes is normal on a busy evening, and a turn
-  that is writing, reading or reasoning is working. What is stopped is a turn that
-  produces *nothing at all* — `waitForIdle` compares a signature of the transcript
-  (message and part counts, timestamps, text length) on every poll, and when it has
-  not changed for `worker.stallSec` (Settings → Workers, default 600 s), the turn is
-  interrupted and **resumed**, not failed: the session is told to continue from
-  exactly where it stopped, up to `worker.resumeMax` times (default 4), then it is
-  reported as a timeout. `roles.<id>.stallSec` overrides the window for one role.
-  That is the operator's own recovery, performed for them — they had watched the
-  desktop app sit on "Working…" for an hour with nothing behind it, and fixed it by
-  saying "you got stuck, continue".
-  **This is measured, and the old ceiling was the wrong shape.** On the clock run
-  (19 Oct) three consecutive turns hit a 600 s ceiling *while working*: the designer
-  made 48 tool calls and wrote a 447-line contract plus four mocks, the coder had a
-  40 KB shell on disk. The Architect accepted that partial work afterwards; nothing
-  was wrong except the number.
-  **A question for the operator is not silence.** While the transcript shows a
-  `question` tool part still running, the stall clock is paused, so the operator can
-  take as long as they like — otherwise every worker that asks anything would be
-  interrupted for asking.
-- **A loop is one phrase held, or one call repeated. The harness counts it and
-  never changes the effort.** Tokens keep arriving, so the activity signature keeps
-  changing and the worker looks busy; two cheap rules catch the shapes that are not
-  progress:
-  * **thinking** — the newest assistant message is looked at only while it has
-    written no text and called no tool: a last 320-character tail that is periodic
-    (the same 12–96 character phrase) and still the same ten seconds later is a loop;
-  * **calls** — the same tool with the same target four times inside the last twelve
-    calls. A step that calls a tool ends with a tool part, so the thinking check
-    cannot see this one; `node bin/t1a-proof.js` eight times in seven minutes was
-    `loops: 0` on 4 Nov precisely because of that.
-  On a loop the runner interrupts the turn, sends a `synthetic` "stop repeating and
-  carry on", and counts it: `↻ Loop detected ×1 of 3 — asking it to carry on`. It
-  **does not touch the model's thinking effort** — walking the variant down made the
-  model worse, not better, and was removed on 4 Nov. At `worker.loopLimit` loops in
-  one work order (Settings → Workers, three by default) the model is marked ISSUES
-  (kind `loop`), the task moves to the next coder **inside the same delegation**, and
-  the run log records `loopMark: { role, model }`. The report names the coder that
-  was marked and says the build now starts one rung lower — naming the run's *final*
-  coder once told the Architect that the coder which had just delivered was the
-  broken one, and it stalled waiting for an operator nobody had woken (4 Nov). The
-  mark is also skipped at the start of later tasks, so coder-1 is not given the
-  first turn of every task only to loop again. `worker.loopGuard` turns the guard
-  off; the number of rescues rides the run and its result line as `loops`.
-- **A changed answer is a new question, and a spent strike is spent (16 Nov).** The
-  operator's own turn is watched by `src/turn-guard.js`, and four runs of one test
-  script there were called "the same target 4 times" while the model was editing the
-  script and the sheet between runs: the answers were a traceback, two `#REF!`s and
-  a pass. The target key now includes the answer digest for a tool that returns one,
-  so four runs with four answers are work; identical answers still strike. Two more
-  faults came from the same nudge: the message named the part that happened to be
-  current (an edit) rather than the shell that repeated, and the four calls stayed in
-  the window, so the same spent strike fired again after the quiet period. The strike
-  now carries its own tool, the window is cleared when a nudge lands, and the watcher
-  starts at the send instead of reading the chat's history.
-- **Recoverable provider failures never end a run.** `src/provider-errors.js`
-  classifies the sentence a turn ended with. *Transient* — rate limit/429,
-  connection reset, socket/network/DNS, 5xx, "overloaded", the free-tier message,
-  and **anything unrecognised** — is retried in the same session with exponential
-  backoff (`worker.retryBaseSec` 10 s doubling to `worker.retryCapSec` 300 s, ±20%
-  jitter), indefinitely. It does not consume an attempt, does not move the ladder,
-  and keeps every file already written: the harness sends `synthetic` "continue"
-  rather than starting a new worker from scratch. *Terminal* — deprecated/retired
-  model, invalid API key, explicit 400/422 — ends the delegation and moves the rung.
-  *Context* — the prompt did not fit the window — is a third kind, because neither
-  of the other two is right: retrying the same request fails identically, and the
-  run is not over. The harness asks the engine to compact and then sends "continue
-  from the summary, keep each turn small", for the worker and for the Architect
-  alike. This is the error a local server set to **Stop at Limit** returns; the
-  alternatives are worse — *Truncate Middle* silently drops the middle of the
-  conversation (the task at the top and the last turn survive, the file contents
-  between them vanish), and *Rolling Window* drops the beginning. The rule is
-  tested before `bad-request`, because OpenAI wraps an over-long prompt in a 400.
-  **The engine does not retry; the harness must.** Measured on the clock run: a rate
-  limit landed at 00:41:03 and the session was `idle` one second later. The desktop
-  app survives that because the client retries; the engine's API does not.
-  **A rate limit must not mark a model.** It used to write a `provider` issue, and
-  `candidatesFor()` skips marked models — so one 429 at 00:41:04 made every role on
-  that model look refused, and the delegation then moved to a model that was
-  retired. Only `deprecated` marks a model now; a 401 stops the turn and reports,
-  but is never written as a permanent mark (a server under load may be lying, and a
-  badge outlives the lie). **Guarded by `node tests\provider-retry.test.mjs`**,
-  which drives the real runner against a stubbed engine — 26 checks over
-  classification, retry, resume, stop and the wake — because this is the code that
-  decides whether an overnight run survives, and every one of those behaviours was
-  invisible in review the first time.
-- **A declined permission is not a provider failure (29 Oct).** The engine ends a
-  step whose tool was declined with the generic error "Step interrupted". The gate
-  has already sent the worker a refusal note, and the worker often answers it with
-  its report; the runner used to read the *first* assistant error after the mark,
-  ignore that later report, retry, and tell the worker "the provider cut the turn",
-  which invited the same tool again. `turnErrorOf` now reads the **last** assistant
-  message, and `toolDeclined` stops a retry when a tool part says the permission was
-  declined. A refusal is a report, not a network retry.
-- **The wake is watched, not fire-and-forget.** `wake()` used to admit the report
-  and move on. On the clock run the Architect's own turn then failed on a rate limit
-  two seconds later: the report sat in a transcript nobody read, no delegation
-  followed, and the run stopped with the UI showing an idle screen. The wake now
-  waits for the Architect's turn and retries its failures on the same schedule; the
-  report is sent once and later attempts just say "continue".
-- **A report's header names the task, the coder, the model and the cost.** It used
-  to read "worker t6 (qc) completed" — a noun, an id and nothing else. It is now
-  "t6 completed by QC (<model name>) · ran for 00:26:28 · used 12.4M tokens (58% was
-  reasoning)", and the other outcomes follow the same shape (`failed in`, `timed
-  out in`, `stopped in`); the model is the catalog's display name, with the ref as
-  the fallback (4 Nov). The clock and the token totals moved here *from* the report,
-  so the chat says each number once; the report keeps turns, the peak context and
-  the compactions, which are about the shape of the effort rather than its size.
-- **An attempt belongs to the ask, not to the id.** A rebuilt plan reuses t1, t2,
-  …, so the attempt budget used to follow the id across plans: on 4 Nov a plan the
-  operator had just asked to be rebuilt refused its t1 because an earlier plan had
-  spent the three attempts. A delegate now carries the plan's goal and the task's
-  title, and `countedAttempts` only counts records whose stamp matches the plan in
-  front of it (`sameAsk`); a plan with a new goal or a reworded task is a new ask
-  with a fresh budget. Records from before the stamp cannot be shown to belong to
-  the current ask, so they do not count either — the first delegation after the
-  upgrade starts clean.
-- **A steer is on the trace before the model reads it.** The engine's
-  `delivery: "steer"` prompt does not come back until the worker reaches its next
-  step, so waiting for it left the chat silent for minutes after the operator
-  pressed Steer — they could not tell it had landed (4 Nov). The run line is
-  pushed, journalled and broadcast when the button is pressed; the prompt is then
-  awaited in the background, and a refusal takes the line back off the trace with
-  a toast and a log warning. An Architect steer paints the operator's sentence in
-  the page at once and keeps it until the engine's own message replaces it.
-- **An automatic answer is not the operator speaking.** After Auto-Answer replies,
-  a synthetic line goes into the asking session: the operator is away, the harness
-  chose the recommended options, treat them as the harness's. Without it the next
-  turn reasoned about a decision nobody had made. Best effort, once per form — the
-  reply has already landed by then.
-- **Stop is the way out, and it is a run-level cancel.** `POST /api/runs/cancel`
-  aborts an `AbortController` for that directory: the poll and the backoff sleep see
-  it on the next tick (so a five-minute wait stops immediately), the worker session
-  is interrupted, the result line is `outcome: 'stopped'`, and **no wake is sent** —
-  waking the Architect after a stop would start a turn that could re-delegate the
-  very task that was just stopped. The button is enabled whenever a run is live for
-  the open project, not only when the open session is busy; it used to be disabled
-  exactly when a worker was running, which made it useless for delegations.
-- **Every provider failure is written to `data\provider-errors.log`** — its own
-  file, its own 30-day retention regardless of `logging.retentionDays`, pruned at
-  boot and (throttled to six hours) on write. One line each: timestamp, transient or
-  terminal, reason, role, model, task, retry number, and the provider's sentence
-  truncated to 180 characters. It exists to answer "are evenings slower, and how
-  often is that rate limits?" across months; a month of lines is a few hundred
-  kilobytes.
-- **The worker's poll is also the UI's source of live activity.** `waitForIdle`
-  already fetches the worker's transcript on a timer, so the newest tool call
-  costs nothing extra: the runner reads its name and target (the input field
-  differs per tool, so file, shell, search, fetch, skill and subagent targets are
-  all read in one place) and emits `run.progress` only when it changes. The same
-  run is in a map keyed by directory, served at `GET /api/runs` — the SSE events
-  are the fast path, and this is what a page reloaded mid-run reopens from.
-  Nothing invented, no extra turn, no polling of the engine from the UI.
-
----
+- **Every provider failure is written to `data\provider-errors.log`** — its own file, its own 30-day
+  retention, pruned at boot and (throttled to six hours) on write: timestamp, transient or terminal,
+  reason, role, model, task, retry number, the provider's sentence truncated to 180 characters. The suite
+  stays out of it (`NODE_TEST_CONTEXT`), because stub models had added fake lines beside a real usage cap
+  and that file is evidence.
+- **The worker's poll is also the UI's source of live activity.** `waitForIdle` already fetches the
+  transcript, so the newest tool call costs nothing extra: the runner reads its name and target and emits
+  `run.progress` only when it changes. The run sits in a map keyed by directory, served at `GET
+  /api/runs` — the SSE events are the fast path, and this is what a reloaded page reopens.
 
 ## The pipeline: ideas, design, a build, and an adversary
 
-The six cards are `architect, inventor, coder-1, designer, coder-2, qc`. `auditor` and `critic` are retired: the Architect verifies its own
-delegations against the disk, so a second confirmation was redundant. The
-adversary slot is **QC** (quality control) — the role that judges the build the
-way an ordinary person meets it. A config written before a rename is migrated once
-(`normalize()` folds `auditor`→`inventor`, `critic`→`hacker`, `hacker`→`qc`), and a
-plan file written before it is translated on read (`LEGACY_ROLE` in `plans.js`), so
-neither a saved model choice nor an existing plan is lost.
+The six cards are `architect, inventor, coder-1, designer, coder-2, qc`. `auditor` and `critic` are
+retired: the Architect verifies its own delegations against the disk. The adversary slot is **QC**. A
+config written before a rename is migrated once (`normalize()` folds `auditor`→`inventor`,
+`critic`→`hacker`, `hacker`→`qc`) and an old plan is translated on read (`LEGACY_ROLE`).
 
-The pipeline is a **menu**, not a checklist: a clock pays for invent → design →
-build the shell → wire it → QC → fix → re-check; a word-count CLI pays for two
-tasks. The Architect used to record that choice in the plan's `phases` field; it
-no longer does, and the field is ignored on read (see "The plan became a work
-list" below). Roles are identities plus one mandate each (`ROLE_MANDATES` in
+The pipeline is a **menu**, not a checklist: a clock pays for invent → design → build → wire → QC → fix;
+a word-count CLI pays for two tasks. Roles are identities plus one mandate each (`ROLE_MANDATES` in
 `plans.js`), and each owns one folder:
 
 | role | may write | produces |
@@ -734,293 +410,165 @@ list" below). Roles are identities plus one mandate each (`ROLE_MANDATES` in
 | designer | `.project/design/` | `design.md` (the spec) + `mock-N.html` |
 | qc | `.project/qc_findings/` | `qc-N.md`: ids `Q1…`, severity, exact repro |
 | coders | the project | `bin/` |
-| every role | `.project/reports/`, `.project/shots/` | evidence (a proof, a log) and the renders it took |
+| every role | `.project/reports/`, `.project/shots/` | evidence and the renders it took |
 
-**Evidence and screenshots are shared on purpose.** The brief tells every role to
-keep its proof and logs in `.project/reports/`, so the write rules allow that folder
-to every role, and the stray-write check ignores it — a rule that denied it made the
-brief a lie, and on 10 Nov a coder wrote there by shell and the tamper alarm reported
-its compliance as tampering. The cleanup mover marks the files it moves into
-`.project` as the harness's own writes for the same reason.
 
-**The file contract is the point.** `.project/` holds `project.md` — the project's
-living document, written by the harness, never by a model: a `## Current` head
-(the latest request and the decisions still in force), the `## Handover` from the
-last compact, the operator's own `## Notes`, and an append-only `## Log` of every
-request and every answer. It replaced `requirement.md` and `decisions.md`; those
-are imported into the Log on first use and archived. It also holds `plan.json`,
-`features.json` (confirmed + rejected, every confirmed item naming the task that
-delivers it), `ideas/`, `design/`, `qc_findings/` and `runs.jsonl`. Each brief is
-assembled from those files, so a worker receives the operator's words and the
-confirmed features verbatim, and the rejected ones are never passed on.
+**The file contract is the point.** `.project/` holds `project.md` — written by the harness, never by a
+model: a `## Current` head (the latest request and the decisions still in force), the `## Handover` from
+the last compact, the operator's `## Notes`, and an append-only `## Log`. It replaced `requirement.md`
+and `decisions.md`, which are imported on first use and archived. It also holds `plan.json`,
+`features.json` (confirmed + rejected, each confirmed item naming the task that delivers it), `ideas/`,
+`design/`, `qc_findings/` and `runs.jsonl`. **The head is why the document exists**: the brief used to
+quote the first 1,600 characters of the *original* request, so a long project opened standing in its
+first day. The head is rebuilt from the Log on every write; Single messages are `### chat` and never
+become the head's request.
 
-**The head is why the document exists.** The brief used to quote the first 1,600
-characters of `requirement.md` — the project's *original* request — so on a long
-project the model opened standing in its first day (see the Single-mode incident
-below). The head is rebuilt from the Log on every write, so "the request" is
-always the last one the operator sent, and the full history is one file away.
-Single-mode messages are logged as `### chat` and never become the head's
-request; the head falls back to the newest chat only when a project never had a
-Multi request at all.
+**Compacting a conversation is the one reset.** `POST /api/session/{id}/compact` is queued at the next
+step boundary and does **not** delete the transcript: the engine's summary replaces what the model is
+sent. The order matters:
 
-**Compacting a conversation is the one reset.** `POST /api/session/{id}/compact`
-is queued at the next step boundary, so from an idle chat it runs now. It does
-**not** delete the transcript: the engine's summary replaces what the model is
-sent, and the messages stay. So the reset is a sequence, and the order matters:
+1. `engine.compact(session)`; wait for a **new** `compaction` message with `status: completed` and a
+   `summary` (shaped Objective / Requirements / Decisions / Work State).
+2. Write the summary into `project.md`'s `## Handover`, and a `### compact` line into the Log. **Nothing
+   is deleted before this succeeds.**
+3. Create a new session in the same folder with the project's mode, Keep Building, model and the "Always
+   Allow" grants; its metadata carries `synapse.compacted {at, summary, messages}`.
+4. Delete the old session and broadcast `project.compacted`.
 
-1. `engine.compact(session)`; wait for a **new** `compaction` message with
-   `status: completed` and a `summary` (a completed row is `{status, reason,
-   model, summary}`, and the summary is the engine's own, written by the
-   project's model, shaped Objective / Requirements / Decisions / Work State).
-2. Write the summary into `project.md`'s `## Handover`, and a `### compact` line
-   into the Log. **Nothing is deleted before this succeeds.**
-3. Create a new session in the same folder with the project's mode,
-   Keep Building, model and the "Always Allow" grants; its metadata carries
-   `synapse.compacted {at, summary, messages}` — the post the new chat shows.
-4. Delete the old session and broadcast `project.compacted`, so a window looking
-   at it follows without a reload.
+A refusal or a timeout leaves the conversation exactly as it was: there is no silent discard. **A failed
+compaction is not waited out, and Stop cancels the wait (29 Oct)**: the engine writes `status: 'failed'`
+when it gives up, so `waitForHandover` returns an error at once instead of polling three minutes; Stop
+marks the wait cancelled (`cancelCompact`) and the request rejects with 409.
 
-A compaction the engine refuses, or one that never lands within the timeout,
-leaves the conversation exactly as it was: the handover is the point, so there is
-no silent discard. The chip that starts it is only shown when a compact can run
-(a project is open, nothing is working, there is something to discard), and a
-second click within three seconds is the confirmation.
+**A worker's transcript is replaced when its compaction no longer fits (28 Oct).** The compactor reads
+the whole *retained* transcript, so a long task asks the model to summarise more than its window holds —
+measured at 225k on a 131k model, while the active prompt was 111k. When that or a provider
+context-limit error reaches a worker run the runner does **not** retry the session: it creates a fresh
+worker with the same role, model, rules and briefing and prompts it with a **Synapse-written handover** —
+the task and its detail, the last thing it said, and "the project's files are the work — inspect git
+status/diff, keep what is done, continue, do not repeat". Three replacements per task, then the old retry
+path applies.
 
-**A failed compaction is not waited out, and Stop cancels the wait (29 Oct).**
-The engine writes a fresh `compaction` message with `status: 'failed'` the moment
-it gives up, so `waitForHandover` reads that and returns an error immediately
-instead of polling for three minutes. Stop during a compact marks the wait
-cancelled (`cancelCompact`) and the request rejects with 409; the client clears
-`state.compacting`, so the chip and composer come back without waiting for the
-timeout. A cancelled compaction writes no handover and deletes nothing. The
-engine's own "Compaction cancelled" message is not painted as a red COMPACTION
-block when the operator stopped it.
+**"Keep" writes a deliberate project copy (28 Oct).** An attachment is normally inline in the operator's
+message, where a compaction may summarise it and a project compact deletes it. Checking **Keep** writes
+the bytes to `.project/attachments/<stamp>-<name>` before the prompt, appends a `### attachment` line to
+the Log, and every brief says the folder exists. Unchecking writes nothing, deleting the project deletes
+it, and the timestamp stops a second keep overwriting the first.
 
-**A worker's transcript is replaced when its compaction no longer fits (28 Oct).**
-The engine's compaction prompt is the whole *retained* transcript, not the current
-context. A long task therefore asks the model to summarise more than its window
-holds — measured at 225k on a 131k model, which failed with "Compaction produced
-no summary" — while the active prompt was only 111k. When that failure, or the
-provider's context-limit error, reaches a worker run, the runner does **not** retry
-the same session. It creates a fresh worker with the same role, model, rules and
-briefing, then prompts it with a **Synapse-written handover**: the task and its
-detail, the last thing the worker said, and "the project's files are the work —
-inspect git status/diff, keep what is done, continue, do not repeat". The old
-session is deleted; the run's clock, attempt and budget continue. Up to three
-replacements per task, after which the old retry path applies.
+**A shell command is judged per statement (28 Oct).** A QC migration read `%APPDATA%` and wrote its
+report in scratch; judging the whole command as one outside write asked for a card three times.
+`analyzeCommand` keeps a read/write answer per statement: an outside **read** is allowed, an outside
+**write** asks, and a write with no path after `cd D:\...` is still an outside write.
 
-The engine's summary is not used here because the failed compaction is exactly the
-case where it does not exist. The project compact (above) still uses the engine's
-summary when it has one. A grant remembered for the old worker session does not
-travel to the new one, so a rare request may be asked again. The delegation
-harness covers both roads — a compaction failure and a provider context-limit
-error: a second session is created, the first deleted, and the handover carries
-the task, the worker's last words and the "do not repeat" instruction.
+**App data is portable by rule (28 Oct).** Every brief says an app's data lives in a `data` folder beside
+its executable (`bin/data`), never `%APPDATA%`, `%LOCALAPPDATA%`, `ProgramData`, the registry or any
+profile folder; scratch is temporary and never shipped. The gate still **asks** for a profile write, but
+the card says where the data belongs.
 
-**"Keep" writes a deliberate project copy (28 Oct).** An attachment is normally
-inline in the operator's message and exists only in the engine's transcript: a
-compaction may summarise it and a project compact deletes it. Checking **Keep** on
-the attic chip writes the bytes to `.project/attachments/<stamp>-<name>` before the
-prompt, appends a `### attachment` line to the project Log, and every brief says
-the folder exists — so a later Architect or a worker can list and read it. The
-inline copy is still what the model reads that turn; the file is what survives. It
-is a project file, not a temp file: unchecking before sending writes nothing, and
-deleting the project deletes it. The name is sanitised and the stored copy is
-timestamped so a second keep of the same name cannot overwrite the first.
+**A shipped tool runs from anywhere in a command (4 Nov).** The rule that lets a model run
+`node skills\...` looked only at the first word, so `timeout 30 node ...\skills\…\shot.mjs` was judged a
+write to the harness and refused. It is per statement and per interpreter now: the first non-flag word
+after the last interpreter must be a script under `skills/`, inline code (`-e`, `-c`, `-Command`) never
+qualifies, and every harness path named must be under `skills/`. The engine's PATH carries `bin\node`
+first, so the plain `node` in a brief works with no Node installed.
 
-**A shell command is judged per statement (28 Oct).** A QC migration read
-`%APPDATA%` and wrote its report in scratch; judging the whole command as one
-outside write asked for a card three times in the last run. `analyzeCommand` now
-keeps a read/write answer per statement: an outside **read** is allowed, an
-outside **write** asks, and a write with no path after `cd D:\...` is still an
-outside write. The AppData hint is chosen from the statement that actually writes,
-so a command that only read AppData no longer gets it.
+**An example in a brief is a template, not an illustration.** The Inventor's first mandate offered an
+alarm, a theme and a second time zone as the shape of a good answer — written for one project and about
+to be sent to every project after it, where a model copies the surface, not the lesson. It now asks for a
+named behaviour small enough to say in a sentence, sayable out loud the way a user would, with "settings
+/ polish / good UX are not features" as the anti-pattern. The features gate follows the same rule: one
+`multiselect`, never bundles, the recommended ones first with `(Recommended)` each carrying its why and
+effort, and `custom: true`. It is instruction, not enforcement — the question schema is the model's.
 
-**App data is portable by rule (28 Oct).** Every brief says an app's data lives in
-a `data` folder beside its executable (`bin/data`, or `data` next to the published
-exe), never `%APPDATA%`, `%LOCALAPPDATA%`, `ProgramData`, the registry or any
-user-profile folder. Scratch is temporary and never shipped; app data is part of
-the project. The permission gate still **asks** for a profile write rather than
-denying it — the operator did not want an outright prohibition — but the card now
-says where the data belongs. An app that already keeps data in AppData must move
-it and import the old copy once; the current Fever Tracker uses
-`%APPDATA%\FeverTracker\data.json` and extracts its web assets under
-`%LOCALAPPDATA%\FeverTracker\web`, so it still needs that migration.
+**A plan that routes every task to a coder skips the craft.** A brief made almost entirely of visual
+constraints came back with all six tasks on `coder-1`: every named file was delivered and the one thing
+the operator wanted to see — the look, decided by someone whose job is deciding looks — was never
+planned. The phase lines said what each *phase* was for and never who was for *what*. The routing rule is
+one sentence: **send a task to the craft it needs, not to whichever role is free; a coder builds a
+decision, never makes one.**
 
-**A shipped tool runs from anywhere in a command (4 Nov).** The rule that lets a
-model run `node skills\...` (`toolbox`) looked only at the command's *first* word:
-a QC run wrote `timeout 30 node ...\skills\visual-review\bin\shot.mjs`, the head was
-`timeout`, so the call was judged a write to the harness and refused. It is per
-statement and per interpreter now: the first non-flag word after the last
-interpreter must be a script under `skills/`, inline code (`-e`, `-c`,
-`-Command`) never qualifies, and every harness path the command names must be
-under `skills/`. The engine's PATH also carries `bin\node` first, so the plain
-`node` in a brief works on a machine with no Node installed — the alternative the
-model found was the vendored binary under `bin\`, which the policy refuses.
+**A rule that lands while Synapse is running has not landed.** The design rule above was committed at
+20:41 and the plan written at 20:42, under a process booted at 20:16. When a brief change "does not
+work", check the boot line in `logs\app.log` before the rule.
 
-**An example in a brief is a template, not an illustration.** The Inventor's first
-mandate said "build me a clock, go" and offered an alarm, a theme and a second time
-zone as the shape of a good answer. It was written for the clock project and would
-have been sent to every project after it — which is the rule in AGENTS.md, and the
-reason it was pulled before a run rather than after one. Few-shot examples are the
-strongest thing in a brief and the least controllable: the model copies the surface,
-not the lesson, and the mandate is the one place with no operator in the loop to
-notice it. It now asks for the same thing without a subject — a named behaviour
-small enough to say in a sentence and sayable out loud the way a user would, with
-"settings / polish / good UX are not features" as the anti-pattern — plus a rule to
-take any illustration from the operator's own request. Write the general rule in
-the brief; keep the incident that earned it here.
+## What a run costs
 
-**The features gate is a multiselect, one option per proposed feature.** The
-Inventor proposes; the Architect asks which to include. It used to ask "how much
-of it should the clock do" with three bundles, which hid ten individual ideas
-behind a mood — the operator's word: they wanted to tick the ones they wanted.
-The brief now says: one `multiselect`, never bundles, the recommended ones first
-with `(Recommended)`, each option's description carrying that idea's one-line why
-and its effort, and `custom: true` for their own. The panel already rendered a
-`multiselect` as checkboxes with descriptions, so this was a brief change, not a
-UI one. It is instruction, not enforcement — the question schema is the model's
-to author.
+Measured from the engine's store (`data\engine\opencode\data\opencode\opencode.db`).
 
-### What the first real run cost (Clock Test 2: 2h 51m, nine tasks, no retries)
+- **Throughput by prompt size, same model:** **157 tok/s under 50k, 145 at 50–100k, 117 at 100–150k, 68
+  at 150–200k**. Every long task finished at 212–290k and its second half ran at half the speed of its
+  first (t2 151→76, t4 167→75, t5 165→82).
+- **Tokens per minute:** Clock Test 3 read **56.4M prompt tokens** over 515 turns — 180–430k a minute,
+  where an interactive chat is 100–200k with long gaps. That density is what a free tier refuses, in
+  bursts of 5–11 minutes.
+- **The thinking share:** 70% of the 727k tokens Clock Test 2 wrote, and 51% of Clock Test 3's
+  transcript. The engine stores `reasoning` parts, so every turn re-sends them; a 212k prompt measured on
+  t4 was thinking 43%, tool results 30%, call arguments 19%, screenshots 4%, instructions 3%, the
+  conversation ~1%.
+- **A compaction can fail because its own summarise call is too big.** The compactor reads the whole
+  message log: t2 on 28 Oct had a 111k turn prompt while the compactor sent **225k to a 131k model**, and
+  the engine wrote `status: 'failed'`. **A failed message is not a compaction** — the trace said
+  "Compacted ×4 · context at 225K/131K" for three real ones. `compactionKeepTokens` changes the tail
+  carried *after* a summary, not the history read.
 
-Measured from the engine's own store (`data\engine\opencode\data\opencode\opencode.db`,
-`session_message.data.tokens`), not from wall-clock guesses. Nine tasks, zero
-retries and zero resumes; 749 model turns; 727k tokens written, **70% of it
-thinking**; 13% of the time in tools, the rest in generation.
+**Since every turn re-sends everything, the only instructions that move the number are about how much
+gets said and how often**: think in a sentence and act, read a file once and search it after, edit rather
+than rewrite, keep the spec under 200 lines, give tasks a named file and a proving command, never re-run
+a passing check, and keep a notes file in scratch. **The harness reports it**: `Effort: 130 turns; the
+context peaked at 118k of its 200k window`, on `runs.jsonl` as `context: {turns, peak, generated,
+thinking, compactions, thinkShare}` and in the app log. The line used to end with a verdict — "Past about
+150k a run gets slower with every turn" — and the operator asked why the model was being told that
+(21 Nov): true of the model it was measured on, then said to every model. The window is printed only when
+the peak fits inside it.
 
-- **The plan is written in full before the first task runs.** *(Superseded on
-  24 Oct: the list is allowed to grow. See "The plan became a work list" below.)*
-  It opened with two  steps and the Architect added seven while it worked, so what the operator
-  approved on the first screen was not what ran. The brief said so, and the
-  validator named the visible symptom: `phases lists "build" but the plan has no
-  task for it - write the whole plan before the first task runs, or drop the
-  phase`. "The plan is finished" also meant every declared phase was covered, which
-  is what stopped the missing-summary note firing at 10:59 while the Architect was
-  still writing the plan.
-- **A second QC pass is a check, not a new hunt.** Round 1 (38m) found nine
-  issues; round 2 (32m) re-verified them and opened a new matrix ("every UTC
-  offset from -12 to +14") for two off-path edges; round 3 (6m) re-ran the repros
-  and the suites and stamped SHIP. The cheap round is the model: the brief now
-  says a second pass re-runs the listed repros *and nothing else*, and anything
-  new goes in an "observed, not fixed" list.
-- **A compaction can fail because its own summarise call is too big.** The
-  engine's compaction prompt is the whole message log, not the model's current
-  prompt: t2 on 28 Oct had a 111k turn prompt while the compactor sent **225k to a
-  131k model**, and the engine wrote `status: 'failed'` ("Compaction produced no
-  summary"). The turn was retried and the next compaction (at 112k) succeeded. A
-  failed message is not a compaction and must not be counted as one — the trace
-  said "Compacted ×4 · context at 225K/131K" for three real compactions, and the
-  225K was the failed prompt. `compactionKeepTokens` changes the tail carried
-  *after* a summary, not the history the compactor reads, so it does not fix this.
-- **A task that runs long gets slower per turn.** Throughput by prompt size, same
-  model: **157 tok/s under 50k, 145 at 50–100k, 117 at 100–150k, 68 at 150–200k**.
-  Every long task here finished at 212–290k, and its second half ran at half the
-  speed of its first (t2 151→76, t4 167→75, t5 165→82). QC hit 290k and
-  auto-compacted (a 228k-token summarise call). The causes are visible: 84% of
-  turns issued exactly one tool call, and the engine stores `reasoning` parts in
-  the transcript (985 of them here), so thinking is re-sent every turn —
-  per-turn growth measured ≈ text + thinking + tool output. What that prompt is
-  made of, measured on t4 (212k, no compaction): **thinking 43%, tool results
-  30%, tool call arguments 19%, screenshots 4%, instructions 3%, the actual
-  conversation ~1%**. Whole file bodies ride along as `write` arguments, and a
-  file read at turn 12 is still in the prompt after turn 40 edited it.
-  Compaction is not the fix and 200k is not a number to build on — see the window
-  watchdog in `docs/notes/models-and-tools.md`.
-- **The meter is turns × transcript, and the briefs now say so.** Clock Test 3 read
-  **56.4M prompt tokens** (workers 50.3M, Architect 6.1M) over 515 turns: t2 12.8M
-  in 71 minutes, t6 13.7M in 34. That is 180–430k tokens a minute, where an
-  interactive chat is 100–200k with long gaps — the density is what a free tier
-  refuses, in bursts of 5–11 minutes. Since every turn re-sends everything, the
-  only instructions that move it are the ones about *how much gets said and how
-  often*: think in a sentence and act (thinking was 51% of the transcript), read a
-  file once and search it after, edit rather than rewrite (a `write` keeps the whole
-  file body), keep the spec under 200 lines, and give tasks a named file and a
-  proving command so the worker does not have to explore. The number is reported on
-  every run (`Effort:` / `context` in `runs.jsonl`) so it can be measured, not
-  guessed.
-- **So the harness reports the cost of each run.** The report the Architect gets,
-  and the chat, carry one line: `Effort: 130 turns; the context peaked at 118k of its
-  200k window`. It is also on the `runs.jsonl` result line as
-  `context: {turns, peak, generated, thinking, compactions, thinkShare}` and in the
-  app log, so an audit reads the run log instead of the engine database. Not on the
-  role card: the operator asked for the chat and the log.
-  **The line used to end with a verdict** — "Past about 150k a run gets slower with
-  every turn" — and the operator asked why the model was being told that (21 Nov). It
-  was true of the model the 916 note above measured, and it was then said to every
-  model: false under prompt caching, false for a window that starts at 200k, and a
-  baked-in number about one model's speed. Removed; the window is printed when it is
-  known, and only when the peak fits inside it (a provider's cumulative cache figure
-  can exceed the window, and a fraction of a window it exceeds is not a fraction worth
-  printing). The measurement itself stays in this file, where an operator can read it
-  and decide.
-- **QC's default focus was dialled down.** `app` now judges the operator's own
-  screen and machine, calls another hemisphere / another screen size / a
-  hand-edited constant an observation rather than a finding, and says a minor or
-  nice-to-have is a note, not a reason for another fix round.
-- **Harness alarms judge what a shell does, not what it names.** Eleven of the
-  run's alarms were the Architect running `skills\visual-review\shot.mjs` before
-  judging a report — the toolbox doing its job, already visible in the transcript,
-  the census and the session log. A command whose only harness paths are under
-  `skills/` is now quiet; one that names the rest of the harness, or that is shaped
-  like a write (a redirect with a real target, or `Set-Content`/`rm`/`mv`/…), is
-  still an alarm, and a *write tool* on a harness file is an alarm for everyone.
-  Replayed over the run's 399 shell commands: 21 would have alarmed before, 1 does
-  now (a compound command that edits project scratch *and* runs the renderer —
-  ambiguous, and kept on the loud side). The one "CHANGED DURING A WORKER RUN"
-  alarm was the operator's own Settings save, and `configSavedAt()` now excuses
-  exactly that: a config change no save of ours explains is still reported.
-- **Our writes are not a worker's (10 Nov).** Two alarms blamed a worker for the
-  operator's own two clicks. A kept attachment lands in `.project/attachments/`
-  while a turn is open, and an answer to a question is appended to `project.md`
-  while one is open, so the before/after comparison found both and reported "the
-  worker wrote outside its folder" — once about a steer's image, once about
-  "Approve manual window". Same precedent as the Settings save, applied to both:
-  `src/synapse-writes.js` records what Synapse itself wrote, `keepAttachments` and
-  `writeDoc` mark their files, and the comparison excuses only those, and only in
-  the window they were written. Exempting the file *names* would have been shorter
-  and would have let a worker edit `project.md` unnoticed.
-  The heading was a second bug of the same alarm: it was chosen by testing the
-  text for "write", so every other kind — "WROTE INSIDE .project…", "CHANGED
-  DURING A WORKER RUN" — read "A model named Synapse in a tool call" beside a file
-  name, which is the operator's "strange white errors". `alarmTitle()` now maps
-  each kind to a sentence of its own.
-- **A changed tree is not a witness (13 Nov).** The post-run `git status` comparison
-  announced "Synapse's own files changed while a worker ran" for six files the
-  operator's agent was editing at the time. The alarm was right about the diff and
-  wrong about the author: `git status` cannot see who wrote a file. The run's own
-  transcript now decides the sentence — if any of its tool calls named the harness
-  (a write tool, or a shell command with a write shape), the files are evidence and
-  the line keeps its old reading; if none did, it is titled *"The harness changed
-  during a run, and no tool call in that run named Synapse"*. Nothing is suppressed:
-  the files are still listed, the log still records them, and the permission rules
-  and the restore point are unchanged — because a project script with a hard-coded
-  path could still write here. What changed is that the operator's own edit no
-  longer reads as a worker tampering with Synapse.
+**A task that needs 80 steps is too big.** Every step re-sends the conversation, so the step count is
+both the time and the cost. `worker.maxTurns` (default 80, 0 turns it off) stops a run that crosses it
+with "the task needs splitting" — outcome `stopped`, no attempt counted, the model not marked. Measured
+4–5 Nov: a local coder spent 178 steps and 18.6M prompt tokens on one task; that is a plan problem, not a
+model problem.
 
-### What the engine actually does with a permission rule (measured, 2.0.30)
+**QC's default focus was dialled down.** `app` judges the operator's own screen and machine, calls
+another hemisphere / screen size / hand-edited constant an observation rather than a finding, and says a
+minor is a note, not another fix round. **A second QC pass is a check, not a new hunt**: round 1 (38m)
+found nine issues, round 2 (32m) re-verified them, round 3 (6m) re-ran the repros and stamped SHIP. A
+second pass re-runs the listed repros *and nothing else*.
 
-This cost an afternoon and is not guessable:
+**Harness alarms judge what a shell does, not what it names.** Eleven alarms in one run were the
+Architect running `skills\visual-review\shot.mjs` before judging — the toolbox doing its job. A command
+whose only harness paths are under `skills/` is quiet now; one naming the rest of the harness, or shaped
+like a write, is still an alarm, and a *write tool* on a harness file is an alarm for everyone. Replayed
+over 399 shell commands: 21 would have alarmed before, 1 does now. **Our writes are not a worker's
+(10 Nov)**: a kept attachment and an answer to a question both land in the project while a turn is open,
+so `src/synapse-writes.js` records what Synapse wrote and the comparison excuses only those, in that
+window — exempting the file *names* would have let a worker edit `project.md` unnoticed. `alarmTitle()`
+maps each kind to its own sentence, and `configSavedAt()` excuses the operator's own Settings save.
 
-- **The rule matches the path as the model wrote it.** A relative rule
-  (`.project/**`) refuses a relative write; an **absolute** rule does *not*
-  refuse a relative path. Emit both forms.
-- **`edit` is the action for both the `write` and the `edit` tools.** `write` is
-  not an action name at all — a rule on it denies nothing, which looks exactly
-  like a working rule until you test it.
+**A changed tree is not a witness (13 Nov).** The post-run `git status` comparison announced "Synapse's
+own files changed while a worker ran" for six files the operator's agent was editing: `git status` cannot
+see who wrote a file. The run's own transcript decides the sentence — if any tool call named the harness,
+the files are evidence; if none did, it is titled *"The harness changed during a run, and no tool call in
+that run named Synapse"*. Nothing is suppressed: the files are listed, the log records them, and the
+rules and restore point are unchanged, because a project script with a hard-coded path could still write
+here.
+
+### What a permission rule actually does
+
+Measured on 2.0.30, and not guessable:
+
+- **The rule matches the path as the model wrote it.** A relative rule (`.project/**`) refuses a relative
+  write; an **absolute** rule does *not* refuse a relative path. Emit both forms.
+- **`edit` is the action for both the `write` and the `edit` tools.** `write` is not an action name — a
+  rule on it denies nothing, which looks like a working rule until you test it.
 - **`read` is an action**, so reads can be denied separately.
-- **`action:'*'` with a path denies reads too** — right for a folder nobody
-  should read, wrong for `.project`, which is meant to be read.
-- **`shell` and `execute` are not path-matched.** They take a command, so a
-  worker can go around any path rule with a redirect. Hence
-  `synapseFingerprint`/`fingerprintDiff`: the runner compares every file under
-  `.project` before and after a worker turn and reports anything changed outside
-  that role's folder as an alarm — prevention for the file tools, detection for
-  the rest. **Verified live:** a coder rule refused `.project/probe/x.txt` twice
-  (`write:error`, no file), while the same write with an absolute path in the
-  prompt got through — which is exactly why the detection layer exists.
+- **`action:'*'` with a path denies reads too** — right for a folder nobody should read, wrong for
+  `.project`.
+- **`shell` and `execute` are not path-matched**, so a worker can go round any path rule with a redirect.
+  Hence `synapseFingerprint`/`fingerprintDiff`: the runner compares every file under `.project` before and
+  after a worker turn — prevention for the file tools, detection for the rest. **Verified live:** a coder
+  rule refused `.project/probe/x.txt` twice (`write:error`) while the same write with an absolute path got
+  through.
 
-### The permission policy (26 Oct 2026)
+### The permission policy
 
 Three zones, one policy file, and the engine's `ask` as the hook:
 
@@ -1031,963 +579,447 @@ Three zones, one policy file, and the engine's `ask` as the hook:
 | shell | allow while it stays inside | toolbox scripts and read verbs; else denied | the operator is asked |
 | execute | asked | asked | asked |
 
-There is no fourth zone any more (20 Nov). A model's scratch is .project/scratch
-inside its project, so read, write and shell there are the project's rules — the
-engine's role ruleset allows that folder explicitly, because it denies .project/**
-first. One writable place, and the fence needs no exception beside the projects.
+Every decision from `decide()` is one object: `effect` (`allow`, `deny` or `ask` — what the gate replies
+`once` or `reject` for), `scope` (the zone: `project`, `harness`, `temp`, `prohibited`, `secret`,
+`processes`), `reason`, and `outside`. **The prohibited list itself is `docs/notes/protection.md`**;
+nothing here widens it. There is no fourth zone any more (20 Nov): a model's scratch is
+`.project/scratch` inside its project, so read, write and shell there are the project's rules — the role
+ruleset allows that folder explicitly, because it denies `.project/**` first.
 
-The ruleset is four broad asks (`edit`, `shell`, `execute`, `read`) plus the
-credential denies; `src/permission-gate.js` answers each `permission.asked` from
-`src/permissions.js` and replies `once` or `reject`. **`always` is never used
-automatically** — a saved allow would outlive the policy that granted it, and the
-next identical call must be judged again.
+The ruleset is four broad asks (`edit`, `shell`, `execute`, `read`) plus the credential denies.
+**`always` is never used automatically** — a saved allow would outlive the policy that granted it. **Always
+Allow is the operator's decision, so it survives a restart**: the memory is written to
+`data/permission-memory.json` on every grant, capped at 500 entries, and a session's grants are dropped
+when the session is deleted.
 
-**Always Allow is the operator's decision, so it survives a restart.** The narrow
-memory is written through to `data/permission-memory.json` on every grant, capped
-at 500 entries, and a session's grants are dropped when that session is deleted.
-The process is not allowed to be the only copy of something the operator had to
-answer.
+**What "the request" is comes from `grantKey` (27 Oct).** A file action remembers the resolved path — a
+relative and an absolute name for one file are one consent. A shell command remembers the executable, the
+files it names and whether it reads, writes or runs them, not the exact argument string: the model re-runs
+the same script with `-ExecutionPolicy Bypass` or a pipe, and every variant asked again until this.
 
-What "the request" is comes from `grantKey` (27 Oct). A file action remembers the
-resolved path — a relative and an absolute name for the same file are one
-consent. A shell command remembers the executable, the files it names and whether
-it reads, writes or runs them, not the exact argument string: the model re-runs
-the same scratch script with `-ExecutionPolicy Bypass` or a pipe, and every
-variant asked again until this. A different file, executable or kind of command
-still asks. The card's tooltip says which of the two it is.
+**Synapse's temp is the harness's, not the machine's, and not a model's.** `TMPDIR` alone did nothing on
+Windows: Node reads `TEMP`/`TMP`, so the engine wrote `%LOCALAPPDATA%\Temp\opencode`. The server sets both
+to `data\temp` before spawning the engine, and the analyser expands `$env:TEMP` from the same env, so the
+writer and the judge see one folder. One engine serves every project, so this cannot be per-project: it is
+plumbing, and what lands there is debris. A command needing a temp directory points `TEMP` at
+`.project/scratch`.
 
-**Synapse's temp is the harness's, not the machine's, and not a model's.** `TMPDIR`
-alone did nothing on Windows: Node reads `TEMP`/`TMP`, so the engine and its shells
-wrote `%LOCALAPPDATA%\Temp\opencode`. The server sets `TEMP`/`TMP` to `data\temp` —
-inside the harness, swept by housekeeping — before it spawns the engine, and the
-permission analyser expands `$env:TEMP` from the same process env, so the writer and
-the judge see one folder. One engine serves every project, so this cannot be a
-per-project path: it is the plumbing a compiler or a runtime uses, it lives where no
-model may write, and what lands there is debris (20 Nov). A model's scratch is
-`.project/scratch` inside its project, created at boot and in `createProject` and
-named in its brief; a command that needs a temp directory points `TEMP` there.
+**Full auto can answer for the operator (28 Oct).** With `synapse.fullAuto` on — still written back as a
+mirror, though the four switches own it — a request left to the operator takes the default after
+`fullAuto.timeoutSec` (20 seconds). A card is **allowed once** (`decidedBy: 'timeout'`); a question takes
+the **Recommended** option, or the top one (`src/auto-answer.js`), and a server-side sweep every five
+seconds answers it (`src/form-auto.js`), so a closed browser cannot stop the work. An operator answer
+cancels either timer, and it can only answer `ask` verdicts: a harness write or a credential store is
+denied before a card exists. **Zero is a real wait (29 Oct)**: `timeoutSec: 0` draws no card — the gate
+answers `once` on the next microtask with `decidedBy: 'full-auto'` and `asked: false`, so the chip is
+green. The setting is read on every ask and `retime()` re-arms open cards.
 
-**Full auto can answer for the operator (28 Oct).** With the session's
-`synapse.fullAuto` on — the cog's second switch — a request left to the operator
-takes the default after `fullAuto.timeoutSec` (20 seconds by default, Settings →
-Workers). A permission card is **allowed once** (`decidedBy: 'timeout'`). A
-question is answered with the **Recommended** option, or the top one when none is
-marked (`src/auto-answer.js`); a server-side sweep every five seconds answers it
-(`src/form-auto.js`), so a closed browser cannot stop the work. An operator answer
-cancels either timer, turning the switch off disarms a card already on screen, and
-it can only answer `ask` verdicts: a harness write or a credential store is denied
-before a card exists. Free-text fields take their default (or empty), and
-hidden/external fields are skipped. A full-auto question is recorded in the project
-document exactly like an operator's answer.
+**A refusal explains itself, through a synthetic note.** The reply body's `message` is dropped on the
+reject path in 2.1.2 — the error is always "The user declined this tool call" — so the gate follows the
+rejection with a `synthetic` message: why, that a workaround is not allowed, and where to escalate
+(26 Oct: the model answered "…I won't attempt any alternate path or tool"). The Architect of a **Multi**
+chat is not sent one without a typed reason: that is the operator's conversation. A **Single** chat always
+gets one (16 Nov), because no worker report and no wake follow and the engine ends the turn: the request
+was declined, not the work; a typed reason is quoted back and is what the model acts on; keep working;
+this is not a Stop. It carries no list of forbidden routes — the first version said "do not try another
+path or tool" beside a reason that said "retry this tool call".
 
-**Zero is a real Full auto wait (29 Oct).** `fullAuto.timeoutSec: 0` means no
-permission card is ever drawn: the gate answers `once` on the next microtask,
-records the decision with `decidedBy: 'full-auto'` and `asked: false`, so the tool
-chip is green rather than amber. Questions still go through the five-second form
-sweep, which answers on its first tick. The setting is read on every ask and
-`retime()` re-arms cards that are already open, so a Settings change does not need
-a restart. The policy walls are untouched: a zero wait can only answer `ask`
-verdicts, never a harness write or a credential store.
+**A read statement is a read, even beside a command (16 Nov).** `node --version; Test-Path
+"…\skills\visual-review\bin\shot.mjs"` asked *"Synapse is the app itself…"* although the Test-Path only
+looked: the harness test used the command's `readsOnly` flag and `node --version` made that false. The
+decision is per statement now — a read-only statement's harness path is checked for readability, and only
+a non-read statement's is a write.
 
-**A refusal explains itself, through a synthetic note.** The reply body has a
-`message` field, but 2.1.2 drops it on the reject path: the tool error is always
-"The user declined this tool call". The gate follows the rejection with a
-`synthetic` message — why it was refused, that a workaround is not allowed, and
-where to escalate (a worker's report; the Architect asks the operator). Measured
-26 Oct: the model answered "…I won't attempt any alternate path or tool", which
-is the note's instruction. The Architect of a **Multi** chat is not sent one
-without a typed reason: that is the operator's own conversation, and the extra
-turn once ended with an empty report (26 Oct). A **Single** chat is different
-(16 Nov): there is no worker report and no wake, and the engine ends the model's
-own turn when a tool is declined. A reason-less rejection used to leave the chat
-silent with the work unfinished, and a reason only produced a note that told the
-model to ask about it. Now a Single chat always gets a short note: the request
-was declined, not the work; a typed reason is quoted back and is what the model
-acts on; keep working; this is not a Stop. The note deliberately does **not**
-carry a list of forbidden routes — the first version said "do not try another
-path or tool" beside a reason that said "retry this tool call", and the model was
-left with two instructions that contradicted each other (16 Nov). The failed call
-is already in front of it; the operator's sentence is the instruction.
+**Why broad asks instead of path globs.** The engine matches a path *as the model wrote it*, so a rule
+allowing `F:/.../project/**` says nothing about a relative `src/app.js`. Resolving both against the
+session's directory in one place judges them the same. The price is one local round trip per write, shell
+and read; the UI waits 200ms before drawing a card.
 
-**A read statement is a read, even beside a command (16 Nov).** `node --version;
-Test-Path "…\skills\visual-review\bin\shot.mjs"` asked *"Synapse is the app itself.
-Changing it is a deliberate choice"*, although the Test-Path only looked. The harness
-test used the command's `readsOnly` flag, and `node --version` made that false; the
-Test-Path's harness path was then judged as a possible write. The decision is per
-statement now: a read-only statement's harness path is checked for readability, and
-only a non-read statement's harness path is a write. The same probe with `Set-Content`
-still asks.
-
-**Why broad asks instead of path globs.** The engine matches a path *as the model
-wrote it*, so a rule that allows `F:/.../project/**` says nothing about a relative
-`src/app.js`, and the relative twin of every "outside" rule cannot be expressed.
-Resolving both against the session's directory, in one place, judges them the
-same. The price is one local round trip per write, shell and read; the gate
-answers in the same second, and the UI waits 200ms before drawing a card so an
-auto-answered request never flashes.
-
-**Measured on 2.1.2:** `Permission.Effect` is `allow | deny | ask`; the resolver
-is `findLast`, so the last matching rule wins and a session rule beats the agent
-default; with nothing matching, the default is **ask**. The ladder is therefore
-emitted first and the mode/role rules after it — which also fixed Single's
-`subagent` deny, previously overridden by the guard's broad allow.
+**Measured on 2.1.2:** `Permission.Effect` is `allow | deny | ask`; the resolver is `findLast`, so **the
+last matching rule wins** and a session rule beats the agent default; with nothing matching the default is
+**ask**. The ladder is emitted first and the mode/role rules after it, which also fixed Single's
+`subagent` deny.
 
 **What the policy cannot see, and does not pretend to:**
 - a project script (`npm test`, `node build.js`) can write anywhere once it runs;
-- `grep` and `glob` are not path-gated, so they can read what the read tool
-  would be refused;
-- shell analysis is a heuristic: an unresolvable path asks, but a determined
-  wrapper can still get through;
-- **a newline separates commands.** `Test-Path D:\` on one line and
-  `Set-Content …` on the next is two statements, and each is judged on its own.
-  Missing that let a read verb on the first line excuse an outside write —
-  measured live on 26 Oct, with a model that wrote the file through a two-line
-  shell command after its write was refused.
+- `grep` and `glob` are not path-gated, so they can read what the read tool would be refused;
+- shell analysis is a heuristic: an unresolvable path asks, but a determined wrapper gets through;
+- **a newline separates commands.** `Test-Path D:\` and `Set-Content …` on the next line are two
+  statements, each judged alone; missing that let a read verb excuse an outside write on 26 Oct.
 
-The card says who is asking (role and task, or the session title), the action,
-the resolved path, and why the policy left it to the operator. A worker's request
-must be visible even though its session is hidden from the rail — filtered to the
-open session it would block the worker until its timeout with nothing on screen.
+The card says who is asking (role and task, or the session title), the action, the resolved path, and why
+the policy left it to the operator. A worker's request must be visible even though its session is hidden
+from the rail — filtered to the open session it would block the worker with nothing on screen. Every
+decision is written against the tool call id, which draws the chip. The engine puts it in `source.id` on
+an edit or read ask, but **2.1.2 omits `source` on every shell ask** (measured 28 Oct), so the gate
+watches `session.tool.input.started`, `input.ended` and `called`, remembers recent calls, and pairs a
+source-less ask with the newest unclaimed call of the same family. The log is memory only
+(`src/permission-log.js`). The live event has the same key rule: `permission.decided` must be stored under
+`decision.toolCallId`, not the request id — keying it by `requestId` made the chip vanish.
 
-Every decision is also written against the tool call id the request came from,
-which draws the chip on that call. The engine puts it in `source.id` on an edit or
-read ask, but **2.1.2 omits `source` on every shell ask** (measured 28 Oct: the
-event has only id, sessionID, action, resources and save). So the gate also watches
-`session.tool.input.started`, `input.ended` and `called`, remembers the session's
-recent calls, and pairs an ask that has no source with the newest unclaimed call of
-the same family — preferring one whose command or path contains the ask's
-resources. A decision stored without a tool-call id cannot draw a chip, and that is
-exactly what happened to shell calls before this fallback. The log is memory only
-(`src/permission-log.js`): a restart clears the chips, not the work.
+**Skills are per role, and enforced.** `roles.<id>.skills` is an allowlist; the session gets
+`{action:'skill', resource:'*', deny}` plus one allow per name (**the last matching rule wins**), and the
+brief names them. Measured: a denied skill answers "Permission denied: skill (type: permission.rejected)"
+while an allowed one loads. No list means no restriction; an empty list means none. The ✎ button holds
+**Skills** (the tick is *allowed*; the **Required** box is `roles.<id>.mustLoad` and changes the brief to
+"load every one of them before your first edit … a skill you skipped is part of the job you skipped"),
+**Focus** (QC only) and **Instructions** (`roles.<id>.instructions`, capped at 2000 characters). Required
+is a subset of allowed by construction, because a required skill the engine refuses would be reported
+missing for ever. **The end-of-run check uses the list the brief actually asked for**, snapshotted when the
+worker was created, not `getConfig()` at the end: on 17 Nov the Architect was told three designer skills
+"were never loaded" after the list had moved. Ticking every skill stores *no* list, because that is the
+same thing and it lets a later skill reach the role.
 
-The live event has the same key rule: `permission.decided` must be stored under
-`decision.toolCallId`, not the request id. A multi-view handler that keyed it by
-`requestId` and returned early made the chip disappear while every other part of
-the card still worked; the request id belongs to the card, the tool-call id belongs
-to the chip.
+**QC has a volume dial, and it starts low.** In `app` it judges the build the way an ordinary,
+non-technical person meets it: **wording** (labels and errors in a coder's voice or in jargon — a message
+the reader cannot understand is a defect, quoted with the plain version), **design flaws** (clipped text,
+broken layout, unreadable contrast), **missing input validation**, and **states that lie**. It is told not
+to run locale or interpreter matrices or fuzz in loops — `security` is the same role with the gloves off.
+Both carry a proportion rule ("the cases with the best chance of happening beat a complete matrix"),
+because the 197-second locale-matrix run was correct and useless. **Ideas are hidden from coders**:
+`roleReadRules` denies `read` on `.project/ideas/**` for `coder-*` only, because that file is where
+rejected options live.
 
-**Skills are per role, and enforced.** `roles.<id>.skills` is an allowlist; the
-session gets `{action:'skill', resource:'*', deny}` plus one allow per name (the
-last matching rule wins), and the brief names them. Measured: a denied skill
-answers "Permission denied: skill (type: permission.rejected)" while an allowed
-one loads. No list means no restriction; an empty list means none. The picker is
-the ✎ button on the role card, which now holds three things:
+**Synapse ships the skills it needs, and says what it cannot find.** `skills\` next to `src\` is put on
+`skills.paths` on every boot, ahead of any configured folder and independent of the config — the difference
+between "the pipeline works on a new PC" and "the Architect silently has no eyes". It ships `visual-review`
+(renders a mock and reads the PNG — the only way these agents see), `ui-design`, `frontend-design`,
+`aesthetic-foundations`, `code-craft` (match the surrounding style, keep the surface small, fail loudly,
+prove it) and `web-guidelines`.
 
-- **Skills** — two levels, in one row of the dialog. The tick on the left is
-  *allowed*: the engine refuses anything unticked. The small **Required** box on the
-  right is `roles.<id>.mustLoad`, and it changes the brief from "here is what you
-  may load" to "load every one of them before your first edit … a skill you skipped
-  is part of the job you skipped"; the runner then reads the worker's transcript and
-  tells the Architect which required skills never appeared. Required is a subset of
-  allowed by construction: the box is dead until the skill is allowed, `normalize()`
-  filters it again on the way in, and the dialog filters it on save. A required skill
-  the engine refuses would be reported missing on every run, for ever.
-  **The end-of-run check uses the list the brief actually asked for**, snapshotted
-  when the worker was created, not `getConfig()` at the end. A role's skills can be
-  changed while a run is live; on 17 Nov the Architect was told three designer skills
-  "were never loaded" after the list underneath the run had moved. `roleMustLoad()`
-  also filters out a required name that the same role is not allowed to load, so a
-  hand-edited config cannot demand an impossible skill.
-  Ticking every skill stores *no* `skills` list, because
-  that is the same thing and it lets a skill added later reach the role.
-- **Focus** (QC only) — `app` by default, `security` when needed.
-- **Instructions** — free text appended to the role's brief on every turn
-  (`roles.<id>.instructions`, capped at 2000 characters).
+**Which copy wins.** The engine reads the configured `skills.paths` *and* `~/.agents/skills`; when a name
+exists in both the **configured** copy loads (measured on 2.0.30 by putting a distinct description in each
+and restarting — verify the file, not the edit, because PowerShell's `-replace '^description:'` needs `(?m)`
+per line). **By default** the Architect may load `visual-review` and must before judging; the Designer may
+load all four design skills and must load `frontend-design` and `aesthetic-foundations`; every coder may load
+`code-craft` and must; QC may load `web-guidelines`, `aesthetic-foundations` and `visual-review` and must the
+first two; the Inventor may load `frontend-design` and must nothing, because a vague request is where
+direction talk helps it name features rather than categories.
 
-**QC has a volume dial, and it starts low.** `roles.qc.focus` is `app` unless it
-is set to `security`, and in `app` it judges the build the way an ordinary,
-non-technical person meets it, in this order: **wording** (labels, errors and
-reports written in a coder's voice or in jargon — a message the reader cannot
-understand is a defect, and QC quotes it and gives the plain version), **design
-flaws** (clipped or overlapping text, broken layout, unreadable contrast at the
-sizes the project must support), **missing input validation**, and **states that
-lie** (silence where something happened, a wrong status, work lost on refresh).
-The old `Hacker` tested an app the way a person types into it; QC is that, plus
-the reading a non-technical user does. It is still told, in those words, not to
-build hostile environments, run locale or interpreter matrices, or fuzz in loops —
-`security` is the same role with the gloves off. Both carry a proportion rule ("the
-cases with the best chance of happening beat a complete matrix"), because the
-197-second
-locale-matrix run was technically correct and useless for a small tool.
+**Two rules about the library itself.** `using-superpowers` was deliberately not shipped: it is a rule about
+*when to invoke skills* ("if there is even a 1% chance a skill might apply, you MUST invoke it"), with
+examples naming skills that are not installed here, so a coder spends the turn announcing skills that do not
+exist — read a skill before shipping it, because a description is a claim, not a measurement. And a skill may
+not say where a shipped tool lives: the text used to carry the full path of `shot.mjs` as it was on the
+machine it was written on, three roles in Timer Test 1 hit `MODULE_NOT_FOUND`, searched the disk for it
+(raising the *shell command naming the harness* alarm) and called it with `--help`, writing a picture of the
+browser's error page. So `describeSkills()` names the absolute path for any role whose list includes
+`visual-review`, the SKILL.md says "the path is in your brief, do not search for another copy", and
+`tests/skills.test.mjs` fails if any shipped `.md` mentions a machine-specific folder. **A skill describes how
+to work, the harness describes where things are.** The operator's own folders are extra paths on top
+(`engine.opencode.skillPaths`), and nothing is downloaded at runtime.
 
-**Ideas are hidden from coders.** `roleReadRules` denies `read` on
-`.project/ideas/**` for `coder-*` only: the ideas file is the one place rejected
-options live, and a coder that reads it can quietly build one. Everything else in
-`.project` stays readable, because the brief and the contract are there to be
-read.
+**Eyes are a skill, not a tool.** `visual-review` (`skills\visual-review`, `bin\shot.mjs`) renders a file or
+URL with the machine's Edge (`--headless=new`, a throwaway `--user-data-dir`, ~1.2s) and writes the PNG into
+the project; the model then **reads the PNG**, which works on deepseek and not just on a vision model
+(measured: it named a made-up word and its background colour correctly). Two widths at most — each image is
+roughly a thousand tokens. The SKILL.md carries the honesty rules: say what is measurable, say what a still
+cannot show, never invent a label.
 
-**Synapse ships the skills it needs, and says what it cannot find.** `skills\`
-next to `src\`, `web\` and `config\` is put on the engine's `skills.paths` on every
-boot, ahead of any configured folder and independent of the config — that is the
-difference between "the pipeline works on a new PC" and "the Architect silently
-has no eyes". Move the folder with the app and everything Synapse needs travels
-with it:
+**The renderer measures, serves and refuses.** Unknown options, extra targets and a missing file are errors
+with the usage line (an unknown `--option` used to fall through, so `--help` photographed a file named
+`--help` and exited 0). It serves the page itself on a random port from the file's own folder, because
+`file://` cannot test localStorage or a reload — agents kept writing `qc-serve.js` / `python -m http.server`
+and leaving them running, and two orphans still held 8321 and 8765 hours later. It reports numbers next to
+the picture: `status`, `viewport`, `doc.scrollW` against the width, `overflow`, WCAG `contrast` below 4.5 (3
+for large text, ancestor opacity folded in, disabled controls exempt), controls under 44px — on the timer
+page it found six under-44px targets and six chips at 2.47:1 that QC called fine. It fails on a blank page or
+a 4xx/5xx, because a blank PNG is the one answer that looks like success, and `--do "click:#start; wait:800"`
+photographs a *state*.
 
-| shipped | why |
-|---|---|
-| `visual-review` | renders a mock and reads the PNG — the only way these agents see |
-| `ui-design` | the Designer's craft: direction, tokens, every state, a spec table |
-| `frontend-design` | taste and direction: distinctiveness, typography, avoiding template defaults (Apache 2.0, licence kept) |
-| `aesthetic-foundations` | composition, colour and hierarchy theory plus a critique protocol, for judging a design |
-| `code-craft` | the coders' brief: match the surrounding style, keep the surface small, fail loudly, prove it, report what ran |
-| `web-guidelines` | the Web Interface Guidelines snapshot (MIT, 21 Oct 2026): focus, forms, motion, hit areas, contrast — the rules QC holds a build to |
+**Desktop apps are a window around a web page, and both halves are checkable.** The interface is HTML in
+`ui/`, so the web pipeline applies. The window is not, so `skills/app-check` starts the exe, waits for a
+window, photographs it (`PrintWindow` first, screen as fallback), and reports title, size, DPI scale, whether
+the process is **alive and responding after the shot** — a window that dies on its first paint looks exactly
+like a working one in a picture — and whether it exited before showing anything. `skills/win-app/template` is
+the shell a project copies: WPF, WebView2, `PerMonitorV2` DPI, a dark title bar, and `ui/` over a **virtual
+https host**, not `file://`, so localStorage, modules and a reload behave. Measured: `dotnet publish` → a
+58.9 MB single-file `App.exe` plus `ui/`, running on a Win10/11 machine with no .NET installed.
+`GET /api/toolchain` answers what a PC can build; it is no longer a Settings pane.
 
-**Where the engine looks, and which copy wins.** The engine reads the configured
-`skills.paths` *and* `~/.agents/skills` by default — so the operator's own library
-stays useful to every other app and still shows up here. When a name exists in
-both, the **configured** copy is the one loaded: measured on 2.0.30 by putting a
-distinct description in each copy and restarting, the shipped text was the one
-read, while a probe skill that existed only in `~/.agents/skills` was still
-listed. (An earlier test of the opposite was wrong because PowerShell's
-`-replace '^description:'` does not match per line without `(?m)`, so the marker
-was never written — verify the file, not the edit.) The consequence is simple:
-ship the copy Synapse should use, and leave the global one alone.
+**The free zen models are in the catalog; the account is what runs out.** Nine `opencode/*-free` models are
+listed (`/api/model`) and selectable, and every one answered one throwaway prompt `idle` with
+`provider.free-limit`, status 429, `retryAfterMs` about 12.4 hours: the routing is right and the free
+allowance for this account is spent. A *run* rather than a probe marks the model — that is what the ISSUES
+chip is for.
 
-**What each role gets by default.** Architect may load `visual-review`, and must
-load it before judging. Designer may load all four design skills and must load
-`frontend-design` and `aesthetic-foundations`. Every coder may load `code-craft`
-and `visual-review`, and must load `code-craft` (a coder that can screenshot its
-own shell before reporting is cheaper than a round trip). QC may load
-`web-guidelines`, `aesthetic-foundations` and `visual-review`, and must load the
-first two; its volume dial is `roles.qc.focus`, not a missing skill. The Inventor
-may load `frontend-design` and must load nothing: an ideas role handed design
-skills starts designing, but a vague request ("build me a clock, go") is where
-direction and typography talk actually helps it name features instead of
-categories.
+## Git and session names on a session's first successful turn
 
-**One skill was deliberately not shipped, and why matters.**
-`using-superpowers` reads like coding guidance and is not: it is a rule about
-*when to invoke skills* ("if there is even a 1% chance a skill might apply, you
-MUST invoke it"), its examples name `superpowers:brainstorming` and
-`systematic-debugging`, neither of which is installed here, and it carries seven
-per-harness tool references (Claude Code, Codex, Pi, Antigravity, Hermes, Muse)
-that mean nothing in a deepseek session. Given to a coder it spends the turn
-announcing skills that do not exist. The operator wanted "best practices to write
-good code", so `code-craft` was written instead. Read a skill before shipping it;
-a description is a claim, not a measurement.
+Beside the old auto-namer's slot in `afterTurn`, Synapse checks the session's directory for a repository
+(`git rev-parse --git-dir`) and runs `git init` if there is none. Once per directory per process, and no
+config.
 
-The operator's own folders are extra paths on top (`engine.opencode.skillPaths`,
-one `;`-separated line in Settings → Tools → Skills). Nothing is downloaded at runtime — the
-offline rule makes "install" mean "carry the folder", and a third-party skill stays
-where its licence lives.
+- `rev-parse` succeeds inside any **parent** repo, so a project folder under an existing repository is
+  left alone — Synapse never creates a nested repo. Since the projects root is a *sibling* of the harness,
+  a project is no longer inside Synapse's own repository, which also keeps its files out of the harness's
+  `git add -u` snapshots.
+- `git` missing or the command failing is logged and skipped; a turn never fails because of it. Verified
+  in an isolated temp folder: exit 128 before `git init`, `.git` and exit 0 after.
 
-The failure this guards is silent: a role's skill list survives a move to another
-machine, the folder does not, and the ruleset still *allows* a name that can never
-load. Nothing errors; the capability just vanishes. `GET /api/skills` therefore
-returns `missing` (names a role expects, and which roles) and `paths` (each
-configured folder, and whether it exists). The UI says it once at boot as a toast
-and lists it in Settings → Tools → Skills; the role picker shows such a name as *"not
-installed on this machine — the reference is kept, but nothing loads"*, so
-unticking it is deliberate rather than a silent loss. Verified live: a role set to
-`nope-skill` produced the toast, named the role, and Settings read
-`not installed: nope-skill (coder-2)`.
-
-**Eyes are a skill, not a tool, and it ships with Synapse.** `visual-review`
-(`skills\visual-review`, `bin\shot.mjs`) renders a file or URL with the machine's
-own
-Edge (`--headless=new`, a throwaway `--user-data-dir`, ~1.2s) and writes the PNG
-into the project; the model then **reads the PNG**, which works on deepseek and
-not just on a vision model (measured: it named a made-up word and its background
-colour correctly). Two widths at most — each image is roughly a thousand tokens.
-The SKILL.md carries the honesty rules: say what is measurable, say what a still
-cannot show, never invent a label. Without it, "the Architect checked the design"
-is a sentence about HTML rather than pixels.
-
-**Desktop apps are a window around a web page, and both halves are checkable.**
-The interface of a Windows app is HTML in `ui/`, so everything built for the web
-pipeline applies to the app itself — the measurement report, the contact sheet,
-the state capture. The window around it is not HTML, so `skills/app-check` closes
-that gap: it starts the exe, waits for a window, photographs it (`PrintWindow`
-first, the screen only as a fallback), and reports title, size, DPI scale, whether
-the process is **alive and responding after the shot** — a window that dies on its
-first paint looks exactly like a working one in a picture — and whether the app
-exited before showing anything. `skills/win-app/template` is the shell a project is
-copied from: WPF, WebView2, `PerMonitorV2` DPI awareness, a dark title bar (Windows
-10 draws white chrome otherwise, which reads as unfinished next to a dark page),
-and `ui/` served over a **virtual https host**, not `file://`, so localStorage,
-modules and a reload behave the way the page was designed for. Measured on this
-machine: `dotnet publish` → a 58.9 MB single-file `App.exe` plus `ui/`, which runs
-on a Win10/11 machine with no .NET installed. The machine probe behind
-`GET /api/toolchain` (`src/toolchain.js`) answers what a PC can build, which is the
-question "copy Synapse somewhere else and start" asks — it is no longer a Settings
-pane (the Windows tab was retired on the operator's request), so ask it directly or
-from a script when a copied folder misbehaves.
-
-**The free zen models are in the catalog; the account is what runs out.** Nine
-`opencode/*-free` models are listed by the engine (`/api/model`) and are selectable:
-Beam, DeepSeek V4.1 Flash, Flint 40B, GLM-5.3-Flash, Jev 1.13, MiMo-V2.6-Flash,
-MiniMax M3.1 Flash, the Nemotron 3s and LongCat. Each was given one prompt in a
-throwaway session, and every one came back `idle` with `provider.free-limit`, status
-429, `retryAfterMs` about 12.4 hours. So nothing needs plugging in and the routing is
-right; the free allowance for this account is spent, and a *run* (rather than a probe)
-marks the model, which is what the ISSUES chip in the picker is for. Two route facts
-cost a cycle here: `GET /api/session/{id}/message` is **singular**, and `prompt` only
-*admits* the message — the turn runs on afterwards, so
-`POST /api/experimental/session/{id}/wait` is what blocks until the session is idle.
-
-**A skill may not say where a shipped tool lives; the brief does.** The skill text
-used to carry the full path of `shot.mjs` as it was on the machine it was written
-on — the operator's own `~/.agents/skills`, which does not carry it here. Three
-roles in Timer Test 1 hit `MODULE_NOT_FOUND`, searched the disk for the script
-(which raised the harness's *shell command naming the harness* alarm), and then
-called it with a flag it does not have (`--help`), which wrote a picture of the
-browser's error page into the designer's folder and tripped the stray-write alarm
-too. Every one of those turns was spent on a fact the harness already knew. So
-`describeSkills()` names the absolute path of the shipped script for any role whose
-list includes `visual-review`, the SKILL.md says "the path is in your brief, do not
-search for another copy", and `tests/skills.test.mjs` fails if any shipped `.md`
-mentions a machine-specific folder again. The general rule: **a skill describes
-how to work, the harness describes where things are.**
-
-**The renderer measures, serves and refuses.** `shot.mjs` is ours, not the
-engine's, and Timer Test 1 showed how thin it was. Now:
-
-- **It refuses what it cannot do.** An unknown `--option` used to fall through to
-  the target, so `--help` photographed a file named `--help` and exited 0. Unknown
-  options, extra targets and a missing file are all errors with the usage line, and
-  `tests/visual-review.test.mjs` holds them.
-- **It serves the page itself**, on a random port, from the file's own folder, and
-  closes on exit — because `file://` cannot test localStorage or a reload, which is
-  the reason agents kept writing `qc-serve.js` / `python -m http.server` and leaving
-  them running (two orphans were still holding 8321 and 8765 hours later).
-- **It reports numbers next to the picture**: `status`, `viewport`, `doc.scrollW`
-  against the width, elements crossing the edge (`overflow`), WCAG `contrast` below
-  4.5 (or 3 for large text, with ancestor opacity folded in and disabled controls
-  exempted), controls under 44px, and `painted` counts. On the timer page it found
-  six under-44px targets and six shortcut chips at 2.47:1 that the QC pass had
-  called fine — which is the argument for measurements over impressions.
-- **It fails on a blank page** (0 visible elements, no text, no images) or a 4xx/5xx
-  status, because a blank PNG is the one answer that looks like success.
-- **Several widths become one contact sheet**, so a narrow-vs-wide comparison is a
-  single image read instead of two.
-- **`--do "click:#start; wait:800"`** photographs a *state* rather than a guess;
-  keys are synthetic events on `document`, which is what a page's own handler
-  listens for.
-
----
-
-## Git on a session's first successful turn
-
-Beside the auto-namer in `afterTurn`, Synapse checks the session's directory for
-a repository (`git rev-parse --git-dir`) and runs `git init` if there is none.
-This is once per directory per process and needs no config.
-
-- `rev-parse` succeeds inside any **parent** repo, so a project folder under an
-  existing repository is left alone — Synapse never creates a nested repo. Since
-  the projects root is now a *sibling* of the harness, a project is no longer
-  inside Synapse's own repository at all, which is also what keeps a project's
-  files out of the harness's `git add -u` snapshots.
-- `git` missing or the command failing is logged and skipped; a turn never
-  fails because of it. Verified the commands in an isolated temp folder:
-  exit 128 before `git init`, `.git` and exit 0 after.
-- The name and the repo are independent side effects of the same succeeded turn;
-  the title is still the model's call through the one-shot `generate` route.
-
----
+**There is no session naming any more (27 Oct).** A session used to be created as **TBD** and named by a
+`generate` call after its first turn. With one chat per project the rail shows the project's name and an
+engine session's title is never read, so the titler is gone. A chat is created with the project's name as
+its engine title, for an audit read of the engine's own list.
 
 ## Single and Multi mode
 
-The composer toggle flips the **open session** live; new sessions always start
-Single. Both modes have the full toolset — that is the whole point.
+The composer toggle flips the **open session** live; new sessions always start Single. Both modes have the
+full toolset — that is the whole point.
 
-- **Single** — a permission ruleset on an ordinary session that denies only
-  `subagent`: not a custom agent, not a blanket deny. The role cards stay
-  collapsed (`max-height: 0`), so a Single session pays nothing for them.
-- **Multi** — the ruleset is cleared (`PATCH /api/session/{id}` with
-  `permissions: []`), the wrapper animates open and the chat slides down. Verified
-  live: the Architect called `subagent` (general, `completed`) and answered with
-  the worker's reply; a subagent run does not leave a child session in the rail.
+- **Single** — a permission ruleset on an ordinary session that denies only `subagent`: not a custom
+  agent, not a blanket deny. The role cards stay collapsed (`max-height: 0`).
+- **Multi** — the ruleset is cleared (`PATCH /api/session/{id}` with `permissions: []`), the wrapper
+  animates open and the chat slides down. Verified live: the Architect called `subagent` (general,
+  `completed`) and answered with the worker's reply; no child session in the rail.
 
-The mode is a per-session property read from `isSingleSession()`
-(`engines/base.js`); nothing is stored in config — `defaults.mode` was removed
-once the toggle became live. **It is applied at send, not on toggle** (27 Oct):
-`sendMessage` carries the mode, PATCHes the ruleset once if it differs from the
-session's, then briefs and prompts in that mode. A click that is never sent
-changes nothing, which is what "it doesn't matter until I send" means. **A
-dedicated `chat` agent (tools denied, `steps: 1`) is the obvious design and it
-does not work**: the free tier rejected every request from a custom agent with a
-provider auth error (measured side by side — the custom-agent session failed at
-20:45:37 while a default-agent session succeeded at 20:45:40). Denying everything
-also defeats the purpose, because Single is meant to have tools.
-`POST /api/session` accepts `permissions`; `PATCH` replaces them.
+The mode is per session, read from `isSingleSession()` (`engines/base.js`); nothing is in config —
+`defaults.mode` was removed once the toggle became live. **It is applied at send, not on toggle** (27 Oct):
+`sendMessage` carries the mode, PATCHes the ruleset once if it differs, then briefs and prompts. **A
+dedicated `chat` agent (tools denied, `steps: 1`) is the obvious design and it does not work**: the free
+tier rejected every request from a custom agent with a provider auth error (measured side by side —
+20:45:37 failed, 20:45:40 succeeded). `POST /api/session` accepts `permissions`; `PATCH` replaces them.
 
 ### A Single session is not told it is an Architect
 
-The trap is not a fresh Single session — it is a live Multi session switched to
-Single to ask for one small thing. The transcript still contains the whole
-campaign, and the project still carries `.project/`. Omitting the harness from the
-brief is not enough; the brief has to overrule what the model can see.
+The trap is not a fresh Single session but a live Multi one switched to Single for one small thing: the
+transcript still holds the campaign and the project still carries `.project/`. Omitting the harness is not
+enough; the brief has to overrule what the model sees. Measured 26 Oct: asked to copy one exe, the model
+read `.project/plan.json`, decided from `t21` whether the build was current, and reported on `t18` and
+`t20` — and the brief had quoted the stored requirement verbatim.
 
-Measured 26 Oct: asked to copy one exe into a folder, the model read
-`.project/plan.json`, decided from `t21` whether the build was current, and
-reported on `t18` and `t20`. The brief had also quoted the stored requirement
-verbatim — the old campaign, "Continue work" and all — because Single used to
-present it as "the operator's request".
-
-What the Single brief says now, and nothing else:
-
-- Where the tools operate, and that the answer may need the disk or a command.
-- One conversation, no team, no delegation; ignore a delegation tool if offered.
-- **Only when a plan file exists**: it was written for a different task, it is to
-  be ignored, its tasks are not this conversation's, and it is not to be followed
-  or updated.
-- **The operator's standing Notes from `project.md`, when there are any** — those
-  are about the project, not the old campaign, and they apply to a one-off ask too.
-
-It does not quote the project's request or its handover, does not point at the
-plan as a work list, and does not call the session a role — the skills line drops
-"this role", "judge the next piece of work" and "your report"
-(`describeSkills(..., { chat: true })`). A Single message is logged in
-`project.md` as a `### chat` entry, but it never becomes the head's request: that
-is a Multi message, and letting a side ask overwrite it is how the earlier task's
-record got polluted. A delegation attempted anyway is still refused in the
-runner, but the refusal now says "do it yourself" rather than "ask the operator to
-switch to Multi" — the second reads as an errand, and the operator did not ask for
-one.
-
-Multi is untouched: the same brief it always had.
+What the Single brief says now, and nothing else: where the tools operate and that the answer may need the
+disk or a command; one conversation, no team, no delegation, ignore a delegation tool if offered; **only
+when a plan file exists**, that it was written for a different task and is not to be followed or updated;
+and **the operator's standing Notes from `project.md`**. It does not quote the request or the handover,
+and does not call the session a role — the skills line drops "this role" and "your report"
+(`describeSkills(..., { chat: true })`). A Single message is logged as `### chat` but never becomes the
+head's request. A delegation attempted anyway is refused with "do it yourself" rather than "ask the
+operator to switch to Multi", which reads as an errand. Multi is untouched.
 
 ## The tool census, and the restart it used to double-count
 
-`recordMessages` is called with the **whole transcript** on every turn and
-de-duplicates with a set of tool-part ids. Those ids ride along with the totals now
-(`seen` in `data/tool-stats.json`, capped at 4000), so the first turn after a restart
-resumes from where the previous process stopped instead of re-adding a session's
-entire tool history — the old failure was an in-memory set with totals on disk:
-2 calls → restart → re-scan the same transcript → 4.
+`recordMessages` is called with the **whole transcript** on every turn and de-duplicates with a set of
+tool-part ids. Those ids ride along with the totals now (`seen` in `data/tool-stats.json`, capped at
+4000), so the first turn after a restart resumes where the last process stopped instead of re-adding a
+session's whole tool history — the old failure was an in-memory set with totals on disk: 2 calls →
+restart → re-scan → 4. A census written **before** ids were kept cannot be repaired, so it says so once
+and is wrong for one more scan. A test looks clean unless it calls `flush()`: the write is debounced by
+2s. `tests/toolstats.test.mjs` pins the restart, the warning and the clearing.
 
-Two things remain true. A census written **before** ids were kept cannot be
-repaired, so it says so once and is wrong for one more scan. And a test looks clean
-unless it calls `flush()`: the write is debounced by 2s. `tests/toolstats.test.mjs`
-pins the restart, the warning and the clearing (a `clear()` that kept its ids would
-make the next scan silently count nothing).
+## An answer has to outlive the transcript
 
-## There is no session naming any more (27 Oct)
+The reply goes back through `form/{id}/reply`, the engine records it as the `question` tool's output, and
+the model reads it next turn — no separate channel, and no confirmation the model read it. Shift Test 5
+showed the seam: the designer was given the same two decisions at 19:46 and 19:51, kept working, then
+re-opened the settled question and asked twice more at 19:53 and 19:54, with the answer in its own context
+and nothing compacted. That repetition is the model's, and the question-loop guard stops it.
 
-A session used to be created as **TBD** and named by a `generate` call after its
-first turn. With one chat per project the rail shows the project's name, and an
-engine session's title is never read — so the titler is gone, along with the
-`generate` call it made for every conversation. A chat is created with the
-project's name as its engine title, for an audit read of the engine's own list.
-
-## A project's memory is its folder, so deleting the project takes it
-
-`.project` — the plan, the project document, the ideas, the design, the
-findings and the run log — belongs to the **directory**, not to a conversation.
-That is why a project is one chat: a second conversation in the same folder would
-inherit the first one's plan and look as if it had opened onto a dead campaign.
-Deleting a project takes its chat, its folder and its `.project` together, after
-the `bin\` consent; there is no separate "delete the plan" step left. The old
-General override (one workspace per session) is gone with the project, and the
-old `forget` checkbox went with the session delete.
-
-## A question lives in the engine's memory, so a restart loses it
-
-The `question` tool does not write the question into the transcript and wait. It
-opens a **form**, and the engine holds that form in memory. Synapse only ever
-sees it through the engine's own routes, so if the engine goes away the question
-goes with it.
-
-Measured on 21 Oct: a form was waiting, the operator restarted Synapse to pick up
-a fix, and afterwards there was nothing to show. `GET /api/pending` returned no
-forms and no active sessions, and the transcript's `question` card still read
-**running** — a state that can never finish, because the engine that was going to
-answer it no longer exists. That session cannot be resumed from there; a new
-session is the honest fix.
-
-Two rules follow.
-
-1. **A restart abandons a pending question.** Nothing recovers it. Say so before
-   restarting while a run is waiting on the operator, and expect that run to be
-   started again.
-2. **The question has to be findable outside the open session.** The answer panel
-   only exists inside a session view, and a page load opens nothing, so the rail
-   marks the session that is waiting (Answer / Decide) and a waiting question is
-   announced once. A blocked session and an idle one both emit nothing, so the
-   rail is the only honest signal.
-
-## An answer is delivered once, into a transcript a compaction can replace
-
-The operator's reply goes back through `form/{id}/reply`, the engine records it as
-the `question` tool's output, and the model reads it in its next turn. That is the
-whole mechanism — there is no separate channel, and no confirmation the model read
-it. Shift Test 5 showed the seam: the designer was given the same two decisions at
-19:46 and 19:51 (both recorded verbatim in the transcript, both printed as *"User
-has answered your questions … you can now continue with the user's answers in
-mind"*), kept working, then re-opened the settled question at 19:51 and asked it
-twice more at 19:53 and 19:54 — 90 seconds apart, with the answer in its own
-context and nothing compacted in between. That repetition is the model's, and the
-question-loop guard is what stops it.
-
-What is ours is that the answer had no life beyond that transcript. A compaction
-replaces older turns with a summary, and a summary is a model's account of an
-answer; the project's document exists for exactly this reason and the answer needed
-the same treatment. So `replyForm` appends to **`.project/project.md`**, under the
-Log, as a `### decision` entry — the question titles and the operator's values,
-verbatim, written by Synapse and never by a model. The head then lists the
-decisions still in force, and every brief that sees the file says so: *"the
-operator's answers so far are in `.project/project.md` … read it before you ask
-anything, and never ask a question it already answers"*. The Architect's features
-multiselect lands there too, which is what makes a rejected idea stay rejected.
-
-Two edges worth knowing. The guard's own memory (`questionHistory`) is in-process:
-a restart forgets which questions were already asked, so the file is the only
-durable record for the *next* run, not a replacement for the guard. And a session
-outside a project has no `.project`, so nothing is written — the reply still goes
-through, and the missing file is not an error.
+What is ours is that the answer had no life beyond that transcript, and a summary of an answer is a
+model's account of it. So `replyForm` appends to **`.project/project.md`**, under the Log, as a
+`### decision` entry — the question titles and the operator's values, verbatim, written by Synapse and
+never by a model. The head lists the decisions still in force, and every brief says so: *"the operator's
+answers so far are in `.project/project.md` … read it before you ask anything, and never ask a question it
+already answers"*. The features multiselect lands there too, which is what makes a rejected idea stay
+rejected. Two edges: the guard's own memory (`questionHistory`) is in-process, so the file is the durable
+record for the *next* run, not a replacement for the guard; and a session outside a project has no
+`.project`, so nothing is written and the reply still goes through.
 
 ## Stop means stop
 
-Measured 23 Oct: the operator pressed Stop, and the run carried on to the end and
-started the next task. Nothing was broken in the runner — the stop button was
-aimed at the wrong thing.
+Measured 23 Oct: the operator pressed Stop and the run carried on to the end and started the next task.
+Nothing was broken in the runner — the button was aimed at the wrong thing. **A delegated task runs in its
+own worker session**, so Stop interrupted the Architect; the worker finished, reported, the Architect was
+woken and delegated the next task. Stop does three things:
 
-**A delegated task runs in its own worker session.** The operator has the Architect
-open, so Stop interrupted the Architect, which is not the thing doing the work. The
-worker finished, reported back, the Architect was woken by the report, and it
-delegated the next task: from the operator's seat, "it just retried later". There
-was also a third way back in — `remindSkippedWork`, which nudges the Architect when
-a ready task was never asked for.
+1. **It cancels the run**, not just the session: `runs.cancel(dir)` aborts the runner, cuts any backoff
+   short and interrupts the worker session.
+2. **It puts the task back to `todo`.** A task left `doing` makes the plan say "1 running" for the rest of
+   the day. That is the one write the harness makes to the plan (`setTaskStatus`).
+3. **It holds the project** (`stoppedByOperator`): a delegation arriving while held is recorded as
+   `stopped-by-operator` and not run, and the "ready but never asked for" reminder stays quiet. The hold
+   lifts when the operator speaks — `POST /messages` or turning keep-building on.
 
-So Stop now does three things, and all three are needed:
+**The run record is not the list of live work.** A worker can outlive a run that already reported or was
+cancelled: the engine still lists its session as active, Synapse has no run to cancel, and the Architect
+looks idle, so Stop was disabled and did nothing. Stop now asks the engine for its active sessions and
+interrupts every one in the same project, plus that session. `/api/pending` reports `canStop`, and the
+composer's Stop is enabled from that answer. Measured 26 Oct: an idle Architect and a running worker —
+`canStop=true`, one press stopped both.
 
-1. **It cancels the run**, not just the session: `runs.cancel(dir)` aborts the
-   runner, cuts any backoff short and interrupts the worker session.
-2. **It puts the task back to `todo`.** Nothing is running, so a task left as
-   `doing` makes the plan say "1 running" for the rest of the day. That is the one
-   write the harness makes to the plan (`setTaskStatus`), and it changes one field.
-3. **It holds the project** (`stoppedByOperator`): a delegation arriving while held
-   is recorded as `stopped-by-operator` and not run, and the "ready but never
-   asked for" reminder stays quiet. The hold lifts when the operator speaks —
-   `POST /messages` or turning keep-building on — because that message is their
-   answer to "what now".
+**A stop used to be filed as the previous provider failure.** Measured 29 Oct: a cap was retried seven
+times, cleared, the worker ran five minutes and Stop was pressed; the result kept `Free usage limit
+reached…` because the runner breaks on `stopped` before recomputing the turn's error, so the Architect
+relayed the cap as the cause. A result now carries `stoppedBy` (`operator` or `harness`) and
+`lastTurnError` separately, and `error` is null for a plain operator stop. The report's head says who
+stopped it, and the old provider sentence is quoted as "before the stop, the last turn had ended with…".
+The record answers *why did it end* and *what was the last thing it heard*.
 
-**The run record is not the list of live work.** A worker can outlive a run that
-has already reported or been cancelled: the engine still lists its session as
-active, Synapse has no run left to cancel, and the Architect on screen is idle —
-so Stop looked disabled and pressing it did nothing. Stop now asks the engine for
-its active sessions and interrupts every one in the same project as the session
-it was pressed on, plus that session. `/api/pending` reports `canStop` for the
-open session's project, and the composer's Stop is enabled from that answer even
-when nothing looks busy. Measured live on 26 Oct: an idle Architect and a running
-worker in one project — `canStop=true`, one press stopped both, and the engine's
-active list was empty afterwards.
+**A stop wakes nobody, says nothing, and is two-stage.** The first Stop lets the open assistant message
+finish and cuts when a different one begins — the next step. No message is sent, no report is requested,
+nothing says "the operator stopped you": the model sees a turn cut at a boundary, what a dropped
+connection looks like. The 45-second `STOP_GRACE_MS` catches a long step; the UI says so in the top-right
+notice and rings the chat in a fast red glow. A second Stop cuts immediately, mid-token if that is where
+it is. Since 6 Nov both stages belong to `src/stop.js`. No Architect turn follows. The hold survives a
+restart: `recoverStops` reads the latest result's `stoppedBy: operator` and holds unless a user message
+arrived since; `recoverLostReports` skips stopped and interrupted results, so a boot cannot replay a
+stopped run as a report and invite the Architect to re-delegate it. A harness stop (the question-loop
+guard) still reports immediately: a failure the operator must see, not a decision.
 
-**A stop used to be filed as the previous provider failure.** Measured 29 Oct on
-the emulator project: a free model's cap was retried seven times, cleared, the
-worker ran for five minutes, and the operator pressed Stop. The result line kept
-the old `Free usage limit reached…` because the runner breaks on `stopped` before
-recomputing the turn's error — so the Architect relayed the cap as the cause, and
-the operator went looking for a limit on a model that never had one. A result now
-carries `stoppedBy` (`operator` or `harness`) and `lastTurnError` separately, and
-`error` is null for a plain operator stop. The report's head says who stopped it;
-the old provider sentence, if any, is quoted as "before the stop, the last turn
-had ended with…". The two questions the record must answer are *why did it end*
-and *what was the last thing it heard* — they are not the same field.
+### The engine retries on its own
 
-**A stop wakes nobody, says nothing, and is two-stage.** The first Stop is
-graceful: the assistant message that is open at that moment is allowed to finish,
-and when a different assistant message begins — the next step — the turn is cut
-there. No message is sent to the model, no report is requested, and nothing says
-"the operator stopped you". The model sees a turn cut at a boundary, which is
-exactly what a dropped connection looks like. The 45-second `STOP_GRACE_MS` cap
-catches a step that takes too long. The UI says what is happening in the top-right
-notice and rings the chat in a fast red glow; a second Stop cuts immediately,
-mid-token if that is where it is. Since 6 Nov both stages are owned by
-`src/stop.js`, not by the runner — see "The engine retries on its own" below.
+Everything above was true and Stop still did not work, because one fact was missing: **the engine runs its
+own retry loop inside the session.** On a 429 it schedules a retry and fires it about thirty seconds
+later, with no request from Synapse; an interrupt arriving during that wait has no generation to abort, so
+it does nothing — then the retry fires and the work carries on.
 
-No Architect turn follows, and no explanation is planted for one. The stop is
-recorded on disk for the audit and the UI, the task goes back to `todo`, and the
-project is held. If the operator wants the work resumed, changed or avoided, they
-say so in their next message — that message is an ordinary message, not a
-permission request dressed up as one.
+Measured: five Stops between 11:51:47 and 11:51:51 were each answered "1 session interrupted", and the
+engine retried at 11:52:05, 11:52:36, 11:53:07, 11:53:38 and 11:54:08. The sixth Stop, at 11:54:10, landed
+1.6 s after a step had started and worked. After the eighth failure the engine scheduled a retry for
+11:58:00, never fired it, and left the session active with nothing running — Stop enabled, the log saying
+"interrupted", the event list frozen on `session.retry.scheduled`. That event is the engine's: not a wake,
+not a schedule Synapse made, and no evidence anything is about to happen. So Stop was rebuilt
+(`src/stop.js`):
 
-The hold survives a restart: `recoverStops` reads the latest result's
-`stoppedBy: operator` and holds the project unless a user message has arrived
-since. `recoverLostReports` skips stopped and interrupted results entirely, so a
-boot cannot replay a stopped run as a report and invite the Architect to judge —
-and therefore re-delegate — work the operator had stopped.
+- **One intent per project, one timer, one owner.** The gentle press, the immediate press and a stop from
+  a card all call `stopper.stop()`. The harness side — cancel the run, mark it stopped, kill the wake
+  loop, hold the project, release the screen — happens there, once. The runner's `requestStop` only marks
+  the run; its 45-second timer and step-boundary check are gone.
+- **Stopped means quiet, not "an interrupt was sent":** no session in the project is active *and* every
+  session touched ends its transcript with an `idle` message — the marker that separates "finished" from
+  "waiting out a retry".
+- **It keeps cutting.** While a session is still active it interrupts again on every tick, which is what
+  makes a stop land on the retry scheduled before the press.
+- **A retry is a boundary**, so the gentle press cuts when the next step begins; and **a turn already
+  waiting out a retry is cut at once**, because the last message is a failed assistant turn and there is
+  nothing left to finish.
+- **A wedged session is recognised**: not active, no idle marker, a failed assistant turn — it is
+  interrupted again, which is what clears it.
+- **It says so when it cannot.** After sixty seconds still running the page is told `stop.stuck` with the
+  provider's sentence; after five minutes it gives up and says that too. It never reports "stopped" while
+  a session is alive.
+- **The operator speaking clears it**, so a stop still watching cannot cut the turn they started.
 
-A harness stop (the question-loop guard) still reports immediately: it is a
-failure the operator must see, not an operator decision.
-
-### The engine retries on its own, so Stop is one intent and a watch (6 Nov)
-
-Everything above was true and Stop still did not work, because one fact was
-missing from the model: **the engine runs its own retry loop inside the session.**
-When the provider answers 429 it schedules a retry and fires it about thirty
-seconds later, with no request from Synapse. An interrupt that arrives during that
-wait has no generation to abort, so it does nothing at all — and then the retry
-fires and the work carries on.
-
-Measured on the operator's machine: five Stops between 11:51:47 and 11:51:51 were
-each answered "1 session interrupted", and the engine retried at 11:52:05,
-11:52:36, 11:53:07, 11:53:38 and 11:54:08. The sixth Stop, at 11:54:10, landed 1.6 s
-after a step had started and worked. Then, after the eighth failure, the engine
-scheduled a retry for 11:58:00, never fired it, and left the session on the active
-list with nothing running — the state where Stop is enabled, the log says
-"interrupted", and the event list freezes on `session.retry.scheduled`.
-
-`session.retry.scheduled` is the engine's event, not ours. It is not a wake, not a
-schedule Synapse made, and not evidence that anything is about to happen: it is the
-provider's sentence ("the cell is at capacity; retry shortly") and a timer the
-engine owns.
-
-So Stop was rebuilt rather than patched again (`src/stop.js`):
-
-- **One intent per project, one timer, one owner.** The gentle press, the immediate
-  press and a stop from a card all call `stopper.stop()`. The harness side of a
-  stop — cancel the run, mark it stopped, kill the wake loop, hold the project,
-  release the screen — happens there, once. The runner's `requestStop` now only
-  marks the run so its report says the operator stopped it; its 45-second timer and
-  its step-boundary check are gone.
-- **Stopped means quiet, not "an interrupt was sent":** no session in the project
-  is active *and* every session touched ends its transcript with an `idle` message.
-  The idle marker is what separates "finished" from "waiting out a retry".
-- **It keeps cutting.** While a session is still active it interrupts again on every
-  tick. That is what makes a stop land on the retry that was scheduled before the
-  press.
-- **A retry is a boundary.** The gentle press cuts when the next step begins, and a
-  scheduled retry counts: the step failed, so there is nothing left to finish.
-- **A turn already waiting out a retry is cut at once.** The gentle press reads the
-  last message first: if it is a failed assistant turn with a retry scheduled, the
-  step is over and there is nothing to wait for. Without this, a wedged session sat
-  behind "Stopping…" for the whole 45-second grace while the engine did nothing.
-- **A wedged session is recognised.** Not active, no idle marker, a failed
-  assistant turn: it is interrupted again, which is what clears it. (One interrupt
-  cleared the 11:58 wedge.)
-- **It says so when it cannot.** After sixty seconds still running, the page is told
-  `stop.stuck` with the provider's sentence; after five minutes it gives up and says
-  that too. It never reports "stopped" while a session is alive.
-- **The operator speaking clears it.** Their next message removes the intent, so a
-  stop that was still watching cannot cut the turn they just started.
-
-`node tests\stop-controller.test.mjs` pins the retry loop, the wedge, the boundary,
-the second press and the clear-on-speak.
+`node tests\stop-controller.test.mjs` pins the retry loop, the wedge, the boundary, the second press and
+the clear-on-speak.
 
 ## Talking to work in flight: steer, not stop
 
-The engine's `POST /api/session/{id}/prompt` is an inbox entry, not a blocking
-call: it returns in about 100 ms while a turn is running and takes `delivery`.
-`steer` is the default and `queue` is the alternative. Measured on 2.1.2 and
-again on 2.2.3:
+`POST /api/session/{id}/prompt` is an inbox entry, not a blocking call. `steer` is the default `delivery`
+and `queue` the alternative. Measured on 2.1.2 and again on 2.2.3:
 
-- `steer` **joins the running turn** and is read at the **next step boundary** —
-  after the tool call in flight, not in the middle of a token. A worker doing tool
-  calls sees it in seconds; a model streaming a 900-word answer saw it when that
-  answer ended (34 s), and the next assistant message obeyed it in the same turn.
-- `queue` waits for the turn to end, which makes it a normal follow-up message
-  with extra ceremony.
+- `steer` **joins the running turn** and is read at the **next step boundary** — after the tool call in
+  flight, not mid-token. A worker doing tool calls sees it in seconds; a model streaming a 900-word answer
+  saw it when that answer ended (34 s) and obeyed it in the same turn.
+- `queue` waits for the turn to end, which makes it a normal follow-up message with ceremony.
 - Neither can preempt a tool call or a generation. **Stop is the hard interrupt.**
 
-Synapse sends a steer with the marker `[steer] ` in front of the operator's
-words. The briefs define it: guidance for the task in flight, not a new task;
-apply it, say in the report what changed, do not restart. The worker's report
-quotes every steer and the Architect judges against the latest instruction, not
-the brief the task started with.
+Synapse sends a steer with the marker `[steer] ` in front of the operator's words. The briefs define it:
+guidance for the task in flight, not a new task; apply it, say in the report what changed, do not restart.
+The report quotes every steer and the Architect judges against the latest instruction. **Who may steer:**
+anyone looking at the project — the first cut allowed only the computer that started the work, and the
+operator removed that check on 30 Oct, choosing reach over ownership. The computer name stays on the steer
+line as an audit fact. The composer becomes **Steer** with a yellow border in every view while the work
+runs.
 
-**Who may steer.** Anyone looking at the project. The first cut allowed only the
-computer that started the work, to stop a second voice changing the task under the
-first; the operator removed that check on 30 Oct and chose reach over ownership.
-The computer name is still written on the steer line, but it is an audit fact, not
-a gate. The composer becomes **Steer** with a yellow border in every view while
-the work runs.
+**The plan follows the steer.** The Architect is told to put the change in the task note and the plan, and
+to ask when a steer changes the task materially rather than quietly reshaping it. A small steer is a note;
+a big one is a decision, and the operator owns it. **Two guards the engine does not give us**: a steer
+admitted just as the turn ends can start a turn nobody polls, so the runner interrupts once after a run
+that carried steers; and a steer during a provider backoff is refused, because the session is idle and the
+message would race the retry.
 
-**The plan follows the steer.** The worker applies it and its report quotes it;
-the Architect is told, in the report, to put the change in the task note and the
-plan, and to ask the operator a question when a steer changes the task materially
-rather than quietly reshaping the work. A small steer is a note; a big one is a
-decision, and the operator owns it.
-
-**Two guards the engine does not give us.** A steer admitted just as the turn
-ends can start a turn nobody is polling, so the runner interrupts the worker once
-after a run that carried steers; and a steer during a provider backoff is refused,
-because the session is idle then and the message would race the retry.
-
-**The worker id is not in `run.started`.** That event is emitted before the worker
-session exists, so its `workerId` is null; the first progress event carrying the
-id used to wait for a tool or context change. Measured 30 Oct: a coder that was
-only thinking showed no worker to the page, and Send stayed disabled instead of
-becoming Steer. The runner now emits `run.progress` immediately after
-`spawnWorker()`, and the composer targets the live run rather than requiring the
-id — the server holds the worker session and refuses only while it is starting.
-
-Measured live on 30 Oct (2.2.3): a delegated coder writing 400 numbered lines was
-steered with "put `STEERED` at the top"; the file came back 401 lines with
-`STEERED` first, and the Architect's verdict said "the steer is satisfied". The
-same day an Architect mid-essay was steered to answer one sentence instead, and
-did, in the same turn. `tests/steer.test.mjs` pins the runner side and the briefs.
-
-**Where a steer is seen.** A steer to a worker is on that worker's run trace with
-the yellow `STEER:` marker — not a “You” message, because the worker has its own
-session. It survives a reload through `/api/runs`. The Architect is not woken; it
-reads the steer in the worker's report. If the run is stopped before that report,
-the next brief carries “the operator's steer to the last run still stands” so it
-can put the change in the plan on its next turn.
+**The worker id is not in `run.started`.** That event is emitted before the worker session exists, so its
+`workerId` is null. Measured 30 Oct: a coder that was only thinking showed no worker to the page, and Send
+stayed disabled instead of becoming Steer. The runner now emits `run.progress` right after `spawnWorker()`,
+and the composer targets the live run. Measured live (2.2.3): a coder writing 400 numbered lines was
+steered with "put `STEERED` at the top"; the file came back 401 lines with `STEERED` first.
+`tests/steer.test.mjs` pins the runner side and the briefs. **A steer is seen** on that worker's run trace
+with the yellow `STEER:` marker — not a "You" message, because the worker has its own session — and it
+survives a reload through `/api/runs`; if the run stops before the report, the next brief carries "the
+operator's steer to the last run still stands".
 
 ## A long command is a lease, not a stall
 
-A worker that runs a 90-minute download produces no transcript change while it
-runs, and `waitForIdle` measures exactly that: silence. Before the lease, the stall
-clock would fire at `worker.stallSec` and the interrupt would kill the download.
+A worker running a 90-minute download produces no transcript change, and `waitForIdle` measures exactly
+that: silence. Before the lease, the stall clock fired and the interrupt killed the download. The worker
+now calls the `lease` tool **before** the long command (`src/mcp/lease-server.js`, a stateless receipt like
+`delegate`): minutes and a one-line reason. The runner reads the call from the transcript on its next poll
+and holds the stall clock off until the lease ends. The chat shows one violet line with a live countdown
+and `/api/runs` carries it.
 
-The worker now calls the `lease` tool **before** the long command (`src/mcp/lease-server.js`,
-a stateless receipt like `delegate`): minutes and a one-line reason. The runner reads
-the call from the transcript on its next poll (the same way it reads delegation
-requests) and holds the stall clock off until the lease ends. The chat shows one
-violet line with a live countdown — “Coder 1 asked for a 02:00:00 lease · 01:58:41
-left · ‘downloading a 200 GB archive’” — and `/api/runs` carries the lease so a
-reload rebuilds it.
+**The card is drawn from the lease, not from the call (21 Nov).** The countdown used to ride only the tool
+call that asked for it, and a worker's lease call never reaches the trace: the page's tool notes are the
+*polled* shell calls, and an MCP call that takes forty milliseconds falls between two polls. The operator
+watched a worker think "call the lease", saw no card, and asked whether the model was lying — it was not:
+three `synapse-lease_lease` calls and a live 15-minute lease in `/api/runs`. The card is now `leaseCard()`,
+from `leaseFor()`, pinned at the bottom of the trace beside the thinking: the Architect's card shape, a
+breathing dot, the same `data-lease-until` clock, and the reason. The line itself is only for a lease whose
+run has folded or is not on the page, so one lease is never said twice.
 
-**The card is drawn from the lease, not from the call (21 Nov).** The countdown used to
-ride only the tool call that asked for it, and a worker's lease call never reaches the
-trace: the page's tool notes are the *polled* shell calls, and an MCP call that takes
-forty milliseconds falls between two polls. The operator watched a worker think "call the
-lease", saw no card, and asked whether the model was lying — it was not: the session had
-three `synapse-lease_lease` calls and `/api/runs` carried a live 15-minute lease. The card
-is now `leaseCard()`, built from `leaseFor()` and pinned at the bottom of the run's trace
-beside the thinking: the Architect's tool-card shape, a breathing dot, the same
-`data-lease-until` clock the line uses, and the reason. The line itself is only for a lease
-whose run has folded or is not on the page, so one lease is never said twice.
+**The note's `kind` is the page's switch, and the lease had overwritten it (21 Nov).** `onLease` emits
+`run.note` with `kind: 'lease'` and then spreads the lease's own fields, which carry a `kind` of `granted`,
+`extended` or `expired` — so every note arrived as `granted`, `noteLease` never ran, and nothing was drawn
+while the stall clock was held off correctly. The lease's state now rides as `leaseKind`, after the spread,
+and `traceSig()` includes the leases.
 
-**The note's `kind` is the page's switch, and the lease had overwritten it (21 Nov).** The
-card was still invisible in a live run, and the operator asked a second time. `onLease` emits
-`run.note` with `kind: 'lease'` and then spreads the lease's own fields — which carry a `kind`
-of `granted`, `extended` or `expired` — so every note arrived as `granted` and `noteLease`
-never ran. The stall clock was held off correctly (that reads the poll, not the note), and
-nothing was drawn: only a page opened mid-lease had a card, because `/api/runs` carries
-`run.lease`. The lease's own state now rides as `leaseKind`, after the spread, and `traceSig()`
-includes the leases so a grant or an expiry redraws on its own.
+At the end the worker is **asked**, not killed: a synthetic says the lease is over and it may call `lease`
+once more for the time it needs. Any assistant message after the question earns the one extension; a second
+lease call replaces the clock. If nothing arrives within `worker.leaseGraceSec` (default 300), the silence
+is a stall again and the normal resume path runs. A model inside a shell call cannot answer — that is why
+the lease is asked for before the command and the question queued. `tests/lease.test.mjs` pins the receipt
+and the settings; the timer needs a live run.
 
-At the end the worker is **asked**, not killed: a synthetic says the lease is over
-and that it may call `lease` once more for the time it needs. Any assistant message
-after the question is an answer and earns the one extension; a second lease call
-replaces the clock. If nothing arrives within `worker.leaseGraceSec` (default 300),
-the silence is a stall again and the normal interrupt/resume path runs.
+## A worker stops what it started, by id
 
-A model inside a shell call cannot answer — that is why the lease is requested
-before the command, and why the question is queued rather than expected immediately.
-The one extension is the guard against a model that asks for two hours and needs
-four; after it, the clock is the clock.
+A coder tidied up with `Stop-Process -Id 26232 -Force; Get-Process python | ForEach-Object { Stop-Process
+-Id $_.Id -Force }`. The second clause stopped **every python on the machine**, the local model server
+among them — dead at 00:07:45, one retry 433 ms later, eight minutes against a closed port, and still
+reported "completed". Nothing looked wrong: the worker asked permission, Auto-Permissions allowed it 26 ms
+later, and 121 of the 122 kill commands in the same logs are `Stop-Process -Name SysMonitor`, the project's
+own app. **The shell refuses now** — a sweep, a family, an id the command looked up — in the `processes`
+scope, with no card (`permissions.js` FAMILY_TEXT); a project's own app by name stays allowed, and so does
+a plain `-Id <number>`. **The brief's sentence is the second layer**: stop a process you started by its id,
+never by its name, because a name matches every process that carries it. `run-rules.test.mjs` holds the
+sentence, and that it names no language, runtime or product.
 
-`tests/lease.test.mjs` pins the receipt and the settings; the timer needs a live run
-(the manual test uses a 0.1-minute lease so it finishes in six seconds).
-
-## A task that needs 80 steps is too big
-
-Every step re-sends the whole conversation, so the step count is both the time and
-the cost of a work order. `worker.maxTurns` (default 80, 0 turns it off) stops a run
-that crosses it with “the task needs splitting” — outcome `stopped`, no attempt
-counted against the role, the model not marked. The Architect is told to split it.
-Measured 4–5 Nov: a local coder spent 178 steps and 18.6M prompt tokens on one task;
-that is a plan problem, not a model problem, and the report says so.
-
-The worker brief also carries the cheap rules: read a file once, never re-run a
-passing check, use the project's own scripts instead of a new variant, and keep a
-notes file in scratch.
-
-## A model that writes its tool call instead of making it
-
-Measured 30 Oct (test6, coder-2, a local model): the worker's turn ended with a
-`<tool_call><function=websearch>…</function></tool_call>` block *inside the
-message*. The engine saw text, the turn closed, and the harness reported
-"completed" with that XML as the report. Nothing was called and no file existed.
-
-The run is honestly over — the same model finished the task on the next attempt,
-which is why the outcome stays `completed` and the ladder does not move on the
-strength of one bad turn. What changed is the report: when the last assistant text
-is nothing but a tool-call block (`wroteToolCall`) and no file was written, the
-report says so in a sentence and quotes what the model wrote, instead of handing
-the Architect raw XML to interpret.
-
-The test suite also stays out of `data\provider-errors.log` now
-(`NODE_TEST_CONTEXT`): the ladder tests' stub models had added fake
-"opencode/one … Invalid request: text is required" lines beside a real usage cap,
-and that file is supposed to be evidence.
-
-## A worker stops what it started, by id (10 Nov)
-
-A coder finished its task and tidied up. It had started the project's own
-`bin/start_server.py` in a background shell, so it ran one command:
-
-```
-Stop-Process -Id 26232 -Force
-Get-Process python | ForEach-Object { Stop-Process -Id $_.Id -Force }
-```
-
-The first clause stops the app it was testing. The second stops **every python on
-the machine**, and the local model server answering that worker's own run ran as
-`python.exe` at the time. It died at 00:07:45; the engine's first retry logged
-433 ms later; the run then retried against a closed port for eight minutes until
-the server was started again, and still reported "completed". Nothing in the
-harness knew the model had gone.
-
-Nothing about it looked wrong. The worker asked permission, which is the tidy
-thing to do. Synapse allowed it 26 ms later because Auto-Permissions was on, so no
-card appeared. And the command is two words from the ordinary form: the other 121
-kill commands in the same logs are `Stop-Process -Name SysMonitor`, the project's
-own app, which harms nothing.
-
-A refusal is not available. Refusing a kill-by-name means a question on every
-cleanup, and a question at 3 a.m. stalls an unattended night run instead of
-protecting it — the operator's call, and the right one. So the rule went into the
-brief every role re-reads on every step: **stop a process you started by its id,
-never by its name**, because a name matches every process that carries it and the
-run may depend on one of them. `run-rules.test.mjs` holds the sentence, and
-separately that the sentence names no language, runtime or product.
-
-That is one more way to say the right thing, not a fence.
-
-### The other side of it, changed the same night
-
-The operator fixed this where the collision actually lived. The server no longer
-answers to the name `python.exe`: it runs as `polyhost.exe`, and it restarts
-itself when its process dies. So a name sweep cannot reach it any more, and the
-same kill now costs a few seconds of retries instead of eight minutes.
-
-That cuts both ways, and the second way is the trap: **a self-restarting server
-makes this failure quiet**. Eight minutes of a dead port announced itself in the
-logs; a three-second gap mid-turn does not, and the turn that lost its model looks
-like an ordinary retry. When a run stalls for no reason, read the provider port's
-pid at the start of the turn before reading anything else.
-
-Synapse's own cleanup cannot reach it either, and that part is by design rather
-than luck: `mayStop()` in `src/cleanup.js` stops only the runtimes that can serve a
-page (`node`, `python`, `pwsh`, `deno`, `bun`), because cleanup exists for a
-worker's leftovers and a worker does not start the model server. A model server's
-program is not on that list, and adding it would be the wrong repair.
-
-The rule is not about python, and that is why it stays. The next service will be
-called something else, the next worker will tidy up with a sweep by name, and a
-name still matches every process that carries it. Nothing in `src/` names the
-runtime or the server: the brief states the rule, `run-rules.test.mjs` keeps the
-rule free of any product's name, and the rename on the other side is a fact about
-one machine, not a fact the harness knows.
-
-If it recurs, the question is which port held the model at the start of the turn
-and whether a name sweep would reach it. That is a policy, and a policy is decided
-before the night starts, not during it.
+**A self-restarting server makes this failure quiet.** The operator's server no longer answers to a
+runtime's name and restarts when it dies, so the same kill costs seconds instead of eight minutes — and the
+turn that lost its model looks like an ordinary retry. When a run stalls for no reason, read the provider
+port's pid at the start of the turn first. Synapse's cleanup cannot reach it either, by design: `mayStop()`
+in `src/cleanup.js` stops only runtimes that can serve a page (`node`, `python`, `pwsh`, `deno`, `bun`),
+because cleanup exists for a worker's leftovers and a worker does not start the model server.
 
 ## A restart is not a pause
 
-Measured 26 Oct: a worker was running t3 and waiting on a permission request when
-Synapse restarted. The runner died before writing a result. The plan said `todo`,
-the runs file still had the `delegate` line, and the Architect's last message was
-"t3 is queued and waiting to run" — so the operator was stuck waiting on a worker
-that did not exist. `recoverDelegations` only picks up requests **no turn ever
-read**; this one had been read and started.
+Measured 26 Oct: a worker was running t3 and waiting on a permission request when Synapse restarted. The
+runner died before writing a result, the plan said `todo`, the runs file still had the `delegate` line, and
+the Architect's last message was "t3 is queued and waiting to run" — so the operator waited on a worker
+that did not exist. `recoverDelegations` only picks up requests **no turn ever read**; this one had been
+read and started.
 
-A boot is the one place that knows the truth: nothing is running yet, so a
-`delegate` with no matching `result` was interrupted. On start, every such record
-is closed with `outcome: "interrupted"`, the task goes back to `todo`, the project
-is held (so the wake cannot retry it on its own), and the Architect is told in its
-own transcript: "Synapse restarted while t3 was running… do not retry it on your
-own". Order matters: close interrupted runs **before** the unread-delegation pass,
-or that pass mistakes an interrupted run for a queued one.
+A boot is the one place that knows the truth: nothing is running, so a `delegate` with no matching `result`
+was interrupted. On start each such record is closed with `outcome: "interrupted"`, the task goes back to
+`todo`, the project is held, and the Architect is told "do not retry it on your own". Order matters: close
+interrupted runs **before** the unread-delegation pass, or that pass mistakes one for a queued run. The
+invariant: **a `delegate` record is always closed by a `result`.** `openDelegations()` in `src/plans.js` is
+the single definition of "open", and it is tested.
 
-The invariant: **a `delegate` record is always closed by a `result`.** The runner
-writes it normally; a boot writes the interrupted one. `openDelegations()` in
-`src/plans.js` is the single definition of "open", and it is tested.
-
-**The result can be written and the wake still lost.** Measured 29 Oct on the
-emulator project: t2 finished at 17:01:30 and the result was on disk, but the
-process restarted between `appendRun(result)` and the Architect's turn — the plan
-said `todo`, no message followed the result, and the page sat on a running clock
-that had stopped 36 minutes earlier. `recoverInterrupted` does not catch it (the
-record is closed) and `recoverDelegations` does not either (the call was read).
-So a boot now also looks for the *other* orphan: a result newer than every message
-in its Architect's transcript, with no `wake` marker. It re-sends a short report —
-"a run finished before Synapse restarted… read `runs.jsonl` and judge it" — and
-writes `{kind:"wake", callId, status:"done"}` so it is replayed once. Only the
-newest three results of the open round, and only within two days: history is not
-replayed at every boot. A successful ordinary wake writes the same marker, which
-is what makes the two states distinguishable (`recoverLostReports`).
-
-A stop with *no* run in flight still holds the project: interrupting the Architect
-mid-turn is the same request, and otherwise its next turn delegates the work that
-was just stopped.
-
-
-
----
-
-## A plan that routes every task to a coder skips the craft
-
-A brief made almost entirely of visual constraints - a palette, a type pairing, an
-8px scale, two widths to prove - came back as `phases: ["build","qc"]` with all six
-tasks on `coder-1`. Nothing was broken: the plan delivered every file the request
-named, and the one thing the operator wanted to see (the look, decided by someone
-whose job is deciding looks) was never planned. The phase lines said what each
-*phase* was for and never said who was for *what*, so the shortest path that
-satisfied the deliverables won.
-
-Two things came out of it:
-
-- **The brief names the crafts, and the routing rule is one sentence**: send a task
-  to the craft it needs, not to whichever role is free; a coder builds a decision,
-  never makes one. Picking colours, type, spacing or states is not a coder's task,
-  and the coder's task reads `design.md` afterwards.
-- **A rule that lands while Synapse is running has not landed.** The design rule
-  was committed at 20:41 and the plan written at 20:42 - under a process that had
-  booted at 20:16. Reading the commit and reading the behaviour would have given
-  the same answer for the wrong reason. When a brief change "does not work", check
-  the boot line in `logs\app.log` before the rule.
-
-## The plan became a work list
-
-The file was designed as a plan: written in full, reviewed once, then executed.
-The record says it became something else, and the harness was fighting it.
-
-**What the record shows.** On one project the Architect invented `t3b` and `t3c`
-to insert work *between* existing items — the schema had no insertion, so it made
-up a naming convention. It set a finished task back to `todo` after judging it
-(`t3:done` → `t3:todo`, 19:41). It added `t9` and `t10` the next day. Sixteen plan
-changes in one evening. On the next project it inserted `t7` between `t2` and
-`t3` mid-flight: the array order is the work order and the id is only a reference.
-
-Meanwhile three rules assumed the old shape, and one of them was actively harmful:
-a delegation was **refused** while a declared phase had no task under it. On Clock
-Test 3 that refusal was right — a two-task plan silently became ten. On a list that
-is allowed to grow it is a rule against the behaviour that makes the harness good.
-
-**What changed.**
-
-- **The word.** The UI and the briefs call it the **Project Plan**; what changed is
-  how it is treated — a work list that grows while the round runs, not a contract
-  fixed at approval. The file is still `.project\plan.json`: renaming it would
-  migrate every existing project for a word, and the file name is not a claim about
-  how it is used.
-- **`phases` is gone.** The top-level field, `PHASE_ROLES`, `uncoveredPhases`, the
-  validator complaint, the delegation refusal and the "finished means every phase
-  is covered" rule. Old plans keep the field and it is ignored on read. The role on
-  each task is what says whether design was planned; the order of the array is the
-  order of work.
-- **`origin` is new** — `plan`, `found` or `operator`. It is a fact about where the
-  row came from, not a rating. The pane marks `found` rows with a quiet amber
-  "added" chip, so a list that grew after the operator looked says so in one
-  glance. An unknown value reads as `plan`; nothing is policed.
-- **The brief asks for the opposite of what it asked before**: start with the work
-  you can see, add items where they belong in the order, and say in one line what
-  you added and why. Scope is still the operator's: `features.json` is the contract
-  and a new feature still goes through the feature question.
-
-**What a rating would have cost.** A `priority` field was considered and left out.
-A model asked to rate its own additions rates them all high, and a list where
-everything is marked is a list where nothing is marked. QC findings already carry
-severity (critical / major / minor) inside the finding, which is where a rating
-means something because it comes with a repro.
-
-**What it costs, honestly.** The operator's protection against scope creep was "I
-saw the whole plan". It is now "the list says what changed, and the features file
-says what was agreed". That is weaker on paper and stronger in practice, because
-the old rule was being broken productively every single run.
+**The result can be written and the wake still lost.** Measured 29 Oct: t2 finished at 17:01:30 and the
+result was on disk, but the process restarted between `appendRun(result)` and the Architect's turn — the
+plan said `todo`, no message followed, and the page sat on a clock that had stopped 36 minutes earlier.
+Neither recovery catches that: the record is closed and the call was read. So a boot also looks for the
+*other* orphan: a result newer than every message in its Architect's transcript, with no `wake` marker. It
+re-sends "a run finished before Synapse restarted… read `runs.jsonl` and judge it" and writes
+`{kind:"wake", callId, status:"done"}` so it is replayed once — only the newest three results of the open
+round, only within two days. A successful ordinary wake writes the same marker, which is what makes the two
+distinguishable (`recoverLostReports`). A stop with *no* run in flight still holds the project:
+interrupting the Architect mid-turn is the same request.
 
 ## An attachment is a URI, not bytes — and the dump is older than the server
 
-Measured 25 Oct on engine **2.1.2**, while adding a paperclip to the composer.
-
-The OpenAPI dump at `%TEMP%\opencode\openapi.json` describes `Prompt.FileAttachment`
-as `{ data, mime, source: {type:'inline'} }`. The server refuses exactly that:
+Measured 25 Oct on engine **2.1.2**, while adding a paperclip to the composer. The OpenAPI dump at
+`%TEMP%\opencode\openapi.json` describes `Prompt.FileAttachment` as `{ data, mime, source: {type:'inline'}
+}`. The server refuses exactly that:
 
 ```
 400 Missing key at ["files"][0]["uri"]
@@ -2001,27 +1033,18 @@ What it takes is a **`uri`**, and a `data:` URI is accepted:
 { uri: "F:/dev/Synapse/package.json" }   400 Unsupported attachment URI
 ```
 
-Two consequences worth keeping. A `file://` URI makes the **server** read the file,
-so the bytes have to be on disk first — fine for a path the operator typed, useless
-for a browser's file picker, which never reveals a path. A `data:` URI needs no
-disk at all, so that is what Synapse sends: the operator attached a file to a
-sentence, and nothing appears in the project folder because of it.
+A `file://` URI makes the **server** read the file, so the bytes must be on disk first — fine for a path
+the operator typed, useless for a browser's file picker, which never reveals a path. A `data:` URI needs no
+disk, so that is what Synapse sends. And the file stays on the message: the engine records its `data` on
+the user message, so a big attachment is re-read on every later turn of that session. The composer caps one
+file at 8 MB and one message at 48 MB (24 files is only a sanity cap), and the cap is about the window as
+much as the network.
 
-And the file stays on the message. The engine records its `data` on the user
-message, so a big attachment is re-read on every later turn of that session —
-the same bill as quoting a report back. The composer caps one file at 8 MB and one
-message at 48 MB in total (24 files is only a sanity cap), and the cap is about
-the window as much as the network. Twelve small screenshots fit; six 8 MB files
-do, and a forty-ninth megabyte does not.
+## Four automation switches, one of them on by default
 
----
-
-## Four automation switches, one of them on by default (3 Nov)
-
-"Keep running" and "Full auto" were two switches doing four jobs between them: one
-wanted the plan carried through, the other answered *everything* for the operator,
-so a person who only wanted questions answered also had every permission allowed.
-They are four now, each independent and each per project:
+"Keep running" and "Full auto" were two switches doing four jobs: one wanted the plan carried through, the
+other answered *everything*, so a person who only wanted questions answered also had every permission
+allowed. They are four now, each independent and per project:
 
 | switch | what it does | starts |
 |---|---|---|
@@ -2030,165 +1053,107 @@ They are four now, each independent and each per project:
 | Auto-Answer | a question takes the Recommended option (or the top row) after its wait | off |
 | Auto-Shutdown | the PC goes off when nothing is running and nothing can start | off |
 
-**The switches are the session's, the waits are the config's.** Which four are on
-lives in the session metadata (`synapse.automation`), so it travels with the chat
-and survives a restart; the waits live in `config.automation` (`keepBuildingSec` 5,
-`permissionsSec` 10, `answerSec` 30, `shutdownMin` 5) because patience is a
-property of the harness, not of a project. `src/automation.js` is the one reader,
-and it carries a chat saved under the old names into the new shape: `synapse.auto`
-becomes Keep Building, `synapse.fullAuto` becomes both of the answering switches,
-and it writes those two back as mirrors so an older reader cannot disagree.
+**The switches are the session's, the waits are the config's.** Which four are on lives in
+`synapse.automation` in the session metadata, so it travels with the chat and survives a restart; the waits
+live in `config.automation` (`keepBuildingSec` 5, `permissionsSec` 10, `answerSec` 30, `shutdownMin` 5)
+because patience is a property of the harness, not of a project. `src/automation.js` is the one reader, and
+it carries a chat saved under the old names into the new shape: `synapse.auto` becomes Keep Building,
+`synapse.fullAuto` becomes both answering switches, and it writes those two back as mirrors so an older
+reader cannot disagree. **A new project is seeded at creation**, so the cog has real answers before
+anything is toggled; a chat from before the four keeps what it had — Keep Building stays off there, because
+`synapse.auto` was off unless the operator turned it on.
 
-**A new project is seeded at creation, not left to inference.** `api.createSession`
-writes the four values down, so the cog has real answers to show before anything is
-toggled, and a later change to the defaults cannot move a project that already
-exists. A chat from before the four keeps what it had — Keep Building stays off
-there, because `synapse.auto` was off unless the operator turned it on.
+**Auto-Shutdown is the server's clock** (`src/auto-shutdown.js`), because a hidden window throttles its
+timers and the operator who needs this is asleep with Synapse in the tray. Its condition is the whole
+machine — no turn, no form, no pending permission anywhere, plus at least one project with the switch on —
+then the idle minutes, then the 20-second countdown with Cancel. A cancel starts the whole wait again
+rather than re-arming on the next sweep; a run that starts cancels it outright. **Synapse being quiet is
+not the machine being idle (16 Nov)**: at 15:12 the app powered the PC off while the operator was working
+in another app, because no Synapse turn had run for twenty minutes — true, and all the old tick checked.
+The deadline now asks Windows for the last mouse or keyboard input (`GetLastInputInfo`, one PowerShell call
+at the deadline only) and counts from that; if the answer cannot be had it does not power off, because not
+knowing is not permission. **Only the operator's window can arm it**: the page marks its requests with
+`x-synapse-ui` and the server refuses `autoShutdown: true` from anything else, so a test, a script or a
+stray call can turn the switch off but never on. `scripts/checks.mjs` turns it off before a run and leaves
+it off — a restore is an enable with a nicer name, and restoring it is what armed the 15:12 power-off.
 
-**Auto-Shutdown is the server's clock** (`src/auto-shutdown.js`), for the same
-reason the timed shutdown always was: a hidden window throttles its timers, and the
-operator who needs this is asleep with Synapse in the tray. Its condition is the
-whole machine, not one project — no turn, no form, no pending permission anywhere,
-plus at least one project with the switch on — then the idle minutes, then the
-existing 20-second countdown with Cancel. A cancel starts the whole wait again
-rather than re-arming on the next sweep; a run that starts cancels it outright.
-The countdown is still armed by `armPowerCountdown` in `src/api.js`, which shares
-`clearPower`, the guards and the Cancel with the old path.
+**The form list is scoped by directory (3 Nov).** Auto-Answer never fired, with the old switch either: the
+fault was the listing. `GET /api/form` is scoped by the `x-opencode-directory` header, and Synapse asked
+from the **workspace root**, where the answer is always `[]` — so the sweep had nothing to answer, for
+ever, and said nothing because "no forms" is also the normal state. Measured: the same sweep pointed at the
+form's own directory answered immediately (`answered: 1`). The server now passes `formsEverywhere`
+(`src/api.js`) to `createFormAuto`, which asks every known and every active session for its own forms and
+de-duplicates by id. Anything else that lists engine objects by directory has to be checked the same way,
+because an empty list looks exactly like a quiet machine.
 
-**Synapse being quiet is not the machine being idle (16 Nov).** At 15:12 the app
-powered the PC off while the operator was working in another app: no Synapse turn
-had run for twenty minutes, which was true, and was all the old tick checked. The
-deadline now asks Windows for the last mouse or keyboard input (`GetLastInputInfo`,
-one small PowerShell call at the deadline only) and counts the wait from that, not
-from the last turn. If the answer cannot be had, it does not power off — not
-knowing is not permission. It has happened more than once.
+## A plan row can own other rows
 
-**Only the operator's window can arm it (16 Nov).** The page marks its requests
-with `x-synapse-ui`; the server refuses `autoShutdown: true` from anything else,
-so a test, a script or a stray API call can turn the switch off but never on.
-`scripts/checks.mjs` turns it off before a run and leaves it off — a restore is an
-enable with a nicer name, and restoring it is what armed the 15:12 power-off.
+The Architect already reached for this: asked for a fix after `t2`, it wrote `t2a`. What was missing was
+not the naming — **nobody put the row under its parent**: rows were drawn in file order, so an appended
+`t2a` sat at the bottom after the finished work and read as an afterthought, which is the "the plan is out
+of order and messy" the operator kept seeing. The fix is ordering, and it is one sentence: **a root keeps
+its own place and its children follow it.**
 
-### The form list is scoped by directory (3 Nov)
+- A **root** is an id no other id owns (`t2`). A **child** is a root's id followed by letters (`t2a`,
+  `t2aa`). Letters only: `t2-1`, `t2_1` and `t21` are ordinary ids, because a rule that guesses is worse
+  than one that does not. Where the Architect *wrote* the child does not matter: it is drawn directly under
+  its root. One level of indentation only — a third level in a 300px rail is a table.
+- An id named like a part whose whole is missing (`t2a` with no `t2`) is a **plan problem**, reported in
+  the Architect's "Plan problems to fix" line, because the alternative is a row that quietly sits at the
+  bottom.
 
-Auto-Answer never fired, with the old Full auto switch either. The reason was not
-the answering: it was the listing. `GET /api/form` is scoped by the
-`x-opencode-directory` header, and Synapse asked from the **workspace root**, where
-the answer is always `[]` — so the sweep had nothing to answer, forever, and said
-nothing because "no forms" is also the normal state.
+**A part waits for its whole.** `t2a` needs no `dependsOn`: it is not ready while `t2` is not done. That is
+what makes the naming worth something — the Architect describes the shape of the work instead of
+maintaining a second dependency list — and it has to be in three places, or the card offers a part before
+its whole: the rail's "Waiting on you" line, the blocked-card rule, and the server's "this step is ready
+and was never asked for" reminder. All three call `taskReady()`. **Nothing is renumbered, ever, and the
+file is never rewritten.** Ordering is a view: `t2a` is already a legal id everywhere it appears, so this
+needed no migration. The rule lives in `web/plan-order.js`, imported by the page and by
+`src/plans.js`/`src/runs.js`.
 
-Measured: the same sweep pointed at the form's own directory answered immediately
-(`answered: 1`). The server now passes `formsEverywhere` (`src/api.js`) to
-`createFormAuto`, which asks every known session and every active one for its own
-forms and de-duplicates by form id. Anything else that lists engine objects by
-directory — sessions are fine, they are listed by project — has to be checked the
-same way, because an empty list looks exactly like a quiet machine.
+## A check the harness runs
 
+A row can carry the proof itself, not only a sentence about it. `checks` is one to three short commands;
+the harness runs them in the project when the worker says it is done.
 
-## A plan row can own other rows (10 Nov)
+- **Same policy as a shell call.** Each command goes through `decide()` before it runs. A check that would
+  ask or is refused is reported as *not run*, with the reason — never silently passed, because a skipped
+  check that reads as a pass is worse than no check.
+- **One repair turn.** A failure sends the command, its exit code and the tail of its output back to the
+  same worker. A second failure stops there: the report head says *finished, but its check fails*, the
+  worker's own words follow, and the Architect judges. The harness never marks the row.
+- **A check that cannot run is not a worker failure.** A missing cmdlet or executable (`... is not
+  recognized ...`, `command not found`, exit 127/9009) is marked invalid: the report says *finished, but
+  its check could not run* and tells the Architect to replace it. The worker is not nudged — it cannot
+  install a command into the harness's shell, and asking it to try is what sent t2a into protected Windows
+  folders on 17 Nov.
+- **Why one, not a loop.** A check that fails twice is a task the worker cannot finish or a check that is
+  wrong; retrying the same turn finds neither. QC still judges the work.
+- **Bounded and local.** At most three commands, 300 characters and two minutes each. Output is capped;
+  the full log goes to `.project/reports/checks/` and nothing is kept outside it.
 
-The Architect already reached for this: asked for a fix after `t2`, it wrote `t2a`
-(Multi, 10 Nov), and one project before that `t3b` and `t3c` to insert work between
-items. What was missing was not the naming — it was that **nobody put the row under
-its parent**. Rows were drawn in the order the file listed them, so an appended `t2a`
-sat at the bottom after the finished work and read as an afterthought, which is the
-"the plan is out of order and messy" the operator kept seeing.
+`parseChecks` is tolerant of a missing field and names a malformed one in the plan problems; the format
+line and one sentence in the Architect's brief tell a model the field exists. The worker is told the
+commands in its task message, so a task without checks costs no extra context.
 
-The fix is ordering, in the harness, and it is one sentence: **a root keeps its own
-place and its children follow it.**
+## The loop guard: three shapes, two watchers
 
-- A **root** is an id no other id owns (`t2`).
-- A **child** is a root's id followed by letters (`t2a`, `t2b`, `t2aa`). Letters only:
-  `t2-1`, `t2_1` and `t21` are ordinary ids, because a rule that guesses is worse than
-  one that does not.
-- Where the Architect *wrote* the child does not matter at all: it is drawn directly
-  under its root, and its root is where the root was.
-- One level of indentation only. `t2ab` is shown under `t2` like any other part — a
-  third level in a 300px rail is a table.
-- An id named like a part whose whole is missing (`t2a` with no `t2`) is a **plan
-  problem**, reported in the Architect's own "Plan problems to fix" line, because the
-  alternative is a row that quietly sits at the bottom.
+A model that loops does one of three things:
 
-**A part waits for its whole.** `t2a` needs no `dependsOn`: it is not ready while `t2`
-is not done. That is what makes the naming worth something — the Architect describes
-the shape of the work instead of maintaining a second dependency list by hand — and it
-has to be in three places, or the card offers a part before its whole: the rail's
-"Waiting on you" line, the blocked-card rule, and the server's "this step is ready and
-was never asked for" reminder. All three call `taskReady()` now.
+- **the same call, again** — the same tool on the same target four times in a window of twelve. The target
+  carries `offset:limit`, so paging a long document stays quiet.
+- **the same answer, again** — the same read-only tool returning byte-identical output three times, whatever
+  was asked. This is the shape the first rule misses: `offset 34, limit 11` and then `offset 35, limit 10`
+  return the same paragraphs. The digest comes from the output already in the transcript, so it costs no
+  engine call.
+- **the same explanation, again** — an 18-word passage repeated in five distinct assistant turns inside a
+  window of sixteen. The first two cannot see it: the model changes the probe every turn, so no target
+  repeats while the same paragraph comes back (16 Nov: ninety turns re-explaining one hash check). Five, not
+  three or four: a model may quote its acceptance sentence while it works, and a guard that cries wolf is
+  worse than none.
 
-**Nothing is renumbered, ever, and the file is never rewritten.** Ordering is a view.
-`t2a` is already a legal id everywhere it appears — `runs.jsonl`, notes, `dependsOn`,
-the project document — so this needed no migration and breaks no history. The rule
-lives in `web/plan-order.js`, imported by the page and by `src/plans.js`/`src/runs.js`,
-so both runtimes answer the same way.
-
-## A done row owes a result (10 Nov)
-
-`done` is the Architect's judgement, and the harness does not second-guess it. What it can
-ask for is the evidence line: a row marked `done` with no `result` is now a **plan
-problem** — *"one line saying what proved it, or it is a claim with nothing behind it"* —
-said in the block the Architect already reads each turn.
-
-It is a problem, not a repair: the judgement stays the model's, and a row the Architect
-settled itself (the QC cap, a check it ran) simply says so in its result, which the pane
-already shows on hover. The rule waits for the file to stand still, like the mirror rule
-(`result` with a `todo` status), because the two fields land in two writes.
-
-Measured before adding it: every done row in the operator's active projects carries a
-result; the two that did not were old plans nobody could read afterwards.
-
-## A check the harness runs (15 Nov)
-
-A row can carry the proof itself, not only a sentence about it. `checks` is one to three
-short commands; the harness runs them in the project when the worker says it is done.
-
-- **Same policy as a shell call.** Each command goes through `decide()` before it runs. A
-  check that would ask or is refused is reported as *not run*, with the reason — never
-  silently passed, because a skipped check that reads as a pass is worse than no check.
-- **One repair turn.** A failure sends the command, its exit code and the tail of its
-  output back to the same worker; it fixes the cause and reports again. A second failure
-  stops there: the report head says *finished, but its check fails*, the worker's own
-  words follow, and the Architect judges. The harness never marks the plan row.
-- **A check that cannot run is not a worker failure.** A missing cmdlet or executable
-  (`... is not recognized ...`, `command not found`, exit 127/9009, or a check process that
-  could not start) is marked invalid. The report says *finished, but its check could not
-  run* and tells the Architect to replace the check; the worker is not nudged. It cannot
-  install a command into the harness's shell, and asking it to try is what sent t2a into
-  protected Windows folders on 17 Nov.
-- **Why one, not a loop.** A check that fails twice is a task the worker cannot finish,
-  or a check that is wrong; retrying the same turn finds neither. QC still judges the
-  work; the check is the cheap proof before that.
-- **Bounded and local.** At most three commands, 300 characters each, two minutes each.
-  Output is capped; the full log goes to `.project/reports/checks/` inside the project,
-  and no check output is kept outside it.
-
-`parseChecks` is tolerant of a missing field and names a malformed one in the plan
-problems; the format line and one sentence in the Architect's brief are what tell a model
-the field exists. The worker is told the commands in its task message, so a task without
-checks costs no extra context.
-
-## The loop guard: three shapes, two watchers (13 Nov, extended 16 Nov)
-
-A model that loops does one of three things, and the guard now names all three:
-
-- **the same call, again** — the same tool on the same target four times in a window of
-  twelve. The target carries `offset:limit`, so paging a long document is a different target
-  each time and stays quiet.
-- **the same answer, again** — the same read-only tool returning byte-identical output three
-  times, whatever was asked. This is the shape the first rule misses: `offset 34, limit 11`
-  and then `offset 35, limit 10` return the same paragraphs, and the model learns nothing.
-  The digest comes from the output already in the transcript, so it costs no engine call.
-- **the same explanation, again** — an 18-word passage repeated in five distinct assistant
-  turns inside a window of sixteen. The first two rules cannot see this: the model changes
-  the probe every turn, so no tool target repeats, while the same paragraph comes back. The
-  16 Nov run spent ninety turns re-explaining one hash check and made a different shell
-  probe each time; the check command had reached five turns by turn 61. Five, not three or
-  four: a model may quote its acceptance sentence while it works, and a guard that cries
-  wolf on the task is worse than no guard.
-
-Thresholds are high on purpose — four calls, three answers, twelve wide — because a strike is
-a nudge, and a false one spends a model's attention. Outputs shorter than 240 characters are
-never evidence ("no files found" three times is a model trying three patterns), and writes are
+Thresholds are high on purpose — four calls, three answers, twelve wide — because a strike is a nudge and a
+false one spends a model's attention. Outputs shorter than 240 characters are never evidence, and writes are
 never judged by their answer.
 
 **Two watchers use the one rule** (`src/loop-detect.js`):
@@ -2198,140 +1163,90 @@ never judged by their answer.
 | the runner's (`waitForIdle`) | a delegated worker | interrupt, one nudge, and the run's loop limit |
 | `src/turn-guard.js` | the chat the *operator* drives | **steer** a nudge into the live turn — no interrupt, no wake — and tell the operator at the third |
 
-The second exists because the switch used to govern nothing in Single mode: a run is waited on
-by the runner, and a chat the operator drives is not. The guard could be on and catch nothing,
-which is exactly what happened to the 27B. The watcher starts when a message is sent, polls
-only while the engine says that session is active, and stops the moment it is not — it can
-never nudge a turn that has ended.
-**Two strikes that were ours (13 Nov).** One run produced two loop-guard nudges, and the
-transcript said the model was working both times:
+The second exists because the switch governed nothing in Single mode: a run is waited on by the runner, and
+a chat the operator drives is not, so the guard could be on and catch nothing. It starts when a message is
+sent, polls only while the engine says that session is active, and stops the moment it is not, so it can
+never nudge a turn that ended.
 
-- **five reads of `archive.txt`** at offsets 216, 454, 668, 905, 1100 — paging a long file.
-  The Architect's watcher had its own, weaker target: the path, not the path *and the slice*,
-  so five different questions looked like one asked five times. It now uses the runner's
-  `toolTarget()`, which carries `offset:limit`.
-- **five writes of one `ANSWER.md`** — write, check, fix, write again. A file being rewritten
-  is the work, not a loop, and no target rule can tell them apart. **Mutating tools are no
-  longer judged by their target at all.** A command that repeats with byte-identical output
-  still is (a build polled twice looks different; a failing test re-run does not).
+**Three false strikes, and what each taught.** Five reads of `archive.txt` at offsets 216, 454, 668, 905,
+1100 were paging a long file — the Architect's watcher used the path rather than the path *and the slice*,
+and now uses the runner's `toolTarget()`. Five writes of one `ANSWER.md` were write, check, fix, write
+again: a file being rewritten is the work, so **mutating tools are no longer judged by their target at
+all**, while a command that repeats with byte-identical output still is. And a model walking a long thread
+took five `browser_scroll {dy: 400}` calls, each from a new position, so for the tools in `MOVING` the
+signature carries the result as well as the arguments — a scroll that lands somewhere new is a new call, and
+one that cannot move still strikes. The lesson that keeps recurring: a rule that fires on real work teaches
+the operator to ignore the alarm, which is worse than no alarm.
 
-The lesson is the one that keeps recurring here: a rule that fires on real work teaches the
-operator to ignore the alarm, which is worse than no alarm.
+**A mark survives the trace's birth (17 Nov).** `run.note` is the fast path, but a page opened mid-run has
+only `/api/runs` to rebuild from, and a note can arrive before the trace exists. `adoptRunMarks()` copies
+the runner's timestamped loop and compaction marks on every progress tick, idempotently; without it the
+count survived and the line fell back to the pinned footer.
 
-**A scroll is a movement, not a question (14 Nov).** The third false strike of the week:
-`ornith-test-web-reddit`, a model walking a long thread took five `browser_scroll {dy: 400}`
-calls between screenshots — each from a new position, reading a new part of the page — and
-the fourth struck as "the same target four times". The target rule compares arguments, and
-for a scroll the arguments say *how far*, not *which part*; the page moves underneath. For
-the tools in `MOVING` the signature now carries the result as well as the arguments, so a
-scroll that lands somewhere new is a new call, and a scroll that cannot move — the same
-position back, at the end of the page — still strikes, which is the loop worth catching.
+## A model's shell: its encoding, and where its output goes
 
-**A mark survives the trace's birth (17 Nov).** `run.note` is the fast path, but a page
-opened mid-run has only `/api/runs` to rebuild from, and a note can arrive before the trace
-exists. `adoptRunMarks()` copies the runner's timestamped loop and compaction marks on every
-progress tick, idempotently. Without it the count survived and the line fell back to the
-pinned footer — the t1 regression the operator saw.
-
-
-## Python's streams are UTF-8, because its locale is not (15 Nov)
-
-A worker printed a check mark and its step died:
+**Python's streams are UTF-8, because its locale is not (15 Nov).** A worker printed a check mark and its
+step died:
 
 ```
 'charmap' codec can't encode character '\u2713' in position 4: character maps to <undefined>
 ```
 
-Nothing in Synapse was decoding anything: Python had failed before its output reached us.
-When stdout is a **pipe** — which is how the engine captures a command's output — Python
-takes its encoding from the locale, and on Windows that is cp1252, where "✓" does not
-exist. The console code page does not help: Python does not consult it for a pipe.
+Nothing in Synapse was decoding: Python had failed before its output reached us. When stdout is a **pipe** —
+which is how the engine captures a command's output — Python takes its encoding from the locale, and on
+Windows that is cp1252, where "✓" does not exist; the console code page does not help, because Python does
+not consult it for a pipe. The engine is started with `PYTHONIOENCODING=utf-8` and every command a model runs
+is a child of it. Only the streams are pinned: a script's own `open()` default is still the locale's, which
+is the script's business.
 
-The engine is now started with `PYTHONIOENCODING=utf-8`, and every command a model runs is
-a child of it, so they inherit it. Only the streams are pinned: a script's own `open()`
-default is still the locale's, which is the script's business. The engine reads our
-children's output as UTF-8 (the suite's own "✔" lines arrive intact), so a model can print
-what it likes.
+**A backgrounded command's output belongs to the project (17 Nov).** The engine answers a long command with
+"moved to the background" and a path under its own data folder — `data\engine\opencode\data\opencode\shell\…`
+— which is closed to models, so the one handle a model is given is a file it may not open. A QC run waited
+on a suite it could not read, ended its turn "waiting", and the run completed without `qc-8.md`. The output
+is not a permission exception: it is the model's own work, so the harness **copies it into the project** at
+`.project/logs/shell-<id>.out`, where the model may read it and the operator keeps it — the same rule as the
+browser's screenshots. The runner mirrors it on every poll (`src/shell-mirror.js`), so the copy grows with
+the command; the brief names the pattern in one line, and a chat turn is told the same by a steer from its
+turn watcher. A read of the engine path is refused with the project path in the note, and the gate copies
+the file at that moment. The copy is a snapshot: read it again after a pause. "Waiting" is not finishing.
 
-## The harness core and the handover digest (17 Nov)
+## The harness core and the handover digest
 
-The project brief was doing two jobs: teaching the harness and carrying the project. Split
-them.
+The project brief was doing two jobs: teaching the harness and carrying the project. Split them.
 
 - **Two roots are process environment**, set in `src/index.js`: `SYNAPSE_HARNESS` and
-  `SYNAPSE_PROJECTS_ROOT`. The engine and the check processes inherit them, so a shell and
-  the check that judges it see one answer. There is deliberately no `SYNAPSE_PROJECT`: one
-  engine serves every project, and a global value would be the wrong project's. `$PWD` is
-  the per-shell project root. `SYNAPSE_SCRATCH_ROOT` is gone with the shared scratch root
-  (20 Nov): a project's scratch is `.project/scratch` inside it, so there is no global name
-  for it to export.
-- **`synapse.harness`** is a second instruction entry, ~400 characters, set beside
-  `synapse.plan` for every session. It names the roots and the rule that a relative shell
-  path is judged from the working directory, not from a script's own `Push-Location`; for a
-  script's output folder, use `"$PWD\bin"` or an absolute path. It cannot be skipped by not
-  loading a skill and cannot be edited by a project. With the browser switched on it also
-  names the browser and search tools — `synapse-browser_open` and the rest of that family,
-  `synapse-search_websearch` and `synapse-search_webfetch` — because the engine prefixes a
-  server's tools with its key, and a model cannot infer a name it has never been shown.
-  Switched off, the tools are absent and so is the paragraph. The block is one copy for
-  every role: it is set once per session, not repeated in each role's brief.
-- **The handover digest is deterministic.** `handoverDigest()` extracts Objective,
-  Requirements and Decisions from the compaction handover; the full handover stays in
-  `.project/project.md` with a pointer. No second model, no invented decisions. An
-  unstructured handover is left full rather than guessed at.
-- **The bare-brief guard is not a project budget.** `tests/brief-layers` measures a brief
-  with no skills and no project document. A real VPA brief was 10.2k for a coder and 21.7k
-  for the Architect; after the digest it is 9.0k and 20.4k. Skills can be larger than the
-  brief itself (three coder skills were 19k characters in the same turn).
+  `SYNAPSE_PROJECTS_ROOT`. The engine and the check processes inherit them, so a shell and the check that
+  judges it see one answer. There is deliberately no `SYNAPSE_PROJECT`: one engine serves every project, and
+  a global value would be the wrong project's. `$PWD` is the per-shell project root. `SYNAPSE_SCRATCH_ROOT`
+  is gone with the shared scratch root (20 Nov).
+- **`synapse.harness`** is a second instruction entry, ~400 characters, set beside `synapse.plan` for every
+  session. It names the roots and the rule that a relative shell path is judged from the working directory,
+  not from a script's own `Push-Location`; for an output folder use `"$PWD\bin"` or an absolute path. It
+  cannot be skipped by not loading a skill and cannot be edited by a project. With the browser on it also
+  names `synapse-browser_open` and the rest of that family, `synapse-search_websearch` and
+  `synapse-search_webfetch`, because the engine prefixes a server's tools with its key and a model cannot
+  infer a name it has never seen. One copy for every role: set once per session, not repeated in each
+  role's brief.
+- **The handover digest is deterministic.** `handoverDigest()` extracts Objective, Requirements and Decisions
+  from the compaction handover; the full handover stays in `.project/project.md` with a pointer. No second
+  model, no invented decisions, and an unstructured handover is left full rather than guessed at. Same
+  input, same digest — which is why it is a function and not a prompt.
+- **The bare-brief guard is not a project budget.** `tests/brief-layers` measures a brief with no skills and
+  no project document. A real VPA brief was 10.2k for a coder and 21.7k for the Architect; after the digest
+  it is 9.0k and 20.4k. Skills can be larger than the brief itself (three coder skills were 19k characters
+  in the same turn).
 
-## A backgrounded command's output belongs to the project (17 Nov)
+## One turn at a time per local server
 
-The engine answers a long command with "moved to the background" and a path under its own
-data folder — `data\engine\opencode\data\opencode\shell\…`. That folder is closed to models
-(the harness is read-only), so the one handle a model is given for a long command is a file
-it may not open. A QC run waited on a suite it could not read, ended its turn "waiting", and
-the run completed without `qc-8.md`.
+Two turns on one local server do not queue inside the server: each sends its whole prompt, so both are
+re-read and a model swap can reload in between — "the model got slow" was often two turns on one server.
+`src/local-lease.js` holds one lease per server, keyed by the provider's base URL (a localhost address is
+local whatever its type says). A turn takes the lease before its prompt and releases it on the engine's own
+`idle` in `src/index.js` — one release point, so the operator's send, a worker run and the Architect's wake
+are all covered, including a turn that is stopped or fails.
 
-- The output is not a permission exception: it is the model's own work, so the harness
-  **copies it into the project** at `.project/logs/shell-<id>.out`, where the model may
-  read it and the operator keeps it. The same rule as the browser's screenshots.
-- The runner mirrors it on every poll (`src/shell-mirror.js`), so the copy grows with the
-  command. The brief names the pattern in one line; a chat turn is told the same thing by
-  a steer from its turn watcher, which runs even when the loop guard is off.
-- A read of the engine path is refused with the project path in the note; the gate copies
-  the file at that moment and says where it went.
-- The copy is a snapshot: read it again after a pause. "Waiting" is not finishing.
-
-## A plan the harness cannot parse says so (17 Nov)
-
-The Architect's first write of `plan.json` sometimes puts a real newline inside a JSON
-string ("Bad control character in string literal"). The file is then not JSON, the harness
-reads no tasks from it, and a delegation answered "the plan has no task t1" — true and
-useless: the row was there, in a file that could not be read. The Architect spent three
-turns finding that out on its own (VPA, 17 Nov).
-
-- A delegation now reads the parse error first: `Nothing was run: plan.json is not valid
-  JSON: <the parser's message>. … A JSON string cannot contain a real newline: keep each
-  string on one line, or write \n instead. Fix the file, then ask again.` It is journalled
-  as `bad-plan`.
-- The Architect's brief carries the rule in one sentence, beside the line that says it owns
-  the file.
-- The file is still never repaired by the harness: the Architect owns it, and a silently
-  mended plan is a plan nobody understands.
-
-## One turn at a time per local server (20 Nov)
-
-Two turns on one local server do not queue inside the server: each sends its whole
-prompt, so both are re-read and a model swap can reload in between — "the model got
-slow" was often two turns on one server. `src/local-lease.js` holds one lease per
-server, keyed by the provider's base URL (a localhost address is local whatever its
-type says). A turn takes the lease before its prompt and releases it on the engine's
-own `idle` in `src/index.js` — one release point, so the operator's send, a worker run
-and the Architect's wake are all covered, including a turn that is stopped or fails.
-
-An operator's message is refused at once, naming who holds the server, and the words
-stay in the composer: a prompt that has not reached the engine is not a post in the
-chat, so parking it erased the post on the next switch and read as work that finished
-(20 Nov). Runs and wakes wait in the queue until Stop cancels them; a lease nobody
-releases lets go after six hours. Two different local servers, and every cloud model,
-never wait.
+An operator's message is refused at once, naming who holds the server, and the words stay in the composer: a
+prompt that has not reached the engine is not a post in the chat, so parking it erased the post on the next
+switch and read as work that finished (20 Nov). Runs and wakes wait in the queue until Stop cancels them; a
+lease nobody releases lets go after six hours. Two different local servers, and every cloud model, never
+wait.
