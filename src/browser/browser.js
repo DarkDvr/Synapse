@@ -21,6 +21,8 @@ import { createAgent } from './agent.js';
 
 /** The launcher that creates a desktop of its own; see the script's own note. */
 const HIDDEN_DESKTOP_SCRIPT = fileURLToPath(new URL('./hidden-desktop.ps1', import.meta.url));
+/** A visible hand-off must not outlive a server that is killed mid-hand-off. */
+const VISIBLE_WATCH_SCRIPT = fileURLToPath(new URL('./visible-watch.ps1', import.meta.url));
 
 /** Windows PowerShell is the launcher the app can always find; a stripped PATH is not. */
 function powershellPath() {
@@ -677,6 +679,10 @@ export function createBrowser({
       '-StateFile', hiddenStateFile,
       '-Width', String(width),
       '-Height', String(height),
+      '-ParentPid', String(process.pid),
+      // Not detached: a detached PowerShell could not set up the desktop and the launch
+      // silently fell back. The keeper still outlives a simple child.kill of the server,
+      // and its parent check is what closes the Edge.
     ], { stdio: 'ignore', windowsHide: true, cwd: path.dirname(profile) });
     const port = await waitForPort(profile, { timeoutMs: 30000 });
     if (!port) {
@@ -701,6 +707,20 @@ export function createBrowser({
     // Off-screen for the moment it exists, so nothing is visible; the protocol puts it on
     // the right monitor and minimizes it a second later.
     child = spawn(edge, launchArgs({ position: '-32000,-32000' }), { stdio: 'ignore', detached: false, cwd: path.dirname(profile) });
+    // A hand-off can be interrupted by Stop under the server that opened it; the watcher
+    // closes the Edge tree when this process goes, by the two ids it was given.
+    if (child.pid) {
+      try {
+        spawn(powershellPath(), [
+          '-NoProfile', '-ExecutionPolicy', 'Bypass',
+          '-File', VISIBLE_WATCH_SCRIPT,
+          '-ParentPid', String(process.pid),
+          '-EdgePid', String(child.pid),
+        ], { stdio: 'ignore', windowsHide: true });
+      } catch (err) {
+        log?.warn?.(`browser: no visible-browser watcher: ${err.message}`);
+      }
+    }
     // Before the port is even open: the window is grabbed the instant it exists, so the
     // taskbar button it wears for those first seconds is gone (12 Nov).
     const early = hideBrowserWindow({ profile, waitMs: 15000 }).catch(() => null);

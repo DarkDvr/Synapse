@@ -114,6 +114,14 @@ export async function askToSignIn({
     // '' silences it; null keeps the script's own default.
     ...(sound === null ? {} : { sound }),
   });
+  if (asked.window) {
+    // The next live hand-off has one line to read: which monitor it landed on, whether
+    // it is still a tool window, and whether it is inside that monitor's work area.
+    log?.info?.(
+      `browser: sign-in window ${asked.window.state || 'unknown'} on ${asked.window.screen || '?'} ` +
+        `(toolWindow=${Boolean(asked.window.toolWindow)}, onScreen=${Boolean(asked.window.onScreen)})`,
+    );
+  }
 
   // Nobody has to close anything: the page is watched, and the moment it stops asking
   // to be signed into, the window is taken away and the caller is told (11 Nov).

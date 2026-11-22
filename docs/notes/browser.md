@@ -151,6 +151,34 @@ The Settings → Browser **Sign In…** path has no model waiting: it shows the 
 watches it, and when the page stops asking to be signed into — no password box, no sign-in
 route, loaded, twice in a row — the window is hidden and the site recorded.
 
+### The window has to be findable (22 Nov)
+
+The live test found the window missing, not the page: the hidden browser had stopped and the
+visible one was running, but the operator pressed Stop because nothing appeared on their
+taskbar or their screen. Three fixes, all measured:
+
+- **AddTab.** The hide path removes the button with `ITaskbarList::DeleteTab`; setting
+  `WS_EX_APPWINDOW` on show does not put it back. The show path calls `AddTab` after the
+  window is shown.
+- **Topmost while it takes the foreground.** A full-screen Synapse covers a restored
+  window. It is shown `HWND_TOPMOST`, focused with the attach-to-foreground trick, then
+  returned to `HWND_NOTOPMOST` after 200 ms.
+- **The primary monitor when the foreground is unknown.** The focus path uses the monitor
+  of the foreground window; the fallback used to be the second monitor. A sign-in now
+  falls back to the primary.
+
+`askToSignIn` logs one line: `sign-in window shown on \\.\DISPLAY2
+(toolWindow=false, onScreen=true)`. That is the check for the next live test.
+
+A Stop can kill the server in the middle of a hand-off: the Node `finally` never runs and
+the visible window is left on the desktop (22 Nov). Two keepers close by pid: the hidden
+keeper takes `-ParentPid` and ends its Edge when the server is gone; the visible hand-off
+spawns `visible-watch.ps1` with the same two ids. Neither matches a process name.
+
+The hidden keeper is launched **not detached**. A detached PowerShell could not set up the
+desktop and the launch fell back silently — the state file never appeared (22 Nov). The
+parent check is what cleans up; detachment is not needed.
+
 ## Being invisible, exactly
 
 A hidden browser must be invisible *and* still render, and those pull apart. This is the

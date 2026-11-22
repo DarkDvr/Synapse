@@ -16,7 +16,10 @@ param(
   [Parameter(Mandatory = $true)][string]$Profile,
   [Parameter(Mandatory = $true)][string]$StateFile,
   [int]$Width = 1280,
-  [int]$Height = 800
+  [int]$Height = 800,
+  # The process that asked for the browser. If it goes, the browser goes with it: a
+  # killed server must not leave an Edge on a hidden desktop for the rest of the day.
+  [int]$ParentPid = 0
 )
 
 $ErrorActionPreference = 'Stop'
@@ -117,12 +120,22 @@ try {
 
   Write-State @{ state = 'running'; desktop = $desktop; edgePid = $pi.dwProcessId; profile = $Profile; startedAt = [DateTime]::UtcNow.ToString('o') }
 
-  # The keeper. 0xFFFFFFFF is INFINITE; Edge's own exit ends the desktop's reason to exist.
-  [void][SynaBrowseDesktop]::WaitForSingleObject($pi.hProcess, [uint32]::MaxValue)
+  # The keeper. Wait two seconds at a time, so the parent can be checked without a second
+  # watcher. 258 is WAIT_TIMEOUT; anything else means Edge has ended.
+  $parentGone = $false
+  while ($true) {
+    $waited = [SynaBrowseDesktop]::WaitForSingleObject($pi.hProcess, 2000)
+    if ($waited -ne 258) { break }
+    if ($ParentPid -gt 0 -and -not (Get-Process -Id $ParentPid -ErrorAction SilentlyContinue)) {
+      $parentGone = $true
+      try { & taskkill /PID $pi.dwProcessId /T /F 2>$null | Out-Null } catch { /* already gone */ }
+      break
+    }
+  }
 
   $code = [uint32]0
   [void][SynaBrowseDesktop]::GetExitCodeProcess($pi.hProcess, [ref]$code)
-  Write-State @{ state = 'exited'; desktop = $desktop; edgePid = $pi.dwProcessId; profile = $Profile; exitCode = $code; exitedAt = [DateTime]::UtcNow.ToString('o') }
+  Write-State @{ state = 'exited'; desktop = $desktop; edgePid = $pi.dwProcessId; profile = $Profile; exitCode = $code; reason = $(if ($parentGone) { 'parent-exit' } else { 'edge-exit' }); exitedAt = [DateTime]::UtcNow.ToString('o') }
 } catch {
   Write-State @{ state = 'error'; desktop = $desktop; error = $_.Exception.Message; profile = $Profile }
   exit 1

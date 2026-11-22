@@ -76,6 +76,10 @@ public interface ITaskbarList {
 [ComImport, Guid("56FDF344-FD6D-11d0-958A-006097C9A090")]
 public class CTaskbarList { }
 private static ITaskbarList list;
+public static void AddTab(IntPtr hwnd) {
+  if (list == null) { list = (ITaskbarList)new CTaskbarList(); list.HrInit(); }
+  list.AddTab(hwnd);
+}
 public static void DeleteTab(IntPtr hwnd) {
   if (list == null) { list = (ITaskbarList)new CTaskbarList(); list.HrInit(); }
   list.DeleteTab(hwnd);
@@ -153,9 +157,14 @@ $hwnd = $found[0]
 $GWL_EXSTYLE = -20
 $WS_EX_TOOLWINDOW = 0x80
 $WS_EX_APPWINDOW = 0x40000
+$SWP_NOSIZE = 0x0001
+$SWP_NOMOVE = 0x0002
 $SWP_NOZORDER = 0x0004
 $SWP_NOACTIVATE = 0x0010
 $SWP_FRAMECHANGED = 0x0020
+$SWP_SHOWWINDOW = 0x0040
+$HWND_TOPMOST = [IntPtr](-1)
+$HWND_NOTOPMOST = [IntPtr](-2)
 
 $screens = [System.Windows.Forms.Screen]::AllScreens
 $screen = $null
@@ -167,7 +176,7 @@ if ($Focus) {
         $screen = $screens | Where-Object { $cx -ge $_.Bounds.X -and $cx -le ($_.Bounds.X + $_.Bounds.Width) -and $cy -ge $_.Bounds.Y -and $cy -le ($_.Bounds.Y + $_.Bounds.Height) } | Select-Object -First 1
     }
 }
-if (-not $screen) { $screen = $screens | Where-Object { -not $_.Primary } | Select-Object -First 1 }
+if (-not $screen -and -not $Focus) { $screen = $screens | Where-Object { -not $_.Primary } | Select-Object -First 1 }
 if (-not $screen) { $screen = [System.Windows.Forms.Screen]::PrimaryScreen }
 $area = $screen.WorkingArea
 $w = [Math]::Min(1200, [int]($area.Width * 0.72))
@@ -197,9 +206,13 @@ if ($Hide) {
 } else {
     $ex = [W.U]::GetWindowLong($hwnd, $GWL_EXSTYLE)
     [void][W.U]::SetWindowLong($hwnd, $GWL_EXSTYLE, (($ex -bor $WS_EX_APPWINDOW) -band (-bnot $WS_EX_TOOLWINDOW)))
-    [void][W.U]::SetWindowPos($hwnd, [IntPtr]::Zero, $x, $y, $w, $h, $SWP_NOZORDER -bor $SWP_NOACTIVATE -bor $SWP_FRAMECHANGED)
+    # A window behind a full-screen Synapse is invisible even when it is shown. Put it on
+    # top while it takes the foreground, then let it settle back into the ordinary band.
     [void][W.U]::ShowWindow($hwnd, 9)   # SW_RESTORE
+    [void][W.U]::SetWindowPos($hwnd, $HWND_TOPMOST, $x, $y, $w, $h, $SWP_SHOWWINDOW)
     [void][W.U]::ShowWindow($hwnd, 4)   # SW_SHOWNOACTIVATE
+    # The hide path took the button off with DeleteTab; AddTab is the call that puts it back.
+    try { [W.Taskbar]::AddTab($hwnd) } catch { }
     if ($Focus) {
         $current = [W.U]::GetCurrentThreadId()
         $fgThread = 0
@@ -213,6 +226,9 @@ if ($Hide) {
         [void][W.U]::SetForegroundWindow($hwnd)
         [void][W.U]::BringWindowToTop($hwnd)
         if ($attached) { [void][W.U]::AttachThreadInput($current, $fgThread, $false) }
+        # Seen above everything for a moment, then back to the normal band.
+        Start-Sleep -Milliseconds 200
+        [void][W.U]::SetWindowPos($hwnd, $HWND_NOTOPMOST, 0, 0, 0, 0, $SWP_NOMOVE -bor $SWP_NOSIZE -bor $SWP_NOACTIVATE)
     }
     $state = 'shown'
 

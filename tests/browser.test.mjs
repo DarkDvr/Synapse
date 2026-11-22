@@ -32,6 +32,19 @@ test('the hide path covers every window and never flashes a taskbar button', () 
   assert.match(script.slice(elseAt), /FlashWindowEx/, 'showing still flashes it, so a sign-in is noticed');
 });
 
+// A hide removes the button; a show that only sets WS_EX_APPWINDOW can leave the window
+// with no button at all, and a full-screen Synapse covers a window that was merely
+// restored. The operator's live test on 22 Nov found both: they pressed Stop because the
+// sign-in window was not on their taskbar or on their screen.
+test('a sign-in window is put back on the taskbar, above the page, on the active screen', () => {
+  const script = fs.readFileSync(new URL('../src/browser/show.ps1', import.meta.url), 'utf8');
+  assert.match(script, /\[W\.Taskbar\]::AddTab\(\$hwnd\)/, 'the button the hide path removed is added back');
+  assert.match(script, /HWND_TOPMOST/, 'a full-screen Synapse would otherwise cover it');
+  assert.match(script, /HWND_NOTOPMOST/, 'and it returns to the ordinary band afterwards');
+  assert.match(script, /if \(-not \$screen -and -not \$Focus\)/, 'a sign-in falls back to the primary monitor, not the second');
+  assert.match(script, /--user-data-dir/, 'the window is still found by the profile, never by process name');
+});
+
 // The fix that worked (14 Nov): the shell re-reads the taskbar bit only when a window is
 // hidden or shown, and DeleteTab removes a button the shell has already made. The watcher
 // and its sign-in flag are gone — one pass is enough.

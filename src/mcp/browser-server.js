@@ -116,6 +116,9 @@ const browser = createBrowser({
   onDownload: reportDownload,
   log: { info: (m) => process.stderr.write(`${m}\n`) },
 });
+// The visible window a hand-off is using, if one is open. On stdin end both browsers are
+// stopped; if this process is killed instead, visible-watch.ps1 does it by pid.
+let handoffBrowser = null;
 
 
 
@@ -611,6 +614,7 @@ async function handle(msg) {
                 hiddenDesktop: false,
                 log: { info: (m) => process.stderr.write(`${m}\n`) },
               });
+              handoffBrowser = visible;
               const shown = await askToSignIn({
                 url: target,
                 profile: cfg.profile,
@@ -621,6 +625,7 @@ async function handle(msg) {
                 restore: true,
                 focus: true,
                 sound: CHIME,
+                log: { info: (m) => process.stderr.write(`${m}\n`) },
                 onSignedIn: (u) => { signedUrl = String(u || ''); },
                 onGone: (why) => { ending = String(why || 'closed'); },
               });
@@ -634,6 +639,7 @@ async function handle(msg) {
               return toolText(id, `The sign-in window failed: ${err.message}. Treat the site as unavailable.`, true);
             } finally {
               try { await visible?.stop?.(); } catch { /* already gone */ }
+              if (handoffBrowser === visible) handoffBrowser = null;
               // Whatever happened, the model's browser comes back on the page it was on.
               try {
                 await browser.start();
@@ -719,6 +725,8 @@ process.stdin.on('data', (chunk) => {
     });
   }
 });
-process.stdin.on('end', () => { browser.stop().finally(() => process.exit(0)); });
+process.stdin.on('end', () => {
+  Promise.allSettled([browser.stop(), handoffBrowser?.stop?.()]).finally(() => process.exit(0));
+});
 process.stderr.write(`synapse-browser MCP ready (enabled=${cfg.enabled}, profile=${cfg.profile})\n`);
 
