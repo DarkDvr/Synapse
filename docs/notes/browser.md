@@ -170,6 +170,11 @@ taskbar or their screen. Three fixes, all measured:
 `askToSignIn` logs one line: `sign-in window shown on \\.\DISPLAY2
 (toolWindow=false, onScreen=true)`. That is the check for the next live test.
 
+`browser.stop()` gives `Browser.close` **three seconds**, not the protocol's minute. The
+window the operator just closed has a half-open socket, and waiting out the full minute
+made every hand-off take about eighty seconds after the close (22 Nov). With the short
+timeout the same cycle returns in about thirty seconds end to end.
+
 A Stop can kill the server in the middle of a hand-off: the Node `finally` never runs and
 the visible window is left on the desktop (22 Nov). Two keepers close by pid: the hidden
 keeper takes `-ParentPid` and ends its Edge when the server is gone; the visible hand-off

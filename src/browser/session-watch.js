@@ -36,12 +36,14 @@ export function watchForSignIn(browser, { intervalMs = 2000, timeoutMs = 10 * 60
   let stopped = false;
   let streak = 0;
   let reported = false;
+  const began = Date.now();
 
   const finish = (why) => {
     if (stopped) return;
     stopped = true;
     clearInterval(timer);
     clearTimeout(deadline);
+    log?.info?.(`browser: watch ended (${why}) after ${Date.now() - began}ms`);
     onGone?.(why);
   };
 

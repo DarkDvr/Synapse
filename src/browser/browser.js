@@ -1523,7 +1523,10 @@ export function createBrowser({
     browserConn = null;
     browserPort = null;
     if (page) {
-      try { await page.send('Browser.close'); } catch { /* already gone */ }
+      // The browser may already be closed (the operator closed the hand-off window), and
+      // a request to a half-open socket would wait the protocol's whole minute. Three
+      // seconds is enough for a live browser; the keeper and the pid wait handle the rest.
+      try { await page.send('Browser.close', {}, 3000); } catch { /* already gone */ }
       try { page.close(); } catch { /* fine */ }
       page = null;
     }

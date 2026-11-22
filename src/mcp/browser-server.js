@@ -604,11 +604,14 @@ async function handle(msg) {
 
             // One browser per profile: the hidden one is parked cleanly (so its cookies
             // flush) and comes back in the finally, whatever the operator does.
+            const t0 = Date.now();
+            const step = (m) => process.stderr.write(`handoff +${Date.now() - t0}ms ${m}\n`);
             let signedUrl = '';
             let ending = '';
             let visible = null;
             try {
               await browser.stop();
+              step('hidden stopped');
               visible = createBrowser({
                 profile: cfg.profile,
                 hiddenDesktop: false,
@@ -628,8 +631,9 @@ async function handle(msg) {
                 sound: CHIME,
                 log: { info: (m) => process.stderr.write(`${m}\n`) },
                 onSignedIn: (u) => { signedUrl = String(u || ''); },
-                onGone: (why) => { ending = String(why || 'closed'); },
+                onGone: (why) => { ending = String(why || 'closed'); step(`window ended (${ending})`); },
               });
+              step('window shown');
               if (!shown.ok) throw new Error(shown.error || 'the sign-in window did not come up');
               // The watcher has its own ten-minute deadline; this only guards a watcher
               // that never fired at all.
@@ -640,10 +644,12 @@ async function handle(msg) {
               return toolText(id, `The sign-in window failed: ${err.message}. Treat the site as unavailable.`, true);
             } finally {
               try { await visible?.stop?.(); } catch { /* already gone */ }
+              step('visible stopped');
               if (handoffBrowser === visible) handoffBrowser = null;
               // Whatever happened, the model's browser comes back on the page it was on.
               try {
                 await browser.start();
+                step('hidden back');
                 await browser.goto(target, { settle: 900 });
               } catch (err) {
                 process.stderr.write(`handoff: the hidden browser did not come back: ${err.message}\n`);
