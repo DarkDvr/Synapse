@@ -61,8 +61,8 @@ export function createBrowserAsks({ notify = null, log = null } = {}) {
       directory: entry.directory || '',
       resources: entry.url ? [entry.url] : [],
       reason: entry.what
-        ? `${String(entry.what).replace(/\.?$/, '.')} Opening the window is your decision, and a sign-in you finish is kept in SynaBrowse's own profile.`
-        : 'Sign in to this site in a window of your own. A sign-in you finish is kept in SynaBrowse\'s own profile.',
+        ? `${String(entry.what).replace(/\.?$/, '.')} Opening the window is your decision, and a sign-in you finish is kept in SynaBrowse's own profile. Close the window when you are done and the model will carry on.`
+        : 'Sign in to this site in a window of your own. A sign-in you finish is kept in SynaBrowse\'s own profile. Close the window when you are done and the model will carry on.',
       browserHost: entry.host,
       browserUrl: entry.url,
       at: entry.at,

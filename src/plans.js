@@ -107,8 +107,9 @@ export function harnessCore({ browser = false } = {}) {
   ];
   if (browser) {
     lines.push(
-      'Browser: `synapse-browser_open`, `_read`, `_click`, `_screenshot` reach pages `webfetch` cannot ' +
-        '(signed in, bot check, drawn by script). A 404 from a fetch is a guessed path, not a wall: open the ' +
+      'Browser: `synapse-browser_open`, `_snapshot`, `_click` reach pages `webfetch` cannot ' +
+        '(signed in, bot check, drawn by script). After open, call `_snapshot` and click by the `ref` ' +
+        'it gives you — do not guess coordinates. A 404 from a fetch is a guessed path, not a wall: open the ' +
         'site and follow its links.',
       'Search: `synapse-search_websearch`; `synapse-search_webfetch` fetches a page. A bare `websearch` does not exist.',
     );

@@ -1,10 +1,13 @@
-// Watch the sign-in window, and take it away the moment the session is real.
+// Watch the sign-in window, and take it away when the session is real — or, in a
+// hand-off, wait for the operator to close it.
 //
 // The operator's complaint was not the sign-in, it was what came after: the window sat
-// there with no way to know whether the login had taken or what to do next (11 Nov). So
-// nothing here waits for them to close anything. It polls the page it is already standing
-// on, and when the page stops asking to be signed into — no password box, no sign-in
-// route, twice in a row, loaded — the window is closed and the caller is told.
+// there with no way to know whether the login had taken or what to do next (11 Nov). It
+// polls the page it is already standing on, and when the page stops asking to be signed
+// into — no password box, no sign-in route, twice in a row, loaded — it hides the window
+// and tells the caller. With `autoHide: false` it reports the page and keeps watching for
+// the close instead: a bot check has no password box, and hiding it mid-challenge would be
+// sabotage (22 Nov).
 //
 // Two polls rather than one because a two-step sign-in (email, then password) hides the
 // password box between steps, and closing the window in that gap would be sabotage.
@@ -23,13 +26,16 @@ export function signedInNow(state) {
 /**
  * Poll until the session looks real, the window goes, or the clock runs out.
  *
- * `onSignedIn(url)` is called once, after the window has been closed by `browser.stop()`;
- * `onGone(why)` is called when the window disappears first (the operator closed it) or the
- * wait ran out — never as a success, because nothing proved a session.
+ * `onSignedIn(url)` is called once, after the window has been closed by `browser.stop()`
+ * when `autoHide` is on; with `autoHide: false` the window is left for the operator to
+ * close, and `onGone` is the ending. `onGone(why)` is called when the window disappears
+ * first (the operator closed it) or the wait ran out — never as a success by itself,
+ * because nothing proved a session.
  */
-export function watchForSignIn(browser, { intervalMs = 2000, timeoutMs = 10 * 60 * 1000, onSignedIn = null, onGone = null, log = null } = {}) {
+export function watchForSignIn(browser, { intervalMs = 2000, timeoutMs = 10 * 60 * 1000, autoHide = true, onSignedIn = null, onGone = null, log = null } = {}) {
   let stopped = false;
   let streak = 0;
+  let reported = false;
 
   const finish = (why) => {
     if (stopped) return;
@@ -52,13 +58,19 @@ export function watchForSignIn(browser, { intervalMs = 2000, timeoutMs = 10 * 60
     if (signedInNow(state)) {
       streak += 1;
       if (streak < 2) return;
-      stopped = true;
-      clearInterval(timer);
-      clearTimeout(deadline);
-      log?.info?.(`browser: signed in at ${state.url} — hiding the window for the operator`);
-      // Hide, do not close: the model is usually still mid-turn and its page must survive.
-      try { await browser.hideWindow(); } catch { /* the window may already be gone */ }
-      try { onSignedIn?.(state.url); } catch { /* a listener must not break the page */ }
+      if (!reported) {
+        reported = true;
+        log?.info?.(`browser: signed in at ${state.url} — ${autoHide ? 'hiding the window for the operator' : 'waiting for the operator to close the window'}`);
+        try { onSignedIn?.(state.url); } catch { /* a listener must not break the page */ }
+        if (autoHide) {
+          stopped = true;
+          clearInterval(timer);
+          clearTimeout(deadline);
+          // Hide, do not close: the model is usually still mid-turn and its page must survive.
+          try { await browser.hideWindow(); } catch { /* the window may already be gone */ }
+          return;
+        }
+      }
       return;
     }
     streak = 0;

@@ -164,7 +164,7 @@ test('the tools drive a local page: read, click, type, screenshot, watch', async
     `).replace('</body>', '<style>@keyframes spin{to{transform:rotate(360deg)}}</style></body>'),
   );
 
-  const browser = createBrowser({ profile, startMinimized: true });
+  const browser = createBrowser({ profile, startMinimized: true, hiddenDesktop: false });
   try {
     await browser.goto(`file:///${page.replace(/\\/g, '/')}`);
     const read = await browser.read({});
@@ -246,7 +246,7 @@ test('a download link saves into the project and the click answers its path', as
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   const port = server.address().port;
   const events = [];
-  const browser = createBrowser({ profile, downloadDir: downloads, onDownload: (rec) => events.push(rec) });
+  const browser = createBrowser({ profile, hiddenDesktop: false, downloadDir: downloads, onDownload: (rec) => events.push(rec) });
   try {
     await browser.goto(`http://127.0.0.1:${port}/`);
     const clicked = await browser.click({ selector: '#dl' });
@@ -303,7 +303,7 @@ test('read() returns the article and says when a page is a sign-in wall', async 
     <main><h1>Sign in to continue</h1>
     <form><input type="text" name="user" /><input type="password" name="pass" /><button>Sign in</button></form></main>`);
 
-  const browser = createBrowser({ profile, startMinimized: true });
+  const browser = createBrowser({ profile, startMinimized: true, hiddenDesktop: false });
   try {
     await browser.goto(`file:///${article.replace(/\\/g, '/')}`);
     const page = await browser.read({});

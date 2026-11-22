@@ -93,7 +93,7 @@ test('the server answers the protocol and its tools work on a local page', async
   fs.writeFileSync(config, JSON.stringify({ browser: { enabled: true, profile, allow: ['127.0.0.1'] } }));
 
   const child = spawn(process.execPath, [SERVER], {
-    env: { ...process.env, SYNAPSE_BROWSER_CONFIG: config },
+    env: { ...process.env, SYNAPSE_BROWSER_CONFIG: config, SYNAPSE_BROWSER_HIDDEN_DESKTOP: '0' },
     stdio: ['pipe', 'pipe', 'pipe'],
   });
   const rpc = speak(child);
@@ -103,7 +103,7 @@ test('the server answers the protocol and its tools work on a local page', async
 
     const tools = await rpc.call('tools/list', {});
     const names = tools.result.tools.map((tool) => tool.name);
-    for (const expected of ['open', 'read', 'click', 'type', 'press', 'wait', 'screenshot', 'watch', 'tabs', 'handoff', 'download', 'close']) {
+    for (const expected of ['open', 'read', 'snapshot', 'click', 'type', 'press', 'wait', 'screenshot', 'watch', 'tabs', 'handoff', 'download', 'close']) {
       assert.ok(names.includes(expected), `the server is missing ${expected}`);
     }
 
@@ -165,7 +165,7 @@ test('the server refuses everything when it is switched off', async (t) => {
   const config = path.join(dir, 'config.json');
   fs.writeFileSync(config, JSON.stringify({ browser: { enabled: false, allow: ['*'] } }));
   const child = spawn(process.execPath, [SERVER], {
-    env: { ...process.env, SYNAPSE_BROWSER_CONFIG: config },
+    env: { ...process.env, SYNAPSE_BROWSER_CONFIG: config, SYNAPSE_BROWSER_HIDDEN_DESKTOP: '0' },
     stdio: ['pipe', 'pipe', 'pipe'],
   });
   const rpc = speak(child);
@@ -207,7 +207,7 @@ test('the server does not keep the project folder locked', async () => {
   fs.writeFileSync(config, JSON.stringify({ browser: { enabled: false } }));
   const child = spawn(process.execPath, [SERVER], {
     cwd: dir,
-    env: { ...process.env, SYNAPSE_BROWSER_CONFIG: config },
+    env: { ...process.env, SYNAPSE_BROWSER_CONFIG: config, SYNAPSE_BROWSER_HIDDEN_DESKTOP: '0' },
     stdio: ['pipe', 'pipe', 'pipe'],
   });
   try {

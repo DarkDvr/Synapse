@@ -73,12 +73,25 @@ test('download says where it goes, and that click waits for a file', () => {
   assert.match(d, /click/i, 'a click that downloads is the common route');
 });
 
+test('snapshot is the action surface: named refs, and a fresh one after a change', () => {
+  const d = text('snapshot');
+  assert.match(d, /ref/, 'the ref is the point');
+  assert.match(d, /Manual download|button/, 'it shows the shape of a control');
+  assert.match(d, /take a new one|re-?snapshot/i, 'refs do not survive navigation');
+  assert.match(d, /covered|hidden/i, 'a click that misses says so');
+  const click = text('click');
+  assert.match(click, /ref/i, 'click takes the ref');
+  assert.match(click, /prefer/i, 'and prefers it over a coordinate');
+  const type = text('type');
+  assert.match(type, /clears the field/i, 'a ref fills rather than appends');
+});
+
 test('every tool has a description and a schema', () => {
   for (const tool of TOOLS) {
     assert.ok(tool.description && tool.description.length > 20, `${tool.name} says what it does`);
     assert.equal(tool.inputSchema?.type, 'object', `${tool.name} has an object schema`);
   }
-  assert.equal(TOOLS.length, 15, 'the fifteen tools: save and dom are the newest');
+  assert.equal(TOOLS.length, 16, 'the sixteen tools: snapshot is the newest');
 });
 
 // A timeout is the moment a model needs the most information: "did not happen" says

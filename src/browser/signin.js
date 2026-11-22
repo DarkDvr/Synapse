@@ -1,13 +1,15 @@
 // The one thing only a person can do: sign in.
 //
 // Opens SynaBrowse on whatever the operator typed — a bare host, a name in another script, a LAN address
-// like `192.168.1.5:8080` — and puts it on the second monitor so they can log in. The
+// like `192.168.1.5:8080` — and puts it on their monitor so they can log in. The
 // address is *not* validated against a format: a browser resolves what a person types,
 // and a harness that insists on `https://` is refusing addresses the browser accepts.
 // The only judgement made here is which scheme to try first.
 //
-// The session it creates lives in the browser's own profile, so every project inherits
-// it and nothing has to be copied.
+// This is a **visible** window by definition, never the hidden desktop: a window there
+// cannot be moved to the operator's monitor. A caller that already owns the visible
+// instance passes it in (`browser`), which is how the model hand-off keeps the handle it
+// needs to stop before the hidden browser takes the profile back.
 import path from 'node:path';
 import { createBrowser, findEdge } from './browser.js';
 import { askOperator } from './handoff.js';
@@ -49,15 +51,47 @@ export function looksUnconfirmed(url, passwordInputs = 0) {
  * `restore` shows the window (on the second monitor) instead of leaving it minimized:
  * a fresh sign-in needs a page on screen, and it is the operator's choice to swing it up.
  * `sound` is the chime path, or '' for silence (the Settings switch).
- * `onSignedIn` is called once the page stops asking for a sign-in; by then the window has
- * already been closed, so the operator never has to guess what to do next.
+ * `onSignedIn` is called once the page stops asking for a sign-in; with `autoHide` the
+ * window has already been hidden by then, and with `autoHide: false` it is left for the
+ * operator to close (the model hand-off, where a bot check is not a password box).
+ * `browser` lets a caller that already owns a visible instance keep the handle, so it can
+ * stop it before the hidden desktop takes the profile back.
  */
-export async function askToSignIn({ url, profile, log = null, restore = true, focus = false, sound = null, onSignedIn = null, onGone = null } = {}) {
+export async function askToSignIn({
+  url,
+  profile,
+  log = null,
+  browser: provided = null,
+  restore = true,
+  focus = false,
+  sound = null,
+  autoHide = true,
+  onSignedIn = null,
+  onGone = null,
+} = {}) {
   if (!findEdge()) return { ok: false, error: 'no Edge on this machine' };
   const candidates = addressCandidates(url);
   if (!candidates.length) return { ok: false, error: 'there is no address to open' };
 
-  const browser = createBrowser({ profile, log });
+  // A sign-in window is visible by definition. It must never be created on the hidden
+  // desktop: a window there cannot be moved to the monitor the operator is looking at.
+  const browser = provided || createBrowser({ profile, log, hiddenDesktop: false });
+  if (!provided) {
+    // Start before navigating, so a running hidden browser is recognised rather than
+    // silently navigated away from the model's work.
+    try {
+      await browser.start();
+    } catch (err) {
+      try { await browser.stop(); } catch { /* not started */ }
+      return { ok: false, url: candidates[0], error: err.message };
+    }
+    if (browser.isAttached?.()) {
+      return {
+        ok: false,
+        error: 'SynaBrowse is already open for a run; use the sign-in card in that chat, or close the run first.',
+      };
+    }
+  }
   let opened = null;
   let failure = null;
   for (const candidate of candidates) {
@@ -69,6 +103,7 @@ export async function askToSignIn({ url, profile, log = null, restore = true, fo
     }
   }
   if (!opened) {
+    if (!provided) { try { await browser.stop(); } catch { /* not started */ } }
     return { ok: false, url: candidates[0], error: failure || 'the address did not open' };
   }
 
@@ -84,6 +119,7 @@ export async function askToSignIn({ url, profile, log = null, restore = true, fo
   // to be signed into, the window is taken away and the caller is told (11 Nov).
   watchForSignIn(browser, {
     log,
+    autoHide,
     onSignedIn: (finalUrl) => { try { onSignedIn?.(finalUrl); } catch { /* a listener must not break the page */ } },
     onGone: (why) => { try { onGone?.(why); } catch { /* a listener must not break the page */ } },
   });
@@ -94,5 +130,6 @@ export async function askToSignIn({ url, profile, log = null, restore = true, fo
     host: hostOf(opened),
     window: asked.window || null,
     error: asked.ok ? null : asked.error || 'the window did not come up',
+    browser,
   };
 }

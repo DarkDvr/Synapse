@@ -74,6 +74,25 @@ test('a window that goes away is an ending, not a sign-in', async () => {
   assert.equal(browser.calls.hidden, 0, 'nothing to hide');
 });
 
+test('a hand-off leaves the window for the operator and still notices the close', async () => {
+  // A bot check has no password box: an auto-hide would take the window away mid-challenge.
+  // The operator closes it, and that close is the ending the model waits for.
+  const browser = fakeBrowser([LOGIN, SIGNED, SIGNED, SIGNED, 'gone']);
+  let signedUrl = '';
+  let why = null;
+  watchForSignIn(browser, {
+    intervalMs: 5,
+    timeoutMs: 1000,
+    autoHide: false,
+    onSignedIn: (url) => { signedUrl = url; },
+    onGone: (reason) => { why = reason; },
+  });
+  await wait(150);
+  assert.equal(signedUrl, 'https://example.test/home', 'the page that looks signed in is recorded');
+  assert.equal(browser.calls.hidden, 0, 'the watcher must not hide the operator’s window');
+  assert.equal(why, 'closed', 'closing the window ends the wait');
+});
+
 test('a wait that runs out ends quietly', async () => {
   const browser = fakeBrowser([LOGIN]);
   let why = null;

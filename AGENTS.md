@@ -197,7 +197,8 @@ Synapse.exe     the app — window, tray, server supervisor (build output)
 shell/          the WPF frame: App, MainWindow, ServerHost, ConsoleStore
 src/            index.js boots it; server.js the routes, api.js the operations; runs.js
                 delegation, plans.js the plan and briefs, permissions.js the policy,
-                protection.js the prohibited list, engines/ (base + opencode), mcp/, browser/
+                protection.js the prohibited list, engines/ (base + opencode), mcp/,
+                browser/ (hidden desktop, agent-browser, refs)
 web/            index.html, app.js and its modules; md.js, synapse.css, panel.css, vendor/
 skills/         shipped: visual-review, app-check, win-app, and the craft briefs
 tests/          node --test, one file per subject; run through scripts\checks.mjs
@@ -205,7 +206,7 @@ scripts/        checks.mjs (the suite, Auto-Shutdown off); wait-for-idle.mjs
 config/         synapse.config.json (this machine's answers); config.default.json ships
 data/           runtime state: engine home, browser profile, caches, pids
 logs/           one file per channel: app, engine, session, tools
-bin/            Node, a private Git and the engine, vendored (not in git)
+bin/            Node, a private Git, the engine and agent-browser, vendored (not in git)
 docs/notes/     the detail behind this file
 ```
 

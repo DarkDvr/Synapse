@@ -1,24 +1,35 @@
 // SynaBrowse: a browser the harness owns.
 //
 // A real Edge — its own profile under `data\browser\profile`, never the operator's and
-// never Brave — launched **headed but hidden**: off the desktop when nobody is needed,
-// on the second monitor and minimized when a human is. Headed on purpose: measured on
-// 11 Nov against a Cloudflare-protected site, a hidden off-screen Edge cleared the
-// interstitial in 2.6 s while `--headless=new` never did, and the flag that decides it is
-// `--disable-blink-features=AutomationControlled`.
+// never Brave — launched on a **Windows desktop of its own** (22 Nov). The window is
+// headed, so it renders and keeps the fingerprint that clears a bot check; it is on
+// another desktop, so it is never on the operator's screen and never flashes a taskbar
+// button. `hidden-desktop.ps1` creates the desktop and keeps the browser there; if the
+// desktop cannot be created, `launchVisible` is the old off-screen fallback.
 //
-// A hidden window is a *background* window, and Chromium throttles timers and stops
-// producing frames for one — so the throttling flags below are not tuning, they are what
-// makes a JavaScript challenge finish at all.
-//
-// No cookie is ever read here. The session lives in the profile because the browser is
-// the thing using it, which is also why the operator's Edge profile is never touched.
+// The page is driven through CDP, and the action layer is agent-browser (`agent.js`):
+// named controls with refs, not coordinates. Both are on purpose — a hidden window that
+// a model can only see as a picture is a model doing geometry.
 import fs from 'node:fs';
 import path from 'node:path';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { connect, connectBrowser, waitForPort, readPort } from './cdp.js';
 import { safeDownloadName, uniqueDownloadPath, formatBytes } from './downloads.js';
 import { screenState, restoreFocus, hideBrowserWindow } from './handoff.js';
+import { createAgent } from './agent.js';
+
+/** The launcher that creates a desktop of its own; see the script's own note. */
+const HIDDEN_DESKTOP_SCRIPT = fileURLToPath(new URL('./hidden-desktop.ps1', import.meta.url));
+
+/** Windows PowerShell is the launcher the app can always find; a stripped PATH is not. */
+function powershellPath() {
+  if (process.env.SystemRoot) {
+    const full = path.join(process.env.SystemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
+    try { if (fs.statSync(full).isFile()) return full; } catch { /* fall through */ }
+  }
+  return 'powershell.exe';
+}
 
 const EDGE_CANDIDATES = [
   'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
@@ -213,6 +224,7 @@ const PRINTABLE = {
  */
 export function clickSummary(res) {
   if (!res || typeof res !== 'object') return '';
+  if (res.ref) return ` by ref ${res.ref}`;
   const at = Array.isArray(res.at) ? res.at : null;
   const where = at ? ` at ${at[0]},${at[1]}` : '';
   const asked = Array.isArray(res.requested) && res.snapped ? ` of the ${res.requested[0]},${res.requested[1]} asked for` : '';
@@ -267,6 +279,7 @@ export function createBrowser({
   profile,
   log = null,
   startMinimized = true,
+  hiddenDesktop = true,
   width = 1280,
   height = 800,
   idleMs = 5 * 60 * 1000,
@@ -280,6 +293,14 @@ export function createBrowser({
   let lastUsed = Date.now();
   let browserConn = null;
   let browserPort = null;
+  let agent = null;
+  // True when this instance found a browser already running on the profile rather than
+  // launching one. A caller that must show a window to the operator refuses to drive
+  // someone else's hidden browser (the Settings sign-in path).
+  let attached = false;
+  // One browser per profile at a time, so one state file per profile is enough. It is
+  // written by the keeper and read back only to stop a pid this profile started.
+  const hiddenStateFile = path.join(path.dirname(profile), 'hidden-desktop.json');
   // guid -> one download's record. Kept after completion so a page reload mid-download
   // still has something to draw, and pruned on access rather than by another timer.
   const downloads = new Map();
@@ -612,6 +633,92 @@ export function createBrowser({
     'about:blank',
   ];
 
+  /** What the keeper last wrote; a missing or half-written file is not an error. */
+  const keeperState = () => {
+    try {
+      // Windows PowerShell's UTF8 encoding writes a BOM; JSON.parse does not accept one.
+      const raw = fs.readFileSync(hiddenStateFile, 'utf8').replace(/^\uFEFF/, '');
+      return JSON.parse(raw);
+    } catch { /* no keeper state, or not JSON yet */ return null; }
+  };
+
+  /** End the browser by the pid the keeper wrote — never by a process name. */
+  const killByState = () => {
+    const state = keeperState();
+    if (state?.state === 'running' && Number(state.edgePid)) {
+      try {
+        spawnSync('taskkill', ['/PID', String(state.edgePid), '/T', '/F'], { windowsHide: true, stdio: 'ignore' });
+      } catch { /* already gone */ }
+    }
+  };
+
+  /** Give up on a failed hidden launch without leaving an Edge on a dead desktop. */
+  const stopKeeper = () => {
+    try { child?.kill?.(); } catch { /* gone */ }
+    child = null;
+    killByState();
+  };
+
+  /**
+   * Launch on a desktop of its own: headed, invisible, and never in the operator's
+   * taskbar. The keeper creates the desktop, launches Edge there, writes its state and
+   * waits; this side only sees the port Edge writes into the profile.
+   */
+  async function launchHidden(edge) {
+    fs.mkdirSync(path.dirname(hiddenStateFile), { recursive: true });
+    try { fs.rmSync(hiddenStateFile, { force: true }); } catch { /* fine */ }
+    try { fs.rmSync(path.join(profile, 'DevToolsActivePort'), { force: true }); } catch { /* fine */ }
+    child = spawn(powershellPath(), [
+      '-NoProfile',
+      '-ExecutionPolicy', 'Bypass',
+      '-File', HIDDEN_DESKTOP_SCRIPT,
+      '-EdgePath', edge,
+      '-Profile', profile,
+      '-StateFile', hiddenStateFile,
+      '-Width', String(width),
+      '-Height', String(height),
+    ], { stdio: 'ignore', windowsHide: true, cwd: path.dirname(profile) });
+    const port = await waitForPort(profile, { timeoutMs: 30000 });
+    if (!port) {
+      const state = keeperState();
+      throw new Error(state?.error || 'the browser did not open a debugging port on the hidden desktop');
+    }
+    child.port = port;
+    note(`browser: started on a hidden desktop, port ${port}`);
+    return port;
+  }
+
+  /**
+   * The old off-screen window, kept as the fallback for a machine that refuses a desktop.
+   * It is visible for a moment at launch; the operator's memory of that flash is why the
+   * hidden desktop exists. It is still the path when `hiddenDesktop: false` is asked for
+   * (tests, and a machine where CreateDesktop is refused).
+   */
+  async function launchVisible(edge) {
+    try { fs.rmSync(path.join(profile, 'DevToolsActivePort'), { force: true }); } catch { /* fine */ }
+    const before = startMinimized ? await screenState().catch(() => null) : null;
+    const area = before?.screens?.find((s) => !s.primary) || before?.screens?.[0] || null;
+    // Off-screen for the moment it exists, so nothing is visible; the protocol puts it on
+    // the right monitor and minimizes it a second later.
+    child = spawn(edge, launchArgs({ position: '-32000,-32000' }), { stdio: 'ignore', detached: false, cwd: path.dirname(profile) });
+    // Before the port is even open: the window is grabbed the instant it exists, so the
+    // taskbar button it wears for those first seconds is gone (12 Nov).
+    const early = hideBrowserWindow({ profile, waitMs: 15000 }).catch(() => null);
+    // Immediately, not after the port is ready: the operator must not lose the caret for
+    // the two seconds a browser takes to open (11 Nov).
+    if (before?.foreground) restoreFocus(before.foreground).catch(() => {});
+    const port = await waitForPort(profile, { timeoutMs: 30000 });
+    if (!port) throw new Error('the browser did not open a debugging port');
+    child.port = port;
+    if (before?.foreground) {
+      const back = await restoreFocus(before.foreground).catch(() => null);
+      if (back) note(`browser: launch placed on ${area?.device || 'the primary'}; focus restored ${back.ok ? 'yes' : 'no'}`);
+    }
+    const hidden = await early;
+    if (hidden?.toolWindow) note(`browser: window hidden (tool window yes, taskbar buttons removed ${hidden.tabsRemoved ?? 0})`);
+    return port;
+  }
+
   /** Start the browser if it is not running, and attach to its page. */
   async function start() {
     // The page we hold may be gone: the operator closed the window after signing in, or
@@ -621,6 +728,7 @@ export function createBrowser({
       log?.info?.('browser: the page is gone — starting again');
       page = null;
       child = null;
+      agent = null;
     }
     if (page) {
       await ensureDownloadBehavior();
@@ -636,41 +744,22 @@ export function createBrowser({
       // hand-off window the operator is using. Attaching is the correct answer: a profile
       // cannot be open twice, and the session is the point.
       const existing = await waitForPort(profile, { timeoutMs: 1200 });
+      attached = Boolean(existing);
       let port = existing;
-      // Where the window belongs, decided before the spawn: the second monitor's centre.
-      let placeX = null;
-      let placeY = null;
-      let early = null;
       if (!port) {
-        // A port file from an earlier instance names a port that is gone.
-        try { fs.rmSync(path.join(profile, 'DevToolsActivePort'), { force: true }); } catch { /* fine */ }
-        // Edge takes the foreground even with --start-minimized, so the launch captures the
-        // operator's window first and gives it back afterwards. The window is positioned on
-        // the second monitor rather than off-screen, so its taskbar button appears there —
-        // off-screen, Windows put the button on the primary (11 Nov).
-        const before = startMinimized ? await screenState().catch(() => null) : null;
-        const area = before?.screens?.find((s) => !s.primary) || before?.screens?.[0] || null;
-        placeX = area ? area.workX + Math.round((area.workW - width) / 2) : null;
-        placeY = area ? area.workY + Math.round((area.workH - height) / 2) : null;
-        // Off-screen for the moment it exists, so nothing is visible; the protocol puts it on
-        // the right monitor and minimizes it a second later.
-        const position = '-32000,-32000';
-        // cwd outside the project: a process whose working directory is a folder keeps that folder
-        // undeletable, and Edge is long-lived (11 Nov).
-        child = spawn(edge, launchArgs({ position }), { stdio: 'ignore', detached: false, cwd: path.dirname(profile) });
-        // Before the port is even open: the window is grabbed the instant it exists, so the
-        // taskbar button it wears for those first seconds is gone (12 Nov).
-        early = hideBrowserWindow({ profile, waitMs: 15000 }).catch(() => null);
-        // Immediately, not after the port is ready: the operator must not lose the caret for
-        // the two seconds a browser takes to open (11 Nov).
-        if (before?.foreground) restoreFocus(before.foreground).catch(() => {});
-        port = await waitForPort(profile, { timeoutMs: 30000 });
-        if (!port) throw new Error('the browser did not open a debugging port');
-        child.port = port;
-        if (before?.foreground) {
-          // Measured, not assumed: the answer says which window has the focus now.
-          const back = await restoreFocus(before.foreground).catch(() => null);
-          if (back) note(`browser: launch placed on ${area?.device || 'the primary'}; focus restored ${back.ok ? 'yes' : 'no'}`);
+        if (hiddenDesktop) {
+          try {
+            port = await launchHidden(edge);
+          } catch (err) {
+            // A desktop can be refused (policy, a service session). A browser that only
+            // flashes is better than no browser, and the log says which one ran.
+            note(`browser: the hidden desktop failed (${err.message}); falling back to an off-screen window`);
+            stopKeeper();
+            await new Promise((r) => setTimeout(r, 500));
+            port = await launchVisible(edge);
+          }
+        } else {
+          port = await launchVisible(edge);
         }
       }
       const conn = await connect(port);
@@ -680,18 +769,14 @@ export function createBrowser({
       // The tab must be the active one or a challenge that runs on a timer never ends.
       try { await conn.send('Page.bringToFront'); } catch { /* a hidden window may refuse */ }
       try { await conn.send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false }); } catch { /* fine */ }
-      // The window is hidden properly: a tool window (no taskbar button, no Alt-Tab), parked
-      // off-screen and left *normal* so it still renders. The "Restore pages" bubble Edge
-      // shows after a kill is suppressed by a flag; it used to appear at the top-left of the
-      // primary and was mistaken for our window (12 Nov).
-      // Always, not only on a fresh launch: a browser that outlived a Synapse restart is
-      // attached with whatever window state it had, and a window with an app-window bit
-      // is a taskbar button the operator can see and click — they reported exactly that
-      // while two models were reading one thread (13 Nov).
-      const hidden = existing ? await hideBrowserWindow({ profile }).catch(() => null) : await early;
-      if (hidden?.toolWindow) {
-        note(`browser: window hidden (tool window yes${existing ? ', attached' : ''}, taskbar buttons removed ${hidden.tabsRemoved ?? 0})`);
+      if (existing) {
+        // A browser that outlived a Synapse restart may still wear an off-screen window
+        // from an older build. Hiding finds nothing on a hidden desktop and costs nothing.
+        const hidden = await hideBrowserWindow({ profile }).catch(() => null);
+        if (hidden?.toolWindow) note(`browser: window hidden (attached, taskbar buttons removed ${hidden.tabsRemoved ?? 0})`);
       }
+      agent = createAgent({ port, log, session: `synapse-${port}` });
+      if (!agent.available) note('browser: agent-browser is not installed — run vendor-agent-browser.ps1; snapshot and ref clicks will say so');
       note(`browser: ${existing ? 'attached to' : 'started'} Edge on port ${port}`);
       await ensureDownloadBehavior();
       return page;
@@ -951,10 +1036,30 @@ export function createBrowser({
    * the viewport and, if nothing clickable is under it, snapped to the nearest control
    * within `snapPx`, and the answer says what it snapped to.
    */
-  async function click({ selector = null, text = null, at = null, settle = 700, snapPx = 28 } = {}) {
+  async function click({ selector = null, text = null, at = null, ref = null, settle = 700, snapPx = 28 } = {}) {
     const p = await start();
     used();
     const since = Date.now();
+    // A ref from `snapshot` is the reliable click: agent-browser resolves the element,
+    // scrolls it into view and refuses when it is covered or hidden, instead of sending a
+    // synthetic point and hoping. The rest of this function is the coordinate fallback.
+    if (ref) {
+      if (!agent?.available) throw new Error('agent-browser is not installed — run vendor-agent-browser.ps1');
+      const usedRef = await agent.click(ref);
+      await new Promise((r) => setTimeout(r, settle));
+      let url = '';
+      try { url = await p.evaluate('location.href'); } catch { /* the click replaced the document */ }
+      const download = downloadDir ? await waitForDownload({ since, graceMs: 900 }) : null;
+      return {
+        url,
+        ref: usedRef,
+        at: null,
+        requested: null,
+        snapped: null,
+        clamped: false,
+        ...(download ? { download } : {}),
+      };
+    }
     let point = at;
     let snapped = null;
     if (!point) {
@@ -1100,12 +1205,19 @@ export function createBrowser({
     };
   }
 
-  /** Type into whatever has focus (or into a selector first). */
-  async function type({ text, selector = null, submit = false } = {}) {
+  /** Type into whatever has focus (or into a selector first). A ref fills the field. */
+  async function type({ text, selector = null, ref = null, submit = false } = {}) {
     const p = await start();
     used();
-    if (selector) await p.evaluate(`document.querySelector(${JSON.stringify(selector)})?.focus()`);
-    await p.send('Input.insertText', { text: String(text ?? '') });
+    if (ref) {
+      if (!agent?.available) throw new Error('agent-browser is not installed — run vendor-agent-browser.ps1');
+      // A ref writes into the element itself, not into whatever happens to have focus; it
+      // clears the field first, which is what a login or a search box wants.
+      await agent.fill(ref, text);
+    } else {
+      if (selector) await p.evaluate(`document.querySelector(${JSON.stringify(selector)})?.focus()`);
+      await p.send('Input.insertText', { text: String(text ?? '') });
+    }
     if (submit) await press('Enter');
     return true;
   }
@@ -1349,9 +1461,26 @@ export function createBrowser({
     return list.filter((t) => t.type === 'page').map((t) => ({ url: t.url, title: t.title, id: t.id }));
   }
 
+  /**
+   * The page as controls with stable refs — the surface a model should act on.
+   *
+   * A screenshot makes the model do geometry; this makes it read a name and click a ref.
+   * agent-browser owns the accessibility tree walk, the ref lifecycle and the refusal when
+   * an element is covered or hidden, which is why it lives in agent.js rather than here.
+   */
+  async function snapshot({ interactive = true, compact = false, depth = null, selector = null } = {}) {
+    await start();
+    used();
+    if (!agent?.available) throw new Error('agent-browser is not installed — run vendor-agent-browser.ps1');
+    return agent.snapshot({ interactive, compact, depth, selector });
+  }
+
   /** Close the browser: the profile and its session stay. */
   async function stop() {
     const exited = [];
+    // The action daemon first: it holds a CDP connection to the page that is about to go.
+    try { await agent?.close?.(); } catch { /* daemon already gone */ }
+    agent = null;
     try { browserConn?.close?.(); } catch { /* gone */ }
     browserConn = null;
     browserPort = null;
@@ -1367,13 +1496,16 @@ export function createBrowser({
       // caller that deletes the folder next (a test, a reset) would get EPERM.
       await new Promise((resolve) => {
         const done = () => resolve();
-        const timer = setTimeout(() => {
-          try { proc.kill(); } catch { /* gone */ }
-          resolve();
-        }, 3000);
+        const timer = setTimeout(done, 4000);
         proc.once('exit', () => { clearTimeout(timer); done(); });
         if (proc.exitCode !== null) { clearTimeout(timer); done(); }
       });
+      if (proc.exitCode === null) {
+        try { proc.kill(); } catch { /* gone */ }
+        // The hidden keeper may have lost the close race with Edge. Its state file names
+        // the pid it launched; that is the identity to end — never a process name.
+        killByState();
+      }
     }
     return exited.length;
   }
@@ -1390,5 +1522,5 @@ export function createBrowser({
   }, 30000);
   reaper.unref?.();
 
-  return { start, running, alive, pageState, goto, read, captureFull, click, type, press, wait, scroll, screenshot, watch, tabs, clearSite, hideWindow, stop, downloadFrom, waitForDownload, saveFrom, saveDir, domQuery, downloads: downloadList, profile };
+  return { start, running, alive, pageState, goto, read, captureFull, snapshot, click, type, press, wait, scroll, screenshot, watch, tabs, clearSite, hideWindow, stop, downloadFrom, waitForDownload, saveFrom, saveDir, domQuery, downloads: downloadList, profile, isAttached: () => attached };
 }

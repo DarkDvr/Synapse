@@ -14,13 +14,15 @@ export const TOOLS = [
     name: 'open',
     description:
       'Open a page in the harness\'s own browser and answer its address, title, a readable ' +
-      'outline of its text and the links on it. The window is hidden: the operator sees ' +
-      'nothing. It opens http and https pages, and a local .html/.htm page when the file is ' +
+      'outline of its text and the links on it. The window is hidden on a desktop of its own: the ' +
+      'operator never sees it and it never appears in their taskbar. It opens http and https ' +
+      'pages, and a local .html/.htm page when the file is ' +
       'inside the projects folder — a mock you wrote is meant to be looked at. The harness, ' +
       'the rest of the machine and every other file type are refused. The browser keeps its ' +
       'sessions between runs, so a site the operator signed in before is already signed in. ' +
       'Use this instead of webfetch when a page is signed in, behind a bot check, or drawn ' +
-      'by script; a page that asks to be signed in needs handoff, not a scrape.',
+      'by script; a page that asks to be signed in needs handoff, not a scrape. ' +
+      'After it opens, call snapshot before clicking anything: that is where the refs come from.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -47,7 +49,9 @@ export const TOOLS = [
       'For a long page (a thread with hundreds of comments) pass full: true instead: the ' +
       'harness scrolls to the end, saves the whole text in the project, and answers its path, ' +
       'so you can read or grep it in pieces rather than stitching several reads together. ' +
-      'It also says when the page is a sign-in wall, or a bot check a human has to clear.',
+      'It also says when the page is a sign-in wall, or a bot check a human has to clear. ' +
+      'For the controls to click, call snapshot: it answers each element with a stable ref. ' +
+      'The x/y here is the fallback for a page where a ref is not available.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -60,21 +64,46 @@ export const TOOLS = [
     },
   },
   {
-    name: 'click',
+    name: 'snapshot',
     description:
-      'Click something on the page: a CSS selector, the visible text of a link or button, or an ' +
-      'x/y pair from `read`. Anything that behaves clickable counts — a button, a tab, a link, ' +
-      'or a row with a pointer cursor and a handler — and a point inside one is clicked where ' +
-      'it was asked. Clicks are synthetic — the operator\'s cursor never moves. Answers the ' +
-      'address afterwards and, when the click was moved to find a control, how far it landed ' +
-      'from where you asked.',
+      'The page as controls with stable references — the way to act on a page. Each line names ' +
+      'one element and its ref, for example `button "Manual download" [ref=e145]` or ' +
+      '`link "Slow download" [ref=e324]`. Click it with `click { "ref": "e145" }`, or fill it ' +
+      'with `type { "ref": "e145", "text": "…" }`. Refs describe the page at the moment of the ' +
+      'snapshot: after a click that navigates or changes the page, take a new one before using ' +
+      'a ref again. This is more reliable than a screenshot and coordinates: it names the ' +
+      'control, and a click fails loudly when the element is covered, hidden or off-screen. ' +
+      'interactive (default true) lists controls only; set it false to include headings and ' +
+      'text. compact drops empty structure, depth limits nesting, selector scopes the tree.',
     inputSchema: {
       type: 'object',
       properties: {
-        selector: { type: 'string', description: 'CSS selector to click.' },
-        text: { type: 'string', description: 'Visible text of the link or button (exact, then contains).' },
-        x: { type: 'integer', description: 'Page x coordinate, with y.' },
-        y: { type: 'integer', description: 'Page y coordinate, with x.' },
+        interactive: { type: 'boolean', description: 'Only interactive controls (default true).' },
+        compact: { type: 'boolean', description: 'Drop empty structural nodes and keep the visible text.' },
+        depth: { type: 'integer', description: 'Limit the tree depth (1-20).', minimum: 1, maximum: 20 },
+        selector: { type: 'string', description: 'Scope the snapshot to a CSS selector.' },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'click',
+    description:
+      'Click something on the page. Prefer a ref from snapshot — `{ "ref": "e145" }` — because ' +
+      'it names the element itself, scrolls it into view, and fails loudly when it is covered ' +
+      'or hidden instead of missing quietly. A CSS selector, the visible text of a link or ' +
+      'button, or an x/y pair from `read` also work, as the fallback. Anything that behaves ' +
+      'clickable counts — a button, a tab, a link, or a row with a pointer cursor and a ' +
+      'handler. Clicks are synthetic — the operator\'s cursor never moves. Answers the address ' +
+      'afterwards; a coordinate click also says when it was moved to find a control.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        ref: { type: 'string', description: 'A ref from snapshot, e.g. "e145" (preferred).' },
+        selector: { type: 'string', description: 'CSS selector to click (fallback).' },
+        text: { type: 'string', description: 'Visible text of the link or button (exact, then contains; fallback).' },
+        x: { type: 'integer', description: 'Page x coordinate, with y (last resort).' },
+        y: { type: 'integer', description: 'Page y coordinate, with x (last resort).' },
       },
       additionalProperties: false,
     },
@@ -82,14 +111,16 @@ export const TOOLS = [
   {
     name: 'type',
     description:
-      'Insert text into the focused field, or into a field named by a CSS selector. This pastes ' +
-      'the text in — it does not fire key events, so a page that listens for keys (a calculator, ' +
-      'a shortcut) needs `press` instead.',
+      'Write into a field. With a ref from snapshot it clears the field and fills it — what a ' +
+      'login or search box wants. Without a ref it inserts into the focused field, or into a ' +
+      'field named by a CSS selector; insertion does not fire key events, so a page that ' +
+      'listens for keys (a calculator, a shortcut) needs `press` instead.',
     inputSchema: {
       type: 'object',
       properties: {
         text: { type: 'string', description: 'What to type.' },
-        selector: { type: 'string', description: 'CSS selector of the field to focus first.' },
+        ref: { type: 'string', description: 'A ref from snapshot, e.g. "e12" (preferred).' },
+        selector: { type: 'string', description: 'CSS selector of the field to focus first (fallback).' },
         submit: { type: 'boolean', description: 'Press Enter afterwards.' },
       },
       required: ['text'],
@@ -177,8 +208,10 @@ export const TOOLS = [
       'Ask the operator to do the one thing only a person can: sign in, or pass a check. It ' +
       'raises a card in their chat — Allow Sign-In, Reject, Reject With Reason, Stop Run — and ' +
       'waits without a time limit. Only an Allow opens a browser window: normal, focused, on ' +
-      'their monitor, on that site, for as long as they need. When the session lands it is ' +
-      'hidden again and the answer says why. If they reject it, carry on without the site.',
+      'their monitor, on that site, for as long as they need. It is the same profile, so the ' +
+      'sign-in is kept for every later run and recorded in the Signed In table. When they close ' +
+      'the window the hidden browser comes back on the same page and the tool answers. If they ' +
+      'reject it, carry on without the site.',
     inputSchema: {
       type: 'object',
       properties: {

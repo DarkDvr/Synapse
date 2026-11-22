@@ -6,6 +6,7 @@ These components travel with it and keep their own licences.
 | Component | Licence | Where |
 |---|---|---|
 | OpenCode 2.1.2 | MIT, Copyright (c) 2025 opencode | `bin\opencode\LICENSE` |
+| agent-browser 0.43.0 | Apache-2.0, Copyright Vercel Labs and contributors | `bin\agent-browser\LICENSE` |
 | Node.js 24.21.0 | MIT, with its bundled third-party notices | `bin\node\LICENSE` |
 | DM Sans | SIL Open Font License 1.1 | `web\vendor\fonts\OFL-DMSans.txt` |
 | Manrope | SIL Open Font License 1.1 | `web\vendor\fonts\OFL-Manrope.txt` |

@@ -22,7 +22,7 @@ if (-not $version) { throw 'package.json has no version' }
 $required = @(
     'Synapse.exe', 'package.json', 'update-apply.ps1', 'update-apply.mjs',
     'config.default.json', 'LICENSE', 'NOTICE', 'THIRD-PARTY.md',
-    'src', 'web', 'skills', 'bin\node', 'bin\opencode'
+    'src', 'web', 'skills', 'bin\node', 'bin\opencode', 'bin\agent-browser'
 )
 foreach ($rel in $required) {
     if (-not (Test-Path -LiteralPath (Join-Path $root $rel))) { throw "missing $rel - build it first (.\shell\build.ps1)" }
@@ -61,6 +61,12 @@ robocopy (Join-Path $root 'bin\opencode') (Join-Path $stage 'bin\opencode') /E `
     /XF '*.bak' /NFL /NDL /NJH /NJS /NP | Out-Null
 if ($LASTEXITCODE -ge 8) { throw "robocopy failed copying bin\opencode ($LASTEXITCODE)" }
 
+# The action layer. A native binary, not an npm package; it attaches to the Edge the
+# harness launches, and bin\ is how it travels.
+robocopy (Join-Path $root 'bin\agent-browser') (Join-Path $stage 'bin\agent-browser') /E `
+    /XF '*.bak' /NFL /NDL /NJH /NJS /NP | Out-Null
+if ($LASTEXITCODE -ge 8) { throw "robocopy failed copying bin\agent-browser ($LASTEXITCODE)" }
+
 # The private Git, when this machine has one. It is optional: a fresh PC can fetch
 # it on first launch, but carrying it means the zip is the whole toolchain.
 $gitDir = Join-Path $root 'bin\git'
@@ -93,7 +99,7 @@ provider definitions, never keys.
 Requirements
 ------------
 Windows 10/11, x64; .NET 10 Desktop Runtime; Microsoft Edge WebView2 Runtime.
-Node and the engine are in bin\ and need no install.
+Node, the engine and agent-browser are in bin\ and need no install.
 
 Licence
 -------

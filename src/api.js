@@ -943,7 +943,7 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
    * with **no time limit**. A session created there is recorded and the window goes;
    * a window closed without one is a rejection.
    */
-  async function browserSignInAsk({ host = '', url = '', what = '', directory = '' } = {}) {
+  async function browserSignInAsk({ host = '', url = '', what = '', directory = '', cardOnly = false } = {}) {
     const target = String(url || '').trim();
     if (!/^https?:\/\//i.test(target)) return { ok: false, error: 'there is no address to open' };
     // The asking chat, if the caller knows it. Only a folder that is really under the
@@ -968,6 +968,12 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
           ? `The operator refused a sign-in window: ${answer.message}`
           : 'The operator refused a sign-in window.',
       };
+    }
+    // The model's hand-off: the card is the permission, and the caller owns the window
+    // lifecycle (it has the hidden browser to stop and a visible one to launch). The
+    // Settings > Browser button leaves this false and gets the whole flow here.
+    if (cardOnly) {
+      return { ok: true, allowed: true, cardOnly: true, url: target, host: String(host || '') };
     }
     const cfg = getConfig();
     const profile = String(cfg.browser?.profile || '').trim() || `${BROWSER_DIR}\\profile`;

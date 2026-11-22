@@ -19,6 +19,7 @@ import path from 'node:path';
 import { DATA_DIR, WEB_DIR, PROJECTS_ROOT } from '../paths.js';
 import { artifactDir } from '../browser/artifacts.js';
 import { clickSummary, createBrowser, findEdge, savedAnswer, requestAnswer, domAnswer } from '../browser/browser.js';
+import { askToSignIn } from '../browser/signin.js';
 import { formatBytes, safeDownloadName, uniqueDownloadPath } from '../browser/downloads.js';
 import { checkUrl, hostOf, localPageAllowed } from '../browser/allow.js';
 import { askOperator } from '../browser/handoff.js';
@@ -52,6 +53,12 @@ function settings() {
     // beside the screen sounds in Settings > General.
     sounds: raw?.notify?.browserSounds !== false,
     idleMinutes: Number(raw?.browser?.idleMinutes) || 5,
+    // A desktop of its own is the default; a machine that refuses CreateDesktop has the
+    // off-screen window as the fallback, and the suite pins the old path so CI never
+    // depends on an interactive desktop.
+    hiddenDesktop: process.env.SYNAPSE_BROWSER_HIDDEN_DESKTOP === '0'
+      ? false
+      : b.hiddenDesktop !== false,
   };
 }
 
@@ -104,6 +111,7 @@ function reportDownload(rec) {
 const browser = createBrowser({
   profile: cfg.profile,
   idleMs: cfg.idleMinutes * 60 * 1000,
+  hiddenDesktop: cfg.hiddenDesktop,
   downloadDir: DOWNLOADS,
   onDownload: reportDownload,
   log: { info: (m) => process.stderr.write(`${m}\n`) },
@@ -283,7 +291,7 @@ async function handle(msg) {
             const page = await browser.read({});
             noteUsed(page.url);
             process.stderr.write(`open ${verdict.local ? verdict.path : verdict.host} -> ${url}\n`);
-            return toolText(id, `Opened ${url}\n\n${outline(page, { maxChars: 6000, links: 60 })}${wallNote(page)}`);
+            return toolText(id, `Opened ${url}\n\n${outline(page, { maxChars: 6000, links: 60 })}${wallNote(page)}\n\nTo click a control, call snapshot and use the ref it gives you.`);
           }
           case 'read': {
             // `full` walks the page to its end and leaves the whole of it in the project,
@@ -345,9 +353,31 @@ async function handle(msg) {
             noteUsed(page.url);
             return toolText(id, `${outline(page, { maxChars: args.maxChars, links: args.links })}${wallNote(page)}`);
           }
+          case 'snapshot': {
+            // The action surface: named controls with refs, not a picture and a guess.
+            const text = await browser.snapshot({
+              interactive: args.interactive !== false,
+              compact: args.compact === true,
+              depth: Number(args.depth) || null,
+              selector: args.selector || null,
+            });
+            if (!String(text || '').trim()) {
+              return toolText(
+                id,
+                'The page has no controls to snapshot. It may still be loading, or it is all text — ' +
+                  'call read for the text, or snapshot again after a wait.',
+                true,
+              );
+            }
+            return toolText(
+              id,
+              `Controls with refs (a ref is good until the page changes):\n\n${text}\n\n` +
+                'Click one with click { "ref": "e12" }; after a navigation or a page change, snapshot again.',
+            );
+          }
           case 'click': {
             const at = Number.isFinite(args.x) && Number.isFinite(args.y) ? [Number(args.x), Number(args.y)] : null;
-            const res = await browser.click({ selector: args.selector || null, text: args.text || null, at });
+            const res = await browser.click({ ref: args.ref || null, selector: args.selector || null, text: args.text || null, at });
             // The click answers where it landed; a string is the address alone, which is
             // what every earlier caller expected.
             const url = typeof res === 'string' ? res : res?.url || '';
@@ -360,9 +390,12 @@ async function handle(msg) {
             // (14 Nov: "click failed: that is not an http(s) address").
             if (url) guard(url);
             const download = typeof res === 'object' ? res?.download : null;
+            const what = args.ref
+              ? 'that control'
+              : args.selector || args.text || `${args.x},${args.y}`;
             return toolText(
               id,
-              `Clicked ${args.selector || args.text || `${args.x},${args.y}`}${clickSummary(res)}${url ? ` -> ${url}` : ''}` +
+              `Clicked ${what}${clickSummary(res)}${url ? ` -> ${url}` : ''}` +
                 `${download ? `\n${downloadAnswer(download)}` : ''}`,
             );
           }
@@ -451,8 +484,17 @@ async function handle(msg) {
             return toolText(id, domAnswer(String(args.selector || ''), rows));
           }
           case 'type':
-            await browser.type({ text: args.text, selector: args.selector || null, submit: args.submit === true });
-            return toolText(id, `Typed ${String(args.text).length} characters${args.submit ? ' and pressed Enter' : ''}.`);
+            await browser.type({
+              text: args.text,
+              ref: args.ref || null,
+              selector: args.selector || null,
+              submit: args.submit === true,
+            });
+            return toolText(
+              id,
+              `${args.ref ? `Filled ${args.ref} with` : 'Typed'} ${String(args.text).length} characters` +
+                `${args.submit ? ' and pressed Enter' : ''}.`,
+            );
           case 'press':
             await browser.press(args.key);
             return toolText(id, `Pressed ${args.key}.`);
@@ -519,9 +561,12 @@ async function handle(msg) {
             return toolText(id, list.map((t) => `- ${t.title} — ${t.url}`).join('\n') || 'No pages open.');
           }
           case 'handoff': {
-            // A sign-in is a permission, not a window that appears: the operator is asked
-            // on a card, and only their Allow opens one. The call waits for the outcome —
-            // there is no timeout, because the wait is theirs (12 Nov).
+            // A sign-in is a permission, not a window that appears. The card is raised by
+            // the app; this server owns the browser lifecycle because it is the only side
+            // holding the hidden browser. Allow -> park hidden, open a visible window on
+            // the operator's desktop, wait for them to close it, restart hidden, continue.
+            const target = String(args.url || (await browser.tabs())[0]?.url || '');
+            if (!target) return toolText(id, 'There is no page to hand off — open one first.', true);
             if (args.url) guard(args.url);
             let answer = null;
             try {
@@ -529,7 +574,7 @@ async function handle(msg) {
                 method: 'POST',
                 headers: { 'content-type': 'application/json' },
                 body: JSON.stringify({
-                  url: args.url || (await browser.tabs())[0]?.url || '',
+                  url: target,
                   host: args.host || '',
                   what: args.what || '',
                   // The chat that asked. This server starts in the project's folder,
@@ -537,6 +582,9 @@ async function handle(msg) {
                   // open — which is how a sign-in for one project appeared in another
                   // (20 Nov). Empty when the server was started outside a project.
                   directory: IN_PROJECT ? START_DIR : '',
+                  // The card only: the window lifecycle is below, because the hidden
+                  // browser has to stop before the visible one can use the profile.
+                  cardOnly: true,
                 }),
               });
               answer = await res.json();
@@ -550,13 +598,80 @@ async function handle(msg) {
                 true,
               );
             }
-            if (!answer.signedIn) {
-              return toolText(id, `A window was opened but no session appeared. ${answer.reason || ''} Treat the site as unavailable.`.trim(), true);
+
+            // One browser per profile: the hidden one is parked cleanly (so its cookies
+            // flush) and comes back in the finally, whatever the operator does.
+            let signedUrl = '';
+            let ending = '';
+            let visible = null;
+            try {
+              await browser.stop();
+              visible = createBrowser({
+                profile: cfg.profile,
+                hiddenDesktop: false,
+                log: { info: (m) => process.stderr.write(`${m}\n`) },
+              });
+              const shown = await askToSignIn({
+                url: target,
+                profile: cfg.profile,
+                browser: visible,
+                // The operator closes the window when the step is done: a bot check has no
+                // password box, so an auto-hide would take the window away mid-challenge.
+                autoHide: false,
+                restore: true,
+                focus: true,
+                sound: CHIME,
+                onSignedIn: (u) => { signedUrl = String(u || ''); },
+                onGone: (why) => { ending = String(why || 'closed'); },
+              });
+              if (!shown.ok) throw new Error(shown.error || 'the sign-in window did not come up');
+              // The watcher has its own ten-minute deadline; this only guards a watcher
+              // that never fired at all.
+              const began = Date.now();
+              while (!ending && Date.now() - began < 10 * 60 * 1000) await new Promise((r) => setTimeout(r, 500));
+              if (!ending) ending = 'timeout';
+            } catch (err) {
+              return toolText(id, `The sign-in window failed: ${err.message}. Treat the site as unavailable.`, true);
+            } finally {
+              try { await visible?.stop?.(); } catch { /* already gone */ }
+              // Whatever happened, the model's browser comes back on the page it was on.
+              try {
+                await browser.start();
+                await browser.goto(target, { settle: 900 });
+              } catch (err) {
+                process.stderr.write(`handoff: the hidden browser did not come back: ${err.message}\n`);
+              }
             }
+
+            if (!signedUrl) {
+              return toolText(
+                id,
+                `The window was closed without a session (${ending}). Treat the site as unavailable and carry on.`,
+                true,
+              );
+            }
+            // Closing the window is not proof: a bot check has no password box, so the
+            // real check is the page after the browser comes back.
+            const after = await browser.read({ maxChars: 800, links: 0 }).catch(() => null);
+            if (after?.wall) {
+              return toolText(
+                id,
+                `The window was closed, but the page is still ${after.wall}. A person has to clear it: ` +
+                  'use handoff again, or carry on without the site.',
+                true,
+              );
+            }
+            try {
+              await fetch('http://127.0.0.1:8700/api/browser/signed-in', {
+                method: 'POST',
+                headers: { 'content-type': 'application/json' },
+                body: JSON.stringify({ url: signedUrl }),
+              });
+            } catch { /* the app may be down; the session is still in the profile */ }
             return toolText(
               id,
-              `Signed in to ${answer.host || 'the site'}; the window is gone and the session is kept in SynaBrowse's profile. ` +
-                'Read the page again — it should be the signed-in one.',
+              `The operator finished at ${signedUrl}. The window is closed and the hidden browser is back on ${target}; ` +
+                'read the page to see the signed-in one.',
             );
           }
           case 'close':

@@ -41,10 +41,52 @@ the operator's window as soon as the process exists, not when the debugging port
 and moves the window only if it is not already inside the target monitor — so the
 common path is one call: minimize.
 
+## The desktop of its own (22 Nov)
+
+The window is not hidden; it is somewhere else. `src/browser/hidden-desktop.ps1` creates a
+Windows desktop (`CreateDesktop`), launches Edge there (`CreateProcess` with `lpDesktop`),
+writes its pid and desktop to `data\browser\hidden-desktop.json`, and waits on the process
+as its keeper. The browser is a normal headed window on that desktop, so it renders, keeps
+the fingerprint that clears a bot check, and is never on the operator's desktop to flash a
+taskbar button.
+
+Measured 22 Nov: **0** windows of the browser's pids on the operator's desktop, **11** on
+the hidden one, with the Nexus page loaded; Cloudflare cleared in about 8 s. A second
+desktop has no shell, so nothing is drawn there.
+
+If the launcher fails (a policy, a service session), `browser.js` logs it and falls back to
+the old off-screen window — a brief flash is better than no browser, and the log says which
+one ran. `hiddenDesktop: false` forces the fallback; the suite uses it so CI does not need
+an interactive desktop.
+
+**What it cannot do:** a live window on one desktop cannot be moved to another with a
+supported Windows API. The hand-off is therefore a relaunch, described below.
+
+## The action layer: refs, not coordinates
+
+`src/browser/agent.js` wraps **agent-browser**, a native Windows binary vendored in
+`bin\agent-browser` (Apache-2.0; `vendor-agent-browser.ps1` restores it). It attaches to the
+Edge Synapse already owns over `--cdp`, walks the accessibility tree, and answers:
+
+```
+- button "Manual download" [ref=e145]
+- link "Slow download" [ref=e324]
+```
+
+`click` and `type` take that ref. A click fails loudly when the control is covered, hidden
+or off-screen, and refs do not survive navigation — the model takes a new snapshot. This is
+the reliable route; the x/y fields remain as the fallback. The spike of 22 Nov drove the
+Nexus manual/slow download in seven tool calls (open, three snapshots, three clicks), with
+no screenshot needed to choose a click.
+
 ## The tools
 
-`open`, `read`, `click`, `type`, `press`, `wait`, `scroll`, `screenshot`, `watch`,
-`tabs`, `handoff`, `download`, `save`, `dom`, `close`.
+`open`, `read`, `snapshot`, `click`, `type`, `press`, `wait`, `scroll`, `screenshot`,
+`watch`, `tabs`, `handoff`, `download`, `save`, `dom`, `close`.
+
+`snapshot` is the action surface: each line names a control and its ref, and `click`/`type`
+take that ref. It is the one a model should use before acting; `read` is for what the page
+says.
 
 The model sees them namespaced — `synapse-browser_open` — because the engine prefixes a
 server's tools with its key. The names travel in `synapse.harness`, one copy for every
@@ -94,15 +136,26 @@ auto-allow, and no timeout: the card waits, and the run's stall clock is suspend
 it does (the wait is the operator's, not the model's).
 
 Only an Allow opens a window, and then it is an ordinary one: normal and focused, on the
-monitor they are looking at, loading that site with **no time limit**. It is watched in
-the background: when the page stops asking to be signed into — no password box, no
-sign-in route, loaded, twice in a row — the window is hidden, the site is recorded, and
-the tool answers "signed in". Closing it without a session is a Reject, and the model
-carries on without the site. The two hollow knocks play when the card appears.
+monitor they are looking at, loading that site with **no time limit**. The two hollow knocks
+play when the card appears.
+
+For a model's `handoff` the window is a **relaunch**, because a window on the hidden desktop
+cannot be moved: the hidden browser is stopped (so the profile is free), a visible one opens
+on the operator's desktop at the same page, and the call waits for them to **close** it.
+Closing is the Done — a bot check has no password box, so the watcher must not auto-hide a
+page that has merely loaded. Then the visible browser stops, the hidden one comes back on
+the same page, and the site is recorded in the Signed In table. The card says to close the
+window. A close without a session is a Reject, and the model carries on without the site.
+
+The Settings → Browser **Sign In…** path has no model waiting: it shows the same window and
+watches it, and when the page stops asking to be signed into — no password box, no sign-in
+route, loaded, twice in a row — the window is hidden and the site recorded.
 
 ## Being invisible, exactly
 
-A hidden browser must be invisible *and* still render, and those pull apart:
+A hidden browser must be invisible *and* still render, and those pull apart. This is the
+**fallback** path (`hiddenDesktop: false`); the main path is the desktop above. The hide
+rules still matter when the desktop cannot be created, and for the tests.
 
 - **the hide starts before the browser is ready.** `show.ps1 -Hide -WaitMs` starts the
   moment the process exists and grabs the window within 40 ms of its creation.
@@ -282,6 +335,16 @@ and the next `read` sat on a half-open socket for seven minutes (11 Nov).
   the page — tokens in the model's context are memory too.
 - **Nothing here reads a cookie.** Not for the table, not to "validate", not as a
   fallback.
+- **A hidden desktop needs an interactive Windows session.** In a service session
+  `CreateDesktop` can be refused; the fallback is the off-screen window, and its launch
+  flash comes back. The log says which path ran.
+- **The hand-off is a relaunch.** About two seconds and a page reload: the hidden browser is
+  stopped, a visible one opens the same URL on the same profile, and the hidden one comes
+  back to that URL after the operator closes the window. Mid-flow page state is not
+  preserved.
+- **agent-browser is a pinned, vendored binary.** If `bin\agent-browser` is missing,
+  `snapshot` and ref clicks say what to run; `open`, `read` and the coordinate fallback
+  still work through CDP.
 
 ## Why a model cannot see it
 
@@ -296,7 +359,7 @@ harness's config. Flipping the switch while Synapse runs writes
 - the log says so;
 - the check: that config must list `"synapse-browser"`. If it does, a model that still
   "cannot find" it is looking for the wrong name — the tools are
-  `synapse-browser_open`, `synapse-browser_read`, and the rest.
+  `synapse-browser_open`, `synapse-browser_snapshot`, and the rest.
 
 It is **on by default** since 13 Nov: the sign-in card is what made that safe, because
 nothing the browser does as the operator happens without a person saying yes to a card
@@ -307,18 +370,21 @@ first.
 | | |
 |---|---|
 | `src/browser/cdp.js` | the protocol client: requests that answer or fail in 60 s, events, evaluate, screenshot |
-| `src/browser/browser.js` | Edge by full path, the launch flags, the toolset, `clearSite`, the idle reaper |
+| `src/browser/browser.js` | Edge by full path, the hidden-desktop launch and its fallback, the toolset, `clearSite`, the idle reaper |
+| `src/browser/hidden-desktop.ps1` | the launcher/keeper: `CreateDesktop`, `CreateProcess` with `lpDesktop`, the state file |
+| `src/browser/agent.js` | the agent-browser wrapper: snapshot, ref click and fill, the daemon close |
+| `vendor-agent-browser.ps1` | restores the pinned binary and its licence into `bin\agent-browser` |
 | `src/browser/allow.js` | the http(s) and local-page checks |
 | `src/browser/artifacts.js` | where a project's screenshots live |
 | `src/browser/downloads.js` | safe names, collision suffixes, the ASCII bar and byte labels |
 | `src/browser/sites.js` | the sites record: add, touch, forget, de-duplicate |
-| `src/browser/session-watch.js` | polls the sign-in window and hides it when the session lands |
-| `src/browser/signin.js` | address candidates, `looksUnconfirmed`, the sign-in flow |
+| `src/browser/session-watch.js` | polls the sign-in window; hides it, or waits for the operator to close it |
+| `src/browser/signin.js` | address candidates, `looksUnconfirmed`, the visible sign-in flow |
 | `src/browser/handoff.js` + `show.ps1` | the window, `-Hide`/`-Focus`, the chime, `stoleFocus` |
 | `src/browser/ask.js` | the sign-in card: one request, no auto-allow, no timeout |
 | `src/mcp/browser-server.js`, `browser-tools.js` | the tools and their descriptions |
 | `web/downloads.js` | the chat's download chip, progress and saved path |
-| tests | `browser`, `browser-mcp`, `browser-watch`, `browser-chat`, `browser-downloads`, `sites`, `browser-tools` |
+| tests | `browser`, `browser-mcp`, `browser-watch`, `browser-chat`, `browser-downloads`, `browser-agent`, `sites`, `browser-tools` |
 
 ## The description is the help
 
@@ -326,7 +392,9 @@ A model never explores a server: the tool list with its descriptions rides in it
 context on every request, so a wrong description is worse than a short one. Two were
 wrong (13 Nov) and are now pinned by `tests/browser-tools.test.mjs`: `open` promised a
 host list that had been removed, and `handoff` described a minimised window it had
-stopped opening when it became a permission card.
+stopped opening when it became a permission card. `snapshot` and the ref-taking `click`
+and `type` were pinned on 22 Nov; `handoff` was re-pinned when closing the window became
+the Done.
 
 There is deliberately **no `help` tool**: it would be a second copy of the same text,
 paid for on every turn, and it would drift the way `handoff` did.
