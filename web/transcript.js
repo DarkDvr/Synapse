@@ -685,7 +685,11 @@ export function renderMessage(m, tail = '', extras = '') {
       );
     }
     if (m.error) body.push(`<div class="msg-error">${esc(m.error)}</div>`);
-    return `<div class="msg assistant"${line} data-msg="assistant"><div class="msg-body">${body.join('')}${tail}${extras}</div></div>`;
+    // A download belongs with the browser's tool cards, above the reasoning — never as
+    // an extra after it. It was drawn below the thinking pane, which is the one place
+    // nothing goes (the operator's rule); the card itself is already a tool card.
+    if (extras) body.splice(1, 0, extras);
+    return `<div class="msg assistant"${line} data-msg="assistant"><div class="msg-body">${body.join('')}${tail}</div></div>`;
   }
   const body = m.error
     ? `<div class="msg-error">${esc(m.error)}</div>`

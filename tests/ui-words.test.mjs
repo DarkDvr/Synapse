@@ -572,7 +572,9 @@ contract('the Architect’s live reasoning is drawn inside its own post', () => 
   // renderMessage takes the tail and the downloads and puts them inside .msg-body, which
   // carries the speaker's 2px rule.
   assert.match(js, /function renderMessage\(m, tail = '', extras = ''\) \{/);
-  assert.match(js, /<div class="msg-body">\$\{body\.join\(''\)\}\$\{tail\}\$\{extras\}<\/div>/, 'the tail lands inside the post');
+  assert.match(js, /<div class="msg-body">\$\{body\.join\(''\)\}\$\{tail\}<\/div>/, 'the tail lands inside the post');
+  assert.match(js, /body\.splice\(1, 0, extras\)/, 'a download sits with the tool cards, above the reasoning');
+  assert.doesNotMatch(js, /\$\{tail\}\$\{extras\}/, 'a download is never after the thinking pane');
   assert.match(js, /const liveTail = renderSessionStream\(\);/, 'the live step is computed once');
   assert.match(js, /renderMessage\(m, i === paneAt \? liveTail : '', extras\)/, 'and only the newest assistant message carries it');
   // A download belongs inside the post it happened in (18 Nov), not after the conversation.
