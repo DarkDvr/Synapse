@@ -18,7 +18,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { DATA_DIR, WEB_DIR, PROJECTS_ROOT } from '../paths.js';
 import { artifactDir } from '../browser/artifacts.js';
-import { clickSummary, createBrowser, findEdge, savedAnswer } from '../browser/browser.js';
+import { clickSummary, createBrowser, findEdge, savedAnswer, requestAnswer, domAnswer } from '../browser/browser.js';
 import { formatBytes, safeDownloadName, uniqueDownloadPath } from '../browser/downloads.js';
 import { checkUrl, hostOf, localPageAllowed } from '../browser/allow.js';
 import { askOperator } from '../browser/handoff.js';
@@ -216,6 +216,15 @@ function downloadAnswer(rec) {
 function wallNote(page) {
   if (!page?.wall) return '';
   const host = hostOf(page.url) || 'this site';
+  // A bot check is not a sign-in, and the two have different answers: a person clears a
+  // captcha once and the session keeps the clearance, while a saved sign-in that expired
+  // needs the password again. Saying "sign in" to a Cloudflare challenge sends a model to
+  // the wrong move (22 Nov: "Just a moment…" read as a page, then a 403 on the fetch).
+  if (/bot check/i.test(page.wall)) {
+    return `\n\nThis page is ${page.wall}, and it has to be cleared by a person. ` +
+      'Call `handoff` with what="clear the check on ' + host + '", wait for the operator, then try again. ' +
+      'Do not keep retrying: a challenge that is clicked at gets longer, not shorter.';
+  }
   const known = (cfg.sites || []).some((site) => host === site.host || host.endsWith(`.${site.host}`));
   if (known) {
     return `\n\nThis page is asking you to sign in again (${page.wall}) — the saved session for ${host} has expired. ` +
@@ -394,7 +403,23 @@ async function handle(msg) {
               return toolText(id, 'This browser session is not inside a project, so there is nowhere to put a file.', true);
             }
             const timeoutMs = Math.min(300_000, Math.max(1000, Number(args.timeoutMs) || 120_000));
-            const rec = await browser.saveFrom(url, { timeoutMs });
+            const method = String(args.method || 'GET').toUpperCase();
+            const form = args.form && typeof args.form === 'object' ? args.form : null;
+            const xhr = args.xhr === true;
+            const asJson = args.json === true;
+            const rec = await browser.saveFrom(url, { method, form, xhr, json: asJson, timeoutMs });
+            if (asJson) {
+              const answer = requestAnswer(rec);
+              // A request refused while the page is a challenge is the challenge, not the
+              // address: say so, and say what clears it (22 Nov, 403 "Just a moment…").
+              if (answer.isError) {
+                const page = await browser.read({ maxChars: 600, links: 0 }).catch(() => null);
+                if (page?.wall) {
+                  return toolText(id, `${answer.text}${wallNote(page)}`, true);
+                }
+              }
+              return toolText(id, answer.text, answer.isError);
+            }
             const answer = savedAnswer(rec);
             if (answer?.isError) return toolText(id, answer.text, true);
             fs.mkdirSync(dir, { recursive: true });
@@ -406,9 +431,24 @@ async function handle(msg) {
             const bytes = fs.statSync(file).size;
             const rel = path.relative(START_DIR, file).replace(/\\/g, '/');
             noteUsed(url);
-            process.stderr.write(`save ${url} -> ${rel} (${bytes} bytes)\n`);
+            process.stderr.write(`save ${method} ${url} -> ${rel} (${bytes} bytes, via ${rec.via || 'page'})\n`);
             const done = savedAnswer({ ...rec, size: bytes, name: path.basename(file) || name }, { dir, rel });
             return toolText(id, done.text, done.isError);
+          }
+          case 'dom': {
+            const rows = await browser.domQuery({
+              selector: String(args.selector || ''),
+              limit: Math.min(40, Math.max(1, Number(args.limit) || 12)),
+            });
+            if (!rows.length) {
+              return toolText(
+                id,
+                `Nothing matches ${args.selector} on this page. A selector is CSS: "a[href*=download]", ".mod-file-download", "[data-file-id]". ` +
+                  'If the page is a widget, its content is in a frame — read lists the frames.',
+                true,
+              );
+            }
+            return toolText(id, domAnswer(String(args.selector || ''), rows));
           }
           case 'type':
             await browser.type({ text: args.text, selector: args.selector || null, submit: args.submit === true });

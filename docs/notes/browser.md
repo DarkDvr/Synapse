@@ -546,4 +546,37 @@ demands a human (a captcha), so the model hands off instead of flailing.
   and an error with no message now says "the browser did not say why" instead of an empty
   string — three calls answered with nothing in the Nexus run.
 
+### The Nexus download, worked out from the VPA app (22 Nov)
+
+The operator pointed at `vpa-modlist-installer`, which downloads Nexus archives by itself.
+Its `NexusMint` + `BrowserSession` are the whole recipe, and it is not Nexus-specific in
+shape — it is "ask the page's own XHR for the link":
+
+1. the mod page states the **game id** in an attribute (`<section class="modpage"
+   data-game-id="1704">`); the **file id** is the number in `?tab=files&file_id=…`;
+2. POST `Core/Libs/Common/Managers/Downloads?GenerateDownloadUrl` with
+   `game_id`, `file_id`, `fid`, `collection_id=0` as `application/x-www-form-urlencoded`,
+   **inside the page** (`credentials: 'include'`, `X-Requested-With: XMLHttpRequest`) — the
+   VPA code says why: "the POST is the request Cloudflare challenges when it arrives from a
+   bare client";
+3. the answer is `{"url": "https://supporter-files.nexus-cdn.com/…?md5=…&expires=…&user_id=…"}`;
+4. the CDN is another origin, so the page's own `fetch` is refused by CORS — fetched from
+   Node instead (the signed address needs no cookie; measured 200, `application/zip`,
+   **88,436 bytes**, saved to `.project/downloads/Music Merged-4625-1-4-2.zip`).
+
+That is now two tools, both generic:
+
+- **`save` is a request**, not only a GET: `method`, `form`, `xhr`, and `json: true` to read
+  the answer instead of saving it. The cross-origin leg is automatic: when the page cannot
+  read the answer, the same address is fetched from Node with the session's cookies for that
+  host and the page as referrer.
+- **`dom`** reads what elements state — `data-*`, `href`, `title`, a form's action — because
+  a page puts the facts a script needs in attributes, where `read` cannot see them.
+
+And the wall that followed: repeated hits made Cloudflare answer **403 "Just a moment…"**,
+which is not a sign-in. `botWall` recognises that wording, and `save`'s refusal now adds the
+sentence a model needs — "it has to be cleared by a person, call handoff, do not keep
+retrying" — because a challenge clicked at gets longer, not shorter.
+
+
 

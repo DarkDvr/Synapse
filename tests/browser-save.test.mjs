@@ -6,7 +6,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { botWall, savedAnswer } from '../src/browser/browser.js';
+import { botWall, savedAnswer, requestAnswer, domAnswer } from '../src/browser/browser.js';
 
 test('a fetch that returned a page is not a file, and says so', () => {
   const answer = savedAnswer({
@@ -57,6 +57,38 @@ test('a bot check is named, and a sign-in wall is not mistaken for one', () => {
   assert.match(botWall('Please verify you are human to continue'), /bot check/);
   assert.match(botWall('', 'https://www.google.com/recaptcha/api.js'), /bot check/);
   assert.match(botWall('Checking your browser before accessing'), /bot check/);
+  // What Nexus actually served on 22 Nov, through Cloudflare.
+  assert.match(botWall('Just a moment... Enable JavaScript and cookies to continue'), /bot check/);
   assert.equal(botWall('Sign in to your account', 'https://example.com/login.js'), '', 'a sign-in page is a captcha');
   assert.equal(botWall('A perfectly ordinary page about music'), '');
+});
+
+// The request half of save: a site's own script asks for a link, and the answer names it.
+test('a JSON answer that names a link says so, and what to do with it', () => {
+  const answer = requestAnswer({
+    ok: true,
+    status: 200,
+    type: 'application/json',
+    text: '{"url":"https://supporter-files.nexus-cdn.com/1704/4625/Music%20Merged.zip?md5=abc&expires=1&user_id=9"}',
+  });
+  assert.equal(answer.isError, false);
+  assert.match(answer.text, /names a link/);
+  assert.match(answer.text, /supporter-files\.nexus-cdn\.com/);
+  assert.match(answer.text, /Save that address/, 'the next move is not named');
+});
+
+test('a refused request keeps the site’s words and any Retry-After', () => {
+  const answer = requestAnswer({ ok: false, status: 403, retry: 30, text: '<html><title>Just a moment...</title>' });
+  assert.equal(answer.isError, true);
+  assert.match(answer.text, /answered 403/);
+  assert.match(answer.text, /wait 30 s/);
+});
+
+test('dom answers what each element states, attributes included', () => {
+  const text = domAnswer('[data-file-id]', [
+    { tag: 'a', text: 'Music Merged', at: [1037, 564], attrs: { 'data-file-id': '245273', href: '/files/245273' } },
+  ]);
+  assert.match(text, /1 element for \[data-file-id\]/);
+  assert.match(text, /<a> \(1037,564\) “Music Merged”/);
+  assert.match(text, /data-file-id="245273"/);
 });

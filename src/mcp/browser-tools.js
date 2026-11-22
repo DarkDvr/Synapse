@@ -210,22 +210,50 @@ export const TOOLS = [
   {
     name: 'save',
     description:
-      'Save what a URL returns into the project, under .project/downloads, and answer its path. ' +
-      'The fetch runs **inside the page**, so it carries the session\'s cookies and the site\'s ' +
-      'own origin — the way a direct file address works in the tab and not from anywhere else. ' +
-      'Use it for a file address you have (a "download" route, an API URL, a link from a page), ' +
-      'especially on a site you are signed in to. It says plainly when the address answers a ' +
-      '**page** instead of a file: a route like "…&action=download" often returns the page it ' +
-      'belongs to, and then the page\'s own download control is the way through (use click — a ' +
-      'click waits for the file). A captcha or "checking your browser" wall is reported rather ' +
-      'than worked around: a human solves that, with handoff.',
+      'Make a request **through the page** and either save what comes back into the project ' +
+      '(under .project/downloads) or return its body. GET by default; `method` and `form` send a ' +
+      'POST, which is how a site\'s own script asks for a download link: same cookies, same origin, ' +
+      'the page as referrer — a POST that is challenged from a bare client answers here. ' +
+      'With `json: true` the body comes back as text instead of being saved, so a route that ' +
+      'answers {"url": "https://…"} tells you the file\'s address, and the next call is save on ' +
+      'that address. ' +
+      'It also says plainly when an address answers a **page** instead of a file: a route like ' +
+      '"…&action=download" often returns the page it belongs to. A captcha or "checking your ' +
+      'browser" wall is reported rather than worked around: a human solves that, with handoff.',
     inputSchema: {
       type: 'object',
       properties: {
-        url: { type: 'string', description: 'The http(s) address to fetch through the page.' },
+        url: { type: 'string', description: 'The http(s) address to request through the page.' },
+        method: { type: 'string', enum: ['GET', 'POST'], description: 'GET (default) or POST.' },
+        form: {
+          type: 'object',
+          description: 'Fields for a POST, sent as application/x-www-form-urlencoded (e.g. {game_id:"1704", file_id:"245273"}).',
+          additionalProperties: { type: ['string', 'number', 'boolean'] },
+        },
+        xhr: { type: 'boolean', description: 'Send X-Requested-With: XMLHttpRequest, which is what a page\'s own AJAX sends.' },
+        json: { type: 'boolean', description: 'Return the body as text (up to 12000 characters) instead of saving it.' },
         timeoutMs: { type: 'integer', description: 'How long to wait for it (1000-300000, default 120000).', minimum: 1000, maximum: 300000 },
       },
       required: ['url'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'dom',
+    description:
+      'Read what elements say about themselves: tag, text, the attributes that matter (data-*, ' +
+      'href, src, title, aria-*, id, class) and where each one is on screen. Use it when a fact ' +
+      'lives in an attribute rather than the page text — a file id, a game id, a link a script ' +
+      'will use, the action of a form — which is exactly what a page\'s own script reads before ' +
+      'it asks for a file. CSS selectors: "[data-file-id]", ".mod-file-download", ' +
+      '"a[href*=download]". A widget inside a frame is not in this document: read names its frame.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        selector: { type: 'string', description: 'A CSS selector.' },
+        limit: { type: 'integer', description: 'How many matches to describe (1-40, default 12).', minimum: 1, maximum: 40 },
+      },
+      required: ['selector'],
       additionalProperties: false,
     },
   },

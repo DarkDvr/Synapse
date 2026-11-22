@@ -47,7 +47,7 @@ export function findEdge() {
  */
 export function botWall(text, srcs = '') {
   const said = `${String(text || '')} ${String(srcs || '')}`;
-  if (/(recaptcha|hcaptcha|cf-turnstile|challenge-platform|checking your browser|verify (that )?you are (a )?human|are you a robot|cf-challenge)/i.test(said)) {
+  if (/(recaptcha|hcaptcha|cf-turnstile|challenge-platform|checking your browser|just a moment|cf-browser-verification|__cf_chl|verify (that )?you are (a )?human|are you a robot|cf-challenge|attention required)/i.test(said)) {
     return 'a bot check — a captcha or a “checking your browser” wall';
   }
   return '';
@@ -90,6 +90,58 @@ export function savedAnswer(rec, { dir = '', rel = '' } = {}) {
       (rec.from ? `\nIt came from ${rec.from}.` : ''),
     isError: false,
   };
+}
+
+/**
+ * What a request's answer says when it is JSON rather than a file.
+ *
+ * The shape that matters is the one a site's own script lives on: a 200 whose body names a
+ * link (`{"url": "https://…"}`), which is how a file behind a page's button is fetched. The
+ * answer names that link, because the next move is `save` on it, and a model reading a wall
+ * of JSON should not have to find the needle (22 Nov, the Nexus mint).
+ */
+export function requestAnswer(rec) {
+  if (!rec) return { text: 'The request answered nothing at all.', isError: true };
+  const status = Number(rec.status) || 0;
+  const body = String(rec.text || '').trim();
+  if (!rec.ok) {
+    const retry = Number(rec.retry) > 0 ? ` The site asked to wait ${rec.retry} s (Retry-After).` : '';
+    const said = body.replace(/\s+/g, ' ').slice(0, 240);
+    return {
+      text: `The request answered ${status || 'an error'}${said ? `: “${said}”` : ''}.${retry}`,
+      isError: true,
+    };
+  }
+  // A link in the answer is a file waiting to be fetched: name it, once.
+  let link = '';
+  try {
+    const parsed = JSON.parse(body);
+    for (const key of ['url', 'generateDownloadUrl', 'download_url', 'URI', 'href', 'link']) {
+      const value = parsed?.[key];
+      if (typeof value === 'string' && /^https?:/i.test(value)) { link = value; break; }
+    }
+  } catch { /* not JSON; the body itself is the answer */ }
+  const size = body.length;
+  const cut = size > 1200 ? `${body.slice(0, 1200)}\n[… ${size - 1200} more characters]` : body;
+  return {
+    text: `The request answered ${status} (${rec.type || 'no content type'})` +
+      `${link ? ` and it names a link:\n${link}\nSave that address with save — it is the file.` : ''}` +
+      `\n\n${cut}`,
+    isError: false,
+  };
+}
+
+/** What the dom tool answers: what the elements are, what they state, where they are. */
+export function domAnswer(selector, rows = []) {
+  const lines = [`${rows.length} element${rows.length === 1 ? '' : 's'} for ${selector}:`];
+  for (const row of rows) {
+    const attrs = Object.entries(row.attrs || {})
+      .map(([k, v]) => `${k}="${String(v).replace(/\s+/g, ' ').slice(0, 90)}"`)
+      .join(' ');
+    const where = row.at ? ` (${row.at.join(',')})` : '';
+    lines.push(`- <${row.tag}>${where}${row.text ? ` “${row.text}”` : ''}${attrs ? `\n    ${attrs}` : ''}`);
+  }
+  return lines.join('\n');
 }
 
 const HIDDEN_FLAGS = [  '--no-first-run',
@@ -393,33 +445,50 @@ export function createBrowser({
   };
 
   /**
-   * Save a URL's bytes into the project, fetching **through the page**.
+   * A request made **through the page**, and the bytes or the body it answered.
    *
    * The request runs in the page's own context (`fetch` with `credentials: 'include'`), so it
-   * carries the session's cookies, the site's origin and the browser's own headers — the
-   * three things a Node-side fetch cannot supply, and the reason a direct file address that
-   * works in the tab answers "a page" or 403 from anywhere else. An 86 KB archive from a
-   * site behind a sign-in is exactly the case this exists for (22 Nov).
+   * carries the session's cookies, the site's origin, the page as referrer and the browser's
+   * own TLS fingerprint — the things a Node-side request cannot supply, and the reason a POST
+   * that works from the page is refused from anywhere else. That is not a trick: a site's own
+   * script makes exactly this call, and the VPA app proved it for Nexus's free-tier download
+   * (`GenerateDownloadUrl` → a signed CDN link, 88,436 bytes, 22 Nov).
    *
-   * What comes back is either bytes (base64 over the wire, capped) or the page the address
-   * really points at. "An address that ends in a file name is not a file" is the trap this
-   * refuses to fall into silently: an HTML answer is reported as an HTML answer, with the
-   * first of its text, so a model can see it was given a page.
+   * Two shapes, because a page's XHR usually answers JSON and a file answers bytes:
+   * `json: true` returns the body as text (capped), and otherwise the bytes are saved.
+   *
+   * **The cross-origin leg.** A file link is nearly always another host (a CDN), and a page
+   * may not read that answer (CORS). The same address is then fetched from Node with the
+   * browser's cookies for that host, the page as referrer and an ordinary user agent — which
+   * is what the signed link needs, and what makes a minted link worth minting.
    */
-  async function saveFrom(url, { timeoutMs = 120_000, maxBytes = 48 * 1024 * 1024 } = {}) {
+  async function saveFrom(url, { method = 'GET', form = null, xhr = false, json = false, timeoutMs = 120_000, maxBytes = 48 * 1024 * 1024 } = {}) {
     const p = await start();
     used();
+    const body = form && typeof form === 'object'
+      ? Object.entries(form).map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join('&')
+      : '';
     const got = await p.evaluate(`(async () => {
       const url = ${JSON.stringify(String(url))};
+      const init = { method: ${JSON.stringify(String(method || 'GET').toUpperCase())}, credentials: 'include', cache: 'no-store', headers: {} };
+      ${body ? `init.headers['content-type'] = 'application/x-www-form-urlencoded; charset=UTF-8';
+      init.body = ${JSON.stringify(body)};` : ''}
+      ${xhr ? `init.headers['X-Requested-With'] = 'XMLHttpRequest';` : ''}
       try {
-        const res = await fetch(url, { credentials: 'include', cache: 'no-store' });
+        const res = await fetch(url, init);
         const type = res.headers.get('content-type') || '';
         const disposition = res.headers.get('content-disposition') || '';
         const named = disposition.match(/filename\\*?=(?:UTF-8'')?"?([^";]+)/i);
+        const retry = res.headers.get('retry-after') || '';
+        if (${json ? 'true' : 'false'}) {
+          let text = '';
+          try { text = await res.text(); } catch { /* no body */ }
+          return { ok: res.ok, status: res.status, type, retry, text: text.slice(0, 12000), from: res.url || url };
+        }
         if (!res.ok) {
           let said = '';
           try { said = (await res.text()).replace(/<[^>]+>/g, ' ').replace(/\\s+/g, ' ').trim().slice(0, 240); } catch { /* no body to read */ }
-          return { ok: false, status: res.status, type, said };
+          return { ok: false, status: res.status, type, retry, said };
         }
         const buf = await res.arrayBuffer();
         const bytes = new Uint8Array(buf);
@@ -437,13 +506,97 @@ export function createBrowser({
           from: res.url || url,
           head: /</.test(head) ? head.replace(/\\s+/g, ' ').slice(0, 160) : '',
           b64: btoa(binary),
+          via: 'page',
         };
       } catch (err) {
-        return { ok: false, error: String((err && err.message) || err) };
+        // A cross-origin answer the page may not read is not a failure of the address.
+        return { ok: false, crossOrigin: true, error: String((err && err.message) || err) };
       }
     })()`, { timeoutMs });
     if (!got) throw new Error('the page did not answer the fetch');
-    return got;
+    if (!got.crossOrigin || json) return got;
+
+    // The CDN leg: from Node, with the session's cookies for that host and the page's referrer.
+    let pageUrl = '';
+    try { pageUrl = String(await p.evaluate('location.href')); } catch { pageUrl = ''; /* the page went away; the referrer is optional */ }
+    let cookie = '';
+    try {
+      const all = await browserConn.send('Storage.getCookies', {});
+      const host = new URL(String(url)).hostname;
+      cookie = (all?.cookies || [])
+        .filter((c) => host === c.domain || host.endsWith(`.${String(c.domain || '').replace(/^\./, '')}`))
+        .map((c) => `${c.name}=${c.value}`).join('; ');
+    } catch { cookie = ''; /* no cookies for that host is a valid request */ }
+    const headers = {
+      'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+    };
+    if (pageUrl) headers.referer = pageUrl;
+    if (cookie) headers.cookie = cookie;
+    try {
+      const res = await fetch(String(url), { headers, redirect: 'follow' });
+      const type = res.headers.get('content-type') || '';
+      if (!res.ok) {
+        return { ok: false, status: res.status, type, said: '', via: 'node' };
+      }
+      const buf = Buffer.from(await res.arrayBuffer());
+      if (buf.length > maxBytes) return { ok: false, tooBig: buf.length, type };
+      const disposition = res.headers.get('content-disposition') || '';
+      const named = disposition.match(/filename\*?=(?:UTF-8'')?"?([^";]+)/i);
+      const head = buf.subarray(0, 400).toString('utf8');
+      return {
+        ok: true,
+        status: res.status,
+        type,
+        size: buf.length,
+        name: named ? decodeURIComponent(named[1]) : '',
+        from: res.url || String(url),
+        head: /</.test(head) ? head.replace(/\s+/g, ' ').slice(0, 160) : '',
+        b64: buf.toString('base64'),
+        via: 'node',
+      };
+    } catch (err) {
+      return { ok: false, error: String((err && err.message) || err) };
+    }
+  }
+
+  /**
+   * What an element says about itself: its tag, its attributes, its text and where it is.
+   *
+   * A page states facts in attributes as often as in prose — `data-game-id`, `data-file-id`,
+   * `href`, `title` — and a model that can only read text cannot see them. That is what a
+   * page's own script reads before it makes its XHR, so the tool offers the same view
+   * (22 Nov: the file id was in an attribute and the download never started).
+   */
+  async function domQuery({ selector = '', attributes = true, limit = 12, timeoutMs = 20000 } = {}) {
+    const p = await start();
+    used();
+    const rows = await p.evaluate(`(() => {
+      const sel = ${JSON.stringify(String(selector || ''))};
+      if (!sel) return null;
+      const clean = (s) => String(s || '').replace(/\\s+/g, ' ').trim();
+      const out = [];
+      for (const el of document.querySelectorAll(sel)) {
+        const box = el.getBoundingClientRect();
+        const attrs = {};
+        if (${attributes ? 'true' : 'false'}) {
+          for (const a of el.attributes) {
+            if (!/^(data-|href$|src$|title$|aria-|name$|value$|type$|id$|class$)/i.test(a.name)) continue;
+            attrs[a.name] = String(a.value).slice(0, 160);
+            if (Object.keys(attrs).length >= 12) break;
+          }
+        }
+        out.push({
+          tag: el.tagName.toLowerCase(),
+          text: clean(el.innerText || el.value || '').slice(0, 160),
+          attrs,
+          at: box.width && box.height ? [Math.round(box.x + box.width / 2), Math.round(box.y + box.height / 2)] : null,
+          size: [Math.round(box.width), Math.round(box.height)],
+        });
+        if (out.length >= ${Math.max(1, Number(limit) || 12)}) break;
+      }
+      return out;
+    })()`, { timeoutMs });
+    return rows || [];
   }
 
   /** Where a saved file goes, under the project. Null when the server has no project. */
@@ -1237,5 +1390,5 @@ export function createBrowser({
   }, 30000);
   reaper.unref?.();
 
-  return { start, running, alive, pageState, goto, read, captureFull, click, type, press, wait, scroll, screenshot, watch, tabs, clearSite, hideWindow, stop, downloadFrom, waitForDownload, saveFrom, saveDir, downloads: downloadList, profile };
+  return { start, running, alive, pageState, goto, read, captureFull, click, type, press, wait, scroll, screenshot, watch, tabs, clearSite, hideWindow, stop, downloadFrom, waitForDownload, saveFrom, saveDir, domQuery, downloads: downloadList, profile };
 }

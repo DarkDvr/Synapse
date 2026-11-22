@@ -78,7 +78,7 @@ test('every tool has a description and a schema', () => {
     assert.ok(tool.description && tool.description.length > 20, `${tool.name} says what it does`);
     assert.equal(tool.inputSchema?.type, 'object', `${tool.name} has an object schema`);
   }
-  assert.equal(TOOLS.length, 14, 'the fourteen tools the brief names — save is the newest');
+  assert.equal(TOOLS.length, 15, 'the fifteen tools: save and dom are the newest');
 });
 
 // A timeout is the moment a model needs the most information: "did not happen" says
