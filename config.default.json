@@ -363,7 +363,9 @@
   },
   "browser": {
     "enabled": false,
+    "engine": "webview2",
     "profile": "",
+    "webview2Profile": "",
     "idleMinutes": 5,
     "sites": []
   }

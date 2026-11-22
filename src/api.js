@@ -900,31 +900,66 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
   // The site is recorded when the operator *closes* that window — their own "done" — and
   // the page is told, because the previous version left them guessing whether the login
   // had been kept (11 Nov).
+  // The sign-in window is always a visible browser on the configured engine. For WebView2
+  // it is the same off-screen host as a hand-off, but with its window shown; a model's
+  // off-screen host on the same profile is stopped first, because a profile opens once.
+  async function openSignInBrowser() {
+    const cfg = getConfig();
+    const engine = cfg.browser?.engine === 'edge' ? 'edge' : 'webview2';
+    const profile = engine === 'webview2'
+      ? String(cfg.browser?.webview2Profile || '').trim() || path.join(BROWSER_DIR, 'webview2')
+      : String(cfg.browser?.profile || '').trim() || path.join(BROWSER_DIR, 'profile');
+    const { createBrowser } = await import('./browser/browser.js');
+    let host = null;
+    if (engine === 'webview2') {
+      const { hostBinary, hostFiles, readHostState, stopHostProcess } = await import('./browser/webview2.js');
+      const exe = hostBinary();
+      if (!exe) throw new Error('the browser host is not built — run shell\\build.ps1');
+      const files = hostFiles({ profile });
+      const state = readHostState(files.stateFile);
+      if (state?.state === 'ready' && state.pid) {
+        await stopHostProcess({ pid: state.pid, hwnd: state.hwnd, stateFile: files.stateFile, log: app });
+      }
+      host = { exe, stateFile: files.stateFile, downloadsFile: files.downloadsFile, visible: true };
+    }
+    const browser = createBrowser({
+      profile,
+      hiddenDesktop: false,
+      actionLayer: false,
+      host,
+      log: app,
+    });
+    return { browser, profile };
+  }
+
   async function browserSignin(url) {
     const target = String(url || '').trim();
     if (!target) return { ok: false, error: 'there is no address to open' };
     const cfg = getConfig();
-    const profile = String(cfg.browser?.profile || '').trim() || `${BROWSER_DIR}\\profile`;
     // The operator's own switch, beside the screen sounds: one chime, or none.
     const sound = cfg.notify?.browserSounds === false ? '' : undefined;
+    let opened = null;
     try {
+      opened = await openSignInBrowser();
       const { askToSignIn } = await import('./browser/signin.js');
       const { addSite } = await import('./browser/sites.js');
       const answer = await askToSignIn({
         url: target,
-        profile,
+        profile: opened.profile,
+        browser: opened.browser,
+        autoHide: false,
         log: app,
         sound,
         // The watcher inside askToSignIn has *already closed the window* by the time this
         // fires: the page stopped asking to be signed into, so the session is real and the
         // operator has nothing left to do (11 Nov).
-        onSignedIn: async (opened) => {
-          const host = String(opened || '').replace(/^[a-z]+:\/\//i, '').split(/[/?#]/)[0].toLowerCase();
+        onSignedIn: async (signedUrl) => {
+          const host = String(signedUrl || '').replace(/^[a-z]+:\/\//i, '').split(/[/?#]/)[0].toLowerCase();
           const next = getConfig();
-          next.browser = { ...next.browser, sites: addSite(next.browser?.sites, host, Date.now(), opened) };
+          next.browser = { ...next.browser, sites: addSite(next.browser?.sites, host, Date.now(), signedUrl) };
           applyConfig(next);
-          app.info(`SynaBrowse: ${host} signed in; the window was hidden and the session kept`);
-          notify?.({ kind: 'browser-session-kept', host, url: opened, ts: Date.now() });
+          app.info(`SynaBrowse: ${host} signed in; the window was closed and the session kept`);
+          notify?.({ kind: 'browser-session-kept', host, url: signedUrl, ts: Date.now() });
         },
       });
       if (answer.ok) app.info(`SynaBrowse: sign-in window asked for ${answer.url}`);
@@ -932,6 +967,8 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
       return answer;
     } catch (err) {
       return { ok: false, error: err.message };
+    } finally {
+      try { await opened?.browser?.stop?.(); } catch { /* already gone */ }
     }
   }
 
@@ -975,40 +1012,46 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
     if (cardOnly) {
       return { ok: true, allowed: true, cardOnly: true, url: target, host: String(host || '') };
     }
-    const cfg = getConfig();
-    const profile = String(cfg.browser?.profile || '').trim() || `${BROWSER_DIR}\\profile`;
     const { askToSignIn } = await import('./browser/signin.js');
     const { addSite } = await import('./browser/sites.js');
-    const outcome = await new Promise((resolve) => {
-      askToSignIn({
-        url: target,
-        profile,
-        log: app,
-        restore: true,
-        focus: true,
-        sound: `${WEB_DIR}\\sounds\\hollow.wav`,
-        onSignedIn: (finalUrl) => {
-          const signedHost = String(finalUrl || '').replace(/^[a-z]+:\/\//i, '').split(/[/?#]/)[0].toLowerCase();
-          const next = getConfig();
-          applyConfig({ ...next, browser: { ...next.browser, sites: addSite(next.browser?.sites, signedHost, Date.now(), finalUrl) } });
-          app.info(`SynaBrowse: ${signedHost} signed in; the window was hidden and the session kept`);
-          notify?.({ kind: 'browser-session-kept', host: signedHost, url: finalUrl, ts: Date.now() });
-          resolve({ signedIn: true, host: signedHost, url: finalUrl });
-        },
-        onGone: (why) => resolve({ signedIn: false, why }),
-      }).catch((err) => resolve({ signedIn: false, why: err.message }));
-    });
-    if (!outcome.signedIn) {
-      return {
-        ok: false,
-        allowed: true,
-        signedIn: false,
-        reason: outcome.why === 'closed'
-          ? 'The operator closed the sign-in window without a session; treat this as a refusal.'
-          : 'No session appeared in the sign-in window; treat this as a refusal.',
-      };
+    let opened = null;
+    try {
+      opened = await openSignInBrowser();
+      const outcome = await new Promise((resolve) => {
+        askToSignIn({
+          url: target,
+          profile: opened.profile,
+          browser: opened.browser,
+          autoHide: false,
+          log: app,
+          restore: true,
+          focus: true,
+          sound: `${WEB_DIR}\\sounds\\hollow.wav`,
+          onSignedIn: (finalUrl) => {
+            const signedHost = String(finalUrl || '').replace(/^[a-z]+:\/\//i, '').split(/[/?#]/)[0].toLowerCase();
+            const next = getConfig();
+            applyConfig({ ...next, browser: { ...next.browser, sites: addSite(next.browser?.sites, signedHost, Date.now(), finalUrl) } });
+            app.info(`SynaBrowse: ${signedHost} signed in; the window was closed and the session kept`);
+            notify?.({ kind: 'browser-session-kept', host: signedHost, url: finalUrl, ts: Date.now() });
+            resolve({ signedIn: true, host: signedHost, url: finalUrl });
+          },
+          onGone: (why) => resolve({ signedIn: false, why }),
+        }).catch((err) => resolve({ signedIn: false, why: err.message }));
+      });
+      if (!outcome.signedIn) {
+        return {
+          ok: false,
+          allowed: true,
+          signedIn: false,
+          reason: outcome.why === 'closed'
+            ? 'The operator closed the sign-in window without a session; treat this as a refusal.'
+            : 'No session appeared in the sign-in window; treat this as a refusal.',
+        };
+      }
+      return { ok: true, allowed: true, signedIn: true, host: outcome.host, url: outcome.url };
+    } finally {
+      try { await opened?.browser?.stop?.(); } catch { /* already gone */ }
     }
-    return { ok: true, allowed: true, signedIn: true, host: outcome.host, url: outcome.url };
   }
 
   /** The watcher saw the page stop asking for a sign-in: record the site and say so. */

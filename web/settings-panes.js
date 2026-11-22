@@ -649,9 +649,15 @@ function settingsBrowser(c) {
       `<label class="set-check" title="A browser the harness owns, with its own profile. Off means the tools do not exist for a model at all.">` +
         `<input data-path="browser.enabled" type="checkbox" ${c.browser?.enabled !== false ? 'checked' : ''} />` +
         `<span>Let models browse with SynaBrowse</span></label>` +
-        setField(c, 'Profile folder (blank = data\\browser\\profile)', 'browser.profile', {
+        setSelect(c, 'Browser engine', 'browser.engine', [
+          { v: 'webview2', l: 'WebView2 (built in)' },
+          { v: 'edge', l: 'Edge (fallback)' },
+        ], {
+          hint: 'WebView2 is the app’s own off-screen browser, with no browser chrome and no downloads panel. Edge is the old hidden-desktop fallback.',
+        }) +
+        setField(c, 'Profile folder (blank = data\\browser\\webview2)', 'browser.webview2Profile', {
           wide: true,
-          hint: 'Where the browser keeps its own cookies and logins. Never the operator’s Edge profile, and never Brave. Blank uses data\\browser\\profile.',
+          hint: 'Where the WebView2 browser keeps its own cookies and logins. Never the operator’s Edge profile, and never Brave. Blank uses data\\browser\\webview2. The Edge fallback uses browser.profile.',
         }) +
         setField(c, 'Close the browser after (minutes with no browsing)', 'browser.idleMinutes', {
           type: 'number',

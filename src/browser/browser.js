@@ -1,15 +1,10 @@
 // SynaBrowse: a browser the harness owns.
 //
-// A real Edge — its own profile under `data\browser\profile`, never the operator's and
-// never Brave — launched on a **Windows desktop of its own** (22 Nov). The window is
-// headed, so it renders and keeps the fingerprint that clears a bot check; it is on
-// another desktop, so it is never on the operator's screen and never flashes a taskbar
-// button. `hidden-desktop.ps1` creates the desktop and keeps the browser there; if the
-// desktop cannot be created, `launchVisible` is the old off-screen fallback.
-//
-// The page is driven through CDP, and the action layer is agent-browser (`agent.js`):
-// named controls with refs, not coordinates. Both are on purpose — a hidden window that
-// a model can only see as a picture is a model doing geometry.
+// The default engine is the WebView2 host (`shell/SynaBrowseHost`): a separate WPF process
+// hosting the app's own Chromium runtime, off-screen, with no browser chrome. `createBrowser`
+// in host mode launches it, attaches CDP and agent-browser, and reads its download JSONL.
+// The Edge path below — its own profile, a Windows desktop of its own — is the fallback
+// (`browser.engine: "edge"`) and is still the code that ran before 1.77.0.
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
@@ -18,6 +13,7 @@ import { connect, connectBrowser, waitForPort, readPort } from './cdp.js';
 import { safeDownloadName, uniqueDownloadPath, formatBytes } from './downloads.js';
 import { screenState, restoreFocus, hideBrowserWindow } from './handoff.js';
 import { createAgent } from './agent.js';
+import { launchHost, hostBinary, readHostState, hostAlive, stopHostProcess, downloadRecord } from './webview2.js';
 
 /** The launcher that creates a desktop of its own; see the script's own note. */
 const HIDDEN_DESKTOP_SCRIPT = fileURLToPath(new URL('./hidden-desktop.ps1', import.meta.url));
@@ -347,6 +343,9 @@ export function createBrowser({
   idleMs = 5 * 60 * 1000,
   downloadDir = null,
   onDownload = null,
+  // WebView2 host mode. The host is a separate WPF process; `profile` is its user-data
+  // folder, `host.stateFile`/`host.downloadsFile` are the two files it talks through.
+  host = null,
 } = {}) {
   let child = null;
   let page = null;
@@ -366,6 +365,11 @@ export function createBrowser({
   // guid -> one download's record. Kept after completion so a page reload mid-download
   // still has something to draw, and pruned on access rather than by another timer.
   const downloads = new Map();
+  // WebView2 host mode: the process, and the JSONL download log it appends.
+  let hostChild = null;
+  let hostDownloadsTimer = null;
+  let hostDownloadOffset = 0;
+  let hostDownloadTail = '';
 
   /** Every action says "still in use", so the idle clock follows the work, not the clock. */
   const used = () => { lastUsed = Date.now(); };
@@ -467,6 +471,10 @@ export function createBrowser({
   /** Set the download folder on every start/attach: the profile is shared, the folder is
    *  this project's, and another project's server may have set it last. */
   async function ensureDownloadBehavior() {
+    if (host) {
+      ensureHostDownloads();
+      return;
+    }
     if (!downloadDir || !page) return;
     fs.mkdirSync(downloadDir, { recursive: true });
     if (!browserConn || browserPort !== page.port) {
@@ -514,6 +522,12 @@ export function createBrowser({
     const p = await start();
     used();
     const since = Date.now();
+    if (host) {
+      // The host's DownloadStarting writes the file; navigation aborts as a download,
+      // exactly as it does on Edge, so the event is the answer and not the error.
+      try { await p.send('Page.navigate', { url }); } catch { /* the download is the answer */ }
+      return waitForDownload({ since, graceMs: 4000, timeoutMs });
+    }
     try {
       await p.send('Page.navigate', { url });
     } catch {
@@ -526,6 +540,55 @@ export function createBrowser({
     pruneDownloads();
     return [...downloads.values()].sort((a, b) => a.startedAt - b.startedAt);
   };
+
+  // ── WebView2 host downloads ─────────────────────────────────────
+  // The host owns the bytes and appends one JSON line per download event. The provider
+  // reads only the new lines, so progress is cheap and a restart is not a re-read.
+  function applyHostDownload(event) {
+    const rec = downloadRecord(event);
+    if (!rec) return;
+    downloads.set(rec.id, rec);
+    emitDownload(rec);
+  }
+
+  function ensureHostDownloads() {
+    if (!host || !downloadDir || hostDownloadsTimer) return;
+    fs.mkdirSync(downloadDir, { recursive: true });
+    hostDownloadOffset = 0;
+    hostDownloadTail = '';
+    const tick = () => {
+      let fd = null;
+      try {
+        const stat = fs.statSync(host.downloadsFile);
+        if (stat.size < hostDownloadOffset) {
+          hostDownloadOffset = 0;
+          hostDownloadTail = '';
+        }
+        if (stat.size === hostDownloadOffset) return;
+        fd = fs.openSync(host.downloadsFile, 'r');
+        const length = stat.size - hostDownloadOffset;
+        const buffer = Buffer.alloc(length);
+        fs.readSync(fd, buffer, 0, length, hostDownloadOffset);
+        hostDownloadOffset = stat.size;
+        hostDownloadTail += buffer.toString('utf8');
+        const lines = hostDownloadTail.split(/\r?\n/);
+        hostDownloadTail = lines.pop() || '';
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          try { applyHostDownload(JSON.parse(line)); } catch { /* a partial line from a crash */ }
+        }
+      } catch { /* the host has not written yet */ }
+      finally { if (fd !== null) { try { fs.closeSync(fd); } catch { /* gone */ } } }
+    };
+    hostDownloadsTimer = setInterval(tick, 200);
+    hostDownloadsTimer.unref?.();
+    tick();
+  }
+
+  function stopHostDownloads() {
+    if (hostDownloadsTimer) clearInterval(hostDownloadsTimer);
+    hostDownloadsTimer = null;
+  }
 
   /**
    * A request made **through the page**, and the bytes or the body it answered.
@@ -814,8 +877,94 @@ export function createBrowser({
     return port;
   }
 
+  /**
+   * The WebView2 host: a separate WPF process, off-screen by default. It can attach to a
+   * host left by a previous server (same state file and a live CDP port) or start one.
+   */
+  async function startHost() {
+    if (page && !(await alive())) {
+      log?.info?.('browser: the WebView2 page is gone — starting again');
+      page = null;
+      agent = null;
+      hostChild = null;
+    }
+    if (page) {
+      ensureHostDownloads();
+      return page;
+    }
+    if (starting) return starting;
+    starting = (async () => {
+      const existing = readHostState(host.stateFile);
+      let port = 0;
+      let reused = false;
+      if (existing?.state === 'ready' && existing.port && await hostAlive(existing.port)) {
+        port = Number(existing.port);
+        reused = true;
+        attached = true;
+      } else {
+        // A stale ready state can name a host whose port is gone; end that pid before the
+        // profile is opened again. The pid is the state's, never a process name.
+        if (existing?.state === 'ready' && existing.pid) {
+          await stopHostProcess({ pid: existing.pid, stateFile: host.stateFile, log });
+        }
+        const exe = host.exe || hostBinary({ root: host.root });
+        const launched = await launchHost({
+          exe,
+          profile,
+          downloadDir,
+          stateFile: host.stateFile,
+          downloadsFile: host.downloadsFile,
+          visible: host.visible === true,
+          parentPid: process.pid,
+          width,
+          height,
+          log,
+        });
+        hostChild = launched.child;
+        port = launched.port;
+        attached = false;
+      }
+      const conn = await connect(port);
+      page = { ...conn, port, profile };
+      await conn.send('Page.enable');
+      await conn.send('Runtime.enable');
+      try { await conn.send('Page.bringToFront'); } catch { /* an off-screen window may refuse */ }
+      try { await conn.send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false }); } catch { /* fine */ }
+      agent = actionLayer ? createAgent({ port, log, session: `synapse-${port}` }) : null;
+      if (actionLayer && !agent.available) note('browser: agent-browser is not installed — run vendor-agent-browser.ps1; snapshot and ref clicks will say so');
+      ensureHostDownloads();
+      note(`browser: ${reused ? 'attached to' : 'started'} the WebView2 host on port ${port}`);
+      return page;
+    })();
+    try {
+      return await starting;
+    } finally {
+      starting = null;
+    }
+  }
+
+  async function stopHostMode() {
+    try { await agent?.close?.(); } catch { /* daemon already gone */ }
+    agent = null;
+    stopHostDownloads();
+    try { browserConn?.close?.(); } catch { /* gone */ }
+    browserConn = null;
+    browserPort = null;
+    const pid = hostChild?.pid || readHostState(host.stateFile)?.pid;
+    const hwnd = readHostState(host.stateFile)?.hwnd;
+    if (page) {
+      try { page.close(); } catch { /* fine */ }
+      page = null;
+    }
+    hostChild = null;
+    await stopHostProcess({ pid, hwnd, stateFile: host.stateFile, log });
+    attached = false;
+    return 0;
+  }
+
   /** Start the browser if it is not running, and attach to its page. */
   async function start() {
+    if (host) return startHost();
     // The page we hold may be gone: the operator closed the window after signing in, or
     // the idle reaper closed it from another process. A dead page is not an error to
     // report — it is a browser to open again (11 Nov).
@@ -1547,6 +1696,10 @@ export function createBrowser({
    * reaper closes the browser when nobody needs it.
    */
   async function hideWindow() {
+    // The WebView2 host is out of process and the operator closes it when the sign-in is
+    // done. Hiding its WPF window from here would need a window handle; the close is the
+    // end of the hand-off either way.
+    if (host) return false;
     const hidden = await hideBrowserWindow({ profile }).catch(() => null);
     return Boolean(hidden && hidden.state === 'hidden');
   }
@@ -1575,6 +1728,7 @@ export function createBrowser({
 
   /** Close the browser: the profile and its session stay. */
   async function stop() {
+    if (host) return stopHostMode();
     const exited = [];
     // The action daemon first: it holds a CDP connection to the page that is about to go.
     try { await agent?.close?.(); } catch { /* daemon already gone */ }

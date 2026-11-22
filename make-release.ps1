@@ -22,7 +22,7 @@ if (-not $version) { throw 'package.json has no version' }
 $required = @(
     'Synapse.exe', 'package.json', 'update-apply.ps1', 'update-apply.mjs',
     'config.default.json', 'LICENSE', 'NOTICE', 'THIRD-PARTY.md',
-    'src', 'web', 'skills', 'bin\node', 'bin\opencode', 'bin\agent-browser'
+    'src', 'web', 'skills', 'bin\node', 'bin\opencode', 'bin\agent-browser', 'bin\browser-host'
 )
 foreach ($rel in $required) {
     if (-not (Test-Path -LiteralPath (Join-Path $root $rel))) { throw "missing $rel - build it first (.\shell\build.ps1)" }
@@ -61,11 +61,17 @@ robocopy (Join-Path $root 'bin\opencode') (Join-Path $stage 'bin\opencode') /E `
     /XF '*.bak' /NFL /NDL /NJH /NJS /NP | Out-Null
 if ($LASTEXITCODE -ge 8) { throw "robocopy failed copying bin\opencode ($LASTEXITCODE)" }
 
-# The action layer. A native binary, not an npm package; it attaches to the Edge the
+# The action layer. A native binary, not an npm package; it attaches to the browser the
 # harness launches, and bin\ is how it travels.
 robocopy (Join-Path $root 'bin\agent-browser') (Join-Path $stage 'bin\agent-browser') /E `
     /XF '*.bak' /NFL /NDL /NJH /NJS /NP | Out-Null
 if ($LASTEXITCODE -ge 8) { throw "robocopy failed copying bin\agent-browser ($LASTEXITCODE)" }
+
+# The WebView2 browser host. A separate process because WebView2 cannot live inside the
+# single-file Synapse.exe; it uses the runtime the app's own window already requires.
+robocopy (Join-Path $root 'bin\browser-host') (Join-Path $stage 'bin\browser-host') /E `
+    /XF '*.bak' /NFL /NDL /NJH /NJS /NP | Out-Null
+if ($LASTEXITCODE -ge 8) { throw "robocopy failed copying bin\browser-host ($LASTEXITCODE)" }
 
 # The private Git, when this machine has one. It is optional: a fresh PC can fetch
 # it on first launch, but carrying it means the zip is the whole toolchain.

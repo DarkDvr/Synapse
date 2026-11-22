@@ -53,6 +53,22 @@ try {
   $size = (Get-Item (Join-Path $root 'Synapse.exe')).Length / 1MB
   Write-Host ''
   Write-Host ("{0}  {1:N1} MB" -f (Join-Path $root 'Synapse.exe'), $size)
+
+  # The browser is its own process: a WebView2 host cannot live inside the single-file
+  # Synapse.exe. It is framework-dependent like the app, one file, and lives in bin\.
+  $hostProject = Join-Path $here 'SynaBrowseHost\SynaBrowseHost.csproj'
+  $hostOut = Join-Path $root 'bin\browser-host'
+  if (Test-Path $hostOut) { Remove-Item $hostOut -Recurse -Force }
+  New-Item -ItemType Directory -Force -Path $hostOut | Out-Null
+  Write-Host "publishing SynaBrowseHost.exe to $hostOut..."
+  dotnet publish $hostProject -c Release -r win-x64 --self-contained false `
+    -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true `
+    -o $hostOut | Out-Host
+  if ($LASTEXITCODE -ne 0) { throw "the browser host publish failed with $LASTEXITCODE" }
+  Get-ChildItem $hostOut -File -Filter '*.xml' | Remove-Item -Force
+  if (-not (Test-Path (Join-Path $hostOut 'SynaBrowseHost.exe'))) { throw 'the browser host exe was not published' }
+  Write-Host ''
+  Write-Host ("{0}  {1:N1} MB" -f (Join-Path $hostOut 'SynaBrowseHost.exe'), ((Get-Item (Join-Path $hostOut 'SynaBrowseHost.exe')).Length / 1MB))
   Write-Host 'Launch it. Nothing else starts the app.'
   Write-Host "Check the window with: node `"$root\skills\app-check\bin\app-check.mjs`" --exe `"$root\Synapse.exe`""
 }

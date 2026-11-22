@@ -2,7 +2,8 @@
 
 A browser Synapse owns, on its own profile, driven over the Chrome DevTools Protocol.
 Models get it as a set of tools; the operator sees one window, only when a person is
-genuinely needed.
+genuinely needed. Since **1.77.0** the default engine is a WebView2 host, off-screen;
+Edge with its hidden desktop remains the fallback (`browser.engine: "edge"`).
 
 ## Why a browser at all
 
@@ -12,6 +13,37 @@ sign-in** (a deep route answers "Something went wrong" until the profile has the
 session). Measured 11 Nov: hidden headed Edge cleared the challenge in **2.6 s**; on
 screen it took 14 s and then showed an error page; headless never cleared it in 30 s.
 That is why the browser is headed and off-screen rather than headless.
+
+## The engine: the WebView2 host (1.77.0)
+
+`shell/SynaBrowseHost` is a separate WPF exe (`bin\browser-host\SynaBrowseHost.exe`) that
+owns a window and a WebView2 controller. It is the app's own Chromium runtime, with no
+browser chrome: no downloads panel, no first-run or crash bubbles, no Edge taskbar button.
+`src/browser/webview2.js` launches it and reads its state and download JSONL;
+`createBrowser({ host })` attaches the CDP page and agent-browser to it.
+
+- **Off-screen by default**: the WPF window at -32000, `ShowInTaskbar=false`. It cleared
+  Nexus's Cloudflare in about 12–15 s with `navigator.webdriver=false`, and the agent-browser
+  saw the page and its refs (including a closed shadow-root button).
+- **Downloads are the host's**: `DownloadStarting` sets the project path; the host appends
+  `starting`/`progress`/`completed` to `data\browser\webview2-downloads.jsonl`, which the
+  provider turns into the chat records. Do **not** call `Browser.setDownloadBehavior`: on
+  WebView2 it is accepted and then cancels the host's download (measured 22 Nov).
+- **The first download fails** (`FileFailed`); the host absorbs it with a tiny data-URL
+  warm-up in `%TEMP%` at startup, deleted afterwards. `DefaultDownloadFolderPath` must be
+  set before the first download or `DownloadStarting` never fires.
+- **Close by HWND**: the host publishes its window handle in the state; the provider posts
+  `WM_CLOSE` so the Closed handler disposes WebView2 and releases the profile. A forced
+  tree kill is the fallback, by the pid in the state.
+- **The profile is `data\browser\webview2`**. A fresh profile is a guest on Nexus: one
+  visible sign-in (Settings → Browser, or a model hand-off) seeds it, then the `sites`
+  table and the profile keep it. The Edge profile is not shared.
+- **Edge is the fallback**: `browser.engine: "edge"` uses the old hidden-desktop path and
+  `data\browser\profile`. The two are one browser at a time, never both.
+- **The hidden desktop is a .NET dead end**: WPF, WinForms and even a bare .NET console
+  all exit `0xC0000142` on a `CreateDesktop` desktop here; Edge (native) runs there. The
+  WebView2 host therefore uses the off-screen window. A native C++ WebView2 host would be
+  needed if the hidden desktop itself must be kept.
 
 ## The profile
 

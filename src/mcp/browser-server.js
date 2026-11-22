@@ -20,6 +20,7 @@ import { DATA_DIR, WEB_DIR, PROJECTS_ROOT } from '../paths.js';
 import { artifactDir } from '../browser/artifacts.js';
 import { browserDownloadsPanel, clickSummary, createBrowser, findEdge, savedAnswer, requestAnswer, domAnswer } from '../browser/browser.js';
 import { askToSignIn } from '../browser/signin.js';
+import { hostFiles, hostBinary } from '../browser/webview2.js';
 import { formatBytes, safeDownloadName, uniqueDownloadPath } from '../browser/downloads.js';
 import { checkUrl, hostOf, localPageAllowed } from '../browser/allow.js';
 import { askOperator } from '../browser/handoff.js';
@@ -46,9 +47,25 @@ function settings() {
     raw = {};
   }
   const b = raw?.browser || {};
+  const wantsEdge = b.engine === 'edge';
+  const host = hostBinary();
+  const engine = wantsEdge || !host ? 'edge' : 'webview2';
+  if (!wantsEdge && !host) process.stderr.write('browser: the WebView2 host is not built; using Edge\n');
+  const profile = engine === 'edge'
+    ? String(b.profile || '').trim() || path.join(DATA_DIR, 'browser', 'profile')
+    : String(b.webview2Profile || '').trim() || path.join(DATA_DIR, 'browser', 'webview2');
+  const files = hostFiles({ profile });
   return {
     enabled: b.enabled === true,
-    profile: String(b.profile || '').trim() || path.join(DATA_DIR, 'browser', 'profile'),
+    engine,
+    profile,
+    // The host files live beside the profile, not inside the WebView2 user-data folder.
+    host: {
+      exe: host,
+      stateFile: files.stateFile,
+      downloadsFile: files.downloadsFile,
+      visible: false,
+    },
     // One chime when the window is put on the second monitor; the operator's switch,
     // beside the screen sounds in Settings > General.
     sounds: raw?.notify?.browserSounds !== false,
@@ -114,6 +131,7 @@ const browser = createBrowser({
   hiddenDesktop: cfg.hiddenDesktop,
   downloadDir: DOWNLOADS,
   onDownload: reportDownload,
+  host: cfg.engine === 'webview2' ? cfg.host : null,
   log: { info: (m) => process.stderr.write(`${m}\n`) },
 });
 // The visible window a hand-off is using, if one is open. On stdin end both browsers are
@@ -695,6 +713,9 @@ async function handle(msg) {
                 profile: cfg.profile,
                 hiddenDesktop: false,
                 actionLayer: false,
+                downloadDir: DOWNLOADS,
+                onDownload: reportDownload,
+                host: cfg.engine === 'webview2' ? { ...cfg.host, visible: true } : null,
                 log: { info: (m) => process.stderr.write(`${m}\n`) },
               });
               handoffBrowser = visible;

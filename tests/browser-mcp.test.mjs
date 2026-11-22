@@ -90,7 +90,7 @@ test('the server answers the protocol and its tools work on a local page', async
   });
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   const origin = `http://127.0.0.1:${server.address().port}`;
-  fs.writeFileSync(config, JSON.stringify({ browser: { enabled: true, profile, allow: ['127.0.0.1'] } }));
+  fs.writeFileSync(config, JSON.stringify({ browser: { enabled: true, engine: 'edge', profile, allow: ['127.0.0.1'] } }));
 
   const child = spawn(process.execPath, [SERVER], {
     env: { ...process.env, SYNAPSE_BROWSER_CONFIG: config, SYNAPSE_BROWSER_HIDDEN_DESKTOP: '0' },
