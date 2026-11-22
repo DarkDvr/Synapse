@@ -36,6 +36,15 @@ test('a page is signed in when it asks for no password and is not on a sign-in r
   assert.equal(signedInNow(null), false);
 });
 
+test('a guest page with a visible Log in link is not signed in', () => {
+  // Nexus's homepage: no password box, not a login route, still a guest (22 Nov).
+  assert.equal(signedInNow({ url: 'https://www.nexusmods.com/', passwords: 0, ready: 'complete', signInLink: true }), false);
+});
+
+test('a bot check is not a session', () => {
+  assert.equal(signedInNow({ url: 'https://www.nexusmods.com/', passwords: 0, ready: 'complete', wall: true }), false);
+});
+
 test('the window is closed once the sign-in lands, and the caller is told once', async () => {
   const browser = fakeBrowser([LOGIN, LOGIN, SIGNED, SIGNED, SIGNED]);
   let signedIn = 0;

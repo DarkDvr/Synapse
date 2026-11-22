@@ -1148,19 +1148,37 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
     const key = String(host || '').trim().toLowerCase();
     if (!key) return { ok: false, error: 'there is no site to forget' };
     const cfg = getConfig();
+    const engine = cfg.browser?.engine === 'edge' ? 'edge' : 'webview2';
+    const profile = engine === 'webview2'
+      ? String(cfg.browser?.webview2Profile || '').trim() || path.join(BROWSER_DIR, 'webview2')
+      : String(cfg.browser?.profile || '').trim() || path.join(BROWSER_DIR, 'profile');
     const { forgetSite } = await import('./browser/sites.js');
     const next = { ...cfg, browser: { ...cfg.browser, sites: forgetSite(cfg.browser?.sites, key) } };
     applyConfig(next);
     // Deleting is not reading: the browser lists its own cookies by name and domain to
     // delete them, and Synapse never stores, logs or returns a value. It must clear the
     // **parent domain** too, or a site's session survives the row (measured 11 Nov:
-    // clearing the origin left seven cookies on `.reddit.com`).
+    // clearing the origin left seven cookies on `.reddit.com`). Clear the profile of the
+    // engine in use, not the other one: forgetting a WebView2 site must not wipe Edge's.
     try {
       const { createBrowser } = await import('./browser/browser.js');
-      const profile = String(cfg.browser?.profile || '').trim() || `${BROWSER_DIR}\\profile`;
-      const browser = createBrowser({ profile });
+      let browserHost = null;
+      if (engine === 'webview2') {
+        const { hostBinary, hostFiles, readHostState, stopHostProcess } = await import('./browser/webview2.js');
+        const exe = hostBinary();
+        if (exe) {
+          const files = hostFiles({ profile });
+          const state = readHostState(files.stateFile);
+          if (state?.state === 'ready' && state.pid) {
+            await stopHostProcess({ pid: state.pid, hwnd: state.hwnd, stateFile: files.stateFile, log: app });
+          }
+          browserHost = { exe, ...files, visible: false };
+        }
+      }
+      const browser = createBrowser({ profile, hiddenDesktop: false, actionLayer: false, host: browserHost });
       const removed = await browser.clearSite(key);
-      app.info(`SynaBrowse: forgot ${key} — ${removed} cookie(s) and its storage are gone from the profile`);
+      await browser.stop();
+      app.info(`SynaBrowse: forgot ${key} — ${removed} cookie(s) and its storage are gone from the ${engine} profile`);
     } catch (err) {
       app.warn(`SynaBrowse: forgot ${key} in the list, but could not clear its data: ${err.message}`);
     }

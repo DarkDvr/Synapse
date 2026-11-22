@@ -1643,7 +1643,18 @@ export function createBrowser({
   async function pageState() {
     if (!page) throw new Error('the window is gone');
     return page.evaluate(
-      "(() => ({ url: location.href, passwords: document.querySelectorAll('input[type=password]').length, ready: document.readyState }))()",
+      `(() => {
+        const text = document.body ? String(document.body.innerText || '').slice(0, 3000) : '';
+        const links = [...document.querySelectorAll('a,button')].slice(0, 400);
+        const signInLink = links.some((el) => {
+          const label = String(el.innerText || el.textContent || el.getAttribute('aria-label') || '').trim();
+          const href = String(el.getAttribute('href') || '');
+          return /^(log ?in|sign ?in)$/i.test(label) || /(?:^|\\/)(?:log-?in|sign-?in|signin|auth)(?:[/?#]|$)/i.test(href);
+        });
+        const wall = /just a moment|checking your browser|performing security verification|verify you are human|attention required/i.test(text)
+          || /just a moment/i.test(document.title);
+        return { url: location.href, passwords: document.querySelectorAll('input[type=password]').length, ready: document.readyState, signInLink, wall };
+      })()`,
       { timeoutMs: 5000 },
     );
   }

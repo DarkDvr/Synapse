@@ -20,6 +20,10 @@ import { looksUnconfirmed } from './signin.js';
 export function signedInNow(state) {
   if (!state || !state.url) return false;
   if (state.ready && state.ready !== 'complete') return false;
+  // A page with a visible "Log in"/"Sign in" control is still a guest page, even when it
+  // has no password box and its address is not a login route (Nexus's homepage, 22 Nov).
+  // A bot check is not a session either; the operator must clear it first.
+  if (state.signInLink || state.wall) return false;
   return !looksUnconfirmed(state.url, state.passwords);
 }
 
