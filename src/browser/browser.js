@@ -1785,5 +1785,5 @@ export function createBrowser({
   }, 30000);
   reaper.unref?.();
 
-  return { start, running, alive, pageState, goto, read, captureFull, snapshot, click, type, press, wait, scroll, screenshot, watch, tabs, clearSite, hideWindow, stop, downloadFrom, waitForDownload, saveFrom, saveDir, domQuery, downloads: downloadList, profile, isAttached: () => attached };
+  return { start, running, alive, pageState, goto, read, captureFull, snapshot, click, type, press, wait, scroll, screenshot, watch, tabs, clearSite, hideWindow, stop, downloadFrom, waitForDownload, saveFrom, saveDir, domQuery, downloads: downloadList, profile, hostMode: Boolean(host), isAttached: () => attached };
 }

@@ -9,7 +9,7 @@ It is **not** a wrapper around the OpenCode desktop app. Synapse drives the genu
 today that engine, tomorrow anything that implements the contract in
 `src\engines\base.js`.
 
-**Version 1.77.0** - Windows 10/11, x64. The zip carries Node, Git, the engine, agent-browser and the fonts.
+**Version 1.77.1** - Windows 10/11, x64. The zip carries Node, Git, the engine, agent-browser and the fonts.
 
 **Licence:** AGPL-3.0-only, Copyright (C) 2026 DarkDvr — see `LICENSE`, `NOTICE`, `THIRD-PARTY.md`.
 

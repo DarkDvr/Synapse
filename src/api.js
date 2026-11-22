@@ -941,6 +941,11 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
     let opened = null;
     try {
       opened = await openSignInBrowser();
+      // The request stays open until the operator closes the window. The sign-in watcher
+      // records the site the moment the page stops asking; the close is the operator's
+      // "done", and only then may the host be stopped and the WebView2 profile released.
+      let settle = null;
+      const done = new Promise((resolve) => { settle = resolve; });
       const { askToSignIn } = await import('./browser/signin.js');
       const { addSite } = await import('./browser/sites.js');
       const answer = await askToSignIn({
@@ -950,9 +955,8 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
         autoHide: false,
         log: app,
         sound,
-        // The watcher inside askToSignIn has *already closed the window* by the time this
-        // fires: the page stopped asking to be signed into, so the session is real and the
-        // operator has nothing left to do (11 Nov).
+        // The watcher inside askToSignIn has *already recorded the site* by the time this
+        // fires: the page stopped asking to be signed into, so the session is real.
         onSignedIn: async (signedUrl) => {
           const host = String(signedUrl || '').replace(/^[a-z]+:\/\//i, '').split(/[/?#]/)[0].toLowerCase();
           const next = getConfig();
@@ -961,7 +965,9 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
           app.info(`SynaBrowse: ${host} signed in; the window was closed and the session kept`);
           notify?.({ kind: 'browser-session-kept', host, url: signedUrl, ts: Date.now() });
         },
+        onGone: (why) => settle(String(why || 'closed')),
       });
+      if (answer.ok) await done;
       if (answer.ok) app.info(`SynaBrowse: sign-in window asked for ${answer.url}`);
       else app.warn(`SynaBrowse: could not show the sign-in window for ${target}: ${answer.error}`);
       return answer;

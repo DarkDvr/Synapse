@@ -69,7 +69,7 @@ export async function askToSignIn({
   onSignedIn = null,
   onGone = null,
 } = {}) {
-  if (!findEdge()) return { ok: false, error: 'no Edge on this machine' };
+  if (!provided && !findEdge()) return { ok: false, error: 'no Edge on this machine' };
   const candidates = addressCandidates(url);
   if (!candidates.length) return { ok: false, error: 'there is no address to open' };
 
@@ -107,13 +107,20 @@ export async function askToSignIn({
     return { ok: false, url: candidates[0], error: failure || 'the address did not open' };
   }
 
-  const asked = await askOperator({
-    profile: browser.profile,
-    restore,
-    focus,
-    // '' silences it; null keeps the script's own default.
-    ...(sound === null ? {} : { sound }),
-  });
+  // The WebView2 host is already a visible window the caller owns. show.ps1 finds Edge
+  // windows by profile, and returns "no SynaBrowse window" for the host — which used to
+  // close it before the operator could sign in (22 Nov). Only Edge needs placing.
+  const hostWindow = provided?.hostMode === true;
+  const asked = hostWindow
+    ? { ok: true, window: { state: 'shown', screen: 'operator', toolWindow: false, onScreen: true }, error: null }
+    : await askOperator({
+      profile: browser.profile,
+      restore,
+      focus,
+      // '' silences it; null keeps the script's own default.
+      ...(sound === null ? {} : { sound }),
+    });
+  if (hostWindow) log?.info?.('browser: sign-in window is the visible WebView2 host');
   if (asked.window) {
     // The next live hand-off has one line to read: which monitor it landed on, whether
     // it is still a tool window, and whether it is inside that monitor's work area.
