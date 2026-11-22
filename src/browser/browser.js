@@ -105,6 +105,24 @@ export function pageRefused(text, title = '') {
   return /(download link (for the file )?could not be retrieved|could not (retrieve|get) the download link|download limit (reached|exceeded)|reach(ed)? (your )?download limit|try again later[^.]{0,90}download)/i.test(said);
 }
 
+/**
+ * Is this accessibility snapshot the browser's own downloads panel?
+ *
+ * The panel is browser UI, not the page. After a download it becomes the accessibility
+ * root: every page snapshot sees its Downloads/Open downloads folder/Search controls and
+ * none of the page's own, and clicking its Downloads button opens the full hub instead of
+ * closing it. The page controls a page snapshot gets back only after the browser restarts
+ * (22 Nov, the second mod). The two shapes are the compact bubble and the full hub.
+ */
+export function browserDownloadsPanel(text) {
+  const said = String(text || '');
+  const bubble = /(^|\n)\s*-\s+button "Downloads"/.test(said) && /(^|\n)\s*-\s+button "Open downloads folder"/.test(said);
+  const hub = /(^|\n)\s*-\s+heading "Downloads"/.test(said) &&
+    /(^|\n)\s*-\s+button "Clear all"/.test(said) &&
+    /(^|\n)\s*-\s+button "Open downloads folder"/.test(said);
+  return bubble || hub;
+}
+
 /** What a saved file's answer says: path, size, type, and whether it was a page after all. */
 export function savedAnswer(rec, { dir = '', rel = '' } = {}) {
   if (!rec) return null;

@@ -244,6 +244,24 @@ the endpoint, and a reopen of the UI. Three tool fixes came out of it:
 The lesson: a download that the site refuses is an answer, not a prompt to try another
 button. Report it; a different file or the site's cooldown decides whether it can run.
 
+## The third run: the downloads panel hid the page (22 Nov)
+
+The Music Merged retry downloaded at 17:14. Its Edge downloads panel stayed. On the next mod
+— Skyrim Audio Amplifier, 198886, uploaded 12 Nov, 139 KB — every `snapshot` returned the
+panel's **Downloads / Open downloads folder / Search downloads** controls and none of the
+page's. The screenshot was page-only (`Page.captureScreenshot` excludes browser chrome), so
+the model saw a page it could not snapshot, pressed Escape (page input; no effect), clicked
+the panel's Downloads button (which opens the full hub instead of closing it), and spent
+seven minutes on coordinates before Stop.
+
+`snapshot` now detects the bubble or the hub, waits while a file is still saving, restarts
+the browser at the current URL and returns the page with a note that a half-filled form was
+lost. On the same page that gave `button "Manual download"` e125, its dialog link e128 and
+`Slow download` e236; three ref clicks saved the 140 KB zip. The panel is browser UI: page
+input cannot close it, and
+`--disable-features=DownloadBubble,DownloadBubbleV2,msDownloadsHub` did not suppress it on
+Edge 158 (measured 22 Nov), so the restart is the reliable path.
+
 ## Being invisible, exactly
 
 A hidden browser must be invisible *and* still render, and those pull apart. This is the

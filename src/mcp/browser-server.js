@@ -18,7 +18,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { DATA_DIR, WEB_DIR, PROJECTS_ROOT } from '../paths.js';
 import { artifactDir } from '../browser/artifacts.js';
-import { clickSummary, createBrowser, findEdge, savedAnswer, requestAnswer, domAnswer } from '../browser/browser.js';
+import { browserDownloadsPanel, clickSummary, createBrowser, findEdge, savedAnswer, requestAnswer, domAnswer } from '../browser/browser.js';
 import { askToSignIn } from '../browser/signin.js';
 import { formatBytes, safeDownloadName, uniqueDownloadPath } from '../browser/downloads.js';
 import { checkUrl, hostOf, localPageAllowed } from '../browser/allow.js';
@@ -379,12 +379,55 @@ async function handle(msg) {
           }
           case 'snapshot': {
             // The action surface: named controls with refs, not a picture and a guess.
-            const text = await browser.snapshot({
+            let text = await browser.snapshot({
               interactive: args.interactive !== false,
               compact: args.compact === true,
               depth: Number(args.depth) || null,
               selector: args.selector || null,
             });
+            let recovered = '';
+            if (browserDownloadsPanel(text)) {
+              // The browser's own downloads panel is not the page, and page input cannot
+              // close it: its Downloads button opens the full hub and Escape does nothing.
+              // A restart is the only way back to the page (22 Nov, the second mod).
+              const saving = browser.downloads().some((d) => ['starting', 'inProgress', 'saving'].includes(d.state));
+              if (saving) {
+                return toolText(
+                  id,
+                  'The browser\'s downloads panel is covering the page while a file is still being saved. ' +
+                    'Wait for it to finish, then snapshot again.',
+                  true,
+                );
+              }
+              let at = '';
+              try { at = String((await browser.pageState()).url || ''); } catch { /* the page is gone */ }
+              if (!/^https?:/i.test(at)) {
+                return toolText(
+                  id,
+                  'The page snapshot is the browser\'s downloads panel, not the page. Close the browser and open the page again.',
+                  true,
+                );
+              }
+              await browser.stop();
+              await browser.start();
+              await browser.goto(at, { settle: 900 });
+              text = await browser.snapshot({
+                interactive: args.interactive !== false,
+                compact: args.compact === true,
+                depth: Number(args.depth) || null,
+                selector: args.selector || null,
+              });
+              recovered = `\n\nThe browser's downloads panel was covering the page; the browser was restarted at ${at}. ` +
+                'Any half-filled form was lost.';
+              if (!String(text || '').trim()) {
+                return toolText(
+                  id,
+                  `The downloads panel was closed and the browser reopened at ${at}, but the page has no controls to snapshot yet. ` +
+                    'Wait, then snapshot again.',
+                  true,
+                );
+              }
+            }
             if (!String(text || '').trim()) {
               return toolText(
                 id,
@@ -403,7 +446,7 @@ async function handle(msg) {
               : '';
             return toolText(
               id,
-              `Controls with refs (a ref is good until the page changes):\n\n${text}${scope}\n\n` +
+              `Controls with refs (a ref is good until the page changes):\n\n${text}${scope}${recovered}\n\n` +
                 'Click one with click { "ref": "e12" }; after a navigation or a page change, snapshot again.',
             );
           }

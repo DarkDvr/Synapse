@@ -6,7 +6,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { botWall, pageMissing, pageDownloaded, pageRefused, savedAnswer, requestAnswer, domAnswer } from '../src/browser/browser.js';
+import { botWall, pageMissing, pageDownloaded, pageRefused, browserDownloadsPanel, savedAnswer, requestAnswer, domAnswer } from '../src/browser/browser.js';
 
 test('a fetch that returned a page is not a file, and says so', () => {
   const answer = savedAnswer({
@@ -84,6 +84,16 @@ test('the page’s own download state and refusal are read, not guessed', () => 
     true,
   );
   assert.equal(pageRefused('A normal page that mentions a download link'), false);
+});
+
+test('the browser’s downloads panel is recognised, and a page is not', () => {
+  const bubble = '- button "Downloads" [ref=e3]\n- button "Open downloads folder" [ref=e4]\n- listitem "probe.bin" [level=1, ref=e7]';
+  const hub = '- heading "Downloads" [level=1, ref=e9]\n- button "Clear all" [ref=e11]\n- button "Open downloads folder" [ref=e12]';
+  assert.equal(browserDownloadsPanel(bubble), true);
+  assert.equal(browserDownloadsPanel(hub), true);
+  assert.equal(browserDownloadsPanel('- heading "Downloads" [level=1]\n- link "A guide" [ref=e4]'), false, 'a page about downloads is not the panel');
+  assert.equal(browserDownloadsPanel('- button "Downloads" [ref=e4]\n- link "A file" [ref=e5]'), false, 'a page with a Downloads button is not the bubble');
+  assert.equal(browserDownloadsPanel('- heading "Music Mods" [ref=e1]'), false);
 });
 
 // The request half of save: a site's own script asks for a link, and the answer names it.
