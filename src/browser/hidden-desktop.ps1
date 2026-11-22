@@ -87,7 +87,7 @@ try {
     exit 1
   }
 
-  $args = @(
+  $flags = @(
     "--user-data-dir=`"$Profile`"",
     '--remote-debugging-port=0',
     '--remote-allow-origins=*',
@@ -105,7 +105,7 @@ try {
     '--window-position=0,0',
     'about:blank'
   )
-  $cmd = '"' + $EdgePath + '" ' + ($args -join ' ')
+  $cmd = '"' + $EdgePath + '" ' + ($flags -join ' ')
 
   $si = New-Object SynaBrowseDesktop+STARTUPINFO
   $si.cb = [Runtime.InteropServices.Marshal]::SizeOf($si)

@@ -179,6 +179,12 @@ The hidden keeper is launched **not detached**. A detached PowerShell could not 
 desktop and the launch fell back silently — the state file never appeared (22 Nov). The
 parent check is what cleans up; detachment is not needed.
 
+**The keepers are a safety net, not a kernel.** A job/tree kill can take a keeper with it;
+in the 22 Nov probe a `child.kill()` of the server killed the watchdog too, and the Edge
+survived. The app's Stop is not a tree kill, so the keeper normally gets its chance. If a
+browser is left behind, the next start attaches to it on the same profile (a profile cannot
+be open twice), and closing the window by hand is the fallback.
+
 ## Being invisible, exactly
 
 A hidden browser must be invisible *and* still render, and those pull apart. This is the

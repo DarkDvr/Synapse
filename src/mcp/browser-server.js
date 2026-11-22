@@ -612,6 +612,7 @@ async function handle(msg) {
               visible = createBrowser({
                 profile: cfg.profile,
                 hiddenDesktop: false,
+                actionLayer: false,
                 log: { info: (m) => process.stderr.write(`${m}\n`) },
               });
               handoffBrowser = visible;

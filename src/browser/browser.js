@@ -282,6 +282,9 @@ export function createBrowser({
   log = null,
   startMinimized = true,
   hiddenDesktop = true,
+  // The visible hand-off window is for the operator, not for a model: it needs no
+  // agent-browser daemon, and starting one just adds a slow close to every hand-off.
+  actionLayer = true,
   width = 1280,
   height = 800,
   idleMs = 5 * 60 * 1000,
@@ -689,6 +692,21 @@ export function createBrowser({
       const state = keeperState();
       throw new Error(state?.error || 'the browser did not open a debugging port on the hidden desktop');
     }
+    // A separate watchdog, detached, because the keeper can be killed with the server.
+    // It needs no desktop, so it survives and ends the Edge tree by the pids it is given.
+    const keeper = keeperState();
+    if (keeper?.edgePid) {
+      try {
+        spawn(powershellPath(), [
+          '-NoProfile', '-ExecutionPolicy', 'Bypass',
+          '-File', VISIBLE_WATCH_SCRIPT,
+          '-ParentPid', String(process.pid),
+          '-EdgePid', String(keeper.edgePid),
+        ], { stdio: 'ignore', windowsHide: true, detached: true });
+      } catch (err) {
+        log?.warn?.(`browser: no hidden-browser watcher: ${err.message}`);
+      }
+    }
     child.port = port;
     note(`browser: started on a hidden desktop, port ${port}`);
     return port;
@@ -716,7 +734,7 @@ export function createBrowser({
           '-File', VISIBLE_WATCH_SCRIPT,
           '-ParentPid', String(process.pid),
           '-EdgePid', String(child.pid),
-        ], { stdio: 'ignore', windowsHide: true });
+        ], { stdio: 'ignore', windowsHide: true, detached: true });
       } catch (err) {
         log?.warn?.(`browser: no visible-browser watcher: ${err.message}`);
       }
@@ -795,8 +813,8 @@ export function createBrowser({
         const hidden = await hideBrowserWindow({ profile }).catch(() => null);
         if (hidden?.toolWindow) note(`browser: window hidden (attached, taskbar buttons removed ${hidden.tabsRemoved ?? 0})`);
       }
-      agent = createAgent({ port, log, session: `synapse-${port}` });
-      if (!agent.available) note('browser: agent-browser is not installed — run vendor-agent-browser.ps1; snapshot and ref clicks will say so');
+      agent = actionLayer ? createAgent({ port, log, session: `synapse-${port}` }) : null;
+      if (actionLayer && !agent.available) note('browser: agent-browser is not installed — run vendor-agent-browser.ps1; snapshot and ref clicks will say so');
       note(`browser: ${existing ? 'attached to' : 'started'} Edge on port ${port}`);
       await ensureDownloadBehavior();
       return page;
@@ -1521,10 +1539,18 @@ export function createBrowser({
         if (proc.exitCode !== null) { clearTimeout(timer); done(); }
       });
       if (proc.exitCode === null) {
-        try { proc.kill(); } catch { /* gone */ }
-        // The hidden keeper may have lost the close race with Edge. Its state file names
-        // the pid it launched; that is the identity to end — never a process name.
-        killByState();
+        if (hiddenDesktop) {
+          try { proc.kill(); } catch { /* gone */ }
+          // The hidden keeper may have lost the close race with Edge. Its state file names
+          // the pid it launched; that is the identity to end — never a process name.
+          killByState();
+        } else if (proc.pid) {
+          // A visible Edge's children can hold the profile after the window closes; the
+          // hidden browser cannot start until they are gone.
+          try {
+            spawnSync('taskkill', ['/PID', String(proc.pid), '/T', '/F'], { windowsHide: true, stdio: 'ignore' });
+          } catch { /* already gone */ }
+        }
       }
     }
     return exited.length;

@@ -77,9 +77,8 @@ export function createAgent({ port, log = null, session = 'synapse', root = ROOT
       fs.mkdirSync(path.dirname(configFile), { recursive: true });
       // A trusted, minimal config: the daemon must not pick up a user-level
       // ~/.agent-browser/config.json on a machine Synapse does not own. `idleTimeout` is a
-      // string in this CLI ("0" disables it), and the file is rewritten so a bad one from
-      // an older build cannot poison every call.
-      fs.writeFileSync(configFile, JSON.stringify({ idleTimeout: '0' }, null, 2), 'utf8');
+      // string in this CLI; 30 minutes lets a killed server's daemon clean itself up.
+      fs.writeFileSync(configFile, JSON.stringify({ idleTimeout: '30m' }, null, 2), 'utf8');
     } catch (err) {
       log?.warn?.(`browser: could not prepare agent-browser folders: ${err.message}`);
     }
@@ -89,7 +88,7 @@ export function createAgent({ port, log = null, session = 'synapse', root = ROOT
     ...process.env,
     AGENT_BROWSER_SOCKET_DIR: socketDir,
     AGENT_BROWSER_CDP: String(port || ''),
-    AGENT_BROWSER_IDLE_TIMEOUT_MS: '0',
+    AGENT_BROWSER_IDLE_TIMEOUT_MS: String(30 * 60 * 1000),
     AGENT_BROWSER_NO_VERSION_CHECK: '1',
     AGENT_BROWSER_JSON: '1',
   };
