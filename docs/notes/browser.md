@@ -117,9 +117,11 @@ with `webfetch`).
   words are not in the parent document, and navigating to the widget's src loses the
   turn.
 - A bot check is **named, never worked around**: `botWall()` recognises a captcha or
-  "checking your browser" from the text and the frame/script sources, and the answer
-  says a person has to clear it and points at `handoff`. A challenge clicked at gets
-  longer, not shorter.
+  “checking your browser” from the page's **visible** text, or from an empty page whose
+  frame is a challenge. A Turnstile script on an ordinary page is not a wall; matching the
+  script URL alone made the signed-in Nexus page look like one (22 Nov). The answer says a
+  person has to clear it and points at `handoff`. A challenge clicked at gets longer, not
+  shorter.
 - Every call is timed to stderr and always answers; an error with no message says "the
   browser did not say why".
 
@@ -189,6 +191,29 @@ in the 22 Nov probe a `child.kill()` of the server killed the watchdog too, and 
 survived. The app's Stop is not a tree kill, so the keeper normally gets its chance. If a
 browser is left behind, the next start attaches to it on the same profile (a profile cannot
 be open twice), and closing the window by hand is the fallback.
+
+## What the first live run found (22 Nov)
+
+The Nexus Music Merged run worked end to end: it found the mod, saved the 86 KB zip and
+the real `MusicMerged.esp`, and the final slow download was one `click { ref }`. The
+friction was in four places, and each is now fixed:
+
+- **A Turnstile script is not a bot check.** `botWall()` matched `cf-turnstile` /
+  `challenge-platform` in the page's script URLs, so the signed-in mod page was reported as
+  a wall, `download` refused twice, and the hand-off failed on its post-restart read. A wall
+  is now the page's **visible** challenge text, or an empty page with a challenge frame.
+- **A dialog needs a plain snapshot.** The model opened the manual-download popup, then
+  scoped `snapshot` to guessed `.popup-box` selectors; the one link that matched was the
+  page behind it, so it concluded “no popup” and fell back to a screenshot and an (x,y)
+  click. The selector is a scope, not a search; the snapshot answer now says so when a
+  scoped result is nearly empty, and the description says to take a plain one after a click
+  opens a dialog.
+- **A 404 page is named.** The model guessed Nexus's search route, got its styled “Page not
+  found”, and tried more routes before falling back to websearch. `read` and `open` now say
+  **Page not found (404)** and that the address, not the site, is wrong.
+- **A download card belongs to the click, not the finish.** It was placed by `endedAt`, and
+  the finish landed after the report had begun, so the card sat under the report. It is now
+  anchored by `startedAt`: with the tool calls that earned it, above the report.
 
 ## Being invisible, exactly
 
@@ -287,9 +312,10 @@ not sit in the operator's Downloads folder.
   second to `POST /api/browser/download`, and the page draws a `SynaBrowse · Download`
   card with `[####----] 42%`, bytes and the saved path. A reload asks
   `GET /api/browser/downloads?dir=…`.
-- **A live card sits at the bottom; a saved one takes its place and folds.** It is placed
-  at the end while bytes arrive, then at the moment it finished, so it scrolls up with
-  the chat; a completed card folds to its one-line head.
+- **A card sits in the post where the action started, not at the bottom.** It is anchored
+  by `startedAt` — the click or `download` call — so a file that finishes after the report
+  has begun stays with the tool calls that earned it; a completed card folds to its
+  one-line head. Anchoring by finish time put the Nexus card under the report (22 Nov).
 - **Progress is browser-scoped, the folder is the project's** — the folder is set again
   before each action, because one browser and one page are already the rule.
 - **No file is ever written outside a project.** The API refuses a `dir` outside the

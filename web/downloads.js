@@ -88,19 +88,25 @@ export function downloadCard(d) {
 /**
  * Where a card sits in the conversation.
  *
- * A live download is the newest thing happening, so it belongs at the bottom with the
- * live trace. A saved one belongs where it finished — the same rule as a finished run —
- * so the chat moves on above it and the card scrolls up instead of standing at the bottom
- * of the page for ten minutes (17 Nov).
+ * It belongs to the **action that started it** — the click or the download call — not to
+ * the moment the bytes finished. A finish can land after the report has begun, which put
+ * the card under the report instead of among the tool calls that earned it (22 Nov).
+ * A record with no start time (an old one) falls to the end of the conversation.
  */
-export const downloadAt = (d) => (Number(d?.endedAt) > 0 ? Number(d.endedAt) : Number.MAX_SAFE_INTEGER);
+export const downloadAt = (d) => {
+  const started = Number(d?.startedAt) || 0;
+  if (started > 0) return started;
+  const ended = Number(d?.endedAt) || 0;
+  return ended > 0 ? ended : Number.MAX_SAFE_INTEGER;
+};
 
 /**
  * The downloads that belong to one post: from its start up to the next post's start.
  *
  * A card inside a message's body sits within the role's green rule, where the operator
  * expects it, and scrolls with that post instead of waiting at the bottom of the page
- * (18 Nov). A live download carries `MAX_SAFE_INTEGER`, so it lands in the newest post.
+ * (18 Nov). It is anchored by `startedAt`, so a file that finishes after the report was
+ * written still sits with the click that began it (22 Nov).
  */
 export function downloadsInWindow(downloads, from, until = Number.POSITIVE_INFINITY) {
   return (Array.isArray(downloads) ? downloads : []).filter((d) => {

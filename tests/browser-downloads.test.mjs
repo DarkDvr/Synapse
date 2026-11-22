@@ -55,22 +55,26 @@ test('the chat chip carries the name, the bar and the saved path', () => {
   assert.match(html, /100%/);
 });
 
-test('a saved download folds and takes its place in the conversation', () => {
-  // Live: the newest thing happening, so the bottom with the live trace.
-  assert.equal(downloadAt({ state: 'inProgress', startedAt: 1 }), Number.MAX_SAFE_INTEGER);
-  // Saved: where it finished, so the chat moves on above it.
-  assert.equal(downloadAt({ state: 'completed', endedAt: 4242 }), 4242);
+test('a download stays with the action that started it, not where it finished', () => {
+  // The card belongs to the click/download call, so it sits among the tool calls above
+  // the report even when the file finishes after the report has begun (22 Nov).
+  assert.equal(downloadAt({ state: 'inProgress', startedAt: 1 }), 1);
+  assert.equal(downloadAt({ state: 'completed', startedAt: 1, endedAt: 4242 }), 1);
   // And it folds to its head: the bar, the bytes and the path were the live state.
   const css = fs.readFileSync(new URL('../web/synapse.css', import.meta.url), 'utf8');
   assert.match(css, /\.tool-download\.is-done \.download-body \{ display: none; \}/);
 });
 
 test('a card belongs to the post it happened in, not the bottom of the page', () => {
-  const saved = { id: 'saved', state: 'completed', endedAt: 1500 };
-  const live = { id: 'live', state: 'inProgress', startedAt: 900 };
+  const before = { id: 'before', state: 'completed', startedAt: 900, endedAt: 950 };
+  const saved = { id: 'saved', state: 'completed', startedAt: 1500, endedAt: 1600 };
+  const late = { id: 'late', state: 'completed', startedAt: 1500, endedAt: 2500 };
+  const live = { id: 'live', state: 'inProgress', startedAt: 1900 };
   // The window is one post: from its start to the next post's start.
-  assert.deepEqual(downloadsInWindow([saved, live], 1000, 2000).map((d) => d.id), ['saved']);
-  // The newest post has no next one; the live card lands there, at its end.
+  assert.deepEqual(downloadsInWindow([before, saved, live], 1000, 2000).map((d) => d.id), ['saved', 'live']);
+  // A finish after the next post's start does not move the card into that post.
+  assert.deepEqual(downloadsInWindow([late], 1000, 2000).map((d) => d.id), ['late']);
+  // The newest post has no next one.
   assert.deepEqual(downloadsInWindow([saved, live], 1000).map((d) => d.id), ['saved', 'live']);
   assert.deepEqual(downloadsInWindow([saved], 2000), []);
 });

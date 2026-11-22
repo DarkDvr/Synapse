@@ -246,6 +246,13 @@ function wallNote(page) {
     'Do not scrape around it or guess at the content.';
 }
 
+/** A page that says it does not exist. The address is the problem; another guess is not the fix. */
+function missingNote(page) {
+  if (!page?.missing) return '';
+  return '\n\nThis page says **Page not found (404)** — the address is wrong, not the site. ' +
+    "Do not retry the same route or guess another one; use the site's own search or a link from a page that works.";
+}
+
 /** Record that the profile opened a host it has a session for (best effort). */
 function noteUsed(url) {
   const host = hostOf(url);
@@ -294,7 +301,7 @@ async function handle(msg) {
             const page = await browser.read({});
             noteUsed(page.url);
             process.stderr.write(`open ${verdict.local ? verdict.path : verdict.host} -> ${url}\n`);
-            return toolText(id, `Opened ${url}\n\n${outline(page, { maxChars: 6000, links: 60 })}${wallNote(page)}\n\nTo click a control, call snapshot and use the ref it gives you.`);
+            return toolText(id, `Opened ${url}\n\n${outline(page, { maxChars: 6000, links: 60 })}${wallNote(page)}${missingNote(page)}\n\nTo click a control, call snapshot and use the ref it gives you.`);
           }
           case 'read': {
             // `full` walks the page to its end and leaves the whole of it in the project,
@@ -345,7 +352,7 @@ async function handle(msg) {
                   'Read it in pieces with the read tool (offset and limit), or grep it — ' +
                   'do not ask this page for the same text again.\n' +
                   `It is a file, not a picture: cite it as ${rel} if you need to name it.` +
-                  `${wallNote(whole)}`,
+                  `${wallNote(whole)}${missingNote(whole)}`,
               );
             }
             const page = await browser.read({
@@ -354,7 +361,7 @@ async function handle(msg) {
               mode: args.mode === 'text' ? 'text' : 'article',
             });
             noteUsed(page.url);
-            return toolText(id, `${outline(page, { maxChars: args.maxChars, links: args.links })}${wallNote(page)}`);
+            return toolText(id, `${outline(page, { maxChars: args.maxChars, links: args.links })}${wallNote(page)}${missingNote(page)}`);
           }
           case 'snapshot': {
             // The action surface: named controls with refs, not a picture and a guess.
@@ -372,9 +379,14 @@ async function handle(msg) {
                 true,
               );
             }
+            const listed = String(text).split('\n').filter((line) => /^\s*-\s/.test(line)).length;
+            const scope = args.selector && listed < 3
+              ? `\n\nThe selector matched only ${listed} control(s). If a click just opened a dialog or menu, ` +
+                'call snapshot again with **no selector**: the dialog is usually outside the part you scoped to.'
+              : '';
             return toolText(
               id,
-              `Controls with refs (a ref is good until the page changes):\n\n${text}\n\n` +
+              `Controls with refs (a ref is good until the page changes):\n\n${text}${scope}\n\n` +
                 'Click one with click { "ref": "e12" }; after a navigation or a page change, snapshot again.',
             );
           }
@@ -664,8 +676,15 @@ async function handle(msg) {
               );
             }
             // Closing the window is not proof: a bot check has no password box, so the
-            // real check is the page after the browser comes back.
-            const after = await browser.read({ maxChars: 800, links: 0 }).catch(() => null);
+            // real check is the page after the browser comes back. A challenge can take a
+            // few seconds to vanish after the operator clears it, so give it that time
+            // before calling the hand-off failed (22 Nov: the page was usable four seconds
+            // after the tool had already refused it).
+            let after = await browser.read({ maxChars: 800, links: 0 }).catch(() => null);
+            for (let i = 0; i < 6 && after?.wall; i += 1) {
+              await new Promise((r) => setTimeout(r, 1000));
+              after = await browser.read({ maxChars: 800, links: 0 }).catch(() => null);
+            }
             if (after?.wall) {
               return toolText(
                 id,

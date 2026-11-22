@@ -59,11 +59,32 @@ export function findEdge() {
  * that handoff is the way through it.
  */
 export function botWall(text, srcs = '') {
-  const said = `${String(text || '')} ${String(srcs || '')}`;
-  if (/(recaptcha|hcaptcha|cf-turnstile|challenge-platform|checking your browser|just a moment|cf-browser-verification|__cf_chl|verify (that )?you are (a )?human|are you a robot|cf-challenge|attention required)/i.test(said)) {
-    return 'a bot check — a captcha or a “checking your browser” wall';
-  }
+  const said = String(text || '');
+  // A wall is something the page *shows*. A Turnstile or reCAPTCHA script on an ordinary
+  // page — a download form, a comment box — is not a wall. Matching the script URL alone
+  // made the Nexus mod page a "bot check" after its challenge had cleared, and the hand-off
+  // and download tools refused a page that was plainly signed in (22 Nov).
+  const visible = /(checking your browser|just a moment|performing security verification|verify (that )?you are (a )?human|are you a robot|attention required|enable javascript and cookies to continue|cf-browser-verification|__cf_chl|cf-challenge)/i;
+  if (visible.test(said)) return 'a bot check — a captcha or a “checking your browser” wall';
+  // A challenge can also be an empty shell with the challenge in a frame. The URL is
+  // evidence only when there is no real page text to read.
+  const frame = /(challenges\.cloudflare\.com|cdn-cgi\/challenge-platform|recaptcha\/api|hcaptcha\.com)/i.test(String(srcs || ''));
+  const thin = said.replace(/\s+/g, ' ').trim().length < 160;
+  if (frame && thin) return 'a bot check — a captcha or a “checking your browser” wall';
   return '';
+}
+
+/**
+ * A page that says it does not exist. Nexus answers a wrong route with a styled 404 whose
+ * title is the site's normal one; the words are the only evidence, so they are read here
+ * and the answer says plainly that the address, not the site, is wrong (22 Nov).
+ */
+export function pageMissing(text, title = '') {
+  const body = String(text || '');
+  const first = `${String(title || '')}\n${body}`.slice(0, 4000);
+  if (!/(page not found|404 not found|404 page|this page could not be found|the page you .{0,40}(could not|cannot|can't) be found|content not found)/i.test(first)) return false;
+  // A 404 page is short. A long article that merely quotes "page not found" is not one.
+  return body.replace(/\s+/g, ' ').trim().length < 6000;
 }
 
 /** What a saved file's answer says: path, size, type, and whether it was a page after all. */
@@ -1018,9 +1039,10 @@ export function createBrowser({
       // the difference so a model knows it is reading a cut (13 Nov).
       return { url: location.href, title: document.title, text, links: anchor, controls: controls.slice(0, 40), frames, srcs, wall, chars: text.length, total: full.length };
     })()`);
-    // A captcha is the one wall a tool must not try to get past. Named here, in Node, so the
-    // sentence can be tested without a browser.
+    // The page's own words decide both a wall and a 404: what a person sees, not a guess
+    // about the URL.
     page.wall = page.wall || botWall(page.text, page.srcs);
+    page.missing = pageMissing(page.text, page.title);
     return page;
   }
 

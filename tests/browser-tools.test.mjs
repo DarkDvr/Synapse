@@ -79,6 +79,9 @@ test('snapshot is the action surface: named refs, and a fresh one after a change
   assert.match(d, /Manual download|button/, 'it shows the shape of a control');
   assert.match(d, /take a new one|re-?snapshot/i, 'refs do not survive navigation');
   assert.match(d, /covered|hidden/i, 'a click that misses says so');
+  assert.match(d, /no selector/i, 'a dialog needs a plain snapshot');
+  const dom = text('dom');
+  assert.match(dom, /shadow root/i, 'dom names its shadow-root blind spot');
   const click = text('click');
   assert.match(click, /ref/i, 'click takes the ref');
   assert.match(click, /prefer/i, 'and prefers it over a coordinate');

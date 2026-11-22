@@ -6,7 +6,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { botWall, savedAnswer, requestAnswer, domAnswer } from '../src/browser/browser.js';
+import { botWall, pageMissing, savedAnswer, requestAnswer, domAnswer } from '../src/browser/browser.js';
 
 test('a fetch that returned a page is not a file, and says so', () => {
   const answer = savedAnswer({
@@ -61,6 +61,19 @@ test('a bot check is named, and a sign-in wall is not mistaken for one', () => {
   assert.match(botWall('Just a moment... Enable JavaScript and cookies to continue'), /bot check/);
   assert.equal(botWall('Sign in to your account', 'https://example.com/login.js'), '', 'a sign-in page is a captcha');
   assert.equal(botWall('A perfectly ordinary page about music'), '');
+  // A Turnstile widget on an ordinary page is not a wall. This is the Nexus mod page after
+  // its challenge cleared: real text, a Cloudflare script in its download form, and the
+  // download tool refusing it as a bot check on 22 Nov.
+  const normal = 'Music Mods Merged SSE Edition. '.repeat(8);
+  assert.equal(botWall(normal, 'https://challenges.cloudflare.com/turnstile/v0/api.js'), '', 'a Turnstile script is not a wall');
+  // An empty shell with the challenge in a frame still is.
+  assert.match(botWall('', 'https://challenges.cloudflare.com/turnstile/v0/api.js'), /bot check/);
+});
+
+test('a page that says Page not found is named as a 404', () => {
+  assert.equal(pageMissing('Page not found', 'Nexus Mods'), true);
+  assert.equal(pageMissing('The page you are looking for could not be found.', ''), true);
+  assert.equal(pageMissing('A normal article. '.repeat(100), ''), false, 'a long article is not a 404');
 });
 
 // The request half of save: a site's own script asks for a link, and the answer names it.
