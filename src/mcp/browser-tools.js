@@ -74,7 +74,10 @@ export const TOOLS = [
       'a ref again. This is more reliable than a screenshot and coordinates: it names the ' +
       'control, and a click fails loudly when the element is covered, hidden or off-screen. ' +
       'interactive (default true) lists controls only; set it false to include headings and ' +
-      'text. compact drops empty structure, depth limits nesting, selector scopes the tree.',
+      'text. compact drops empty structure, depth limits nesting, selector scopes the tree. ' +
+      'After a click that opens a dialog or menu, call snapshot with **no selector**: the dialog ' +
+      'is usually outside the part you scoped to, and a guessed selector can return one unrelated ' +
+      'link. There is no limit option; the tree is already compact.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -279,7 +282,9 @@ export const TOOLS = [
       'lives in an attribute rather than the page text — a file id, a game id, a link a script ' +
       'will use, the action of a form — which is exactly what a page\'s own script reads before ' +
       'it asks for a file. CSS selectors: "[data-file-id]", ".mod-file-download", ' +
-      '"a[href*=download]". A widget inside a frame is not in this document: read names its frame.',
+      '"a[href*=download]". A widget inside a frame is not in this document: read names its frame. ' +
+      'A control inside a shadow root is not in this document either; use snapshot for those — ' +
+      'it sees open and closed shadow roots.',
     inputSchema: {
       type: 'object',
       properties: {
