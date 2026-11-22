@@ -23,37 +23,42 @@ function Get-Sha([string]$File) {
   (Get-FileHash -LiteralPath $File -Algorithm SHA256).Hash.ToLower()
 }
 
+$want = $Sha256.ToLower()
+$current = $false
 if (Test-Path -LiteralPath $destExe) {
   $have = Get-Sha $destExe
-  if ($have -eq $Sha256.ToLower()) {
-    Write-Host "agent-browser $Version already in $destExe (sha256 matches)"
-    exit 0
+  if ($have -eq $want) {
+    $current = $true
+    Write-Host "agent-browser $Version is already in $destExe (sha256 matches)"
+  } else {
+    Write-Host "the existing binary does not match $Version; replacing it"
   }
-  Write-Host "the existing binary does not match $Version; replacing it"
 }
-
-$temp = "$destExe.download"
-if (Test-Path -LiteralPath $temp) { Remove-Item -LiteralPath $temp -Force }
 
 # curl.exe ships with Windows 10/11 and does not depend on PowerShell's TLS stack, which
 # failed on a machine where this was first vendored. Invoke-WebRequest is the fallback.
 $curl = (Get-Command curl.exe -ErrorAction SilentlyContinue).Source
-if ($curl) {
-  & $curl -L --fail --silent --show-error -o $temp $url
-  if ($LASTEXITCODE -ne 0) { throw "curl failed to download $url" }
-} else {
-  Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 120 -OutFile $temp
+
+if (-not $current) {
+  $temp = "$destExe.download"
+  if (Test-Path -LiteralPath $temp) { Remove-Item -LiteralPath $temp -Force }
+  if ($curl) {
+    & $curl -L --fail --silent --show-error -o $temp $url
+    if ($LASTEXITCODE -ne 0) { throw "curl failed to download $url" }
+  } else {
+    Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 120 -OutFile $temp
+  }
+  $got = Get-Sha $temp
+  if ($got -ne $want) {
+    Remove-Item -LiteralPath $temp -Force
+    throw "sha256 mismatch: expected $Sha256, got $got. Nothing was installed."
+  }
+  Move-Item -LiteralPath $temp -Destination $destExe -Force
 }
 
-$got = Get-Sha $temp
-if ($got -ne $Sha256.ToLower()) {
-  Remove-Item -LiteralPath $temp -Force
-  throw "sha256 mismatch: expected $Sha256, got $got. Nothing was installed."
-}
-Move-Item -LiteralPath $temp -Destination $destExe -Force
-
-# The Apache-2.0 notice travels with the binary. If the machine is offline, a short
-# pointer is written instead; the licence is also named in THIRD-PARTY.md.
+# The Apache-2.0 notice travels with the binary, on a first run and on a repeat one. If
+# the machine is offline, a short pointer is written instead; the licence is also named
+# in THIRD-PARTY.md.
 $license = Join-Path $dest 'LICENSE'
 try {
   if ($curl) {
@@ -74,7 +79,7 @@ try {
 
 Set-Content -Path (Join-Path $dest 'VERSION.txt') -Encoding utf8 -Value @(
   "agent-browser $Version (win32-x64) $((Get-Item $destExe).Length) bytes",
-  "sha256 $Sha256",
+  "sha256 $want",
   "source $url",
   "Apache-2.0, Copyright Vercel Labs and contributors.",
   'Attached to Synapse''s own Edge over CDP; it does not launch a browser here.'
