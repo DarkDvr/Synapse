@@ -115,6 +115,8 @@ export const PROCESS_SERVER = path.join(ROOT, 'src', 'mcp', 'process-server.js')
 // SynaBrowse: the tools that drive the harness's own browser. Registered only when the
 // operator has switched it on — a browser that can act as them is not a default.
 export const BROWSER_SERVER = path.join(ROOT, 'src', 'mcp', 'browser-server.js');
+// Project-scoped skills: a per-session server that only sees the project's own folders.
+export const SKILL_SERVER = path.join(ROOT, 'src', 'mcp', 'skill-server.js');
 export const BROWSER_DIR = path.join(DATA_DIR, 'browser');
 
 export const PID_FILE = path.join(DATA_DIR, 'synapse.pid');

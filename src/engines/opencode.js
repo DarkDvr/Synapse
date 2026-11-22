@@ -14,7 +14,7 @@ import {
   normalizeSession,
   parseModelRef,
 } from './base.js';
-import { ROOT, TEMP_DIR, SEARCH_SERVER, DELEGATE_SERVER, LEASE_SERVER, GIT_SERVER, PROCESS_SERVER, BROWSER_SERVER, ENGINE_PID_FILE, SKILLS_DIR, VENDOR_ENGINE } from '../paths.js';
+import { ROOT, TEMP_DIR, SEARCH_SERVER, DELEGATE_SERVER, LEASE_SERVER, GIT_SERVER, PROCESS_SERVER, BROWSER_SERVER, SKILL_SERVER, ENGINE_PID_FILE, SKILLS_DIR, VENDOR_ENGINE } from '../paths.js';
 import { providerApiKey } from '../config.js';
 import { vacuumStore } from '../engine-store.js';
 import { purgeProjectTraces } from '../engine-project-purge.js';
@@ -190,6 +190,7 @@ export class OpenCodeEngine extends Engine {
     delete servers['synapse-git'];
     delete servers['synapse-process'];
     delete servers['synapse-browser'];
+    delete servers['synapse-skills'];
     // A server that no longer exists: the plan became a file the Architect owns
     // (src/plans.js), so the entry must not linger pointing at a deleted file.
     delete servers['synapse-plan'];
@@ -242,6 +243,15 @@ export class OpenCodeEngine extends Engine {
       codemode: false,
     };
 
+    // Project skills: one server per session, in the project's own directory, so its
+    // catalog is this project's .project/skills (and legacy .skills) and nothing else.
+    // The engine's own skill tool stays global; this is the project-scoped counterpart.
+    servers['synapse-skills'] = {
+      type: 'local',
+      command: [process.execPath, SKILL_SERVER],
+      codemode: false,
+    };
+
     // SynaBrowse: the harness's own browser, hidden until a human is needed. Only
     // registered when the operator has switched it on — the tools can act as them, so
     // the absence of the switch is the off state rather than a tool that refuses.
@@ -258,6 +268,7 @@ export class OpenCodeEngine extends Engine {
     delete legacyMcp['synapse-delegate'];
     delete legacyMcp['synapse-lease'];
     delete legacyMcp['synapse-plan'];
+    delete legacyMcp['synapse-skills'];
     delete legacyMcp.synapse;
 
     const next = {
