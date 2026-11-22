@@ -2,7 +2,7 @@
 
 Every row is one thing that can appear in the conversation: where it comes from, what
 it looks like, **what it must do** (the assertion), and the pain it has today. It was
-written as the contract for a rebuild; the rebuild was cut on 19 Nov (§5), and the rows
+written as the contract for a rebuild; the rebuild was cut on 19 Nov (§4), and the rows
 are now the work list for fixing the chat we have.
 
 The rule of this document: a row without a test is not understood yet, and a test
@@ -219,7 +219,7 @@ scenario to the page's own renderer with no server and no browser, and
 next update. It fails before 1.62.14 and passes after, which is how we know the harness
 can see the thing it is for.
 
-## 5. What the rebuild found, and why it was cut
+## 4. What the rebuild found, and why it was cut
 
 The rebuild ran to a working switch (`?chat=v2`) and was cut on 19 Nov: it was a
 regression from the old chat in the things that matter while reading — the pane, the
@@ -245,7 +245,7 @@ the list of defects in the chat that ships:
   not touch. The wheel should move the pane, and stop it following, while the pointer is
   over it.
 
-## 6. The harness that stays
+## 5. The harness that stays
 
 `tests/scenario-player.mjs` and `tests/scenario.test.mjs` feed a scenario to the old
 renderer with no browser and no server, and `tests/scenarios/S1-folds.json` holds the one

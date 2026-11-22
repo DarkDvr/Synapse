@@ -36,7 +36,7 @@ more — open a note for it.
 - **The chat rebuild was cut on 19 Nov** after the operator judged it a regression from
   the chat that ships. Its code is in the history before 1.64.0
   (`git show 16b2ef5:web/chat-view.js`); the branch, worktree and tests are gone. What
-  it found is `docs/notes/chat-inventory.md` §5 — the list of defects in the chat we
+  it found is `docs/notes/chat-inventory.md` §4 — the list of defects in the chat we
   kept, and where the chat work goes from here.
 - **The rail, role cards and plan pane** read the same state the chat does. They are
   not part of the chat work, and there is no plan for them beyond the cases in
