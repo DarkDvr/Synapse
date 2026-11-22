@@ -1,113 +1,74 @@
 # Two people, one Synapse
 
-The app can be open on this PC and on a laptop at the same time. Both talk to the
-same server, the same engine and the same projects. These are the rules for that,
-and every one of them exists to stop an **accident**, not to defend against a
-hostile network: the LAN is trusted, the token is the door, and the people are
-the operator.
+The app can be open on this PC and on a laptop at once. Both talk to the same server,
+engine and projects. Every rule here exists to stop an **accident**, not a hostile
+network: the LAN is trusted, the token is the door, and the people are the operator.
 
 ## What "busy" means
 
-A **project** is busy when any of these is true:
+A **project** is busy when a session in it is running a turn, a delegated run is in
+flight, or a card or question from it is waiting. An idle project is free. A project
+waiting for a card is busy but **answerable** — that is the case the laptop exists for.
 
-- a session in it is running a turn;
-- a delegated run in it is in flight (a worker is working, or the run is between
-  steps);
-- a permission card or a question from it is waiting for an answer.
+**A project is one conversation**, so a busy project locks only itself.
 
-An idle project is free. A project waiting for a card is busy but **answerable** —
-that is the case the laptop exists for.
-
-**A project is one conversation.** Every project has its own folder and chat, so a
-busy project locks only itself; one project's chat must never block another.
-
-Busy is derived from work, never from a click. A tab that closes, crashes or
-sleeps therefore cannot hold a project. Nothing to expire, nothing to leak.
+Busy is derived from work, never from a click. A tab that closes, crashes or sleeps
+therefore cannot hold a project: nothing to expire, nothing to leak.
 
 ## The rules
 
 1. **Any view may steer while the project is busy.** The message joins the running
-   turn at its next step: it is guidance for the work in flight, not a second
-   conversation. The composer says **Steer** with a yellow border, whoever is
-   typing. Cards and questions still block the composer — **that project's cards and
-   questions, in that project's chat**; another project waiting on a card blocks only
-   itself, and the rail marks it. Stop is unchanged, and always available.
-2. **Cards are answerable from any view, busy or not.** The first answer wins and
-   is broadcast: every other view closes the panel and repaints the chip. A
-   second answer is a no-op, not an error.
-3. **Stop is available everywhere, always, and it is two-stage.** The first press
-   asks the work to finish the step it is in and end; the second cuts it off
-   immediately. The notice and the red glow are broadcast, so every view knows a
-   stop is in progress and a second press anywhere is the hard one. Stop wakes
-   nobody and explains nothing to the model: it sees a cut, like a dropped
-   connection. If you want the work resumed or changed, say so in your next
-   message. After a stop, change the model, type Continue, send. There is no
-   separate takeover button. Your next message is also the first thing that can
-   say the run ended: the brief adds one state line — the last run has no report
-   and nothing has started since, so do not wait for it — without saying why it
-   stopped. Without it the Architect sat on "the resend hasn't reported back yet"
-   beside a plan with three todo rows (30 Oct, test5).
-4. **Single/Multi follows the same rule** as a prompt: switchable only while the
-   project is idle. The button is greyed with the reason, and the server refuses
-   the change even if a stale page asks.
-5. **Settings are edited by one view at a time.** Opening Settings takes a lock;
-   closing it, or losing the connection, releases it. Another view is told which
-   computer holds it and the panel does not open. There is no merge and no
-   overwrite prompt while the lock works.
-6. **Presence.** Every view is labelled with the computer's name. "busy — laptop,
-   Fever Tracker" is the sentence the rules are written to produce.
-7. **Changes travel.** The Remote Access switch and saved settings are broadcast,
-   so both views agree without a reload. No rule here may be implemented by
-   refreshing the page: a reload is how a half-typed prompt dies.
-8. **The server is the authority.** Every rule above is enforced where the action
-   is accepted; the greyed button and the message are the honest face of it. A
-   stale tab or `curl` must meet the same refusal.
-9. **Every broadcast says which view caused it.** A stream frame is written once and
-   handed to every view, so it cannot carry a per-client flag like `yours`: the page
-   compares the sender's id with its own instead. Without that, a view read its own
-   action as somebody else's and said so — opening Settings and letting any view join
-   (a second tab, a reload) closed the panel with "The settings are now being edited
-   on ANDREWS", which is the machine you are sitting at (measured 31 Oct, twice: the
-   same shape showed up as "Saved on another computer" after a save, and as a second
-   "Changed on ANDREWS" after the LAN switch). Anything the UI words as *another
-   computer* must be provably another view, or say nothing.
+   turn at its next step: guidance for the work in flight, not a second
+   conversation. The composer says **Steer** with a yellow border. Cards and questions
+   still block the composer — that project's, in that project's chat. Stop is
+   unchanged and always available.
+2. **Cards are answerable from any view.** The first answer wins and is broadcast: other
+   views close the panel and repaint the chip. A second answer is a no-op.
+3. **Stop is available everywhere, always, and it is two-stage.** The first press asks
+   the work to finish the step it is in and end; the second cuts it off. The notice is
+   broadcast, so a second press anywhere is the hard one. Stop wakes nobody and
+   explains nothing: the model sees a cut, like a dropped connection. After a stop,
+   change the model, type Continue, send. Your next message is also the first thing
+   that can tell the Architect the run ended — the brief adds one state line, without
+   saying why (30 Oct, test5).
+4. **Single/Multi follows the same rule:** switchable only while the project is idle.
+   The button is greyed with the reason and the server refuses a stale page.
+5. **Settings are edited by one view at a time.** Opening takes a lock; closing, or
+   losing the connection, releases it. Another view is told which computer holds it.
+6. **Presence.** Every view is labelled with the computer's name: "busy — laptop,
+   Fever Tracker" is the sentence these rules exist to produce.
+7. **Changes travel.** The Remote Access switch and saved settings are broadcast. No
+   rule here is implemented by refreshing the page: a reload is how a half-typed
+   prompt dies.
+8. **The server is the authority.** Every rule is enforced where the action is
+   accepted, so a stale tab or `curl` meets the same refusal.
+9. **Every broadcast says which view caused it.** A frame is written once for every
+   view, so it cannot carry `yours`: the page compares the sender's id with its own.
+   Without that, a view read its own action as somebody else's and said "being edited
+   on ANDREWS" — the machine you are sitting at (31 Oct, twice).
 
-## Failure modes, and what handles them
+## Failure modes
 
-- **A view disappears with Settings open.** Its stream closes, the lock is
-  released, and the next view may open it. A lock also carries a heartbeat: a
-  holder that stops answering for fifteen minutes loses it.
-- **Your own action, reported back as somebody else's.** Anything a view causes —
-  a settings save, the LAN switch, taking the Settings lock — comes back on the
-  stream like every other event, and the page must recognise its own id and stay
-  quiet (rule 9). The events carry `byId` for exactly this; the client-side test is
-  `tests/own-events.test.mjs`, and a broadcast frame that gains a *consequence*
-  without an origin is the bug that grows back.
-- **A stuck turn.** Stop is the escape hatch (rule 3), which is why it is not
-  restricted.
-- **Two answers at once.** The first decision is recorded and broadcast; the
-  second gets `already answered` and the panel closes anyway (rule 2).
-- **A steer sent as the work ends.** The server refuses it and the composer keeps
-  the text, so pressing Send again sends it as a normal message. The run's report
-  is the record either way.
-- **A reload while busy.** The page rebuilds from `/api/status`, `/api/pending`
-  and the stream; it does not need the previous page to have been kind.
+- **A view disappears with Settings open.** Its stream closes, the lock is released;
+  a lock also carries a heartbeat, and a holder silent for fifteen minutes loses it.
+- **Your own action reported back as somebody else's** is rule 9. The events carry
+  `byId`; `tests/own-events.test.mjs` guards it, and a broadcast frame that gains a
+  consequence without an origin is the bug that grows back.
+- **A stuck turn.** Stop is the escape hatch, which is why it is not restricted.
+- **Two answers at once.** The first is recorded and broadcast; the second gets
+  `already answered` and the panel closes anyway.
+- **A steer sent as the work ends.** The server refuses it and the composer keeps the
+  text, so Send again sends it as a normal message.
+- **A reload while busy.** The page rebuilds from `/api/status`, `/api/pending` and
+  the stream; it does not need the previous page to have been kind.
 
 ## Deliberately not done
 
-- **No separate "take over" control.** Stop is the takeover.
-- **No field-level merge or conflict dialog for Settings.** The lock prevents the
-  conflict; a merge would only matter if two people edited the same file at once,
-  which the lock forbids.
-- **No read-only mode.** A view that is blocked from sending is already a viewer:
-  it sees the transcript, the cards and the console live, and can answer.
-- **No locking of the tray or the shell.** The desktop app is one view of the
-  same server; the rules are for pages.
+No separate "take over" control (Stop is the takeover). No field-level merge or
+conflict dialog for Settings (the lock prevents the conflict). No read-only mode (a
+view blocked from sending is already a viewer). No locking of the tray or the shell.
 
-## Where it lives
-
-- `src/presence.js` — who is connected, the computer's name, the settings lock.
-- `src/busy.js` — is this project busy, and why.
-- `src/server.js` — the routes that refuse, and the events that broadcast.
-- `web/app.js` — the disabled Send, the greyed mode switch, the Settings lock and
-  the close-on-decision handler.
+Where it lives: `src/presence.js` (who is connected, the name, the settings lock),
+`src/busy.js` (is this project busy, and why), `src/server.js` (the routes that refuse
+and the events that broadcast), `web/app.js` (the disabled Send, the greyed mode
+switch, the Settings lock, the close-on-decision handler).

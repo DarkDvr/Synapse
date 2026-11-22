@@ -1,309 +1,176 @@
 # The desktop app, and what it is allowed to touch
 
-`Synapse.exe` is the app: a WPF window around a WebView2 page, and the only thing
-the operator launches. This note is the rule it obeys about the machine it runs
-on, the parts it installs for itself, and the traps that cost time getting there.
-
----
+`Synapse.exe` is the app: a WPF window around a WebView2 page, and the only thing the
+operator launches. This note is the rule it obeys about the machine, the parts it
+installs for itself, and the traps that cost time.
 
 ## 1. A good tenant
 
 The machine is borrowed. Synapse may read what is on it and may run what it finds
-(there is no harm in using an existing Node, an existing engine, an existing
-`git`), but **the only place it may write is its own folder and the projects root
-beside it.**
-
-That is one rule with several consequences, and each one used to be broken:
+(an existing Node, engine or `git`), but **the only place it may write is its own
+folder and the projects root beside it.**
 
 | Never | Because |
 |---|---|
-| `winget install …`, MSI, an installer of any kind | it changes the machine, needs elevation, and leaves something behind that Synapse cannot uninstall |
+| `winget install`, MSI, any installer | it changes the machine, needs elevation, and leaves something Synapse cannot uninstall |
 | a global npm install | it lands in `%APPDATA%\npm`, outside the folder, and survives deleting Synapse |
 | editing `PATH`, now or in the registry | the change outlives the app and changes what every other program finds |
 | writing `%APPDATA%`, `~/.config`, `%LOCALAPPDATA%` | these are the user's, and a portable folder that scatters state is not portable |
 | asking the operator to install a prerequisite | the app is meant to be copied and run |
 
-The test for a new dependency is: **if this folder is deleted, is the machine
-exactly as it was?** If the answer is no, the dependency is installed wrongly.
+The test for a new dependency: **if this folder is deleted, is the machine exactly as
+it was?** If not, it is installed wrongly.
 
----
-
-## 2. What Synapse needs, and where each part lives
+## 2. What it needs, and where each part lives
 
 | Part | Lives in | How it gets there |
 |---|---|---|
-| Node | `bin\node\node.exe` | `vendor-node.ps1`, or the npm fetch in `src\npm-check.js` |
-| npm | `bin\node\node_modules\npm` | same download as Node; only used for engine updates |
-| Engine | `bin\opencode\opencode.exe` | `vendor-engine.ps1`, or the update flow in `src\engine-update.js` |
-| Git | `bin\git\cmd\git.exe` | MinGit 2.56.1, downloaded once on first launch when the machine has none — `src\git.js` |
-| .NET packages | `vendor\nuget-packages` | `vendor-nuget.ps1`, so a worker's `dotnet build` needs no network |
+| Node | `bin\node\node.exe` | `vendor-node.ps1`, or the fetch in `src\npm-check.js` |
+| npm | `bin\node\node_modules\npm` | same download; only used for engine updates |
+| Engine | `bin\opencode\opencode.exe` | `vendor-engine.ps1`, or the update flow |
+| Git | `bin\git\cmd\git.exe` | MinGit, once, when the machine has none (`src\git.js`) |
+| .NET packages | `vendor\nuget-packages` | `vendor-nuget.ps1`, so `dotnet build` needs no network |
 | Fonts | `web\vendor\fonts.css` | vendored, never a CDN |
-| WebView2 runtime | the machine | shipped with Windows 11, present on nearly every Windows 10 box through Edge. Not ours to install: if it is missing the app says so and stops |
-
-`bin\`, `vendor\` and `node_modules\` are not in git — they are caches that travel
-with a copied folder, restored by the scripts above.
+| WebView2 runtime | the machine | ships with Windows 11 and nearly every Windows 10 box through Edge. Not ours to install: if it is missing the app says so and stops |
 
 **The vendored copy is preferred, always.** `start` resolves `bin\node\node.exe`
-first and falls back to whatever is on `PATH` only for a dev checkout, and says
-which one it used. The engine does the same for `bin\opencode`.
-
-**Git follows the same rule.** A machine with git uses its own; one without gets
-MinGit in `bin\git`, downloaded by `src\git.js` before the engine starts and put
-on the engine's PATH for the workers. Nothing is installed system-wide and
-deleting `bin\git` undoes it. See `docs/notes/git.md`.
-
----
+first and falls back to `PATH` only for a dev checkout, and says which it used; the
+engine does the same for `bin\opencode`. `bin\`, `vendor\` and `node_modules\` are
+not in git — caches that travel with a copied folder.
 
 ## 3. npm is for one thing
 
-`npm` is used by exactly one feature: **Settings → Check for Updates**, which
-installs `@opencode/cli` and copies the binary over the vendored one. The app
-itself is plain Node with zero packages; nothing else at runtime touches npm.
+**Settings → Check for Updates**, which installs `@opencode/cli` and copies the binary
+over the vendored one. The app is plain Node with zero packages.
 
-Three facts that were wrong before this note existed:
+Three facts that were wrong before this note existed: `bin\node\npm.cmd` did not work
+(the script was copied without `node_modules\npm`); the missing-npm path installed
+Node machine-wide with winget, the exact thing rule 3 forbids; and the fix is local —
+`ensureLocalNpm()` downloads the Node zip for the version already in `bin\node` and
+extracts only `node_modules\npm` into it. Because that npm's global prefix *is*
+`bin\node`, `npm install -g` lands inside the folder.
 
-- **`bin\node\npm.cmd` did not work.** `vendor-node.ps1` copied `node.exe`,
-  `npm.cmd` and `npx.cmd` but not `node_modules\npm`, so `npm.cmd` pointed at a
-  `npm-cli.js` that was not there. A copied folder therefore looked like it had
-  npm and did not.
-- **The missing-npm path installed Node machine-wide with winget.** That is the
-  exact thing rule 3 forbids, and it happened at boot on a machine that only
-  wanted to run a GUI.
-- **The fix is local.** `ensureLocalNpm()` downloads the Node zip for the
-  version already in `bin\node` and extracts *only* `node_modules\npm` into it.
-  No installer, no elevation, no `PATH`, no `%APPDATA%`. It is silent because
-  the app has no console to ask in; if it fails, the update button reports it
-  and nothing else changes.
-
-So npm's absence is not a boot failure, and npm's presence is never assumed.
-A machine with no npm and no network can still run every turn: the engine and the
-model provider are all it takes.
-
----
+At boot (`src/npm-check.js`): ours is used silently; this machine's is used with one
+line saying so; missing, it is fetched in the background; a failed fetch is one
+warning, recorded in `data\npm-attempt.json` and not retried for six hours. No prompt
+— the app starts the server hidden, so a question would sit unanswered.
 
 ## 4. The shell
 
-`shell\` is the WPF project; `shell\build.ps1` publishes a lean, single-file
-`Synapse.exe` to the folder root. The exe is build output and is not in git.
-
 **Process model.** The shell spawns `bin\node\node.exe src\index.js` with
-`SYNAPSE_SUPERVISED=1`, no window, and all three standard streams redirected —
-stdin is closed immediately so a prompt can never block invisibly. The engine is
-that child's child. Nothing is ever matched by process name: the shell stops what
-it holds a handle to, and `Kill(entireProcessTree: true)` is the fallback after
-eight seconds, which is the handle-safe version of `taskkill /T`.
+`SYNAPSE_SUPERVISED=1`, no window, all streams redirected — stdin closed immediately so
+a prompt cannot block invisibly. The engine is that child's child. Nothing is matched
+by process name: the shell stops what it holds a handle to, and
+`Kill(entireProcessTree)` is the fallback after eight seconds.
 
 **Exit codes are the contract.**
 
 | Code | Means | Shell does |
 |---|---|---|
-| 2 | "restart me" — Settings → Restart Now | respawns |
-| 3 | "close the whole app" — a staged Synapse update is waiting | raises `QuitRequested`; the app exits, and `update-apply.mjs` replaces the files and starts it again |
+| 2 | restart me | respawns and reloads the page |
+| 3 | close the whole app — a staged update is waiting | raises `QuitRequested`; `update-apply.mjs` replaces the files and starts it again |
 | 0 | stopped on purpose | stays stopped |
-| anything else | it died | shows the failure with the tail, does **not** respawn in a loop |
+| anything else | it died | shows the last useful line and the console; no respawn loop |
 
 **Updates use code 3.** The server downloads and stages a release, starts
-`update-apply.mjs` detached, and exits 3 (`update-apply.ps1` remains the fallback
-for an install from before the Node helper existed). The shell closes; the helper
-waits for both pids, backs up the program files under `data\backups\`, overlays the
-stage and starts `Synapse.exe` again. The stage never contains `data\`, `config\` or
-the projects folder, so an update cannot take the operator's settings with it. A
-failed copy restores the backup and still starts the old version.
+`update-apply.mjs` detached and exits 3. The helper waits for both pids, backs up the
+program files under `data\backups\`, overlays the stage and starts `Synapse.exe`. The
+stage never contains `data\`, `config\` or the projects folder. A failed copy restores
+the backup and still starts the old version.
 
-**A crash leaves things running, so the next start cleans up after it.** Measured:
-killing the app from Task Manager left the server, the engine and its four MCP children
-alive, still holding 8700 and 8720 — the next launch then failed with `EADDRINUSE`, which
-reads as "Synapse is broken". `ServerHost.Start()` therefore stops what a previous run
-left **before** it spawns anything: it reads `data\synapse.pid` and `data\engine.pid`, and
-acts only on a pid whose executable is still inside this folder. That is the same identity
-rule as everywhere else — never a process name — and it is what makes a recycled pid
-harmless: pointed at Notepad, the guard leaves Notepad running and starts normally. The
-server goes first, because its tree holds the engine and the engine holds the MCP children.
+**A crash leaves things running, so the next start cleans up.** A kill from Task
+Manager once left the server, the engine and four MCP children alive, still holding
+8700 and 8720, and the next launch failed with `EADDRINUSE`. `ServerHost.Start()`
+reads `data\synapse.pid` and `data\engine.pid` and acts only on a pid whose executable
+is still inside this folder — the same identity rule as everywhere else. The server
+goes first, because its tree holds the engine.
 
-**The console moved into the window.** `logger` still mirrors the `app` channel
-and every warning or error to stdout; that stdout is captured by the shell into
-`logs\console.log` and into a ring buffer, and served to the page over the
-WebView2 message channel (`{kind:'console', action:'tail', offset}`). The page
-never reads a file and never asks the server, which is the whole point: the
-console has to work when the server is stopped. There is exactly one writer of
-that file — the shell — so the server's fatal-before-logger errors still land
-somewhere.
+**The console is in the window.** `logger` mirrors the `app` channel and every warning
+or error to stdout; the shell captures that into `logs\console.log` and a ring buffer
+and serves it to the page over the WebView2 channel. The page never reads a file and
+never asks the server — the console has to work when the server is stopped. There is
+one writer of that file, the shell, so the server's fatal-before-logger errors still
+land somewhere. The panel is `min(1180px, 100%)` by `76vh`, wraps rather than scrolling
+sideways, is selectable, and polls the tail every 750 ms. It carries Start, Restart
+and Stop beside Close, with one of them always disabled.
 
-`logs\console.log` duplicates what `logs\app.log` already holds. That is
-deliberate: the console is defined as "the app channel plus every warning or
-error from any channel", which is a different cut of the same output.
-
-**The app stops and starts; the window stays.** Stop Server from the tray warns
-first — a **native dialog on purpose**, because it has to be answerable when the page
-is not: the server may already be down, or the page may have failed to load, and a
-page-drawn confirmation would be invisible in both. Consent then `POST`s
-`/api/shutdown`, so the engine is stopped rather than orphaned.
-
-**The page stays too.** A deliberate stop — or a crash — does not swap the window to
-the boot panel. The Engine row goes red, and the console is one click away. The
-panel is for a server that never arrived, which is the only case where there is no
-page worth keeping. When the server comes back the shell reloads the page, because
-everything on it was fetched from a server that no longer exists. That includes a
-restart the *server* asks for (`/api/restart`, which Settings' save uses): the
-`ExitRestart` branch reports Stopped before starting the replacement, as the tray's
-restart does, so the window reloads too. Verified 28 Oct: `[app] reloading
-http://127.0.0.1:8700` followed the restart in `logs\console.log`, and a client
-change in `web/` is live after a server restart without Ctrl+R.
-
-**The console is behind `...` on the Engine row.** A boxed ellipsis, not a label: it
-is an affordance, not a fourth row in a block that already has three. The panel is
-wide and tall on purpose — `min(1180px, 100%)` by `76vh` — because it is a log to
-read, not a peek. Lines wrap rather than scrolling sideways (a stack trace is read),
-the text is selectable, and it asks the shell for the tail when it opens and then
-every 750 ms. Outside the app it says so instead of showing an empty box.
-
-**The console carries the three server actions.** Start, Restart and Stop sit to the
-left of Close, in the tray menu's order, and one of them is always disabled — there is
-nothing to start while it runs and nothing to stop while it is down. Colour is the
-border and the label only: a filled button would be louder than the dialog it sits in,
-and Close is the primary action here. Stop goes through the tray's own confirmation,
-because the question is asked in the shell and not in two places that could drift.
-
-**The title bar says the server is stopped**, as well as the Engine row — that strip
-is the only thing on screen that does not depend on the page below it, which is
-exactly the state it describes.
-
-**The boot panel can start the server.** `web/offline.html` carries a Start Server
-button, shown only while the server is stopped or has failed — while it is starting
-there is nothing to press, and a button that does nothing is a mock.
-
-
----
+**The app stops and starts; the window stays.** Stop Server from the tray warns first
+in a **native dialog**, because the page may already be down; consent `POST`s
+`/api/shutdown` so the engine is stopped rather than orphaned. A deliberate stop or a
+crash does not swap the window to the boot panel — the Engine row goes red and the
+console is one click away. When the server comes back the shell reloads the page,
+because everything on it was fetched from a server that no longer exists.
+`web/offline.html` carries a Start Server button, shown only while the server is
+stopped or has failed.
 
 ## 5. The window
 
-No frame. `shell\MainWindow.xaml` sets `WindowStyle="None"` and keeps
-`WindowChrome` for the two things the frame was actually for: the resize borders at
-every edge, and a maximised window that fits the work area.
+No frame; `WindowChrome` keeps the resize borders and a maximised window that fits the
+work area.
 
-**The title bar is the shell's, and that is not a style choice.** The page drew it
-for a while, and it could not work: a page's scrollbar spans the page's viewport, so
-a bar inside the page is a bar the scrollbar draws over. Measured on the operator's
-screen — the scrollbar ran up through the close button. Outside the page, the
-scrollbar starts where the page starts, which is under the bar.
-
-- **The bar is `WindowChrome.CaptionHeight="36"`**, so dragging, double-click to
-  maximise, the right-click system menu and the Windows 11 snap layouts are the
-  frame's own. Nothing in JavaScript reproduces a drag, and
-  `IsNonClientRegionSupportEnabled` is no longer set — the page owns no chrome.
-- **The buttons are XAML**, with the Segoe Fluent Icons glyphs Windows uses on its own
-  caption buttons, and `WindowChrome.IsHitTestVisibleInChrome="True"` so the caption
-  does not swallow their clicks. Maximise and restore share a button; only the glyph
-  (E922/E923) changes.
-- **The page has no `padding-top` any more.** The viewport starts below the bar, so
-  `100vh` is already the room under it and nothing has to subtract 36px.
-
-**The WebView is inset by the resize border, because a child window takes the mouse.**
-Measured: with the WebView full-bleed, `WindowFromPoint` at every edge returned
-Chromium's window, so the frame was never asked to hit-test and only the caption
-behaved. Forwarding the hit-test *through* the WebView is not possible: its windows
-belong to another process, and `SetWindowLongPtr` on them answers **error 5**
-(access denied). So the 6px belongs to the frame — and the strips left over are
-painted in the colours the page **renders** there, which is not what its CSS says: the
-rail declares `#191B1F` and paints **`#111417`** (the background image darkens it), and
-the content's edge is `#0D161E`. Measured after: within 1–3 units of the pixels beside
-them, so there is no visible frame, and `WindowFromPoint` at every edge and corner
-returns the top-level window with HTLEFT/HTRIGHT/HTBOTTOM and the corner codes. The
-top-right corner is the close button, as in every Windows app.
-
-**A maximised frameless window overhangs.** Measured: 2574×1454 at (-7,-7) on a
-2560×1440 screen, which put the taskbar under the window. `MainWindow` hooks
-`WM_GETMINMAXINFO` and answers with the monitor's work area in physical pixels, so it
-is right at any scaling.
-
-**And the stage has to follow the window.** `fitStageHeight()` measures the room
-once on load, so a resize left the old height behind and the page grew a scrollbar at
-the new size. It is called on every `resize` as well.
-
-**The page reserves no scrollbar gutter.** `scrollbar-gutter: stable` on `html` holds
-a 10px column open whether or not anything scrolls, and the panes that scroll inside
-the page keep their own reservation — that is where the rule belongs. The page itself
-does not: it only scrolls in the narrow layout, where a bar is expected.
-
-**`color-scheme: dark`.** Chromium's own scrollbars, spinners and date pickers follow
-it. Without it a dark window grows a light scrollbar, and a transparent track over an
-unpainted gutter is what reads as a black stripe.
-
-**One instance per folder.** A second launch does not start a second server — it would
-lose the port race and show a boot panel with `EADDRINUSE` on it, which reads as a
-broken app rather than as "it is already open". The folder's path, hashed, names both
-a mutex and a registered window message (a SHA-256, not `GetHashCode`, which is salted
-per process so two launches would never agree); the second copy broadcasts "come
-forward" and exits.
-
-**The window remembers where it was.** `data\window.json`, written when it is hidden
-and whenever its state changes. The restore refuses a position where the title bar
-could not be grabbed: there is no frame, so that 36px strip is the only thing to drag,
-and a saved position that leaves it off the desktop is a window nobody can move back.
-
----
+- **The title bar is the shell's.** A page's scrollbar spans the page viewport, so a
+  bar inside the page is a bar the scrollbar draws over. The bar is
+  `CaptionHeight="36"`, so dragging, double-click, the system menu and snap layouts
+  are the frame's own; the buttons are XAML with Segoe Fluent glyphs and
+  `IsHitTestVisibleInChrome`. The page has no `padding-top`: `100vh` is already the
+  room under the bar.
+- **The WebView is inset by the resize border, because a child window takes the
+  mouse.** With it full-bleed, `WindowFromPoint` at every edge returned Chromium's
+  window, and forwarding the hit-test through the WebView is impossible — its windows
+  belong to another process, and `SetWindowLongPtr` answers **error 5**. The 6px
+  strips are painted in the colours the page *renders* there (the rail declares
+  `#191B1F` and paints `#111417`), measured within 1–3 units of their neighbours.
+- **A maximised frameless window overhangs.** Measured 2574×1454 at (-7,-7) on a
+  2560×1440 screen, which put the taskbar under the window; `MainWindow` answers
+  `WM_GETMINMAXINFO` with the monitor's work area in physical pixels.
+- **The stage follows the window:** `fitStageHeight()` runs on load and on every
+  `resize`, or the page grows a scrollbar at the new size.
+- **No scrollbar gutter on the page.** `scrollbar-gutter: stable` on `html` holds a
+  10px column open whether or not anything scrolls; the panes that scroll inside keep
+  their own reservation. `color-scheme: dark` so Chromium's own scrollbars and
+  controls follow.
+- **One instance per folder.** A second launch broadcasts "come forward" and exits,
+  rather than losing the port race and showing a boot panel with `EADDRINUSE`.
+- **The window remembers where it was** (`data\window.json`), and refuses a position
+  where the title bar could not be grabbed.
 
 ## 6. The folder travels
 
-Copy the folder to another PC, double-click `Synapse.exe`, and it works — on Windows
-with the **.NET 10 Desktop Runtime**, which is the one thing it does not install for
-itself. The exe is a small framework-dependent app on purpose; when the runtime is
-missing, Windows says so before Synapse has run a line.
+Copy it to another PC, double-click `Synapse.exe`, and it works — on Windows with the
+**.NET 10 Desktop Runtime**, the one thing it does not install for itself.
 
-Two ways a copy leaves this machine, and they are different things. **The release
-zip** (`make-release.ps1`, built for a release) is the program: `Synapse.exe`,
-`package.json`, the updater, `src\`, `web\`, `skills\` and the seed config — no
-`data\`, no `logs\`, no projects, no keys, no tests, no docs, no git. **Copying
-the folder** moves everything, including this machine's answers, which is what
-makes it a clone rather than a delivery.
+The release zip (`make-release.ps1`) is the program: `Synapse.exe`, `package.json`,
+the updater, `src\`, `web\`, `skills\` and the seed config — no `data\`, no `logs\`, no
+projects, no keys, no tests, no docs, no git. **Copying the folder** moves everything,
+including this machine's answers, which is what makes it a clone.
 
 The rule that makes the rest true: **a path that names a place on this machine is a
-hint, never an instruction.** The config and the runtime state travel with the folder,
-so they still name the machine the copy came from. Measured on a second PC:
+hint, never an instruction.**
 
-- `config.engine.opencode.binary` was `F:\dev\Synapse\…\opencode.exe`, so the engine
-  could not be spawned at all (`spawn … ENOENT`) and the app served a UI whose runtime
-  was dead. Paths are now checked: if the **drive or share** is not here, the value is
-  cleared at boot (`repairMachinePaths`) and the copy that travels is used. If the drive
-  *is* here and only the file is missing, the config is left alone — that is a typo to
-  fix, not a different machine.
-- `config.engine.opencode.home` was the same kind of path, and the home is *created* —
-  so the copy made an `F:\dev\Synapse\data\engine` on a PC that has no F: drive. The
-  home now falls back to `data\engine\opencode` unless its root exists.
-- `data/projects.json` listed a project whose folder was on the old machine. A project
-  whose directory is gone is not listed, and is dropped from the registry at boot
-  (`pruneMissing`), silently: a row nobody can open is not information. The cost is that
-  a project on a temporarily unplugged drive is forgotten; the folder can be added again,
-  which adopts it, plan and sessions included.
+- If the **drive or share** is not here, the value is cleared at boot
+  (`repairMachinePaths`) and the copy that travels is used. If the drive is here and
+  only the file is missing, the config is left alone — that is a typo to fix.
+- `config.engine.opencode.home` falls back to `data\engine\opencode` unless its root
+  exists, so a copy cannot create a drive it does not have.
+- A project whose directory is gone is dropped from the registry at boot
+  (`pruneMissing`), silently. The cost is that a project on an unplugged drive is
+  forgotten; the folder can be added again, which adopts it.
 
-The guard is `tests/portable-paths.test.mjs`. The general rule for anything added later:
-ask whether the value would still mean anything on a PC that has never seen this one.
+The guard is `tests/portable-paths.test.mjs`. The rule for anything added later: ask
+whether the value would still mean anything on a PC that has never seen this one.
 
+## The taskbar blink
 
+When the work ends and Synapse is not the focused window, its button flashes until the
+operator comes back.
 
-## The taskbar blink (12 Nov)
+- the page posts `/api/attention`; the server writes `[[attention]] work finished`;
+- `ServerHost.OnLine` recognises the marker, keeps it out of the console store, and
+  raises `Attention`;
+- `MainWindow.FlashTaskbar` calls `FlashWindowEx` with `FLASHW_ALL | FLASHW_TIMERNOFG`,
+  which stops by itself when the window is activated, and does nothing when Synapse is
+  in front or hidden in the tray.
 
-When the work ends and the operator is looking at something else, the window's taskbar
-button flashes until they come back. The decision is the page's — it is the same moment the
-finished-work chime plays, and a run the harness stopped — while the taskbar belongs to the
-shell, so the two talk over the channel they already have:
-
-- the page posts `/api/attention`; the server writes one line, `[[attention]] work finished`;
-- `ServerHost.OnLine` recognises the marker, keeps it out of the console store, and raises
-  `Attention`;
-- `MainWindow.FlashTaskbar` calls `FlashWindowEx` with `FLASHW_ALL | FLASHW_TIMERNOFG` — the
-  flashing stops by itself the moment the window is activated. It does nothing when the
-  window is already in front or hidden in the tray.
-
-What blinks, all of it only while Synapse is **not** the focused window:
-
-| when | why it is a person's turn |
-|---|---|
-| the work ends (the finished-work chime) | nobody is waiting on a model any more |
-| a run the harness stopped | the reason is in the chat, not on the screen |
-| a permission card appears | with Auto-Permissions off, only a person can answer it |
-| a SynaBrowse sign-in is asked for | it is never auto-allowed |
-| the screen (mouse, keyboard, focus) is asked for | it is never auto-allowed |
-| a question is asked | with Auto-Answer off, only a person can answer it |
-| the auto-shutdown countdown starts | the PC is about to go off |
-
+It fires when: the work ends; the harness stopped a run; a permission card appears; a
+sign-in or the screen is asked for; a question is asked; the auto-shutdown countdown
+starts.

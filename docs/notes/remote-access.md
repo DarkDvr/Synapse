@@ -1,92 +1,62 @@
 # Remote access: the LAN switch
 
-The operator leaves the desktop running and opens Synapse from a laptop on the
-same network. The laptop is a **thin client**: the desktop keeps the engine, the
-projects and every session; the laptop only needs a browser pointed at the
-desktop's UI.
+The laptop is a **thin client**: the desktop keeps the engine, the projects and every
+session; the laptop only needs a browser pointed at the desktop's UI.
 
 ## What the switch does
 
-`STATUS → Remote Access` is one boolean, `server.remote` in the config file.
+`STATUS → Remote Access` is one boolean, `server.remote`.
 
-- **Off** (default): the HTTP listener binds `server.host` (`127.0.0.1`). Nothing
-  on the LAN can connect, because nothing is listening there.
-- **On**: the listener moves to `0.0.0.0` so a private IPv4 address can reach it.
-  The desktop keeps using `http://127.0.0.1:8700`; there is no second UI.
+- **Off** (default): the listener binds `server.host` (`127.0.0.1`), so nothing on the
+  LAN can connect.
+- **On**: the listener moves to `0.0.0.0`. The desktop keeps using
+  `http://127.0.0.1:8700`; there is no second UI.
 
-The listener moves in place (`http.relisten`), without restarting the engine. The
-API answers the toggle before the sockets close; SSE clients reconnect a moment
-later — that is why the page flickers and comes back.
+It moves in place (`http.relisten`) without restarting the engine. The API answers
+before the sockets close, so SSE clients reconnect a moment later and the page
+flickers and comes back.
 
 **It is off at every start.** A restart resets `server.remote` to false and the
-listener comes up on loopback, whatever the file said before. Measured 29 Oct: a
-listener restored as "on" at boot showed on while the LAN still could not reach
-it, and only toggling off and on actually opened it. The door is also a token-
-protected service, so it should not open itself. Turn it on from the desktop
-after the server is up; the token is unchanged.
+listener comes up on loopback whatever the file said; measured 29 Oct, a listener
+restored as "on" showed on while the LAN still could not reach it. The door is also a
+token-protected service, so it should not open itself.
 
 ## Who may connect
 
-Three gates, checked on every request from a non-loopback address:
+Three gates, on every request from a non-loopback address:
 
-1. **Remote access is on.** If it is off, a non-loopback request is refused
-   outright (in practice the port is not listening either).
-2. **The address is private:** `10/8`, `172.16/12` or `192.168/16`. A public
-   address is refused even with the token.
-3. **The token matches.** The token is 32 random bytes, written to
-   `data/remote-token` (mode 600), and exchanged once for an `HttpOnly`,
-   `SameSite=Strict` cookie by `/login?token=…`. The token itself never appears in
-   a page, and `/api/remote` returns it **only to loopback** — a LAN client gets
-   `token: null` and types it into the login page.
+1. **Remote access is on**, or the request is refused outright.
+2. **The address is private:** `10/8`, `172.16/12`, `192.168/16`. A public address is
+   refused even with the token.
+3. **The token matches.** 32 random bytes in `data/remote-token` (mode 600),
+   exchanged once for an `HttpOnly`, `SameSite=Strict` cookie by `/login?token=…`. It
+   never appears in a page, and `/api/remote` returns it **only to loopback**.
 
-The login page is self-contained (no assets) because it has to load before the
-browser has a cookie.
-
-The engine's own port (8720) is never exposed: the Synapse server proxies every
-engine call. Exposing 8720 would put the engine's API, and its session data, on
-the network.
+The login page is self-contained because it loads before there is a cookie. The
+engine's port (8720) is never exposed: the server proxies every engine call.
 
 ## Using it
 
 1. On the desktop, with the server up: STATUS → Remote Access → on.
-2. A second line appears under the switch with the desktop's name,
-   `http://<machine-name>:8700/`. Open it on the laptop. The raw `192.168.…`
-   address went on 4 Nov: it was a second line of numbers under the name, and DHCP
-   moves it. The line under it is a count (`clients: 1`); the machines' network
-   names are in its tooltip, `Connected clients: …`, because a rail line that
-   lists them either wraps or ellipses. A name arrives from a reverse lookup that
-   runs after the connection is accepted: when it answers, every page is told
-   again, and a client the network cannot name is never printed as an address —
-   the tooltip says the name has not arrived.
-3. The **TOKEN** chip on that line copies the token; paste it into the login
-   page. The cookie signs in once; the address then opens straight to the UI.
+2. A line appears with the desktop's name, `http://<machine-name>:8700/`, and a count
+   (`clients: 1`) whose tooltip names them. A name arrives from a reverse lookup
+   after the connection; a client the network cannot name is never printed as an
+   address.
+3. The **TOKEN** chip copies it; paste it into the login page. The cookie signs in
+   once.
 4. If the desktop's IP changes, the address changes; the token stays valid.
-5. Off hides the address and the chip entirely: one row, nothing on the LAN.
-6. **Countdowns follow the desktop's clock, not the laptop's.** Auto-Answer and
-   Auto-Permission compare a timestamp the server wrote with "now"; every response's
-   `Date` header becomes an offset (`state.clockSkew`), so a laptop whose clock is
-   minutes off counts from the same start. Without it, a card that had just appeared
-   read "picked now" on the remote PC while it counted properly on the desktop
-   (4 Nov).
+5. **Countdowns follow the desktop's clock.** Every response's `Date` header becomes
+   an offset (`state.clockSkew`), so a laptop minutes off counts from the same start.
 
-Windows Firewall may ask for permission the first time the listener goes public;
-allow it on **Private** networks only. Do not port-forward 8700; if you need
-access outside the house, use a private overlay network such as Tailscale, not a
-public port.
-
-The desktop must stay awake; the tray app can serve with the window closed, but
-Windows sleep will still stop it. Set sleep to never while plugged in, or use a
-power plan for it.
+Allow the firewall prompt on **Private** networks only. Do not port-forward 8700; for
+access outside the house use a private overlay such as Tailscale. The desktop must
+stay awake — Windows sleep stops it even with the window in the tray.
 
 ## What it is not
 
-- Not HTTPS. On a trusted home LAN the token is protected from other devices but
-  not from a passive sniffer on the same network. HTTPS with a self-signed cert is
-  the later upgrade if the LAN is not trusted.
-- Not multi-user. Everyone who opens the link is the operator: they can answer
-  permission cards, stop runs and change settings. Treat the address and token as
-  a password.
-- Not a second copy of the app. The desktop serves the UI, so both machines run
-  the same code with no version skew. A remote mode in `Synapse.exe` (skip the
-  local server, load the remote URL) is a later shell feature, not required for
-  this.
+- **Not HTTPS.** On a trusted LAN the token keeps other devices out, not a passive
+  sniffer.
+- **Not multi-user.** Everyone who opens the link is the operator and can answer
+  cards, stop runs and change settings. Treat the address and token as a password.
+- **Not a second copy of the app.** The desktop serves the UI, so both machines run
+  the same code.

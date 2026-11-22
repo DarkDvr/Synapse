@@ -1,55 +1,30 @@
 # The suite, and the run on GitHub
 
 `node --test "tests/*.test.mjs"` from the project root. Every test runs offline
-except one skipped by design: `engine-contract.test.mjs` needs `SYNAPSE_E2E=1` and
-a live engine.
+except `engine-contract.test.mjs`, which needs `SYNAPSE_E2E=1` and a live engine.
 
-On this machine, run it through `bin\node\node.exe scripts\checks.mjs`: the same
-command, with Auto-Shutdown turned off for every project first and **left off**. An
-idle app plus a test run is exactly what the auto-shutdown tick waits for — it powered
-the PC off under the suite on 11 Nov and again on 15 Nov. Only the Synapse window may
-turn Auto-Shutdown back on; the script and the tests may only turn it off.
-
-## The audit (16 Nov)
-
-The suite had grown to 126 files / 816 cases. It was not mostly duplication: policy,
-gate plumbing, page wiring and CSS each had a test, and several apparent duplicates
-were one invariant checked at two layers. The safe cut was **packaging**, not coverage:
-the 52 UI-contract cases became eight groups (each failure still names its original
-case), and `auto-shutdown-policy.test.mjs` folded into `shutdown.test.mjs`. That
-pass ended at 125 files / 772 cases, with the same assertions. The download feature
-added one file and the browser cases; the suite is now 126 files / 821 cases.
-
-What was deliberately not done: deleting policy or provider-permutation cases to hit a
-number. They are cheap and each names a branch. The next real saving is time, not count:
-`loop-run` (about 137 s) and the two visual `--diff` tests (about 31 s each) are the
-poles; they want an opt-in `SYNAPSE_SLOW` path, not deletion.
+On this machine, run it through `bin\node\node.exe scripts\checks.mjs`. The script
+turns Auto-Shutdown off for every project first and **leaves it off**: an idle app
+plus a test run is exactly what the auto-shutdown tick waits for, and it powered the
+PC off under the suite on 11 and 15 Nov. Only the Synapse window may turn it back on.
 
 `.github/workflows/tests.yml` runs the same command on `windows-latest` for every
 push to `main`, and by hand from the Actions tab. Windows because the app is: the
-tests read Windows paths, drive Edge through `skills/visual-review` and read the
-WPF project file. Node 24, and one step checks Edge is on the runner so a missing
-browser is a sentence at the top instead of a failure fifteen minutes in.
+tests read Windows paths, drive Edge through `skills/visual-review` and read the WPF
+project file. Node 24, and one step checks Edge is on the runner so a missing browser
+is a sentence at the top instead of a failure fifteen minutes in.
 
 ## The one rule: a test may read only a file that travels in git
 
-`config/synapse.config.json`, `data/`, `logs/` and `bin/` are gitignored — they are
-this machine's answers, not the program. A test that opens one of them passes here
-and fails on every runner, and it fails the ugliest way: an `ENOENT` at import time,
-so the whole file reports as one broken test while the rest pass around it.
+`config/synapse.config.json`, `data/`, `logs/` and `bin/` are gitignored — this
+machine's answers, not the program. A test that opens one passes here and fails on
+every runner, and it fails the ugliest way: an `ENOENT` at import time, so the whole
+file reports as one broken test while the rest pass around it.
 
-This has now happened three times:
-
-- 6 Nov, one hour after CI existed: two tests that only passed on this machine
-  (`1de459d` fixed them).
-- 8 Nov, `548a6da` "the config stays home" took `config/synapse.config.json` out of
-  git and added it to `.gitignore` — a good decision — while
-  `provider-config.test.mjs` still read it to check the shipped DeepSeek provider.
-  The file was on this machine, so the suite stayed green here, and **37 consecutive
-  runs failed** over 32 hours on that one `ENOENT`, each sending the operator an
-  email.
-- 9 Nov, fixed: the test reads `config.default.json`, the seed every fresh install is
-  made from. That is the file that ships, so it is the file "what we ship" may read.
+This has happened three times, twice on the same file: a config test reading
+`config/synapse.config.json` failed 37 consecutive runs over 32 hours after the file
+left git (8–9 Nov). The fix was to read `config.default.json`, the seed every fresh
+install is made from — the file that ships is the file "what we ship" may read.
 
 The rule generalises: **removing a file from git is a two-place change**, and the
 test that read it is the other place. When a commit un-tracks something, grep
@@ -74,35 +49,22 @@ A worktree is the CI checkout exactly: no `config/`, no `data/`, no `bin/`, no
 `Synapse.exe`. Green here and red there has only ever meant one thing — a test is
 reading something this machine happens to have.
 
-Copy the **whole** change into it, not the file you were editing. A worktree
-holding half a commit answers a question nobody asked: on 9 Nov it went green
-because the new note was absent in both trees, and CI failed on the note the
-commit actually added. Run `git status` first, and mirror every path it names.
+Copy the **whole** change into it, not the file you were editing. A worktree holding
+half a commit answers a question nobody asked: on 9 Nov it went green because the new
+note was absent in both trees, while CI failed on the note the commit actually added.
+Run `git status` first, and mirror every path it names.
 
-## Emails
+GitHub mails the owner every failed run of a watched workflow. A red run is not made
+quieter by a setting; it is made quieter by being green.
 
-The operator is the repository owner, so GitHub mails every failed run of a watched
-workflow. The setting is per user, not per repository: GitHub → Settings →
-Notifications → Actions, or Watch → "Participate and @mentions" on the repository.
-A red run is not made quieter by that; it is made quieter by being green.
+## Fixtures
 
-## The temp folders the suite used to leave (fixed 11 Nov)
+Every fixture folder goes through **`tmpdir(prefix)`** in `tests/tmpdir.mjs`: it makes
+the folder, remembers it, and a `process.on('exit')` hook empties it. Before that a
+full run left about 145 folders in `%TEMP%` (15,638 by 10 Nov), because a file that
+throws never reaches its own `finally`.
 
-`node --test "tests/*.test.mjs"` runs each file in its own process, and a file that
-throws never reaches its own `finally` — so a failing fixture folder stayed in `%TEMP%`.
-Counted on 10 Nov: **15,638 folders, 61 MB**, about 145 more per full run, with names
-like `synapse-doc-*`, `synapse-perm-*`, `synapse-round-*`. Clutter, never a fault in the
-app: the app points its own `TEMP` at `data\temp` (20 Nov; before, the projects scratch
-root), so `%TEMP%` was only ever the suite's.
-
-Every fixture folder now goes through **`tmpdir(prefix)`** in `tests/tmpdir.mjs`: it makes
-the folder, remembers it, and a `process.on('exit')` hook empties it. A test may still
-delete its own folder early; the sweep finds it gone and says nothing.
-
-Measured after the change: a full run adds **0** folders (102 → 102 before the backlog was
-cleared). Two honest limits: a process killed outright (SIGKILL, a hard `taskkill`) never
-reaches the hook, so it leaves one; and the hook must be synchronous, because Node runs no
-async work on `exit`. `tests/tmpdir.test.mjs` proves the case that matters — a child that
-throws leaves nothing behind, and a folder removed early does not break the sweep.
-
-
+Measured after the change: a full run adds **0** folders. Two honest limits: a
+process killed outright never reaches the hook, and the hook must be synchronous —
+Node runs no async work on `exit`. `tests/tmpdir.test.mjs` proves the case that
+matters.
