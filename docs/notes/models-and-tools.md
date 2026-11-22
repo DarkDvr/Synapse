@@ -1,117 +1,90 @@
 # Models and tools
 
-The catalog, the thinking-effort variants, what Synapse remembers about a model,
-the probe, and how the engine itself is updated. Split out of `AGENTS.md`; read it
-before touching model selection or `src/modelcache.js`.
+The catalog, the thinking-effort variants, what Synapse remembers about a model, the
+probe, and how the engine is updated. Read it before touching model selection,
+`src/windows.js` or `src/modelcache.js`.
 
 ## The cache share on a card
 
-The card says `120k/262k ctx (92% cache)`. The prompt is `input + cache.read` from the step's
-usage, and the share is `cache.read / (input + cache.read)`:
+The card says `120k/262k ctx (92% cache)`. The prompt is `input + cache.read` from the
+step's usage, and the share is `cache.read / (input + cache.read)`:
 
 - a cloud model with prompt caching reports both numbers;
-- a local server reports them when it does KV reuse (llama.cpp's cache reuse, LM Studio) and
-  reports nothing when it does not — then there is no share, and none is shown;
-- the share is **refused** when the sum exceeds the window, because that is the signature of
-  a provider reporting `cache.read` as a running session total (a 27B reported five million
-  against a 262K window on 12 Nov). A percentage built on that would be fiction.
+- a local server reports them when it does KV reuse (llama.cpp, LM Studio) and nothing
+  when it does not — then there is no share, and none is shown;
+- the share is **refused** when the sum exceeds the window, the signature of a provider
+  reporting `cache.read` as a running session total (a 27B reported five million against
+  a 262K window on 12 Nov). A percentage built on that would be fiction.
 
-The Architect's card takes the halves from the streamed event and the transcript; a worker's
-takes them from `promptParts()` through `run.progress` (`ctxFresh`, `ctxCached`).
+The Architect's card takes the halves from the streamed event and the transcript; a
+worker's from `promptParts()` through `run.progress`.
 
 ## Tools and models
 
-- **The toolset is per-model, per-agent, and even per-call.** One run reported
-  `execute`, the next did not. Never hardcode an assumption about which tools
-  exist — the probe asks the model and reports it.
-- Observed toolset: `edit, glob, grep, question, read, shell, skill, subagent,
-  webfetch, websearch, write, execute`. There is **no `list`** and **no
-  `todowrite`**; asked for `list` the model used `read`, asked for `task` it
-  used `subagent`.
-- **`question` is the form mechanism, and the form is the interface.** The tool
-  call blocks the session, and the engine raises a **form** for it:
-  `GET /api/session/{id}/form` lists it, `POST .../form/{formId}/reply` with
-  `{answer:{<key>: value}}` settles it, and the tool call then completes with the
-  answers in its output. A form is a schema, not a question: fields are
+- **The toolset is per-model, per-agent and even per-call.** One run reported `execute`,
+  the next did not. Never hardcode an assumption about which tools exist — the probe
+  asks the model and reports it. Observed: `edit, glob, grep, question, read, shell,
+  skill, subagent, webfetch, websearch, write, execute`. There is no `list` and no
+  `todowrite`.
+- **`question` is the form mechanism, and the form is the interface.** The call blocks
+  the session and the engine raises a **form**: `GET /api/session/{id}/form` lists it,
+  `POST .../form/{formId}/reply` with `{answer:{<key>: value}}` settles it. Fields are
   `string` (with `options` → a choice, `custom: true` → an escape hatch),
-  `multiselect` (checkboxes), `boolean`, `number`/`integer`, `external`, with
-  `required`, `hidden` and `when` (eq/neq on another key). Missing one stalls a
-  session forever.
-  **The global form list is location-scoped and will not show a project's form.**
-  `GET /api/form` only lists forms in the engine's own location (the projects
-  root), so a question asked in a project subfolder is invisible there — which is
-  exactly why the first real question showed up as a raw JSON tool card while the
-  session sat blocked. Ask the session, not the world: a session waiting on a
-  form is a session `GET /api/session/active` reports as active, and the open
-  session is asked for by name too (`GET /api/pending?session=<id>`).
-  **Forms live in the engine's memory.** A Synapse restart restarts the engine,
-  and every pending form dies with it: the transcript is left with a tool part
-  stuck at `running` and the turn never resumes. Interrupt the session (Stop)
-  before a restart if a question is open; a stranded part is the one visible
-  symptom.
-- **Tools are fast; models are slow.** Measured tool execution: file tools
-  10–130ms, shell ~300ms, webfetch ~180–330ms, `execute` ~50ms. Turn times are
-  3–80s because of model latency. Judge tools by their own `time.completed -
-  time.created`, not by the turn.
-- **The free tier throttles.** Under rapid requests the provider returns
-  "OpenCode's free tier can only be used from within OpenCode." It is
-  intermittent, not a ban. **Every test turn spends the operator's quota** —
-  batch checks, and prefer a single turn that proves several things.
-  Evenings are slower than days on this provider — the operator's observation,
-  and the reason `data\provider-errors.log` exists: expect 10+ minute turns and
-  rate limits that last up to half an hour. The harness waits those out now; a
-  test that assumes a fast turn is a test that looks broken at 21:00.
+  `multiselect`, `boolean`, `number`/`integer`, `external`, with `required`, `hidden`
+  and `when` (eq/neq on another key). Missing one stalls a session forever.
+  **The global form list is location-scoped and will not show a project's form**
+  (`GET /api/form` lists only the engine's own location), which is why the first real
+  question showed up as a raw JSON tool card while the session sat blocked. Ask the
+  session, not the world: `GET /api/pending?session=<id>`.
+  **Forms live in the engine's memory.** A Synapse restart restarts the engine and every
+  pending form dies with it: the transcript is left with a tool part stuck at `running`
+  and the turn never resumes. Interrupt the session before a restart if a question is
+  open.
+- **Tools are fast; models are slow.** Measured tool execution: file tools 10–130 ms,
+  shell ~300 ms, `webfetch` ~180–330 ms, `execute` ~50 ms. Turn times are 3–80 s because
+  of model latency. Judge tools by their own `time.completed - time.created`.
+- **The free tier throttles.** "OpenCode's free tier can only be used from within
+  OpenCode" is intermittent, not a ban, and **every test turn spends the operator's
+  quota** — batch checks, and prefer one turn that proves several things. Evenings are
+  slower; expect 10+ minute turns and rate limits up to half an hour.
+  `data\provider-errors.log` is the record.
 
-### Context windows and thinking effort
+## Context windows and thinking effort
 
-`GET /api/model` reports `limit.context`, `limit.output` and `variants`; each
-variant sets a `reasoningEffort`. Synapse surfaces all of it (`normalizeModel`)
-and stores the operator's choice per role.
+`GET /api/model` reports `limit.context`, `limit.output` and `variants`; each variant
+sets a `reasoningEffort`.
 
-- **Omitting a variant is not "no effort".** The engine stores
-  `variant:"default"`, which is not one of the advertised variants. Measured
-  reasoning tokens on the same task: `low` 70, default 228, `max` 719 (r/opencode
-  boundary test, Oct 2026).
-- **The catalog is conservative.** DeepSeek V4.1 Flash Free advertises 200k
-  context, but the backend serves **1,048,576** — boundary-tested: ~1.037M OK,
-  ~1.107M HTTP 400. MiMo-V2.6-Flash and Big Pickle are still genuinely 200k, so
-  **never raise a limit without testing that model**.
-- Synapse writes overrides from `engine.opencode.modelLimits` (config file) into
-  `providers.opencode.models.<id>.limit` in the isolated engine config on every
-  boot. That changes only the engine's local budgeting ceiling; the provider's
-  own limit still applies. Output limits were *not* tested — only context.
-- **There is no such thing as "the" context window, so nothing may assume one.**
-  Most hosted models here are 1,048,576; MiMo, Big Pickle and GLM are 200,000; a
-  local LLM the operator plugs in later will be ~62,000. Even the *engine* does
-  not compact at the model's limit: on the clock run it auto-compacted at 290k on
-  a model advertising 1M. So compaction is not a schedule and not a token number.
+- **Omitting a variant is not "no effort".** The engine stores `variant:"default"`,
+  which is not an advertised variant. Measured reasoning tokens on one task: `low` 70,
+  default 228, `max` 719.
+- **The catalog is conservative.** DeepSeek V4.1 Flash Free advertises 200k but the
+  backend serves **1,048,576** (boundary-tested: ~1.037M OK, ~1.107M 400). Others are
+  genuinely 200k, so **never raise a limit without testing that model**.
+- **There is no such thing as "the" context window, so nothing may assume one.** Hosted
+  models here are ~1M or 200k; a local model may be 62k. Even the engine does not compact
+  at the model's limit: it auto-compacted at 290k on a model advertising 1M. Compaction
+  is not a schedule and not a token number.
 
-**The window watchdog (`src/runs.js`).** The one thing Synapse can do about it is
-a boundary check, and only from facts:
+### The window watchdog (`src/runs.js`)
 
-- `windowRoom({context, output})` = `context - output - max(8k, 5% of context)` —
-  the room left for the next turn's own output and for what it will pull in.
-- It fires when *that model's* recorded window is about to be reached, once, and
-  re-arms only after the transcript has fallen below 70% of the room (a compaction
-  that did not take must not become a request every poll).
-- **A window nobody recorded gets no watchdog at all.** `modelCache.get(ref)` or
-  the operator's `modelLimits` is the only source; guessing is how a 62k local
-  model would be treated like a 1M hosted one.
-- It runs inside `waitForIdle`, which already has the messages on every 1.5s poll,
-  so it costs no extra engine call and can never slow a turn down. It watches the
-  Architect too (its session outlives every delegation), using the session's own
-  model rather than the card's.
-- `POST /api/session/{id}/compact` is "durably admit a session compaction request
-  … it runs at the next step boundary", so it is safe to send mid-run; a 409 means
-  one is already queued. The transcript is kept; only what the model is sent is
-  replaced by the summary.
-- This is a *safeguard*, not a strategy. The failure it prevents is an oversized
-  request, which is the one error a retry can never fix. Prevention — shorter
-  tasks, batched tools — is the strategy.
+`windowRoom({context, output})` = `context - output - max(8k, 5% of context)` — the room
+left for the next turn's own output and for what it will pull in.
 
-**What the engine actually does, read out of its own bundle** (2.1.2, the
-`@opencode/SessionCompaction` chunk). This is not documented anywhere and it
-explains every "why did it compact *now*" question:
+- It fires when *that model's* recorded window is about to be reached, once, and re-arms
+  only after the transcript has fallen below 70% of the room.
+- **A window nobody recorded gets no watchdog at all.** `modelCache.get(ref)` or the
+  operator's `modelLimits` is the only source; guessing is how a 62k local model would be
+  treated like a 1M hosted one.
+- It runs inside `waitForIdle`, which already has the messages on every 1.5 s poll, so it
+  costs no extra engine call.
+- `POST /api/session/{id}/compact` is "durably admit a session compaction request … it
+  runs at the next step boundary", so it is safe mid-run; a 409 means one is queued. The
+  transcript is kept; only what the model is sent is replaced.
+
+This is a safeguard, not a strategy. The failure it prevents — an oversized request — is
+the one error a retry can never fix. Prevention is shorter tasks and batched tools.
+
+### What the engine actually does (read out of its bundle, 2.1.2)
 
 ```
 threshold = context − max(floor(context × 0.15), context ≥ 32,000 ? 16,000 : 0)
@@ -119,188 +92,87 @@ fires when   last step's (input + cache.read + cache.write + output + reasoning)
              + an estimate of the tool results that arrived since >= threshold
 ```
 
-- So the reserve is **15% of the context, but never less than 16,000 tokens** — on
-  a 42,240 window that is 16,000, and it compacts at **26,240**. On 60,160 it is
-  still 16,000 → 44,160. On 1,048,576 it is 15% → 891,290.
-- The count is not the provider's prompt size: it adds an *estimate* of the tool
-  results waiting to be sent, which is why a run can compact at 19,981 one minute
-  and 26,812 the next. Chasing a single "compaction size" is chasing a moving
-  number.
-- `compaction.buffer` replaces that whole `max(15%, 16k)` reserve when set.
-  `compaction.auto` defaults to true; `keep` defaults to **15,000** tokens, which
-  is why a compacted transcript comes back at ~11k and refills within a few turns.
-- `output` plays no part in this: the reserve is a flat share of `context`, and
-  `limit.output` only limits what the model may write.
+- The reserve is **15% of the context, but never less than 16,000 tokens** — on a 42,240
+  window that is 16,000, and it compacts at **26,240**; on 1,048,576 it is 15% →
+  891,290.
+- The count is not the provider's prompt size: it adds an *estimate* of the tool results
+  waiting to be sent, which is why a run can compact at 19,981 one minute and 26,812 the
+  next.
+- `compaction.buffer` replaces that reserve; `compaction.auto` defaults true; `keep`
+  defaults to **15,000** tokens, which is why a compacted transcript comes back at ~11k
+  and refills within a few turns.
+- `output` plays no part: the reserve is a flat share of `context`.
 
-**What a compaction actually leaves behind, measured** (one local run, 60,160):
-summary written = **2,552 output tokens**; the first prompt after it = **10,613**,
-so about **8,061 tokens were conversation carried over verbatim**. In other words
-the summary is a quarter of what you pay to re-read, and the `keep` tail is the
-rest.
+**What a compaction leaves behind, measured** (one local run, 60,160): summary written =
+2,552 output tokens; the first prompt after it = 10,613, so about 8,061 tokens were
+conversation carried over verbatim. The summary cannot be shortened — it is a template
+inside the engine's binary — but the tail can: `engine.opencode.compactionKeepTokens`
+writes `compaction.keep.tokens`. Default 0 keeps the engine's 15,000; a smaller number
+lowers the floor after every compaction and costs the worker that much verbatim context
+when it resumes.
 
-- **The summary cannot be shortened.** It is written against a template inside the
-  engine's binary (`## Objective`, `## Important Details`, …), and the engine even
-  re-asks if the reply misses a section. No config key reaches it.
-- **The tail can.** `engine.opencode.compactionKeepTokens` is written into the
-  engine's `compaction.keep.tokens` (Settings → Engine → Compaction). Default 0 =
-  write nothing, so the engine keeps its own 15,000. A smaller number lowers the
-  floor after every compaction — and costs the worker that much verbatim context
-  when it resumes, which is the trade to make deliberately rather than by default.
+**The number the engine compacts on is the number the engine was told** — the
+catalog/provider-config copy, not what the runtime has loaded. When the two differ the
+engine wins, because it is the thing that compacts.
 
-**The number the engine compacts on is the number the *engine* was told** — the
-catalog/provider-config copy, not what the runtime has loaded. Ours is the loaded
-one. When the two differ the engine wins the race, because it is the thing that
-compacts.
+### Where the window comes from, and which source wins
 
-**The window is measured, not declared.** A number typed into Settings is a claim;
-what the runtime has loaded is the thing itself, and nobody should have to retype it
-after reloading a model. So:
+One module owns this: `src/windows.js`. It used to be worked out in four places from
+four sources that could disagree, and five rounds of fixes never ended because each fix
+corrected one copy (a model loaded at 128k, the card saying 60k).
 
-- **At boot**, before the engine is created, `measureLocalWindows()` asks every
-  local provider what it has loaded (LM Studio: `/api/v0/models` →
-  `loaded_context_length`; a model that is not loaded reports nothing) and writes
-  it into `engine.opencode.providers[].models[].context`, then saves. The engine is
-  then handed the same window the watchdog uses. Settings shows a local model as
-  `id | name` only — there is nothing to type, because nothing there could be
-  better than the measurement.
-- **At run start**, `noteLoadedWindow()` repeats the measurement for that one model
-  before its session exists. Normally it agrees. When it does not, the model was
-  reloaded while Synapse was running: the run budgets for the new window, the
-  config is updated, and a warning says the engine keeps its old compaction point
-  until Synapse restarts. `POST /api/location/reload` exists and would apply it
-  immediately, but it cancels every pending permission and form — never mid-run.
-- A remote provider keeps its typed window (`id | name | context | output`) because
-  there is nobody to ask; that is where a tested override belongs.
-- A server that is not answering changes nothing: the last known window stands,
-  and the boot log says nothing about it.
-
-**The incident that proves it (22 Oct, t7 again).** A local model with 60,160
-loaded and `limit.context: 42240` in the engine config: six compactions in
-thirteen minutes, at prompt sizes of 19,981–26,812, every one of them
-`"reason":"auto"`, and **not one** `compacting before the window closes` line in
-`app.log` — the watchdog was waiting for 45,968, which the engine's 26,240 always
-arrives first, so our safeguard never fired at all. The warning that would have
-told us was logged at INFO on the `tools` channel, which is not mirrored to the
-console: it read *"using 60160 for this run"*, and sounded like good news. That is
-now a boot-time measurement instead of a warning nobody reads.
-
-**Where the number comes from, and which source wins.** One module owns this now:
-`src/windows.js`. It was worked out in four places before — the API, the runner,
-the boot measurement and the page — from four sources that could disagree, and
-five rounds of fixes never ended because each fix corrected one copy while another
-kept the old number. The report that ended it: a local model loaded at **128k**,
-the card saying **60k**, because the config still held the number measured the
-last time that model was loaded smaller.
-
-The rule is *measurement beats claim*:
-
-1. **What a local server has loaded** (`providerLoadedWindow`) — asked at boot, when
-   a role's model is chosen, and once per run, per model. Three dialects exist and a
-   server has whichever it has, all tried against one deadline:
-
-   | endpoint | who answers | where the window is |
-   |---|---|---|
-   | `/api/v0/models` | LM Studio | `loaded_context_length`, per model |
-   | `/props` | llama.cpp family (Strata, llama-server, KoboldCpp) | `default_generation_settings.n_ctx`, for the one loaded model, named by `model_alias` |
-   | `/v1/models` | a wrapper's own list | `meta.n_ctx` (also read by Refresh List) |
-
-   Only what is *served* counts: `max_context_length` is what the model could take,
-   so the probe skips it. A `/props` server has exactly one model loaded, and its
-   answer is recorded under `*` as well as the alias, so an id that differs from the
-   alias still gets the right number. A model nobody loaded has no window at all.
-
-   **A provider model's `limit` is all or nothing** (measured on 2.1.2 with a
-   scratch engine, four variants): `limit: { context }` alone makes the engine answer
-   `skipped malformed recognized value` at `$.provider.<id>` and **drop the whole
-   provider** — the model never reaches the catalog and never appears on a role
-   card. `{ context, output }` is accepted; so is no limit at all, which is why this
-   only bites a local server whose window was just measured and whose output nobody
-   chose. `opencode.js` therefore always writes the pair, filling an unchosen output
-   with the engine's own default for a model it does not know (32,000).
-2. **A prompt the provider refused.** This is the cloud equivalent, because a hosted
-   model has no endpoint to ask. `classifyFailure` already labels it `kind:
-   'context'`; the size of the refused prompt is recorded by
-   `modelCache.noteContext()` and the next turn budgets *below* it. A catalog that
-   later reports a different window clears the refusal, so the two cannot fight.
-3. **The operator's `modelLimits` override.** A deliberate, boundary-tested
-   number, not a claim — see "The override is a documented field" below.
-4. **The config's provider entry**, which is what Settings holds and what a
-   measurement writes, and last the engine catalog's `limit.context`.
-
-That order is one function, `resolveWindow()` in `src/windows.js`, because the
-order *is* the rule and it needs to be readable and tested in one place:
+**The rule is measurement beats claim**, one function `resolveWindow()`:
 
 | | beats | loses to |
 |---|---|---|
-| loaded | everything | nothing |
-| override | refused, provider entry, catalog | loaded |
-| refused | a catalog larger than it | loaded, override |
+| loaded (asked of a local server) | everything | nothing |
+| operator override | refused, provider entry, catalog | loaded |
+| refused (a provider said no) | a catalog larger than it | loaded, override |
 | provider entry | catalog | the three above |
 | catalog | nothing | all four |
 
-**The number is remembered, and that is half the fix.** `knownWindow()` answers
-from one resolved value per model ref, not by re-deriving from whichever source
-answered this poll. It changes when a measurement says so, when the operator edits
-the model, or when the model changes — never because a lookup happened to miss. A
-selection is measured immediately (`POST /api/config` kicks `refreshWindow`, and
-the answer arrives as a `kind:'model'` broadcast), so the card shows the window the
-server really has *before* the model is used, not after the next run. The
-measurement is also written into the provider entry, so the engine is started with
-the same number and compacts at the same point.
+- **What a local server has loaded** is asked at boot, when a role's model is chosen, and
+  once per run. Three dialects, one deadline:
 
-Loaded beats everything, which fixes the old `min(declared, loaded)`: that kept the
-**smaller** number, so raising a local window from 42,240 to 60,160 (Bionic,
-22 Oct) was silently ignored, and the warning only fired in the other direction.
-Both directions are logged now.
+  | endpoint | who answers | where the window is |
+  |---|---|---|
+  | `/api/v0/models` | LM Studio | `loaded_context_length`, per model |
+  | `/props` | llama.cpp family | `default_generation_settings.n_ctx`, for the one loaded model |
+  | `/v1/models` | a wrapper's own list | `meta.n_ctx` |
 
-**The override outranks a refusal on purpose.** A refusal is one provider's answer
-on one afternoon; an override is a number the operator made that provider serve, by
-hand, at the boundary. Before this, a single 200k refusal would have cancelled a
-working 1M setting and the run would have started compacting at a fifth of its real
-window — the Fever Tracker mistake again, with a different cause.
+  Only what is *served* counts: `max_context_length` is what the model could take and is
+  skipped. A model nobody loaded has no window. Storing a maximum would be worse than
+  storing nothing — the server would truncate the middle of a prompt instead of failing.
+- **A provider model's `limit` is all or nothing** (measured 2.1.2): `limit: { context }`
+  alone makes the engine answer `skipped malformed recognized value` and **drop the whole
+  provider**. `opencode.js` therefore always writes the pair, filling an unchosen output
+  with the engine's default 32,000.
+- **A refusal is the cloud equivalent** of a measurement: `classifyFailure` labels it
+  `kind:'context'`, `modelCache.noteContext()` records the size, and the next turn budgets
+  below it. A catalog that later reports a different window clears the refusal.
+- **Both spellings of the key are honoured:** the engine config takes the bare model id,
+  Synapse's ref is `provider/model`, and `modelLimits` may be written either way.
+- **The number is remembered** — `knownWindow()` answers from one resolved value per
+  model ref, and it changes only when a measurement, an edit or a model change says so,
+  never because a lookup missed. A selection is measured immediately, so the card shows
+  the real window before the model is used.
+- **A server that is not answering changes nothing**: the last known window stands.
 
-**Both spellings of the key are honoured.** The engine config takes the **bare**
-model id (`providers.opencode.models.<id>.limit`), while a ref in Synapse is
-`provider/model`. `modelLimits` may be written either way and `declaredWindow()`
-finds it either way; when only the ref was checked, the engine could be serving 1M
-while the watchdog believed 200k.
+The incident that proves it (22 Oct): a local model with 60,160 loaded and
+`limit.context: 42240` in the engine config compacted six times in thirteen minutes at
+prompt sizes of 19,981–26,812, every one `"reason":"auto"`, and the watchdog never fired
+because it was waiting for 45,968. The warning that would have told us was logged at INFO
+on a channel not mirrored to the console, and read like good news. It is a boot-time
+measurement now. The cost of the bug is the shape: a *silently* wrong number the harness
+acts on forty-nine times (Fever Tracker's t7: 86 turns, 81 minutes, 49 compactions).
 
-**The override is a documented field, not a hack.** OpenCode's config schema
-(`https://opencode.ai/config.json`, `ProviderConfig.models.*.limit`) defines
-`limit {context, input, output}` per model — so `engine.opencode.modelLimits` writes
-exactly where the format says a model's window is declared, and the engine's own
-budgeting then uses it. The schema also documents `compaction`
-(`auto`, `keep.tokens`, `buffer`; `reserved`/`prune`/`tail_turns` are deprecated),
-which is the *other* lever on the 49-compaction problem — unproven here, do not
-turn it without a run to show it helped.
+The operator sees it live: the role card carries `27k/60k ctx` beside the rate, and every
+compaction adds a pinned amber line to the worker's trace.
 
-**Asking the engine about limits.** The catalog Synapse stores
-(`data\model-cache.json`) is `GET /api/model` → `{data:[{id, providerID, limit:
-{context, output}, variants}]}`, re-read at boot and after an engine update; the
-console line `catalog: N model(s) from engine X` is the check. The v2 server docs
-list the provider-shaped routes instead — `GET /config` (the merged config, which
-includes our own `limit` overrides), `GET /config/providers` and `GET /provider`
-(`{all, default, connected}`) — so if `/api/model` ever disappears, those are
-where a window can be read from.
+## Other model servers
 
-**What that cost, on one run.** Fever Tracker's t7 ran 86 turns and 81 minutes, and
-`logs\app.log` holds **32** lines of `context 30k of 42k … compacting before the
-window closes` while the server had **60,160** loaded: the watchdog was compacting
-against a window 18k too small, over and over (the run's own tally: 49 compactions).
-Every one of those threw away the transcript the coder was working from. That is
-the shape of the bug — not a wrong number, but a *silently* wrong number that the
-harness acts on forty-nine times.
-
-**The operator can see it while it runs**: the role card carries
-`27k/60k ctx` beside the rate, and every compaction adds a pinned amber line to the
-worker's trace (`⏳ Compacting ×2 · context at 32k/60k`), which is not a step and is
-never trimmed out of the trace's four-line tail.
-
-### Other model servers: a local LLM in the same dropdown
-
-`engine.opencode.providers` in `config\synapse.config.json` registers any
-OpenAI-compatible server — a local LLM, a second vendor — and it then appears in the
-model menu like any other model:
+`engine.opencode.providers` registers any OpenAI-compatible server — a local LLM, a
+second vendor — and it appears in the model menu:
 
 ```json
 "providers": [
@@ -310,446 +182,240 @@ model menu like any other model:
 ]
 ```
 
-`src/engines/opencode.js` writes each one into the engine's own config as`provider.<id>` with `npm: "@ai-sdk/openai-compatible"`, `options.baseURL` and a
-`models` map — **`provider` singular for definitions, `providers` plural for
-per-provider overrides**, and getting those two names the wrong way round is
-silent. Nothing is contacted until a model is picked and a turn is run; an
-unreachable server fails that turn and nothing else.
+`src/engines/opencode.js` writes each into the engine's config as `provider.<id>` with
+`npm: "@ai-sdk/openai-compatible"`, `options.baseURL` and a `models` map — **`provider`
+singular for definitions, `providers` plural for per-provider overrides**, and swapping
+those two names is silent. Nothing is contacted until a model is picked and a turn runs.
 
-`context`/`output` are optional per model, and are the only honest source for the
-window watchdog (`src/runs.js`). Left out, the engine reports **its own default
-(200,000 for a provider it has no limit for)** — which is not the local model's real
-window, so set it when you know it. Measured: `qwen3.8-27b-ud` on `localhost:1235`
-answered a turn through the engine in **18 s**, no other change needed.
+- `context`/`output` are optional per model and are the only honest source for the
+  watchdog. Left out, the engine reports its own default 200,000, which is not the local
+  model's real window. Measured: a 27B on `localhost:1235` answered a turn in **18 s**.
+- **A local server is one of two list formats.** `format: "openai"` answers `GET /models`;
+  `format: "ollama"` answers `GET /api/tags` (`{name}` rather than `{id}`). Chat goes
+  through the OpenAI URL either way — Ollama serves it at `/v1` — so `format` only decides
+  which list endpoint `Refresh List` asks first; the other is tried after a 404.
+- **The address decides whether a provider is local, not the type it was saved as.** An
+  OpenAI-Compatible row with a localhost URL is a server on this machine: the Local LLM
+  row counts it, the probe asks it, the picker badges it LOCAL. Red "no answer" is only
+  claimed when *no* registered local server answers.
+- **The provider order is the operator's**, saved as `engine.opencode.providerOrder`; a
+  role card's menu lists providers in exactly that order, and an unmentioned id keeps its
+  default place at the end.
+- **The engine's own two providers can be removed and put back.** The ✕ on `opencode` or
+  `opencode-go` adds the id to `engine.opencode.hiddenProviders` and filters its models
+  from what is offered; nothing is unregistered, and a role already pointing at one keeps
+  working with a card that says "hidden in Settings". Add Provider lists them again.
+- **A provider removed in Settings stops being served.** The engine's `provider` map is
+  rebuilt from Synapse's config on every start; a provider with no models yet is kept in
+  Synapse's config and left out of the engine's.
 
-**Ask the server what its window really is, don't guess from the card.** LM Studio
-answers `GET /api/v0/models` with `max_context_length` (what the model supports) and
-`loaded_context_length` (what it actually reserved). Measured here: 262,144 and
-**39,168** — a 27B at IQ3_S on a 16 GB card. Synapse was configured with 40,960,
-1,792 tokens *larger than the window*, and the server's **Context Overflow:
-Truncate Middle** would have silently dropped the middle of an oversized prompt
-rather than failing — for an agent that means keeping the task at the top and the
-last turn at the bottom while the file contents in between vanish. Set the limit to
-the loaded length or below.
+## A vendor's own API
 
-**What a 40k window costs.** The engine compacts at roughly the same point the
-watchdog does (~60% of the window): a 32-turn task at 39k took **3 compactions**
-and read 541k prompt tokens, peaking at 24.6k. That is workable for a small task and
-would be constant churn for a big one — which is the argument for splitting tasks
-rather than for a bigger window.
-
-### A vendor's own API (DeepSeek, and any other)
-
-**The way in is Settings > Providers**, not this file by hand: the tab lists the
+**The way in is Settings → Providers**, not a hand-edited file: the tab lists the
 engine's built-in catalog as its own rows and every registered provider below it, and
-offers *Local Provider* and *OpenAI Compatible* (the two ids differ only by where they
-point — see `providerType()` in `src/providers.js`). A row can be added, renamed,
-given a server URL and a key, and *Refresh List* asks that server what it serves.
-Saving writes the same `providers` array documented here, so a hand-written entry and
-a clicked one are the same thing.
+offers *Local Provider* and *OpenAI Compatible* (the ids differ only by where they point).
+Saving writes the same `providers` array a hand-written entry would.
 
-**The engine's own two providers can be removed, and put back (6 Nov).** They are
-`opencode` (OC Zen) and `opencode-go` (OC Go), registered by the engine itself — no
-key or URL of theirs is Synapse's to edit — and until 6 Nov their rows were read-only.
-The operator's argument was the pillar: the harness needs the engine, not its models,
-so nothing about those two should be a special case. The ✕ on an engine row adds its
-id to `engine.opencode.hiddenProviders`, and `api.models()` filters that provider's
-models out of what the page is offered. **Nothing is unregistered**: the engine keeps
-serving them, the catalog is still recorded in `data\model-cache.json`, and a role
-that already points at one of those models keeps working — its card says "hidden in
-Settings" instead of "not in the catalog". Add Provider lists the hidden ones and
-puts the row back. Empty (the default) offers everything the engine serves.
-
-**The address decides whether a provider is local, not the type it was saved
-as.** A custom runtime added as *OpenAI Compatible* with a `localhost`/`127.0.0.1`
-URL (PolyStrata, 4 Nov) is a server on this machine: the Local LLM row counts it,
-the window probe asks it, and the picker badges it LOCAL. The stored type still
-decides for every remote address, and Settings keeps showing the row as it was
-saved. Before this the type won, so the one server that was answering was invisible
-while the row said "no answer" — and red is only claimed when *no* registered local
-server answers at all.
-
-**The provider order is the operator's, and the model menu follows it.** Settings
-> Providers has ↑/↓ on every row, the engine catalog's two rows included; the
-order is saved as `engine.opencode.providerOrder`, an array of provider ids, and a
-role card's model menu lists providers in exactly that order. An id the array does
-not mention keeps its default place at the end, so a provider added later appears
-without being placed by hand. Reordering touches nothing in the engine — only the
-list Synapse draws — so it applies when the settings are saved.
-
-**A local server is one of two list formats.** `format: "openai"` (LM Studio,
-vLLM, llama.cpp) answers `GET /models`; `format: "ollama"` answers
-`GET /api/tags`, whose entries are `{name}` rather than `{id}`. Chat goes through
-the OpenAI-compatible URL either way — Ollama serves that at `/v1`, which is why
-the same provider definition works for both — so `format` only decides which list
-endpoint `Refresh List` asks *first*: `src/providers.js` tries the other one
-automatically (a 404 at `/models` falls through to `/api/tags`, and a refused
-connection stops after one attempt).
-
-**Ask the runtime what window it reserved.** An OpenAI-shaped `/models` answer
-carries no context at all, so a local provider's list also asks LM Studio's
-`/api/v0/models`. **Only `loaded_context_length` is taken** — the window the server
-has actually reserved for the model it has loaded. An unloaded model reports only
-`max_context_length`, which is what it *could* take; storing that would be a worse
-lie than storing nothing, because the watchdog would never compact and the server
-would truncate the middle of the prompt instead of failing. Measured: 39,168
-loaded and 262,144 maximum for a 27B at IQ3_S, and the other seven models on that
-machine report no window at all until each is loaded once. A remote vendor is not
-probed (`type: openai`) — one request fewer to a billed endpoint, for an answer it
-does not have.
-
-Refresh also **updates** the windows of models already in the list, not just the
-ones it adds: reload a model with a different context and the number follows. A
-model the server currently has unloaded keeps the last value measured for it
-rather than being erased, and the status line says how many still have none.
-
-**A provider removed in Settings stops being served.** The engine's `provider`
-map is rebuilt from Synapse's config on every start (it used to be merged into
-whatever was already on disk, which left a deleted provider's models in the menu
-for ever — the `bionic` rename is what surfaced it). A provider with no models
-yet is kept in Synapse's config and left out of the engine's, so half-finished
-work survives a save without registering an empty catalog.
-
-The same `providers` list carries a billed vendor, not just a local server. DeepSeek
-publishes an OpenAI-format endpoint, so it needs no code — one entry, and it appears
-in the picker with a **DeepSeek** badge beside its models:
+DeepSeek publishes an OpenAI-format endpoint, so it needs no code:
 
 ```json
 { "id": "deepseek", "name": "DeepSeek",
   "baseURL": "https://api.deepseek.com/v1",
   "apiKey": "env:DEEPSEEK_API_KEY",
   "models": [
-    { "id": "deepseek-flash",   "name": "DeepSeek Flash", "context": 1048576, "output": 65536 },
-    { "id": "deepseek-v4-pro",  "name": "DeepSeek Pro",   "context": 1048576, "output": 65536 }
+    { "id": "deepseek-flash",  "name": "DeepSeek Flash", "context": 1048576, "output": 65536 },
+    { "id": "deepseek-v4-pro", "name": "DeepSeek Pro",   "context": 1048576, "output": 65536 }
   ] }
 ```
 
-**The key never goes in the config file.** It lives in `data\provider-keys.json` —
-the pattern Peri.Scope uses for the secrets its own config must not carry: a small
-JSON file beside the app's data, which `.gitignore` already covers. The tracked
-config keeps only the provider's shape. `providerApiKey()` in `src/config.js`
-resolves in this order:
+**The key never goes in the config file.** It lives in `data\provider-keys.json`, which
+`.gitignore` covers. `providerApiKey()` resolves in this order:
 
 | stored in | means |
 |---|---|
-| `data\provider-keys.json` | what the operator typed in Settings — wins over everything |
-| `"apiKey": "env:DEEPSEEK_API_KEY"` | read that variable (`setx …`, then restart Synapse) |
-| `"apiKey": ""` | the conventional `<ID>_API_KEY` if it is set; otherwise a keyless server, which is not an error |
+| `data\provider-keys.json` | what the operator typed — wins over everything |
+| `"apiKey": "env:DEEPSEEK_API_KEY"` | read that variable, then restart Synapse |
+| `"apiKey": ""` | the conventional `<ID>_API_KEY` if set; otherwise a keyless server, which is not an error |
 
-A key typed in the Settings field is sent once, over localhost, and written to
-that file by `reconcile()` in `src/api.js`; the config is then saved with an empty
-`apiKey`. The browser is never *given* a key: `toClientConfig()` returns
-`apiKey: ""` plus `apiKeySet`, `apiKeyMasked` (`sk-liv***7df`) and `apiKeyFrom`, so
-the screen can say "a key is stored" without holding one. **Remove Key** sends
-`apiKey: null`, which deletes the entry.
+A key typed in Settings is sent once over localhost and written to that file by
+`reconcile()`. The browser is never *given* a key: `toClientConfig()` returns `apiKey: ""`
+plus `apiKeySet`, `apiKeyMasked` (`sk-liv***7df`) and `apiKeyFrom`. **Remove Key** sends
+`apiKey: null`.
 
-Everything downstream — the model cache, the picker, the probe, the role cards —
-treats these models exactly like the engine's own. The badge comes from
-`providerLabel()` in `web\app.js`: **Local** for anything on this machine, the
-provider's own name otherwise.
+The badge comes from `providerLabel()`: **Local** for anything on this machine, the
+provider's name otherwise. For DeepSeek the vendor's docs (Oct 2026, not measured here)
+say 1M context, 384K output, tool calls on both, thinking on by default at `high` —
+`reasoning_effort` maps low/high/max, so `medium` is *not* a middle setting, it is high.
+`output` is set to 65536 because it is the engine's per-turn budget, not a capability
+claim.
 
-What the vendor's docs say about these two (Oct 2026, not measured here): **1M
-context, 384K max output**, tool calls on both, vision on Flash only, thinking mode
-**on by default at `high`**. That last one matters for cost: the OpenAI format
-switches it with `{"thinking": {"type": "disabled"}}` and scales it with
-`reasoning_effort`, and the engine's `low/medium/high` variants map to the vendor's
-`low/high/max` — so `medium` is *not* a middle setting here, it is high. `output` is
-set to 65536 rather than the API's 384K because it is the engine's per-turn budget,
-not a capability claim: a turn that writes more than that has gone wrong.
+## The model cache (`data\model-cache.json`)
 
-### The model cache (`data\model-cache.json`)
+Models come and go; what we learned about one should outlive it leaving the catalog. The
+picker is built from the engine's **live** catalog every launch: the cache only supplies
+what we learned about a model that is still there, and never adds an entry of its own.
+`src/modelcache.js` is keyed by the full `provider/id` ref, because the same model can
+exist in more than one category. Each record holds name, provider, context/output,
+variants (`{id, label}`), capabilities, `firstSeen`/`lastSeen` and the discovered toolset.
+`engine.listModels()` is recorded on every boot and every `GET /api/models`.
 
-Models come and go; what we learned about one should outlive it leaving the
-catalog. The picker is built from the engine's **live** catalog on every launch:
-the cache only supplies what we learned about a model that is still there (its
-toolset, its variants, its issues), and never adds an entry of its own — a model
-that leaves the catalog disappears with it. `src/modelcache.js` is a small JSON store **keyed by the full
-`provider/id` ref**, because the same model can exist in more than one category
-— `opencode/deepseek-v4.1-flash-free` and a future `opencode-go/…` are different
-entries with different backends, and local runtimes will be more. Each record
-holds name, provider, context/output, variants (`{id, label}` — label is the
-provider's own `reasoningEffort`), capabilities, `firstSeen`/`lastSeen` and the
-discovered toolset. `engine.listModels()` is recorded on every boot and every
-`GET /api/models`, so the file stays current for free.
+- **Each model is asked at most N times, ever** (default 3). The first selection fires
+  `POST /api/models/inspect`; the server answers from cache when a valid tool list
+  exists, refuses to stack a duplicate run, and serialises runs one at a time. A
+  completed run counts even when the answer is empty; at the cap the model is
+  `exhausted` and never asked again. Synapse re-asks on boot for any role's current model
+  still missing a list. Settings has **Reset Ask Counters**.
+- The discovery prompt asks the model to list its tools; `parseToolNames` takes the last
+  dotted segment then keeps `[a-z0-9_-]` (MCP names contain hyphens — an earlier parser
+  dropped them and turned `synapse-search_websearch` into `synapsesearch_websearch`).
+- When a check finishes, `model.probed` goes over SSE and the tooltips gain `· N tools`.
+  The picker menu shows a source chip so two entries with the same display name cannot be
+  confused.
+- **A model can be marked, and only the operator unmarks it.** A provider refusal during
+  a worker run writes the provider's own sentence into the record
+  (`issues: [{at, kind, message}]`, newest first) and broadcasts `kind:'model'`. The row
+  grows an orange **ISSUES** chip, the closed picker's border goes amber, and **clicking
+  the chip clears it** — no turn, no question, nothing written to the plan: "UI-only, only
+  me". The mark survives a restart, because a retired model is still advertised and the
+  picker would otherwise show it as healthy (`space-bunny-free`).
+  **The record does not block a selection and is never mentioned in a brief.** The one
+  place it is policy: a task whose planned role is marked starts one rung lower
+  (`roleMarked`), so a known-broken model costs a task its first turn, not every task.
+- **The probe marks a model that cannot drive tools.** It counts *real* failures (a case
+  whose tool the model was never offered does not count) and **3 or more** writes a
+  `kind:'tools'` issue. Three because a probe is one turn per case against a flaky
+  provider. **No probe clears a mark**: a mark clears when the model delivers a completed
+  run, or when the operator clears it.
+- `GET /api/models/cache` exposes the store for debugging.
 
-- **Each model is asked at most N times, ever** (default 3). The first selection
-  fires `POST /api/models/inspect`; the server answers from cache when a *valid*
-  (non-empty) tool list exists, refuses to stack a duplicate run, and serialises
-  runs one at a time (`inspectChain`). A completed run increments `timesAsked`
-  even when the answer is empty — an empty answer is only eligible for a retry
-  while `timesAsked < modelChecks.maxAsks` (Settings, 1–20). At the cap the
-  model is `exhausted` and is never asked again. The count is per model, so the
-  attempts spread across selections and restarts. Synapse re-asks on boot for
-  any **role's** current model that is still missing a valid list. Settings has
-  **Reset Ask Counters**, which zeroes every model's count (valid results are
-  kept). Verified: seeded one model at 3 asks → `{started:false, exhausted:true}`;
-  another at 1 ask → asked again on restart and locked in; reset returned 11 and
-  left `timesAsked` at 0 everywhere.
-- The discovery prompt asks the model to list its tools; `parseToolNames` takes
-  the last dotted segment (`tools["opencode"].list_mcp_resources` →
-  `list_mcp_resources`) then keeps `[a-z0-9_-]` (MCP names contain hyphens — an
-  earlier parser dropped them and turned `synapse-search_websearch` into
-  `synapsesearch_websearch`).
-- When the check finishes, `model.probed` goes out over SSE and the picker/effort
-  tooltips gain a `· N tools` suffix. The picker menu itself shows a source chip
-  (`OPENCODE`, `OPENCODE GO`, later a local provider) so two entries with the
-  same display name can never be confused.
-- **A model can be marked, and only the operator unmarks it.** A provider refusal
-  during a worker run (`outcome: "error"`) writes the provider's own sentence into
-  the model's record (`issues: [{ at, kind, message }]`, newest first, de-duplicated
-  by message) and broadcasts `kind: 'model'` so the picker re-reads the catalog
-  without a reload. The picker row grows an orange **ISSUES** chip whose tooltip is
-  the sentence and its date, the closed picker's border goes amber, and **clicking
-  the chip clears it**: no turn, no question, nothing written to the plan and
-  nothing said to any model — "UI-only, only me", in the operator's words. The mark
-  survives a restart until it is cleared, which is the point: a retired model is
-  still advertised by the catalog, so without this the picker shows a dead model as
-  perfectly healthy (that is exactly what happened to `space-bunny-free`).
-  **The record does not block a selection and is never mentioned in a brief** —
-  the operator can still choose the model, and the Architect is told nothing about
-  the record. The one place it is policy is the ladder: a task whose planned role
-  is marked starts one rung lower (`provider`, `tools`, or `loop` — see
-  `roleMarked` in `src/runs.js`), so a model known to be broken costs a task its
-  first turn instead of every task. Deliberately narrow, because a model can come
-  back and because the operator is the one who checks.
-- **The probe marks a model that cannot drive tools.** A probe run counts its
-  *real* failures — a case whose tool the model was never offered does not count
-  (`offered === false`), since the case list asks about tools a model may simply
-  not have — and **3 or more** writes a `kind: 'tools'` issue naming the tools.
-  The threshold is 3 because a probe is one turn per case against a flaky free
-  provider, and two could be an afternoon. **No probe clears a mark, not even a
-  clean one.** A mark clears when the model delivers: a run that completes using
-  that model — the role finished its work — clears it, or the operator clears it
-  by hand in the picker. A test is not work, and the operator owns the record.
-- `GET /api/models/cache` exposes the raw store for debugging.
+## Is there a newer engine? (`src/engine-update.js`)
 
-### Is there a newer engine? (`src/engine-update.js`)
+The catalog ships inside the engine binary, so a stale model list is nearly always a
+stale *engine*. A yellow **Update** chip appears when a newer one is known, and is absent
+when nothing is.
 
-The catalog ships inside the engine binary, so a stale model list is nearly
-always a stale *engine*. The status block names the version running; a small
-yellow **Update** chip beside Settings appears when a newer one is known, and it
-opens the dialog. When nothing is known it is not there at all.
-
-- **Two sources, because they fail differently.** OpenCode Desktop ships its own
-  engine and updates itself, so its `resources\opencode-cli.version` is read
-  locally at boot — instant, offline, and on this machine it is the signal that
-  actually arrives. npm (`registry.npmjs.org/@opencode/cli`) is asked **only when
-  the dialog opens or Check Again is pressed**: the app is offline by rule, and a
-  check the operator asked for is not the app phoning home at boot. The answer is
-  cached in `data\engine-update.json`, so the chip survives a restart with no
-  network and `GET /api/engine/update` is free.
-- **The npm answer replaces the cached one**, rather than merely raising it —
-  otherwise a wrong cache is sticky for ever (seen while testing with a fake
-  `9.9.9`: the online check could not heal it). The desktop's version is compared,
-  not trusted, so it can still be ahead of npm.
-- **Updating is stop → `npm install -g @opencode/cli@latest` → start**, and that
-  order is not a preference: on Windows a running `.exe` cannot be replaced. The
-  engine restarts **in-process** (`engine.stop()` / `engine.start()`), so the UI
-  stays up and the browser tab survives; measured 9.4 s end to end on 2.1.0 →
-  2.1.0, catalog re-read, sessions and their transcripts intact. A failed install
-  still restarts the engine, because being down is worse than being old.
+- **Two sources, because they fail differently.** OpenCode Desktop ships its own engine,
+  so its `resources\opencode-cli.version` is read locally at boot — instant, offline, and
+  on this machine the signal that actually arrives. npm
+  (`registry.npmjs.org/@opencode/cli`) is asked **only when the dialog opens or Check
+  Again is pressed**: the app is offline by rule, and a check the operator asked for is
+  not the app phoning home. The answer is cached in `data\engine-update.json`.
+- **The npm answer replaces the cached one** rather than raising it, or a wrong cache
+  would be sticky for ever.
+- **Updating is stop → `npm install -g @opencode/cli@latest` → start**, and that order is
+  not a preference: a running `.exe` cannot be replaced on Windows. The engine restarts
+  in-process, so the UI stays up and the tab survives (measured 9.4 s, sessions and
+  transcripts intact). A failed install still restarts the engine, because being down is
+  worse than being old.
 - **It refuses while work is in flight** — a live delegation, or any session
-  `/api/session/active` reports (which includes one blocked on a question) —
-  because the restart loses that turn. It also refuses an engine it did not
-  install with npm (`packageRoot()` walks up from the binary to an
-  `@opencode/cli` `package.json`), rather than installing a second engine
-  somewhere else while Synapse keeps using the old one.
-- **`npm` cannot be run with `execFile` on Windows**; the install goes through
-  `cmd.exe /d /s /c npm …` with array arguments.
-- Settings → Engine carries **Check for Updates** too, so the feature is reachable
-  when the chip is hidden. The dialog is honest about what it does not know: npm
-  publishes no release notes for this package, and it says so instead of inventing
-  a changelog.
+  `/api/session/active` reports, which includes one blocked on a question — and it
+  refuses an engine Synapse did not install with npm (`packageRoot()`), rather than
+  installing a second engine somewhere else.
+- **`npm` cannot be run with `execFile` on Windows**; it goes through `cmd.exe /d /s /c
+  npm …` with array arguments.
+- The dialog is honest about what it does not know: npm publishes no release notes for
+  this package, and it says so instead of inventing a changelog.
 
-### The probe (`Run Tool Probe`)
+## The probe (`Run Tool Probe`)
 
-Drives one turn per tool in a disposable scratch session
-(`<projects root>\_probe`), records the tool's own execution time, and labels a
-failure "not offered by this model" when the tool was never in its list.
+One turn per tool in a disposable scratch session (`<projects root>\_probe`), recording
+the tool's own execution time, and labelling a failure "not offered by this model" when
+the tool was never in its list.
 
-- It **interrupts a timed-out case** before starting the next. Without that, the
-  wedge is inherited and every later case fails too.
-- **The scratch session is invisible.** Probe and model-check sessions live in
-  `<projects root>\_probe`; the API filters that directory out of project/session
-  lists, so they never appear in the rail, and `probe.sweep()` deletes any
-  leftover at boot (a killed process cannot leave a ghost). They are real
-  engine sessions behind the scenes, not fake turns.
-- Results persist to `data\probe.json` so a restart does not blank the panel.
-  The run still records **which model** it was against (captured after the toolset
-  discovery turn — a fresh session reports no model before its first turn), but
-  the panel no longer prints it: a probe is a question about the *tools*, and the
-  model name above the table read as if the results were model-specific. The ref
-  stays in `probe.json` for the case where a result looks impossible. The toolset
-  list is **not** printed either — the per-case table underneath is the useful
-  view.
-
----
+- It **interrupts a timed-out case** before starting the next, or the wedge is inherited
+  and every later case fails too.
+- **The scratch session is invisible.** Probe and model-check sessions live in `_probe`;
+  the API filters that directory out of project and session lists, and `probe.sweep()`
+  deletes leftovers at boot.
+- Results persist to `data\probe.json`. The panel does not print the model name or the
+  toolset: a probe is a question about the *tools*, and per-case results are the view.
+  The ref stays in the file for a result that looks impossible.
 
 ## The tool census
 
-Every finished turn is scanned once and its tool calls recorded (keyed by part
-id, so re-reading a transcript never double-counts) into
-`data\tool-stats.json`: per tool and per model — calls, failures, exit codes,
-average execution time, and the last 20 error signatures. `GET /api/tools/stats`
-serves it; the rail's **Tools in use** panel shows the live summary.
+Every finished turn is scanned once and its calls recorded (by part id, so re-reading a
+transcript never double-counts) into `data\tool-stats.json`: per tool and per model —
+calls, failures, exit codes, average execution time, and the last 20 error signatures.
+`GET /api/tools/stats` serves it; the rail's **Tools in use** panel shows the live
+summary.
 
-It describes *now*, not history, so it **clears itself on every boot**
-(`tools.resetOnBoot`, on by default — untick *Clear the Tool Census on every
-start* in Settings to keep it across restarts), and Settings has a **Clear Tool
-Census** button for a mid-session reset (`POST /api/tools/reset`). Left to
-accumulate it stops describing the current environment: after a few days of
-testing it read 184 calls from sessions that no longer existed.
+It describes *now*, not history, so it **clears on every boot** (`tools.resetOnBoot`, on
+by default; Settings can keep it), and Settings has **Clear Tool Census**. Left to
+accumulate it stops describing the environment: after a few days it read 184 calls from
+sessions that no longer existed.
 
----
+## Numbers that were not what they said
 
-## Three numbers that were not what they said
+Measured 23–24 Oct against a provider whose own server log prints its speed per step.
 
-Measured on 23 Oct and 24 Oct, on a provider whose own server log prints its
-speed per step.
-
-**"0% thinking" was a claim we could not make.** The run line takes the thinking
-share from `tokens.reasoning`, and this provider reports `reasoning: 0` while
-putting the thinking inside `output`: one turn held 43,526 characters of
-reasoning and reported 14,875 output tokens with no split. The total was right,
-the label was false. The line now says *thinking included, not counted
-separately* whenever there is reasoning text and no reasoning tokens
+**"0% thinking" was a claim we could not make.** The run line takes the thinking share
+from `tokens.reasoning`, and this provider reports `reasoning: 0` while putting the
+thinking inside `output` (43,526 characters of reasoning, 14,875 output tokens, no
+split). The line now says *thinking included, not counted separately*
 (`contextStats().thinkUnsplit`).
 
-**The card's speed was the whole step, not the writing.** `session.usage.updated`
-arrives once per step, so dividing written tokens by the gap between two of them
-also divides by the tool that ran and the seconds the engine took to ask again.
-The same turn the provider logged at 100-137 tok/s read 60-70 on the card. Each
-turn carries its own clock — `time.created` → `time.streamed` — and the writer
-uses it (`writingSpeed` in `src/runs.js`). The event-based rate stays as the
-fallback for a provider that sends no timings.
+**The card's speed was the whole step, not the writing.** Usage arrives once per step, so
+dividing written tokens by the gap between two usage events also divides by the tool that
+ran and the round trip. The provider's own log is the measurement: 60 tokens in 8 s is
+93.4 tok/s by its clock and 7.5 by ours, because it divides by the time between the first
+token and the last. The page keeps the first and last of each step's deltas
+(`deltaWindow`) and divides the step's tokens by that span.
 
-**That clock still contained reading the prompt, so the card stayed low.** The
-provider's own log is the measurement, and it is two lines about the same turn:
+Two later corrections to the same window:
 
-```
-[strata] done: 60 tokens in 8 s (93.4 tok/s) (stop, cancel=False)
-[strata] reading the prompt: 28,699 of 28,704 tokens, 4 s so far
-```
+- **the window was missing the tool call** (13 Nov): a tool call's arguments are
+  `tokens.output` — a `write` of a whole HTML file is thousands — but they arrive as
+  `session.tool.input.started`/`.ended`, not deltas. A step that wrote a file divided the
+  file's tokens by the seconds it spent thinking around the write, so the card read 2–4×
+  the provider's figure (279 vs a true 161). The window now opens on the first delta *or*
+  `tool.input.started` and closes on the last delta *or* `tool.input.ended`;
+  `tool.called`/`tool.success` are excluded, because the tool's own running time is not
+  the model writing.
+- **an event lost with the stream was a second step divided by one step's time.**
+  `forgetUsageSamples()` re-baselines on reconnect: the next usage event becomes the
+  baseline and no sample is taken across the gap.
 
-Eight seconds elapsed, sixty tokens were written, and the provider called it 93.4
-— because it divides by the time between the first token and the last. Our 60/8
-was 7.5, and the card said 8. It was never stale, and never a different turn: it
-was a different quantity. A long enough turn hides the difference (4 s of prefill
-inside 42 s reads 10% low), a short one is nothing but the difference.
+## A provider's error wears its own clothes
 
-The fix measures what the provider measures. The page already receives every
-`session.text.delta` and `session.reasoning.delta`, so it keeps the first and the
-last of each step (`deltaWindow` in `web/app.js`) and divides the step's tokens by
-that span. Nothing is estimated and nothing is adjusted: the prompt, the round
-trip and the tool that follows are simply not inside the window.
+A turn failed with `'charmap' codec can't encode character '\u2713'` and it looked like
+Python inside Synapse. Nothing here runs Python: the **model server** had raised a
+`UnicodeEncodeError` inside itself and handed the text back as an error object in a 200
+response. The engine labelled it `provider.internal`.
 
-The order of the two events does not matter, which is why this needed no new
-plumbing. Deltas between one `usage.updated` and the next belong to that step
-whichever end of the step the usage figure arrives on, because the window is
-taken and cleared every time one is used. A step with no streamed text has no
-window and falls back to the whole-step rate.
+- **Read the engine's raw message before believing a stack trace's owner.**
+  `GET /api/session/{id}/message` on 8720 (Basic auth
+  `opencode:<data\engine\opencode\password.txt>`) carries the `error.type`, the status and
+  the provider's body. `provider.internal` means the provider, whoever wrote it.
+- **`PYTHONIOENCODING=utf-8` in the engine's environment reaches the engine's children,
+  not the provider.** The model server is launched by the operator and needs it at its own
+  start.
 
-**The window was missing the tool call (13 Nov).** A tool call's arguments are
-`tokens.output` — a `write` of a whole HTML file is thousands of them — but they arrive as
-`session.tool.input.started`/`.ended`, not as deltas. So a step that wrote a file divided
-the file's tokens by the seconds it spent thinking around the write, and the card read
-2–4× the provider's own figure: the operator's Designer card said 279 tok/s while the
-provider's log said 60–174, and a step that was one big `write` read 1000+. Measured on
-the run itself, from its event timestamps: the 11 steps' old window summed to **24.8 s**,
-and with the tool-input marks added **42.9 s** — 279 becomes 161, inside the provider's
-range. The window now opens on the first delta *or* `tool.input.started` and closes on the
-last delta *or* `tool.input.ended`; `tool.called`/`tool.success` are excluded, because the
-tool's own running time is not the model writing.
+**A provider error inside a 200 is a failed turn, not an outage.** An SSE response sends
+its status before the first token, so a failure after that can only arrive as an error
+frame or as a 200 whose body is `{"error": …}`. The runner read only the sentence,
+classified it "unknown" and retried, so one provider bug became ten identical failures.
+Now `providerErrorFrame()` parses `error.response.body`, `normalizeMessage` marks the
+message `errorKind: 'provider-frame'`, `turnErrorOf` reports it as "the provider returned
+an error inside its response: <their sentence>", and `classifyFailure` maps it to
+**terminal** / `provider-frame`. Everything else on the ladder is untouched — a rate limit
+is still transient.
 
-**And an event lost with the stream was a second step divided by one step's time.** The
-subtraction that turns cumulative `tokens.output` into *this step's* tokens needs every
-`usage.updated`; a reconnect loses some, and the next figure then spans two steps over one
-window — the "1000+ tok/s" sightings. `forgetUsageSamples()` re-baselines on reconnect:
-the next usage event becomes the baseline and no sample is taken across the gap.
+## The model list, asked once at boot
 
-
-
-## A provider's error wears its own clothes (15 Nov)
-
-A turn failed with
-
-```
-'charmap' codec can't encode character '\u2713' in position 41: character maps to <undefined>
-```
-
-and it looked like Python inside Synapse. Nothing here runs Python. The engine's raw
-message said what it really was:
-
-```json
-{"type":"provider.internal","status":200,
- "response":{"body":"{\"error\":{\"type\":\"server_error\",\"message\":\"'charmap' codec ...\"}}"}}
-```
-
-The **model server** (PolyStrata, a Python process at `127.0.0.1:8080`) had raised
-`UnicodeEncodeError` inside itself — a print or log write in cp1252 — and handed the text
-back as an error object in a 200 response. The engine labelled it `provider.internal`; the
-page shows the provider's sentence, which is why it reads like ours.
-
-Two lessons:
-
-- **Read the engine's raw message before believing a stack trace's owner.** `GET
-  /api/session/{id}/message` on port 8720 (Basic auth `opencode:<data\engine\opencode\password.txt>`)
-  carries the `error.type`, the status and the provider's body. `provider.internal` means the
-  provider, whoever wrote it.
-- **`PYTHONIOENCODING=utf-8` in the engine's environment reaches the engine's children, not
-  the provider.** It is there for model-run scripts (1.58.24) and would not have fixed this;
-  the model server is launched by the operator, not by Synapse, and needs the variable at its
-  own start (or `encoding="utf-8"` on whatever it writes).
-
-The chat that hit this had taught itself to print "✓" in its reasoning; every request then
-carried it, and the server's encoder refused it every time — a loop that looks like a model
-refusing to work rather than a provider failing to log.
-
-**Follow-up (15 Nov): a provider error inside a 200 is a failed turn, not an outage.**
-The charmap failure came back as HTTP **200** with `{"error": {"type": "server_error", …}}`
-in the body — an SSE response sends its status before the first token, so there is no status
-left to say "failed". The engine relayed it as a provider error with `response.body`; the
-runner read only the sentence, classified it "unknown" and retried, so one provider bug
-became ten identical failures.
-
-The shape is now recognised:
-
-- `providerErrorFrame()` in `src/engines/base.js` parses `error.response.body` and finds the
-  provider's own object; `normalizeMessage` marks the message `errorKind: 'provider-frame'`;
-- `turnErrorOf` reports it as *"the provider returned an error inside its response: <their
-  sentence>"*, which is what the card and the model see;
-- `classifyFailure` maps that to **terminal** / `provider-frame`, so the same request is not
-  retried. Everything else on the ladder is untouched — a rate limit is still transient.
-
-**The hunch about the printer, checked.** PolyStrata has `_debug_req()` (an 80-character
-preview of the last message at request start) and — more likely — a mid-stream
-`print(f"[strata] raw: …")` behind the same `STRATA_DEBUG=1` switch, which prints the
-model's **generated text**: exactly the shape that carries a "✓", and it runs after the 200
-is already sent. Neither `[strata] req` nor `raw:` lines appear in its logs, but a print that
-raises writes nothing, so their absence is what the bug predicts. The fix stays on that
-side: launch it with `PYTHONIOENCODING=utf-8` (or `PYTHONUTF8=1`).
-
-## The model list, asked once at boot (17 Nov)
-
-A provider's list in Settings is a snapshot from the last time the operator pressed
-Refresh List, and on 17 Nov OpenCode Go's was months old: models it had added were
-missing, models it had dropped were still offered to the roles. The engine reads its
-provider definitions once, at start, so a list learned *after* that start cannot run
-until the next restart — which is why this is a boot step rather than a background
-task.
+A provider's list in Settings is a snapshot from the last Refresh, and on 17 Nov OpenCode
+Go's was months old: models it had added were missing and models it had dropped were
+still offered. The engine reads its provider definitions once, at start, so a list learned
+after that start cannot run until the next restart — which is why this is a boot step.
 
 - `syncProviderModels()` asks every provider in parallel under **one three-second
-  deadline** shared by all of them, before the engine is configured.
+  deadline**, before the engine is configured.
 - **An answer is authoritative for ids.** A model the provider no longer lists is
-  removed: a role pointing at it could not run, and the operator needs to see that
+  removed, because a role pointing at it could not run and the operator needs to see that
   now. New ids are added.
-- **The operator's entry survives** for a model that is still listed — its name, its
-  window, its output. A `/models` listing is not a measurement of anything.
-- **No answer changes nothing.** Timeout, 401, an empty list, HTML instead of JSON:
-  the saved list stands. The page says it once, and the two halves are deliberately
-  different shapes — a line per provider that *changed*, with `(+added, -removed)`,
-  then one comma-separated sentence for the providers that did not answer. A provider
-  that answered with the same list is not mentioned: there is nothing to do about it.
-  A local runtime the operator has not launched yet is the ordinary case, not an error.
-- A role whose saved ref is no longer in the catalog shows an **empty model field
-  with a red border**, and sending is refused with the reason. Single and Multi both.
+- **The operator's entry survives** for a model still listed — its name, window, output.
+  A `/models` listing is not a measurement of anything.
+- **No answer changes nothing.** Timeout, 401, an empty list, HTML: the saved list stands.
+  The page says it once — a line per provider that changed (`(+added, -removed)`), then
+  one sentence for the providers that did not answer.
+- A role whose saved ref is no longer in the catalog shows an **empty model field with a
+  red border**, and sending is refused with the reason, in both modes.

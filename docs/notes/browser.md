@@ -1,136 +1,144 @@
 # SynaBrowse — the harness's own browser
 
 A browser Synapse owns, on its own profile, driven over the Chrome DevTools Protocol.
-Models get it as thirteen tools; the operator sees one window, only when a person is
-genuinely needed. This note is the "why" behind `src/browser/` and
-`src/mcp/browser-server.js`, with the measurements that produced it.
+Models get it as a set of tools; the operator sees one window, only when a person is
+genuinely needed.
 
 ## Why a browser at all
 
-`webfetch` reads public pages and nothing else. Two walls it cannot pass, both measured:
-
-- **Cloudflare's interstitial.** `webfetch` gets the "Just a moment…" page. A *headed*
-  Edge clears it; `--headless=new` never does, however long it waits.
-- **A sign-in.** A deep route on a logged-in site answers "Something went wrong." until
-  the profile has the session. Nothing in `webfetch` can create one.
-
-The measurements, 11 Nov, same machine: hidden headed Edge cleared the challenge in
-**2.6 s**; on screen it took 14 s and then showed an error page; headless never cleared it
-in 30 s. That is the whole reason the browser is headed and off-screen rather than
-headless.
+`webfetch` reads public pages and nothing else. Two walls it cannot pass, both
+measured: **Cloudflare's interstitial** (`webfetch` gets "Just a moment…") and **a
+sign-in** (a deep route answers "Something went wrong" until the profile has the
+session). Measured 11 Nov: hidden headed Edge cleared the challenge in **2.6 s**; on
+screen it took 14 s and then showed an error page; headless never cleared it in 30 s.
+That is why the browser is headed and off-screen rather than headless.
 
 ## The profile
 
-`data\browser\profile` — one per installation, global across projects, in `data/` so it is
-never committed. **Never** the operator's Edge profile, and never Brave (rule 9). The
-session lives in the profile because the browser is the thing using it; nothing is copied,
-and no cookie is ever read, exported or logged.
+`data\browser\profile` — one per installation, global across projects, in `data/` so it
+is never committed. **Never** the operator's Edge profile, and never Brave. The session
+lives in the profile because the browser is the thing using it; nothing is copied, and
+no cookie is ever read, exported or logged.
 
-A profile cannot be open twice, so `createBrowser()` attaches to an existing instance when
-one is running (`DevToolsActivePort` + a live `/json/version`), and is idempotent under
-concurrent callers.
+A profile cannot be open twice, so `createBrowser()` attaches to an existing instance
+(`DevToolsActivePort` + a live `/json/version`) and is idempotent under concurrent
+callers.
 
-## The launch, flag by flag (`src/browser/browser.js`)
+## The launch, flag by flag
 
 | flag | why |
 |---|---|
-| `--disable-blink-features=AutomationControlled` | the one that decides the Cloudflare result: without it the page sits on "Verifying…" for ever |
-| `--disable-background-timer-throttling`, `--disable-backgrounding-occluded-windows`, `--disable-renderer-backgrounding` | a hidden window is a background window; without these its timers are throttled and its frames stop, and a JavaScript challenge never finishes |
-| `--disable-features=CalculateNativeWinOcclusion` | stops Windows deciding the off-screen window is occluded and suspending it |
+| `--disable-blink-features=AutomationControlled` | decides the Cloudflare result: without it the page sits on "Verifying…" for ever |
+| `--disable-background-timer-throttling`, `--disable-backgrounding-occluded-windows`, `--disable-renderer-backgrounding` | a hidden window is a background window; without these its timers are throttled and a JavaScript challenge never finishes |
+| `--disable-features=CalculateNativeWinOcclusion` | stops Windows suspending the off-screen window |
 | `--window-position=-32000,-32000` | off the desktop, not on a monitor |
-| `--start-minimized` | a launch must not take the foreground; the hand-off decides when the window is shown |
-| `--remote-debugging-port=0` + `--user-data-dir` | the port is written into the profile, so no port is chosen by hand |
+| `--start-minimized` | a launch must not take the foreground |
+| `--remote-debugging-port=0` + `--user-data-dir` | the port is written into the profile; no port is chosen by hand |
 
-The window is found again by the command line naming that profile — never by process name.
+The window is found again by the command line naming that profile — never by process
+name. `--test-type` suppresses Chromium's "unsupported flag" bar. The launch restores
+the operator's window as soon as the process exists, not when the debugging port opens,
+and moves the window only if it is not already inside the target monitor — so the
+common path is one call: minimize.
 
-## The launch is quiet, and the window does not flash
+## The tools
 
-- **No unsupported-flag bar.** `--disable-blink-features=AutomationControlled` makes Chromium
-  print "You're using an unsupported command-line flag…" across the top of the page. It was
-  in a screenshot the operator sent. `--test-type` suppresses the bar; the profile is a
-  disposable automation profile, so the trade is right.
-- **Focus comes back within the second.** The launch restores the operator's window as soon
-  as the process exists, not when the debugging port opens, so the caret does not leave for
-  the two seconds an Edge start takes.
-- **No visible flash.** The hand-off used to restore the window, move it and minimize it
-  again — a window that appeared and vanished. It now moves only when the window is not
-  already inside the target monitor, and the launch already places it there, so the common
-  path is one call: minimize.
+`open`, `read`, `click`, `type`, `press`, `wait`, `scroll`, `screenshot`, `watch`,
+`tabs`, `handoff`, `download`, `save`, `dom`, `close`.
 
-## The tools (`src/mcp/browser-server.js`)
+The model sees them namespaced — `synapse-browser_open` — because the engine prefixes a
+server's tools with its key. The names travel in `synapse.harness`, one copy for every
+role, and only while the browser is switched on: a brief that says `open` sends the
+model to a tool that does not exist (17 Nov, a Single chat that then guessed nine URLs
+with `webfetch`).
 
-`open`, `read`, `click`, `type`, `press`, `wait`, `scroll`, `screenshot`, `watch`, `tabs`,
-`handoff`, `download`, `close`.
+- `read` answers the page as a person reads it — headings and text, plus the links and
+  **controls** (buttons, tabs, menu items, anything that draws a pointer) with the
+  address and coordinate a click uses. Not HTML: a DOM dump is thousands of tokens.
+  `mode: "text"` keeps the page's own lines for a thread or profile; article mode keeps
+  standalone labels (an author, a date) that a paragraph would drop.
+- `read { full: true }` scrolls to the end in viewport steps, extracts once, and writes
+  the page into `.project\browser\pages\<slug>-<stamp>.md` with a title, source, size
+  and short contents. Bounded at 400,000 characters and 25 seconds, and a cut says so.
+- `screenshot`/`watch` write into `<project>\.project\browser\shots\` and answer the
+  absolute path *and* the project-relative one the chat can render.
+- `save` fetches an address **in the page's own context** (`credentials: 'include'`), so
+  the request carries the session's cookies, origin and headers. It takes `method`,
+  `form`, `xhr` and `json`, and the cross-origin leg is automatic: when the page cannot
+  read the answer, the same address is fetched from Node with that host's cookies and
+  the page as referrer. Measured on a mod page: a real file in **84 ms**, and an address
+  that answered `text/html` refused as "answered a page, not a file".
+- `dom` reads what elements state — `data-*`, `href`, `title`, a form's action —
+  because a page puts the facts a script needs in attributes, where `read` cannot see
+  them.
+- `read` names each visible iframe with its src, size and click coordinate: a widget's
+  words are not in the parent document, and navigating to the widget's src loses the
+  turn.
+- A bot check is **named, never worked around**: `botWall()` recognises a captcha or
+  "checking your browser" from the text and the frame/script sources, and the answer
+  says a person has to clear it and points at `handoff`. A challenge clicked at gets
+  longer, not shorter.
+- Every call is timed to stderr and always answers; an error with no message says "the
+  browser did not say why".
 
-The model sees them namespaced — `synapse-browser_open`, `synapse-browser_read`, and so
-on — because the engine prefixes a server's tools with its key, and the key here is
-`synapse-browser`. The harness core names the prefixed names for that reason: a brief that
-says only `open` sends the model to a tool that does not exist, and the turn is spent on
-the error (17 Nov, measured in a Single chat that then guessed nine URLs with `webfetch`).
-The names travel in `synapse.harness`, one copy for every role, and only while the browser
-is switched on.
-
-- `read` answers the page as a person reads it — headings and text, plus the links that can
-  be clicked with their addresses and coordinates. Not HTML: a DOM dump is thousands of
-  tokens of markup.
-- `watch` records the screencast for a moment and answers a strip of frames, for an
-  animation, a spinner, a menu that slides. A still cannot show what changed.
-- `screenshot`/`watch` write into the **project** (`<project>\.project\browser\shots\`) and answer
-  the absolute path *and* the project-relative one the chat can render, so the model
-  shows a picture without copying it.
-- The page must be an http(s) address. `file://` is refused: it would be a way around the
-  harness's own rules.
-
-Registered in the engine's isolated config only when `browser.enabled` is true — the off
-state is the *absence* of the tools, not a tool that refuses. The whole config reaches the
-adapter as `ctx.whole` (`src/engines/index.js`) because the switch is the harness's, not
-the engine's.
+The page must be an http(s) address or a local `.html` mock (below). Registered in the
+engine's isolated config only when `browser.enabled` is true — the off state is the
+*absence* of the tools, not a tool that refuses.
 
 ## The hand-off is a permission
 
-A page that needs a login is not a window that appears — it is a **question**. The browser
-works behind the scenes; when a page is a wall, the model calls `handoff`, and the harness
-raises the same card the screen lease uses: **Allow Sign-In**, Reject, Reject With Reason,
-Stop Run. There is no auto-allow, and there is no timeout: the card waits for the operator,
-and the run's stall clock is suspended while it does (the wait is theirs, not the model's).
+A page that needs a login is not a window that appears — it is a **question**. When a
+page is a wall, the model calls `handoff`, and the harness raises the same card the
+screen lease uses: **Allow Sign-In**, Reject, Reject With Reason, Stop Run. No
+auto-allow, and no timeout: the card waits, and the run's stall clock is suspended while
+it does (the wait is the operator's, not the model's).
 
-Only an Allow opens a window, and then it is an ordinary window:
-
-- normal and focused, on the monitor the operator is looking at (the monitor of the window
-  that had the foreground when they clicked), because they asked for it;
-- loading that site, with **no time limit** — they can fetch a password from a manager, walk
-  away, come back;
-- watched in the background: when the page stops asking to be signed into — no password
-  box, no sign-in route, loaded, twice in a row — the window is hidden, the site is
-  recorded, and the tool call answers "signed in";
-- if they close it without a session, that is a Reject: the tool answers so, and the model
-  carries on without the site.
-
-The two hollow knocks play when the card appears, so an operator looking elsewhere looks up.
-Nothing is minimized for a sign-in, and nothing takes the foreground uninvited.
+Only an Allow opens a window, and then it is an ordinary one: normal and focused, on the
+monitor they are looking at, loading that site with **no time limit**. It is watched in
+the background: when the page stops asking to be signed into — no password box, no
+sign-in route, loaded, twice in a row — the window is hidden, the site is recorded, and
+the tool answers "signed in". Closing it without a session is a Reject, and the model
+carries on without the site. The two hollow knocks play when the card appears.
 
 ## Being invisible, exactly
 
-A hidden browser must be invisible *and* still render, and those two pull apart:
+A hidden browser must be invisible *and* still render, and those pull apart:
 
-- **The hide starts before the browser is ready.** `show.ps1 -Hide -WaitMs` is started the moment
-  the process exists and grabs the window within 40 ms of its creation, parking it off-screen
-  as soon as Edge creates it.
-- **No taskbar button: hide, style, show, then DeleteTab.** `show.ps1 -Hide` hides the window,
-  sets `WS_EX_TOOLWINDOW`, clears `WS_EX_APPWINDOW`, shows it off-screen and calls
-  `ITaskbarList::DeleteTab`. Setting the style on an already-visible window does nothing —
-  Windows re-reads it on hide/show — which is why the first three attempts failed (14 Nov;
-  see "Hiding it: the attempts, and the one that works" below).
-- **Off-screen and normal, never minimized.** A minimized Chromium window stops compositing,
-  so `Page.captureScreenshot` never answers; off-screen, it is invisible and still renders.
-  Measured both ways: minimized → no answer in 15 s; off-screen → 55 ms.
-- **No "Restore pages" bubble.** Edge shows it as a window of its own at the top-left of the
-  primary after a kill, and it was mistaken for ours. `--hide-crash-restore-bubble` and
-  `--disable-session-crashed-bubble` suppress it, and the window search ignores it by title.
-- **A sign-in window is the exception.** On Allow the tool-window bit is cleared, the window
-  is placed on the monitor the operator is looking at, restored, and brought forward with the
-  attach-to-foreground-thread trick — because they asked for it and are about to type. After
-  the session lands it is hidden again.
+- **the hide starts before the browser is ready.** `show.ps1 -Hide -WaitMs` starts the
+  moment the process exists and grabs the window within 40 ms of its creation.
+- **no taskbar button: hide, style, show, then DeleteTab.** Hide, set
+  `WS_EX_TOOLWINDOW`, clear `WS_EX_APPWINDOW`, show off-screen, call
+  `ITaskbarList::DeleteTab`. Setting the style on an already-visible window does nothing
+  — Windows re-reads it on hide/show, which is why three earlier attempts failed (14
+  Nov).
+- **off-screen and normal, never minimized.** A minimized Chromium window stops
+  compositing, so `Page.captureScreenshot` never answers; off-screen it is invisible and
+  still renders. Measured: minimized → no answer in 15 s; off-screen → 55 ms.
+- **no "Restore pages" bubble.** Edge shows it at the top-left after a kill and it was
+  mistaken for ours; two flags suppress it and the window search ignores it by title.
+- **a sign-in window is the exception:** on Allow the tool-window bit is cleared, the
+  window is placed on the operator's monitor, restored and brought forward, because they
+  asked for it and are about to type. After the session lands it is hidden again.
+
+### Hiding it: the attempts, and the one that works
+
+| attempt | what it did | result |
+|---|---|---|
+| 12 Nov | tool-window bit off, parked at −32000, left normal so Chromium keeps rendering | button stayed; parking worked |
+| 13 Nov | the same on **every** top-level window of the profile | button stayed |
+| 14 Nov | untitled windows accepted, a **watcher** re-applying the bits every 1.2 s | button stayed; watcher removed |
+| 14 Nov | **hide → set the style → show**, then `DeleteTab` | **button gone** |
+
+The first three failed because the bit was set on a window the shell had **already put
+on the taskbar**, and Windows re-reads it when a window is hidden or shown — not while
+it stays visible. What is still not covered: a window Edge creates **later** (a popup),
+because the watcher is gone. One pass at launch is not a watcher; if a stray button
+appears mid-session, that is the line to move back.
+
+**What the rule may touch:** only an `msedge.exe` whose command line carries
+`--user-data-dir=<SynaBrowse's own profile>` **as an argument**, matched literally.
+Edge a person or Windows opened runs on its own profile and is never matched; WebView2
+is a different process (`msedgewebview2.exe`), so Synapse's own window cannot be caught.
 
 ## Sites: a record, not a permission list
 
@@ -138,222 +146,161 @@ A hidden browser must be invisible *and* still render, and those two pull apart:
 
 - There is no host allowlist. The master switch is the fence; the table says which hosts
   the profile has sessions for.
-- **The table's last row is the form**: type an address, press `Sign In…` (or Enter).
-- A typed address is not validated: a browser resolves `example.test` or a LAN address;
-  the harness only chooses the scheme to try first (https, then http).
-- The row is written **only after the operator closes the window and the address is opened
-  once more, hidden**. `looksUnconfirmed()` refuses it when the page still has a password
-  box or sits on a sign-in route; nothing is added and the toast says why.
-- A confirmed row keeps the address it was confirmed at, and shows ages, not countdowns:
+- **The table's last row is the form**: type an address, press `Sign In…` or Enter. It is
+  not validated — a browser resolves `example.test` or a LAN address; the harness only
+  chooses the scheme to try first (https, then http).
+- The row is written **only after the operator closes the window and the address is
+  opened once more, hidden**. `looksUnconfirmed()` refuses it while the page still has a
+  password box or sits on a sign-in route; nothing is added and the toast says why.
+- A confirmed row keeps the address it was confirmed at and shows ages, not countdowns:
   when a session expires is the site's decision.
 - ✕ forgets a site: the row goes and the browser drops that site's cookies **and its
-  storage**. The parent domain matters: measured 11 Nov, clearing the origin
-  `www.reddit.com` left seven cookies on `.reddit.com`, so the operator stayed signed in
-  after deleting the row. Cookies are listed by name and domain to delete them; a value is
-  never stored, logged or returned.
+  storage**. The parent domain matters — clearing `www.reddit.com` left seven cookies on
+  `.reddit.com`, so the operator stayed signed in after deleting the row. Cookies are
+  listed by name and domain to delete them; a value is never stored, logged or returned.
 
-The sign-in button says what it is doing: **Opening…** while the browser starts, then
-**Saving…** while the address is checked, both breathing (`waiting-breathe`).
-
-## What a model receives
-
-- **The article, not the page.** `read` scores the DOM for the element that carries
-  paragraphs and little link furniture, then emits Markdown-ish lines — headings, list
-  items, quotes, code. A nav or a footer is dropped. `mode: "text"` keeps the whole page
-  for the rare site the picker gets wrong.
-- **A sign-in wall, named.** A page with a password box, or a form that says sign in,
-  comes back with a sentence: *"This page needs a sign-in only the operator can give (a
-  password box), and <host> is not in the Signed In table. Call `handoff` …"* — and if
-  the host *is* in the table, the sentence says the session has expired instead. The
-  model does not have to infer it from the prose, and does not scrape around a login.
-- **One card per intention.** Consecutive browser calls fold into a single card
-  ("SynaBrowse · 3 calls") with the calls listed inside, because a sign-in is open → read →
-  handoff → read and four full cards read as four things happening (11 Nov).
-- **A line in the brief.** When the switch is on, every role's brief says the browser
-  tools reach pages `webfetch` cannot, and that a wall needs `handoff`. Without it the
-  brief points at `webfetch` and the tools go unread — a tool a model does not know it
-  has is a tool that does not exist.
+The sign-in button says what it is doing: **Opening…** then **Saving…**, both breathing.
 
 ## Project artifacts, not a shared folder
 
-The engine gives each project's MCP server that project's folder as its working directory —
-measured 11 Nov, the server for `test` starts with cwd `F:\dev\Synapse.Projects\test`.
-So screenshots and frame strips go to `<project>\.project\browser\shots\`:
+The engine gives each project's MCP server that project's folder as its working
+directory (measured 11 Nov), so screenshots and frame strips go to
+`<project>\.project\browser\shots\`: they are deleted with the project, two projects
+browsing the same site keep their own pictures, and nothing under the harness has to be
+forgiven. `src/browser/artifacts.js` decides; the harness folder is the fallback for a
+server whose cwd is not a project.
 
-- they are deleted with the project, and picked up by the project's own cleanup;
-- two projects browsing the same site keep their own pictures;
-- nothing under the harness has to be forgiven — `src/browser/artifacts.js` decides, and the
-  harness folder is only the fallback for a server whose cwd is not a project (the projects
-  root, which is the "all projects" context). That fallback is why
-  `data\browser\shots\` stays on the read exceptions.
+## A local mock is a page
 
-## RAM
+`open` accepts a `file:` address under a fence: the file must be **inside the projects
+folder** (resolved first, so `..` cannot climb out) and must be **`.html`/`.htm`**. The
+point is a page to look at, not a reader for arbitrary files. Everything the browser does
+with it works the same, and no host is recorded. `localPageAllowed()` in
+`src/browser/allow.js` is the rule, tested without a browser.
 
-The browser is ~300 MB of the operator's RAM while it runs, and a local model lives in
-the same memory. Three rules keep that honest:
+## Downloads
 
-- it starts on demand and never at boot;
-- it is closed after `idleMinutes` (default 5, Settings → Browser) with no tool call —
-  the profile keeps every session, so the next call pays a launch, not a login;
-- the text it returns is the article, not the page, so what it spends is content: tokens
-  in the model's context are memory too.
+A download is a file the page hands the browser. It goes to
+`<project>\.project\downloads\`: it belongs to the project, is deleted with it, and does
+not sit in the operator's Downloads folder.
+
+- **The browser chooses the folder, not the page.** `Browser.setDownloadBehavior` with
+  `allowAndName` writes under the download's GUID; on completion it is renamed to the
+  suggested filename, made safe as one leaf, and a collision gets ` (1)`.
+- **A click that downloads waits for the file**, and its answer carries the
+  project-relative path. `download {url}` is the explicit route; `download` with no
+  `url` waits for one already in flight.
+- **The chat shows an ASCII bar.** The browser reports begin/progress/completed on the
+  browser's CDP endpoint (not the page's); the server forwards them throttled to four a
+  second to `POST /api/browser/download`, and the page draws a `SynaBrowse · Download`
+  card with `[####----] 42%`, bytes and the saved path. A reload asks
+  `GET /api/browser/downloads?dir=…`.
+- **A live card sits at the bottom; a saved one takes its place and folds.** It is placed
+  at the end while bytes arrive, then at the moment it finished, so it scrolls up with
+  the chat; a completed card folds to its one-line head.
+- **Progress is browser-scoped, the folder is the project's** — the folder is set again
+  before each action, because one browser and one page are already the rule.
+- **No file is ever written outside a project.** The API refuses a `dir` outside the
+  projects root, and a failed `setDownloadBehavior` denies downloads rather than falling
+  back to the machine's Downloads.
+
+## Names and lines
+
+A model reading a Reddit thread needed two things extraction had thrown away: **who
+wrote each comment**, and **the page's line structure**. Text mode used to collapse all
+whitespace — a whole thread arrived as one 20,000-character line. Now text mode keeps
+one line per block, blank runs collapsed, and article mode emits a standalone link or
+`<time>` as its own line. The `read` description says which mode to use: *article* for
+prose, *text* for a thread, a forum or a profile.
+
+## A page cut in silence is a page the model thinks it has
+
+`read` used to cut at 6,000 characters whatever `maxChars` said, with no mark. It now
+reports the page's own length (`total`), honours `maxChars` (6,000 by default, up to
+100,000 in one read, 30,000 in the older outline) and links, and a cut ends with
+`[… truncated: 6,000 of 41,210 characters. Ask again with a larger maxChars (up to
+30000), or scroll and read again for the rest.]`
+
+## A wait that fails says which absence it found
+
+`wait` used to match rendered text only, so a model waiting for a collapsed comment got
+five red failures with no way to tell "late" from "collapsed" from "not there". It now
+checks the page's HTML too and says: *"after 5s the text "193" is not displayed, but it
+is in the page's HTML — a collapsed comment, a closed menu or a tooltip. Open that, then
+wait again"*; or *"it is in neither the page's text nor its HTML (9,400 characters of
+text). Check the spelling, or read the page"*. `browser.wait()` answers
+`{ ok, elapsedMs, hidden, textLength }` so the server can say it.
+
+## Where a click lands
+
+Measured in a scratch project: a 1280×800 window gives a 1280×800 PNG at
+`devicePixelRatio` 1 (the page is held at `Emulation.setDeviceMetricsOverride`), and a
+click asked for 324,444 arrives at 324,444 — delivery error 0,0. So the arithmetic is not
+the error; a model reading a picture is, by a few pixels. The click therefore makes the
+near-miss harmless:
+
+- the point is **clamped** into the viewport, because a y from a whole-page image can be
+  past its bottom;
+- if nothing clickable is under it, it **snaps** to the nearest control within **28 px**,
+  and the answer says which and how far;
+- a point **inside** anything that behaves clickable (`[role=tab]`, `[onclick]`, an
+  ancestor with `cursor: pointer`) is the operator's aim, not a near-miss, so it is
+  clicked where asked;
+- the answer reports where it really landed (`at`), and `screenshot` says the image's
+  size and that one image pixel is one CSS pixel.
+
+`Page.captureScreenshot` with `captureBeyondViewport` alone returns the viewport (a 888px
+page came back 1280×800), so a full-page image asks `Page.getLayoutMetrics` and clips to
+the content size. `open` waits up to 3 s for ~120 characters before returning, because a
+storefront renders its text after `load`.
+
+## A key is a character too
+
+`press` takes any printable ASCII character, or several, and dispatches a real
+keyDown/keyUp with the physical code and virtual key (`Digit7`/55, `Equal`/187 for both
+`=` and `+`), plus `text` on the way down so the character is inserted and `keypress`
+fires. `type` inserts text through `insertText`, which fires **no key event at all** —
+its description says so. A chord is refused by name.
+
 ## When the page is gone
 
-Every protocol request answers or fails within 60 seconds — a minute, because fetching a password from a manager takes one — and `start()` checks that the
-page it holds is still alive before using it. Both were added after a real wound: the
-operator signed in, closed the hand-off window, and the next `read` sat on a half-open
-socket for seven minutes — the tool never returned, the model never spoke, and the run
-was stopped twice (11 Nov). A closed window is now a browser to open again, and a
-refusing one is an error the model can report.
+Every protocol request answers or fails within 60 seconds — a minute, because fetching a
+password from a manager takes one — and `start()` checks that the page it holds is still
+alive. Both came from a real wound: the operator signed in, closed the hand-off window,
+and the next `read` sat on a half-open socket for seven minutes (11 Nov).
 
 ## Limits, stated
 
 - **Expiry is the site's.** The table shows when a session was made, never "good for N
-  days"; the harness cannot know and will not invent it.
+  days".
 - **Confirmation is a page check, not a proof.** A site that renders a sign-in form
-  without a password input can pass it. It catches the common case: you were sent back to
-  the login page.
+  without a password input can pass it.
 - **The profile can break** (an Edge upgrade, a crashed write). Recreate it; never copy
   Edge's.
-- **A hidden browser costs RAM** (~300 MB). It starts on demand and is not started at boot.
-- **Nothing here reads a cookie.** Not for the table, not for "validate", not for a
+- **A hidden browser costs RAM** (~300 MB). It starts on demand, never at boot, is closed
+  after `idleMinutes` (default 5) with no tool call, and returns the article rather than
+  the page — tokens in the model's context are memory too.
+- **Nothing here reads a cookie.** Not for the table, not to "validate", not as a
   fallback.
 
-## A local mock is a page (14 Nov)
+## Why a model cannot see it
 
-A model that writes a mock has one honest way to look at it, and on 14 Nov one was refused
-its own `file:///F:/dev/Synapse.Projects/test/mock-2.html` and had to describe a page it
-could not see. `open` accepts a `file:` address now, under the fence that keeps the browser
-a browser and not a way around the file rules:
+"SynaBrowse is on and the model says there is no such tool" is almost always one thing:
+**the engine registers its MCP servers when it starts**, from
+`data\engine\opencode\config\opencode\opencode.json`, which is written at boot from the
+harness's config. Flipping the switch while Synapse runs writes
+`config\synapse.config.json` and nothing the engine can see until it starts again.
 
-- the file must be **inside the projects folder** — the path is resolved first, so `..`
-  cannot climb out, and the harness and the rest of the machine are refused;
-- it must be **`.html`/`.htm`**, because the point is a page to look at, not a reader for
-  arbitrary files (the `read` tool has its own policy for those);
-- everything the browser does with it — `read`, `click`, `type`, `screenshot` — works the
-  same, and no host is recorded for it.
+- the switch says so: `browser.enabled` and `browser.profile` are in `restartNeeded()`,
+  so Settings offers **Save & Restart**;
+- the log says so;
+- the check: that config must list `"synapse-browser"`. If it does, a model that still
+  "cannot find" it is looking for the wrong name — the tools are
+  `synapse-browser_open`, `synapse-browser_read`, and the rest.
 
-`localPageAllowed()` in `src/browser/allow.js` is the rule, tested without a browser; the
-tool's description names it, because that is where a model learns what it may open.
-
-## Names and lines (14 Nov)
-
-A model reading a Reddit thread for a report needed two things the extraction had thrown
-away: **who wrote each comment**, and **the page's line structure**. Article mode emitted
-only headings, paragraphs, list items and quotes — a username is a standalone link outside
-the paragraph, so every name was dropped and the model had the words with no attribution.
-Text mode, the fallback, ran the page through `clean()`, which collapses all whitespace:
-the whole thread arrived as **one 20,000-character line**, so the model shell-split it and
-still lost where one comment ended.
-
-Both are fixed at the source:
-
-- **text mode keeps the page's own lines** — one line per block, blank runs collapsed, and
-  every name, date and comment keeps its own row;
-- **article mode keeps standalone labels** — a link or a `<time>` outside a paragraph is an
-  author, a date or a tag, and is emitted as its own line. The page's nav, aside, form,
-  buttons and footer are still furniture and stay out;
-- the `read` description says which mode to use: *article* for an article's prose, *text*
-  for a thread, a forum or a profile.
-
-## Hiding it: the attempts, and the one that works (14 Nov)
-
-The window used to keep a taskbar button with a thumbnail carrying the Edge logo and the
-page title, and it stayed until Synapse killed the browser. Everything built to prevent that
-was tried, failed, and was removed (1.58.22, −116 lines); then the cause was found and the
-fix is three calls.
-
-| attempt | what it did | result |
-|---|---|---|
-| 12 Nov | `WS_EX_TOOLWINDOW` on, `WS_EX_APPWINDOW` off, parked at −32000, left normal so Chromium keeps rendering | button stayed; off-screen parking worked |
-| 13 Nov | the same on **every** top-level window of the profile, not just the first; no `FlashWindowEx` on hide | button stayed |
-| 14 Nov | untitled windows accepted, and a **watcher** re-applying the bits every 1.2 s with a sign-in flag | button stayed; watcher and flag removed (1.58.22) |
-| 14 Nov | **hide → set the style → show**, then `ITaskbarList::DeleteTab` | **button gone** |
-
-**Why the first three failed:** the tool-window bit was set on a window the shell had
-**already put on the taskbar**, and Windows re-reads that bit when a window is hidden or
-shown — not while it stays visible. Setting the style and re-showing a window that is
-already visible changes nothing the shell can see, however many times it is done.
-
-**The fix, in `show.ps1 -Hide`,** for every window found: `SW_HIDE`; set
-`WS_EX_TOOLWINDOW` and clear `WS_EX_APPWINDOW`; move to −32000; `SW_SHOWNOACTIVATE`;
-`ITaskbarList::DeleteTab(hwnd)` on the taskbar object. The hide is momentary and the show
-is immediate,
-so the browser never stops compositing long enough to matter — a probe loaded a page and
-screenshotted after it. The report carries `tabsRemoved` (the log reads `taskbar buttons
-removed 2`).
-
-**How it was checked:** a probe browser on a scratch profile was left running; a screenshot
-of the taskbar 9 s and 16 s after start showed no Edge button, twice. A control — the same
-Edge launched *without* the hide — showed `about:blank - Perso…` in the same place. The
-operator's evidence, the taskbar thumbnail, is what the old code produced and this does not.
-
-**What is still not covered:** a window Edge creates **later** (a popup) is not hidden,
-because the watcher is gone. The browser's main window is created once at launch, and the
-probe's page loads did not make another; if a stray button ever appears again during a
-session, this is the line to move back — one pass at launch is not a watcher.
-
-**The rule is the whole argument, not a mention (14 Nov).** The operator asked what else
-this could touch. A candidate is an `msedge.exe` process whose command line carries
-`--user-data-dir=<SynaBrowse's own profile>` **as an argument**, matched literally (quoted
-or not, separators normalised). An Edge that a person or Windows opened runs on its own
-profile and is never matched; a process that merely names our folder in another argument is
-not matched either; and WebView2 windows are a different process (`msedgewebview2.exe`), so
-Synapse's own window cannot be caught. Nothing here can see, move or hide a window that is
-not Synapse's browser.
-
-**A click is a click even when it cannot say where it landed (14 Nov).** `click` judged the
-landing address like a new open, and a click that reloads the document can come back with
-no address at all — `checkUrl('')` says "that is not an http(s) address", so a working
-click on a local mock was reported as a failure. An empty address now means "the page was
-being replaced", and the click is reported as done.
-
-**A key is a character too (14 Nov).** A calculator test wanted "7", and `press` knew only
-names: `press failed: unknown key: 7`. `type` could not help — it inserts text through
-`insertText`, which fires **no key event at all**, so a page that listens for `keydown`
-never sees it. `press` now takes any printable ASCII character, or several one after the
-other, and dispatches a real keyDown/keyUp with the physical code and virtual key
-(`Digit7`/55; `Equal`/187 for both "=" and "+"), plus `text` on the way down so the
-character is inserted and `keypress` fires. A chord is refused by name ("ctrl+c" would
-otherwise be typed into the field as six characters), and `type`'s description now says it
-does not fire key events.
-
-A failed `click` also says what the text was, not only that it was not found: *"that is not
-a link, a button or a form control — use an x/y from read, or a CSS selector"* — which is
-the move that works on an overlay whose hint text is not clickable.
-
-## Downloads (16 Nov)
-
-A download is a file the page hands the browser, not a page the model reads. It goes to
-`<project>\.project\downloads\`: it belongs to the project, is deleted with it, and does
-not sit in the operator's Downloads folder where the next person finds it.
-
-- **The browser chooses the folder, not the page.** `Browser.setDownloadBehavior` with
-  `allowAndName` makes Chromium write under the download's GUID; a site cannot choose a
-  path. On completion the GUID is renamed to the suggested filename, made safe as one
-  leaf, and a collision gets ` (1)` rather than overwriting the first file.
-- **A click that downloads waits for the file.** `click` waits a moment for a
-  `Browser.downloadWillBegin`, then for the file; its answer carries the project-relative
-  path. `download {url}` is the explicit route for an address that is itself a file;
-  `download` with no `url` waits for a download already in flight.
-- **The chat shows an ASCII bar.** The browser reports begin/progress/completed on the
-  browser's CDP endpoint (not the page's); `src/mcp/browser-server.js` forwards them
-  (throttled to four a second) to `POST /api/browser/download`, and the page draws a
-  `SynaBrowse · Download` card with `[####----] 42%`, bytes and the saved path. A reload
-  asks `GET /api/browser/downloads?dir=…`, so a download that outlives the page is still
-  there.
-- **A live card sits at the bottom; a saved one takes its place and folds (17 Nov).** The
-  card used to be appended after the transcript and stay there, open, for ten minutes, so
-  the chat moved on above it and it never receded. Now it is placed in the conversation
-  like a trace: at the end while the bytes arrive, then at the moment it finished, so it
-  scrolls up with the chat. A completed card folds to its one-line head — the bar, the
-  bytes and the path were the live state, and the head already says `Saved` and the name.
-- **Progress is browser-scoped, the folder is the project's.** The profile is one global
-  browser, so the download folder is set again before each browser action. One browser and
-  one page are already the rule; a download is not a second concurrency model.
-- **No file is ever written outside a project.** The API refuses a `dir` outside the
-  projects root, and a failed `setDownloadBehavior` denies downloads rather than falling
-  back to the machine's Downloads folder.
+It is **on by default** since 13 Nov: the sign-in card is what made that safe, because
+nothing the browser does as the operator happens without a person saying yes to a card
+first.
 
 ## Where things live
 
@@ -361,222 +308,25 @@ not sit in the operator's Downloads folder where the next person finds it.
 |---|---|
 | `src/browser/cdp.js` | the protocol client: requests that answer or fail in 60 s, events, evaluate, screenshot |
 | `src/browser/browser.js` | Edge by full path, the launch flags, the toolset, `clearSite`, the idle reaper |
-| `src/browser/allow.js` | the http(s) check (`hostOf`, `checkUrl`) |
-| `src/browser/artifacts.js` | where a project's screenshots live (`<project>\.project\browser\shots`, with the harness folder as the fallback) |
-| `src/browser/downloads.js` | safe download names, collision suffixes, the ASCII bar and byte labels |
-| `web/downloads.js` | the chat's download chip, its progress and its saved path |
+| `src/browser/allow.js` | the http(s) and local-page checks |
+| `src/browser/artifacts.js` | where a project's screenshots live |
+| `src/browser/downloads.js` | safe names, collision suffixes, the ASCII bar and byte labels |
 | `src/browser/sites.js` | the sites record: add, touch, forget, de-duplicate |
-| `src/browser/session-watch.js` | polls the sign-in window and **hides** it when the session lands |
+| `src/browser/session-watch.js` | polls the sign-in window and hides it when the session lands |
 | `src/browser/signin.js` | address candidates, `looksUnconfirmed`, the sign-in flow |
 | `src/browser/handoff.js` + `show.ps1` | the window, `-Hide`/`-Focus`, the chime, `stoleFocus` |
 | `src/browser/ask.js` | the sign-in card: one request, no auto-allow, no timeout |
-| `src/browser/screen.ps1` | which monitor the operator is on, and the attach-thread focus |
-| `src/mcp/browser-server.js` | the thirteen tools, the wall sentence, `handoff` asking through the permission card, and download progress |
-| `tests/browser.test.mjs`, `tests/browser-mcp.test.mjs`, `tests/browser-watch.test.mjs`, `tests/browser-chat.test.mjs`, `tests/browser-downloads.test.mjs`, `tests/sites.test.mjs` | the fence, the tools against a local page, the server over real stdio, the watcher, the chat labels, download names/chips, the record |
+| `src/mcp/browser-server.js`, `browser-tools.js` | the tools and their descriptions |
+| `web/downloads.js` | the chat's download chip, progress and saved path |
+| tests | `browser`, `browser-mcp`, `browser-watch`, `browser-chat`, `browser-downloads`, `sites`, `browser-tools` |
 
-**A page cut in silence is a page the model thinks it has (13 Nov).** Two models were benched
-against the same long Reddit thread. Both were handed 6,000 characters of it and neither was
-told: the tool's `outline` cut the text at 6,000 whatever `maxChars` said, and a cut left no
-mark. The page now reports its own length (`total`), the tool honours `maxChars` and `links`,
-and a cut ends with `[… truncated: 6,000 of 41,210 characters. Ask again with a larger maxChars
-(up to 30000), or scroll and read again for the rest.]` — the size of what is missing, and the
-two ways to get it.
+## The description is the help
 
-The same run showed the browser's window in the taskbar. The hide was applied on launch and
-not on **attach**, so a browser that outlived a Synapse restart kept an app-window bit; it is
-re-hidden every time `start()` finds one running.
-**The description is the help (13 Nov).** A model never explores a server: the tool list with
-its descriptions and schemas rides in its context on every request, so a description is the
-only documentation it gets and a wrong one is worse than a short one. Two were wrong:
-`open` still promised a host list that was removed, and `handoff` described a minimised window
-it had stopped opening a release earlier since it became a permission card.
+A model never explores a server: the tool list with its descriptions rides in its
+context on every request, so a wrong description is worse than a short one. Two were
+wrong (13 Nov) and are now pinned by `tests/browser-tools.test.mjs`: `open` promised a
+host list that had been removed, and `handoff` described a minimised window it had
+stopped opening when it became a permission card.
 
-There is deliberately **no `help` tool**. It would be a second copy of the same text, paid for
-on every turn, and it would drift the way `handoff` did — a model that already has the schema
-would be calling a tool to be told what it was told. What changed instead:
-
-- `open`: hidden window, http(s) pages or a local `.html` mock inside the projects folder, sign-ins persist between runs, a wall is `handoff``s;
-- `read`: 6,000 by default, 30,000 at most, and a cut says so;
-- `handoff`: the card, the operator's Allow, no time limit;
-- `screenshot`: the project path and the chat-ready relative one.
-
-The descriptions live in `src/mcp/browser-tools.js` — apart from the server, because importing
-the server starts it and it waits on stdin — and `tests/browser-tools.test.mjs` pins the
-sentences that matter.
-## The whole page, saved (13 Nov)
-
-A long thread is loaded as it is scrolled, so one `read` at the top can only ever see the top.
-Stitching six reads together is work a model does by guessing where it left off, and two
-models benched against one Reddit thread both ended up with a partial picture.
-
-`read` has two routes now:
-
-| route | what it is for |
-|---|---|
-| `read` | the current viewport's text — 6,000 characters by default, up to 100,000, and a cut says how much was left out |
-| `read { full: true }` | the whole page: the browser scrolls to the end in viewport steps (twice without growth before it stops), extracts once with a large ceiling, and **writes it into the project** as `<project>\\.project\\browser\\pages\\<slug>-<stamp>.md` |
-
-The saved file carries the title, the source address, the capture time, its size, and a short
-table of contents, then the text. The answer gives the path, the size in characters and rough
-tokens, and how many headings it found — so a model can read it in pieces with the `read` tool,
-grep it, or ask for a section, instead of asking the page again.
-
-The capture is bounded on purpose: 400,000 characters and 25 seconds. Past either, the answer
-says it was cut at the ceiling rather than pretending the page ended.
-
-Why a file and not one huge answer: 400,000 characters is about 100K tokens. That is a
-context window spent on one page, and it is spent whether or not the model needed all of it.
-The file costs nothing until it is read, and the model chooses the piece.
-## Why a model cannot see it (13 Nov)
-
-"SynaBrowse is switched on and the model says there is no such tool" is almost always one
-thing: **the engine registers its MCP servers when it starts**, from
-`data\engine\opencode\config\opencode\opencode.json`, and that file is written at boot from the
-harness's own config. Flipping the switch while Synapse runs writes
-`config\synapse.config.json` — and nothing the engine can see until it starts again.
-
-- **The switch now says so**: `browser.enabled` and `browser.profile` are in
-  `restartNeeded()`, so Settings offers **Save & Restart** instead of a save that does nothing.
-- **The log says so**: `SynaBrowse switched on — the engine registers its tools at start, so
-  this takes effect after a restart`.
-- **The check**: `data\engine\opencode\config\opencode\opencode.json` must list
-  `"synapse-browser"`. If it does, a model that still "cannot find" it is looking for the wrong
-  name: the tools are `synapse-browser_open`, `synapse-browser_read`, and the rest.
-
-And it is **on by default** since 13 Nov. The sign-in permission card is what made that safe:
-nothing the browser does as the operator happens without a person saying yes to a card first.
-## A wait that fails says which absence it found (14 Nov)
-
-`wait` matched **rendered text only** (`document.body.innerText`). On a Reddit thread a
-model waited for `"193"` and `"smithereens"` four times, each a five-second red failure,
-and could not tell whether the page was late, the comment was collapsed, or the text was
-simply not there — so it kept changing the needle and trying again.
-
-The answer now carries the target, the time it waited, and on a timeout the difference that
-matters: it checks the page's HTML as well and says
-
-- *"Not shown: after 5s the text "193" is not displayed, but it is in the page's HTML — a
-  collapsed comment, a closed menu or a tooltip. Open that, then wait again"*; or
-- *"Not there: after 5s the text "193" is in neither the page's text nor its HTML (9,400
-  characters of text). Check the spelling, or read the page to see what it says."*
-
-The description says what the tool is for: a wait is for *after an action*, and `read` is
-the cheaper way to check whether something is on the page now. `browser.wait()` answers
-`{ ok, elapsedMs, hidden, textLength }` instead of a bare boolean, so the server can say it.
-
-## Where a click lands (16 Nov)
-
-A model reported clicks landing "slightly off-target from the screenshots". Measured in a
-scratch project — never in the operator's live one — the pipeline is exact:
-
-- a 1280x800 window gives a **1280x800** viewport PNG at `devicePixelRatio` 1, because the
-  page is held at `Emulation.setDeviceMetricsOverride` with `deviceScaleFactor: 1`;
-- a click asked for **324,444** arrives with `clientX/clientY` **324,444**: delivery error 0,0;
-- `read`'s `at` values are `getBoundingClientRect` centres, the same space as a click.
-
-So the arithmetic is not the error — a model reading a picture is, by a few pixels or by a
-scale factor from whatever its vision pipeline did to the image. The click therefore makes
-the near-miss harmless instead of arguing about it:
-
-- the point is **clamped** into the viewport, because a y from a whole-page image can be
-  past its bottom;
-- if nothing clickable is under the point, it **snaps** to the nearest control within
-  **28 px** and the answer says which, and how far;
-- the answer reports where it really landed (`at`), and `screenshot` now says the image's
-  size and that one image pixel is one CSS pixel of the viewport.
-
-**The whole-page capture was lying.** `Page.captureScreenshot` with `captureBeyondViewport`
-alone returns the viewport (measured: a page 888 px tall came back 1280x800). It now asks
-`Page.getLayoutMetrics` for the content size and clips to it, so a full-page image is the
-document (888 tall for that page, 1265 wide — the width excludes the scrollbar, which is
-why a full-image x is a document x and not a viewport one).
-
-## A download row is not a link (22 Nov)
-
-The skyrim_modlist run tried to fetch an 86 KB mod archive from Nexus and could not, and the
-tools were part of the reason. What the transcript shows:
-
-- `click {x:1078,y:432}` — the point was inside the download row's *box*, so the snap
-  measured **0 px** and clicked the row's centre; it landed **83 px away on "Version
-  history"**, and the answer said only "0 px away", which reads as a hit;
-- `click {text:"Manual download"}` — refused: the FILES tab had not been opened, so the row
-  was not in the DOM (the `?tab=files` address does not switch Nexus's tab on a fresh load);
-- `open` of the DownloadPopUp widget URL — it is an **iframe widget**, so navigating to it
-  lands on the mod page again;
-- `read` listed links only, so the row and the FILES tab were not visible as things to
-  click, and three calls answered with **no text at all**.
-
-Four changes, each measured against that page afterwards:
-
-- **`read` lists controls, not just links.** Buttons, tabs, menu items and anything that
-  draws a pointer, on screen, with the coordinate a click uses as it is. On the Nexus page
-  that is `FILES 2 (273,658)` and the download row, where before it was silence.
-- **A click accepts anything that behaves clickable**: `[role=tab]`, `[role=link]`,
-  `[onclick]`, and any ancestor with `cursor: pointer`. A point *inside* such an element is
-  the operator's aim, not a near-miss, so it is clicked where it was asked.
-- **The answer tells the truth about distance**: the number is how far the click landed from
-  the point asked for (83 px, not 0), and the point is named. When nothing can be clicked,
-  it says which absence it found: the words are on the page but not on a control, or the
-  page does not contain them yet.
-- **`open` waits for words.** A storefront renders its text after `load`; the page was read
-  as `(no title)` with an empty body, so the model clicked into nothing. `goto` now waits
-  (up to 3 s) for ~120 characters before returning.
-
-Still open, in the order they would help: a **`save`/`fetch` tool that downloads a URL with
-the page's own cookies** (a direct file address often needs the session); **frame targeting**
-for widget iframes (the DownloadPopUp); and a download journey that says plainly when a site
-demands a human (a captcha), so the model hands off instead of flailing.
-
-### And then they were built (22 Nov)
-
-- **`save`** fetches the address *in the page's own context* (`fetch` with
-  `credentials: 'include'`), so the request carries the session's cookies, the site's origin
-  and the browser's headers — the three things a Node-side fetch cannot supply. It writes
-  under `.project/downloads` and answers the path. Measured on the Nexus page: a real file
-  (`favicon.ico`, 15086 bytes) came back in **84 ms**, and `…&file_id=245273&action=download`
-  was refused as **"answered a page, not a file (text/html, 222 KB)"** with the next move to
-  make. That refusal is the point: an address that ends in a file name is not a file.
-- **Frames are listed.** `read` names each visible iframe with its src, size and the
-  coordinate a click uses, because a widget's words are not in the parent document and
-  navigating to the widget's src is what lost the turn.
-- **A bot check is named, never worked around.** `botWall()` recognises a captcha or
-  "checking your browser" wall from the page's text and its frame/script sources; the answer
-  says a person has to clear it and points at `handoff`.
-- **A call always answers.** Every tool call is timed to stderr (`tool click 41ms failed`),
-  and an error with no message now says "the browser did not say why" instead of an empty
-  string — three calls answered with nothing in the Nexus run.
-
-### The Nexus download, worked out from the VPA app (22 Nov)
-
-The operator pointed at `vpa-modlist-installer`, which downloads Nexus archives by itself.
-Its `NexusMint` + `BrowserSession` are the whole recipe, and it is not Nexus-specific in
-shape — it is "ask the page's own XHR for the link":
-
-1. the mod page states the **game id** in an attribute (`<section class="modpage"
-   data-game-id="1704">`); the **file id** is the number in `?tab=files&file_id=…`;
-2. POST `Core/Libs/Common/Managers/Downloads?GenerateDownloadUrl` with
-   `game_id`, `file_id`, `fid`, `collection_id=0` as `application/x-www-form-urlencoded`,
-   **inside the page** (`credentials: 'include'`, `X-Requested-With: XMLHttpRequest`) — the
-   VPA code says why: "the POST is the request Cloudflare challenges when it arrives from a
-   bare client";
-3. the answer is `{"url": "https://supporter-files.nexus-cdn.com/…?md5=…&expires=…&user_id=…"}`;
-4. the CDN is another origin, so the page's own `fetch` is refused by CORS — fetched from
-   Node instead (the signed address needs no cookie; measured 200, `application/zip`,
-   **88,436 bytes**, saved to `.project/downloads/Music Merged-4625-1-4-2.zip`).
-
-That is now two tools, both generic:
-
-- **`save` is a request**, not only a GET: `method`, `form`, `xhr`, and `json: true` to read
-  the answer instead of saving it. The cross-origin leg is automatic: when the page cannot
-  read the answer, the same address is fetched from Node with the session's cookies for that
-  host and the page as referrer.
-- **`dom`** reads what elements state — `data-*`, `href`, `title`, a form's action — because
-  a page puts the facts a script needs in attributes, where `read` cannot see them.
-
-And the wall that followed: repeated hits made Cloudflare answer **403 "Just a moment…"**,
-which is not a sign-in. `botWall` recognises that wording, and `save`'s refusal now adds the
-sentence a model needs — "it has to be cleared by a person, call handoff, do not keep
-retrying" — because a challenge clicked at gets longer, not shorter.
-
-
-
+There is deliberately **no `help` tool**: it would be a second copy of the same text,
+paid for on every turn, and it would drift the way `handoff` did.
