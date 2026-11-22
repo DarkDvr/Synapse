@@ -846,7 +846,12 @@ function sessionLease() {
 export function renderTool(part) {  const status = String(part.status || 'unknown').toLowerCase();
   const failed = Boolean(part.failed) || /error|fail/.test(status);
   const running = /run|stream|pend|progress/.test(status);
-  const cls = running ? 'warn' : failed ? 'err' : 'ok';
+  // The engine leaves a part as `streaming` when the turn is cut (a Stop, an app
+  // restart, a dead session); nothing will ever finish it. Once the chat is no
+  // longer busy that part is history, not live, so the card says Stopped instead
+  // of a streaming dot that never ends (22 Nov).
+  const stale = running && !state.busy;
+  const cls = stale ? '' : running ? 'warn' : failed ? 'err' : 'ok';
 
   // A stable key so an open card survives a re-render; toolSeq is only the
   // fallback for a part with no message identity.
@@ -860,7 +865,7 @@ export function renderTool(part) {  const status = String(part.status || 'unknow
   const hasExit = typeof part.exitCode === 'number';
   // One status label, not two. The Error button that used to sit here said the
   // same thing as this pill, and the detail is one click away in the card body.
-  const label = failed ? (hasExit ? `Exit ${part.exitCode}` : 'Failed') : status;
+  const label = stale ? 'Stopped' : failed ? (hasExit ? `Exit ${part.exitCode}` : 'Failed') : status;
   const detail = part.error || output || '(no output)';
 
   // A chip only when the call reached outside the project: green when the policy

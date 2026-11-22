@@ -839,3 +839,9 @@ test('a harness steer wears the harness post, not You', () => {
   assert.match(js, /Synapse · harness/, 'the standard Harness header is reused');
   assert.match(js, /data-msg="synapse"/, 'and it belongs to Synapse');
 });
+
+test('a tool left streaming after the run stops says Stopped', () => {
+  const js = read('web/transcript.js');
+  assert.match(js, /running && !state\.busy/, 'the renderer checks the chat is still busy');
+  assert.match(js, /'Stopped'/, 'and does not keep a streaming dot alive');
+});
