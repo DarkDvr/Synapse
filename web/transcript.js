@@ -462,6 +462,16 @@ export function renderMessage(m, tail = '', extras = '') {
   // has an id — the engine's, or the `local-` one an echo carries until the reload.
   const line = m.id ? ` data-line="msg:${esc(m.id)}"` : '';
 
+  // A harness steer is a real user-role turn — the engine has no synthetic role for a
+  // mid-turn prompt — but it is Synapse speaking, not the operator. Draw it with the
+  // standard harness post, never as "You" (22 Nov).
+  if (m.type === 'user' && /^\s*\[harness\]/i.test(String(m.text || ''))) {
+    const body = String(m.text || '').replace(/^\s*\[harness\]\s*/i, '');
+    return `<div class="msg harness"${line} data-msg="synapse"><div class="msg-body">
+      ${stamp}<span class="msg-role">Synapse · harness</span>
+      <div class="msg-answer">${renderMarkdown(body)}</div>
+    </div></div>`;
+  }
   if (m.type === 'user') {
     // What was attached is part of the message, not a footnote to it: the operator
     // asked about a file, and a transcript that shows the sentence and hides the

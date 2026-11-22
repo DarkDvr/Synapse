@@ -832,3 +832,10 @@ for (const [label, indexes] of groups) {
     assert.deepEqual(failures, [], failures.join('\n'));
   });
 }
+
+test('a harness steer wears the harness post, not You', () => {
+  const js = read('web/transcript.js');
+  assert.match(js, /\[harness\]/i, 'the harness prefix is recognised');
+  assert.match(js, /Synapse · harness/, 'the standard Harness header is reused');
+  assert.match(js, /data-msg="synapse"/, 'and it belongs to Synapse');
+});
