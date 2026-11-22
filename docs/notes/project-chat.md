@@ -101,9 +101,10 @@ Updated:        the stamp of the last write
 - **Which chart?** -> Line, as agreed
 ```
 
-- The brief quotes **Current** (1,800 chars), **Notes** (900) and **Handover**
-  (2,000) and names the file; the model reads the Log only when it needs history.
-  Single mode quotes Notes and nothing else.
+- The brief quotes **Current** (1,800 chars) and **Notes** (900), and the handover as
+  a **digest** of about 700 characters when it has recognisable sections — the whole
+  thing, capped at 2,000, only when it does not. It names the file; the model reads the
+  Log when it needs history. Single mode quotes Notes and nothing else.
 - Synapse writes the file, atomically (temp + rename). No model restates the
   operator's words.
 - The head is why the document exists: the brief used to quote the *first* 1,600
