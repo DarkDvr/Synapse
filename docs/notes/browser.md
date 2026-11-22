@@ -215,6 +215,35 @@ friction was in four places, and each is now fixed:
   the finish landed after the report had begun, so the card sat under the report. It is now
   anchored by `startedAt`: with the tool calls that earned it, above the report.
 
+## The second run: the site refused, the model looped (22 Nov)
+
+The next run, on `synabrowse_test2`, got further and then hit the site's own limit. It found
+the file page, opened the download options, and clicked **Slow download**; Nexus answered
+**“Something went wrong. The download link for the file could not be retrieved. Please try
+again later.”** The page also marked the file **Downloaded 22 Nov 2026** — the first run had
+downloaded the same file 34 minutes earlier. The hand-off succeeded and the site was
+recorded; the site still would not issue a second link. The first run's zip is in
+`synabrowse_test\.project\downloads`.
+
+The model then looped for eight minutes: the same Slow control twice, two guessed widget
+endpoints (`PremiumDownload` 403 Cloudflare, `DownloadPopUp` 404), a needless hand-off for
+the endpoint, and a reopen of the UI. Three tool fixes came out of it:
+
+- **`pageRefused` / `pageDownloaded`.** `read`/`open` say when the site marked a file
+  downloaded and when the site says the download link could not be retrieved. `download`
+  says plainly that a site refusal is not a missing click and that retrying the same
+  control will not change it.
+- **The download-options dialog.** After the file-row button, the page needs a second click
+  (the modal's `Manual download` link) before the Slow/Fast options appear. A plain
+  snapshot has them; `snapshot` now says to drop **selector, compact and depth** after a
+  dialog, because a depth limit can cut the buttons out. `click`/`wait` say that `text` is
+  the page's own text and does not see a shadow-root dialog.
+- **Do not reverse-engineer endpoints.** `save` says a 403/404 HTML is the site answering,
+  not a file; the page's own control is the way.
+
+The lesson: a download that the site refuses is an answer, not a prompt to try another
+button. Report it; a different file or the site's cooldown decides whether it can run.
+
 ## Being invisible, exactly
 
 A hidden browser must be invisible *and* still render, and those pull apart. This is the

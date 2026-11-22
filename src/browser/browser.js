@@ -87,6 +87,24 @@ export function pageMissing(text, title = '') {
   return body.replace(/\s+/g, ' ').trim().length < 6000;
 }
 
+/**
+ * The date a file page says it was already downloaded, or ''.
+ *
+ * A file page that says “Downloaded 22 Nov 2026” is telling the model something a free
+ * download may enforce; naming it saves the loop where a site refuses a second link and
+ * the model keeps clicking the same button (22 Nov).
+ */
+export function pageDownloaded(text) {
+  const match = /Downloaded\s+(\d{1,2}\s+[A-Z][a-z]{2,}\s+\d{4})/i.exec(String(text || ''));
+  return match ? match[1].replace(/\s+/g, ' ').trim() : '';
+}
+
+/** Does the site itself say the download could not be started? */
+export function pageRefused(text, title = '') {
+  const said = `${String(title || '')} ${String(text || '')}`;
+  return /(download link (for the file )?could not be retrieved|could not (retrieve|get) the download link|download limit (reached|exceeded)|reach(ed)? (your )?download limit|try again later[^.]{0,90}download)/i.test(said);
+}
+
 /** What a saved file's answer says: path, size, type, and whether it was a page after all. */
 export function savedAnswer(rec, { dir = '', rel = '' } = {}) {
   if (!rec) return null;
@@ -1043,6 +1061,8 @@ export function createBrowser({
     // about the URL.
     page.wall = page.wall || botWall(page.text, page.srcs);
     page.missing = pageMissing(page.text, page.title);
+    page.downloaded = pageDownloaded(page.text);
+    page.refused = pageRefused(page.text, page.title);
     return page;
   }
 

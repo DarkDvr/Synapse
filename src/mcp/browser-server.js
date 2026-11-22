@@ -253,6 +253,20 @@ function missingNote(page) {
     "Do not retry the same route or guess another one; use the site's own search or a link from a page that works.";
 }
 
+/** A file page that already has a download date. Free downloads may enforce it. */
+function downloadedNote(page) {
+  if (!page?.downloaded) return '';
+  return `\n\nThe page marks this file as **already downloaded on ${page.downloaded}**. ` +
+    'A free slow download may be refused; if the site says the download link could not be retrieved, report that rather than retrying.';
+}
+
+/** The site's own answer to a download request. It is not a missing click. */
+function refusedNote(page) {
+  if (!page?.refused) return '';
+  return '\n\nThe site refused the download: “the download link could not be retrieved / try again later”. ' +
+    'That is the site, not a missing click. Report it and stop; do not click the same control again or guess a private endpoint.';
+}
+
 /** Record that the profile opened a host it has a session for (best effort). */
 function noteUsed(url) {
   const host = hostOf(url);
@@ -301,7 +315,7 @@ async function handle(msg) {
             const page = await browser.read({});
             noteUsed(page.url);
             process.stderr.write(`open ${verdict.local ? verdict.path : verdict.host} -> ${url}\n`);
-            return toolText(id, `Opened ${url}\n\n${outline(page, { maxChars: 6000, links: 60 })}${wallNote(page)}${missingNote(page)}\n\nTo click a control, call snapshot and use the ref it gives you.`);
+            return toolText(id, `Opened ${url}\n\n${outline(page, { maxChars: 6000, links: 60 })}${wallNote(page)}${missingNote(page)}${downloadedNote(page)}${refusedNote(page)}\n\nTo click a control, call snapshot and use the ref it gives you.`);
           }
           case 'read': {
             // `full` walks the page to its end and leaves the whole of it in the project,
@@ -352,7 +366,7 @@ async function handle(msg) {
                   'Read it in pieces with the read tool (offset and limit), or grep it — ' +
                   'do not ask this page for the same text again.\n' +
                   `It is a file, not a picture: cite it as ${rel} if you need to name it.` +
-                  `${wallNote(whole)}${missingNote(whole)}`,
+                  `${wallNote(whole)}${missingNote(whole)}${downloadedNote(whole)}${refusedNote(whole)}`,
               );
             }
             const page = await browser.read({
@@ -361,7 +375,7 @@ async function handle(msg) {
               mode: args.mode === 'text' ? 'text' : 'article',
             });
             noteUsed(page.url);
-            return toolText(id, `${outline(page, { maxChars: args.maxChars, links: args.links })}${wallNote(page)}${missingNote(page)}`);
+            return toolText(id, `${outline(page, { maxChars: args.maxChars, links: args.links })}${wallNote(page)}${missingNote(page)}${downloadedNote(page)}${refusedNote(page)}`);
           }
           case 'snapshot': {
             // The action surface: named controls with refs, not a picture and a guess.
@@ -380,9 +394,12 @@ async function handle(msg) {
               );
             }
             const listed = String(text).split('\n').filter((line) => /^\s*-\s/.test(line)).length;
-            const scope = args.selector && listed < 3
-              ? `\n\nThe selector matched only ${listed} control(s). If a click just opened a dialog or menu, ` +
-                'call snapshot again with **no selector**: the dialog is usually outside the part you scoped to.'
+            const narrowed = Boolean(args.selector) || args.compact === true || Number(args.depth) > 0;
+            const scope = narrowed
+              ? `\n\nThis snapshot was narrowed${args.selector ? ` to \`${args.selector}\`` : ''}. ` +
+                'If a dialog or menu is open and its controls are not here, call snapshot with **no selector, compact or depth**: ' +
+                'a depth limit can cut a dialog that is deeper, and a selector can return only the page behind it.' +
+                (args.selector && listed < 3 ? ` The selector matched only ${listed} control(s).` : '')
               : '';
             return toolText(
               id,
@@ -428,15 +445,22 @@ async function handle(msg) {
               rec = active ? await browser.waitForDownload({ since: active.startedAt, graceMs: 1000, timeoutMs }) : null;
             }
             if (!rec) {
-              // The click may have been answered by a wall instead of a file: say which.
-              const wall = await browser.read({ maxChars: 800, links: 0 }).then((p) => p?.wall || '').catch(() => '');
+              // The click may have been answered by a wall, by the site's own refusal, or
+              // by a download-options dialog. Say which; a repeated click is not the fix.
+              const page = await browser.read({ maxChars: 1600, links: 0 }).catch(() => null);
+              const wall = page?.wall || '';
               return toolText(
                 id,
                 wall
                   ? `No download started: the page is now ${wall}. A person has to clear it — use handoff, ` +
                       'or ask the operator to take the download from here.'
-                  : 'No download started. If the file is behind a button, click it (click waits for the download); ' +
-                      'if it is a direct address, call download with that url, or save to fetch it through the page.',
+                  : page?.refused
+                    ? 'No download started: the site says the download link could not be retrieved / try again later. ' +
+                      'That is the site refusing, not a missing click — report it and stop. Do not click the same control again ' +
+                      'or guess a private endpoint.'
+                    : 'No download started. If the click opened a download-options dialog (Slow/Fast), take a plain snapshot ' +
+                      'and click the download control in it; if it is a direct address, call download with that url. ' +
+                      'If the page shows its own error, report it and stop.',
                 true,
               );
             }

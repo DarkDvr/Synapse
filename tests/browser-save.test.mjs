@@ -6,7 +6,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { botWall, pageMissing, savedAnswer, requestAnswer, domAnswer } from '../src/browser/browser.js';
+import { botWall, pageMissing, pageDownloaded, pageRefused, savedAnswer, requestAnswer, domAnswer } from '../src/browser/browser.js';
 
 test('a fetch that returned a page is not a file, and says so', () => {
   const answer = savedAnswer({
@@ -74,6 +74,16 @@ test('a page that says Page not found is named as a 404', () => {
   assert.equal(pageMissing('Page not found', 'Nexus Mods'), true);
   assert.equal(pageMissing('The page you are looking for could not be found.', ''), true);
   assert.equal(pageMissing('A normal article. '.repeat(100), ''), false, 'a long article is not a 404');
+});
+
+test('the page’s own download state and refusal are read, not guessed', () => {
+  assert.equal(pageDownloaded('Music Merged (86KB) Downloaded 22 Nov 2026'), '22 Nov 2026');
+  assert.equal(pageDownloaded('Downloaded today'), '');
+  assert.equal(
+    pageRefused('Something went wrong. The download link for the file could not be retrieved. Please try again later.'),
+    true,
+  );
+  assert.equal(pageRefused('A normal page that mentions a download link'), false);
 });
 
 // The request half of save: a site's own script asks for a link, and the answer names it.

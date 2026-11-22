@@ -75,9 +75,9 @@ export const TOOLS = [
       'control, and a click fails loudly when the element is covered, hidden or off-screen. ' +
       'interactive (default true) lists controls only; set it false to include headings and ' +
       'text. compact drops empty structure, depth limits nesting, selector scopes the tree. ' +
-      'After a click that opens a dialog or menu, call snapshot with **no selector**: the dialog ' +
-      'is usually outside the part you scoped to, and a guessed selector can return one unrelated ' +
-      'link. There is no limit option; the tree is already compact.',
+      'After a click that opens a dialog or menu, call snapshot with **no selector, compact or depth**: ' +
+      'all three can hide a dialog that is deeper than the page or outside the part you scoped to, and a ' +
+      'guessed selector can return one unrelated link. There is no limit option; the tree is already compact.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -98,7 +98,9 @@ export const TOOLS = [
       'button, or an x/y pair from `read` also work, as the fallback. Anything that behaves ' +
       'clickable counts — a button, a tab, a link, or a row with a pointer cursor and a ' +
       'handler. Clicks are synthetic — the operator\'s cursor never moves. Answers the address ' +
-      'afterwards; a coordinate click also says when it was moved to find a control.',
+      'afterwards; a coordinate click also says when it was moved to find a control. ' +
+      '`text` is the page\'s own visible text; a control inside a shadow-root dialog is not in it — ' +
+      'use a ref from snapshot for those.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -153,7 +155,8 @@ export const TOOLS = [
       'there *now*, `read` is cheaper. It waits for text a person can see, so a timeout says ' +
       'which kind of absence it was: the text is missing from the page entirely, or it is in the ' +
       'page and not shown (a collapsed comment, a closed menu, a tooltip) — open that and wait ' +
-      'again. Check the spelling before waiting twice.',
+      'again. Check the spelling before waiting twice. `text` is the page\'s own visible text; a ' +
+      'control inside a shadow-root dialog is not in it — use snapshot and its refs for those.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -233,7 +236,10 @@ export const TOOLS = [
       'that is itself the file, or for a download that began after the click answered. The name ' +
       'is the one the site suggested, made safe; an existing file is never overwritten — the new ' +
       'one gets " (1)". The chat shows an ASCII progress bar while it runs, so the operator can ' +
-      'watch a large file. A cancelled or failed download says so instead of answering a path.',
+      'watch a large file. A cancelled or failed download says so instead of answering a path. ' +
+      'If the page says the download link could not be retrieved or to try again later, that is the ' +
+      'site refusing the download — report it and stop; the same click will not change it. If a click ' +
+      'opened a Slow/Fast options dialog, take a plain snapshot and click the download control there.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -255,7 +261,9 @@ export const TOOLS = [
       'that address. ' +
       'It also says plainly when an address answers a **page** instead of a file: a route like ' +
       '"…&action=download" often returns the page it belongs to. A captcha or "checking your ' +
-      'browser" wall is reported rather than worked around: a human solves that, with handoff.',
+      'browser" wall is reported rather than worked around: a human solves that, with handoff. ' +
+      'Do not reverse-engineer a site\'s private widget or API endpoints: a 403/404 HTML is the site ' +
+      'answering, not a file. Use the page\'s own control (snapshot, then click) instead.',
     inputSchema: {
       type: 'object',
       properties: {

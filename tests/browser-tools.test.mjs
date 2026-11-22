@@ -80,6 +80,7 @@ test('snapshot is the action surface: named refs, and a fresh one after a change
   assert.match(d, /take a new one|re-?snapshot/i, 'refs do not survive navigation');
   assert.match(d, /covered|hidden/i, 'a click that misses says so');
   assert.match(d, /no selector/i, 'a dialog needs a plain snapshot');
+  assert.match(d, /compact or depth/i, 'and not a narrowed one');
   const dom = text('dom');
   assert.match(dom, /shadow root/i, 'dom names its shadow-root blind spot');
   const click = text('click');
