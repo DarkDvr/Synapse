@@ -946,6 +946,7 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
       // "done", and only then may the host be stopped and the WebView2 profile released.
       let settle = null;
       const done = new Promise((resolve) => { settle = resolve; });
+      let signed = false;
       const { askToSignIn } = await import('./browser/signin.js');
       const { addSite } = await import('./browser/sites.js');
       const answer = await askToSignIn({
@@ -958,6 +959,7 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
         // The watcher inside askToSignIn has *already recorded the site* by the time this
         // fires: the page stopped asking to be signed into, so the session is real.
         onSignedIn: async (signedUrl) => {
+          signed = true;
           const host = String(signedUrl || '').replace(/^[a-z]+:\/\//i, '').split(/[/?#]/)[0].toLowerCase();
           const next = getConfig();
           next.browser = { ...next.browser, sites: addSite(next.browser?.sites, host, Date.now(), signedUrl) };
@@ -970,7 +972,7 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
       if (answer.ok) await done;
       if (answer.ok) app.info(`SynaBrowse: sign-in window asked for ${answer.url}`);
       else app.warn(`SynaBrowse: could not show the sign-in window for ${target}: ${answer.error}`);
-      return answer;
+      return { ...answer, signedIn: signed };
     } catch (err) {
       return { ok: false, error: err.message };
     } finally {

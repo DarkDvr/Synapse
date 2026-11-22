@@ -1646,7 +1646,13 @@ export function createBrowser({
       `(() => {
         const text = document.body ? String(document.body.innerText || '').slice(0, 3000) : '';
         const links = [...document.querySelectorAll('a,button')].slice(0, 400);
+        const visible = (el) => {
+          if (!el.getClientRects().length) return false;
+          const style = getComputedStyle(el);
+          return style.visibility !== 'hidden' && style.display !== 'none' && style.opacity !== '0';
+        };
         const signInLink = links.some((el) => {
+          if (!visible(el)) return false;
           const label = String(el.innerText || el.textContent || el.getAttribute('aria-label') || '').trim();
           const href = String(el.getAttribute('href') || '');
           return /^(log ?in|sign ?in)$/i.test(label) || /(?:^|\\/)(?:log-?in|sign-?in|signin|auth)(?:[/?#]|$)/i.test(href);
