@@ -54,19 +54,22 @@ export function findEdge() {
  * (22 Nov, Nexus's slow-download page). The sentence it gets says which kind of wall it is and
  * that handoff is the way through it.
  */
-export function botWall(text, srcs = '') {
+export function botWall(text, srcs = '', title = '') {
   const said = String(text || '');
   // A wall is something the page *shows*. A Turnstile or reCAPTCHA script on an ordinary
   // page — a download form, a comment box — is not a wall. Matching the script URL alone
   // made the Nexus mod page a "bot check" after its challenge had cleared, and the hand-off
   // and download tools refused a page that was plainly signed in (22 Nov).
-  const visible = /(checking your browser|just a moment|performing security verification|verify (that )?you are (a )?human|are you a robot|attention required|enable javascript and cookies to continue|cf-browser-verification|__cf_chl|cf-challenge)/i;
+  const visible = /(checking your browser|just a moment|performing security verification|verify (that )?you are (a )?human|attention required|enable javascript and cookies to continue|cf-browser-verification|__cf_chl|cf-challenge)/i;
   if (visible.test(said)) return 'a bot check — a captcha or a “checking your browser” wall';
   // A challenge can also be an empty shell with the challenge in a frame. The URL is
-  // evidence only when there is no real page text to read.
+  // evidence only when there is no real page text to read — or when the title itself is a
+  // challenge title. A normal search page with a Cloudflare script on it is not a wall
+  // (Nexus, 22 Nov: "Search results" was labelled a bot check).
   const frame = /(challenges\.cloudflare\.com|cdn-cgi\/challenge-platform|recaptcha\/api|hcaptcha\.com)/i.test(String(srcs || ''));
-  const thin = said.replace(/\s+/g, ' ').trim().length < 160;
-  if (frame && thin) return 'a bot check — a captcha or a “checking your browser” wall';
+  const challengeTitle = /(just a moment|attention required|checking your browser|security verification|access denied)/i.test(String(title || ''));
+  const thin = said.replace(/\s+/g, ' ').trim().length < 30;
+  if (frame && (thin || challengeTitle)) return 'a bot check — a captcha or a “checking your browser” wall';
   return '';
 }
 
@@ -1226,7 +1229,7 @@ export function createBrowser({
     })()`);
     // The page's own words decide both a wall and a 404: what a person sees, not a guess
     // about the URL.
-    page.wall = page.wall || botWall(page.text, page.srcs);
+    page.wall = page.wall || botWall(page.text, page.srcs, page.title);
     page.missing = pageMissing(page.text, page.title);
     page.downloaded = pageDownloaded(page.text);
     page.refused = pageRefused(page.text, page.title);

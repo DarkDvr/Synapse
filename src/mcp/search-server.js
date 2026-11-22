@@ -14,6 +14,11 @@ import { readSessions } from '../site-sessions.js';
 
 const PROTOCOL_VERSION = '2024-11-05';
 
+// Shown to the model once, when it connects. The common mistake is webfetch against a
+// search engine: DuckDuckGo and Google answer a scripted fetch with a bot check, not
+// results, and the model then reports that it found nothing.
+const SEARCH_HELP = `web_search finds pages; use it first. webfetch reads one URL you already have, not a search engine: DuckDuckGo and Google block scripted fetches and answer with a bot check. For a page that needs JavaScript, a signed-in session or a download, use SynaBrowse.`;
+
 const TOOL = {
   name: 'websearch',
   description:
@@ -41,8 +46,10 @@ const FETCH_TOOL = {
   name: 'webfetch',
   description:
     'Read one web page as clean text: the article or README, not the site around it. ' +
-    'Prefer this over fetching raw HTML yourself. GitHub repositories, issues, pull requests ' +
-    'and file links are read through GitHub itself, and X/Twitter posts through oEmbed, so ' +
+    'Use this on a URL you already have, usually a result from web_search. Do not point it ' +
+    'at a search engine: DuckDuckGo and Google answer scripted fetches with a bot check, ' +
+    'not results. GitHub repositories, issues, pull requests and file links are read through ' +
+    'GitHub itself, and X/Twitter posts through oEmbed, so ' +
     'those come back exact. Some sites (Reddit, x.com, login-only forums) refuse anonymous ' +
     'readers; the error says which wall was hit, so you can tell the operator instead of guessing.',
   inputSchema: {
@@ -82,6 +89,7 @@ async function handle(msg) {
         protocolVersion: params?.protocolVersion || PROTOCOL_VERSION,
         capabilities: { tools: {} },
         serverInfo: { name: 'synapse-search', version: '1.0.0' },
+        instructions: SEARCH_HELP,
       });
 
     case 'notifications/initialized':

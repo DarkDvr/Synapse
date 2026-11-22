@@ -30,6 +30,15 @@ import { watchForSignIn } from '../browser/session-watch.js';
 import { TOOLS } from './browser-tools.js';
 
 const PROTOCOL_VERSION = '2024-11-05';
+
+// Shown to the model once, when it connects: what SynaBrowse is for, the tools in one
+// screen, and the two mistakes that cost a run (webfetch for discovery; looking for an
+// `input` tool instead of clicking the site's search control and pressing Enter).
+const BROWSER_HELP = `SynaBrowse is a real browser with its own profile. Use it for a page that needs JavaScript, a signed-in session, or a download. To find a page, use web_search first; webfetch is for a URL you already know (search engines block scripted fetches).
+
+open(url): start at a URL. snapshot(): the controls on the page, each with a ref; use the newest refs. click({ref}): click a control; snapshot again after a change. type({ref, text}): type into a field; press Enter with press({key:"Enter"}). press({key}): Enter, Escape, Tab. read({maxChars}): the page's text and links. wait({ms}) and scroll(...): let it load or move. download(): the files this run has seen; click a download control and wait. handoff({what, url?}): show the window for a person to sign in or clear a check; wait for them. close(): stop; the profile and session stay.
+
+A site's own search: click its search control — it may be an unnamed button but it still has a ref — then type the words into the field and press Enter. There is no input tool; the write tool is type. An unnamed button can also be focused and activated with Enter. The first download after a fresh host is a warm-up; the real file follows.`;
 // Its own sound: two hollow knocks on a plastic cup, not the finished-work chime.
 const CHIME = path.join(WEB_DIR, 'sounds', 'hollow.wav');
 
@@ -304,6 +313,7 @@ async function handle(msg) {
         protocolVersion: params?.protocolVersion || PROTOCOL_VERSION,
         capabilities: { tools: {} },
         serverInfo: { name: 'synapse-browser', version: '1.0.0' },
+        instructions: BROWSER_HELP,
       });
     case 'notifications/initialized':
     case 'notifications/cancelled':
