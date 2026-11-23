@@ -6,6 +6,7 @@
 // check happens in the search_lab project; these cases keep the pure logic honest.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import {
   normalizeBrowserResults,
   decodeDdgRedirect,
@@ -57,4 +58,12 @@ test('the page order is DuckDuckGo, Lite, then Bing', () => {
   assert.match(BROWSER_ENGINES[0].extract(3), /result-title-a/);
   assert.match(BROWSER_ENGINES[0].extract(3), /data-result="snippet"/);
   assert.match(BROWSER_ENGINES[2].extract(3), /b_algo/);
+});
+
+test('the search browser never creates a window or a tab', () => {
+  const src = fs.readFileSync(new URL('../src/browser/search.js', import.meta.url), 'utf8');
+  assert.doesNotMatch(src, /send\('Target\.createTarget'/, 'a CDP target is a visible WebView2 window');
+  assert.match(src, /Page\.navigate/, 'the one off-screen page is navigated instead');
+  assert.match(src, /searchBrowser/, 'the search has its own host, not the model browser');
+  assert.match(src, /'search', 'webview2'/, 'the search host must not share the main host state file');
 });

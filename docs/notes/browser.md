@@ -5,8 +5,8 @@ Models get it as a set of tools; the operator sees one window, only when a perso
 genuinely needed. It is not an option: SynaBrowse ships with Synapse, and the WebView2
 host is always the browser. Edge with its hidden desktop is kept only as a test fallback
 behind `SYNAPSE_BROWSER_ENGINE=edge`, never as an operator choice.
-`web_search` also uses this browser, in a new tab, when the HTTP engines are blocked —
-see `docs/notes/web-search.md`.
+`web_search` uses a **separate off-screen host page** of its own, never this window and
+never a new tab — see `docs/notes/web-search.md`.
 
 ## Why a browser at all
 
@@ -517,7 +517,7 @@ browser does as the operator happens without a person saying yes to a card first
 | `src/browser/cdp.js` | the protocol client: requests that answer or fail in 60 s, events, evaluate, screenshot |
 | `src/browser/browser.js` | Edge by full path, the hidden-desktop launch and its fallback, the toolset, `clearSite`, the idle reaper |
 | `src/browser/settings.js` | the one reader of the browser's profile, idle minutes and test seams |
-| `src/browser/search.js` | search through a new tab, result extraction and the launch lock |
+| `src/browser/search.js` | the off-screen search host page, result extraction, idle close and the launch lock |
 | `src/browser/hidden-desktop.ps1` | the launcher/keeper: `CreateDesktop`, `CreateProcess` with `lpDesktop`, the state file |
 | `src/browser/agent.js` | the agent-browser wrapper: snapshot, ref click and fill, the daemon close |
 | `vendor-agent-browser.ps1` | restores the pinned binary and its licence into `bin\agent-browser` |

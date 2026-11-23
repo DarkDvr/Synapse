@@ -3,9 +3,10 @@
 // Why this exists: the search engines do not treat an HTTP client and a browser
 // the same way. On 23 Nov 2026 DuckDuckGo answered the HTTP search with HTTP 202
 // and an anti-bot page after two or three queries; the same query in SynaBrowse
-// returned ten results in about one second. This module opens a **new tab** in
-// the browser the harness already owns, reads the result cards, closes the tab,
-// and leaves the page a model is working on untouched.
+// returned ten results in about one second. This module starts its own off-screen
+// browser host, drives its one page to the result page, reads the cards, and leaves
+// the main browser and the operator's screen alone. It deliberately never creates a
+// target: WebView2 makes a CDP target a real window, which flashed on screen once.
 //
 // It never starts a browser that is switched off, never reads a cookie, and never
 // runs a page's own script: the extraction is a fixed expression with fixed
@@ -14,8 +15,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { DATA_DIR } from '../paths.js';
 import { browserSettings } from './settings.js';
-import { connect, connectBrowser } from './cdp.js';
-import { hostAlive, launchHost, readHostState, stopHostProcess } from './webview2.js';
+import { connect } from './cdp.js';
+import { hostAlive, hostBinary, hostFiles, launchHost, readHostState, stopHostProcess } from './webview2.js';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -230,6 +231,54 @@ export function normalizeBrowserResults(results, limit = 5) {
   return out;
 }
 
+/**
+ * The search browser is its own off-screen host, with its own profile.
+ *
+ * It is deliberately not the main SynaBrowse window: a search must never put a new
+ * window on the operator's screen, and it must never navigate the page a model is
+ * working on. The host starts on demand after the HTTP engines refuse, keeps one
+ * page, and is closed again after the configured idle time.
+ */
+function searchBrowser() {
+  const cfg = browserSettings();
+  // A subfolder, because the host's state file is named `webview2-state.json` beside
+  // the profile's parent. Sharing `data\browser` with the main host would make the
+  // search attach to the main browser's state file and drive its page (caught 23 Nov).
+  const profile = path.join(DATA_DIR, 'browser', 'search', 'webview2');
+  const files = hostFiles({ profile });
+  return {
+    exe: hostBinary(),
+    profile,
+    idleMinutes: cfg.idleMinutes,
+    host: {
+      stateFile: files.stateFile,
+      downloadsFile: files.downloadsFile,
+    },
+  };
+}
+
+let lastUsed = 0;
+let stopTimer = null;
+
+/** Close the search host after the same idle window as the main browser. */
+function scheduleStop(host) {
+  const idleMs = Math.max(1, Number(host.idleMinutes) || 5) * 60_000;
+  lastUsed = Date.now();
+  if (stopTimer) clearTimeout(stopTimer);
+  stopTimer = setTimeout(async () => {
+    stopTimer = null;
+    if (Date.now() - lastUsed < idleMs - 1000) {
+      scheduleStop(host);
+      return;
+    }
+    const state = readHostState(host.host.stateFile);
+    if (state?.state === 'ready' && state.pid) {
+      await stopHostProcess({ pid: state.pid, hwnd: state.hwnd, stateFile: host.host.stateFile });
+    }
+  }, idleMs);
+  stopTimer.unref?.();
+}
+
 /** The port of a ready WebView2 host, or 0. */
 async function readyPort(stateFile) {
   const state = readHostState(stateFile);
@@ -237,7 +286,7 @@ async function readyPort(stateFile) {
   return (await hostAlive(Number(state.port))) ? Number(state.port) : 0;
 }
 
-/** A ready port that is safe to add a search tab to. A visible hand-off is not. */
+/** A ready port that is safe to drive the search page on. */
 async function usablePort(stateFile) {
   const port = await readyPort(stateFile);
   if (!port) return 0;
@@ -248,18 +297,16 @@ async function usablePort(stateFile) {
 }
 
 /**
- * Is SynaBrowse already running and safe to put a search tab in?
+ * Is the search browser already running?
  *
- * True only for the WebView2 host, with the switch on, and with no visible
- * hand-off window: a search must not add a tab to the window the operator is
- * typing into. A cold browser is not "ready" — the HTTP engines get the first
- * try, so a search does not pay for a browser launch nobody needed.
+ * True only when its own host is ready. A cold one is not "ready" — the HTTP engines
+ * get the first try, so a search does not pay for a browser launch nobody needed.
  */
 export async function browserSearchReady() {
   try {
-    const cfg = browserSettings();
-    if (cfg.engine !== 'webview2' || !cfg.host?.stateFile) return false;
-    return Boolean(await usablePort(cfg.host.stateFile));
+    const host = searchBrowser();
+    if (!host.exe) return false;
+    return Boolean(await usablePort(host.host.stateFile));
   } catch {
     // The question is "is it ready?", and an unreadable config means no.
     return false;
@@ -318,31 +365,29 @@ function clearStaleLock(lock) {
 }
 
 /**
- * The browser the search uses.
+ * The search browser the search uses.
  *
- * The existing SynaBrowse host is reused. If it is not running, one is started on
- * the same profile; a small lock file keeps two sessions from launching two hosts
- * on a profile that can only be open once. The host is left running for the
- * browser server (or the next search); this module never stops a browser another
- * tool may be using.
+ * It is a separate host with a separate profile, not the browser a model may be
+ * working in. It starts on demand, keeps one off-screen page, and is closed after
+ * the configured idle time. A small lock file keeps two sessions from launching two
+ * hosts on a profile that can only be open once.
  */
-async function ensurePort(cfg, { timeoutMs = 25000 } = {}) {
-  if (cfg.engine !== 'webview2') {
-    throw new Error('browser search needs the WebView2 host; the Edge path is a test fallback only');
-  }
-  if (!cfg.host?.exe) throw new Error('the WebView2 browser host is not built');
+async function ensurePort(host, { timeoutMs = 25000 } = {}) {
+  if (!host.exe) throw new Error('the WebView2 browser host is not built');
+  const stateFile = host.host.stateFile;
+  fs.mkdirSync(path.dirname(stateFile), { recursive: true });
 
-  const first = await usablePort(cfg.host.stateFile);
+  const first = await usablePort(stateFile);
   if (first) return first;
 
   // A ready state with a dead port is a host that crashed. End the pid it named
   // before opening the profile again; this is the same cleanup browser.js does.
-  const stale = readHostState(cfg.host.stateFile);
+  const stale = readHostState(stateFile);
   if (stale?.state === 'ready' && stale.pid) {
-    await stopHostProcess({ pid: stale.pid, hwnd: stale.hwnd, stateFile: cfg.host.stateFile });
+    await stopHostProcess({ pid: stale.pid, hwnd: stale.hwnd, stateFile });
   }
 
-  const lock = `${cfg.host.stateFile}.launch`;
+  const lock = `${stateFile}.launch`;
   let fd = null;
   try {
     fd = fs.openSync(lock, 'wx');
@@ -351,25 +396,25 @@ async function ensurePort(cfg, { timeoutMs = 25000 } = {}) {
     if (err.code !== 'EEXIST') throw err;
     // Another session may be starting it. Wait for that host, unless the lock's
     // owner is already gone (a search-server killed mid-launch leaves the file).
-    if (clearStaleLock(lock)) return ensurePort(cfg, { timeoutMs });
-    const waited = await waitForPort(cfg.host.stateFile, timeoutMs);
+    if (clearStaleLock(lock)) return ensurePort(host, { timeoutMs });
+    const waited = await waitForPort(stateFile, timeoutMs);
     if (waited) return waited;
-    if (clearStaleLock(lock)) return ensurePort(cfg, { timeoutMs });
-    throw new Error('another Synapse process is starting the browser');
+    if (clearStaleLock(lock)) return ensurePort(host, { timeoutMs });
+    throw new Error('another Synapse process is starting the search browser');
   }
 
   try {
-    const again = await usablePort(cfg.host.stateFile);
+    const again = await usablePort(stateFile);
     if (again) return again;
-    const downloadDir = path.join(DATA_DIR, 'browser', 'downloads');
-    fs.mkdirSync(path.dirname(cfg.host.stateFile), { recursive: true });
+    const downloadDir = path.join(DATA_DIR, 'browser', 'search-downloads');
+    fs.mkdirSync(path.dirname(stateFile), { recursive: true });
     fs.mkdirSync(downloadDir, { recursive: true });
     const launched = await launchHost({
-      exe: cfg.host.exe,
-      profile: cfg.profile,
+      exe: host.exe,
+      profile: host.profile,
       downloadDir,
-      stateFile: cfg.host.stateFile,
-      downloadsFile: cfg.host.downloadsFile,
+      stateFile,
+      downloadsFile: host.host.downloadsFile,
       visible: false,
       parentPid: process.pid,
       width: 1280,
@@ -382,28 +427,25 @@ async function ensurePort(cfg, { timeoutMs = 25000 } = {}) {
   }
 }
 
-/** Open a blank tab, drive it to `url`, and close it whatever happens. */
-async function withTab(port, url, fn) {
-  const bc = await connectBrowser(port);
-  let page = null;
-  let targetId = null;
+/**
+ * Drive the one off-screen page to `url` and read it.
+ *
+ * There is deliberately no `Target.createTarget`: WebView2 treats a CDP "target" as
+ * a real window, so that call put a visible search window on the operator's screen
+ * for a second (live flash, 23 Nov). One long-lived page cannot flash.
+ */
+async function withPage(port, url, fn) {
+  const page = await connect(port);
   try {
-    const created = await bc.send('Target.createTarget', { url: 'about:blank' });
-    targetId = created.targetId;
-    for (let i = 0; i < 30 && !page; i += 1) {
-      try { page = await connect(port, { targetId }); } catch { /* the target may not be listed yet */ await sleep(100); }
-    }
-    if (!page) throw new Error('the browser did not give the new tab a page');
     await page.send('Page.enable');
     await page.send('Runtime.enable');
     const loaded = page.waitEvent('Page.loadEventFired', 15000);
-    await page.send('Page.navigate', { url });
+    const nav = await page.send('Page.navigate', { url });
+    if (nav?.errorText) throw new Error(nav.errorText);
     await loaded;
     return await fn(page);
   } finally {
-    try { page?.close(); } catch { /* gone */ }
-    try { if (targetId) await bc.send('Target.closeTarget', { targetId }); } catch { /* gone */ }
-    try { bc.close(); } catch { /* gone */ }
+    try { page.close(); } catch { /* gone */ }
   }
 }
 
@@ -431,14 +473,15 @@ async function waitForResults(page, expression, timeoutMs) {
 export async function browserSearch(query, { limit = 5, timeoutMs = 15000 } = {}) {
   const q = String(query || '').trim();
   if (!q) throw new Error('empty query');
-  const cfg = browserSettings();
-  const port = await ensurePort(cfg);
+  const host = searchBrowser();
+  const port = await ensurePort(host);
+  scheduleStop(host);
   const attempts = [];
   const perEngine = Math.max(4000, Math.floor(timeoutMs / BROWSER_ENGINES.length));
 
   for (const engine of BROWSER_ENGINES) {
     try {
-      const found = await withTab(port, engine.url(q), async (page) => {
+      const found = await withPage(port, engine.url(q), async (page) => {
         const state = await waitForResults(page, engine.extract(limit), perEngine);
         if (state?.wall) throw new Error(state.wall);
         return normalizeBrowserResults(state?.results, limit);

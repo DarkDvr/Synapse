@@ -18,12 +18,12 @@ minutes, and the next path gets the query.
 
 ## The order
 
-1. **A warm SynaBrowse** — if its WebView2 host is already running and no hand-off
-   window is visible. Measured in the live test: about **1 s** for ten result cards.
-   It cannot be HTTP-202'd because it is the real page with a real profile.
+1. **A warm search browser** — the separate off-screen SynaBrowse host described
+   below. Measured in the live test: about **1 s** for ten result cards. It cannot be
+   HTTP-202'd because it is the real page with a real profile.
 2. **DuckDuckGo HTML**, then **Lite** — about 0.7–1.3 s when it is not blocked.
 3. **Bing HTML** — a second index; about 1–2 s when it answers.
-4. **A cold SynaBrowse** — only after the HTTP engines are walled. A simple query
+4. **A cold search browser** — only after the HTTP engines are walled. A simple query
    does not pay for a browser launch nobody needed.
 
 `auto` is the only path a model sees. Engine selection is a harness decision; the tool
@@ -31,24 +31,25 @@ schema has no engine argument.
 
 ## How the browser search works
 
-`src/browser/search.js` puts a **new tab** in the browser the harness already owns,
-reads `article[data-testid=result]` (DuckDuckGo's rendered page), closes the tab,
-and returns title, URL, snippet, source and a date when the page shows one. It never
-navigates the page a model is working on, never reads a cookie, and runs only a
-fixed extraction expression.
+`src/browser/search.js` runs its own **off-screen SynaBrowse host**, with its own
+profile (`data\browser\search`), and drives its one page to DuckDuckGo. It reads
+`article[data-testid=result]`, then navigates the same page to DuckDuckGo Lite or Bing
+if needed. It never creates a tab or a window, never touches the main browser's page,
+never reads a cookie, and runs only a fixed extraction expression.
 
-- The tab is created with `Target.createTarget` on the browser endpoint and closed
-  in `finally`; a failed search cannot leave a tab behind.
-- A **visible hand-off window is refused**: a search must not add a tab to the
-  window the operator is typing into.
+- **No `Target.createTarget`.** WebView2 treats a CDP target as a real top-level window;
+  that call put the search results on the operator's screen for a second (live flash,
+  23 Nov). The search host keeps one page and `Page.navigate`s it.
+- The host window is created at `-32000,-32000`, `ShowInTaskbar=false`, like the main
+  browser's off-screen window. Nothing it shows is on the operator's desktop.
 - A second session starting at the same moment is not allowed to race the profile:
-  `webview2-state.json.launch` is a lock, and the loser waits for the winner's port.
+  `search-state.json.launch` is a lock, and the loser waits for the winner's port.
 - A ready state with a dead port is cleaned up by the pid it names, never by a
   process name.
-- The host is left running for the browser server or the next search. Search never
-  stops a browser another tool may be using.
-- `src/search.js` holds a **serial queue**: two model searches never open two tabs at
-  once. A burst becomes a short line of searches instead of a rate-limit trigger. The
+- The host is left running for the next search and closed after the configured idle
+  time (default five minutes). Search never stops the main browser.
+- `src/search.js` holds a **serial queue**: two model searches never run at once. A
+  burst becomes a short line of searches instead of a rate-limit trigger. The
   per-search ceiling is 15 s, so even a queue of a few queries is measured in seconds,
   not minutes.
 
@@ -82,7 +83,7 @@ Each gets a few seconds; the total stays under the tool's timeout.
 | | |
 |---|---|
 | `src/search.js` | the HTTP engines, 202 detection, cooldown, cache, queue, browser-first decision |
-| `src/browser/search.js` | the new-tab browser search, extraction, lock and host lifecycle |
+| `src/browser/search.js` | the off-screen search host page, extraction, lock, idle close and host lifecycle |
 | `src/browser/settings.js` | the one reader of the browser profile and idle minutes, shared with the browser server |
 | `src/mcp/search-server.js` | the model's tool: schema, formatting, error text |
 | `tests/search.test.mjs` | 202/challenge fixtures, cooldown, cache, queue, browser-first, fallback |

@@ -14,7 +14,7 @@
 // Order:
 //   1. DuckDuckGo HTML, then Lite (fast, no key)
 //   2. Bing HTML (a second index, so one soft ban is not the whole tool)
-//   3. SynaBrowse (a real browser, in a new tab) when the HTTP engines are walled
+//   3. SynaBrowse (a real browser, on a page of its own, never on screen)
 //
 // Reliability rules:
 //   - one retry of a *network* failure, never of an answer or a wall
@@ -45,7 +45,7 @@ const lastRequestAt = new Map(); // engine id -> when its last request started
  *
  * Models fire tool calls in parallel, and a burst is exactly what trips a search
  * engine's rate limit. The queue is the answer that does not depend on the model
- * behaving: five searches take five short turns, not five simultaneous tabs. The
+ * behaving: five searches take five short turns, not five simultaneous browser pages. The
  * engine has a 15 s ceiling of its own, so even a bad run stays under a minute or
  * so rather than several minutes.
  */
@@ -361,10 +361,10 @@ export async function webSearch(query, {
       return null;
     };
 
-    // A warm browser is the fastest reliable path: about one second in the live
-    // test, while a DuckDuckGo soft ban leaves Bing to time out before the
-    // fallback. A cold browser is not preferred — the HTTP engines get the first
-    // try, so a simple query does not pay for a browser launch nobody needed.
+    // A warm search browser is the fastest reliable path: about one second in the
+    // live test, while a DuckDuckGo soft ban leaves Bing to time out before the
+    // fallback. A cold one is not preferred — the HTTP engines get the first try,
+    // so a simple query does not pay for a browser launch nobody needed.
     let browserReady = false;
     if (browserFallback || wantBrowser) {
       try { browserReady = await browserReadyImpl(); } catch { /* no browser is not an error */ browserReady = false; }
