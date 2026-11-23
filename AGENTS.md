@@ -156,6 +156,7 @@ open is a document that does not exist:
 | `docs/notes/multi-user.md` | two views at once — what "busy" means, Stop as the takeover, the Settings lock |
 | `docs/notes/web-reading.md` | reading a signed-in site, or touching any browser — every cookie route was measured, one destroyed browser data, Brave is never touched |
 | `docs/notes/browser.md` | `src/browser/`, `src/mcp/browser-server.js` or the Browser tab — SynaBrowse's flags, profile, sites record, hand-off |
+| `docs/notes/web-search.md` | `src/search.js`, `src/mcp/search-server.js` or the browser search fallback — engines, 202 walls, cache and provenance |
 | `docs/notes/project-chat.md` | how a project, a chat or a compaction works — one chat per project, the project document, scratch, Private |
 | `docs/notes/protection.md` | `src/protection.js`, the prohibited list or the Brave rule — what is refused without asking, and what the fence cannot see |
 | `docs/notes/tests.md` | adding a test, or when CI is red — the one rule a test must keep |

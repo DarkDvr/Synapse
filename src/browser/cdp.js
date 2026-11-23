@@ -170,10 +170,12 @@ async function clientFor(wsUrl, target = null) {
   return { target, send, waitEvent, onEvent, evaluate, screenshot, close };
 }
 
-/** Connect to one page target. */
-export async function connect(port, { preferUrl = null } = {}) {
+/** Connect to one page target, by address or by the id a new tab was given. */
+export async function connect(port, { preferUrl = null, targetId = null } = {}) {
   const targets = (await listTargets(port)).filter((t) => t.type === 'page');
-  const target = (preferUrl && targets.find((t) => t.url.includes(preferUrl))) || targets[0];
+  const target = targetId
+    ? targets.find((t) => t.id === targetId)
+    : (preferUrl && targets.find((t) => t.url.includes(preferUrl))) || targets[0];
   if (!target?.webSocketDebuggerUrl) throw new Error('the browser has no page to drive');
   return clientFor(target.webSocketDebuggerUrl, target);
 }

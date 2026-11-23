@@ -4,6 +4,8 @@ A browser Synapse owns, on its own profile, driven over the Chrome DevTools Prot
 Models get it as a set of tools; the operator sees one window, only when a person is
 genuinely needed. Since **1.77.0** the default engine is a WebView2 host, off-screen;
 Edge with its hidden desktop remains the fallback (`browser.engine: "edge"`).
+`web_search` also uses this browser, in a new tab, when the HTTP engines are blocked —
+see `docs/notes/web-search.md`.
 
 ## Why a browser at all
 

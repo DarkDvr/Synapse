@@ -367,6 +367,7 @@
     "profile": "",
     "webview2Profile": "",
     "idleMinutes": 5,
+    "searchBrowser": true,
     "sites": []
   }
 }

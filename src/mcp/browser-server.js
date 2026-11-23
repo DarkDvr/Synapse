@@ -20,7 +20,7 @@ import { DATA_DIR, WEB_DIR, PROJECTS_ROOT } from '../paths.js';
 import { artifactDir } from '../browser/artifacts.js';
 import { browserDownloadsPanel, clickSummary, createBrowser, findEdge, savedAnswer, requestAnswer, domAnswer } from '../browser/browser.js';
 import { askToSignIn } from '../browser/signin.js';
-import { hostFiles, hostBinary } from '../browser/webview2.js';
+import { browserSettings } from '../browser/settings.js';
 import { formatBytes, safeDownloadName, uniqueDownloadPath } from '../browser/downloads.js';
 import { checkUrl, hostOf, localPageAllowed } from '../browser/allow.js';
 import { askOperator } from '../browser/handoff.js';
@@ -43,50 +43,7 @@ A site's own search: click its search control — it may be an unnamed button bu
 const CHIME = path.join(WEB_DIR, 'sounds', 'hollow.wav');
 
 /** The browser settings, read once: the operator edits the config file, not a UI here. */
-function settings() {
-  // A test seam: the suite drives this server against a throwaway profile
-  // rather than the operator's config, so the tools can be proved without touching it.
-  const file = process.env.SYNAPSE_BROWSER_CONFIG
-    || path.join(DATA_DIR, '..', 'config', 'synapse.config.json');
-  let raw = {};
-  try {
-    raw = JSON.parse(fs.readFileSync(file, 'utf8'));
-  } catch {
-    // No config file yet: everything is off, which is the safe answer.
-    raw = {};
-  }
-  const b = raw?.browser || {};
-  const wantsEdge = b.engine === 'edge';
-  const host = hostBinary();
-  const engine = wantsEdge || !host ? 'edge' : 'webview2';
-  if (!wantsEdge && !host) process.stderr.write('browser: the WebView2 host is not built; using Edge\n');
-  const profile = engine === 'edge'
-    ? String(b.profile || '').trim() || path.join(DATA_DIR, 'browser', 'profile')
-    : String(b.webview2Profile || '').trim() || path.join(DATA_DIR, 'browser', 'webview2');
-  const files = hostFiles({ profile });
-  return {
-    enabled: b.enabled === true,
-    engine,
-    profile,
-    // The host files live beside the profile, not inside the WebView2 user-data folder.
-    host: {
-      exe: host,
-      stateFile: files.stateFile,
-      downloadsFile: files.downloadsFile,
-      visible: false,
-    },
-    // One chime when the window is put on the second monitor; the operator's switch,
-    // beside the screen sounds in Settings > General.
-    sounds: raw?.notify?.browserSounds !== false,
-    idleMinutes: Number(raw?.browser?.idleMinutes) || 5,
-    // A desktop of its own is the default; a machine that refuses CreateDesktop has the
-    // off-screen window as the fallback, and the suite pins the old path so CI never
-    // depends on an interactive desktop.
-    hiddenDesktop: process.env.SYNAPSE_BROWSER_HIDDEN_DESKTOP === '0'
-      ? false
-      : b.hiddenDesktop !== false,
-  };
-}
+const cfg = browserSettings();
 
 // The engine starts this server with the *project* as its working directory, which is how
 // the artifacts folder is found — and a process whose cwd is inside a folder keeps that
@@ -100,8 +57,6 @@ const START_DIR = process.cwd();
 const IN_PROJECT = path.resolve(START_DIR).toLowerCase().startsWith(`${path.resolve(PROJECTS_ROOT).toLowerCase()}${path.sep}`);
 const DOWNLOADS = IN_PROJECT ? path.join(START_DIR, '.project', 'downloads') : null;
 try { process.chdir(DATA_DIR); } catch { /* the harness folder exists; nothing to do */ }
-
-const cfg = settings();
 
 /**
  * Tell the page about a download. The browser owns the bytes; Synapse only draws the
