@@ -2183,11 +2183,31 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
       // A read and a compare when nothing changed, which is the usual case.
       ensureAgents(location, { log: app });
       await ensureVcs(location, { log: app });
+      // A new project starts on the Architect of the project that was used last.
+      // The UI passes the open chat's model; an API caller that omits it gets the
+      // newest session's model, which is the same choice without a hidden default.
+      let model = body?.model;
+      if (!model) {
+        try {
+          const known = await projectsWithSessions();
+          const latest = known
+            .flatMap((p) => p.sessions || [])
+            .filter((s) => s.model && !s.internal)
+            .sort((a, b) => (b.updated || 0) - (a.updated || 0))[0];
+          if (latest) {
+            model = latest.variant && latest.variant !== 'default'
+              ? { ref: latest.model, variant: latest.variant }
+              : { ref: latest.model };
+          }
+        } catch (err) {
+          app.warn(`could not read the last project's Architect: ${err.message}`);
+        }
+      }
       const session = await engine.createSession({
         // The engine's own title is never shown: the rail names the project. It is
         // set to the project's name so the engine's list is readable in an audit.
         title: project.name,
-        model: body?.model,
+        model,
         agent: body?.agent,
         // The permission ladder comes first: every write, shell, read and code
         // call asks the engine, and the gate answers from the policy. The
@@ -2389,22 +2409,27 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
       // the run (Test project, 3 Nov: "Single color" came back Red for a turn that
       // had asked for Yellow as the recommended option).
       questionHistory.delete(sessionId);
-      // The chat is the Architect's, so the Architect's configured model is what the
-      // next turn must run on. The session also carries a model of its own — the one
-      // the engine last stored — and that can go stale: a provider renamed since
-      // leaves a ref the engine refuses, and no amount of picking in the UI reaches
-      // it, because picking saves the config and only a switch changes the session.
-      // (9 Nov: `opencode-go/deepseek-v4.1-flash`, from before the provider became
-      // `oc-go`.) One comparison per message, and the stale case repairs itself.
-      const architectRef = String(getConfig()?.roles?.architect?.ref || '');
-      if (architectRef && sessionModel !== architectRef) {
-        try {
-          await engine.switchModel(sessionId, architectRef);
-          app.info(`model repaired for ${sessionId}: ${sessionModel || 'none'} -> ${architectRef}`);
-        } catch (err) {
-          // A switch that fails must not swallow the message: the prompt below is the
-          // operator's actual request, and it will report the model it could not use.
-          app.warn(`could not set the Architect's model for ${sessionId}: ${err.message}`);
+      // The project's chat keeps its own Architect model: each project has one
+      // session, and that session's model is the project's choice. The config's
+      // `roles.architect` is only the fallback for a chat that has no model yet
+      // (a session created without one). It must not overwrite an existing
+      // project every turn — that was why switching projects reset the Architect
+      // to whichever role was changed last (23 Nov).
+      let architectRef = sessionModel;
+      if (!architectRef) {
+        const configured = getConfig()?.roles?.architect || {};
+        const ref = String(configured.ref || '');
+        if (ref) {
+          try {
+            const variant = String(configured.variant || '');
+            await engine.switchModel(sessionId, variant ? { ref, variant } : ref);
+            architectRef = ref;
+            app.info(`model set for ${sessionId}: ${ref}${variant ? ` (${variant})` : ''}`);
+          } catch (err) {
+            // A switch that fails must not swallow the message: the prompt below is the
+            // operator's actual request, and it will report the model it could not use.
+            app.warn(`could not set the Architect's model for ${sessionId}: ${err.message}`);
+          }
         }
       }
       // The operator's words are the message. A stop before this one is just a cut:

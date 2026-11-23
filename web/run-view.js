@@ -44,7 +44,49 @@ export const variantsOf = (model) =>
 // ascending order: Cat Jam Free → high, xhigh, max; DeepSeek → low, high, max.
 export const topEfforts = (model) => variantsOf(model).slice(-3);
 
+/**
+ * The session on screen, from the project list the rail already has.
+ *
+ * `selectionFor` needs the open session's own model: a project keeps its Architect
+ * there, and the config's `roles.architect` is only the fallback for a chat that
+ * has no model yet. The lookup is local because projects.js imports this module.
+ */
+function sessionOnScreen() {
+  const id = state.sessionId;
+  if (!id) return null;
+  for (const project of state.projects || []) {
+    const session = (project.sessions || []).find((s) => s.id === id);
+    if (session) return session;
+  }
+  return null;
+}
+
+/** The most recently used project chat, for when no chat is open. */
+function latestSession() {
+  let best = null;
+  for (const project of state.projects || []) {
+    for (const session of project.sessions || []) {
+      if (!session?.model || session.internal) continue;
+      if (!best || Number(session.updated || 0) > Number(best.updated || 0)) best = session;
+    }
+  }
+  return best;
+}
+
 export function selectionFor(roleId) {
+  // The Architect's model belongs to the project's one chat. Switching projects
+  // must show that project's model, not whichever role was changed last in the
+  // config (23 Nov). Worker roles remain config choices until they have a
+  // project-scoped home of their own.
+  if (roleId === 'architect') {
+    const session = sessionOnScreen() || (!state.sessionId ? latestSession() : null);
+    if (session?.model) {
+      return {
+        ref: session.model,
+        variant: session.variant && session.variant !== 'default' ? session.variant : '',
+      };
+    }
+  }
   return asSelection(state.config?.roles?.[roleId]) || { ref: '', variant: '' };
 }
 

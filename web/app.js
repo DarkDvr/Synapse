@@ -838,6 +838,10 @@ async function openSession(id) {
   // the mode is a property of the session, not of the app
   state.mode = sessionMode(findSession(id));
   state.automation = { ...AUTOMATION_DEFAULTS, ...(findSession(id)?.automation || {}) };
+  // The Architect's role card follows the session, not the config: every project
+  // keeps its own Architect model on its own chat. Worker roles stay config-wide.
+  fillRoleModels();
+  renderRoleActivity();
   // Arriving mid-run is not "it just finished": arm the chime from where the chat
   // actually is, or switching to a busy chat and back would chirp for old work.
   state.workWasLive = sessionWorking(id);

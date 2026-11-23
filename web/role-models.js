@@ -33,6 +33,17 @@ export function roleModelsWiring(fns) {
   Object.assign(wired, fns);
 }
 
+/** The open session, from the project list the rail already has. */
+function sessionNow() {
+  const id = state.sessionId;
+  if (!id) return null;
+  for (const project of state.projects || []) {
+    const session = (project.sessions || []).find((s) => s.id === id);
+    if (session) return session;
+  }
+  return null;
+}
+
 // One model picker and one thinking-effort button per role card. The model
 // change is stored in the config file; the Architect's copy is also applied to
 // the open session immediately, while worker selections wait for the
@@ -134,6 +145,11 @@ export function fillRoleModels() {
 
 /** Every role, the Architect included, keeps its own persisted selection. */
 export async function saveRoleSelection(roleId, ref, variant) {
+  // The open project's Architect lives on its session. Writing the global role
+  // would change every other project on its next turn (and wakes their chats).
+  // With no chat open, the config is the default a new project starts from, so
+  // it is still written.
+  if (roleId === 'architect' && state.sessionId) return;
   const draft = JSON.parse(JSON.stringify(state.config || {}));
   // Keep whatever else the entry holds (its skill list, its timeout): changing
   // the model must never quietly wipe the rest of the role's settings.
@@ -269,14 +285,25 @@ export async function editRoleSettings(roleId) {
   }
 }
 
-/** Push the Architect's current model + effort onto the open session. */
-export async function applyArchitectModel() {
-  const model = architectSelection();
-  if (!model || !state.sessionId) return;
+/** Push an Architect model + effort onto the open session. */
+export async function applyArchitectModel(ref = null, variant = null) {
+  const model = ref ? { ref, variant: variant || '' } : architectSelection();
+  if (!model?.ref || !state.sessionId) return false;
+  const session = sessionNow();
+  if (!session) return false;
   try {
     await api('POST', `/api/sessions/${encodeURIComponent(state.sessionId)}/model`, { model });
+    session.model = model.ref;
+    session.variant = model.variant || 'default';
+    fillRoleModels();
+    wired.renderRoleActivity();
+    return true;
   } catch (err) {
+    // The select has already moved under the operator's hand; put the session's
+    // real model back so the card does not keep a choice the engine refused.
+    fillRoleModels();
     toast('Could Not Switch the Chat Model', err.message);
+    return false;
   }
 }
 
@@ -285,7 +312,14 @@ export async function setRoleModel(roleId, ref) {
   const current = selectionFor(roleId).variant;
   const variant = topEfforts(modelByRef(ref)).some((v) => v.id === current) ? current : '';
   try {
-    await saveRoleSelection(roleId, ref, variant);
+    // An open project keeps its Architect on its own session. Writing the global
+    // role would change every other project on its next turn.
+    if (roleId === 'architect' && state.sessionId) {
+      const applied = await applyArchitectModel(ref, variant);
+      if (!applied) return;
+    } else {
+      await saveRoleSelection(roleId, ref, variant);
+    }
     // A speed belongs to the model it was measured on. The old model's figure must
     // not reappear here or on another project's card (16 Nov).
     clearRoleRate(roleId);
@@ -310,8 +344,7 @@ export async function setRoleModel(roleId, ref) {
     // the server answers from cache and never probes the same model twice
     api('POST', '/api/models/inspect', { ref }).catch(() => {});
     if (roleId === 'architect') {
-      await applyArchitectModel();
-      toast('Model for Architect', state.sessionId ? 'Saved and applied to this chat.' : 'Saved for new chats.');
+      toast('Model for Architect', state.sessionId ? 'Saved for this project.' : 'Saved for new chats.');
     } else {
       // Honest about the one case where changing the model is not a fix: the new
       // model carries a provider or tools mark of its own.
@@ -333,15 +366,19 @@ export async function setRoleModel(roleId, ref) {
 export async function cycleEffort(roleId) {
   const sel = document.querySelector(`.role-model[data-role="${roleId}"]`);
   const btn = document.querySelector(`.role-effort[data-role="${roleId}"]`);
-  if (!btn || btn.disabled) return;
-  const ids = topEfforts(modelByRef(sel?.value)).map((v) => v.id);
+  if (!btn || btn.disabled || !sel?.value) return;
+  const ids = topEfforts(modelByRef(sel.value)).map((v) => v.id);
   if (ids.length === 0) return;
   const idx = ids.indexOf(selectionFor(roleId).variant);
   const next = idx === -1 ? ids[0] : idx < ids.length - 1 ? ids[idx + 1] : '';
   try {
-    await saveRoleSelection(roleId, sel.value, next);
-    renderEffort(roleId);
-    if (roleId === 'architect') await applyArchitectModel();
+    if (roleId === 'architect' && state.sessionId) {
+      const applied = await applyArchitectModel(sel.value, next);
+      if (!applied) return;
+    } else {
+      await saveRoleSelection(roleId, sel.value, next);
+      renderEffort(roleId);
+    }
   } catch (err) {
     toast('Could not save the thinking effort', err.message);
   }

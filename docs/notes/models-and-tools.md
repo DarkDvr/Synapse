@@ -4,6 +4,25 @@ The catalog, the thinking-effort variants, what Synapse remembers about a model,
 probe, and how the engine is updated. Read it before touching model selection,
 `src/windows.js` or `src/modelcache.js`.
 
+## The Architect's model is the project's
+
+A project has one chat, and that chat's **session carries the Architect's model and
+thinking effort**. Switching projects must show that project's choice, not whichever
+role was changed last in `config\roles.architect`.
+
+- `api.sendMessage` reads the session's model first. The config's `roles.architect` is
+  only the fallback for a chat that has no model yet — it does not repair or overwrite
+  an existing project every turn.
+- `web/run-view.js` `selectionFor('architect')` reads the open session; with no chat
+  open it reads the newest project chat, so a new project inherits the last project's
+  Architect.
+- Changing the Architect while a chat is open switches that session (and its effort)
+  only. It is not written to the global role, because that would move every other
+  project on its next turn and wake their waiting chats.
+- Changing it while no chat is open writes the global role as the default.
+- **Worker roles are still config-wide.** They have no per-project store yet; the
+  Architect is the one role that is a property of the project's conversation.
+
 ## The cache share on a card
 
 The card says `120k/262k ctx (92% cache)`. The prompt is `input + cache.read` from the
