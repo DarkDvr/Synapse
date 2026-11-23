@@ -2,9 +2,11 @@
 //
 // The native <select> per role card is the truth; the picker in
 // ./model-picker.js drives it, and this module is what happens when it changes: the
-// choice is saved to the config at once (a role's model is not a draft), the effort
-// chevrons follow the model that is now selected, and the Architect's own model is
-// pushed to the session so the next turn uses it.
+// choice is written to the open project's `.project\roles.json` at once (a role's
+// model is not a draft), and the effort chevrons follow the model now selected. The
+// server moves the Architect's chat and wakes a worker that was waiting on the old
+// model. With no project open, the same choice becomes the config template for the
+// next project.
 //
 // Four things come from app.js and are wired at boot: the model labels, the dialog
 // that asks before a role loses its settings, and the cards' activity.
@@ -13,7 +15,7 @@ import { esc } from './format.js';
 import { $ } from './dom.js';
 import { api } from './api.js';
 import { toast } from './toast.js';
-import { modelByRef, selectionFor, topEfforts, variantsOf, ROLES, architectSelection, currentProject, dirKey } from './run-view.js';
+import { modelByRef, selectionFor, topEfforts, variantsOf, ROLES, currentProject, dirKey } from './run-view.js';
 import { renderTranscript } from './transcript.js';
 import { pickers, syncPickerInput } from './model-picker.js';
 import { clearRoleRate } from './role-rate-store.js';
@@ -143,13 +145,27 @@ export function fillRoleModels() {
   });
 }
 
-/** Every role, the Architect included, keeps its own persisted selection. */
+/** Every role, the Architect included, keeps its model in the project's role set. */
 export async function saveRoleSelection(roleId, ref, variant) {
-  // The open project's Architect lives on its session. Writing the global role
-  // would change every other project on its next turn (and wakes their chats).
-  // With no chat open, the config is the default a new project starts from, so
-  // it is still written.
-  if (roleId === 'architect' && state.sessionId) return;
+  const project = currentProject();
+  if (project?.id) {
+    const out = await api('POST', `/api/projects/${encodeURIComponent(project.id)}/roles`, {
+      role: roleId,
+      ref,
+      variant,
+    });
+    if (out?.roles) project.roles = out.roles;
+    if (roleId === 'architect') {
+      const session = sessionNow();
+      if (session) {
+        session.model = ref;
+        session.variant = variant || 'default';
+      }
+    }
+    fillRoleModels();
+    return true;
+  }
+  // With no project open the config is the template the next project inherits.
   const draft = JSON.parse(JSON.stringify(state.config || {}));
   // Keep whatever else the entry holds (its skill list, its timeout): changing
   // the model must never quietly wipe the rest of the role's settings.
@@ -158,6 +174,7 @@ export async function saveRoleSelection(roleId, ref, variant) {
   else delete entry.variant;
   draft.roles = { ...(draft.roles || {}), [roleId]: entry };
   state.config = await api('PUT', '/api/config', draft);
+  return true;
 }
 
 /**
@@ -285,49 +302,25 @@ export async function editRoleSettings(roleId) {
   }
 }
 
-/** Push an Architect model + effort onto the open session. */
-export async function applyArchitectModel(ref = null, variant = null) {
-  const model = ref ? { ref, variant: variant || '' } : architectSelection();
-  if (!model?.ref || !state.sessionId) return false;
-  const session = sessionNow();
-  if (!session) return false;
-  try {
-    await api('POST', `/api/sessions/${encodeURIComponent(state.sessionId)}/model`, { model });
-    session.model = model.ref;
-    session.variant = model.variant || 'default';
-    fillRoleModels();
-    wired.renderRoleActivity();
-    return true;
-  } catch (err) {
-    // The select has already moved under the operator's hand; put the session's
-    // real model back so the card does not keep a choice the engine refused.
-    fillRoleModels();
-    toast('Could Not Switch the Chat Model', err.message);
-    return false;
-  }
-}
-
 export async function setRoleModel(roleId, ref) {
   const role = ROLES.find((r) => r.id === roleId);
   const current = selectionFor(roleId).variant;
   const variant = topEfforts(modelByRef(ref)).some((v) => v.id === current) ? current : '';
+  const select = document.querySelector(`#topology .role-model[data-role="${CSS.escape(roleId)}"]`);
+  const picker = pickers.get(roleId);
+  const input = picker?.input;
+  // A choice that has not reached the project file does not look applied yet. The
+  // breathing stops the moment the save returns, whether it succeeded or failed.
+  input?.classList.add('is-saving');
+  select?.classList.add('is-saving');
   try {
-    // An open project keeps its Architect on its own session. Writing the global
-    // role would change every other project on its next turn.
-    if (roleId === 'architect' && state.sessionId) {
-      const applied = await applyArchitectModel(ref, variant);
-      if (!applied) return;
-    } else {
-      await saveRoleSelection(roleId, ref, variant);
-    }
+    await saveRoleSelection(roleId, ref, variant);
     // A speed belongs to the model it was measured on. The old model's figure must
     // not reappear here or on another project's card (16 Nov).
     clearRoleRate(roleId);
     // Keep the card's own select in step: renderRoleActivity reads the refused
     // mark from it, and a stale value would keep the old model's red line.
-    const select = document.querySelector(`#topology .role-model[data-role="${CSS.escape(roleId)}"]`);
     if (select) select.value = ref;
-    const picker = pickers.get(roleId);
     if (picker) syncPickerInput(picker.input);
     renderEffort(roleId);
     // A model change is the operator saying "this role is fixed". Three things
@@ -344,20 +337,24 @@ export async function setRoleModel(roleId, ref) {
     // the server answers from cache and never probes the same model twice
     api('POST', '/api/models/inspect', { ref }).catch(() => {});
     if (roleId === 'architect') {
-      toast('Model for Architect', state.sessionId ? 'Saved for this project.' : 'Saved for new chats.');
+      toast('Model for Architect', currentProject() ? 'Saved for this project.' : 'Saved for new chats.');
     } else {
       // Honest about the one case where changing the model is not a fix: the new
       // model carries a provider or tools mark of its own.
       const marked = (modelByRef(ref)?.issues || []).some((i) => i.kind === 'provider' || i.kind === 'tools');
+      const scope = currentProject() ? 'Saved for this project.' : 'Saved for new projects.';
       toast(
         `Model for ${role?.name || roleId}`,
         marked
-          ? 'Saved. This model still carries an issue mark — the picker shows why.'
-          : 'Saved. It can take tasks again.',
+          ? `${scope} This model still carries an issue mark — the picker shows why.`
+          : `${scope} It can take tasks again.`,
       );
     }
   } catch (err) {
     toast('Could not save the role model', err.message);
+  } finally {
+    input?.classList.remove('is-saving');
+    select?.classList.remove('is-saving');
   }
 }
 
@@ -371,15 +368,17 @@ export async function cycleEffort(roleId) {
   if (ids.length === 0) return;
   const idx = ids.indexOf(selectionFor(roleId).variant);
   const next = idx === -1 ? ids[0] : idx < ids.length - 1 ? ids[idx + 1] : '';
+  const picker = pickers.get(roleId);
+  const input = picker?.input;
+  input?.classList.add('is-saving');
+  sel.classList.add('is-saving');
   try {
-    if (roleId === 'architect' && state.sessionId) {
-      const applied = await applyArchitectModel(sel.value, next);
-      if (!applied) return;
-    } else {
-      await saveRoleSelection(roleId, sel.value, next);
-      renderEffort(roleId);
-    }
+    await saveRoleSelection(roleId, sel.value, next);
+    renderEffort(roleId);
   } catch (err) {
     toast('Could not save the thinking effort', err.message);
+  } finally {
+    input?.classList.remove('is-saving');
+    sel.classList.remove('is-saving');
   }
 }

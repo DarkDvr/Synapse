@@ -44,21 +44,11 @@ export const variantsOf = (model) =>
 // ascending order: Cat Jam Free → high, xhigh, max; DeepSeek → low, high, max.
 export const topEfforts = (model) => variantsOf(model).slice(-3);
 
-/**
- * The session on screen, from the project list the rail already has.
- *
- * `selectionFor` needs the open session's own model: a project keeps its Architect
- * there, and the config's `roles.architect` is only the fallback for a chat that
- * has no model yet. The lookup is local because projects.js imports this module.
- */
-function sessionOnScreen() {
+/** The project whose chat is on screen. */
+function projectOnScreen() {
   const id = state.sessionId;
   if (!id) return null;
-  for (const project of state.projects || []) {
-    const session = (project.sessions || []).find((s) => s.id === id);
-    if (session) return session;
-  }
-  return null;
+  return (state.projects || []).find((p) => (p.sessions || []).some((s) => s.id === id)) || null;
 }
 
 /** The most recently used project chat, for when no chat is open. */
@@ -73,13 +63,31 @@ function latestSession() {
   return best;
 }
 
+/** The project that chat belongs to, for inheritance while no chat is open. */
+function latestProject() {
+  const session = latestSession();
+  if (!session) return null;
+  return (state.projects || []).find((p) => (p.sessions || []).some((s) => s.id === session.id)) || null;
+}
+
 export function selectionFor(roleId) {
-  // The Architect's model belongs to the project's one chat. Switching projects
-  // must show that project's model, not whichever role was changed last in the
-  // config (23 Nov). Worker roles remain config choices until they have a
-  // project-scoped home of their own.
+  // Every role's model belongs to the project. The project's `roles.json` is the
+  // source; the config's role is only the template for a project that has never
+  // written that role. With no chat open, the newest project supplies the set a
+  // new project will inherit.
+  const project = projectOnScreen() || (!state.sessionId ? latestProject() : null);
+  const saved = project?.roles?.[roleId];
+  if (saved?.ref) {
+    return {
+      ref: saved.ref,
+      variant: saved.variant && saved.variant !== 'default' ? saved.variant : '',
+    };
+  }
+  // Projects written before roles.json keep their Architect session model.
   if (roleId === 'architect') {
-    const session = sessionOnScreen() || (!state.sessionId ? latestSession() : null);
+    const session = project
+      ? (project.sessions || []).find((s) => s.id === state.sessionId) || latestSession()
+      : latestSession();
     if (session?.model) {
       return {
         ref: session.model,

@@ -3,7 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
-import { appendRun, readPlan, readRuns, runLedger, briefSession, logPlanState, BRIEF_KEY, HARNESS_KEY, harnessCore } from './plans.js';
+import { appendRun, readPlan, readRuns, runLedger, briefSession, logPlanState, BRIEF_KEY, HARNESS_KEY, harnessCore, ROLES } from './plans.js';
 import { ensureProjectDoc, appendRequest as appendProjectRequest, appendChat, appendDecision as appendProjectDecision, appendEntry, setHandover } from './project-doc.js';
 import { ensureAgents } from './project-agents.js';
 import { commitLabel, commitVcs, ensureVcs } from './project-vcs.js';
@@ -29,6 +29,7 @@ import { loadQueued, putQueued, dropQueued, renameQueuedDir } from './queued-sen
 import { providerApiKey } from './config.js';
 import { configureBrowserAsks } from './browser/ask.js';
 import { browserSettings } from './browser/settings.js';
+import { readProjectRoles, writeProjectRoles, effectiveRoles, roleModel } from './project-roles.js';
 import * as windows from './windows.js';
 import { questionSignature, guardDecision, readableAnswer } from './question-loop.js';
 import { setProviderKey, providerKeyState, maskKey } from './secrets.js';
@@ -607,7 +608,7 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
    * opened is noise. (Scaffolding is filtered separately.)
    */
   async function projectsWithSessions() {
-    const list = projects.list().map((p) => ({ ...p, sessions: [] }));
+    const list = projects.list().map((p) => ({ ...p, roles: readProjectRoles(p.directory), sessions: [] }));
     // The private markers are facts about the folders; keep the filter in step on every
     // rail load, so a folder marked outside Synapse is honoured too (15 Nov).
     setPrivateDirs(list.filter((p) => p.private).map((p) => p.directory));
@@ -2183,25 +2184,58 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
       // A read and a compare when nothing changed, which is the usual case.
       ensureAgents(location, { log: app });
       await ensureVcs(location, { log: app });
-      // A new project starts on the Architect of the project that was used last.
-      // The UI passes the open chat's model; an API caller that omits it gets the
-      // newest session's model, which is the same choice without a hidden default.
-      let model = body?.model;
-      if (!model) {
+      // A new project starts with the full role set of the project used last. The
+      // page sends the open project's set; an API caller that omits it falls back
+      // to the newest project chat below. The file is the project's own from this
+      // moment; the config is only the template for a project with no predecessor.
+      if (body?.roles && typeof body.roles === 'object') {
+        try {
+          writeProjectRoles(location, body.roles);
+        } catch (err) {
+          app.warn(`could not copy the role set into ${project.name}: ${err.message}`);
+        }
+      }
+      const config = getConfig() || {};
+      let roles = readProjectRoles(location);
+      if (!Object.keys(roles).length) {
+        let seed = null;
         try {
           const known = await projectsWithSessions();
           const latest = known
-            .flatMap((p) => p.sessions || [])
-            .filter((s) => s.model && !s.internal)
-            .sort((a, b) => (b.updated || 0) - (a.updated || 0))[0];
+            .filter((p) => p.id !== project.id)
+            .flatMap((p) => (p.sessions || []).map((s) => ({ p, s })))
+            .filter(({ s }) => s.model && !s.internal)
+            .sort((a, b) => (b.s.updated || 0) - (a.s.updated || 0))[0];
           if (latest) {
-            model = latest.variant && latest.variant !== 'default'
-              ? { ref: latest.model, variant: latest.variant }
-              : { ref: latest.model };
+            seed = effectiveRoles(config, latest.p.directory, {
+              architect: { ref: latest.s.model, variant: latest.s.variant },
+            });
           }
         } catch (err) {
-          app.warn(`could not read the last project's Architect: ${err.message}`);
+          app.warn(`could not read the last project's role set: ${err.message}`);
         }
+        roles = seed || effectiveRoles(config, location);
+      }
+      // Snapshot the effective set into the project. A project always owns all its
+      // roles, including the ones it never touched, so a later template change
+      // cannot move a model the operator already sees here.
+      const savedArchitect = roleModel(roles, 'architect');
+      roles = effectiveRoles(config, location, { architect: savedArchitect });
+      let model = null;
+      if (body?.model) {
+        const entry = typeof body.model === 'string'
+          ? { ref: body.model, variant: '' }
+          : roleModel({ architect: body.model }, 'architect');
+        if (entry) {
+          roles.architect = entry;
+          model = entry;
+        }
+      }
+      if (!model) model = roleModel(roles, 'architect');
+      try {
+        writeProjectRoles(location, roles);
+      } catch (err) {
+        app.warn(`could not save the role set for ${project.name}: ${err.message}`);
       }
       const session = await engine.createSession({
         // The engine's own title is never shown: the rail names the project. It is
@@ -2245,14 +2279,91 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
       return { session, projectId: project.id };
     },
 
+    /**
+     * Save one role's model for one project.
+     *
+     * The project file is the source of truth. For the Architect the chat is moved
+     * at once; for a worker only a run that is waiting in a backoff is woken. A
+     * live worker keeps the model it started on and the next delegation reads the
+     * new file.
+     */
+    setProjectRole: async (projectId, body, actor = null) => {
+      requireReady();
+      const project = projects.find(projectId);
+      if (!project) throw fail(404, 'project not found');
+      const role = String(body?.role || '');
+      if (!ROLES.includes(role)) throw fail(400, `unknown role: ${role || '(none)'}`);
+      const ref = String(body?.ref || '').trim();
+      if (!ref || !ref.includes('/')) throw fail(400, 'a model reference is required');
+      const variant = String(body?.variant || '').trim();
+
+      const known = await projectsWithSessions().catch(() => []);
+      const chat = (known.find((p) => p.id === projectId)?.sessions || [])
+        .filter((s) => !s.internal)
+        .sort((a, b) => (b.updated || 0) - (a.updated || 0))[0];
+      // Write the whole effective set, not just the edited role: a project that is
+      // being changed now owns all of its roles. The config stays the template for
+      // the next project.
+      const roles = effectiveRoles(getConfig() || {}, project.directory, {
+        architect: chat?.model ? { ref: chat.model, variant: chat.variant } : null,
+      });
+      roles[role] = { ref, variant };
+      writeProjectRoles(project.directory, roles);
+
+      // The same loop-mark hygiene a global role change had: the mark is about a
+      // different run, and choosing this model is not evidence against it.
+      try {
+        const cleared = modelCache?.clearLoopIssues?.(ref) || 0;
+        if (cleared) {
+          notify?.({ kind: 'model', type: 'issues', ref });
+          app.info(`model loops cleared for ${role}: ${ref} (${cleared} mark(s); the project's model changed)`);
+        }
+      } catch (err) {
+        app.warn(`could not clear the loop marks on ${ref}: ${err.message}`);
+      }
+
+      if (role === 'architect' && chat?.id) {
+        try {
+          await engine.switchModel(chat.id, variant ? { ref, variant } : ref);
+        } catch (err) {
+          app.warn(`role ${role} saved for ${project.name}, but the chat did not switch: ${err.message}`);
+        }
+      }
+      // A wait in either the Architect's report loop or a worker's backoff is
+      // waiting on a clock that no longer matters; only this project is woken.
+      try {
+        await runs?.wakeRole?.(role, { ref, variant }, project.directory);
+      } catch (err) {
+        app.warn(`could not wake ${role} in ${project.name}: ${err.message}`);
+      }
+
+      notify?.({ kind: 'roles', projectId, roles, by: actor?.name || null, byId: actor?.id || null });
+      return { ok: true, roles };
+    },
+
     /** Switch the model and/or thinking effort used by an existing session. */
     switchModel: async (sessionId, body) => {
       requireReady();
       const model = body?.model;
-      if (!model || (typeof model === 'string' && !model.includes('/'))) {
+      const ref = typeof model === 'string' ? model : String(model?.ref || '');
+      if (!ref || !ref.includes('/')) {
         throw fail(400, 'a model reference is required');
       }
-      await engine.switchModel(sessionId, model);
+      const variant = typeof model === 'object' ? String(model?.variant || '') : '';
+      await engine.switchModel(sessionId, variant ? { ref, variant } : ref);
+      const session = await engine.getSession(sessionId).catch(() => null);
+      if (session?.directory) {
+        try {
+          const roles = effectiveRoles(getConfig() || {}, session.directory, {
+            architect: { ref: session.model || ref, variant: session.variant },
+          });
+          roles.architect = { ref, variant };
+          writeProjectRoles(session.directory, roles);
+          notify?.({ kind: 'roles', projectId: null, directory: session.directory, roles });
+        } catch (err) {
+          app.warn(`could not record the Architect model for ${session.directory}: ${err.message}`);
+        }
+      }
       return { ok: true };
     },
 
@@ -2409,14 +2520,30 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
       // the run (Test project, 3 Nov: "Single color" came back Red for a turn that
       // had asked for Yellow as the recommended option).
       questionHistory.delete(sessionId);
-      // The project's chat keeps its own Architect model: each project has one
-      // session, and that session's model is the project's choice. The config's
-      // `roles.architect` is only the fallback for a chat that has no model yet
-      // (a session created without one). It must not overwrite an existing
-      // project every turn — that was why switching projects reset the Architect
-      // to whichever role was changed last (23 Nov).
+      // The project's role file is the first source for the Architect, then the
+      // session (a project written before this file existed), then the config
+      // template. An external edit of roles.json is honoured on the next message:
+      // the session is moved to it before the prompt, so the file really is the
+      // project's answer.
+      const projectArchitect = roleModel(readProjectRoles(directory), 'architect');
+      const sessionVariant = String(session?.variant || '') === 'default' ? '' : String(session?.variant || '');
       let architectRef = sessionModel;
-      if (!architectRef) {
+      if (projectArchitect?.ref) {
+        const variant = projectArchitect.variant || '';
+        architectRef = projectArchitect.ref;
+        if (projectArchitect.ref !== sessionModel || variant !== sessionVariant) {
+          try {
+            await engine.switchModel(
+              sessionId,
+              variant ? { ref: projectArchitect.ref, variant } : projectArchitect.ref,
+            );
+            app.info(`model set for ${sessionId}: ${projectArchitect.ref}${variant ? ` (${variant})` : ''}`);
+          } catch (err) {
+            architectRef = sessionModel || '';
+            app.warn(`could not set the project's Architect model for ${sessionId}: ${err.message}`);
+          }
+        }
+      } else if (!architectRef) {
         const configured = getConfig()?.roles?.architect || {};
         const ref = String(configured.ref || '');
         if (ref) {

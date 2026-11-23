@@ -550,6 +550,11 @@ export function createServer({ api, engine, logger, config, remote, onRemote }) 
         return sendJson(res, 200, await api.wipeProjectDir(body));
       }
       const projectId = decodeURIComponent(seg[1] || '');
+      // One role's model for one project. The project file is the source of truth;
+      // the route answers with the whole set.
+      if (seg.length === 3 && seg[2] === 'roles' && method === 'POST') {
+        return sendJson(res, 200, await api.setProjectRole(projectId, await readBody(req), actorOf(req)));
+      }
       if (seg.length === 2 && method === 'PATCH') return sendJson(res, 200, await api.updateProject(projectId, await readBody(req)));
       // What the delete dialog has to show before it asks: the folder, and whether
       // there are deliverables in `bin\` that need their own consent.

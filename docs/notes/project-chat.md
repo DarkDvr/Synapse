@@ -66,9 +66,9 @@ reload; the handover lives in `project.md` for the brief.
 ## The state folder
 
 Every project has one folder for everything the harness keeps about it: `.project`.
-The plan, the features, the project document, the run log, reports, shots, attachments
-and a private project's scratch live there. It is excluded from the run's diff and
-from git, because it is state, not work.
+The plan, the role models (`roles.json`), the project document, the run log, reports,
+shots, attachments and a private project's scratch live there. It is excluded from the
+run's diff and from git, because it is state, not work.
 
 It was called `.synapse` until 15 Nov 2026; the first boot with this version moves the
 folder, rewrites the paths inside it, updates a project's `.gitignore` and adds the

@@ -1347,6 +1347,21 @@ function connectStream() {
       return;
     }
 
+    // A project's role set changed on another view (or through the direct model
+    // route): update the rail's copy, and repaint the cards if this is the open
+    // project. The project file is the authority; nothing waits for a restart.
+    if (ev.kind === 'roles') {
+      const project = state.projects.find(
+        (p) => (ev.projectId && p.id === ev.projectId) || (ev.directory && dirKey(p.directory) === dirKey(ev.directory)),
+      );
+      if (project && ev.roles) project.roles = ev.roles;
+      if (project && currentProject()?.id === project.id) {
+        fillRoleModels();
+        renderRoleActivity();
+      }
+      return;
+    }
+
     // A card was answered somewhere else: the panel is rebuilt from pending, and
     // A tool asked to change a prohibited path: the operator sees the red line even
     // when the asker was a hidden worker session.

@@ -936,6 +936,20 @@ body.dark .sidebar-bottom,
   border-color: rgba(240, 86, 63, 0.75); color: var(--red);
 }
 .model-search.is-skipped:hover { border-color: var(--red); }
+/* A model choice that has not reached the project file yet. The card must not
+   look as if the change landed while the request is still in flight; the breath
+   stops the moment it returns, success or failure. */
+.model-search.is-saving {
+  border-color: #5d6270;
+  animation: model-saving 1.1s ease-in-out infinite;
+}
+@keyframes model-saving {
+  0%, 100% { opacity: 0.62; }
+  50% { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .model-search.is-saving { animation: none; opacity: 1; }
+}
 .model-search:focus-visible { outline: 2px solid var(--orange); outline-offset: 1px; }
 .model-search::placeholder { color: #6d717a; }
 

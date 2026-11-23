@@ -59,6 +59,7 @@ import { report } from './report.js';
 import { runTaskChecks, checkNudge } from './checks.js';
 import { treeOf, changeSince, createCheckpoint, dropCheckpoint, isRepo, ensureRepo } from './git.js';
 import { changedInVcs, commitLabel, commitVcs, designMismatch, ensureVcs, pruneVcs } from './project-vcs.js';
+import { readProjectRoles, effectiveRoles, roleModel } from './project-roles.js';
 import { tokens, ranFor } from './words.js';
 import { skillRules, describeSkills, roleMustLoad } from './skills.js';
 import { rulesFor } from './permissions.js';
@@ -1115,6 +1116,11 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     try {
       const session = await engine.getSession(sessionId);
       if (!session?.directory || session.internal) return;
+      // The project's role file is the model set for this run. The config is the
+      // template for any role the project has never written; the merge keeps the
+      // role's skills, instructions and stall settings from the config.
+      const baseConfig = getConfig() || {};
+      const effectiveConfig = { ...baseConfig, roles: effectiveRoles(baseConfig, session.directory) };
       const requests = requestsIn(messages, session.directory);
       // Single mode promises no delegation — that is the whole difference
       // between the two modes. The tool is offered by the engine regardless
@@ -1326,7 +1332,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
       (t) => !nudged.has(`${normDir(dir)}|${t.id}`) && taskReady(t, tasks),
     );
     if (!ready) return;
-    if (roleMarked(ready.role, getConfig() || {})) return;
+    if (roleMarked(ready.role, effectiveConfig)) return;
     nudged.add(`${normDir(dir)}|${ready.id}`);
     out.info(
       `plan step ${ready.id} (${ready.role}) is ready and was never asked for - reminding the Architect once`,
@@ -1432,7 +1438,10 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
       return;
     }
 
-    const config = getConfig() || {};
+    // `run()` is its own closure: read the project's role file here as well, or
+    // the delegation would look for the handleTurn variable and fail (23 Nov).
+    const baseConfig = getConfig() || {};
+    const config = { ...baseConfig, roles: effectiveRoles(baseConfig, dir) };
     // How many times this task has actually been run — see countedAttempts. A
     // model change for the planned role starts the count over: the earlier
     // failures were the old model's, and the operator has fixed it. So does a
@@ -3801,7 +3810,13 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
   }
 
   async function wakeLoop(architectId, dir, { description, text }, signal) {
-    const settings = workerSettings(getConfig() || {});
+    const configForWake = getConfig() || {};
+    const settings = workerSettings(configForWake);
+    // The local server that answers this project's Architect, read from the
+    // project's own role set rather than the global template.
+    const architectRefForWake =
+      roleModel(effectiveRoles(configForWake, dir), 'architect')?.ref ||
+      configForWake.roles?.architect?.ref;
     // A model change for the Architect's own chat ends a backoff here too: the
     // same wake a worker gets, on the loop that sends the report.
     let chatWake = newWake();
@@ -3829,7 +3844,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
         // The wake is a turn on the Architect's model. On a local server it waits its
         // turn like any other, and Stop cancels the wait (20 Nov).
         if (localLease) {
-          const server = localServer(getConfig() || {}, getConfig()?.roles?.architect?.ref);
+          const server = localServer(configForWake, architectRefForWake);
           if (server) {
             const lease = await localLease.acquire({
               serverKey: server.key,
@@ -4174,12 +4189,18 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
    * the new model by the run itself, and the worker is asked to carry on.
    * Returns how many runs were woken.
    */
-  async function wakeRole(role, model) {
+  async function wakeRole(role, model, dir = '') {
     let woken = 0;
+    const target = dir ? normDir(dir) : '';
+    // A global template change must not move a project that already owns this
+    // role; a project-scoped change names its directory and moves only that one.
+    const ownsRole = (key) => Boolean(readProjectRoles(key)[role]);
     // The Architect's own loop: it has no delegation controls, so it is woken by
     // its own entry (one per project), and its session moves with it.
     if (role === 'architect') {
-      for (const entry of archWakes.values()) {
+      for (const [key, entry] of archWakes) {
+        if (target && key !== target) continue;
+        if (!target && ownsRole(key)) continue;
         if (!entry.waiting()) continue;
         if (model && entry.architectId) {
           try {
@@ -4195,6 +4216,8 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
       return woken;
     }
     for (const [key, control] of controls) {
+      if (target && key !== target) continue;
+      if (!target && ownsRole(key)) continue;
       if (control.role !== role || typeof control.wake !== 'function') continue;
       // Only a run that is actually waiting: a working turn is switched by the
       // engine on its next prompt, and interrupting it would be a different act.

@@ -4,24 +4,28 @@ The catalog, the thinking-effort variants, what Synapse remembers about a model,
 probe, and how the engine is updated. Read it before touching model selection,
 `src/windows.js` or `src/modelcache.js`.
 
-## The Architect's model is the project's
+## Every role's model is the project's
 
-A project has one chat, and that chat's **session carries the Architect's model and
-thinking effort**. Switching projects must show that project's choice, not whichever
-role was changed last in `config\roles.architect`.
+Every project has `.project\roles.json`: its own Architect, Inventor, Designer, QC,
+Coder 1 and Coder 2, with a model ref and thinking effort each. The config's `roles`
+remain the **template** — skills, instructions, timings — and the starting point for a
+project that has never written a role.
 
-- `api.sendMessage` reads the session's model first. The config's `roles.architect` is
-  only the fallback for a chat that has no model yet — it does not repair or overwrite
-  an existing project every turn.
-- `web/run-view.js` `selectionFor('architect')` reads the open session; with no chat
-  open it reads the newest project chat, so a new project inherits the last project's
-  Architect.
-- Changing the Architect while a chat is open switches that session (and its effort)
-  only. It is not written to the global role, because that would move every other
-  project on its next turn and wake their waiting chats.
-- Changing it while no chat is open writes the global role as the default.
-- **Worker roles are still config-wide.** They have no per-project store yet; the
-  Architect is the one role that is a property of the project's conversation.
+- `api.sendMessage` reads the project's Architect entry first, then the session model
+  (for projects written before the file), then the config.
+- `src/runs.js` merges the project's role map over the config when it chooses a
+  worker; the ladder, the model marks and the attempt history all use that merged
+  view.
+- `web/run-view.js` `selectionFor(role)` reads the open project's `roles[role]`; with
+  no chat open it reads the newest project, so a new project inherits the whole set.
+- Changing a role while a project is open writes only that project's file. The
+  Architect's chat is switched at once; a worker that was waiting in a backoff is
+  woken; a live worker finishes on its old model and the next delegation reads the
+  file.
+- Changing a role with no project open writes the config template.
+- The model drop-down breathes while the save is in flight and stops when it returns.
+- A global role change is a template change, not a project change: projects with a
+  role file keep their own choice.
 
 ## The cache share on a card
 
