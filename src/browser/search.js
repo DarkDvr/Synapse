@@ -277,6 +277,46 @@ async function waitForPort(stateFile, timeoutMs) {
   return 0;
 }
 
+/** Is a pid still there? Used only to prove a launch lock is stale. */
+function processAlive(pid) {
+  if (!Number.isInteger(pid) || pid <= 0) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err) {
+    // EPERM means the process exists but belongs to another user; this app is
+    // single-user, so that is still alive.
+    return err.code === 'EPERM';
+  }
+}
+
+/** A launch lock left by a killed search-server is not a browser. */
+function clearStaleLock(lock) {
+  let pid = 0;
+  try {
+    pid = Number(fs.readFileSync(lock, 'utf8').trim()) || 0;
+  } catch {
+    // The lock vanished between the EEXIST and this read; that is the answer.
+    return false;
+  }
+  if (pid && !processAlive(pid)) {
+    try { fs.rmSync(lock, { force: true }); } catch { /* another process won the race */ }
+    return true;
+  }
+  if (!pid) {
+    // An empty lock is either an old version's lock or a creator that died between
+    // open and write. Two seconds is longer than that write takes.
+    try {
+      const st = fs.statSync(lock);
+      if (Date.now() - st.mtimeMs > 2000) {
+        fs.rmSync(lock, { force: true });
+        return true;
+      }
+    } catch { /* someone else removed it */ }
+  }
+  return false;
+}
+
 /**
  * The browser the search uses.
  *
@@ -308,18 +348,15 @@ async function ensurePort(cfg, { timeoutMs = 25000 } = {}) {
   let fd = null;
   try {
     fd = fs.openSync(lock, 'wx');
+    try { fs.writeSync(fd, String(process.pid)); } catch { /* the mtime is the fallback */ }
   } catch (err) {
     if (err.code !== 'EEXIST') throw err;
-    // Another session is starting it. Wait for that host rather than racing it.
+    // Another session may be starting it. Wait for that host, unless the lock's
+    // owner is already gone (a search-server killed mid-launch leaves the file).
+    if (clearStaleLock(lock)) return ensurePort(cfg, { timeoutMs });
     const waited = await waitForPort(cfg.host.stateFile, timeoutMs);
     if (waited) return waited;
-    // A lock left by a killed process is not a browser. Age is the only evidence.
-    try {
-      const st = fs.statSync(lock);
-      if (Date.now() - st.mtimeMs > 30000) fs.rmSync(lock, { force: true });
-    } catch { /* someone else removed it */ }
-    const second = await usablePort(cfg.host.stateFile);
-    if (second) return second;
+    if (clearStaleLock(lock)) return ensurePort(cfg, { timeoutMs });
     throw new Error('another Synapse process is starting the browser');
   }
 
