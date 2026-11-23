@@ -9,7 +9,7 @@
 // Nothing comes from app.js: the mode is state, and the waits are config.
 import { state } from './state.js';
 import { $ } from './dom.js';
-import { architectSelection, currentProject } from './run-view.js';
+import { architectSelection, selectionFor, ROLES } from './run-view.js';
 import { settleChatBox } from './chat-geometry.js';
 import { renderKeep } from './run-menu.js';
 
@@ -38,10 +38,15 @@ export function chatBody(projectId) {
   const body = { projectId, permissions: SINGLE_PERMISSIONS };
   const model = architectSelection();
   if (model) body.model = model;
-  // A new project takes the open project's whole role set, not just its Architect:
-  // every project has a team, even while it is in Single mode.
-  const roles = currentProject()?.roles;
-  if (roles && Object.keys(roles).length) body.roles = roles;
+  // A new project takes the open project's whole effective set, not just its
+  // Architect: every project has a team, even while it is in Single mode. Reading
+  // selectionFor fills roles the old project never wrote from the config template.
+  const roles = {};
+  for (const role of ROLES) {
+    const sel = selectionFor(role.id);
+    if (sel.ref) roles[role.id] = { ref: sel.ref, variant: sel.variant };
+  }
+  if (Object.keys(roles).length) body.roles = roles;
   return body;
 }
 

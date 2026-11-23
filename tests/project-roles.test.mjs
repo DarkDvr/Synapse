@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { tmpdir } from './tmpdir.mjs';
-import { readProjectRoles, writeProjectRoles, effectiveRoles, roleModel, rolesPath } from '../src/project-roles.js';
+import { readProjectRoles, writeProjectRoles, effectiveRoles, roleModel, mergeRoles, rolesPath } from '../src/project-roles.js';
 
 const config = {
   roles: {
@@ -59,6 +59,21 @@ test('a malformed file is empty, not a crash', () => {
   fs.writeFileSync(rolesPath(dir), '{ this is not json', 'utf8');
   assert.deepEqual(readProjectRoles(dir), {});
   assert.deepEqual(roleModel({ architect: { ref: '' } }, 'architect'), null);
+});
+
+test('a seed overlays the template without dropping the roles it names', () => {
+  const dir = tmpdir('project-roles-merge-');
+  const template = effectiveRoles(config, dir);
+  const merged = mergeRoles(template, {
+    architect: { ref: 'provider/new-arch', variant: 'low' },
+    'coder-1': { ref: 'provider/new-one' },
+  });
+  assert.equal(merged.architect.ref, 'provider/new-arch');
+  assert.equal(merged.architect.variant, 'low');
+  assert.equal(merged.architect.skills[0], 'visual-review');
+  assert.equal(merged['coder-1'].ref, 'provider/new-one');
+  assert.equal(merged['coder-1'].stallSec, 600);
+  assert.equal(merged['coder-2'].ref, 'provider/two', 'a role outside the seed keeps the template');
 });
 
 test('the Architect’s session model is the migration fallback', () => {

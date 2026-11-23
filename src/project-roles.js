@@ -120,3 +120,21 @@ export function effectiveRoles(config, dir, { architect = null } = {}) {
 export function roleModel(roles, role) {
   return normalizeEntry(roles?.[role]);
 }
+
+/**
+ * Overlay a project/seed set on a full template set.
+ *
+ * The overlay's ref and variant win; the template's other fields (skills,
+ * instructions, timings) survive. A role the overlay does not name keeps the
+ * template's entry, which is what a new project needs when it inherits only part
+ * of a predecessor's set.
+ */
+export function mergeRoles(template, overlay) {
+  const out = {};
+  for (const role of ROLES) {
+    const base = template?.[role] && typeof template[role] === 'object' ? template[role] : {};
+    const own = normalizeEntry(overlay?.[role]);
+    out[role] = own ? { ...base, ...own } : { ...base };
+  }
+  return out;
+}

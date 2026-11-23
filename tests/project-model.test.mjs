@@ -130,3 +130,9 @@ test('a pending model choice breathes until the save returns', () => {
   assert.match(css, /\.model-search\.is-saving/);
   assert.match(css, /@keyframes model-saving/);
 });
+
+test('a new project is given the whole effective set, not only the Architect', () => {
+  const src = fs.readFileSync(new URL('../web/mode.js', import.meta.url), 'utf8');
+  assert.match(src, /for \(const role of ROLES\)/);
+  assert.match(src, /body\.roles = roles/);
+});

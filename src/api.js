@@ -29,7 +29,7 @@ import { loadQueued, putQueued, dropQueued, renameQueuedDir } from './queued-sen
 import { providerApiKey } from './config.js';
 import { configureBrowserAsks } from './browser/ask.js';
 import { browserSettings } from './browser/settings.js';
-import { readProjectRoles, writeProjectRoles, effectiveRoles, roleModel } from './project-roles.js';
+import { readProjectRoles, writeProjectRoles, effectiveRoles, roleModel, mergeRoles } from './project-roles.js';
 import * as windows from './windows.js';
 import { questionSignature, guardDecision, readableAnswer } from './question-loop.js';
 import { setProviderKey, providerKeyState, maskKey } from './secrets.js';
@@ -2216,11 +2216,12 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
         }
         roles = seed || effectiveRoles(config, location);
       }
-      // Snapshot the effective set into the project. A project always owns all its
-      // roles, including the ones it never touched, so a later template change
-      // cannot move a model the operator already sees here.
-      const savedArchitect = roleModel(roles, 'architect');
-      roles = effectiveRoles(config, location, { architect: savedArchitect });
+      // Snapshot the effective set into the project. The seed may come from the
+      // previous project rather than this folder, so overlay it on the template
+      // without asking this empty folder for the values again — that was how a new
+      // project inherited the Architect but dropped every worker back to the
+      // config template (23 Nov).
+      roles = mergeRoles(effectiveRoles(config, location), roles);
       let model = null;
       if (body?.model) {
         const entry = typeof body.model === 'string'
