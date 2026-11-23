@@ -1794,9 +1794,9 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
       // Its context: where it is, what the plan says, and that the plan is not
       // its to touch. The task itself goes in the message that prompts it.
       try {
-        // The core names the roots, and the browser and search tools when the browser
-        // is on; a worker gets the same block the Architect does.
-        await engine.setInstruction(w.id, HARNESS_KEY, harnessCore({ browser: config?.browser?.enabled === true }));
+        // The core names the roots, and the browser and search tools; a worker gets
+        // the same block the Architect does.
+        await engine.setInstruction(w.id, HARNESS_KEY, harnessCore());
         await engine.setInstruction(
           w.id,
           BRIEF_KEY,

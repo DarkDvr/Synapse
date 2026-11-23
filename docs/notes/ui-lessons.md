@@ -650,7 +650,8 @@ run — so they get `Allow Screen` / `Allow Sign-In` and **no Always Allow**.
   Automation, Prohibited, Logging, Check for Updates, About. There is no "Runtime" tab — it
   is **Engine** — and Updates/About are those last two, not extra screens. A tab is a
   *subject*, not a field: Notices held one sound, moved into General, and Automation
-  replaced it. Browser is SynaBrowse: the enable switch, its profile folder, and a Signed
+  replaced it. Browser is SynaBrowse: it ships on, so there is no enable switch and no
+  engine/profile field — a close-after field and a Signed
   In table in the Prohibited table's shape, whose last row *is* the form (an address typed
   in the site column, `Sign In…` in place of "last used"). A row becomes real only after
   the window is closed and the address opened once more, hidden, to confirm it no longer

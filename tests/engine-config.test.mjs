@@ -58,6 +58,7 @@ const written = (dirs) => JSON.parse(fs.readFileSync(path.join(dirs.config, 'ope
   check('the window is declared where the engine reads it', cfg.provider?.local?.models?.qwen?.limit?.context === 60160, JSON.stringify(cfg.provider?.local));
   check('the keep budget survives beside it', cfg.compaction?.keep?.tokens === 6000, JSON.stringify(cfg.compaction));
   check('mcp servers are still registered', Boolean(cfg.mcp?.servers?.['synapse-search']), JSON.stringify(Object.keys(cfg.mcp?.servers || {})));
+  check('SynaBrowse is always registered', Boolean(cfg.mcp?.servers?.['synapse-browser']), JSON.stringify(Object.keys(cfg.mcp?.servers || {})));
 }
 
 // A provider model's limit must carry BOTH numbers.

@@ -17,16 +17,17 @@ const PROTOCOL_VERSION = '2024-11-05';
 // Shown to the model once, when it connects. The common mistake is webfetch against a
 // search engine: DuckDuckGo and Google answer a scripted fetch with a bot check, not
 // results, and the model then reports that it found nothing.
-const SEARCH_HELP = `web_search finds pages; use it first. webfetch reads one URL you already have, not a search engine: DuckDuckGo and Google block scripted fetches and answer with a bot check. For a page that needs JavaScript, a signed-in session or a download, use SynaBrowse. web_search falls back to SynaBrowse automatically when the HTTP search engines are blocked.`;
+const SEARCH_HELP = `web_search finds pages; use it first. webfetch reads one URL you already have, not a search engine: DuckDuckGo and Google block scripted fetches and answer with a bot check. For a page that needs JavaScript, a signed-in session or a download, use SynaBrowse. web_search tries its engines itself; do not repeat a query that reports every path was blocked — rephrase it or ask the operator.`;
 
 const TOOL = {
   name: 'websearch',
   description:
     'Search the web and return the top results with titles, URLs and snippets. ' +
-    'Works without any API key. When SynaBrowse is already running, auto uses it ' +
-    'first; otherwise it tries DuckDuckGo and Bing, and falls back to SynaBrowse ' +
-    'when they are blocked. Use this for current facts, versions, documentation ' +
-    'and anything you cannot read from the local filesystem. Follow up with ' +
+    'Works without any API key. The tool chooses the fastest path itself: a warm ' +
+    'SynaBrowse first, then DuckDuckGo and Bing, then SynaBrowse again. Use this for ' +
+    'current facts, versions, documentation and anything you cannot read from the local ' +
+    'filesystem. If it reports that every path was blocked, the engines were all tried — ' +
+    'rephrase the query or ask the operator; do not repeat it unchanged. Follow up with ' +
     'webfetch on a result that matters.',
   inputSchema: {
     type: 'object',
@@ -37,13 +38,6 @@ const TOOL = {
         description: 'How many results to return (1-10, default 5).',
         minimum: 1,
         maximum: 10,
-      },
-      engine: {
-        type: 'string',
-        enum: ['auto', 'http', 'browser'],
-        description:
-          'auto (default) uses a warm SynaBrowse first, then DuckDuckGo and Bing ' +
-          'over HTTP, then SynaBrowse; http never uses the browser; browser forces SynaBrowse.',
       },
     },
     required: ['query'],
@@ -129,9 +123,8 @@ async function handle(msg) {
       }
       if (name !== TOOL.name) return toolText(id, `Unknown tool: ${name}`, true);
       const limit = Math.min(10, Math.max(1, Number(args.limit) || 5));
-      const engine = ['auto', 'http', 'browser'].includes(args.engine) ? args.engine : 'auto';
       try {
-        const found = await webSearch(args.query, { limit, engine });
+        const found = await webSearch(args.query, { limit });
         process.stderr.write(
           `search "${String(args.query).slice(0, 80)}" -> ${found.results.length} via ${found.engine} ` +
             `in ${found.elapsedMs}ms${found.cached ? ' (cached)' : ''}\n`,

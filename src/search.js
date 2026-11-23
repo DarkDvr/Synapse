@@ -40,6 +40,22 @@ const inflight = new Map();
 const cooldown = new Map(); // engine id -> don't ask again until
 const lastRequestAt = new Map(); // engine id -> when its last request started
 
+/**
+ * One search at a time per search-server process.
+ *
+ * Models fire tool calls in parallel, and a burst is exactly what trips a search
+ * engine's rate limit. The queue is the answer that does not depend on the model
+ * behaving: five searches take five short turns, not five simultaneous tabs. The
+ * engine has a 15 s ceiling of its own, so even a bad run stays under a minute or
+ * so rather than several minutes.
+ */
+let searchQueue = Promise.resolve();
+function enqueue(task) {
+  const run = searchQueue.then(task, task);
+  searchQueue = run.catch(() => { /* a failed search must not poison the queue */ });
+  return run;
+}
+
 const ENTITIES = {
   '&amp;': '&', '&quot;': '"', '&#x27;': "'", '&#39;': "'",
   '&lt;': '<', '&gt;': '>', '&nbsp;': ' ', '&hellip;': '…',
@@ -320,7 +336,7 @@ export async function webSearch(query, {
   }
   if (inflight.has(key) && !wantBrowser) return inflight.get(key);
 
-  const run = (async () => {
+  const run = enqueue(async () => {
     const began = Date.now();
     const attempts = [];
     const canBrowser = engine === 'auto' || engine === 'browser';
@@ -399,7 +415,7 @@ export async function webSearch(query, {
       ? attempts.map((a) => `${a.engine}: ${a.reason}`).join('; ')
       : 'no engine was available';
     throw new SearchError(said, { attempts });
-  })();
+  });
 
   if (!wantBrowser) inflight.set(key, run);
   try {

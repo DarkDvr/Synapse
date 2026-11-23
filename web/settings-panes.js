@@ -610,10 +610,11 @@ function settingsUpdates() {
     </section>`;
 }
 
-// SynaBrowse: the browser the harness owns. Off until the operator says so — the tools
-// can act as them — and fenced by a list of hosts. The sign-in row is the one control
-// here that does something immediately instead of at Save: it puts that browser on the
-// second monitor so a person can log in, which is the only part a person must do.
+// SynaBrowse: the browser the harness owns. It ships with Synapse, so there is no
+// enable switch and no second browser to choose — only how long it stays open and
+// which sites have a session. The sign-in row is the one control here that does
+// something immediately instead of at Save: it puts that browser on the second
+// monitor so a person can log in, which is the only part a person must do.
 // "2 days ago" for the Sites table: an age, because how long a session lasts is the
 // site's decision and a countdown would be a number the harness invented.
 function ago(at) {
@@ -646,19 +647,7 @@ function settingsBrowser(c) {
   return [
     setGroup(
       'SynaBrowse',
-      `<label class="set-check" title="A browser the harness owns, with its own profile. Off means the tools do not exist for a model at all.">` +
-        `<input data-path="browser.enabled" type="checkbox" ${c.browser?.enabled !== false ? 'checked' : ''} />` +
-        `<span>Let models browse with SynaBrowse</span></label>` +
-        setSelect(c, 'Browser engine', 'browser.engine', [
-          { v: 'webview2', l: 'WebView2 (built in)' },
-          { v: 'edge', l: 'Edge (fallback)' },
-        ], {
-          hint: 'WebView2 is the app’s own off-screen browser, with no browser chrome and no downloads panel. Edge is the old hidden-desktop fallback.',
-        }) +
-        setField(c, 'Profile folder (blank = data\\browser\\webview2)', 'browser.webview2Profile', {
-          wide: true,
-          hint: 'Where the WebView2 browser keeps its own cookies and logins. Never the operator’s Edge profile, and never Brave. Blank uses data\\browser\\webview2. The Edge fallback uses browser.profile.',
-        }) +
+      `<p class="set-note">SynaBrowse ships with Synapse and is always available to models. There is no switch and no second browser to choose; when a site needs a sign-in, the model asks and you approve it here.</p>` +
         setField(c, 'Close the browser after (minutes with no browsing)', 'browser.idleMinutes', {
           type: 'number',
           value: c.browser?.idleMinutes ?? 5,
@@ -666,7 +655,7 @@ function settingsBrowser(c) {
           hint: 'The browser is about 300 MB of RAM. After this long with no tool call it is closed; the profile keeps every sign-in, so the next call starts it again. 1 to 60 minutes.',
         }),
       undefined,
-      'A browser the harness owns, on its own profile. One switch, one profile, one session per site — no host list to maintain.',
+      'A browser the harness owns, on its own profile. One browser, one profile, one session per site — no host list to maintain.',
     ),
     setGroup(
       'Signed In',

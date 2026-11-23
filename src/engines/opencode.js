@@ -252,16 +252,13 @@ export class OpenCodeEngine extends Engine {
       codemode: false,
     };
 
-    // SynaBrowse: the harness's own browser, hidden until a human is needed. Only
-    // registered when the operator has switched it on — the tools can act as them, so
-    // the absence of the switch is the off state rather than a tool that refuses.
-    if (this.whole?.browser?.enabled) {
-      servers['synapse-browser'] = {
-        type: 'local',
-        command: [process.execPath, BROWSER_SERVER],
-        codemode: false,
-      };
-    }
+    // SynaBrowse: the harness's own browser. It ships with the app and is not a
+    // switch: every session gets it, so a model never has to ask whether it exists.
+    servers['synapse-browser'] = {
+      type: 'local',
+      command: [process.execPath, BROWSER_SERVER],
+      codemode: false,
+    };
 
     const legacyMcp = { ...(cfg.mcp || {}) };
     delete legacyMcp['synapse-search'];

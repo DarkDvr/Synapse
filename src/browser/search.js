@@ -258,7 +258,7 @@ async function usablePort(stateFile) {
 export async function browserSearchReady() {
   try {
     const cfg = browserSettings();
-    if (!cfg.enabled || !cfg.searchBrowser || cfg.engine !== 'webview2' || !cfg.host?.stateFile) return false;
+    if (cfg.engine !== 'webview2' || !cfg.host?.stateFile) return false;
     return Boolean(await usablePort(cfg.host.stateFile));
   } catch {
     // The question is "is it ready?", and an unreadable config means no.
@@ -327,10 +327,8 @@ function clearStaleLock(lock) {
  * tool may be using.
  */
 async function ensurePort(cfg, { timeoutMs = 25000 } = {}) {
-  if (!cfg.enabled) throw new Error('SynaBrowse is switched off');
-  if (!cfg.searchBrowser) throw new Error('the search browser fallback is switched off');
   if (cfg.engine !== 'webview2') {
-    throw new Error('browser search needs the WebView2 engine; the Edge fallback is for browsing only');
+    throw new Error('browser search needs the WebView2 host; the Edge path is a test fallback only');
   }
   if (!cfg.host?.exe) throw new Error('the WebView2 browser host is not built');
 

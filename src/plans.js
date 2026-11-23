@@ -91,29 +91,25 @@ export const HARNESS_KEY = 'synapse.harness';
  * judged. `$PWD` is the per-project root; SYNAPSE_PROJECT is deliberately absent —
  * one engine serves every project, so a global project variable would be wrong.
  *
- * With the browser switched on it also names the browser and search tools, because
- * those names are the one thing a model cannot infer: the engine prefixes an MCP
- * server's tools with its key (`synapse-browser_open`), and the bare `websearch` is
- * not a tool at all. A brief that named `open` cost a Single chat nine guessed URLs
- * on 17 Nov. Switched off, the tools are absent, so the paragraph is absent too.
+ * It also names the browser and search tools, because those names are the one thing
+ * a model cannot infer: the engine prefixes an MCP server's tools with its key
+ * (`synapse-browser_open`), and the bare `websearch` is not a tool at all. A brief
+ * that named `open` cost a Single chat nine guessed URLs on 17 Nov. SynaBrowse ships
+ * with the app, so these lines are always present.
  */
-export function harnessCore({ browser = false } = {}) {
+export function harnessCore() {
   const harness = process.env.SYNAPSE_HARNESS || ROOT;
   const projects = process.env.SYNAPSE_PROJECTS_ROOT || PROJECTS_ROOT;
   const lines = [
     `Harness roots: SYNAPSE_HARNESS=${harness}; SYNAPSE_PROJECTS_ROOT=${projects}.`,
     `The project root is $PWD (PowerShell) or %CD% (cmd). A relative path in a shell command is resolved from the working directory, not from a script's own folder. For a script's output folder, use an absolute path inside the project — for example, "$PWD\\bin".`,
     `Scratch is ${PLAN_DIR}/scratch, nowhere else. If a command needs a temp directory, set it there: $env:TEMP = "$PWD/${PLAN_DIR}/scratch/temp".`,
+    'Browser: `synapse-browser_open`, `_snapshot`, `_click` reach pages `webfetch` cannot ' +
+      '(signed in, bot check, drawn by script). After open, call `_snapshot` and click by the `ref` ' +
+      'it gives you — do not guess coordinates. A 404 from a fetch is a guessed path, not a wall: open the ' +
+      'site and follow its links.',
+    'Search: `synapse-search_websearch`; `synapse-search_webfetch` fetches a page. A bare `websearch` does not exist.',
   ];
-  if (browser) {
-    lines.push(
-      'Browser: `synapse-browser_open`, `_snapshot`, `_click` reach pages `webfetch` cannot ' +
-        '(signed in, bot check, drawn by script). After open, call `_snapshot` and click by the `ref` ' +
-        'it gives you — do not guess coordinates. A 404 from a fetch is a guessed path, not a wall: open the ' +
-        'site and follow its links.',
-      'Search: `synapse-search_websearch`; `synapse-search_webfetch` fetches a page. A bare `websearch` does not exist.',
-    );
-  }
   return lines.join('\n');
 }
 

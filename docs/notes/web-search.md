@@ -18,17 +18,16 @@ minutes, and the next path gets the query.
 
 ## The order
 
-1. **A warm SynaBrowse** — if its WebView2 host is already running, no hand-off
-   window is visible, and the browser is switched on. Measured in the live test:
-   about **1 s** for ten result cards. It cannot be HTTP-202'd because it is the
-   real page with a real profile.
+1. **A warm SynaBrowse** — if its WebView2 host is already running and no hand-off
+   window is visible. Measured in the live test: about **1 s** for ten result cards.
+   It cannot be HTTP-202'd because it is the real page with a real profile.
 2. **DuckDuckGo HTML**, then **Lite** — about 0.7–1.3 s when it is not blocked.
 3. **Bing HTML** — a second index; about 1–2 s when it answers.
 4. **A cold SynaBrowse** — only after the HTTP engines are walled. A simple query
    does not pay for a browser launch nobody needed.
 
-`engine: "http"` skips the browser. `engine: "browser"` forces SynaBrowse and is
-the live test's deterministic path. `auto` is the default.
+`auto` is the only path a model sees. Engine selection is a harness decision; the tool
+schema has no engine argument.
 
 ## How the browser search works
 
@@ -48,8 +47,10 @@ fixed extraction expression.
   process name.
 - The host is left running for the browser server or the next search. Search never
   stops a browser another tool may be using.
-- `browser.searchBrowser: false` turns the fallback off without switching SynaBrowse
-  off for browsing.
+- `src/search.js` holds a **serial queue**: two model searches never open two tabs at
+  once. A burst becomes a short line of searches instead of a rate-limit trigger. The
+  per-search ceiling is 15 s, so even a queue of a few queries is measured in seconds,
+  not minutes.
 
 The engine order inside the browser is DuckDuckGo rendered → DuckDuckGo Lite → Bing.
 Each gets a few seconds; the total stays under the tool's timeout.
@@ -67,9 +68,9 @@ Each gets a few seconds; the total stays under the tool's timeout.
 
 ## What still does not work
 
-- **Edge as the engine** cannot drive the search fallback yet. The WebView2 host is
-  the one that has a state file and a port the search can attach to; with
-  `browser.engine: "edge"` the HTTP engines are the whole stack.
+- **The Edge test fallback** cannot drive the search fallback. The WebView2 host is
+  the one that has a state file and a port the search can attach to; the Edge path
+  exists only for the suite and uses a fixed test profile.
 - A search engine can still decide a browser is a bot. The next engine is the answer;
   the tool reports the wall rather than pretending it found nothing.
 - `webfetch` is still the reader for public pages; a Reddit page that refuses an
@@ -80,9 +81,9 @@ Each gets a few seconds; the total stays under the tool's timeout.
 
 | | |
 |---|---|
-| `src/search.js` | the HTTP engines, 202 detection, cooldown, cache, browser-first decision |
+| `src/search.js` | the HTTP engines, 202 detection, cooldown, cache, queue, browser-first decision |
 | `src/browser/search.js` | the new-tab browser search, extraction, lock and host lifecycle |
-| `src/browser/settings.js` | the one reader of `browser` config, shared with the browser server |
+| `src/browser/settings.js` | the one reader of the browser profile and idle minutes, shared with the browser server |
 | `src/mcp/search-server.js` | the model's tool: schema, formatting, error text |
-| `tests/search.test.mjs` | 202/challenge fixtures, cooldown, cache, browser-first, fallback |
-| `tests/browser-search.test.mjs` | redirect decoding, result normalization, engine order, off switch |
+| `tests/search.test.mjs` | 202/challenge fixtures, cooldown, cache, queue, browser-first, fallback |
+| `tests/browser-search.test.mjs` | redirect decoding, result normalization, engine order |

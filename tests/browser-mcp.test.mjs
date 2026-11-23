@@ -90,10 +90,16 @@ test('the server answers the protocol and its tools work on a local page', async
   });
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   const origin = `http://127.0.0.1:${server.address().port}`;
-  fs.writeFileSync(config, JSON.stringify({ browser: { enabled: true, engine: 'edge', profile, allow: ['127.0.0.1'] } }));
+  fs.writeFileSync(config, JSON.stringify({ browser: {} }));
 
   const child = spawn(process.execPath, [SERVER], {
-    env: { ...process.env, SYNAPSE_BROWSER_CONFIG: config, SYNAPSE_BROWSER_HIDDEN_DESKTOP: '0' },
+    env: {
+      ...process.env,
+      SYNAPSE_BROWSER_CONFIG: config,
+      SYNAPSE_BROWSER_ENGINE: 'edge',
+      SYNAPSE_BROWSER_EDGE_PROFILE: profile,
+      SYNAPSE_BROWSER_HIDDEN_DESKTOP: '0',
+    },
     stdio: ['pipe', 'pipe', 'pipe'],
   });
   const rpc = speak(child);
@@ -139,9 +145,9 @@ test('the server answers the protocol and its tools work on a local page', async
     assert.match(shot.result.content[0].text, /cite it exactly as !\[\]\(/, 'the answer must give a path the chat can render');
     assert.match(shot.result.content[0].text, /shot-\d/, 'the answer names the file');
 
-    // The fence is the switch, not a host list — and a `file:` page is allowed only for a
-    // file inside the projects folder. The engine binary is outside it, so this is refused
-    // with the sentence that says where a local page may live (14 Nov).
+    // The fence is the browser itself, not a host list — and a `file:` page is allowed
+    // only for a file inside the projects folder. The engine binary is outside it, so
+    // this is refused with the sentence that says where a local page may live (14 Nov).
     const blocked = await rpc.call('tools/call', { name: 'open', arguments: { url: `file:///${process.execPath.replace(/\\/g, '/')}` } });
     assert.equal(blocked.result.isError, true, 'a file:// address outside the projects was accepted');
     assert.match(blocked.result.content[0].text, /inside the projects folder/);
@@ -151,31 +157,6 @@ test('the server answers the protocol and its tools work on a local page', async
   } finally {
     try { child.kill(); } catch { /* gone */ }
     await new Promise((resolve) => server.close(resolve));
-    try { fs.rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 }); } catch { /* swept at exit */ }
-  }
-});
-
-test('the server refuses everything when it is switched off', async (t) => {
-  const edge = findEdge();
-  if (!edge) {
-    t.skip('no Edge on this machine');
-    return;
-  }
-  const dir = tmpdir('synabrowse-off-');
-  const config = path.join(dir, 'config.json');
-  fs.writeFileSync(config, JSON.stringify({ browser: { enabled: false, allow: ['*'] } }));
-  const child = spawn(process.execPath, [SERVER], {
-    env: { ...process.env, SYNAPSE_BROWSER_CONFIG: config, SYNAPSE_BROWSER_HIDDEN_DESKTOP: '0' },
-    stdio: ['pipe', 'pipe', 'pipe'],
-  });
-  const rpc = speak(child);
-  try {
-    await rpc.call('initialize', {});
-    const call = await rpc.call('tools/call', { name: 'open', arguments: { url: 'https://example.com/' } });
-    assert.equal(call.result.isError, true);
-    assert.match(call.result.content[0].text, /switched off/);
-  } finally {
-    try { child.kill(); } catch { /* gone */ }
     try { fs.rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 }); } catch { /* swept at exit */ }
   }
 });
@@ -204,7 +185,7 @@ test('a project server writes inside the project, anything else in the harness',
 test('the server does not keep the project folder locked', async () => {
   const dir = tmpdir('synabrowse-cwd-');
   const config = path.join(dir, 'config.json');
-  fs.writeFileSync(config, JSON.stringify({ browser: { enabled: false } }));
+  fs.writeFileSync(config, JSON.stringify({ browser: {} }));
   const child = spawn(process.execPath, [SERVER], {
     cwd: dir,
     env: { ...process.env, SYNAPSE_BROWSER_CONFIG: config, SYNAPSE_BROWSER_HIDDEN_DESKTOP: '0' },

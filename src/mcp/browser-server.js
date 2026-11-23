@@ -286,10 +286,9 @@ async function handle(msg) {
       // how the next one is found instead of guessed at.
       timing = { name, began: Date.now() };
       try {
-        if (!cfg.enabled) {
-          return toolText(id, 'SynaBrowse is switched off. The operator turns it on in Settings > Browser.', true);
+        if (cfg.engine === 'edge' && !findEdge()) {
+          return toolText(id, 'There is no Edge on this machine, so the Edge test fallback cannot run.', true);
         }
-        if (!findEdge()) return toolText(id, 'There is no Edge on this machine, so SynaBrowse cannot run.', true);
 
         switch (name) {
           case 'open': {
@@ -807,5 +806,5 @@ process.stdin.on('data', (chunk) => {
 process.stdin.on('end', () => {
   Promise.allSettled([browser.stop(), handoffBrowser?.stop?.()]).finally(() => process.exit(0));
 });
-process.stderr.write(`synapse-browser MCP ready (enabled=${cfg.enabled}, profile=${cfg.profile})\n`);
+process.stderr.write(`synapse-browser MCP ready (profile=${cfg.profile})\n`);
 

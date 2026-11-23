@@ -37,8 +37,8 @@ It does not merely fail; it destroys. That was paid for once, on 2 Nov.
 
 ## The route we took
 
-**SynaBrowse**: the harness's own hidden Edge with its own profile
-(`data\browser\profile`). A site is signed into once, by the operator, in a window the
+**SynaBrowse**: the harness's own WebView2 browser with its own profile
+(`data\browser\webview2`). A site is signed into once, by the operator, in a window the
 `handoff` tool puts on their monitor; the profile keeps the session for every later
 run. No cookie is read, copied or exported — the browser already has it, and the page
 is read through the browser. `docs/notes/browser.md` is the reference;

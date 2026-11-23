@@ -6,6 +6,7 @@
 // hit, and the reason a wall is no longer reported as "no results".
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import {
   webSearch,
   formatResults,
@@ -193,4 +194,30 @@ test('SearchBlocked is an answer, not a network error', () => {
   const err = new SearchBlocked('DuckDuckGo: the anti-bot page (HTTP 202)', { status: 202 });
   assert.equal(err.blocked, true);
   assert.equal(err.status, 202);
+});
+
+test('two searches never run at once', async () => {
+  let active = 0;
+  let most = 0;
+  const fetchImpl = async () => {
+    active += 1;
+    most = Math.max(most, active);
+    await new Promise((r) => setTimeout(r, 40));
+    active -= 1;
+    return new Response(DDG_OK, { status: 200, headers: { 'content-type': 'text/html' } });
+  };
+  const [a, b] = await Promise.all([
+    webSearch('queue one', { fetchImpl, browserFallback: false, timeoutMs: 2000 }),
+    webSearch('queue two', { fetchImpl, browserFallback: false, timeoutMs: 2000 }),
+  ]);
+  assert.equal(a.results.length, 1);
+  assert.equal(b.results.length, 1);
+  assert.equal(most, 1, 'the two searches overlapped');
+});
+
+test('the model is offered no engine choice', () => {
+  const src = fs.readFileSync(new URL('../src/mcp/search-server.js', import.meta.url), 'utf8');
+  assert.doesNotMatch(src, /name: 'engine'/);
+  assert.match(src, /do not repeat it unchanged/);
+  assert.match(src, /do not repeat a query that reports every path was blocked/);
 });

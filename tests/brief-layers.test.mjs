@@ -102,7 +102,7 @@ test('a bare role brief stays within its regression guard', () => {
 // project's own facts.
 test('the harness core is small, and says where the project root is', () => {
   const core = harnessCore();
-  assert.ok(core.length < 700, `the core is ${core.length} characters`);
+  assert.ok(core.length < 1200, `the core is ${core.length} characters`);
   assert.match(core, /SYNAPSE_HARNESS=/);
   assert.match(core, /SYNAPSE_PROJECTS_ROOT=/);
   assert.match(core, /\.project\/scratch/);
@@ -148,19 +148,14 @@ test('the Architect is given the delegate tool’s exact name', () => {
 // but the engine prefixes a server's tools with its key, so the model's list holds
 // `synapse-browser_open`. The model could not have called what the brief named, and it
 // fell back to guessing URLs with webfetch (17 Nov). The names now live in the harness
-// core — one block, every role — and only while the browser is switched on.
-test('the browser and search tools are named in the core, and only while the browser is on', () => {
-  const off = harnessCore();
-  assert.doesNotMatch(off, /synapse-browser_/, 'a browser tool is named while the browser is off');
-  assert.doesNotMatch(off, /synapse-search_/, 'a search tool is named while the browser is off');
-  const on = harnessCore({ browser: true });
-  assert.match(on, /`synapse-browser_open`/, 'the browser tools lost their prefix');
-  assert.match(on, /`synapse-search_websearch`/, 'the search tool lost its prefix');
-  assert.match(on, /bare `websearch` does not exist/, 'the name that is not a tool is not called out');
-  assert.doesNotMatch(on, /`open`, `read`/, 'the core names bare tools again');
-  assert.ok(on.length < 1200, `the core with the browser is ${on.length} characters`);
-  // One block, not a second copy in every role's brief.
-  assert.doesNotMatch(briefSession({ dir: 'F:/dev/Synapse.Projects/__no_such_project__', role: 'coder-1' }), /synapse-browser_/);
+// core — one block, every role — because SynaBrowse ships with Synapse and is always on.
+test('the browser and search tools are named in the core', () => {
+  const core = harnessCore();
+  assert.match(core, /`synapse-browser_open`/, 'the browser tools lost their prefix');
+  assert.match(core, /`synapse-search_websearch`/, 'the search tool lost its prefix');
+  assert.match(core, /bare `websearch` does not exist/, 'the name that is not a tool is not called out');
+  assert.doesNotMatch(core, /`open`, `read`/, 'the core names bare tools again');
+  assert.ok(core.length < 1200, `the core is ${core.length} characters`);
 });
 
 test('the server exports two roots to shells and keeps its own temp out of the projects', () => {

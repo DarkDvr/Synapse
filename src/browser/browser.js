@@ -3,8 +3,8 @@
 // The default engine is the WebView2 host (`shell/SynaBrowseHost`): a separate WPF process
 // hosting the app's own Chromium runtime, off-screen, with no browser chrome. `createBrowser`
 // in host mode launches it, attaches CDP and agent-browser, and reads its download JSONL.
-// The Edge path below — its own profile, a Windows desktop of its own — is the fallback
-// (`browser.engine: "edge"`) and is still the code that ran before 1.77.0.
+// The Edge path below — its own profile, a Windows desktop of its own — is kept only for
+// the suite (`SYNAPSE_BROWSER_ENGINE=edge`), not as an operator choice.
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';

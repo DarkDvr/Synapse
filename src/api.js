@@ -15,7 +15,7 @@ import { keepAttachments } from './keep-attachments.js';
 import { skillRules, describeSkills } from './skills.js';
 import { rulesFor, decide, resolvePath, refusalNote, SINGLE_RULES } from './permissions.js';
 import { stopTargets, createStopper } from './stop.js';
-import { PROJECTS_ROOT, SKILLS_DIR, ROOT, scratchDir, normDir, BROWSER_DIR, WEB_DIR } from './paths.js';
+import { PROJECTS_ROOT, SKILLS_DIR, ROOT, scratchDir, normDir, WEB_DIR } from './paths.js';
 import { EV } from '../web/events.js';
 import { fail, refuseBusy } from './errors.js';
 import { createTurnGuard } from './turn-guard.js';
@@ -28,6 +28,7 @@ import { localServer } from './local-lease.js';
 import { loadQueued, putQueued, dropQueued, renameQueuedDir } from './queued-sends.js';
 import { providerApiKey } from './config.js';
 import { configureBrowserAsks } from './browser/ask.js';
+import { browserSettings } from './browser/settings.js';
 import * as windows from './windows.js';
 import { questionSignature, guardDecision, readableAnswer } from './question-loop.js';
 import { setProviderKey, providerKeyState, maskKey } from './secrets.js';
@@ -524,7 +525,7 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
       // The core carries the harness roots and — when the browser is on — the browser
       // and search tool names. It is the same block for every role, so it is set once
       // per session and only written again when its text changes.
-      const core = harnessCore({ browser: getConfig()?.browser?.enabled === true });
+      const core = harnessCore();
       if (briefedCore.get(sessionId) !== core) {
         await engine.setInstruction(sessionId, HARNESS_KEY, core);
         briefedCore.set(sessionId, core);
@@ -900,15 +901,13 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
   // The site is recorded when the operator *closes* that window — their own "done" — and
   // the page is told, because the previous version left them guessing whether the login
   // had been kept (11 Nov).
-  // The sign-in window is always a visible browser on the configured engine. For WebView2
-  // it is the same off-screen host as a hand-off, but with its window shown; a model's
-  // off-screen host on the same profile is stopped first, because a profile opens once.
+  // The sign-in window is always a visible browser on the WebView2 host. It is the same
+  // off-screen host as a hand-off, but with its window shown; a model's off-screen host
+  // on the same profile is stopped first, because a profile opens once.
   async function openSignInBrowser() {
-    const cfg = getConfig();
-    const engine = cfg.browser?.engine === 'edge' ? 'edge' : 'webview2';
-    const profile = engine === 'webview2'
-      ? String(cfg.browser?.webview2Profile || '').trim() || path.join(BROWSER_DIR, 'webview2')
-      : String(cfg.browser?.profile || '').trim() || path.join(BROWSER_DIR, 'profile');
+    const settings = browserSettings();
+    const engine = settings.engine;
+    const profile = settings.profile;
     const { createBrowser } = await import('./browser/browser.js');
     let host = null;
     if (engine === 'webview2') {
@@ -1150,10 +1149,9 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
     const key = String(host || '').trim().toLowerCase();
     if (!key) return { ok: false, error: 'there is no site to forget' };
     const cfg = getConfig();
-    const engine = cfg.browser?.engine === 'edge' ? 'edge' : 'webview2';
-    const profile = engine === 'webview2'
-      ? String(cfg.browser?.webview2Profile || '').trim() || path.join(BROWSER_DIR, 'webview2')
-      : String(cfg.browser?.profile || '').trim() || path.join(BROWSER_DIR, 'profile');
+    const settings = browserSettings();
+    const engine = settings.engine;
+    const profile = settings.profile;
     const { forgetSite } = await import('./browser/sites.js');
     const next = { ...cfg, browser: { ...cfg.browser, sites: forgetSite(cfg.browser?.sites, key) } };
     applyConfig(next);

@@ -122,12 +122,9 @@ export const DEFAULTS = {
   },
   browser: {
     // SynaBrowse: a browser the harness owns, with its own profile under
-    // data\browser\profile. Off by default — it can act as the operator, so it is
-    // switched on deliberately. `profile` empty means the default under data\.
+    // data\browser\webview2. It ships with the app and has no enabled switch.
     // `sites` is a record, not a permission: the hosts the operator has signed into,
     // written by the sign-in flow only (src/browser/sites.js).
-    enabled: true,
-    profile: '',
     sites: [],
     // Close the browser after this many minutes with no tool call: it is ~300 MB of RAM,
     // and a run that browsed once must not keep paying for it. The profile keeps the
@@ -365,9 +362,15 @@ export function normalize(raw) {
   cfg.tools.resetOnBoot = cfg.tools.resetOnBoot !== false;
   // SynaBrowse. `sites` is a record of the hosts the operator signed into, written by
   // the sign-in flow; it is normalised here so a hand-edited file cannot break the table.
+  // The old enable switch, browser-engine and profile keys are retired: SynaBrowse
+  // ships with the app and is the only browser, so they are removed rather than kept
+  // as hidden settings.
   cfg.browser = isPlainObject(cfg.browser) ? cfg.browser : {};
-  cfg.browser.enabled = cfg.browser.enabled === true;
-  cfg.browser.profile = String(cfg.browser.profile || '').trim();
+  delete cfg.browser.enabled;
+  delete cfg.browser.engine;
+  delete cfg.browser.profile;
+  delete cfg.browser.webview2Profile;
+  delete cfg.browser.searchBrowser;
   cfg.browser.sites = normalizeSites(cfg.browser.sites);
   cfg.browser.idleMinutes = Math.min(60, Math.max(1, Number(cfg.browser.idleMinutes) || DEFAULTS.browser.idleMinutes));
   delete cfg.browser.allow;

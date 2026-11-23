@@ -6,11 +6,7 @@
 // check happens in the search_lab project; these cases keep the pure logic honest.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import fs from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
 import {
-  browserSearch,
   normalizeBrowserResults,
   decodeDdgRedirect,
   decodeBingRedirect,
@@ -61,19 +57,4 @@ test('the page order is DuckDuckGo, Lite, then Bing', () => {
   assert.match(BROWSER_ENGINES[0].extract(3), /result-title-a/);
   assert.match(BROWSER_ENGINES[0].extract(3), /data-result="snippet"/);
   assert.match(BROWSER_ENGINES[2].extract(3), /b_algo/);
-});
-
-test('browser search refuses when SynaBrowse is switched off', async () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'synapse-search-browser-'));
-  const config = path.join(dir, 'config.json');
-  fs.writeFileSync(config, JSON.stringify({ browser: { enabled: false } }));
-  const previous = process.env.SYNAPSE_BROWSER_CONFIG;
-  process.env.SYNAPSE_BROWSER_CONFIG = config;
-  try {
-    await assert.rejects(() => browserSearch('anything'), /switched off/);
-  } finally {
-    if (previous === undefined) delete process.env.SYNAPSE_BROWSER_CONFIG;
-    else process.env.SYNAPSE_BROWSER_CONFIG = previous;
-    fs.rmSync(dir, { recursive: true, force: true });
-  }
 });

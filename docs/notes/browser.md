@@ -2,8 +2,9 @@
 
 A browser Synapse owns, on its own profile, driven over the Chrome DevTools Protocol.
 Models get it as a set of tools; the operator sees one window, only when a person is
-genuinely needed. Since **1.77.0** the default engine is a WebView2 host, off-screen;
-Edge with its hidden desktop remains the fallback (`browser.engine: "edge"`).
+genuinely needed. It is not an option: SynaBrowse ships with Synapse, and the WebView2
+host is always the browser. Edge with its hidden desktop is kept only as a test fallback
+behind `SYNAPSE_BROWSER_ENGINE=edge`, never as an operator choice.
 `web_search` also uses this browser, in a new tab, when the HTTP engines are blocked —
 see `docs/notes/web-search.md`.
 
@@ -40,8 +41,9 @@ browser chrome: no downloads panel, no first-run or crash bubbles, no Edge taskb
 - **The profile is `data\browser\webview2`**. A fresh profile is a guest on Nexus: one
   visible sign-in (Settings → Browser, or a model hand-off) seeds it, then the `sites`
   table and the profile keep it. The Edge profile is not shared.
-- **Edge is the fallback**: `browser.engine: "edge"` uses the old hidden-desktop path and
-  `data\browser\profile`. The two are one browser at a time, never both.
+- **Edge is a test fallback only**: `SYNAPSE_BROWSER_ENGINE=edge` uses the old
+  hidden-desktop path and `data\browser\profile`, so the suite can drive a browser on a
+  machine with no WebView2 host. The two are one browser at a time, never both.
 - **The hidden desktop is a .NET dead end**: WPF, WinForms and even a bare .NET console
   all exit `0xC0000142` on a `CreateDesktop` desktop here; Edge (native) runs there. The
   WebView2 host therefore uses the off-screen window. A native C++ WebView2 host would be
@@ -124,9 +126,8 @@ says.
 
 The model sees them namespaced — `synapse-browser_open` — because the engine prefixes a
 server's tools with its key. The names travel in `synapse.harness`, one copy for every
-role, and only while the browser is switched on: a brief that says `open` sends the
-model to a tool that does not exist (17 Nov, a Single chat that then guessed nine URLs
-with `webfetch`).
+role, always: a brief that says `open` sends the model to a tool that does not exist
+(17 Nov, a Single chat that then guessed nine URLs with `webfetch`).
 
 - `read` answers the page as a person reads it — headings and text, plus the links and
   **controls** (buttons, tabs, menu items, anything that draws a pointer) with the
@@ -159,9 +160,9 @@ with `webfetch`).
 - Every call is timed to stderr and always answers; an error with no message says "the
   browser did not say why".
 
-The page must be an http(s) address or a local `.html` mock (below). Registered in the
-engine's isolated config only when `browser.enabled` is true — the off state is the
-*absence* of the tools, not a tool that refuses.
+The page must be an http(s) address or a local `.html` mock (below). The server is
+registered in the engine's isolated config at every start; there is no off state and no
+tool that refuses because a switch is off.
 
 ## The hand-off is a permission
 
@@ -497,19 +498,17 @@ and the next `read` sat on a half-open socket for seven minutes (11 Nov).
 "SynaBrowse is on and the model says there is no such tool" is almost always one thing:
 **the engine registers its MCP servers when it starts**, from
 `data\engine\opencode\config\opencode\opencode.json`, which is written at boot from the
-harness's config. Flipping the switch while Synapse runs writes
-`config\synapse.config.json` and nothing the engine can see until it starts again.
+harness's config. SynaBrowse is always registered now, but an engine that was already
+running from an older build has not seen it yet.
 
-- the switch says so: `browser.enabled` and `browser.profile` are in `restartNeeded()`,
-  so Settings offers **Save & Restart**;
-- the log says so;
 - the check: that config must list `"synapse-browser"`. If it does, a model that still
   "cannot find" it is looking for the wrong name — the tools are
-  `synapse-browser_open`, `synapse-browser_snapshot`, and the rest.
+  `synapse-browser_open`, `synapse-browser_snapshot`, and the rest;
+- if the config does not list it, restart Synapse; the engine only reads its MCP servers
+  at start.
 
-It is **on by default** since 13 Nov: the sign-in card is what made that safe, because
-nothing the browser does as the operator happens without a person saying yes to a card
-first.
+SynaBrowse is not a permission switch. The sign-in card is the permission: nothing the
+browser does as the operator happens without a person saying yes to a card first.
 
 ## Where things live
 
@@ -517,6 +516,8 @@ first.
 |---|---|
 | `src/browser/cdp.js` | the protocol client: requests that answer or fail in 60 s, events, evaluate, screenshot |
 | `src/browser/browser.js` | Edge by full path, the hidden-desktop launch and its fallback, the toolset, `clearSite`, the idle reaper |
+| `src/browser/settings.js` | the one reader of the browser's profile, idle minutes and test seams |
+| `src/browser/search.js` | search through a new tab, result extraction and the launch lock |
 | `src/browser/hidden-desktop.ps1` | the launcher/keeper: `CreateDesktop`, `CreateProcess` with `lpDesktop`, the state file |
 | `src/browser/agent.js` | the agent-browser wrapper: snapshot, ref click and fill, the daemon close |
 | `vendor-agent-browser.ps1` | restores the pinned binary and its licence into `bin\agent-browser` |
@@ -530,7 +531,7 @@ first.
 | `src/browser/ask.js` | the sign-in card: one request, no auto-allow, no timeout |
 | `src/mcp/browser-server.js`, `browser-tools.js` | the tools and their descriptions |
 | `web/downloads.js` | the chat's download chip, progress and saved path |
-| tests | `browser`, `browser-mcp`, `browser-watch`, `browser-chat`, `browser-downloads`, `browser-agent`, `sites`, `browser-tools` |
+| tests | `browser`, `browser-mcp`, `browser-watch`, `browser-chat`, `browser-downloads`, `browser-agent`, `sites`, `browser-tools`, `browser-search` |
 
 ## The description is the help
 
