@@ -6,6 +6,7 @@
 // and a line while the call is running.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import { toolLabel, browserLine, isBrowserTool, renderBrowserGroup } from '../web/transcript.js';
 
 test('a browser tool is named in the operator’s words', () => {
@@ -53,4 +54,14 @@ test('a run of browser calls is one card, and a single call is itself', () => {
   assert.match(group, /SynaBrowse · Read/);
   assert.match(group, /example\.test/, 'the address is in the row');
   assert.equal((group.match(/tool-group-row/g) || []).length, 3);
+});
+
+test('a browser call label is one line, not two', () => {
+  const css = fs.readFileSync(new URL('../web/synapse.css', import.meta.url), 'utf8');
+  assert.match(
+    css,
+    /\.tool-group-row \{[^}]*grid-template-columns: 10px minmax\(0, max-content\) minmax\(0, 1fr\)/,
+    'the name column must size to the label, not a fixed 120px',
+  );
+  assert.match(css, /\.tool-group-name \{[^}]*white-space: nowrap/, 'the label may not wrap');
 });

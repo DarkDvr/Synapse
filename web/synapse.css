@@ -1889,14 +1889,18 @@ details:not([open]) > [data-fold-body] { display: none; }
    four separate cards for one intention read as four things happening (11 Nov). The rows
    inside are the calls, in order. */
 .tool-group-row {
-  display: grid; grid-template-columns: 10px 120px minmax(0, 1fr); align-items: center;
+  display: grid; grid-template-columns: 10px minmax(0, max-content) minmax(0, 1fr); align-items: center;
   gap: 6px; padding: 2px 8px;
   font-family: var(--mono); font-size: calc(var(--chat-fs) * 0.8);
   border-top: 1px solid rgba(255, 255, 255, 0.045);
 }
 .tool-group-row:first-child { border-top: none; }
 .tool-group-row .status-dot { width: 6px; height: 6px; box-shadow: none; }
-.tool-group-name { color: var(--text); }
+/* The name is a literal: "SynaBrowse · Click" is one token, not two lines. The old
+   120px column was narrower than the label and wrapped it into "SynaBrowse ·" /
+   "Click" at the operator's chat width (23 Nov). max-content lets the label size
+   itself; the target keeps the remaining space and ellipsises there. */
+.tool-group-name { color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tool-group-target { color: #8a8e96; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tool-head .tool-state { flex: none; margin-left: auto; }
 /* The permission chip sits immediately left of the state pill, and only exists
