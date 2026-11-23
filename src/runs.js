@@ -1116,11 +1116,6 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     try {
       const session = await engine.getSession(sessionId);
       if (!session?.directory || session.internal) return;
-      // The project's role file is the model set for this run. The config is the
-      // template for any role the project has never written; the merge keeps the
-      // role's skills, instructions and stall settings from the config.
-      const baseConfig = getConfig() || {};
-      const effectiveConfig = { ...baseConfig, roles: effectiveRoles(baseConfig, session.directory) };
       const requests = requestsIn(messages, session.directory);
       // Single mode promises no delegation — that is the whole difference
       // between the two modes. The tool is offered by the engine regardless
@@ -1332,7 +1327,8 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
       (t) => !nudged.has(`${normDir(dir)}|${t.id}`) && taskReady(t, tasks),
     );
     if (!ready) return;
-    if (roleMarked(ready.role, effectiveConfig)) return;
+    const baseConfig = getConfig() || {};
+    if (roleMarked(ready.role, { ...baseConfig, roles: effectiveRoles(baseConfig, dir) })) return;
     nudged.add(`${normDir(dir)}|${ready.id}`);
     out.info(
       `plan step ${ready.id} (${ready.role}) is ready and was never asked for - reminding the Architect once`,

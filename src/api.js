@@ -2425,6 +2425,7 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
       let directory = '';
       let single = false;
       let sessionModel = '';
+      let sessionVariant = '';
       try {
         const session = await engine.getSession(sessionId);
         directory = session?.directory || '';
@@ -2442,6 +2443,7 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
           }
         }
         sessionModel = String(session?.model || '');
+        sessionVariant = String(session?.variant || '') === 'default' ? '' : String(session?.variant || '');
         const applied = session?.single === true ? 'single' : 'multi';
         single = asked ? asked === 'single' : applied === 'single';
         if (asked && asked !== applied) {
@@ -2526,7 +2528,6 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
       // the session is moved to it before the prompt, so the file really is the
       // project's answer.
       const projectArchitect = roleModel(readProjectRoles(directory), 'architect');
-      const sessionVariant = String(session?.variant || '') === 'default' ? '' : String(session?.variant || '');
       let architectRef = sessionModel;
       if (projectArchitect?.ref) {
         const variant = projectArchitect.variant || '';
