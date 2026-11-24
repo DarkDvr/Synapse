@@ -1683,6 +1683,17 @@ function connectStream() {
       // in this chat or any other (see attention.js).
       if (ev.type === 'run.stopping') attention.quietUntil(ev.dir);
       handleRunEvent(ev);
+      // The runner wakes the Architect a few seconds after the worker's report. Ask
+      // the server now rather than waiting out the eight-second poll: the pending
+      // answer puts the Architect in `busySessions`, so the finished-work hold is
+      // cancelled instead of chiming over its judging turn (24 Nov).
+      if (ev.type === 'run.finished') {
+        schedulePendingRefresh();
+        // The report wake has been measured five seconds after the worker's finish;
+        // one look now would still see an idle server. The second look lands after
+        // the wake, while the ten-second chime hold is still open.
+        setTimeout(schedulePendingRefresh, 5000);
+      }
       // A run ending can leave the chat idle without a session event (the Architect's
       // turn was already over), so the answer to "is anything still happening?" is
       // asked again after every run event, not only after the engine's.

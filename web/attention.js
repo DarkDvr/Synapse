@@ -66,9 +66,12 @@ export function transitions(before, after, { skipFinished = new Set() } = {}) {
  * How long a finish is held back before it is worth a sound.
  *
  * A gap is not a finish: the Architect reads a worker's report and starts the next turn
- * a second or two later, and with Keep Building on it starts the next task.
+ * a second or two later, and with Keep Building on it starts the next task. The runner's
+ * report wake is not instant either — measured 5s between a worker finishing and the
+ * "wake sent" line — so four seconds chimed over the Architect's judging turn (24 Nov).
+ * Ten seconds clears that wake and still lets a real finish speak.
  */
-export const FINISH_GRACE_MS = 4000;
+export const FINISH_GRACE_MS = 10000;
 
 /**
  * Wait out the gap before saying a chat has finished — the same rule for the open chat.

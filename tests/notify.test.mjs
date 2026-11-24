@@ -127,6 +127,15 @@ test('the app window lets a notification play before the first click', () => {
   assert.match(shell, /CoreWebView2EnvironmentOptions/);
 });
 
+test('a finished worker asks the server before the chime', () => {
+  // The runner wakes the Architect several seconds after the worker's finish. A look
+  // at the server then puts the Architect in busySessions and cancels the hold; one
+  // look immediately would still see an idle server.
+  const page = read('web/app.js');
+  assert.match(page, /ev\.type === 'run\.finished'[\s\S]{0,250}schedulePendingRefresh/);
+  assert.match(page, /setTimeout\(schedulePendingRefresh, 5000\)/);
+});
+
 // The screen lease has its own two sounds: rising when the AI takes the mouse and
 // keyboard, falling when it gives them back. They are not the finished-work chime and
 // must not be in its dropdown; one checkbox turns the pair off.

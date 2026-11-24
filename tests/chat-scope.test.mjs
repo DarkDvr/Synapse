@@ -15,7 +15,7 @@ installPage();
 const { state } = await import('../web/state.js');
 const { permissionsHere, formsHere, currentForm, waitingIn, askDir, sameChat, dirKey } = await import('../web/run-view.js');
 const { renderPermissionCards } = await import('../web/permission-card.js');
-const { chatStates, transitions, createAttention, holdFinish } = await import('../web/attention.js');
+const { chatStates, transitions, createAttention, holdFinish, FINISH_GRACE_MS } = await import('../web/attention.js');
 
 const A = 'F:\\dev\\Synapse.Projects\\alpha';
 const B = 'F:\\dev\\Synapse.Projects\\beta';
@@ -298,6 +298,12 @@ test('a stopped chat does not chime, and the open chat is left to noteWorking', 
   attention.quietUntil(B);
   attention.note(map(false, false), { openDir: A });
   assert.deepEqual(events, [], 'a stopped chat, or the open chat, chimed');
+});
+
+test('the finish grace outlasts the report wake', () => {
+  // Measured 24 Nov: the worker's run finished at 11:38:26, the runner's "wake sent"
+  // for the Architect came at 11:38:31. The old four-second grace chimed in between.
+  assert.ok(FINISH_GRACE_MS >= 10000, `the grace is ${FINISH_GRACE_MS}ms; it must clear the 5s wake`);
 });
 
 test('the waiting post says how many turns are ahead', async () => {
