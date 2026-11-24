@@ -118,6 +118,15 @@ test('a WAV is served as audio, not as an opaque file', () => {
   assert.match(read('src/server.js'), /'\.wav': 'audio\/wav'/);
 });
 
+test('the app window lets a notification play before the first click', () => {
+  // A question card and a screen lease arrive when nobody has clicked. Chromium's
+  // default autoplay policy would reject the first play, and playSound swallows the
+  // rejection by design, so the app's own window must opt out.
+  const shell = read('shell/MainWindow.xaml.cs');
+  assert.match(shell, /--autoplay-policy=no-user-gesture-required/);
+  assert.match(shell, /CoreWebView2EnvironmentOptions/);
+});
+
 // The screen lease has its own two sounds: rising when the AI takes the mouse and
 // keyboard, falling when it gives them back. They are not the finished-work chime and
 // must not be in its dropdown; one checkbox turns the pair off.

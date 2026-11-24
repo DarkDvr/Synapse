@@ -288,11 +288,21 @@ public partial class MainWindow : Window
 
     static async Task<CoreWebView2Environment> CreateEnvironmentAsync(string profile)
     {
+        // Notification sounds are the page's job, and they fire when nobody has
+        // clicked: a question card, the screen lease, the finished-work chime.
+        // Chromium otherwise blocks the first play until a gesture, and the page's
+        // playSound deliberately swallows that rejection — silence with no error
+        // (reported 24 Nov). This is the app's own window, not a web page, so the
+        // autoplay policy is ours to set.
+        var options = new CoreWebView2EnvironmentOptions
+        {
+            AdditionalBrowserArguments = "--autoplay-policy=no-user-gesture-required",
+        };
         for (var attempt = 0; ; attempt++)
         {
             try
             {
-                return await CoreWebView2Environment.CreateAsync(null, profile);
+                return await CoreWebView2Environment.CreateAsync(null, profile, options);
             }
             catch (COMException err) when (err.HResult == ResourceInUse && attempt < 5)
             {
