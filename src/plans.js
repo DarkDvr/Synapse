@@ -75,6 +75,11 @@ const RESULT_STATUS_GRACE_MS = 10 * 60 * 1000;
 export const ORIGINS = ['plan', 'found', 'operator'];
 
 export const PLAN_DIR = '.project';
+/** Folders under .project that are shared by design: screenshots, evidence, the
+ *  scratch every role may write, and the shell logs the harness writes. The
+ *  per-turn fingerprint skips them; the role rules must agree. */
+export const SHARED_PROJECT_DIRS = [SHARED_DIR, EVIDENCE_DIR, `${PLAN_DIR}/scratch`, `${PLAN_DIR}/logs`]
+  .map((p) => p.split('/').pop());
 const PLAN_NAME = 'plan.json';
 const RUNS_NAME = 'runs.jsonl';
 const FEATURES_NAME = 'features.json';
@@ -1018,6 +1023,8 @@ export function synapseFingerprint(dir) {
       const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
       if (entry.isDirectory()) {
         if (entry.name === '.git' && !prefix) continue;
+        // Shared folders are not the role's to prove: skip them at the root.
+        if (!prefix && SHARED_PROJECT_DIRS.includes(entry.name)) continue;
         walk(path.join(folder, entry.name), rel);
       } else {
         try {

@@ -41,8 +41,7 @@ import {
   synapseFingerprint,
   fingerprintDiff,
   ownedFolder,
-  SHARED_DIR,
-  EVIDENCE_DIR,
+  SHARED_PROJECT_DIRS,
   setTaskStatus,
   releaseDoing,
   openDelegations,
@@ -2644,7 +2643,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     // explicitly allowed to write, and the shell logs the harness writes. A change
     // there is the brief being followed, not a stray write. Leaving scratch out made
     // every QC run report its own permitted work as tampering (24 Nov).
-    const sharedDirs = [SHARED_DIR, EVIDENCE_DIR, 'scratch', 'logs'].map((d) => d.split('/').pop());
+    const sharedDirs = SHARED_PROJECT_DIRS;
     const strayWrites = fingerprintDiff(synapseBefore, synapseAfter, ownedFolder(role))
       .filter((p) => !sharedDirs.some((d) => p === d || p.startsWith(`${d}/`)))
       .filter((p) => !HARNESS_FILES.has(p))
