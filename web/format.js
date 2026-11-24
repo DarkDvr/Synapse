@@ -61,10 +61,53 @@ export function fmtBytes(n) {
   return `${(v / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+/**
+ * A tool's arguments, however the engine delivered them.
+ *
+ * Most calls arrive as an object, some as a JSON string, and MCP calls from this
+ * engine arrive as a query string (`minutes=5&reason=the+suite`). The last shape
+ * made a lease invisible: its minutes never reached the runner or the card's clock
+ * (24 Nov).
+ */
+export function parseToolInput(input) {
+  if (input && typeof input === 'object') return input;
+  if (typeof input !== 'string' || !input.trim()) return null;
+  try {
+    const parsed = JSON.parse(input);
+    return parsed && typeof parsed === 'object' ? parsed : null;
+  } catch {
+    // Not JSON: a query string is the other shape the engine uses.
+  }
+  try {
+    const params = new URLSearchParams(input);
+    const out = {};
+    for (const [key, value] of params) out[key] = value;
+    return Object.keys(out).length ? out : null;
+  } catch {
+    // A title that is plain prose is not arguments.
+    return null;
+  }
+}
+
+/** A tool's name as the operator reads it, without the MCP server prefix. */
+export function toolNameLabel(name) {
+  const raw = String(name || 'tool');
+  if (/(^|[_:])lease$/i.test(raw)) return 'Lease';
+  return raw;
+}
+
 /** A tool call's one-line description: what it is actually running. */
 export function toolTarget(part) {
-  const i = part?.input;
+  const name = String(part?.name || '');
+  const i = parseToolInput(part?.input) || parseToolInput(part?.title);
   const clean = (v) => (typeof v === 'string' ? v.replace(/\s+/g, ' ').trim() : '');
+  // A lease's useful target is what the time is for, not its wire arguments.
+  if (/(^|[_:])lease$/i.test(name)) {
+    const reason = clean(i?.reason);
+    if (reason) return reason;
+    const minutes = Number(i?.minutes);
+    if (Number.isFinite(minutes) && minutes > 0) return `${minutes} minute lease`;
+  }
   if (i && typeof i === 'object') {
     const named = clean(i.command) || clean(i.path) || clean(i.filePath) || clean(i.pattern)
       || clean(i.query) || clean(i.url) || clean(i.name);

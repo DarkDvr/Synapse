@@ -13,7 +13,7 @@
 import { state } from './state.js';
 import { EV } from './events.js';
 import { permissionChip } from './ask-note.js';
-import { esc, shortSpan, fileChip, reasoningGist } from './format.js';
+import { esc, shortSpan, fileChip, reasoningGist, toolNameLabel } from './format.js';
 import { renderMarkdown } from './md.js';
 import { paneMarkup } from './thinking-pane.js';
 import { leaseClock, leaseFor, leaseCard, leaseChip } from './chat-notes.js';
@@ -111,7 +111,7 @@ export function renderTrace(t) {
     // same flex head, the same type. A worker's call arrives as a name and a target
     // with no detail to open, so the head stands alone — but it is one component in
     // one place, not a lookalike (8 Nov).
-    return `<div class="tool-card trace-card"${line}><div class="tool-head"><span class="status-dot ok" role="img" aria-label="tool call"></span><span class="tool-name">${esc(name)}</span>${leaseClock(tool, lease)}<span class="tool-target" title="${esc(target)}">${esc(target)}</span></div></div>`;
+    return `<div class="tool-card trace-card"${line}><div class="tool-head"><span class="status-dot ok" role="img" aria-label="tool call"></span><span class="tool-name">${esc(toolNameLabel(name))}</span>${leaseClock(tool, lease)}<span class="tool-target" title="${esc(target)}">${esc(target)}</span></div></div>`;
   };
   const note = (n, k = '') => {
     // The name this line slides in under; a redraw of the same step is the same name.

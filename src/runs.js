@@ -324,13 +324,21 @@ export function toolTarget(input = {}) {
     .join('&');
 }
 
-/** The tool input may arrive as an object or as a JSON string. */
+/** The tool input may arrive as an object, JSON, or an MCP query string. */
 function parseInput(input) {
   if (input && typeof input === 'object') return input;
   if (typeof input !== 'string') return null;
   try {
     const parsed = JSON.parse(input);
-    return parsed && typeof parsed === 'object' ? parsed : null;
+    if (parsed && typeof parsed === 'object') return parsed;
+  } catch {
+    // Not JSON: MCP calls arrive as `minutes=5&reason=the+suite`.
+  }
+  try {
+    const query = new URLSearchParams(input);
+    const out = {};
+    for (const [key, value] of query) out[key] = value;
+    return Object.keys(out).length ? out : null;
   } catch {
     return null;
   }
@@ -3329,7 +3337,7 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
           const key = String(part.id || `${message.id}:${part.name}`);
           if (leaseSeen.has(key)) continue;
           leaseSeen.add(key);
-          const input = parseInput(part.input) || {};
+          const input = parseInput(part.input) || parseInput(part.title) || {};
           const asked = Number(input.minutes);
           const minutes = Number.isFinite(asked) ? Math.min(480, Math.max(0.1, asked)) : 0;
           if (!minutes) continue;

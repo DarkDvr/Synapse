@@ -13,6 +13,7 @@ const page = installPage();
 const { state } = await import('../web/state.js');
 const { chatNotesWiring, leaseFor, leaseClock, renderLease, noteLease, callLeaseClock, leaseOfMessages } = await import('../web/chat-notes.js');
 const { tracesWiring, renderTrace, noteLeaseLine } = await import('../web/traces.js');
+const { parseToolInput, toolNameLabel, toolTarget } = await import('../web/format.js');
 
 chatNotesWiring({
   currentProject: () => ({ directory: 'F:/scenario' }),
@@ -148,4 +149,22 @@ test('the lease line and the card read the same clock', () => {
   const from = (html) => (html.match(/data-lease-until="(\d+)"/) || [])[1];
   assert.equal(from(line), from(card), 'two clocks for one lease');
   assert.ok(page.document, 'the fake page is installed');
+});
+
+test('an MCP query string is still a lease', () => {
+  // The engine delivered this call as `minutes=5&reason=the+suites`; JSON-only
+  // parsing made the card raw and the runner blind (24 Nov).
+  const call = { type: 'tool', name: 'synapse-lease_lease', input: 'minutes=5&reason=the+suites' };
+  assert.deepEqual(parseToolInput(call.input), { minutes: '5', reason: 'the suites' });
+  assert.equal(toolNameLabel(call.name), 'Lease');
+  assert.equal(toolTarget(call), 'the suites');
+  const live = leaseOfMessages([{ created: Date.now() - 60_000, parts: [call] }]);
+  assert.equal(live.minutes, 5, 'the query minutes did not become a lease');
+  assert.equal(live.reason, 'the suites');
+  assert.match(callLeaseClock(call, live), /data-lease-until="\d+"/, 'the lease has no clock');
+  // The engine sometimes puts the same query on the part's title instead of input.
+  const titled = { type: 'tool', name: 'synapse-lease_lease', title: 'minutes=3&reason=the+install' };
+  const fromTitle = leaseOfMessages([{ created: Date.now() - 60_000, parts: [titled] }]);
+  assert.equal(fromTitle.minutes, 3, 'a query in the title did not become a lease');
+  assert.equal(fromTitle.reason, 'the install');
 });

@@ -11,7 +11,7 @@
 // and the compact post's metadata. Wired at boot; a missing one throws.
 import { state } from './state.js';
 import { $ } from './dom.js';
-import { esc, hhmm, toolTarget, fileChip, shortName, reasoningGist } from './format.js';
+import { esc, hhmm, toolTarget, toolNameLabel, fileChip, shortName, reasoningGist } from './format.js';
 
 /** 172000 → "172K": one number, in the chat's own units. */
 const compactK = (n) => (!n ? '0' : n >= 1000000 ? `${(n / 1000000).toFixed(1)}M` : n >= 1000 ? `${Math.round(n / 1000)}K` : String(n));
@@ -793,7 +793,7 @@ export function toolLabel(part) {
   const name = String(part?.name || 'tool');
   const browser = /^synapse-browser[._]([a-z]+)$/i.exec(name);
   if (browser) return BROWSER_VERBS[browser[1].toLowerCase()] || 'SynaBrowse';
-  return name;
+  return toolNameLabel(name);
 }
 
 /** The live line while a browser tool runs: "SynaBrowse · Opening www.example.test…". */

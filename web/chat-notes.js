@@ -6,7 +6,7 @@
 // same place, in the same order. One file because they answer one question: what did
 // the harness notice that the conversation does not say?
 import { state } from './state.js';
-import { esc, hhmmss } from './format.js';
+import { esc, hhmmss, parseToolInput } from './format.js';
 
 // Three things this file needs from app.js: which project is on screen, the key that
 // identifies a folder, and a role's display name. Wired at boot.
@@ -157,7 +157,8 @@ export function leaseOfMessages(messages, at = 0) {
   for (const m of Array.isArray(messages) ? messages : []) {
     for (const part of m?.parts || []) {
       if (part?.type !== 'tool' || !/(^|[_:])lease$/i.test(String(part.name || '').trim())) continue;
-      const minutes = Number(parseInput(part.input)?.minutes);
+      const input = parseInput(part.input) || parseInput(part.title) || {};
+      const minutes = Number(input.minutes);
       if (!Number.isFinite(minutes) || minutes <= 0) continue;
       const when = Number(part.created) || Number(m.created) || 0;
       if (at && when && when > at) continue;
@@ -166,7 +167,7 @@ export function leaseOfMessages(messages, at = 0) {
         task: '',
         role: '',
         minutes,
-        reason: String(parseInput(part.input)?.reason || '').trim().slice(0, 200),
+        reason: String(input.reason || '').trim().slice(0, 200),
         until: when + minutes * 60_000,
         extended: Boolean(found),
         expired: false,
@@ -179,15 +180,9 @@ export function leaseOfMessages(messages, at = 0) {
   return found;
 }
 
-/** A tool part's arguments arrive as an object or as a JSON string, depending on the engine. */
+/** A tool part's arguments arrive as an object, JSON, or an MCP query string. */
 function parseInput(input) {
-  if (input && typeof input === 'object') return input;
-  if (typeof input !== 'string' || !input.trim()) return null;
-  try {
-    return JSON.parse(input);
-  } catch {
-    return null;
-  }
+  return parseToolInput(input);
 }
 
 /**
